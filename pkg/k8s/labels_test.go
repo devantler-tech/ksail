@@ -1,10 +1,10 @@
-package labels_test
+package k8s_test
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/utils/labels"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,7 +16,7 @@ func getTestItemLabels(item TestItem) map[string]string {
 	return item.Labels
 }
 
-func TestUniqueValues_BasicCases(t *testing.T) {
+func TestUniqueLabelValues_BasicCases(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -66,13 +66,13 @@ func TestUniqueValues_BasicCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := labels.UniqueValues(tt.items, tt.key, getTestItemLabels)
+			result := k8s.UniqueLabelValues(tt.items, tt.key, getTestItemLabels)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestUniqueValues_MissingAndNilHandling(t *testing.T) {
+func TestUniqueLabelValues_MissingAndNilHandling(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -116,13 +116,13 @@ func TestUniqueValues_MissingAndNilHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := labels.UniqueValues(tt.items, tt.key, getTestItemLabels)
+			result := k8s.UniqueLabelValues(tt.items, tt.key, getTestItemLabels)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestUniqueValues_DeduplicationAndSorting(t *testing.T) {
+func TestUniqueLabelValues_DeduplicationAndSorting(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -177,13 +177,13 @@ func TestUniqueValues_DeduplicationAndSorting(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := labels.UniqueValues(tt.items, tt.key, getTestItemLabels)
+			result := k8s.UniqueLabelValues(tt.items, tt.key, getTestItemLabels)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestUniqueValues_WithDifferentTypes(t *testing.T) {
+func TestUniqueLabelValues_WithDifferentTypes(t *testing.T) {
 	t.Parallel()
 
 	t.Run("works with custom struct type", func(t *testing.T) {
@@ -201,7 +201,7 @@ func TestUniqueValues_WithDifferentTypes(t *testing.T) {
 			{Name: "pod3", LabelMap: map[string]string{"app": "web"}},
 		}
 
-		result := labels.UniqueValues(pods, "app", func(p Pod) map[string]string {
+		result := k8s.UniqueLabelValues(pods, "app", func(p Pod) map[string]string {
 			return p.LabelMap
 		})
 
@@ -221,7 +221,7 @@ func TestUniqueValues_WithDifferentTypes(t *testing.T) {
 			{Labels: map[string]string{"tier": "frontend"}},
 		}
 
-		result := labels.UniqueValues(resources, "tier", func(r *Resource) map[string]string {
+		result := k8s.UniqueLabelValues(resources, "tier", func(r *Resource) map[string]string {
 			return r.Labels
 		})
 
@@ -229,7 +229,7 @@ func TestUniqueValues_WithDifferentTypes(t *testing.T) {
 	})
 }
 
-func TestUniqueValues_EdgeCases(t *testing.T) {
+func TestUniqueLabelValues_EdgeCases(t *testing.T) {
 	t.Parallel()
 
 	t.Run("handles empty key string", func(t *testing.T) {
@@ -240,7 +240,7 @@ func TestUniqueValues_EdgeCases(t *testing.T) {
 			{Labels: map[string]string{"env": "prod"}},
 		}
 
-		result := labels.UniqueValues(items, "", getTestItemLabels)
+		result := k8s.UniqueLabelValues(items, "", getTestItemLabels)
 		assert.Equal(t, []string{"value"}, result)
 	})
 
@@ -254,7 +254,7 @@ func TestUniqueValues_EdgeCases(t *testing.T) {
 			}
 		}
 
-		result := labels.UniqueValues(items, "env", getTestItemLabels)
+		result := k8s.UniqueLabelValues(items, "env", getTestItemLabels)
 		assert.Equal(t, []string{"prod"}, result)
 	})
 
@@ -268,7 +268,7 @@ func TestUniqueValues_EdgeCases(t *testing.T) {
 			}
 		}
 
-		result := labels.UniqueValues(items, "id", getTestItemLabels)
+		result := k8s.UniqueLabelValues(items, "id", getTestItemLabels)
 		assert.Len(t, result, 100)
 		// Verify sorted
 		for i := 1; i < len(result); i++ {
