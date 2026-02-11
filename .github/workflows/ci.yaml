@@ -123,18 +123,18 @@ jobs:
       - name: 🔄 Sync all Go modules
         run: |
           echo "Syncing module dependencies..."
-          
+
           # List of module directories
           modules=(
             "."
             ".github/scripts/generate-schema"
           )
-          
+
           for dir in "${modules[@]}"; do
             echo "Running go mod tidy in $dir..."
             (cd "$dir" && go mod tidy)
           done
-          
+
           echo "✅ Module dependencies synced"
 
       - name: 📤 Commit and push module changes
