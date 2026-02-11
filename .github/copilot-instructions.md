@@ -32,6 +32,10 @@ npm ci
 cd /path/to/repo
 go build -o ksail
 # Takes a few seconds on first run for Go module downloads
+
+# For optimized builds (uses the same -ldflags as release builds):
+go build -ldflags="-s -w" -o ksail-optimized
+# Strips debug symbols and can significantly reduce binary size (in some cases by ~25–35%; see #2095 for an example benchmark; actual size varies by OS/arch, Go version, and dependencies)
 ```
 
 **Run Unit Tests**:
@@ -69,6 +73,7 @@ cd /path/to/repo
 ./ksail cluster init --help       # Show init options
 ./ksail cluster init              # Initialize default project
 ./ksail cluster create            # Create cluster (requires Docker)
+./ksail cluster update            # Update cluster configuration
 ./ksail cluster info              # Show cluster info
 ./ksail cluster delete            # Destroy cluster
 ```
@@ -174,6 +179,7 @@ All CLI commands only require Docker to be installed:
 ```bash
 ksail cluster init [options]           # Initialize new KSail project
 ksail cluster create                   # Create and start cluster
+ksail cluster update                   # Update cluster to match configuration
 ksail cluster delete                   # Destroy cluster and resources
 ksail cluster start                    # Start existing cluster
 ksail cluster stop                     # Stop running cluster
