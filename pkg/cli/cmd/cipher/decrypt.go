@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
 	"github.com/getsops/sops/v3/cmd/sops/codes"
@@ -268,8 +268,6 @@ func writeDecryptedOutput(cmd *cobra.Command, data []byte, outputPath string) er
 // getDecryptStores returns the appropriate SOPS stores for decryption.
 // When reading from stdin, it defaults to YAML format.
 // For JSON format from stdin, users can pipe to a file first.
-//
-//nolint:ireturn // Returning sops.Store interface is the correct pattern here
 func getDecryptStores(inputPath string, readFromStdin bool) (sops.Store, sops.Store, error) {
 	if readFromStdin {
 		// Default to YAML for stdin - most common format

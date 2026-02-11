@@ -5,7 +5,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/stretchr/testify/assert"
 )

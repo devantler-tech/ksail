@@ -8,13 +8,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestK3dClusterProvisioner_List tests the List method of K3dClusterProvisioner.
+// TestProvisioner_List tests the List method of Provisioner.
 //
 //nolint:paralleltest // Cannot use t.Parallel() because List() modifies global os.Stdout.
-func TestK3dClusterProvisioner_List(t *testing.T) {
+func TestProvisioner_List(t *testing.T) {
 	// Test with nil config
 	t.Run("list with nil config", func(t *testing.T) {
-		provisioner := k3dprovisioner.NewK3dClusterProvisioner(nil, "")
+		provisioner := k3dprovisioner.NewProvisioner(nil, "")
 		result, err := provisioner.List(context.Background())
 
 		// In test environment without k3d binary, this may return an error or empty list
@@ -31,7 +31,7 @@ func TestK3dClusterProvisioner_List(t *testing.T) {
 
 	// Test with empty config path
 	t.Run("list with empty config path", func(t *testing.T) {
-		provisioner := k3dprovisioner.NewK3dClusterProvisioner(nil, "")
+		provisioner := k3dprovisioner.NewProvisioner(nil, "")
 		result, err := provisioner.List(context.Background())
 
 		// In test environment without k3d binary, this may return an error or empty list
@@ -47,10 +47,10 @@ func TestK3dClusterProvisioner_List(t *testing.T) {
 	})
 }
 
-// TestK3dClusterProvisioner_Exists tests the Exists method.
+// TestProvisioner_Exists tests the Exists method.
 //
 //nolint:paralleltest // Cannot use t.Parallel() because Exists() calls List() which modifies global os.Stdout.
-func TestK3dClusterProvisioner_Exists(t *testing.T) {
+func TestProvisioner_Exists(t *testing.T) {
 	tests := []struct {
 		name        string
 		clusterName string
@@ -67,7 +67,7 @@ func TestK3dClusterProvisioner_Exists(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(_ *testing.T) {
-			provisioner := k3dprovisioner.NewK3dClusterProvisioner(nil, "")
+			provisioner := k3dprovisioner.NewProvisioner(nil, "")
 			_, _ = provisioner.Exists(context.Background(), testCase.clusterName)
 
 			// In test environment without actual k3d clusters, this may return an error
@@ -76,8 +76,8 @@ func TestK3dClusterProvisioner_Exists(t *testing.T) {
 	}
 }
 
-// TestK3dClusterProvisioner_NewProvisioner tests the constructor.
-func TestK3dClusterProvisioner_NewProvisioner(t *testing.T) {
+// TestProvisioner_NewProvisioner tests the constructor.
+func TestProvisioner_NewProvisioner(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -98,28 +98,28 @@ func TestK3dClusterProvisioner_NewProvisioner(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			provisioner := k3dprovisioner.NewK3dClusterProvisioner(nil, testCase.configPath)
+			provisioner := k3dprovisioner.NewProvisioner(nil, testCase.configPath)
 			assert.NotNil(t, provisioner)
 		})
 	}
 }
 
-// TestK3dClusterProvisioner_Create tests the Create method.
-func TestK3dClusterProvisioner_Create(t *testing.T) {
+// TestProvisioner_Create tests the Create method.
+func TestProvisioner_Create(t *testing.T) {
 	t.Parallel()
 
 	t.Skip("Skipping Create test - k3d binary not available in test environment")
 }
 
-// TestK3dClusterProvisioner_Delete tests the Delete method.
-func TestK3dClusterProvisioner_Delete(t *testing.T) {
+// TestProvisioner_Delete tests the Delete method.
+func TestProvisioner_Delete(t *testing.T) {
 	t.Parallel()
 
 	t.Skip("Skipping Delete test - k3d binary not available in test environment")
 }
 
-// TestK3dClusterProvisioner_Start tests the Start method.
-func TestK3dClusterProvisioner_Start(t *testing.T) {
+// TestProvisioner_Start tests the Start method.
+func TestProvisioner_Start(t *testing.T) {
 	t.Parallel()
 
 	t.Skip(
@@ -127,8 +127,8 @@ func TestK3dClusterProvisioner_Start(t *testing.T) {
 	)
 }
 
-// TestK3dClusterProvisioner_Stop tests the Stop method.
-func TestK3dClusterProvisioner_Stop(t *testing.T) {
+// TestProvisioner_Stop tests the Stop method.
+func TestProvisioner_Stop(t *testing.T) {
 	t.Parallel()
 
 	t.Skip(

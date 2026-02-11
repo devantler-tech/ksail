@@ -8,7 +8,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/helmutil"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -95,7 +96,7 @@ func (b *InstallerBase) WaitForAPIServerStability(ctx context.Context) error {
 		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
 
-	err = k8s.WaitForAPIServerStable(
+	err = readiness.WaitForAPIServerStable(
 		ctx,
 		clientset,
 		APIServerStabilityTimeout,
@@ -145,14 +146,9 @@ func (b *InstallerBase) ImagesFromChart(
 		return nil, fmt.Errorf("get helm client: %w", err)
 	}
 
-	manifest, err := client.TemplateChart(ctx, spec)
+	images, err := helmutil.ImagesFromChart(ctx, client, spec)
 	if err != nil {
-		return nil, fmt.Errorf("template chart %s: %w", spec.ChartName, err)
-	}
-
-	images, err := image.ExtractImagesFromManifest(manifest)
-	if err != nil {
-		return nil, fmt.Errorf("extract images from %s manifest: %w", spec.ChartName, err)
+		return nil, fmt.Errorf("images from chart %s: %w", spec.ChartName, err)
 	}
 
 	return images, nil

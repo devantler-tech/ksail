@@ -29,8 +29,8 @@ const (
 	fluxDistributionArtifact = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
 )
 
-// fluxInstanceManager handles FluxInstance lifecycle operations.
-type fluxInstanceManager struct {
+// instanceManager handles FluxInstance lifecycle operations.
+type instanceManager struct {
 	restConfig *rest.Config
 	apiWaiter  *apiWaiter
 }
@@ -39,15 +39,15 @@ type fluxInstanceManager struct {
 func newFluxInstanceManager(
 	restConfig *rest.Config,
 	timeout, interval time.Duration,
-) *fluxInstanceManager {
-	return &fluxInstanceManager{
+) *instanceManager {
+	return &instanceManager{
 		restConfig: restConfig,
 		apiWaiter:  newAPIWaiter(restConfig, timeout, interval),
 	}
 }
 
 // setup waits for the FluxInstance CRD, creates the client, and upserts the FluxInstance.
-func (m *fluxInstanceManager) setup(
+func (m *instanceManager) setup(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
@@ -71,7 +71,7 @@ func (m *fluxInstanceManager) setup(
 	case <-time.After(apiStabilizationDelay):
 	}
 
-	fluxInstance, err := buildFluxInstance(clusterCfg, clusterName)
+	fluxInstance, err := buildInstance(clusterCfg, clusterName)
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func (m *fluxInstanceManager) setup(
 // waitForReady waits for the FluxInstance to report a Ready condition.
 // The FluxInstance controller sets this condition when Flux controllers are installed
 // and the sync source (OCIRepository) is ready.
-func (m *fluxInstanceManager) waitForReady(ctx context.Context) error {
+func (m *instanceManager) waitForReady(ctx context.Context) error {
 	return pollUntilReady(
 		ctx,
 		m.apiWaiter.timeout,
@@ -138,7 +138,7 @@ func (m *fluxInstanceManager) waitForReady(ctx context.Context) error {
 
 // upsertWithRetry creates or updates a FluxInstance with retry logic
 // to handle transient API errors during CRD initialization.
-func (m *fluxInstanceManager) upsertWithRetry(
+func (m *instanceManager) upsertWithRetry(
 	ctx context.Context,
 	clientFactory func() (client.Client, error),
 	desired *FluxInstance,
@@ -193,7 +193,7 @@ func (m *fluxInstanceManager) upsertWithRetry(
 }
 
 // tryUpsert attempts to create or update a FluxInstance once.
-func (m *fluxInstanceManager) tryUpsert(
+func (m *instanceManager) tryUpsert(
 	ctx context.Context,
 	fluxClient client.Client,
 	key client.ObjectKey,
@@ -221,7 +221,7 @@ func (m *fluxInstanceManager) tryUpsert(
 }
 
 // createAndVerify creates a FluxInstance and verifies it was persisted.
-func (m *fluxInstanceManager) createAndVerify(
+func (m *instanceManager) createAndVerify(
 	ctx context.Context,
 	fluxClient client.Client,
 	key client.ObjectKey,
@@ -246,8 +246,8 @@ func (m *fluxInstanceManager) createAndVerify(
 	return nil
 }
 
-// buildFluxInstance constructs a FluxInstance resource from cluster configuration.
-func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInstance, error) {
+// buildInstance constructs a FluxInstance resource from cluster configuration.
+func buildInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInstance, error) {
 	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 
 	var repoURL, pullSecret, tag string
@@ -274,7 +274,7 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxI
 			Name:      fluxInstanceDefaultName,
 			Namespace: fluxclient.DefaultNamespace,
 		},
-		Spec: FluxInstanceSpec{
+		Spec: InstanceSpec{
 			Distribution: Distribution{
 				Version:  fluxDistributionVersion,
 				Registry: fluxDistributionRegistry,

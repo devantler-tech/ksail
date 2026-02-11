@@ -1,6 +1,6 @@
 package v1alpha1
 
-import "github.com/devantler-tech/ksail/v5/pkg/utils/envvar"
+import "github.com/devantler-tech/ksail/v5/pkg/envvar"
 
 // ExpandEnvVars expands environment variable placeholders in all string fields
 // of the cluster configuration. This includes paths, credentials, contexts, and

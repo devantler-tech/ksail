@@ -8,13 +8,15 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	calicoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/calico"
 	ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
 
@@ -62,7 +64,9 @@ func installCNIOnly(
 	tmr timer.Timer,
 	installFunc func(*cobra.Command, *v1alpha1.Cluster, timer.Timer) error,
 ) error {
-	tmr.NewStage()
+	if tmr != nil {
+		tmr.NewStage()
+	}
 
 	return installFunc(cmd, clusterCfg, tmr)
 }
@@ -98,7 +102,7 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		return err
 	}
 
-	ciliumInst := ciliuminstaller.NewCiliumInstallerWithDistribution(
+	ciliumInst := ciliuminstaller.NewInstallerWithDistribution(
 		setup.helmClient,
 		setup.kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
@@ -106,7 +110,7 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		clusterCfg.Spec.Cluster.Distribution,
 	)
 
-	return runCNIInstallation(cmd, ciliumInst, "cilium", tmr)
+	return runCNIInstallation(cmd, ciliumInst, "cilium", tmr, setup, clusterCfg)
 }
 
 func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
@@ -117,7 +121,7 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 
 	setup.timeout = max(setup.timeout, installer.CalicoInstallTimeout)
 
-	calicoInst := calicoinstaller.NewCalicoInstallerWithDistribution(
+	calicoInst := calicoinstaller.NewInstallerWithDistribution(
 		setup.helmClient,
 		setup.kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
@@ -125,7 +129,7 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		clusterCfg.Spec.Cluster.Distribution,
 	)
 
-	return runCNIInstallation(cmd, calicoInst, "calico", tmr)
+	return runCNIInstallation(cmd, calicoInst, "calico", tmr, setup, clusterCfg)
 }
 
 func runCNIInstallation(
@@ -133,6 +137,8 @@ func runCNIInstallation(
 	inst cniInstaller,
 	cniName string,
 	tmr timer.Timer,
+	setup *cniSetupResult,
+	clusterCfg *v1alpha1.Cluster,
 ) error {
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
@@ -145,12 +151,43 @@ func runCNIInstallation(
 		return fmt.Errorf("%s installation failed: %w", cniName, err)
 	}
 
+	// Wait for at least one node to become Ready before declaring success.
+	// This is critical for CNIs like Calico that use SkipWait (Helm returns
+	// before pods are ready), ensuring the network layer is functional
+	// before post-CNI components begin installing.
+	err = waitForCNIReadiness(cmd.Context(), setup, clusterCfg)
+	if err != nil {
+		return fmt.Errorf("node readiness check after %s install failed: %w", cniName, err)
+	}
+
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
 		Content: "cni installed",
-		Timer:   helpers.MaybeTimer(cmd, tmr),
+		Timer:   flags.MaybeTimer(cmd, tmr),
 		Writer:  cmd.OutOrStdout(),
 	})
+
+	return nil
+}
+
+// waitForCNIReadiness waits for at least one node to become Ready after CNI installation.
+func waitForCNIReadiness(
+	ctx context.Context,
+	setup *cniSetupResult,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	clientset, err := k8s.NewClientset(
+		setup.kubeconfig,
+		clusterCfg.Spec.Cluster.Connection.Context,
+	)
+	if err != nil {
+		return fmt.Errorf("create kubernetes client: %w", err)
+	}
+
+	err = readiness.WaitForNodeReady(ctx, clientset, setup.timeout)
+	if err != nil {
+		return fmt.Errorf("wait for node readiness after CNI install: %w", err)
+	}
 
 	return nil
 }

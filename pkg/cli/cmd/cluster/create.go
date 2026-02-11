@@ -7,25 +7,29 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/k3d"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/kind"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 )
+
+// NOTE: Some imports above (configmanager, k3dconfigmanager, kindconfigmanager,
+// talosconfigmanager, etc.) are used by functions that remain in this file
+// (loadClusterConfiguration, resolveClusterNameFromContext, etc.)
 
 const (
 	k3sDisableMetricsServerFlag = "--disable=metrics-server"
@@ -41,14 +45,14 @@ func newCreateLifecycleConfig() lifecycle.Config {
 		ActivityContent:    "creating cluster",
 		SuccessContent:     "cluster created",
 		ErrorMessagePrefix: "failed to create cluster",
-		Action: func(ctx context.Context, provisioner clusterprovisioner.ClusterProvisioner, clusterName string) error {
+		Action: func(ctx context.Context, provisioner clusterprovisioner.Provisioner, clusterName string) error {
 			return provisioner.Create(ctx, clusterName)
 		},
 	}
 }
 
 // NewCreateCmd wires the cluster create command using the shared runtime container.
-func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
+func NewCreateCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "create",
 		Short:        "Create a cluster",
@@ -59,31 +63,13 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		},
 	}
 
-	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultProviderFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCNIFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultLoadBalancerFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultPolicyEngineFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultImportImagesFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.ControlPlanesFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.WorkersFieldSelector())
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		defaultClusterMutationFieldSelectors(),
+	)
 
-	cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
-
-	cmd.Flags().StringSlice("mirror-registry", []string{},
-		"Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. "+
-			"Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). "+
-			"Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'")
-
-	// NOTE: mirror-registry is NOT bound to Viper to allow custom merge logic
-	// It's handled manually via getMirrorRegistriesWithDefaults() in setup/mirrorregistry
-
-	cmd.Flags().StringP("name", "n", "",
-		"Cluster name used for container names, registry names, and kubeconfig context")
-	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
+	registerMirrorRegistryFlag(cmd)
+	registerNameFlag(cmd, cfgManager)
 
 	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleCreateRunE)
 
@@ -92,7 +78,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 
 // handleCreateRunE executes cluster creation with mirror registry setup and CNI installation.
 //
-//nolint:funlen // Orchestrates full cluster creation lifecycle with multiple stages.
+
 func handleCreateRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -100,111 +86,16 @@ func handleCreateRunE(
 ) error {
 	deps.Timer.Start()
 
-	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
-
-	ctx, err := loadClusterConfiguration(cfgManager, outputTimer)
+	ctx, _, err := loadAndValidateClusterConfig(cfgManager, deps)
 	if err != nil {
 		return err
 	}
 
-	// Apply cluster name override from --name flag if provided
-	nameOverride := cfgManager.Viper.GetString("name")
-	if nameOverride != "" {
-		// Validate cluster name is DNS-1123 compliant
-		validationErr := v1alpha1.ValidateClusterName(nameOverride)
-		if validationErr != nil {
-			return fmt.Errorf("invalid --name flag: %w", validationErr)
-		}
-
-		err = applyClusterNameOverride(ctx, nameOverride)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Early validation of distribution x provider combination
-	err = ctx.ClusterCfg.Spec.Cluster.Provider.ValidateForDistribution(
-		ctx.ClusterCfg.Spec.Cluster.Distribution,
-	)
-	if err != nil {
-		return fmt.Errorf("invalid configuration: %w", err)
-	}
-
-	localDeps := getLocalRegistryDeps()
-
-	err = ensureLocalRegistriesReady(
-		cmd,
-		ctx,
-		deps,
-		cfgManager,
-		localDeps,
-	)
-	if err != nil {
-		return err
-	}
-
-	setupK3dMetricsServer(ctx.ClusterCfg, ctx.K3dConfig)
-	SetupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
-	SetupK3dLoadBalancer(ctx.ClusterCfg, ctx.K3dConfig)
-
-	configureClusterProvisionerFactory(&deps, ctx)
-
-	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps)
-	if err != nil {
-		return err
-	}
-
-	configureRegistryMirrorsInClusterWithWarning(
-		cmd,
-		ctx,
-		deps,
-		cfgManager,
-	)
-
-	err = localregistry.ExecuteStage(
-		cmd,
-		ctx,
-		deps,
-		localregistry.StageConnect,
-		localDeps,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to connect local registry: %w", err)
-	}
-
-	// Wait for K3d local registry to be ready before installing components.
-	// K3d creates the registry during cluster creation, so we need to wait
-	// for it to be ready before Flux can sync from it.
-	err = localregistry.WaitForK3dLocalRegistryReady(
-		cmd,
-		ctx.ClusterCfg,
-		ctx.K3dConfig,
-		localDeps.DockerInvoker,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to wait for local registry: %w", err)
-	}
-
-	// Set Connection.Context so post-CNI setup (InstallCNI, helm, kubectl) can resolve
-	// the correct kubeconfig context. This MUST happen after local registry operations
-	// (which resolve cluster name from distribution configs, not from context) but before
-	// post-CNI setup (which needs the kubectl context name like "kind-kind").
-	clusterName := resolveClusterNameFromContext(ctx)
-	ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(
-		clusterName,
-	)
-
-	maybeImportCachedImages(cmd, ctx, deps.Timer)
-
-	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
+	return runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
 }
 
-// configureClusterProvisionerFactory sets up the cluster provisioner factory.
-// Uses test override if available, otherwise creates a default factory.
-func configureClusterProvisionerFactory(
-	deps *lifecycle.Deps,
-	ctx *localregistry.Context,
-) {
+// newProvisionerFactory returns the cluster provisioner factory, using any test override if set.
+func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factory {
 	clusterProvisionerFactoryMu.RLock()
 
 	factoryOverride := clusterProvisionerFactoryOverride
@@ -212,16 +103,25 @@ func configureClusterProvisionerFactory(
 	clusterProvisionerFactoryMu.RUnlock()
 
 	if factoryOverride != nil {
-		deps.Factory = factoryOverride
-	} else {
-		deps.Factory = clusterprovisioner.DefaultFactory{
-			DistributionConfig: &clusterprovisioner.DistributionConfig{
-				Kind:  ctx.KindConfig,
-				K3d:   ctx.K3dConfig,
-				Talos: ctx.TalosConfig,
-			},
-		}
+		return factoryOverride
 	}
+
+	return clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind:  ctx.KindConfig,
+			K3d:   ctx.K3dConfig,
+			Talos: ctx.TalosConfig,
+		},
+	}
+}
+
+// configureProvisionerFactory sets up the cluster provisioner factory on deps.
+// Uses test override if available, otherwise creates a default factory.
+func configureProvisionerFactory(
+	deps *lifecycle.Deps,
+	ctx *localregistry.Context,
+) {
+	deps.Factory = newProvisionerFactory(ctx)
 }
 
 // maybeImportCachedImages imports cached container images if configured.
@@ -391,7 +291,7 @@ func handlePostCreationSetup(
 	}
 
 	factories := getInstallerFactories()
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	// OCI artifact push is now handled inside InstallPostCNIComponents after Flux is installed
 	err = setup.InstallPostCNIComponents(
@@ -407,79 +307,61 @@ func handlePostCreationSetup(
 	return nil
 }
 
+// maybeDisableK3dFeature conditionally appends a K3s --disable flag to K3d config.
+// It is a no-op when the distribution is not K3s, k3dConfig is nil, the feature
+// is not in the disabled state, or the flag is already present.
+func maybeDisableK3dFeature(
+	clusterCfg *v1alpha1.Cluster,
+	k3dConfig *v1alpha5.SimpleConfig,
+	isDisabled bool,
+	flag string,
+) {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
+		return
+	}
+
+	if !isDisabled {
+		return
+	}
+
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg == flag {
+			return
+		}
+	}
+
+	k3dConfig.Options.K3sOptions.ExtraArgs = append(
+		k3dConfig.Options.K3sOptions.ExtraArgs,
+		v1alpha5.K3sArgWithNodeFilters{
+			Arg:         flag,
+			NodeFilters: []string{"server:*"},
+		},
+	)
+}
+
 func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
-		return
-	}
-
-	if clusterCfg.Spec.Cluster.MetricsServer != v1alpha1.MetricsServerDisabled {
-		return
-	}
-
-	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == k3sDisableMetricsServerFlag {
-			return
-		}
-	}
-
-	k3dConfig.Options.K3sOptions.ExtraArgs = append(
-		k3dConfig.Options.K3sOptions.ExtraArgs,
-		v1alpha5.K3sArgWithNodeFilters{
-			Arg:         k3sDisableMetricsServerFlag,
-			NodeFilters: []string{"server:*"},
-		},
+	maybeDisableK3dFeature(
+		clusterCfg, k3dConfig,
+		clusterCfg.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerDisabled,
+		k3sDisableMetricsServerFlag,
 	)
 }
 
-// SetupK3dCSI configures K3d to disable local-storage when CSI is explicitly disabled.
-// This function is exported for testing purposes.
-func SetupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
-		return
-	}
-
-	if clusterCfg.Spec.Cluster.CSI != v1alpha1.CSIDisabled {
-		return
-	}
-
-	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == k3sDisableLocalStorageFlag {
-			return
-		}
-	}
-
-	k3dConfig.Options.K3sOptions.ExtraArgs = append(
-		k3dConfig.Options.K3sOptions.ExtraArgs,
-		v1alpha5.K3sArgWithNodeFilters{
-			Arg:         k3sDisableLocalStorageFlag,
-			NodeFilters: []string{"server:*"},
-		},
+// setupK3dCSI configures K3d to disable local-storage when CSI is explicitly disabled.
+func setupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
+	maybeDisableK3dFeature(
+		clusterCfg, k3dConfig,
+		clusterCfg.Spec.Cluster.CSI == v1alpha1.CSIDisabled,
+		k3sDisableLocalStorageFlag,
 	)
 }
 
-// SetupK3dLoadBalancer configures K3d to disable servicelb when LoadBalancer is explicitly disabled.
-// This function is exported for testing purposes.
-func SetupK3dLoadBalancer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
-		return
-	}
-
-	if clusterCfg.Spec.Cluster.LoadBalancer != v1alpha1.LoadBalancerDisabled {
-		return
-	}
-
-	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == k3sDisableServiceLBFlag {
-			return
-		}
-	}
-
-	k3dConfig.Options.K3sOptions.ExtraArgs = append(
-		k3dConfig.Options.K3sOptions.ExtraArgs,
-		v1alpha5.K3sArgWithNodeFilters{
-			Arg:         k3sDisableServiceLBFlag,
-			NodeFilters: []string{"server:*"},
-		},
+// setupK3dLoadBalancer configures K3d to disable servicelb when LoadBalancer is explicitly disabled.
+func setupK3dLoadBalancer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
+	maybeDisableK3dFeature(
+		clusterCfg, k3dConfig,
+		clusterCfg.Spec.Cluster.LoadBalancer == v1alpha1.LoadBalancerDisabled,
+		k3sDisableServiceLBFlag,
 	)
 }
 
@@ -533,7 +415,7 @@ func importCachedImages(
 	importPath string,
 	tmr timer.Timer,
 ) error {
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,

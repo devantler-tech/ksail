@@ -10,3 +10,15 @@ failed to install Calico: install or upgrade calico: failed to add calico reposi
 [TestCalicoInstaller_Uninstall_Error - 1]
 failed to uninstall calico release: assert.AnError general error for testing
 ---
+
+[TestInstaller_Uninstall_Error - 1]
+failed to uninstall calico release: assert.AnError general error for testing
+---
+
+[TestInstaller_Install_ChartError - 1]
+failed to install Calico: install or upgrade calico: failed to install calico chart: assert.AnError general error for testing
+---
+
+[TestInstaller_Install_RepoError - 1]
+failed to install Calico: install or upgrade calico: failed to add calico repository: assert.AnError general error for testing
+---

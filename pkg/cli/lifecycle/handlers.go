@@ -7,18 +7,18 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
 
-// ErrMissingClusterProvisionerDependency indicates that a lifecycle command resolved a nil provisioner.
-var ErrMissingClusterProvisionerDependency = errors.New("missing cluster provisioner dependency")
+// ErrMissingProvisionerDependency indicates that a lifecycle command resolved a nil provisioner.
+var ErrMissingProvisionerDependency = errors.New("missing cluster provisioner dependency")
 
 // ErrClusterConfigRequired indicates that a nil cluster configuration was provided.
 var ErrClusterConfigRequired = errors.New("cluster configuration is required")
@@ -28,7 +28,7 @@ var ErrClusterConfigRequired = errors.New("cluster configuration is required")
 // It returns an error if the lifecycle operation fails.
 type Action func(
 	ctx context.Context,
-	provisioner clusterprovisioner.ClusterProvisioner,
+	provisioner clusterprovisioner.Provisioner,
 	clusterName string,
 ) error
 
@@ -57,7 +57,7 @@ type Deps struct {
 // This is the recommended way to create lifecycle command handlers for standard operations like
 // start, stop, and delete. The returned function can be assigned directly to a cobra.Command's RunE field.
 func NewStandardRunE(
-	runtimeContainer *runtime.Runtime,
+	runtimeContainer *di.Runtime,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	config Config,
 ) func(*cobra.Command, []string) error {
@@ -65,7 +65,7 @@ func NewStandardRunE(
 		runtimeContainer,
 		cfgManager,
 		func(cmd *cobra.Command, manager *ksailconfigmanager.ConfigManager, deps Deps) error {
-			return HandleRunE(cmd, manager, deps, config)
+			return handleRunE(cmd, manager, deps, config)
 		},
 	)
 }
@@ -84,14 +84,14 @@ func NewStandardRunE(
 // directly for custom lifecycle handlers that need dependency injection but require
 // custom logic beyond the standard HandleRunE flow.
 func WrapHandler(
-	runtimeContainer *runtime.Runtime,
+	runtimeContainer *di.Runtime,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	handler func(*cobra.Command, *ksailconfigmanager.ConfigManager, Deps) error,
 ) func(*cobra.Command, []string) error {
-	return runtime.RunEWithRuntime(
+	return di.RunEWithRuntime(
 		runtimeContainer,
-		runtime.WithTimer(
-			func(cmd *cobra.Command, _ runtime.Injector, tmr timer.Timer) error {
+		di.WithTimer(
+			func(cmd *cobra.Command, _ di.Injector, tmr timer.Timer) error {
 				// Wrap output with StageSeparatingWriter for automatic stage separation
 				stageWriter := notify.NewStageSeparatingWriter(cmd.OutOrStdout())
 				cmd.SetOut(stageWriter)
@@ -101,7 +101,7 @@ func WrapHandler(
 					tmr.Start()
 				}
 
-				outputTimer := helpers.MaybeTimer(cmd, tmr)
+				outputTimer := flags.MaybeTimer(cmd, tmr)
 
 				_, err := cfgManager.Load(configmanager.LoadOptions{Timer: outputTimer})
 				if err != nil {
@@ -121,14 +121,14 @@ func WrapHandler(
 	)
 }
 
-// HandleRunE orchestrates the standard lifecycle workflow.
+// handleRunE orchestrates the standard lifecycle workflow.
 // It performs the following steps in order:
 //  1. Create a new timer stage (config was already loaded in WrapHandler)
 //  2. Execute the lifecycle action via RunWithConfig
 //
 // Note: The cluster configuration is already loaded by WrapHandler,
 // so this function uses the cached config from cfgManager.Config.
-func HandleRunE(
+func handleRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps Deps,
@@ -270,7 +270,7 @@ func RunWithConfig(
 	}
 
 	if provisioner == nil {
-		return ErrMissingClusterProvisionerDependency
+		return ErrMissingProvisionerDependency
 	}
 
 	clusterName, err := getClusterNameFromConfigOrContext(distributionConfig, clusterCfg)
@@ -295,7 +295,7 @@ func runWithProvisioner(
 	cmd *cobra.Command,
 	deps Deps,
 	config Config,
-	provisioner clusterprovisioner.ClusterProvisioner,
+	provisioner clusterprovisioner.Provisioner,
 	clusterName string,
 ) error {
 	showTitle(cmd, config.TitleEmoji, config.TitleContent)
@@ -312,7 +312,7 @@ func runWithProvisioner(
 		return fmt.Errorf("%s: %w", config.ErrorMessagePrefix, err)
 	}
 
-	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
+	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
 
 	notify.WriteMessage(
 		notify.Message{

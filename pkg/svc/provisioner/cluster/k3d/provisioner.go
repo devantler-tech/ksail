@@ -11,8 +11,9 @@ import (
 	"strings"
 	"sync"
 
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
-	runner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
+	runner "github.com/devantler-tech/ksail/v5/pkg/runner"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	clustercommand "github.com/k3d-io/k3d/v5/cmd/cluster"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/sirupsen/logrus"
@@ -28,18 +29,19 @@ var (
 	logrusConfigOnce sync.Once //nolint:gochecknoglobals // Required for one-time logrus initialization
 )
 
-// K3dClusterProvisioner executes k3d lifecycle commands via Cobra.
-type K3dClusterProvisioner struct {
-	simpleCfg  *v1alpha5.SimpleConfig
-	configPath string
-	runner     runner.CommandRunner
+// Provisioner executes k3d lifecycle commands via Cobra.
+type Provisioner struct {
+	simpleCfg         *v1alpha5.SimpleConfig
+	configPath        string
+	runner            runner.CommandRunner
+	componentDetector *detector.ComponentDetector
 }
 
-// NewK3dClusterProvisioner constructs a new command-backed provisioner.
-func NewK3dClusterProvisioner(
+// NewProvisioner constructs a new command-backed provisioner.
+func NewProvisioner(
 	simpleCfg *v1alpha5.SimpleConfig,
 	configPath string,
-) *K3dClusterProvisioner {
+) *Provisioner {
 	// Configure logrus for k3d's console output once
 	// k3d uses logrus for logging, so we need to set it up properly
 	// Use sync.Once to prevent data races when called from parallel tests
@@ -54,7 +56,7 @@ func NewK3dClusterProvisioner(
 		logrus.SetLevel(logrus.InfoLevel)
 	})
 
-	prov := &K3dClusterProvisioner{
+	prov := &Provisioner{
 		simpleCfg:  simpleCfg,
 		configPath: configPath,
 		runner:     runner.NewCobraCommandRunner(nil, nil),
@@ -64,7 +66,7 @@ func NewK3dClusterProvisioner(
 }
 
 // Create provisions a k3d cluster using the native Cobra command.
-func (k *K3dClusterProvisioner) Create(ctx context.Context, name string) error {
+func (k *Provisioner) Create(ctx context.Context, name string) error {
 	args := k.appendConfigFlag(nil)
 	args = k.appendImageFlag(args)
 
@@ -83,8 +85,8 @@ func (k *K3dClusterProvisioner) Create(ctx context.Context, name string) error {
 }
 
 // Delete removes a k3d cluster via the Cobra command.
-// Returns clustererrors.ErrClusterNotFound if the cluster does not exist.
-func (k *K3dClusterProvisioner) Delete(ctx context.Context, name string) error {
+// Returns clustererr.ErrClusterNotFound if the cluster does not exist.
+func (k *Provisioner) Delete(ctx context.Context, name string) error {
 	// Check if cluster exists before attempting to delete
 	target := k.resolveName(name)
 
@@ -94,7 +96,7 @@ func (k *K3dClusterProvisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	if !exists {
-		return fmt.Errorf("%w: %s", clustererrors.ErrClusterNotFound, target)
+		return fmt.Errorf("%w: %s", clustererr.ErrClusterNotFound, target)
 	}
 
 	args := k.appendConfigFlag(nil)
@@ -110,7 +112,7 @@ func (k *K3dClusterProvisioner) Delete(ctx context.Context, name string) error {
 }
 
 // Start resumes a stopped k3d cluster via Cobra.
-func (k *K3dClusterProvisioner) Start(ctx context.Context, name string) error {
+func (k *Provisioner) Start(ctx context.Context, name string) error {
 	return k.runLifecycleCommand(
 		ctx,
 		clustercommand.NewCmdClusterStart,
@@ -122,7 +124,7 @@ func (k *K3dClusterProvisioner) Start(ctx context.Context, name string) error {
 }
 
 // Stop halts a running k3d cluster via Cobra.
-func (k *K3dClusterProvisioner) Stop(ctx context.Context, name string) error {
+func (k *Provisioner) Stop(ctx context.Context, name string) error {
 	return k.runLifecycleCommand(
 		ctx,
 		clustercommand.NewCmdClusterStop,
@@ -134,7 +136,7 @@ func (k *K3dClusterProvisioner) Stop(ctx context.Context, name string) error {
 }
 
 // List returns cluster names reported by the Cobra command.
-func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
+func (k *Provisioner) List(ctx context.Context) ([]string, error) {
 	// Temporarily redirect logrus to discard output during list
 	// to prevent log messages from appearing in console
 	originalLogOutput := logrus.StandardLogger().Out
@@ -198,7 +200,7 @@ func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 }
 
 // Exists returns whether the target cluster is present.
-func (k *K3dClusterProvisioner) Exists(ctx context.Context, name string) (bool, error) {
+func (k *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 	clusters, err := k.List(ctx)
 	if err != nil {
 		return false, fmt.Errorf("list: %w", err)
@@ -212,8 +214,13 @@ func (k *K3dClusterProvisioner) Exists(ctx context.Context, name string) (bool, 
 	return slices.Contains(clusters, target), nil
 }
 
+// WithComponentDetector sets the component detector for querying cluster state.
+func (k *Provisioner) WithComponentDetector(d *detector.ComponentDetector) {
+	k.componentDetector = d
+}
+
 // runListCommand executes the k3d cluster list command and returns the output.
-func (k *K3dClusterProvisioner) runListCommand(ctx context.Context) (string, error) {
+func (k *Provisioner) runListCommand(ctx context.Context) (string, error) {
 	cmd := clustercommand.NewCmdClusterList()
 	args := []string{"--output", "json"}
 
@@ -255,7 +262,7 @@ func parseClusterNames(output string) ([]string, error) {
 	return names, nil
 }
 
-func (k *K3dClusterProvisioner) appendConfigFlag(args []string) []string {
+func (k *Provisioner) appendConfigFlag(args []string) []string {
 	if k.configPath == "" {
 		return args
 	}
@@ -266,7 +273,7 @@ func (k *K3dClusterProvisioner) appendConfigFlag(args []string) []string {
 // appendImageFlag adds the --image flag when no config file is used.
 // This ensures the k3d CLI uses the image from our in-memory config
 // instead of its internal default (which may be an older version).
-func (k *K3dClusterProvisioner) appendImageFlag(args []string) []string {
+func (k *Provisioner) appendImageFlag(args []string) []string {
 	// Only add --image flag when no config file is used
 	// When a config file exists, the image is read from the config file
 	if k.configPath != "" {
@@ -281,7 +288,7 @@ func (k *K3dClusterProvisioner) appendImageFlag(args []string) []string {
 	return args
 }
 
-func (k *K3dClusterProvisioner) resolveName(name string) string {
+func (k *Provisioner) resolveName(name string) string {
 	if strings.TrimSpace(name) != "" {
 		return name
 	}
@@ -293,7 +300,7 @@ func (k *K3dClusterProvisioner) resolveName(name string) string {
 	return ""
 }
 
-func (k *K3dClusterProvisioner) runLifecycleCommand(
+func (k *Provisioner) runLifecycleCommand(
 	ctx context.Context,
 	builder func() *cobra.Command,
 	args []string,

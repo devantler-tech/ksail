@@ -8,17 +8,15 @@ import (
 	"path/filepath"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
 	"github.com/getsops/sops/v3/cmd/sops/codes"
 	"github.com/getsops/sops/v3/cmd/sops/common"
 	"github.com/getsops/sops/v3/keyservice"
-	"github.com/getsops/sops/v3/stores"
 	"github.com/getsops/sops/v3/stores/json"
 	"github.com/getsops/sops/v3/stores/yaml"
 	"github.com/getsops/sops/v3/version"
-	"github.com/mitchellh/go-wordwrap"
 	"github.com/spf13/cobra"
 )
 
@@ -57,22 +55,6 @@ type fileAlreadyEncryptedError struct{}
 
 func (err *fileAlreadyEncryptedError) Error() string {
 	return "file already encrypted"
-}
-
-const wrapWidth = 75
-
-func (err *fileAlreadyEncryptedError) UserError() string {
-	message := "The file you have provided contains a top-level entry called " +
-		"'" + stores.SopsMetadataKey + "', or for flat file formats top-level entries starting with " +
-		"'" + stores.SopsMetadataKey + "_'. This is generally due to the file already being encrypted. " +
-		"SOPS uses a top-level entry called '" + stores.SopsMetadataKey + "' to store the metadata " +
-		"required to decrypt the file. For this reason, SOPS cannot " +
-		"encrypt files that already contain such an entry.\n\n" +
-		"If this is an unencrypted file, rename the '" + stores.SopsMetadataKey + "' entry.\n\n" +
-		"If this is an encrypted file and you want to edit it, use the " +
-		"editor mode, for example: `sops my_file.yaml`"
-
-	return wordwrap.WrapString(message, wrapWidth)
 }
 
 // ensureNoMetadata checks whether a file already contains SOPS metadata.
