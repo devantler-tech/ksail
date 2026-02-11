@@ -13,7 +13,7 @@ import (
 
 const ciEnvValue = "true"
 
-func TestNewCloudProviderKINDInstaller(t *testing.T) {
+func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	// Skip in CI - requires Docker
@@ -26,7 +26,7 @@ func TestNewCloudProviderKINDInstaller(t *testing.T) {
 
 	defer func() { _ = dockerClient.Close() }()
 
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(dockerClient)
+	installer := cloudproviderkindinstaller.NewInstaller(dockerClient)
 
 	assert.NotNil(t, installer)
 }
@@ -45,7 +45,7 @@ func TestCloudProviderKINDInstallerInstallAndUninstall(t *testing.T) {
 
 	defer func() { _ = dockerClient.Close() }()
 
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(dockerClient)
+	installer := cloudproviderkindinstaller.NewInstaller(dockerClient)
 
 	ctx := context.Background()
 
@@ -71,7 +71,7 @@ func TestCloudProviderKINDInstallerUninstallNoInstall(t *testing.T) {
 
 	defer func() { _ = dockerClient.Close() }()
 
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(dockerClient)
+	installer := cloudproviderkindinstaller.NewInstaller(dockerClient)
 
 	ctx := context.Background()
 	err = installer.Uninstall(ctx)

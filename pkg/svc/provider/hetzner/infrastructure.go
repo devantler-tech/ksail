@@ -167,48 +167,48 @@ func buildFirewallRules() []hcloud.FirewallRule {
 		{
 			Direction:   hcloud.FirewallRuleDirectionIn,
 			Protocol:    hcloud.FirewallRuleProtocolTCP,
-			Port:        hcloud.Ptr("50000"),
+			Port:        new("50000"),
 			SourceIPs:   anyIP,
-			Description: hcloud.Ptr("Talos API (apid)"),
+			Description: new("Talos API (apid)"),
 		},
 		// Kubernetes API
 		{
 			Direction:   hcloud.FirewallRuleDirectionIn,
 			Protocol:    hcloud.FirewallRuleProtocolTCP,
-			Port:        hcloud.Ptr("6443"),
+			Port:        new("6443"),
 			SourceIPs:   anyIP,
-			Description: hcloud.Ptr("Kubernetes API"),
+			Description: new("Kubernetes API"),
 		},
 		// Talos trustd (for machine config)
 		{
 			Direction:   hcloud.FirewallRuleDirectionIn,
 			Protocol:    hcloud.FirewallRuleProtocolTCP,
-			Port:        hcloud.Ptr("50001"),
+			Port:        new("50001"),
 			SourceIPs:   anyIP,
-			Description: hcloud.Ptr("Talos trustd"),
+			Description: new("Talos trustd"),
 		},
 		// etcd
 		{
 			Direction:   hcloud.FirewallRuleDirectionIn,
 			Protocol:    hcloud.FirewallRuleProtocolTCP,
-			Port:        hcloud.Ptr("2379-2380"),
+			Port:        new("2379-2380"),
 			SourceIPs:   anyIP,
-			Description: hcloud.Ptr("etcd"),
+			Description: new("etcd"),
 		},
 		// Kubelet
 		{
 			Direction:   hcloud.FirewallRuleDirectionIn,
 			Protocol:    hcloud.FirewallRuleProtocolTCP,
-			Port:        hcloud.Ptr("10250"),
+			Port:        new("10250"),
 			SourceIPs:   anyIP,
-			Description: hcloud.Ptr("Kubelet API"),
+			Description: new("Kubelet API"),
 		},
 		// ICMP (ping)
 		{
 			Direction:   hcloud.FirewallRuleDirectionIn,
 			Protocol:    hcloud.FirewallRuleProtocolICMP,
 			SourceIPs:   anyIP,
-			Description: hcloud.Ptr("ICMP (ping)"),
+			Description: new("ICMP (ping)"),
 		},
 	}
 }

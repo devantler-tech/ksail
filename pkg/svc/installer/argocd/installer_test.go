@@ -12,12 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewArgoCDInstaller(t *testing.T) {
+func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	timeout := 5 * time.Minute
 	client := helm.NewMockInterface(t)
-	installer := argocdinstaller.NewArgoCDInstaller(client, timeout)
+	installer := argocdinstaller.NewInstaller(client, timeout)
 
 	require.NotNil(t, installer)
 }
@@ -69,10 +69,10 @@ func TestArgoCDInstallerUninstallError(t *testing.T) {
 
 func newArgoCDInstallerWithDefaults(
 	t *testing.T,
-) (*argocdinstaller.ArgoCDInstaller, *helm.MockInterface) {
+) (*argocdinstaller.Installer, *helm.MockInterface) {
 	t.Helper()
 	client := helm.NewMockInterface(t)
-	installer := argocdinstaller.NewArgoCDInstaller(
+	installer := argocdinstaller.NewInstaller(
 		client,
 		5*time.Second,
 	)

@@ -8,11 +8,12 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/labels"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
@@ -31,11 +32,17 @@ const (
 	LabelTalosClusterName = "talos.cluster.name"
 )
 
+// Node role constants.
+const (
+	// RoleControlPlane is the role identifier for control-plane nodes.
+	RoleControlPlane = "control-plane"
+	// RoleWorker is the role identifier for worker nodes.
+	RoleWorker = "worker"
+)
+
 // Default resource values for nodes.
 const (
-	defaultNodeMemory = 2 * 1024 * 1024 * 1024 // 2GB
-	defaultNodeCPUs   = 2 * 1000 * 1000 * 1000 // 2 CPU cores
-	defaultMTU        = 1500
+	defaultMTU = 1500
 	// ipv4Offset is the offset from gateway for node IPs (gateway is .1, nodes start at .2).
 	ipv4Offset = 2
 	// stateDirectoryPermissions is the permissions for the state directory.
@@ -88,8 +95,8 @@ type HetznerNodeGroupOpts struct {
 	Location    string
 }
 
-// TalosProvisioner implements ClusterProvisioner for Talos-in-Docker clusters.
-type TalosProvisioner struct {
+// Provisioner implements ClusterProvisioner for Talos-in-Docker clusters.
+type Provisioner struct {
 	// talosConfigs holds the loaded Talos machine configurations with all patches applied.
 	talosConfigs *talosconfigmanager.Configs
 	// options holds runtime configuration for provisioning.
@@ -105,21 +112,22 @@ type TalosProvisioner struct {
 	hetznerOpts        *v1alpha1.OptionsHetzner
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
 	logWriter          io.Writer
+	componentDetector  *detector.ComponentDetector
 }
 
-// NewTalosProvisioner creates a new TalosProvisioner.
+// NewProvisioner creates a new Provisioner.
 // The talosConfigs parameter contains the pre-loaded Talos machine configurations
 // with all patches (file-based and runtime) already applied.
 // The options parameter contains runtime settings like node counts and output paths.
-func NewTalosProvisioner(
+func NewProvisioner(
 	talosConfigs *talosconfigmanager.Configs,
 	options *Options,
-) *TalosProvisioner {
+) *Provisioner {
 	if options == nil {
 		options = NewOptions()
 	}
 
-	return &TalosProvisioner{
+	return &Provisioner{
 		talosConfigs: talosConfigs,
 		options:      options,
 		provisionerFactory: func(ctx context.Context) (provision.Provisioner, error) {
@@ -130,69 +138,76 @@ func NewTalosProvisioner(
 }
 
 // WithDockerClient sets the Docker client for container operations.
-func (p *TalosProvisioner) WithDockerClient(c dockerclient.APIClient) *TalosProvisioner {
+func (p *Provisioner) WithDockerClient(c dockerclient.APIClient) *Provisioner {
 	p.dockerClient = c
 
 	return p
 }
 
 // WithProvisionerFactory sets a custom provisioner factory for testing.
-func (p *TalosProvisioner) WithProvisionerFactory(
+func (p *Provisioner) WithProvisionerFactory(
 	f func(ctx context.Context) (provision.Provisioner, error),
-) *TalosProvisioner {
+) *Provisioner {
 	p.provisionerFactory = f
 
 	return p
 }
 
 // WithLogWriter sets the log writer for provisioning output.
-func (p *TalosProvisioner) WithLogWriter(w io.Writer) *TalosProvisioner {
+func (p *Provisioner) WithLogWriter(w io.Writer) *Provisioner {
 	p.logWriter = w
 
 	return p
 }
 
 // WithInfraProvider sets the infrastructure provider for node operations.
-func (p *TalosProvisioner) WithInfraProvider(prov provider.Provider) *TalosProvisioner {
+func (p *Provisioner) WithInfraProvider(prov provider.Provider) *Provisioner {
 	p.infraProvider = prov
 
 	return p
 }
 
 // WithHetznerOptions sets the Hetzner-specific options for cloud provisioning.
-func (p *TalosProvisioner) WithHetznerOptions(opts v1alpha1.OptionsHetzner) *TalosProvisioner {
+func (p *Provisioner) WithHetznerOptions(opts v1alpha1.OptionsHetzner) *Provisioner {
 	p.hetznerOpts = &opts
 
 	return p
 }
 
 // WithTalosOptions sets the Talos-specific options (node counts, cloud ISO, etc.).
-func (p *TalosProvisioner) WithTalosOptions(opts v1alpha1.OptionsTalos) *TalosProvisioner {
+func (p *Provisioner) WithTalosOptions(opts v1alpha1.OptionsTalos) *Provisioner {
 	p.talosOpts = &opts
+
+	return p
+}
+
+// WithComponentDetector sets the component detector for querying cluster state.
+func (p *Provisioner) WithComponentDetector(d *detector.ComponentDetector) *Provisioner {
+	p.componentDetector = d
 
 	return p
 }
 
 // SetProvider sets the infrastructure provider for node operations.
 // This implements the ProviderAware interface.
-func (p *TalosProvisioner) SetProvider(prov provider.Provider) {
+func (p *Provisioner) SetProvider(prov provider.Provider) {
 	p.infraProvider = prov
 }
 
 // Options returns the current runtime options.
-func (p *TalosProvisioner) Options() *Options {
+func (p *Provisioner) Options() *Options {
 	return p.options
 }
 
 // TalosConfigs returns the loaded Talos machine configurations.
-func (p *TalosProvisioner) TalosConfigs() *talosconfigmanager.Configs {
+func (p *Provisioner) TalosConfigs() *talosconfigmanager.Configs {
 	return p.talosConfigs
 }
 
 // Create creates a Talos cluster.
 // If name is non-empty, it overrides the cluster name from talosConfigs.
 // Routes to Docker-based or Hetzner-based provisioning based on configuration.
-func (p *TalosProvisioner) Create(ctx context.Context, name string) error {
+func (p *Provisioner) Create(ctx context.Context, name string) error {
 	clusterName := p.resolveClusterName(name)
 
 	// Route to Hetzner-based provisioning if Hetzner options are set
@@ -207,7 +222,7 @@ func (p *TalosProvisioner) Create(ctx context.Context, name string) error {
 // Delete deletes a Talos cluster.
 // If name is non-empty, it overrides the configured cluster name.
 // Routes to Docker-based or Hetzner-based deletion based on configuration.
-func (p *TalosProvisioner) Delete(ctx context.Context, name string) error {
+func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	clusterName := p.resolveClusterName(name)
 
 	// Route to Hetzner-based deletion if Hetzner options are set
@@ -222,7 +237,7 @@ func (p *TalosProvisioner) Delete(ctx context.Context, name string) error {
 // Exists checks if a Talos cluster exists.
 // If name is non-empty, it overrides the configured cluster name.
 // Routes to Docker-based or Hetzner-based existence check based on configuration.
-func (p *TalosProvisioner) Exists(ctx context.Context, name string) (bool, error) {
+func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 	clusterName := p.resolveClusterName(name)
 
 	// Route to Hetzner-based check if Hetzner options are set
@@ -255,7 +270,7 @@ func (p *TalosProvisioner) Exists(ctx context.Context, name string) (bool, error
 
 // List lists all Talos-in-Docker clusters.
 // Returns unique cluster names from containers with Talos labels.
-func (p *TalosProvisioner) List(ctx context.Context) ([]string, error) {
+func (p *Provisioner) List(ctx context.Context) ([]string, error) {
 	if p.dockerClient == nil {
 		return nil, ErrDockerNotAvailable
 	}
@@ -271,7 +286,7 @@ func (p *TalosProvisioner) List(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	return labels.UniqueValues(
+	return k8s.UniqueLabelValues(
 		containers,
 		LabelTalosClusterName,
 		func(c container.Summary) map[string]string {
@@ -283,7 +298,7 @@ func (p *TalosProvisioner) List(ctx context.Context) ([]string, error) {
 // Start starts a stopped Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
 // Uses the infrastructure provider if set, otherwise falls back to Docker client.
-func (p *TalosProvisioner) Start(ctx context.Context, name string) error {
+func (p *Provisioner) Start(ctx context.Context, name string) error {
 	clusterName := p.resolveClusterName(name)
 
 	// Use infrastructure provider if available
@@ -341,7 +356,7 @@ const containerStopTimeout = 30
 // Stop stops a running Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
 // Uses the infrastructure provider if set, otherwise falls back to Docker client.
-func (p *TalosProvisioner) Stop(ctx context.Context, name string) error {
+func (p *Provisioner) Stop(ctx context.Context, name string) error {
 	clusterName := p.resolveClusterName(name)
 
 	// Use infrastructure provider if available
@@ -381,7 +396,7 @@ func (p *TalosProvisioner) Stop(ctx context.Context, name string) error {
 }
 
 // resolveClusterName returns the provided name if non-empty, otherwise the cluster name from configs.
-func (p *TalosProvisioner) resolveClusterName(name string) string {
+func (p *Provisioner) resolveClusterName(name string) string {
 	if name != "" {
 		return name
 	}

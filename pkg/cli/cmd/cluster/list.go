@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -20,10 +20,10 @@ import (
 )
 
 // ErrUnsupportedProvider re-exports the shared error for backward compatibility.
-var ErrUnsupportedProvider = clustererrors.ErrUnsupportedProvider
+var ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
 
-// AllDistributions returns all supported distributions.
-func AllDistributions() []v1alpha1.Distribution {
+// allDistributions returns all supported distributions.
+func allDistributions() []v1alpha1.Distribution {
 	return []v1alpha1.Distribution{
 		v1alpha1.DistributionVanilla,
 		v1alpha1.DistributionK3s,
@@ -31,16 +31,16 @@ func AllDistributions() []v1alpha1.Distribution {
 	}
 }
 
-// AllProviders returns all supported providers.
-func AllProviders() []v1alpha1.Provider {
+// allProviders returns all supported providers.
+func allProviders() []v1alpha1.Provider {
 	return []v1alpha1.Provider{
 		v1alpha1.ProviderDocker,
 		v1alpha1.ProviderHetzner,
 	}
 }
 
-// clusterResult holds a cluster name with its provider for display purposes.
-type clusterResult struct {
+// listResult holds a cluster name with its provider for display purposes.
+type listResult struct {
 	Provider    v1alpha1.Provider
 	ClusterName string
 }
@@ -72,7 +72,7 @@ Examples:
   ksail cluster list --provider Hetzner`
 
 // NewListCmd creates the list command for clusters.
-func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
+func NewListCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	var providerFilter v1alpha1.Provider
 
 	cmd := &cobra.Command{
@@ -81,7 +81,7 @@ func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		Long:         listLongDesc,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runtimeContainer.Invoke(func(_ runtime.Injector) error {
+			return runtimeContainer.Invoke(func(_ di.Injector) error {
 				deps := ListDeps{}
 
 				return HandleListRunE(cmd, providerFilter, deps)
@@ -123,7 +123,7 @@ func HandleListRunE(
 	providers := resolveProviders(providerFilter)
 
 	// Collect clusters from all providers
-	var allResults []clusterResult
+	var allResults []listResult
 
 	for _, prov := range providers {
 		clusters, err := getProviderClusters(cmd.Context(), deps, prov)
@@ -140,7 +140,7 @@ func HandleListRunE(
 		}
 
 		for _, cluster := range clusters {
-			allResults = append(allResults, clusterResult{
+			allResults = append(allResults, listResult{
 				Provider:    prov,
 				ClusterName: cluster,
 			})
@@ -156,7 +156,7 @@ func HandleListRunE(
 // resolveProviders returns the list of providers to query based on the filter.
 func resolveProviders(filter v1alpha1.Provider) []v1alpha1.Provider {
 	if filter == "" {
-		return AllProviders()
+		return allProviders()
 	}
 
 	return []v1alpha1.Provider{filter}
@@ -182,7 +182,7 @@ func getProviderClusters(
 func getDockerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 	var allClusters []string
 
-	for _, dist := range AllDistributions() {
+	for _, dist := range allDistributions() {
 		clusters, err := getDistributionClusters(ctx, deps, dist)
 		if err != nil {
 			// Log and continue - don't fail on one distribution
@@ -297,7 +297,7 @@ func createEmptyDistributionConfig(
 func displayListResults(
 	writer io.Writer,
 	providers []v1alpha1.Provider,
-	results []clusterResult,
+	results []listResult,
 ) {
 	if len(results) == 0 {
 		_, _ = fmt.Fprintln(writer, "No clusters found.")

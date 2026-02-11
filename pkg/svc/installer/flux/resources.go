@@ -56,16 +56,16 @@ var loadRESTConfig = func(kubeconfig string) (*rest.Config, error) {
 	return k8s.BuildRESTConfig(kubeconfig, "")
 }
 
-// fluxSetupParams holds the components needed for Flux setup operations.
+// setupParams holds the components needed for Flux setup operations.
 // Context is passed separately to setupFluxCore to avoid embedding it in a struct.
-type fluxSetupParams struct {
+type setupParams struct {
 	restConfig  *rest.Config
 	clusterCfg  *v1alpha1.Cluster
 	clusterName string
 }
 
 // setupFluxCore performs the common Flux setup: secret creation, FluxInstance creation, and OCIRepository patching.
-func setupFluxCore(ctx context.Context, params fluxSetupParams) error {
+func setupFluxCore(ctx context.Context, params setupParams) error {
 	// For external registries with credentials, create the pull secret before FluxInstance
 	err := ensureExternalRegistrySecret(ctx, params.restConfig, params.clusterCfg)
 	if err != nil {
@@ -126,7 +126,7 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	err = setupFluxCore(ctx, fluxSetupParams{
+	err = setupFluxCore(ctx, setupParams{
 		restConfig:  restConfig,
 		clusterCfg:  clusterCfg,
 		clusterName: clusterName,
@@ -154,12 +154,12 @@ func EnsureDefaultResources(
 	return nil
 }
 
-// SetupFluxInstance creates the FluxInstance CR and configures OCIRepository settings.
+// SetupInstance creates the FluxInstance CR and configures OCIRepository settings.
 // This does NOT wait for FluxInstance to be ready - use WaitForFluxReady after pushing artifacts.
 // Returns error if setup fails.
 //
 //nolint:contextcheck // context passed from caller and used in nested functions
-func SetupFluxInstance(
+func SetupInstance(
 	ctx context.Context,
 	kubeconfig string,
 	clusterCfg *v1alpha1.Cluster,
@@ -178,7 +178,7 @@ func SetupFluxInstance(
 		return err
 	}
 
-	return setupFluxCore(ctx, fluxSetupParams{
+	return setupFluxCore(ctx, setupParams{
 		restConfig:  restConfig,
 		clusterCfg:  clusterCfg,
 		clusterName: clusterName,

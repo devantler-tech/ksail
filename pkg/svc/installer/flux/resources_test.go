@@ -217,7 +217,7 @@ func TestBuildLocalRegistryURL(t *testing.T) {
 	}
 }
 
-func TestBuildFluxInstance(t *testing.T) {
+func TestBuildInstance(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -264,7 +264,7 @@ func TestBuildFluxInstance(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			instance, err := fluxinstaller.BuildFluxInstance(
+			instance, err := fluxinstaller.BuildInstance(
 				testCase.clusterCfg,
 				testCase.clusterName,
 			)

@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 )
 
 func TestNewInstallCmdRequiresMinimumArgs(t *testing.T) {
 	t.Parallel()
 
-	cmd := workload.NewInstallCmd(runtime.NewRuntime())
+	cmd := workload.NewInstallCmd(di.NewRuntime())
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 
@@ -63,7 +63,7 @@ func TestInstallCommandHonorsFlags(t *testing.T) {
 func runInstallCmd(t *testing.T, args ...string) error {
 	t.Helper()
 
-	cmd := workload.NewInstallCmd(runtime.NewRuntime())
+	cmd := workload.NewInstallCmd(di.NewRuntime())
 
 	var output bytes.Buffer
 	cmd.SetOut(&output)

@@ -11,30 +11,30 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
 )
 
-// CiliumInstaller implements the installer.Installer interface for Cilium.
-type CiliumInstaller struct {
+// Installer implements the installer.Installer interface for Cilium.
+type Installer struct {
 	*cni.InstallerBase
 
 	distribution v1alpha1.Distribution
 }
 
-// NewCiliumInstaller creates a new Cilium installer instance.
-func NewCiliumInstaller(
+// NewInstaller creates a new Cilium installer instance.
+func NewInstaller(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,
-) *CiliumInstaller {
-	return NewCiliumInstallerWithDistribution(client, kubeconfig, context, timeout, "")
+) *Installer {
+	return NewInstallerWithDistribution(client, kubeconfig, context, timeout, "")
 }
 
-// NewCiliumInstallerWithDistribution creates a new Cilium installer instance with distribution-specific configuration.
-func NewCiliumInstallerWithDistribution(
+// NewInstallerWithDistribution creates a new Cilium installer instance with distribution-specific configuration.
+func NewInstallerWithDistribution(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,
-) *CiliumInstaller {
-	ciliumInstaller := &CiliumInstaller{
+) *Installer {
+	ciliumInstaller := &Installer{
 		distribution: distribution,
 	}
 	ciliumInstaller.InstallerBase = cni.NewInstallerBase(
@@ -48,7 +48,7 @@ func NewCiliumInstallerWithDistribution(
 }
 
 // Install installs or upgrades Cilium via its Helm chart.
-func (c *CiliumInstaller) Install(ctx context.Context) error {
+func (c *Installer) Install(ctx context.Context) error {
 	// For Talos, wait for API server to stabilize before CNI installation.
 	// The API server may be unstable immediately after bootstrap.
 	if c.distribution == v1alpha1.DistributionTalos {
@@ -67,7 +67,7 @@ func (c *CiliumInstaller) Install(ctx context.Context) error {
 }
 
 // Uninstall removes the Helm release for Cilium.
-func (c *CiliumInstaller) Uninstall(ctx context.Context) error {
+func (c *Installer) Uninstall(ctx context.Context) error {
 	client, err := c.GetClient()
 	if err != nil {
 		return fmt.Errorf("get helm client: %w", err)
@@ -82,7 +82,7 @@ func (c *CiliumInstaller) Uninstall(ctx context.Context) error {
 }
 
 // Images returns the container images used by Cilium.
-func (c *CiliumInstaller) Images(ctx context.Context) ([]string, error) {
+func (c *Installer) Images(ctx context.Context) ([]string, error) {
 	images, err := c.ImagesFromChart(ctx, c.chartSpec())
 	if err != nil {
 		return nil, fmt.Errorf("get cilium images: %w", err)
@@ -91,7 +91,7 @@ func (c *CiliumInstaller) Images(ctx context.Context) ([]string, error) {
 	return images, nil
 }
 
-func (c *CiliumInstaller) chartSpec() *helm.ChartSpec {
+func (c *Installer) chartSpec() *helm.ChartSpec {
 	return &helm.ChartSpec{
 		ReleaseName:     "cilium",
 		ChartName:       "cilium/cilium",
@@ -105,7 +105,7 @@ func (c *CiliumInstaller) chartSpec() *helm.ChartSpec {
 
 // --- internals ---
 
-func (c *CiliumInstaller) helmInstallOrUpgradeCilium(ctx context.Context) error {
+func (c *Installer) helmInstallOrUpgradeCilium(ctx context.Context) error {
 	client, err := c.GetClient()
 	if err != nil {
 		return fmt.Errorf("get helm client: %w", err)
@@ -135,7 +135,7 @@ func (c *CiliumInstaller) helmInstallOrUpgradeCilium(ctx context.Context) error 
 }
 
 // getCiliumValues returns the Helm values for Cilium based on the distribution.
-func (c *CiliumInstaller) getCiliumValues() map[string]string {
+func (c *Installer) getCiliumValues() map[string]string {
 	values := defaultCiliumValues()
 
 	// Add distribution-specific values

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	iohelpers "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 )
 
 // ErrRepositoryRequired indicates that the repository is required for empty artifacts.
@@ -145,7 +145,7 @@ func normalizeRepositoryName(candidate, sourcePath string) string {
 // Consecutive hyphens are collapsed to single hyphens.
 // Leading and trailing hyphens are trimmed.
 func sanitizeSegment(segment string) string {
-	return iohelpers.SanitizeToDNSLabel(segment)
+	return k8s.SanitizeToDNSLabel(segment)
 }
 
 // normalizeArtifactName derives an artifact name from the candidate or repository.
