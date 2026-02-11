@@ -430,6 +430,13 @@ func (l *LoadBalancer) ValidValues() []string {
 func (l *LoadBalancer) EffectiveValue(
 	distribution Distribution, provider Provider,
 ) LoadBalancer {
+	// Talos × Docker: LoadBalancer is not yet implemented (MetalLB planned).
+	// Force Disabled regardless of the requested value to prevent false-positive
+	// diffs in the update command. Remove this guard once MetalLB support lands.
+	if distribution == DistributionTalos && provider == ProviderDocker {
+		return LoadBalancerDisabled
+	}
+
 	if *l != LoadBalancerDefault {
 		return *l
 	}
