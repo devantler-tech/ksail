@@ -50,6 +50,7 @@ func humanizeToolName(name string) string {
 			words[i] = strings.ToUpper(word[:1]) + word[1:]
 		}
 	}
+
 	return strings.Join(words, " ")
 }
 

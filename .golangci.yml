@@ -2,7 +2,7 @@ version: "2"
 run:
   allow-parallel-runners: true
   modules-download-mode: readonly
-  go: "1.25.4"
+  go: "1.26.0"
 formatters:
   enable:
     - gci
@@ -18,233 +18,36 @@ linters:
   disable:
     - exhaustruct
     - wsl
+    - ireturn
   exclusions:
     paths:
       - ".*mocks.*\\.go$"
     rules:
-      - linters:
-          - ireturn
-        path: pkg/io/config-manager/loader/loader.go
-      - linters:
-          - ireturn
-        path: pkg/client/docker/engine.go
-      - linters:
-          - ireturn
-        path: pkg/cli/helpers/flags.go
-      - linters:
-          - ireturn
-        path: pkg/svc/provisioner/cluster/factory.go
-      - linters:
-          - ireturn
-        path: pkg/svc/provisioner/registry/local_registry_service.go
-      - linters:
-          - ireturn
-        path: pkg/svc/installer/cni/base.go
-      - linters:
-          - ireturn
-        path: pkg/client/oci/service.go
-      - linters:
-          - ireturn
-        path: pkg/client/flux/client.go
-      - linters:
-          - ireturn
-        path: pkg/client/kubectl/client.go
-      - linters:
-          - ireturn
-        path: pkg/svc/installer/flux/fluxinstance_types.go
-      - linters:
-          - ireturn
-        path: pkg/client/oci/builder_impl.go
-      - linters:
-          - ireturn
-        path: pkg/client/kubeconform/client.go
-      - linters:
-          - ireturn
-        path: pkg/svc/installer/flux/resources.go
-      - linters:
-          - ireturn
-        path: pkg/svc/installer/flux/resources_test.go
-      - linters:
-          - ireturn
-        path: pkg/cli/cmd/cipher/encrypt.go
-      - linters:
-          - ireturn
-        path: pkg/cli/cmd/cluster/create_test.go
-      - linters:
-          - ireturn
-        path: pkg/cli/cmd/cluster/list_test.go
-      - linters:
-          - ireturn
-        path: pkg/cli/cmd/cluster/delete.go
-      - linters:
-          - ireturn
-        path: pkg/client/argocd/reconciler.go
-      - linters:
-          - ireturn
-        path: pkg/client/flux/reconciler.go
-      - linters:
-          - ireturn
-        path: pkg/k8s/apiserver_test.go
-      - linters:
-          - ireturn
-        path: pkg/svc/reconciler/base.go
+      # Tests that modify env vars cannot run in parallel
       - linters:
           - paralleltest
         path: pkg/cli/cmd/cipher/import_test.go
-      # Chat package exclusions - legitimate CLI tool behavior
-      - linters:
-          - gosec
-        text: "G304|G204"
-        path: pkg/svc/chat/
-      - linters:
-          - gosec
-        text: "G304|G204"
-        path: pkg/cli/cmd/chat.go
-      # Chat package exclusions - acceptable for CLI interactive code
-      - linters:
-          - cyclop
-        path: pkg/cli/cmd/chat.go
-      - linters:
-          - err113
-        path: pkg/cli/cmd/chat.go
-      - linters:
-          - errcheck
-        path: pkg/cli/cmd/chat.go
-      - linters:
-          - funlen
-        path: pkg/cli/cmd/chat.go
-      - linters:
-          - exhaustive
-        path: pkg/cli/cmd/chat.go
-      - linters:
-          - errorlint
-        path: pkg/cli/cmd/chat.go
-      - linters:
-          - mnd
-        path: pkg/cli/cmd/chat.go
-      - linters:
-          - modernize
-        path: pkg/cli/cmd/chat.go
-      - linters:
-          - nlreturn
-        path: pkg/cli/cmd/chat.go
-      - linters:
-          - perfsprint
-        path: pkg/cli/cmd/chat.go
-      - linters:
-          - wrapcheck
-        path: pkg/cli/cmd/chat.go
-      - linters:
-          - wsl_v5
-        path: pkg/cli/cmd/chat.go
-      # Chat TUI package exclusions - acceptable for TUI code
+      # Bubbletea requires context in the Model struct
       - linters:
           - containedctx
         path: pkg/cli/ui/chat/
-      - linters:
-          - cyclop
-        path: pkg/cli/ui/chat/
-      - linters:
-          - err113
-        path: pkg/cli/ui/chat/
-      - linters:
-          - errcheck
-        path: pkg/cli/ui/chat/
-      - linters:
-          - funlen
-        path: pkg/cli/ui/chat/
-      - linters:
-          - exhaustive
-        path: pkg/cli/ui/chat/
+      # lipgloss style variables must be package-level globals
       - linters:
           - gochecknoglobals
         path: pkg/cli/ui/chat/
-      - linters:
-          - gocognit
-        path: pkg/cli/ui/chat/
-      - linters:
-          - goconst
-        path: pkg/cli/ui/chat/
-      - linters:
-          - gocritic
-        path: pkg/cli/ui/chat/
-      - linters:
-          - ireturn
-        path: pkg/cli/ui/chat/
-      - linters:
-          - mnd
-        path: pkg/cli/ui/chat/
-      - linters:
-          - modernize
-        path: pkg/cli/ui/chat/
-      - linters:
-          - nlreturn
-        path: pkg/cli/ui/chat/
-      - linters:
-          - noinlineerr
-        path: pkg/cli/ui/chat/
-      - linters:
-          - perfsprint
-        path: pkg/cli/ui/chat/
-      - linters:
-          - recvcheck
-        path: pkg/cli/ui/chat/
-      - linters:
-          - varnamelen
-        path: pkg/cli/ui/chat/
-      - linters:
-          - wrapcheck
-        path: pkg/cli/ui/chat/
-      - linters:
-          - wsl_v5
-        path: pkg/cli/ui/chat/
-      - linters:
-          - cyclop
-        path: pkg/svc/chat/
-      - linters:
-          - err113
-        path: pkg/svc/chat/
-      - linters:
-          - funlen
-        path: pkg/svc/chat/
-      - linters:
-          - noinlineerr
-        path: pkg/svc/chat/
-      - linters:
-          - mirror
-        path: pkg/svc/chat/
-      - linters:
-          - nilerr
-        path: pkg/svc/chat/
-      - linters:
-          - modernize
-        text: stringsseq
-        path: pkg/svc/chat/
-      - linters:
-          - perfsprint
-        path: pkg/svc/chat/
-      - linters:
-          - funlen
-        path: pkg/svc/provisioner/registry/local_registry_service_test.go
-      - linters:
-          - tagalign
-        path: pkg/apis/cluster/v1alpha1/types.go
-      - linters:
-          - tagalign
-        path: pkg/apis/cluster/v1alpha1/options.go
+      # Package names that conflict with stdlib or are too generic cannot be renamed without breaking changes
       - linters:
           - revive
         text: "var-naming: avoid package names that conflict with Go standard library package names"
-        path: pkg/io/
+        path: pkg/(io|cli/cmd/cipher|svc/image)/
       - linters:
           - revive
         text: "var-naming: avoid meaningless package names"
         path: pkg/utils/doc.go
-      - linters:
-          - nolintlint
-        text: "directive `//nolint:staticcheck // WatchProgress is deprecated but simpler than WaitForFunc` is unused"
-        path: pkg/svc/provider/hetzner/provider.go
   settings:
+    tagalign:
+      align: false
+      sort: true
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false

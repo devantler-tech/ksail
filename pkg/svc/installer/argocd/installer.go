@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/helmutil"
 )
 
 const (
@@ -15,23 +15,23 @@ const (
 	argoCDChartName   = "oci://ghcr.io/argoproj/argo-helm/argo-cd"
 )
 
-// ArgoCDInstaller installs or upgrades Argo CD via its Helm OCI chart.
+// Installer installs or upgrades Argo CD via its Helm OCI chart.
 //
 // It implements installer.Installer semantics (Install/Uninstall) so it can be
 // orchestrated by cluster lifecycle flows.
-type ArgoCDInstaller struct {
+type Installer struct {
 	timeout time.Duration
 	client  helm.Interface
 }
 
-// NewArgoCDInstaller creates a new Argo CD installer instance.
-func NewArgoCDInstaller(client helm.Interface, timeout time.Duration) *ArgoCDInstaller {
-	return &ArgoCDInstaller{client: client, timeout: timeout}
+// NewInstaller creates a new Argo CD installer instance.
+func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
+	return &Installer{client: client, timeout: timeout}
 }
 
 // Install installs or upgrades Argo CD via its Helm chart.
-func (a *ArgoCDInstaller) Install(ctx context.Context) error {
-	err := a.helmInstallOrUpgradeArgoCD(ctx)
+func (a *Installer) Install(ctx context.Context) error {
+	err := a.helmInstallOrUpgrade(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install Argo CD: %w", err)
 	}
@@ -40,7 +40,7 @@ func (a *ArgoCDInstaller) Install(ctx context.Context) error {
 }
 
 // Uninstall removes the Helm release for Argo CD.
-func (a *ArgoCDInstaller) Uninstall(ctx context.Context) error {
+func (a *Installer) Uninstall(ctx context.Context) error {
 	err := a.client.UninstallRelease(ctx, argoCDReleaseName, argoCDNamespace)
 	if err != nil {
 		return fmt.Errorf("failed to uninstall Argo CD release: %w", err)
@@ -50,23 +50,16 @@ func (a *ArgoCDInstaller) Uninstall(ctx context.Context) error {
 }
 
 // Images returns the container images used by Argo CD.
-func (a *ArgoCDInstaller) Images(ctx context.Context) ([]string, error) {
-	spec := a.chartSpec()
-
-	manifest, err := a.client.TemplateChart(ctx, spec)
+func (a *Installer) Images(ctx context.Context) ([]string, error) {
+	images, err := helmutil.ImagesFromChart(ctx, a.client, a.chartSpec())
 	if err != nil {
-		return nil, fmt.Errorf("failed to template argocd chart: %w", err)
-	}
-
-	images, err := image.ExtractImagesFromManifest(manifest)
-	if err != nil {
-		return nil, fmt.Errorf("extract images from argocd manifest: %w", err)
+		return nil, fmt.Errorf("listing images: %w", err)
 	}
 
 	return images, nil
 }
 
-func (a *ArgoCDInstaller) chartSpec() *helm.ChartSpec {
+func (a *Installer) chartSpec() *helm.ChartSpec {
 	return &helm.ChartSpec{
 		ReleaseName:     argoCDReleaseName,
 		ChartName:       argoCDChartName,
@@ -82,7 +75,7 @@ func (a *ArgoCDInstaller) chartSpec() *helm.ChartSpec {
 
 // --- internals ---
 
-func (a *ArgoCDInstaller) helmInstallOrUpgradeArgoCD(ctx context.Context) error {
+func (a *Installer) helmInstallOrUpgrade(ctx context.Context) error {
 	spec := a.chartSpec()
 
 	// Set context deadline longer than Helm timeout to ensure Helm has

@@ -169,6 +169,78 @@ func (_c *MockInterface_InstallChart_Call) RunAndReturn(run func(ctx context.Con
 	return _c
 }
 
+// ReleaseExists provides a mock function for the type MockInterface
+func (_mock *MockInterface) ReleaseExists(ctx context.Context, releaseName string, namespace string) (bool, error) {
+	ret := _mock.Called(ctx, releaseName, namespace)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReleaseExists")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (bool, error)); ok {
+		return returnFunc(ctx, releaseName, namespace)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) bool); ok {
+		r0 = returnFunc(ctx, releaseName, namespace)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, releaseName, namespace)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockInterface_ReleaseExists_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReleaseExists'
+type MockInterface_ReleaseExists_Call struct {
+	*mock.Call
+}
+
+// ReleaseExists is a helper method to define mock.On call
+//   - ctx context.Context
+//   - releaseName string
+//   - namespace string
+func (_e *MockInterface_Expecter) ReleaseExists(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_ReleaseExists_Call {
+	return &MockInterface_ReleaseExists_Call{Call: _e.mock.On("ReleaseExists", ctx, releaseName, namespace)}
+}
+
+func (_c *MockInterface_ReleaseExists_Call) Run(run func(ctx context.Context, releaseName string, namespace string)) *MockInterface_ReleaseExists_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockInterface_ReleaseExists_Call) Return(exists bool, err error) *MockInterface_ReleaseExists_Call {
+	_c.Call.Return(exists, err)
+	return _c
+}
+
+func (_c *MockInterface_ReleaseExists_Call) RunAndReturn(run func(ctx context.Context, releaseName string, namespace string) (bool, error)) *MockInterface_ReleaseExists_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // InstallOrUpgradeChart provides a mock function for the type MockInterface
 func (_mock *MockInterface) InstallOrUpgradeChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error) {
 	ret := _mock.Called(ctx, spec)

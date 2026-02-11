@@ -1,6 +1,8 @@
 package hetzner
 
-import "strconv"
+import (
+	"strconv"
+)
 
 // Label constants for identifying KSail-managed Hetzner resources.
 // These labels are applied to servers, networks, firewalls, and placement groups.

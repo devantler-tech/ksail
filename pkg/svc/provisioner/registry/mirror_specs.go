@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/envvar"
+	"github.com/devantler-tech/ksail/v5/pkg/envvar"
 )
 
 // MirrorSpec represents a parsed mirror registry specification entry.

@@ -4,7 +4,7 @@
 // These annotations are used by the toolgen package to generate AI-accessible tools
 // and by the chat interface to enforce permission checks for edit operations.
 //
-// See also: pkg/ai/toolgen for annotation processing and tool generation.
+// See also: pkg/toolgen for annotation processing and tool generation.
 //
 // # Available Annotations
 //

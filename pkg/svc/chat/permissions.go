@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	copilot "github.com/github/copilot-sdk/go"
 )
 
@@ -36,12 +36,12 @@ func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandler {
 
 // isReadOperation determines if a permission request is for a read-only operation.
 func isReadOperation(kind string) bool {
-	readKinds := map[string]bool{
-		"read": true,
-		"url":  true, // URL fetching is typically read-only
+	switch kind {
+	case "read", "url":
+		return true
+	default:
+		return false
 	}
-
-	return readKinds[kind]
 }
 
 // promptForPermission prompts the user for permission and returns the result.
@@ -73,21 +73,35 @@ func promptForPermission(
 		})
 	}
 
-	// Prompt for confirmation
+	return readPermissionResponse(writer)
+}
+
+// readPermissionResponse reads and processes the user's permission response from stdin.
+func readPermissionResponse(
+	writer io.Writer,
+) (copilot.PermissionRequestResult, error) {
 	_, _ = fmt.Fprint(writer, "Allow this operation? [y/N]: ")
 
 	reader := bufio.NewReader(os.Stdin)
 
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		// Return denied result. The error (typically EOF) is expected in non-interactive contexts.
-		// We intentionally don't propagate it since the denied result handles this case.
+	line, readErr := reader.ReadString('\n')
+
+	// I/O error (typically EOF) is expected in non-interactive contexts.
+	// Treat it as a denial rather than propagating the error.
+	//nolint:nilerr // I/O errors (EOF) treated as denial in non-interactive contexts
+	if readErr != nil {
 		return copilot.PermissionRequestResult{
 			Kind: "denied-no-approval-rule-and-could-not-request-from-user",
 		}, nil
 	}
 
-	input = strings.TrimSpace(strings.ToLower(input))
+	if strings.TrimSpace(line) == "" {
+		return copilot.PermissionRequestResult{
+			Kind: "denied-no-approval-rule-and-could-not-request-from-user",
+		}, nil
+	}
+
+	input := strings.TrimSpace(strings.ToLower(line))
 
 	if input == "y" || input == "yes" {
 		notify.WriteMessage(notify.Message{
@@ -117,42 +131,70 @@ func getPermissionDescription(request copilot.PermissionRequest) string {
 
 	var parts []string
 
-	// Tool name if available - show first
-	if tool, ok := request.Extra["toolName"].(string); ok && tool != "" {
-		parts = append(parts, fmt.Sprintf("Tool: %s", tool))
-	}
-
-	// Shell command - most important for shell operations
-	if cmd, ok := request.Extra["command"].(string); ok && cmd != "" {
-		parts = append(parts, fmt.Sprintf("$ %s", cmd))
-	}
-
-	// Arguments if present
-	if args, ok := request.Extra["args"].([]any); ok && len(args) > 0 {
-		argStrs := make([]string, len(args))
-		for i, arg := range args {
-			argStrs[i] = fmt.Sprintf("%v", arg)
-		}
-
-		parts = append(parts, "Args: "+strings.Join(argStrs, " "))
-	}
-
-	// File path for write operations
-	if path, ok := request.Extra["path"].(string); ok && path != "" {
-		parts = append(parts, "Path: "+path)
-	}
-
-	// Content preview for writes (truncated)
-	const maxContentPreview = 200
-
-	if content, ok := request.Extra["content"].(string); ok && content != "" {
-		preview := content
-		if len(preview) > maxContentPreview {
-			preview = preview[:maxContentPreview] + "..."
-		}
-
-		parts = append(parts, "Content:\n"+preview)
-	}
+	parts = appendToolName(parts, request.Extra)
+	parts = appendCommand(parts, request.Extra)
+	parts = appendArgs(parts, request.Extra)
+	parts = appendPath(parts, request.Extra)
+	parts = appendContentPreview(parts, request.Extra)
 
 	return strings.Join(parts, "\n")
+}
+
+// appendToolName appends the tool name to parts if present.
+func appendToolName(parts []string, extra map[string]any) []string {
+	if tool, ok := extra["toolName"].(string); ok && tool != "" {
+		return append(parts, "Tool: "+tool)
+	}
+
+	return parts
+}
+
+// appendCommand appends the shell command to parts if present.
+func appendCommand(parts []string, extra map[string]any) []string {
+	if cmd, ok := extra["command"].(string); ok && cmd != "" {
+		return append(parts, "$ "+cmd)
+	}
+
+	return parts
+}
+
+// appendArgs appends the arguments to parts if present.
+func appendArgs(parts []string, extra map[string]any) []string {
+	args, ok := extra["args"].([]any)
+	if !ok || len(args) == 0 {
+		return parts
+	}
+
+	argStrs := make([]string, len(args))
+	for i, arg := range args {
+		argStrs[i] = fmt.Sprintf("%v", arg)
+	}
+
+	return append(parts, "Args: "+strings.Join(argStrs, " "))
+}
+
+// appendPath appends the file path to parts if present.
+func appendPath(parts []string, extra map[string]any) []string {
+	if path, ok := extra["path"].(string); ok && path != "" {
+		return append(parts, "Path: "+path)
+	}
+
+	return parts
+}
+
+// appendContentPreview appends a truncated content preview to parts if present.
+func appendContentPreview(parts []string, extra map[string]any) []string {
+	const maxContentPreview = 200
+
+	content, ok := extra["content"].(string)
+	if !ok || content == "" {
+		return parts
+	}
+
+	preview := content
+	if len(preview) > maxContentPreview {
+		preview = preview[:maxContentPreview] + "..."
+	}
+
+	return append(parts, "Content:\n"+preview)
 }

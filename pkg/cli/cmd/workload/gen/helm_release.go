@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
+	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
 	"github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -192,7 +192,7 @@ func parseDependency(dep string) (*helmv2.DependencyReference, error) {
 }
 
 // NewHelmReleaseCmd creates the workload gen helmrelease command.
-func NewHelmReleaseCmd(_ *runtime.Runtime) *cobra.Command {
+func NewHelmReleaseCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "helmrelease [NAME]",
 		Aliases: []string{"hr"},
@@ -254,7 +254,7 @@ func runHelmReleaseGen(cmd *cobra.Command, args []string) error {
 }
 
 func generateHelmReleaseYAML(helmRelease *helmv2.HelmRelease) (string, error) {
-	generator := yamlgenerator.NewYAMLGenerator[helmv2.HelmRelease]()
+	generator := yamlgenerator.NewGenerator[helmv2.HelmRelease]()
 	opts := yamlgenerator.Options{
 		Output: "",
 		Force:  false,
@@ -279,7 +279,7 @@ func outputHelmRelease(cmd *cobra.Command, yaml string, tmr timer.Timer) error {
 		return errNotImplemented
 	}
 
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,

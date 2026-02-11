@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewLocalPathStorageInstaller(t *testing.T) {
+func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
-	installer := localpathstorageinstaller.NewLocalPathStorageInstaller(
+	installer := localpathstorageinstaller.NewInstaller(
 		"/path/to/kubeconfig",
 		"test-context",
 		5*time.Minute,
@@ -27,7 +27,7 @@ func TestLocalPathStorageInstaller_Install_K3d(t *testing.T) {
 	t.Parallel()
 
 	// K3d already has local-path-provisioner, so Install should be a no-op
-	installer := localpathstorageinstaller.NewLocalPathStorageInstaller(
+	installer := localpathstorageinstaller.NewInstaller(
 		"/path/to/kubeconfig",
 		"test-context",
 		5*time.Minute,
@@ -43,7 +43,7 @@ func TestLocalPathStorageInstaller_Install_K3d(t *testing.T) {
 func TestLocalPathStorageInstaller_Uninstall(t *testing.T) {
 	t.Parallel()
 
-	installer := localpathstorageinstaller.NewLocalPathStorageInstaller(
+	installer := localpathstorageinstaller.NewInstaller(
 		"/path/to/kubeconfig",
 		"test-context",
 		5*time.Minute,
