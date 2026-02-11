@@ -143,25 +143,29 @@ The repository uses a Go workspace (`go.work`) to manage these modules together.
    cd ../../..
    ```
 
-2. **Always verify changes in ALL modules**, not just the root:
+2. **CI automatically syncs modules**: The `sync-modules` job in CI automatically runs `go mod tidy` in all module directories and commits any changes back to the PR, so you don't have to manually sync modules before pushing.
+
+3. **Always verify changes in ALL modules** when committing manually:
    ```bash
    git status                # Should show changes in both go.mod files if dependencies changed
    git diff go.mod go.sum .github/scripts/generate-schema/go.mod .github/scripts/generate-schema/go.sum
    ```
 
-3. **Check both `go.mod` and `go.sum` for changes in all modules**
-
 4. **If a dependency changes in the main module, it likely affects the schema generator module** because it imports types from the main module
 
 **Important notes:**
 - The `go.work` file unifies both modules into a single workspace
-- CI verifies all modules are in sync via the `verify-modules` job
-- Running `go mod tidy` in one module does NOT automatically update the other module
-- When Dependabot updates dependencies, manually run `go mod tidy` in the generate-schema module
+- CI automatically syncs all modules via the `sync-modules` job
+- Running `go mod tidy` in one module does NOT automatically update the other module locally
+- When Dependabot updates dependencies, the CI will automatically sync both modules
 
 **Workflow for dependency updates:**
 ```bash
 # After updating dependencies in root go.mod (e.g., via Dependabot)
+# Option 1: Let CI handle it automatically (recommended)
+git push  # CI will sync modules and commit changes
+
+# Option 2: Sync manually before pushing
 cd .github/scripts/generate-schema
 go mod tidy
 cd ../../..
