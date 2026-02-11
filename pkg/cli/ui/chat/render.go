@@ -64,6 +64,12 @@ func (m *Model) buildStatusText() string {
 		statusParts = append(statusParts, modeStyle.Render("≡"))
 	}
 
+	// YOLO indicator
+	if m.yoloMode {
+		yoloStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow)).Bold(true)
+		statusParts = append(statusParts, yoloStyle.Render("YOLO"))
+	}
+
 	// Model name
 	modelStyle := lipgloss.NewStyle().Foreground(dimColor)
 
