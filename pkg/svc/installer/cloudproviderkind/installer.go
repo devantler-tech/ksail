@@ -31,14 +31,14 @@ const (
 	cpkContainerPrefix = "cpk-"
 )
 
-// CloudProviderKINDInstaller manages the cloud-provider-kind controller as a Docker container.
-type CloudProviderKINDInstaller struct {
+// Installer manages the cloud-provider-kind controller as a Docker container.
+type Installer struct {
 	dockerClient client.APIClient
 }
 
-// NewCloudProviderKINDInstaller creates a new Cloud Provider KIND installer instance.
-func NewCloudProviderKINDInstaller(dockerClient client.APIClient) *CloudProviderKINDInstaller {
-	return &CloudProviderKINDInstaller{
+// NewInstaller creates a new Cloud Provider KIND installer instance.
+func NewInstaller(dockerClient client.APIClient) *Installer {
+	return &Installer{
 		dockerClient: dockerClient,
 	}
 }
@@ -46,7 +46,7 @@ func NewCloudProviderKINDInstaller(dockerClient client.APIClient) *CloudProvider
 // Install starts the cloud-provider-kind controller container if not already running.
 // The controller runs as a Docker container and monitors all KIND clusters for
 // LoadBalancer services, creating additional containers to handle traffic.
-func (c *CloudProviderKINDInstaller) Install(ctx context.Context) error {
+func (c *Installer) Install(ctx context.Context) error {
 	// Check if container already exists and is running
 	running, err := c.isContainerRunning(ctx)
 	if err != nil {
@@ -84,7 +84,7 @@ func (c *CloudProviderKINDInstaller) Install(ctx context.Context) error {
 
 // Uninstall stops and removes the cloud-provider-kind controller container.
 // It also cleans up any cpk-* containers created by cloud-provider-kind for LoadBalancer services.
-func (c *CloudProviderKINDInstaller) Uninstall(ctx context.Context) error {
+func (c *Installer) Uninstall(ctx context.Context) error {
 	// Stop and remove the main controller container
 	err := c.removeContainer(ctx, ContainerName)
 	if err != nil {
@@ -101,12 +101,12 @@ func (c *CloudProviderKINDInstaller) Uninstall(ctx context.Context) error {
 }
 
 // Images returns the container images used by cloud-provider-kind.
-func (c *CloudProviderKINDInstaller) Images(_ context.Context) ([]string, error) {
+func (c *Installer) Images(_ context.Context) ([]string, error) {
 	return []string{CloudProviderKindImage()}, nil
 }
 
 // isContainerRunning checks if the cloud-provider-kind container is running.
-func (c *CloudProviderKINDInstaller) isContainerRunning(ctx context.Context) (bool, error) {
+func (c *Installer) isContainerRunning(ctx context.Context) (bool, error) {
 	containers, err := c.listContainersByName(ctx, ContainerName)
 	if err != nil {
 		return false, err
@@ -120,7 +120,7 @@ func (c *CloudProviderKINDInstaller) isContainerRunning(ctx context.Context) (bo
 }
 
 // containerExists checks if the cloud-provider-kind container exists (running or stopped).
-func (c *CloudProviderKINDInstaller) containerExists(ctx context.Context) (bool, error) {
+func (c *Installer) containerExists(ctx context.Context) (bool, error) {
 	containers, err := c.listContainersByName(ctx, ContainerName)
 	if err != nil {
 		return false, err
@@ -130,7 +130,7 @@ func (c *CloudProviderKINDInstaller) containerExists(ctx context.Context) (bool,
 }
 
 // listContainersByName lists containers matching the given exact name.
-func (c *CloudProviderKINDInstaller) listContainersByName(
+func (c *Installer) listContainersByName(
 	ctx context.Context,
 	name string,
 ) ([]container.Summary, error) {
@@ -149,7 +149,7 @@ func (c *CloudProviderKINDInstaller) listContainersByName(
 }
 
 // createAndStartContainer creates and starts the cloud-provider-kind container.
-func (c *CloudProviderKINDInstaller) createAndStartContainer(ctx context.Context) error {
+func (c *Installer) createAndStartContainer(ctx context.Context) error {
 	imageName := CloudProviderKindImage()
 
 	// Ensure image exists
@@ -215,7 +215,7 @@ func (c *CloudProviderKINDInstaller) createAndStartContainer(ctx context.Context
 }
 
 // ensureImage pulls the image if not already present locally.
-func (c *CloudProviderKINDInstaller) ensureImage(ctx context.Context, imageName string) error {
+func (c *Installer) ensureImage(ctx context.Context, imageName string) error {
 	// Check if image exists
 	_, err := c.dockerClient.ImageInspect(ctx, imageName)
 	if err == nil {
@@ -240,7 +240,7 @@ func (c *CloudProviderKINDInstaller) ensureImage(ctx context.Context, imageName 
 }
 
 // ensureKindNetwork creates the kind network if it doesn't exist.
-func (c *CloudProviderKINDInstaller) ensureKindNetwork(ctx context.Context) error {
+func (c *Installer) ensureKindNetwork(ctx context.Context) error {
 	// Check if network exists
 	_, err := c.dockerClient.NetworkInspect(ctx, KindNetworkName, network.InspectOptions{})
 	if err == nil {
@@ -260,7 +260,7 @@ func (c *CloudProviderKINDInstaller) ensureKindNetwork(ctx context.Context) erro
 }
 
 // removeContainer stops and removes a container by name.
-func (c *CloudProviderKINDInstaller) removeContainer(ctx context.Context, name string) error {
+func (c *Installer) removeContainer(ctx context.Context, name string) error {
 	containers, err := c.listContainersByName(ctx, name)
 	if err != nil {
 		return err
@@ -290,7 +290,7 @@ func (c *CloudProviderKINDInstaller) removeContainer(ctx context.Context, name s
 }
 
 // cleanupCPKContainers removes all cpk-* containers created by cloud-provider-kind.
-func (c *CloudProviderKINDInstaller) cleanupCPKContainers(ctx context.Context) error {
+func (c *Installer) cleanupCPKContainers(ctx context.Context) error {
 	// List all containers with cpk- prefix
 	filterArgs := filters.NewArgs()
 	filterArgs.Add("name", cpkContainerPrefix)

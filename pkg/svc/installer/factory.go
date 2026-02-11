@@ -8,17 +8,17 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	argocdinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/argocd"
-	certmanagerinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cert-manager"
+	certmanagerinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/certmanager"
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cloudproviderkind"
 	calicoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/calico"
 	ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
 	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	gatekeeperinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/gatekeeper"
-	hetznercsiinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hetzner-csi"
-	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kubelet-csr-approver"
+	hetznercsiinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hetznercsi"
+	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kubeletcsrapprover"
 	kyvernoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kyverno"
 	localpathstorageinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/localpathstorage"
-	metricsserverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metrics-server"
+	metricsserverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metricsserver"
 	"github.com/docker/docker/client"
 )
 
@@ -109,12 +109,12 @@ func (f *Factory) GetImagesForCluster(
 func (f *Factory) addGitOpsInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
 	switch spec.GitOpsEngine {
 	case v1alpha1.GitOpsEngineFlux:
-		installers["flux"] = fluxinstaller.NewFluxInstaller(
+		installers["flux"] = fluxinstaller.NewInstaller(
 			f.helmClient,
 			max(f.timeout, FluxInstallTimeout),
 		)
 	case v1alpha1.GitOpsEngineArgoCD:
-		installers["argocd"] = argocdinstaller.NewArgoCDInstaller(f.helmClient, f.timeout)
+		installers["argocd"] = argocdinstaller.NewInstaller(f.helmClient, f.timeout)
 	case v1alpha1.GitOpsEngineNone:
 		// No GitOps engine configured
 	}
@@ -123,11 +123,11 @@ func (f *Factory) addGitOpsInstaller(installers map[string]Installer, spec v1alp
 func (f *Factory) addCNIInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
 	switch spec.CNI {
 	case v1alpha1.CNICilium:
-		installers["cilium"] = ciliuminstaller.NewCiliumInstallerWithDistribution(
+		installers["cilium"] = ciliuminstaller.NewInstallerWithDistribution(
 			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout, f.distribution,
 		)
 	case v1alpha1.CNICalico:
-		installers["calico"] = calicoinstaller.NewCalicoInstallerWithDistribution(
+		installers["calico"] = calicoinstaller.NewInstallerWithDistribution(
 			f.helmClient, f.kubeconfig, f.kubecontext,
 			max(f.timeout, CalicoInstallTimeout), f.distribution,
 		)
@@ -142,11 +142,11 @@ func (f *Factory) addPolicyEngineInstaller(
 ) {
 	switch spec.PolicyEngine {
 	case v1alpha1.PolicyEngineKyverno:
-		installers["kyverno"] = kyvernoinstaller.NewKyvernoInstaller(
+		installers["kyverno"] = kyvernoinstaller.NewInstaller(
 			f.helmClient, max(f.timeout, KyvernoInstallTimeout),
 		)
 	case v1alpha1.PolicyEngineGatekeeper:
-		installers["gatekeeper"] = gatekeeperinstaller.NewGatekeeperInstaller(
+		installers["gatekeeper"] = gatekeeperinstaller.NewInstaller(
 			f.helmClient,
 			f.timeout,
 		)
@@ -160,7 +160,7 @@ func (f *Factory) addCertManagerInstaller(
 	spec v1alpha1.ClusterSpec,
 ) {
 	if spec.CertManager == v1alpha1.CertManagerEnabled {
-		installers["cert-manager"] = certmanagerinstaller.NewCertManagerInstaller(
+		installers["cert-manager"] = certmanagerinstaller.NewInstaller(
 			f.helmClient, max(f.timeout, CertManagerInstallTimeout),
 		)
 	}
@@ -173,24 +173,24 @@ func (f *Factory) addMetricsServerInstaller(
 	if spec.MetricsServer == v1alpha1.MetricsServerEnabled ||
 		(spec.MetricsServer == v1alpha1.MetricsServerDefault &&
 			!spec.Distribution.ProvidesMetricsServerByDefault()) {
-		installers["metrics-server"] = metricsserverinstaller.NewMetricsServerInstaller(
-			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout,
+		installers["metrics-server"] = metricsserverinstaller.NewInstaller(
+			f.helmClient, f.timeout,
 		)
 	}
 }
 
 func (f *Factory) addCSIInstallers(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
 	if f.needsLocalPathStorage(spec) {
-		installers["local-path-storage"] = localpathstorageinstaller.NewLocalPathStorageInstaller(
+		installers["local-path-storage"] = localpathstorageinstaller.NewInstaller(
 			f.kubeconfig, f.kubecontext, f.timeout, f.distribution,
 		)
 	}
 
 	if f.needsHetznerCSI(spec) {
-		installers["hetzner-csi"] = hetznercsiinstaller.NewHetznerCSIInstaller(
+		installers["hetzner-csi"] = hetznercsiinstaller.NewInstaller(
 			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout,
 		)
-		installers["kubelet-csr-approver"] = kubeletcsrapproverinstaller.NewKubeletCSRApproverInstaller(
+		installers["kubelet-csr-approver"] = kubeletcsrapproverinstaller.NewInstaller(
 			f.helmClient,
 			f.timeout,
 		)
@@ -202,7 +202,7 @@ func (f *Factory) addLoadBalancerInstaller(
 	spec v1alpha1.ClusterSpec,
 ) {
 	if f.needsCloudProviderKind(spec) && f.dockerClient != nil {
-		installers["cloud-provider-kind"] = cloudproviderkindinstaller.NewCloudProviderKINDInstaller(
+		installers["cloud-provider-kind"] = cloudproviderkindinstaller.NewInstaller(
 			f.dockerClient,
 		)
 	}

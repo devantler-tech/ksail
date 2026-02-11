@@ -1,0 +1,486 @@
+package notify_test
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/gkampitakis/go-snaps/snaps"
+)
+
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+
+	_, err := snaps.Clean(m, snaps.CleanOpts{Sort: true})
+	if err != nil {
+		_, _ = os.Stderr.WriteString("failed to clean snapshots: " + err.Error() + "\n")
+
+		os.Exit(1)
+	}
+
+	os.Exit(exitCode)
+}
+
+// Static errors for testing.
+var (
+	errTestInstallationFailed = errors.New("installation failed")
+	errTestTaskFailed         = errors.New("failed")
+)
+
+func TestProgressGroup_EmptyTasks(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf)
+
+	err := progressGroup.Run(context.Background())
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	if buf.Len() != 0 {
+		t.Errorf("expected no output for empty tasks, got: %q", buf.String())
+	}
+}
+
+func TestProgressGroup_SingleTaskSuccess(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	progressGroup := notify.NewProgressGroup(
+		"Installing",
+		"📦",
+		&buf,
+		notify.WithLabels(notify.InstallingLabels()),
+	)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "test-component",
+			Fn: func(_ context.Context) error {
+				return nil
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	snaps.MatchSnapshot(t, buf.String())
+}
+
+func TestProgressGroup_SingleTaskFailure(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "failing-component",
+			Fn: func(_ context.Context) error {
+				return errTestInstallationFailed
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+
+	snaps.MatchSnapshot(t, buf.String())
+}
+
+func TestProgressGroup_MultipleTasksSuccess(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	progressGroup := notify.NewProgressGroup(
+		"Installing",
+		"📦",
+		&buf,
+		notify.WithLabels(notify.InstallingLabels()),
+	)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "component-a",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "component-b",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
+				return nil
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	// Since tasks run concurrently, verify content without depending on order.
+	output := buf.String()
+
+	// Verify title is first
+	if !strings.HasPrefix(output, "📦 Installing...\n") {
+		t.Errorf("expected output to start with title, got: %q", output)
+	}
+
+	// Verify both components are started and completed
+	expectedPatterns := []string{
+		"► component-a installing",
+		"✔ component-a installed",
+		"► component-b installing",
+		"✔ component-b installed",
+	}
+
+	for _, pattern := range expectedPatterns {
+		if !strings.Contains(output, pattern) {
+			t.Errorf("expected output to contain %q, got: %q", pattern, output)
+		}
+	}
+}
+
+func TestProgressGroup_PartialFailure(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "good-component",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "bad-component",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
+				return errTestTaskFailed
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+
+	// Since tasks run concurrently, verify content without depending on order.
+	output := buf.String()
+
+	// Verify title is first
+	if !strings.HasPrefix(output, "📦 Installing...\n") {
+		t.Errorf("expected output to start with title, got: %q", output)
+	}
+
+	// Verify good component started and completed
+	if !strings.Contains(output, "► good-component running") {
+		t.Errorf("expected good-component running message, got: %q", output)
+	}
+
+	if !strings.Contains(output, "✔ good-component completed") {
+		t.Errorf("expected good-component completed message, got: %q", output)
+	}
+
+	// Verify bad component started and failed
+	if !strings.Contains(output, "► bad-component running") {
+		t.Errorf("expected bad-component running message, got: %q", output)
+	}
+
+	if !strings.Contains(output, "✗ bad-component failed") {
+		t.Errorf("expected bad-component failed message, got: %q", output)
+	}
+}
+
+func TestProgressGroup_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "long-running",
+			Fn: func(taskCtx context.Context) error {
+				select {
+				case <-taskCtx.Done():
+					return taskCtx.Err()
+				case <-time.After(10 * time.Second):
+					return nil
+				}
+			},
+		},
+	}
+
+	// Cancel after a short delay
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err := progressGroup.Run(ctx, tasks...)
+	if err == nil {
+		t.Error("expected error due to cancellation, got nil")
+	}
+
+	if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "canceled") {
+		t.Errorf("expected context canceled error, got: %v", err)
+	}
+}
+
+func TestProgressGroup_DefaultWriter(t *testing.T) {
+	t.Parallel()
+
+	// Test that nil writer defaults to os.Stdout (just ensure no panic)
+	progressGroup := notify.NewProgressGroup("Installing", "", nil)
+
+	// Run with empty tasks to verify no panic
+	err := progressGroup.Run(context.Background())
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+}
+
+func TestProgressGroup_DefaultLabels(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	// Use default labels (pending, running, completed)
+	progressGroup := notify.NewProgressGroup("Processing", "►", &buf)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "task-1",
+			Fn: func(_ context.Context) error {
+				return nil
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	snaps.MatchSnapshot(t, buf.String())
+}
+
+func TestProgressGroup_ValidatingLabels(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	progressGroup := notify.NewProgressGroup(
+		"Validating",
+		"✅",
+		&buf,
+		notify.WithLabels(notify.ValidatingLabels()),
+	)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "schema",
+			Fn: func(_ context.Context) error {
+				return nil
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	snaps.MatchSnapshot(t, buf.String())
+}
+
+func TestProgressGroup_WithTimer_Success(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	tmr := &fixedTimer{total: 3 * time.Second, stage: 500 * time.Millisecond}
+
+	progressGroup := notify.NewProgressGroup(
+		"Installing",
+		"📦",
+		&buf,
+		notify.WithLabels(notify.InstallingLabels()),
+		notify.WithTimer(tmr),
+	)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "component",
+			Fn: func(_ context.Context) error {
+				return nil
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+
+	// Should contain timing info on success
+	if !strings.Contains(output, "⏲ current:") {
+		t.Errorf("expected timing info in output, got: %q", output)
+	}
+
+	if !strings.Contains(output, "total:") {
+		t.Errorf("expected total timing in output, got: %q", output)
+	}
+}
+
+func TestProgressGroup_WithTimer_Failure_NoTiming(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	tmr := &fixedTimer{total: 3 * time.Second, stage: 500 * time.Millisecond}
+
+	progressGroup := notify.NewProgressGroup(
+		"Installing",
+		"📦",
+		&buf,
+		notify.WithTimer(tmr),
+	)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "failing-task",
+			Fn: func(_ context.Context) error {
+				return errTestTaskFailed
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+
+	output := buf.String()
+
+	// Should NOT contain timing info on failure
+	if strings.Contains(output, "⏲ current:") {
+		t.Errorf("expected no timing info on failure, got: %q", output)
+	}
+}
+
+func TestProgressGroup_DefaultEmoji(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	// Empty emoji should default to ►
+	progressGroup := notify.NewProgressGroup("Processing", "", &buf)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "task",
+			Fn: func(_ context.Context) error {
+				return nil
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+
+	if !strings.HasPrefix(output, "► Processing...\n") {
+		t.Errorf("expected default emoji ►, got: %q", output)
+	}
+}
+
+func TestProgressGroup_MultipleTasksPartialOrder(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	progressGroup := notify.NewProgressGroup(
+		"Deploying",
+		"🚀",
+		&buf,
+		notify.WithLabels(notify.DefaultLabels()),
+	)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "first",
+			Fn: func(_ context.Context) error {
+				time.Sleep(20 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "second",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "third",
+			Fn: func(_ context.Context) error {
+				time.Sleep(5 * time.Millisecond)
+
+				return nil
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+
+	// All tasks should be completed
+	for _, name := range []string{"first", "second", "third"} {
+		if !strings.Contains(output, "✔ "+name+" completed") {
+			t.Errorf("expected completion of %q in output, got: %q", name, output)
+		}
+	}
+}

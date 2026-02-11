@@ -7,11 +7,29 @@ import (
 	"github.com/charmbracelet/glamour/ansi"
 )
 
+// listLevelIndent is the indentation depth for list items.
+const listLevelIndent = 2
+
 // createRenderer creates a glamour renderer with a static dark style.
 // This avoids terminal queries that can cause escape sequences to be captured as input.
 func createRenderer(width int) *glamour.TermRenderer {
-	// Use a completely static style definition to avoid any terminal queries
-	style := ansi.StyleConfig{
+	style := defaultMarkdownStyle()
+
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStyles(style),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return nil
+	}
+
+	return renderer
+}
+
+// defaultMarkdownStyle returns a static dark style configuration for glamour.
+// Uses a completely static style definition to avoid any terminal queries.
+func defaultMarkdownStyle() ansi.StyleConfig { //nolint:funlen // pure struct literal definition
+	return ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
@@ -21,8 +39,8 @@ func createRenderer(width int) *glamour.TermRenderer {
 		},
 		Heading: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color: stringPtr("39"),
-				Bold:  boolPtr(true),
+				Color: new("39"),
+				Bold:  new(true),
 			},
 		},
 		H1: ansi.StyleBlock{
@@ -45,7 +63,7 @@ func createRenderer(width int) *glamour.TermRenderer {
 			Margin:         uintPtr(0),
 		},
 		List: ansi.StyleList{
-			LevelIndent: 2,
+			LevelIndent: listLevelIndent,
 		},
 		Item: ansi.StylePrimitive{
 			BlockPrefix: "• ",
@@ -55,34 +73,34 @@ func createRenderer(width int) *glamour.TermRenderer {
 		},
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color: stringPtr("203"),
+				Color: new("203"),
 			},
 		},
 		CodeBlock: ansi.StyleCodeBlock{
 			StyleBlock: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{
-					Color: stringPtr("244"),
+					Color: new("244"),
 				},
 				Margin: uintPtr(1),
 			},
 			Chroma: &ansi.Chroma{
 				Text: ansi.StylePrimitive{
-					Color: stringPtr("#d0d0d0"),
+					Color: new("#d0d0d0"),
 				},
 				Keyword: ansi.StylePrimitive{
-					Color: stringPtr("#00afff"),
+					Color: new("#00afff"),
 				},
 				Name: ansi.StylePrimitive{
-					Color: stringPtr("#87d7ff"),
+					Color: new("#87d7ff"),
 				},
 				LiteralString: ansi.StylePrimitive{
-					Color: stringPtr("#5fd75f"),
+					Color: new("#5fd75f"),
 				},
 				LiteralNumber: ansi.StylePrimitive{
-					Color: stringPtr("#d7005f"),
+					Color: new("#d7005f"),
 				},
 				Comment: ansi.StylePrimitive{
-					Color: stringPtr("#626262"),
+					Color: new("#626262"),
 				},
 			},
 		},
@@ -90,33 +108,24 @@ func createRenderer(width int) *glamour.TermRenderer {
 			StyleBlock: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{},
 			},
-			CenterSeparator: stringPtr("│"),
-			ColumnSeparator: stringPtr("│"),
-			RowSeparator:    stringPtr("─"),
+			CenterSeparator: new("│"),
+			ColumnSeparator: new("│"),
+			RowSeparator:    new("─"),
 		},
 		Emph: ansi.StylePrimitive{
-			Italic: boolPtr(true),
+			Italic: new(true),
 		},
 		Strong: ansi.StylePrimitive{
-			Bold: boolPtr(true),
+			Bold: new(true),
 		},
 		Link: ansi.StylePrimitive{
-			Color:     stringPtr("39"),
-			Underline: boolPtr(true),
+			Color:     new("39"),
+			Underline: new(true),
 		},
 		LinkText: ansi.StylePrimitive{
-			Color: stringPtr("45"),
+			Color: new("45"),
 		},
 	}
-
-	r, err := glamour.NewTermRenderer(
-		glamour.WithStyles(style),
-		glamour.WithWordWrap(width),
-	)
-	if err != nil {
-		return nil
-	}
-	return r
 }
 
 // renderMarkdownWithRenderer renders markdown using the provided renderer.
@@ -124,6 +133,7 @@ func renderMarkdownWithRenderer(renderer *glamour.TermRenderer, content string) 
 	if renderer == nil {
 		return content
 	}
+
 	out, err := renderer.Render(content)
 	if err != nil {
 		return content
@@ -132,7 +142,5 @@ func renderMarkdownWithRenderer(renderer *glamour.TermRenderer, content string) 
 	return strings.TrimRight(out, "\n")
 }
 
-// Helper functions for style config.
-func stringPtr(s string) *string { return &s }
-func boolPtr(b bool) *bool       { return &b }
-func uintPtr(u uint) *uint       { return &u }
+// uintPtr returns a pointer to the given uint value.
+func uintPtr(u uint) *uint { return new(u) }

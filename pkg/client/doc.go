@@ -12,12 +12,9 @@
 //   - kubectl: Kubernetes API operations
 //   - kustomize: Kustomize manifest rendering
 //   - oci: OCI artifact building and pushing
+//   - reconciler: Common base for GitOps reconciliation clients
 //
 // By embedding these clients as Go libraries, KSail only requires Docker
 // as an external dependency, simplifying installation and ensuring
 // version consistency across all components.
-//
-// Each client package provides a clean interface for its respective tool's
-// functionality, abstracting away implementation details and providing
-// consistent error handling and configuration patterns.
 package client

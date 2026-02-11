@@ -5,14 +5,14 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 )
 
 func TestNewPushCmdHasValidateFlag(t *testing.T) {
 	t.Parallel()
 
-	cmd := workload.NewPushCmd(runtime.New(nil))
+	cmd := workload.NewPushCmd(di.New(nil))
 
 	// Check if --validate flag exists
 	validateFlag := cmd.Flags().Lookup("validate")
@@ -42,7 +42,7 @@ func TestNewPushCmdHasValidateFlag(t *testing.T) {
 func TestPushCmdShowsValidateFlagInHelp(t *testing.T) {
 	t.Parallel()
 
-	cmd := workload.NewPushCmd(runtime.New(nil))
+	cmd := workload.NewPushCmd(di.New(nil))
 
 	var output bytes.Buffer
 	cmd.SetOut(&output)
@@ -91,7 +91,7 @@ func TestPushCmdAcceptsValidateFlag(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			cmd := workload.NewPushCmd(runtime.New(nil))
+			cmd := workload.NewPushCmd(di.New(nil))
 			cmd.SetArgs(testCase.args)
 
 			// Parse flags without executing the command

@@ -6,9 +6,10 @@ import (
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/kind"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
@@ -20,11 +21,11 @@ import (
 // Re-export errors for backward compatibility.
 var (
 	// ErrUnsupportedDistribution is returned when an unsupported distribution is specified.
-	ErrUnsupportedDistribution = clustererrors.ErrUnsupportedDistribution
+	ErrUnsupportedDistribution = clustererr.ErrUnsupportedDistribution
 	// ErrUnsupportedProvider is returned when an unsupported provider is specified.
-	ErrUnsupportedProvider = clustererrors.ErrUnsupportedProvider
+	ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
 	// ErrMissingDistributionConfig is returned when no pre-loaded distribution config is provided.
-	ErrMissingDistributionConfig = clustererrors.ErrMissingDistributionConfig
+	ErrMissingDistributionConfig = clustererr.ErrMissingDistributionConfig
 )
 
 // DistributionConfig holds pre-loaded distribution-specific configuration.
@@ -41,7 +42,7 @@ type DistributionConfig struct {
 
 // Factory creates distribution-specific cluster provisioners based on the KSail cluster configuration.
 type Factory interface {
-	Create(ctx context.Context, cluster *v1alpha1.Cluster) (ClusterProvisioner, any, error)
+	Create(ctx context.Context, cluster *v1alpha1.Cluster) (Provisioner, any, error)
 }
 
 // DefaultFactory implements Factory for creating cluster provisioners.
@@ -51,6 +52,11 @@ type DefaultFactory struct {
 	// DistributionConfig holds pre-loaded distribution-specific configuration.
 	// This is required and must contain the appropriate config for the cluster's distribution.
 	DistributionConfig *DistributionConfig
+
+	// ComponentDetector is an optional detector used to probe running clusters
+	// for installed components. When non-nil it is injected into provisioners
+	// so that GetCurrentConfig returns accurate live state instead of defaults.
+	ComponentDetector *detector.ComponentDetector
 }
 
 // Create selects the correct distribution provisioner for the KSail cluster configuration.
@@ -58,7 +64,7 @@ type DefaultFactory struct {
 func (f DefaultFactory) Create(
 	_ context.Context,
 	cluster *v1alpha1.Cluster,
-) (ClusterProvisioner, any, error) {
+) (Provisioner, any, error) {
 	if cluster == nil {
 		return nil, nil, fmt.Errorf(
 			"cluster configuration is required: %w",
@@ -91,7 +97,7 @@ func (f DefaultFactory) Create(
 
 func (f DefaultFactory) createKindProvisioner(
 	cluster *v1alpha1.Cluster,
-) (ClusterProvisioner, any, error) {
+) (Provisioner, any, error) {
 	if f.DistributionConfig.Kind == nil {
 		return nil, nil, fmt.Errorf(
 			"kind config is required for Vanilla distribution: %w",
@@ -116,6 +122,10 @@ func (f DefaultFactory) createKindProvisioner(
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create Kind provisioner: %w", err)
+	}
+
+	if f.ComponentDetector != nil {
+		provisioner.WithComponentDetector(f.ComponentDetector)
 	}
 
 	return provisioner, kindConfig, nil
@@ -161,7 +171,7 @@ func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, opts v1alpha1.OptionsTalo
 
 func (f DefaultFactory) createK3dProvisioner(
 	cluster *v1alpha1.Cluster,
-) (ClusterProvisioner, any, error) {
+) (Provisioner, any, error) {
 	if f.DistributionConfig.K3d == nil {
 		return nil, nil, fmt.Errorf(
 			"k3d config is required for K3d distribution: %w",
@@ -187,6 +197,10 @@ func (f DefaultFactory) createK3dProvisioner(
 		k3dConfig,
 		tempConfigPath,
 	)
+
+	if f.ComponentDetector != nil {
+		provisioner.WithComponentDetector(f.ComponentDetector)
+	}
 
 	return provisioner, k3dConfig, nil
 }
@@ -214,7 +228,7 @@ func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, opts v1alpha1.Optio
 
 func (f DefaultFactory) createTalosProvisioner(
 	cluster *v1alpha1.Cluster,
-) (ClusterProvisioner, any, error) {
+) (Provisioner, any, error) {
 	if f.DistributionConfig.Talos == nil {
 		return nil, nil, fmt.Errorf(
 			"talos config is required for Talos distribution: %w",
@@ -245,6 +259,10 @@ func (f DefaultFactory) createTalosProvisioner(
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create Talos provisioner: %w", err)
+	}
+
+	if f.ComponentDetector != nil {
+		provisioner.WithComponentDetector(f.ComponentDetector)
 	}
 
 	return provisioner, f.DistributionConfig.Talos, nil

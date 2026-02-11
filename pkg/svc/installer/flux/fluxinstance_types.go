@@ -28,8 +28,8 @@ type FluxInstance struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   FluxInstanceSpec   `json:"spec"`
-	Status FluxInstanceStatus `json:"status"`
+	Spec   InstanceSpec   `json:"spec"`
+	Status InstanceStatus `json:"status"`
 }
 
 // DeepCopyInto copies all properties of this object into another object of the same type.
@@ -106,14 +106,14 @@ func (in *FluxInstanceList) DeepCopyObject() runtime.Object {
 	return nil
 }
 
-// FluxInstanceSpec contains the distribution configuration and sync source.
-type FluxInstanceSpec struct {
+// InstanceSpec contains the distribution configuration and sync source.
+type InstanceSpec struct {
 	Distribution Distribution `json:"distribution"`
 	Sync         *Sync        `json:"sync,omitempty"`
 }
 
-// DeepCopyInto copies all properties from this FluxInstanceSpec into another.
-func (in *FluxInstanceSpec) DeepCopyInto(out *FluxInstanceSpec) {
+// DeepCopyInto copies all properties from this InstanceSpec into another.
+func (in *InstanceSpec) DeepCopyInto(out *InstanceSpec) {
 	*out = *in
 	if in.Sync != nil {
 		out.Sync = new(Sync)
@@ -149,13 +149,13 @@ func (in *Sync) DeepCopyInto(out *Sync) {
 	}
 }
 
-// FluxInstanceStatus keeps parity with the real CRD so the scheme matches expectations.
-type FluxInstanceStatus struct {
+// InstanceStatus keeps parity with the real CRD so the scheme matches expectations.
+type InstanceStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-// DeepCopyInto copies all properties into another FluxInstanceStatus.
-func (in *FluxInstanceStatus) DeepCopyInto(out *FluxInstanceStatus) {
+// DeepCopyInto copies all properties into another InstanceStatus.
+func (in *InstanceStatus) DeepCopyInto(out *InstanceStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		out.Conditions = make([]metav1.Condition, len(in.Conditions))
@@ -165,13 +165,13 @@ func (in *FluxInstanceStatus) DeepCopyInto(out *FluxInstanceStatus) {
 	}
 }
 
-// DeepCopy creates a deep copy of this FluxInstanceStatus.
-func (in *FluxInstanceStatus) DeepCopy() *FluxInstanceStatus {
+// DeepCopy creates a deep copy of this InstanceStatus.
+func (in *InstanceStatus) DeepCopy() *InstanceStatus {
 	if in == nil {
 		return nil
 	}
 
-	out := new(FluxInstanceStatus)
+	out := new(InstanceStatus)
 	in.DeepCopyInto(out)
 
 	return out

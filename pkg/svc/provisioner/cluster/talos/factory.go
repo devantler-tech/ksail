@@ -6,23 +6,23 @@ import (
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
 // ErrUnsupportedProvider re-exports the shared error for backward compatibility.
-var ErrUnsupportedProvider = clustererrors.ErrUnsupportedProvider
+var ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
 
 // ErrMissingHetznerToken is returned when the Hetzner API token is not set.
 var ErrMissingHetznerToken = errors.New("hetzner API token not set")
 
-// CreateProvisioner creates a TalosProvisioner from a pre-loaded configuration.
-// The Talos config should be loaded via the config-manager before calling this function,
+// CreateProvisioner creates a Provisioner from a pre-loaded configuration.
+// The Talos config should be loaded via the configmanager before calling this function,
 // allowing any in-memory modifications (e.g., CNI patches, mirror registries) to be preserved.
 //
 // Parameters:
@@ -40,7 +40,7 @@ func CreateProvisioner(
 	opts v1alpha1.OptionsTalos,
 	hetznerOpts v1alpha1.OptionsHetzner,
 	skipCNIChecks bool,
-) (*TalosProvisioner, error) {
+) (*Provisioner, error) {
 	// Validate or default the provider
 	if providerType == "" {
 		providerType = v1alpha1.ProviderDocker
@@ -65,7 +65,7 @@ func CreateProvisioner(
 	}
 
 	// Create provisioner with loaded configs and options
-	provisioner := NewTalosProvisioner(talosConfigs, options)
+	provisioner := NewProvisioner(talosConfigs, options)
 
 	// Configure the infrastructure provider
 	var infraProvider provider.Provider

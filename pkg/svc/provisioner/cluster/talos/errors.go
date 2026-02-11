@@ -26,4 +26,10 @@ var (
 	ErrMissingKubernetesEndpoint = errors.New("cluster info missing KubernetesEndpoint")
 	// ErrKernelModuleLoadFailed is returned when loading a required kernel module fails.
 	ErrKernelModuleLoadFailed = errors.New("failed to load kernel module")
+	// ErrMinimumControlPlanes is returned when scaling would reduce control-plane nodes below 1.
+	ErrMinimumControlPlanes = errors.New("cannot scale control-plane nodes below 1")
+	// ErrEtcdLeaveCluster is returned when an etcd member fails to leave the cluster.
+	ErrEtcdLeaveCluster = errors.New("failed to remove etcd member")
+	// ErrNoConfigForRole is returned when no Talos machine config is available for a role.
+	ErrNoConfigForRole = errors.New("no config available for role")
 )
