@@ -558,3 +558,36 @@ func TestForceInjection(t *testing.T) {
 		t.Errorf("Expected original 'name' arg preserved, got %v", nameVal)
 	}
 }
+
+// TestNilEventChanAutoApproves verifies that write tools with a nil event channel
+// auto-approve instead of deadlocking (non-TUI mode).
+func TestNilEventChanAutoApproves(t *testing.T) {
+	t.Parallel()
+
+	agentModeRef := chatui.NewAgentModeRef(true)
+
+	toolCalled := false
+	writeTool := createTestWriteTool("test_nil_chan_tool", &toolCalled)
+	metadata := createToolMetadata("test_nil_chan_tool")
+
+	// Pass nil for eventChan — simulates non-TUI mode
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{writeTool}, nil, agentModeRef, nil, metadata,
+	)
+
+	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
+		ToolCallID: "test_nil_chan",
+		ToolName:   "test_nil_chan_tool",
+	})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	if !toolCalled {
+		t.Error("Tool should have been called with nil eventChan (auto-approve)")
+	}
+
+	if result.ResultType != successResult {
+		t.Errorf("Expected success, got %s", result.ResultType)
+	}
+}

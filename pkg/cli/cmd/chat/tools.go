@@ -192,6 +192,14 @@ func WrapToolsWithPermissionAndModeMetadata(
 				return originalHandler(invocation)
 			}
 
+			// If no event channel is available (non-TUI mode), auto-approve write tools
+			// to avoid deadlocking on a nil channel send.
+			if eventChan == nil {
+				invocation = injectForceFlag(invocation)
+
+				return originalHandler(invocation)
+			}
+
 			approved, result := awaitToolPermission(eventChan, toolName, invocation)
 			if !approved {
 				return *result, nil
