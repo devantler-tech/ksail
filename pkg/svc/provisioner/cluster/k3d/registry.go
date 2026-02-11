@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -112,8 +112,6 @@ func CleanupRegistries(
 
 // prepareRegistryContext sets up the registry manager and resolves the network name.
 // Returns nil manager if no registries are configured.
-//
-//nolint:ireturn // returns registry.Backend interface for dependency injection
 func prepareRegistryContext(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,
@@ -139,7 +137,6 @@ func prepareRegistryContext(
 	return registryMgr, registryInfos, networkName, nil
 }
 
-//nolint:ireturn // returns registry.Backend interface for dependency injection
 func setupRegistryManager(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,
@@ -168,7 +165,7 @@ type mirrorConfig struct {
 	Endpoint []string `yaml:"endpoint"`
 }
 
-type k3dMirrorConfig struct {
+type registryMirrors struct {
 	Mirrors map[string]mirrorConfig `yaml:"mirrors"`
 }
 
@@ -197,13 +194,13 @@ func extractRegistriesFromConfig(
 }
 
 // parseMirrorConfig parses the K3d registries.config YAML string.
-func parseMirrorConfig(configStr string) *k3dMirrorConfig {
+func parseMirrorConfig(configStr string) *registryMirrors {
 	trimmed := strings.TrimSpace(configStr)
 	if trimmed == "" {
 		return nil
 	}
 
-	var mirrorCfg k3dMirrorConfig
+	var mirrorCfg registryMirrors
 
 	err := yaml.Unmarshal([]byte(trimmed), &mirrorCfg)
 	if err != nil {

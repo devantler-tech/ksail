@@ -3,12 +3,12 @@ package workload
 import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload/gen"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 )
 
 // NewWorkloadCmd creates and returns the workload command group namespace.
-func NewWorkloadCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
+func NewWorkloadCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "workload",
 		Short: "Manage workload operations",

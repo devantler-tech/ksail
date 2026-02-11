@@ -2,12 +2,12 @@ package cipher
 
 import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 )
 
 // NewCipherCmd creates the cipher command that integrates with SOPS.
-func NewCipherCmd(_ *runtime.Runtime) *cobra.Command {
+func NewCipherCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cipher",
 		Short: "Manage encrypted files with SOPS",

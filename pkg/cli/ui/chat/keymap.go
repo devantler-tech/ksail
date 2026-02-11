@@ -47,107 +47,14 @@ type KeyMap struct {
 
 // DefaultKeyMap returns the default keybindings.
 func DefaultKeyMap() KeyMap {
-	return KeyMap{
-		// Navigation
-		Up: key.NewBinding(
-			key.WithKeys("up"),
-			key.WithHelp("↑", "history up / navigate"),
-		),
-		Down: key.NewBinding(
-			key.WithKeys("down"),
-			key.WithHelp("↓", "history down / navigate"),
-		),
-		PageUp: key.NewBinding(
-			key.WithKeys("pgup"),
-			key.WithHelp("PgUp", "scroll up"),
-		),
-		PageDown: key.NewBinding(
-			key.WithKeys("pgdown"),
-			key.WithHelp("PgDn", "scroll down"),
-		),
+	keyMap := KeyMap{}
+	setNavigationKeys(&keyMap)
+	setActionKeys(&keyMap)
+	setToolAndOutputKeys(&keyMap)
+	setModalKeys(&keyMap)
+	setPickerAndFilterKeys(&keyMap)
 
-		// Actions
-		Send: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("⏎", "send message"),
-		),
-		NewLine: key.NewBinding(
-			key.WithKeys("alt+enter"),
-			key.WithHelp("Alt+⏎", "new line"),
-		),
-		Cancel: key.NewBinding(
-			key.WithKeys("esc"),
-			key.WithHelp("esc", "cancel / quit"),
-		),
-		Quit: key.NewBinding(
-			key.WithKeys("ctrl+c"),
-			key.WithHelp("Ctrl+C", "force quit"),
-		),
-		ToggleMode: key.NewBinding(
-			key.WithKeys("tab"),
-			key.WithHelp("Tab", "toggle agent/plan mode"),
-		),
-		ToggleHelp: key.NewBinding(
-			key.WithKeys("f1"),
-			key.WithHelp("F1", "toggle help"),
-		),
-
-		// Tools
-		ExpandTools: key.NewBinding(
-			key.WithKeys("ctrl+t"),
-			key.WithHelp("Ctrl+T", "expand/collapse tools"),
-		),
-
-		// Output
-		CopyOutput: key.NewBinding(
-			key.WithKeys("ctrl+y"),
-			key.WithHelp("Ctrl+Y", "copy latest output"),
-		),
-
-		// Modals
-		OpenSessions: key.NewBinding(
-			key.WithKeys("ctrl+h"),
-			key.WithHelp("Ctrl+H", "session history"),
-		),
-		OpenModel: key.NewBinding(
-			key.WithKeys("ctrl+o"),
-			key.WithHelp("Ctrl+O", "change model"),
-		),
-		NewChat: key.NewBinding(
-			key.WithKeys("ctrl+n"),
-			key.WithHelp("Ctrl+N", "new chat"),
-		),
-
-		// Permission modal
-		Allow: key.NewBinding(
-			key.WithKeys("y", "Y"),
-			key.WithHelp("y", "allow"),
-		),
-		Deny: key.NewBinding(
-			key.WithKeys("n", "N"),
-			key.WithHelp("n", "deny"),
-		),
-
-		// Picker navigation
-		Select: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("⏎", "select"),
-		),
-		Rename: key.NewBinding(
-			key.WithKeys("r"),
-			key.WithHelp("r", "rename"),
-		),
-		Delete: key.NewBinding(
-			key.WithKeys("d"),
-			key.WithHelp("d", "delete"),
-		),
-
-		// Filter/search
-		Filter: key.NewBinding(
-			key.WithKeys("/"),
-			key.WithHelp("/", "filter"),
-		),
-	}
+	return keyMap
 }
 
 // ShortHelp returns keybindings for the mini help view (footer).
@@ -210,4 +117,103 @@ func (k KeyMap) PickerShortHelp() []key.Binding {
 // SessionPickerShortHelp returns keybindings for the session picker.
 func (k KeyMap) SessionPickerShortHelp() []key.Binding {
 	return []key.Binding{k.Up, k.Down, k.Select, k.Rename, k.Delete, k.Filter, k.Cancel}
+}
+
+func setNavigationKeys(keyMap *KeyMap) {
+	keyMap.Up = key.NewBinding(
+		key.WithKeys("up"),
+		key.WithHelp("↑", "history up / navigate"),
+	)
+	keyMap.Down = key.NewBinding(
+		key.WithKeys("down"),
+		key.WithHelp("↓", "history down / navigate"),
+	)
+	keyMap.PageUp = key.NewBinding(
+		key.WithKeys("pgup"),
+		key.WithHelp("PgUp", "scroll up"),
+	)
+	keyMap.PageDown = key.NewBinding(
+		key.WithKeys("pgdown"),
+		key.WithHelp("PgDn", "scroll down"),
+	)
+}
+
+func setActionKeys(keyMap *KeyMap) {
+	keyMap.Send = key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp(enterSymbol, "send message"),
+	)
+	keyMap.NewLine = key.NewBinding(
+		key.WithKeys("alt+enter"),
+		key.WithHelp("Alt+"+enterSymbol, "new line"),
+	)
+	keyMap.Cancel = key.NewBinding(
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "cancel / quit"),
+	)
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c"),
+		key.WithHelp("Ctrl+C", "force quit"),
+	)
+	keyMap.ToggleMode = key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("Tab", "toggle agent/plan mode"),
+	)
+	keyMap.ToggleHelp = key.NewBinding(
+		key.WithKeys("f1"),
+		key.WithHelp("F1", "toggle help"),
+	)
+}
+
+func setToolAndOutputKeys(keyMap *KeyMap) {
+	keyMap.ExpandTools = key.NewBinding(
+		key.WithKeys("ctrl+t"),
+		key.WithHelp("Ctrl+T", "expand/collapse tools"),
+	)
+	keyMap.CopyOutput = key.NewBinding(
+		key.WithKeys("ctrl+y"),
+		key.WithHelp("Ctrl+Y", "copy latest output"),
+	)
+}
+
+func setModalKeys(keyMap *KeyMap) {
+	keyMap.OpenSessions = key.NewBinding(
+		key.WithKeys("ctrl+h"),
+		key.WithHelp("Ctrl+H", "session history"),
+	)
+	keyMap.OpenModel = key.NewBinding(
+		key.WithKeys("ctrl+o"),
+		key.WithHelp("Ctrl+O", "change model"),
+	)
+	keyMap.NewChat = key.NewBinding(
+		key.WithKeys("ctrl+n"),
+		key.WithHelp("Ctrl+N", "new chat"),
+	)
+	keyMap.Allow = key.NewBinding(
+		key.WithKeys("y", "Y"),
+		key.WithHelp("y", "allow"),
+	)
+	keyMap.Deny = key.NewBinding(
+		key.WithKeys("n", "N"),
+		key.WithHelp("n", "deny"),
+	)
+}
+
+func setPickerAndFilterKeys(keyMap *KeyMap) {
+	keyMap.Select = key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("⏎", "select"),
+	)
+	keyMap.Rename = key.NewBinding(
+		key.WithKeys("r"),
+		key.WithHelp("r", "rename"),
+	)
+	keyMap.Delete = key.NewBinding(
+		key.WithKeys("d"),
+		key.WithHelp("d", "delete"),
+	)
+	keyMap.Filter = key.NewBinding(
+		key.WithKeys("/"),
+		key.WithHelp("/", "filter"),
+	)
 }

@@ -4,7 +4,8 @@ import (
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
@@ -31,11 +32,11 @@ Example:
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Set up editor environment variables before edit
-			cleanup := helpers.SetupEditorEnv(editorFlag, "workload")
+			cleanup := editor.SetupEditorEnv(editorFlag, "workload")
 			defer cleanup()
 
 			// Try to load config silently to get kubeconfig path
-			kubeconfigPath := helpers.GetKubeconfigPathSilently()
+			kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
 
 			// Create IO streams for kubectl
 			ioStreams := genericiooptions.IOStreams{

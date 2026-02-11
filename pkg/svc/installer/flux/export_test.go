@@ -34,9 +34,9 @@ func BuildLocalRegistryURL(
 	return buildLocalRegistryURL(localRegistry, clusterCfg, clusterName)
 }
 
-// BuildFluxInstance exports buildFluxInstance for testing.
-func BuildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInstance, error) {
-	return buildFluxInstance(clusterCfg, clusterName)
+// BuildInstance exports buildInstance for testing.
+func BuildInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInstance, error) {
+	return buildInstance(clusterCfg, clusterName)
 }
 
 // BuildRegistrySecret exports buildRegistrySecret for testing.

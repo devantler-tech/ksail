@@ -10,6 +10,18 @@ import (
 // logoHeight is the number of lines in the block letter logo (must be const for headerHeight calculation).
 const logoHeight = 6
 
+// ANSI color constants for picker and modal styling.
+const (
+	ansiGray   = 8
+	ansiGreen  = 10
+	ansiYellow = 11
+	ansiCyan   = 14
+	ansiWhite  = 15
+
+	// scrollIndicatorLines is the number of lines used for scroll indicators (top + bottom).
+	scrollIndicatorLines = 2
+)
+
 // Logo functions that delegate to the shared asciiart package.
 var (
 	// logo returns the ASCII art block letter logo.
@@ -71,7 +83,7 @@ var (
 	headerBoxStyle = lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(primaryColor).
-			Padding(0, 2)
+			Padding(0, modalPadding)
 
 	// userMsgStyle is the style for user messages.
 	userMsgStyle = lipgloss.NewStyle().
@@ -135,19 +147,24 @@ func calculatePickerScrollOffset(selectedIndex, totalItems, maxVisible int) int 
 	if totalItems <= maxVisible {
 		return 0
 	}
+
 	scrollOffset := 0
 	if selectedIndex >= scrollOffset+maxVisible {
 		scrollOffset = selectedIndex - maxVisible + 1
 	}
+
 	if selectedIndex < scrollOffset {
 		scrollOffset = selectedIndex
 	}
+
 	if scrollOffset > totalItems-maxVisible {
 		scrollOffset = totalItems - maxVisible
 	}
+
 	if scrollOffset < 0 {
 		scrollOffset = 0
 	}
+
 	return scrollOffset
 }
 
@@ -155,9 +172,10 @@ func calculatePickerScrollOffset(selectedIndex, totalItems, maxVisible int) int 
 func calculatePickerContentLines(visibleCount int, isScrollable bool) int {
 	contentLines := 1 + visibleCount
 	if isScrollable {
-		contentLines += 2
+		contentLines += scrollIndicatorLines
 	}
-	return max(contentLines, 6)
+
+	return max(contentLines, minPickerHeight)
 }
 
 // createPickerModalStyle creates a consistent modal style for picker dialogs.
@@ -175,11 +193,12 @@ func createPickerModalStyle(width, height int) lipgloss.Style {
 func renderPickerModal(content string, modalWidth, visibleCount int, isScrollable bool) string {
 	contentLines := calculatePickerContentLines(visibleCount, isScrollable)
 	modalStyle := createPickerModalStyle(modalWidth, contentLines)
+
 	return modalStyle.Render(content)
 }
 
 // scrollIndicatorStyle is the style for scroll indicators in pickers.
-var scrollIndicatorStyle = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+var scrollIndicatorStyle = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiGray))
 
 // renderScrollIndicatorTop renders the "more above" indicator for a picker.
 func renderScrollIndicatorTop(

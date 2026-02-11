@@ -4,18 +4,18 @@ structname: "Mock{{.InterfaceName}}"
 pkgname: "{{.PackageName}}"
 include-auto-generated: true
 packages:
-  github.com/devantler-tech/ksail/v5/pkg/io/generator:
+  github.com/devantler-tech/ksail/v5/pkg/fsutil/generator:
     config:
       recursive: false
-      dir: pkg/io/generator
+      dir: pkg/fsutil/generator
       filename: mocks.go
       pkgname: generator
     interfaces:
       Generator:
-  github.com/devantler-tech/ksail/v5/pkg/io/config-manager:
+  github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager:
     config:
       recursive: false
-      dir: pkg/io/config-manager
+      dir: pkg/fsutil/configmanager
       filename: mocks.go
       pkgname: configmanager
     interfaces:
@@ -35,12 +35,12 @@ packages:
       filename: mocks.go
       pkgname: clusterprovisioner
     interfaces:
-      ClusterProvisioner:
+      Provisioner:
       Factory:
-  github.com/devantler-tech/ksail/v5/pkg/io/validator:
+  github.com/devantler-tech/ksail/v5/pkg/fsutil/validator:
     config:
       recursive: false
-      dir: pkg/io/validator
+      dir: pkg/fsutil/validator
       filename: mocks.go
       pkgname: validator
     interfaces:
@@ -54,18 +54,18 @@ packages:
     interfaces:
       ContainerAPIClient:
       APIClient:
-  github.com/devantler-tech/ksail/v5/pkg/utils/timer:
+  github.com/devantler-tech/ksail/v5/pkg/timer:
     config:
       recursive: false
-      dir: pkg/utils/timer
+      dir: pkg/timer
       filename: mocks.go
       pkgname: timer
     interfaces:
       Timer:
-  github.com/devantler-tech/ksail/v5/pkg/utils/runner:
+  github.com/devantler-tech/ksail/v5/pkg/runner:
     config:
       recursive: false
-      dir: pkg/utils/runner
+      dir: pkg/runner
       filename: mocks.go
       pkgname: runner
     interfaces:
@@ -94,24 +94,14 @@ packages:
       pkgname: di
     interfaces:
       Injector:
-  github.com/devantler-tech/ksail/v5/pkg/io/marshaller:
+  github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller:
     config:
       recursive: false
-      dir: pkg/io/marshaller
+      dir: pkg/fsutil/marshaller
       filename: mocks.go
       pkgname: marshaller
     interfaces:
       Marshaller:
-  github.com/devantler-tech/ksail/v5/pkg/client/argocd:
-    config:
-      recursive: false
-      dir: pkg/client/argocd
-      filename: mocks.go
-      pkgname: argocd
-    interfaces:
-      Installer:
-      Manager:
-      StatusProvider:
   github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry:
     config:
       recursive: false

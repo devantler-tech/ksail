@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	dockerhelpers "github.com/devantler-tech/ksail/v5/pkg/cli/dockerutil"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
@@ -26,7 +27,7 @@ type DockerClientInvoker func(*cobra.Command, func(client.APIClient) error) erro
 
 // DefaultDockerClientInvoker returns the default Docker client invoker.
 func DefaultDockerClientInvoker() DockerClientInvoker {
-	return helpers.WithDockerClient
+	return dockerhelpers.WithDockerClient
 }
 
 // RunDockerStage executes a Docker-based stage with standard progress messaging.
@@ -69,7 +70,7 @@ func RunDockerStage(
 
 	invoker := dockerInvoker
 	if invoker == nil {
-		invoker = helpers.WithDockerClient
+		invoker = dockerhelpers.WithDockerClient
 	}
 
 	err := invoker(cmd, func(dockerClient client.APIClient) error {
@@ -78,7 +79,7 @@ func RunDockerStage(
 			return fmt.Errorf("%s: %w", info.FailurePrefix, actionErr)
 		}
 
-		outputTimer := helpers.MaybeTimer(cmd, tmr)
+		outputTimer := flags.MaybeTimer(cmd, tmr)
 
 		notify.WriteMessage(notify.Message{
 			Type:    notify.SuccessType,

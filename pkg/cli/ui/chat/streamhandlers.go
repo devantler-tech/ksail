@@ -1,11 +1,15 @@
 package chat
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// errStreamTimeout is a sentinel error for streaming event timeouts.
+var errStreamTimeout = errors.New("streaming event timeout")
 
 // drainEventChannel drains any buffered events from the event channel.
 func (m *Model) drainEventChannel() {
@@ -24,11 +28,14 @@ func (m *Model) drainEventChannel() {
 func (m *Model) handleStreamChunk(msg streamChunkMsg) (tea.Model, tea.Cmd) {
 	if msg.content != "" {
 		m.currentResponse.WriteString(msg.content)
+
 		if len(m.messages) > 0 {
 			m.messages[len(m.messages)-1].content = m.currentResponse.String()
 		}
+
 		m.updateViewportContent()
 	}
+
 	return m, m.waitForEvent()
 }
 
@@ -47,13 +54,14 @@ func (m *Model) handleAssistantMessage(msg assistantMessageMsg) (tea.Model, tea.
 	// Update the message content
 	if len(m.messages) > 0 {
 		last := &m.messages[len(m.messages)-1]
-		if last.role == "assistant" {
+		if last.role == roleAssistant {
 			last.content = m.currentResponse.String()
 			// Don't render yet - wait for SessionIdle or TurnEnd for proper completion
 		}
 	}
 
 	m.updateViewportContent()
+
 	return m, m.waitForEvent()
 }
 
@@ -86,61 +94,16 @@ func (m *Model) handleToolStart(msg toolStartMsg) (tea.Model, tea.Cmd) {
 
 	// DON'T insert tool as separate message - render inline with assistant response
 	m.updateViewportContent()
+
 	return m, m.waitForEvent()
 }
 
 // handleToolEnd handles tool execution completion events.
 func (m *Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
-	// Find the tool to complete. The SDK's ToolExecutionComplete event often
-	// doesn't include the tool name, so we use FIFO matching as primary strategy.
-	var tool *toolExecution
-
-	// Strategy 1: Try matching by tool ID if provided
-	if msg.toolID != "" {
-		tool = m.tools[msg.toolID]
-	}
-
-	// Strategy 2: Try matching by name if provided and not unknown
-	if tool == nil && msg.toolName != "" && msg.toolName != unknownToolName {
-		for _, id := range m.toolOrder {
-			t := m.tools[id]
-			if t != nil && t.name == msg.toolName && t.status == toolRunning {
-				tool = t
-				break
-			}
-		}
-	}
-
-	// Strategy 3: FIFO - match the first running tool (SDK doesn't always provide name)
-	if tool == nil {
-		for _, id := range m.toolOrder {
-			t := m.tools[id]
-			if t != nil && t.status == toolRunning {
-				tool = t
-				break
-			}
-		}
-	}
+	tool := m.findCompletedTool(msg)
 
 	if tool != nil {
-		// Update tool status
-		if msg.success {
-			tool.status = toolSuccess
-		} else {
-			tool.status = toolFailed
-		}
-		// Only use SDK output if we didn't stream any output already
-		if tool.output == "" && msg.output != "" {
-			tool.output = msg.output
-		}
-		// Keep expanded so users can follow along with output (press Tab to collapse)
-		tool.expanded = true
-
-		// Track pending tools for proper completion detection
-		m.pendingToolCount--
-		if m.pendingToolCount < 0 {
-			m.pendingToolCount = 0 // Safety guard
-		}
+		m.completeToolExecution(tool, msg)
 	}
 
 	m.updateViewportContent()
@@ -156,15 +119,92 @@ func (m *Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
 	return m, m.waitForEvent()
 }
 
+// findCompletedTool locates the tool execution that matches a completion event.
+// It uses three strategies: match by ID, match by name, and FIFO fallback.
+func (m *Model) findCompletedTool(msg toolEndMsg) *toolExecution {
+	if tool := m.findToolByID(msg.toolID); tool != nil {
+		return tool
+	}
+
+	if tool := m.findRunningToolByName(msg.toolName); tool != nil {
+		return tool
+	}
+
+	return m.findFirstRunningTool()
+}
+
+// findToolByID looks up a tool execution by its ID.
+func (m *Model) findToolByID(toolID string) *toolExecution {
+	if toolID == "" {
+		return nil
+	}
+
+	return m.tools[toolID]
+}
+
+// findRunningToolByName finds the first running tool matching the given name.
+func (m *Model) findRunningToolByName(toolName string) *toolExecution {
+	if toolName == "" || toolName == unknownToolName {
+		return nil
+	}
+
+	for _, id := range m.toolOrder {
+		tool := m.tools[id]
+		if tool != nil && tool.name == toolName && tool.status == toolRunning {
+			return tool
+		}
+	}
+
+	return nil
+}
+
+// findFirstRunningTool returns the first tool in execution order that is still running (FIFO).
+func (m *Model) findFirstRunningTool() *toolExecution {
+	for _, id := range m.toolOrder {
+		tool := m.tools[id]
+		if tool != nil && tool.status == toolRunning {
+			return tool
+		}
+	}
+
+	return nil
+}
+
+// completeToolExecution updates a tool's status and output upon completion.
+func (m *Model) completeToolExecution(tool *toolExecution, msg toolEndMsg) {
+	// Update tool status
+	if msg.success {
+		tool.status = toolSuccess
+	} else {
+		tool.status = toolFailed
+	}
+
+	// Only use SDK output if we didn't stream any output already
+	if tool.output == "" && msg.output != "" {
+		tool.output = msg.output
+	}
+
+	// Keep expanded so users can follow along with output (press Tab to collapse)
+	tool.expanded = true
+
+	// Track pending tools for proper completion detection
+	m.pendingToolCount--
+	if m.pendingToolCount < 0 {
+		m.pendingToolCount = 0 // Safety guard
+	}
+}
+
 // handleToolOutputChunk handles real-time output chunks from running tools.
 func (m *Model) handleToolOutputChunk(toolID, chunk string) (tea.Model, tea.Cmd) {
 	// The toolID from generator is actually the tool name (e.g., "ksail_cluster_list")
 	// Find the FIRST running tool that matches this name (FIFO order)
 	var tool *toolExecution
+
 	for _, id := range m.toolOrder {
-		t := m.tools[id]
-		if t != nil && t.name == toolID && t.status == toolRunning {
-			tool = t
+		candidate := m.tools[id]
+		if candidate != nil && candidate.name == toolID && candidate.status == toolRunning {
+			tool = candidate
+
 			break
 		}
 	}
@@ -172,6 +212,7 @@ func (m *Model) handleToolOutputChunk(toolID, chunk string) (tea.Model, tea.Cmd)
 	if tool != nil {
 		// Append the chunk to the tool's output
 		tool.output += chunk
+
 		m.updateViewportContent()
 	}
 
@@ -212,14 +253,7 @@ func (m *Model) tryFinalizeResponse() (tea.Model, tea.Cmd) {
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 
 		// Commit current tools to this message for persistence across turns
-		last.tools = make([]*toolExecution, 0, len(m.toolOrder))
-		last.toolOrder = make([]string, len(m.toolOrder))
-		copy(last.toolOrder, m.toolOrder)
-		for _, id := range m.toolOrder {
-			if tool := m.tools[id]; tool != nil {
-				last.tools = append(last.tools, tool)
-			}
-		}
+		m.commitToolsToLastAssistantMessage()
 	}
 
 	m.updateViewportContent()
@@ -247,6 +281,7 @@ func (m *Model) handleTurnStart() (tea.Model, tea.Cmd) {
 	m.isStreaming = true
 	m.justCompleted = false
 	m.updateViewportContent()
+
 	return m, m.waitForEvent()
 }
 
@@ -257,9 +292,11 @@ func (m *Model) handleReasoning(_ reasoningMsg) (tea.Model, tea.Cmd) {
 	// We just keep streaming state active and wait for more events
 	m.isStreaming = true
 	m.justCompleted = false
+
 	// Optionally, we could append reasoning content to a separate buffer
 	// For now, just acknowledge we're still processing
 	m.updateViewportContent()
+
 	return m, m.waitForEvent()
 }
 
@@ -267,13 +304,16 @@ func (m *Model) handleReasoning(_ reasoningMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleAbort() (tea.Model, tea.Cmd) {
 	m.isStreaming = false
 	m.cleanup()
-	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "assistant" {
+
+	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == roleAssistant {
 		last := &m.messages[len(m.messages)-1]
 		last.content += "\n\n[Session aborted]"
 		last.isStreaming = false
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 	}
+
 	m.updateViewportContent()
+
 	return m, nil
 }
 
@@ -282,12 +322,14 @@ func (m *Model) handleAbort() (tea.Model, tea.Cmd) {
 func (m *Model) handleSnapshotRewind() (tea.Model, tea.Cmd) {
 	// For now, just add an indicator and continue listening for events
 	// A more sophisticated implementation could reload session state
-	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "assistant" {
+	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == roleAssistant {
 		last := &m.messages[len(m.messages)-1]
 		last.content += "\n\n[Session rewound to previous state]"
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 	}
+
 	m.updateViewportContent()
+
 	return m, m.waitForEvent()
 }
 
@@ -296,13 +338,16 @@ func (m *Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
 	m.isStreaming = false
 	m.cleanup() // Clean up event subscription
 	m.err = msg.err
-	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "assistant" {
+
+	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == roleAssistant {
 		last := &m.messages[len(m.messages)-1]
 		last.content = fmt.Sprintf("Error: %v", msg.err)
 		last.isStreaming = false
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 	}
+
 	m.updateViewportContent()
+
 	// Don't wait for more events - response is complete (with error)
 	return m, nil
 }
@@ -313,6 +358,7 @@ func (m *Model) waitForEvent() tea.Cmd {
 	ctx := m.ctx
 	eventChan := m.eventChan
 	timeout := m.timeout
+
 	return func() tea.Msg {
 		// Use timeout to detect stuck conditions (e.g., assistant looping on tools)
 		timer := time.NewTimer(timeout)
@@ -324,8 +370,8 @@ func (m *Model) waitForEvent() tea.Cmd {
 		case <-timer.C:
 			return streamErrMsg{
 				err: fmt.Errorf(
-					"waiting for streaming event (assistant response or tool output) timed out after %v; "+
-						"the assistant or tools may be stuck",
+					"%w: waited %v; the assistant or tools may be stuck",
+					errStreamTimeout,
 					timeout,
 				),
 			}
@@ -339,10 +385,12 @@ func (m *Model) waitForEvent() tea.Cmd {
 func (m *Model) cleanup() {
 	// Unsubscribe from session events (thread-safe)
 	m.unsubscribeMu.Lock()
+
 	if m.unsubscribe != nil {
 		m.unsubscribe()
 		m.unsubscribe = nil
 	}
+
 	m.unsubscribeMu.Unlock()
 
 	// Reset completion tracking state

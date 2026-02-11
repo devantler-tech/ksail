@@ -2,13 +2,13 @@ package gen
 
 import (
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 )
 
 // createGenCmd is a helper that creates a gen command by calling the provided kubectl method.
 func createGenCmd(
-	_ *runtime.Runtime,
+	_ *di.Runtime,
 	createMethod func(*kubectl.Client) (*cobra.Command, error),
 ) *cobra.Command {
 	client := kubectl.NewClientWithStdio()
@@ -19,7 +19,7 @@ func createGenCmd(
 }
 
 // NewGenCmd creates and returns the gen command group namespace.
-func NewGenCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
+func NewGenCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "gen",
 		Short: "Generate Kubernetes resource manifests",

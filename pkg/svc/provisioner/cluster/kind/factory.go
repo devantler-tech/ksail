@@ -10,8 +10,8 @@ import (
 
 const defaultKubeconfigPath = "~/.kube/config"
 
-// CreateProvisioner creates a KindClusterProvisioner from a pre-loaded configuration.
-// The Kind config should be loaded via the config-manager before calling this function,
+// CreateProvisioner creates a Provisioner from a pre-loaded configuration.
+// The Kind config should be loaded via the configmanager before calling this function,
 // allowing any in-memory modifications (e.g., mirror registries) to be preserved.
 //
 // Parameters:
@@ -20,12 +20,12 @@ const defaultKubeconfigPath = "~/.kube/config"
 func CreateProvisioner(
 	kindConfig *v1alpha4.Cluster,
 	kubeconfigPath string,
-) (*KindClusterProvisioner, error) {
+) (*Provisioner, error) {
 	if kubeconfigPath == "" {
 		kubeconfigPath = defaultKubeconfigPath
 	}
 
-	kindSDKProvider := NewDefaultKindProviderAdapter()
+	kindSDKProvider := NewDefaultProviderAdapter()
 
 	dockerClient, err := NewDefaultDockerClient()
 	if err != nil {
@@ -35,7 +35,7 @@ func CreateProvisioner(
 	// Create Docker infrastructure provider for Kind clusters
 	infraProvider := dockerprovider.NewProvider(dockerClient, dockerprovider.LabelSchemeKind)
 
-	provisioner := NewKindClusterProvisioner(
+	provisioner := NewProvisioner(
 		kindConfig,
 		kubeconfigPath,
 		kindSDKProvider,
@@ -45,20 +45,20 @@ func CreateProvisioner(
 	return provisioner, nil
 }
 
-// CreateProvisionerWithProvider creates a KindClusterProvisioner with a custom infrastructure provider.
+// CreateProvisionerWithProvider creates a Provisioner with a custom infrastructure provider.
 // This is useful for testing or when a specific provider implementation is needed.
 func CreateProvisionerWithProvider(
 	kindConfig *v1alpha4.Cluster,
 	kubeconfigPath string,
 	infraProvider provider.Provider,
-) (*KindClusterProvisioner, error) {
+) (*Provisioner, error) {
 	if kubeconfigPath == "" {
 		kubeconfigPath = defaultKubeconfigPath
 	}
 
-	kindSDKProvider := NewDefaultKindProviderAdapter()
+	kindSDKProvider := NewDefaultProviderAdapter()
 
-	provisioner := NewKindClusterProvisioner(
+	provisioner := NewProvisioner(
 		kindConfig,
 		kubeconfigPath,
 		kindSDKProvider,
