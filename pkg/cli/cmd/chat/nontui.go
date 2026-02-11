@@ -50,10 +50,11 @@ func runNonTUIChat(
 ) error {
 	// Set up tools without streaming
 	tools, toolMetadata := chatsvc.GetKSailToolMetadata(cmd.Root(), nil) //nolint:contextcheck
-	// In non-TUI mode, pass nil for eventChan and agentModeRef:
+	// In non-TUI mode, pass nil for eventChan, agentModeRef, and yoloModeRef:
 	// - nil eventChan: tool execution is not streamed to UI (output goes directly to LLM)
 	// - nil agentModeRef: agent mode is always enabled (no plan-only mode in non-TUI)
-	tools = WrapToolsWithPermissionAndModeMetadata(tools, nil, nil, toolMetadata)
+	// - nil yoloModeRef: YOLO mode is not available in non-TUI mode
+	tools = WrapToolsWithPermissionAndModeMetadata(tools, nil, nil, nil, toolMetadata)
 	sessionConfig.Tools = tools
 
 	// Set up permission handler for non-KSail tools (git, shell, etc.)

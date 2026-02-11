@@ -73,6 +73,22 @@ func formatToolArguments(args any) string {
 	return formatArgsMap(params)
 }
 
+// injectForceFlag injects a "force" argument into the tool invocation.
+// This skips interactive confirmation prompts when the tool supports --force.
+// If the tool does not have a --force flag, the argument is silently ignored
+// by the tool executor's parameter filtering.
+func injectForceFlag(invocation copilot.ToolInvocation) copilot.ToolInvocation {
+	args, ok := invocation.Arguments.(map[string]any)
+	if !ok || args == nil {
+		args = map[string]any{}
+	}
+
+	args["force"] = true
+	invocation.Arguments = args
+
+	return invocation
+}
+
 // buildPlanModeBlockedResult creates a ToolResult indicating tool execution was blocked in plan mode.
 func buildPlanModeBlockedResult(toolName string) (copilot.ToolResult, error) {
 	cmdDescription := strings.ReplaceAll(toolName, "_", " ")
@@ -135,10 +151,12 @@ func awaitToolPermission(
 // In plan mode, ALL tool execution is blocked (model can only describe what it would do).
 // In agent mode, edit tools require permission (based on RequiresPermission annotation),
 // while read-only tools are auto-approved.
+// When YOLO mode is enabled, permission prompts are skipped and all tools are auto-approved.
 func WrapToolsWithPermissionAndModeMetadata(
 	tools []copilot.Tool,
 	eventChan chan tea.Msg,
 	agentModeRef *chatui.AgentModeRef,
+	yoloModeRef *chatui.YoloModeRef,
 	toolMetadata map[string]toolgen.ToolDefinition,
 ) []copilot.Tool {
 	wrappedTools := make([]copilot.Tool, len(tools))
@@ -167,10 +185,19 @@ func WrapToolsWithPermissionAndModeMetadata(
 				return originalHandler(invocation)
 			}
 
+			// In YOLO mode, auto-approve all tools that would normally require permission
+			if yoloModeRef != nil && yoloModeRef.IsEnabled() {
+				invocation = injectForceFlag(invocation)
+
+				return originalHandler(invocation)
+			}
+
 			approved, result := awaitToolPermission(eventChan, toolName, invocation)
 			if !approved {
 				return *result, nil
 			}
+
+			invocation = injectForceFlag(invocation)
 
 			return originalHandler(invocation)
 		}

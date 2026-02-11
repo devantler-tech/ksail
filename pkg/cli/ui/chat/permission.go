@@ -133,11 +133,20 @@ func (m *Model) renderPermissionModal() string {
 // CreateTUIPermissionHandler creates a permission handler that integrates with the TUI.
 // It sends permission requests to the provided event channel and waits for a response.
 // This allows the TUI to display permission prompts and collect user input.
-func CreateTUIPermissionHandler(eventChan chan<- tea.Msg) copilot.PermissionHandler {
+// When yoloModeRef is provided and YOLO mode is enabled, permissions are auto-approved.
+func CreateTUIPermissionHandler(
+	eventChan chan<- tea.Msg,
+	yoloModeRef *YoloModeRef,
+) copilot.PermissionHandler {
 	return func(
 		request copilot.PermissionRequest,
 		_ copilot.PermissionInvocation,
 	) (copilot.PermissionRequestResult, error) {
+		// In YOLO mode, auto-approve all SDK permission requests
+		if yoloModeRef != nil && yoloModeRef.IsEnabled() {
+			return copilot.PermissionRequestResult{Kind: "approved"}, nil
+		}
+
 		// Extract tool name and command from the permission request.
 		// The Extra map contains the raw permission request data from the SDK.
 		// Common keys vary by permission kind (shell, file_edit, etc.)
