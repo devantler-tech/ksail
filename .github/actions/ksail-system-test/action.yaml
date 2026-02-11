@@ -238,7 +238,7 @@ runs:
         # shellcheck disable=SC2086
         ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
 
-    - name:  Debug Kubernetes failure
+    - name: Debug Kubernetes failure
       if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
