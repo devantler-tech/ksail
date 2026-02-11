@@ -161,6 +161,9 @@ func sendChatWithoutStreaming(
 
 	select {
 	case <-ctx.Done():
+		// Abort the in-flight Copilot request when the context is cancelled.
+		_ = session.Abort()
+
 		return fmt.Errorf("chat cancelled: %w", ctx.Err())
 	case chatResult := <-resultChan:
 		if chatResult.err != nil {

@@ -207,7 +207,7 @@ func validateDirectory(
 			},
 		)
 		if filesErr != nil {
-			return fmt.Errorf("YAML validation failed: %w", filesErr)
+			return fmt.Errorf("yaml validation failed: %w", filesErr)
 		}
 	}
 
