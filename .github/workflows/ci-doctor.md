@@ -40,7 +40,7 @@ tools:
     toolsets: [all]
   cache-memory: true
   web-fetch:
-  bash:
+  bash: true
 
 timeout-minutes: 60
 source: githubnext/agentics/workflows/ci-doctor.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32

@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +32,7 @@ Examples:
   ksail workload export --context=kind-dev --kubeconfig=~/.kube/config`
 
 // NewExportCmd creates the image export command.
-func NewExportCmd(_ *runtime.Runtime) *cobra.Command {
+func NewExportCmd(_ *di.Runtime) *cobra.Command {
 	var images []string
 
 	cmd := &cobra.Command{

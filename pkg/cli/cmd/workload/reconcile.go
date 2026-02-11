@@ -8,13 +8,13 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	registryhelpers "github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +37,7 @@ func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
 		kubeconfigPath = v1alpha1.DefaultKubeconfigPath
 	}
 
-	expanded, err := iopath.ExpandHomePath(kubeconfigPath)
+	expanded, err := fsutil.ExpandHomePath(kubeconfigPath)
 	if err != nil {
 		return "", fmt.Errorf("expand kubeconfig path: %w", err)
 	}
@@ -46,7 +46,7 @@ func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
 }
 
 // NewReconcileCmd creates the workload reconcile command.
-func NewReconcileCmd(_ *runtime.Runtime) *cobra.Command {
+func NewReconcileCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "reconcile",
 		Short:        "Trigger reconciliation for GitOps workloads",
@@ -145,7 +145,7 @@ func autoDetectGitOpsEngine(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	engine, err := helpers.DetectGitOpsEngine(cmd.Context())
+	engine, err := registryhelpers.DetectGitOpsEngine(cmd.Context())
 	if err != nil {
 		return v1alpha1.GitOpsEngineNone, fmt.Errorf("detect gitops engine: %w", err)
 	}

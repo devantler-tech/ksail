@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/siderolabs/talos/pkg/cluster/check"
 	"github.com/siderolabs/talos/pkg/conditions"
@@ -18,9 +18,9 @@ import (
 
 // writeKubeconfig writes the raw kubeconfig bytes to the configured kubeconfig path.
 // It expands tilde in the path, ensures the directory exists, and writes the file.
-func (p *TalosProvisioner) writeKubeconfig(kubeconfig []byte) error {
+func (p *Provisioner) writeKubeconfig(kubeconfig []byte) error {
 	// Expand tilde in kubeconfig path (e.g., ~/.kube/config -> /home/user/.kube/config)
-	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
+	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
 	}
@@ -46,9 +46,9 @@ func (p *TalosProvisioner) writeKubeconfig(kubeconfig []byte) error {
 }
 
 // saveTalosconfig saves the talosconfig for any cluster type.
-func (p *TalosProvisioner) saveTalosconfig(configBundle *bundle.Bundle) error {
+func (p *Provisioner) saveTalosconfig(configBundle *bundle.Bundle) error {
 	// Expand tilde in talosconfig path
-	talosconfigPath, err := iopath.ExpandHomePath(p.options.TalosconfigPath)
+	talosconfigPath, err := fsutil.ExpandHomePath(p.options.TalosconfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to expand talosconfig path: %w", err)
 	}
@@ -103,9 +103,9 @@ func rewriteKubeconfigEndpoint(kubeconfigBytes []byte, endpoint string) ([]byte,
 // cleanupKubeconfig removes the cluster, context, and user entries for the deleted cluster
 // from the kubeconfig file. This only removes entries matching the cluster name,
 // leaving other cluster configurations intact.
-func (p *TalosProvisioner) cleanupKubeconfig(clusterName string) error {
+func (p *Provisioner) cleanupKubeconfig(clusterName string) error {
 	// Expand tilde in kubeconfig path
-	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
+	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
 	}
@@ -132,9 +132,9 @@ func (p *TalosProvisioner) cleanupKubeconfig(clusterName string) error {
 // This cleans up stale configuration that would point to IPs that no longer exist.
 // If the current context is the deleted cluster, it sets the context to the first
 // remaining context, or leaves it empty if no contexts remain.
-func (p *TalosProvisioner) cleanupTalosconfig(clusterName string) error {
+func (p *Provisioner) cleanupTalosconfig(clusterName string) error {
 	// Expand tilde in talosconfig path
-	talosconfigPath, err := iopath.ExpandHomePath(p.options.TalosconfigPath)
+	talosconfigPath, err := fsutil.ExpandHomePath(p.options.TalosconfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to expand talosconfig path: %w", err)
 	}
@@ -197,7 +197,7 @@ func (p *TalosProvisioner) cleanupTalosconfig(clusterName string) error {
 // validates the same control plane readiness via the K8s API instead.
 //
 // See: https://pkg.go.dev/github.com/siderolabs/talos/pkg/cluster/check
-func (p *TalosProvisioner) clusterReadinessChecks() []check.ClusterCheck {
+func (p *Provisioner) clusterReadinessChecks() []check.ClusterCheck {
 	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) ||
 		p.options.SkipCNIChecks
 
@@ -231,7 +231,7 @@ func (p *TalosProvisioner) clusterReadinessChecks() []check.ClusterCheck {
 // serving certificate rotation is enabled but the CSR approver cannot run (e.g., no CNI),
 // making StaticPodStatus resources unavailable. The K8sFullControlPlaneAssertion check
 // validates control plane readiness via the K8s API instead.
-func (p *TalosProvisioner) k8sComponentsReadinessChecksWithoutStaticPodStatus() []check.ClusterCheck {
+func (p *Provisioner) k8sComponentsReadinessChecksWithoutStaticPodStatus() []check.ClusterCheck {
 	return []check.ClusterCheck{
 		// wait for all the nodes to report in at k8s level
 		func(cluster check.ClusterInfo) conditions.Condition {

@@ -76,7 +76,11 @@ func processDocDirectory(
 	loadedFiles map[string]bool,
 ) {
 	_ = fs.WalkDir(docsFS, dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || loadedFiles[path] {
+		if err != nil {
+			return err
+		}
+
+		if d == nil || d.IsDir() || loadedFiles[path] {
 			return nil
 		}
 

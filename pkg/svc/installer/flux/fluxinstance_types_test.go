@@ -24,7 +24,7 @@ func TestFluxInstance_DeepCopy(t *testing.T) {
 			Name:      "test-instance",
 			Namespace: "test-namespace",
 		},
-		Spec: fluxinstaller.FluxInstanceSpec{
+		Spec: fluxinstaller.InstanceSpec{
 			Distribution: fluxinstaller.Distribution{
 				Version:  "2.x",
 				Registry: "ghcr.io/fluxcd",
@@ -40,7 +40,7 @@ func TestFluxInstance_DeepCopy(t *testing.T) {
 				Interval: &metav1.Duration{Duration: time.Minute},
 			},
 		},
-		Status: fluxinstaller.FluxInstanceStatus{
+		Status: fluxinstaller.InstanceStatus{
 			Conditions: []metav1.Condition{
 				{
 					Type:   "Ready",
@@ -149,7 +149,7 @@ func TestFluxInstanceList_DeepCopyObject(t *testing.T) {
 func TestFluxInstanceSpec_DeepCopyInto(t *testing.T) {
 	t.Parallel()
 
-	original := fluxinstaller.FluxInstanceSpec{
+	original := fluxinstaller.InstanceSpec{
 		Distribution: fluxinstaller.Distribution{
 			Version: "2.x",
 		},
@@ -159,7 +159,7 @@ func TestFluxInstanceSpec_DeepCopyInto(t *testing.T) {
 		},
 	}
 
-	var copied fluxinstaller.FluxInstanceSpec
+	var copied fluxinstaller.InstanceSpec
 	original.DeepCopyInto(&copied)
 
 	assert.Equal(t, original.Distribution.Version, copied.Distribution.Version)
@@ -171,14 +171,14 @@ func TestFluxInstanceSpec_DeepCopyInto(t *testing.T) {
 func TestFluxInstanceSpec_DeepCopyInto_NilSync(t *testing.T) {
 	t.Parallel()
 
-	original := fluxinstaller.FluxInstanceSpec{
+	original := fluxinstaller.InstanceSpec{
 		Distribution: fluxinstaller.Distribution{
 			Version: "2.x",
 		},
 		Sync: nil,
 	}
 
-	var copied fluxinstaller.FluxInstanceSpec
+	var copied fluxinstaller.InstanceSpec
 	original.DeepCopyInto(&copied)
 
 	assert.Nil(t, copied.Sync)
@@ -228,7 +228,7 @@ func TestSync_DeepCopyInto_NilInterval(t *testing.T) {
 func TestFluxInstanceStatus_DeepCopy(t *testing.T) {
 	t.Parallel()
 
-	original := &fluxinstaller.FluxInstanceStatus{
+	original := &fluxinstaller.InstanceStatus{
 		Conditions: []metav1.Condition{
 			{Type: "Ready", Status: metav1.ConditionTrue},
 			{Type: "Healthy", Status: metav1.ConditionFalse},
@@ -246,7 +246,7 @@ func TestFluxInstanceStatus_DeepCopy(t *testing.T) {
 func TestFluxInstanceStatus_DeepCopy_Nil(t *testing.T) {
 	t.Parallel()
 
-	var original *fluxinstaller.FluxInstanceStatus
+	var original *fluxinstaller.InstanceStatus
 
 	copied := original.DeepCopy()
 
@@ -256,7 +256,7 @@ func TestFluxInstanceStatus_DeepCopy_Nil(t *testing.T) {
 func TestFluxInstanceStatus_DeepCopy_NilConditions(t *testing.T) {
 	t.Parallel()
 
-	original := &fluxinstaller.FluxInstanceStatus{
+	original := &fluxinstaller.InstanceStatus{
 		Conditions: nil,
 	}
 

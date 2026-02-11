@@ -28,10 +28,10 @@ func TestMain(m *testing.M) {
 	os.Exit(exitCode)
 }
 
-func TestNewCiliumInstaller(t *testing.T) {
+func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
-	installer := ciliuminstaller.NewCiliumInstaller(
+	installer := ciliuminstaller.NewInstaller(
 		nil,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -41,7 +41,7 @@ func TestNewCiliumInstaller(t *testing.T) {
 	require.NotNil(t, installer, "expected installer to be created")
 }
 
-func TestNewCiliumInstallerWithDistribution(t *testing.T) {
+func TestNewInstallerWithDistribution(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -71,7 +71,7 @@ func TestNewCiliumInstallerWithDistribution(t *testing.T) {
 			t.Parallel()
 
 			client := helm.NewMockInterface(t)
-			installer := ciliuminstaller.NewCiliumInstallerWithDistribution(
+			installer := ciliuminstaller.NewInstallerWithDistribution(
 				client,
 				"/path/to/kubeconfig",
 				"test-context",
@@ -84,7 +84,7 @@ func TestNewCiliumInstallerWithDistribution(t *testing.T) {
 	}
 }
 
-func TestNewCiliumInstaller_WithDifferentTimeout(t *testing.T) {
+func TestNewInstaller_WithDifferentTimeout(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -109,7 +109,7 @@ func TestNewCiliumInstaller_WithDifferentTimeout(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			installer := ciliuminstaller.NewCiliumInstaller(
+			installer := ciliuminstaller.NewInstaller(
 				nil,
 				"/path/to/kubeconfig",
 				"test-context",
@@ -121,10 +121,10 @@ func TestNewCiliumInstaller_WithDifferentTimeout(t *testing.T) {
 	}
 }
 
-func TestNewCiliumInstaller_WithEmptyParams(t *testing.T) {
+func TestNewInstaller_WithEmptyParams(t *testing.T) {
 	t.Parallel()
 
-	installer := ciliuminstaller.NewCiliumInstaller(
+	installer := ciliuminstaller.NewInstaller(
 		nil,
 		"",
 		"",
@@ -134,10 +134,10 @@ func TestNewCiliumInstaller_WithEmptyParams(t *testing.T) {
 	require.NotNil(t, installer, "expected installer to be created even with empty params")
 }
 
-func TestCiliumInstaller_Install_VanillaDistribution(t *testing.T) {
+func TestInstaller_Install_VanillaDistribution(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCiliumInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
 	expectCiliumInstall(t, client, nil)
 
 	err := installer.Install(context.Background())
@@ -145,10 +145,10 @@ func TestCiliumInstaller_Install_VanillaDistribution(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCiliumInstaller_Install_K3sDistribution(t *testing.T) {
+func TestInstaller_Install_K3sDistribution(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCiliumInstallerWithDistribution(t, v1alpha1.DistributionK3s)
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionK3s)
 	expectCiliumInstall(t, client, nil)
 
 	err := installer.Install(context.Background())
@@ -156,10 +156,10 @@ func TestCiliumInstaller_Install_K3sDistribution(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCiliumInstaller_Install_RepoError(t *testing.T) {
+func TestInstaller_Install_RepoError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCiliumInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(assert.AnError)
@@ -170,10 +170,10 @@ func TestCiliumInstaller_Install_RepoError(t *testing.T) {
 	snaps.MatchSnapshot(t, err.Error())
 }
 
-func TestCiliumInstaller_Install_ChartError(t *testing.T) {
+func TestInstaller_Install_ChartError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCiliumInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
 	expectCiliumInstall(t, client, assert.AnError)
 
 	err := installer.Install(context.Background())
@@ -182,10 +182,10 @@ func TestCiliumInstaller_Install_ChartError(t *testing.T) {
 	snaps.MatchSnapshot(t, err.Error())
 }
 
-func TestCiliumInstaller_Install_NilClient(t *testing.T) {
+func TestInstaller_Install_NilClient(t *testing.T) {
 	t.Parallel()
 
-	installer := ciliuminstaller.NewCiliumInstallerWithDistribution(
+	installer := ciliuminstaller.NewInstallerWithDistribution(
 		nil, // nil client
 		"/path/to/kubeconfig",
 		"test-context",
@@ -199,10 +199,10 @@ func TestCiliumInstaller_Install_NilClient(t *testing.T) {
 	assert.Contains(t, err.Error(), "helm client is nil")
 }
 
-func TestCiliumInstaller_Uninstall_Success(t *testing.T) {
+func TestInstaller_Uninstall_Success(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCiliumInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "cilium", "kube-system").
 		Return(nil)
@@ -212,10 +212,10 @@ func TestCiliumInstaller_Uninstall_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCiliumInstaller_Uninstall_Error(t *testing.T) {
+func TestInstaller_Uninstall_Error(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCiliumInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "cilium", "kube-system").
 		Return(assert.AnError)
@@ -226,10 +226,10 @@ func TestCiliumInstaller_Uninstall_Error(t *testing.T) {
 	snaps.MatchSnapshot(t, err.Error())
 }
 
-func TestCiliumInstaller_Uninstall_NilClient(t *testing.T) {
+func TestInstaller_Uninstall_NilClient(t *testing.T) {
 	t.Parallel()
 
-	installer := ciliuminstaller.NewCiliumInstallerWithDistribution(
+	installer := ciliuminstaller.NewInstallerWithDistribution(
 		nil, // nil client
 		"/path/to/kubeconfig",
 		"test-context",
@@ -245,14 +245,14 @@ func TestCiliumInstaller_Uninstall_NilClient(t *testing.T) {
 
 // --- test helpers ---
 
-func newCiliumInstallerWithDistribution(
+func newInstallerWithDistribution(
 	t *testing.T,
 	distribution v1alpha1.Distribution,
-) (*ciliuminstaller.CiliumInstaller, *helm.MockInterface) {
+) (*ciliuminstaller.Installer, *helm.MockInterface) {
 	t.Helper()
 
 	client := helm.NewMockInterface(t)
-	installer := ciliuminstaller.NewCiliumInstallerWithDistribution(
+	installer := ciliuminstaller.NewInstallerWithDistribution(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",

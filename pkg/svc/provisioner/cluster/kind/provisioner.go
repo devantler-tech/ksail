@@ -9,11 +9,12 @@ import (
 	"slices"
 	"strings"
 
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
-	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller"
+	runner "github.com/devantler-tech/ksail/v5/pkg/runner"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
-	runner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/kind/pkg/cluster"
 	kindcmd "sigs.k8s.io/kind/pkg/cmd"
@@ -52,7 +53,6 @@ func (noopInfoLogger) Info(string)          {}
 func (noopInfoLogger) Infof(string, ...any) {}
 func (noopInfoLogger) Enabled() bool        { return false }
 
-//nolint:ireturn // Required by Kind SDK log.Logger interface
 func (l *streamLogger) V(level log.Level) log.InfoLogger {
 	// Only enable info-level messages (V(0)), suppress verbose/debug (V(1+))
 	if level > 0 {
@@ -94,34 +94,35 @@ func (l *streamLogger) write(message string) {
 	_, _ = io.WriteString(l.writer, message+"\n")
 }
 
-// KindProvider describes the subset of methods from kind's Provider used here.
-type KindProvider interface {
+// Provider describes the subset of methods from kind's Provider used here.
+type Provider interface {
 	Create(name string, opts ...cluster.CreateOption) error
 	Delete(name, kubeconfigPath string) error
 	List() ([]string, error)
 	ListNodes(name string) ([]string, error)
 }
 
-// KindClusterProvisioner is an implementation of the ClusterProvisioner interface for provisioning kind clusters.
+// Provisioner is an implementation of the ClusterProvisioner interface for provisioning kind clusters.
 // It uses kind's Cobra commands where available (create, delete, list) and delegates
 // infrastructure operations (start, stop) to the injected Provider.
-type KindClusterProvisioner struct {
-	kubeConfig      string
-	kindConfig      *v1alpha4.Cluster
-	kindSDKProvider KindProvider
-	infraProvider   provider.Provider
-	runner          runner.CommandRunner
+type Provisioner struct {
+	kubeConfig        string
+	kindConfig        *v1alpha4.Cluster
+	kindSDKProvider   Provider
+	infraProvider     provider.Provider
+	runner            runner.CommandRunner
+	componentDetector *detector.ComponentDetector
 }
 
-// NewKindClusterProvisioner constructs a KindClusterProvisioner with explicit dependencies
+// NewProvisioner constructs a Provisioner with explicit dependencies
 // for the kind SDK provider and infrastructure provider.
-func NewKindClusterProvisioner(
+func NewProvisioner(
 	kindConfig *v1alpha4.Cluster,
 	kubeConfig string,
-	kindSDKProvider KindProvider,
+	kindSDKProvider Provider,
 	infraProvider provider.Provider,
-) *KindClusterProvisioner {
-	return NewKindClusterProvisionerWithRunner(
+) *Provisioner {
+	return NewProvisionerWithRunner(
 		kindConfig,
 		kubeConfig,
 		kindSDKProvider,
@@ -130,16 +131,16 @@ func NewKindClusterProvisioner(
 	)
 }
 
-// NewKindClusterProvisionerWithRunner constructs a KindClusterProvisioner with
+// NewProvisionerWithRunner constructs a Provisioner with
 // an explicit command runner for testing purposes.
-func NewKindClusterProvisionerWithRunner(
+func NewProvisionerWithRunner(
 	kindConfig *v1alpha4.Cluster,
 	kubeConfig string,
-	kindSDKProvider KindProvider,
+	kindSDKProvider Provider,
 	infraProvider provider.Provider,
 	runner runner.CommandRunner,
-) *KindClusterProvisioner {
-	return &KindClusterProvisioner{
+) *Provisioner {
+	return &Provisioner{
 		kubeConfig:      kubeConfig,
 		kindConfig:      kindConfig,
 		kindSDKProvider: kindSDKProvider,
@@ -150,12 +151,17 @@ func NewKindClusterProvisionerWithRunner(
 
 // SetProvider sets the infrastructure provider for node operations.
 // This implements the ProviderAware interface.
-func (k *KindClusterProvisioner) SetProvider(p provider.Provider) {
+func (k *Provisioner) SetProvider(p provider.Provider) {
 	k.infraProvider = p
 }
 
+// WithComponentDetector sets the component detector for querying cluster state.
+func (k *Provisioner) WithComponentDetector(d *detector.ComponentDetector) {
+	k.componentDetector = d
+}
+
 // Create creates a kind cluster using kind's Cobra command.
-func (k *KindClusterProvisioner) Create(ctx context.Context, name string) error {
+func (k *Provisioner) Create(ctx context.Context, name string) error {
 	target := setName(name, k.kindConfig.Name)
 
 	// Serialize config to temp file (required by kind's Cobra command)
@@ -203,8 +209,8 @@ func (k *KindClusterProvisioner) Create(ctx context.Context, name string) error 
 }
 
 // Delete deletes a kind cluster using kind's Cobra command.
-// Returns clustererrors.ErrClusterNotFound if the cluster does not exist.
-func (k *KindClusterProvisioner) Delete(ctx context.Context, name string) error {
+// Returns clustererr.ErrClusterNotFound if the cluster does not exist.
+func (k *Provisioner) Delete(ctx context.Context, name string) error {
 	target := setName(name, k.kindConfig.Name)
 
 	// Check if cluster exists before attempting to delete
@@ -214,10 +220,10 @@ func (k *KindClusterProvisioner) Delete(ctx context.Context, name string) error 
 	}
 
 	if !exists {
-		return fmt.Errorf("%w: %s", clustererrors.ErrClusterNotFound, target)
+		return fmt.Errorf("%w: %s", clustererr.ErrClusterNotFound, target)
 	}
 
-	kubeconfigPath, err := iopath.ExpandHomePath(k.kubeConfig)
+	kubeconfigPath, err := fsutil.ExpandHomePath(k.kubeConfig)
 	if err != nil {
 		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
 	}
@@ -248,18 +254,18 @@ func (k *KindClusterProvisioner) Delete(ctx context.Context, name string) error 
 
 // Start starts a kind cluster.
 // Delegates to the infrastructure provider for container operations.
-func (k *KindClusterProvisioner) Start(ctx context.Context, name string) error {
+func (k *Provisioner) Start(ctx context.Context, name string) error {
 	return k.withProvider(ctx, name, "start", k.infraProvider.StartNodes)
 }
 
 // Stop stops a kind cluster.
 // Delegates to the infrastructure provider for container operations.
-func (k *KindClusterProvisioner) Stop(ctx context.Context, name string) error {
+func (k *Provisioner) Stop(ctx context.Context, name string) error {
 	return k.withProvider(ctx, name, "stop", k.infraProvider.StopNodes)
 }
 
 // List returns all kind clusters using kind's Cobra command.
-func (k *KindClusterProvisioner) List(ctx context.Context) ([]string, error) {
+func (k *Provisioner) List(ctx context.Context) ([]string, error) {
 	// Use a buffer to capture output without displaying it
 	var outBuf bytes.Buffer
 
@@ -306,7 +312,7 @@ func (k *KindClusterProvisioner) List(ctx context.Context) ([]string, error) {
 }
 
 // Exists checks if a kind cluster exists.
-func (k *KindClusterProvisioner) Exists(ctx context.Context, name string) (bool, error) {
+func (k *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 	clusters, err := k.List(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to list kind clusters: %w", err)
@@ -324,7 +330,7 @@ func (k *KindClusterProvisioner) Exists(ctx context.Context, name string) (bool,
 // --- internals ---
 
 // withProvider executes a provider operation with proper nil check and error wrapping.
-func (k *KindClusterProvisioner) withProvider(
+func (k *Provisioner) withProvider(
 	ctx context.Context,
 	name string,
 	operationName string,
@@ -333,7 +339,7 @@ func (k *KindClusterProvisioner) withProvider(
 	target := setName(name, k.kindConfig.Name)
 
 	if k.infraProvider == nil {
-		return fmt.Errorf("%w for cluster '%s'", clustererrors.ErrProviderNotSet, target)
+		return fmt.Errorf("%w for cluster '%s'", clustererr.ErrProviderNotSet, target)
 	}
 
 	err := providerFunc(ctx, target)

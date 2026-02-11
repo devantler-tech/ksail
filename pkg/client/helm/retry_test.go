@@ -10,9 +10,9 @@ import (
 )
 
 // Static test errors for retry tests.
-// Error messages intentionally match real HTTP error patterns including capitalization.
+// Error messages intentionally match real HTTP/network error patterns including capitalization.
 //
-//nolint:staticcheck // Test error strings simulate real HTTP error messages with standard capitalization
+//nolint:staticcheck // Test error strings simulate real error messages with standard capitalization
 var (
 	errGeneric             = errors.New("something went wrong")
 	errNotFound            = errors.New("404 Not Found")
@@ -28,9 +28,23 @@ var (
 	errWrapped500          = errors.New(
 		"failed to download index: server returned 500 Internal Server Error",
 	)
+	errConnReset = errors.New(
+		"read tcp 10.1.0.115:37414->98.84.224.111:443: read: connection reset by peer",
+	)
+	errConnRefused = errors.New(
+		"dial tcp 127.0.0.1:443: connect: connection refused",
+	)
+	errIOTimeout = errors.New(
+		"net/http: request canceled (Client.Timeout exceeded): i/o timeout",
+	)
+	errTLSTimeout    = errors.New("net/http: TLS handshake timeout")
+	errUnexpectedEOF = errors.New("unexpected EOF")
+	errNoSuchHost    = errors.New(
+		"dial tcp: lookup charts.example.com: no such host",
+	)
 )
 
-func TestIsRetryableHTTPError(t *testing.T) {
+func TestIsRetryableNetworkError(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -51,13 +65,19 @@ func TestIsRetryableHTTPError(t *testing.T) {
 		{name: "504 Gateway Timeout code", err: errTimeout504, expected: true},
 		{name: "504 Gateway Timeout text", err: errGatewayTimeout, expected: true},
 		{name: "wrapped 500 error", err: errWrapped500, expected: true},
+		{name: "connection reset by peer", err: errConnReset, expected: true},
+		{name: "connection refused", err: errConnRefused, expected: true},
+		{name: "i/o timeout", err: errIOTimeout, expected: true},
+		{name: "TLS handshake timeout", err: errTLSTimeout, expected: true},
+		{name: "unexpected EOF", err: errUnexpectedEOF, expected: true},
+		{name: "no such host", err: errNoSuchHost, expected: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := isRetryableHTTPError(tt.err)
+			result := isRetryableNetworkError(tt.err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

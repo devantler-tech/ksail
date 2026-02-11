@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 )
@@ -12,8 +12,6 @@ import (
 // Dependency resolvers.
 
 // ResolveTimer retrieves the timer dependency from the injector with consistent error handling.
-//
-//nolint:ireturn,nolintlint // DI container exposes the timer interface.
 func ResolveTimer(injector Injector) (timer.Timer, error) {
 	tmr, err := do.Invoke[timer.Timer](injector)
 	if err != nil {
@@ -23,11 +21,9 @@ func ResolveTimer(injector Injector) (timer.Timer, error) {
 	return tmr, nil
 }
 
-// ResolveClusterProvisionerFactory retrieves the cluster provisioner factory dependency
+// ResolveProvisionerFactory retrieves the cluster provisioner factory dependency
 // from the injector with consistent error handling.
-//
-//nolint:ireturn,nolintlint // DI container exposes the factory interface.
-func ResolveClusterProvisionerFactory(
+func ResolveProvisionerFactory(
 	injector Injector,
 ) (clusterprovisioner.Factory, error) {
 	factory, err := do.Invoke[clusterprovisioner.Factory](injector)

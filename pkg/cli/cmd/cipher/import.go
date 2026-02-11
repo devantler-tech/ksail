@@ -11,7 +11,7 @@ import (
 
 	"filippo.io/age"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/spf13/cobra"
 )
 

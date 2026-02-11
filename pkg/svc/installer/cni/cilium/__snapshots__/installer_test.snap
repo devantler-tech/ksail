@@ -10,3 +10,15 @@ failed to install Cilium: install or upgrade cilium: failed to add cilium reposi
 [TestCiliumInstaller_Uninstall_Error - 1]
 failed to uninstall cilium release: assert.AnError general error for testing
 ---
+
+[TestInstaller_Install_RepoError - 1]
+failed to install Cilium: install or upgrade cilium: failed to add cilium repository: assert.AnError general error for testing
+---
+
+[TestInstaller_Install_ChartError - 1]
+failed to install Cilium: install or upgrade cilium: failed to install cilium chart: assert.AnError general error for testing
+---
+
+[TestInstaller_Uninstall_Error - 1]
+failed to uninstall cilium release: assert.AnError general error for testing
+---

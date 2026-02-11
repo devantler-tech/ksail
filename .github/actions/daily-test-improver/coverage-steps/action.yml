@@ -11,7 +11,7 @@ runs:
         go-version-file: go.mod
         cache: true
         cache-dependency-path: go.sum
-    
+
     # Step 2: Verify Go installation
     - name: ✅ Verify Go setup
       shell: bash
@@ -41,7 +41,7 @@ runs:
       shell: bash
       run: |
         echo "Enabling covdata workaround..." | tee -a coverage-steps.log
-        go env -w GOTOOLCHAIN=go1.25.4+auto 2>&1 | tee -a coverage-steps.log
+        go env -w GOTOOLCHAIN=go1.26.0+auto 2>&1 | tee -a coverage-steps.log
         echo "✅ Covdata enabled" | tee -a coverage-steps.log
 
     # Step 6: Run unit tests with coverage

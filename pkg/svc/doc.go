@@ -1,18 +1,17 @@
 // Package svc provides service layer components for KSail.
 //
 // This package contains the business logic layer that coordinates between
-// the CLI commands and the underlying clients/infrastructure:
+// the CLI commands and the underlying clients/infrastructure.
 //
+// Subpackages:
+//   - chat: AI chat integration with GitHub Copilot SDK
+//   - detector: Installed component and cluster distribution detection
+//   - diff: Configuration diff engine for cluster updates
+//   - image: Container image export/import for Kind and K3d nodes
 //   - installer: Component installers for CNI, CSI, GitOps engines, and cert-manager
-//   - provisioner: Cluster and registry provisioning for Kind, K3d, and Talos
-//
-// The svc package follows the service pattern, encapsulating complex operations
-// that involve multiple steps, retries, and coordination between different
-// subsystems.
-//
-// Key responsibilities:
-//   - Installing and configuring Kubernetes components (Cilium, Calico, Flux, ArgoCD)
-//   - Provisioning and managing cluster lifecycle (create, start, stop, delete)
-//   - Managing container registries (local and mirror registries)
-//   - Handling distribution-specific logic for Kind, K3d, and Talos
+//   - mcp: Model Context Protocol server for AI assistants
+//   - provider: Infrastructure providers (Docker, Hetzner)
+//   - provisioner: Cluster and registry provisioning for Vanilla, K3s, and Talos
+//   - registryresolver: OCI registry detection, resolution, and artifact push
+//   - state: Cluster state tracking for update operations
 package svc
