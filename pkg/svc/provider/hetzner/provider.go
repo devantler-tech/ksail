@@ -677,7 +677,7 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) hcloud.ServerCre
 		Location: &hcloud.Location{
 			Name: opts.Location,
 		},
-		StartAfterCreate: hcloud.Ptr(true),
+		StartAfterCreate: new(true),
 	}
 
 	// Use either Image or ISO - ISOs are used for Talos public ISOs

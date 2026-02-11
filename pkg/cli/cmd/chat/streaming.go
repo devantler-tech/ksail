@@ -15,35 +15,53 @@ type streamingState struct {
 	done        chan struct{}
 	responseErr error
 	mu          sync.Mutex
-	closed      bool
+	doneOnce    sync.Once
 }
 
 // markDone signals that streaming is complete.
+// Safe for concurrent callers via sync.Once.
 func (s *streamingState) markDone() {
-	if !s.closed {
-		s.closed = true
-		close(s.done)
-	}
+	s.doneOnce.Do(func() { close(s.done) })
+}
+
+// streamingAction describes what I/O to perform after releasing the lock.
+type streamingAction int
+
+const (
+	actionNone         streamingAction = iota
+	actionDelta                        // write delta content
+	actionToolStart                    // write tool execution start
+	actionToolComplete                 // write tool completion
+)
+
+// streamingOutput holds the data needed for post-unlock I/O.
+type streamingOutput struct {
+	action streamingAction
+	text   string
 }
 
 // handleStreamingEvent processes a single streaming session event.
+// State mutation happens under the lock; I/O happens after unlocking.
 func handleStreamingEvent(
 	event copilot.SessionEvent,
 	writer io.Writer,
 	state *streamingState,
 ) {
+	output := computeStreamingOutput(event, state)
+	writeStreamingOutput(output, writer)
+}
+
+// computeStreamingOutput processes state changes under the lock and returns
+// the I/O action to perform after unlocking.
+func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) streamingOutput {
 	state.mu.Lock()
 	defer state.mu.Unlock()
-
-	if state.closed {
-		return
-	}
 
 	//nolint:exhaustive // Only a subset of ~30 SDK event types are relevant for streaming display.
 	switch event.Type {
 	case copilot.AssistantMessageDelta:
 		if event.Data.DeltaContent != nil {
-			_, _ = fmt.Fprint(writer, *event.Data.DeltaContent)
+			return streamingOutput{action: actionDelta, text: *event.Data.DeltaContent}
 		}
 	case copilot.SessionIdle:
 		state.markDone()
@@ -57,11 +75,30 @@ func handleStreamingEvent(
 		toolName := getToolName(event)
 		toolArgs := getToolArgs(event)
 
-		_, _ = fmt.Fprintf(writer, "\n🔧 Running: %s%s\n", toolName, toolArgs)
+		return streamingOutput{
+			action: actionToolStart,
+			text:   fmt.Sprintf("\n🔧 Running: %s%s\n", toolName, toolArgs),
+		}
 	case copilot.ToolExecutionComplete:
-		_, _ = fmt.Fprint(writer, "✓ Done\n")
+		return streamingOutput{action: actionToolComplete}
 	default:
 		// Ignore other event types
+	}
+
+	return streamingOutput{action: actionNone}
+}
+
+// writeStreamingOutput performs the I/O operation outside the critical section.
+func writeStreamingOutput(output streamingOutput, writer io.Writer) {
+	switch output.action {
+	case actionDelta:
+		_, _ = fmt.Fprint(writer, output.text)
+	case actionToolStart:
+		_, _ = fmt.Fprint(writer, output.text)
+	case actionToolComplete:
+		_, _ = fmt.Fprint(writer, "✓ Done\n")
+	case actionNone:
+		// Nothing to write
 	}
 }
 

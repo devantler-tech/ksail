@@ -1,6 +1,6 @@
 module github.com/devantler-tech/ksail/generate-schema
 
-go 1.25.4
+go 1.26.0
 
 require (
 	github.com/devantler-tech/ksail/v5 v5.20.3

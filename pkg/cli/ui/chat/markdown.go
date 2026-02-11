@@ -39,8 +39,8 @@ func defaultMarkdownStyle() ansi.StyleConfig { //nolint:funlen // pure struct li
 		},
 		Heading: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color: stringPtr("39"),
-				Bold:  boolPtr(true),
+				Color: new("39"),
+				Bold:  new(true),
 			},
 		},
 		H1: ansi.StyleBlock{
@@ -73,34 +73,34 @@ func defaultMarkdownStyle() ansi.StyleConfig { //nolint:funlen // pure struct li
 		},
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color: stringPtr("203"),
+				Color: new("203"),
 			},
 		},
 		CodeBlock: ansi.StyleCodeBlock{
 			StyleBlock: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{
-					Color: stringPtr("244"),
+					Color: new("244"),
 				},
 				Margin: uintPtr(1),
 			},
 			Chroma: &ansi.Chroma{
 				Text: ansi.StylePrimitive{
-					Color: stringPtr("#d0d0d0"),
+					Color: new("#d0d0d0"),
 				},
 				Keyword: ansi.StylePrimitive{
-					Color: stringPtr("#00afff"),
+					Color: new("#00afff"),
 				},
 				Name: ansi.StylePrimitive{
-					Color: stringPtr("#87d7ff"),
+					Color: new("#87d7ff"),
 				},
 				LiteralString: ansi.StylePrimitive{
-					Color: stringPtr("#5fd75f"),
+					Color: new("#5fd75f"),
 				},
 				LiteralNumber: ansi.StylePrimitive{
-					Color: stringPtr("#d7005f"),
+					Color: new("#d7005f"),
 				},
 				Comment: ansi.StylePrimitive{
-					Color: stringPtr("#626262"),
+					Color: new("#626262"),
 				},
 			},
 		},
@@ -108,22 +108,22 @@ func defaultMarkdownStyle() ansi.StyleConfig { //nolint:funlen // pure struct li
 			StyleBlock: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{},
 			},
-			CenterSeparator: stringPtr("│"),
-			ColumnSeparator: stringPtr("│"),
-			RowSeparator:    stringPtr("─"),
+			CenterSeparator: new("│"),
+			ColumnSeparator: new("│"),
+			RowSeparator:    new("─"),
 		},
 		Emph: ansi.StylePrimitive{
-			Italic: boolPtr(true),
+			Italic: new(true),
 		},
 		Strong: ansi.StylePrimitive{
-			Bold: boolPtr(true),
+			Bold: new(true),
 		},
 		Link: ansi.StylePrimitive{
-			Color:     stringPtr("39"),
-			Underline: boolPtr(true),
+			Color:     new("39"),
+			Underline: new(true),
 		},
 		LinkText: ansi.StylePrimitive{
-			Color: stringPtr("45"),
+			Color: new("45"),
 		},
 	}
 }
@@ -142,7 +142,5 @@ func renderMarkdownWithRenderer(renderer *glamour.TermRenderer, content string) 
 	return strings.TrimRight(out, "\n")
 }
 
-// Helper functions for style config.
-func stringPtr(s string) *string { return &s }
-func boolPtr(b bool) *bool       { return &b }
-func uintPtr(u uint) *uint       { return &u }
+// uintPtr returns a pointer to the given uint value.
+func uintPtr(u uint) *uint { return new(u) }
