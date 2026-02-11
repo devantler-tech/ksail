@@ -58,6 +58,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.2.0
 	github.com/siderolabs/go-retry v0.3.3
 	golang.org/x/text v0.33.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -546,7 +547,6 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/gorm v1.31.1 // indirect
 	helm.sh/helm/v3 v3.19.0 // indirect
 	k8s.io/apiserver v0.35.0 // indirect
