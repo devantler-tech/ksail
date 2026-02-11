@@ -1,6 +1,6 @@
 module github.com/devantler-tech/ksail/v5
 
-go 1.25.4
+go 1.26.0
 
 require (
 	filippo.io/age v1.3.1

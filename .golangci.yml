@@ -2,7 +2,7 @@ version: "2"
 run:
   allow-parallel-runners: true
   modules-download-mode: readonly
-  go: "1.25.4"
+  go: "1.26.0"
 formatters:
   enable:
     - gci

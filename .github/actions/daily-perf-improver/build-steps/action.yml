@@ -47,7 +47,7 @@ runs:
         echo "=== Running Unit Tests ===" | tee -a build-steps.log
         test_start=$(date +%s)
         # Enable covdata (temp) see https://github.com/golang/go/issues/75031
-        go env -w GOTOOLCHAIN=go1.25.4+auto
+        go env -w GOTOOLCHAIN=go1.26.0+auto
         if go test -race -coverprofile=coverage.txt -covermode=atomic ./... 2>&1 | tee -a build-steps.log; then
           test_end=$(date +%s)
           test_duration=$((test_end - test_start))
@@ -112,7 +112,7 @@ runs:
             echo "Installing npm dependencies..." | tee -a ../build-steps.log
             npm ci 2>&1 | tee -a ../build-steps.log
           fi
-          
+
           if npm run build 2>&1 | tee -a ../build-steps.log; then
             docs_end=$(date +%s)
             docs_duration=$((docs_end - docs_start))

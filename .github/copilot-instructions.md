@@ -201,7 +201,7 @@ ksail cluster init --help
 **"Go version mismatch"**:
 
 ```bash
-go version  # Should match the version in go.mod (go 1.25.4)
+go version  # Should match the version in go.mod (go 1.26.0)
 # If not, install/update Go from https://go.dev/dl/
 ```
 
@@ -234,7 +234,7 @@ npm run dev                            # Test locally (if needed)
 
 ### Important Notes
 
-- The project uses **Go 1.25.4+** (see `go.mod`)
+- The project uses **Go 1.26.0+** (see `go.mod`)
 - All Kubernetes tools are embedded as Go libraries - only Docker is required externally
 - Unit tests run quickly and should generally pass
 - System tests in CI cover extensive scenarios with multiple tool combinations
@@ -257,7 +257,7 @@ npm run dev                            # Test locally (if needed)
 **Distribution Names (user-facing):**
 
 | Distribution | Tool  | Provider        | Description                  |
-|--------------|-------|-----------------|------------------------------|
+| ------------ | ----- | --------------- | ---------------------------- |
 | `Vanilla`    | Kind  | Docker          | Standard upstream Kubernetes |
 | `K3s`        | K3d   | Docker          | Lightweight K3s in Docker    |
 | `Talos`      | Talos | Docker, Hetzner | Immutable Talos Linux        |
@@ -280,7 +280,7 @@ npm run dev                            # Test locally (if needed)
 
 ## Active Technologies
 
-- Go 1.25.4+ (see `go.mod`)
+- Go 1.26.0+ (see `go.mod`)
 - Embedded Kubernetes tools (kubectl, helm, kind, k3d, flux, argocd) as Go libraries
 - Docker as the only external dependency
 - Astro with Starlight for documentation (Node.js-based)
