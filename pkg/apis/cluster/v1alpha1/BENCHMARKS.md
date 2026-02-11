@@ -11,6 +11,7 @@ The benchmarks in `marshal_bench_test.go` measure the performance of cluster con
 - Serializing cluster state for storage
 
 The marshalling implementation uses custom reflection-based logic to:
+
 1. Prune default values to produce minimal YAML output
 2. Convert Go structs to YAML/JSON representations
 3. Handle special types (durations, enums, nested structs)
@@ -59,6 +60,7 @@ Tests the `MarshalYAML()` method across different cluster configuration complexi
 5. **FullProductionCluster** - Complete production configuration with all components
 
 **What it measures:**
+
 - Custom MarshalYAML implementation performance
 - Default pruning overhead
 - Reflection-based struct-to-map conversion
@@ -72,6 +74,7 @@ Tests the `MarshalJSON()` method with varying configurations:
 3. **FullProductionCluster** - Fully-specified cluster
 
 **What it measures:**
+
 - JSON marshalling performance (used internally by YAML encoder)
 - Default pruning impact on JSON output
 
@@ -83,6 +86,7 @@ Tests full end-to-end YAML encoding using `yaml.Marshal()`:
 2. **FullProductionCluster** - Complex production cluster
 
 **What it measures:**
+
 - Complete YAML encoding pipeline
 - YAML library overhead
 - Total time for marshalling + encoding
@@ -92,6 +96,7 @@ Tests full end-to-end YAML encoding using `yaml.Marshal()`:
 Tests standard `json.Marshal()` performance for comparison.
 
 **What it measures:**
+
 - Complete JSON encoding performance
 - Baseline for comparison with custom marshalling
 
@@ -104,6 +109,7 @@ Tests the default pruning operation in isolation:
 3. **AllCustomValues** - All fields set to non-default values
 
 **What it measures:**
+
 - Default pruning algorithm performance
 - Reflection overhead for field traversal
 - Impact of default value matching logic
