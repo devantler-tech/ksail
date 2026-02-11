@@ -16,25 +16,25 @@ These benchmarks establish performance baselines for:
 ### Run all benchmarks in this package
 
 ```bash
-go test -bench=. -benchmem ./pkg/k8s/...
+go test -bench=. -benchmem ./pkg/k8s/readiness/...
 ```
 
 ### Run with longer benchmark time for more accurate results
 
 ```bash
-go test -bench=. -benchmem -benchtime=5s ./pkg/k8s/...
+go test -bench=. -benchmem -benchtime=5s ./pkg/k8s/readiness/...
 ```
 
 ### Run specific benchmark
 
 ```bash
-go test -bench=BenchmarkWaitForMultipleResources_Sequential -benchmem ./pkg/k8s/...
+go test -bench=BenchmarkWaitForMultipleResources_Sequential -benchmem ./pkg/k8s/readiness/...
 ```
 
 ### Save baseline results for comparison
 
 ```bash
-go test -bench=. -benchmem ./pkg/k8s/... > baseline.txt
+go test -bench=. -benchmem ./pkg/k8s/readiness/... > baseline.txt
 ```
 
 ## Comparing Performance Changes
@@ -46,12 +46,12 @@ Use `benchstat` to compare before/after performance:
 go install golang.org/x/perf/cmd/benchstat@latest
 
 # Run baseline
-go test -bench=. -benchmem ./pkg/k8s/... > before.txt
+go test -bench=. -benchmem ./pkg/k8s/readiness/... > before.txt
 
 # Make your changes...
 
 # Run after changes
-go test -bench=. -benchmem ./pkg/k8s/... > after.txt
+go test -bench=. -benchmem ./pkg/k8s/readiness/... > after.txt
 
 # Compare results
 benchstat before.txt after.txt
@@ -100,31 +100,21 @@ Measures the base polling mechanism overhead with immediate readiness.
 - Minimum overhead per polling operation
 - Useful for understanding fixed costs
 
-## Baseline Results (Initial Run)
+## Baseline Results
 
-```
-BenchmarkWaitForMultipleResources_Sequential/1_resource-4           441916    8529 ns/op    9227 B/op    57 allocs/op
-BenchmarkWaitForMultipleResources_Sequential/5_resources-4          108722   33026 ns/op   39431 B/op   209 allocs/op
-BenchmarkWaitForMultipleResources_Sequential/10_resources-4          53956   65453 ns/op   78078 B/op   398 allocs/op
-BenchmarkWaitForMultipleResources_Sequential/20_resources-4          27798  131117 ns/op  155388 B/op   771 allocs/op
-BenchmarkWaitForMultipleResources_MixedTypes/2d_2ds-4               130659   27412 ns/op   32260 B/op   173 allocs/op
-BenchmarkWaitForMultipleResources_MixedTypes/5d_5ds-4                55470   65139 ns/op   77564 B/op   397 allocs/op
-BenchmarkWaitForMultipleResources_MixedTypes/10d_10ds-4              27722  130215 ns/op  154880 B/op   774 allocs/op
-BenchmarkWaitForMultipleResources_RealWorldCNI-4                    272376   14662 ns/op   14682 B/op    96 allocs/op
-BenchmarkPollForReadiness_SingleCheck-4                            3635716     989 ns/op     688 B/op    11 allocs/op
-```
+Baselines should be generated after merging by running:
 
-**Platform:** AMD EPYC 7763 64-Core Processor (GitHub Actions runner)  
-**Go Version:** 1.25.6  
-**Date:** 2026-02-08
+```bash
+go test -bench=. -benchmem -count=5 ./pkg/k8s/readiness/... | tee baseline.txt
+```
 
 ## Performance Insights
 
 ### Current Sequential Implementation
 
-- **Linear scaling:** Time scales linearly with resource count (~6.5μs per resource)
-- **Memory efficiency:** ~7.7KB per resource with ~38 allocations per resource
-- **Real-world performance:** Cilium installation (~15μs total) is optimistic due to fake clientset
+- Time scales linearly with resource count
+- Memory allocations scale proportionally with resources
+- Real-world benchmarks use a fake clientset so times reflect polling overhead only, not network I/O
 
 ### Optimization Opportunities
 
@@ -156,14 +146,14 @@ Based on these benchmarks, potential optimizations include:
 
 When making performance-related changes:
 
-1. Run benchmarks before changes: `go test -bench=. -benchmem ./pkg/k8s/... > before.txt`
+1. Run benchmarks before changes: `go test -bench=. -benchmem ./pkg/k8s/readiness/... > before.txt`
 2. Make your changes
-3. Run benchmarks after: `go test -bench=. -benchmem ./pkg/k8s/... > after.txt`
+3. Run benchmarks after: `go test -bench=. -benchmem ./pkg/k8s/readiness/... > after.txt`
 4. Compare: `benchstat before.txt after.txt`
 5. Include results in PR description
 
 Aim for:
 
-- ✅ No regression in any scenario
-- ✅ At least 10% improvement in target scenario
-- ✅ No significant memory increase
+- No regression in any scenario
+- At least 10% improvement in target scenario
+- No significant memory increase
