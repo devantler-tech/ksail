@@ -43,13 +43,19 @@ func NewBase(
 }
 
 // Install adds the Helm repository and installs or upgrades the chart.
+// It wraps the context with a deadline that includes [helm.ContextTimeoutBuffer]
+// beyond the chart timeout so that Helm's internal kstatus watchers can
+// observe resource readiness and report errors before the Go context expires.
 func (b *Base) Install(ctx context.Context) error {
 	err := b.client.AddRepository(ctx, b.repo, b.timeout)
 	if err != nil {
 		return fmt.Errorf("failed to add %s repository: %w", b.repo.Name, err)
 	}
 
-	_, err = b.client.InstallOrUpgradeChart(ctx, b.spec)
+	installCtx, cancel := context.WithTimeout(ctx, b.timeout+helm.ContextTimeoutBuffer)
+	defer cancel()
+
+	_, err = b.client.InstallOrUpgradeChart(installCtx, b.spec)
 	if err != nil {
 		return fmt.Errorf("failed to install %s chart: %w", b.name, err)
 	}
