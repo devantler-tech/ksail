@@ -70,9 +70,12 @@ func runTUIChat(
 	// Tool handlers create their own timeout context since SDK's ToolHandler interface doesn't include context.
 	tools, toolMetadata := chatsvc.GetKSailToolMetadata(rootCmd, outputChan) //nolint:contextcheck
 	agentModeRef := chatui.NewAgentModeRef(true)
-	tools = WrapToolsWithPermissionAndModeMetadata(tools, eventChan, agentModeRef, toolMetadata)
+	yoloModeRef := chatui.NewYoloModeRef(false)
+	tools = WrapToolsWithPermissionAndModeMetadata(
+		tools, eventChan, agentModeRef, yoloModeRef, toolMetadata,
+	)
 	sessionConfig.Tools = tools
-	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan)
+	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan, yoloModeRef)
 
 	session, err := client.CreateSession(sessionConfig)
 	if err != nil {
@@ -94,11 +97,13 @@ func runTUIChat(
 		}
 	}()
 
-	return fmt.Errorf(
-		"TUI chat failed: %w",
-		chatui.RunWithEventChannelAndModeRef(
-			ctx, session, client, sessionConfig,
-			models, currentModel, timeout, eventChan, agentModeRef,
-		),
+	err = chatui.RunWithEventChannelAndModeRef(
+		ctx, session, client, sessionConfig,
+		models, currentModel, timeout, eventChan, agentModeRef, yoloModeRef,
 	)
+	if err != nil {
+		return fmt.Errorf("TUI chat failed: %w", err)
+	}
+
+	return nil
 }

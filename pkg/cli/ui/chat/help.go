@@ -97,8 +97,9 @@ func (m *Model) renderHelpOverlay() string {
 			helpKeyStyle.Render(keyPageNav)+" scroll") + "\n")
 	content.WriteString(clipStyle.Render(
 		helpKeyStyle.Render("Tab")+" mode"+helpSep+
+			helpKeyStyle.Render("^Y")+" yolo"+helpSep+
 			helpKeyStyle.Render("^T")+" tools"+helpSep+
-			helpKeyStyle.Render("^Y")+" copy"+helpSep+
+			helpKeyStyle.Render("^R")+" copy"+helpSep+
 			helpKeyStyle.Render("^H")+" sessions"+helpSep+
 			helpKeyStyle.Render("^O")+" model"+helpSep+
 			helpKeyStyle.Render("^N")+" new") + "\n")
@@ -216,10 +217,18 @@ func (m *Model) getDefaultHelpParts() []string {
 
 	// Conditionally add copy hint
 	if m.hasAssistantMessages() {
-		parts = append(parts, helpKeyStyle.Render("^Y")+" copy")
+		parts = append(parts, helpKeyStyle.Render("^R")+" copy")
 	}
 
 	parts = append(parts, helpKeyStyle.Render("Tab")+" "+modeIcon)
+
+	// Add YOLO mode hint
+	yoloHint := "yolo"
+	if m.yoloMode {
+		yoloHint = "yolo ✓"
+	}
+
+	parts = append(parts, helpKeyStyle.Render("^Y")+" "+yoloHint)
 
 	// Conditionally add tools hint
 	if len(m.toolOrder) > 0 || m.hasToolsInMessages() {

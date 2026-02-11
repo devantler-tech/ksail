@@ -13,6 +13,7 @@ import (
 )
 
 const (
+	successResult = "success"
 	failureResult = "failure"
 )
 
@@ -35,7 +36,7 @@ func createTestTool(called *bool) copilot.Tool {
 
 			return copilot.ToolResult{
 				TextResultForLLM: "Tool executed successfully",
-				ResultType:       "success",
+				ResultType:       successResult,
 			}, nil
 		},
 	}
@@ -50,7 +51,7 @@ func TestPlanModeToolExecution(t *testing.T) {
 			name:             "AgentModeAllowsExecution",
 			agentModeEnabled: true,
 			expectToolCalled: true,
-			expectResultType: "success",
+			expectResultType: successResult,
 		},
 		{
 			name:             "PlanModeBlocksExecution",
@@ -82,7 +83,7 @@ func runPlanModeTestCase(t *testing.T, testCase planModeTestCase) {
 	testTool := createTestTool(&toolCalled)
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{testTool}, eventChan, agentModeRef, nil,
+		[]copilot.Tool{testTool}, eventChan, agentModeRef, nil, nil,
 	)
 
 	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
@@ -124,13 +125,13 @@ func TestPlanModeToggle(t *testing.T) {
 
 			return copilot.ToolResult{
 				TextResultForLLM: "Tool executed successfully",
-				ResultType:       "success",
+				ResultType:       successResult,
 			}, nil
 		},
 	}
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{testTool}, eventChan, agentModeRef, nil,
+		[]copilot.Tool{testTool}, eventChan, agentModeRef, nil, nil,
 	)
 	wrappedTool := wrappedTools[0]
 
@@ -160,7 +161,7 @@ func TestPlanModeToggle(t *testing.T) {
 		t.Error("Tool should be called after toggling to agent mode")
 	}
 
-	if result.ResultType != "success" {
+	if result.ResultType != successResult {
 		t.Errorf("Expected success after toggle, got %s", result.ResultType)
 	}
 }
@@ -181,13 +182,13 @@ func TestPlanModeBlocksMutableTools(t *testing.T) {
 
 			return copilot.ToolResult{
 				TextResultForLLM: "Cluster created",
-				ResultType:       "success",
+				ResultType:       successResult,
 			}, nil
 		},
 	}
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{mutableTool}, eventChan, agentModeRef, nil,
+		[]copilot.Tool{mutableTool}, eventChan, agentModeRef, nil, nil,
 	)
 
 	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
@@ -230,12 +231,36 @@ func createTestWriteTool(toolName string, toolCalled *bool) copilot.Tool {
 // createToolMetadata creates metadata for a tool with permission requirements.
 func createToolMetadata(
 	toolName string,
-	requiresPermission bool,
 ) map[string]toolgen.ToolDefinition {
 	return map[string]toolgen.ToolDefinition{
 		toolName: {
 			Name:               toolName,
-			RequiresPermission: requiresPermission,
+			RequiresPermission: true,
+		},
+	}
+}
+
+// createToolMetadataWithForce creates metadata for a tool with permission and force support.
+func createToolMetadataWithForce(
+	toolName string,
+) map[string]toolgen.ToolDefinition {
+	return map[string]toolgen.ToolDefinition{
+		toolName: {
+			Name:               toolName,
+			RequiresPermission: true,
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"force": map[string]any{
+						"type":        "boolean",
+						"description": "Skip confirmation prompts",
+					},
+					"name": map[string]any{
+						"type":        "string",
+						"description": "Cluster name",
+					},
+				},
+			},
 		},
 	}
 }
@@ -277,10 +302,10 @@ func TestWriteToolSendsPermissionRequest(t *testing.T) {
 
 	toolCalled := false
 	writeTool := createTestWriteTool("test_write_tool", &toolCalled)
-	metadata := createToolMetadata("test_write_tool", true)
+	metadata := createToolMetadata("test_write_tool")
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, agentModeRef, metadata,
+		[]copilot.Tool{writeTool}, eventChan, agentModeRef, nil, metadata,
 	)
 
 	// Start tool invocation in goroutine since it will block waiting for permission
@@ -315,10 +340,10 @@ func TestWriteToolDeniedPermission(t *testing.T) {
 
 	toolCalled := false
 	writeTool := createTestWriteTool("test_write_tool2", &toolCalled)
-	metadata := createToolMetadata("test_write_tool2", true)
+	metadata := createToolMetadata("test_write_tool2")
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, agentModeRef, metadata,
+		[]copilot.Tool{writeTool}, eventChan, agentModeRef, nil, metadata,
 	)
 
 	// Start tool invocation in goroutine
@@ -370,7 +395,7 @@ func TestReadToolSkipsPermission(t *testing.T) {
 
 			return copilot.ToolResult{
 				TextResultForLLM: "Read operation completed",
-				ResultType:       "success",
+				ResultType:       successResult,
 			}, nil
 		},
 	}
@@ -384,7 +409,7 @@ func TestReadToolSkipsPermission(t *testing.T) {
 	}
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{readTool}, eventChan, agentModeRef, metadata,
+		[]copilot.Tool{readTool}, eventChan, agentModeRef, nil, metadata,
 	)
 
 	// Execute directly - should not send permission request
@@ -408,7 +433,245 @@ func TestReadToolSkipsPermission(t *testing.T) {
 		t.Error("Read tool should have been called directly")
 	}
 
-	if result.ResultType != "success" {
+	if result.ResultType != successResult {
+		t.Errorf("Expected success, got %s", result.ResultType)
+	}
+}
+
+// TestYoloModeAutoApproves verifies that YOLO mode auto-approves write tools
+// without sending permission requests.
+func TestYoloModeAutoApproves(t *testing.T) {
+	t.Parallel()
+
+	eventChan := make(chan tea.Msg, 10)
+	agentModeRef := chatui.NewAgentModeRef(true)
+	yoloModeRef := chatui.NewYoloModeRef(true) // YOLO mode enabled
+
+	toolCalled := false
+	writeTool := createTestWriteTool("test_yolo_tool", &toolCalled)
+	metadata := createToolMetadata("test_yolo_tool")
+
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{writeTool}, eventChan, agentModeRef, yoloModeRef, metadata,
+	)
+
+	// Execute directly - should auto-approve without permission prompt
+	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
+		ToolCallID: "test_yolo",
+		ToolName:   "test_yolo_tool",
+	})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// Check no permission request was sent
+	select {
+	case msg := <-eventChan:
+		t.Errorf("YOLO mode should not send permission request, got: %T", msg)
+	default:
+		// Good - no message sent
+	}
+
+	if !toolCalled {
+		t.Error("Tool should have been called in YOLO mode")
+	}
+
+	if result.ResultType != successResult {
+		t.Errorf("Expected success, got %s", result.ResultType)
+	}
+}
+
+// TestYoloModeDisabledStillPrompts verifies that with YOLO mode disabled,
+// write tools still require permission.
+func TestYoloModeDisabledStillPrompts(t *testing.T) {
+	t.Parallel()
+
+	eventChan := make(chan tea.Msg, 10)
+	agentModeRef := chatui.NewAgentModeRef(true)
+	yoloModeRef := chatui.NewYoloModeRef(false) // YOLO mode disabled
+
+	toolCalled := false
+	writeTool := createTestWriteTool("test_yolo_off_tool", &toolCalled)
+	metadata := createToolMetadata("test_yolo_off_tool")
+
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{writeTool}, eventChan, agentModeRef, yoloModeRef, metadata,
+	)
+
+	// Start tool invocation in goroutine since it will block waiting for permission
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		_, _ = wrappedTools[0].Handler(copilot.ToolInvocation{
+			ToolCallID: "test_yolo_off",
+			ToolName:   "test_yolo_off_tool",
+		})
+	}()
+
+	// Wait for permission request and approve it
+	waitForPermissionRequestAndRespond(t, eventChan, "test_yolo_off_tool", true)
+
+	// Wait for handler to complete
+	<-done
+
+	if !toolCalled {
+		t.Error("Tool should have been called after permission approval")
+	}
+}
+
+// TestForceInjection verifies that the force flag is injected into tool arguments
+// when a tool requiring permission is approved and its schema defines a force parameter.
+func TestForceInjection(t *testing.T) {
+	t.Parallel()
+
+	eventChan := make(chan tea.Msg, 10)
+	agentModeRef := chatui.NewAgentModeRef(true)
+	yoloModeRef := chatui.NewYoloModeRef(true) // YOLO mode to avoid permission prompt
+
+	var receivedArgs map[string]any
+
+	writeTool := copilot.Tool{
+		Name:        "test_force_tool",
+		Description: "A write tool",
+		Handler: func(inv copilot.ToolInvocation) (copilot.ToolResult, error) {
+			args, isMap := inv.Arguments.(map[string]any)
+			if isMap {
+				receivedArgs = args
+			}
+
+			return copilot.ToolResult{
+				TextResultForLLM: "Done",
+				ResultType:       successResult,
+			}, nil
+		},
+	}
+
+	metadata := createToolMetadataWithForce("test_force_tool")
+
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{writeTool}, eventChan, agentModeRef, yoloModeRef, metadata,
+	)
+
+	_, err := wrappedTools[0].Handler(copilot.ToolInvocation{
+		ToolCallID: "test_force",
+		ToolName:   "test_force_tool",
+		Arguments:  map[string]any{"name": "my-cluster"},
+	})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	if receivedArgs == nil {
+		t.Fatal("Expected arguments to be passed to handler")
+	}
+
+	forceVal, forceExists := receivedArgs["force"]
+	if !forceExists {
+		t.Error("Expected 'force' argument to be injected")
+	}
+
+	forceBool, isBool := forceVal.(bool)
+	if !isBool || !forceBool {
+		t.Errorf("Expected force=true, got %v", forceVal)
+	}
+
+	// Verify original args are preserved
+	nameVal, nameExists := receivedArgs["name"]
+	if !nameExists || nameVal != "my-cluster" {
+		t.Errorf("Expected original 'name' arg preserved, got %v", nameVal)
+	}
+}
+
+// TestForceNotInjectedWithoutSchemaSupport verifies that the force flag is NOT injected
+// when the tool's parameter schema does not define a force property.
+func TestForceNotInjectedWithoutSchemaSupport(t *testing.T) {
+	t.Parallel()
+
+	eventChan := make(chan tea.Msg, 10)
+	agentModeRef := chatui.NewAgentModeRef(true)
+	yoloModeRef := chatui.NewYoloModeRef(true) // YOLO mode to avoid permission prompt
+
+	var receivedArgs map[string]any
+
+	writeTool := copilot.Tool{
+		Name:        "test_no_force_tool",
+		Description: "A write tool without force support",
+		Handler: func(inv copilot.ToolInvocation) (copilot.ToolResult, error) {
+			args, isMap := inv.Arguments.(map[string]any)
+			if isMap {
+				receivedArgs = args
+			}
+
+			return copilot.ToolResult{
+				TextResultForLLM: "Done",
+				ResultType:       successResult,
+			}, nil
+		},
+	}
+
+	// Use metadata WITHOUT force in schema
+	metadata := createToolMetadata("test_no_force_tool")
+
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{writeTool}, eventChan, agentModeRef, yoloModeRef, metadata,
+	)
+
+	_, err := wrappedTools[0].Handler(copilot.ToolInvocation{
+		ToolCallID: "test_no_force",
+		ToolName:   "test_no_force_tool",
+		Arguments:  map[string]any{"name": "my-cluster"},
+	})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	if receivedArgs == nil {
+		t.Fatal("Expected arguments to be passed to handler")
+	}
+
+	// Verify force was NOT injected
+	if _, forceExists := receivedArgs["force"]; forceExists {
+		t.Error("Expected 'force' NOT to be injected for tool without force in schema")
+	}
+
+	// Verify original args are preserved
+	nameVal, nameExists := receivedArgs["name"]
+	if !nameExists || nameVal != "my-cluster" {
+		t.Errorf("Expected original 'name' arg preserved, got %v", nameVal)
+	}
+}
+
+// TestNilEventChanAutoApproves verifies that write tools with a nil event channel
+// auto-approve instead of deadlocking (non-TUI mode).
+func TestNilEventChanAutoApproves(t *testing.T) {
+	t.Parallel()
+
+	agentModeRef := chatui.NewAgentModeRef(true)
+
+	toolCalled := false
+	writeTool := createTestWriteTool("test_nil_chan_tool", &toolCalled)
+	metadata := createToolMetadata("test_nil_chan_tool")
+
+	// Pass nil for eventChan — simulates non-TUI mode
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{writeTool}, nil, agentModeRef, nil, metadata,
+	)
+
+	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
+		ToolCallID: "test_nil_chan",
+		ToolName:   "test_nil_chan_tool",
+	})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	if !toolCalled {
+		t.Error("Tool should have been called with nil eventChan (auto-approve)")
+	}
+
+	if result.ResultType != successResult {
 		t.Errorf("Expected success, got %s", result.ResultType)
 	}
 }
