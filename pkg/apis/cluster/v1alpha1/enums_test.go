@@ -712,7 +712,7 @@ func TestExpectedContextName(t *testing.T) {
 
 // EffectiveValue tests.
 
-//nolint:dupl,funlen // Table-driven test with comprehensive distribution × value combinations.
+//nolint:funlen // Table-driven test with comprehensive distribution × value combinations.
 func TestCSI_EffectiveValue(t *testing.T) {
 	t.Parallel()
 
@@ -828,7 +828,7 @@ func TestMetricsServer_EffectiveValue(t *testing.T) {
 	}
 }
 
-//nolint:dupl,funlen // Table-driven test with comprehensive distribution × value combinations.
+//nolint:funlen // Table-driven test with comprehensive distribution × value combinations.
 func TestLoadBalancer_EffectiveValue(t *testing.T) {
 	t.Parallel()
 
@@ -856,6 +856,20 @@ func TestLoadBalancer_EffectiveValue(t *testing.T) {
 		{
 			name:         "talos_docker_default_resolves_to_disabled",
 			lb:           v1alpha1.LoadBalancerDefault,
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.LoadBalancerDisabled,
+		},
+		{
+			name:         "talos_docker_enabled_resolves_to_disabled",
+			lb:           v1alpha1.LoadBalancerEnabled,
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.LoadBalancerDisabled,
+		},
+		{
+			name:         "talos_docker_disabled_resolves_to_disabled",
+			lb:           v1alpha1.LoadBalancerDisabled,
 			distribution: v1alpha1.DistributionTalos,
 			provider:     v1alpha1.ProviderDocker,
 			expected:     v1alpha1.LoadBalancerDisabled,

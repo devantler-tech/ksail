@@ -113,15 +113,6 @@ runs:
         # shellcheck disable=SC2086
         ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
 
-    - name: 📥 Restore cached Docker volumes
-      id: restore-volume-cache
-      if: inputs.provider == 'Docker'
-      uses: ./.github/actions/cache-docker-volumes
-      with:
-        distribution: ${{ inputs.distribution }}
-        operation: restore
-        cache-version: v1
-
     - name: 📥 Restore mirror cache
       id: restore-mirror-cache
       if: inputs.provider == 'Docker'
@@ -246,14 +237,6 @@ runs:
       run: |
         # shellcheck disable=SC2086
         ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
-
-    - name: 💾 Save Docker volumes to cache
-      if: inputs.provider == 'Docker' && steps.restore-volume-cache.outputs.cache-hit != 'true'
-      uses: ./.github/actions/cache-docker-volumes
-      with:
-        distribution: ${{ inputs.distribution }}
-        operation: save
-        cache-version: v1
 
     - name: 🐞 Debug Kubernetes failure
       if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
