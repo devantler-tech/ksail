@@ -29,8 +29,6 @@ type Backend interface {
 type BackendFactory func(client.APIClient) (Backend, error)
 
 // DefaultBackendFactory creates a real RegistryManager that interacts with Docker.
-//
-//nolint:ireturn // returns interface for dependency injection; concrete type is dockerclient.RegistryManager
 func DefaultBackendFactory(dockerClient client.APIClient) (Backend, error) {
 	backend, err := dockerclient.NewRegistryManager(dockerClient)
 	if err != nil {

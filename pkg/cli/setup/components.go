@@ -12,21 +12,21 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	argocdgitops "github.com/devantler-tech/ksail/v5/pkg/client/argocd"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	argocdinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/argocd"
-	certmanagerinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cert-manager"
+	certmanagerinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/certmanager"
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cloudproviderkind"
 	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	gatekeeperinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/gatekeeper"
-	hetznercsiinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hetzner-csi"
-	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kubelet-csr-approver"
+	hetznercsiinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hetznercsi"
+	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kubeletcsrapprover"
 	kyvernoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kyverno"
 	localpathstorageinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/localpathstorage"
-	metricsserverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metrics-server"
+	metricsserverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metricsserver"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/spf13/cobra"
 )
@@ -105,9 +105,11 @@ func policyEngineFactory(
 		case v1alpha1.PolicyEngineKyverno:
 			timeout = max(timeout, installer.KyvernoInstallTimeout)
 
-			return kyvernoinstaller.NewKyvernoInstaller(helmClient, timeout), nil
+			return kyvernoinstaller.NewInstaller(helmClient, timeout), nil
 		case v1alpha1.PolicyEngineGatekeeper:
-			return gatekeeperinstaller.NewGatekeeperInstaller(helmClient, timeout), nil
+			timeout = max(timeout, installer.GatekeeperInstallTimeout)
+
+			return gatekeeperinstaller.NewInstaller(helmClient, timeout), nil
 		default:
 			return nil, fmt.Errorf("%w: unknown engine %q", ErrPolicyEngineDisabled, engine)
 		}
@@ -129,7 +131,7 @@ func csiFactory(
 		// For Talos × Hetzner, use the Hetzner CSI driver
 		if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
 			clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
-			return hetznercsiinstaller.NewHetznerCSIInstaller(
+			return hetznercsiinstaller.NewInstaller(
 				helmClient,
 				kubeconfig,
 				clusterCfg.Spec.Cluster.Connection.Context,
@@ -138,7 +140,7 @@ func csiFactory(
 		}
 
 		// For other distributions, use local-path-provisioner
-		return localpathstorageinstaller.NewLocalPathStorageInstaller(
+		return localpathstorageinstaller.NewInstaller(
 			kubeconfig,
 			clusterCfg.Spec.Cluster.Connection.Context,
 			timeout,
@@ -151,6 +153,7 @@ func csiFactory(
 func helmInstallerFactory(
 	factories *InstallerFactories,
 	newInstaller func(client helm.Interface, timeout time.Duration) installer.Installer,
+	minTimeout time.Duration,
 ) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
 	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
 		helmClient, _, err := factories.HelmClientFactory(clusterCfg)
@@ -159,6 +162,7 @@ func helmInstallerFactory(
 		}
 
 		timeout := installer.GetInstallTimeout(clusterCfg)
+		timeout = max(timeout, minTimeout)
 
 		return newInstaller(helmClient, timeout), nil
 	}
@@ -172,38 +176,36 @@ func DefaultInstallerFactories() *InstallerFactories {
 	factories.HelmClientFactory = HelmClientForCluster
 
 	factories.Flux = func(client helm.Interface, timeout time.Duration) installer.Installer {
-		return fluxinstaller.NewFluxInstaller(client, timeout)
+		return fluxinstaller.NewInstaller(client, timeout)
 	}
 
-	factories.CertManager = func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-		helmClient, _, err := factories.HelmClientFactory(clusterCfg)
-		if err != nil {
-			return nil, err
-		}
-
-		timeout := installer.GetInstallTimeout(clusterCfg)
-		timeout = max(timeout, installer.CertManagerInstallTimeout)
-
-		return certmanagerinstaller.NewCertManagerInstaller(helmClient, timeout), nil
-	}
+	factories.CertManager = helmInstallerFactory(
+		factories,
+		func(c helm.Interface, t time.Duration) installer.Installer {
+			return certmanagerinstaller.NewInstaller(c, t)
+		},
+		installer.CertManagerInstallTimeout,
+	)
 	factories.ArgoCD = helmInstallerFactory(
 		factories,
 		func(c helm.Interface, t time.Duration) installer.Installer {
-			return argocdinstaller.NewArgoCDInstaller(c, t)
+			return argocdinstaller.NewInstaller(c, t)
 		},
+		installer.ArgoCDInstallTimeout,
 	)
 	factories.KubeletCSRApprover = helmInstallerFactory(
 		factories,
 		func(c helm.Interface, t time.Duration) installer.Installer {
-			return kubeletcsrapproverinstaller.NewKubeletCSRApproverInstaller(c, t)
+			return kubeletcsrapproverinstaller.NewInstaller(c, t)
 		},
+		0,
 	)
 	factories.CSI = csiFactory(factories)
 	factories.PolicyEngine = policyEngineFactory(factories)
 
 	factories.EnsureArgoCDResources = EnsureArgoCDResources
 	factories.EnsureFluxResources = fluxinstaller.EnsureDefaultResources
-	factories.SetupFluxInstance = fluxinstaller.SetupFluxInstance
+	factories.SetupFluxInstance = fluxinstaller.SetupInstance
 	factories.WaitForFluxReady = fluxinstaller.WaitForFluxReady
 
 	return factories
@@ -211,7 +213,7 @@ func DefaultInstallerFactories() *InstallerFactories {
 
 // HelmClientForCluster creates a Helm client configured for the cluster.
 func HelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, error) {
-	kubeconfig, err := helpers.GetKubeconfigPathFromConfig(clusterCfg)
+	kubeconfig, err := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get kubeconfig path: %w", err)
 	}
@@ -257,19 +259,18 @@ func NeedsLoadBalancerInstall(clusterCfg *v1alpha1.Cluster) bool {
 }
 
 // helmClientSetup creates a Helm client and retrieves the install timeout.
-// Returns the Helm client, kubeconfig path, timeout, and any error.
 func helmClientSetup(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
-) (*helm.Client, string, time.Duration, error) {
-	helmClient, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
+) (*helm.Client, time.Duration, error) {
+	helmClient, _, err := factories.HelmClientFactory(clusterCfg)
 	if err != nil {
-		return nil, "", 0, fmt.Errorf("failed to create helm client: %w", err)
+		return nil, 0, fmt.Errorf("failed to create helm client: %w", err)
 	}
 
 	timeout := installer.GetInstallTimeout(clusterCfg)
 
-	return helmClient, kubeconfig, timeout, nil
+	return helmClient, timeout, nil
 }
 
 // InstallMetricsServerSilent installs metrics-server silently for parallel execution.
@@ -278,15 +279,13 @@ func InstallMetricsServerSilent(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	helmClient, kubeconfig, timeout, err := helmClientSetup(clusterCfg, factories)
+	helmClient, timeout, err := helmClientSetup(clusterCfg, factories)
 	if err != nil {
 		return err
 	}
 
-	msInstaller := metricsserverinstaller.NewMetricsServerInstaller(
+	msInstaller := metricsserverinstaller.NewInstaller(
 		helmClient,
-		kubeconfig,
-		clusterCfg.Spec.Cluster.Connection.Context,
 		timeout,
 	)
 
@@ -318,7 +317,7 @@ func InstallLoadBalancerSilent(
 
 			defer func() { _ = dockerAPIClient.Close() }()
 
-			lbInstaller := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(dockerAPIClient)
+			lbInstaller := cloudproviderkindinstaller.NewInstaller(dockerAPIClient)
 
 			installErr := lbInstaller.Install(ctx)
 			if installErr != nil {
@@ -346,29 +345,44 @@ func InstallLoadBalancerSilent(
 	return nil
 }
 
-// InstallKubeletCSRApproverSilent installs kubelet-csr-approver silently for parallel execution.
+// installFromFactory is a shared helper for Install*Silent functions that follow the
+// factory pattern: check factory != nil, create installer, call Install.
+func installFromFactory(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factory func(*v1alpha1.Cluster) (installer.Installer, error),
+	nilErr error,
+	componentName string,
+) error {
+	if factory == nil {
+		return nilErr
+	}
+
+	inst, err := factory(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create %s installer: %w", componentName, err)
+	}
+
+	installErr := inst.Install(ctx)
+	if installErr != nil {
+		return fmt.Errorf("%s installation failed: %w", componentName, installErr)
+	}
+
+	return nil
+}
+
+// installKubeletCSRApproverSilent installs kubelet-csr-approver silently for parallel execution.
 // kubelet-csr-approver is required when metrics-server is installed with secure TLS enabled,
 // as it automatically approves kubelet serving certificate CSRs.
-func InstallKubeletCSRApproverSilent(
+func installKubeletCSRApproverSilent(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	if factories.KubeletCSRApprover == nil {
-		return ErrKubeletCSRApproverInstallerFactoryNil
-	}
-
-	csrApproverInstaller, err := factories.KubeletCSRApprover(clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create kubelet-csr-approver installer: %w", err)
-	}
-
-	installErr := csrApproverInstaller.Install(ctx)
-	if installErr != nil {
-		return fmt.Errorf("kubelet-csr-approver installation failed: %w", installErr)
-	}
-
-	return nil
+	return installFromFactory(
+		ctx, clusterCfg, factories.KubeletCSRApprover,
+		ErrKubeletCSRApproverInstallerFactoryNil, "kubelet-csr-approver",
+	)
 }
 
 // InstallArgoCDSilent installs ArgoCD silently for parallel execution.
@@ -377,21 +391,10 @@ func InstallArgoCDSilent(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	if factories.ArgoCD == nil {
-		return ErrArgoCDInstallerFactoryNil
-	}
-
-	argoInstaller, err := factories.ArgoCD(clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create argocd installer: %w", err)
-	}
-
-	installErr := argoInstaller.Install(ctx)
-	if installErr != nil {
-		return fmt.Errorf("failed to install argocd: %w", installErr)
-	}
-
-	return nil
+	return installFromFactory(
+		ctx, clusterCfg, factories.ArgoCD,
+		ErrArgoCDInstallerFactoryNil, "argocd",
+	)
 }
 
 // InstallFluxSilent installs Flux silently for parallel execution.
@@ -422,21 +425,10 @@ func InstallCSISilent(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	if factories.CSI == nil {
-		return ErrCSIInstallerFactoryNil
-	}
-
-	csiInstaller, err := factories.CSI(clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create CSI installer: %w", err)
-	}
-
-	installErr := csiInstaller.Install(ctx)
-	if installErr != nil {
-		return fmt.Errorf("local-path-storage installation failed: %w", installErr)
-	}
-
-	return nil
+	return installFromFactory(
+		ctx, clusterCfg, factories.CSI,
+		ErrCSIInstallerFactoryNil, "CSI",
+	)
 }
 
 // InstallCertManagerSilent installs cert-manager silently for parallel execution.
@@ -445,21 +437,10 @@ func InstallCertManagerSilent(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	if factories.CertManager == nil {
-		return ErrCertManagerInstallerFactoryNil
-	}
-
-	cmInstaller, err := factories.CertManager(clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create cert-manager installer: %w", err)
-	}
-
-	installErr := cmInstaller.Install(ctx)
-	if installErr != nil {
-		return fmt.Errorf("failed to install cert-manager: %w", installErr)
-	}
-
-	return nil
+	return installFromFactory(
+		ctx, clusterCfg, factories.CertManager,
+		ErrCertManagerInstallerFactoryNil, "cert-manager",
+	)
 }
 
 // InstallPolicyEngineSilent installs the policy engine silently for parallel execution.
@@ -468,21 +449,10 @@ func InstallPolicyEngineSilent(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	if factories.PolicyEngine == nil {
-		return ErrPolicyEngineInstallerFactoryNil
-	}
-
-	peInstaller, err := factories.PolicyEngine(clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create policy engine installer: %w", err)
-	}
-
-	installErr := peInstaller.Install(ctx)
-	if installErr != nil {
-		return fmt.Errorf("failed to install policy engine: %w", installErr)
-	}
-
-	return nil
+	return installFromFactory(
+		ctx, clusterCfg, factories.PolicyEngine,
+		ErrPolicyEngineInstallerFactoryNil, "policy-engine",
+	)
 }
 
 // EnsureArgoCDResources configures default Argo CD resources post-install.

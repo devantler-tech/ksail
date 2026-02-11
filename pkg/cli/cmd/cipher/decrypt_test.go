@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 )
 
@@ -48,7 +48,7 @@ func TestNewDecryptCmd(t *testing.T) {
 func TestDecryptCommandHelp(t *testing.T) {
 	t.Parallel()
 
-	rt := runtime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer
@@ -78,7 +78,7 @@ func TestDecryptCommandAcceptsStdin(t *testing.T) {
 func executeDecryptCommand(t *testing.T, args []string) error {
 	t.Helper()
 
-	rt := runtime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out, errOut bytes.Buffer
@@ -95,7 +95,7 @@ func TestDecryptCommandUnsupportedFormat(t *testing.T) {
 
 	testFile := createTestFile(t, "test.txt", "test content")
 
-	rt := runtime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out, errOut bytes.Buffer
@@ -210,7 +210,7 @@ func TestDecryptCommandWithOutputFlag(t *testing.T) {
 func TestCipherCommandHasDecryptSubcommand(t *testing.T) {
 	t.Parallel()
 
-	rt := runtime.NewRuntime()
+	rt := di.NewRuntime()
 	cmd := cipher.NewCipherCmd(rt)
 
 	// Verify decrypt subcommand exists

@@ -9,17 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:paralleltest // reads shared backendFactoryOverride global
 func TestGetBackendFactory_ReturnsDefaultWhenNoOverride(t *testing.T) {
-	t.Parallel()
-
 	factory := registry.GetBackendFactory()
 
 	require.NotNil(t, factory, "GetBackendFactory should return a non-nil factory")
 }
 
+//nolint:paralleltest // mutates shared backendFactoryOverride global
 func TestSetBackendFactoryForTests_OverridesFactory(t *testing.T) {
-	t.Parallel()
-
 	called := false
 	mockFactory := func(_ client.APIClient) (registry.Backend, error) {
 		called = true
@@ -38,9 +36,8 @@ func TestSetBackendFactoryForTests_OverridesFactory(t *testing.T) {
 	assert.True(t, called, "override factory should have been called")
 }
 
+//nolint:paralleltest // mutates shared backendFactoryOverride global
 func TestSetBackendFactoryForTests_CleanupRestoresOriginal(t *testing.T) {
-	t.Parallel()
-
 	originalFactory := registry.GetBackendFactory()
 
 	mockFactory := func(_ client.APIClient) (registry.Backend, error) {
@@ -66,9 +63,8 @@ func TestSetBackendFactoryForTests_CleanupRestoresOriginal(t *testing.T) {
 	assert.Error(t, origErr, "original factory should also reject nil client")
 }
 
+//nolint:paralleltest // mutates shared backendFactoryOverride global
 func TestSetBackendFactoryForTests_NestedOverrides(t *testing.T) {
-	t.Parallel()
-
 	firstCalled := false
 	secondCalled := false
 

@@ -144,6 +144,6 @@ func TestTimeoutConstants(t *testing.T) {
 
 	t.Run("kyverno_install_timeout", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, 7*time.Minute, installer.KyvernoInstallTimeout)
+		assert.Equal(t, 10*time.Minute, installer.KyvernoInstallTimeout)
 	})
 }

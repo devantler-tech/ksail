@@ -12,19 +12,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewKyvernoInstaller(t *testing.T) {
+func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := kyvernoinstaller.NewKyvernoInstaller(client, 5*time.Second)
+	installer := kyvernoinstaller.NewInstaller(client, 5*time.Second)
 
 	assert.NotNil(t, installer)
 }
 
-func TestKyvernoInstallerInstallSuccess(t *testing.T) {
+func TestInstallSuccess(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newKyvernoInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	expectKyvernoInstall(t, client, nil)
 
 	err := installer.Install(context.Background())
@@ -32,10 +32,10 @@ func TestKyvernoInstallerInstallSuccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestKyvernoInstallerInstallRepoError(t *testing.T) {
+func TestInstallRepoError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newKyvernoInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(assert.AnError)
@@ -46,10 +46,10 @@ func TestKyvernoInstallerInstallRepoError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to add kyverno repository")
 }
 
-func TestKyvernoInstallerInstallChartError(t *testing.T) {
+func TestInstallChartError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newKyvernoInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	expectKyvernoInstall(t, client, assert.AnError)
 
 	err := installer.Install(context.Background())
@@ -58,10 +58,10 @@ func TestKyvernoInstallerInstallChartError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to install kyverno chart")
 }
 
-func TestKyvernoInstallerUninstallSuccess(t *testing.T) {
+func TestUninstallSuccess(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newKyvernoInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().UninstallRelease(mock.Anything, "kyverno", "kyverno").Return(nil)
 
 	err := installer.Uninstall(context.Background())
@@ -69,10 +69,10 @@ func TestKyvernoInstallerUninstallSuccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestKyvernoInstallerUninstallError(t *testing.T) {
+func TestUninstallError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newKyvernoInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "kyverno", "kyverno").
 		Return(assert.AnError)
@@ -83,13 +83,13 @@ func TestKyvernoInstallerUninstallError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to uninstall kyverno release")
 }
 
-func newKyvernoInstallerWithDefaults(
+func newInstallerWithDefaults(
 	t *testing.T,
-) (*kyvernoinstaller.KyvernoInstaller, *helm.MockInterface) {
+) (*kyvernoinstaller.Installer, *helm.MockInterface) {
 	t.Helper()
 
 	client := helm.NewMockInterface(t)
-	installer := kyvernoinstaller.NewKyvernoInstaller(client, 2*time.Minute)
+	installer := kyvernoinstaller.NewInstaller(client, 2*time.Minute)
 
 	return installer, client
 }

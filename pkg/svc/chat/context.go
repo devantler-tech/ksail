@@ -38,11 +38,15 @@ You help users configure, troubleshoot, and operate Kubernetes clusters using KS
 		builder.WriteString(fmt.Sprintf("<working_directory>%s</working_directory>\n\n", workDir))
 
 		// Check if ksail.yaml exists in working directory
-		if _, statErr := os.Stat(filepath.Join(workDir, "ksail.yaml")); statErr == nil {
-			content, readErr := os.ReadFile(filepath.Join(workDir, "ksail.yaml"))
+		configPath := filepath.Join(workDir, "ksail.yaml")
+
+		_, statErr := os.Stat(configPath)
+		if statErr == nil {
+			//nolint:gosec // Reading local ksail.yaml config is safe
+			content, readErr := os.ReadFile(configPath)
 			if readErr == nil {
 				builder.WriteString("<current_ksail_config>\n")
-				builder.WriteString(string(content))
+				builder.Write(content)
 				builder.WriteString("\n</current_ksail_config>\n\n")
 			}
 		}
@@ -82,6 +86,7 @@ func getCLIHelp() string {
 	ctx, cancel := context.WithTimeout(context.Background(), cliHelpTimeout)
 	defer cancel()
 
+	//nolint:gosec // Running own ksail binary with fixed args is safe
 	cmd := exec.CommandContext(ctx, ksailPath, "--help")
 
 	output, err := cmd.Output()
@@ -122,7 +127,8 @@ func FindKSailExecutable() string {
 				"/usr/local/bin/ksail",
 			}
 			for _, p := range commonPaths {
-				if _, statErr := os.Stat(p); statErr == nil {
+				_, statErr := os.Stat(p)
+				if statErr == nil {
 					return p
 				}
 			}

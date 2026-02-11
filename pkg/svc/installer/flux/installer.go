@@ -6,29 +6,29 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/helmutil"
 )
 
-// FluxInstaller implements the installer.Installer interface for Flux.
-type FluxInstaller struct {
+// Installer implements the installer.Installer interface for Flux.
+type Installer struct {
 	timeout time.Duration
 	client  helm.Interface
 }
 
-// NewFluxInstaller creates a new Flux installer instance.
-func NewFluxInstaller(
+// NewInstaller creates a new Flux installer instance.
+func NewInstaller(
 	client helm.Interface,
 	timeout time.Duration,
-) *FluxInstaller {
-	return &FluxInstaller{
+) *Installer {
+	return &Installer{
 		client:  client,
 		timeout: timeout,
 	}
 }
 
 // Install installs or upgrades the Flux Operator via its OCI Helm chart.
-func (b *FluxInstaller) Install(ctx context.Context) error {
-	err := b.helmInstallOrUpgradeFluxOperator(ctx)
+func (b *Installer) Install(ctx context.Context) error {
+	err := b.helmInstallOrUpgrade(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install Flux operator: %w", err)
 	}
@@ -37,7 +37,7 @@ func (b *FluxInstaller) Install(ctx context.Context) error {
 }
 
 // Uninstall removes the Helm release for the Flux Operator.
-func (b *FluxInstaller) Uninstall(ctx context.Context) error {
+func (b *Installer) Uninstall(ctx context.Context) error {
 	err := b.client.UninstallRelease(ctx, "flux-operator", "flux-system")
 	if err != nil {
 		return fmt.Errorf("failed to uninstall flux-operator release: %w", err)
@@ -47,23 +47,16 @@ func (b *FluxInstaller) Uninstall(ctx context.Context) error {
 }
 
 // Images returns the container images used by the Flux Operator.
-func (b *FluxInstaller) Images(ctx context.Context) ([]string, error) {
-	spec := b.chartSpec()
-
-	manifest, err := b.client.TemplateChart(ctx, spec)
+func (b *Installer) Images(ctx context.Context) ([]string, error) {
+	images, err := helmutil.ImagesFromChart(ctx, b.client, b.chartSpec())
 	if err != nil {
-		return nil, fmt.Errorf("failed to template flux-operator chart: %w", err)
-	}
-
-	images, err := image.ExtractImagesFromManifest(manifest)
-	if err != nil {
-		return nil, fmt.Errorf("extract images from flux-operator manifest: %w", err)
+		return nil, fmt.Errorf("listing images: %w", err)
 	}
 
 	return images, nil
 }
 
-func (b *FluxInstaller) chartSpec() *helm.ChartSpec {
+func (b *Installer) chartSpec() *helm.ChartSpec {
 	return &helm.ChartSpec{
 		ReleaseName:     "flux-operator",
 		ChartName:       "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
@@ -82,7 +75,7 @@ func (b *FluxInstaller) chartSpec() *helm.ChartSpec {
 
 // --- internals ---
 
-func (b *FluxInstaller) helmInstallOrUpgradeFluxOperator(ctx context.Context) error {
+func (b *Installer) helmInstallOrUpgrade(ctx context.Context) error {
 	spec := b.chartSpec()
 
 	// Set context deadline longer than Helm timeout to ensure Helm has

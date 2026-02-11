@@ -9,13 +9,13 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/kind"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	registryhelpers "github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
 
@@ -37,13 +37,13 @@ func ShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
 	return clusterCfg.Spec.Cluster.LocalRegistry.Enabled()
 }
 
-// ResolveClusterNameFromContext resolves the cluster name from the cluster config.
+// resolveClusterNameFromContext resolves the cluster name from the cluster config.
 // It first attempts to parse the cluster name from Connection.Context
 // (e.g., "k3d-system-test-cluster" -> "system-test-cluster").
 // Falls back to the distribution's default cluster name if context is not set or parsing fails.
 // The cluster name is used for constructing registry container names
 // (e.g., system-test-cluster-local-registry).
-func ResolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
+func resolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 	if clusterCfg == nil {
 		return kindconfigmanager.DefaultClusterName
 	}
@@ -51,7 +51,7 @@ func ResolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 	// First try to extract cluster name from the context if available
 	contextName := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
 	if contextName != "" {
-		_, clusterName, err := lifecycle.DetectDistributionFromContext(contextName)
+		_, clusterName, err := clusterdetector.DetectDistributionFromContext(contextName)
 		if err == nil && clusterName != "" {
 			return clusterName
 		}
@@ -110,7 +110,7 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 		NeedsMetricsServer:      needsMetricsServer,
 		NeedsLoadBalancer:       NeedsLoadBalancerInstall(clusterCfg),
 		NeedsKubeletCSRApprover: needsKubeletCSRApprover,
-		NeedsCSI:                NeedsCSIInstall(clusterCfg),
+		NeedsCSI:                needsCSIInstall(clusterCfg),
 		NeedsCertManager:        clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
 		NeedsPolicyEngine:       clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone,
 		NeedsArgoCD:             clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
@@ -118,7 +118,7 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 	}
 }
 
-// NeedsCSIInstall determines if CSI needs to be installed.
+// needsCSIInstall determines if CSI needs to be installed.
 //
 // In general, we install CSI only when it is explicitly Enabled AND the
 // distribution × provider combination does not provide it by default.
@@ -126,7 +126,7 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 // Special case:
 //   - Talos × Hetzner: Hetzner CSI is not pre-installed and must be installed
 //     by KSail when CSI is either Default or Enabled.
-func NeedsCSIInstall(clusterCfg *v1alpha1.Cluster) bool {
+func needsCSIInstall(clusterCfg *v1alpha1.Cluster) bool {
 	dist := clusterCfg.Spec.Cluster.Distribution
 	provider := clusterCfg.Spec.Cluster.Provider
 	csiSetting := clusterCfg.Spec.Cluster.CSI
@@ -244,7 +244,7 @@ func buildComponentTasks(
 	if reqs.NeedsKubeletCSRApprover {
 		tasks = append(
 			tasks,
-			newTask("kubelet-csr-approver", clusterCfg, factories, InstallKubeletCSRApproverSilent),
+			newTask("kubelet-csr-approver", clusterCfg, factories, installKubeletCSRApproverSilent),
 		)
 	}
 
@@ -305,7 +305,7 @@ func configureGitOpsResources(
 	}
 
 	// Resolve cluster name for registry naming
-	clusterName := ResolveClusterNameFromContext(clusterCfg)
+	clusterName := resolveClusterNameFromContext(clusterCfg)
 	writer := cmd.OutOrStdout()
 
 	// Show title for configure stage
@@ -458,10 +458,13 @@ func ensureOCIArtifact(
 	}
 
 	// Resolve registry info
-	registryInfo, err := helpers.ResolveRegistry(ctx, helpers.ResolveRegistryOptions{
-		ClusterConfig: clusterCfg,
-		ClusterName:   clusterName,
-	})
+	registryInfo, err := registryhelpers.ResolveRegistry(
+		ctx,
+		registryhelpers.ResolveRegistryOptions{
+			ClusterConfig: clusterCfg,
+			ClusterName:   clusterName,
+		},
+	)
 	if err != nil {
 		return false, fmt.Errorf("resolve registry: %w", err)
 	}
@@ -487,6 +490,16 @@ func ensureOCIArtifact(
 		return true, nil
 	}
 
+	return pushInitialOCIArtifact(ctx, clusterCfg, clusterName, writer)
+}
+
+// pushInitialOCIArtifact pushes an initial OCI artifact when none exists.
+func pushInitialOCIArtifact(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+	writer io.Writer,
+) (bool, error) {
 	// Artifact doesn't exist, push an empty one
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
@@ -494,7 +507,7 @@ func ensureOCIArtifact(
 		Writer:  writer,
 	})
 
-	result, err := helpers.PushOCIArtifact(ctx, helpers.PushOCIArtifactOptions{
+	result, err := registryhelpers.PushOCIArtifact(ctx, registryhelpers.PushOCIArtifactOptions{
 		ClusterConfig: clusterCfg,
 		ClusterName:   clusterName,
 		SourceDir:     "", // Use default from config
@@ -518,7 +531,7 @@ func ensureOCIArtifact(
 
 // buildArtifactExistsOptions creates options for checking artifact existence.
 func buildArtifactExistsOptions(
-	registryInfo *helpers.RegistryInfo,
+	registryInfo *registryhelpers.Info,
 	clusterCfg *v1alpha1.Cluster,
 ) oci.ArtifactExistsOptions {
 	return oci.ArtifactExistsOptions{
@@ -531,7 +544,7 @@ func buildArtifactExistsOptions(
 	}
 }
 
-func resolveRegistryEndpoint(info *helpers.RegistryInfo) string {
+func resolveRegistryEndpoint(info *registryhelpers.Info) string {
 	if info.Port > 0 {
 		return net.JoinHostPort(info.Host, strconv.Itoa(int(info.Port)))
 	}
@@ -539,7 +552,7 @@ func resolveRegistryEndpoint(info *helpers.RegistryInfo) string {
 	return info.Host
 }
 
-func resolveRepository(info *helpers.RegistryInfo, cfg *v1alpha1.Cluster) string {
+func resolveRepository(info *registryhelpers.Info, cfg *v1alpha1.Cluster) string {
 	if info.Repository != "" {
 		return info.Repository
 	}
@@ -552,7 +565,7 @@ func resolveRepository(info *helpers.RegistryInfo, cfg *v1alpha1.Cluster) string
 	return sourceDir
 }
 
-func resolveTag(info *helpers.RegistryInfo) string {
+func resolveTag(info *registryhelpers.Info) string {
 	if info.Tag != "" {
 		return info.Tag
 	}

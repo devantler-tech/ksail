@@ -1,16 +1,16 @@
-// Package confirm provides confirmation prompt utilities for destructive operations.
 package confirm
 
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 )
 
 // ErrDeletionCancelled is returned when the user cancels a deletion operation.
@@ -140,14 +140,10 @@ func ShowDeletionPreview(writer io.Writer, preview *DeletionPreview) {
 		writeHetznerResources(&previewText, preview)
 	}
 
-	// Add the confirmation prompt
-	previewText.WriteString("\n" + `Type "yes" to confirm deletion: `)
+	notify.Warningf(writer, "%s", previewText.String())
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.WarningType,
-		Content: previewText.String(),
-		Writer:  writer,
-	})
+	// Print the confirmation prompt on its own line without a symbol prefix
+	_, _ = fmt.Fprint(writer, `Type "yes" to confirm deletion: `)
 }
 
 // writeDockerResources writes Docker-specific resources to the preview.

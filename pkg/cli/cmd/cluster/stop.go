@@ -35,7 +35,7 @@ func NewStopCmd(_ any) *cobra.Command {
 		Success:      "cluster stopped",
 		Action: func(
 			ctx context.Context,
-			provisioner clusterprovisioner.ClusterProvisioner,
+			provisioner clusterprovisioner.Provisioner,
 			clusterName string,
 		) error {
 			return provisioner.Stop(ctx, clusterName)

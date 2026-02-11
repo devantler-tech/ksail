@@ -2,7 +2,7 @@
 description: Write documentation for a product or project by researching and gathering information, then organizing
 ---
 
-# Update Docs
+# Update Docs Agent
 
 ## Job Description
 

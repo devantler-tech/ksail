@@ -9,7 +9,7 @@ import (
 	"io"
 	"strings"
 
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -285,8 +285,6 @@ func EscapeShellArg(arg string) string {
 // prepareKindRegistryManager is a helper that prepares the registry manager and registry infos
 // for Kind registry operations. Returns nil manager if mirrorSpecs is empty.
 // The clusterName is used as prefix for container names to ensure uniqueness.
-//
-//nolint:ireturn // returns interface for dependency injection; concrete type is dockerclient.RegistryManager
 func prepareKindRegistryManager(
 	ctx context.Context,
 	mirrorSpecs []registry.MirrorSpec,
