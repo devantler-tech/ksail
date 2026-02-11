@@ -331,6 +331,7 @@ jobs:
   system-test:
     name: 🧪 System Test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [changes, build-artifact, warm-mirror-cache]
     if: github.event_name == 'merge_group' && needs.changes.outputs.code == 'true'
     permissions:

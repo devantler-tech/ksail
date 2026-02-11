@@ -17,6 +17,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
 - ☸️ **Simple Clusters** — Spin up Vanilla, K3s, or Talos clusters with one command. Same workflow across distributions.
+- 📥 **Mirror Registries** — Avoid rate limits, and store images once. Same mirrors used by different clusters.
 - 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
 - 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.
 - ⚙️ **Customizable Stack** — Select your CNI, CSI, policy engine, cert-manager, and mirror registries.
@@ -84,7 +85,10 @@ ksail cluster create
 ksail workload apply -k ./k8s   # kubectl workflow
 ksail workload reconcile        # gitops workflow
 
-# 5. Connect to the cluster with K9s
+# 5. Update cluster configuration (modify ksail.yaml, then run)
+ksail cluster update            # Apply configuration changes
+
+# 6. Connect to the cluster with K9s
 ksail cluster connect
 ```
 

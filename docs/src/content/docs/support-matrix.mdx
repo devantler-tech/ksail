@@ -28,6 +28,9 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 | **CSI**                       |
 | Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)  |
 | Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner) |
+| **LoadBalancer**              |
+| LoadBalancer Support          | ✅      | Built-in | ❌ (Docker)  |
+| MetalLB (planned)             | ✅      | ✅       | 🚧 (Docker)  |
 | **GitOps**                    |
 | Flux                          | ✅      | ✅       | ✅           |
 | ArgoCD                        | ✅      | ✅       | ✅           |
@@ -45,8 +48,9 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 **Notes:**
 
 - "Built-in" means the distribution includes this component by default
-- K3s includes local-path-provisioner and metrics-server out of the box
+- K3s includes local-path-provisioner, metrics-server, and ServiceLB (load balancer) out of the box
 - Talos CSI support is provider-dependent: Local Path Provisioner for Docker, Hetzner CSI Driver for Hetzner Cloud
+- **LoadBalancer limitations**: Talos on Docker does not currently support LoadBalancer services. The `--load-balancer` flag is forced to `Disabled` for this combination. MetalLB support for Talos+Docker is planned for a future release. Talos on Hetzner uses the cloud provider's load balancer.
 
 ## Secret Management × Provider Matrix
 
@@ -84,7 +88,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 | CNI                      | In-place       | In-place  | In-place |
 | CSI                      | In-place       | In-place  | In-place |
 | Metrics Server           | In-place       | In-place  | In-place |
-| Load Balancer            | In-place       | In-place  | In-place |
+| Load Balancer            | In-place       | In-place  | N/A¹     |
 | cert-manager             | In-place       | In-place  | In-place |
 | Policy Engine            | In-place       | In-place  | In-place |
 | GitOps Engine            | In-place       | In-place  | In-place |
@@ -103,6 +107,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 - Use `ksail cluster update --dry-run` to preview changes before applying
 - Talos supports the broadest set of in-place updates, including node scaling for both control-plane and worker nodes
 - Kind does not support any structural node changes after creation
+- **¹ Load Balancer for Talos+Docker**: LoadBalancer is currently not supported for Talos on Docker and is always `Disabled`. This row is N/A because the setting cannot be changed for this combination. See [FAQ](/faq/#which-distributions-support-loadbalancer-services) for more details.
 
 ## Platform Requirements
 
