@@ -712,7 +712,7 @@ func TestExpectedContextName(t *testing.T) {
 
 // EffectiveValue tests.
 
-//nolint:dupl,funlen // Table-driven test with comprehensive distribution × value combinations.
+//nolint:funlen // Table-driven test with comprehensive distribution × value combinations.
 func TestCSI_EffectiveValue(t *testing.T) {
 	t.Parallel()
 
@@ -828,7 +828,7 @@ func TestMetricsServer_EffectiveValue(t *testing.T) {
 	}
 }
 
-//nolint:dupl,funlen // Table-driven test with comprehensive distribution × value combinations.
+//nolint:funlen // Table-driven test with comprehensive distribution × value combinations.
 func TestLoadBalancer_EffectiveValue(t *testing.T) {
 	t.Parallel()
 
