@@ -112,6 +112,17 @@ Changing the distribution (e.g., Vanilla to Talos) or provider (e.g., Docker to 
 The current implementation does not automatically detect distribution/provider changes on an existing cluster.
 You must manually delete the old cluster first with `ksail cluster delete`, then run `ksail cluster create`.
 
+### Which distributions support LoadBalancer services?
+
+LoadBalancer support varies by distribution and provider:
+
+- **Vanilla (Kind)** - ✅ Supports LoadBalancer services
+- **K3s (K3d)** - ✅ Includes ServiceLB load balancer by default
+- **Talos on Docker** - ❌ LoadBalancer services are not currently supported. The `--load-balancer` flag is automatically set to `Disabled` for this combination
+- **Talos on Hetzner** - ✅ Uses Hetzner Cloud Load Balancer
+
+MetalLB support for Talos+Docker is planned for a future release. Until then, use `NodePort` or `ClusterIP` services with port-forwarding for Talos clusters on Docker.
+
 ### Can I add nodes to an existing cluster?
 
 It depends on the distribution:
