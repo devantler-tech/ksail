@@ -9,7 +9,7 @@ registries:
     replaces-base: true
   ghcr:
     type: docker-registry
-    url: https://ghcr.io
+    url: https://ghcr.io/devantler-tech
     username: devantler
     password: ${{secrets.GHCR_TOKEN}}
     replaces-base: true
