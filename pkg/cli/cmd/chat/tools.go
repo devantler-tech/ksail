@@ -21,14 +21,10 @@ func getToolName(event copilot.SessionEvent) string {
 	return "unknown"
 }
 
-// getToolArgs formats tool arguments for display.
-func getToolArgs(event copilot.SessionEvent) string {
-	if event.Data.Arguments == nil {
-		return ""
-	}
-
-	args, ok := event.Data.Arguments.(map[string]any)
-	if !ok || len(args) == 0 {
+// formatArgsMap converts a map of arguments to a comma-separated key=value string.
+// Keys are sorted for consistent output across runs.
+func formatArgsMap(args map[string]any) string {
+	if len(args) == 0 {
 		return ""
 	}
 
@@ -45,34 +41,36 @@ func getToolArgs(event copilot.SessionEvent) string {
 		parts = append(parts, fmt.Sprintf("%s=%v", k, args[k]))
 	}
 
-	if len(parts) == 0 {
+	return strings.Join(parts, ", ")
+}
+
+// getToolArgs formats tool arguments for display with parentheses.
+func getToolArgs(event copilot.SessionEvent) string {
+	if event.Data.Arguments == nil {
 		return ""
 	}
 
-	return " (" + strings.Join(parts, ", ") + ")"
+	args, ok := event.Data.Arguments.(map[string]any)
+	if !ok || len(args) == 0 {
+		return ""
+	}
+
+	formatted := formatArgsMap(args)
+	if formatted == "" {
+		return ""
+	}
+
+	return " (" + formatted + ")"
 }
 
 // formatToolArguments converts tool invocation arguments to a display string.
 func formatToolArguments(args any) string {
 	params, ok := args.(map[string]any)
-	if !ok || len(params) == 0 {
+	if !ok {
 		return ""
 	}
 
-	// Sort keys for consistent output (Go map iteration order is non-deterministic)
-	keys := make([]string, 0, len(params))
-	for k := range params {
-		keys = append(keys, k)
-	}
-
-	slices.Sort(keys)
-
-	parts := make([]string, 0, len(keys))
-	for _, k := range keys {
-		parts = append(parts, fmt.Sprintf("%s=%v", k, params[k]))
-	}
-
-	return strings.Join(parts, ", ")
+	return formatArgsMap(params)
 }
 
 // buildPlanModeBlockedResult creates a ToolResult indicating tool execution was blocked in plan mode.
