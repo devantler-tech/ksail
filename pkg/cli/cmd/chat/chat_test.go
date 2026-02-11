@@ -240,6 +240,31 @@ func createToolMetadata(
 	}
 }
 
+// createToolMetadataWithForce creates metadata for a tool with permission and force support.
+func createToolMetadataWithForce(
+	toolName string,
+) map[string]toolgen.ToolDefinition {
+	return map[string]toolgen.ToolDefinition{
+		toolName: {
+			Name:               toolName,
+			RequiresPermission: true,
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"force": map[string]any{
+						"type":        "boolean",
+						"description": "Skip confirmation prompts",
+					},
+					"name": map[string]any{
+						"type":        "string",
+						"description": "Cluster name",
+					},
+				},
+			},
+		},
+	}
+}
+
 // waitForPermissionRequestAndRespond waits for a permission request and responds with the given value.
 func waitForPermissionRequestAndRespond(
 	t *testing.T,
@@ -497,7 +522,7 @@ func TestYoloModeDisabledStillPrompts(t *testing.T) {
 }
 
 // TestForceInjection verifies that the force flag is injected into tool arguments
-// when a tool requiring permission is approved.
+// when a tool requiring permission is approved and its schema defines a force parameter.
 func TestForceInjection(t *testing.T) {
 	t.Parallel()
 
@@ -523,7 +548,7 @@ func TestForceInjection(t *testing.T) {
 		},
 	}
 
-	metadata := createToolMetadata("test_force_tool")
+	metadata := createToolMetadataWithForce("test_force_tool")
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
 		[]copilot.Tool{writeTool}, eventChan, agentModeRef, yoloModeRef, metadata,
@@ -550,6 +575,65 @@ func TestForceInjection(t *testing.T) {
 	forceBool, isBool := forceVal.(bool)
 	if !isBool || !forceBool {
 		t.Errorf("Expected force=true, got %v", forceVal)
+	}
+
+	// Verify original args are preserved
+	nameVal, nameExists := receivedArgs["name"]
+	if !nameExists || nameVal != "my-cluster" {
+		t.Errorf("Expected original 'name' arg preserved, got %v", nameVal)
+	}
+}
+
+// TestForceNotInjectedWithoutSchemaSupport verifies that the force flag is NOT injected
+// when the tool's parameter schema does not define a force property.
+func TestForceNotInjectedWithoutSchemaSupport(t *testing.T) {
+	t.Parallel()
+
+	eventChan := make(chan tea.Msg, 10)
+	agentModeRef := chatui.NewAgentModeRef(true)
+	yoloModeRef := chatui.NewYoloModeRef(true) // YOLO mode to avoid permission prompt
+
+	var receivedArgs map[string]any
+
+	writeTool := copilot.Tool{
+		Name:        "test_no_force_tool",
+		Description: "A write tool without force support",
+		Handler: func(inv copilot.ToolInvocation) (copilot.ToolResult, error) {
+			args, isMap := inv.Arguments.(map[string]any)
+			if isMap {
+				receivedArgs = args
+			}
+
+			return copilot.ToolResult{
+				TextResultForLLM: "Done",
+				ResultType:       successResult,
+			}, nil
+		},
+	}
+
+	// Use metadata WITHOUT force in schema
+	metadata := createToolMetadata("test_no_force_tool")
+
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{writeTool}, eventChan, agentModeRef, yoloModeRef, metadata,
+	)
+
+	_, err := wrappedTools[0].Handler(copilot.ToolInvocation{
+		ToolCallID: "test_no_force",
+		ToolName:   "test_no_force_tool",
+		Arguments:  map[string]any{"name": "my-cluster"},
+	})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	if receivedArgs == nil {
+		t.Fatal("Expected arguments to be passed to handler")
+	}
+
+	// Verify force was NOT injected
+	if _, forceExists := receivedArgs["force"]; forceExists {
+		t.Error("Expected 'force' NOT to be injected for tool without force in schema")
 	}
 
 	// Verify original args are preserved
