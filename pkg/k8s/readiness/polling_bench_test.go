@@ -13,6 +13,66 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+// createDeployments creates a list of ready deployment objects and readiness checks for benchmarking.
+func createDeployments(count int, namespace string) ([]runtime.Object, []readiness.Check) {
+	objects := make([]runtime.Object, 0, count)
+	checks := make([]readiness.Check, 0, count)
+
+	for j := range count {
+		name := fmt.Sprintf("test-deployment-%d", j)
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+			},
+			Status: appsv1.DeploymentStatus{
+				Replicas:          1,
+				UpdatedReplicas:   1,
+				AvailableReplicas: 1,
+			},
+		}
+
+		objects = append(objects, deployment)
+		checks = append(checks, readiness.Check{
+			Type:      "deployment",
+			Namespace: namespace,
+			Name:      name,
+		})
+	}
+
+	return objects, checks
+}
+
+// createDaemonSets creates a list of ready daemonset objects and readiness checks for benchmarking.
+func createDaemonSets(count int, namespace string) ([]runtime.Object, []readiness.Check) {
+	objects := make([]runtime.Object, 0, count)
+	checks := make([]readiness.Check, 0, count)
+
+	for j := range count {
+		name := fmt.Sprintf("test-daemonset-%d", j)
+		daemonset := &appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+			},
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: 1,
+				NumberUnavailable:      0,
+				UpdatedNumberScheduled: 1,
+			},
+		}
+
+		objects = append(objects, daemonset)
+		checks = append(checks, readiness.Check{
+			Type:      "daemonset",
+			Namespace: namespace,
+			Name:      name,
+		})
+	}
+
+	return objects, checks
+}
+
 // BenchmarkWaitForMultipleResources_Sequential benchmarks the current sequential
 // implementation of multi-resource polling.
 //
@@ -29,35 +89,12 @@ func BenchmarkWaitForMultipleResources_Sequential(b *testing.B) {
 		{"20_resources", 20},
 	}
 
-	for _, sc := range scenarios {
-		b.Run(sc.name, func(b *testing.B) {
+	for _, scenario := range scenarios {
+		b.Run(scenario.name, func(b *testing.B) {
 			b.ReportAllocs()
 
 			// Create fake resources outside the benchmark loop
-			resources := make([]readiness.Check, 0, sc.resourceCount)
-			clientObjects := make([]runtime.Object, 0, sc.resourceCount)
-
-			for j := 0; j < sc.resourceCount; j++ {
-				deploymentName := fmt.Sprintf("test-deployment-%d", j)
-				deployment := &appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      deploymentName,
-						Namespace: "test-ns",
-					},
-					Status: appsv1.DeploymentStatus{
-						Replicas:          1,
-						UpdatedReplicas:   1,
-						AvailableReplicas: 1,
-					},
-				}
-
-				clientObjects = append(clientObjects, deployment)
-				resources = append(resources, readiness.Check{
-					Type:      "deployment",
-					Namespace: "test-ns",
-					Name:      deploymentName,
-				})
-			}
+			clientObjects, resources := createDeployments(scenario.resourceCount, "test-ns")
 
 			client := fake.NewClientset(clientObjects...)
 			ctx := context.Background()
@@ -65,7 +102,7 @@ func BenchmarkWaitForMultipleResources_Sequential(b *testing.B) {
 
 			b.ResetTimer()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				err := readiness.WaitForMultipleResources(ctx, client, resources, timeout)
 				if err != nil {
 					b.Fatalf("unexpected error: %v", err)
@@ -91,57 +128,21 @@ func BenchmarkWaitForMultipleResources_MixedTypes(b *testing.B) {
 		{"10d_10ds", 10, 10},
 	}
 
-	for _, sc := range scenarios {
-		b.Run(sc.name, func(b *testing.B) {
+	for _, scenario := range scenarios {
+		b.Run(scenario.name, func(b *testing.B) {
 			b.ReportAllocs()
 
 			// Create fake resources outside the benchmark loop
-			resources := make([]readiness.Check, 0, sc.deployments+sc.daemonsets)
-			clientObjects := make([]runtime.Object, 0, sc.deployments+sc.daemonsets)
+			deployObjects, deployChecks := createDeployments(scenario.deployments, "test-ns")
+			daemonObjects, daemonChecks := createDaemonSets(scenario.daemonsets, "kube-system")
 
-			for j := 0; j < sc.deployments; j++ {
-				deploymentName := fmt.Sprintf("test-deployment-%d", j)
-				deployment := &appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      deploymentName,
-						Namespace: "test-ns",
-					},
-					Status: appsv1.DeploymentStatus{
-						Replicas:          1,
-						UpdatedReplicas:   1,
-						AvailableReplicas: 1,
-					},
-				}
+			clientObjects := make([]runtime.Object, 0, len(deployObjects)+len(daemonObjects))
+			clientObjects = append(clientObjects, deployObjects...)
+			clientObjects = append(clientObjects, daemonObjects...)
 
-				clientObjects = append(clientObjects, deployment)
-				resources = append(resources, readiness.Check{
-					Type:      "deployment",
-					Namespace: "test-ns",
-					Name:      deploymentName,
-				})
-			}
-
-			for j := 0; j < sc.daemonsets; j++ {
-				daemonsetName := fmt.Sprintf("test-daemonset-%d", j)
-				daemonset := &appsv1.DaemonSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      daemonsetName,
-						Namespace: "kube-system",
-					},
-					Status: appsv1.DaemonSetStatus{
-						DesiredNumberScheduled: 1,
-						NumberUnavailable:      0,
-						UpdatedNumberScheduled: 1,
-					},
-				}
-
-				clientObjects = append(clientObjects, daemonset)
-				resources = append(resources, readiness.Check{
-					Type:      "daemonset",
-					Namespace: "kube-system",
-					Name:      daemonsetName,
-				})
-			}
+			resources := make([]readiness.Check, 0, len(deployChecks)+len(daemonChecks))
+			resources = append(resources, deployChecks...)
+			resources = append(resources, daemonChecks...)
 
 			client := fake.NewClientset(clientObjects...)
 			ctx := context.Background()
@@ -149,7 +150,7 @@ func BenchmarkWaitForMultipleResources_MixedTypes(b *testing.B) {
 
 			b.ResetTimer()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				err := readiness.WaitForMultipleResources(ctx, client, resources, timeout)
 				if err != nil {
 					b.Fatalf("unexpected error: %v", err)
@@ -219,7 +220,7 @@ func BenchmarkWaitForMultipleResources_RealWorldCNI(b *testing.B) {
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		err := readiness.WaitForMultipleResources(ctx, client, resources, timeout)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
@@ -245,7 +246,7 @@ func BenchmarkPollForReadiness_SingleCheck(b *testing.B) {
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		err := readiness.PollForReadiness(ctx, deadline, pollFunc)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
