@@ -16,25 +16,25 @@ These benchmarks establish performance baselines for:
 ### Run all benchmarks in this package
 
 ```bash
-go test -bench=. -benchmem ./pkg/k8s/readiness/...
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/...
 ```
 
 ### Run with longer benchmark time for more accurate results
 
 ```bash
-go test -bench=. -benchmem -benchtime=5s ./pkg/k8s/readiness/...
+go test -bench=. -benchmem -benchtime=5s -run=^$ ./pkg/k8s/readiness/...
 ```
 
 ### Run specific benchmark
 
 ```bash
-go test -bench=BenchmarkWaitForMultipleResources_Sequential -benchmem ./pkg/k8s/readiness/...
+go test -bench=BenchmarkWaitForMultipleResources_Sequential -benchmem -run=^$ ./pkg/k8s/readiness/...
 ```
 
 ### Save baseline results for comparison
 
 ```bash
-go test -bench=. -benchmem ./pkg/k8s/readiness/... > baseline.txt
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > baseline.txt
 ```
 
 ## Comparing Performance Changes
@@ -46,12 +46,12 @@ Use `benchstat` to compare before/after performance:
 go install golang.org/x/perf/cmd/benchstat@latest
 
 # Run baseline
-go test -bench=. -benchmem ./pkg/k8s/readiness/... > before.txt
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > before.txt
 
 # Make your changes...
 
 # Run after changes
-go test -bench=. -benchmem ./pkg/k8s/readiness/... > after.txt
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > after.txt
 
 # Compare results
 benchstat before.txt after.txt
@@ -105,7 +105,7 @@ Measures the base polling mechanism overhead with immediate readiness.
 Baselines should be generated after merging by running:
 
 ```bash
-go test -bench=. -benchmem -count=5 ./pkg/k8s/readiness/... | tee baseline.txt
+go test -bench=. -benchmem -count=5 -run=^$ ./pkg/k8s/readiness/... | tee baseline.txt
 ```
 
 ## Performance Insights
@@ -146,9 +146,9 @@ Based on these benchmarks, potential optimizations include:
 
 When making performance-related changes:
 
-1. Run benchmarks before changes: `go test -bench=. -benchmem ./pkg/k8s/readiness/... > before.txt`
+1. Run benchmarks before changes: `go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > before.txt`
 2. Make your changes
-3. Run benchmarks after: `go test -bench=. -benchmem ./pkg/k8s/readiness/... > after.txt`
+3. Run benchmarks after: `go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > after.txt`
 4. Compare: `benchstat before.txt after.txt`
 5. Include results in PR description
 
