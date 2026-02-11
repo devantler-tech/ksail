@@ -64,15 +64,15 @@ type setupParams struct {
 	clusterName string
 }
 
-// setupFluxCore performs the common Flux setup: secret creation, Instance creation, and OCIRepository patching.
+// setupFluxCore performs the common Flux setup: secret creation, FluxInstance creation, and OCIRepository patching.
 func setupFluxCore(ctx context.Context, params setupParams) error {
-	// For external registries with credentials, create the pull secret before Instance
+	// For external registries with credentials, create the pull secret before FluxInstance
 	err := ensureExternalRegistrySecret(ctx, params.restConfig, params.clusterCfg)
 	if err != nil {
 		return err
 	}
 
-	// Setup Instance
+	// Setup FluxInstance
 	fluxMgr := newFluxInstanceManager(
 		params.restConfig,
 		fluxAPIAvailabilityTimeout,
@@ -100,9 +100,9 @@ func setupFluxCore(ctx context.Context, params setupParams) error {
 	return ensureLocalRegistryInsecureIfNeeded(ctx, ociPatcher, params.clusterCfg)
 }
 
-// EnsureDefaultResources configures a default Instance so the operator can
+// EnsureDefaultResources configures a default FluxInstance so the operator can
 // bootstrap controllers and sync from the local OCI registry.
-// If artifactPushed is false, the function will skip waiting for Instance readiness
+// If artifactPushed is false, the function will skip waiting for FluxInstance readiness
 // because the artifact doesn't exist yet (will be pushed later via workload push).
 //
 //nolint:contextcheck // context passed from caller and used in nested functions
@@ -135,9 +135,9 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	// Only wait for Instance readiness if artifact was pushed.
+	// Only wait for FluxInstance readiness if artifact was pushed.
 	// If no artifact was pushed (e.g., source directory missing during cluster create),
-	// the Instance will remain in "Reconciliation in progress" until workload push is run.
+	// the FluxInstance will remain in "Reconciliation in progress" until workload push is run.
 	if artifactPushed {
 		fluxMgr := newFluxInstanceManager(
 			restConfig,
@@ -147,15 +147,15 @@ func EnsureDefaultResources(
 
 		err = fluxMgr.waitForReady(ctx)
 		if err != nil {
-			return fmt.Errorf("failed waiting for Instance to be ready: %w", err)
+			return fmt.Errorf("failed waiting for FluxInstance to be ready: %w", err)
 		}
 	}
 
 	return nil
 }
 
-// SetupInstance creates the Instance CR and configures OCIRepository settings.
-// This does NOT wait for Instance to be ready - use WaitForFluxReady after pushing artifacts.
+// SetupInstance creates the FluxInstance CR and configures OCIRepository settings.
+// This does NOT wait for FluxInstance to be ready - use WaitForFluxReady after pushing artifacts.
 // Returns error if setup fails.
 //
 //nolint:contextcheck // context passed from caller and used in nested functions
@@ -185,7 +185,7 @@ func SetupInstance(
 	})
 }
 
-// WaitForFluxReady waits for the Instance to report a Ready condition.
+// WaitForFluxReady waits for the FluxInstance to report a Ready condition.
 // Call this after pushing an OCI artifact to ensure Flux has successfully reconciled.
 //
 //nolint:contextcheck // context passed from caller
@@ -210,7 +210,7 @@ func WaitForFluxReady(
 
 	err = fluxMgr.waitForReady(ctx)
 	if err != nil {
-		return fmt.Errorf("failed waiting for Instance to be ready: %w", err)
+		return fmt.Errorf("failed waiting for FluxInstance to be ready: %w", err)
 	}
 
 	return nil

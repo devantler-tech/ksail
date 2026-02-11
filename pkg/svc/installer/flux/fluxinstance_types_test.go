@@ -19,7 +19,7 @@ const (
 func TestFluxInstance_DeepCopy(t *testing.T) {
 	t.Parallel()
 
-	original := &fluxinstaller.Instance{
+	original := &fluxinstaller.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-instance",
 			Namespace: "test-namespace",
@@ -69,7 +69,7 @@ func TestFluxInstance_DeepCopy(t *testing.T) {
 func TestFluxInstance_DeepCopy_Nil(t *testing.T) {
 	t.Parallel()
 
-	var original *fluxinstaller.Instance
+	var original *fluxinstaller.FluxInstance
 
 	copied := original.DeepCopy()
 
@@ -79,7 +79,7 @@ func TestFluxInstance_DeepCopy_Nil(t *testing.T) {
 func TestFluxInstance_DeepCopyObject(t *testing.T) {
 	t.Parallel()
 
-	original := &fluxinstaller.Instance{
+	original := &fluxinstaller.FluxInstance{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
 		},
@@ -88,7 +88,7 @@ func TestFluxInstance_DeepCopyObject(t *testing.T) {
 	obj := original.DeepCopyObject()
 
 	require.NotNil(t, obj)
-	copied, ok := obj.(*fluxinstaller.Instance)
+	copied, ok := obj.(*fluxinstaller.FluxInstance)
 	require.True(t, ok)
 	assert.Equal(t, original.Name, copied.Name)
 }
@@ -96,8 +96,8 @@ func TestFluxInstance_DeepCopyObject(t *testing.T) {
 func TestFluxInstanceList_DeepCopy(t *testing.T) {
 	t.Parallel()
 
-	original := &fluxinstaller.InstanceList{
-		Items: []fluxinstaller.Instance{
+	original := &fluxinstaller.FluxInstanceList{
+		Items: []fluxinstaller.FluxInstance{
 			{
 				ObjectMeta: metav1.ObjectMeta{Name: "item1"},
 			},
@@ -122,7 +122,7 @@ func TestFluxInstanceList_DeepCopy(t *testing.T) {
 func TestFluxInstanceList_DeepCopy_Nil(t *testing.T) {
 	t.Parallel()
 
-	var original *fluxinstaller.InstanceList
+	var original *fluxinstaller.FluxInstanceList
 
 	copied := original.DeepCopy()
 
@@ -132,8 +132,8 @@ func TestFluxInstanceList_DeepCopy_Nil(t *testing.T) {
 func TestFluxInstanceList_DeepCopyObject(t *testing.T) {
 	t.Parallel()
 
-	original := &fluxinstaller.InstanceList{
-		Items: []fluxinstaller.Instance{
+	original := &fluxinstaller.FluxInstanceList{
+		Items: []fluxinstaller.FluxInstance{
 			{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
 		},
 	}
@@ -141,7 +141,7 @@ func TestFluxInstanceList_DeepCopyObject(t *testing.T) {
 	obj := original.DeepCopyObject()
 
 	require.NotNil(t, obj)
-	copied, ok := obj.(*fluxinstaller.InstanceList)
+	copied, ok := obj.(*fluxinstaller.FluxInstanceList)
 	require.True(t, ok)
 	assert.Len(t, copied.Items, 1)
 }

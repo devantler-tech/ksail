@@ -35,7 +35,7 @@ func BuildLocalRegistryURL(
 }
 
 // BuildInstance exports buildInstance for testing.
-func BuildInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*Instance, error) {
+func BuildInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInstance, error) {
 	return buildInstance(clusterCfg, clusterName)
 }
 
@@ -65,7 +65,7 @@ func PollUntilReady(
 	return pollUntilReady(ctx, timeout, interval, resourceDesc, checkFn)
 }
 
-// WaitForFluxInstanceReady exports the Instance readiness check for testing.
+// WaitForFluxInstanceReady exports the FluxInstance readiness check for testing.
 func WaitForFluxInstanceReady(ctx context.Context, restConfig any) error {
 	rc, ok := restConfig.(*rest.Config)
 	if !ok {

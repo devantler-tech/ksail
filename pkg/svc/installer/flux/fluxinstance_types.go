@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	fluxInstanceKind        = "Instance"
+	fluxInstanceKind        = "FluxInstance"
 	fluxOCIRepositoryKind   = "OCIRepository"
 	fluxInstanceDefaultName = "flux"
 	fluxInstanceGroup       = "fluxcd.controlplane.io"
@@ -21,10 +21,10 @@ var fluxInstanceGroupVersion = schema.GroupVersion{
 	Version: fluxInstanceVersion,
 }
 
-// Instance mirrors the Flux operator Instance CRD with the minimal fields
+// FluxInstance mirrors the Flux operator FluxInstance CRD with the minimal fields
 // KSail-Go needs to configure default sync behavior. Keeping a local definition
 // avoids pulling the entire operator module into go.mod.
-type Instance struct {
+type FluxInstance struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 
@@ -33,7 +33,7 @@ type Instance struct {
 }
 
 // DeepCopyInto copies all properties of this object into another object of the same type.
-func (in *Instance) DeepCopyInto(out *Instance) {
+func (in *FluxInstance) DeepCopyInto(out *FluxInstance) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
 	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
@@ -41,20 +41,20 @@ func (in *Instance) DeepCopyInto(out *Instance) {
 	in.Status.DeepCopyInto(&out.Status)
 }
 
-// DeepCopy creates a deep copy of Instance.
-func (in *Instance) DeepCopy() *Instance {
+// DeepCopy creates a deep copy of FluxInstance.
+func (in *FluxInstance) DeepCopy() *FluxInstance {
 	if in == nil {
 		return nil
 	}
 
-	out := new(Instance)
+	out := new(FluxInstance)
 	in.DeepCopyInto(out)
 
 	return out
 }
 
 // DeepCopyObject implements runtime.Object interface.
-func (in *Instance) DeepCopyObject() runtime.Object {
+func (in *FluxInstance) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
 	}
@@ -62,43 +62,43 @@ func (in *Instance) DeepCopyObject() runtime.Object {
 	return nil
 }
 
-// InstanceList registers the list kind with the scheme for completeness.
-type InstanceList struct {
+// FluxInstanceList registers the list kind with the scheme for completeness.
+type FluxInstanceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
 
-	Items []Instance `json:"items"`
+	Items []FluxInstance `json:"items"`
 }
 
-// DeepCopyInto copies all properties into another InstanceList.
-func (in *InstanceList) DeepCopyInto(out *InstanceList) {
+// DeepCopyInto copies all properties into another FluxInstanceList.
+func (in *FluxInstanceList) DeepCopyInto(out *FluxInstanceList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
 
 	in.ListMeta.DeepCopyInto(&out.ListMeta)
 
 	if in.Items != nil {
-		out.Items = make([]Instance, len(in.Items))
+		out.Items = make([]FluxInstance, len(in.Items))
 		for i := range in.Items {
 			in.Items[i].DeepCopyInto(&out.Items[i])
 		}
 	}
 }
 
-// DeepCopy creates a deep copy of InstanceList.
-func (in *InstanceList) DeepCopy() *InstanceList {
+// DeepCopy creates a deep copy of FluxInstanceList.
+func (in *FluxInstanceList) DeepCopy() *FluxInstanceList {
 	if in == nil {
 		return nil
 	}
 
-	out := new(InstanceList)
+	out := new(FluxInstanceList)
 	in.DeepCopyInto(out)
 
 	return out
 }
 
 // DeepCopyObject implements runtime.Object interface.
-func (in *InstanceList) DeepCopyObject() runtime.Object {
+func (in *FluxInstanceList) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
 	}
@@ -183,8 +183,8 @@ func (in *InstanceStatus) DeepCopy() *InstanceStatus {
 func addFluxInstanceToScheme(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(
 		fluxInstanceGroupVersion,
-		&Instance{},
-		&InstanceList{},
+		&FluxInstance{},
+		&FluxInstanceList{},
 	)
 	metav1.AddToGroupVersion(scheme, fluxInstanceGroupVersion)
 
