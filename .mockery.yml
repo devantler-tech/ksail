@@ -35,7 +35,7 @@ packages:
       filename: mocks.go
       pkgname: clusterprovisioner
     interfaces:
-      ClusterProvisioner:
+      Provisioner:
       Factory:
   github.com/devantler-tech/ksail/v5/pkg/fsutil/validator:
     config:

@@ -126,8 +126,12 @@ func sendChatWithStreaming(
 	select {
 	case <-state.done:
 	case <-ctx.Done():
+		_ = session.Abort()
+
 		return fmt.Errorf("streaming cancelled: %w", ctx.Err())
 	case <-time.After(timeout):
+		_ = session.Abort()
+
 		return fmt.Errorf("%w after %v", errResponseTimeout, timeout)
 	}
 
