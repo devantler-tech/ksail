@@ -107,12 +107,14 @@ Create a new GitHub discussion with title starting with "${{ github.workflow }}"
 ### 📅 Week of [Date]
 
 #### 🎯 Key Highlights This Week
+
 - Recent releases, features, or achievements to promote
 - Unique value propositions to emphasize
 
 #### 📱 Social Media Posts
 
 **X/Twitter/Mastodon** (copy-paste ready):
+
 ```
 [Post 1 with hashtags #Kubernetes #CloudNative #DevOps #GitOps]
 [Post 2...]
@@ -120,6 +122,7 @@ Create a new GitHub discussion with title starting with "${{ github.workflow }}"
 ```
 
 **LinkedIn** (copy-paste ready):
+
 ```
 [Professional post 1 with hashtags]
 [Professional post 2...]
@@ -128,28 +131,35 @@ Create a new GitHub discussion with title starting with "${{ github.workflow }}"
 #### 💬 Community Engagement
 
 **Reddit Opportunities**:
+
 - r/[subreddit]: [Post idea or discussion to engage with]
 - r/[subreddit]: [Another opportunity]
 
 **Other Communities**:
+
 - [Platform]: [Opportunity description]
 
 #### ✍️ Content Ideas
+
 - Blog post: [Title and brief outline]
 - Tutorial: [Title and key topics]
 - Comparison: [Topic]
 
 #### 🔍 Trending Topics & Opportunities
+
 - [Relevant discussions, questions, or trends found this week]
 - [Links to specific opportunities with suggested responses]
 
 #### 📊 Competitive Insights
+
 - [Notable competitor activities or market changes]
 
 #### 🎬 Video/Presentation Ideas
+
 - [Tutorial or demo ideas for YouTube/conferences]
 
 #### 🤝 Collaboration Opportunities
+
 - [Projects, influencers, or communities to engage with]
 
 ---
