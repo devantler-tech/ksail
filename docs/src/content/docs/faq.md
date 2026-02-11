@@ -116,12 +116,53 @@ You must manually delete the old cluster first with `ksail cluster delete`, then
 
 LoadBalancer support varies by distribution and provider:
 
-- **Vanilla (Kind)** - ✅ Supports LoadBalancer services
-- **K3s (K3d)** - ✅ Includes ServiceLB load balancer by default
-- **Talos on Docker** - ❌ LoadBalancer services are not currently supported. The `--load-balancer` flag is automatically set to `Disabled` for this combination
-- **Talos on Hetzner** - ✅ Uses Hetzner Cloud Load Balancer
+| Distribution         | Support Status | LoadBalancer Implementation      | Configuration Required |
+| -------------------- | -------------- | -------------------------------- | ---------------------- |
+| **Vanilla (Kind)**   | ✅ Supported   | MetalLB                          | `--load-balancer Enabled` |
+| **K3s (K3d)**        | ✅ Built-in    | ServiceLB (Klipper-LB)           | Enabled by default |
+| **Talos on Docker**  | ❌ Not supported | N/A                             | Always `Disabled` |
+| **Talos on Hetzner** | ✅ Built-in    | hcloud-cloud-controller-manager  | Enabled by default |
 
-MetalLB support for Talos+Docker is planned for a future release. Until then, use `NodePort` or `ClusterIP` services with port-forwarding for Talos clusters on Docker.
+**Quick setup examples:**
+
+``````bash
+# Vanilla with LoadBalancer
+ksail cluster init --distribution Vanilla --load-balancer Enabled
+
+# K3s with LoadBalancer (default)
+ksail cluster init --distribution K3s
+
+# Talos on Hetzner with LoadBalancer (default)
+export HCLOUD_TOKEN="your-token"
+ksail cluster init --distribution Talos --provider Hetzner
+``````
+
+**Talos on Docker limitations:**
+
+MetalLB support for Talos+Docker is planned for a future release. Until then, LoadBalancer services are not supported on this combination. The `--load-balancer` flag is automatically set to `Disabled`, regardless of user input.
+
+**Workarounds for Talos+Docker:**
+
+``````bash
+# Option 1: Use NodePort
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-app
+spec:
+  type: NodePort
+  selector:
+    app: my-app
+  ports:
+    - port: 80
+      targetPort: 8080
+      nodePort: 30080  # Access via localhost:30080
+
+# Option 2: Use ClusterIP with port-forwarding
+ksail workload port-forward svc/my-app 8080:80
+``````
+
+See the [LoadBalancer Configuration Guide](/configuration/loadbalancer/) for complete setup instructions and examples.
 
 ### Can I add nodes to an existing cluster?
 

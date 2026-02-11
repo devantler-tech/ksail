@@ -17,6 +17,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
 - ☸️ **Simple Clusters** — Spin up Vanilla, K3s, or Talos clusters with one command. Same workflow across distributions.
+- 🌐 **LoadBalancer Support** — Built-in LoadBalancer services via MetalLB, ServiceLB, or cloud provider integration.
 - 📥 **Mirror Registries** — Avoid rate limits, and store images once. Same mirrors used by different clusters.
 - 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
 - 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.
@@ -70,6 +71,7 @@ ksail cluster init \
   --distribution <Vanilla|K3s|Talos> \
   --cni <Default|Cilium|Calico> \
   --csi <Default|Enabled|Disabled> \
+  --load-balancer <Default|Enabled|Disabled> \
   --metrics-server <Default|Enabled|Disabled> \
   --cert-manager <Enabled|Disabled> \
   --policy-engine <None|Kyverno|Gatekeeper> \

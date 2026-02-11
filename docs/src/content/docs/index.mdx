@@ -30,6 +30,7 @@ Setting up and operating Kubernetes clusters often requires juggling multiple CL
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
 - ☸️ **Simple Clusters** — Spin up Vanilla, K3s, or Talos clusters with one command. Same workflow across distributions.
+- 🌐 **LoadBalancer Support** — Built-in LoadBalancer services via MetalLB, ServiceLB, or cloud provider integration.
 - 📥 **Mirror Registries** — Avoid rate limits, and store images once. Same mirrors used by different clusters.
 - 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
 - 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.
@@ -107,6 +108,9 @@ ksail cluster connect
   </Card>
   <Card title="Declarative Configuration" icon="document">
     Complete `ksail.yaml` reference. [Learn more →](/configuration/declarative-configuration/)
+  </Card>
+  <Card title="LoadBalancer Configuration" icon="rocket">
+    LoadBalancer support matrix and configuration examples. [Learn more →](/configuration/loadbalancer/)
   </Card>
   <Card title="CLI Flags" icon="forward-slash">
     Complete CLI flags for all commands. [Learn more →](/cli-flags/)

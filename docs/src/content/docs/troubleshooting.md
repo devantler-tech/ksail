@@ -194,6 +194,168 @@ The default ISO ID may be outdated. Check your Hetzner Cloud project:
 
 Configure KSail to use the correct ISO ID (implementation-specific - check latest documentation).
 
+## LoadBalancer Services
+
+### LoadBalancer Service Stuck in Pending
+
+**Symptom:** Service remains in `Pending` state, no external IP assigned
+
+**Possible causes:**
+
+1. **LoadBalancer support disabled** - Distribution does not include LoadBalancer by default
+2. **Talos on Docker** - LoadBalancer services are not supported for this combination
+3. **MetalLB not installed** - Vanilla (Kind) requires explicit LoadBalancer installation
+4. **Controller not running** - LoadBalancer controller pods are crashed or missing
+
+**Solution:**
+
+``````bash
+# 1. Check service status
+ksail workload get svc my-app -o wide
+ksail workload describe svc my-app
+
+# 2. Verify LoadBalancer is enabled for your distribution
+# Check your ksail.yaml file for loadBalancer setting
+
+# 3. For Vanilla (Kind) - enable MetalLB
+ksail cluster init --distribution Vanilla --load-balancer Enabled
+ksail cluster create
+# Or update existing cluster:
+# Edit ksail.yaml: loadBalancer: Enabled
+ksail cluster update
+
+# 4. For K3s - verify ServiceLB pods are running
+ksail workload get pods -n kube-system -l svccontroller.k3s.cattle.io/svcname=my-app
+
+# 5. For Talos on Docker - LoadBalancer not supported
+# Use NodePort or ClusterIP with port-forwarding instead:
+ksail workload port-forward svc/my-app 8080:80
+
+# 6. Check controller logs
+# For K3s:
+ksail workload logs -n kube-system -l app=svclb-my-app
+
+# For Vanilla with MetalLB:
+ksail workload logs -n metallb-system deployment/controller
+
+# For Talos on Hetzner:
+ksail workload logs -n kube-system daemonset/hcloud-cloud-controller-manager
+``````
+
+### LoadBalancer IP Address Not Assigned
+
+**Symptom:** Service type is `LoadBalancer` but `EXTERNAL-IP` shows `<none>` or `<pending>`
+
+**Solution:**
+
+``````bash
+# 1. Verify LoadBalancer support is enabled
+cat ksail.yaml | grep loadBalancer
+
+# 2. Check LoadBalancer controller events
+ksail workload describe svc my-app | grep -A 10 Events
+
+# 3. For Hetzner Cloud - verify API token and quota
+export HCLOUD_TOKEN="your-token"
+# Check if you have reached LoadBalancer quota in Hetzner Cloud Console
+
+# 4. For MetalLB - verify address pool configuration
+ksail workload get ipaddresspools -n metallb-system
+ksail workload describe ipaddresspool default -n metallb-system
+
+# 5. Restart LoadBalancer controller
+# For K3s:
+ksail workload delete pod -n kube-system -l app=svclb-my-app
+
+# For MetalLB:
+ksail workload delete pod -n metallb-system -l app.kubernetes.io/name=metallb
+``````
+
+### Cloud Provider Load Balancer Errors
+
+**Symptom:** Hetzner Cloud Load Balancer creation fails or shows errors in events
+
+**Solution:**
+
+``````bash
+# 1. Verify Hetzner Cloud credentials
+echo $HCLOUD_TOKEN | cut -c1-10  # Should show first 10 chars of token
+
+# 2. Check cloud controller manager logs
+ksail workload logs -n kube-system daemonset/hcloud-cloud-controller-manager --tail=100
+
+# 3. Verify service annotations are valid
+ksail workload get svc my-app -o yaml | grep -A 5 annotations
+
+# 4. Check Hetzner Cloud Console for:
+#    - Load balancer quota limits
+#    - Network/firewall rules
+#    - Server location compatibility
+
+# 5. Common annotation issues:
+# - Invalid location: use valid Hetzner datacenter (nbg1, fsn1, hel1, etc.)
+# - Invalid type: use valid LB type (lb11, lb21, lb31)
+# - Network conflicts: ensure cluster network doesn't overlap
+``````
+
+### Common Misconfigurations
+
+#### Wrong LoadBalancer Setting for Distribution
+
+**Problem:** Using `Enabled` for Talos+Docker or expecting LoadBalancer on Vanilla without enabling it
+
+**Solution:**
+
+``````bash
+# Vanilla requires explicit LoadBalancer enablement:
+ksail cluster init --distribution Vanilla --load-balancer Enabled
+
+# K3s includes LoadBalancer by default (no flag needed):
+ksail cluster init --distribution K3s
+
+# Talos on Docker does NOT support LoadBalancer (always Disabled):
+# Use NodePort or port-forwarding instead
+
+# Talos on Hetzner includes LoadBalancer by default:
+ksail cluster init --distribution Talos --provider Hetzner
+``````
+
+#### Missing Service Selector
+
+**Problem:** LoadBalancer service has no backend pods
+
+**Solution:**
+
+``````bash
+# 1. Verify service selector matches pod labels
+ksail workload get svc my-app -o yaml | grep -A 3 selector
+ksail workload get pods -l app=my-app
+
+# 2. Check endpoints
+ksail workload get endpoints my-app
+# Should show pod IPs - if empty, selector doesn't match any pods
+
+# 3. Fix selector in service manifest to match pod labels
+``````
+
+#### Port Conflicts
+
+**Problem:** LoadBalancer port already in use
+
+**Solution:**
+
+``````bash
+# 1. List all LoadBalancer services
+ksail workload get svc -A | grep LoadBalancer
+
+# 2. Check for port conflicts (each service needs unique port or use shared IP)
+# For MetalLB, use shared IP annotation:
+# annotations:
+#   metallb.universe.tf/allow-shared-ip: "my-app"
+
+# 3. Use different ports or NodePort as alternative
+``````
+
 ## Getting More Help
 
 If you're still experiencing issues:
@@ -207,6 +369,10 @@ When reporting issues, include:
 - KSail version (`ksail --version`)
 - Operating system and architecture
 - Docker version (`docker --version`)
+- Distribution and provider (`Vanilla/K3s/Talos` + `Docker/Hetzner`)
+- LoadBalancer configuration (`cat ksail.yaml | grep loadBalancer`)
 - Relevant configuration (`ksail.yaml`)
+- Service manifest for LoadBalancer issues
 - Complete error messages
+- Controller logs (see commands above)
 - Steps to reproduce
