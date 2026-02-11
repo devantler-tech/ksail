@@ -73,6 +73,7 @@ cd /path/to/repo
 ./ksail cluster init --help       # Show init options
 ./ksail cluster init              # Initialize default project
 ./ksail cluster create            # Create cluster (requires Docker)
+./ksail cluster update            # Update cluster configuration
 ./ksail cluster info              # Show cluster info
 ./ksail cluster delete            # Destroy cluster
 ```
@@ -178,6 +179,7 @@ All CLI commands only require Docker to be installed:
 ```bash
 ksail cluster init [options]           # Initialize new KSail project
 ksail cluster create                   # Create and start cluster
+ksail cluster update                   # Update cluster to match configuration
 ksail cluster delete                   # Destroy cluster and resources
 ksail cluster start                    # Start existing cluster
 ksail cluster stop                     # Stop running cluster
