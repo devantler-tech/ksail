@@ -123,6 +123,51 @@ Follow idiomatic Go practices and community standards when writing Go code. Thes
 - Use `go mod tidy` to clean up unused dependencies
 - Vendor dependencies only when necessary
 
+#### Multi-Module Repositories
+
+This repository contains multiple Go modules:
+- Main module: `go.mod` (root)
+- Schema generator: `.github/scripts/generate-schema/go.mod`
+
+The repository uses a Go workspace (`go.work`) to manage these modules together.
+
+**When updating dependencies:**
+
+1. **Use Go workspace commands** to update all modules at once:
+   ```bash
+   # At repository root
+   go work sync              # Sync workspace with module dependencies
+   go mod tidy               # Tidy root module
+   cd .github/scripts/generate-schema
+   go mod tidy               # Tidy generate-schema module
+   cd ../../..
+   ```
+
+2. **Always verify changes in ALL modules**, not just the root:
+   ```bash
+   git status                # Should show changes in both go.mod files if dependencies changed
+   git diff go.mod go.sum .github/scripts/generate-schema/go.mod .github/scripts/generate-schema/go.sum
+   ```
+
+3. **Check both `go.mod` and `go.sum` for changes in all modules**
+
+4. **If a dependency changes in the main module, it likely affects the schema generator module** because it imports types from the main module
+
+**Important notes:**
+- The `go.work` file unifies both modules into a single workspace
+- CI verifies all modules are in sync via the `verify-modules` job
+- Running `go mod tidy` in one module does NOT automatically update the other module
+- When Dependabot updates dependencies, manually run `go mod tidy` in the generate-schema module
+
+**Workflow for dependency updates:**
+```bash
+# After updating dependencies in root go.mod (e.g., via Dependabot)
+cd .github/scripts/generate-schema
+go mod tidy
+cd ../../..
+git add go.mod go.sum .github/scripts/generate-schema/go.mod .github/scripts/generate-schema/go.sum
+```
+
 ## Type Safety and Language Features
 
 ### Type Definitions
