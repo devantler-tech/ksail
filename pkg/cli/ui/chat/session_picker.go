@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -314,7 +315,7 @@ func (m *Model) startNewSession() error {
 
 	m.sessionConfig.SessionID = ""
 
-	session, err := m.client.CreateSession(m.sessionConfig)
+	session, err := m.client.CreateSession(context.Background(), m.sessionConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create new session: %w", err)
 	}
@@ -374,12 +375,12 @@ func (m *Model) resumeOrCreateSession(metadata *SessionMetadata) bool {
 		OnPermissionRequest: m.sessionConfig.OnPermissionRequest,
 	}
 
-	session, err := m.client.ResumeSessionWithOptions(metadata.ID, resumeConfig)
+	session, err := m.client.ResumeSessionWithOptions(context.Background(), metadata.ID, resumeConfig)
 	if err != nil {
 		// If resume fails, try creating a new session with the same ID
 		m.sessionConfig.SessionID = metadata.ID
 
-		session, err = m.client.CreateSession(m.sessionConfig)
+		session, err = m.client.CreateSession(context.Background(), m.sessionConfig)
 		if err != nil {
 			m.err = fmt.Errorf("failed to resume session: %w", err)
 
@@ -394,7 +395,7 @@ func (m *Model) resumeOrCreateSession(metadata *SessionMetadata) bool {
 
 // loadSessionMessages loads and renders messages from a resumed session.
 func (m *Model) loadSessionMessages(metadata *SessionMetadata) {
-	events, err := m.session.GetMessages()
+	events, err := m.session.GetMessages(context.Background())
 	if err != nil {
 		m.messages = []message{}
 	} else {

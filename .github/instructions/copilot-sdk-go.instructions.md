@@ -11,6 +11,7 @@ name: "GitHub Copilot SDK Go Instructions"
 - Requires GitHub Copilot CLI installed and in PATH
 - Uses goroutines and channels for concurrent operations
 - No external dependencies beyond the standard library
+- **BREAKING CHANGE (v0.1.20+)**: All client and session methods require `context.Context` as the first parameter
 
 ## Installation
 
@@ -25,7 +26,10 @@ go get github.com/github/copilot-sdk/go
 ### Basic Client Setup
 
 ```go
-import "github.com/github/copilot-sdk/go"
+import (
+    "context"
+    copilot "github.com/github/copilot-sdk/go"
+)
 
 client := copilot.NewClient(nil)
 if err := client.Start(); err != nil {
@@ -71,7 +75,8 @@ Use `ForceStop()` when `Stop()` takes too long.
 Use `SessionConfig` for configuration:
 
 ```go
-session, err := client.CreateSession(&copilot.SessionConfig{
+ctx := context.Background() // or use context from parent operation
+session, err := client.CreateSession(ctx, &copilot.SessionConfig{
     Model: "gpt-5",
     Streaming: true,
     Tools: []copilot.Tool{...},
@@ -104,19 +109,20 @@ if err != nil {
 ### Resuming Sessions
 
 ```go
-session, err := client.ResumeSession("session-id")
+ctx := context.Background()
+session, err := client.ResumeSession(ctx, "session-id")
 // Or with options:
-session, err := client.ResumeSessionWithOptions("session-id", &copilot.ResumeSessionConfig{ ... })
+session, err := client.ResumeSessionWithOptions(ctx, "session-id", &copilot.ResumeSessionConfig{ ... })
 ```
 
 ### Session Operations
 
 - `session.SessionID` - Get session identifier (string)
-- `session.Send(copilot.MessageOptions{Prompt: "...", Attachments: []copilot.Attachment{...}})` - Send message, returns (messageID string, error)
-- `session.SendAndWait(options, timeout)` - Send and wait for idle, returns (\*SessionEvent, error)
-- `session.Abort()` - Abort current processing, returns error
-- `session.GetMessages()` - Get all events/messages, returns ([]SessionEvent, error)
-- `session.Destroy()` - Clean up session, returns error
+- `session.Send(ctx, copilot.MessageOptions{Prompt: "...", Attachments: []copilot.Attachment{...}})` - Send message, returns (messageID string, error)
+- `session.SendAndWait(ctx, options, timeout)` - Send and wait for idle, returns (\*SessionEvent, error)
+- `session.Abort(ctx)` - Abort current processing, returns error
+- `session.GetMessages(ctx)` - Get all events/messages, returns ([]SessionEvent, error)
+- `session.Destroy()` - Clean up session, returns error (does not require context)
 
 ## Event Handling
 
@@ -137,7 +143,7 @@ unsubscribe := session.On(func(evt copilot.SessionEvent) {
 })
 defer unsubscribe()
 
-session.Send(copilot.MessageOptions{Prompt: "..."})
+session.Send(context.Background(), copilot.MessageOptions{Prompt: "..."})
 <-done
 ```
 
@@ -189,7 +195,8 @@ session.On(func(evt copilot.SessionEvent) {
 Set `Streaming: true` in SessionConfig:
 
 ```go
-session, err := client.CreateSession(&copilot.SessionConfig{
+ctx := context.Background()
+session, err := client.CreateSession(ctx, &copilot.SessionConfig{
     Model: "gpt-5",
     Streaming: true,
 })
@@ -231,7 +238,7 @@ session.On(func(evt copilot.SessionEvent) {
     }
 })
 
-session.Send(copilot.MessageOptions{Prompt: "Tell me a story"})
+session.Send(context.Background(), copilot.MessageOptions{Prompt: "Tell me a story"})
 <-done
 ```
 
@@ -242,7 +249,8 @@ Note: Final events (`AssistantMessage`, `AssistantReasoning`) are ALWAYS sent re
 ### Defining Tools
 
 ```go
-session, err := client.CreateSession(&copilot.SessionConfig{
+ctx := context.Background()
+session, err := client.CreateSession(ctx, &copilot.SessionConfig{
     Model: "gpt-5",
     Tools: []copilot.Tool{
         {
@@ -299,7 +307,8 @@ When Copilot invokes a tool, the client automatically:
 ### Append Mode (Default - Preserves Guardrails)
 
 ```go
-session, err := client.CreateSession(&copilot.SessionConfig{
+ctx := context.Background()
+session, err := client.CreateSession(ctx, &copilot.SessionConfig{
     Model: "gpt-5",
     SystemMessage: &copilot.SystemMessageConfig{
         Mode: "append",
@@ -316,7 +325,8 @@ session, err := client.CreateSession(&copilot.SessionConfig{
 ### Replace Mode (Full Control - Removes Guardrails)
 
 ```go
-session, err := client.CreateSession(&copilot.SessionConfig{
+ctx := context.Background()
+session, err := client.CreateSession(ctx, &copilot.SessionConfig{
     Model: "gpt-5",
     SystemMessage: &copilot.SystemMessageConfig{
         Mode:    "replace",
@@ -330,7 +340,8 @@ session, err := client.CreateSession(&copilot.SessionConfig{
 Attach files to messages using `Attachment`:
 
 ```go
-messageID, err := session.Send(copilot.MessageOptions{
+ctx := context.Background()
+messageID, err := session.Send(ctx, copilot.MessageOptions{
     Prompt: "Analyze this file",
     Attachments: []copilot.Attachment{
         {
@@ -350,7 +361,8 @@ Use the `Mode` field in `MessageOptions`:
 - `"immediate"` - Process message immediately
 
 ```go
-session.Send(copilot.MessageOptions{
+ctx := context.Background()
+session.Send(ctx, copilot.MessageOptions{
     Prompt: "...",
     Mode:   "enqueue",
 })
@@ -361,11 +373,12 @@ session.Send(copilot.MessageOptions{
 Sessions are independent and can run concurrently:
 
 ```go
-session1, _ := client.CreateSession(&copilot.SessionConfig{Model: "gpt-5"})
-session2, _ := client.CreateSession(&copilot.SessionConfig{Model: "claude-sonnet-4.5"})
+ctx := context.Background()
+session1, _ := client.CreateSession(ctx, &copilot.SessionConfig{Model: "gpt-5"})
+session2, _ := client.CreateSession(ctx, &copilot.SessionConfig{Model: "claude-sonnet-4.5"})
 
-session1.Send(copilot.MessageOptions{Prompt: "Hello from session 1"})
-session2.Send(copilot.MessageOptions{Prompt: "Hello from session 2"})
+session1.Send(ctx, copilot.MessageOptions{Prompt: "Hello from session 1"})
+session2.Send(ctx, copilot.MessageOptions{Prompt: "Hello from session 2"})
 ```
 
 ## Bring Your Own Key (BYOK)
@@ -373,7 +386,8 @@ session2.Send(copilot.MessageOptions{Prompt: "Hello from session 2"})
 Use custom API providers via `ProviderConfig`:
 
 ```go
-session, err := client.CreateSession(&copilot.SessionConfig{
+ctx := context.Background()
+session, err := client.CreateSession(ctx, &copilot.SessionConfig{
     Provider: &copilot.ProviderConfig{
         Type:    "openai",
         BaseURL: "https://api.openai.com/v1",
@@ -396,12 +410,13 @@ state := client.GetState()
 ### Standard Exception Handling
 
 ```go
-session, err := client.CreateSession(&copilot.SessionConfig{})
+ctx := context.Background()
+session, err := client.CreateSession(ctx, &copilot.SessionConfig{})
 if err != nil {
     log.Fatalf("Failed to create session: %v", err)
 }
 
-_, err = session.Send(copilot.MessageOptions{Prompt: "Hello"})
+_, err = session.Send(ctx, copilot.MessageOptions{Prompt: "Hello"})
 if err != nil {
     log.Printf("Failed to send: %v", err)
 }
@@ -504,7 +519,8 @@ if err := client.Start(); err != nil {
 }
 defer client.Stop()
 
-session, err := client.CreateSession(&copilot.SessionConfig{Model: "gpt-5"})
+ctx := context.Background()
+session, err := client.CreateSession(ctx, &copilot.SessionConfig{Model: "gpt-5"})
 if err != nil {
     log.Fatal(err)
 }
@@ -520,14 +536,15 @@ session.On(func(evt copilot.SessionEvent) {
     }
 })
 
-session.Send(copilot.MessageOptions{Prompt: "What is 2+2?"})
+session.Send(ctx, copilot.MessageOptions{Prompt: "What is 2+2?"})
 <-done
 ```
 
 ### Multi-Turn Conversation
 
 ```go
-session, _ := client.CreateSession(nil)
+ctx := context.Background()
+session, _ := client.CreateSession(ctx, nil)
 defer session.Destroy()
 
 sendAndWait := func(prompt string) error {
@@ -550,7 +567,7 @@ sendAndWait := func(prompt string) error {
     })
     defer unsubscribe()
 
-    if _, err := session.Send(copilot.MessageOptions{Prompt: prompt}); err != nil {
+    if _, err := session.Send(ctx, copilot.MessageOptions{Prompt: prompt}); err != nil {
         return err
     }
     <-done
@@ -565,7 +582,8 @@ sendAndWait("What is its population?")
 
 ```go
 // Use built-in SendAndWait for simpler synchronous interaction
-response, err := session.SendAndWait(copilot.MessageOptions{
+ctx := context.Background()
+response, err := session.SendAndWait(ctx, copilot.MessageOptions{
     Prompt: "What is 2+2?",
 }, 0) // 0 uses default 60s timeout
 
@@ -587,7 +605,8 @@ type UserInfo struct {
     Role  string `json:"role"`
 }
 
-session, _ := client.CreateSession(&copilot.SessionConfig{
+ctx := context.Background()
+session, _ := client.CreateSession(ctx, &copilot.SessionConfig{
     Tools: []copilot.Tool{
         {
             Name:        "get_user",

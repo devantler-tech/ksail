@@ -2,6 +2,7 @@ package chat
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -101,7 +102,7 @@ func ensureSessionsDir() (string, error) {
 // Sessions are sorted by ModifiedTime (most recent first).
 func ListSessions(client *copilot.Client) ([]SessionMetadata, error) {
 	// Get sessions from SDK
-	sdkSessions, err := client.ListSessions()
+	sdkSessions, err := client.ListSessions(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to list SDK sessions: %w", err)
 	}
@@ -252,7 +253,7 @@ func DeleteSession(
 	}
 
 	// Delete from SDK first
-	err = client.DeleteSession(sessionID)
+	err = client.DeleteSession(context.Background(), sessionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete SDK session: %w", err)
 	}
@@ -294,7 +295,7 @@ func deleteLocalSession(
 // Returns an error if sync fails (caller should display as non-blocking toast).
 func SyncSessionMetadata(client *copilot.Client) error {
 	// Get all sessions from SDK
-	sdkSessions, err := client.ListSessions()
+	sdkSessions, err := client.ListSessions(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to list SDK sessions: %w", err)
 	}
