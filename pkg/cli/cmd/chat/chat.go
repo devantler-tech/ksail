@@ -77,7 +77,7 @@ func startCopilotClient() (*copilot.Client, error) {
 		LogLevel: "error",
 	})
 
-	err := client.Start()
+	err := client.Start(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to start Copilot client: %w\n\n"+
@@ -93,7 +93,7 @@ func startCopilotClient() (*copilot.Client, error) {
 
 // validateCopilotAuth checks authentication and returns the login name.
 func validateCopilotAuth(client *copilot.Client) (string, error) {
-	authStatus, err := client.GetAuthStatus()
+	authStatus, err := client.GetAuthStatus(context.Background())
 	if err != nil {
 		return "", fmt.Errorf("failed to check authentication: %w", err)
 	}

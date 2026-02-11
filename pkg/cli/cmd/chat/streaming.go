@@ -118,7 +118,7 @@ func sendChatWithStreaming(
 	})
 	defer unsubscribe()
 
-	_, err := session.Send(copilot.MessageOptions{Prompt: input})
+	_, err := session.Send(context.Background(), copilot.MessageOptions{Prompt: input})
 	if err != nil {
 		return fmt.Errorf("failed to send chat message: %w", err)
 	}
@@ -126,11 +126,11 @@ func sendChatWithStreaming(
 	select {
 	case <-state.done:
 	case <-ctx.Done():
-		_ = session.Abort()
+		_ = session.Abort(context.Background())
 
 		return fmt.Errorf("streaming cancelled: %w", ctx.Err())
 	case <-time.After(timeout):
-		_ = session.Abort()
+		_ = session.Abort(context.Background())
 
 		return fmt.Errorf("%w after %v", errResponseTimeout, timeout)
 	}
@@ -155,14 +155,14 @@ func sendChatWithoutStreaming(
 	resultChan := make(chan result, 1)
 
 	go func() {
-		response, err := session.SendAndWait(copilot.MessageOptions{Prompt: input}, timeout)
+		response, err := session.SendAndWait(context.Background(), copilot.MessageOptions{Prompt: input}, timeout)
 		resultChan <- result{response: response, err: err}
 	}()
 
 	select {
 	case <-ctx.Done():
 		// Abort the in-flight Copilot request when the context is cancelled.
-		_ = session.Abort()
+		_ = session.Abort(context.Background())
 
 		return fmt.Errorf("chat cancelled: %w", ctx.Err())
 	case chatResult := <-resultChan:

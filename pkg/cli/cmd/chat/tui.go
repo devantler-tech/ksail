@@ -56,7 +56,7 @@ func runTUIChat(
 	timeout time.Duration,
 	rootCmd *cobra.Command,
 ) error {
-	allModels, err := client.ListModels()
+	allModels, err := client.ListModels(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to list models: %w", err)
 	}
