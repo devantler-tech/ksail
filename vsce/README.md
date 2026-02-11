@@ -48,7 +48,7 @@ The **Init** and **Create** commands feature multi-step wizards with:
 
 - Distribution selection (Vanilla/K3s/Talos)
 - Provider selection (Docker/Hetzner)
-- Component configuration (CNI, CSI, GitOps engine, etc.)
+- Component configuration (CNI, CSI, LoadBalancer, GitOps engine, etc.)
 - Output path selection for generated files
 
 ### Tree View
