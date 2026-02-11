@@ -40,35 +40,53 @@ const (
 		"Do not execute tools or make changes - only describe what you would do:\n\n"
 )
 
-// AgentModeRef is a thread-safe reference to the agent mode state.
-// It allows tool handlers to check the current mode at execution time.
+// ModeRef is a thread-safe reference to a boolean mode state.
+// It allows tool handlers to check and update mode state at execution time.
 // The enabled field is unexported to ensure all access goes through mutex-protected methods.
-type AgentModeRef struct {
+type ModeRef struct {
 	mu      sync.RWMutex
 	enabled bool
 }
 
-// NewAgentModeRef creates a new AgentModeRef with the given initial state.
-func NewAgentModeRef(initial bool) *AgentModeRef {
-	return &AgentModeRef{
+// NewModeRef creates a new ModeRef with the given initial state.
+func NewModeRef(initial bool) *ModeRef {
+	return &ModeRef{
 		enabled: initial,
 	}
 }
 
-// IsEnabled returns true if agent mode is enabled (tools can execute).
-func (r *AgentModeRef) IsEnabled() bool {
+// IsEnabled returns true if the mode is enabled.
+func (r *ModeRef) IsEnabled() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	return r.enabled
 }
 
-// SetEnabled updates the agent mode state.
-func (r *AgentModeRef) SetEnabled(enabled bool) {
+// SetEnabled updates the mode state.
+func (r *ModeRef) SetEnabled(enabled bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.enabled = enabled
+}
+
+// AgentModeRef is a thread-safe reference to the agent mode state.
+// When enabled, tools can execute; when disabled (plan mode), tools are blocked.
+type AgentModeRef = ModeRef
+
+// NewAgentModeRef creates a new AgentModeRef with the given initial state.
+func NewAgentModeRef(initial bool) *AgentModeRef {
+	return NewModeRef(initial)
+}
+
+// YoloModeRef is a thread-safe reference to the YOLO mode state.
+// When enabled, write operations are auto-approved without prompting the user.
+type YoloModeRef = ModeRef
+
+// NewYoloModeRef creates a new YoloModeRef with the given initial state.
+func NewYoloModeRef(initial bool) *YoloModeRef {
+	return NewModeRef(initial)
 }
 
 // message represents a single message in the chat history.
@@ -170,6 +188,10 @@ type Model struct {
 	agentMode    bool          // true = agent (execute), false = plan (describe only)
 	agentModeRef *AgentModeRef // shared reference for tool handlers to check current mode
 
+	// YOLO mode (auto-approve write operations without prompting)
+	yoloMode    bool         // true = auto-approve, false = prompt for confirmation
+	yoloModeRef *YoloModeRef // shared reference for tool handlers to check YOLO state
+
 	// Channel for async streaming events from Copilot
 	eventChan chan tea.Msg
 }
@@ -192,6 +214,7 @@ func New(
 		timeout,
 		nil,
 		nil,
+		nil,
 	)
 }
 
@@ -199,6 +222,7 @@ func New(
 // If eventChan is nil, a new channel is created. This allows external code to send events
 // to the TUI (e.g., permission requests).
 // If agentModeRef is provided, it will be used to synchronize agent mode state with tool handlers.
+// If yoloModeRef is provided, it will be used to synchronize YOLO mode state with tool handlers.
 func NewWithEventChannel(
 	session *copilot.Session,
 	client *copilot.Client,
@@ -208,6 +232,7 @@ func NewWithEventChannel(
 	timeout time.Duration,
 	eventChan chan tea.Msg,
 	agentModeRef *AgentModeRef,
+	yoloModeRef *YoloModeRef,
 ) *Model {
 	textArea := createTextArea()
 	viewPort := createViewport()
@@ -251,6 +276,7 @@ func NewWithEventChannel(
 		currentModel:     currentModel,
 		agentMode:        true,         // Default to agent mode
 		agentModeRef:     agentModeRef, // Store reference for tool handlers
+		yoloModeRef:      yoloModeRef,  // Store reference for YOLO mode
 	}
 }
 
@@ -629,6 +655,7 @@ func Run(
 		timeout,
 		nil,
 		nil,
+		nil,
 	)
 }
 
@@ -654,6 +681,7 @@ func RunWithEventChannel(
 		timeout,
 		eventChan,
 		nil,
+		nil,
 	)
 }
 
@@ -669,6 +697,7 @@ func RunWithEventChannelAndModeRef(
 	timeout time.Duration,
 	eventChan chan tea.Msg,
 	agentModeRef *AgentModeRef,
+	yoloModeRef *YoloModeRef,
 ) error {
 	model := NewWithEventChannel(
 		session,
@@ -679,12 +708,18 @@ func RunWithEventChannelAndModeRef(
 		timeout,
 		eventChan,
 		agentModeRef,
+		yoloModeRef,
 	)
 	model.ctx = ctx
 
 	// Ensure agentModeRef is initialized with the model's initial state
 	if agentModeRef != nil {
 		agentModeRef.SetEnabled(model.agentMode)
+	}
+
+	// Ensure yoloModeRef is initialized with the model's initial state
+	if yoloModeRef != nil {
+		yoloModeRef.SetEnabled(model.yoloMode)
 	}
 
 	program := tea.NewProgram(

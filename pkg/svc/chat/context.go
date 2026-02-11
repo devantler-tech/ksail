@@ -142,8 +142,12 @@ func FindKSailExecutable() string {
 const ksailInstructions = `<instructions>
 - Help users configure and manage Kubernetes clusters using KSail
 - When suggesting commands, explain what they do before running them
-- For write operations (creating clusters, applying workloads, deleting resources), the user will be prompted to confirm
-- Prefer KSail commands over raw kubectl when KSail provides equivalent functionality
+- For write operations (creating clusters, applying workloads, deleting resources),
+  the user will be prompted to confirm unless YOLO mode is enabled (Ctrl+Y in TUI)
+- ALWAYS use the registered KSail tools (e.g., cluster_write, cluster_read, workload_apply)
+  instead of running ksail commands through bash, shell, or terminal tools.
+  The registered tools handle confirmation prompts and force flags automatically.
+  Running ksail commands through bash will block on interactive prompts.
 - Reference the documentation when helping with ksail.yaml configuration
 - Use the troubleshooting tips for diagnosing issues
 - Be concise but thorough in explanations
