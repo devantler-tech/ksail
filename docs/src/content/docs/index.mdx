@@ -70,7 +70,10 @@ ksail cluster create
 # 4. Deploy workloads
 ksail workload apply -k ./k8s
 
-# 5. Connect with K9s
+# 5. Update cluster configuration (modify ksail.yaml, then run)
+ksail cluster update
+
+# 6. Connect with K9s
 ksail cluster connect
 ``````
 
