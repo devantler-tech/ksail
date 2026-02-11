@@ -91,7 +91,7 @@ func buildPlanModeBlockedResult(toolName string) (copilot.ToolResult, error) {
 // awaitToolPermission sends a permission request to the TUI and waits for user response.
 // Returns the approval state and an optional denial/timeout ToolResult.
 func awaitToolPermission(
-	eventChan chan tea.Msg,
+	eventChan chan<- tea.Msg,
 	toolName string,
 	invocation copilot.ToolInvocation,
 ) (bool, *copilot.ToolResult) {
