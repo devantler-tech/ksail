@@ -43,7 +43,7 @@ spec:
     vanilla:
       mirrorsDir: "${MIRRORS_DIR:-mirrors}"
     talos:
-      config: "${TALOS_CONFIG_PATH:-~/.talos/config}"
+      config: "${TALOS_CONFIG_PATH:-${HOME}/.talos/config}"
     hetzner:
       sshKeyName: "${HCLOUD_SSH_KEY}"
   workload:
