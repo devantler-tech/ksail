@@ -244,9 +244,10 @@ func executeModeCheck(
 
 		return result, true, nil
 	case chatui.AskMode:
-		// In ask mode, block write tools but allow read-only tools
+		// In ask mode, only execute tools that are explicitly known and do not require permission.
+		// Unknown tools and tools requiring permission are blocked by default.
 		metadata, metaExists := toolMetadata[toolName]
-		if metaExists && metadata.RequiresPermission {
+		if !metaExists || metadata.RequiresPermission {
 			result := buildAskModeBlockedResult(toolName)
 
 			return result, true, nil
