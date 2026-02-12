@@ -349,9 +349,9 @@ func NewModel(params Params) *Model {
 		historyIndex:     -1,
 		availableModels:  params.Models,
 		currentModel:     params.CurrentModel,
-		chatMode:        AgentMode,          // Default to agent mode
-		chatModeRef:     params.ChatModeRef, // Store reference for tool handlers
-		yoloModeRef:     params.YoloModeRef, // Store reference for YOLO mode
+		chatMode:         AgentMode,          // Default to agent mode
+		chatModeRef:      params.ChatModeRef, // Store reference for tool handlers
+		yoloModeRef:      params.YoloModeRef, // Store reference for YOLO mode
 	}
 }
 
