@@ -15,9 +15,6 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-// ErrCRDTimeout is returned when MetalLB CRDs are not available within the expected time.
-var ErrCRDTimeout = fmt.Errorf("timed out waiting for metallb CRDs after %s", crdPollTimeout)
-
 const (
 	metallbRepoName  = "metallb"
 	metallbRepoURL   = "https://metallb.github.io/metallb"
@@ -156,7 +153,9 @@ func (m *Installer) configureMetalLB(ctx context.Context) error {
 }
 
 // waitForCRDs polls the MetalLB IPAddressPool CRD until it is available.
-func (m *Installer) waitForCRDs(ctx context.Context, client *dynamic.DynamicClient) error {
+// Only CRD-not-yet-registered errors (404 Not Found) are retried; other
+// errors (RBAC, network, auth) cause an immediate failure.
+func (m *Installer) waitForCRDs(ctx context.Context, client dynamic.Interface) error {
 	ipAddressPoolGVR := schema.GroupVersionResource{
 		Group:    "metallb.io",
 		Version:  "v1beta1",
@@ -168,26 +167,41 @@ func (m *Installer) waitForCRDs(ctx context.Context, client *dynamic.DynamicClie
 	ticker := time.NewTicker(crdPollInterval)
 	defer ticker.Stop()
 
+	var lastErr error
+
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled waiting for metallb CRDs: %w", ctx.Err())
 		case <-deadline:
-			return ErrCRDTimeout
+			return fmt.Errorf(
+				"timed out waiting for metallb CRDs after %s: %w",
+				crdPollTimeout, lastErr,
+			)
 		case <-ticker.C:
 			_, err := client.Resource(ipAddressPoolGVR).Namespace(metallbNamespace).
 				List(ctx, metav1.ListOptions{Limit: 1})
 			if err == nil {
 				return nil
 			}
+
+			// Only retry on 404 (CRD not yet registered).
+			// Fail immediately on unexpected errors (RBAC, network, auth).
+			if !apierrors.IsNotFound(err) {
+				return fmt.Errorf("unexpected error checking metallb CRDs: %w", err)
+			}
+
+			lastErr = err
 		}
 	}
 }
 
-// ensureIPAddressPool creates or updates the default IPAddressPool.
+// ensureIPAddressPool applies the default IPAddressPool using Server-Side Apply.
+// Only fields owned by the "ksail" field manager are managed; user customizations
+// to other fields are preserved.
 func (m *Installer) ensureIPAddressPool(
 	ctx context.Context,
-	client *dynamic.DynamicClient,
+	client dynamic.Interface,
 ) error {
 	gvr := schema.GroupVersionResource{
 		Group:    "metallb.io",
@@ -211,38 +225,21 @@ func (m *Installer) ensureIPAddressPool(
 		},
 	}
 
-	existing, err := client.Resource(gvr).Namespace(metallbNamespace).
-		Get(ctx, "default-pool", metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, err = client.Resource(gvr).Namespace(metallbNamespace).
-			Create(ctx, pool, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to create IPAddressPool: %w", err)
-		}
-
-		return nil
-	}
-
+	_, err := client.Resource(gvr).Namespace(metallbNamespace).
+		Apply(ctx, "default-pool", pool, metav1.ApplyOptions{FieldManager: "ksail"})
 	if err != nil {
-		return fmt.Errorf("failed to get IPAddressPool: %w", err)
-	}
-
-	// Update existing resource
-	pool.SetResourceVersion(existing.GetResourceVersion())
-
-	_, err = client.Resource(gvr).Namespace(metallbNamespace).
-		Update(ctx, pool, metav1.UpdateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to update IPAddressPool: %w", err)
+		return fmt.Errorf("failed to apply IPAddressPool: %w", err)
 	}
 
 	return nil
 }
 
-// ensureL2Advertisement creates or updates the default L2Advertisement.
+// ensureL2Advertisement applies the default L2Advertisement using Server-Side Apply.
+// Only fields owned by the "ksail" field manager are managed; user customizations
+// to other fields are preserved.
 func (m *Installer) ensureL2Advertisement(
 	ctx context.Context,
-	client *dynamic.DynamicClient,
+	client dynamic.Interface,
 ) error {
 	gvr := schema.GroupVersionResource{
 		Group:    "metallb.io",
@@ -266,29 +263,10 @@ func (m *Installer) ensureL2Advertisement(
 		},
 	}
 
-	existing, err := client.Resource(gvr).Namespace(metallbNamespace).
-		Get(ctx, "default-l2-advert", metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, err = client.Resource(gvr).Namespace(metallbNamespace).
-			Create(ctx, advert, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to create L2Advertisement: %w", err)
-		}
-
-		return nil
-	}
-
+	_, err := client.Resource(gvr).Namespace(metallbNamespace).
+		Apply(ctx, "default-l2-advert", advert, metav1.ApplyOptions{FieldManager: "ksail"})
 	if err != nil {
-		return fmt.Errorf("failed to get L2Advertisement: %w", err)
-	}
-
-	// Update existing resource
-	advert.SetResourceVersion(existing.GetResourceVersion())
-
-	_, err = client.Resource(gvr).Namespace(metallbNamespace).
-		Update(ctx, advert, metav1.UpdateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to update L2Advertisement: %w", err)
+		return fmt.Errorf("failed to apply L2Advertisement: %w", err)
 	}
 
 	return nil

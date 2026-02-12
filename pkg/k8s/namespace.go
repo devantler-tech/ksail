@@ -23,10 +23,10 @@ func pssLabels() map[string]string {
 }
 
 // EnsurePrivilegedNamespace creates the given namespace with PodSecurity
-// Standard "privileged" labels, or patches an existing namespace to add them.
+// Standard "privileged" labels, or updates an existing namespace to add them.
 func EnsurePrivilegedNamespace(
 	ctx context.Context,
-	clientset *kubernetes.Clientset,
+	clientset kubernetes.Interface,
 	name string,
 ) error {
 	namespace, err := clientset.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})

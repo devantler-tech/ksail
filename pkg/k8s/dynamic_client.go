@@ -9,7 +9,7 @@ import (
 // NewDynamicClient creates a Kubernetes dynamic client from kubeconfig path and context.
 // This is a convenience function that combines BuildRESTConfig and dynamic client creation.
 // Use this when working with unstructured resources or custom resource types.
-func NewDynamicClient(kubeconfig, context string) (*dynamic.DynamicClient, error) {
+func NewDynamicClient(kubeconfig, context string) (dynamic.Interface, error) {
 	restConfig, err := BuildRESTConfig(kubeconfig, context)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build rest config: %w", err)

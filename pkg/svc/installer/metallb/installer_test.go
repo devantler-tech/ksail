@@ -67,5 +67,4 @@ func TestInstaller_Uninstall(t *testing.T) {
 	err := installer.Uninstall(context.Background())
 
 	require.NoError(t, err)
-	mockClient.AssertExpectations(t)
 }

@@ -301,7 +301,7 @@ func (c *Installer) ensurePrivilegedNamespaces(ctx context.Context) error {
 // or update a namespace with PSS privileged labels.
 func (c *Installer) ensurePrivilegedNamespace(
 	ctx context.Context,
-	clientset *kubernetes.Clientset,
+	clientset kubernetes.Interface,
 	name string,
 ) error {
 	err := k8s.EnsurePrivilegedNamespace(ctx, clientset, name)
