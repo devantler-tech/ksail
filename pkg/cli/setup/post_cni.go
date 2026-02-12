@@ -179,7 +179,7 @@ func InstallPostCNIComponents(
 		}
 	}
 
-	err := installComponentsInParallel(ctx, cmd, clusterCfg, factories, tmr, reqs)
+	err := installComponentsInPhases(ctx, cmd, clusterCfg, factories, tmr, reqs)
 	if err != nil {
 		return err
 	}
@@ -194,7 +194,7 @@ func InstallPostCNIComponents(
 	)
 }
 
-func installComponentsInParallel(
+func installComponentsInPhases(
 	ctx context.Context,
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
@@ -231,7 +231,7 @@ func installComponentsInParallel(
 	gitopsTasks := buildGitOpsTasks(clusterCfg, factories, reqs)
 	if len(gitopsTasks) > 0 {
 		gitopsGroup := notify.NewProgressGroup(
-			"Installing GitOps engine",
+			"Installing GitOps engines",
 			"📦",
 			writer,
 			notify.WithLabels(labels),
@@ -240,7 +240,7 @@ func installComponentsInParallel(
 
 		err := gitopsGroup.Run(ctx, gitopsTasks...)
 		if err != nil {
-			return fmt.Errorf("failed to install GitOps engine: %w", err)
+			return fmt.Errorf("failed to install GitOps engines: %w", err)
 		}
 	}
 
