@@ -132,15 +132,27 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          path: ksail
+          fetch-depth: 2
 
       - name: 📤 Upload completion spec to release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
-          files: ksail/completions/ksail.ts
+          files: completions/ksail.ts
           draft: true
 
+      - name: 🔍 Check if spec has changed
+        id: diff
+        run: |
+          if git diff --quiet HEAD~1 -- completions/ksail.ts; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Completion spec is unchanged — skipping publish"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Completion spec has changed — will publish"
+          fi
+
       - name: 🍴 Ensure fork of withfig/autocomplete exists
+        if: steps.diff.outputs.changed == 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           github-token: ${{ secrets.AUTOCOMPLETE_PAT }}
@@ -182,6 +194,7 @@ jobs:
             }
 
       - name: 📄 Checkout withfig/autocomplete
+        if: steps.diff.outputs.changed == 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: withfig/autocomplete
@@ -189,9 +202,11 @@ jobs:
           token: ${{ secrets.AUTOCOMPLETE_PAT }}
 
       - name: 🔮 Copy completion spec
-        run: cp ksail/completions/ksail.ts autocomplete/src/ksail.ts
+        if: steps.diff.outputs.changed == 'true'
+        run: cp completions/ksail.ts autocomplete/src/ksail.ts
 
       - name: 📤 Create PR to withfig/autocomplete
+        if: steps.diff.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
         with:
           token: ${{ secrets.AUTOCOMPLETE_PAT }}
