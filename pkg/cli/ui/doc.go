@@ -5,6 +5,10 @@
 //   - asciiart: ASCII art rendering with color formatting for logos and graphics
 //   - errorhandler: Cobra command execution with error formatting and normalization
 //
+// Terminal utilities:
+//
+//   - SetTerminalTitle: Set the terminal window title using ANSI escape sequences
+//
 // Related packages for user interaction (located in pkg/utils):
 //
 //   - pkg/utils/notify: Formatted message display with symbols, colors, and timing information
@@ -18,6 +22,9 @@
 //
 //	// Display ASCII logo
 //	asciiart.PrintKSailLogo(os.Stdout)
+//
+//	// Set terminal title
+//	SetTerminalTitle("KSail")
 //
 //	// Track command execution time
 //	timer := timer.New()

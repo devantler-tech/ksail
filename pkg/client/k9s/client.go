@@ -4,6 +4,7 @@ import (
 	"os"
 
 	k9scmd "github.com/derailed/k9s/cmd"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -31,6 +32,9 @@ func (c *Client) CreateConnectCommand(kubeConfigPath, context string) *cobra.Com
 }
 
 func (c *Client) runK9s(kubeConfigPath, context string, args []string) error {
+	// Set terminal title to "ksail" before launching k9s
+	ui.SetTerminalTitle("ksail")
+
 	// Set up os.Args to pass flags to k9s
 	originalArgs := os.Args
 
