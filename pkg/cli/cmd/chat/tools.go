@@ -223,8 +223,10 @@ func WrapToolsWithPermissionAndModeMetadata(
 	return wrappedTools
 }
 
-// executeModeCheck checks the current chat mode and returns a result if tool execution
-// should be blocked. Returns (result, true) if blocked, (zero, false) if execution should proceed.
+// executeModeCheck checks the current chat mode and returns a result when the call
+// has been fully handled — either by blocking the tool or by executing it directly
+// (e.g. read-only tools in AskMode). Returns (result, true) if handled, (zero, false)
+// if execution should proceed through the normal agent-mode path.
 func executeModeCheck(
 	chatModeRef *chatui.ChatModeRef,
 	toolName string,

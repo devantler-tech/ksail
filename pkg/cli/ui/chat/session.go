@@ -87,9 +87,10 @@ type sessionMetadataJSON struct {
 }
 
 // legacyMessageMetadata represents the old per-message JSON format.
+// Pointer fields distinguish "absent" from zero-value during deserialization.
 type legacyMessageMetadata struct {
-	AgentMode bool     `json:"agentMode"`
-	ChatMode  ChatMode `json:"chatMode"`
+	AgentMode *bool     `json:"agentMode"`
+	ChatMode  *ChatMode `json:"chatMode"`
 }
 
 // UnmarshalJSON provides backward-compatible deserialization.
@@ -143,16 +144,17 @@ func resolveMessageChatMode(rawMsg json.RawMessage) MessageMetadata {
 		return MessageMetadata{ChatMode: AgentMode}
 	}
 
-	// If chatMode field is present and non-zero, use it; otherwise fall back to agentMode
-	switch {
-	case legacy.ChatMode != AgentMode:
-		return MessageMetadata{ChatMode: legacy.ChatMode}
-	case !legacy.AgentMode:
-		// Legacy: agentMode=false means plan mode
-		return MessageMetadata{ChatMode: PlanMode}
-	default:
-		return MessageMetadata{ChatMode: AgentMode}
+	// New format: chatMode field is explicitly present
+	if legacy.ChatMode != nil {
+		return MessageMetadata{ChatMode: *legacy.ChatMode}
 	}
+
+	// Legacy format: agentMode bool present and false means plan mode
+	if legacy.AgentMode != nil && !*legacy.AgentMode {
+		return MessageMetadata{ChatMode: PlanMode}
+	}
+
+	return MessageMetadata{ChatMode: AgentMode}
 }
 
 // errInvalidAppDir is returned when the appDir parameter is not a simple directory name.
