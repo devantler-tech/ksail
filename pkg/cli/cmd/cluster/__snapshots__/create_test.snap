@@ -30,7 +30,7 @@
 ► configuring registry mirrors in cluster
 ✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
 
-📦 Installing components...
+📦 Installing infrastructure components...
 ► csi installing
 ✔ csi installed
 ---
@@ -130,7 +130,7 @@
 ► configuring registry mirrors in cluster
 ✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
 
-📦 Installing components...
+📦 Installing infrastructure components...
 ► cert-manager installing
 ✔ cert-manager installed
 ---
@@ -174,7 +174,7 @@
 ► attaching local registry to cluster
 ✔ local registry attached to cluster
 
-📦 Installing components...
+📦 Installing GitOps engines...
 ► argocd installing
 ✔ argocd installed
 
@@ -223,7 +223,7 @@
 ► attaching local registry to cluster
 ✔ local registry attached to cluster
 
-📦 Installing components...
+📦 Installing GitOps engines...
 ► flux installing
 ✔ flux installed
 
