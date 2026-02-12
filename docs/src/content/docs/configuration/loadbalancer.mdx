@@ -13,7 +13,7 @@ LoadBalancer support varies by distribution × provider combination:
 
 | Distribution   | Docker Provider | Hetzner Provider | Default Behavior | LoadBalancer Implementation      |
 | -------------- | --------------- | ---------------- | ---------------- | -------------------------------- |
-| Vanilla (Kind) | ✅ Supported    | ❌ N/A           | Disabled         | MetalLB (when enabled)           |
+| Vanilla (Kind) | ✅ Supported    | ❌ N/A           | Disabled         | cloud-provider-kind (Docker container) |
 | K3s (K3d)      | ✅ Built-in     | ❌ N/A           | Enabled          | ServiceLB (Klipper-LB)           |
 | Talos          | ❌ Not supported¹ | ✅ Built-in    | Disabled (Docker) / Enabled (Hetzner) | hcloud-cloud-controller-manager (Hetzner only) |
 
@@ -21,7 +21,7 @@ LoadBalancer support varies by distribution × provider combination:
 
 1. **Talos on Docker**: LoadBalancer services are not currently supported. The `--load-balancer` flag is automatically set to `Disabled` for this combination, regardless of user input. MetalLB support for Talos+Docker is planned for a future release.
 2. **K3s**: Includes ServiceLB (Klipper-LB) by default, which automatically assigns LoadBalancer IPs using host ports.
-3. **Vanilla**: Requires explicit LoadBalancer installation (MetalLB). Set `--load-balancer Enabled` during cluster creation.
+3. **Vanilla**: Requires explicit LoadBalancer installation (cloud-provider-kind). Set `--load-balancer Enabled` during cluster creation. The cloud-provider-kind controller runs as a Docker container and creates additional containers to handle LoadBalancer traffic.
 4. **Talos on Hetzner**: Uses Hetzner Cloud Load Balancer via the cloud controller manager. Automatically enabled.
 
 ## Configuration Options
@@ -91,17 +91,17 @@ Services with `type: LoadBalancer` automatically provision Hetzner Cloud Load Ba
 Install LoadBalancer support even if not included by default:
 
 <Tabs>
-<TabItem label="Vanilla with MetalLB">
+<TabItem label="Vanilla with cloud-provider-kind">
 
 ```bash
-# Install MetalLB for LoadBalancer support
+# Install cloud-provider-kind for LoadBalancer support
 ksail cluster init \
   --distribution Vanilla \
   --load-balancer Enabled
 ksail cluster create
 ```
 
-MetalLB will be installed and configured to provide LoadBalancer services.
+The cloud-provider-kind controller will be started as a Docker container to provide LoadBalancer services.
 
 </TabItem>
 <TabItem label="K3s (keep default)">
@@ -194,10 +194,6 @@ metadata:
   name: my-app
   namespace: default
   annotations:
-    # MetalLB-specific annotations (Vanilla with LoadBalancer enabled)
-    metallb.universe.tf/address-pool: default
-    metallb.universe.tf/allow-shared-ip: my-app
-    
     # Hetzner Cloud LB annotations (Talos on Hetzner)
     load-balancer.hetzner.cloud/name: my-app-lb
     load-balancer.hetzner.cloud/location: nbg1
@@ -214,6 +210,8 @@ spec:
       port: 443
       targetPort: 8443
 ```
+
+**Note:** Annotations are provider-specific. Vanilla (Kind) with cloud-provider-kind and K3s with ServiceLB typically don't require annotations.
 
 </TabItem>
 <TabItem label="CLI Generation">
@@ -244,8 +242,8 @@ ksail workload describe svc my-app
 # For K3s (ServiceLB):
 ksail workload logs -n kube-system -l app=svclb-my-app
 
-# For Vanilla (MetalLB):
-ksail workload logs -n metallb-system deployment/controller
+# For Vanilla (cloud-provider-kind runs as Docker container):
+docker logs ksail-cloud-provider-kind
 
 # For Talos on Hetzner:
 ksail workload logs -n kube-system daemonset/hcloud-cloud-controller-manager
@@ -253,7 +251,7 @@ ksail workload logs -n kube-system daemonset/hcloud-cloud-controller-manager
 
 ## Updating LoadBalancer Configuration
 
-You can change LoadBalancer settings on an existing cluster using `ksail cluster update`:
+You can enable LoadBalancer on an existing cluster using `ksail cluster update`:
 
 ```bash
 # Edit ksail.yaml and change loadBalancer setting
@@ -266,14 +264,18 @@ ksail cluster update
 
 **Update behavior:**
 
-| Distribution   | Update Type | Downtime |
-| -------------- | ----------- | -------- |
-| Vanilla (Kind) | In-place    | No       |
-| K3s (K3d)      | In-place    | No       |
-| Talos (Docker) | N/A¹        | N/A      |
-| Talos (Hetzner)| In-place    | No       |
+| Distribution   | Enable LoadBalancer | Disable LoadBalancer | Downtime |
+| -------------- | ------------------- | -------------------- | -------- |
+| Vanilla (Kind) | In-place (starts cloud-provider-kind container) | Manual cleanup required¹ | No |
+| K3s (K3d)      | N/A (enabled by default) | Requires recreation² | N/A |
+| Talos (Docker) | N/A (not supported) | N/A (always disabled) | N/A |
+| Talos (Hetzner)| N/A (enabled by default) | Not recommended³ | N/A |
 
-**¹ Note:** LoadBalancer cannot be changed for Talos+Docker because it's always `Disabled`.
+**Notes:**
+
+1. **Vanilla disable**: Currently, disabling LoadBalancer on Vanilla requires manual cleanup (stopping the cloud-provider-kind container). Use `docker stop ksail-cloud-provider-kind` and `docker rm ksail-cloud-provider-kind`.
+2. **K3s disable**: ServiceLB is controlled by K3s server flags at creation time. To disable, you must recreate the cluster with `--load-balancer Disabled`.
+3. **Talos on Hetzner**: Disabling LoadBalancer is not recommended as it may interfere with cloud provider integration.
 
 ## Troubleshooting
 

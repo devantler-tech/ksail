@@ -30,7 +30,7 @@ Setting up and operating Kubernetes clusters often requires juggling multiple CL
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
 - ☸️ **Simple Clusters** — Spin up Vanilla, K3s, or Talos clusters with one command. Same workflow across distributions.
-- 🌐 **LoadBalancer Support** — Built-in LoadBalancer services via MetalLB, ServiceLB, or cloud provider integration.
+- 🌐 **LoadBalancer Support** — Built-in LoadBalancer services via cloud-provider integrations (e.g., cloud-provider-kind for Vanilla, ServiceLB for K3s). MetalLB integration for Talos×Docker is planned.
 - 📥 **Mirror Registries** — Avoid rate limits, and store images once. Same mirrors used by different clusters.
 - 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
 - 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.
