@@ -249,7 +249,9 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
-			timer.Stop()
+			if !timer.Stop() {
+				<-timer.C
+			}
 
 			return fmt.Errorf("registry image pull cancelled: %w", ctx.Err())
 		case <-timer.C:
