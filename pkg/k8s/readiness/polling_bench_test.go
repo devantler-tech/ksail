@@ -18,8 +18,8 @@ func createDeployments(count int, namespace string) ([]runtime.Object, []readine
 	objects := make([]runtime.Object, 0, count)
 	checks := make([]readiness.Check, 0, count)
 
-	for j := range count {
-		name := fmt.Sprintf("test-deployment-%d", j)
+	for i := range count {
+		name := fmt.Sprintf("test-deployment-%d", i)
 		deployment := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
@@ -48,8 +48,8 @@ func createDaemonSets(count int, namespace string) ([]runtime.Object, []readines
 	objects := make([]runtime.Object, 0, count)
 	checks := make([]readiness.Check, 0, count)
 
-	for j := range count {
-		name := fmt.Sprintf("test-daemonset-%d", j)
+	for i := range count {
+		name := fmt.Sprintf("test-daemonset-%d", i)
 		daemonset := &appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
