@@ -62,8 +62,6 @@ func TestNewInstaller(t *testing.T) {
 }
 
 func TestInstaller_Install(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name         string
 		distribution v1alpha1.Distribution
@@ -88,7 +86,9 @@ func TestInstaller_Install(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
+			if testCase.expectNoOp {
+				t.Parallel()
+			}
 
 			installer := localpathstorageinstaller.NewInstaller(
 				"/path/to/kubeconfig",
@@ -98,10 +98,19 @@ func TestInstaller_Install(t *testing.T) {
 			)
 
 			ctx := context.Background()
+
+			// For non-no-op distributions, force a predictable failure by clearing PATH
+			// so any external kubectl invocation will fail deterministically.
+			if !testCase.expectNoOp {
+				t.Setenv("PATH", "")
+			}
+
 			err := installer.Install(ctx)
 
 			if testCase.expectNoOp {
-				assert.NoError(t, err, "Install should succeed as no-op")
+				require.NoError(t, err, "Install should succeed as no-op")
+			} else {
+				require.Error(t, err, "Install should fail when kubectl is unavailable")
 			}
 		})
 	}
