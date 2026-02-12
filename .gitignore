@@ -95,4 +95,3 @@ bin/
 # actionlint binary
 actionlint
 /ksail
-.github/scripts/generate-schema/generate-schema

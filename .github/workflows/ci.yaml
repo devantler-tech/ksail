@@ -52,7 +52,7 @@ jobs:
             schema:
               - 'pkg/apis/**/*.go'
               - 'go.mod'
-              - '.github/scripts/generate-schema*'
+              - 'schemas/gen_schema.go'
             cli:
               - 'cmd/**/*.go'
               - 'pkg/**/*.go'
@@ -123,18 +123,7 @@ jobs:
       - name: 🔄 Sync all Go modules
         run: |
           echo "Syncing module dependencies..."
-
-          # List of module directories
-          modules=(
-            "."
-            ".github/scripts/generate-schema"
-          )
-
-          for dir in "${modules[@]}"; do
-            echo "Running go mod tidy in $dir..."
-            (cd "$dir" && go mod tidy)
-          done
-
+          go mod tidy
           echo "✅ Module dependencies synced"
 
       - name: 📤 Commit and push module changes
@@ -144,7 +133,7 @@ jobs:
           commit_message: "chore: sync Go module dependencies"
           commit_user_name: module-sync-bot
           commit_user_email: module-sync-bot@users.noreply.github.com
-          file_pattern: "go.mod go.sum .github/scripts/generate-schema/go.mod .github/scripts/generate-schema/go.sum"
+          file_pattern: "go.mod go.sum"
 
   generate-schema:
     name: 📝 Generate JSON Schema
@@ -173,7 +162,7 @@ jobs:
           go-version-file: go.mod
 
       - name: 📝 Generate JSON schema
-        run: .github/scripts/generate-schema.sh
+        run: go generate ./schemas/...
 
       - name: 📤 Commit and push schema changes
         if: github.event_name != 'merge_group'

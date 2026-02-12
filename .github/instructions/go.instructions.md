@@ -123,58 +123,28 @@ Follow idiomatic Go practices and community standards when writing Go code. Thes
 - Use `go mod tidy` to clean up unused dependencies
 - Vendor dependencies only when necessary
 
-#### Multi-Module Repositories
+#### Single-Module Repository
 
-This repository contains multiple Go modules:
-
-- Main module: `go.mod` (root)
-- Schema generator: `.github/scripts/generate-schema/go.mod`
-
-The repository uses a Go workspace (`go.work`) to manage these modules together.
+This repository contains a single Go module (`go.mod` at the root). A `go.work` file exists for workspace convenience.
 
 **When updating dependencies:**
 
-1. **Use Go workspace commands** to update all modules at once:
+```bash
+# At repository root
+go mod tidy
+```
 
-   ```bash
-   # At repository root
-   go work sync              # Sync workspace with module dependencies
-   go mod tidy               # Tidy root module
-   cd .github/scripts/generate-schema
-   go mod tidy               # Tidy generate-schema module
-   cd ../../..
-   ```
+CI automatically runs `go mod tidy` and commits changes back to the PR via the `sync-modules` job.
 
-2. **CI automatically syncs modules**: The `sync-modules` job in CI automatically runs `go mod tidy` in all module directories and commits any changes back to the PR, so you don't have to manually sync modules before pushing.
-
-3. **Always verify changes in ALL modules** when committing manually:
-
-   ```bash
-   git status                # Should show changes in both go.mod files if dependencies changed
-   git diff go.mod go.sum .github/scripts/generate-schema/go.mod .github/scripts/generate-schema/go.sum
-   ```
-
-4. **If a dependency changes in the main module, it likely affects the schema generator module** because it imports types from the main module
-
-**Important notes:**
-
-- The `go.work` file unifies both modules into a single workspace
-- CI automatically syncs all modules via the `sync-modules` job
-- Running `go mod tidy` in one module does NOT automatically update the other module locally
-- When Dependabot updates dependencies, the CI will automatically sync both modules
-
-**Workflow for dependency updates:**
+**Code generators** use the `//go:build ignore` pattern and are invoked via `//go:generate` directives:
 
 ```bash
-# After updating dependencies in root go.mod (e.g., via Dependabot)
-# Option 1: Let CI handle it automatically (recommended)
-git push  # CI will sync modules and commit changes
+# Regenerate all generated code
+go generate ./...
 
-# Option 2: Sync manually before pushing
-cd .github/scripts/generate-schema
-go mod tidy
-cd ../../..
-git add go.mod go.sum .github/scripts/generate-schema/go.mod .github/scripts/generate-schema/go.sum
+# Or target specific generators
+go generate ./schemas/...         # JSON schema
+go generate ./pkg/svc/chat/...    # Embedded documentation
 ```
 
 ## Type Safety and Language Features

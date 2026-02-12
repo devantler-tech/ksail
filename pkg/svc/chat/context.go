@@ -61,10 +61,10 @@ func getCLIHelp() string {
 	return string(output)
 }
 
-// loadDocumentation returns the embedded documentation.
-// The documentation is embedded at compile time from the docs/ directory.
+// loadDocumentation returns the generated documentation constant.
+// The documentation is pre-processed at go:generate time from docs/src/content/docs/.
 func loadDocumentation() string {
-	return embeddedDocumentation
+	return generatedDocumentation
 }
 
 // FindKSailExecutable attempts to find the ksail executable.

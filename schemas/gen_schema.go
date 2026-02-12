@@ -1,10 +1,21 @@
-// Package main provides a CLI tool to generate JSON schema from KSail config types.
+// Copyright (c) KSail contributors. All rights reserved.
+// Licensed under the MIT License.
+
+//go:build ignore
+
+// gen_schema.go generates a JSON schema from KSail config types and writes
+// it to ksail-config.schema.json. This replaces the separate Go module that
+// previously lived in .github/scripts/generate-schema/.
+//
+// Usage:
+//
+//	go run gen_schema.go [output-path]
 package main
 
 import (
 	"encoding/json"
 	"fmt"
-	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -21,12 +32,12 @@ const (
 )
 
 func main() {
-	if err := run(os.Stdout, os.Stderr, os.Args); err != nil {
-		os.Exit(1)
+	if err := run(os.Args); err != nil {
+		log.Fatal(err)
 	}
 }
 
-func run(stdout, stderr io.Writer, args []string) error {
+func run(args []string) error {
 	reflector := &jsonschema.Reflector{
 		AllowAdditionalProperties: false,
 		DoNotReference:            true,
@@ -38,26 +49,24 @@ func run(stdout, stderr io.Writer, args []string) error {
 
 	schemaJSON, err := json.MarshalIndent(schema, "", "  ")
 	if err != nil {
-		fmt.Fprintf(stderr, "Error marshaling schema: %v\n", err)
 		return fmt.Errorf("marshal schema: %w", err)
 	}
 
-	outputPath := "schemas/ksail-config.schema.json"
+	outputPath := "ksail-config.schema.json"
 	if len(args) > 1 {
 		outputPath = args[1]
 	}
 
 	if err := os.MkdirAll(filepath.Dir(outputPath), dirPermissions); err != nil {
-		fmt.Fprintf(stderr, "Error creating directory: %v\n", err)
-		return fmt.Errorf("create directory: %w", err)
+		return fmt.Errorf("create directory for %s: %w", outputPath, err)
 	}
 
 	if err := os.WriteFile(outputPath, schemaJSON, filePermissions); err != nil {
-		fmt.Fprintf(stderr, "Error writing schema: %v\n", err)
-		return fmt.Errorf("write schema: %w", err)
+		return fmt.Errorf("write schema to %s: %w", outputPath, err)
 	}
 
-	fmt.Fprintf(stdout, "Successfully generated JSON schema at %s\n", outputPath)
+	fmt.Printf("gen_schema: wrote %s (%d bytes)\n", outputPath, len(schemaJSON))
+
 	return nil
 }
 
@@ -67,12 +76,12 @@ func customizeSchema(schema *jsonschema.Schema) {
 	schema.Title = "KSail Cluster Configuration"
 	schema.Description = "JSON schema for KSail cluster configuration (ksail.yaml)"
 
-	// Walk schema tree once, applying all transformations
+	// Walk schema tree once, applying all transformations.
 	walkSchema(schema, func(s *jsonschema.Schema) {
-		// Clear required (all fields use omitzero)
+		// Clear required (all fields use omitzero).
 		s.Required = nil
 
-		// Mark empty objects as alpha placeholders
+		// Mark empty objects as alpha placeholders.
 		if s.Type == "object" && (s.Properties == nil || s.Properties.Len() == 0) {
 			if s.Description == "" {
 				s.Description = "Alpha placeholder (currently unsupported)."
@@ -80,14 +89,15 @@ func customizeSchema(schema *jsonschema.Schema) {
 		}
 	})
 
-	// Restore root-level spec requirement
+	// Restore root-level spec requirement.
 	schema.Required = []string{"spec"}
 
-	// Set kind/apiVersion enums from constants
+	// Set kind/apiVersion enums from constants.
 	if schema.Properties != nil {
 		if p, ok := schema.Properties.Get("kind"); ok && p != nil {
 			p.Enum = []any{v1alpha1.Kind}
 		}
+
 		if p, ok := schema.Properties.Get("apiVersion"); ok && p != nil {
 			p.Enum = []any{v1alpha1.APIVersion}
 		}
@@ -107,9 +117,11 @@ func walkSchema(schema *jsonschema.Schema, fn func(*jsonschema.Schema)) {
 			walkSchema(pair.Value, fn)
 		}
 	}
+
 	if schema.Items != nil {
 		walkSchema(schema.Items, fn)
 	}
+
 	if schema.AdditionalProperties != nil {
 		walkSchema(schema.AdditionalProperties, fn)
 	}
@@ -118,12 +130,12 @@ func walkSchema(schema *jsonschema.Schema, fn func(*jsonschema.Schema)) {
 // customTypeMapper provides custom schema mappings for v1alpha1 types.
 // It automatically detects enum types that implement the EnumValuer interface.
 func customTypeMapper(t reflect.Type) *jsonschema.Schema {
-	// Check if this type implements EnumValuer (try pointer receiver first)
+	// Check if this type implements EnumValuer (try pointer receiver first).
 	enumValuerType := reflect.TypeFor[v1alpha1.EnumValuer]()
 	ptrType := reflect.PointerTo(t)
 
 	if ptrType.Implements(enumValuerType) {
-		// Create a pointer to zero value and call ValidValues()
+		// Create a pointer to zero value and call ValidValues().
 		zero := reflect.New(t)
 		values := zero.Interface().(v1alpha1.EnumValuer).ValidValues()
 
@@ -135,7 +147,7 @@ func customTypeMapper(t reflect.Type) *jsonschema.Schema {
 		return &jsonschema.Schema{Type: "string", Enum: enumVals}
 	}
 
-	// Special case for metav1.Duration
+	// Special case for metav1.Duration.
 	if t == reflect.TypeFor[metav1.Duration]() {
 		return &jsonschema.Schema{
 			Type:    "string",
