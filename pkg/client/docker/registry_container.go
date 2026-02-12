@@ -6,7 +6,9 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/devantler-tech/ksail/v5/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v5/pkg/envvar"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -219,6 +221,7 @@ func (rm *RegistryManager) stopRegistryContainer(
 // Image management.
 
 // ensureRegistryImage pulls the registry image if not already present locally.
+// Retries transient network errors (e.g., Docker Hub 502) with exponential backoff.
 func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 	// Check if image exists
 	_, err := rm.client.ImageInspect(ctx, RegistryImageName)
@@ -226,10 +229,43 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 		return nil
 	}
 
-	// Pull image
+	var lastErr error
+
+	for attempt := 1; attempt <= imagePullMaxRetries; attempt++ {
+		pullErr := rm.pullRegistryImage(ctx)
+		if pullErr == nil {
+			return nil
+		}
+
+		lastErr = pullErr
+
+		if !netretry.IsRetryable(lastErr) || attempt == imagePullMaxRetries {
+			break
+		}
+
+		// Calculate delay with exponential backoff
+		delay := netretry.ExponentialDelay(attempt, imagePullRetryBaseWait, imagePullRetryMaxWait)
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+
+			return fmt.Errorf("registry image pull cancelled: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+
+	return fmt.Errorf("failed to pull registry image: %w", lastErr)
+}
+
+// pullRegistryImage performs a single attempt to pull the registry image.
+func (rm *RegistryManager) pullRegistryImage(ctx context.Context) error {
 	reader, err := rm.client.ImagePull(ctx, RegistryImageName, image.PullOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to pull registry image: %w", err)
+		return fmt.Errorf("image pull request: %w", err)
 	}
 
 	// Consume pull output
@@ -237,11 +273,11 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 	closeErr := reader.Close()
 
 	if err != nil {
-		return fmt.Errorf("failed to read image pull output: %w", err)
+		return fmt.Errorf("reading image pull output: %w", err)
 	}
 
 	if closeErr != nil {
-		return fmt.Errorf("failed to close image pull reader: %w", closeErr)
+		return fmt.Errorf("closing image pull reader: %w", closeErr)
 	}
 
 	return nil

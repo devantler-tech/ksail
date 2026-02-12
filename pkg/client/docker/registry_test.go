@@ -30,6 +30,9 @@ var (
 	errVolumeRemoveFailed    = errors.New("volume remove failed")
 	errListFailed            = errors.New("list failed")
 	errReadFailed            = errors.New("read failed")
+	errBadGateway            = errors.New("502 Bad Gateway")
+	errServiceUnavail        = errors.New("response: Service Unavailable")
+	errUnauthorized          = errors.New("unauthorized: authentication required")
 )
 
 // setupTestRegistryManager creates a test setup with mock client, manager, and context.
@@ -1217,4 +1220,149 @@ func TestBuildContainerConfig_WithoutCredentials(t *testing.T) {
 	err := manager.CreateRegistry(ctx, config)
 
 	require.NoError(t, err)
+}
+
+// Image pull retry integration tests.
+
+func TestEnsureRegistryImage_RetryOn502(t *testing.T) {
+	t.Parallel()
+
+	mockClient, manager, ctx := setupTestRegistryManager(t)
+
+	config := docker.RegistryConfig{
+		Name:        "docker.io",
+		Port:        5000,
+		UpstreamURL: "https://registry-1.docker.io",
+		ClusterName: "test-cluster",
+	}
+
+	mockRegistryNotExists(ctx, mockClient)
+
+	// Image not found locally
+	mockClient.EXPECT().
+		ImageInspect(ctx, docker.RegistryImageName).
+		Return(image.InspectResponse{}, errNotFound).
+		Once()
+
+	// First pull attempt: 502 Bad Gateway
+	mockClient.EXPECT().
+		ImagePull(ctx, docker.RegistryImageName, mock.Anything).
+		Return(nil, errBadGateway).
+		Once()
+
+	// Second pull attempt: success
+	mockClient.EXPECT().
+		ImagePull(ctx, docker.RegistryImageName, mock.Anything).
+		Return(io.NopCloser(strings.NewReader("")), nil).
+		Once()
+
+	// Complete the remaining registry creation steps
+	mockVolumeCreateSequence(ctx, mockClient, config.Name)
+	mockContainerCreateStart(ctx, mockClient, "docker.io", "test-id")
+
+	err := manager.CreateRegistry(ctx, config)
+
+	require.NoError(t, err)
+}
+
+func TestEnsureRegistryImage_NonRetryableErrorFailsImmediately(t *testing.T) {
+	t.Parallel()
+
+	mockClient, manager, ctx := setupTestRegistryManager(t)
+
+	config := docker.RegistryConfig{
+		Name:        "docker.io",
+		Port:        5000,
+		UpstreamURL: "https://registry-1.docker.io",
+		ClusterName: "test-cluster",
+	}
+
+	mockRegistryNotExists(ctx, mockClient)
+	mockImageNotFound(ctx, mockClient)
+
+	// Pull fails with non-retryable error — should NOT retry
+	mockClient.EXPECT().
+		ImagePull(ctx, docker.RegistryImageName, mock.Anything).
+		Return(nil, errUnauthorized).
+		Once()
+
+	err := manager.CreateRegistry(ctx, config)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to ensure registry image")
+	assert.Contains(t, err.Error(), "unauthorized")
+}
+
+func TestEnsureRegistryImage_AllRetriesExhausted(t *testing.T) {
+	t.Parallel()
+
+	mockClient, manager, ctx := setupTestRegistryManager(t)
+
+	config := docker.RegistryConfig{
+		Name:        "docker.io",
+		Port:        5000,
+		UpstreamURL: "https://registry-1.docker.io",
+		ClusterName: "test-cluster",
+	}
+
+	mockRegistryNotExists(ctx, mockClient)
+	mockImageNotFound(ctx, mockClient)
+
+	// All 3 attempts fail with retryable error
+	mockClient.EXPECT().
+		ImagePull(ctx, docker.RegistryImageName, mock.Anything).
+		Return(nil, errBadGateway).
+		Times(3)
+
+	err := manager.CreateRegistry(ctx, config)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to ensure registry image")
+	assert.Contains(t, err.Error(), "502 Bad Gateway")
+}
+
+func TestEnsureRegistryImage_ContextCancelledDuringRetry(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	manager, err := docker.NewRegistryManager(mockClient)
+	require.NoError(t, err)
+
+	config := docker.RegistryConfig{
+		Name:        "docker.io",
+		Port:        5000,
+		UpstreamURL: "https://registry-1.docker.io",
+		ClusterName: "test-cluster",
+	}
+
+	// Use a context that we can cancel
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Registry doesn't exist
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{}, nil).
+		Once()
+
+	// Image not found locally
+	mockClient.EXPECT().
+		ImageInspect(mock.Anything, docker.RegistryImageName).
+		Return(image.InspectResponse{}, errNotFound).
+		Once()
+
+	// First pull fails with retryable error, cancel context immediately after
+	mockClient.EXPECT().
+		ImagePull(mock.Anything, docker.RegistryImageName, mock.Anything).
+		RunAndReturn(func(_ context.Context, _ string, _ image.PullOptions) (io.ReadCloser, error) {
+			cancel() // Cancel context before retry backoff
+
+			return nil, errServiceUnavail
+		}).
+		Once()
+
+	createErr := manager.CreateRegistry(ctx, config)
+
+	require.Error(t, createErr)
+	assert.Contains(t, createErr.Error(), "cancelled")
 }
