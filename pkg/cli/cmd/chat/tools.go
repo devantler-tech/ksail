@@ -117,7 +117,7 @@ func toolSupportsForce(metadata map[string]toolgen.ToolDefinition, toolName stri
 }
 
 // buildPlanModeBlockedResult creates a ToolResult indicating tool execution was blocked in plan mode.
-func buildPlanModeBlockedResult(toolName string) (copilot.ToolResult, error) {
+func buildPlanModeBlockedResult(toolName string) copilot.ToolResult {
 	cmdDescription := strings.ReplaceAll(toolName, "_", " ")
 
 	return copilot.ToolResult{
@@ -128,7 +128,22 @@ func buildPlanModeBlockedResult(toolName string) (copilot.ToolResult, error) {
 		ResultType: "failure",
 		SessionLog: "[PLAN MODE BLOCKED] " + cmdDescription,
 		Error:      "Tool execution blocked in plan mode: " + toolName,
-	}, nil
+	}
+}
+
+// buildAskModeBlockedResult creates a ToolResult indicating a write tool was blocked in ask mode.
+func buildAskModeBlockedResult(toolName string) copilot.ToolResult {
+	cmdDescription := strings.ReplaceAll(toolName, "_", " ")
+
+	return copilot.ToolResult{
+		TextResultForLLM: "Write tool blocked - currently in Ask mode (read-only).\n" +
+			"Tool: " + cmdDescription + "\n" +
+			"In Ask mode, only read-only tools can execute. Write operations are blocked.\n" +
+			"Switch to Agent mode (press Tab) to execute write tools.",
+		ResultType: "failure",
+		SessionLog: "[ASK MODE BLOCKED] " + cmdDescription,
+		Error:      "Write tool blocked in ask mode: " + toolName,
+	}
 }
 
 // awaitToolPermission sends a permission request to the TUI and waits for user response.
@@ -176,13 +191,14 @@ func awaitToolPermission(
 
 // WrapToolsWithPermissionAndModeMetadata wraps ALL tools with mode enforcement and permission prompts.
 // In plan mode, ALL tool execution is blocked (model can only describe what it would do).
+// In ask mode, write tools are blocked but read-only tools execute normally.
 // In agent mode, edit tools require permission (based on RequiresPermission annotation),
 // while read-only tools are auto-approved.
 // When YOLO mode is enabled, permission prompts are skipped and all tools are auto-approved.
 func WrapToolsWithPermissionAndModeMetadata(
 	tools []copilot.Tool,
 	eventChan chan tea.Msg,
-	agentModeRef *chatui.AgentModeRef,
+	chatModeRef *chatui.ChatModeRef,
 	yoloModeRef *chatui.YoloModeRef,
 	toolMetadata map[string]toolgen.ToolDefinition,
 ) []copilot.Tool {
@@ -199,7 +215,7 @@ func WrapToolsWithPermissionAndModeMetadata(
 		wrappedTools[toolIdx].Handler = func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
 			return executeWrappedTool(
 				invocation, toolName, originalHandler,
-				eventChan, agentModeRef, yoloModeRef, toolMetadata,
+				eventChan, chatModeRef, yoloModeRef, toolMetadata,
 			)
 		}
 	}
@@ -207,22 +223,62 @@ func WrapToolsWithPermissionAndModeMetadata(
 	return wrappedTools
 }
 
-// executeWrappedTool handles permission checks, YOLO mode, force flag injection,
-// and user approval for a single tool invocation.
+// executeModeCheck checks the current chat mode and returns a result if tool execution
+// should be blocked. Returns (result, true) if blocked, (zero, false) if execution should proceed.
+func executeModeCheck(
+	chatModeRef *chatui.ChatModeRef,
+	toolName string,
+	invocation copilot.ToolInvocation,
+	originalHandler func(copilot.ToolInvocation) (copilot.ToolResult, error),
+	toolMetadata map[string]toolgen.ToolDefinition,
+) (copilot.ToolResult, bool, error) {
+	if chatModeRef == nil {
+		return copilot.ToolResult{}, false, nil
+	}
+
+	switch chatModeRef.Mode() {
+	case chatui.PlanMode:
+		result := buildPlanModeBlockedResult(toolName)
+
+		return result, true, nil
+	case chatui.AskMode:
+		// In ask mode, block write tools but allow read-only tools
+		metadata, metaExists := toolMetadata[toolName]
+		if metaExists && metadata.RequiresPermission {
+			result := buildAskModeBlockedResult(toolName)
+
+			return result, true, nil
+		}
+
+		result, err := originalHandler(invocation)
+
+		return result, true, err
+	case chatui.AgentMode:
+		// Fall through to normal agent mode logic
+	}
+
+	return copilot.ToolResult{}, false, nil
+}
+
+// executeWrappedTool handles mode enforcement, permission checks, YOLO mode,
+// force flag injection, and user approval for a single tool invocation.
 func executeWrappedTool(
 	invocation copilot.ToolInvocation,
 	toolName string,
 	originalHandler func(copilot.ToolInvocation) (copilot.ToolResult, error),
 	eventChan chan tea.Msg,
-	agentModeRef *chatui.AgentModeRef,
+	chatModeRef *chatui.ChatModeRef,
 	yoloModeRef *chatui.YoloModeRef,
 	toolMetadata map[string]toolgen.ToolDefinition,
 ) (copilot.ToolResult, error) {
-	if agentModeRef != nil && !agentModeRef.IsEnabled() {
-		return buildPlanModeBlockedResult(toolName)
+	// Check chat mode for tool blocking
+	if result, handled, err := executeModeCheck(
+		chatModeRef, toolName, invocation, originalHandler, toolMetadata,
+	); handled {
+		return result, err
 	}
 
-	// Check if tool requires permission from metadata.
+	// Agent mode: check if tool requires permission from metadata.
 	// If metadata is nil or tool not found, defaults to requiresPermission=false (auto-approve).
 	requiresPermission := false
 	if metadata, metaExists := toolMetadata[toolName]; metaExists {

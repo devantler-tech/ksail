@@ -40,17 +40,20 @@ var (
 
 // MessageMetadata represents metadata for a single message in a session.
 type MessageMetadata struct {
-	AgentMode bool `json:"agentMode"` // true = agent mode, false = plan mode
+	// ChatMode stores the chat mode when the message was sent.
+	// 0 = agent, 1 = plan, 2 = ask.
+	// For backward compatibility, the legacy AgentMode field is also read during unmarshal.
+	ChatMode ChatMode `json:"chatMode"`
 }
 
 // SessionMetadata represents metadata for a chat session stored locally.
 // Message content is stored server-side by Copilot and retrieved via ResumeSession.
 type SessionMetadata struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Model     string `json:"model,omitempty"`
-	AgentMode *bool  `json:"agentMode,omitempty"` // nil or true = agent mode, false = plan mode
-	// Messages stores per-message metadata (agentMode for each user message).
+	ID       string    `json:"id"`
+	Name     string    `json:"name"`
+	Model    string    `json:"model,omitempty"`
+	ChatMode *ChatMode `json:"chatMode,omitempty"` // nil = agent mode (default)
+	// Messages stores per-message metadata (chatMode for each user message).
 	Messages    []MessageMetadata        `json:"messages,omitempty"`
 	SDKMetadata *copilot.SessionMetadata `json:"-"` // SDK metadata (not persisted)
 	CreatedAt   time.Time                `json:"createdAt"`
@@ -69,6 +72,87 @@ func (s *SessionMetadata) GetDisplayName() string {
 	}
 
 	return unnamedSessionName
+}
+
+// sessionMetadataJSON is the raw JSON shape for backward-compatible unmarshaling.
+type sessionMetadataJSON struct {
+	ID        string            `json:"id"`
+	Name      string            `json:"name"`
+	Model     string            `json:"model,omitempty"`
+	ChatMode  *ChatMode         `json:"chatMode,omitempty"`
+	AgentMode *bool             `json:"agentMode,omitempty"` // legacy field
+	Messages  []json.RawMessage `json:"messages,omitempty"`
+	CreatedAt time.Time         `json:"createdAt"`
+	UpdatedAt time.Time         `json:"updatedAt"`
+}
+
+// legacyMessageMetadata represents the old per-message JSON format.
+type legacyMessageMetadata struct {
+	AgentMode bool     `json:"agentMode"`
+	ChatMode  ChatMode `json:"chatMode"`
+}
+
+// UnmarshalJSON provides backward-compatible deserialization.
+// It reads both the legacy "agentMode" bool fields and the new "chatMode" int fields.
+func (s *SessionMetadata) UnmarshalJSON(data []byte) error {
+	var raw sessionMetadataJSON
+
+	err := json.Unmarshal(data, &raw)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal session metadata: %w", err)
+	}
+
+	s.ID = raw.ID
+	s.Name = raw.Name
+	s.Model = raw.Model
+	s.CreatedAt = raw.CreatedAt
+	s.UpdatedAt = raw.UpdatedAt
+
+	// Resolve session-level chat mode: prefer chatMode, fall back to legacy agentMode
+	switch {
+	case raw.ChatMode != nil:
+		s.ChatMode = raw.ChatMode
+	case raw.AgentMode != nil:
+		mode := AgentMode
+		if !*raw.AgentMode {
+			mode = PlanMode
+		}
+
+		s.ChatMode = &mode
+	default:
+		s.ChatMode = nil // nil = default (agent mode)
+	}
+
+	// Resolve per-message metadata
+	s.Messages = make([]MessageMetadata, 0, len(raw.Messages))
+
+	for _, rawMsg := range raw.Messages {
+		s.Messages = append(s.Messages, resolveMessageChatMode(rawMsg))
+	}
+
+	return nil
+}
+
+// resolveMessageChatMode deserializes a single message's metadata, handling
+// both legacy agentMode bool and new chatMode int formats.
+func resolveMessageChatMode(rawMsg json.RawMessage) MessageMetadata {
+	var legacy legacyMessageMetadata
+
+	err := json.Unmarshal(rawMsg, &legacy)
+	if err != nil {
+		return MessageMetadata{ChatMode: AgentMode}
+	}
+
+	// If chatMode field is present and non-zero, use it; otherwise fall back to agentMode
+	switch {
+	case legacy.ChatMode != AgentMode:
+		return MessageMetadata{ChatMode: legacy.ChatMode}
+	case !legacy.AgentMode:
+		// Legacy: agentMode=false means plan mode
+		return MessageMetadata{ChatMode: PlanMode}
+	default:
+		return MessageMetadata{ChatMode: AgentMode}
+	}
 }
 
 // errInvalidAppDir is returned when the appDir parameter is not a simple directory name.

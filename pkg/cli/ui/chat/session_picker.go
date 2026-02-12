@@ -324,10 +324,10 @@ func (m *Model) startNewSession() error {
 
 	// Clear all state for new session
 	m.messages = []message{}
-	m.agentMode = true // New chats start in agent mode by default
+	m.chatMode = AgentMode // New chats start in agent mode by default
 	// Update the shared reference so tool handlers see the change
-	if m.agentModeRef != nil {
-		m.agentModeRef.SetEnabled(true)
+	if m.chatModeRef != nil {
+		m.chatModeRef.SetMode(AgentMode)
 	}
 
 	m.resetStreamingState()
@@ -339,11 +339,15 @@ func (m *Model) startNewSession() error {
 // loadSession loads a chat session into the model using the Copilot SDK.
 func (m *Model) loadSession(metadata *SessionMetadata) {
 	m.currentSessionID = metadata.ID
-	// Restore mode from session (nil or true = agent mode, false = plan mode)
-	m.agentMode = metadata.AgentMode == nil || *metadata.AgentMode
+	// Restore mode from session (nil = agent mode default)
+	if metadata.ChatMode != nil {
+		m.chatMode = *metadata.ChatMode
+	} else {
+		m.chatMode = AgentMode
+	}
 	// Update the shared reference so tool handlers see the change
-	if m.agentModeRef != nil {
-		m.agentModeRef.SetEnabled(m.agentMode)
+	if m.chatModeRef != nil {
+		m.chatModeRef.SetMode(m.chatMode)
 	}
 
 	m.cleanup()
@@ -458,13 +462,13 @@ func (m *Model) sessionEventsToMessages(
 				role:    role,
 				content: content,
 			}
-			// Restore agentMode for user messages from metadata
+			// Restore chatMode for user messages from metadata
 			if role == roleUser {
 				if userMsgIndex < len(metadata.Messages) {
-					msg.agentMode = metadata.Messages[userMsgIndex].AgentMode
+					msg.chatMode = metadata.Messages[userMsgIndex].ChatMode
 				} else {
-					// Default to true (agent mode) for messages without metadata
-					msg.agentMode = true
+					// Default to agent mode for messages without metadata
+					msg.chatMode = AgentMode
 				}
 
 				userMsgIndex++
@@ -497,24 +501,24 @@ func (m *Model) saveCurrentSession() error {
 		name = existing.Name
 	}
 
-	agentMode := m.agentMode
+	chatMode := m.chatMode
 	// Build per-message metadata
 	messageMetadata := make([]MessageMetadata, 0)
 
 	for _, msg := range m.messages {
 		if msg.role == roleUser {
 			messageMetadata = append(messageMetadata, MessageMetadata{
-				AgentMode: msg.agentMode,
+				ChatMode: msg.chatMode,
 			})
 		}
 	}
 
 	metadata := &SessionMetadata{
-		ID:        sessionID,
-		Messages:  messageMetadata,
-		Model:     m.currentModel,
-		Name:      name,
-		AgentMode: &agentMode,
+		ID:       sessionID,
+		Messages: messageMetadata,
+		Model:    m.currentModel,
+		Name:     name,
+		ChatMode: &chatMode,
 	}
 
 	saveErr := SaveSession(metadata, m.theme.SessionDir)
