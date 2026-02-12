@@ -53,11 +53,12 @@ func DefaultOptions() ToolOptions {
 	return ToolOptions{
 		ExcludeCommands: []string{
 			// Meta commands - not useful as tools
-			"ksail chat",       // Chat interface, not a tool
-			"ksail mcp",        // MCP server itself, not a tool
-			"ksail completion", // Shell completion generator
-			"ksail help",       // Help command, not a tool
-			"ksail",            // Root command, not a tool
+			"ksail chat",              // Chat interface, not a tool
+			"ksail mcp",               // MCP server itself, not a tool
+			"ksail completion",        // Shell completion generator
+			"ksail generate-fig-spec", // Fig/Kiro CLI completion spec generator
+			"ksail help",              // Help command, not a tool
+			"ksail",                   // Root command, not a tool
 		},
 		IncludeHidden:  false,
 		CommandTimeout: defaultCommandTimeout,

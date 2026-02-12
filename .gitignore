@@ -42,7 +42,9 @@ node_modules/
 
 # GoReleaser artifacts
 dist/
-completions/
+completions/*
+!completions/.gitattributes
+!completions/ksail.ts
 manpages/
 LICENSE.md
 

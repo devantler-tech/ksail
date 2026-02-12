@@ -92,6 +92,7 @@ linters:
             - github.com/stretchr/testify
             - github.com/siderolabs
             - github.com/sirupsen/logrus
+            - github.com/withfig
             - github.com/yannh
             - filippo.io/age
             - golang.design/x

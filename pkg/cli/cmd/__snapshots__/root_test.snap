@@ -14,13 +14,13 @@ Usage:
   ksail [command]
 
 Available Commands:
-  chat        Start an AI-assisted chat session
-  cipher      Manage encrypted files with SOPS
-  cluster     Manage cluster lifecycle
-  completion  Generate the autocompletion script for the specified shell
-  help        Help about any command
-  mcp         Start an MCP server
-  workload    Manage workload operations
+  chat              Start an AI-assisted chat session
+  cipher            Manage encrypted files with SOPS
+  cluster           Manage cluster lifecycle
+  completion        Generate the autocompletion script for the specified shell
+  help              Help about any command
+  mcp               Start an MCP server
+  workload          Manage workload operations
 
 Flags:
       --benchmark   Show per-activity benchmark output
@@ -39,13 +39,13 @@ Usage:
   ksail [command]
 
 Available Commands:
-  chat        Start an AI-assisted chat session
-  cipher      Manage encrypted files with SOPS
-  cluster     Manage cluster lifecycle
-  completion  Generate the autocompletion script for the specified shell
-  help        Help about any command
-  mcp         Start an MCP server
-  workload    Manage workload operations
+  chat              Start an AI-assisted chat session
+  cipher            Manage encrypted files with SOPS
+  cluster           Manage cluster lifecycle
+  completion        Generate the autocompletion script for the specified shell
+  help              Help about any command
+  mcp               Start an MCP server
+  workload          Manage workload operations
 
 Flags:
       --benchmark   Show per-activity benchmark output

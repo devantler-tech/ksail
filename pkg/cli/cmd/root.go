@@ -13,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/errorhandler"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
+	cobracompletefig "github.com/withfig/autocomplete-tools/integrations/cobra"
 )
 
 // NewRootCmd creates and returns the root command with version info and subcommands.
@@ -43,6 +44,9 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.AddCommand(cipher.NewCipherCmd(runtimeContainer))
 	cmd.AddCommand(chat.NewChatCmd(runtimeContainer))
 	cmd.AddCommand(mcp.NewMCPCmd(runtimeContainer))
+
+	// Hidden command for generating Fig/Kiro CLI completion specs
+	cmd.AddCommand(cobracompletefig.CreateCompletionSpecCommand())
 
 	return cmd
 }

@@ -156,6 +156,9 @@ go run main.go --help
 │       ├── provider/       # Infrastructure providers (docker, hetzner)
 │       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos)
 │       └── image/          # Container image export/import services
+├── completions/            # Generated CLI completion specs (Fig/Kiro)
+│   ├── ksail.ts            # Auto-generated TypeScript completion spec
+│   └── .gitattributes      # Marks ksail.ts as linguist-generated
 ├── docs/                   # Astro documentation source
 │   ├── dist/               # Generated site (after npm run build)
 │   └── package.json        # Node.js dependencies for documentation
@@ -191,6 +194,7 @@ ksail workload gen <resource>          # Generate resources
 ksail cipher <command>                 # Manage secrets with SOPS
 ksail chat                             # AI chat powered by GitHub Copilot
 ksail mcp                              # Start MCP server for AI assistants
+ksail generate-fig-spec                # (hidden) Generate Fig/Kiro CLI completion spec to stdout
 ```
 
 ### Init Command Options
