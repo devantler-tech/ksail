@@ -1,6 +1,7 @@
 package docs_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,14 +38,38 @@ func countCommands(c *cobra.Command) int {
 	return count
 }
 
+// skipIfDirMissing skips the test when the directory does not exist.
+func skipIfDirMissing(t *testing.T, dir string) {
+	t.Helper()
+
+	_, err := os.Stat(dir)
+	if os.IsNotExist(err) {
+		t.Skipf("docs not generated yet (run go generate ./docs/...): %s", dir)
+	}
+}
+
+// readOrSkip reads a file's content or skips the test if the file does not exist.
+func readOrSkip(t *testing.T, path string) string {
+	t.Helper()
+
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		t.Skipf("file not generated yet (run go generate ./docs/...): %s", path)
+	}
+
+	content, err := os.ReadFile(path) //nolint:gosec // path from test constant, not user input
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+
+	return string(content)
+}
+
 func TestCLIFlagsDocsExist(t *testing.T) {
 	t.Parallel()
 
 	dir := "src/content/docs/cli-flags"
-
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		t.Skipf("CLI flags docs not generated yet (run go generate ./docs/...): %s", dir)
-	}
+	skipIfDirMissing(t, dir)
 
 	rootCmd := cmd.NewRootCmd("test", "", "")
 
@@ -53,12 +78,15 @@ func TestCLIFlagsDocsExist(t *testing.T) {
 
 	var actual int
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
 
-		if !info.IsDir() && strings.HasSuffix(path, ".mdx") && !strings.HasSuffix(path, "index.mdx") {
+		isMDX := strings.HasSuffix(path, ".mdx")
+		isIndex := strings.HasSuffix(path, "index.mdx")
+
+		if !info.IsDir() && isMDX && !isIndex {
 			actual++
 		}
 
@@ -73,41 +101,46 @@ func TestCLIFlagsDocsExist(t *testing.T) {
 	}
 }
 
+// checkFrontmatter validates that a single MDX file contains the expected frontmatter.
+func checkFrontmatter(t *testing.T, path string, content []byte) {
+	t.Helper()
+
+	text := string(content)
+
+	if !strings.HasPrefix(text, "---\n") {
+		t.Errorf("%s: missing frontmatter (should start with ---)", path)
+	}
+
+	if !strings.Contains(text, "title:") {
+		t.Errorf("%s: missing title in frontmatter", path)
+	}
+
+	if !strings.Contains(text, "description:") {
+		t.Errorf("%s: missing description in frontmatter", path)
+	}
+}
+
 func TestCLIFlagsPagesHaveFrontmatter(t *testing.T) {
 	t.Parallel()
 
 	dir := "src/content/docs/cli-flags"
+	skipIfDirMissing(t, dir)
 
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		t.Skipf("CLI flags docs not generated yet: %s", dir)
-	}
-
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
 
-		if info.IsDir() || strings.HasSuffix(path, "index.mdx") || !strings.HasSuffix(path, ".mdx") {
+		if info.IsDir() || !strings.HasSuffix(path, ".mdx") || strings.HasSuffix(path, "index.mdx") {
 			return nil
 		}
 
-		content, readErr := os.ReadFile(path)
+		content, readErr := os.ReadFile(path) //nolint:gosec // path from filepath.Walk
 		if readErr != nil {
-			return readErr
+			return fmt.Errorf("reading %s: %w", path, readErr)
 		}
 
-		text := string(content)
-		if !strings.HasPrefix(text, "---\n") {
-			t.Errorf("%s: missing frontmatter (should start with ---)", path)
-		}
-
-		if !strings.Contains(text, "title:") {
-			t.Errorf("%s: missing title in frontmatter", path)
-		}
-
-		if !strings.Contains(text, "description:") {
-			t.Errorf("%s: missing description in frontmatter", path)
-		}
+		checkFrontmatter(t, path, content)
 
 		return nil
 	})
@@ -119,18 +152,7 @@ func TestCLIFlagsPagesHaveFrontmatter(t *testing.T) {
 func TestIndexMDXPreserved(t *testing.T) {
 	t.Parallel()
 
-	indexPath := "src/content/docs/cli-flags/index.mdx"
-
-	content, err := os.ReadFile(indexPath)
-	if os.IsNotExist(err) {
-		t.Skipf("index.mdx not present (run go generate ./docs/...)")
-	}
-
-	if err != nil {
-		t.Fatalf("reading %s: %v", indexPath, err)
-	}
-
-	text := string(content)
+	text := readOrSkip(t, "src/content/docs/cli-flags/index.mdx")
 
 	if !strings.Contains(text, "title: CLI Flags") {
 		t.Error("index.mdx: missing expected title")
@@ -144,18 +166,7 @@ func TestIndexMDXPreserved(t *testing.T) {
 func TestConfigReferenceExists(t *testing.T) {
 	t.Parallel()
 
-	path := "src/content/docs/configuration/declarative-configuration.mdx"
-
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Skipf("config reference not generated yet (run go generate ./docs/...): %s", path)
-	}
-
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("reading %s: %v", path, err)
-	}
-
-	text := string(content)
+	text := readOrSkip(t, "src/content/docs/configuration/declarative-configuration.mdx")
 
 	t.Run("has frontmatter", func(t *testing.T) {
 		t.Parallel()
@@ -184,19 +195,7 @@ func TestConfigReferenceExists(t *testing.T) {
 	t.Run("has enum values from types", func(t *testing.T) {
 		t.Parallel()
 
-		dist := v1alpha1.Distribution("")
-		for _, v := range dist.ValidValues() {
-			if !strings.Contains(text, "`"+v+"`") {
-				t.Errorf("missing distribution value %q", v)
-			}
-		}
-
-		cni := v1alpha1.CNI("")
-		for _, v := range cni.ValidValues() {
-			if !strings.Contains(text, "`"+v+"`") {
-				t.Errorf("missing CNI value %q", v)
-			}
-		}
+		assertEnumValues(t, text)
 	})
 
 	t.Run("has environment variable expansion section", func(t *testing.T) {
@@ -214,4 +213,23 @@ func TestConfigReferenceExists(t *testing.T) {
 			t.Error("missing Schema Support section")
 		}
 	})
+}
+
+// assertEnumValues checks that known enum values appear in the config reference text.
+func assertEnumValues(t *testing.T, text string) {
+	t.Helper()
+
+	dist := v1alpha1.Distribution("")
+	for _, v := range dist.ValidValues() {
+		if !strings.Contains(text, "`"+v+"`") {
+			t.Errorf("missing distribution value %q", v)
+		}
+	}
+
+	cni := v1alpha1.CNI("")
+	for _, v := range cni.ValidValues() {
+		if !strings.Contains(text, "`"+v+"`") {
+			t.Errorf("missing CNI value %q", v)
+		}
+	}
 }

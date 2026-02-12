@@ -11,12 +11,15 @@ import (
 	"testing"
 )
 
-func TestGeneratedSchema(t *testing.T) {
+// generateSchema runs the schema generator and returns the parsed JSON.
+func generateSchema(t *testing.T) map[string]any {
+	t.Helper()
+
 	outDir := t.TempDir()
 	outPath := filepath.Join(outDir, "ksail-config.schema.json")
 
 	// Run the generator from the schemas/ directory.
-	cmd := exec.Command("go", "run", "gen_schema.go", outPath)
+	cmd := exec.Command("go", "run", "gen_schema.go", outPath) //nolint:gosec // test-controlled arguments
 	cmd.Dir = filepath.Join("..", "schemas")
 
 	out, err := cmd.CombinedOutput()
@@ -24,17 +27,29 @@ func TestGeneratedSchema(t *testing.T) {
 		t.Fatalf("generator failed: %v\noutput:\n%s", err, string(out))
 	}
 
-	b, err := os.ReadFile(outPath)
+	b, err := os.ReadFile(outPath) //nolint:gosec // path from t.TempDir, not user input
 	if err != nil {
 		t.Fatalf("read generated schema: %v", err)
 	}
 
 	var schema map[string]any
-	if err := json.Unmarshal(b, &schema); err != nil {
+
+	err = json.Unmarshal(b, &schema)
+	if err != nil {
 		t.Fatalf("unmarshal generated schema: %v", err)
 	}
 
+	return schema
+}
+
+func TestGeneratedSchema(t *testing.T) {
+	t.Parallel()
+
+	schema := generateSchema(t)
+
 	t.Run("root metadata", func(t *testing.T) {
+		t.Parallel()
+
 		if got := schema["title"]; got != "KSail Cluster Configuration" {
 			t.Errorf("title = %q, want %q", got, "KSail Cluster Configuration")
 		}
@@ -50,16 +65,22 @@ func TestGeneratedSchema(t *testing.T) {
 	})
 
 	t.Run("kind enum", func(t *testing.T) {
+		t.Parallel()
+
 		kindProp := mustProp(t, schema, "kind")
 		assertEnum(t, kindProp, []string{"Cluster"})
 	})
 
 	t.Run("apiVersion enum", func(t *testing.T) {
+		t.Parallel()
+
 		apiProp := mustProp(t, schema, "apiVersion")
 		assertEnum(t, apiProp, []string{"ksail.io/v1alpha1"})
 	})
 
 	t.Run("distribution enum", func(t *testing.T) {
+		t.Parallel()
+
 		cluster := mustNestedProp(t, schema, "spec", "cluster")
 		dist := mustMap(t, cluster["properties"], "cluster.properties")
 		distProp := mustMap(t, dist["distribution"], "distribution")
@@ -67,6 +88,8 @@ func TestGeneratedSchema(t *testing.T) {
 	})
 
 	t.Run("provider enum", func(t *testing.T) {
+		t.Parallel()
+
 		cluster := mustNestedProp(t, schema, "spec", "cluster")
 		props := mustMap(t, cluster["properties"], "cluster.properties")
 		prov := mustMap(t, props["provider"], "provider")
@@ -74,6 +97,8 @@ func TestGeneratedSchema(t *testing.T) {
 	})
 
 	t.Run("no required fields on nested objects", func(t *testing.T) {
+		t.Parallel()
+
 		// The generator clears required on all nested objects (omitzero).
 		spec := mustProp(t, schema, "spec")
 		if spec["required"] != nil {
