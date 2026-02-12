@@ -42,7 +42,6 @@ var (
 type MessageMetadata struct {
 	// ChatMode stores the chat mode when the message was sent.
 	// 0 = agent, 1 = plan, 2 = ask.
-	// For backward compatibility, the legacy AgentMode field is also read during unmarshal.
 	ChatMode ChatMode `json:"chatMode"`
 }
 
@@ -72,89 +71,6 @@ func (s *SessionMetadata) GetDisplayName() string {
 	}
 
 	return unnamedSessionName
-}
-
-// sessionMetadataJSON is the raw JSON shape for backward-compatible unmarshaling.
-type sessionMetadataJSON struct {
-	ID        string            `json:"id"`
-	Name      string            `json:"name"`
-	Model     string            `json:"model,omitempty"`
-	ChatMode  *ChatMode         `json:"chatMode,omitempty"`
-	AgentMode *bool             `json:"agentMode,omitempty"` // legacy field
-	Messages  []json.RawMessage `json:"messages,omitempty"`
-	CreatedAt time.Time         `json:"createdAt"`
-	UpdatedAt time.Time         `json:"updatedAt"`
-}
-
-// legacyMessageMetadata represents the old per-message JSON format.
-// Pointer fields distinguish "absent" from zero-value during deserialization.
-type legacyMessageMetadata struct {
-	AgentMode *bool     `json:"agentMode"`
-	ChatMode  *ChatMode `json:"chatMode"`
-}
-
-// UnmarshalJSON provides backward-compatible deserialization.
-// It reads both the legacy "agentMode" bool fields and the new "chatMode" int fields.
-func (s *SessionMetadata) UnmarshalJSON(data []byte) error {
-	var raw sessionMetadataJSON
-
-	err := json.Unmarshal(data, &raw)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal session metadata: %w", err)
-	}
-
-	s.ID = raw.ID
-	s.Name = raw.Name
-	s.Model = raw.Model
-	s.CreatedAt = raw.CreatedAt
-	s.UpdatedAt = raw.UpdatedAt
-
-	// Resolve session-level chat mode: prefer chatMode, fall back to legacy agentMode
-	switch {
-	case raw.ChatMode != nil:
-		s.ChatMode = raw.ChatMode
-	case raw.AgentMode != nil:
-		mode := AgentMode
-		if !*raw.AgentMode {
-			mode = PlanMode
-		}
-
-		s.ChatMode = &mode
-	default:
-		s.ChatMode = nil // nil = default (agent mode)
-	}
-
-	// Resolve per-message metadata
-	s.Messages = make([]MessageMetadata, 0, len(raw.Messages))
-
-	for _, rawMsg := range raw.Messages {
-		s.Messages = append(s.Messages, resolveMessageChatMode(rawMsg))
-	}
-
-	return nil
-}
-
-// resolveMessageChatMode deserializes a single message's metadata, handling
-// both legacy agentMode bool and new chatMode int formats.
-func resolveMessageChatMode(rawMsg json.RawMessage) MessageMetadata {
-	var legacy legacyMessageMetadata
-
-	err := json.Unmarshal(rawMsg, &legacy)
-	if err != nil {
-		return MessageMetadata{ChatMode: AgentMode}
-	}
-
-	// New format: chatMode field is explicitly present
-	if legacy.ChatMode != nil {
-		return MessageMetadata{ChatMode: *legacy.ChatMode}
-	}
-
-	// Legacy format: agentMode bool present and false means plan mode
-	if legacy.AgentMode != nil && !*legacy.AgentMode {
-		return MessageMetadata{ChatMode: PlanMode}
-	}
-
-	return MessageMetadata{ChatMode: AgentMode}
 }
 
 // errInvalidAppDir is returned when the appDir parameter is not a simple directory name.
