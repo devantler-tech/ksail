@@ -279,7 +279,11 @@ ksail workload delete pod -n metallb-system -l app.kubernetes.io/name=metallb
 
 ``````bash
 # 1. Verify Hetzner Cloud credentials
-echo $HCLOUD_TOKEN | cut -c1-10  # Should show first 10 chars of token
+if [ -z "${HCLOUD_TOKEN:-}" ]; then
+  echo "HCLOUD_TOKEN is not set. Please export your Hetzner API token as HCLOUD_TOKEN."
+else
+  echo "HCLOUD_TOKEN is set. Verify the token value in the Hetzner Cloud Console if issues persist."
+fi
 
 # 2. Check cloud controller manager logs
 ksail workload logs -n kube-system daemonset/hcloud-cloud-controller-manager --tail=100
