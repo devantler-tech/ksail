@@ -19,7 +19,7 @@ LoadBalancer support varies by distribution × provider combination:
 
 **Notes:**
 
-1. **Talos on Docker**: LoadBalancer services are not currently supported. The `--load-balancer` flag is automatically set to `Disabled` for this combination, regardless of user input. MetalLB support for Talos+Docker is planned for a future release.
+1. **Talos on Docker**: LoadBalancer services are not currently supported. The `--load-balancer` flag is automatically set to `Disabled` for this combination, regardless of user input. MetalLB support for Talos on Docker is planned for a future release.
 2. **K3s**: Includes ServiceLB (Klipper-LB) by default, which automatically assigns LoadBalancer IPs using host ports.
 3. **Vanilla**: Requires explicit LoadBalancer installation (cloud-provider-kind). Set `--load-balancer Enabled` during cluster creation. The cloud-provider-kind controller runs as a Docker container and creates additional containers to handle LoadBalancer traffic.
 4. **Talos on Hetzner**: Uses Hetzner Cloud Load Balancer via the cloud controller manager. Automatically enabled.
