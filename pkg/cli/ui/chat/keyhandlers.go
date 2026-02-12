@@ -208,7 +208,7 @@ func (m *Model) handleOpenSessionPicker() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	sessions, _ := ListSessions(m.client)
+	sessions, _ := ListSessions(m.client, m.theme.SessionDir)
 	m.availableSessions = sessions
 	m.filteredSessions = sessions // Start with all sessions
 	m.sessionFilterText = ""      // Reset filter

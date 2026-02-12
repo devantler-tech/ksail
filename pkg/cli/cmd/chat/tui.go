@@ -100,6 +100,7 @@ func runTUIChat(
 	err = chatui.RunWithEventChannelAndModeRef(
 		ctx, session, client, sessionConfig,
 		models, currentModel, timeout, eventChan, agentModeRef, yoloModeRef,
+		chatui.DefaultThemeConfig(), chatui.DefaultToolDisplayConfig(),
 	)
 	if err != nil {
 		return fmt.Errorf("TUI chat failed: %w", err)

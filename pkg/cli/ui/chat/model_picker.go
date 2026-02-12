@@ -182,16 +182,16 @@ func (m *Model) renderModelPickerModal() string {
 	m.renderModelPickerTitle(&listContent, clipStyle)
 
 	isScrollable := totalItems > maxVisible
-	renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
+	m.renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
 
 	endIdx := min(scrollOffset+visibleCount, totalItems)
 	m.renderModelItems(&listContent, clipStyle, scrollOffset, endIdx)
 
-	renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
+	m.renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
 
 	content := strings.TrimRight(listContent.String(), "\n")
 
-	return renderPickerModal(content, modalWidth, visibleCount, isScrollable)
+	return m.renderPickerModal(content, modalWidth, visibleCount, isScrollable)
 }
 
 // renderModelPickerTitle renders the title or filter input.

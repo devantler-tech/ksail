@@ -21,8 +21,7 @@ const (
 	defaultWidth  = 100
 	defaultHeight = 30
 	inputHeight   = 3
-	headerHeight  = logoHeight + 3 // logo + tagline + border
-	footerHeight  = 1              // single line help text
+	footerHeight  = 1 // single line help text
 
 	// Shared picker/output constants.
 	maxPickerItems    = 10 // absolute maximum items in picker modals
@@ -125,6 +124,12 @@ type Model struct {
 	quitting         bool
 	ready            bool
 
+	// Configuration
+	theme        ThemeConfig
+	toolDisplay  ToolDisplayConfig
+	styles       uiStyles
+	headerHeight int
+
 	// Prompt history
 	history      []string // previously submitted prompts
 	historyIndex int      // -1 means not browsing history, 0+ is position in history
@@ -215,6 +220,8 @@ func New(
 		nil,
 		nil,
 		nil,
+		DefaultThemeConfig(),
+		DefaultToolDisplayConfig(),
 	)
 }
 
@@ -233,14 +240,20 @@ func NewWithEventChannel(
 	eventChan chan tea.Msg,
 	agentModeRef *AgentModeRef,
 	yoloModeRef *YoloModeRef,
+	theme ThemeConfig,
+	toolDisplay ToolDisplayConfig,
 ) *Model {
-	textArea := createTextArea()
-	viewPort := createViewport()
+	const headerPadding = 3
+
+	styles := newUIStyles(theme)
+	headerH := theme.LogoHeight + headerPadding
+	textArea := createTextArea(theme.Placeholder)
+	viewPort := createViewport(theme.WelcomeMessage, styles.status, headerH)
 
 	// Initialize spinner
 	spin := spinner.New()
 	spin.Spinner = spinner.MiniDot
-	spin.Style = spinnerStyle
+	spin.Style = styles.spinner
 
 	// Initialize markdown renderer before Bubbletea takes over terminal
 	// This avoids terminal queries that could interfere with input
@@ -252,11 +265,15 @@ func NewWithEventChannel(
 	}
 
 	return &Model{
+		theme:            theme,
+		toolDisplay:      toolDisplay,
+		styles:           styles,
+		headerHeight:     headerH,
 		viewport:         viewPort,
 		textarea:         textArea,
 		spinner:          spin,
 		renderer:         mdRenderer,
-		help:             createHelpModel(),
+		help:             createHelpModel(styles),
 		keys:             DefaultKeyMap(),
 		messages:         make([]message, 0),
 		session:          session,
@@ -281,9 +298,9 @@ func NewWithEventChannel(
 }
 
 // createTextArea initializes the textarea component for user input.
-func createTextArea() textarea.Model {
+func createTextArea(placeholder string) textarea.Model {
 	textArea := textarea.New()
-	textArea.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
+	textArea.Placeholder = placeholder
 	textArea.Focus()
 	textArea.CharLimit = charLimit
 	textArea.SetWidth(defaultWidth - textAreaPadding)
@@ -305,12 +322,12 @@ func createTextArea() textarea.Model {
 }
 
 // createViewport initializes the viewport component for chat history.
-func createViewport() viewport.Model {
+func createViewport(welcomeMessage string, statusSty lipgloss.Style, headerH int) viewport.Model {
 	viewportWidth := defaultWidth - viewportWidthPadding
-	viewportHeight := defaultHeight - inputHeight - headerHeight - footerHeight - viewportHeightPadding
+	viewportHeight := defaultHeight - inputHeight - headerH - footerHeight - viewportHeightPadding
 	viewPort := viewport.New(viewportWidth, viewportHeight)
-	initialMsg := "  Type a message below to start chatting with KSail AI.\n"
-	viewPort.SetContent(statusStyle.Render(initialMsg))
+	initialMsg := "  " + welcomeMessage + "\n"
+	viewPort.SetContent(statusSty.Render(initialMsg))
 
 	return viewPort
 }
@@ -391,9 +408,9 @@ func (m *Model) Update(
 // View renders the TUI.
 func (m *Model) View() string {
 	if m.quitting {
-		goodbye := statusStyle.Render("  Goodbye! Thanks for using KSail.\n")
+		goodbye := m.styles.status.Render("  " + m.theme.GoodbyeMessage + "\n")
 
-		return logoStyle.Render(logo()) + "\n\n" + goodbye
+		return m.styles.logo.Render(m.theme.Logo()) + "\n\n" + goodbye
 	}
 
 	sections := make([]string, 0, viewSectionCount)
@@ -401,7 +418,7 @@ func (m *Model) View() string {
 	// Header, chat viewport, input/modal, and footer
 	sections = append(sections, m.renderHeader())
 	sections = append(sections,
-		viewportStyle.Width(max(m.width-modalPadding, 1)).Render(m.viewport.View()),
+		m.styles.viewport.Width(max(m.width-modalPadding, 1)).Render(m.viewport.View()),
 	)
 	sections = append(sections, m.renderInputOrModal())
 	sections = append(sections, m.renderFooter())
@@ -592,10 +609,11 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 	session := m.session
 	eventChan := m.eventChan
 	agentMode := m.agentMode
+	commandBuilders := m.toolDisplay.CommandBuilders
 
 	return func() tea.Msg {
 		// Create event dispatcher to route SDK events to tea messages
-		dispatcher := newSessionEventDispatcher(eventChan)
+		dispatcher := newSessionEventDispatcher(eventChan, commandBuilders)
 
 		// Subscribe for this turn's events and store unsubscribe in the model
 		unsubscribe := session.On(dispatcher.dispatch)
@@ -656,6 +674,8 @@ func Run(
 		nil,
 		nil,
 		nil,
+		DefaultThemeConfig(),
+		DefaultToolDisplayConfig(),
 	)
 }
 
@@ -682,6 +702,8 @@ func RunWithEventChannel(
 		eventChan,
 		nil,
 		nil,
+		DefaultThemeConfig(),
+		DefaultToolDisplayConfig(),
 	)
 }
 
@@ -698,6 +720,8 @@ func RunWithEventChannelAndModeRef(
 	eventChan chan tea.Msg,
 	agentModeRef *AgentModeRef,
 	yoloModeRef *YoloModeRef,
+	theme ThemeConfig,
+	toolDisplay ToolDisplayConfig,
 ) error {
 	model := NewWithEventChannel(
 		session,
@@ -709,6 +733,8 @@ func RunWithEventChannelAndModeRef(
 		eventChan,
 		agentModeRef,
 		yoloModeRef,
+		theme,
+		toolDisplay,
 	)
 	model.ctx = ctx
 

@@ -11,7 +11,7 @@ func (m *Model) renderHeader() string {
 	headerContentWidth := max(m.width-headerPadding, 1)
 
 	// Truncate each logo line by display width (handles Unicode properly)
-	logoLines := strings.Split(logo(), "\n")
+	logoLines := strings.Split(m.theme.Logo(), "\n")
 	truncateStyle := lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true)
 
 	var clippedLogo strings.Builder
@@ -25,7 +25,7 @@ func (m *Model) renderHeader() string {
 		}
 	}
 
-	logoRendered := logoStyle.Render(clippedLogo.String())
+	logoRendered := m.styles.logo.Render(clippedLogo.String())
 
 	// Build tagline with right-aligned status
 	taglineRow := m.buildTaglineRow(headerContentWidth)
@@ -33,12 +33,12 @@ func (m *Model) renderHeader() string {
 
 	headerContent := logoRendered + "\n" + taglineRow
 
-	return headerBoxStyle.Width(max(m.width-modalPadding, 1)).Render(headerContent)
+	return m.styles.headerBox.Width(max(m.width-modalPadding, 1)).Render(headerContent)
 }
 
 // buildTaglineRow builds the tagline row with right-aligned status indicator.
 func (m *Model) buildTaglineRow(contentWidth int) string {
-	taglineText := taglineStyle.Render("  " + tagline())
+	taglineText := m.styles.tagline.Render("  " + m.theme.Tagline())
 	statusText := m.buildStatusText()
 
 	if statusText == "" {
@@ -71,7 +71,7 @@ func (m *Model) buildStatusText() string {
 	}
 
 	// Model name
-	modelStyle := lipgloss.NewStyle().Foreground(dimColor)
+	modelStyle := lipgloss.NewStyle().Foreground(m.theme.DimColor)
 
 	switch {
 	case m.currentModel != "":
@@ -83,11 +83,14 @@ func (m *Model) buildStatusText() string {
 	// Streaming state and feedback
 	switch {
 	case m.isStreaming:
-		statusParts = append(statusParts, m.spinner.View()+" "+statusStyle.Render("Thinking..."))
+		statusParts = append(
+			statusParts,
+			m.spinner.View()+" "+m.styles.status.Render("Thinking..."),
+		)
 	case m.showCopyFeedback:
-		statusParts = append(statusParts, statusStyle.Render("Copied"+checkmarkSuffix))
+		statusParts = append(statusParts, m.styles.status.Render("Copied"+checkmarkSuffix))
 	case m.justCompleted:
-		statusParts = append(statusParts, statusStyle.Render("Ready"+checkmarkSuffix))
+		statusParts = append(statusParts, m.styles.status.Render("Ready"+checkmarkSuffix))
 	}
 
 	return strings.Join(statusParts, " • ")
@@ -111,7 +114,7 @@ func (m *Model) renderInputOrModal() string {
 		return m.renderSessionPickerModal()
 	}
 
-	return inputStyle.Width(max(m.width-modalPadding, 1)).Render(m.textarea.View())
+	return m.styles.input.Width(max(m.width-modalPadding, 1)).Render(m.textarea.View())
 }
 
 // renderFooter renders the context-aware help text footer using bubbles/help.
