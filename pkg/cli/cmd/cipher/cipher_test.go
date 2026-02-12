@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )
@@ -28,7 +28,7 @@ func TestMain(m *testing.M) {
 func TestNewCipherCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := runtime.NewRuntime()
+	rt := di.NewRuntime()
 	cmd := cipher.NewCipherCmd(rt)
 
 	if cmd == nil {
@@ -60,7 +60,7 @@ func TestNewCipherCmd(t *testing.T) {
 func TestCipherCommandHelp(t *testing.T) {
 	t.Parallel()
 
-	rt := runtime.NewRuntime()
+	rt := di.NewRuntime()
 	cmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer
@@ -105,7 +105,7 @@ func createTestFile(t *testing.T, filename, content string) string {
 func setupCipherCommandTest(t *testing.T, args []string) *cobra.Command {
 	t.Helper()
 
-	rt := runtime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out, errOut bytes.Buffer

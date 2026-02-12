@@ -28,10 +28,10 @@ func TestMain(m *testing.M) {
 	os.Exit(exitCode)
 }
 
-func TestNewCalicoInstaller(t *testing.T) {
+func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
-	installer := calicoinstaller.NewCalicoInstaller(
+	installer := calicoinstaller.NewInstaller(
 		nil,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -41,7 +41,7 @@ func TestNewCalicoInstaller(t *testing.T) {
 	require.NotNil(t, installer, "expected installer to be created")
 }
 
-func TestNewCalicoInstallerWithDistribution(t *testing.T) {
+func TestNewInstallerWithDistribution(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -71,7 +71,7 @@ func TestNewCalicoInstallerWithDistribution(t *testing.T) {
 			t.Parallel()
 
 			client := helm.NewMockInterface(t)
-			installer := calicoinstaller.NewCalicoInstallerWithDistribution(
+			installer := calicoinstaller.NewInstallerWithDistribution(
 				client,
 				"/path/to/kubeconfig",
 				"test-context",
@@ -84,7 +84,7 @@ func TestNewCalicoInstallerWithDistribution(t *testing.T) {
 	}
 }
 
-func TestNewCalicoInstaller_WithDifferentTimeout(t *testing.T) {
+func TestNewInstaller_WithDifferentTimeout(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -109,7 +109,7 @@ func TestNewCalicoInstaller_WithDifferentTimeout(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			installer := calicoinstaller.NewCalicoInstaller(
+			installer := calicoinstaller.NewInstaller(
 				nil,
 				"/path/to/kubeconfig",
 				"test-context",
@@ -121,10 +121,10 @@ func TestNewCalicoInstaller_WithDifferentTimeout(t *testing.T) {
 	}
 }
 
-func TestNewCalicoInstaller_WithEmptyParams(t *testing.T) {
+func TestNewInstaller_WithEmptyParams(t *testing.T) {
 	t.Parallel()
 
-	installer := calicoinstaller.NewCalicoInstaller(
+	installer := calicoinstaller.NewInstaller(
 		nil,
 		"",
 		"",
@@ -134,10 +134,10 @@ func TestNewCalicoInstaller_WithEmptyParams(t *testing.T) {
 	require.NotNil(t, installer, "expected installer to be created even with empty params")
 }
 
-func TestCalicoInstaller_Install_VanillaDistribution(t *testing.T) {
+func TestInstaller_Install_VanillaDistribution(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCalicoInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
 	expectCalicoInstall(t, client, nil)
 
 	err := installer.Install(context.Background())
@@ -145,10 +145,10 @@ func TestCalicoInstaller_Install_VanillaDistribution(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCalicoInstaller_Install_K3sDistribution(t *testing.T) {
+func TestInstaller_Install_K3sDistribution(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCalicoInstallerWithDistribution(t, v1alpha1.DistributionK3s)
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionK3s)
 	expectCalicoInstall(t, client, nil)
 
 	err := installer.Install(context.Background())
@@ -156,10 +156,10 @@ func TestCalicoInstaller_Install_K3sDistribution(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCalicoInstaller_Install_RepoError(t *testing.T) {
+func TestInstaller_Install_RepoError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCalicoInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(assert.AnError)
@@ -170,10 +170,10 @@ func TestCalicoInstaller_Install_RepoError(t *testing.T) {
 	snaps.MatchSnapshot(t, err.Error())
 }
 
-func TestCalicoInstaller_Install_ChartError(t *testing.T) {
+func TestInstaller_Install_ChartError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCalicoInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
 	expectCalicoInstall(t, client, assert.AnError)
 
 	err := installer.Install(context.Background())
@@ -182,10 +182,10 @@ func TestCalicoInstaller_Install_ChartError(t *testing.T) {
 	snaps.MatchSnapshot(t, err.Error())
 }
 
-func TestCalicoInstaller_Install_NilClient(t *testing.T) {
+func TestInstaller_Install_NilClient(t *testing.T) {
 	t.Parallel()
 
-	installer := calicoinstaller.NewCalicoInstallerWithDistribution(
+	installer := calicoinstaller.NewInstallerWithDistribution(
 		nil, // nil client
 		"/path/to/kubeconfig",
 		"test-context",
@@ -199,10 +199,10 @@ func TestCalicoInstaller_Install_NilClient(t *testing.T) {
 	assert.Contains(t, err.Error(), "helm client is nil")
 }
 
-func TestCalicoInstaller_Uninstall_Success(t *testing.T) {
+func TestInstaller_Uninstall_Success(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCalicoInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "calico", "tigera-operator").
 		Return(nil)
@@ -212,10 +212,10 @@ func TestCalicoInstaller_Uninstall_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCalicoInstaller_Uninstall_Error(t *testing.T) {
+func TestInstaller_Uninstall_Error(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCalicoInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "calico", "tigera-operator").
 		Return(assert.AnError)
@@ -226,10 +226,10 @@ func TestCalicoInstaller_Uninstall_Error(t *testing.T) {
 	snaps.MatchSnapshot(t, err.Error())
 }
 
-func TestCalicoInstaller_Uninstall_NilClient(t *testing.T) {
+func TestInstaller_Uninstall_NilClient(t *testing.T) {
 	t.Parallel()
 
-	installer := calicoinstaller.NewCalicoInstallerWithDistribution(
+	installer := calicoinstaller.NewInstallerWithDistribution(
 		nil, // nil client
 		"/path/to/kubeconfig",
 		"test-context",
@@ -245,14 +245,14 @@ func TestCalicoInstaller_Uninstall_NilClient(t *testing.T) {
 
 // --- test helpers ---
 
-func newCalicoInstallerWithDistribution(
+func newInstallerWithDistribution(
 	t *testing.T,
 	distribution v1alpha1.Distribution,
-) (*calicoinstaller.CalicoInstaller, *helm.MockInterface) {
+) (*calicoinstaller.Installer, *helm.MockInterface) {
 	t.Helper()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewCalicoInstallerWithDistribution(
+	installer := calicoinstaller.NewInstallerWithDistribution(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",

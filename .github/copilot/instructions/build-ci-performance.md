@@ -103,7 +103,7 @@ go mod why -m github.com/heavy/dependency
 
 ```dockerfile
 # Multi-stage build with cache mounts
-FROM golang:1.25.4 AS builder
+FROM golang:1.26.0 AS builder
 
 WORKDIR /build
 COPY go.mod go.sum ./
@@ -324,13 +324,13 @@ jobs:
   # These can run in parallel
   lint:
     runs-on: ubuntu-latest
-  
+
   test-unit:
     runs-on: ubuntu-latest
-  
+
   build:
     runs-on: ubuntu-latest
-  
+
   # This depends on build
   test-system:
     needs: [build]

@@ -81,8 +81,6 @@ type ArtifactExistsOptions struct {
 type verifier struct{}
 
 // NewRegistryVerifier creates a new registry verifier.
-//
-//nolint:ireturn // Interface return is intentional for dependency injection
 func NewRegistryVerifier() RegistryVerifier {
 	return &verifier{}
 }
@@ -152,8 +150,6 @@ func (v *verifier) ArtifactExists(ctx context.Context, opts ArtifactExistsOption
 }
 
 // buildReference creates a reference from artifact exists options.
-//
-//nolint:ireturn // Interface return is required by go-containerregistry API
 func (v *verifier) buildReference(opts ArtifactExistsOptions) (name.Reference, error) {
 	refStr := fmt.Sprintf("%s/%s:%s", opts.RegistryEndpoint, opts.Repository, opts.Tag)
 

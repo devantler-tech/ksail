@@ -38,7 +38,7 @@ tools:
   github:
     toolsets: [all]
   web-fetch:
-  bash:
+  bash: true
 
 source: githubnext/agentics/workflows/daily-qa.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
 ---

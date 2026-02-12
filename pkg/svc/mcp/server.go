@@ -1,4 +1,3 @@
-// Package mcp provides an MCP server for exposing KSail commands as tools.
 package mcp
 
 import (
@@ -8,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/ai/toolgen"
+	"github.com/devantler-tech/ksail/v5/pkg/toolgen"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 )

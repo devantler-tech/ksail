@@ -59,7 +59,9 @@ __MACOSX/
 *-megalinter_file_names_cspell.txt
 
 # Go test coverage reports
-coverage*
+coverage*.txt
+coverage*.out
+coverage*.html
 
 # Go test binaries
 *.test
@@ -77,6 +79,9 @@ coverage_summary.txt
 
 # Go vendor directory
 vendor/
+
+# Go workspace sum file (derived from go.work)
+go.work.sum
 
 # ==============================================================================
 # Testing Tools

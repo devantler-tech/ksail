@@ -275,6 +275,22 @@ func (c *CSI) ValidValues() []string {
 	return []string{string(CSIDefault), string(CSIEnabled), string(CSIDisabled)}
 }
 
+// EffectiveValue resolves Default to its concrete meaning for the given
+// distribution × provider combination. Enabled and Disabled pass through
+// unchanged. For distributions that bundle a CSI driver (e.g. K3s),
+// Default resolves to Enabled; otherwise it resolves to Disabled.
+func (c *CSI) EffectiveValue(distribution Distribution, provider Provider) CSI {
+	if *c != CSIDefault {
+		return *c
+	}
+
+	if distribution.ProvidesCSIByDefault(provider) {
+		return CSIEnabled
+	}
+
+	return CSIDisabled
+}
+
 // --- Metrics Server Types ---
 
 // MetricsServer defines the Metrics Server options for a KSail cluster.
@@ -333,6 +349,22 @@ func (m *MetricsServer) ValidValues() []string {
 	}
 }
 
+// EffectiveValue resolves Default to its concrete meaning for the given
+// distribution. Enabled and Disabled pass through unchanged. For
+// distributions that bundle metrics-server (e.g. K3s), Default resolves
+// to Enabled; otherwise it resolves to Disabled.
+func (m *MetricsServer) EffectiveValue(distribution Distribution) MetricsServer {
+	if *m != MetricsServerDefault {
+		return *m
+	}
+
+	if distribution.ProvidesMetricsServerByDefault() {
+		return MetricsServerEnabled
+	}
+
+	return MetricsServerDisabled
+}
+
 // --- Load Balancer Types ---
 
 // LoadBalancer defines the LoadBalancer options for a KSail cluster.
@@ -389,6 +421,32 @@ func (l *LoadBalancer) ValidValues() []string {
 		string(LoadBalancerEnabled),
 		string(LoadBalancerDisabled),
 	}
+}
+
+// EffectiveValue resolves Default to its concrete meaning for the given
+// distribution × provider combination. Enabled and Disabled pass through
+// unchanged, except for Talos+Docker which is forced to Disabled regardless
+// of the requested value. For distributions that bundle a load balancer
+// (e.g. K3s), Default resolves to Enabled; otherwise it resolves to Disabled.
+func (l *LoadBalancer) EffectiveValue(
+	distribution Distribution, provider Provider,
+) LoadBalancer {
+	// Talos × Docker: LoadBalancer is not yet implemented (MetalLB planned).
+	// Force Disabled regardless of the requested value to prevent false-positive
+	// diffs in the update command. Remove this guard once MetalLB support lands.
+	if distribution == DistributionTalos && provider == ProviderDocker {
+		return LoadBalancerDisabled
+	}
+
+	if *l != LoadBalancerDefault {
+		return *l
+	}
+
+	if distribution.ProvidesLoadBalancerByDefault(provider) {
+		return LoadBalancerEnabled
+	}
+
+	return LoadBalancerDisabled
 }
 
 // --- Cert-Manager Types ---

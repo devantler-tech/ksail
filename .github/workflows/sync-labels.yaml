@@ -4,6 +4,10 @@ on:
   schedule:
     - cron: "0 7 * * 1"
 
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: false
+
 permissions:
   issues: write
 

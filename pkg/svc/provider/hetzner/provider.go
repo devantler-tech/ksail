@@ -7,8 +7,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/labels"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
@@ -205,9 +205,13 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to list servers: %w", err)
 	}
 
-	return labels.UniqueValues(servers, LabelClusterName, func(s *hcloud.Server) map[string]string {
-		return s.Labels
-	}), nil
+	return k8s.UniqueLabelValues(
+		servers,
+		LabelClusterName,
+		func(s *hcloud.Server) map[string]string {
+			return s.Labels
+		},
+	), nil
 }
 
 // NodesExist returns true if nodes exist for the given cluster name.
@@ -247,6 +251,21 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	err := p.deleteInfrastructure(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to delete infrastructure: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteServer deletes a single Hetzner Cloud server.
+// Unlike DeleteNodes, this targets a specific server without removing infrastructure.
+func (p *Provider) DeleteServer(ctx context.Context, server *hcloud.Server) error {
+	if p.client == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	_, _, err := p.client.Server.DeleteWithResult(ctx, server)
+	if err != nil {
+		return fmt.Errorf("failed to delete server %s: %w", server.Name, err)
 	}
 
 	return nil
@@ -658,7 +677,7 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) hcloud.ServerCre
 		Location: &hcloud.Location{
 			Name: opts.Location,
 		},
-		StartAfterCreate: hcloud.Ptr(true),
+		StartAfterCreate: new(true),
 	}
 
 	// Use either Image or ISO - ISOs are used for Talos public ISOs

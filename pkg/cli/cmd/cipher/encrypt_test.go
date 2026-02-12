@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 )
 
@@ -30,7 +30,7 @@ func TestNewEncryptCmd(t *testing.T) {
 func TestEncryptCommandHelp(t *testing.T) {
 	t.Parallel()
 
-	rt := runtime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer
@@ -48,7 +48,7 @@ func TestEncryptCommandHelp(t *testing.T) {
 func TestEncryptCommandRequiresFile(t *testing.T) {
 	t.Parallel()
 
-	rt := runtime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out, errOut bytes.Buffer
@@ -68,7 +68,7 @@ func setupEncryptTest(t *testing.T, filename, content string) error {
 
 	testFile := createTestFile(t, filename, content)
 
-	rt := runtime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out, errOut bytes.Buffer

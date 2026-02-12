@@ -184,10 +184,3 @@ func TestErrKubeconfigPathEmpty_ErrorMessage(t *testing.T) {
 
 	assert.Contains(t, k8s.ErrKubeconfigPathEmpty.Error(), "kubeconfig path is empty")
 }
-
-// TestErrTimeoutExceeded_ErrorMessage tests the timeout error message content.
-func TestErrTimeoutExceeded_ErrorMessage(t *testing.T) {
-	t.Parallel()
-
-	assert.Contains(t, k8s.ErrTimeoutExceeded.Error(), "timeout exceeded")
-}

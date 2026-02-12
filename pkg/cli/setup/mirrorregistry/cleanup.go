@@ -6,16 +6,17 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	dockerhelpers "github.com/devantler-tech/ksail/v5/pkg/cli/dockerutil"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
@@ -32,7 +33,7 @@ type CleanupDependencies struct {
 // DefaultCleanupDependencies returns the default cleanup dependencies.
 func DefaultCleanupDependencies() CleanupDependencies {
 	return CleanupDependencies{
-		DockerInvoker:     helpers.WithDockerClient,
+		DockerInvoker:     dockerhelpers.WithDockerClient,
 		LocalRegistryDeps: localregistry.DefaultDependencies(),
 	}
 }
@@ -373,7 +374,7 @@ func displayRegistryCleanupOutputWithTimer(
 		})
 	}
 
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
@@ -610,7 +611,7 @@ func executeRegistryCleanup(
 
 	notifyRegistryDeletions(ctx, cmd, registryNames, registryMgr)
 
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,

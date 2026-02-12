@@ -4,16 +4,17 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/k9s"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/spf13/cobra"
 )
 
 // NewConnectCmd creates the connect command for clusters.
-func NewConnectCmd(_ *runtime.Runtime) *cobra.Command {
+func NewConnectCmd(_ *di.Runtime) *cobra.Command {
 	var editorFlag string
 
 	cmd := &cobra.Command{
@@ -44,7 +45,7 @@ any k9s functionality. Examples:
 	)
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return HandleConnectRunE(cmd, cfgManager, args, editorFlag)
+		return handleConnectRunE(cmd, cfgManager, args, editorFlag)
 	}
 
 	cmd.Flags().StringVar(
@@ -57,9 +58,8 @@ any k9s functionality. Examples:
 	return cmd
 }
 
-// HandleConnectRunE handles the connect command execution.
-// Exported for testing purposes.
-func HandleConnectRunE(
+// handleConnectRunE handles the connect command execution.
+func handleConnectRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	args []string,
@@ -76,7 +76,7 @@ func HandleConnectRunE(
 	defer cleanup()
 
 	// Get kubeconfig path with tilde expansion
-	kubeConfigPath, err := helpers.GetKubeconfigPathFromConfig(cfg)
+	kubeConfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("get kubeconfig path: %w", err)
 	}
@@ -107,7 +107,7 @@ func HandleConnectRunE(
 // It returns a cleanup function that should be called to restore the original environment.
 func setupEditorEnv(editorFlag string, cfg *v1alpha1.Cluster) func() {
 	// Create editor resolver
-	resolver := helpers.NewEditorResolver(editorFlag, cfg)
+	resolver := editor.NewResolver(editorFlag, cfg)
 
 	// Resolve the editor
 	editorCmd := resolver.Resolve()

@@ -11,10 +11,10 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/samber/do/v2"
@@ -49,11 +49,10 @@ type fakeDeleteFactory struct {
 	deleteErr    error
 }
 
-//nolint:ireturn,nolintlint // Test fake must return interface to satisfy factory contract
 func (f fakeDeleteFactory) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
-) (clusterprovisioner.ClusterProvisioner, any, error) {
+) (clusterprovisioner.Provisioner, any, error) {
 	cfg := &v1alpha4.Cluster{Name: "test"}
 
 	return &fakeDeleteProvisioner{
@@ -88,12 +87,12 @@ users:
 	return kubeconfigPath
 }
 
-func newDeleteTestRuntimeContainer(t *testing.T) *runtime.Runtime {
+func newDeleteTestRuntimeContainer(t *testing.T) *di.Runtime {
 	t.Helper()
 
-	return runtime.New(
-		func(i runtime.Injector) error {
-			do.Provide(i, func(runtime.Injector) (timer.Timer, error) {
+	return di.New(
+		func(i di.Injector) error {
+			do.Provide(i, func(di.Injector) (timer.Timer, error) {
 				return timer.New(), nil
 			})
 
@@ -118,7 +117,7 @@ func setupContextBasedTest(
 	contextName string,
 	existsResult bool,
 	deleteErr error,
-) (*runtime.Runtime, func()) {
+) (*di.Runtime, func()) {
 	t.Helper()
 
 	workingDir := t.TempDir()
@@ -127,7 +126,7 @@ func setupContextBasedTest(
 	kubeconfigPath := writeKubeconfigWithContext(t, workingDir, contextName)
 	t.Setenv("KUBECONFIG", kubeconfigPath)
 
-	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(
+	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(
 		fakeDeleteFactory{existsResult: existsResult, deleteErr: deleteErr},
 	)
 
@@ -200,7 +199,7 @@ func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
 		t,
 		"kind-nonexistent",
 		false,
-		clustererrors.ErrClusterNotFound,
+		clustererr.ErrClusterNotFound,
 	)
 	defer cleanup()
 
@@ -213,7 +212,7 @@ func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
 
 	err := cmd.Execute()
 	require.Error(t, err)
-	require.ErrorIs(t, err, clustererrors.ErrClusterNotFound)
+	require.ErrorIs(t, err, clustererr.ErrClusterNotFound)
 
 	snaps.MatchSnapshot(t, trimTrailingNewlineDelete(out.String()))
 }
@@ -416,8 +415,8 @@ func TestDelete_NonTTY_SkipsConfirmation(t *testing.T) {
 
 // Ensure fake types satisfy interfaces at compile time.
 var (
-	_ clusterprovisioner.ClusterProvisioner = (*fakeDeleteProvisioner)(nil)
-	_ clusterprovisioner.Factory            = (*fakeDeleteFactory)(nil)
+	_ clusterprovisioner.Provisioner = (*fakeDeleteProvisioner)(nil)
+	_ clusterprovisioner.Factory     = (*fakeDeleteFactory)(nil)
 )
 
 // containerTestCase is a test case for IsClusterContainer.

@@ -28,6 +28,14 @@ const (
 	defaultSessionName = "New Chat"
 	// unnamedSessionName is used when SDK has no summary and no local name.
 	unnamedSessionName = "Unnamed"
+	// hoursPerDay is the number of hours in a day.
+	hoursPerDay = 24
+)
+
+// Sentinel errors for session operations.
+var (
+	errSessionIDEmpty   = errors.New("session ID is empty")
+	errInvalidSessionID = errors.New("invalid session ID")
 )
 
 // MessageMetadata represents metadata for a single message in a session.
@@ -55,37 +63,55 @@ func (s *SessionMetadata) GetDisplayName() string {
 	if s.Name != "" {
 		return s.Name
 	}
+
 	if s.SDKMetadata != nil && s.SDKMetadata.Summary != nil && *s.SDKMetadata.Summary != "" {
 		return *s.SDKMetadata.Summary
 	}
+
 	return unnamedSessionName
 }
 
+// errInvalidAppDir is returned when the appDir parameter is not a simple directory name.
+var errInvalidAppDir = errors.New(
+	"invalid appDir: must be a simple directory name (non-empty, relative, no separators or \"..\")",
+)
+
 // sessionsDir returns the path to the chat sessions directory.
-func sessionsDir() (string, error) {
+func sessionsDir(appDir string) (string, error) {
+	if appDir == "" ||
+		filepath.IsAbs(appDir) ||
+		strings.Contains(appDir, "..") ||
+		strings.ContainsAny(appDir, "/\\") {
+		return "", errInvalidAppDir
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
-	return filepath.Join(home, ".ksail", "chat", "sessions"), nil
+
+	return filepath.Join(home, appDir, "chat", "sessions"), nil
 }
 
 // ensureSessionsDir creates the sessions directory if it doesn't exist.
-func ensureSessionsDir() (string, error) {
-	dir, err := sessionsDir()
+func ensureSessionsDir(appDir string) (string, error) {
+	dir, err := sessionsDir(appDir)
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(dir, sessionDirPerm); err != nil {
+
+	err = os.MkdirAll(dir, sessionDirPerm)
+	if err != nil {
 		return "", fmt.Errorf("failed to create sessions directory: %w", err)
 	}
+
 	return dir, nil
 }
 
 // ListSessions returns all local session metadata from SDK, enriched with local metadata.
 // Remote sessions are excluded from the returned slice.
 // Sessions are sorted by ModifiedTime (most recent first).
-func ListSessions(client *copilot.Client) ([]SessionMetadata, error) {
+func ListSessions(client *copilot.Client, appDir string) ([]SessionMetadata, error) {
 	// Get sessions from SDK
 	sdkSessions, err := client.ListSessions()
 	if err != nil {
@@ -100,7 +126,7 @@ func ListSessions(client *copilot.Client) ([]SessionMetadata, error) {
 		}
 
 		// Try to load local metadata
-		localSession, err := LoadSession(sdkSession.SessionID)
+		localSession, err := LoadSession(sdkSession.SessionID, appDir)
 		if err != nil {
 			// No local metadata, create from SDK only
 			localSession = &SessionMetadata{
@@ -126,41 +152,63 @@ func ListSessions(client *copilot.Client) ([]SessionMetadata, error) {
 // validateSessionID ensures the session ID contains only safe characters.
 // Allowed characters are ASCII letters, digits, hyphens, and underscores.
 // This prevents path traversal attacks using malicious session IDs.
-func validateSessionID(id string) error {
-	if id == "" {
-		return errors.New("session ID is empty")
+func validateSessionID(
+	sessionID string,
+) error {
+	if sessionID == "" {
+		return errSessionIDEmpty
 	}
-	for _, c := range id {
-		if (c >= 'a' && c <= 'z') ||
-			(c >= 'A' && c <= 'Z') ||
-			(c >= '0' && c <= '9') ||
-			c == '-' || c == '_' {
+
+	for _, char := range sessionID {
+		if isValidSessionIDChar(char) {
 			continue
 		}
-		return fmt.Errorf("invalid session ID %q: contains invalid character %q", id, c)
+
+		return fmt.Errorf(
+			"%w: %q contains invalid character %q",
+			errInvalidSessionID,
+			sessionID,
+			char,
+		)
 	}
+
 	return nil
 }
 
-// LoadSession loads session metadata by ID.
-func LoadSession(id string) (*SessionMetadata, error) {
-	if err := validateSessionID(id); err != nil {
-		return nil, err
-	}
+// isValidSessionIDChar returns true if the rune is allowed in session IDs.
+func isValidSessionIDChar(char rune) bool {
+	return (char >= 'a' && char <= 'z') ||
+		(char >= 'A' && char <= 'Z') ||
+		(char >= '0' && char <= '9') ||
+		char == '-' || char == '_'
+}
 
-	dir, err := sessionsDir()
+// LoadSession loads session metadata by ID.
+func LoadSession(
+	sessionID string,
+	appDir string,
+) (*SessionMetadata, error) {
+	err := validateSessionID(sessionID)
 	if err != nil {
 		return nil, err
 	}
 
-	path := filepath.Join(dir, id+".json")
+	dir, err := sessionsDir(appDir)
+	if err != nil {
+		return nil, err
+	}
+
+	path := filepath.Join(dir, sessionID+".json")
+
 	data, err := os.ReadFile(path) //nolint:gosec // Path is validated via validateSessionID
 	if err != nil {
 		return nil, fmt.Errorf("failed to read session file: %w", err)
 	}
 
 	var session SessionMetadata
-	if err := json.Unmarshal(data, &session); err != nil {
+
+	err = json.Unmarshal(data, &session)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse session file: %w", err)
 	}
 
@@ -169,12 +217,13 @@ func LoadSession(id string) (*SessionMetadata, error) {
 
 // SaveSession saves session metadata to disk.
 // The ID must be provided (typically from the Copilot SDK session.SessionID).
-func SaveSession(session *SessionMetadata) error {
-	if err := validateSessionID(session.ID); err != nil {
+func SaveSession(session *SessionMetadata, appDir string) error {
+	err := validateSessionID(session.ID)
+	if err != nil {
 		return err
 	}
 
-	dir, err := ensureSessionsDir()
+	dir, err := ensureSessionsDir(appDir)
 	if err != nil {
 		return err
 	}
@@ -183,6 +232,7 @@ func SaveSession(session *SessionMetadata) error {
 	if session.CreatedAt.IsZero() {
 		session.CreatedAt = time.Now()
 	}
+
 	session.UpdatedAt = time.Now()
 
 	if session.Name == "" {
@@ -195,7 +245,9 @@ func SaveSession(session *SessionMetadata) error {
 	}
 
 	path := filepath.Join(dir, session.ID+".json")
-	if err := os.WriteFile(path, data, sessionFilePerm); err != nil {
+
+	err = os.WriteFile(path, data, sessionFilePerm)
+	if err != nil {
 		return fmt.Errorf("failed to write session file: %w", err)
 	}
 
@@ -203,37 +255,50 @@ func SaveSession(session *SessionMetadata) error {
 }
 
 // DeleteSession removes a chat session from both SDK and local disk.
-func DeleteSession(client *copilot.Client, id string) error {
-	if err := validateSessionID(id); err != nil {
-		return err
-	}
-
-	// Delete from SDK first
-	if err := client.DeleteSession(id); err != nil {
-		return fmt.Errorf("failed to delete SDK session: %w", err)
-	}
-
-	// Then delete local file
-	return deleteLocalSession(id)
-}
-
-// deleteLocalSession removes a chat session from local disk only.
-func deleteLocalSession(id string) error {
-	if err := validateSessionID(id); err != nil {
-		return err
-	}
-
-	dir, err := sessionsDir()
+func DeleteSession(
+	client *copilot.Client,
+	sessionID string,
+	appDir string,
+) error {
+	err := validateSessionID(sessionID)
 	if err != nil {
 		return err
 	}
 
-	path := filepath.Join(dir, id+".json")
-	if err := os.Remove(path); err != nil {
-		if os.IsNotExist(err) {
+	// Delete from SDK first
+	err = client.DeleteSession(sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to delete SDK session: %w", err)
+	}
+
+	// Then delete local file
+	return deleteLocalSession(sessionID, appDir)
+}
+
+// deleteLocalSession removes a chat session from local disk only.
+func deleteLocalSession(
+	sessionID string,
+	appDir string,
+) error {
+	err := validateSessionID(sessionID)
+	if err != nil {
+		return err
+	}
+
+	dir, err := sessionsDir(appDir)
+	if err != nil {
+		return err
+	}
+
+	path := filepath.Join(dir, sessionID+".json")
+
+	removeErr := os.Remove(path)
+	if removeErr != nil {
+		if os.IsNotExist(removeErr) {
 			return nil // Already deleted
 		}
-		return fmt.Errorf("failed to delete session file: %w", err)
+
+		return fmt.Errorf("failed to delete session file: %w", removeErr)
 	}
 
 	return nil
@@ -242,7 +307,7 @@ func deleteLocalSession(id string) error {
 // SyncSessionMetadata synchronizes local session files with SDK sessions.
 // It removes local session files that no longer exist in the SDK (excluding remote sessions).
 // Returns an error if sync fails (caller should display as non-blocking toast).
-func SyncSessionMetadata(client *copilot.Client) error {
+func SyncSessionMetadata(client *copilot.Client, appDir string) error {
 	// Get all sessions from SDK
 	sdkSessions, err := client.ListSessions()
 	if err != nil {
@@ -251,24 +316,32 @@ func SyncSessionMetadata(client *copilot.Client) error {
 
 	// Build set of valid local SDK session IDs (excluding remote sessions)
 	validIDs := make(map[string]struct{})
+
 	for _, sdkSession := range sdkSessions {
 		if sdkSession.IsRemote {
 			continue // Skip remote sessions
 		}
+
 		validIDs[sdkSession.SessionID] = struct{}{}
 	}
 
 	// Get local sessions directory
-	dir, err := sessionsDir()
+	dir, err := sessionsDir(appDir)
 	if err != nil {
 		return err
 	}
 
+	return deleteOrphanedLocalSessions(dir, validIDs)
+}
+
+// deleteOrphanedLocalSessions removes local session files not present in the valid IDs set.
+func deleteOrphanedLocalSessions(dir string, validIDs map[string]struct{}) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil // No local sessions to sync
 		}
+
 		return fmt.Errorf("failed to read sessions directory: %w", err)
 	}
 
@@ -278,11 +351,13 @@ func SyncSessionMetadata(client *copilot.Client) error {
 			continue
 		}
 
-		id := strings.TrimSuffix(entry.Name(), ".json")
-		if _, exists := validIDs[id]; !exists {
+		sessionID := strings.TrimSuffix(entry.Name(), ".json")
+		if _, exists := validIDs[sessionID]; !exists {
 			// Local session doesn't exist in SDK, delete it
 			path := filepath.Join(dir, entry.Name())
-			if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
+
+			removeErr := os.Remove(path)
+			if removeErr != nil && !os.IsNotExist(removeErr) {
 				// Log error but continue with other files
 				continue
 			}
@@ -297,21 +372,23 @@ var ErrNoSessions = errors.New("no sessions available")
 
 // GetMostRecentSession returns the most recently updated session metadata.
 // Returns ErrNoSessions if no sessions exist.
-func GetMostRecentSession(client *copilot.Client) (*SessionMetadata, error) {
-	sessions, err := ListSessions(client)
+func GetMostRecentSession(client *copilot.Client, appDir string) (*SessionMetadata, error) {
+	sessions, err := ListSessions(client, appDir)
 	if err != nil {
 		return nil, err
 	}
+
 	if len(sessions) == 0 {
 		return nil, ErrNoSessions
 	}
+
 	return &sessions[0], nil
 }
 
 // GenerateSessionName creates a session name from the first user message.
-func GenerateSessionName(messages []chatMessage) string {
+func GenerateSessionName(messages []message) string {
 	for _, msg := range messages {
-		if msg.role == "user" && msg.content != "" {
+		if msg.role == roleUser && msg.content != "" {
 			name := strings.ReplaceAll(msg.content, "\n", " ")
 			if utf8.RuneCountInString(name) > maxSessionNameLength {
 				runes := []rune(name)
@@ -319,16 +396,18 @@ func GenerateSessionName(messages []chatMessage) string {
 					runes[:maxSessionNameLength-len(truncatedNameSuffix)],
 				) + truncatedNameSuffix
 			}
+
 			return name
 		}
 	}
+
 	return defaultSessionName
 }
 
 // FormatRelativeTime formats a time as a relative string (e.g., "2 hours ago").
-func FormatRelativeTime(t time.Time) string {
+func FormatRelativeTime(timestamp time.Time) string {
 	now := time.Now()
-	diff := now.Sub(t)
+	diff := now.Sub(timestamp)
 
 	switch {
 	case diff < time.Minute:
@@ -338,20 +417,23 @@ func FormatRelativeTime(t time.Time) string {
 		if mins == 1 {
 			return "1 min ago"
 		}
+
 		return fmt.Sprintf("%d mins ago", mins)
-	case diff < 24*time.Hour:
+	case diff < hoursPerDay*time.Hour:
 		hours := int(diff.Hours())
 		if hours == 1 {
 			return "1 hour ago"
 		}
+
 		return fmt.Sprintf("%d hours ago", hours)
-	case diff < 7*24*time.Hour:
-		days := int(diff.Hours() / 24)
+	case diff < 7*hoursPerDay*time.Hour:
+		days := int(diff.Hours() / hoursPerDay)
 		if days == 1 {
 			return "yesterday"
 		}
+
 		return fmt.Sprintf("%d days ago", days)
 	default:
-		return t.Format("Jan 2")
+		return timestamp.Format("Jan 2")
 	}
 }

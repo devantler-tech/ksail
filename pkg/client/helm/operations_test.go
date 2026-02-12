@@ -17,6 +17,9 @@ import (
 var (
 	errRepositoryConnection    = errors.New("failed to connect to repository")
 	errChartInstallationFailed = errors.New("chart installation failed")
+	errTransientNetworkFailure = errors.New(
+		"failed to locate chart: read tcp 10.0.0.1:12345->1.2.3.4:443: read: connection reset by peer",
+	)
 )
 
 func TestInstallOrUpgradeChart_Success(t *testing.T) {
@@ -168,4 +171,83 @@ func TestChartConfig_Fields(t *testing.T) {
 	require.True(t, config.CreateNamespace)
 	require.Equal(t, map[string]string{"key": "val"}, config.SetJSONVals)
 	require.True(t, config.SkipWait)
+}
+
+func TestInstallOrUpgradeChart_RetryOnTransientNetworkError(t *testing.T) {
+	t.Parallel()
+
+	mockClient := helm.NewMockInterface(t)
+	ctx := context.Background()
+	timeout := 5 * time.Minute
+
+	repoConfig := helm.RepoConfig{
+		Name:     "test-repo",
+		URL:      "https://charts.example.com",
+		RepoName: "Test Repository",
+	}
+
+	chartConfig := helm.ChartConfig{
+		ReleaseName: "test-release",
+		ChartName:   "test-chart",
+		Namespace:   "default",
+		RepoURL:     "https://charts.example.com",
+	}
+
+	mockClient.EXPECT().AddRepository(
+		mock.Anything,
+		mock.Anything,
+		timeout,
+	).Return(nil)
+
+	// First call fails with transient network error, second succeeds.
+	mockClient.EXPECT().InstallOrUpgradeChart(
+		mock.Anything,
+		mock.Anything,
+	).Return(nil, fmt.Errorf("install error: %w", errTransientNetworkFailure)).Once()
+
+	mockClient.EXPECT().InstallOrUpgradeChart(
+		mock.Anything,
+		mock.Anything,
+	).Return(&helm.ReleaseInfo{Name: "test-release"}, nil).Once()
+
+	err := helm.InstallOrUpgradeChart(ctx, mockClient, repoConfig, chartConfig, timeout)
+	require.NoError(t, err)
+}
+
+func TestInstallOrUpgradeChart_NonRetryableErrorFailsImmediately(t *testing.T) {
+	t.Parallel()
+
+	mockClient := helm.NewMockInterface(t)
+	ctx := context.Background()
+	timeout := 5 * time.Minute
+
+	repoConfig := helm.RepoConfig{
+		Name:     "test-repo",
+		URL:      "https://charts.example.com",
+		RepoName: "Test Repository",
+	}
+
+	chartConfig := helm.ChartConfig{
+		ReleaseName: "test-release",
+		ChartName:   "test-chart",
+		Namespace:   "default",
+		RepoURL:     "https://charts.example.com",
+	}
+
+	mockClient.EXPECT().AddRepository(
+		mock.Anything,
+		mock.Anything,
+		timeout,
+	).Return(nil)
+
+	// Non-retryable error should not trigger retry.
+	mockClient.EXPECT().InstallOrUpgradeChart(
+		mock.Anything,
+		mock.Anything,
+	).Return(nil, fmt.Errorf("install error: %w", errChartInstallationFailed)).Once()
+
+	err := helm.InstallOrUpgradeChart(ctx, mockClient, repoConfig, chartConfig, timeout)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to install Test Repository chart")
+	assert.Contains(t, err.Error(), "chart installation failed")
 }
