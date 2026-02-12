@@ -116,12 +116,12 @@ You must manually delete the old cluster first with `ksail cluster delete`, then
 
 LoadBalancer support varies by distribution and provider:
 
-| Distribution         | Support Status  | LoadBalancer Implementation           | Configuration Required    |
-|----------------------|-----------------|---------------------------------------|---------------------------|
+| Distribution         | Support Status  | LoadBalancer Implementation            | Configuration Required    |
+|----------------------|-----------------|----------------------------------------|---------------------------|
 | **Vanilla (Kind)**   | ✅ Supported     | cloud-provider-kind (Docker container) | `--load-balancer Enabled` |
-| **K3s (K3d)**        | ✅ Built-in      | ServiceLB (Klipper-LB)                | Enabled by default        |
-| **Talos on Docker**  | ❌ Not supported | N/A                                   | Always `Disabled`         |
-| **Talos on Hetzner** | ✅ Built-in      | hcloud-cloud-controller-manager       | Enabled by default        |
+| **K3s (K3d)**        | ✅ Built-in      | ServiceLB (Klipper-LB)                 | Enabled by default        |
+| **Talos on Docker**  | ❌ Not supported | N/A                                    | Always `Disabled`         |
+| **Talos on Hetzner** | ✅ Built-in      | hcloud-cloud-controller-manager        | Enabled by default        |
 
 For Vanilla (Kind) on Docker, KSail starts the `cloud-provider-kind` component (running as a Docker container) to provide LoadBalancer functionality.
 
