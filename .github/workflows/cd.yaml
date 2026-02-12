@@ -11,6 +11,10 @@ env:
   # proxy.golang.org outages. go.sum still verifies module integrity.
   GOPROXY: "https://proxy.golang.org|direct"
 
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: false
+
 jobs:
   goreleaser:
     name: Release with GoReleaser
