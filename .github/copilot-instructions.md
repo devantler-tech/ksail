@@ -302,3 +302,4 @@ npm run dev                            # Test locally (if needed)
 - **VSCode Extension**: Added VSCode extension for managing KSail clusters from the editor with interactive wizards and MCP server support
 - **AI Chat Integration**: Added `ksail chat` command powered by GitHub Copilot SDK for interactive cluster configuration and troubleshooting (`pkg/svc/chat/`)
 - **MCP Server**: Implemented Model Context Protocol server to expose KSail as a tool for Claude and other AI assistants (`pkg/svc/mcp/`)
+- **MetalLB LoadBalancer Support**: Completed LoadBalancer support for Talos × Docker with MetalLB installer (`pkg/svc/installer/metallb/`), configured with default IP pool (172.18.255.200-172.18.255.250) and Layer 2 mode
