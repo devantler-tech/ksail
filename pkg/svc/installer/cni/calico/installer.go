@@ -12,7 +12,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
-	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -298,59 +297,16 @@ func (c *Installer) ensurePrivilegedNamespaces(ctx context.Context) error {
 	return nil
 }
 
-// ensurePrivilegedNamespace creates or updates a namespace with PSS privileged labels.
+// ensurePrivilegedNamespace delegates to k8s.EnsurePrivilegedNamespace to create
+// or update a namespace with PSS privileged labels.
 func (c *Installer) ensurePrivilegedNamespace(
 	ctx context.Context,
-	clientset *kubernetes.Clientset,
+	clientset kubernetes.Interface,
 	name string,
 ) error {
-	pssLabels := map[string]string{
-		"pod-security.kubernetes.io/enforce": "privileged",
-		"pod-security.kubernetes.io/audit":   "privileged",
-		"pod-security.kubernetes.io/warn":    "privileged",
-	}
-
-	namespace, err := clientset.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
+	err := k8s.EnsurePrivilegedNamespace(ctx, clientset, name)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create the namespace with PSS labels
-			newNS := &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   name,
-					Labels: pssLabels,
-				},
-			}
-
-			_, err = clientset.CoreV1().Namespaces().Create(ctx, newNS, metav1.CreateOptions{})
-			if err != nil {
-				return fmt.Errorf("create namespace: %w", err)
-			}
-
-			return nil
-		}
-
-		return fmt.Errorf("get namespace: %w", err)
-	}
-
-	// Namespace exists, ensure PSS labels are set
-	if namespace.Labels == nil {
-		namespace.Labels = make(map[string]string)
-	}
-
-	updated := false
-
-	for k, v := range pssLabels {
-		if namespace.Labels[k] != v {
-			namespace.Labels[k] = v
-			updated = true
-		}
-	}
-
-	if updated {
-		_, err = clientset.CoreV1().Namespaces().Update(ctx, namespace, metav1.UpdateOptions{})
-		if err != nil {
-			return fmt.Errorf("update namespace labels: %w", err)
-		}
+		return fmt.Errorf("ensure privileged namespace %s: %w", name, err)
 	}
 
 	return nil

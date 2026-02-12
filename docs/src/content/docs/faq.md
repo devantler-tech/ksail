@@ -114,14 +114,14 @@ You must manually delete the old cluster first with `ksail cluster delete`, then
 
 ### Which distributions support LoadBalancer services?
 
-LoadBalancer support varies by distribution and provider:
+LoadBalancer support is available across all distributions:
 
-- **Vanilla (Kind)** - ✅ Supports LoadBalancer services
-- **K3s (K3d)** - ✅ Includes ServiceLB load balancer by default
-- **Talos on Docker** - ❌ LoadBalancer services are not currently supported. The `--load-balancer` flag is automatically set to `Disabled` for this combination
+- **Vanilla (Kind) on Docker** - ✅ Uses cloud-provider-kind (external Docker container)
+- **K3s on Docker** - ✅ Uses built-in ServiceLB (Klipper-LB)
+- **Talos on Docker** - ✅ Uses MetalLB with default IP pool (172.18.255.200-172.18.255.250)
 - **Talos on Hetzner** - ✅ Uses Hetzner Cloud Load Balancer
 
-MetalLB support for Talos+Docker is planned for a future release. Until then, use `NodePort` or `ClusterIP` services with port-forwarding for Talos clusters on Docker.
+All distributions now provide LoadBalancer service support. MetalLB was added for Talos on Docker in v5.31+.
 
 ### Can I add nodes to an existing cluster?
 
