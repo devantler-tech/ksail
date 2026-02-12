@@ -15,12 +15,19 @@ var errStreamEvent = errors.New("stream event error")
 // sessionEventDispatcher routes SDK session events to the appropriate tea.Msg channel.
 // It converts Copilot SDK events into chat-specific messages for the TUI.
 type sessionEventDispatcher struct {
-	eventChan chan<- tea.Msg
+	eventChan       chan<- tea.Msg
+	commandBuilders map[string]CommandBuilder
 }
 
 // newSessionEventDispatcher creates a dispatcher that routes events to the given channel.
-func newSessionEventDispatcher(eventChan chan<- tea.Msg) *sessionEventDispatcher {
-	return &sessionEventDispatcher{eventChan: eventChan}
+func newSessionEventDispatcher(
+	eventChan chan<- tea.Msg,
+	commandBuilders map[string]CommandBuilder,
+) *sessionEventDispatcher {
+	return &sessionEventDispatcher{
+		eventChan:       eventChan,
+		commandBuilders: commandBuilders,
+	}
 }
 
 // dispatch routes a Copilot session event to the appropriate handler.
@@ -123,7 +130,7 @@ func (d *sessionEventDispatcher) handleToolStart(event copilot.SessionEvent) {
 		mcpToolName = *event.Data.MCPToolName
 	}
 
-	command := extractCommandFromArgs(toolName, event.Data.Arguments)
+	command := extractCommandFromArgs(toolName, event.Data.Arguments, d.commandBuilders)
 	toolID := fmt.Sprintf(toolIDFormat, time.Now().UnixNano())
 
 	d.eventChan <- toolStartMsg{

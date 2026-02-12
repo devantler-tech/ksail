@@ -94,7 +94,7 @@ func (m *Model) renderPermissionModal() string {
 
 	contentLines += 2
 
-	humanName := humanizeToolName(m.pendingPermission.toolName)
+	humanName := humanizeToolName(m.pendingPermission.toolName, m.toolDisplay.NameMappings)
 	content.WriteString(clipStyle.Render("Tool: "+humanName) + "\n")
 
 	contentLines++
