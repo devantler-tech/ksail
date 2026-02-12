@@ -467,7 +467,7 @@ func (m *Model) sessionEventsToMessages(
 				if userMsgIndex < len(metadata.Messages) {
 					msg.chatMode = metadata.Messages[userMsgIndex].ChatMode
 				} else {
-					// Default to agent mode for messages without metadata
+					// Default chatMode to AgentMode for messages without metadata
 					msg.chatMode = AgentMode
 				}
 
