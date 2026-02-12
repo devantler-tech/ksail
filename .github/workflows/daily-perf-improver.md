@@ -105,7 +105,7 @@ To decide which phase to perform:
 
 3. Create `.github/actions/daily-perf-improver/build-steps/action.yml` with validated build steps. Each step must log output to `build-steps.log` in repo root. Cross-check against existing CI/devcontainer configs.
 
-4. Create 1-5 performance engineering guides in `.github/copilot/instructions/` covering relevant areas (e.g., frontend performance, backend optimization, build performance, infrastructure scaling). Each guide should document:
+4. Create 1-5 performance engineering guides in `.github/instructions/` covering relevant areas (e.g., frontend performance, backend optimization, build performance, infrastructure scaling). Each guide should document:
 
 - Performance measurement strategies and tooling
 - Common bottlenecks and optimization techniques
@@ -142,7 +142,7 @@ To decide which phase to perform:
 
    e. Select a performance improvement goal to pursue from the plan. Ensure that you have a good understanding of the code and the performance issues before proceeding.
 
-   f. Select and read the appropriate performance engineering guide(s) in `.github/copilot/instructions/` to help you with your work. If it doesn't exist, create it and later add it to your pull request.
+   f. Select and read the appropriate performance engineering guide(s) in `.github/instructions/` to help you with your work. If it doesn't exist, create it and later add it to your pull request.
 
 2. **Work towards your selected goal**. For the performance improvement goal you selected, do the following:
 
@@ -189,6 +189,6 @@ To decide which phase to perform:
 
    After creation, check the pull request to ensure it is correct, includes all expected files, and doesn't include any unwanted files or changes. Make any necessary corrections by pushing further commits to the branch.
 
-   b. If failed or lessons learned then add more files to the PR branch to update relevant performance guide in `.github/copilot/instructions/` with insights. Create a new guide if needed, or split, merge or delete existing guides as appropriate. This is your chance to improve the performance engineering documentation for next time, so you and your team don't make the same mistakes again! Make the most of it!
+   b. If failed or lessons learned then add more files to the PR branch to update relevant performance guide in `.github/instructions/` with insights. Create a new guide if needed, or split, merge or delete existing guides as appropriate. This is your chance to improve the performance engineering documentation for next time, so you and your team don't make the same mistakes again! Make the most of it!
 
 5. **Final update**: Add brief comment (1 or 2 sentences) to the discussion identified at the start of the workflow stating goal worked on, PR links, and progress made.
