@@ -80,6 +80,9 @@ coverage_summary.txt
 # Go vendor directory
 vendor/
 
+# Go workspace sum file (derived from go.work)
+go.work.sum
+
 # ==============================================================================
 # Testing Tools
 # ==============================================================================

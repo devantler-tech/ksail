@@ -73,6 +73,49 @@ func formatToolArguments(args any) string {
 	return formatArgsMap(params)
 }
 
+// injectForceFlag injects a "force" argument into the tool invocation.
+// This skips interactive confirmation prompts when the tool supports --force.
+// Only call this after verifying the tool supports force via toolSupportsForce.
+func injectForceFlag(invocation copilot.ToolInvocation) copilot.ToolInvocation {
+	args, ok := invocation.Arguments.(map[string]any)
+	if !ok || args == nil {
+		args = map[string]any{}
+	}
+
+	args["force"] = true
+	invocation.Arguments = args
+
+	return invocation
+}
+
+// toolSupportsForce reports whether the tool's parameter schema defines a "force" property.
+// This prevents injecting --force into tools that don't accept it, which would cause
+// runtime failures for non-consolidated tools that pass all parameters as CLI flags.
+func toolSupportsForce(metadata map[string]toolgen.ToolDefinition, toolName string) bool {
+	if metadata == nil {
+		return false
+	}
+
+	meta, metaExists := metadata[toolName]
+	if !metaExists || meta.Parameters == nil {
+		return false
+	}
+
+	propertiesVal, propsExists := meta.Parameters["properties"]
+	if !propsExists {
+		return false
+	}
+
+	properties, propsIsMap := propertiesVal.(map[string]any)
+	if !propsIsMap {
+		return false
+	}
+
+	_, hasForce := properties["force"]
+
+	return hasForce
+}
+
 // buildPlanModeBlockedResult creates a ToolResult indicating tool execution was blocked in plan mode.
 func buildPlanModeBlockedResult(toolName string) (copilot.ToolResult, error) {
 	cmdDescription := strings.ReplaceAll(toolName, "_", " ")
@@ -135,10 +178,12 @@ func awaitToolPermission(
 // In plan mode, ALL tool execution is blocked (model can only describe what it would do).
 // In agent mode, edit tools require permission (based on RequiresPermission annotation),
 // while read-only tools are auto-approved.
+// When YOLO mode is enabled, permission prompts are skipped and all tools are auto-approved.
 func WrapToolsWithPermissionAndModeMetadata(
 	tools []copilot.Tool,
 	eventChan chan tea.Msg,
 	agentModeRef *chatui.AgentModeRef,
+	yoloModeRef *chatui.YoloModeRef,
 	toolMetadata map[string]toolgen.ToolDefinition,
 ) []copilot.Tool {
 	wrappedTools := make([]copilot.Tool, len(tools))
@@ -152,29 +197,71 @@ func WrapToolsWithPermissionAndModeMetadata(
 		toolName := tool.Name
 
 		wrappedTools[toolIdx].Handler = func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-			if agentModeRef != nil && !agentModeRef.IsEnabled() {
-				return buildPlanModeBlockedResult(toolName)
-			}
-
-			// Check if tool requires permission from metadata.
-			// If metadata is nil or tool not found, defaults to requiresPermission=false (auto-approve).
-			requiresPermission := false
-			if metadata, ok := toolMetadata[toolName]; ok {
-				requiresPermission = metadata.RequiresPermission
-			}
-
-			if !requiresPermission {
-				return originalHandler(invocation)
-			}
-
-			approved, result := awaitToolPermission(eventChan, toolName, invocation)
-			if !approved {
-				return *result, nil
-			}
-
-			return originalHandler(invocation)
+			return executeWrappedTool(
+				invocation, toolName, originalHandler,
+				eventChan, agentModeRef, yoloModeRef, toolMetadata,
+			)
 		}
 	}
 
 	return wrappedTools
+}
+
+// executeWrappedTool handles permission checks, YOLO mode, force flag injection,
+// and user approval for a single tool invocation.
+func executeWrappedTool(
+	invocation copilot.ToolInvocation,
+	toolName string,
+	originalHandler func(copilot.ToolInvocation) (copilot.ToolResult, error),
+	eventChan chan tea.Msg,
+	agentModeRef *chatui.AgentModeRef,
+	yoloModeRef *chatui.YoloModeRef,
+	toolMetadata map[string]toolgen.ToolDefinition,
+) (copilot.ToolResult, error) {
+	if agentModeRef != nil && !agentModeRef.IsEnabled() {
+		return buildPlanModeBlockedResult(toolName)
+	}
+
+	// Check if tool requires permission from metadata.
+	// If metadata is nil or tool not found, defaults to requiresPermission=false (auto-approve).
+	requiresPermission := false
+	if metadata, metaExists := toolMetadata[toolName]; metaExists {
+		requiresPermission = metadata.RequiresPermission
+	}
+
+	if !requiresPermission {
+		return originalHandler(invocation)
+	}
+
+	// In YOLO mode, auto-approve all tools that would normally require permission
+	if yoloModeRef != nil && yoloModeRef.IsEnabled() {
+		return invokeWithOptionalForce(invocation, toolMetadata, toolName, originalHandler)
+	}
+
+	// If no event channel is available (non-TUI mode), auto-approve write tools
+	// to avoid deadlocking on a nil channel send.
+	if eventChan == nil {
+		return invokeWithOptionalForce(invocation, toolMetadata, toolName, originalHandler)
+	}
+
+	approved, result := awaitToolPermission(eventChan, toolName, invocation)
+	if !approved {
+		return *result, nil
+	}
+
+	return invokeWithOptionalForce(invocation, toolMetadata, toolName, originalHandler)
+}
+
+// invokeWithOptionalForce injects the force flag if the tool supports it, then calls the handler.
+func invokeWithOptionalForce(
+	invocation copilot.ToolInvocation,
+	toolMetadata map[string]toolgen.ToolDefinition,
+	toolName string,
+	handler func(copilot.ToolInvocation) (copilot.ToolResult, error),
+) (copilot.ToolResult, error) {
+	if toolSupportsForce(toolMetadata, toolName) {
+		invocation = injectForceFlag(invocation)
+	}
+
+	return handler(invocation)
 }
