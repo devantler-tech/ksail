@@ -202,25 +202,55 @@ func installComponentsInParallel(
 	tmr timer.Timer,
 	reqs ComponentRequirements,
 ) error {
-	tasks := buildComponentTasks(clusterCfg, factories, reqs)
+	writer := cmd.OutOrStdout()
+	labels := notify.InstallingLabels()
 
-	progressGroup := notify.NewProgressGroup(
-		"Installing components",
-		"📦",
-		cmd.OutOrStdout(),
-		notify.WithLabels(notify.InstallingLabels()),
-		notify.WithTimer(tmr),
-	)
+	// Phase 1: Infrastructure components (metrics-server, load-balancer,
+	// kubelet-csr-approver, CSI, cert-manager, policy-engine).
+	// Policy engines register webhooks that can interfere with API requests,
+	// so they must be fully ready before GitOps engines start.
+	infraTasks := buildInfrastructureTasks(clusterCfg, factories, reqs)
+	if len(infraTasks) > 0 {
+		infraGroup := notify.NewProgressGroup(
+			"Installing infrastructure components",
+			"📦",
+			writer,
+			notify.WithLabels(labels),
+			notify.WithTimer(tmr),
+		)
 
-	executeErr := progressGroup.Run(ctx, tasks...)
-	if executeErr != nil {
-		return fmt.Errorf("failed to execute parallel component installation: %w", executeErr)
+		err := infraGroup.Run(ctx, infraTasks...)
+		if err != nil {
+			return fmt.Errorf("failed to install infrastructure components: %w", err)
+		}
+	}
+
+	// Phase 2: GitOps engines (ArgoCD, Flux).
+	// Installed after infrastructure so policy-engine webhooks are stable
+	// and won't cause intermittent kstatus watch timeouts.
+	gitopsTasks := buildGitOpsTasks(clusterCfg, factories, reqs)
+	if len(gitopsTasks) > 0 {
+		gitopsGroup := notify.NewProgressGroup(
+			"Installing GitOps engine",
+			"📦",
+			writer,
+			notify.WithLabels(labels),
+			notify.WithTimer(tmr),
+		)
+
+		err := gitopsGroup.Run(ctx, gitopsTasks...)
+		if err != nil {
+			return fmt.Errorf("failed to install GitOps engine: %w", err)
+		}
 	}
 
 	return nil
 }
 
-func buildComponentTasks(
+// buildInfrastructureTasks returns tasks for infrastructure components that
+// should be installed before GitOps engines. This includes policy engines
+// whose webhooks must be fully ready before other Helm installations begin.
+func buildInfrastructureTasks(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 	reqs ComponentRequirements,
@@ -265,6 +295,18 @@ func buildComponentTasks(
 			newTask("policy-engine", clusterCfg, factories, InstallPolicyEngineSilent),
 		)
 	}
+
+	return tasks
+}
+
+// buildGitOpsTasks returns tasks for GitOps engines that should be installed
+// after infrastructure components are ready.
+func buildGitOpsTasks(
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+	reqs ComponentRequirements,
+) []notify.ProgressTask {
+	var tasks []notify.ProgressTask
 
 	if reqs.NeedsArgoCD {
 		tasks = append(tasks, newTask("argocd", clusterCfg, factories, InstallArgoCDSilent))

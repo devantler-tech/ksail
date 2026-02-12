@@ -36,10 +36,14 @@ func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
 				WaitForJobs:     true,
 				Timeout:         timeout,
 				SetValues: map[string]string{
-					// Use Ignore so the validating webhook does not block API
-					// requests when webhook pods are temporarily unreachable
-					// (e.g. during CNI churn on freshly bootstrapped clusters).
-					"webhook.failurePolicy": "Ignore",
+					// Use Ignore so webhooks do not block API requests when
+					// webhook pods are temporarily unreachable (e.g. during
+					// CNI churn on freshly bootstrapped clusters). Both
+					// validating and mutating policies must be set explicitly
+					// to avoid intermittent kstatus watch timeouts in
+					// components installed in parallel (e.g. ArgoCD).
+					"webhook.failurePolicy":         "Ignore",
+					"mutatingWebhook.failurePolicy": "Ignore",
 				},
 			},
 		),
