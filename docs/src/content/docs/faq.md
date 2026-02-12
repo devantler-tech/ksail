@@ -141,9 +141,9 @@ ksail cluster init --distribution Talos --provider Hetzner
 
 **Talos on Docker limitations:**
 
-MetalLB support for Talos+Docker is planned for a future release. Until then, LoadBalancer services are not supported on this combination. The `--load-balancer` flag is automatically set to `Disabled`, regardless of user input.
+MetalLB support for Talos on Docker is planned for a future release. Until then, LoadBalancer services are not supported on this combination. The `--load-balancer` flag is automatically set to `Disabled`, regardless of user input.
 
-**Workarounds for Talos+Docker:**
+**Workarounds for Talos on Docker:**
 
 ```yaml
 # Option 1: Use NodePort
