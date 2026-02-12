@@ -5,8 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	copilot "github.com/github/copilot-sdk/go"
 )
 
 // ThemeConfig configures the visual appearance and branding of the chat TUI.
@@ -81,6 +84,46 @@ type ToolDisplayConfig struct {
 
 // CommandBuilder extracts a display command string from tool arguments for display in the TUI.
 type CommandBuilder func(args map[string]any) string
+
+// Params bundles the parameters for creating and running the chat TUI.
+// Use this struct with NewModel or Run to configure the chat session.
+type Params struct {
+	// Session is the active Copilot chat session.
+	Session *copilot.Session
+
+	// Client is the Copilot client used for API calls.
+	Client *copilot.Client
+
+	// SessionConfig holds the session configuration.
+	SessionConfig *copilot.SessionConfig
+
+	// Models is the list of available models.
+	Models []copilot.ModelInfo
+
+	// CurrentModel is the initially-selected model identifier.
+	CurrentModel string
+
+	// Timeout controls the per-request timeout.
+	Timeout time.Duration
+
+	// EventChan is an optional pre-created event channel for sending external events to the TUI.
+	// If nil, a new channel is created internally.
+	EventChan chan tea.Msg
+
+	// AgentModeRef is an optional reference to synchronize agent mode state with tool handlers.
+	AgentModeRef *AgentModeRef
+
+	// YoloModeRef is an optional reference to synchronize YOLO mode state with tool handlers.
+	YoloModeRef *YoloModeRef
+
+	// Theme configures colors, logo, labels, and other visual aspects.
+	// Zero value applies DefaultThemeConfig().
+	Theme ThemeConfig
+
+	// ToolDisplay configures tool name mappings and command builders.
+	// Zero value applies DefaultToolDisplayConfig().
+	ToolDisplay ToolDisplayConfig
+}
 
 // SystemContextConfig configures the system prompt for the AI assistant.
 // Use BuildSystemContext() to produce a formatted system context string from this config.
@@ -183,6 +226,7 @@ func DefaultToolDisplayConfig() ToolDisplayConfig {
 			"read_file":            "Reading file",
 			"write_file":           "Writing file",
 			"list_dir":             "Listing directory",
+			"list_directory":       "Listing directory",
 		},
 		CommandBuilders: defaultCommandBuilders(),
 	}
@@ -195,6 +239,7 @@ func defaultCommandBuilders() map[string]CommandBuilder {
 		"ksail_cluster_info": defaultBuildClusterInfoCommand,
 		"ksail_workload_get": defaultBuildWorkloadGetCommand,
 		"read_file":          defaultBuildReadFileCommand,
+		"list_dir":           defaultBuildListDirectoryCommand,
 		"list_directory":     defaultBuildListDirectoryCommand,
 	}
 }

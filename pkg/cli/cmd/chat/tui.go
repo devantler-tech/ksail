@@ -48,6 +48,25 @@ func startOutputForwarder(
 	return &forwarderWg
 }
 
+// setupChatTools configures the chat tools, permission and mode references.
+func setupChatTools(
+	sessionConfig *copilot.SessionConfig,
+	rootCmd *cobra.Command,
+	eventChan chan tea.Msg,
+	outputChan chan toolgen.OutputChunk,
+) (*chatui.AgentModeRef, *chatui.YoloModeRef) {
+	tools, toolMetadata := chatsvc.GetKSailToolMetadata(rootCmd, outputChan)
+	agentModeRef := chatui.NewAgentModeRef(true)
+	yoloModeRef := chatui.NewYoloModeRef(false)
+	tools = WrapToolsWithPermissionAndModeMetadata(
+		tools, eventChan, agentModeRef, yoloModeRef, toolMetadata,
+	)
+	sessionConfig.Tools = tools
+	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan, yoloModeRef)
+
+	return agentModeRef, yoloModeRef
+}
+
 // runTUIChat starts the TUI chat mode.
 func runTUIChat(
 	ctx context.Context,
@@ -66,16 +85,9 @@ func runTUIChat(
 	eventChan := make(chan tea.Msg, eventChannelBuffer)
 	outputChan := make(chan toolgen.OutputChunk, outputChannelBuffer)
 	forwarderWg := startOutputForwarder(outputChan, eventChan)
-
-	// Tool handlers create their own timeout context since SDK's ToolHandler interface doesn't include context.
-	tools, toolMetadata := chatsvc.GetKSailToolMetadata(rootCmd, outputChan) //nolint:contextcheck
-	agentModeRef := chatui.NewAgentModeRef(true)
-	yoloModeRef := chatui.NewYoloModeRef(false)
-	tools = WrapToolsWithPermissionAndModeMetadata(
-		tools, eventChan, agentModeRef, yoloModeRef, toolMetadata,
+	agentModeRef, yoloModeRef := setupChatTools( //nolint:contextcheck
+		sessionConfig, rootCmd, eventChan, outputChan,
 	)
-	sessionConfig.Tools = tools
-	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan, yoloModeRef)
 
 	session, err := client.CreateSession(sessionConfig)
 	if err != nil {
@@ -97,11 +109,19 @@ func runTUIChat(
 		}
 	}()
 
-	err = chatui.RunWithEventChannelAndModeRef(
-		ctx, session, client, sessionConfig,
-		models, currentModel, timeout, eventChan, agentModeRef, yoloModeRef,
-		chatui.DefaultThemeConfig(), chatui.DefaultToolDisplayConfig(),
-	)
+	err = chatui.Run(ctx, chatui.Params{
+		Session:       session,
+		Client:        client,
+		SessionConfig: sessionConfig,
+		Models:        models,
+		CurrentModel:  currentModel,
+		Timeout:       timeout,
+		EventChan:     eventChan,
+		AgentModeRef:  agentModeRef,
+		YoloModeRef:   yoloModeRef,
+		Theme:         chatui.DefaultThemeConfig(),
+		ToolDisplay:   chatui.DefaultToolDisplayConfig(),
+	})
 	if err != nil {
 		return fmt.Errorf("TUI chat failed: %w", err)
 	}

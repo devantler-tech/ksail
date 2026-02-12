@@ -71,8 +71,20 @@ func (s *SessionMetadata) GetDisplayName() string {
 	return unnamedSessionName
 }
 
+// errInvalidAppDir is returned when the appDir parameter is not a simple directory name.
+var errInvalidAppDir = errors.New(
+	"invalid appDir: must be a simple directory name (non-empty, relative, no separators or \"..\")",
+)
+
 // sessionsDir returns the path to the chat sessions directory.
 func sessionsDir(appDir string) (string, error) {
+	if appDir == "" ||
+		filepath.IsAbs(appDir) ||
+		strings.Contains(appDir, "..") ||
+		strings.ContainsAny(appDir, "/\\") {
+		return "", errInvalidAppDir
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)

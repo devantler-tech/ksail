@@ -168,30 +168,12 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 
 // renderModelPickerModal renders the model picker as an inline modal section.
 func (m *Model) renderModelPickerModal() string {
-	modalWidth := max(m.width-modalPadding, 1)
-	contentWidth := max(modalWidth-contentPadding, 1)
-	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
-
-	totalItems := len(m.filteredModels) + 1
-	maxVisible := m.calculateMaxPickerVisible()
-	visibleCount := min(totalItems, maxVisible)
-
-	scrollOffset := calculatePickerScrollOffset(m.modelPickerIndex, totalItems, maxVisible)
-
-	var listContent strings.Builder
-	m.renderModelPickerTitle(&listContent, clipStyle)
-
-	isScrollable := totalItems > maxVisible
-	m.renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
-
-	endIdx := min(scrollOffset+visibleCount, totalItems)
-	m.renderModelItems(&listContent, clipStyle, scrollOffset, endIdx)
-
-	m.renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
-
-	content := strings.TrimRight(listContent.String(), "\n")
-
-	return m.renderPickerModal(content, modalWidth, visibleCount, isScrollable)
+	return m.renderPickerModalContent(
+		len(m.filteredModels)+1,
+		m.modelPickerIndex,
+		m.renderModelPickerTitle,
+		m.renderModelItems,
+	)
 }
 
 // renderModelPickerTitle renders the title or filter input.

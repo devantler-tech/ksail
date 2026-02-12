@@ -201,49 +201,21 @@ type Model struct {
 	eventChan chan tea.Msg
 }
 
-// New creates a new chat TUI model.
-func New(
-	session *copilot.Session,
-	client *copilot.Client,
-	sessionConfig *copilot.SessionConfig,
-	models []copilot.ModelInfo,
-	currentModel string,
-	timeout time.Duration,
-) *Model {
-	return NewWithEventChannel(
-		session,
-		client,
-		sessionConfig,
-		models,
-		currentModel,
-		timeout,
-		nil,
-		nil,
-		nil,
-		DefaultThemeConfig(),
-		DefaultToolDisplayConfig(),
-	)
-}
-
-// NewWithEventChannel creates a new chat TUI model with an optional pre-existing event channel.
-// If eventChan is nil, a new channel is created. This allows external code to send events
-// to the TUI (e.g., permission requests).
-// If agentModeRef is provided, it will be used to synchronize agent mode state with tool handlers.
-// If yoloModeRef is provided, it will be used to synchronize YOLO mode state with tool handlers.
-func NewWithEventChannel(
-	session *copilot.Session,
-	client *copilot.Client,
-	sessionConfig *copilot.SessionConfig,
-	models []copilot.ModelInfo,
-	currentModel string,
-	timeout time.Duration,
-	eventChan chan tea.Msg,
-	agentModeRef *AgentModeRef,
-	yoloModeRef *YoloModeRef,
-	theme ThemeConfig,
-	toolDisplay ToolDisplayConfig,
-) *Model {
+// NewModel creates a new chat TUI model from the given parameters.
+// If params.EventChan is nil, a new channel is created.
+// If params.Theme or params.ToolDisplay are zero-valued, defaults are applied.
+func NewModel(params Params) *Model {
 	const headerPadding = 3
+
+	theme := params.Theme
+	if theme.Logo == nil {
+		theme = DefaultThemeConfig()
+	}
+
+	toolDisplay := params.ToolDisplay
+	if toolDisplay.NameMappings == nil {
+		toolDisplay = DefaultToolDisplayConfig()
+	}
 
 	styles := newUIStyles(theme)
 	headerH := theme.LogoHeight + headerPadding
@@ -260,6 +232,7 @@ func NewWithEventChannel(
 	mdRenderer := createRenderer(defaultWidth - rendererPadding)
 
 	// Use provided event channel or create new one
+	eventChan := params.EventChan
 	if eventChan == nil {
 		eventChan = make(chan tea.Msg, eventChanBuf)
 	}
@@ -276,11 +249,11 @@ func NewWithEventChannel(
 		help:             createHelpModel(styles),
 		keys:             DefaultKeyMap(),
 		messages:         make([]message, 0),
-		session:          session,
-		client:           client,
-		sessionConfig:    sessionConfig,
-		currentSessionID: session.SessionID, // Track the SDK's session ID
-		timeout:          timeout,
+		session:          params.Session,
+		client:           params.Client,
+		sessionConfig:    params.SessionConfig,
+		currentSessionID: params.Session.SessionID, // Track the SDK's session ID
+		timeout:          params.Timeout,
 		ctx:              context.Background(),
 		eventChan:        eventChan,
 		width:            defaultWidth,
@@ -289,11 +262,11 @@ func NewWithEventChannel(
 		toolOrder:        make([]string, 0),
 		history:          make([]string, 0),
 		historyIndex:     -1,
-		availableModels:  models,
-		currentModel:     currentModel,
-		agentMode:        true,         // Default to agent mode
-		agentModeRef:     agentModeRef, // Store reference for tool handlers
-		yoloModeRef:      yoloModeRef,  // Store reference for YOLO mode
+		availableModels:  params.Models,
+		currentModel:     params.CurrentModel,
+		agentMode:        true,                // Default to agent mode
+		agentModeRef:     params.AgentModeRef, // Store reference for tool handlers
+		yoloModeRef:      params.YoloModeRef,  // Store reference for YOLO mode
 	}
 }
 
@@ -651,101 +624,20 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 	}
 }
 
-// Run starts the chat TUI and returns a permission handler for integration with the Copilot SDK.
-// The returned handler can be used with SessionConfig.OnPermissionRequest to enable interactive
-// permission prompting within the TUI.
-func Run(
-	ctx context.Context,
-	session *copilot.Session,
-	client *copilot.Client,
-	sessionConfig *copilot.SessionConfig,
-	models []copilot.ModelInfo,
-	currentModel string,
-	timeout time.Duration,
-) error {
-	return RunWithEventChannelAndModeRef(
-		ctx,
-		session,
-		client,
-		sessionConfig,
-		models,
-		currentModel,
-		timeout,
-		nil,
-		nil,
-		nil,
-		DefaultThemeConfig(),
-		DefaultToolDisplayConfig(),
-	)
-}
-
-// RunWithEventChannel starts the chat TUI with a pre-created event channel.
-// This allows external code (like permission handlers) to send events to the TUI.
-func RunWithEventChannel(
-	ctx context.Context,
-	session *copilot.Session,
-	client *copilot.Client,
-	sessionConfig *copilot.SessionConfig,
-	models []copilot.ModelInfo,
-	currentModel string,
-	timeout time.Duration,
-	eventChan chan tea.Msg,
-) error {
-	return RunWithEventChannelAndModeRef(
-		ctx,
-		session,
-		client,
-		sessionConfig,
-		models,
-		currentModel,
-		timeout,
-		eventChan,
-		nil,
-		nil,
-		DefaultThemeConfig(),
-		DefaultToolDisplayConfig(),
-	)
-}
-
-// RunWithEventChannelAndModeRef starts the chat TUI with a pre-created event channel and agent mode reference.
-// This allows external code (like permission handlers) to send events to the TUI and synchronize agent mode state.
-func RunWithEventChannelAndModeRef(
-	ctx context.Context,
-	session *copilot.Session,
-	client *copilot.Client,
-	sessionConfig *copilot.SessionConfig,
-	models []copilot.ModelInfo,
-	currentModel string,
-	timeout time.Duration,
-	eventChan chan tea.Msg,
-	agentModeRef *AgentModeRef,
-	yoloModeRef *YoloModeRef,
-	theme ThemeConfig,
-	toolDisplay ToolDisplayConfig,
-) error {
-	model := NewWithEventChannel(
-		session,
-		client,
-		sessionConfig,
-		models,
-		currentModel,
-		timeout,
-		eventChan,
-		agentModeRef,
-		yoloModeRef,
-		theme,
-		toolDisplay,
-	)
+// Run starts the chat TUI with the given parameters.
+// This is the primary entry point for running the chat interface.
+func Run(ctx context.Context, params Params) error {
+	model := NewModel(params)
 	model.ctx = ctx
 
 	// Ensure agentModeRef is initialized with the model's initial state
-	if agentModeRef != nil {
-		agentModeRef.SetEnabled(model.agentMode)
+	if params.AgentModeRef != nil {
+		params.AgentModeRef.SetEnabled(model.agentMode)
 	}
 
 	// Ensure yoloModeRef is initialized with the model's initial state
-	if yoloModeRef != nil {
-		yoloModeRef.SetEnabled(model.yoloMode)
+	if params.YoloModeRef != nil {
+		params.YoloModeRef.SetEnabled(model.yoloMode)
 	}
 
 	program := tea.NewProgram(
@@ -757,7 +649,7 @@ func RunWithEventChannelAndModeRef(
 
 	_, err := program.Run()
 	if err != nil {
-		return fmt.Errorf("running chat program with event channel: %w", err)
+		return fmt.Errorf("running chat program: %w", err)
 	}
 
 	return nil

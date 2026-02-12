@@ -529,30 +529,12 @@ func (m *Model) saveCurrentSession() error {
 
 // renderSessionPickerModal renders the session picker as an inline modal section.
 func (m *Model) renderSessionPickerModal() string {
-	modalWidth := max(m.width-modalPadding, 1)
-	contentWidth := max(modalWidth-contentPadding, 1)
-	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
-
-	totalItems := len(m.filteredSessions) + 1
-	maxVisible := m.calculateMaxPickerVisible()
-	visibleCount := min(totalItems, maxVisible)
-
-	scrollOffset := calculatePickerScrollOffset(m.sessionPickerIndex, totalItems, maxVisible)
-
-	var listContent strings.Builder
-	m.renderSessionPickerTitle(&listContent, clipStyle)
-
-	isScrollable := totalItems > maxVisible
-	m.renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
-
-	endIdx := min(scrollOffset+visibleCount, totalItems)
-	m.renderSessionItems(&listContent, clipStyle, scrollOffset, endIdx)
-
-	m.renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
-
-	content := strings.TrimRight(listContent.String(), "\n")
-
-	return m.renderPickerModal(content, modalWidth, visibleCount, isScrollable)
+	return m.renderPickerModalContent(
+		len(m.filteredSessions)+1,
+		m.sessionPickerIndex,
+		m.renderSessionPickerTitle,
+		m.renderSessionItems,
+	)
 }
 
 // renderSessionPickerTitle renders the title, filter input, or delete confirmation.

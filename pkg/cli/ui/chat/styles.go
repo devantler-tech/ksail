@@ -153,6 +153,46 @@ func (m *Model) renderPickerModal(
 	return modalStyle.Render(content)
 }
 
+// pickerTitleRenderer renders the title/filter section of a picker modal.
+type pickerTitleRenderer func(*strings.Builder, lipgloss.Style)
+
+// pickerItemsRenderer renders the items section of a picker modal.
+type pickerItemsRenderer func(*strings.Builder, lipgloss.Style, int, int)
+
+// renderPickerModalContent renders the common structure shared by all picker modals.
+// It handles layout computation, scroll indicators, and delegates to the provided
+// title and items renderers for type-specific content.
+func (m *Model) renderPickerModalContent(
+	totalItems int,
+	pickerIndex int,
+	renderTitle pickerTitleRenderer,
+	renderItems pickerItemsRenderer,
+) string {
+	modalWidth := max(m.width-modalPadding, 1)
+	contentWidth := max(modalWidth-contentPadding, 1)
+	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
+
+	maxVisible := m.calculateMaxPickerVisible()
+	visibleCount := min(totalItems, maxVisible)
+
+	scrollOffset := calculatePickerScrollOffset(pickerIndex, totalItems, maxVisible)
+
+	var listContent strings.Builder
+	renderTitle(&listContent, clipStyle)
+
+	isScrollable := totalItems > maxVisible
+	m.renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
+
+	endIdx := min(scrollOffset+visibleCount, totalItems)
+	renderItems(&listContent, clipStyle, scrollOffset, endIdx)
+
+	m.renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
+
+	content := strings.TrimRight(listContent.String(), "\n")
+
+	return m.renderPickerModal(content, modalWidth, visibleCount, isScrollable)
+}
+
 // renderScrollIndicatorTop renders the "more above" indicator for a picker.
 func (m *Model) renderScrollIndicatorTop(
 	listContent *strings.Builder,
