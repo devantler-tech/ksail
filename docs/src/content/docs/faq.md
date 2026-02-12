@@ -47,7 +47,7 @@ For Hetzner cloud clusters (Talos only), you need a Hetzner account and API toke
 
 The update method depends on how you installed it:
 
-``````bash
+```bash
 # Homebrew
 brew upgrade devantler-tech/tap/ksail
 
@@ -56,7 +56,7 @@ go install github.com/devantler-tech/ksail/v5@latest
 
 # Binary download
 # Download latest from https://github.com/devantler-tech/ksail/releases
-``````
+```
 
 ## Cluster Management
 
@@ -74,13 +74,13 @@ See the [Support Matrix](/support-matrix/) for provider compatibility.
 
 Yes! Use the `--name` flag to create multiple clusters:
 
-``````bash
+```bash
 ksail cluster init --name dev-cluster
 ksail cluster create
 
 ksail cluster init --name staging-cluster
 ksail cluster create
-``````
+```
 
 List all clusters with `ksail cluster list --all`.
 
@@ -88,13 +88,13 @@ List all clusters with `ksail cluster list --all`.
 
 KSail automatically configures your kubeconfig with the appropriate context. Use standard kubectl context switching:
 
-``````bash
+```bash
 # List contexts
 kubectl config get-contexts
 
 # Switch context
 kubectl config use-context <cluster-name>
-``````
+```
 
 ### Can I use my own container registry?
 
@@ -105,6 +105,39 @@ Yes! KSail supports:
 3. **External registries** - Use your own registry with authentication
 
 See [Registry Management](/features/#registry-management) for examples.
+
+### What happens if I change the distribution or provider in ksail.yaml?
+
+Changing the distribution (e.g., Vanilla to Talos) or provider (e.g., Docker to Hetzner) requires full cluster recreation.
+The current implementation does not automatically detect distribution/provider changes on an existing cluster.
+You must manually delete the old cluster first with `ksail cluster delete`, then run `ksail cluster create`.
+
+### Which distributions support LoadBalancer services?
+
+LoadBalancer support is available across all distributions:
+
+- **Vanilla (Kind) on Docker** - ✅ Uses cloud-provider-kind (external Docker container)
+- **K3s on Docker** - ✅ Uses built-in ServiceLB (Klipper-LB)
+- **Talos on Docker** - ✅ Uses MetalLB with default IP pool (172.18.255.200-172.18.255.250)
+- **Talos on Hetzner** - ✅ Uses Hetzner Cloud Load Balancer
+
+All distributions now provide LoadBalancer service support. MetalLB was added for Talos on Docker in v5.31+.
+
+### Can I add nodes to an existing cluster?
+
+It depends on the distribution:
+
+- **Talos** - Yes, both control-plane and worker nodes can be scaled via `ksail cluster update`
+- **K3s (K3d)** - Yes, worker (agent) nodes can be added/removed. Server (control-plane) scaling requires recreation
+- **Vanilla (Kind)** - No, Kind does not support node changes after creation. Requires recreation
+
+See the [Update Behavior](/support-matrix/#update-behavior) table for details.
+
+### What does `ksail cluster update --dry-run` show?
+
+The `--dry-run` flag previews all detected configuration changes without applying them.
+It lists each change with its classification (in-place, reboot-required, or recreate-required)
+and a summary of how many changes would be applied. This is useful for reviewing the impact before committing.
 
 ## Workload Management
 
@@ -119,19 +152,19 @@ Use `apply` for quick iteration, `reconcile` for Git-driven deployments.
 
 Yes! KSail includes Helm v4 with kstatus:
 
-``````bash
+```bash
 # Install a Helm chart
 ksail workload install <chart> --namespace <ns>
 
 # Generate HelmRelease for GitOps
 ksail workload gen helmrelease <name> --source=oci://registry/chart
-``````
+```
 
 ### How do I debug failing pods?
 
 KSail wraps kubectl debugging commands:
 
-``````bash
+```bash
 # View logs
 ksail workload logs deployment/my-app
 
@@ -140,7 +173,7 @@ ksail workload describe pod/my-pod
 
 # Execute in container
 ksail workload exec deployment/my-app -- /bin/sh
-``````
+```
 
 ## GitOps
 
@@ -148,22 +181,22 @@ ksail workload exec deployment/my-app -- /bin/sh
 
 KSail supports both **Flux** and **ArgoCD**. Choose during initialization:
 
-``````bash
+```bash
 ksail cluster init --gitops-engine Flux
 # or
 ksail cluster init --gitops-engine ArgoCD
-``````
+```
 
 ### Do I need a Git repository for GitOps?
 
 Not necessarily! KSail can package manifests as **OCI artifacts** and push to a local registry:
 
-``````bash
+```bash
 ksail cluster init --gitops-engine Flux --local-registry
 ksail cluster create
 ksail workload push      # Package and push to local registry
 ksail workload reconcile # Sync to cluster
-``````
+```
 
 This enables GitOps workflows without Git (useful for local development).
 
@@ -186,14 +219,14 @@ CLI flags override `ksail.yaml` values. See [Configuration Overview](/configurat
 
 Yes! The `ksail.yaml` file is designed for Git:
 
-``````bash
+```bash
 # Initialize project
 ksail cluster init --distribution Vanilla --cni Cilium
 
 # Commit configuration
 git add ksail.yaml kind.yaml k8s/
 git commit -m "chore: initial cluster configuration"
-``````
+```
 
 Team members can recreate the same cluster from `ksail.yaml`.
 
@@ -201,12 +234,12 @@ Team members can recreate the same cluster from `ksail.yaml`.
 
 Use environment-specific `ksail.yaml` files:
 
-``````
+```
 myproject/
 ├── ksail-dev.yaml
 ├── ksail-staging.yaml
 └── ksail-prod.yaml
-``````
+```
 
 Or use environment variables with placeholders in `ksail.yaml`.
 
@@ -216,7 +249,7 @@ Or use environment variables with placeholders in `ksail.yaml`.
 
 KSail includes **SOPS** for secret encryption:
 
-``````bash
+```bash
 # Encrypt a file
 ksail cipher encrypt secret.yaml
 
@@ -225,7 +258,7 @@ ksail cipher decrypt secret.enc.yaml
 
 # Edit encrypted file
 ksail cipher edit secret.enc.yaml
-``````
+```
 
 Supports age, PGP, and cloud KMS providers. See [Secret Management](/features/#secret-management).
 
@@ -233,14 +266,14 @@ Supports age, PGP, and cloud KMS providers. See [Secret Management](/features/#s
 
 KSail uses environment variables for sensitive data (`${VAR}` syntax in configuration). The values are expanded at runtime and never stored in config files.
 
-``````bash
+```bash
 # Set credential
 export REGISTRY_TOKEN="my-secret-token"
 
 # Use in configuration
 ksail cluster init \
   --local-registry 'user:${REGISTRY_TOKEN}@registry.example.com'
-``````
+```
 
 ## Troubleshooting
 
@@ -250,7 +283,7 @@ See the [Troubleshooting Guide](/troubleshooting/#cluster-creation-hangs) for co
 
 ### How do I clean up resources?
 
-``````bash
+```bash
 # Delete a cluster (removes containers/VMs and resources)
 ksail cluster delete
 
@@ -258,7 +291,7 @@ ksail cluster delete
 docker system prune
 
 # For Hetzner, deletion removes cloud resources automatically
-``````
+```
 
 ### Where can I get help?
 

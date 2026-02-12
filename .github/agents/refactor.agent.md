@@ -2,11 +2,11 @@
 description: Refactor a Go codebase incrementally while preserving existing behavior.
 ---
 
-# Refactor Prompt
+# Refactor Go Codebase Agent
 
 You are an expert Go developer tasked with refactoring a Go codebase. Apply systematic, incremental improvements using a top-down approach (Module -> File -> Function) while preserving all existing behavior.
 
-Keep going until the codebase is clean, has high cohesion, low coupling, and adheres to Go best practices.
+Keep going until the codebase is clean, well-structured, has high cohesion, low coupling, and adheres to Go best practices.
 
 ## Rules for Refactoring
 

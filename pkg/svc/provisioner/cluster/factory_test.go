@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
@@ -18,7 +18,7 @@ import (
 )
 
 //nolint:funlen // table-driven test with multiple test cases
-func TestCreateClusterProvisioner_WithDistributionConfig(t *testing.T) {
+func TestCreateProvisioner_WithDistributionConfig(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -37,7 +37,7 @@ func TestCreateClusterProvisioner_WithDistributionConfig(t *testing.T) {
 					Name: "test-kind",
 				},
 			},
-			expectedType: &kindprovisioner.KindClusterProvisioner{},
+			expectedType: &kindprovisioner.Provisioner{},
 			expectError:  false,
 		},
 		{
@@ -50,7 +50,7 @@ func TestCreateClusterProvisioner_WithDistributionConfig(t *testing.T) {
 					},
 				},
 			},
-			expectedType: &k3dprovisioner.K3dClusterProvisioner{},
+			expectedType: &k3dprovisioner.Provisioner{},
 			expectError:  false,
 		},
 		{
@@ -61,7 +61,7 @@ func TestCreateClusterProvisioner_WithDistributionConfig(t *testing.T) {
 					Name: "test-talos",
 				},
 			},
-			expectedType: &talosprovisioner.TalosProvisioner{},
+			expectedType: &talosprovisioner.Provisioner{},
 			expectError:  false,
 		},
 		{
@@ -114,7 +114,7 @@ func TestCreateClusterProvisioner_WithDistributionConfig(t *testing.T) {
 	}
 }
 
-func TestCreateClusterProvisioner_NilCluster(t *testing.T) {
+func TestCreateProvisioner_NilCluster(t *testing.T) {
 	t.Parallel()
 
 	factory := clusterprovisioner.DefaultFactory{
@@ -133,7 +133,7 @@ func TestCreateClusterProvisioner_NilCluster(t *testing.T) {
 	assert.ErrorIs(t, err, clusterprovisioner.ErrUnsupportedDistribution)
 }
 
-func TestCreateClusterProvisioner_MissingDistributionConfig(t *testing.T) {
+func TestCreateProvisioner_MissingDistributionConfig(t *testing.T) {
 	t.Parallel()
 
 	factory := clusterprovisioner.DefaultFactory{}
@@ -158,7 +158,7 @@ func TestCreateClusterProvisioner_MissingDistributionConfig(t *testing.T) {
 	assert.ErrorIs(t, err, clusterprovisioner.ErrMissingDistributionConfig)
 }
 
-func TestCreateClusterProvisioner_WrongDistributionConfig(t *testing.T) {
+func TestCreateProvisioner_WrongDistributionConfig(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {

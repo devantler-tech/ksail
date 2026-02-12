@@ -6,19 +6,19 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
-	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil/scaffolder"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
 
 // NewInitCmd creates and returns the init command.
-func NewInitCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
+func NewInitCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "init",
 		Short:        "Initialize a new project",
@@ -35,9 +35,9 @@ func NewInitCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	// here avoids polluting the generic config manager with scaffolding concerns.
 	bindInitLocalFlags(cmd, cfgManager)
 
-	cmd.RunE = runtime.RunEWithRuntime(
+	cmd.RunE = di.RunEWithRuntime(
 		runtimeContainer,
-		runtime.WithTimer(func(cmd *cobra.Command, _ runtime.Injector, tmr timer.Timer) error {
+		di.WithTimer(func(cmd *cobra.Command, _ di.Injector, tmr timer.Timer) error {
 			deps := InitDeps{Timer: tmr}
 
 			return HandleInitRunE(cmd, cfgManager, deps)
@@ -165,7 +165,7 @@ func HandleInitRunE(
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
 		Content: "initialized project",
-		Timer:   helpers.MaybeTimer(cmd, deps.Timer),
+		Timer:   flags.MaybeTimer(cmd, deps.Timer),
 		Writer:  cmd.OutOrStdout(),
 	})
 

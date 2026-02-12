@@ -11,8 +11,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/samber/do/v2"
 	"github.com/stretchr/testify/require"
@@ -165,7 +165,7 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 func TestNewWorkloadCmdRunETriggersHelp(t *testing.T) {
 	t.Parallel()
 
-	runtimeContainer := runtime.New(func(injector do.Injector) error {
+	runtimeContainer := di.New(func(injector do.Injector) error {
 		do.Provide(injector, func(do.Injector) (timer.Timer, error) {
 			return timer.New(), nil
 		})

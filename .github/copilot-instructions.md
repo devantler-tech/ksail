@@ -32,6 +32,10 @@ npm ci
 cd /path/to/repo
 go build -o ksail
 # Takes a few seconds on first run for Go module downloads
+
+# For optimized builds (uses the same -ldflags as release builds):
+go build -ldflags="-s -w" -o ksail-optimized
+# Strips debug symbols and can significantly reduce binary size (in some cases by ~25–35%; see #2095 for an example benchmark; actual size varies by OS/arch, Go version, and dependencies)
 ```
 
 **Run Unit Tests**:
@@ -69,6 +73,7 @@ cd /path/to/repo
 ./ksail cluster init --help       # Show init options
 ./ksail cluster init              # Initialize default project
 ./ksail cluster create            # Create cluster (requires Docker)
+./ksail cluster update            # Update cluster configuration
 ./ksail cluster info              # Show cluster info
 ./ksail cluster delete            # Destroy cluster
 ```
@@ -130,8 +135,7 @@ go run main.go --help
 /
 ├── main.go                 # Main entry point
 ├── pkg/                    # Core packages
-│   ├── ai/                 # AI-related utilities
-│   │   └── toolgen/        # Tool generation for AI assistants
+│   ├── toolgen/            # Tool generation for AI assistants
 │   ├── apis/               # API types and schemas
 │   ├── cli/                # CLI wiring, UI, and Cobra commands
 │   │   ├── annotations/    # Command annotation constants
@@ -151,8 +155,7 @@ go run main.go --help
 │       ├── mcp/            # Model Context Protocol server
 │       ├── provider/       # Infrastructure providers (docker, hetzner)
 │       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos)
-│       ├── image/          # Container image export/import services
-│       └── reconciler/     # Common base for GitOps reconciliation clients
+│       └── image/          # Container image export/import services
 ├── docs/                   # Astro documentation source
 │   ├── dist/               # Generated site (after npm run build)
 │   └── package.json        # Node.js dependencies for documentation
@@ -176,6 +179,7 @@ All CLI commands only require Docker to be installed:
 ```bash
 ksail cluster init [options]           # Initialize new KSail project
 ksail cluster create                   # Create and start cluster
+ksail cluster update                   # Update cluster to match configuration
 ksail cluster delete                   # Destroy cluster and resources
 ksail cluster start                    # Start existing cluster
 ksail cluster stop                     # Stop running cluster
@@ -203,7 +207,7 @@ ksail cluster init --help
 **"Go version mismatch"**:
 
 ```bash
-go version  # Should match the version in go.mod (go 1.25.4)
+go version  # Should match the version in go.mod (go 1.26.0)
 # If not, install/update Go from https://go.dev/dl/
 ```
 
@@ -236,7 +240,7 @@ npm run dev                            # Test locally (if needed)
 
 ### Important Notes
 
-- The project uses **Go 1.25.4+** (see `go.mod`)
+- The project uses **Go 1.26.0+** (see `go.mod`)
 - All Kubernetes tools are embedded as Go libraries - only Docker is required externally
 - Unit tests run quickly and should generally pass
 - System tests in CI cover extensive scenarios with multiple tool combinations
@@ -266,7 +270,7 @@ npm run dev                            # Test locally (if needed)
 
 **Key Packages:**
 
-- `pkg/ai/toolgen/`: AI tool generation utilities for integrating with AI assistants
+- `pkg/toolgen/`: AI tool generation utilities for integrating with AI assistants
 - `pkg/apis/`: API types, schemas, and enums (`pkg/apis/cluster/v1alpha1/enums.go` defines Distribution values)
 - `pkg/client/`: Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
 - `pkg/svc/`: Services including installers, providers, and provisioners
@@ -276,13 +280,13 @@ npm run dev                            # Test locally (if needed)
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner)
   - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos)
   - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
-  - `pkg/svc/reconciler/`: Common base for GitOps reconciliation clients (Flux and ArgoCD)
+- `pkg/client/reconciler/`: Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - `pkg/di/`: Dependency injection for wiring components
 - `pkg/utils/`: General utility functions
 
 ## Active Technologies
 
-- Go 1.25.4+ (see `go.mod`)
+- Go 1.26.0+ (see `go.mod`)
 - Embedded Kubernetes tools (kubectl, helm, kind, k3d, flux, argocd) as Go libraries
 - Docker as the only external dependency
 - Astro with Starlight for documentation (Node.js-based)
@@ -298,3 +302,4 @@ npm run dev                            # Test locally (if needed)
 - **VSCode Extension**: Added VSCode extension for managing KSail clusters from the editor with interactive wizards and MCP server support
 - **AI Chat Integration**: Added `ksail chat` command powered by GitHub Copilot SDK for interactive cluster configuration and troubleshooting (`pkg/svc/chat/`)
 - **MCP Server**: Implemented Model Context Protocol server to expose KSail as a tool for Claude and other AI assistants (`pkg/svc/mcp/`)
+- **MetalLB LoadBalancer Support**: Completed LoadBalancer support for Talos × Docker with MetalLB installer (`pkg/svc/installer/metallb/`), configured with default IP pool (172.18.255.200-172.18.255.250) and Layer 2 mode

@@ -10,8 +10,8 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
-	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -19,30 +19,30 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// CalicoInstaller implements the installer.Installer interface for Calico.
-type CalicoInstaller struct {
+// Installer implements the installer.Installer interface for Calico.
+type Installer struct {
 	*cni.InstallerBase
 
 	distribution v1alpha1.Distribution
 }
 
-// NewCalicoInstaller creates a new Calico installer instance.
-func NewCalicoInstaller(
+// NewInstaller creates a new Calico installer instance.
+func NewInstaller(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,
-) *CalicoInstaller {
-	return NewCalicoInstallerWithDistribution(client, kubeconfig, context, timeout, "")
+) *Installer {
+	return NewInstallerWithDistribution(client, kubeconfig, context, timeout, "")
 }
 
-// NewCalicoInstallerWithDistribution creates a new Calico installer with distribution-specific configuration.
-func NewCalicoInstallerWithDistribution(
+// NewInstallerWithDistribution creates a new Calico installer with distribution-specific configuration.
+func NewInstallerWithDistribution(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,
-) *CalicoInstaller {
-	calicoInstaller := &CalicoInstaller{
+) *Installer {
+	calicoInstaller := &Installer{
 		distribution: distribution,
 	}
 	calicoInstaller.InstallerBase = cni.NewInstallerBase(
@@ -56,7 +56,7 @@ func NewCalicoInstallerWithDistribution(
 }
 
 // Install installs or upgrades Calico via its Helm chart.
-func (c *CalicoInstaller) Install(ctx context.Context) error {
+func (c *Installer) Install(ctx context.Context) error {
 	// For Talos, we need to create namespaces with PSS labels before installing
 	// because Talos has PSS enforcement enabled by default.
 	// We also need to wait for API server stability as the API server may be
@@ -82,7 +82,7 @@ func (c *CalicoInstaller) Install(ctx context.Context) error {
 }
 
 // Uninstall removes the Helm release for Calico.
-func (c *CalicoInstaller) Uninstall(ctx context.Context) error {
+func (c *Installer) Uninstall(ctx context.Context) error {
 	client, err := c.GetClient()
 	if err != nil {
 		return fmt.Errorf("get helm client: %w", err)
@@ -97,7 +97,7 @@ func (c *CalicoInstaller) Uninstall(ctx context.Context) error {
 }
 
 // Images returns the container images used by Calico.
-func (c *CalicoInstaller) Images(ctx context.Context) ([]string, error) {
+func (c *Installer) Images(ctx context.Context) ([]string, error) {
 	images, err := c.ImagesFromChart(ctx, c.chartSpec())
 	if err != nil {
 		return nil, fmt.Errorf("get calico images: %w", err)
@@ -106,7 +106,7 @@ func (c *CalicoInstaller) Images(ctx context.Context) ([]string, error) {
 	return images, nil
 }
 
-func (c *CalicoInstaller) chartSpec() *helm.ChartSpec {
+func (c *Installer) chartSpec() *helm.ChartSpec {
 	return &helm.ChartSpec{
 		ReleaseName:     "calico",
 		ChartName:       "projectcalico/tigera-operator",
@@ -120,7 +120,7 @@ func (c *CalicoInstaller) chartSpec() *helm.ChartSpec {
 
 // --- internals ---
 
-func (c *CalicoInstaller) helmInstallOrUpgradeCalico(ctx context.Context) error {
+func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
 	client, err := c.GetClient()
 	if err != nil {
 		return fmt.Errorf("get helm client: %w", err)
@@ -160,7 +160,7 @@ func (c *CalicoInstaller) helmInstallOrUpgradeCalico(ctx context.Context) error 
 }
 
 // getCalicoValues returns the Helm values for Calico based on the distribution.
-func (c *CalicoInstaller) getCalicoValues() map[string]string {
+func (c *Installer) getCalicoValues() map[string]string {
 	values := defaultCalicoValues()
 
 	// Add distribution-specific values
@@ -202,7 +202,7 @@ func talosCalicoValues() map[string]string {
 	}
 }
 
-func (c *CalicoInstaller) waitForCalicoCRDs(ctx context.Context) error {
+func (c *Installer) waitForCalicoCRDs(ctx context.Context) error {
 	restConfig, err := k8s.BuildRESTConfig(c.GetKubeconfig(), c.GetContext())
 	if err != nil {
 		return fmt.Errorf("build REST config: %w", err)
@@ -214,7 +214,7 @@ func (c *CalicoInstaller) waitForCalicoCRDs(ctx context.Context) error {
 	}
 
 	for _, name := range calicoCRDNames() {
-		pollErr := k8s.PollForReadiness(
+		pollErr := readiness.PollForReadiness(
 			ctx,
 			c.GetTimeout(),
 			func(ctx context.Context) (bool, error) {
@@ -281,7 +281,7 @@ func calicoNamespaces() []string {
 // ensurePrivilegedNamespaces creates the required namespaces with PSS labels for Talos.
 // Talos has PodSecurity Standard enforcement enabled by default, so we need to label
 // the namespaces as "privileged" to allow the CNI pods to run.
-func (c *CalicoInstaller) ensurePrivilegedNamespaces(ctx context.Context) error {
+func (c *Installer) ensurePrivilegedNamespaces(ctx context.Context) error {
 	clientset, err := k8s.NewClientset(c.GetKubeconfig(), c.GetContext())
 	if err != nil {
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
@@ -297,59 +297,16 @@ func (c *CalicoInstaller) ensurePrivilegedNamespaces(ctx context.Context) error 
 	return nil
 }
 
-// ensurePrivilegedNamespace creates or updates a namespace with PSS privileged labels.
-func (c *CalicoInstaller) ensurePrivilegedNamespace(
+// ensurePrivilegedNamespace delegates to k8s.EnsurePrivilegedNamespace to create
+// or update a namespace with PSS privileged labels.
+func (c *Installer) ensurePrivilegedNamespace(
 	ctx context.Context,
-	clientset *kubernetes.Clientset,
+	clientset kubernetes.Interface,
 	name string,
 ) error {
-	pssLabels := map[string]string{
-		"pod-security.kubernetes.io/enforce": "privileged",
-		"pod-security.kubernetes.io/audit":   "privileged",
-		"pod-security.kubernetes.io/warn":    "privileged",
-	}
-
-	namespace, err := clientset.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
+	err := k8s.EnsurePrivilegedNamespace(ctx, clientset, name)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create the namespace with PSS labels
-			newNS := &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   name,
-					Labels: pssLabels,
-				},
-			}
-
-			_, err = clientset.CoreV1().Namespaces().Create(ctx, newNS, metav1.CreateOptions{})
-			if err != nil {
-				return fmt.Errorf("create namespace: %w", err)
-			}
-
-			return nil
-		}
-
-		return fmt.Errorf("get namespace: %w", err)
-	}
-
-	// Namespace exists, ensure PSS labels are set
-	if namespace.Labels == nil {
-		namespace.Labels = make(map[string]string)
-	}
-
-	updated := false
-
-	for k, v := range pssLabels {
-		if namespace.Labels[k] != v {
-			namespace.Labels[k] = v
-			updated = true
-		}
-	}
-
-	if updated {
-		_, err = clientset.CoreV1().Namespaces().Update(ctx, namespace, metav1.UpdateOptions{})
-		if err != nil {
-			return fmt.Errorf("update namespace labels: %w", err)
-		}
+		return fmt.Errorf("ensure privileged namespace %s: %w", name, err)
 	}
 
 	return nil

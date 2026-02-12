@@ -9,65 +9,33 @@ import (
 	goruntime "runtime"
 	"strings"
 	"time"
+
+	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 )
 
 // BuildSystemContext builds the system prompt context for the chat assistant.
-// It combines multiple sources of information:
-//   - Identity and role description for the AI assistant
-//   - Current working directory and ksail.yaml configuration if present
-//   - KSail documentation loaded from the docs/ directory
-//   - Dynamic CLI help output from the ksail executable
-//   - Instructions for proper behavior and command usage
-//
-// Returns the complete system context string and any error encountered.
-// If documentation loading fails, a partial context is still returned.
+// It delegates to the generic chatui.BuildSystemContext with KSail-specific defaults.
 func BuildSystemContext() (string, error) {
-	var builder strings.Builder
-
-	// Add identity and role
-	builder.WriteString(`<identity>
-You are KSail Assistant, an AI helper for KSail - a CLI tool for creating and managing local Kubernetes clusters.
-You help users configure, troubleshoot, and operate Kubernetes clusters using KSail.
-</identity>
-
-`)
-
-	// Add working directory context
-	workDir, err := os.Getwd()
-	if err == nil {
-		builder.WriteString(fmt.Sprintf("<working_directory>%s</working_directory>\n\n", workDir))
-
-		// Check if ksail.yaml exists in working directory
-		if _, statErr := os.Stat(filepath.Join(workDir, "ksail.yaml")); statErr == nil {
-			content, readErr := os.ReadFile(filepath.Join(workDir, "ksail.yaml"))
-			if readErr == nil {
-				builder.WriteString("<current_ksail_config>\n")
-				builder.WriteString(string(content))
-				builder.WriteString("\n</current_ksail_config>\n\n")
-			}
-		}
+	result, err := chatui.BuildSystemContext(DefaultSystemContextConfig())
+	if err != nil {
+		return "", fmt.Errorf("building system context: %w", err)
 	}
 
-	// Load documentation from docs/ directory
-	docs := loadDocumentation()
-	if docs != "" {
-		builder.WriteString("<ksail_documentation>\n")
-		builder.WriteString(docs)
-		builder.WriteString("\n</ksail_documentation>\n\n")
+	return result, nil
+}
+
+// DefaultSystemContextConfig returns the default KSail system context configuration.
+func DefaultSystemContextConfig() chatui.SystemContextConfig {
+	return chatui.SystemContextConfig{
+		Identity: "You are KSail Assistant, an AI helper for KSail - " +
+			"a CLI tool for creating and managing local Kubernetes clusters.\n" +
+			"You help users configure, troubleshoot, and operate Kubernetes clusters using KSail.",
+		Documentation:            loadDocumentation(),
+		CLIHelp:                  getCLIHelp(),
+		Instructions:             ksailInstructions,
+		IncludeWorkingDirContext: true,
+		ConfigFileName:           "ksail.yaml",
 	}
-
-	// Add CLI help dynamically
-	cliHelp := getCLIHelp()
-	if cliHelp != "" {
-		builder.WriteString("<cli_help>\n")
-		builder.WriteString(cliHelp)
-		builder.WriteString("\n</cli_help>\n\n")
-	}
-
-	// Add instructions
-	builder.WriteString(ksailInstructions)
-
-	return builder.String(), nil
 }
 
 // getCLIHelp captures the ksail --help output dynamically.
@@ -82,6 +50,7 @@ func getCLIHelp() string {
 	ctx, cancel := context.WithTimeout(context.Background(), cliHelpTimeout)
 	defer cancel()
 
+	//nolint:gosec // Running own ksail binary with fixed args is safe
 	cmd := exec.CommandContext(ctx, ksailPath, "--help")
 
 	output, err := cmd.Output()
@@ -122,7 +91,8 @@ func FindKSailExecutable() string {
 				"/usr/local/bin/ksail",
 			}
 			for _, p := range commonPaths {
-				if _, statErr := os.Stat(p); statErr == nil {
+				_, statErr := os.Stat(p)
+				if statErr == nil {
 					return p
 				}
 			}
@@ -136,8 +106,12 @@ func FindKSailExecutable() string {
 const ksailInstructions = `<instructions>
 - Help users configure and manage Kubernetes clusters using KSail
 - When suggesting commands, explain what they do before running them
-- For write operations (creating clusters, applying workloads, deleting resources), the user will be prompted to confirm
-- Prefer KSail commands over raw kubectl when KSail provides equivalent functionality
+- For write operations (creating clusters, applying workloads, deleting resources),
+  the user will be prompted to confirm unless YOLO mode is enabled (Ctrl+Y in TUI)
+- ALWAYS use the registered KSail tools (e.g., cluster_write, cluster_read, workload_apply)
+  instead of running ksail commands through bash, shell, or terminal tools.
+  The registered tools handle confirmation prompts and force flags automatically.
+  Running ksail commands through bash will block on interactive prompts.
 - Reference the documentation when helping with ksail.yaml configuration
 - Use the troubleshooting tips for diagnosing issues
 - Be concise but thorough in explanations

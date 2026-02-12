@@ -709,3 +709,200 @@ func TestExpectedContextName(t *testing.T) {
 		})
 	}
 }
+
+// EffectiveValue tests.
+
+//nolint:funlen // Table-driven test with comprehensive distribution × value combinations.
+func TestCSI_EffectiveValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		csi          v1alpha1.CSI
+		distribution v1alpha1.Distribution
+		provider     v1alpha1.Provider
+		expected     v1alpha1.CSI
+	}{
+		{
+			name:         "vanilla_docker_default_resolves_to_disabled",
+			csi:          v1alpha1.CSIDefault,
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CSIDisabled,
+		},
+		{
+			name:         "k3s_docker_default_resolves_to_enabled",
+			csi:          v1alpha1.CSIDefault,
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CSIEnabled,
+		},
+		{
+			name:         "talos_docker_default_resolves_to_disabled",
+			csi:          v1alpha1.CSIDefault,
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CSIDisabled,
+		},
+		{
+			name:         "talos_hetzner_default_resolves_to_enabled",
+			csi:          v1alpha1.CSIDefault,
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderHetzner,
+			expected:     v1alpha1.CSIEnabled,
+		},
+		{
+			name:         "enabled_passes_through",
+			csi:          v1alpha1.CSIEnabled,
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CSIEnabled,
+		},
+		{
+			name:         "disabled_passes_through",
+			csi:          v1alpha1.CSIDisabled,
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CSIDisabled,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := testCase.csi.EffectiveValue(testCase.distribution, testCase.provider)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
+
+func TestMetricsServer_EffectiveValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		ms           v1alpha1.MetricsServer
+		distribution v1alpha1.Distribution
+		expected     v1alpha1.MetricsServer
+	}{
+		{
+			name:         "vanilla_default_resolves_to_disabled",
+			ms:           v1alpha1.MetricsServerDefault,
+			distribution: v1alpha1.DistributionVanilla,
+			expected:     v1alpha1.MetricsServerDisabled,
+		},
+		{
+			name:         "k3s_default_resolves_to_enabled",
+			ms:           v1alpha1.MetricsServerDefault,
+			distribution: v1alpha1.DistributionK3s,
+			expected:     v1alpha1.MetricsServerEnabled,
+		},
+		{
+			name:         "talos_default_resolves_to_disabled",
+			ms:           v1alpha1.MetricsServerDefault,
+			distribution: v1alpha1.DistributionTalos,
+			expected:     v1alpha1.MetricsServerDisabled,
+		},
+		{
+			name:         "enabled_passes_through",
+			ms:           v1alpha1.MetricsServerEnabled,
+			distribution: v1alpha1.DistributionVanilla,
+			expected:     v1alpha1.MetricsServerEnabled,
+		},
+		{
+			name:         "disabled_passes_through",
+			ms:           v1alpha1.MetricsServerDisabled,
+			distribution: v1alpha1.DistributionK3s,
+			expected:     v1alpha1.MetricsServerDisabled,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := testCase.ms.EffectiveValue(testCase.distribution)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
+
+//nolint:funlen // Table-driven test with comprehensive distribution × value combinations.
+func TestLoadBalancer_EffectiveValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		lb           v1alpha1.LoadBalancer
+		distribution v1alpha1.Distribution
+		provider     v1alpha1.Provider
+		expected     v1alpha1.LoadBalancer
+	}{
+		{
+			name:         "vanilla_docker_default_resolves_to_disabled",
+			lb:           v1alpha1.LoadBalancerDefault,
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.LoadBalancerDisabled,
+		},
+		{
+			name:         "k3s_docker_default_resolves_to_enabled",
+			lb:           v1alpha1.LoadBalancerDefault,
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.LoadBalancerEnabled,
+		},
+		{
+			name:         "talos_docker_default_resolves_to_disabled",
+			lb:           v1alpha1.LoadBalancerDefault,
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.LoadBalancerDisabled,
+		},
+		{
+			name:         "talos_docker_enabled_passes_through",
+			lb:           v1alpha1.LoadBalancerEnabled,
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.LoadBalancerEnabled,
+		},
+		{
+			name:         "talos_docker_disabled_resolves_to_disabled",
+			lb:           v1alpha1.LoadBalancerDisabled,
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.LoadBalancerDisabled,
+		},
+		{
+			name:         "talos_hetzner_default_resolves_to_enabled",
+			lb:           v1alpha1.LoadBalancerDefault,
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderHetzner,
+			expected:     v1alpha1.LoadBalancerEnabled,
+		},
+		{
+			name:         "enabled_passes_through",
+			lb:           v1alpha1.LoadBalancerEnabled,
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.LoadBalancerEnabled,
+		},
+		{
+			name:         "disabled_passes_through",
+			lb:           v1alpha1.LoadBalancerDisabled,
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.LoadBalancerDisabled,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := testCase.lb.EffectiveValue(testCase.distribution, testCase.provider)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}

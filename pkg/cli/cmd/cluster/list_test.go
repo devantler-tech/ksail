@@ -63,7 +63,7 @@ type fakeFactoryWithClusters struct {
 func (f fakeFactoryWithClusters) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
-) (clusterprovisioner.ClusterProvisioner, any, error) {
+) (clusterprovisioner.Provisioner, any, error) {
 	cfg := &v1alpha4.Cluster{Name: "test"}
 
 	return &fakeProvisionerWithClusters{clusters: f.clusters, listErr: f.listErr}, cfg, nil
@@ -260,13 +260,13 @@ type fakeFactoryWithErrors struct{}
 func (fakeFactoryWithErrors) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
-) (clusterprovisioner.ClusterProvisioner, any, error) {
+) (clusterprovisioner.Provisioner, any, error) {
 	return nil, nil, fmt.Errorf("test error: %w", errTestFactoryError)
 }
 
 // Ensure fake types satisfy interfaces at compile time.
 var (
-	_ clusterprovisioner.ClusterProvisioner = (*fakeProvisionerWithClusters)(nil)
-	_ clusterprovisioner.Factory            = (*fakeFactoryWithClusters)(nil)
-	_ clusterprovisioner.Factory            = (*fakeFactoryWithErrors)(nil)
+	_ clusterprovisioner.Provisioner = (*fakeProvisionerWithClusters)(nil)
+	_ clusterprovisioner.Factory     = (*fakeFactoryWithClusters)(nil)
+	_ clusterprovisioner.Factory     = (*fakeFactoryWithErrors)(nil)
 )

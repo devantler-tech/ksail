@@ -113,15 +113,6 @@ runs:
         # shellcheck disable=SC2086
         ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
 
-    - name: 📥 Restore cached Docker volumes
-      id: restore-volume-cache
-      if: inputs.provider == 'Docker'
-      uses: ./.github/actions/cache-docker-volumes
-      with:
-        distribution: ${{ inputs.distribution }}
-        operation: restore
-        cache-version: v1
-
     - name: 📥 Restore mirror cache
       id: restore-mirror-cache
       if: inputs.provider == 'Docker'
@@ -150,6 +141,25 @@ runs:
           echo "   Images from these registries may need to be pulled directly."
         else
           echo "✅ All 4 mirror cache volumes present"
+        fi
+
+    - name: 📥 Pre-pull registry image
+      if: inputs.provider == 'Docker'
+      shell: bash
+      run: |
+        pulled=false
+        for attempt in 1 2 3; do
+          if docker pull registry:3; then
+            echo "✅ registry:3 image pulled successfully"
+            pulled=true
+            break
+          fi
+          echo "⚠️ registry:3 pull attempt $attempt failed, retrying in 5s…"
+          sleep 5
+        done
+        if [ "$pulled" = false ]; then
+          echo "❌ Failed to pull registry:3 after 3 attempts"
+          exit 1
         fi
 
     - name: 🧪 ksail cluster create
@@ -223,16 +233,32 @@ runs:
         ksail workload push --path "$GITOPS_PATH/"
         ksail workload reconcile
 
-    - name: 💾 Save Docker volumes to cache
-      if: inputs.provider == 'Docker' && steps.restore-volume-cache.outputs.cache-hit != 'true'
-      uses: ./.github/actions/cache-docker-volumes
-      with:
-        distribution: ${{ inputs.distribution }}
-        operation: save
-        cache-version: v1
+    - name: 🧪 ksail cluster update --dry-run
+      id: cluster-update-dry-run
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+      run: |
+        # shellcheck disable=SC2086
+        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+
+    - name: 🧪 ksail cluster update
+      id: cluster-update
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+      run: |
+        # shellcheck disable=SC2086
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
+      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"

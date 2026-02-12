@@ -1,7 +1,7 @@
 package registry
 
 import (
-	iohelpers "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -33,7 +33,7 @@ const (
 //   - Truncates to DNS1123LabelMaxLength (63 chars)
 //   - Falls back to DefaultRepoName if result is invalid
 func SanitizeRepoName(value string) string {
-	sanitized := iohelpers.SanitizeToDNSLabel(value)
+	sanitized := k8s.SanitizeToDNSLabel(value)
 	if sanitized == "" {
 		return DefaultRepoName
 	}

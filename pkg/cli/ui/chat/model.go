@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -14,22 +15,20 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	copilot "github.com/github/copilot-sdk/go"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 const (
 	defaultWidth  = 100
 	defaultHeight = 30
 	inputHeight   = 3
-	headerHeight  = logoHeight + 3 // logo + tagline + border
-	footerHeight  = 1              // single line help text
+	footerHeight  = 1 // single line help text
 
 	// Shared picker/output constants.
 	maxPickerItems    = 10 // absolute maximum items in picker modals
 	minPickerItems    = 3  // minimum items to show in picker modals
 	minViewportHeight = 10 // minimum height to preserve for main viewport
 	minWrapWidth      = 20 // minimum width for text wrapping
+	viewSectionCount  = 4  // number of sections in View: header, viewport, input, footer
 
 	// Tool and error message constants.
 	unknownToolName  = "unknown"           // fallback when tool name is nil
@@ -40,37 +39,57 @@ const (
 		"Do not execute tools or make changes - only describe what you would do:\n\n"
 )
 
-// AgentModeRef is a thread-safe reference to the agent mode state.
-// It allows tool handlers to check the current mode at execution time.
+// ModeRef is a thread-safe reference to a boolean mode state.
+// It allows tool handlers to check and update mode state at execution time.
 // The enabled field is unexported to ensure all access goes through mutex-protected methods.
-type AgentModeRef struct {
+type ModeRef struct {
 	mu      sync.RWMutex
 	enabled bool
 }
 
-// NewAgentModeRef creates a new AgentModeRef with the given initial state.
-func NewAgentModeRef(initial bool) *AgentModeRef {
-	return &AgentModeRef{
+// NewModeRef creates a new ModeRef with the given initial state.
+func NewModeRef(initial bool) *ModeRef {
+	return &ModeRef{
 		enabled: initial,
 	}
 }
 
-// IsEnabled returns true if agent mode is enabled (tools can execute).
-func (r *AgentModeRef) IsEnabled() bool {
+// IsEnabled returns true if the mode is enabled.
+func (r *ModeRef) IsEnabled() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return r.enabled
 }
 
-// SetEnabled updates the agent mode state.
-func (r *AgentModeRef) SetEnabled(enabled bool) {
+// SetEnabled updates the mode state.
+func (r *ModeRef) SetEnabled(enabled bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.enabled = enabled
 }
 
-// chatMessage represents a single message in the chat history.
-type chatMessage struct {
+// AgentModeRef is a thread-safe reference to the agent mode state.
+// When enabled, tools can execute; when disabled (plan mode), tools are blocked.
+type AgentModeRef = ModeRef
+
+// NewAgentModeRef creates a new AgentModeRef with the given initial state.
+func NewAgentModeRef(initial bool) *AgentModeRef {
+	return NewModeRef(initial)
+}
+
+// YoloModeRef is a thread-safe reference to the YOLO mode state.
+// When enabled, write operations are auto-approved without prompting the user.
+type YoloModeRef = ModeRef
+
+// NewYoloModeRef creates a new YoloModeRef with the given initial state.
+func NewYoloModeRef(initial bool) *YoloModeRef {
+	return NewModeRef(initial)
+}
+
+// message represents a single message in the chat history.
+type message struct {
 	role        string // "user", "assistant", or "tool"
 	content     string
 	rendered    string // markdown-rendered content for assistant messages
@@ -95,7 +114,7 @@ type Model struct {
 	spinner  spinner.Model
 
 	// State
-	messages         []chatMessage
+	messages         []message
 	currentResponse  strings.Builder
 	isStreaming      bool
 	justCompleted    bool // true when a response just finished, shows "Ready" indicator
@@ -104,6 +123,12 @@ type Model struct {
 	err              error
 	quitting         bool
 	ready            bool
+
+	// Configuration
+	theme        ThemeConfig
+	toolDisplay  ToolDisplayConfig
+	styles       uiStyles
+	headerHeight int
 
 	// Prompt history
 	history      []string // previously submitted prompts
@@ -168,95 +193,67 @@ type Model struct {
 	agentMode    bool          // true = agent (execute), false = plan (describe only)
 	agentModeRef *AgentModeRef // shared reference for tool handlers to check current mode
 
+	// YOLO mode (auto-approve write operations without prompting)
+	yoloMode    bool         // true = auto-approve, false = prompt for confirmation
+	yoloModeRef *YoloModeRef // shared reference for tool handlers to check YOLO state
+
 	// Channel for async streaming events from Copilot
 	eventChan chan tea.Msg
 }
 
-// New creates a new chat TUI model.
-func New(
-	session *copilot.Session,
-	client *copilot.Client,
-	sessionConfig *copilot.SessionConfig,
-	models []copilot.ModelInfo,
-	currentModel string,
-	timeout time.Duration,
-) *Model {
-	return NewWithEventChannel(
-		session,
-		client,
-		sessionConfig,
-		models,
-		currentModel,
-		timeout,
-		nil,
-		nil,
-	)
-}
+// NewModel creates a new chat TUI model from the given parameters.
+// If params.EventChan is nil, a new channel is created.
+// If params.Theme or params.ToolDisplay are zero-valued, defaults are applied.
+func NewModel(params Params) *Model {
+	const headerPadding = 3
 
-// NewWithEventChannel creates a new chat TUI model with an optional pre-existing event channel.
-// If eventChan is nil, a new channel is created. This allows external code to send events
-// to the TUI (e.g., permission requests).
-// If agentModeRef is provided, it will be used to synchronize agent mode state with tool handlers.
-func NewWithEventChannel(
-	session *copilot.Session,
-	client *copilot.Client,
-	sessionConfig *copilot.SessionConfig,
-	models []copilot.ModelInfo,
-	currentModel string,
-	timeout time.Duration,
-	eventChan chan tea.Msg,
-	agentModeRef *AgentModeRef,
-) *Model {
-	// Initialize textarea for user input
-	textArea := textarea.New()
-	textArea.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
-	textArea.Focus()
-	textArea.CharLimit = 4096
-	textArea.SetWidth(defaultWidth - 6)
-	textArea.SetHeight(inputHeight)
-	textArea.ShowLineNumbers = false
-	// Show ">" only on first line, nothing on continuation lines
-	textArea.SetPromptFunc(2, func(lineIdx int) string {
-		if lineIdx == 0 {
-			return "> "
-		}
-		return "  "
-	})
-	textArea.FocusedStyle.CursorLine = lipgloss.NewStyle()
-	textArea.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	theme := params.Theme
+	if theme.Logo == nil {
+		theme = DefaultThemeConfig()
+	}
 
-	// Initialize viewport for chat history
-	viewPort := viewport.New(defaultWidth-4, defaultHeight-inputHeight-headerHeight-footerHeight-4)
-	initialMsg := "  Type a message below to start chatting with KSail AI.\n"
-	viewPort.SetContent(statusStyle.Render(initialMsg))
+	toolDisplay := params.ToolDisplay
+	if toolDisplay.NameMappings == nil {
+		toolDisplay = DefaultToolDisplayConfig()
+	}
+
+	styles := newUIStyles(theme)
+	headerH := theme.LogoHeight + headerPadding
+	textArea := createTextArea(theme.Placeholder)
+	viewPort := createViewport(theme.WelcomeMessage, styles.status, headerH)
 
 	// Initialize spinner
 	spin := spinner.New()
 	spin.Spinner = spinner.MiniDot
-	spin.Style = spinnerStyle
+	spin.Style = styles.spinner
 
 	// Initialize markdown renderer before Bubbletea takes over terminal
 	// This avoids terminal queries that could interfere with input
-	mdRenderer := createRenderer(defaultWidth - 8)
+	mdRenderer := createRenderer(defaultWidth - rendererPadding)
 
 	// Use provided event channel or create new one
+	eventChan := params.EventChan
 	if eventChan == nil {
-		eventChan = make(chan tea.Msg, 100)
+		eventChan = make(chan tea.Msg, eventChanBuf)
 	}
 
 	return &Model{
+		theme:            theme,
+		toolDisplay:      toolDisplay,
+		styles:           styles,
+		headerHeight:     headerH,
 		viewport:         viewPort,
 		textarea:         textArea,
 		spinner:          spin,
 		renderer:         mdRenderer,
-		help:             createHelpModel(),
+		help:             createHelpModel(styles),
 		keys:             DefaultKeyMap(),
-		messages:         make([]chatMessage, 0),
-		session:          session,
-		client:           client,
-		sessionConfig:    sessionConfig,
-		currentSessionID: session.SessionID, // Track the SDK's session ID
-		timeout:          timeout,
+		messages:         make([]message, 0),
+		session:          params.Session,
+		client:           params.Client,
+		sessionConfig:    params.SessionConfig,
+		currentSessionID: params.Session.SessionID, // Track the SDK's session ID
+		timeout:          params.Timeout,
 		ctx:              context.Background(),
 		eventChan:        eventChan,
 		width:            defaultWidth,
@@ -265,11 +262,47 @@ func NewWithEventChannel(
 		toolOrder:        make([]string, 0),
 		history:          make([]string, 0),
 		historyIndex:     -1,
-		availableModels:  models,
-		currentModel:     currentModel,
-		agentMode:        true,         // Default to agent mode
-		agentModeRef:     agentModeRef, // Store reference for tool handlers
+		availableModels:  params.Models,
+		currentModel:     params.CurrentModel,
+		agentMode:        true,                // Default to agent mode
+		agentModeRef:     params.AgentModeRef, // Store reference for tool handlers
+		yoloModeRef:      params.YoloModeRef,  // Store reference for YOLO mode
 	}
+}
+
+// createTextArea initializes the textarea component for user input.
+func createTextArea(placeholder string) textarea.Model {
+	textArea := textarea.New()
+	textArea.Placeholder = placeholder
+	textArea.Focus()
+	textArea.CharLimit = charLimit
+	textArea.SetWidth(defaultWidth - textAreaPadding)
+	textArea.SetHeight(inputHeight)
+	textArea.ShowLineNumbers = false
+
+	// Show ">" only on first line, nothing on continuation lines
+	textArea.SetPromptFunc(modalPadding, func(lineIdx int) string {
+		if lineIdx == 0 {
+			return "> "
+		}
+
+		return "  "
+	})
+	textArea.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	textArea.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+	return textArea
+}
+
+// createViewport initializes the viewport component for chat history.
+func createViewport(welcomeMessage string, statusSty lipgloss.Style, headerH int) viewport.Model {
+	viewportWidth := defaultWidth - viewportWidthPadding
+	viewportHeight := defaultHeight - inputHeight - headerH - footerHeight - viewportHeightPadding
+	viewPort := viewport.New(viewportWidth, viewportHeight)
+	initialMsg := "  " + welcomeMessage + "\n"
+	viewPort.SetContent(statusSty.Render(initialMsg))
+
+	return viewPort
 }
 
 // GetEventChannel returns the model's event channel for external use.
@@ -286,7 +319,11 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Update handles messages and updates the model.
-func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+//
+//nolint:cyclop // type-switch dispatcher for tea.Msg
+func (m *Model) Update(
+	msg tea.Msg,
+) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -294,33 +331,84 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyMsg(msg)
 
 	case tea.MouseMsg:
-		// Handle only mouse wheel scrolling - let click/drag pass through for text selection
-		if msg.Button == tea.MouseButtonWheelUp {
-			m.viewport.ScrollUp(3)
-			m.userScrolled = !m.viewport.AtBottom()
-			return m, nil
-		}
-		if msg.Button == tea.MouseButtonWheelDown {
-			m.viewport.ScrollDown(3)
-			if m.viewport.AtBottom() {
-				m.userScrolled = false
-			}
-			return m, nil
-		}
-		// Ignore other mouse events (clicks, drags) - terminal handles text selection
-		return m, nil
+		return m.handleMouseMsg(msg)
 
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.updateDimensions()
-		if !m.ready {
-			m.ready = true
-		}
+		m.handleWindowSize(msg)
 
 	case userSubmitMsg:
 		return m.handleUserSubmit(msg)
 
+	case streamChunkMsg, assistantMessageMsg, toolStartMsg, toolEndMsg,
+		toolOutputChunkMsg, ToolOutputChunkMsg, permissionRequestMsg,
+		PermissionRequestMsg, streamEndMsg, turnStartMsg, turnEndMsg,
+		reasoningMsg, abortMsg, snapshotRewindMsg, streamErrMsg:
+		return m.handleStreamEvent(msg)
+
+	case copyFeedbackClearMsg:
+		m.showCopyFeedback = false
+
+		return m, nil
+
+	case spinner.TickMsg:
+		// Always update spinner to keep it ticking
+		var cmd tea.Cmd
+
+		m.spinner, cmd = m.spinner.Update(msg)
+		cmds = append(cmds, cmd)
+		// Update viewport content if there are active tools or streaming to animate spinners
+		if m.isStreaming || m.hasRunningTools() {
+			m.updateViewportContent()
+		}
+	}
+
+	// Update sub-components
+	if !m.isStreaming {
+		var taCmd tea.Cmd
+
+		m.textarea, taCmd = m.textarea.Update(msg)
+		cmds = append(cmds, taCmd)
+	}
+
+	var vpCmd tea.Cmd
+
+	m.viewport, vpCmd = m.viewport.Update(msg)
+	cmds = append(cmds, vpCmd)
+
+	return m, tea.Batch(cmds...)
+}
+
+// View renders the TUI.
+func (m *Model) View() string {
+	if m.quitting {
+		goodbye := m.styles.status.Render("  " + m.theme.GoodbyeMessage + "\n")
+
+		return m.styles.logo.Render(m.theme.Logo()) + "\n\n" + goodbye
+	}
+
+	sections := make([]string, 0, viewSectionCount)
+
+	// Header, chat viewport, input/modal, and footer
+	sections = append(sections, m.renderHeader())
+	sections = append(sections,
+		m.styles.viewport.Width(max(m.width-modalPadding, 1)).Render(m.viewport.View()),
+	)
+	sections = append(sections, m.renderInputOrModal())
+	sections = append(sections, m.renderFooter())
+
+	// Join sections and clip final output to terminal width to prevent any wrapping
+	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
+}
+
+// handleStreamEvent dispatches streaming-related events to their specific handlers.
+//
+//nolint:cyclop // type-switch dispatcher for stream messages
+func (m *Model) handleStreamEvent(
+	msg tea.Msg,
+) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
 	case streamChunkMsg:
 		return m.handleStreamChunk(msg)
 
@@ -372,163 +460,29 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamErrMsg:
 		return m.handleStreamErr(msg)
 
-	case copyFeedbackClearMsg:
-		m.showCopyFeedback = false
+	default:
 		return m, nil
+	}
+}
 
-	case spinner.TickMsg:
-		// Always update spinner to keep it ticking
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		cmds = append(cmds, cmd)
-		// Update viewport content if there are active tools or streaming to animate spinners
-		if m.isStreaming || m.hasRunningTools() {
-			m.updateViewportContent()
+// handleMouseMsg handles mouse input events.
+func (m *Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	//nolint:exhaustive // Only wheel events are relevant for viewport scrolling.
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		m.viewport.ScrollUp(scrollLines)
+		m.userScrolled = !m.viewport.AtBottom()
+	case tea.MouseButtonWheelDown:
+		m.viewport.ScrollDown(scrollLines)
+
+		if m.viewport.AtBottom() {
+			m.userScrolled = false
 		}
+	default:
+		// Ignore other mouse events (clicks, drags) - terminal handles text selection
 	}
 
-	// Update sub-components
-	if !m.isStreaming {
-		var taCmd tea.Cmd
-		m.textarea, taCmd = m.textarea.Update(msg)
-		cmds = append(cmds, taCmd)
-	}
-
-	var vpCmd tea.Cmd
-	m.viewport, vpCmd = m.viewport.Update(msg)
-	cmds = append(cmds, vpCmd)
-
-	return m, tea.Batch(cmds...)
-}
-
-// View renders the TUI.
-func (m *Model) View() string {
-	if m.quitting {
-		goodbye := statusStyle.Render("  Goodbye! Thanks for using KSail.\n")
-		return logoStyle.Render(logo()) + "\n\n" + goodbye
-	}
-
-	sections := make([]string, 0, 4)
-
-	// Header, chat viewport, input/modal, and footer
-	sections = append(sections, m.renderHeader())
-	sections = append(sections, viewportStyle.Width(m.width-2).Render(m.viewport.View()))
-	sections = append(sections, m.renderInputOrModal())
-	sections = append(sections, m.renderFooter())
-
-	// Join sections and clip final output to terminal width to prevent any wrapping
-	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
-	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
-}
-
-// calculateMaxPickerVisible returns the maximum number of items that can be shown
-// in a picker modal without pushing the viewport out of view.
-func (m *Model) calculateMaxPickerVisible() int {
-	// Calculate available height: total - header - input - footer - borders
-	// Reserve space for: title (1) + scroll indicators (2) + borders (2) + minimum viewport
-	availableHeight := m.height - headerHeight - inputHeight - footerHeight - 4 - minViewportHeight
-
-	// Subtract space for picker overhead (title + top/bottom padding)
-	pickerOverhead := 3 // title + top/bottom padding
-	availableForItems := availableHeight - pickerOverhead
-
-	// Calculate max items: cap between min and max
-	maxItems := max(minPickerItems, min(availableForItems, maxPickerItems))
-	return maxItems
-}
-
-// renderHeader renders the header section with logo and status.
-func (m *Model) renderHeader() string {
-	headerContentWidth := max(m.width-6, 1)
-
-	// Truncate each logo line by display width (handles Unicode properly)
-	logoLines := strings.Split(logo(), "\n")
-	truncateStyle := lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true)
-	var clippedLogo strings.Builder
-	for i, line := range logoLines {
-		clippedLine := truncateStyle.Render(line)
-		clippedLogo.WriteString(clippedLine)
-		if i < len(logoLines)-1 {
-			clippedLogo.WriteString("\n")
-		}
-	}
-	logoRendered := logoStyle.Render(clippedLogo.String())
-
-	// Build tagline with right-aligned status
-	taglineRow := m.buildTaglineRow(headerContentWidth)
-	taglineRow = lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true).Render(taglineRow)
-
-	headerContent := logoRendered + "\n" + taglineRow
-	return headerBoxStyle.Width(m.width - 2).Render(headerContent)
-}
-
-// buildTaglineRow builds the tagline row with right-aligned status indicator.
-func (m *Model) buildTaglineRow(contentWidth int) string {
-	taglineText := taglineStyle.Render("  " + tagline())
-	statusText := m.buildStatusText()
-
-	if statusText == "" {
-		return taglineText
-	}
-
-	taglineLen := lipgloss.Width(taglineText)
-	statusLen := lipgloss.Width(statusText)
-	spacing := max(contentWidth-taglineLen-statusLen, 2)
-	return taglineText + strings.Repeat(" ", spacing) + statusText
-}
-
-// buildStatusText builds the status indicator text (mode, model, streaming state).
-func (m *Model) buildStatusText() string {
-	var statusParts []string
-
-	// Mode icon: </> for Agent, ≡ for Plan
-	modeStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(14))
-	if m.agentMode {
-		statusParts = append(statusParts, modeStyle.Render("</>"))
-	} else {
-		statusParts = append(statusParts, modeStyle.Render("≡"))
-	}
-
-	// Model name
-	modelStyle := lipgloss.NewStyle().Foreground(dimColor)
-	if m.currentModel != "" {
-		statusParts = append(statusParts, modelStyle.Render(m.currentModel))
-	} else {
-		statusParts = append(statusParts, modelStyle.Render("auto"))
-	}
-
-	// Streaming state and feedback
-	if m.isStreaming {
-		statusParts = append(statusParts, m.spinner.View()+" "+statusStyle.Render("Thinking..."))
-	} else if m.showCopyFeedback {
-		statusParts = append(statusParts, statusStyle.Render("Copied ✓"))
-	} else if m.justCompleted {
-		statusParts = append(statusParts, statusStyle.Render("Ready ✓"))
-	}
-
-	return strings.Join(statusParts, " • ")
-}
-
-// renderInputOrModal renders either the input area or active modal.
-func (m *Model) renderInputOrModal() string {
-	if m.showHelpOverlay {
-		return m.renderHelpOverlay()
-	}
-	if m.pendingPermission != nil {
-		return m.renderPermissionModal()
-	}
-	if m.showModelPicker {
-		return m.renderModelPickerModal()
-	}
-	if m.showSessionPicker {
-		return m.renderSessionPickerModal()
-	}
-	return inputStyle.Width(m.width - 2).Render(m.textarea.View())
-}
-
-// renderFooter renders the context-aware help text footer using bubbles/help.
-func (m *Model) renderFooter() string {
-	return lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(m.renderShortHelp())
+	return m, nil
 }
 
 // handleUserSubmit handles user message submission.
@@ -545,13 +499,13 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 
 	// Add user message and placeholder assistant message
 	// Store the current mode with the message so it can be displayed in the indicator
-	m.messages = append(m.messages, chatMessage{
-		role:      "user",
+	m.messages = append(m.messages, message{
+		role:      roleUser,
 		content:   msg.content,
 		agentMode: m.agentMode,
 	})
-	m.messages = append(m.messages, chatMessage{
-		role:        "assistant",
+	m.messages = append(m.messages, message{
+		role:        roleAssistant,
 		content:     "",
 		isStreaming: true,
 	})
@@ -564,16 +518,18 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 
 // commitToolsToLastAssistantMessage saves current tools to the last assistant message.
 func (m *Model) commitToolsToLastAssistantMessage() {
-	for i := len(m.messages) - 1; i >= 0; i-- {
-		if m.messages[i].role == "assistant" {
-			m.messages[i].tools = make([]*toolExecution, 0, len(m.toolOrder))
-			m.messages[i].toolOrder = make([]string, len(m.toolOrder))
-			copy(m.messages[i].toolOrder, m.toolOrder)
+	for idx := len(m.messages) - 1; idx >= 0; idx-- {
+		if m.messages[idx].role == roleAssistant {
+			m.messages[idx].tools = make([]*toolExecution, 0, len(m.toolOrder))
+			m.messages[idx].toolOrder = make([]string, len(m.toolOrder))
+			copy(m.messages[idx].toolOrder, m.toolOrder)
+
 			for _, id := range m.toolOrder {
 				if tool := m.tools[id]; tool != nil {
-					m.messages[i].tools = append(m.messages[i].tools, tool)
+					m.messages[idx].tools = append(m.messages[idx].tools, tool)
 				}
 			}
+
 			break
 		}
 	}
@@ -584,6 +540,7 @@ func (m *Model) addToPromptHistory(prompt string) {
 	if prompt != "" && (len(m.history) == 0 || m.history[len(m.history)-1] != prompt) {
 		m.history = append(m.history, prompt)
 	}
+
 	m.historyIndex = -1
 	m.savedInput = ""
 }
@@ -601,88 +558,11 @@ func (m *Model) prepareForNewTurn() {
 	m.currentResponse.Reset()
 }
 
-// activeModalHeight returns the extra height needed for the currently active modal
-// beyond the input area height (since modals replace the input area).
-func (m *Model) activeModalHeight() int {
-	if m.showHelpOverlay {
-		// Help overlay uses fixed 5 lines (same as input area)
-		return 0
-	}
-	if m.pendingPermission != nil {
-		// Calculate actual permission modal height based on content.
-		// Base layout: title(1) + blank(1) + tool(1) + blank(1) + "Allow?"(1) + buttons(1) = 6 lines,
-		// plus optional lines for the command and arguments when present.
-		contentLines := 6
-		if m.pendingPermission.command != "" {
-			contentLines++
-		}
-		if m.pendingPermission.arguments != "" {
-			contentLines++
-		}
-
-		// Return extra height beyond input area
-		if contentLines > inputHeight {
-			return contentLines - inputHeight
-		}
-		return 0
-	}
-	if m.showModelPicker || m.showSessionPicker {
-		// Calculate actual picker height based on content
-		var totalItems int
-		if m.showSessionPicker {
-			totalItems = len(m.filteredSessions) + 1 // +1 for "New Chat" option
-		} else {
-			totalItems = len(m.filteredModels) + 1 // +1 for "auto" option
-		}
-		maxVisible := m.calculateMaxPickerVisible()
-		visibleCount := min(totalItems, maxVisible)
-		isScrollable := totalItems > maxVisible
-
-		// Calculate content lines: title + visible items
-		contentLines := 1 + visibleCount
-		if isScrollable {
-			contentLines += 2 // Add space for scroll indicators
-		}
-		// Apply minimum height constraint (matches calculatePickerContentLines in styles.go)
-		contentLines = max(contentLines, 6)
-
-		// Return extra height beyond input area
-		if contentLines > inputHeight {
-			return contentLines - inputHeight
-		}
-		return 0
-	}
-	return 0
-}
-
-// updateDimensions updates component dimensions based on terminal size.
-func (m *Model) updateDimensions() {
-	// Account for borders and padding
-	contentWidth := m.width - 4
-
-	// Calculate available height: total - header - input - footer - borders - modal
-	// Each bordered box adds 2 lines (top + bottom border)
-	modalHeight := m.activeModalHeight()
-	viewportHeight := max(m.height-headerHeight-inputHeight-footerHeight-4-modalHeight, 5)
-
-	oldWidth := m.viewport.Width
-	m.viewport.Width = contentWidth - 2
-	m.viewport.Height = viewportHeight
-	m.textarea.SetWidth(contentWidth - 2)
-
-	// If viewport width changed, recreate the renderer and re-render completed messages
-	if oldWidth != m.viewport.Width {
-		m.renderer = createRenderer(m.viewport.Width - 4)
-		m.reRenderCompletedMessages()
-		m.updateViewportContent()
-	}
-}
-
 // reRenderCompletedMessages re-renders all completed assistant messages with the current renderer.
 func (m *Model) reRenderCompletedMessages() {
-	for i := range m.messages {
-		msg := &m.messages[i]
-		if msg.role == "assistant" && msg.content != "" {
+	for idx := range m.messages {
+		msg := &m.messages[idx]
+		if msg.role == roleAssistant && msg.content != "" {
 			msg.rendered = renderMarkdownWithRenderer(m.renderer, msg.content)
 		}
 	}
@@ -702,10 +582,11 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 	session := m.session
 	eventChan := m.eventChan
 	agentMode := m.agentMode
+	commandBuilders := m.toolDisplay.CommandBuilders
 
 	return func() tea.Msg {
 		// Create event dispatcher to route SDK events to tea messages
-		dispatcher := newSessionEventDispatcher(eventChan)
+		dispatcher := newSessionEventDispatcher(eventChan, commandBuilders)
 
 		// Subscribe for this turn's events and store unsubscribe in the model
 		unsubscribe := session.On(dispatcher.dispatch)
@@ -726,11 +607,14 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		if err != nil {
 			// Clean up on error
 			m.unsubscribeMu.Lock()
+
 			if m.unsubscribe != nil {
 				m.unsubscribe()
 				m.unsubscribe = nil
 			}
+
 			m.unsubscribeMu.Unlock()
+
 			return streamErrMsg{err: err}
 		}
 
@@ -740,84 +624,20 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 	}
 }
 
-// Run starts the chat TUI and returns a permission handler for integration with the Copilot SDK.
-// The returned handler can be used with SessionConfig.OnPermissionRequest to enable interactive
-// permission prompting within the TUI.
-func Run(
-	ctx context.Context,
-	session *copilot.Session,
-	client *copilot.Client,
-	sessionConfig *copilot.SessionConfig,
-	models []copilot.ModelInfo,
-	currentModel string,
-	timeout time.Duration,
-) error {
-	model := New(session, client, sessionConfig, models, currentModel, timeout)
-	model.ctx = ctx
-	program := tea.NewProgram(
-		model,
-		tea.WithAltScreen(),
-		tea.WithContext(ctx),
-		tea.WithMouseCellMotion(), // Enable mouse wheel (use shift+click for text selection)
-	)
-
-	_, err := program.Run()
-	return err
-}
-
-// RunWithEventChannel starts the chat TUI with a pre-created event channel.
-// This allows external code (like permission handlers) to send events to the TUI.
-func RunWithEventChannel(
-	ctx context.Context,
-	session *copilot.Session,
-	client *copilot.Client,
-	sessionConfig *copilot.SessionConfig,
-	models []copilot.ModelInfo,
-	currentModel string,
-	timeout time.Duration,
-	eventChan chan tea.Msg,
-) error {
-	return RunWithEventChannelAndModeRef(
-		ctx,
-		session,
-		client,
-		sessionConfig,
-		models,
-		currentModel,
-		timeout,
-		eventChan,
-		nil,
-	)
-}
-
-// RunWithEventChannelAndModeRef starts the chat TUI with a pre-created event channel and agent mode reference.
-// This allows external code (like permission handlers) to send events to the TUI and synchronize agent mode state.
-func RunWithEventChannelAndModeRef(
-	ctx context.Context,
-	session *copilot.Session,
-	client *copilot.Client,
-	sessionConfig *copilot.SessionConfig,
-	models []copilot.ModelInfo,
-	currentModel string,
-	timeout time.Duration,
-	eventChan chan tea.Msg,
-	agentModeRef *AgentModeRef,
-) error {
-	model := NewWithEventChannel(
-		session,
-		client,
-		sessionConfig,
-		models,
-		currentModel,
-		timeout,
-		eventChan,
-		agentModeRef,
-	)
+// Run starts the chat TUI with the given parameters.
+// This is the primary entry point for running the chat interface.
+func Run(ctx context.Context, params Params) error {
+	model := NewModel(params)
 	model.ctx = ctx
 
 	// Ensure agentModeRef is initialized with the model's initial state
-	if agentModeRef != nil {
-		agentModeRef.SetEnabled(model.agentMode)
+	if params.AgentModeRef != nil {
+		params.AgentModeRef.SetEnabled(model.agentMode)
+	}
+
+	// Ensure yoloModeRef is initialized with the model's initial state
+	if params.YoloModeRef != nil {
+		params.YoloModeRef.SetEnabled(model.yoloMode)
 	}
 
 	program := tea.NewProgram(
@@ -828,7 +648,11 @@ func RunWithEventChannelAndModeRef(
 	)
 
 	_, err := program.Run()
-	return err
+	if err != nil {
+		return fmt.Errorf("running chat program: %w", err)
+	}
+
+	return nil
 }
 
 // hasRunningTools returns true if any tools are currently running.
@@ -838,168 +662,6 @@ func (m *Model) hasRunningTools() bool {
 			return true
 		}
 	}
+
 	return false
-}
-
-// CreateTUIPermissionHandler creates a permission handler that integrates with the TUI.
-// It sends permission requests to the provided event channel and waits for a response.
-// This allows the TUI to display permission prompts and collect user input.
-func CreateTUIPermissionHandler(eventChan chan<- tea.Msg) copilot.PermissionHandler {
-	return func(
-		request copilot.PermissionRequest,
-		_ copilot.PermissionInvocation,
-	) (copilot.PermissionRequestResult, error) {
-		// Extract tool name and command from the permission request.
-		// The Extra map contains the raw permission request data from the SDK.
-		// Common keys vary by permission kind (shell, file_edit, etc.)
-		toolName, command := extractPermissionDetails(request)
-
-		// Create response channel
-		responseChan := make(chan bool, 1)
-
-		// Send permission request to TUI
-		eventChan <- permissionRequestMsg{
-			toolCallID: request.ToolCallID,
-			toolName:   toolName,
-			command:    command,
-			arguments:  "", // Arguments are included in the command for SDK permissions
-			response:   responseChan,
-		}
-
-		// Wait for response from TUI
-		approved := <-responseChan
-
-		if approved {
-			return copilot.PermissionRequestResult{Kind: "approved"}, nil
-		}
-		return copilot.PermissionRequestResult{Kind: "denied-interactively-by-user"}, nil
-	}
-}
-
-// extractPermissionDetails extracts human-readable tool name and command from an SDK permission request.
-// The Extra map contains different fields depending on the permission kind.
-// Uses priority-based field checking with early returns to avoid deep nesting.
-func extractPermissionDetails(request copilot.PermissionRequest) (string, string) {
-	// Default tool name based on permission kind
-	toolName := formatPermissionKind(request.Kind)
-
-	// Fields that contain the actual command/action (ordered by priority)
-	commandFields := []string{
-		"command",       // Shell commands
-		"cmd",           // Alternative shell command field
-		"shell",         // Some shells use this
-		"runInTerminal", // VS Code terminal execution
-		"execute",       // Generic execution
-		"run",           // Generic run
-		"script",        // Script execution
-		"input",         // Input to execute
-	}
-
-	for _, field := range commandFields {
-		if val, ok := request.Extra[field]; ok {
-			if cmd := extractStringValue(val); cmd != "" {
-				return toolName, cmd
-			}
-		}
-	}
-
-	// Check for nested execution object (some SDK versions nest the command)
-	if exec, ok := request.Extra["execution"].(map[string]any); ok {
-		for _, field := range commandFields {
-			if val, ok := exec[field]; ok {
-				if cmd := extractStringValue(val); cmd != "" {
-					return toolName, cmd
-				}
-			}
-		}
-	}
-
-	// Path-based operations (file read/write/edit)
-	pathFields := []string{"path", "filePath", "file", "target"}
-	for _, field := range pathFields {
-		if val, ok := request.Extra[field]; ok {
-			if path := extractStringValue(val); path != "" {
-				return toolName, path
-			}
-		}
-	}
-
-	// Fallback: look for any string value that looks like a command
-	// Skip metadata fields that don't contain the actual command
-	metadataFields := map[string]bool{
-		"kind": true, "toolCallId": true, "possiblePaths": true,
-		"possibleUrls": true, "sessionId": true, "requestId": true,
-		"timestamp": true, "type": true, "id": true,
-	}
-
-	for key, val := range request.Extra {
-		if metadataFields[key] {
-			continue
-		}
-		if cmd := extractStringValue(val); cmd != "" {
-			// Found a non-metadata string value - use it
-			return toolName, cmd
-		}
-	}
-
-	// Last resort: just show the permission kind
-	return toolName, request.Kind
-}
-
-// extractStringValue extracts a string from various value types.
-func extractStringValue(val any) string {
-	switch v := val.(type) {
-	case string:
-		return v
-	case []any:
-		// Join array elements
-		parts := make([]string, 0, len(v))
-		for _, item := range v {
-			if s, ok := item.(string); ok && s != "" {
-				parts = append(parts, s)
-			}
-		}
-		if len(parts) > 0 {
-			return strings.Join(parts, " ")
-		}
-	case map[string]any:
-		// Try to extract command from nested object
-		if cmd, ok := v["command"].(string); ok {
-			return cmd
-		}
-		if cmd, ok := v["cmd"].(string); ok {
-			return cmd
-		}
-	}
-	return ""
-}
-
-// formatPermissionKind converts a permission kind to a human-readable tool name.
-func formatPermissionKind(kind string) string {
-	switch kind {
-	case "shell":
-		return "Shell Command"
-	case "file_edit", "fileEdit":
-		return "File Edit"
-	case "file_read", "fileRead":
-		return "File Read"
-	case "file_write", "fileWrite":
-		return "File Write"
-	case "terminal":
-		return "Terminal"
-	case "browser":
-		return "Browser"
-	case "network":
-		return "Network Request"
-	default:
-		// Capitalize and format the kind
-		if kind == "" {
-			return unknownOperation
-		}
-		// Replace underscores with spaces and title case.
-		// English titlecase is appropriate for all SDK permission kinds (shell, file_edit, etc.)
-		formatted := strings.ReplaceAll(kind, "_", " ")
-		caser := cases.Title(language.English)
-		return caser.String(formatted)
-	}
 }

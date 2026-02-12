@@ -58,6 +58,12 @@ const (
 	// RegistryRestartPolicy defines the container restart policy.
 	RegistryRestartPolicy = "unless-stopped"
 
+	// Image pull retry configuration.
+	// Docker Hub may experience transient 5xx errors during image pulls.
+	imagePullMaxRetries    = 3
+	imagePullRetryBaseWait = 2 * time.Second
+	imagePullRetryMaxWait  = 15 * time.Second
+
 	// Registry health check configuration.
 
 	// RegistryReadyTimeout is the maximum time to wait for a registry to become ready.

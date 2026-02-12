@@ -5,11 +5,11 @@ import (
 	"io"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
 
@@ -27,7 +27,7 @@ func initCommandContext(cmd *cobra.Command) (*commandContext, error) {
 
 	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	clusterCfg, err := cfgManager.Load(configmanager.LoadOptions{Timer: outputTimer})
 	if err != nil {

@@ -2,7 +2,6 @@ package image
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"regexp"
@@ -228,12 +227,4 @@ func ExtractImagesFromMultipleManifests(manifests ...string) ([]string, error) {
 	}
 
 	return allImages, nil
-}
-
-// ExtractImagesFromBytes extracts images from raw YAML bytes.
-func ExtractImagesFromBytes(data []byte) ([]string, error) {
-	reader := bytes.NewReader(data)
-	seen := make(map[string]struct{})
-
-	return extractImagesFromReader(reader, seen)
 }

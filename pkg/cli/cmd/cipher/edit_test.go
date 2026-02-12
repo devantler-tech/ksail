@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 )
 
@@ -31,7 +31,7 @@ func TestNewEditCmd(t *testing.T) {
 func TestEditCommandHelp(t *testing.T) {
 	t.Parallel()
 
-	rt := runtime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer

@@ -12,19 +12,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewGatekeeperInstaller(t *testing.T) {
+func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := gatekeeperinstaller.NewGatekeeperInstaller(client, 5*time.Second)
+	installer := gatekeeperinstaller.NewInstaller(client, 5*time.Second)
 
 	assert.NotNil(t, installer)
 }
 
-func TestGatekeeperInstallerInstallSuccess(t *testing.T) {
+func TestInstallSuccess(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newGatekeeperInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	expectGatekeeperInstall(t, client, nil)
 
 	err := installer.Install(context.Background())
@@ -32,10 +32,10 @@ func TestGatekeeperInstallerInstallSuccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestGatekeeperInstallerInstallRepoError(t *testing.T) {
+func TestInstallRepoError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newGatekeeperInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(assert.AnError)
@@ -46,10 +46,10 @@ func TestGatekeeperInstallerInstallRepoError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to add gatekeeper repository")
 }
 
-func TestGatekeeperInstallerInstallChartError(t *testing.T) {
+func TestInstallChartError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newGatekeeperInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	expectGatekeeperInstall(t, client, assert.AnError)
 
 	err := installer.Install(context.Background())
@@ -58,10 +58,10 @@ func TestGatekeeperInstallerInstallChartError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to install gatekeeper chart")
 }
 
-func TestGatekeeperInstallerUninstallSuccess(t *testing.T) {
+func TestUninstallSuccess(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newGatekeeperInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().UninstallRelease(mock.Anything, "gatekeeper", "gatekeeper-system").Return(nil)
 
 	err := installer.Uninstall(context.Background())
@@ -69,10 +69,10 @@ func TestGatekeeperInstallerUninstallSuccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestGatekeeperInstallerUninstallError(t *testing.T) {
+func TestUninstallError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newGatekeeperInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "gatekeeper", "gatekeeper-system").
 		Return(assert.AnError)
@@ -83,13 +83,13 @@ func TestGatekeeperInstallerUninstallError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to uninstall gatekeeper release")
 }
 
-func newGatekeeperInstallerWithDefaults(
+func newInstallerWithDefaults(
 	t *testing.T,
-) (*gatekeeperinstaller.GatekeeperInstaller, *helm.MockInterface) {
+) (*gatekeeperinstaller.Installer, *helm.MockInterface) {
 	t.Helper()
 
 	client := helm.NewMockInterface(t)
-	installer := gatekeeperinstaller.NewGatekeeperInstaller(client, 2*time.Minute)
+	installer := gatekeeperinstaller.NewInstaller(client, 2*time.Minute)
 
 	return installer, client
 }

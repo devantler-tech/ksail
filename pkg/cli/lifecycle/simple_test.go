@@ -5,6 +5,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +14,7 @@ import (
 func TestCreateMinimalProvisioner_Kind(t *testing.T) {
 	t.Parallel()
 
-	provisioner, err := lifecycle.CreateMinimalProvisioner(&lifecycle.ClusterInfo{
+	provisioner, err := lifecycle.CreateMinimalProvisioner(&clusterdetector.Info{
 		Distribution: v1alpha1.DistributionVanilla,
 		Provider:     v1alpha1.ProviderDocker,
 		ClusterName:  "test-cluster",
@@ -27,7 +28,7 @@ func TestCreateMinimalProvisioner_Kind(t *testing.T) {
 func TestCreateMinimalProvisioner_K3d(t *testing.T) {
 	t.Parallel()
 
-	provisioner, err := lifecycle.CreateMinimalProvisioner(&lifecycle.ClusterInfo{
+	provisioner, err := lifecycle.CreateMinimalProvisioner(&clusterdetector.Info{
 		Distribution: v1alpha1.DistributionK3s,
 		Provider:     v1alpha1.ProviderDocker,
 		ClusterName:  "dev-cluster",
@@ -41,7 +42,7 @@ func TestCreateMinimalProvisioner_K3d(t *testing.T) {
 func TestCreateMinimalProvisioner_Talos(t *testing.T) {
 	t.Parallel()
 
-	provisioner, err := lifecycle.CreateMinimalProvisioner(&lifecycle.ClusterInfo{
+	provisioner, err := lifecycle.CreateMinimalProvisioner(&clusterdetector.Info{
 		Distribution: v1alpha1.DistributionTalos,
 		Provider:     v1alpha1.ProviderDocker,
 		ClusterName:  "prod-cluster",
@@ -56,7 +57,7 @@ func TestCreateMinimalProvisioner_TalosHetzner(t *testing.T) {
 	// Set required environment variable for Hetzner provider
 	t.Setenv("HCLOUD_TOKEN", "test-token")
 
-	provisioner, err := lifecycle.CreateMinimalProvisioner(&lifecycle.ClusterInfo{
+	provisioner, err := lifecycle.CreateMinimalProvisioner(&clusterdetector.Info{
 		Distribution: v1alpha1.DistributionTalos,
 		Provider:     v1alpha1.ProviderHetzner,
 		ClusterName:  "hetzner-cluster",
@@ -83,7 +84,7 @@ func TestCreateMinimalProvisioner_UnsupportedDistribution(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			provisioner, err := lifecycle.CreateMinimalProvisioner(&lifecycle.ClusterInfo{
+			provisioner, err := lifecycle.CreateMinimalProvisioner(&clusterdetector.Info{
 				Distribution: testCase.distribution,
 				Provider:     v1alpha1.ProviderDocker,
 				ClusterName:  "cluster",
@@ -113,7 +114,7 @@ func TestCreateMinimalProvisioner_ClusterNames(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			provisioner, err := lifecycle.CreateMinimalProvisioner(&lifecycle.ClusterInfo{
+			provisioner, err := lifecycle.CreateMinimalProvisioner(&clusterdetector.Info{
 				Distribution: v1alpha1.DistributionVanilla,
 				Provider:     v1alpha1.ProviderDocker,
 				ClusterName:  testCase.clusterName,

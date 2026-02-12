@@ -43,24 +43,28 @@ func (m *Model) handleSessionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleSessionRenameKey handles keyboard input when renaming a session.
 func (m *Model) handleSessionRenameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "enter":
+	case keyEnter:
 		return m.confirmSessionRename()
-	case "esc":
+	case keyEscape:
 		m.renamingSession = false
 		m.sessionRenameInput = ""
+
 		return m, nil
-	case "backspace":
+	case keyBackspace:
 		if len(m.sessionRenameInput) > 0 {
 			m.sessionRenameInput = m.sessionRenameInput[:len(m.sessionRenameInput)-1]
 		}
+
 		return m, nil
 	case " ":
 		m.sessionRenameInput += " "
+
 		return m, nil
 	default:
 		if msg.Type == tea.KeyRunes {
 			m.sessionRenameInput += string(msg.Runes)
 		}
+
 		return m, nil
 	}
 }
@@ -84,14 +88,19 @@ func (m *Model) confirmSessionRename() (tea.Model, tea.Cmd) {
 	}
 
 	session.Name = newName
-	if err := SaveSession(&session); err != nil {
-		m.err = fmt.Errorf("failed to save session: %w", err)
+
+	saveErr := SaveSession(&session, m.theme.SessionDir)
+	if saveErr != nil {
+		m.err = fmt.Errorf("failed to save session: %w", saveErr)
+
 		return m, nil
 	}
 
-	if err := m.refreshSessionList(); err != nil {
+	refreshErr := m.refreshSessionList()
+	if refreshErr != nil {
 		return m, nil
 	}
+
 	return m, nil
 }
 
@@ -100,11 +109,14 @@ func (m *Model) handleSessionDeleteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cm
 	switch msg.String() {
 	case "y", "Y":
 		m.confirmDeleteSession = false
+
 		return m.deleteSelectedSession()
 	case "n", "N", "esc":
 		m.confirmDeleteSession = false
+
 		return m, nil
 	}
+
 	return m, nil
 }
 
@@ -115,101 +127,135 @@ func (m *Model) deleteSelectedSession() (tea.Model, tea.Cmd) {
 	}
 
 	session := m.filteredSessions[m.sessionPickerIndex-1]
-	if err := DeleteSession(m.client, session.ID); err != nil {
-		m.err = fmt.Errorf("failed to delete session: %w", err)
+
+	deleteErr := DeleteSession(m.client, session.ID, m.theme.SessionDir)
+	if deleteErr != nil {
+		m.err = fmt.Errorf("failed to delete session: %w", deleteErr)
+
 		return m, nil
 	}
 
-	if err := m.refreshSessionList(); err != nil {
+	refreshErr := m.refreshSessionList()
+	if refreshErr != nil {
 		return m, nil
 	}
+
 	m.clampSessionIndex()
+
 	return m, nil
 }
 
 // refreshSessionList reloads the session list from storage and re-applies filters.
 func (m *Model) refreshSessionList() error {
-	sessions, err := ListSessions(m.client)
+	sessions, err := ListSessions(m.client, m.theme.SessionDir)
 	if err != nil {
 		m.err = fmt.Errorf("failed to refresh sessions: %w", err)
+
 		return err
 	}
+
 	m.availableSessions = sessions
 	m.applySessionFilter()
+
 	return nil
 }
 
 // handleSessionPickerNavKey handles navigation keys in the session picker.
+//
+//nolint:cyclop // keyboard dispatcher for session picker navigation
 func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "esc":
+	case keyEscape:
 		m.showSessionPicker = false
 		m.sessionFilterText = ""
 		m.sessionFilterActive = false
 		m.updateDimensions()
+
 		return m, nil
 	case "/":
 		m.sessionFilterActive = true
+
 		return m, nil
 	case "up", "k":
 		if m.sessionPickerIndex > 0 {
 			m.sessionPickerIndex--
 		}
+
 		return m, nil
-	case "down", "j":
+	case keyDown, "j":
 		if m.sessionPickerIndex < totalItems-1 {
 			m.sessionPickerIndex++
 		}
+
 		return m, nil
-	case "d", "delete", "backspace":
-		if m.isValidSessionIndex() {
-			m.confirmDeleteSession = true
-		}
+	case "d", "delete", keyBackspace:
+		m.initiateSessionDelete()
+
 		return m, nil
 	case "r":
-		if m.isValidSessionIndex() {
-			session := m.filteredSessions[m.sessionPickerIndex-1]
-			m.renamingSession = true
-			m.sessionRenameInput = session.GetDisplayName()
-		}
+		m.initiateSessionRename()
+
 		return m, nil
-	case "enter":
+	case keyEnter:
 		return m.selectSession()
-	case "ctrl+c":
+	case keyCtrlC:
 		m.cleanup()
 		m.quitting = true
+
 		return m, tea.Quit
 	}
+
 	return m, nil
+}
+
+// initiateSessionDelete starts a session deletion confirmation if a valid session is selected.
+func (m *Model) initiateSessionDelete() {
+	if m.isValidSessionIndex() {
+		m.confirmDeleteSession = true
+	}
+}
+
+// initiateSessionRename starts a session rename if a valid session is selected.
+func (m *Model) initiateSessionRename() {
+	if m.isValidSessionIndex() {
+		session := m.filteredSessions[m.sessionPickerIndex-1]
+		m.renamingSession = true
+		m.sessionRenameInput = session.GetDisplayName()
+	}
 }
 
 // handleSessionFilterKey handles keyboard input when filtering sessions.
 func (m *Model) handleSessionFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "enter":
+	case keyEnter:
 		m.sessionFilterActive = false
+
 		return m, nil
-	case "esc":
+	case keyEscape:
 		// Clear filter and exit filter mode
 		m.sessionFilterText = ""
 		m.sessionFilterActive = false
 		m.applySessionFilter()
+
 		return m, nil
-	case "backspace":
+	case keyBackspace:
 		if len(m.sessionFilterText) > 0 {
 			m.sessionFilterText = m.sessionFilterText[:len(m.sessionFilterText)-1]
 			m.applySessionFilter()
 		}
+
 		return m, nil
-	case "ctrl+c":
+	case keyCtrlC:
 		m.cleanup()
 		m.quitting = true
+
 		return m, tea.Quit
 	default:
 		if msg.Type == tea.KeyRunes {
 			m.sessionFilterText += string(msg.Runes)
 			m.applySessionFilter()
 		}
+
 		return m, nil
 	}
 }
@@ -220,7 +266,9 @@ func (m *Model) applySessionFilter() {
 		m.filteredSessions = m.availableSessions
 	} else {
 		filterLower := strings.ToLower(m.sessionFilterText)
+
 		m.filteredSessions = make([]SessionMetadata, 0)
+
 		for _, session := range m.availableSessions {
 			if strings.Contains(strings.ToLower(session.GetDisplayName()), filterLower) {
 				m.filteredSessions = append(m.filteredSessions, session)
@@ -237,24 +285,29 @@ func (m *Model) applySessionFilter() {
 // selectSession handles session selection from the picker.
 func (m *Model) selectSession() (tea.Model, tea.Cmd) {
 	_ = m.saveCurrentSession()
+
 	if m.sessionPickerIndex == 0 {
-		if err := m.startNewSession(); err != nil {
-			m.err = err
+		startErr := m.startNewSession()
+		if startErr != nil {
+			m.err = startErr
 		}
 	} else if m.isValidSessionIndex() {
 		session := m.filteredSessions[m.sessionPickerIndex-1]
 		m.loadSession(&session)
 	}
+
 	m.showSessionPicker = false
 	m.sessionFilterText = ""
 	m.sessionFilterActive = false
 	m.updateDimensions()
+
 	return m, nil
 }
 
 // startNewSession destroys the current session and creates a fresh one.
 func (m *Model) startNewSession() error {
 	m.cleanup()
+
 	if m.session != nil {
 		_ = m.session.Destroy()
 	}
@@ -265,18 +318,21 @@ func (m *Model) startNewSession() error {
 	if err != nil {
 		return fmt.Errorf("failed to create new session: %w", err)
 	}
+
 	m.session = session
 	m.currentSessionID = session.SessionID
 
 	// Clear all state for new session
-	m.messages = []chatMessage{}
+	m.messages = []message{}
 	m.agentMode = true // New chats start in agent mode by default
 	// Update the shared reference so tool handlers see the change
 	if m.agentModeRef != nil {
 		m.agentModeRef.SetEnabled(true)
 	}
+
 	m.resetStreamingState()
 	m.updateViewportContent()
+
 	return nil
 }
 
@@ -291,6 +347,7 @@ func (m *Model) loadSession(metadata *SessionMetadata) {
 	}
 
 	m.cleanup()
+
 	if m.session != nil {
 		_ = m.session.Destroy()
 	}
@@ -300,39 +357,58 @@ func (m *Model) loadSession(metadata *SessionMetadata) {
 		m.currentModel = metadata.Model
 	}
 
-	// Resume session with tools and permission handler.
-	// The SDK requires tools and handlers to be re-registered when resuming.
+	if !m.resumeOrCreateSession(metadata) {
+		return
+	}
+
+	m.loadSessionMessages(metadata)
+	m.resetStreamingState()
+	m.updateViewportContent()
+}
+
+// resumeOrCreateSession resumes an existing session or creates a new one.
+// Returns true if a session was successfully created/resumed.
+func (m *Model) resumeOrCreateSession(metadata *SessionMetadata) bool {
 	resumeConfig := &copilot.ResumeSessionConfig{
 		Tools:               m.sessionConfig.Tools,
 		OnPermissionRequest: m.sessionConfig.OnPermissionRequest,
 	}
+
 	session, err := m.client.ResumeSessionWithOptions(metadata.ID, resumeConfig)
 	if err != nil {
 		// If resume fails, try creating a new session with the same ID
 		m.sessionConfig.SessionID = metadata.ID
+
 		session, err = m.client.CreateSession(m.sessionConfig)
 		if err != nil {
 			m.err = fmt.Errorf("failed to resume session: %w", err)
-			return
+
+			return false
 		}
 	}
+
 	m.session = session
 
-	events, err := session.GetMessages()
+	return true
+}
+
+// loadSessionMessages loads and renders messages from a resumed session.
+func (m *Model) loadSessionMessages(metadata *SessionMetadata) {
+	events, err := m.session.GetMessages()
 	if err != nil {
-		m.messages = []chatMessage{}
+		m.messages = []message{}
 	} else {
 		m.messages = m.sessionEventsToMessages(events, metadata)
 	}
 
-	for i := range m.messages {
-		if m.messages[i].role == "assistant" && m.messages[i].content != "" {
-			m.messages[i].rendered = renderMarkdownWithRenderer(m.renderer, m.messages[i].content)
+	for idx := range m.messages {
+		if m.messages[idx].role == roleAssistant && m.messages[idx].content != "" {
+			m.messages[idx].rendered = renderMarkdownWithRenderer(
+				m.renderer,
+				m.messages[idx].content,
+			)
 		}
 	}
-
-	m.resetStreamingState()
-	m.updateViewportContent()
 }
 
 // resetStreamingState clears streaming-related state without clearing messages.
@@ -346,48 +422,58 @@ func (m *Model) resetStreamingState() {
 	m.sessionComplete = false
 }
 
-// sessionEventsToMessages converts Copilot SessionEvents to internal chatMessages.
+// sessionEventsToMessages converts Copilot SessionEvents to internal messages.
 // It also restores per-message metadata (like agentMode) from the session metadata.
 func (m *Model) sessionEventsToMessages(
 	events []copilot.SessionEvent,
 	metadata *SessionMetadata,
-) []chatMessage {
-	var messages []chatMessage
+) []message {
+	var messages []message
+
 	userMsgIndex := 0
+
 	for _, event := range events {
 		var role, content string
+
+		//nolint:exhaustive // Only user and assistant messages are relevant for session history.
 		switch event.Type {
 		case copilot.UserMessage:
-			role = "user"
+			role = roleUser
+
 			if event.Data.Content != nil {
 				content = *event.Data.Content
 			}
 		case copilot.AssistantMessage:
-			role = "assistant"
+			role = roleAssistant
+
 			if event.Data.Content != nil {
 				content = *event.Data.Content
 			}
 		default:
 			continue
 		}
+
 		if content != "" {
-			msg := chatMessage{
+			msg := message{
 				role:    role,
 				content: content,
 			}
 			// Restore agentMode for user messages from metadata
-			if role == "user" {
+			if role == roleUser {
 				if userMsgIndex < len(metadata.Messages) {
 					msg.agentMode = metadata.Messages[userMsgIndex].AgentMode
 				} else {
 					// Default to true (agent mode) for messages without metadata
 					msg.agentMode = true
 				}
+
 				userMsgIndex++
 			}
+
 			messages = append(messages, msg)
 		}
 	}
+
 	return messages
 }
 
@@ -404,7 +490,9 @@ func (m *Model) saveCurrentSession() error {
 
 	// Preserve existing custom name if set
 	name := GenerateSessionName(m.messages)
-	if existing, err := LoadSession(sessionID); err == nil && existing.Name != "" {
+
+	existing, loadErr := LoadSession(sessionID, m.theme.SessionDir)
+	if loadErr == nil && existing.Name != "" {
 		// Keep user-defined names (anything that differs from auto-generated)
 		name = existing.Name
 	}
@@ -412,13 +500,15 @@ func (m *Model) saveCurrentSession() error {
 	agentMode := m.agentMode
 	// Build per-message metadata
 	messageMetadata := make([]MessageMetadata, 0)
+
 	for _, msg := range m.messages {
-		if msg.role == "user" {
+		if msg.role == roleUser {
 			messageMetadata = append(messageMetadata, MessageMetadata{
 				AgentMode: msg.agentMode,
 			})
 		}
 	}
+
 	metadata := &SessionMetadata{
 		ID:        sessionID,
 		Messages:  messageMetadata,
@@ -427,39 +517,24 @@ func (m *Model) saveCurrentSession() error {
 		AgentMode: &agentMode,
 	}
 
-	if err := SaveSession(metadata); err != nil {
-		return err
+	saveErr := SaveSession(metadata, m.theme.SessionDir)
+	if saveErr != nil {
+		return saveErr
 	}
 
 	m.currentSessionID = sessionID
+
 	return nil
 }
 
 // renderSessionPickerModal renders the session picker as an inline modal section.
 func (m *Model) renderSessionPickerModal() string {
-	modalWidth := m.width - 2
-	contentWidth := max(modalWidth-4, 1)
-	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
-
-	totalItems := len(m.filteredSessions) + 1
-	maxVisible := m.calculateMaxPickerVisible()
-	visibleCount := min(totalItems, maxVisible)
-
-	scrollOffset := calculatePickerScrollOffset(m.sessionPickerIndex, totalItems, maxVisible)
-
-	var listContent strings.Builder
-	m.renderSessionPickerTitle(&listContent, clipStyle)
-
-	isScrollable := totalItems > maxVisible
-	renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
-
-	endIdx := min(scrollOffset+visibleCount, totalItems)
-	m.renderSessionItems(&listContent, clipStyle, scrollOffset, endIdx)
-
-	renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
-
-	content := strings.TrimRight(listContent.String(), "\n")
-	return renderPickerModal(content, modalWidth, visibleCount, isScrollable)
+	return m.renderPickerModalContent(
+		len(m.filteredSessions)+1,
+		m.sessionPickerIndex,
+		m.renderSessionPickerTitle,
+		m.renderSessionItems,
+	)
 }
 
 // renderSessionPickerTitle renders the title, filter input, or delete confirmation.
@@ -467,20 +542,23 @@ func (m *Model) renderSessionPickerTitle(listContent *strings.Builder, clipStyle
 	if m.confirmDeleteSession && m.isValidSessionIndex() {
 		session := m.filteredSessions[m.sessionPickerIndex-1]
 		listContent.WriteString(clipStyle.Render(
-			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(11)).Render(
+			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow)).Render(
 				fmt.Sprintf("Delete \"%s\"?", truncateString(session.GetDisplayName(), maxSessionDisplayLength)),
 			),
 		) + "\n\n")
+
 		return
 	}
 
 	// Show filter input if filtering is active or has text
 	if m.sessionFilterActive || m.sessionFilterText != "" {
-		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(14))
+		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiCyan))
+
 		cursor := ""
 		if m.sessionFilterActive {
 			cursor = "_"
 		}
+
 		filterLine := filterStyle.Render("🔍 " + m.sessionFilterText + cursor)
 		listContent.WriteString(clipStyle.Render(filterLine) + "\n")
 	} else {
@@ -516,22 +594,26 @@ func (m *Model) formatSessionItem(index int) (string, bool) {
 
 	if m.renamingSession && index == m.sessionPickerIndex {
 		inputStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.ANSIColor(15)).
-			Background(lipgloss.ANSIColor(8))
+			Foreground(lipgloss.ANSIColor(ansiWhite)).
+			Background(lipgloss.ANSIColor(ansiGray))
+
 		line := prefix + inputStyle.Render(m.sessionRenameInput+"_")
 		if session.ID == m.currentSessionID {
-			line += " ✓"
+			line += checkmarkSuffix
 		}
+
 		return line, session.ID == m.currentSessionID
 	}
 
 	timeAgo := m.formatSessionTime(&session)
 	name := truncateString(session.GetDisplayName(), maxSessionDisplayLength)
 	line := fmt.Sprintf("%s%s (%s)", prefix, name, timeAgo)
+
 	isCurrentSession := session.ID == m.currentSessionID
 	if isCurrentSession {
-		line += " ✓"
+		line += checkmarkSuffix
 	}
+
 	return line, isCurrentSession
 }
 
@@ -540,17 +622,20 @@ func (m *Model) styleSessionItem(line string, index int, isCurrentSession bool) 
 	if m.renamingSession && index == m.sessionPickerIndex && index > 0 {
 		return line
 	}
+
 	if index == m.sessionPickerIndex {
 		return lipgloss.NewStyle().
-			Foreground(lipgloss.ANSIColor(14)).
+			Foreground(lipgloss.ANSIColor(ansiCyan)).
 			Bold(true).
 			Render(line)
 	}
+
 	if isCurrentSession {
 		return lipgloss.NewStyle().
-			Foreground(lipgloss.ANSIColor(10)).
+			Foreground(lipgloss.ANSIColor(ansiGreen)).
 			Render(line)
 	}
+
 	return line
 }
 
@@ -573,7 +658,9 @@ func truncateString(s string, maxLen int) string {
 	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
+
 	runes := []rune(s)
+
 	return string(runes[:maxLen-ellipsisLength]) + "..."
 }
 

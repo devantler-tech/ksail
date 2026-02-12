@@ -8,13 +8,13 @@ import (
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
 
@@ -100,7 +100,7 @@ func runImagesCommand(
 	tmr := timer.New()
 	tmr.Start()
 
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	clusterCfg, err := cfgManager.Load(configmanagerinterface.LoadOptions{
 		Silent:         true,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -28,12 +29,12 @@ func EnsureDefaultResources(ctx context.Context, kubeconfig string, timeout time
 		return fmt.Errorf("create kubernetes client: %w", err)
 	}
 
-	checks := []k8s.ReadinessCheck{
+	checks := []readiness.Check{
 		{Type: "deployment", Namespace: argoCDNamespace, Name: "argocd-server"},
 		{Type: "deployment", Namespace: argoCDNamespace, Name: "argocd-repo-server"},
 	}
 
-	err = k8s.WaitForMultipleResources(ctx, clientset, checks, timeout)
+	err = readiness.WaitForMultipleResources(ctx, clientset, checks, timeout)
 	if err != nil {
 		return fmt.Errorf("wait for Argo CD components: %w", err)
 	}

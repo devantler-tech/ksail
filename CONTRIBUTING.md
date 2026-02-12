@@ -22,7 +22,7 @@ For detailed package and API documentation, refer to the Go documentation at [pk
 
 Before you begin developing, ensure you have the following installed:
 
-- [Go (v1.25.4+)](https://go.dev/doc/install)
+- [Go (v1.26.0+)](https://go.dev/doc/install)
 - [mockery (v3.5+)](https://vektra.github.io/mockery/v3.5/installation/)
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://megalinter.io/latest/mega-linter-runner/#installation)
@@ -45,12 +45,17 @@ MegaLinter also checks Markdown files. Markdown lint rules are configured in `.m
 
 ```sh
 # working-directory: ./
-# Build the ksail binary
+# Build the ksail binary (development build)
 go build -o ksail
 
 # Or: compile all packages (no binary output)
 go build ./...
+
+# For optimized builds (uses the same -ldflags as release builds):
+go build -ldflags="-s -w" -o ksail-optimized
 ```
+
+> **Note:** Release builds use `-ldflags="-s -w"` to strip debug symbols, which can significantly reduce binary size (in some cases by ~25–35%; see [#2095](https://github.com/devantler-tech/ksail/pull/2095) for an example benchmark where Darwin/AMD64 binaries went from 302MB → 217MB, ~28%). Actual size varies by OS/arch, Go version, and dependencies. Development builds include debug symbols for a better debugging experience.
 
 ### Test
 
@@ -67,6 +72,27 @@ mockery
 # working-directory: ./
 go test ./...
 ```
+
+#### Benchmarks
+
+KSail includes Go benchmarks for performance-critical code paths. When making performance-related changes, run benchmarks to validate improvements:
+
+```sh
+# working-directory: ./
+# Run all benchmarks
+go test -bench=. -benchmem ./...
+
+# Run benchmarks for specific package (e.g., resource polling)
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/...
+
+# Compare before/after performance
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > before.txt
+# (make changes)
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > after.txt
+benchstat before.txt after.txt
+```
+
+See package-specific BENCHMARKS.md files (e.g., `pkg/k8s/readiness/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
 
 ### Documentation
 
