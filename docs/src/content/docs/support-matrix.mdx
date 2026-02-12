@@ -30,9 +30,10 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 | Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner) |
 | **LoadBalancer**              |         |          |              |
 | LoadBalancer Support (Default)| ❌ Disabled | ✅ Enabled (ServiceLB) | ❌ Disabled (Docker) / ✅ Enabled (Hetzner) |
-| MetalLB (Vanilla)             | ✅ Available | ✅ Compatible | 🚧 Planned (Docker) |
+| cloud-provider-kind (Vanilla)| ✅ Available | ❌ N/A   | ❌ N/A       |
 | ServiceLB (K3s)               | ❌ N/A | ✅ Built-in | ❌ N/A |
 | Hetzner Cloud LB (Talos)      | ❌ N/A | ❌ N/A | ✅ Built-in (Hetzner only) |
+| MetalLB (planned for Talos)   | ❌ N/A | ❌ N/A | 🚧 Planned (Docker) |
 | **GitOps**                    |
 | Flux                          | ✅      | ✅       | ✅           |
 | ArgoCD                        | ✅      | ✅       | ✅           |
@@ -53,7 +54,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 - K3s includes local-path-provisioner, metrics-server, and ServiceLB (Klipper-LB) load balancer out of the box
 - Talos CSI support is provider-dependent: Local Path Provisioner for Docker, Hetzner CSI Driver for Hetzner Cloud
 - **LoadBalancer support**:
-  - **Vanilla (Kind)**: Disabled by default. Use `--load-balancer Enabled` to install MetalLB
+  - **Vanilla (Kind)**: Disabled by default. Use `--load-balancer Enabled` to start cloud-provider-kind (runs as a Docker container)
   - **K3s (K3d)**: Enabled by default via ServiceLB (Klipper-LB). Can be disabled with `--load-balancer Disabled`
   - **Talos on Docker**: Not supported. Always `Disabled` regardless of flag. MetalLB support planned for future release
   - **Talos on Hetzner**: Enabled by default via hcloud-cloud-controller-manager. Automatically provisions Hetzner Cloud Load Balancers

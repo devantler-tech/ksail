@@ -204,7 +204,7 @@ Configure KSail to use the correct ISO ID (implementation-specific - check lates
 
 1. **LoadBalancer support disabled** - Distribution does not include LoadBalancer by default
 2. **Talos on Docker** - LoadBalancer services are not supported for this combination
-3. **MetalLB not installed** - Vanilla (Kind) requires explicit LoadBalancer installation
+3. **cloud-provider-kind not started** - Vanilla (Kind) requires explicit LoadBalancer installation
 4. **Controller not running** - LoadBalancer controller pods are crashed or missing
 
 **Solution:**
@@ -217,7 +217,7 @@ ksail workload describe svc my-app
 # 2. Verify LoadBalancer is enabled for your distribution
 # Check your ksail.yaml file for loadBalancer setting
 
-# 3. For Vanilla (Kind) - enable MetalLB
+# 3. For Vanilla (Kind) - enable cloud-provider-kind
 ksail cluster init --distribution Vanilla --load-balancer Enabled
 ksail cluster create
 # Or update existing cluster:
@@ -235,8 +235,8 @@ ksail workload port-forward svc/my-app 8080:80
 # For K3s:
 ksail workload logs -n kube-system -l app=svclb-my-app
 
-# For Vanilla with MetalLB:
-ksail workload logs -n metallb-system deployment/controller
+# For Vanilla (cloud-provider-kind runs as Docker container):
+docker logs ksail-cloud-provider-kind
 
 # For Talos on Hetzner:
 ksail workload logs -n kube-system daemonset/hcloud-cloud-controller-manager
@@ -259,16 +259,19 @@ ksail workload describe svc my-app | grep -A 10 Events
 export HCLOUD_TOKEN="your-token"
 # Check if you have reached LoadBalancer quota in Hetzner Cloud Console
 
-# 4. For MetalLB - verify address pool configuration
-ksail workload get ipaddresspools -n metallb-system
-ksail workload describe ipaddresspool default -n metallb-system
+# 4. For Vanilla (Kind with cloud-provider-kind) - verify controller status
+docker ps | grep ksail-cloud-provider-kind
+docker logs ksail-cloud-provider-kind | tail -n 50
 
 # 5. Restart LoadBalancer controller
 # For K3s:
 ksail workload delete pod -n kube-system -l app=svclb-my-app
 
-# For MetalLB:
-ksail workload delete pod -n metallb-system -l app.kubernetes.io/name=metallb
+# For Vanilla (Kind with cloud-provider-kind):
+docker restart ksail-cloud-provider-kind
+
+# For Talos×Docker with MetalLB (planned):
+# MetalLB is not yet implemented for Talos×Docker
 ```
 
 ### Cloud Provider Load Balancer Errors
@@ -352,10 +355,8 @@ ksail workload get endpoints my-app
 # 1. List all LoadBalancer services
 ksail workload get svc -A | grep LoadBalancer
 
-# 2. Check for port conflicts (each service needs unique port or use shared IP)
-# For MetalLB, use shared IP annotation:
-# annotations:
-#   metallb.universe.tf/allow-shared-ip: "my-app"
+# 2. Check for port conflicts (each service needs unique port)
+# For Vanilla with cloud-provider-kind, ports are mapped to host
 
 # 3. Use different ports or NodePort as alternative
 ```

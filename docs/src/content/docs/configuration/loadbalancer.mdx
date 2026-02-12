@@ -42,7 +42,7 @@ Let KSail choose the appropriate LoadBalancer configuration:
 <TabItem label="Vanilla (Kind)">
 
 ```bash
-# LoadBalancer will be Disabled (MetalLB not installed by default)
+# LoadBalancer will be Disabled (cloud-provider-kind not started by default)
 ksail cluster init --distribution Vanilla
 ksail cluster create
 ```
@@ -147,7 +147,7 @@ ksail cluster init \
 ksail cluster create
 ```
 
-MetalLB will not be installed (same as default behavior).
+cloud-provider-kind will not be started (same as default behavior).
 
 </TabItem>
 </Tabs>
