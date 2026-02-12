@@ -73,6 +73,27 @@ mockery
 go test ./...
 ```
 
+#### Benchmarks
+
+KSail includes Go benchmarks for performance-critical code paths. When making performance-related changes, run benchmarks to validate improvements:
+
+```sh
+# working-directory: ./
+# Run all benchmarks
+go test -bench=. -benchmem ./...
+
+# Run benchmarks for specific package (e.g., resource polling)
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/...
+
+# Compare before/after performance
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > before.txt
+# (make changes)
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > after.txt
+benchstat before.txt after.txt
+```
+
+See package-specific BENCHMARKS.md files (e.g., `pkg/k8s/readiness/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
+
 ### Documentation
 
 The project documentation is built using [Astro](https://astro.build/) with the [Starlight](https://starlight.astro.build/) theme and is located in the `docs/` directory.
