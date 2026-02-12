@@ -8,7 +8,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/helmutil"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -121,54 +120,9 @@ func (m *Installer) ensurePrivilegedNamespace(ctx context.Context) error {
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	pssLabels := map[string]string{
-		"pod-security.kubernetes.io/enforce": "privileged",
-		"pod-security.kubernetes.io/audit":   "privileged",
-		"pod-security.kubernetes.io/warn":    "privileged",
-	}
-
-	namespace, err := clientset.CoreV1().Namespaces().Get(
-		ctx, metallbNamespace, metav1.GetOptions{},
-	)
+	err = k8s.EnsurePrivilegedNamespace(ctx, clientset, metallbNamespace)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			newNS := &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   metallbNamespace,
-					Labels: pssLabels,
-				},
-			}
-
-			_, err = clientset.CoreV1().Namespaces().Create(ctx, newNS, metav1.CreateOptions{})
-			if err != nil {
-				return fmt.Errorf("create namespace: %w", err)
-			}
-
-			return nil
-		}
-
-		return fmt.Errorf("get namespace: %w", err)
-	}
-
-	// Namespace exists — ensure PSS labels are set.
-	if namespace.Labels == nil {
-		namespace.Labels = make(map[string]string)
-	}
-
-	updated := false
-
-	for k, v := range pssLabels {
-		if namespace.Labels[k] != v {
-			namespace.Labels[k] = v
-			updated = true
-		}
-	}
-
-	if updated {
-		_, err = clientset.CoreV1().Namespaces().Update(ctx, namespace, metav1.UpdateOptions{})
-		if err != nil {
-			return fmt.Errorf("update namespace labels: %w", err)
-		}
+		return fmt.Errorf("ensure privileged namespace: %w", err)
 	}
 
 	return nil
