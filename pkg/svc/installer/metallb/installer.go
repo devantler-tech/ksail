@@ -7,10 +7,16 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/helmutil"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 )
+
+// ErrCRDTimeout is returned when MetalLB CRDs are not available within the expected time.
+var ErrCRDTimeout = fmt.Errorf("timed out waiting for metallb CRDs after %s", crdPollTimeout)
 
 const (
 	metallbRepoName  = "metallb"
@@ -18,195 +24,247 @@ const (
 	metallbRelease   = "metallb"
 	metallbNamespace = "metallb-system"
 	metallbChartName = "metallb/metallb"
-	
-	// Default IP range for Docker bridge network (172.18.0.0/16)
-	// MetalLB will allocate IPs from this range for LoadBalancer services
 	defaultIPRange   = "172.18.255.200-172.18.255.250"
+
+	// crdPollInterval is the interval between CRD readiness checks.
+	crdPollInterval = 2 * time.Second
+	// crdPollTimeout is the maximum time to wait for MetalLB CRDs to be registered.
+	crdPollTimeout = 60 * time.Second
 )
 
-// MetalLBInstaller installs or upgrades MetalLB.
+// Installer installs or upgrades MetalLB.
 //
-// It implements installer.Installer semantics (Install/Uninstall) so it can be
-// orchestrated by cluster lifecycle flows.
+// It embeds helmutil.Base for the Helm lifecycle and adds a post-install step
+// that creates the required IPAddressPool and L2Advertisement resources.
 //
 // MetalLB provides LoadBalancer implementation for bare metal and local development
 // clusters. It works by allocating IP addresses from a configured pool and announcing
-// them via Layer 2 (ARP/NDP) or BGP.
-type MetalLBInstaller struct {
-	client     helm.Interface
+// them via Layer 2 (ARP/NDP).
+type Installer struct {
+	*helmutil.Base
+
 	kubeconfig string
 	context    string
-	timeout    time.Duration
 	ipRange    string
 }
 
-// NewMetalLBInstaller creates a new MetalLB installer instance.
+// NewInstaller creates a new MetalLB installer instance.
 // If ipRange is empty, it uses the default range suitable for Docker networks.
-func NewMetalLBInstaller(
+func NewInstaller(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,
 	ipRange string,
-) *MetalLBInstaller {
+) *Installer {
 	if ipRange == "" {
 		ipRange = defaultIPRange
 	}
-	
-	return &MetalLBInstaller{
-		client:     client,
+
+	return &Installer{
+		Base: helmutil.NewBase(
+			"metallb",
+			client,
+			timeout,
+			&helm.RepositoryEntry{
+				Name: metallbRepoName,
+				URL:  metallbRepoURL,
+			},
+			&helm.ChartSpec{
+				ReleaseName:     metallbRelease,
+				ChartName:       metallbChartName,
+				Namespace:       metallbNamespace,
+				RepoURL:         metallbRepoURL,
+				CreateNamespace: true,
+				Atomic:          true,
+				Wait:            true,
+				WaitForJobs:     true,
+				Timeout:         timeout,
+			},
+		),
 		kubeconfig: kubeconfig,
 		context:    context,
-		timeout:    timeout,
 		ipRange:    ipRange,
 	}
 }
 
-// Install installs or upgrades MetalLB via its Helm chart.
-// After installation, it configures the IP address pool and L2 advertisement.
-func (m *MetalLBInstaller) Install(ctx context.Context) error {
-	err := m.helmInstallOrUpgradeMetalLB(ctx)
+// Install installs or upgrades MetalLB via its Helm chart, then configures
+// the IPAddressPool and L2Advertisement resources.
+func (m *Installer) Install(ctx context.Context) error {
+	err := m.Base.Install(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install metallb: %w", err)
 	}
-	
-	// Configure IP address pool and L2 advertisement
+
 	err = m.configureMetalLB(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to configure metallb: %w", err)
 	}
-	
+
 	return nil
 }
 
-// Uninstall removes the Helm release for MetalLB.
-func (m *MetalLBInstaller) Uninstall(ctx context.Context) error {
-	err := m.client.UninstallRelease(ctx, metallbRelease, metallbNamespace)
-	if err != nil {
-		return fmt.Errorf("failed to uninstall metallb release: %w", err)
-	}
-	
-	return nil
-}
-
-func (m *MetalLBInstaller) helmInstallOrUpgradeMetalLB(ctx context.Context) error {
-	repoEntry := &helm.RepositoryEntry{Name: metallbRepoName, URL: metallbRepoURL}
-	
-	err := m.client.AddRepository(ctx, repoEntry, m.timeout)
-	if err != nil {
-		return fmt.Errorf("failed to add metallb repository: %w", err)
-	}
-	
-	spec := &helm.ChartSpec{
-		ReleaseName:     metallbRelease,
-		ChartName:       metallbChartName,
-		Namespace:       metallbNamespace,
-		RepoURL:         metallbRepoURL,
-		CreateNamespace: true,
-		Atomic:          true,
-		Wait:            true,
-		WaitForJobs:     true,
-		Timeout:         m.timeout,
-	}
-	
-	_, err = m.client.InstallOrUpgradeChart(ctx, spec)
-	if err != nil {
-		return fmt.Errorf("failed to install metallb chart: %w", err)
-	}
-	
-	return nil
-}
-
-// configureMetalLB creates the IPAddressPool and L2Advertisement resources.
-// These resources configure MetalLB to allocate IPs from the specified range
-// and announce them via Layer 2 (ARP).
-func (m *MetalLBInstaller) configureMetalLB(ctx context.Context) error {
-	// Create Kubernetes dynamic client
+// configureMetalLB waits for the MetalLB CRDs to become available and then
+// creates or updates the IPAddressPool and L2Advertisement resources.
+func (m *Installer) configureMetalLB(ctx context.Context) error {
 	dynamicClient, err := k8s.NewDynamicClient(m.kubeconfig, m.context)
 	if err != nil {
 		return fmt.Errorf("failed to create dynamic client: %w", err)
 	}
-	
-	// Create IPAddressPool
-	err = m.createIPAddressPool(ctx, dynamicClient)
+
+	// Wait for MetalLB CRDs to be registered before creating resources.
+	err = m.waitForCRDs(ctx, dynamicClient)
 	if err != nil {
-		return fmt.Errorf("failed to create ip address pool: %w", err)
+		return fmt.Errorf("metallb CRDs not ready: %w", err)
 	}
-	
-	// Create L2Advertisement
-	err = m.createL2Advertisement(ctx, dynamicClient)
+
+	err = m.ensureIPAddressPool(ctx, dynamicClient)
 	if err != nil {
-		return fmt.Errorf("failed to create l2 advertisement: %w", err)
+		return fmt.Errorf("failed to ensure ip address pool: %w", err)
 	}
-	
+
+	err = m.ensureL2Advertisement(ctx, dynamicClient)
+	if err != nil {
+		return fmt.Errorf("failed to ensure l2 advertisement: %w", err)
+	}
+
 	return nil
 }
 
-func (m *MetalLBInstaller) createIPAddressPool(
-	ctx context.Context,
-	dynamicClient *k8s.DynamicClient,
-) error {
+// waitForCRDs polls the MetalLB IPAddressPool CRD until it is available.
+func (m *Installer) waitForCRDs(ctx context.Context, client *dynamic.DynamicClient) error {
 	ipAddressPoolGVR := schema.GroupVersionResource{
 		Group:    "metallb.io",
 		Version:  "v1beta1",
 		Resource: "ipaddresspools",
 	}
-	
-	ipPool := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+
+	deadline := time.After(crdPollTimeout)
+
+	ticker := time.NewTicker(crdPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled waiting for metallb CRDs: %w", ctx.Err())
+		case <-deadline:
+			return ErrCRDTimeout
+		case <-ticker.C:
+			_, err := client.Resource(ipAddressPoolGVR).Namespace(metallbNamespace).
+				List(ctx, metav1.ListOptions{Limit: 1})
+			if err == nil {
+				return nil
+			}
+		}
+	}
+}
+
+// ensureIPAddressPool creates or updates the default IPAddressPool.
+func (m *Installer) ensureIPAddressPool(
+	ctx context.Context,
+	client *dynamic.DynamicClient,
+) error {
+	gvr := schema.GroupVersionResource{
+		Group:    "metallb.io",
+		Version:  "v1beta1",
+		Resource: "ipaddresspools",
+	}
+
+	pool := &unstructured.Unstructured{
+		Object: map[string]any{
 			"apiVersion": "metallb.io/v1beta1",
 			"kind":       "IPAddressPool",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "default-pool",
 				"namespace": metallbNamespace,
 			},
-			"spec": map[string]interface{}{
-				"addresses": []interface{}{
+			"spec": map[string]any{
+				"addresses": []any{
 					m.ipRange,
 				},
 			},
 		},
 	}
-	
-	_, err := dynamicClient.Resource(ipAddressPoolGVR).Namespace(metallbNamespace).
-		Create(ctx, ipPool, metav1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to create IPAddressPool: %w", err)
+
+	existing, err := client.Resource(gvr).Namespace(metallbNamespace).
+		Get(ctx, "default-pool", metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		_, err = client.Resource(gvr).Namespace(metallbNamespace).
+			Create(ctx, pool, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to create IPAddressPool: %w", err)
+		}
+
+		return nil
 	}
-	
+
+	if err != nil {
+		return fmt.Errorf("failed to get IPAddressPool: %w", err)
+	}
+
+	// Update existing resource
+	pool.SetResourceVersion(existing.GetResourceVersion())
+
+	_, err = client.Resource(gvr).Namespace(metallbNamespace).
+		Update(ctx, pool, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update IPAddressPool: %w", err)
+	}
+
 	return nil
 }
 
-func (m *MetalLBInstaller) createL2Advertisement(
+// ensureL2Advertisement creates or updates the default L2Advertisement.
+func (m *Installer) ensureL2Advertisement(
 	ctx context.Context,
-	dynamicClient *k8s.DynamicClient,
+	client *dynamic.DynamicClient,
 ) error {
-	l2AdvertisementGVR := schema.GroupVersionResource{
+	gvr := schema.GroupVersionResource{
 		Group:    "metallb.io",
 		Version:  "v1beta1",
 		Resource: "l2advertisements",
 	}
-	
-	l2Advert := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+
+	advert := &unstructured.Unstructured{
+		Object: map[string]any{
 			"apiVersion": "metallb.io/v1beta1",
 			"kind":       "L2Advertisement",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "default-l2-advert",
 				"namespace": metallbNamespace,
 			},
-			"spec": map[string]interface{}{
-				"ipAddressPools": []interface{}{
+			"spec": map[string]any{
+				"ipAddressPools": []any{
 					"default-pool",
 				},
 			},
 		},
 	}
-	
-	_, err := dynamicClient.Resource(l2AdvertisementGVR).Namespace(metallbNamespace).
-		Create(ctx, l2Advert, metav1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to create L2Advertisement: %w", err)
+
+	existing, err := client.Resource(gvr).Namespace(metallbNamespace).
+		Get(ctx, "default-l2-advert", metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		_, err = client.Resource(gvr).Namespace(metallbNamespace).
+			Create(ctx, advert, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to create L2Advertisement: %w", err)
+		}
+
+		return nil
 	}
-	
+
+	if err != nil {
+		return fmt.Errorf("failed to get L2Advertisement: %w", err)
+	}
+
+	// Update existing resource
+	advert.SetResourceVersion(existing.GetResourceVersion())
+
+	_, err = client.Resource(gvr).Namespace(metallbNamespace).
+		Update(ctx, advert, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update L2Advertisement: %w", err)
+	}
+
 	return nil
 }
