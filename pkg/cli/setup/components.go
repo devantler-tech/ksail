@@ -441,7 +441,7 @@ func InstallFluxSilent(
 		return fmt.Errorf("failed to create helm client: %w", err)
 	}
 
-	timeout := installer.GetInstallTimeout(clusterCfg)
+	timeout := max(installer.GetInstallTimeout(clusterCfg), installer.FluxInstallTimeout)
 	fluxInstaller := factories.Flux(helmClient, timeout)
 
 	installErr := fluxInstaller.Install(ctx)
