@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/devantler-tech/ksail/v5/pkg/client/netretry"
 )
 
 const (
@@ -75,11 +77,11 @@ func installChartWithRetry(
 			return nil
 		}
 
-		if !isRetryableNetworkError(lastErr) || attempt == chartInstallMaxRetries {
+		if !netretry.IsRetryable(lastErr) || attempt == chartInstallMaxRetries {
 			break
 		}
 
-		delay := calculateRepoRetryDelay(attempt)
+		delay := netretry.ExponentialDelay(attempt, repoIndexRetryBaseWait, repoIndexRetryMaxWait)
 
 		timer := time.NewTimer(delay)
 		select {

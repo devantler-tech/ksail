@@ -12,6 +12,10 @@
 # Git patch files
 *.patch
 
+# Screenshots and temporary images (except those in docs/)
+/*.png
+!docs/**/*.png
+
 # ==============================================================================
 # Node.js (root level - created by npx)
 # ==============================================================================

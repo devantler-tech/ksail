@@ -35,6 +35,14 @@ func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
 				Wait:            true,
 				WaitForJobs:     true,
 				Timeout:         timeout,
+				SetValues: map[string]string{
+					// Use Ignore so the admission webhook does not block
+					// API requests when webhook pods are temporarily
+					// unreachable (e.g. during bootstrap or CNI churn).
+					// The chart default is Fail, which can cause cascading
+					// failures for components installed in parallel.
+					"admissionController.webhookServer.failurePolicy": "Ignore",
+				},
 			},
 		),
 	}
