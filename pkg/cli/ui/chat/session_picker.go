@@ -89,7 +89,7 @@ func (m *Model) confirmSessionRename() (tea.Model, tea.Cmd) {
 
 	session.Name = newName
 
-	saveErr := SaveSession(&session)
+	saveErr := SaveSession(&session, m.theme.SessionDir)
 	if saveErr != nil {
 		m.err = fmt.Errorf("failed to save session: %w", saveErr)
 
@@ -128,7 +128,7 @@ func (m *Model) deleteSelectedSession() (tea.Model, tea.Cmd) {
 
 	session := m.filteredSessions[m.sessionPickerIndex-1]
 
-	deleteErr := DeleteSession(m.client, session.ID)
+	deleteErr := DeleteSession(m.client, session.ID, m.theme.SessionDir)
 	if deleteErr != nil {
 		m.err = fmt.Errorf("failed to delete session: %w", deleteErr)
 
@@ -147,7 +147,7 @@ func (m *Model) deleteSelectedSession() (tea.Model, tea.Cmd) {
 
 // refreshSessionList reloads the session list from storage and re-applies filters.
 func (m *Model) refreshSessionList() error {
-	sessions, err := ListSessions(m.client)
+	sessions, err := ListSessions(m.client, m.theme.SessionDir)
 	if err != nil {
 		m.err = fmt.Errorf("failed to refresh sessions: %w", err)
 
@@ -491,7 +491,7 @@ func (m *Model) saveCurrentSession() error {
 	// Preserve existing custom name if set
 	name := GenerateSessionName(m.messages)
 
-	existing, loadErr := LoadSession(sessionID)
+	existing, loadErr := LoadSession(sessionID, m.theme.SessionDir)
 	if loadErr == nil && existing.Name != "" {
 		// Keep user-defined names (anything that differs from auto-generated)
 		name = existing.Name
@@ -517,7 +517,7 @@ func (m *Model) saveCurrentSession() error {
 		AgentMode: &agentMode,
 	}
 
-	saveErr := SaveSession(metadata)
+	saveErr := SaveSession(metadata, m.theme.SessionDir)
 	if saveErr != nil {
 		return saveErr
 	}
@@ -529,30 +529,12 @@ func (m *Model) saveCurrentSession() error {
 
 // renderSessionPickerModal renders the session picker as an inline modal section.
 func (m *Model) renderSessionPickerModal() string {
-	modalWidth := max(m.width-modalPadding, 1)
-	contentWidth := max(modalWidth-contentPadding, 1)
-	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
-
-	totalItems := len(m.filteredSessions) + 1
-	maxVisible := m.calculateMaxPickerVisible()
-	visibleCount := min(totalItems, maxVisible)
-
-	scrollOffset := calculatePickerScrollOffset(m.sessionPickerIndex, totalItems, maxVisible)
-
-	var listContent strings.Builder
-	m.renderSessionPickerTitle(&listContent, clipStyle)
-
-	isScrollable := totalItems > maxVisible
-	renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
-
-	endIdx := min(scrollOffset+visibleCount, totalItems)
-	m.renderSessionItems(&listContent, clipStyle, scrollOffset, endIdx)
-
-	renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
-
-	content := strings.TrimRight(listContent.String(), "\n")
-
-	return renderPickerModal(content, modalWidth, visibleCount, isScrollable)
+	return m.renderPickerModalContent(
+		len(m.filteredSessions)+1,
+		m.sessionPickerIndex,
+		m.renderSessionPickerTitle,
+		m.renderSessionItems,
+	)
 }
 
 // renderSessionPickerTitle renders the title, filter input, or delete confirmation.

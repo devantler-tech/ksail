@@ -1,3 +1,4 @@
-# NOTE: The docs/ directory is committed (not ignored) because go:embed
-# requires the files to exist at build time. Run `go generate ./...` to
-# regenerate from the source docs if they change.
+# The docs/ directory is no longer needed — documentation is now generated
+# into docs_generated.go by gen_docs.go at go:generate time.
+# Ignore the docs/ directory in case it gets recreated accidentally.
+docs/

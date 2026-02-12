@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v5/pkg/client/netretry"
 	helmv4cli "helm.sh/helm/v4/pkg/cli"
 	helmv4getter "helm.sh/helm/v4/pkg/getter"
 	repov1 "helm.sh/helm/v4/pkg/repo/v1"
@@ -25,10 +24,6 @@ const (
 	repoIndexRetryBaseWait = 2 * time.Second
 	repoIndexRetryMaxWait  = 15 * time.Second
 )
-
-// httpStatusCodePattern matches HTTP 5xx status codes at word boundaries
-// to avoid false positives on port numbers like ":5000".
-var httpStatusCodePattern = regexp.MustCompile(`\b50[0-4]\b`)
 
 var (
 	errRepositoryEntryRequired = errors.New("helm: repository entry is required")
@@ -209,12 +204,12 @@ func downloadRepositoryIndex(ctx context.Context, chartRepository *repov1.ChartR
 		}
 
 		// Check if this is a retryable transient network error
-		if !isRetryableNetworkError(lastErr) || attempt == repoIndexMaxRetries {
+		if !netretry.IsRetryable(lastErr) || attempt == repoIndexMaxRetries {
 			break
 		}
 
 		// Calculate delay with exponential backoff
-		delay := calculateRepoRetryDelay(attempt)
+		delay := netretry.ExponentialDelay(attempt, repoIndexRetryBaseWait, repoIndexRetryMaxWait)
 
 		// Use a timer so the retry loop respects context cancellation
 		timer := time.NewTimer(delay)
@@ -228,41 +223,4 @@ func downloadRepositoryIndex(ctx context.Context, chartRepository *repov1.ChartR
 	}
 
 	return lastErr
-}
-
-// isRetryableNetworkError returns true if the error indicates a transient network error
-// that should be retried. This covers HTTP 5xx status codes and TCP-level errors
-// such as connection resets, timeouts, and unexpected EOF.
-func isRetryableNetworkError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	errMsg := err.Error()
-
-	// HTTP 5xx status text patterns
-	textPatterns := []string{
-		"Internal Server Error", "Bad Gateway",
-		"Service Unavailable", "Gateway Timeout",
-		// TCP-level transient network errors
-		"connection reset by peer", "connection refused",
-		"i/o timeout", "TLS handshake timeout",
-		"unexpected EOF", "no such host",
-	}
-
-	for _, pattern := range textPatterns {
-		if strings.Contains(errMsg, pattern) {
-			return true
-		}
-	}
-
-	// Match HTTP 5xx numeric codes at word boundaries to avoid false positives
-	// on port numbers like ":5000". Uses regexp for precise matching.
-	return httpStatusCodePattern.MatchString(errMsg)
-}
-
-// calculateRepoRetryDelay returns the delay for the given retry attempt.
-// Uses exponential backoff: 2s, 4s, 8s... capped at repoIndexRetryMaxWait.
-func calculateRepoRetryDelay(attempt int) time.Duration {
-	return min(repoIndexRetryBaseWait*time.Duration(1<<(attempt-1)), repoIndexRetryMaxWait)
 }

@@ -9,69 +9,33 @@ import (
 	goruntime "runtime"
 	"strings"
 	"time"
+
+	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 )
 
 // BuildSystemContext builds the system prompt context for the chat assistant.
-// It combines multiple sources of information:
-//   - Identity and role description for the AI assistant
-//   - Current working directory and ksail.yaml configuration if present
-//   - KSail documentation loaded from the docs/ directory
-//   - Dynamic CLI help output from the ksail executable
-//   - Instructions for proper behavior and command usage
-//
-// Returns the complete system context string and any error encountered.
-// If documentation loading fails, a partial context is still returned.
+// It delegates to the generic chatui.BuildSystemContext with KSail-specific defaults.
 func BuildSystemContext() (string, error) {
-	var builder strings.Builder
-
-	// Add identity and role
-	builder.WriteString(`<identity>
-You are KSail Assistant, an AI helper for KSail - a CLI tool for creating and managing local Kubernetes clusters.
-You help users configure, troubleshoot, and operate Kubernetes clusters using KSail.
-</identity>
-
-`)
-
-	// Add working directory context
-	workDir, err := os.Getwd()
-	if err == nil {
-		builder.WriteString(fmt.Sprintf("<working_directory>%s</working_directory>\n\n", workDir))
-
-		// Check if ksail.yaml exists in working directory
-		configPath := filepath.Join(workDir, "ksail.yaml")
-
-		_, statErr := os.Stat(configPath)
-		if statErr == nil {
-			//nolint:gosec // Reading local ksail.yaml config is safe
-			content, readErr := os.ReadFile(configPath)
-			if readErr == nil {
-				builder.WriteString("<current_ksail_config>\n")
-				builder.Write(content)
-				builder.WriteString("\n</current_ksail_config>\n\n")
-			}
-		}
+	result, err := chatui.BuildSystemContext(DefaultSystemContextConfig())
+	if err != nil {
+		return "", fmt.Errorf("building system context: %w", err)
 	}
 
-	// Load documentation from docs/ directory
-	docs := loadDocumentation()
-	if docs != "" {
-		builder.WriteString("<ksail_documentation>\n")
-		builder.WriteString(docs)
-		builder.WriteString("\n</ksail_documentation>\n\n")
+	return result, nil
+}
+
+// DefaultSystemContextConfig returns the default KSail system context configuration.
+func DefaultSystemContextConfig() chatui.SystemContextConfig {
+	return chatui.SystemContextConfig{
+		Identity: "You are KSail Assistant, an AI helper for KSail - " +
+			"a CLI tool for creating and managing local Kubernetes clusters.\n" +
+			"You help users configure, troubleshoot, and operate Kubernetes clusters using KSail.",
+		Documentation:            loadDocumentation(),
+		CLIHelp:                  getCLIHelp(),
+		Instructions:             ksailInstructions,
+		IncludeWorkingDirContext: true,
+		ConfigFileName:           "ksail.yaml",
 	}
-
-	// Add CLI help dynamically
-	cliHelp := getCLIHelp()
-	if cliHelp != "" {
-		builder.WriteString("<cli_help>\n")
-		builder.WriteString(cliHelp)
-		builder.WriteString("\n</cli_help>\n\n")
-	}
-
-	// Add instructions
-	builder.WriteString(ksailInstructions)
-
-	return builder.String(), nil
 }
 
 // getCLIHelp captures the ksail --help output dynamically.
@@ -97,10 +61,10 @@ func getCLIHelp() string {
 	return string(output)
 }
 
-// loadDocumentation returns the embedded documentation.
-// The documentation is embedded at compile time from the docs/ directory.
+// loadDocumentation returns the generated documentation constant.
+// The documentation is pre-processed at go:generate time from docs/src/content/docs/.
 func loadDocumentation() string {
-	return embeddedDocumentation
+	return generatedDocumentation
 }
 
 // FindKSailExecutable attempts to find the ksail executable.
