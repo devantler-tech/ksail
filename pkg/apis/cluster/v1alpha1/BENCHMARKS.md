@@ -116,12 +116,13 @@ Tests the default pruning operation in isolation:
 
 ## Performance Baselines
 
-*Baseline results will be added after initial benchmark run*
+Baseline results are stored in [baselines/cluster-marshalling-baseline.txt](baselines/cluster-marshalling-baseline.txt).
 
-Run benchmarks and save baseline:
+To regenerate the baseline:
 
 ```bash
-go test -bench=. -benchmem ./pkg/apis/cluster/v1alpha1/... > baselines/cluster-marshalling-baseline.txt
+go test -run=^$ -bench=. -benchmem ./pkg/apis/cluster/v1alpha1/... \
+  > pkg/apis/cluster/v1alpha1/baselines/cluster-marshalling-baseline.txt
 ```
 
 ## Comparing Performance
@@ -130,10 +131,10 @@ After making optimizations, compare with baseline:
 
 ```bash
 # Save new results
-go test -bench=. -benchmem ./pkg/apis/cluster/v1alpha1/... > new-results.txt
+go test -run=^$ -bench=. -benchmem ./pkg/apis/cluster/v1alpha1/... > new-results.txt
 
 # Compare with benchstat (install if needed: go install golang.org/x/perf/cmd/benchstat@latest)
-benchstat baselines/cluster-marshalling-baseline.txt new-results.txt
+benchstat pkg/apis/cluster/v1alpha1/baselines/cluster-marshalling-baseline.txt new-results.txt
 ```
 
 ## Performance Targets

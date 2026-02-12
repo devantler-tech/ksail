@@ -1,9 +1,3 @@
-2026/02/11 00:01:38 WARN environment variable not set variable=TEST_UNDEFINED
-2026/02/11 00:01:38 WARN environment variable not set variable=UNDEFINED_USER
-2026/02/11 00:01:38 WARN environment variable not set variable=UNDEFINED_PASS
-2026/02/11 00:01:38 WARN environment variable not set variable=UNDEFINED_VAR
-2026/02/11 00:01:38 WARN environment variable not set variable=UNDEFINED_VAR
-2026/02/11 00:01:38 WARN environment variable not set variable=UNDEFINED_DIR
 goos: linux
 goarch: amd64
 pkg: github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1
