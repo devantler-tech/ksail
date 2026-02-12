@@ -425,19 +425,11 @@ func (l *LoadBalancer) ValidValues() []string {
 
 // EffectiveValue resolves Default to its concrete meaning for the given
 // distribution × provider combination. Enabled and Disabled pass through
-// unchanged, except for Talos+Docker which is forced to Disabled regardless
-// of the requested value. For distributions that bundle a load balancer
-// (e.g. K3s), Default resolves to Enabled; otherwise it resolves to Disabled.
+// unchanged. For distributions that bundle a load balancer (e.g. K3s),
+// Default resolves to Enabled; otherwise it resolves to Disabled.
 func (l *LoadBalancer) EffectiveValue(
 	distribution Distribution, provider Provider,
 ) LoadBalancer {
-	// Talos × Docker: LoadBalancer is not yet implemented (MetalLB planned).
-	// Force Disabled regardless of the requested value to prevent false-positive
-	// diffs in the update command. Remove this guard once MetalLB support lands.
-	if distribution == DistributionTalos && provider == ProviderDocker {
-		return LoadBalancerDisabled
-	}
-
 	if *l != LoadBalancerDefault {
 		return *l
 	}
