@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/helmutil"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -90,7 +91,15 @@ func NewInstaller(
 // Install installs or upgrades MetalLB via its Helm chart, then configures
 // the IPAddressPool and L2Advertisement resources.
 func (m *Installer) Install(ctx context.Context) error {
-	err := m.Base.Install(ctx)
+	// Talos enforces PodSecurity Standards by default. MetalLB speaker requires
+	// NET_ADMIN, NET_RAW, SYS_ADMIN capabilities and host networking, so the
+	// namespace must be labelled "privileged" before Helm installs the chart.
+	err := m.ensurePrivilegedNamespace(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to ensure privileged namespace: %w", err)
+	}
+
+	err = m.Base.Install(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install metallb: %w", err)
 	}
@@ -98,6 +107,68 @@ func (m *Installer) Install(ctx context.Context) error {
 	err = m.configureMetalLB(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to configure metallb: %w", err)
+	}
+
+	return nil
+}
+
+// ensurePrivilegedNamespace creates or updates the metallb-system namespace
+// with PodSecurity Standard "privileged" labels so that the speaker DaemonSet
+// can obtain the elevated privileges it needs (host networking, NET_ADMIN, etc.).
+func (m *Installer) ensurePrivilegedNamespace(ctx context.Context) error {
+	clientset, err := k8s.NewClientset(m.kubeconfig, m.context)
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	pssLabels := map[string]string{
+		"pod-security.kubernetes.io/enforce": "privileged",
+		"pod-security.kubernetes.io/audit":   "privileged",
+		"pod-security.kubernetes.io/warn":    "privileged",
+	}
+
+	namespace, err := clientset.CoreV1().Namespaces().Get(
+		ctx, metallbNamespace, metav1.GetOptions{},
+	)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			newNS := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   metallbNamespace,
+					Labels: pssLabels,
+				},
+			}
+
+			_, err = clientset.CoreV1().Namespaces().Create(ctx, newNS, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("create namespace: %w", err)
+			}
+
+			return nil
+		}
+
+		return fmt.Errorf("get namespace: %w", err)
+	}
+
+	// Namespace exists — ensure PSS labels are set.
+	if namespace.Labels == nil {
+		namespace.Labels = make(map[string]string)
+	}
+
+	updated := false
+
+	for k, v := range pssLabels {
+		if namespace.Labels[k] != v {
+			namespace.Labels[k] = v
+			updated = true
+		}
+	}
+
+	if updated {
+		_, err = clientset.CoreV1().Namespaces().Update(ctx, namespace, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("update namespace labels: %w", err)
+		}
 	}
 
 	return nil
