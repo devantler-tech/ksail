@@ -143,6 +143,7 @@ CI automatically runs `go mod tidy` and commits changes back to the PR via the `
 go generate ./...
 
 # Or target specific generators
+go generate ./docs/...            # CLI flags + configuration reference
 go generate ./schemas/...         # JSON schema
 go generate ./pkg/svc/chat/...    # Embedded documentation
 ```
