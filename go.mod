@@ -2,6 +2,11 @@ module github.com/devantler-tech/ksail/v5
 
 go 1.26.0
 
+// Exclude the standalone google.golang.org/grpc/stats/opentelemetry module to avoid
+// ambiguous import errors. The opentelemetry stats package is included in the main
+// google.golang.org/grpc module and should be used from there.
+exclude google.golang.org/grpc/stats/opentelemetry v0.0.0-20241028142157-ada6787961b3
+
 require (
 	filippo.io/age v1.3.1
 	github.com/containerd/errdefs v1.0.0
@@ -33,7 +38,7 @@ require (
 	github.com/yannh/kubeconform v0.7.0
 	golang.org/x/sync v0.19.0
 	golang.org/x/term v0.39.0
-	helm.sh/helm/v4 v4.1.0
+	helm.sh/helm/v4 v4.1.1
 	k8s.io/api v0.35.0
 	k8s.io/apiextensions-apiserver v0.35.0
 	k8s.io/apimachinery v0.35.0

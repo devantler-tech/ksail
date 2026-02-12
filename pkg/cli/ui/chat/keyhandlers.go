@@ -67,7 +67,7 @@ func (m *Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.handleChatShortcutKey(msg)
 }
 
-// handleChatShortcutKey handles shortcut keys (toggles, pickers, history, help).
+// handleChatShortcutKey handles shortcut keys (toggles, pickers, help).
 func (m *Model) handleChatShortcutKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "f1":
@@ -85,7 +85,17 @@ func (m *Model) handleChatShortcutKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+t":
 		return m.handleToggleAllTools()
 	case "ctrl+y":
+		return m.handleToggleYolo()
+	case "ctrl+r":
 		return m.handleCopyOutput()
+	}
+
+	return m.handleNavigationKey(msg)
+}
+
+// handleNavigationKey handles history navigation and viewport/textarea input.
+func (m *Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
 	case "up":
 		return m.handleHistoryUp()
 	case keyDown:
@@ -198,7 +208,7 @@ func (m *Model) handleOpenSessionPicker() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	sessions, _ := ListSessions(m.client)
+	sessions, _ := ListSessions(m.client, m.theme.SessionDir)
 	m.availableSessions = sessions
 	m.filteredSessions = sessions // Start with all sessions
 	m.sessionFilterText = ""      // Reset filter
@@ -363,6 +373,24 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	m.justCompleted = false
 
 	return m, tea.Batch(m.spinner.Tick, m.sendMessageCmd(content))
+}
+
+// handleToggleYolo toggles YOLO mode (auto-approve write operations).
+func (m *Model) handleToggleYolo() (tea.Model, tea.Cmd) {
+	// Prevent toggling while streaming to avoid state mismatch
+	if m.isStreaming {
+		return m, nil
+	}
+
+	m.yoloMode = !m.yoloMode
+	// Update the shared reference so tool handlers see the change
+	if m.yoloModeRef != nil {
+		m.yoloModeRef.SetEnabled(m.yoloMode)
+	}
+
+	m.updateViewportContent()
+
+	return m, nil
 }
 
 // handleCopyOutput copies the latest assistant message to clipboard.

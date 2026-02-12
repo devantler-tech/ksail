@@ -55,28 +55,20 @@ const (
 	roleAssistant   = "assistant"
 )
 
-// helpKeyStyle renders keybinding keys.
-var helpKeyStyle = lipgloss.NewStyle().
-	Foreground(toolColor)
-
-// helpDescStyle renders keybinding descriptions.
-var helpDescStyle = lipgloss.NewStyle().
-	Foreground(dimColor) // Muted gray for subtle descriptions
-
 // createHelpModel creates a configured help model.
-func createHelpModel() help.Model {
+func createHelpModel(styles uiStyles) help.Model {
 	helpModel := help.New()
 	helpModel.ShortSeparator = helpSep
 	helpModel.FullSeparator = "   "
 	helpModel.Ellipsis = "…"
 	helpModel.Styles = help.Styles{
-		ShortKey:       helpKeyStyle,
-		ShortDesc:      helpDescStyle,
-		ShortSeparator: helpStyle,
-		Ellipsis:       helpStyle,
-		FullKey:        helpKeyStyle,
-		FullDesc:       helpDescStyle,
-		FullSeparator:  helpStyle,
+		ShortKey:       styles.helpKey,
+		ShortDesc:      styles.helpDesc,
+		ShortSeparator: styles.help,
+		Ellipsis:       styles.help,
+		FullKey:        styles.helpKey,
+		FullDesc:       styles.helpDesc,
+		FullSeparator:  styles.help,
 	}
 
 	return helpModel
@@ -91,24 +83,25 @@ func (m *Model) renderHelpOverlay() string {
 	// Compact help content fitting in input area height (3 lines of content)
 	var content strings.Builder
 	content.WriteString(clipStyle.Render(
-		helpKeyStyle.Render(enterSymbol)+" send"+helpSep+
-			helpKeyStyle.Render("Alt+"+enterSymbol)+" newline"+helpSep+
-			helpKeyStyle.Render(keyArrows)+" history"+helpSep+
-			helpKeyStyle.Render(keyPageNav)+" scroll") + "\n")
+		m.styles.helpKey.Render(enterSymbol)+" send"+helpSep+
+			m.styles.helpKey.Render("Alt+"+enterSymbol)+" newline"+helpSep+
+			m.styles.helpKey.Render(keyArrows)+" history"+helpSep+
+			m.styles.helpKey.Render(keyPageNav)+" scroll") + "\n")
 	content.WriteString(clipStyle.Render(
-		helpKeyStyle.Render("Tab")+" mode"+helpSep+
-			helpKeyStyle.Render("^T")+" tools"+helpSep+
-			helpKeyStyle.Render("^Y")+" copy"+helpSep+
-			helpKeyStyle.Render("^H")+" sessions"+helpSep+
-			helpKeyStyle.Render("^O")+" model"+helpSep+
-			helpKeyStyle.Render("^N")+" new") + "\n")
+		m.styles.helpKey.Render("Tab")+" mode"+helpSep+
+			m.styles.helpKey.Render("^Y")+" yolo"+helpSep+
+			m.styles.helpKey.Render("^T")+" tools"+helpSep+
+			m.styles.helpKey.Render("^R")+" copy"+helpSep+
+			m.styles.helpKey.Render("^H")+" sessions"+helpSep+
+			m.styles.helpKey.Render("^O")+" model"+helpSep+
+			m.styles.helpKey.Render("^N")+" new") + "\n")
 	content.WriteString(clipStyle.Render(
-		helpKeyStyle.Render(keyEscape) + " close" + helpSep +
-			helpKeyStyle.Render("^C") + " quit"))
+		m.styles.helpKey.Render(keyEscape) + " close" + helpSep +
+			m.styles.helpKey.Render("^C") + " quit"))
 
 	// Use same height as input area (inputHeight = 3)
 	contentStr := content.String()
-	modalStyle := createPickerModalStyle(modalWidth, inputHeight)
+	modalStyle := m.createPickerModalStyle(modalWidth, inputHeight)
 
 	return modalStyle.Render(contentStr)
 }
@@ -117,7 +110,7 @@ func (m *Model) renderHelpOverlay() string {
 // It intelligently truncates to fit available width while always showing "F1 help".
 func (m *Model) renderShortHelp() string {
 	availWidth := max(m.width-contentPadding, minHelpWidth) // Account for padding
-	helpToggle := helpKeyStyle.Render("F1") + " help"
+	helpToggle := m.styles.helpKey.Render("F1") + " help"
 	helpToggleWidth := lipgloss.Width(helpToggle)
 	usableWidth := availWidth - helpToggleWidth - helpSepSpacing // Space for separator
 
@@ -131,17 +124,17 @@ func (m *Model) renderShortHelp() string {
 
 	result += helpToggle
 
-	return helpStyle.Render("  " + result)
+	return m.styles.help.Render("  " + result)
 }
 
 // getContextHelpParts returns help parts based on current UI context.
 func (m *Model) getContextHelpParts() []string {
 	switch {
 	case m.showHelpOverlay:
-		return []string{helpKeyStyle.Render(keyEscape) + " close"}
+		return []string{m.styles.helpKey.Render(keyEscape) + " close"}
 
 	case m.pendingPermission != nil:
-		return getPermissionHelpParts()
+		return getPermissionHelpParts(m.styles.helpKey)
 
 	case m.showModelPicker:
 		return m.getModelPickerHelpParts()
@@ -155,7 +148,7 @@ func (m *Model) getContextHelpParts() []string {
 }
 
 // getPermissionHelpParts returns help for permission prompts.
-func getPermissionHelpParts() []string {
+func getPermissionHelpParts(helpKeyStyle lipgloss.Style) []string {
 	return []string{
 		helpKeyStyle.Render("y") + " allow",
 		helpKeyStyle.Render("n") + " deny",
@@ -166,14 +159,14 @@ func getPermissionHelpParts() []string {
 // getModelPickerHelpParts returns help for model picker state.
 func (m *Model) getModelPickerHelpParts() []string {
 	if m.modelFilterActive {
-		return getFilterModeHelpParts()
+		return getFilterModeHelpParts(m.styles.helpKey)
 	}
 
 	return []string{
-		helpKeyStyle.Render(keyArrows) + " select",
-		helpKeyStyle.Render("/") + " filter",
-		helpKeyStyle.Render(enterSymbol) + " confirm",
-		helpKeyStyle.Render(keyEscape) + " cancel",
+		m.styles.helpKey.Render(keyArrows) + " select",
+		m.styles.helpKey.Render("/") + " filter",
+		m.styles.helpKey.Render(enterSymbol) + " confirm",
+		m.styles.helpKey.Render(keyEscape) + " cancel",
 	}
 }
 
@@ -182,23 +175,23 @@ func (m *Model) getSessionPickerHelpParts() []string {
 	switch {
 	case m.renamingSession:
 		return []string{
-			helpKeyStyle.Render(enterSymbol) + " save",
-			helpKeyStyle.Render(keyEscape) + " cancel",
+			m.styles.helpKey.Render(enterSymbol) + " save",
+			m.styles.helpKey.Render(keyEscape) + " cancel",
 		}
 	case m.confirmDeleteSession:
 		return []string{
-			helpKeyStyle.Render("y") + " delete",
-			helpKeyStyle.Render("n") + " cancel",
+			m.styles.helpKey.Render("y") + " delete",
+			m.styles.helpKey.Render("n") + " cancel",
 		}
 	case m.sessionFilterActive:
-		return getFilterModeHelpParts()
+		return getFilterModeHelpParts(m.styles.helpKey)
 	default:
 		return []string{
-			helpKeyStyle.Render(keyArrows) + " select",
-			helpKeyStyle.Render("/") + " filter",
-			helpKeyStyle.Render("r") + " rename",
-			helpKeyStyle.Render("d") + " delete",
-			helpKeyStyle.Render(keyEscape) + " close",
+			m.styles.helpKey.Render(keyArrows) + " select",
+			m.styles.helpKey.Render("/") + " filter",
+			m.styles.helpKey.Render("r") + " rename",
+			m.styles.helpKey.Render("d") + " delete",
+			m.styles.helpKey.Render(keyEscape) + " close",
 		}
 	}
 }
@@ -211,25 +204,33 @@ func (m *Model) getDefaultHelpParts() []string {
 	}
 
 	parts := []string{
-		helpKeyStyle.Render(enterSymbol) + " send",
+		m.styles.helpKey.Render(enterSymbol) + " send",
 	}
 
 	// Conditionally add copy hint
 	if m.hasAssistantMessages() {
-		parts = append(parts, helpKeyStyle.Render("^Y")+" copy")
+		parts = append(parts, m.styles.helpKey.Render("^R")+" copy")
 	}
 
-	parts = append(parts, helpKeyStyle.Render("Tab")+" "+modeIcon)
+	parts = append(parts, m.styles.helpKey.Render("Tab")+" "+modeIcon)
+
+	// Add YOLO mode hint
+	yoloHint := "yolo"
+	if m.yoloMode {
+		yoloHint = "yolo ✓"
+	}
+
+	parts = append(parts, m.styles.helpKey.Render("^Y")+" "+yoloHint)
 
 	// Conditionally add tools hint
 	if len(m.toolOrder) > 0 || m.hasToolsInMessages() {
-		parts = append(parts, helpKeyStyle.Render("^T")+" tools")
+		parts = append(parts, m.styles.helpKey.Render("^T")+" tools")
 	}
 
 	parts = append(parts,
-		helpKeyStyle.Render("^H")+" sessions",
-		helpKeyStyle.Render("^O")+" model",
-		helpKeyStyle.Render("^N")+" new",
+		m.styles.helpKey.Render("^H")+" sessions",
+		m.styles.helpKey.Render("^O")+" model",
+		m.styles.helpKey.Render("^N")+" new",
 	)
 
 	return parts
@@ -266,7 +267,7 @@ func buildTruncatedHelp(parts []string, maxWidth int) string {
 }
 
 // getFilterModeHelpParts returns help parts for filter mode (used by both model and session pickers).
-func getFilterModeHelpParts() []string {
+func getFilterModeHelpParts(helpKeyStyle lipgloss.Style) []string {
 	return []string{
 		helpKeyStyle.Render(enterSymbol) + " done",
 		helpKeyStyle.Render(keyEscape) + " clear",

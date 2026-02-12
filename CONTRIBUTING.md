@@ -22,7 +22,7 @@ For detailed package and API documentation, refer to the Go documentation at [pk
 
 Before you begin developing, ensure you have the following installed:
 
-- [Go (v1.25.4+)](https://go.dev/doc/install)
+- [Go (v1.26.0+)](https://go.dev/doc/install)
 - [mockery (v3.5+)](https://vektra.github.io/mockery/v3.5/installation/)
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://megalinter.io/latest/mega-linter-runner/#installation)
@@ -72,6 +72,27 @@ mockery
 # working-directory: ./
 go test ./...
 ```
+
+#### Benchmarks
+
+KSail includes Go benchmarks for performance-critical code paths. When making performance-related changes, run benchmarks to validate improvements:
+
+```sh
+# working-directory: ./
+# Run all benchmarks
+go test -bench=. -benchmem ./...
+
+# Run benchmarks for specific package (e.g., resource polling)
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/...
+
+# Compare before/after performance
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > before.txt
+# (make changes)
+go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > after.txt
+benchstat before.txt after.txt
+```
+
+See package-specific BENCHMARKS.md files (e.g., `pkg/k8s/readiness/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
 
 ### Documentation
 

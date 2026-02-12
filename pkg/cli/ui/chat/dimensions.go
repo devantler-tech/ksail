@@ -18,7 +18,7 @@ func (m *Model) handleWindowSize(msg tea.WindowSizeMsg) {
 func (m *Model) calculateMaxPickerVisible() int {
 	// Calculate available height: total - header - input - footer - borders
 	// Reserve space for: title (1) + scroll indicators (2) + borders (2) + minimum viewport
-	availableHeight := m.height - headerHeight - inputHeight - footerHeight - viewportHeightPadding - minViewportHeight
+	availableHeight := m.height - m.headerHeight - inputHeight - footerHeight - viewportHeightPadding - minViewportHeight
 
 	// Subtract space for picker overhead (title + top/bottom padding)
 	availableForItems := availableHeight - pickerOverhead
@@ -100,7 +100,7 @@ func (m *Model) updateDimensions() {
 	// Each bordered box adds 2 lines (top + bottom border)
 	modalHeight := m.activeModalHeight()
 	viewportHeight := max(
-		m.height-headerHeight-inputHeight-footerHeight-viewportHeightPadding-modalHeight,
+		m.height-m.headerHeight-inputHeight-footerHeight-viewportHeightPadding-modalHeight,
 		minHeight,
 	)
 

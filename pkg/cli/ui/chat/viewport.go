@@ -24,8 +24,8 @@ const (
 // updateViewportContent updates the viewport with rendered message content.
 func (m *Model) updateViewportContent() {
 	if len(m.messages) == 0 {
-		welcomeMsg := "  Type a message below to start chatting with KSail AI.\n"
-		m.viewport.SetContent(statusStyle.Render(welcomeMsg))
+		welcomeMsg := "  " + m.theme.WelcomeMessage + "\n"
+		m.viewport.SetContent(m.styles.status.Render(welcomeMsg))
 
 		return
 	}
@@ -75,7 +75,7 @@ func (m *Model) renderUserMessage(builder *strings.Builder, msg *message, wrapWi
 		modeIcon = "≡"
 	}
 
-	builder.WriteString(userMsgStyle.Render("▶ You " + modeIcon))
+	builder.WriteString(m.styles.userMsg.Render("▶ You " + modeIcon))
 	builder.WriteString("\n\n")
 
 	wrapped := wordwrap.WrapString(msg.content, wrapWidth)
@@ -89,7 +89,7 @@ func (m *Model) renderUserMessage(builder *strings.Builder, msg *message, wrapWi
 // renderAssistantMessage renders an assistant message with interleaved tools.
 func (m *Model) renderAssistantMessage(builder *strings.Builder, msg *message, wrapWidth uint) {
 	builder.WriteString("\n")
-	builder.WriteString(assistantMsgStyle.Render("▶ KSail"))
+	builder.WriteString(m.styles.assistantMsg.Render(m.theme.AssistantLabel))
 
 	if msg.isStreaming {
 		builder.WriteString(" " + m.spinner.View())
@@ -217,14 +217,14 @@ func (m *Model) writeIndentedContent(builder *strings.Builder, content string) {
 func (m *Model) renderLegacyToolOutput(builder *strings.Builder, msg *message, wrapWidth uint) {
 	wrapped := wordwrap.WrapString(msg.content, wrapWidth-legacyToolIndent)
 	for line := range strings.SplitSeq(wrapped, "\n") {
-		builder.WriteString(toolOutputStyle.Render("    " + line))
+		builder.WriteString(m.styles.toolOutput.Render("    " + line))
 		builder.WriteString("\n")
 	}
 }
 
 // renderToolInline renders a tool execution inline within an assistant response.
 func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, wrapWidth uint) {
-	humanName := humanizeToolName(tool.name)
+	humanName := humanizeToolName(tool.name, m.toolDisplay.NameMappings)
 
 	displayName := humanName
 	if tool.command != "" {
@@ -249,7 +249,7 @@ func (m *Model) renderRunningTool(
 	wrapWidth uint,
 ) {
 	line := fmt.Sprintf("  %s %s", m.spinner.View(), displayName)
-	builder.WriteString(toolMsgStyle.Render(line))
+	builder.WriteString(m.styles.toolMsg.Render(line))
 	builder.WriteString("\n")
 
 	if tool.output != "" {
@@ -267,7 +267,7 @@ func (m *Model) renderSuccessTool(
 	summary := m.getToolSummary(tool)
 	if tool.expanded {
 		line := "  ✓ " + displayName
-		builder.WriteString(toolCollapsedStyle.Render(line))
+		builder.WriteString(m.styles.toolCollapsed.Render(line))
 		builder.WriteString("\n")
 
 		if tool.output != "" {
@@ -276,10 +276,10 @@ func (m *Model) renderSuccessTool(
 	} else {
 		line := "  ✓ " + displayName
 		if summary != "" {
-			line += toolOutputStyle.Render(" — " + summary)
+			line += m.styles.toolOutput.Render(" — " + summary)
 		}
 
-		builder.WriteString(toolCollapsedStyle.Render(line))
+		builder.WriteString(m.styles.toolCollapsed.Render(line))
 		builder.WriteString("\n")
 	}
 }
@@ -294,7 +294,7 @@ func (m *Model) renderFailedTool(
 	line := "  ✗ " + displayName
 
 	if tool.expanded {
-		builder.WriteString(errorStyle.Render(line))
+		builder.WriteString(m.styles.errMsg.Render(line))
 		builder.WriteString("\n")
 
 		if tool.output != "" {
@@ -306,10 +306,12 @@ func (m *Model) renderFailedTool(
 
 	// Collapsed: show first line of error as summary
 	if tool.output != "" {
-		line += toolOutputStyle.Render(" — " + m.truncateLine(tool.output, toolOutputTruncateLen))
+		line += m.styles.toolOutput.Render(
+			" — " + m.truncateLine(tool.output, toolOutputTruncateLen),
+		)
 	}
 
-	builder.WriteString(errorStyle.Render(line))
+	builder.WriteString(m.styles.errMsg.Render(line))
 	builder.WriteString("\n")
 }
 
@@ -351,7 +353,7 @@ func (m *Model) renderToolOutput(
 	wrapped := wordwrap.WrapString(truncatedOutput, wrapWidth-toolOutputIndent)
 
 	for line := range strings.SplitSeq(wrapped, "\n") {
-		builder.WriteString(toolOutputStyle.Render("      " + line))
+		builder.WriteString(m.styles.toolOutput.Render("      " + line))
 		builder.WriteString("\n")
 	}
 }

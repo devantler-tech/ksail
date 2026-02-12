@@ -28,6 +28,7 @@ ksail cluster create
 | ----------------------- | --------------------------- |
 | `ksail cluster init`    | Initialize a new project    |
 | `ksail cluster create`  | Create a cluster            |
+| `ksail cluster update`  | Update a cluster            |
 | `ksail cluster delete`  | Delete a cluster            |
 | `ksail cluster start`   | Start a stopped cluster     |
 | `ksail cluster stop`    | Stop a running cluster      |
@@ -69,6 +70,7 @@ ksail workload logs deployment/my-app
 | `ksail workload scale`    | Scale deployments                  |
 | `ksail workload rollout`  | Manage rollouts                    |
 | `ksail workload wait`     | Wait for conditions                |
+| `ksail workload images`   | List required container images     |
 
 ## GitOps Workflows
 
@@ -133,9 +135,15 @@ ksail cluster init \
 
 ### Mirror Registries
 
+> [!NOTE]
+> **Default mirrors enabled:** KSail now enables `docker.io` and `ghcr.io` mirrors by default to avoid rate limits and improve CI/CD performance.
+
 ```bash
+# Mirrors are enabled by default (docker.io and ghcr.io)
+ksail cluster init
+
+# Add additional mirrors
 ksail cluster init \
-  --mirror-registry docker.io=https://registry-1.docker.io \
   --mirror-registry gcr.io=https://gcr.io
 ```
 
@@ -144,6 +152,17 @@ ksail cluster init \
 **With authentication:**
 
 ```bash
+# Using GitHub Container Registry
+export GITHUB_USER=your-username
+export GITHUB_TOKEN=ghp_yourtoken
+
+ksail cluster init \
+  --mirror-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io=https://ghcr.io'
+
+# Using Docker Hub to avoid rate limits
+export DOCKER_USER=your-username
+export DOCKER_TOKEN=your-token
+
 ksail cluster init \
   --mirror-registry '${DOCKER_USER}:${DOCKER_TOKEN}@docker.io=https://registry-1.docker.io'
 ```
@@ -151,7 +170,15 @@ ksail cluster init \
 **Format:** `[user:pass@]host[=endpoint]`
 
 > [!NOTE]
-> Credentials support `${ENV_VAR}` placeholders for secure handling.
+> Credentials support `${ENV_VAR}` placeholders for secure handling. The registry proxy will authenticate to the upstream registry using the provided credentials, preventing rate limit issues for unauthenticated requests.
+
+**How it works:**
+
+1. KSail creates a local pull-through cache registry container for each mirror
+2. Credentials are resolved from environment variables at runtime
+3. The registry authenticates to the upstream using `REGISTRY_PROXY_USERNAME` and `REGISTRY_PROXY_PASSWORD`
+4. Images are pulled through the authenticated mirror, avoiding rate limits
+5. Cached images persist across cluster restarts for faster subsequent pulls
 
 ## Secret Management
 
