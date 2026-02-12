@@ -143,7 +143,7 @@ MetalLB support for Talos+Docker is planned for a future release. Until then, Lo
 
 **Workarounds for Talos+Docker:**
 
-``````bash
+```yaml
 # Option 1: Use NodePort
 apiVersion: v1
 kind: Service
@@ -157,10 +157,12 @@ spec:
     - port: 80
       targetPort: 8080
       nodePort: 30080  # Access via localhost:30080
+```
 
+```bash
 # Option 2: Use ClusterIP with port-forwarding
 ksail workload port-forward svc/my-app 8080:80
-``````
+```
 
 See the [LoadBalancer Configuration Guide](/configuration/loadbalancer/) for complete setup instructions and examples.
 

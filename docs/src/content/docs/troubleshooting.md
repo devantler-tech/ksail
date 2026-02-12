@@ -13,14 +13,14 @@ This guide covers common issues you might encounter when using KSail and how to 
 
 **Solution:**
 
-``````bash
+```bash
 # Verify Docker is running
 docker ps
 
 # If not running, start Docker Desktop or Docker daemon
 # macOS: Open Docker Desktop application
 # Linux: sudo systemctl start docker
-``````
+```
 
 ### Cluster Creation Hangs
 
@@ -34,7 +34,7 @@ docker ps
 
 **Solution:**
 
-``````bash
+```bash
 # Check existing clusters
 ksail cluster list --all
 
@@ -44,7 +44,7 @@ ksail cluster delete --name <cluster-name>
 # Check Docker resources
 docker system df
 docker system prune  # Clean up if needed
-``````
+```
 
 ### Port Already in Use
 
@@ -52,7 +52,7 @@ docker system prune  # Clean up if needed
 
 **Solution:**
 
-``````bash
+```bash
 # Use a different local registry port by specifying host:port in --local-registry
 ksail cluster init --local-registry http://localhost:5050
 
@@ -63,7 +63,7 @@ lsof -ti:5000 | xargs kill -9
 # Windows:
 netstat -ano | findstr :5000
 # Then kill the process ID shown
-``````
+```
 
 ## GitOps Workflow Issues
 
@@ -73,7 +73,7 @@ netstat -ano | findstr :5000
 
 **Solution:**
 
-``````bash
+```bash
 # Verify local registry is running
 docker ps | grep registry
 
@@ -81,7 +81,7 @@ docker ps | grep registry
 # Ensure authentication is set if using external registry
 ksail cluster init \
   --local-registry '${USER}:${TOKEN}@registry.example.com'
-``````
+```
 
 ### Flux/ArgoCD Not Reconciling
 
@@ -89,7 +89,7 @@ ksail cluster init \
 
 **Solution:**
 
-``````bash
+```bash
 # Check GitOps controller status
 ksail workload get pods -n flux-system  # For Flux
 ksail workload get pods -n argocd       # For ArgoCD
@@ -100,7 +100,7 @@ ksail workload logs -n flux-system deployment/kustomize-controller
 
 # Force reconciliation
 ksail workload reconcile --timeout=5m
-``````
+```
 
 ## Configuration Issues
 
@@ -110,14 +110,14 @@ ksail workload reconcile --timeout=5m
 
 **Solution:**
 
-``````bash
+```bash
 # Validate against schema
 # The schema is available at:
 # https://github.com/devantler-tech/ksail/blob/main/schemas/ksail-config.schema.json
 
 # Re-initialize with correct values
 ksail cluster init --name my-cluster --distribution Vanilla
-``````
+```
 
 ### Environment Variables Not Expanding
 
@@ -125,7 +125,7 @@ ksail cluster init --name my-cluster --distribution Vanilla
 
 **Solution:**
 
-``````bash
+```bash
 # Ensure environment variables are set before running ksail
 export MY_TOKEN="secret-value"
 
@@ -135,7 +135,7 @@ echo $MY_TOKEN
 # Use the variable in configuration
 ksail cluster init \
   --local-registry '${USER}:${MY_TOKEN}@ghcr.io/myorg/myrepo'
-``````
+```
 
 ## Network Issues
 
@@ -145,7 +145,7 @@ ksail cluster init \
 
 **Solution:**
 
-``````bash
+```bash
 # Check CNI pods are running
 ksail workload get pods -n kube-system
 
@@ -159,7 +159,7 @@ ksail workload get pods -n kube-system -l k8s-app=calico-node
 ksail cluster delete
 ksail cluster init --cni Cilium
 ksail cluster create
-``````
+```
 
 ## Hetzner Cloud Issues
 
@@ -169,7 +169,7 @@ ksail cluster create
 
 **Solution:**
 
-``````bash
+```bash
 # Verify token has correct permissions (read/write)
 # Create token in Hetzner Cloud Console: Security → API Tokens
 
@@ -177,7 +177,7 @@ export HCLOUD_TOKEN="your-token-here"
 
 # Test token
 hcloud server list  # If you have hcloud CLI installed
-``````
+```
 
 ### Talos ISO Not Found
 
@@ -209,7 +209,7 @@ Configure KSail to use the correct ISO ID (implementation-specific - check lates
 
 **Solution:**
 
-``````bash
+```bash
 # 1. Check service status
 ksail workload get svc my-app -o wide
 ksail workload describe svc my-app
@@ -240,7 +240,7 @@ ksail workload logs -n metallb-system deployment/controller
 
 # For Talos on Hetzner:
 ksail workload logs -n kube-system daemonset/hcloud-cloud-controller-manager
-``````
+```
 
 ### LoadBalancer IP Address Not Assigned
 
@@ -248,7 +248,7 @@ ksail workload logs -n kube-system daemonset/hcloud-cloud-controller-manager
 
 **Solution:**
 
-``````bash
+```bash
 # 1. Verify LoadBalancer support is enabled
 cat ksail.yaml | grep loadBalancer
 
@@ -269,7 +269,7 @@ ksail workload delete pod -n kube-system -l app=svclb-my-app
 
 # For MetalLB:
 ksail workload delete pod -n metallb-system -l app.kubernetes.io/name=metallb
-``````
+```
 
 ### Cloud Provider Load Balancer Errors
 
@@ -277,7 +277,7 @@ ksail workload delete pod -n metallb-system -l app.kubernetes.io/name=metallb
 
 **Solution:**
 
-``````bash
+```bash
 # 1. Verify Hetzner Cloud credentials
 if [ -z "${HCLOUD_TOKEN:-}" ]; then
   echo "HCLOUD_TOKEN is not set. Please export your Hetzner API token as HCLOUD_TOKEN."
@@ -300,7 +300,7 @@ ksail workload get svc my-app -o yaml | grep -A 5 annotations
 # - Invalid location: use valid Hetzner datacenter (nbg1, fsn1, hel1, etc.)
 # - Invalid type: use valid LB type (lb11, lb21, lb31)
 # - Network conflicts: ensure cluster network doesn't overlap
-``````
+```
 
 ### Common Misconfigurations
 
@@ -310,7 +310,7 @@ ksail workload get svc my-app -o yaml | grep -A 5 annotations
 
 **Solution:**
 
-``````bash
+```bash
 # Vanilla requires explicit LoadBalancer enablement:
 ksail cluster init --distribution Vanilla --load-balancer Enabled
 
@@ -322,7 +322,7 @@ ksail cluster init --distribution K3s
 
 # Talos on Hetzner includes LoadBalancer by default:
 ksail cluster init --distribution Talos --provider Hetzner
-``````
+```
 
 #### Missing Service Selector
 
@@ -330,7 +330,7 @@ ksail cluster init --distribution Talos --provider Hetzner
 
 **Solution:**
 
-``````bash
+```bash
 # 1. Verify service selector matches pod labels
 ksail workload get svc my-app -o yaml | grep -A 3 selector
 ksail workload get pods -l app=my-app
@@ -340,7 +340,7 @@ ksail workload get endpoints my-app
 # Should show pod IPs - if empty, selector doesn't match any pods
 
 # 3. Fix selector in service manifest to match pod labels
-``````
+```
 
 #### Port Conflicts
 
@@ -348,7 +348,7 @@ ksail workload get endpoints my-app
 
 **Solution:**
 
-``````bash
+```bash
 # 1. List all LoadBalancer services
 ksail workload get svc -A | grep LoadBalancer
 
@@ -358,7 +358,7 @@ ksail workload get svc -A | grep LoadBalancer
 #   metallb.universe.tf/allow-shared-ip: "my-app"
 
 # 3. Use different ports or NodePort as alternative
-``````
+```
 
 ## Getting More Help
 
