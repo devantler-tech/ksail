@@ -62,6 +62,7 @@ export default defineConfig({
             { label: "Troubleshooting", link: "/troubleshooting/" },
           ],
         },
+        { label: "Resources", link: "/resources/" },
       ],
       lastUpdated: true,
       pagination: true,
