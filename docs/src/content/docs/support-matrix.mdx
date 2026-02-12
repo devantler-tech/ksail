@@ -29,8 +29,8 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 | Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)  |
 | Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner) |
 | **LoadBalancer**              |
-| LoadBalancer Support          | ✅      | Built-in | ❌ (Docker)  |
-| MetalLB (planned)             | ✅      | ✅       | 🚧 (Docker)  |
+| LoadBalancer Support          | ✅      | Built-in | ✅ (Docker)  |
+| MetalLB                       | ❌      | ❌       | ✅ (Docker)  |
 | **GitOps**                    |
 | Flux                          | ✅      | ✅       | ✅           |
 | ArgoCD                        | ✅      | ✅       | ✅           |
@@ -50,7 +50,11 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 - "Built-in" means the distribution includes this component by default
 - K3s includes local-path-provisioner, metrics-server, and ServiceLB (load balancer) out of the box
 - Talos CSI support is provider-dependent: Local Path Provisioner for Docker, Hetzner CSI Driver for Hetzner Cloud
-- **LoadBalancer limitations**: Talos on Docker does not currently support LoadBalancer services. The `--load-balancer` flag is forced to `Disabled` for this combination. MetalLB support for Talos+Docker is planned for a future release. Talos on Hetzner uses the cloud provider's load balancer.
+- **LoadBalancer support by distribution**:
+  - **Vanilla (Kind) on Docker**: Uses cloud-provider-kind (runs as external Docker container)
+  - **K3s on Docker**: Uses built-in ServiceLB (Klipper-LB)
+  - **Talos on Docker**: Uses MetalLB with default IP pool (172.18.255.200-172.18.255.250)
+  - **Talos on Hetzner**: Uses Hetzner Cloud Load Balancer (cloud provider integration)
 
 ## Secret Management × Provider Matrix
 
