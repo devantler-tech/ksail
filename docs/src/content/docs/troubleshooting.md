@@ -221,7 +221,7 @@ ksail workload describe svc my-app
 ksail cluster init --distribution Vanilla --load-balancer Enabled
 ksail cluster create
 # Or update existing cluster:
-# Edit ksail.yaml: loadBalancer: Enabled
+# Edit ksail.yaml: loadBalancer: Enabled  # enables cloud-provider-kind for Vanilla (Kind)
 ksail cluster update
 
 # 4. For K3s - verify ServiceLB pods are running
@@ -232,13 +232,13 @@ ksail workload get pods -n kube-system -l svccontroller.k3s.cattle.io/svcname=my
 ksail workload port-forward svc/my-app 8080:80
 
 # 6. Check controller logs
-# For K3s:
+# For K3s (ServiceLB):
 ksail workload logs -n kube-system -l app=svclb-my-app
 
 # For Vanilla (cloud-provider-kind runs as Docker container):
 docker logs ksail-cloud-provider-kind
 
-# For Talos on Hetzner:
+# For Talos on Hetzner (hcloud Cloud Controller Manager):
 ksail workload logs -n kube-system daemonset/hcloud-cloud-controller-manager
 ```
 
@@ -264,14 +264,14 @@ docker ps | grep ksail-cloud-provider-kind
 docker logs ksail-cloud-provider-kind | tail -n 50
 
 # 5. Restart LoadBalancer controller
-# For K3s:
+# For K3s (ServiceLB):
 ksail workload delete pod -n kube-system -l app=svclb-my-app
 
 # For Vanilla (Kind with cloud-provider-kind):
 docker restart ksail-cloud-provider-kind
 
-# For Talos×Docker with MetalLB (planned):
-# MetalLB is not yet implemented for Talos×Docker
+# Talos×Docker:
+# Talos×Docker LoadBalancer support is not available; use a supported provider (e.g., Hetzner) for cloud LBs.
 ```
 
 ### Cloud Provider Load Balancer Errors
@@ -355,8 +355,7 @@ ksail workload get endpoints my-app
 # 1. List all LoadBalancer services
 ksail workload get svc -A | grep LoadBalancer
 
-# 2. Check for port conflicts (each service needs unique port)
-# For Vanilla with cloud-provider-kind, ports are mapped to host
+# 2. Check for port conflicts (on Vanilla with cloud-provider-kind, each service uses a distinct host port)
 
 # 3. Use different ports or NodePort as alternative
 ```

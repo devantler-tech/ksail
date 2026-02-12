@@ -127,7 +127,7 @@ For Vanilla (Kind) on Docker, KSail starts the `cloud-provider-kind` component (
 
 **Quick setup examples:**
 
-``````bash
+```bash
 # Vanilla with LoadBalancer
 ksail cluster init --distribution Vanilla --load-balancer Enabled
 
@@ -137,7 +137,7 @@ ksail cluster init --distribution K3s
 # Talos on Hetzner with LoadBalancer (default)
 export HCLOUD_TOKEN="your-token"
 ksail cluster init --distribution Talos --provider Hetzner
-``````
+```
 
 **Talos on Docker limitations:**
 
