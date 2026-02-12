@@ -861,11 +861,11 @@ func TestLoadBalancer_EffectiveValue(t *testing.T) {
 			expected:     v1alpha1.LoadBalancerDisabled,
 		},
 		{
-			name:         "talos_docker_enabled_resolves_to_disabled",
+			name:         "talos_docker_enabled_passes_through",
 			lb:           v1alpha1.LoadBalancerEnabled,
 			distribution: v1alpha1.DistributionTalos,
 			provider:     v1alpha1.ProviderDocker,
-			expected:     v1alpha1.LoadBalancerDisabled,
+			expected:     v1alpha1.LoadBalancerEnabled,
 		},
 		{
 			name:         "talos_docker_disabled_resolves_to_disabled",
