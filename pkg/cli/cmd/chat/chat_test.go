@@ -790,109 +790,111 @@ func assertAskModeAllowsReadTool(t *testing.T, metadata map[string]toolgen.ToolD
 	}
 }
 
-// TestLoadChatConfig verifies that chat configuration is loaded correctly from ksail.yaml.
-func TestLoadChatConfig(t *testing.T) {
-	tests := []struct {
-name                    string
-yamlContent             string
-expectModel             string
-expectReasoningEffort   string
-}{
-{
-name: "both model and reasoningEffort set",
-yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+//nolint:funlen // Test data structure
+func getLoadChatConfigTests() []struct {
+	name                  string
+	yamlContent           string
+	expectModel           string
+	expectReasoningEffort string
+} {
+	return []struct {
+		name                  string
+		yamlContent           string
+		expectModel           string
+		expectReasoningEffort string
+	}{
+		{
+			name: "both model and reasoningEffort set",
+			yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
 kind: Cluster
 spec:
   chat:
     model: gpt-5
     reasoningEffort: high
 `,
-expectModel:           "gpt-5",
-expectReasoningEffort: "high",
-},
-{
-name: "only model set",
-yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+			expectModel:           "gpt-5",
+			expectReasoningEffort: "high",
+		},
+		{
+			name: "only model set",
+			yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
 kind: Cluster
 spec:
   chat:
     model: claude-sonnet-4.5
 `,
-expectModel:           "claude-sonnet-4.5",
-expectReasoningEffort: "",
-},
-{
-name: "only reasoningEffort set",
-yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+			expectModel:           "claude-sonnet-4.5",
+			expectReasoningEffort: "",
+		},
+		{
+			name: "only reasoningEffort set",
+			yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
 kind: Cluster
 spec:
   chat:
     reasoningEffort: medium
 `,
-expectModel:           "",
-expectReasoningEffort: "medium",
-},
-{
-name: "empty chat spec",
-yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+			expectModel:           "",
+			expectReasoningEffort: "medium",
+		},
+		{
+			name: "empty chat spec",
+			yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
 kind: Cluster
 spec:
   chat: {}
 `,
-expectModel:           "",
-expectReasoningEffort: "",
-},
-{
-name: "no chat spec",
-yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+			expectModel:           "",
+			expectReasoningEffort: "",
+		},
+		{
+			name: "no chat spec",
+			yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
 kind: Cluster
 spec: {}
 `,
-expectModel:           "",
-expectReasoningEffort: "",
-},
+			expectModel:           "",
+			expectReasoningEffort: "",
+		},
+	}
 }
 
-	for _, tt := range tests {
+// TestLoadChatConfig verifies that chat configuration is loaded correctly from ksail.yaml.
+//
+//nolint:paralleltest // Cannot use t.Parallel() because subtests use t.Chdir()
+func TestLoadChatConfig(t *testing.T) {
+	for _, tt := range getLoadChatConfigTests() {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create temp directory for test
-			tmpDir := t.TempDir()
-
-// Save original working directory
-origDir, err := os.Getwd()
-if err != nil {
-t.Fatalf("Failed to get current directory: %v", err)
+			runLoadChatConfigTest(t, tt.yamlContent, tt.expectModel, tt.expectReasoningEffort)
+		})
+	}
 }
 
-// Change to temp directory
-if err := os.Chdir(tmpDir); err != nil {
-t.Fatalf("Failed to change directory: %v", err)
-}
+func runLoadChatConfigTest(t *testing.T, yamlContent, expectModel, expectReasoningEffort string) {
+	t.Helper()
 
-// Restore original directory after test
-defer func() {
-if err := os.Chdir(origDir); err != nil {
-t.Errorf("Failed to restore directory: %v", err)
-}
-}()
+	// Create temp directory for test
+	tmpDir := t.TempDir()
 
-// Write ksail.yaml
-if err := os.WriteFile("ksail.yaml", []byte(tt.yamlContent), 0600); err != nil {
-t.Fatalf("Failed to write config file: %v", err)
-}
+	// Change to temp directory (saves original and restores automatically)
+	t.Chdir(tmpDir)
 
-// Load config
-cfg := chat.LoadChatConfig()
+	// Write ksail.yaml
+	err := os.WriteFile("ksail.yaml", []byte(yamlContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
 
-// Verify model
-if cfg.Model != tt.expectModel {
-t.Errorf("Expected model %q, got %q", tt.expectModel, cfg.Model)
-}
+	// Load config
+	cfg := chat.GetLoadChatConfig()()
 
-// Verify reasoningEffort
-if cfg.ReasoningEffort != tt.expectReasoningEffort {
-t.Errorf("Expected reasoningEffort %q, got %q", tt.expectReasoningEffort, cfg.ReasoningEffort)
-}
-})
-}
+	// Verify model
+	if cfg.Model != expectModel {
+		t.Errorf("Expected model %q, got %q", expectModel, cfg.Model)
+	}
+
+	// Verify reasoningEffort
+	if cfg.ReasoningEffort != expectReasoningEffort {
+		t.Errorf("Expected reasoningEffort %q, got %q", expectReasoningEffort, cfg.ReasoningEffort)
+	}
 }
