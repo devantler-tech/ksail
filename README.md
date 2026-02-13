@@ -13,8 +13,6 @@ KSail is a tool that bundles common Kubernetes tooling into a single binary. It 
 
 Setting up and operating Kubernetes clusters is a skill of its own, often requiring juggling multiple CLI tools, writing bespoke scripts, and dealing with inconsistent developer workflows, all determined by the specific project. This complexity and inconsistency slow down development, make Kubernetes hard for newcomers, and make it difficult to maintain reproducible environments and ways of working. KSail removes the tooling overhead so you can focus on your workloads.
 
-**No Vendor Lock-In:** KSail works with native distribution configurations (`kind.yaml`, `k3d.yaml`, Talos patches) — you can run the same cluster outside KSail using Kind, K3d, or Talos directly. KSail is a superset that provides a unified workflow across distributions while preserving full compatibility with the underlying tools.
-
 ## Key Features
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
