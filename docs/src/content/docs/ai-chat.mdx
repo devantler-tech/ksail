@@ -139,17 +139,17 @@ The chat interface displays real-time quota information in the footer, right-ali
 The quota indicator shows:
 - **Used/Total requests** — Current usage against your entitlement (e.g., `45/100 reqs`)
 - **Remaining percentage** — How much quota remains (e.g., `55%`)
-- **Reset date** — When your quota renews (e.g., `resets Feb 15`)
+- **Reset date (when available)** — When your quota renews (e.g., `resets Feb 15`)
 
-**Example:** `45/100 reqs · 55% · resets Feb 15`
+**Example (with reset date available):** `45/100 reqs · 55% · resets Feb 15`
 
 ### Display Behavior
 
 - Quota appears automatically when usage data is available from GitHub Copilot
 - Only the "premium" quota category is shown (unlimited categories are hidden for clarity)
 - Help text takes priority — if the terminal is too narrow, quota is hidden to preserve help visibility
+- Reset date is included only when provided by GitHub Copilot
 - Updates in real-time as you interact with the assistant
-
 ## Mode Comparison
 
 | Feature | Agent Mode | Plan Mode | Ask Mode |
