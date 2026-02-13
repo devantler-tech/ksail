@@ -7,11 +7,13 @@ This guide covers detecting and eliminating code duplication in Go projects.
 ### Using jscpd
 
 Run duplication detection:
+
 ```bash
 jscpd --config .jscpd.json
 ```
 
 This will generate:
+
 - Console output with duplication statistics
 - HTML report in `report/` directory
 - Markdown report for CI/CD
@@ -19,6 +21,7 @@ This will generate:
 ### Manual Detection
 
 Look for:
+
 - Copy-pasted functions with minor variations
 - Similar error handling patterns
 - Repeated validation logic
@@ -31,6 +34,7 @@ Look for:
 **Pattern:** Multiple functions with identical or nearly identical code.
 
 **Strategy:**
+
 1. Identify the common logic
 2. Extract to a shared function
 3. Parameterize the differences
@@ -39,6 +43,7 @@ Look for:
 **Example:**
 
 Before:
+
 ```go
 func ValidateUser(user User) error {
     if user.Name == "" {
@@ -62,6 +67,7 @@ func ValidateProduct(product Product) error {
 ```
 
 After:
+
 ```go
 func ValidateRequired(fieldName, value string) error {
     if value == "" {
@@ -96,6 +102,7 @@ func ValidateProduct(product Product) error {
 **Pattern:** Similar code across multiple packages.
 
 **Strategy:**
+
 1. Create a shared utility package (e.g., `pkg/utils/validation`)
 2. Move common functions there
 3. Export functions with clear names
@@ -104,6 +111,7 @@ func ValidateProduct(product Product) error {
 **Example:**
 
 Before (in multiple packages):
+
 ```go
 // pkg/user/validator.go
 func isValidEmail(email string) bool {
@@ -117,6 +125,7 @@ func isValidEmail(email string) bool {
 ```
 
 After:
+
 ```go
 // pkg/utils/validation/email.go
 package validation
@@ -144,6 +153,7 @@ func ValidateUser(user User) error {
 **Pattern:** Repetitive test cases or conditional logic.
 
 **Strategy:**
+
 1. Define a struct with test data
 2. Create a slice of test cases
 3. Loop through cases
@@ -152,6 +162,7 @@ func ValidateUser(user User) error {
 **Example:**
 
 Before:
+
 ```go
 func TestValidation(t *testing.T) {
     err := Validate("")
@@ -172,6 +183,7 @@ func TestValidation(t *testing.T) {
 ```
 
 After:
+
 ```go
 func TestValidation(t *testing.T) {
     tests := []struct {
@@ -200,6 +212,7 @@ func TestValidation(t *testing.T) {
 **Pattern:** Multiple types with similar method implementations.
 
 **Strategy:**
+
 1. Define an interface for common behavior
 2. Implement the interface on each type
 3. Write shared functions that accept the interface
@@ -208,6 +221,7 @@ func TestValidation(t *testing.T) {
 **Example:**
 
 Before:
+
 ```go
 func SaveUser(user User) error {
     if err := validateUser(user); err != nil {
@@ -227,6 +241,7 @@ func SaveProduct(product Product) error {
 ```
 
 After:
+
 ```go
 type Validatable interface {
     Validate() error
@@ -269,24 +284,29 @@ func Save(entity Saveable) error {
 After eliminating duplication:
 
 1. **Build:** Ensure code compiles
+
    ```bash
    go build ./...
    ```
 
 2. **Test:** Verify existing tests pass
+
    ```bash
    go test ./...
    ```
 
 3. **Lint:** Check for new issues
+
    ```bash
    golangci-lint run --timeout 5m
    ```
 
 4. **Duplication:** Verify duplication is reduced
+
    ```bash
    jscpd --config .jscpd.json
    ```
+
    Check that the duplication report shows improvement.
 
 ## Best Practices

@@ -9,6 +9,7 @@ This guide covers common code smells in Go and how to refactor them incrementall
 **Smell:** Functions exceeding ~50 lines or handling multiple responsibilities.
 
 **Detection:**
+
 ```bash
 # Find long functions
 grep -r "^func " --include="*.go" | while read line; do
@@ -19,6 +20,7 @@ done
 ```
 
 **Refactoring Strategy:**
+
 1. Identify logical blocks within the function
 2. Extract helper functions for each block
 3. Name helpers descriptively based on what they do
@@ -28,6 +30,7 @@ done
 **Example:**
 
 Before:
+
 ```go
 func ProcessOrder(order Order) error {
     // Validate order (10 lines)
@@ -52,6 +55,7 @@ func ProcessOrder(order Order) error {
 ```
 
 After:
+
 ```go
 func ProcessOrder(order Order) error {
     if err := validateOrder(order); err != nil {
@@ -97,6 +101,7 @@ func saveOrder(order Order) error {
 **Smell:** Functions with more than 3-4 levels of nesting.
 
 **Refactoring Strategy:**
+
 1. Use early returns (guard clauses) to reduce nesting
 2. Invert conditions where appropriate
 3. Extract nested logic into separate functions
@@ -105,6 +110,7 @@ func saveOrder(order Order) error {
 **Example:**
 
 Before:
+
 ```go
 func ProcessFile(path string) error {
     if fileExists(path) {
@@ -129,6 +135,7 @@ func ProcessFile(path string) error {
 ```
 
 After:
+
 ```go
 func ProcessFile(path string) error {
     if !fileExists(path) {
@@ -157,6 +164,7 @@ func ProcessFile(path string) error {
 **Smell:** Using primitive types (string, int) instead of domain types.
 
 **Refactoring Strategy:**
+
 1. Create domain types for concepts
 2. Add validation in constructors
 3. Add methods to domain types
@@ -165,6 +173,7 @@ func ProcessFile(path string) error {
 **Example:**
 
 Before:
+
 ```go
 func CreateUser(email string, age int) error {
     if !strings.Contains(email, "@") {
@@ -179,6 +188,7 @@ func CreateUser(email string, age int) error {
 ```
 
 After:
+
 ```go
 type Email string
 
@@ -215,26 +225,31 @@ func CreateUser(email Email, age Age) error {
 After each refactoring:
 
 1. **Build:** Ensure code compiles
+
    ```bash
    go build ./...
    ```
 
 2. **Test:** Verify existing tests pass
+
    ```bash
    go test ./...
    ```
 
 3. **Lint:** Check for new issues
+
    ```bash
    golangci-lint run --timeout 5m
    ```
 
 4. **Format:** Apply formatting
+
    ```bash
    golangci-lint fmt
    ```
 
 5. **Duplication:** Check for new duplication
+
    ```bash
    jscpd --config .jscpd.json
    ```

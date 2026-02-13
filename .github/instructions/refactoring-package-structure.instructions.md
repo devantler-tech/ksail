@@ -9,11 +9,13 @@ This guide covers improving package organization, reducing coupling, and managin
 **Principle:** Related functionality should be grouped together.
 
 **Detection:**
+
 - Packages with many unrelated functions
 - Functions that don't share data or behavior
 - Files in a package that don't import each other
 
 **Strategy:**
+
 1. Group by feature/domain, not by layer (avoid generic names like `utils`, `helpers`, `common`)
 2. Keep related types and functions together
 3. Split large packages into sub-packages when they grow beyond ~10-15 files
@@ -21,6 +23,7 @@ This guide covers improving package organization, reducing coupling, and managin
 **Example:**
 
 Before:
+
 ```
 pkg/
   utils/
@@ -31,6 +34,7 @@ pkg/
 ```
 
 After:
+
 ```
 pkg/
   stringutil/
@@ -52,6 +56,7 @@ pkg/
 **Principle:** Packages should depend on as few other packages as possible.
 
 **Detection:**
+
 ```bash
 # Analyze package dependencies
 go mod graph | grep "github.com/devantler-tech/ksail"
@@ -61,6 +66,7 @@ go list -f '{{.ImportPath}} {{.Imports}}' ./... | grep -E "pkg/a.*pkg/b|pkg/b.*p
 ```
 
 **Strategy:**
+
 1. Define interfaces in the consuming package, not the implementing package
 2. Use dependency injection
 3. Break circular dependencies by extracting shared types to a new package
@@ -69,6 +75,7 @@ go list -f '{{.ImportPath}} {{.Imports}}' ./... | grep -E "pkg/a.*pkg/b|pkg/b.*p
 **Example:**
 
 Before (circular dependency):
+
 ```go
 // pkg/user/user.go
 package user
@@ -90,6 +97,7 @@ func SendWelcome(u user.User) error {
 ```
 
 After (circular dependency broken):
+
 ```go
 // pkg/types/email.go
 package types
@@ -120,6 +128,7 @@ func SendWelcome(email types.EmailAddress, name string) error {
 **Principle:** Interfaces should be small and focused. Define interfaces where they're used, not where they're implemented.
 
 **Strategy:**
+
 1. Keep interfaces to 1-3 methods
 2. Define interfaces in the consuming package
 3. Let implementing packages satisfy the interface implicitly
@@ -128,6 +137,7 @@ func SendWelcome(email types.EmailAddress, name string) error {
 **Example:**
 
 Before:
+
 ```go
 // pkg/storage/storage.go
 package storage
@@ -152,6 +162,7 @@ type Cache struct {
 ```
 
 After:
+
 ```go
 // pkg/cache/cache.go
 package cache
@@ -185,12 +196,14 @@ func (s *Storage) Delete(key string) error { /* ... */ }
 **Smell:** A package with too many files or responsibilities.
 
 **Detection:**
+
 ```bash
 # Count files per package
 find . -name "*.go" -not -path "*/vendor/*" | sed 's|/[^/]*$||' | sort | uniq -c | sort -rn | head -20
 ```
 
 **Refactoring:**
+
 1. Identify logical groupings within the package
 2. Create sub-packages for each group
 3. Move related files to sub-packages
@@ -201,6 +214,7 @@ find . -name "*.go" -not -path "*/vendor/*" | sed 's|/[^/]*$||' | sort | uniq -c
 **Smell:** Packages named `utils`, `helpers`, `common`.
 
 **Refactoring:**
+
 1. Rename based on what the package provides (e.g., `stringutil`, `validation`)
 2. Split by domain if the package has multiple concerns
 3. Move functions closer to where they're used if they're only used in one place
@@ -210,6 +224,7 @@ find . -name "*.go" -not -path "*/vendor/*" | sed 's|/[^/]*$||' | sort | uniq -c
 **Smell:** Implementation details exposed in public API.
 
 **Refactoring:**
+
 1. Use unexported types for internal implementation
 2. Define public interfaces that hide implementation
 3. Return interfaces, accept concrete types (when appropriate)
@@ -217,6 +232,7 @@ find . -name "*.go" -not -path "*/vendor/*" | sed 's|/[^/]*$||' | sort | uniq -c
 **Example:**
 
 Before:
+
 ```go
 // pkg/database/database.go
 package database
@@ -233,6 +249,7 @@ func NewDB(connStr string) (*DB, error) {
 ```
 
 After:
+
 ```go
 // pkg/database/database.go
 package database
@@ -293,26 +310,31 @@ go mod graph | dot -T svg -o deps.svg
 After package refactoring:
 
 1. **Build:** Ensure code compiles
+
    ```bash
    go build ./...
    ```
 
 2. **Test:** Verify existing tests pass
+
    ```bash
    go test ./...
    ```
 
 3. **Check imports:** Ensure no circular dependencies
+
    ```bash
    go list -f '{{.ImportPath}} {{.Imports}}' ./... | grep circular || echo "No circular deps"
    ```
 
 4. **Lint:** Check for new issues
+
    ```bash
    golangci-lint run --timeout 5m
    ```
 
 5. **Verify usage:** Ensure public API hasn't changed unexpectedly
+
    ```bash
    # Check for breaking changes in go.mod
    go list -m -versions all
