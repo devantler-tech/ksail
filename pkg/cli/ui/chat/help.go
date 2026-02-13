@@ -149,34 +149,10 @@ func (m *Model) helpOverlayExtraHeight() int {
 
 // countFlowLines counts how many lines are needed to flow parts within maxWidth.
 func countFlowLines(parts []string, maxWidth int) int {
-	lines := 1
-	lineWidth := 0
-	sepWidth := lipgloss.Width(helpSep)
+	// Use a very large maxLines so flowHelpParts doesn't truncate.
+	result := flowHelpParts(parts, maxWidth, len(parts))
 
-	for _, part := range parts {
-		partWidth := lipgloss.Width(part)
-		needsSep := lineWidth > 0
-
-		totalNeeded := partWidth
-		if needsSep {
-			totalNeeded += sepWidth
-		}
-
-		if needsSep && lineWidth+totalNeeded > maxWidth {
-			lines++
-			lineWidth = partWidth
-
-			continue
-		}
-
-		if needsSep {
-			lineWidth += sepWidth
-		}
-
-		lineWidth += partWidth
-	}
-
-	return lines
+	return strings.Count(result, "\n") + 1
 }
 
 // flowHelpParts arranges help parts into lines that wrap within maxWidth,
