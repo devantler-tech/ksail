@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"context"
 	"strings"
 	"time"
 
@@ -209,7 +208,7 @@ func (m *Model) handleOpenSessionPicker() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	sessions, _ := ListSessions(context.Background(), m.client, m.theme.SessionDir)
+	sessions, _ := ListSessions(m.ctx, m.client, m.theme.SessionDir)
 	m.availableSessions = sessions
 	m.filteredSessions = sessions // Start with all sessions
 	m.sessionFilterText = ""      // Reset filter

@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -146,7 +145,7 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 	m.sessionConfig.Model = newModelID
 	m.currentModel = newModelID
 
-	session, err := m.client.CreateSession(context.Background(), m.sessionConfig)
+	session, err := m.client.CreateSession(m.ctx, m.sessionConfig)
 	if err != nil {
 		m.err = fmt.Errorf("failed to switch model: %w", err)
 		m.showModelPicker = false

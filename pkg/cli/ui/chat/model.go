@@ -728,7 +728,7 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		}
 
 		// Send the message
-		_, err := session.Send(context.Background(), copilot.MessageOptions{Prompt: prompt})
+		_, err := session.Send(m.ctx, copilot.MessageOptions{Prompt: prompt})
 		if err != nil {
 			// Clean up on error
 			m.unsubscribeMu.Lock()
