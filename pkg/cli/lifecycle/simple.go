@@ -173,6 +173,8 @@ func clusterNameFromDistConfig(distCfg *clusterprovisioner.DistributionConfig) s
 		return distCfg.K3d.Name
 	case distCfg.Talos != nil && distCfg.Talos.GetClusterName() != "":
 		return distCfg.Talos.GetClusterName()
+	case distCfg.VCluster != nil && distCfg.VCluster.Name != "":
+		return distCfg.VCluster.Name
 	default:
 		return ""
 	}

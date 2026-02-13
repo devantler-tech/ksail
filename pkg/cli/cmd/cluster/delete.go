@@ -185,6 +185,16 @@ func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *cluster
 		return clusterInfo
 	}
 
+	// Try to detect using VCluster context naming convention
+	if strings.TrimSpace(resolved.ClusterName) != "" {
+		contextName = "vcluster-docker_" + resolved.ClusterName
+	}
+
+	clusterInfo, detectErr = clusterdetector.DetectInfo(resolved.KubeconfigPath, contextName)
+	if detectErr == nil && clusterInfo != nil {
+		return clusterInfo
+	}
+
 	return nil
 }
 

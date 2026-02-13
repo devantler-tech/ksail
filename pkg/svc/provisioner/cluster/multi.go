@@ -38,6 +38,7 @@ func supportedDistributions() []v1alpha1.Distribution {
 		v1alpha1.DistributionVanilla,
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionTalos,
+		v1alpha1.DistributionVCluster,
 	}
 }
 

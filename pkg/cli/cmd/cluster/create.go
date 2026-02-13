@@ -399,6 +399,11 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 		ctx.TalosConfig = newConfig
 	}
 
+	// Update VCluster config
+	if ctx.VClusterConfig != nil {
+		ctx.VClusterConfig.Name = name
+	}
+
 	// Update the ksail.yaml context to match the distribution pattern
 	if ctx.ClusterCfg != nil {
 		dist := ctx.ClusterCfg.Spec.Cluster.Distribution
