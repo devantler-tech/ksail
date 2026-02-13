@@ -1,0 +1,127 @@
+name: "Daily Refactor - Build Steps"
+description: "Validated build, test, lint, format, and duplication detection steps for KSail"
+
+runs:
+  using: "composite"
+  steps:
+    - name: 📦 Install Dependencies
+      shell: bash
+      run: |
+        {
+          echo "==== Installing Dependencies ===="
+          
+          # Install golangci-lint (v2.9.0+ required for Go 1.26+)
+          echo "Installing golangci-lint v2.9.0..."
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.9.0
+          
+          # Install jscpd for code duplication detection
+          echo "Installing jscpd..."
+          if command -v jscpd &> /dev/null; then
+            echo "jscpd already installed"
+          else
+            # Try local install if global fails
+            npm install --prefix /tmp jscpd || npm install -g jscpd || echo "Warning: jscpd installation failed, duplication check will be skipped"
+          fi
+          
+          echo "✅ Dependencies installed successfully"
+        } | tee -a build-steps.log
+
+    - name: 🏗️ Build
+      shell: bash
+      run: |
+        {
+          echo ""
+          echo "==== Building Go Code ===="
+          # Download dependencies first
+          go mod download
+          go build -v ./...
+          if [ $? -eq 0 ]; then
+            echo "✅ Build succeeded"
+          else
+            echo "❌ Build failed"
+            exit 1
+          fi
+        } | tee -a build-steps.log
+
+    - name: 🧪 Test
+      shell: bash
+      run: |
+        {
+          echo ""
+          echo "==== Running Tests ===="
+          go test -v ./...
+          if [ $? -eq 0 ]; then
+            echo "✅ All tests passed"
+          else
+            echo "❌ Tests failed"
+            exit 1
+          fi
+        } | tee -a build-steps.log
+
+    - name: 🔍 Lint
+      shell: bash
+      run: |
+        {
+          echo ""
+          echo "==== Running golangci-lint ===="
+          $(go env GOPATH)/bin/golangci-lint run --timeout 5m
+          if [ $? -eq 0 ]; then
+            echo "✅ No linting issues found"
+          else
+            echo "❌ Linting issues detected"
+            exit 1
+          fi
+        } | tee -a build-steps.log
+
+    - name: 🎨 Format Check
+      shell: bash
+      run: |
+        {
+          echo ""
+          echo "==== Checking Code Formatting ===="
+          # Run gofmt and check if any files need formatting
+          UNFORMATTED=$(gofmt -l .)
+          if [ -z "$UNFORMATTED" ]; then
+            echo "✅ All files are properly formatted"
+          else
+            echo "❌ The following files need formatting:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+        } | tee -a build-steps.log
+
+    - name: 🔄 Duplication Check
+      shell: bash
+      run: |
+        {
+          echo ""
+          echo "==== Checking Code Duplication ===="
+          if command -v jscpd &> /dev/null; then
+            jscpd --config .jscpd.json
+            if [ $? -eq 0 ]; then
+              echo "✅ No code duplication issues found"
+            else
+              echo "⚠️  Code duplication detected (see report for details)"
+              # Don't fail build on duplication, just warn
+            fi
+          elif [ -x /tmp/node_modules/.bin/jscpd ]; then
+            /tmp/node_modules/.bin/jscpd --config .jscpd.json
+            if [ $? -eq 0 ]; then
+              echo "✅ No code duplication issues found"
+            else
+              echo "⚠️  Code duplication detected (see report for details)"
+            fi
+          else
+            echo "⚠️  jscpd not available, skipping duplication check"
+          fi
+        } | tee -a build-steps.log
+
+    - name: 📋 Summary
+      shell: bash
+      run: |
+        {
+          echo ""
+          echo "==== Build Steps Summary ===="
+          echo "All validation steps completed successfully."
+          echo "Log file: build-steps.log"
+        } | tee -a build-steps.log
