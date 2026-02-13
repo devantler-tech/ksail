@@ -64,6 +64,9 @@ type WorkloadSpec struct {
 // ChatSpec defines AI chat assistant configuration.
 type ChatSpec struct {
 	Model string `json:"model,omitzero" jsonschema:"description=Chat model (empty or 'auto' for API default)"`
+	// ReasoningEffort specifies the reasoning effort level for chat responses.
+	// Valid values: "low", "medium", "high"
+	ReasoningEffort string `json:"reasoningEffort,omitzero" jsonschema:"enum=low,enum=medium,enum=high" jsonschema_description:"Reasoning effort level for chat responses (low, medium, or high)"` //nolint:lll // Long description required for JSON schema
 }
 
 // Connection defines connection options for a KSail cluster.
