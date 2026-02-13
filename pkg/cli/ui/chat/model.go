@@ -35,11 +35,14 @@ const (
 	unknownErrorMsg  = "unknown error"     // fallback when error message is nil
 	toolIDFormat     = "tool-%d"           // format string for generating unique tool IDs (timestamp-based)
 	unknownOperation = "Unknown Operation" // fallback when operation type is unrecognized
-	planModePrefix   = `[PLAN MODE] Research and outline steps to accomplish this task. Do not execute tools or make changes - only describe what you would do:
+	planModePrefix   = `[PLAN MODE] Research and outline steps to accomplish this task. ` +
+		`Do not execute tools or make changes - only describe what you would do:
 
 
 `
-	askModePrefix = `[ASK MODE] You are in read-only investigation mode. Use available read-only tools to research and gather information, then provide a thorough answer. Do NOT execute any tools that create, modify, or delete resources:
+	askModePrefix = `[ASK MODE] You are in read-only investigation mode. ` +
+		`Use available read-only tools to research and gather information, then provide a thorough answer. ` +
+		`Do NOT execute any tools that create, modify, or delete resources:
 
 
 `
