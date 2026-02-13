@@ -79,11 +79,16 @@ func runTUIChat(
 	rootCmd *cobra.Command,
 ) error {
 	allModels, err := client.ListModels(ctx)
+
+	var models []copilot.ModelInfo
 	if err != nil {
-		return fmt.Errorf("failed to list models: %w", err)
+		// ListModels can fail due to backend issues (e.g. 400 from the API).
+		// Fall back gracefully so the TUI still works with the configured model.
+		models = nil
+	} else {
+		models = filterEnabledModels(allModels)
 	}
 
-	models := filterEnabledModels(allModels)
 	currentModel := sessionConfig.Model
 	eventChan := make(chan tea.Msg, eventChannelBuffer)
 	outputChan := make(chan toolgen.OutputChunk, outputChannelBuffer)
