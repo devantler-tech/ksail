@@ -217,6 +217,15 @@
             "model": {
               "type": "string",
               "description": "Chat model (empty or 'auto' for API default)"
+            },
+            "reasoningEffort": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "description": "Reasoning effort level (low"
             }
           },
           "additionalProperties": false,
