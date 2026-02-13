@@ -99,3 +99,37 @@ type copyFeedbackClearMsg struct{}
 // snapshotRewindMsg signals that the session was rewound to a previous state.
 // This can happen when the user discards changes or reverts to a checkpoint.
 type snapshotRewindMsg struct{}
+
+// usageMsg carries token usage statistics from the assistant.
+type usageMsg struct {
+	model        string
+	inputTokens  float64
+	outputTokens float64
+}
+
+// compactionStartMsg signals that context compaction has started.
+type compactionStartMsg struct{}
+
+// compactionCompleteMsg signals that context compaction has completed.
+type compactionCompleteMsg struct {
+	success              bool
+	preCompactionTokens  float64
+	postCompactionTokens float64
+	tokensRemoved        float64
+}
+
+// intentMsg carries the assistant's intent/plan for the current turn.
+type intentMsg struct {
+	content string
+}
+
+// modelChangeMsg signals that the session's model was changed server-side.
+type modelChangeMsg struct {
+	previousModel string
+	newModel      string
+}
+
+// shutdownMsg signals that the session has ended.
+type shutdownMsg struct {
+	shutdownType string
+}

@@ -400,3 +400,64 @@ func (m *Model) cleanup() {
 	// Drain any remaining events to prevent blocking
 	m.drainEventChannel()
 }
+
+// handleUsage handles token usage events from the assistant.
+func (m *Model) handleUsage(msg usageMsg) (tea.Model, tea.Cmd) {
+	m.lastUsageModel = msg.model
+	m.lastInputTokens = msg.inputTokens
+	m.lastOutputTokens = msg.outputTokens
+
+	return m, m.waitForEvent()
+}
+
+// handleCompactionStart handles context compaction start events.
+func (m *Model) handleCompactionStart() (tea.Model, tea.Cmd) {
+	m.isCompacting = true
+	m.updateViewportContent()
+
+	return m, m.waitForEvent()
+}
+
+// handleCompactionComplete handles context compaction completion events.
+func (m *Model) handleCompactionComplete(msg compactionCompleteMsg) (tea.Model, tea.Cmd) {
+	m.isCompacting = false
+
+	_ = msg // Compaction stats (success, tokens removed) available for future display
+
+	m.updateViewportContent()
+
+	return m, m.waitForEvent()
+}
+
+// handleIntent handles assistant intent events (planning/thinking indicators).
+func (m *Model) handleIntent(msg intentMsg) (tea.Model, tea.Cmd) {
+	// Append intent content as reasoning-style content in the current response
+	if msg.content != "" && len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		if last.role == roleAssistant && last.isStreaming {
+			m.currentResponse.WriteString(msg.content)
+			last.content = m.currentResponse.String()
+			m.updateViewportContent()
+		}
+	}
+
+	return m, m.waitForEvent()
+}
+
+// handleModelChange handles server-side model change events.
+func (m *Model) handleModelChange(msg modelChangeMsg) (tea.Model, tea.Cmd) {
+	if msg.newModel != "" {
+		m.currentModel = msg.newModel
+	}
+
+	return m, m.waitForEvent()
+}
+
+// handleShutdown handles session shutdown events.
+func (m *Model) handleShutdown(_ shutdownMsg) (tea.Model, tea.Cmd) {
+	m.isStreaming = false
+	m.cleanup()
+	m.updateViewportContent()
+
+	return m, nil
+}

@@ -236,6 +236,14 @@ type Model struct {
 	unsubscribe     func()     // function to unsubscribe from session events
 	unsubscribeMu   sync.Mutex // protects unsubscribe access
 
+	// Token usage tracking (updated via AssistantUsage events)
+	lastUsageModel   string  // model used in the last usage event
+	lastInputTokens  float64 // input tokens from the last usage event
+	lastOutputTokens float64 // output tokens from the last usage event
+
+	// Compaction state (updated via SessionCompaction events)
+	isCompacting bool // true while context compaction is in progress
+
 	// Dimensions
 	width  int
 	height int
@@ -433,7 +441,9 @@ func (m *Model) Update(
 	case streamChunkMsg, assistantMessageMsg, toolStartMsg, toolEndMsg,
 		toolOutputChunkMsg, ToolOutputChunkMsg, permissionRequestMsg,
 		PermissionRequestMsg, streamEndMsg, turnStartMsg, turnEndMsg,
-		reasoningMsg, abortMsg, snapshotRewindMsg, streamErrMsg:
+		reasoningMsg, abortMsg, snapshotRewindMsg, streamErrMsg,
+		usageMsg, compactionStartMsg, compactionCompleteMsg,
+		intentMsg, modelChangeMsg, shutdownMsg:
 		return m.handleStreamEvent(msg)
 
 	case copyFeedbackClearMsg:
@@ -495,7 +505,7 @@ func (m *Model) View() string {
 
 // handleStreamEvent dispatches streaming-related events to their specific handlers.
 //
-//nolint:cyclop // type-switch dispatcher for stream messages
+//nolint:cyclop,funlen // type-switch dispatcher for stream messages
 func (m *Model) handleStreamEvent(
 	msg tea.Msg,
 ) (tea.Model, tea.Cmd) {
@@ -550,6 +560,24 @@ func (m *Model) handleStreamEvent(
 
 	case streamErrMsg:
 		return m.handleStreamErr(msg)
+
+	case usageMsg:
+		return m.handleUsage(msg)
+
+	case compactionStartMsg:
+		return m.handleCompactionStart()
+
+	case compactionCompleteMsg:
+		return m.handleCompactionComplete(msg)
+
+	case intentMsg:
+		return m.handleIntent(msg)
+
+	case modelChangeMsg:
+		return m.handleModelChange(msg)
+
+	case shutdownMsg:
+		return m.handleShutdown(msg)
 
 	default:
 		return m, nil
@@ -700,7 +728,7 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		}
 
 		// Send the message
-		_, err := session.Send(copilot.MessageOptions{Prompt: prompt})
+		_, err := session.Send(context.Background(), copilot.MessageOptions{Prompt: prompt})
 		if err != nil {
 			// Clean up on error
 			m.unsubscribeMu.Lock()

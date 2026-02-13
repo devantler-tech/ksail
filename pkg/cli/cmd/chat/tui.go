@@ -63,6 +63,9 @@ func setupChatTools(
 	)
 	sessionConfig.Tools = tools
 	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan, yoloModeRef)
+	sessionConfig.Hooks = &copilot.SessionHooks{
+		OnPreToolUse: BuildPreToolUseHook(chatModeRef, toolMetadata),
+	}
 
 	return chatModeRef, yoloModeRef
 }
@@ -75,7 +78,7 @@ func runTUIChat(
 	timeout time.Duration,
 	rootCmd *cobra.Command,
 ) error {
-	allModels, err := client.ListModels()
+	allModels, err := client.ListModels(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list models: %w", err)
 	}
@@ -89,7 +92,7 @@ func runTUIChat(
 		sessionConfig, rootCmd, eventChan, outputChan,
 	)
 
-	session, err := client.CreateSession(sessionConfig)
+	session, err := client.CreateSession(ctx, sessionConfig)
 	if err != nil {
 		close(outputChan)
 		forwarderWg.Wait()
