@@ -85,6 +85,8 @@ func TestInstaller_Uninstall_ContextCancellation(t *testing.T) {
 	err := installer.Uninstall(ctx)
 
 	require.Error(t, err)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Contains(t, err.Error(), "uninstall")
 }
 
 // Skipped: Install requires a real Kubernetes cluster (ensurePrivilegedNamespace calls k8s.NewClientset).
