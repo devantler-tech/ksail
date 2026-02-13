@@ -205,15 +205,16 @@ type Model struct {
 	spinner  spinner.Model
 
 	// State
-	messages         []message
-	currentResponse  strings.Builder
-	isStreaming      bool
-	justCompleted    bool // true when a response just finished, shows "Ready" indicator
-	showCopyFeedback bool // true when copy feedback should be shown briefly
-	userScrolled     bool // true when user has scrolled away from bottom (pause auto-scroll)
-	err              error
-	quitting         bool
-	ready            bool
+	messages                     []message
+	currentResponse              strings.Builder
+	isStreaming                  bool
+	justCompleted                bool // true when a response just finished, shows "Ready" indicator
+	showCopyFeedback             bool // true when copy feedback should be shown briefly
+	showModelUnavailableFeedback bool // true when model-unavailable feedback should be shown
+	userScrolled                 bool // true when user has scrolled away from bottom (pause auto-scroll)
+	err                          error
+	quitting                     bool
+	ready                        bool
 
 	// Configuration
 	theme        ThemeConfig
@@ -448,6 +449,11 @@ func (m *Model) Update(
 
 	case copyFeedbackClearMsg:
 		m.showCopyFeedback = false
+
+		return m, nil
+
+	case modelUnavailableClearMsg:
+		m.showModelUnavailableFeedback = false
 
 		return m, nil
 

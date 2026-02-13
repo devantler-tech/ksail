@@ -9,6 +9,20 @@ import (
 	copilot "github.com/github/copilot-sdk/go"
 )
 
+// FilterEnabledModels returns only models with an enabled policy state.
+// This is used by the lazy-load model picker and can be called from outside the package.
+func FilterEnabledModels(allModels []copilot.ModelInfo) []copilot.ModelInfo {
+	var models []copilot.ModelInfo
+
+	for _, m := range allModels {
+		if m.Policy != nil && m.Policy.State == "enabled" {
+			models = append(models, m)
+		}
+	}
+
+	return models
+}
+
 // handleModelPickerKey handles keyboard input when the model picker is active.
 func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	totalItems := len(m.filteredModels) + 1 // auto + filtered models

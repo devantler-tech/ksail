@@ -96,6 +96,9 @@ type PermissionRequestMsg struct {
 // copyFeedbackClearMsg signals that the copy feedback should be hidden.
 type copyFeedbackClearMsg struct{}
 
+// modelUnavailableClearMsg signals that the model-unavailable feedback should be hidden.
+type modelUnavailableClearMsg struct{}
+
 // snapshotRewindMsg signals that the session was rewound to a previous state.
 // This can happen when the user discards changes or reverts to a checkpoint.
 type snapshotRewindMsg struct{}

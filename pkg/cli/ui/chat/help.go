@@ -222,11 +222,13 @@ func (m *Model) getDefaultHelpParts() []string {
 		parts = append(parts, m.styles.helpKey.Render("^T")+" tools")
 	}
 
-	parts = append(parts,
-		m.styles.helpKey.Render("^H")+" sessions",
-		m.styles.helpKey.Render("^O")+" model",
-		m.styles.helpKey.Render("^N")+" new",
-	)
+	parts = append(parts, m.styles.helpKey.Render("^H")+" sessions")
+
+	if len(m.availableModels) > 0 {
+		parts = append(parts, m.styles.helpKey.Render("^O")+" model")
+	}
+
+	parts = append(parts, m.styles.helpKey.Render("^N")+" new")
 
 	return parts
 }

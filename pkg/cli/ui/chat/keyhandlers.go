@@ -172,9 +172,28 @@ func (m *Model) handleEscape() (tea.Model, tea.Cmd) {
 }
 
 // handleOpenModelPicker opens the model selection picker.
+// If models have not been loaded yet, it attempts to fetch them lazily
+// (matching the session picker's on-demand pattern). If the fetch fails
+// or returns an empty list, transient feedback is shown to the user.
 func (m *Model) handleOpenModelPicker() (tea.Model, tea.Cmd) {
-	if m.isStreaming || len(m.availableModels) == 0 {
+	if m.isStreaming {
 		return m, nil
+	}
+
+	// Lazy-load models on first use (or retry after a previous failure)
+	if len(m.availableModels) == 0 {
+		allModels, err := m.client.ListModels(m.ctx)
+		if err == nil {
+			m.availableModels = FilterEnabledModels(allModels)
+		}
+	}
+
+	if len(m.availableModels) == 0 {
+		m.showModelUnavailableFeedback = true
+
+		return m, tea.Tick(clipboardResetMillis*time.Millisecond, func(_ time.Time) tea.Msg {
+			return modelUnavailableClearMsg{}
+		})
 	}
 
 	m.showModelPicker = true
