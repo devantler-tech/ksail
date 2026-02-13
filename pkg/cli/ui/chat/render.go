@@ -159,22 +159,15 @@ func (m *Model) buildModelStatusText() string {
 // buildQuotaStatusText renders the premium request quota indicator for the status bar.
 // Shows "used/total reqs · X% · resets Jan 2" when quota data is available,
 // or nothing if no quota snapshots have been received yet.
+// Only the "premium" quota category is displayed — other categories (e.g., unlimited
+// "chat" quotas) are ignored to keep the status bar stable and relevant.
 func (m *Model) buildQuotaStatusText() string {
 	if len(m.lastQuotaSnapshots) == 0 {
 		return ""
 	}
 
-	// Look for the "premium" quota category first, fall back to the first available key.
+	// Only show the "premium" quota category — it's the one relevant for billing.
 	snapshot, found := m.lastQuotaSnapshots["premium"]
-	if !found {
-		for _, v := range m.lastQuotaSnapshots {
-			snapshot = v
-			found = true
-
-			break
-		}
-	}
-
 	if !found {
 		return ""
 	}

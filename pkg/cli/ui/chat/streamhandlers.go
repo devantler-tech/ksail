@@ -408,8 +408,15 @@ func (m *Model) handleUsage(msg usageMsg) (tea.Model, tea.Cmd) {
 	m.lastOutputTokens = msg.outputTokens
 	m.lastCost = msg.cost
 
-	if len(msg.quotaSnapshots) > 0 {
-		m.lastQuotaSnapshots = msg.quotaSnapshots
+	// Merge quota snapshots into the existing map so categories from different
+	// usage events accumulate rather than overwrite each other. This prevents
+	// the status bar from flickering between different quota categories.
+	for key, snapshot := range msg.quotaSnapshots {
+		if m.lastQuotaSnapshots == nil {
+			m.lastQuotaSnapshots = make(map[string]quotaSnapshot)
+		}
+
+		m.lastQuotaSnapshots[key] = snapshot
 	}
 
 	return m, m.waitForEvent()
