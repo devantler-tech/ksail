@@ -49,7 +49,6 @@ func generateSchema(t *testing.T) map[string]any {
 	return schema
 }
 
-//nolint:funlen // Table-driven test with multiple subtests is naturally long
 func TestGeneratedSchema(t *testing.T) {
 	t.Parallel()
 
