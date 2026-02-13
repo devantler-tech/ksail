@@ -26,7 +26,8 @@ func TestDistribution_ValidValues(t *testing.T) {
 	assert.Contains(t, values, "Vanilla")
 	assert.Contains(t, values, "K3s")
 	assert.Contains(t, values, "Talos")
-	assert.Len(t, values, 3)
+	assert.Contains(t, values, "VCluster")
+	assert.Len(t, values, 4)
 }
 
 func TestCNI_Default(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
+	vclusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/vcluster"
 	k3dtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -210,6 +211,14 @@ func CreateMinimalProvisioner(
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Talos provisioner: %w", err)
+		}
+
+		return provisioner, nil
+
+	case v1alpha1.DistributionVCluster:
+		provisioner, err := vclusterprovisioner.CreateProvisioner(clusterName, "")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create VCluster provisioner: %w", err)
 		}
 
 		return provisioner, nil

@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil/validator"
+	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dapi "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -15,9 +16,10 @@ const requiredCiliumArgs = 2
 
 // Validator validates KSail cluster configurations for semantic correctness and cross-configuration consistency.
 type Validator struct {
-	kindConfig  *kindv1alpha4.Cluster
-	k3dConfig   *k3dapi.SimpleConfig
-	talosConfig *talosconfigmanager.Configs
+	kindConfig     *kindv1alpha4.Cluster
+	k3dConfig      *k3dapi.SimpleConfig
+	talosConfig    *talosconfigmanager.Configs
+	vclusterConfig *clusterprovisioner.VClusterConfig
 }
 
 // NewValidator creates a new KSail configuration validator without distribution configuration.
@@ -47,6 +49,14 @@ func NewValidatorForK3d(k3dConfig *k3dapi.SimpleConfig) *Validator {
 func NewValidatorForTalos(talosConfig *talosconfigmanager.Configs) *Validator {
 	return &Validator{
 		talosConfig: talosConfig,
+	}
+}
+
+// NewValidatorForVCluster creates a new KSail configuration validator with VCluster distribution configuration.
+// The VCluster config is used for cross-configuration validation (name consistency).
+func NewValidatorForVCluster(vclusterConfig *clusterprovisioner.VClusterConfig) *Validator {
+	return &Validator{
+		vclusterConfig: vclusterConfig,
 	}
 }
 
@@ -137,14 +147,14 @@ func (v *Validator) validateDistribution(
 			fixSuggestion = "Set spec.cluster.distribution to a supported distribution type"
 		} else {
 			message = "invalid distribution value"
-			fixSuggestion = "Use a supported distribution: Vanilla, K3s, or Talos"
+			fixSuggestion = "Use a supported distribution: Vanilla, K3s, Talos, or VCluster"
 		}
 
 		result.AddError(validator.ValidationError{
 			Field:         "spec.cluster.distribution",
 			Message:       message,
 			CurrentValue:  distribution,
-			ExpectedValue: "one of: Vanilla, K3s, Talos",
+			ExpectedValue: "one of: Vanilla, K3s, Talos, VCluster",
 			FixSuggestion: fixSuggestion,
 		})
 	}
@@ -176,6 +186,8 @@ func (v *Validator) getExpectedContextName(config *v1alpha1.Cluster) string {
 		return "k3d-" + distributionName
 	case v1alpha1.DistributionTalos:
 		return "admin@" + distributionName
+	case v1alpha1.DistributionVCluster:
+		return "vcluster-docker_" + distributionName
 	default:
 		return ""
 	}
@@ -190,6 +202,8 @@ func (v *Validator) getDistributionConfigName(distribution v1alpha1.Distribution
 		return v.getK3dConfigName()
 	case v1alpha1.DistributionTalos:
 		return v.getTalosConfigName()
+	case v1alpha1.DistributionVCluster:
+		return v.getVClusterConfigName()
 	default:
 		return ""
 	}
@@ -225,6 +239,17 @@ func (v *Validator) getTalosConfigName() string {
 	}
 
 	// No Talos config provided, return empty to skip validation
+	return ""
+}
+
+// getVClusterConfigName returns the VCluster configuration cluster name if available.
+// Returns empty string if no VCluster config is provided to the validator.
+func (v *Validator) getVClusterConfigName() string {
+	if v.vclusterConfig != nil && v.vclusterConfig.Name != "" {
+		return v.vclusterConfig.Name
+	}
+
+	// No VCluster config provided, return empty to skip validation
 	return ""
 }
 

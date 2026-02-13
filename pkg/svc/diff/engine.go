@@ -183,6 +183,14 @@ func (e *Engine) checkLocalRegistryChange(
 				Category: clusterupdate.ChangeCategoryInPlace,
 				Reason:   reasons[e.distribution],
 			})
+		case v1alpha1.DistributionVCluster:
+			result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
+				Field:    "cluster.localRegistry.registry",
+				OldValue: oldSpec.LocalRegistry.Registry,
+				NewValue: newSpec.LocalRegistry.Registry,
+				Category: clusterupdate.ChangeCategoryInPlace,
+				Reason:   "VCluster delegates registry to host cluster",
+			})
 		}
 	}
 }

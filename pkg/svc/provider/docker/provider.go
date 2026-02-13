@@ -22,6 +22,8 @@ const (
 	LabelSchemeK3d LabelScheme = "k3d"
 	// LabelSchemeTalos uses "talos.cluster.name" label to identify nodes.
 	LabelSchemeTalos LabelScheme = "talos"
+	// LabelSchemeVCluster uses container name prefix "vcluster.cp.<cluster>" to identify nodes.
+	LabelSchemeVCluster LabelScheme = "vcluster"
 )
 
 // Talos label constants.
@@ -227,6 +229,8 @@ func (p *Provider) listContainers(
 		return p.listK3dContainers(ctx, clusterName)
 	case LabelSchemeTalos:
 		return p.listTalosContainers(ctx, clusterName)
+	case LabelSchemeVCluster:
+		return p.listVClusterContainers(ctx, clusterName)
 	default:
 		return nil, fmt.Errorf("%w: %s", provider.ErrUnknownLabelScheme, p.labelScheme)
 	}
@@ -339,6 +343,8 @@ func (p *Provider) extractClusterName(ctr container.Summary) string {
 		return ctr.Labels[LabelK3dCluster]
 	case LabelSchemeTalos:
 		return ctr.Labels[LabelTalosClusterName]
+	case LabelSchemeVCluster:
+		return extractVClusterName(ctr)
 	default:
 		return ""
 	}
@@ -364,7 +370,107 @@ func (p *Provider) extractRole(ctr container.Summary) string {
 		return ctr.Labels[LabelK3dRole]
 	case LabelSchemeTalos:
 		return ctr.Labels[LabelTalosType]
+	case LabelSchemeVCluster:
+		return extractVClusterRole(ctr)
 	default:
 		return ""
 	}
+}
+
+// vCluster container name prefixes.
+// vCluster Docker driver names containers as:
+//   - Control plane: vcluster.cp.<cluster-name>
+//   - Worker nodes:  vcluster.node.<cluster-name>.<worker-name>
+//   - Load balancers: vcluster.lb.<cluster-name>.<lb-name>
+const (
+	vclusterCPPrefix = "vcluster.cp."
+	vclusterNodePrefix = "vcluster.node."
+	vclusterLBPrefix   = "vcluster.lb."
+)
+
+// listVClusterContainers lists containers by vCluster name prefix.
+func (p *Provider) listVClusterContainers(
+	ctx context.Context,
+	clusterName string,
+) ([]container.Summary, error) {
+	containers, err := p.client.ContainerList(ctx, container.ListOptions{All: true})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	cpPrefix := vclusterCPPrefix + clusterName
+	nodePrefix := vclusterNodePrefix + clusterName + "."
+	lbPrefix := vclusterLBPrefix + clusterName + "."
+
+	var result []container.Summary
+
+	for _, ctr := range containers {
+		for _, name := range ctr.Names {
+			name = strings.TrimPrefix(name, "/")
+			if name == cpPrefix || strings.HasPrefix(name, nodePrefix) || strings.HasPrefix(name, lbPrefix) {
+				result = append(result, ctr)
+
+				break
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// extractVClusterName extracts the cluster name from a vCluster container name.
+func extractVClusterName(ctr container.Summary) string {
+	if len(ctr.Names) == 0 {
+		return ""
+	}
+
+	name := strings.TrimPrefix(ctr.Names[0], "/")
+
+	// Control plane: vcluster.cp.<cluster-name>
+	if clusterName, ok := strings.CutPrefix(name, vclusterCPPrefix); ok {
+		return clusterName
+	}
+
+	// Worker: vcluster.node.<cluster-name>.<worker>
+	if rest, ok := strings.CutPrefix(name, vclusterNodePrefix); ok {
+		if idx := strings.IndexByte(rest, '.'); idx > 0 {
+			return rest[:idx]
+		}
+
+		return rest
+	}
+
+	// Load balancer: vcluster.lb.<cluster-name>.<lb>
+	if rest, ok := strings.CutPrefix(name, vclusterLBPrefix); ok {
+		if idx := strings.IndexByte(rest, '.'); idx > 0 {
+			return rest[:idx]
+		}
+
+		return rest
+	}
+
+	return ""
+}
+
+// extractVClusterRole determines the role of a vCluster container from its name.
+func extractVClusterRole(ctr container.Summary) string {
+	if len(ctr.Names) == 0 {
+		return ""
+	}
+
+	name := strings.TrimPrefix(ctr.Names[0], "/")
+
+	if strings.HasPrefix(name, vclusterCPPrefix) {
+		return "control-plane"
+	}
+
+	if strings.HasPrefix(name, vclusterNodePrefix) {
+		return "worker"
+	}
+
+	if strings.HasPrefix(name, vclusterLBPrefix) {
+		return "load-balancer"
+	}
+
+	return ""
 }

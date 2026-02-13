@@ -56,9 +56,10 @@ func (l *Installer) Install(ctx context.Context) error {
 		return nil
 	}
 
-	// For Kind and Talos, install local-path-provisioner
+	// For Kind, Talos, and VCluster, install local-path-provisioner
 	if l.distribution == v1alpha1.DistributionVanilla ||
-		l.distribution == v1alpha1.DistributionTalos {
+		l.distribution == v1alpha1.DistributionTalos ||
+		l.distribution == v1alpha1.DistributionVCluster {
 		return l.installLocalPathProvisioner(ctx)
 	}
 

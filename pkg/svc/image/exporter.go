@@ -61,9 +61,10 @@ func (e *Exporter) Export(
 	providerType v1alpha1.Provider,
 	opts ExportOptions,
 ) error {
-	// Talos is not supported - it's an immutable OS without shell access
-	// and its Machine API doesn't expose image export functionality
-	if distribution == v1alpha1.DistributionTalos {
+	// Talos and VCluster are not supported - Talos is an immutable OS without shell access,
+	// VCluster nodes run as pods inside a host cluster without direct containerd access.
+	if distribution == v1alpha1.DistributionTalos ||
+		distribution == v1alpha1.DistributionVCluster {
 		return ErrUnsupportedDistribution
 	}
 

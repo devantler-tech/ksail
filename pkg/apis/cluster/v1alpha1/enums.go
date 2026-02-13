@@ -27,6 +27,8 @@ const (
 	DistributionK3s Distribution = "K3s"
 	// DistributionTalos is the Talos distribution.
 	DistributionTalos Distribution = "Talos"
+	// DistributionVCluster is the vCluster distribution (uses Vind/Docker driver).
+	DistributionVCluster Distribution = "VCluster"
 )
 
 // ProvidesMetricsServerByDefault returns true if the distribution includes metrics-server by default.
@@ -35,7 +37,7 @@ func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 	switch *d {
 	case DistributionK3s:
 		return true
-	case DistributionVanilla, DistributionTalos:
+	case DistributionVanilla, DistributionTalos, DistributionVCluster:
 		return false
 	default:
 		return false
@@ -48,7 +50,7 @@ func (d *Distribution) ProvidesStorageByDefault() bool {
 	switch *d {
 	case DistributionK3s:
 		return true
-	case DistributionVanilla, DistributionTalos:
+	case DistributionVanilla, DistributionTalos, DistributionVCluster:
 		return false
 	default:
 		return false
@@ -67,8 +69,8 @@ func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
 	case DistributionTalos:
 		// Talos × Hetzner provides Hetzner CSI by default
 		return provider == ProviderHetzner
-	case DistributionVanilla:
-		// Vanilla (Kind) does not provide CSI by default
+	case DistributionVanilla, DistributionVCluster:
+		// Vanilla (Kind) and VCluster do not provide CSI by default
 		return false
 	default:
 		return false
@@ -88,8 +90,8 @@ func (d *Distribution) ProvidesLoadBalancerByDefault(provider Provider) bool {
 	case DistributionTalos:
 		// Talos × Hetzner provides hcloud-cloud-controller-manager by default
 		return provider == ProviderHetzner
-	case DistributionVanilla:
-		// Vanilla (Kind) does not provide LoadBalancer by default
+	case DistributionVanilla, DistributionVCluster:
+		// Vanilla (Kind) and VCluster do not provide LoadBalancer by default
 		return false
 	default:
 		return false
@@ -106,8 +108,8 @@ func (d *Distribution) Set(value string) error {
 		}
 	}
 
-	return fmt.Errorf("%w: %s (valid options: %s, %s, %s)",
-		ErrInvalidDistribution, value, DistributionVanilla, DistributionK3s, DistributionTalos)
+	return fmt.Errorf("%w: %s (valid options: %s, %s, %s, %s)",
+		ErrInvalidDistribution, value, DistributionVanilla, DistributionK3s, DistributionTalos, DistributionVCluster)
 }
 
 // IsValid checks if the distribution value is supported.
@@ -132,7 +134,12 @@ func (d *Distribution) Default() any {
 
 // ValidValues returns all valid Distribution values as strings.
 func (d *Distribution) ValidValues() []string {
-	return []string{string(DistributionVanilla), string(DistributionK3s), string(DistributionTalos)}
+	return []string{
+		string(DistributionVanilla),
+		string(DistributionK3s),
+		string(DistributionTalos),
+		string(DistributionVCluster),
+	}
 }
 
 // ContextName returns the kubeconfig context name for a given cluster name.
@@ -154,6 +161,8 @@ func (d *Distribution) ContextName(clusterName string) string {
 		return "k3d-" + clusterName
 	case DistributionTalos:
 		return "admin@" + clusterName
+	case DistributionVCluster:
+		return "vcluster-docker_" + clusterName
 	default:
 		return ""
 	}
@@ -174,6 +183,8 @@ func (d *Distribution) DefaultClusterName() string {
 		return "k3d-default"
 	case DistributionTalos:
 		return "talos-default"
+	case DistributionVCluster:
+		return "vcluster-default"
 	default:
 		return "kind"
 	}
@@ -715,7 +726,7 @@ func (p *Provider) ValidValues() []string {
 // supportedProviders returns the valid providers for a given distribution.
 func supportedProviders(distribution Distribution) []Provider {
 	switch distribution {
-	case DistributionVanilla, DistributionK3s:
+	case DistributionVanilla, DistributionK3s, DistributionVCluster:
 		return []Provider{ProviderDocker}
 	case DistributionTalos:
 		return []Provider{ProviderDocker, ProviderHetzner}
