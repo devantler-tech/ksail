@@ -15,19 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// filterEnabledModels returns only models with an enabled policy state.
-func filterEnabledModels(allModels []copilot.ModelInfo) []copilot.ModelInfo {
-	var models []copilot.ModelInfo
-
-	for _, m := range allModels {
-		if m.Policy != nil && m.Policy.State == "enabled" {
-			models = append(models, m)
-		}
-	}
-
-	return models
-}
-
 // startOutputForwarder forwards tool output chunks to the TUI event channel.
 // Returns a WaitGroup that completes when the forwarder goroutine exits.
 func startOutputForwarder(
@@ -63,6 +50,9 @@ func setupChatTools(
 	)
 	sessionConfig.Tools = tools
 	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan, yoloModeRef)
+	sessionConfig.Hooks = &copilot.SessionHooks{
+		OnPreToolUse: BuildPreToolUseHook(chatModeRef, toolMetadata),
+	}
 
 	return chatModeRef, yoloModeRef
 }
@@ -75,12 +65,6 @@ func runTUIChat(
 	timeout time.Duration,
 	rootCmd *cobra.Command,
 ) error {
-	allModels, err := client.ListModels()
-	if err != nil {
-		return fmt.Errorf("failed to list models: %w", err)
-	}
-
-	models := filterEnabledModels(allModels)
 	currentModel := sessionConfig.Model
 	eventChan := make(chan tea.Msg, eventChannelBuffer)
 	outputChan := make(chan toolgen.OutputChunk, outputChannelBuffer)
@@ -89,7 +73,7 @@ func runTUIChat(
 		sessionConfig, rootCmd, eventChan, outputChan,
 	)
 
-	session, err := client.CreateSession(sessionConfig)
+	session, err := client.CreateSession(ctx, sessionConfig)
 	if err != nil {
 		close(outputChan)
 		forwarderWg.Wait()
@@ -113,7 +97,7 @@ func runTUIChat(
 		Session:       session,
 		Client:        client,
 		SessionConfig: sessionConfig,
-		Models:        models,
+		Models:        nil, // Lazy-loaded on first ^O press
 		CurrentModel:  currentModel,
 		Timeout:       timeout,
 		EventChan:     eventChan,

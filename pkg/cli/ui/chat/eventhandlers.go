@@ -58,6 +58,18 @@ func (d *sessionEventDispatcher) dispatch(
 		d.handleToolComplete(event)
 	case copilot.SessionSnapshotRewind:
 		d.handleSnapshotRewind()
+	case copilot.AssistantUsage:
+		d.handleUsage(event)
+	case copilot.SessionCompactionStart:
+		d.handleCompactionStart()
+	case copilot.SessionCompactionComplete:
+		d.handleCompactionComplete(event)
+	case copilot.AssistantIntent:
+		d.handleIntent(event)
+	case copilot.SessionModelChange:
+		d.handleModelChange(event)
+	case copilot.SessionShutdown:
+		d.handleShutdown(event)
 	}
 }
 
@@ -158,4 +170,103 @@ func (d *sessionEventDispatcher) handleToolComplete(event copilot.SessionEvent) 
 
 func (d *sessionEventDispatcher) handleSnapshotRewind() {
 	d.eventChan <- snapshotRewindMsg{}
+}
+
+func (d *sessionEventDispatcher) handleUsage(event copilot.SessionEvent) {
+	msg := usageMsg{}
+
+	if event.Data.Model != nil {
+		msg.model = *event.Data.Model
+	}
+
+	if event.Data.InputTokens != nil {
+		msg.inputTokens = *event.Data.InputTokens
+	}
+
+	if event.Data.OutputTokens != nil {
+		msg.outputTokens = *event.Data.OutputTokens
+	}
+
+	if event.Data.Cost != nil {
+		msg.cost = *event.Data.Cost
+	}
+
+	if len(event.Data.QuotaSnapshots) > 0 {
+		msg.quotaSnapshots = make(map[string]quotaSnapshot, len(event.Data.QuotaSnapshots))
+
+		for key, snapshot := range event.Data.QuotaSnapshots {
+			resetStr := ""
+			if snapshot.ResetDate != nil {
+				resetStr = snapshot.ResetDate.Format("Jan 2")
+			}
+
+			msg.quotaSnapshots[key] = quotaSnapshot{
+				entitlementRequests:   snapshot.EntitlementRequests,
+				isUnlimited:           snapshot.IsUnlimitedEntitlement,
+				usedRequests:          snapshot.UsedRequests,
+				remainingPercentage:   snapshot.RemainingPercentage,
+				resetDate:             resetStr,
+				overage:               snapshot.Overage,
+				overageAllowedAtQuota: snapshot.OverageAllowedWithExhaustedQuota,
+			}
+		}
+	}
+
+	d.eventChan <- msg
+}
+
+func (d *sessionEventDispatcher) handleCompactionStart() {
+	d.eventChan <- compactionStartMsg{}
+}
+
+func (d *sessionEventDispatcher) handleCompactionComplete(event copilot.SessionEvent) {
+	msg := compactionCompleteMsg{}
+
+	if event.Data.Success != nil {
+		msg.success = *event.Data.Success
+	}
+
+	if event.Data.PreCompactionTokens != nil {
+		msg.preCompactionTokens = *event.Data.PreCompactionTokens
+	}
+
+	if event.Data.PostCompactionTokens != nil {
+		msg.postCompactionTokens = *event.Data.PostCompactionTokens
+	}
+
+	if event.Data.TokensRemoved != nil {
+		msg.tokensRemoved = *event.Data.TokensRemoved
+	}
+
+	d.eventChan <- msg
+}
+
+func (d *sessionEventDispatcher) handleIntent(event copilot.SessionEvent) {
+	if event.Data.Content != nil {
+		d.eventChan <- intentMsg{content: *event.Data.Content}
+	}
+}
+
+func (d *sessionEventDispatcher) handleModelChange(event copilot.SessionEvent) {
+	msg := modelChangeMsg{}
+
+	if event.Data.PreviousModel != nil {
+		msg.previousModel = *event.Data.PreviousModel
+	}
+
+	if event.Data.NewModel != nil {
+		msg.newModel = *event.Data.NewModel
+	}
+
+	d.eventChan <- msg
+}
+
+func (d *sessionEventDispatcher) handleShutdown(event copilot.SessionEvent) {
+	msg := shutdownMsg{}
+
+	if event.Data.ShutdownType != nil {
+		msg.shutdownType = string(*event.Data.ShutdownType)
+	}
+
+	d.eventChan <- msg
 }

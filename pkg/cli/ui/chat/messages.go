@@ -96,6 +96,57 @@ type PermissionRequestMsg struct {
 // copyFeedbackClearMsg signals that the copy feedback should be hidden.
 type copyFeedbackClearMsg struct{}
 
+// modelUnavailableClearMsg signals that the model-unavailable feedback should be hidden.
+type modelUnavailableClearMsg struct{}
+
 // snapshotRewindMsg signals that the session was rewound to a previous state.
 // This can happen when the user discards changes or reverts to a checkpoint.
 type snapshotRewindMsg struct{}
+
+// usageMsg carries token usage and billing statistics from the assistant.
+type usageMsg struct {
+	model          string
+	inputTokens    float64
+	outputTokens   float64
+	cost           float64
+	quotaSnapshots map[string]quotaSnapshot
+}
+
+// quotaSnapshot mirrors copilot.QuotaSnapshot for internal use,
+// avoiding direct SDK type dependency in message passing.
+type quotaSnapshot struct {
+	entitlementRequests   float64
+	isUnlimited           bool
+	usedRequests          float64
+	remainingPercentage   float64
+	resetDate             string // formatted as "Jan 2" for display
+	overage               float64
+	overageAllowedAtQuota bool
+}
+
+// compactionStartMsg signals that context compaction has started.
+type compactionStartMsg struct{}
+
+// compactionCompleteMsg signals that context compaction has completed.
+type compactionCompleteMsg struct {
+	success              bool
+	preCompactionTokens  float64
+	postCompactionTokens float64
+	tokensRemoved        float64
+}
+
+// intentMsg carries the assistant's intent/plan for the current turn.
+type intentMsg struct {
+	content string
+}
+
+// modelChangeMsg signals that the session's model was changed server-side.
+type modelChangeMsg struct {
+	previousModel string
+	newModel      string
+}
+
+// shutdownMsg signals that the session has ended.
+type shutdownMsg struct {
+	shutdownType string
+}

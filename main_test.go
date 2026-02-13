@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v5/internal/buildmeta"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/assert"
 )
@@ -25,9 +26,9 @@ func TestMain(m *testing.M) {
 func TestVersionVariables(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "dev", version)
-	assert.Equal(t, "none", commit)
-	assert.Equal(t, "unknown", date)
+	assert.Equal(t, "dev", buildmeta.Version)
+	assert.Equal(t, "none", buildmeta.Commit)
+	assert.Equal(t, "unknown", buildmeta.Date)
 }
 
 func TestRunWithArgsScenarios(t *testing.T) {

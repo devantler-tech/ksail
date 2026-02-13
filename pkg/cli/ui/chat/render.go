@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -66,25 +67,34 @@ func (m *Model) buildStatusText() string {
 		statusParts = append(statusParts, yoloStyle.Render("auto-approve"))
 	}
 
-	// Model name
-	modelStyle := lipgloss.NewStyle().Foreground(m.theme.DimColor)
+	// Model name — show "auto → resolved" when in auto mode, otherwise the explicit model
+	statusParts = append(statusParts, m.buildModelStatusText())
 
-	switch {
-	case m.currentModel != "":
-		statusParts = append(statusParts, modelStyle.Render(m.currentModel))
-	default:
-		statusParts = append(statusParts, modelStyle.Render(modelAuto))
+	// Reasoning effort — show level when set
+	if effortText := m.buildReasoningEffortStatusText(); effortText != "" {
+		statusParts = append(statusParts, effortText)
+	}
+
+	// Quota — show premium request usage when available
+	if quotaText := m.buildQuotaStatusText(); quotaText != "" {
+		statusParts = append(statusParts, quotaText)
 	}
 
 	// Streaming state and feedback
 	switch {
 	case m.isStreaming:
-		statusParts = append(
-			statusParts,
-			m.spinner.View()+" "+m.styles.status.Render("Thinking..."),
-		)
+		statusParts = append(statusParts, m.spinner.View())
 	case m.showCopyFeedback:
 		statusParts = append(statusParts, m.styles.status.Render("Copied"+checkmarkSuffix))
+	case m.showModelUnavailableFeedback:
+		warnStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow))
+
+		feedback := "Models unavailable"
+		if m.modelUnavailableReason != "" {
+			feedback += ": " + m.modelUnavailableReason
+		}
+
+		statusParts = append(statusParts, warnStyle.Render(feedback))
 	case m.justCompleted:
 		statusParts = append(statusParts, m.styles.status.Render("Ready"+checkmarkSuffix))
 	}
@@ -106,6 +116,10 @@ func (m *Model) renderInputOrModal() string {
 		return m.renderModelPickerModal()
 	}
 
+	if m.showReasoningPicker {
+		return m.renderReasoningPickerModal()
+	}
+
 	if m.showSessionPicker {
 		return m.renderSessionPickerModal()
 	}
@@ -116,4 +130,83 @@ func (m *Model) renderInputOrModal() string {
 // renderFooter renders the context-aware help text footer using bubbles/help.
 func (m *Model) renderFooter() string {
 	return lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(m.renderShortHelp())
+}
+
+// buildModelStatusText renders the model indicator for the status bar.
+// Shows "auto → resolved-model (0.9x)" when in auto mode with a resolved model,
+// "auto (-10%)" when not yet resolved, or the explicit model ID otherwise.
+func (m *Model) buildModelStatusText() string {
+	modelStyle := lipgloss.NewStyle().Foreground(m.theme.DimColor)
+
+	switch {
+	case m.isAutoMode():
+		resolved := m.resolvedAutoModel()
+		if resolved == "" {
+			return modelStyle.Render(modelAuto + " (-10%)")
+		}
+
+		mult := m.findModelMultiplier(resolved)
+		if mult > 0 {
+			discounted := mult * autoDiscountFactor
+
+			return modelStyle.Render(
+				fmt.Sprintf("%s \u2192 %s (%.1fx)", modelAuto, resolved, discounted),
+			)
+		}
+
+		return modelStyle.Render(modelAuto + " \u2192 " + resolved)
+	case m.currentModel != "":
+		return modelStyle.Render(m.currentModel)
+	default:
+		return modelStyle.Render(modelAuto)
+	}
+}
+
+// buildReasoningEffortStatusText renders the reasoning effort indicator for the status bar.
+// Returns an empty string when no reasoning effort is set.
+func (m *Model) buildReasoningEffortStatusText() string {
+	if m.sessionConfig.ReasoningEffort == "" {
+		return ""
+	}
+
+	effortStyle := lipgloss.NewStyle().Foreground(m.theme.DimColor)
+
+	return effortStyle.Render(m.sessionConfig.ReasoningEffort + " effort")
+}
+
+// buildQuotaStatusText renders the premium request quota indicator for the status bar.
+// Shows "used/total reqs · X% · resets Jan 2" when quota data is available,
+// or nothing if no quota snapshots have been received yet.
+// Only the "premium" quota category is displayed — other categories (e.g., unlimited
+// "chat" quotas) are ignored to keep the status bar stable and relevant.
+func (m *Model) buildQuotaStatusText() string {
+	if len(m.lastQuotaSnapshots) == 0 {
+		return ""
+	}
+
+	// Only show the "premium" quota category — it's the one relevant for billing.
+	snapshot, found := m.lastQuotaSnapshots["premium"]
+	if !found {
+		return ""
+	}
+
+	quotaStyle := lipgloss.NewStyle().Foreground(m.theme.DimColor)
+
+	if snapshot.isUnlimited {
+		return quotaStyle.Render("\u221e reqs")
+	}
+
+	var parts []string
+
+	parts = append(
+		parts,
+		fmt.Sprintf("%.0f/%.0f reqs", snapshot.usedRequests, snapshot.entitlementRequests),
+	)
+	parts = append(parts, fmt.Sprintf("%.0f%%", snapshot.remainingPercentage))
+
+	if snapshot.resetDate != "" {
+		parts = append(parts, "resets "+snapshot.resetDate)
+	}
+
+	return quotaStyle.Render(strings.Join(parts, " \u00b7 "))
 }

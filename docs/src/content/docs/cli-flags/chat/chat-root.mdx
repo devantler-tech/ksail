@@ -24,10 +24,11 @@ Usage:
   ksail chat [flags]
 
 Flags:
-  -m, --model string       Model to use (e.g., gpt-5, claude-sonnet-4)
-  -s, --streaming          Enable streaming responses (default true)
-  -t, --timeout duration   Response timeout duration (default 5m0s)
-      --tui                Use interactive TUI mode with markdown rendering (default true)
+  -m, --model string              Model to use (e.g., gpt-5, claude-sonnet-4)
+  -r, --reasoning-effort string   Reasoning effort level for models that support it (low, medium, high)
+  -s, --streaming                 Enable streaming responses (default true)
+  -t, --timeout duration          Response timeout duration (default 5m0s)
+      --tui                       Use interactive TUI mode with markdown rendering (default true)
 
 Global Flags:
       --benchmark   Show per-activity benchmark output
