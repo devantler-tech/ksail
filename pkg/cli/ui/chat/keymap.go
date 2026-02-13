@@ -161,7 +161,7 @@ func setActionKeys(keyMap *KeyMap) {
 	)
 	keyMap.ToggleMode = key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("Tab", "toggle agent/plan mode"),
+		key.WithHelp("Tab", "cycle mode (agent/plan/ask)"),
 	)
 	keyMap.ToggleHelp = key.NewBinding(
 		key.WithKeys("f1"),
@@ -180,7 +180,7 @@ func setToolAndOutputKeys(keyMap *KeyMap) {
 	)
 	keyMap.ToggleYolo = key.NewBinding(
 		key.WithKeys("ctrl+y"),
-		key.WithHelp("Ctrl+Y", "toggle YOLO mode"),
+		key.WithHelp("Ctrl+Y", "toggle auto-approve (YOLO)"),
 	)
 }
 

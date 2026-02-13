@@ -100,6 +100,12 @@ func TestGeneratedSchema(t *testing.T) {
 		assertEnum(t, prov, []string{"Docker", "Hetzner"})
 	})
 
+	testNoRequiredFields(t, schema)
+}
+
+func testNoRequiredFields(t *testing.T, schema map[string]any) {
+	t.Helper()
+
 	t.Run("no required fields on nested objects", func(t *testing.T) {
 		t.Parallel()
 

@@ -35,9 +35,77 @@ const (
 	unknownErrorMsg  = "unknown error"     // fallback when error message is nil
 	toolIDFormat     = "tool-%d"           // format string for generating unique tool IDs (timestamp-based)
 	unknownOperation = "Unknown Operation" // fallback when operation type is unrecognized
-	planModePrefix   = "[PLAN MODE] Research and outline steps to accomplish this task. " +
-		"Do not execute tools or make changes - only describe what you would do:\n\n"
+	planModePrefix   = `[PLAN MODE] Research and outline steps to accomplish this task. ` +
+		`Do not execute tools or make changes - only describe what you would do:
+
+
+`
+	askModePrefix = `[ASK MODE] You are in read-only investigation mode. ` +
+		`Use available read-only tools to research and gather information, then provide a thorough answer. ` +
+		`Do NOT execute any tools that create, modify, or delete resources:
+
+
+`
 )
+
+// ChatMode represents the chat interaction mode.
+type ChatMode int //nolint:revive // ChatMode is clearer than Mode given existing ModeRef type in this package.
+
+const (
+	// AgentMode allows full tool execution with permission prompts for write operations.
+	AgentMode ChatMode = iota
+	// PlanMode blocks all tool execution; the model describes what it would do.
+	PlanMode
+	// AskMode allows read-only tool execution; write tools are blocked.
+	AskMode
+)
+
+// String returns a human-readable label for the chat mode.
+func (m ChatMode) String() string {
+	switch m {
+	case AgentMode:
+		return "agent"
+	case PlanMode:
+		return "plan"
+	case AskMode:
+		return "ask"
+	default:
+		return "agent"
+	}
+}
+
+// Icon returns the TUI icon for the chat mode.
+func (m ChatMode) Icon() string {
+	switch m {
+	case AgentMode:
+		return "</>"
+	case PlanMode:
+		return "\u2261" // ≡
+	case AskMode:
+		return "?"
+	default:
+		return "</>"
+	}
+}
+
+// Label returns the icon and text label for the chat mode (e.g. "</> agent").
+func (m ChatMode) Label() string {
+	return m.Icon() + " " + m.String()
+}
+
+// Next cycles to the next chat mode: Agent -> Plan -> Ask -> Agent.
+func (m ChatMode) Next() ChatMode {
+	switch m {
+	case AgentMode:
+		return PlanMode
+	case PlanMode:
+		return AskMode
+	case AskMode:
+		return AgentMode
+	default:
+		return AgentMode
+	}
+}
 
 // ModeRef is a thread-safe reference to a boolean mode state.
 // It allows tool handlers to check and update mode state at execution time.
@@ -70,13 +138,36 @@ func (r *ModeRef) SetEnabled(enabled bool) {
 	r.enabled = enabled
 }
 
-// AgentModeRef is a thread-safe reference to the agent mode state.
-// When enabled, tools can execute; when disabled (plan mode), tools are blocked.
-type AgentModeRef = ModeRef
+// ChatModeRef is a thread-safe reference to the current chat mode.
+// It allows tool handlers to check the mode at execution time.
+//
+//nolint:revive // ChatModeRef avoids ambiguity with existing ModeRef type.
+type ChatModeRef struct {
+	mu   sync.RWMutex
+	mode ChatMode
+}
 
-// NewAgentModeRef creates a new AgentModeRef with the given initial state.
-func NewAgentModeRef(initial bool) *AgentModeRef {
-	return NewModeRef(initial)
+// NewChatModeRef creates a new ChatModeRef with the given initial mode.
+func NewChatModeRef(initial ChatMode) *ChatModeRef {
+	return &ChatModeRef{
+		mode: initial,
+	}
+}
+
+// Mode returns the current chat mode.
+func (r *ChatModeRef) Mode() ChatMode {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.mode
+}
+
+// SetMode updates the chat mode.
+func (r *ChatModeRef) SetMode(mode ChatMode) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.mode = mode
 }
 
 // YoloModeRef is a thread-safe reference to the YOLO mode state.
@@ -96,7 +187,7 @@ type message struct {
 	isStreaming bool
 	tools       []*toolExecution // tools executed during this assistant message
 	toolOrder   []string         // ordered tool IDs for this message
-	agentMode   bool             // true = agent mode, false = plan mode (for user messages)
+	chatMode    ChatMode         // the chat mode when this message was sent (for user messages)
 }
 
 // permissionResponse records a user's response to a permission request.
@@ -189,9 +280,9 @@ type Model struct {
 	// Markdown renderer (cached to avoid terminal queries)
 	renderer *glamour.TermRenderer
 
-	// Mode selection (agent executes tools, plan describes only)
-	agentMode    bool          // true = agent (execute), false = plan (describe only)
-	agentModeRef *AgentModeRef // shared reference for tool handlers to check current mode
+	// Mode selection (agent executes tools, plan describes only, ask is read-only)
+	chatMode    ChatMode     // current chat mode
+	chatModeRef *ChatModeRef // shared reference for tool handlers to check current mode
 
 	// YOLO mode (auto-approve write operations without prompting)
 	yoloMode    bool         // true = auto-approve, false = prompt for confirmation
@@ -264,9 +355,9 @@ func NewModel(params Params) *Model {
 		historyIndex:     -1,
 		availableModels:  params.Models,
 		currentModel:     params.CurrentModel,
-		agentMode:        true,                // Default to agent mode
-		agentModeRef:     params.AgentModeRef, // Store reference for tool handlers
-		yoloModeRef:      params.YoloModeRef,  // Store reference for YOLO mode
+		chatMode:         AgentMode,          // Default to agent mode
+		chatModeRef:      params.ChatModeRef, // Store reference for tool handlers
+		yoloModeRef:      params.YoloModeRef, // Store reference for YOLO mode
 	}
 }
 
@@ -500,9 +591,9 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	// Add user message and placeholder assistant message
 	// Store the current mode with the message so it can be displayed in the indicator
 	m.messages = append(m.messages, message{
-		role:      roleUser,
-		content:   msg.content,
-		agentMode: m.agentMode,
+		role:     roleUser,
+		content:  msg.content,
+		chatMode: m.chatMode,
 	})
 	m.messages = append(m.messages, message{
 		role:        roleAssistant,
@@ -581,7 +672,7 @@ func (m *Model) sendMessageCmd(content string) tea.Cmd {
 func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 	session := m.session
 	eventChan := m.eventChan
-	agentMode := m.agentMode
+	chatMode := m.chatMode
 	commandBuilders := m.toolDisplay.CommandBuilders
 
 	return func() tea.Msg {
@@ -596,10 +687,16 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		m.unsubscribe = unsubscribe
 		m.unsubscribeMu.Unlock()
 
-		// In plan mode, prefix the prompt with instructions to plan without executing
+		// In plan or ask mode, prefix the prompt with mode-specific instructions
 		prompt := userMessage
-		if !agentMode {
+
+		switch chatMode {
+		case PlanMode:
 			prompt = planModePrefix + userMessage
+		case AskMode:
+			prompt = askModePrefix + userMessage
+		case AgentMode:
+			// No prefix needed
 		}
 
 		// Send the message
@@ -630,9 +727,9 @@ func Run(ctx context.Context, params Params) error {
 	model := NewModel(params)
 	model.ctx = ctx
 
-	// Ensure agentModeRef is initialized with the model's initial state
-	if params.AgentModeRef != nil {
-		params.AgentModeRef.SetEnabled(model.agentMode)
+	// Ensure chatModeRef is initialized with the model's initial state
+	if params.ChatModeRef != nil {
+		params.ChatModeRef.SetMode(model.chatMode)
 	}
 
 	// Ensure yoloModeRef is initialized with the model's initial state

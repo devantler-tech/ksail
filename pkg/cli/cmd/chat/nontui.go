@@ -50,9 +50,9 @@ func runNonTUIChat(
 ) error {
 	// Set up tools without streaming
 	tools, toolMetadata := chatsvc.GetKSailToolMetadata(cmd.Root(), nil) //nolint:contextcheck
-	// In non-TUI mode, pass nil for eventChan, agentModeRef, and yoloModeRef:
+	// In non-TUI mode, pass nil for eventChan, chatModeRef, and yoloModeRef:
 	// - nil eventChan: write tools are auto-approved (no UI to prompt for confirmation)
-	// - nil agentModeRef: agent mode is always enabled (no plan-only mode in non-TUI)
+	// - nil chatModeRef: agent mode is always enabled (no mode switching in non-TUI)
 	// - nil yoloModeRef: YOLO mode toggle is not available (write tools auto-approve via nil eventChan)
 	tools = WrapToolsWithPermissionAndModeMetadata(tools, nil, nil, nil, toolMetadata)
 	sessionConfig.Tools = tools

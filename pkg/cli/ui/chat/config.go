@@ -110,8 +110,8 @@ type Params struct {
 	// If nil, a new channel is created internally.
 	EventChan chan tea.Msg
 
-	// AgentModeRef is an optional reference to synchronize agent mode state with tool handlers.
-	AgentModeRef *AgentModeRef
+	// ChatModeRef is an optional reference to synchronize chat mode state with tool handlers.
+	ChatModeRef *ChatModeRef
 
 	// YoloModeRef is an optional reference to synchronize YOLO mode state with tool handlers.
 	YoloModeRef *YoloModeRef

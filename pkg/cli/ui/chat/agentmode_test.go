@@ -7,50 +7,59 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 )
 
-// TestAgentModeRef tests the thread-safe agent mode reference.
-func TestAgentModeRef(t *testing.T) {
+// TestChatModeRef tests the thread-safe chat mode reference.
+func TestChatModeRef(t *testing.T) {
 	t.Parallel()
 
-	ref := chat.NewAgentModeRef(true)
+	ref := chat.NewChatModeRef(chat.AgentMode)
 
 	// Test initial state
-	if !ref.IsEnabled() {
-		t.Error("Expected agent mode to be enabled initially")
+	if ref.Mode() != chat.AgentMode {
+		t.Errorf("Expected agent mode initially, got %v", ref.Mode())
 	}
 
-	// Test setting to false
-	ref.SetEnabled(false)
+	// Test setting to plan mode
+	ref.SetMode(chat.PlanMode)
 
-	if ref.IsEnabled() {
-		t.Error("Expected agent mode to be disabled after SetEnabled(false)")
+	if ref.Mode() != chat.PlanMode {
+		t.Errorf("Expected plan mode after SetMode(PlanMode), got %v", ref.Mode())
 	}
 
-	// Test setting back to true
-	ref.SetEnabled(true)
+	// Test setting to ask mode
+	ref.SetMode(chat.AskMode)
 
-	if !ref.IsEnabled() {
-		t.Error("Expected agent mode to be enabled after SetEnabled(true)")
+	if ref.Mode() != chat.AskMode {
+		t.Errorf("Expected ask mode after SetMode(AskMode), got %v", ref.Mode())
+	}
+
+	// Test setting back to agent mode
+	ref.SetMode(chat.AgentMode)
+
+	if ref.Mode() != chat.AgentMode {
+		t.Errorf("Expected agent mode after SetMode(AgentMode), got %v", ref.Mode())
 	}
 }
 
-// TestAgentModeRefConcurrency tests concurrent access to agent mode reference.
-func TestAgentModeRefConcurrency(t *testing.T) {
+// TestChatModeRefConcurrency tests concurrent access to chat mode reference.
+func TestChatModeRefConcurrency(t *testing.T) {
 	t.Parallel()
 
-	ref := chat.NewAgentModeRef(true)
+	ref := chat.NewChatModeRef(chat.AgentMode)
+
+	modes := []chat.ChatMode{chat.AgentMode, chat.PlanMode, chat.AskMode}
 
 	var waitGroup sync.WaitGroup
 
-	// Start multiple goroutines that toggle the mode
+	// Start multiple goroutines that cycle through modes
 	for idx := range 100 {
 		waitGroup.Add(1)
 
-		go func(enabled bool) {
+		go func(modeIdx int) {
 			defer waitGroup.Done()
 
-			ref.SetEnabled(enabled)
-			_ = ref.IsEnabled()
-		}(idx%2 == 0)
+			ref.SetMode(modes[modeIdx%len(modes)])
+			_ = ref.Mode()
+		}(idx)
 	}
 
 	waitGroup.Wait()
