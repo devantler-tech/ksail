@@ -146,9 +146,12 @@ go run main.go --help
 │   │   └── ui/             # Terminal UI (ASCII art, chat TUI, confirmations)
 │   ├── client/             # Embedded tool clients (kubectl, helm, flux, etc.)
 │   ├── di/                 # Dependency injection
-│   ├── io/                 # I/O utilities
+│   ├── envvar/             # Environment variable utilities
+│   ├── fsutil/             # Filesystem utilities (includes configmanager)
 │   ├── k8s/                # Kubernetes helpers/templates
-│   ├── utils/              # General utilities
+│   ├── notify/             # CLI notifications and progress display
+│   ├── runner/             # Cobra command execution helpers
+│   ├── timer/              # Command timing and performance tracking
 │   └── svc/                # Services (installers, managers, etc.)
 │       ├── chat/           # AI chat integration (GitHub Copilot SDK)
 │       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
@@ -282,7 +285,13 @@ npm run dev                            # Test locally (if needed)
   - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
 - `pkg/client/reconciler/`: Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - `pkg/di/`: Dependency injection for wiring components
-- `pkg/utils/`: General utility functions
+- `pkg/k8s/`: Kubernetes helpers and templates
+- `pkg/cli/`: CLI wiring, commands, and terminal UI components
+- `pkg/envvar/`: Environment variable utilities
+- `pkg/fsutil/`: Filesystem utilities (includes configmanager for configuration loading)
+- `pkg/notify/`: CLI notifications and progress display utilities
+- `pkg/runner/`: Cobra command execution helpers
+- `pkg/timer/`: Command timing and performance tracking
 
 ## Active Technologies
 
