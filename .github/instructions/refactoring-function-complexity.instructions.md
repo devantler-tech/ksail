@@ -245,7 +245,7 @@ After each refactoring:
 4. **Format:** Apply formatting
 
    ```bash
-   golangci-lint fmt
+   gofmt -w .
    ```
 
 5. **Duplication:** Check for new duplication
