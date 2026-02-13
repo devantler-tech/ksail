@@ -4,6 +4,7 @@
 package schemas_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -19,7 +20,8 @@ func generateSchema(t *testing.T) map[string]any {
 	outPath := filepath.Join(outDir, "ksail-config.schema.json")
 
 	// Run the generator from the schemas/ directory.
-	cmd := exec.Command("go", "run", "gen_schema.go", outPath) //nolint:gosec // test-controlled arguments
+	//nolint:gosec // test-controlled arguments
+	cmd := exec.CommandContext(context.Background(), "go", "run", "gen_schema.go", outPath)
 	cmd.Dir = filepath.Join("..", "schemas")
 
 	out, err := cmd.CombinedOutput()
@@ -27,14 +29,15 @@ func generateSchema(t *testing.T) map[string]any {
 		t.Fatalf("generator failed: %v\noutput:\n%s", err, string(out))
 	}
 
-	b, err := os.ReadFile(outPath) //nolint:gosec // path from t.TempDir, not user input
+	//nolint:gosec // path from t.TempDir, not user input
+	schemaBytes, err := os.ReadFile(outPath)
 	if err != nil {
 		t.Fatalf("read generated schema: %v", err)
 	}
 
 	var schema map[string]any
 
-	err = json.Unmarshal(b, &schema)
+	err = json.Unmarshal(schemaBytes, &schema)
 	if err != nil {
 		t.Fatalf("unmarshal generated schema: %v", err)
 	}
@@ -42,6 +45,7 @@ func generateSchema(t *testing.T) map[string]any {
 	return schema
 }
 
+//nolint:funlen // Table-driven test with multiple subtests is naturally long
 func TestGeneratedSchema(t *testing.T) {
 	t.Parallel()
 
