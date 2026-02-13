@@ -1,4 +1,6 @@
 package chat
 
-// Exported for testing purposes.
-var LoadChatConfig = loadChatConfig
+// GetLoadChatConfig returns the loadChatConfig function for testing purposes.
+func GetLoadChatConfig() func() chatConfig {
+	return loadChatConfig
+}

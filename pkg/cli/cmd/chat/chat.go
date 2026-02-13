@@ -57,12 +57,9 @@ func parseChatFlags(cmd *cobra.Command) (flags, error) {
 	reasoningEffortFlag, _ := cmd.Flags().GetString("reasoning-effort")
 
 	// Validate reasoning effort if provided via flag
-	if reasoningEffortFlag != "" {
-		switch reasoningEffortFlag {
-		case "low", "medium", "high":
-		default:
-			return flags{}, fmt.Errorf("%w: %q", errInvalidReasoningEffort, reasoningEffortFlag)
-		}
+	err := validateReasoningEffort(reasoningEffortFlag)
+	if err != nil {
+		return flags{}, err
 	}
 
 	streaming, _ := cmd.Flags().GetBool("streaming")
@@ -73,23 +70,12 @@ func parseChatFlags(cmd *cobra.Command) (flags, error) {
 	cfg := loadChatConfig()
 
 	// Determine model: flag > config > "" (auto)
-	model := modelFlag
-	if model == "" {
-		if cfg.Model != "" && cfg.Model != "auto" {
-			model = cfg.Model
-		}
-	}
+	model := resolveModel(modelFlag, cfg.Model)
 
 	// Determine reasoning effort: flag > config > ""
-	reasoningEffort := reasoningEffortFlag
-	if reasoningEffort == "" && cfg.ReasoningEffort != "" {
-		// Validate config value
-		switch cfg.ReasoningEffort {
-		case "low", "medium", "high":
-			reasoningEffort = cfg.ReasoningEffort
-		default:
-			return flags{}, fmt.Errorf("%w: %q (from config)", errInvalidReasoningEffort, cfg.ReasoningEffort)
-		}
+	reasoningEffort, err := resolveReasoningEffort(reasoningEffortFlag, cfg.ReasoningEffort)
+	if err != nil {
+		return flags{}, err
 	}
 
 	return flags{
@@ -99,6 +85,48 @@ func parseChatFlags(cmd *cobra.Command) (flags, error) {
 		timeout:         timeout,
 		useTUI:          useTUI,
 	}, nil
+}
+
+func validateReasoningEffort(effort string) error {
+	if effort == "" {
+		return nil
+	}
+
+	switch effort {
+	case "low", "medium", "high":
+		return nil
+	default:
+		return fmt.Errorf("%w: %q", errInvalidReasoningEffort, effort)
+	}
+}
+
+func resolveModel(flagValue, configValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+
+	if configValue != "" && configValue != "auto" {
+		return configValue
+	}
+
+	return ""
+}
+
+func resolveReasoningEffort(flagValue, configValue string) (string, error) {
+	if flagValue != "" {
+		return flagValue, nil
+	}
+
+	if configValue != "" {
+		err := validateReasoningEffort(configValue)
+		if err != nil {
+			return "", fmt.Errorf("%w: %q (from config)", errInvalidReasoningEffort, configValue)
+		}
+
+		return configValue, nil
+	}
+
+	return "", nil
 }
 
 // setupCopilotClient starts the Copilot client, validates authentication,
