@@ -198,7 +198,7 @@ func (m *Model) currentModelSupportsReasoning() bool {
 	if modelID == "" {
 		// No resolved model yet — optimistically show the keybind since auto mode
 		// may resolve to a reasoning-capable model.
-		return m.sessionConfig.ReasoningEffort != ""
+		return true
 	}
 
 	for _, model := range m.availableModels {
