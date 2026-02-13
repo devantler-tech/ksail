@@ -48,6 +48,10 @@ linters:
     tagalign:
       align: false
       sort: true
+    gomoddirectives:
+      replace-allow-list:
+        - github.com/docker/docker
+        - github.com/docker/cli
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false
