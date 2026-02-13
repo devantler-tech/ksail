@@ -61,7 +61,7 @@ require (
 	github.com/github/copilot-sdk/go v0.1.23
 	github.com/hetznercloud/hcloud-go/v2 v2.36.0
 	github.com/invopop/jsonschema v0.13.0
-	github.com/modelcontextprotocol/go-sdk v1.2.0
+	github.com/modelcontextprotocol/go-sdk v1.3.0
 	github.com/siderolabs/go-retry v0.3.3
 	golang.org/x/text v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
