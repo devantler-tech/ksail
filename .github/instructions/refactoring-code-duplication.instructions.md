@@ -103,7 +103,7 @@ func ValidateProduct(product Product) error {
 
 **Strategy:**
 
-1. Create a shared package with a descriptive name (e.g., `pkg/validation`, `pkg/stringutil`)
+1. Create a shared package with a descriptive name appropriate for this repo (for example, reuse existing locations like `pkg/fsutil/validator` or `pkg/apis/cluster/v1alpha1`, or introduce a new package such as `pkg/<domain>/validation`)
 2. Move common functions there
 3. Export functions with clear names
 4. Update all imports
