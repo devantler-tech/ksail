@@ -4,3 +4,10 @@
 # 415 - because some websites have unsupported Media Types.
 # 429 - because some websites have low rate limits.
 accept = ["100..=103", "200..=299", "403", "415", "429"]
+
+# Exclude package-lock.json — contains registry tarballs that are not browsable URLs.
+exclude_path = ["docs/package-lock.json"]
+
+# Exclude site-relative documentation links that are valid in the Astro/Starlight
+# build but cannot be resolved by lychee without a running dev server.
+exclude = ['^/']
