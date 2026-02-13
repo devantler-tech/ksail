@@ -242,6 +242,7 @@ require (
 	github.com/coreos/go-iptables v0.8.0 // indirect
 	github.com/cosi-project/runtime v1.12.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
+	github.com/creack/pty v1.1.24 // indirect
 	github.com/curioswitch/go-reassign v0.3.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/daixiang0/gci v0.13.7 // indirect
@@ -259,6 +260,7 @@ require (
 	github.com/docker/cli v29.1.2+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.5 // indirect
+	github.com/docker/go v1.5.1-1 // indirect
 	github.com/docker/go-events v0.0.0-20250114142523-c867878c5e32 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
@@ -485,8 +487,6 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.1.0 // indirect
 	github.com/moby/locker v1.0.1 // indirect
-	github.com/moby/moby/api v1.53.0 // indirect
-	github.com/moby/moby/client v0.2.2 // indirect
 	github.com/moby/patternmatcher v0.6.0 // indirect
 	github.com/moby/spdystream v0.5.0 // indirect
 	github.com/moby/sys/atomicwriter v0.1.0 // indirect
@@ -731,9 +731,12 @@ tool (
 	golang.org/x/tools/cmd/deadcode
 )
 
-// Workaround for k3d compatibility with updated docker/moby clients from k9s upgrade
+// Pin docker/docker and docker/cli for k3d compatibility.
+// k3d v5.9.0-rc.0 uses docker/docker monolith types. docker/cli v29 migrated to
+// the new moby/moby/api and moby/moby/client split modules whose types are
+// incompatible with docker/docker types. Pinning docker/cli to v28 keeps
+// everything on the monolith type system.
 replace (
-github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
-github.com/moby/moby/client => github.com/docker/docker/client v28.5.2+incompatible
-github.com/moby/moby/api => github.com/docker/docker/api v28.5.2+incompatible
+	github.com/docker/cli => github.com/docker/cli v28.3.1+incompatible
+	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
 )

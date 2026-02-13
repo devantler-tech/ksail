@@ -4,6 +4,7 @@
 package schemas_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -19,7 +20,13 @@ func generateSchema(t *testing.T) map[string]any {
 	outPath := filepath.Join(outDir, "ksail-config.schema.json")
 
 	// Run the generator from the schemas/ directory.
-	cmd := exec.Command("go", "run", "gen_schema.go", outPath) //nolint:gosec // test-controlled arguments
+	cmd := exec.CommandContext( //nolint:gosec // test-controlled arguments
+		context.Background(),
+		"go",
+		"run",
+		"gen_schema.go",
+		outPath,
+	)
 	cmd.Dir = filepath.Join("..", "schemas")
 
 	out, err := cmd.CombinedOutput()
@@ -27,14 +34,14 @@ func generateSchema(t *testing.T) map[string]any {
 		t.Fatalf("generator failed: %v\noutput:\n%s", err, string(out))
 	}
 
-	b, err := os.ReadFile(outPath) //nolint:gosec // path from t.TempDir, not user input
+	schemaData, err := os.ReadFile(outPath) //nolint:gosec // path from t.TempDir, not user input
 	if err != nil {
 		t.Fatalf("read generated schema: %v", err)
 	}
 
 	var schema map[string]any
 
-	err = json.Unmarshal(b, &schema)
+	err = json.Unmarshal(schemaData, &schema)
 	if err != nil {
 		t.Fatalf("unmarshal generated schema: %v", err)
 	}
@@ -70,7 +77,6 @@ func TestGeneratedSchema(t *testing.T) {
 		kindProp := mustProp(t, schema, "kind")
 		assertEnum(t, kindProp, []string{"Cluster"})
 	})
-
 	t.Run("apiVersion enum", func(t *testing.T) {
 		t.Parallel()
 
