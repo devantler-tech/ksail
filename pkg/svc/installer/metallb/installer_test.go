@@ -15,16 +15,7 @@ import (
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
-	mockClient := helm.NewMockInterface(t)
-	timeout := 5 * time.Minute
-
-	installer := metallbinstaller.NewInstaller(
-		mockClient,
-		"~/.kube/config",
-		"test-context",
-		timeout,
-		"",
-	)
+	installer, _ := newInstallerWithDefaults(t)
 
 	assert.NotNil(t, installer)
 }
@@ -32,39 +23,91 @@ func TestNewInstaller(t *testing.T) {
 func TestNewInstaller_CustomIPRange(t *testing.T) {
 	t.Parallel()
 
-	mockClient := helm.NewMockInterface(t)
-	timeout := 5 * time.Minute
-
+	client := helm.NewMockInterface(t)
 	installer := metallbinstaller.NewInstaller(
-		mockClient,
+		client,
 		"~/.kube/config",
 		"test-context",
-		timeout,
+		5*time.Minute,
 		"10.0.0.100-10.0.0.200",
 	)
 
 	assert.NotNil(t, installer)
 }
 
-func TestInstaller_Uninstall(t *testing.T) {
+func TestUninstallSuccess(t *testing.T) {
 	t.Parallel()
 
-	mockClient := helm.NewMockInterface(t)
-	timeout := 5 * time.Minute
+	installer, client := newInstallerWithDefaults(t)
 
-	mockClient.EXPECT().
+	client.EXPECT().
 		UninstallRelease(mock.Anything, "metallb", "metallb-system").
 		Return(nil).
 		Once()
 
-	installer := metallbinstaller.NewInstaller(
-		mockClient,
-		"~/.kube/config",
-		"test-context",
-		timeout,
-		"",
-	)
 	err := installer.Uninstall(context.Background())
 
 	require.NoError(t, err)
+}
+
+func TestUninstallError(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newInstallerWithDefaults(t)
+
+	client.EXPECT().
+		UninstallRelease(mock.Anything, "metallb", "metallb-system").
+		Return(assert.AnError).
+		Once()
+
+	err := installer.Uninstall(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to uninstall metallb release")
+	require.ErrorIs(t, err, assert.AnError)
+}
+
+func TestUninstallContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newInstallerWithDefaults(t)
+
+	client.EXPECT().
+		UninstallRelease(mock.MatchedBy(func(ctx context.Context) bool {
+			return ctx.Err() != nil
+		}), "metallb", "metallb-system").
+		Return(context.Canceled).
+		Once()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := installer.Uninstall(ctx)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Contains(t, err.Error(), "failed to uninstall metallb release")
+}
+
+// Skipped: Install requires a real Kubernetes cluster (ensurePrivilegedNamespace calls k8s.NewClientset).
+func TestInstallEnsurePrivilegedNamespace(t *testing.T) {
+	t.Parallel()
+	t.Skip("requires Kubernetes cluster: ensurePrivilegedNamespace uses k8s.NewClientset")
+}
+
+func newInstallerWithDefaults(
+	t *testing.T,
+) (*metallbinstaller.Installer, *helm.MockInterface) {
+	t.Helper()
+
+	client := helm.NewMockInterface(t)
+	installer := metallbinstaller.NewInstaller(
+		client,
+		"~/.kube/config",
+		"test-context",
+		5*time.Minute,
+		"",
+	)
+
+	return installer, client
 }
