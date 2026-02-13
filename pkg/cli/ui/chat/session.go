@@ -40,17 +40,19 @@ var (
 
 // MessageMetadata represents metadata for a single message in a session.
 type MessageMetadata struct {
-	AgentMode bool `json:"agentMode"` // true = agent mode, false = plan mode
+	// ChatMode stores the chat mode when the message was sent.
+	// 0 = agent, 1 = plan, 2 = ask.
+	ChatMode ChatMode `json:"chatMode"`
 }
 
 // SessionMetadata represents metadata for a chat session stored locally.
 // Message content is stored server-side by Copilot and retrieved via ResumeSession.
 type SessionMetadata struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Model     string `json:"model,omitempty"`
-	AgentMode *bool  `json:"agentMode,omitempty"` // nil or true = agent mode, false = plan mode
-	// Messages stores per-message metadata (agentMode for each user message).
+	ID       string    `json:"id"`
+	Name     string    `json:"name"`
+	Model    string    `json:"model,omitempty"`
+	ChatMode *ChatMode `json:"chatMode,omitempty"` // nil = agent mode (default)
+	// Messages stores per-message metadata (chatMode for each user message).
 	Messages    []MessageMetadata        `json:"messages,omitempty"`
 	SDKMetadata *copilot.SessionMetadata `json:"-"` // SDK metadata (not persisted)
 	CreatedAt   time.Time                `json:"createdAt"`

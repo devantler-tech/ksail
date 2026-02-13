@@ -280,7 +280,9 @@ func generateConfigReferenceTables(b *strings.Builder) {
 
 	// spec.
 	b.WriteString("### spec\n\n")
-	b.WriteString("The `spec` field is a `Spec` object that defines editor, cluster, and workload configuration.\n\n")
+	b.WriteString(
+		"The `spec` field is a `Spec` object that defines editor, cluster, and workload configuration.\n\n",
+	)
 	writeFieldTable(b, reflect.TypeOf(v1alpha1.Spec{}), "")
 
 	// spec.editor description.
@@ -296,7 +298,12 @@ func generateConfigReferenceTables(b *strings.Builder) {
 	writeFieldTable(b, reflect.TypeOf(v1alpha1.ClusterSpec{}), "")
 
 	// Enum detail sections for cluster fields.
-	generateEnumSection(b, "distribution", reflect.TypeOf(v1alpha1.Distribution("")), distributionDetails)
+	generateEnumSection(
+		b,
+		"distribution",
+		reflect.TypeOf(v1alpha1.Distribution("")),
+		distributionDetails,
+	)
 	generateEnumSection(b, "provider", reflect.TypeOf(v1alpha1.Provider("")), providerDetails)
 
 	b.WriteString(configDistributionProse)
@@ -308,14 +315,34 @@ func generateConfigReferenceTables(b *strings.Builder) {
 
 	generateEnumSection(b, "cni", reflect.TypeOf(v1alpha1.CNI("")), cniDetails)
 	generateEnumSection(b, "csi", reflect.TypeOf(v1alpha1.CSI("")), csiDetails)
-	generateEnumSection(b, "metricsServer", reflect.TypeOf(v1alpha1.MetricsServer("")), metricsServerDetails)
-	generateEnumSection(b, "certManager", reflect.TypeOf(v1alpha1.CertManager("")), certManagerDetails)
-	generateEnumSection(b, "policyEngine", reflect.TypeOf(v1alpha1.PolicyEngine("")), policyEngineDetails)
+	generateEnumSection(
+		b,
+		"metricsServer",
+		reflect.TypeOf(v1alpha1.MetricsServer("")),
+		metricsServerDetails,
+	)
+	generateEnumSection(
+		b,
+		"certManager",
+		reflect.TypeOf(v1alpha1.CertManager("")),
+		certManagerDetails,
+	)
+	generateEnumSection(
+		b,
+		"policyEngine",
+		reflect.TypeOf(v1alpha1.PolicyEngine("")),
+		policyEngineDetails,
+	)
 
 	b.WriteString(configLocalRegistryProse)
 	b.WriteString("\n\n")
 
-	generateEnumSection(b, "gitOpsEngine", reflect.TypeOf(v1alpha1.GitOpsEngine("")), gitOpsEngineDetails)
+	generateEnumSection(
+		b,
+		"gitOpsEngine",
+		reflect.TypeOf(v1alpha1.GitOpsEngine("")),
+		gitOpsEngineDetails,
+	)
 
 	b.WriteString(configDistToolOptions)
 	b.WriteString("\n\n")
@@ -365,7 +392,9 @@ func writeFieldTable(b *strings.Builder, t reflect.Type, prefix string) {
 			defaultVal = "`" + defaultVal + "`"
 		}
 
-		b.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n", fullName, typeName, defaultVal, desc))
+		b.WriteString(
+			fmt.Sprintf("| `%s` | %s | %s | %s |\n", fullName, typeName, defaultVal, desc),
+		)
 	}
 
 	b.WriteString("\n")

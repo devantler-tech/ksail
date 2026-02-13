@@ -131,7 +131,8 @@ func TestCLIFlagsPagesHaveFrontmatter(t *testing.T) {
 			return walkErr
 		}
 
-		if info.IsDir() || !strings.HasSuffix(path, ".mdx") || strings.HasSuffix(path, "index.mdx") {
+		if info.IsDir() || !strings.HasSuffix(path, ".mdx") ||
+			strings.HasSuffix(path, "index.mdx") {
 			return nil
 		}
 

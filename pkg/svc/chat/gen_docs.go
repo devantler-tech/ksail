@@ -84,7 +84,12 @@ func buildDocumentation() string {
 	processDocDirectory(&builder, filepath.Join(sourceDocsDir, "cli-flags"), "### ", loadedFiles)
 
 	// Load any remaining configuration files.
-	processDocDirectory(&builder, filepath.Join(sourceDocsDir, "configuration"), "### ", loadedFiles)
+	processDocDirectory(
+		&builder,
+		filepath.Join(sourceDocsDir, "configuration"),
+		"### ",
+		loadedFiles,
+	)
 
 	return builder.String()
 }
