@@ -187,6 +187,31 @@ func (d *sessionEventDispatcher) handleUsage(event copilot.SessionEvent) {
 		msg.outputTokens = *event.Data.OutputTokens
 	}
 
+	if event.Data.Cost != nil {
+		msg.cost = *event.Data.Cost
+	}
+
+	if len(event.Data.QuotaSnapshots) > 0 {
+		msg.quotaSnapshots = make(map[string]quotaSnapshot, len(event.Data.QuotaSnapshots))
+
+		for key, snapshot := range event.Data.QuotaSnapshots {
+			resetStr := ""
+			if snapshot.ResetDate != nil {
+				resetStr = snapshot.ResetDate.Format("Jan 2")
+			}
+
+			msg.quotaSnapshots[key] = quotaSnapshot{
+				entitlementRequests:   snapshot.EntitlementRequests,
+				isUnlimited:           snapshot.IsUnlimitedEntitlement,
+				usedRequests:          snapshot.UsedRequests,
+				remainingPercentage:   snapshot.RemainingPercentage,
+				resetDate:             resetStr,
+				overage:               snapshot.Overage,
+				overageAllowedAtQuota: snapshot.OverageAllowedWithExhaustedQuota,
+			}
+		}
+	}
+
 	d.eventChan <- msg
 }
 

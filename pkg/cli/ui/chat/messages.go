@@ -103,11 +103,25 @@ type modelUnavailableClearMsg struct{}
 // This can happen when the user discards changes or reverts to a checkpoint.
 type snapshotRewindMsg struct{}
 
-// usageMsg carries token usage statistics from the assistant.
+// usageMsg carries token usage and billing statistics from the assistant.
 type usageMsg struct {
-	model        string
-	inputTokens  float64
-	outputTokens float64
+	model          string
+	inputTokens    float64
+	outputTokens   float64
+	cost           float64
+	quotaSnapshots map[string]quotaSnapshot
+}
+
+// quotaSnapshot mirrors copilot.QuotaSnapshot for internal use,
+// avoiding direct SDK type dependency in message passing.
+type quotaSnapshot struct {
+	entitlementRequests   float64
+	isUnlimited           bool
+	usedRequests          float64
+	remainingPercentage   float64
+	resetDate             string // formatted as "Jan 2" for display
+	overage               float64
+	overageAllowedAtQuota bool
 }
 
 // compactionStartMsg signals that context compaction has started.

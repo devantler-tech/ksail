@@ -228,6 +228,8 @@ func (m *Model) isAutoMode() bool {
 
 // resolvedAutoModel returns the server-resolved model ID when in auto mode,
 // or empty string if auto hasn't resolved yet.
+// Falls back to lastUsageModel from assistant.usage events since session.model_change
+// may not fire reliably in all cases.
 func (m *Model) resolvedAutoModel() string {
 	if !m.isAutoMode() {
 		return ""
@@ -235,6 +237,10 @@ func (m *Model) resolvedAutoModel() string {
 
 	if m.currentModel != "" && m.currentModel != modelAuto {
 		return m.currentModel
+	}
+
+	if m.lastUsageModel != "" {
+		return m.lastUsageModel
 	}
 
 	return ""
@@ -289,19 +295,23 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 }
 
 // formatAutoOption formats the "auto" picker item, showing the resolved model
-// and its billing multiplier when available.
+// and its discounted billing multiplier when available.
+// Auto model selection provides a 10% multiplier discount on paid plans.
+// See: https://docs.github.com/en/copilot/concepts/auto-model-selection#multiplier-discounts
 func (m *Model) formatAutoOption() string {
 	resolved := m.resolvedAutoModel()
 	if resolved == "" {
-		return "auto (let Copilot choose)"
+		return "auto (let Copilot choose \u00b7 -10%)"
 	}
 
 	mult := m.findModelMultiplier(resolved)
 	if mult > 0 {
-		return fmt.Sprintf("auto (%s \u00b7 %.0fx)", resolved, mult)
+		discounted := mult * autoDiscountFactor
+
+		return fmt.Sprintf("auto (%s \u00b7 %.1fx)", resolved, discounted)
 	}
 
-	return fmt.Sprintf("auto (%s)", resolved)
+	return fmt.Sprintf("auto (%s \u00b7 -10%%)", resolved)
 }
 
 // styleModelItem applies styling to a model item.

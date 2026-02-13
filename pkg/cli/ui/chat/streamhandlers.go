@@ -406,6 +406,11 @@ func (m *Model) handleUsage(msg usageMsg) (tea.Model, tea.Cmd) {
 	m.lastUsageModel = msg.model
 	m.lastInputTokens = msg.inputTokens
 	m.lastOutputTokens = msg.outputTokens
+	m.lastCost = msg.cost
+
+	if len(msg.quotaSnapshots) > 0 {
+		m.lastQuotaSnapshots = msg.quotaSnapshots
+	}
 
 	return m, m.waitForEvent()
 }

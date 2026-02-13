@@ -242,6 +242,10 @@ type Model struct {
 	lastUsageModel   string  // model used in the last usage event
 	lastInputTokens  float64 // input tokens from the last usage event
 	lastOutputTokens float64 // output tokens from the last usage event
+	lastCost         float64 // cost from the last usage event
+
+	// Quota tracking (updated via QuotaSnapshots in AssistantUsage events)
+	lastQuotaSnapshots map[string]quotaSnapshot // keyed by quota category (e.g., "premium")
 
 	// Compaction state (updated via SessionCompaction events)
 	isCompacting bool // true while context compaction is in progress
