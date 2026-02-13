@@ -427,7 +427,7 @@ func friendlyTypeName(t reflect.Type) string {
 }
 
 // extractDescription extracts a description from the jsonschema tag,
-// falling back to a cleaned-up version of the field's Go doc comment.
+// falling back to the jsonschema_description tag.
 func extractDescription(field reflect.StructField) string {
 	tag := field.Tag.Get("jsonschema")
 	if tag != "" {
@@ -436,6 +436,10 @@ func extractDescription(field reflect.StructField) string {
 				return strings.TrimPrefix(part, "description=")
 			}
 		}
+	}
+
+	if desc := field.Tag.Get("jsonschema_description"); desc != "" {
+		return desc
 	}
 
 	return ""

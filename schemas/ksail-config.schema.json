@@ -224,7 +224,8 @@
                 "low",
                 "medium",
                 "high"
-              ]
+              ],
+              "description": "Reasoning effort level for chat responses (low, medium, or high)"
             }
           },
           "additionalProperties": false,

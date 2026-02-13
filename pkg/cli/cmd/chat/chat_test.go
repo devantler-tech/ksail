@@ -805,7 +805,7 @@ func getLoadChatConfigTests() []struct {
 	}{
 		{
 			name: "both model and reasoningEffort set",
-			yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+			yamlContent: `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   chat:
@@ -817,7 +817,7 @@ spec:
 		},
 		{
 			name: "only model set",
-			yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+			yamlContent: `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   chat:
@@ -828,7 +828,7 @@ spec:
 		},
 		{
 			name: "only reasoningEffort set",
-			yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+			yamlContent: `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   chat:
@@ -839,7 +839,7 @@ spec:
 		},
 		{
 			name: "empty chat spec",
-			yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+			yamlContent: `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   chat: {}
@@ -849,7 +849,7 @@ spec:
 		},
 		{
 			name: "no chat spec",
-			yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+			yamlContent: `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec: {}
 `,
@@ -863,9 +863,11 @@ spec: {}
 //
 //nolint:paralleltest // Cannot use t.Parallel() because subtests use t.Chdir()
 func TestLoadChatConfig(t *testing.T) {
-	for _, tt := range getLoadChatConfigTests() {
-		t.Run(tt.name, func(t *testing.T) {
-			runLoadChatConfigTest(t, tt.yamlContent, tt.expectModel, tt.expectReasoningEffort)
+	for _, testCase := range getLoadChatConfigTests() {
+		t.Run(testCase.name, func(t *testing.T) {
+			runLoadChatConfigTest(
+				t, testCase.yamlContent, testCase.expectModel, testCase.expectReasoningEffort,
+			)
 		})
 	}
 }
