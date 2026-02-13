@@ -96,35 +96,6 @@ func TestInstaller_Install_EnsurePrivilegedNamespace(t *testing.T) {
 }
 
 // Skipped: Install calls ensurePrivilegedNamespace before Helm operations, blocking isolation.
-func TestInstaller_Install_HelmLifecycle(t *testing.T) {
-	t.Parallel()
-	t.Skip("requires Kubernetes cluster: ensurePrivilegedNamespace blocks Helm testing")
-}
-
-// Skipped: waitForCRDs uses a dynamic.Interface to poll for CRD registration.
-func TestInstaller_Install_CRDWait(t *testing.T) {
-	t.Parallel()
-	t.Skip("requires dynamic Kubernetes client or test cluster")
-}
-
-// Skipped: ensureIPAddressPool uses Server-Side Apply via dynamic client.
-func TestInstaller_Install_IPAddressPoolCreation(t *testing.T) {
-	t.Parallel()
-	t.Skip("requires dynamic Kubernetes client or test cluster")
-}
-
-// Skipped: ensureL2Advertisement uses Server-Side Apply via dynamic client.
-func TestInstaller_Install_L2AdvertisementCreation(t *testing.T) {
-	t.Parallel()
-	t.Skip("requires dynamic Kubernetes client or test cluster")
-}
-
-// Skipped: Full integration test requiring all Kubernetes APIs.
-func TestInstaller_Install_FullSuccess(t *testing.T) {
-	t.Parallel()
-	t.Skip("requires Kubernetes cluster for full integration test")
-}
-
 func newInstallerWithDefaults(
 	t *testing.T,
 ) (*metallbinstaller.Installer, *helm.MockInterface) {
