@@ -5,6 +5,52 @@ description: KSail builds upon established Kubernetes technologies and patterns.
 
 KSail builds upon established Kubernetes technologies and patterns. This page provides an overview of key concepts with links to upstream documentation for deeper understanding.
 
+## Native Configuration Philosophy
+
+**KSail is a superset, not a replacement.** One of KSail's core design principles is to work with native distribution configurations rather than creating proprietary formats. When you run `ksail cluster init`, KSail generates:
+
+- **`kind.yaml`** for Vanilla (Kind) clusters — standard [Kind configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
+- **`k3d.yaml`** for K3s clusters — standard [K3d configuration](https://k3d.io/stable/usage/configfile/)
+- **`talos/` patches** for Talos clusters — standard [Talos configuration patches](https://www.talos.dev/latest/reference/configuration/)
+
+### Why This Matters
+
+**No vendor lock-in:** You can use these configuration files directly with the underlying tools (Kind, K3d, Talos CLI) without KSail. This means:
+
+- **Freedom to migrate:** Run `kind create cluster --config kind.yaml` anytime
+- **Standard tooling:** Use native CLI tools alongside KSail
+- **Team flexibility:** Team members can choose KSail or native tools
+- **Learning path:** Configurations match official documentation
+- **Future-proof:** Your investment in learning stays valid even if you stop using KSail
+
+### Unified Workflow Across Distributions
+
+While each distribution has its own configuration format, KSail provides a consistent workflow:
+
+```bash
+# Same commands work across all distributions
+ksail cluster init --distribution Vanilla  # Generates kind.yaml
+ksail cluster init --distribution K3s      # Generates k3d.yaml
+ksail cluster init --distribution Talos    # Generates talos/ patches
+
+# Consistent lifecycle management
+ksail cluster create   # Works with any distribution
+ksail cluster update   # Works with any distribution
+ksail cluster delete   # Works with any distribution
+```
+
+This consistency makes it easy to switch distributions or work on multiple projects using different Kubernetes flavors.
+
+### Configuration Portability
+
+KSail-generated configurations are fully portable:
+
+- **Vanilla (`kind.yaml`)**: Valid Kind configuration that can be used with `kind create cluster --config kind.yaml`
+- **K3s (`k3d.yaml`)**: Valid K3d configuration that can be used with `k3d cluster create --config k3d.yaml`
+- **Talos (patch files)**: Valid Talos patches that can be applied with `talosctl`
+
+You maintain full control and can always "drop down" to the native tool if needed.
+
 ## Kubernetes
 
 [Kubernetes](https://kubernetes.io/) is an open-source container orchestration platform for automating deployment, scaling, and management of containerized applications.
