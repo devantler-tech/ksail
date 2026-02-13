@@ -224,8 +224,7 @@
                 "low",
                 "medium",
                 "high"
-              ],
-              "description": "Reasoning effort level (low"
+              ]
             }
           },
           "additionalProperties": false,
