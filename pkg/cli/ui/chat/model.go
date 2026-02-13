@@ -208,10 +208,11 @@ type Model struct {
 	messages                     []message
 	currentResponse              strings.Builder
 	isStreaming                  bool
-	justCompleted                bool // true when a response just finished, shows "Ready" indicator
-	showCopyFeedback             bool // true when copy feedback should be shown briefly
-	showModelUnavailableFeedback bool // true when model-unavailable feedback should be shown
-	userScrolled                 bool // true when user has scrolled away from bottom (pause auto-scroll)
+	justCompleted                bool   // true when a response just finished, shows "Ready" indicator
+	showCopyFeedback             bool   // true when copy feedback should be shown briefly
+	showModelUnavailableFeedback bool   // true when model-unavailable feedback should be shown
+	modelUnavailableReason       string // reason why models are unavailable (for status bar)
+	userScrolled                 bool   // true when user has scrolled away from bottom (pause auto-scroll)
 	err                          error
 	quitting                     bool
 	ready                        bool
@@ -454,6 +455,7 @@ func (m *Model) Update(
 
 	case modelUnavailableClearMsg:
 		m.showModelUnavailableFeedback = false
+		m.modelUnavailableReason = ""
 
 		return m, nil
 

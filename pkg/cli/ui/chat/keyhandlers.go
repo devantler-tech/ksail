@@ -183,7 +183,10 @@ func (m *Model) handleOpenModelPicker() (tea.Model, tea.Cmd) {
 	// Lazy-load models on first use (or retry after a previous failure)
 	if len(m.availableModels) == 0 {
 		allModels, err := m.client.ListModels(m.ctx)
-		if err == nil {
+		if err != nil {
+			m.modelUnavailableReason = err.Error()
+		} else {
+			m.modelUnavailableReason = ""
 			m.availableModels = FilterEnabledModels(allModels)
 		}
 	}

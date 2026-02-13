@@ -76,14 +76,33 @@ func parseChatFlags(cmd *cobra.Command) flags {
 }
 
 // startCopilotClient creates and starts a Copilot client.
-// If GITHUB_TOKEN is set, it is used for authentication, bypassing OAuth/gh CLI auth.
+// Authentication precedence:
+//  1. KSAIL_COPILOT_TOKEN / COPILOT_TOKEN — explicit Copilot token
+//  2. Copilot CLI's own OAuth credentials (device flow via `copilot auth login`)
+//
+// GITHUB_TOKEN is intentionally NOT used: it is a general-purpose PAT that
+// may lack Copilot-specific scopes, causing API endpoints like models.list
+// to return 400.
 func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
+	// Environment variables to check for explicit Copilot tokens (priority order).
+	tokenEnvVars := []string{"KSAIL_COPILOT_TOKEN", "COPILOT_TOKEN"}
+
+	// Environment variables filtered from the child copilot CLI process to
+	// prevent implicit auth interference. GITHUB_TOKEN and GH_TOKEN are
+	// general-purpose PATs that may not carry Copilot-specific scopes.
+	filteredEnvVars := []string{"GITHUB_TOKEN", "GH_TOKEN"}
+
 	opts := &copilot.ClientOptions{
 		LogLevel: "error",
+		Env:      filterEnvVars(os.Environ(), filteredEnvVars),
 	}
 
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		opts.GithubToken = token
+	for _, envVar := range tokenEnvVars {
+		if token := os.Getenv(envVar); token != "" {
+			opts.GithubToken = token
+
+			break
+		}
 	}
 
 	client := copilot.NewClient(opts)
@@ -95,12 +114,38 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 				"To fix:\n"+
 				"  1. Install GitHub Copilot CLI: npm install -g @githubnext/github-copilot-cli\n"+
 				"  2. Or set COPILOT_CLI_PATH to your installation\n"+
-				"  3. Or set GITHUB_TOKEN for token-based authentication",
+				"  3. Or authenticate: copilot auth login\n"+
+				"  4. Or set KSAIL_COPILOT_TOKEN for token-based authentication",
 			err,
 		)
 	}
 
 	return client, nil
+}
+
+// filterEnvVars returns a copy of env with the specified variable names removed.
+// Comparison is case-sensitive (matching os.Environ() format "KEY=value").
+func filterEnvVars(env []string, remove []string) []string {
+	filtered := make([]string, 0, len(env))
+
+	for _, entry := range env {
+		exclude := false
+
+		for _, name := range remove {
+			prefix := name + "="
+			if len(entry) >= len(prefix) && entry[:len(prefix)] == prefix {
+				exclude = true
+
+				break
+			}
+		}
+
+		if !exclude {
+			filtered = append(filtered, entry)
+		}
+	}
+
+	return filtered
 }
 
 // validateCopilotAuth checks authentication and returns the login name.

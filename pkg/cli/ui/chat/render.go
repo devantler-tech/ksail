@@ -87,7 +87,13 @@ func (m *Model) buildStatusText() string {
 		statusParts = append(statusParts, m.styles.status.Render("Copied"+checkmarkSuffix))
 	case m.showModelUnavailableFeedback:
 		warnStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow))
-		statusParts = append(statusParts, warnStyle.Render("Models unavailable"))
+
+		feedback := "Models unavailable"
+		if m.modelUnavailableReason != "" {
+			feedback += ": " + m.modelUnavailableReason
+		}
+
+		statusParts = append(statusParts, warnStyle.Render(feedback))
 	case m.justCompleted:
 		statusParts = append(statusParts, m.styles.status.Render("Ready"+checkmarkSuffix))
 	}
