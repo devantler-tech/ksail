@@ -89,7 +89,7 @@ func (m *Model) renderHelpOverlay() string {
 			m.styles.helpKey.Render(keyPageNav)+" scroll") + "\n")
 	content.WriteString(clipStyle.Render(
 		m.styles.helpKey.Render("Tab")+" mode"+helpSep+
-			m.styles.helpKey.Render("^Y")+" yolo"+helpSep+
+			m.styles.helpKey.Render("^Y")+" auto-approve"+helpSep+
 			m.styles.helpKey.Render("^T")+" tools"+helpSep+
 			m.styles.helpKey.Render("^R")+" copy"+helpSep+
 			m.styles.helpKey.Render("^H")+" sessions"+helpSep+
@@ -198,11 +198,6 @@ func (m *Model) getSessionPickerHelpParts() []string {
 
 // getDefaultHelpParts returns help for the default chat view.
 func (m *Model) getDefaultHelpParts() []string {
-	modeIcon := "</>"
-	if !m.agentMode {
-		modeIcon = "≡"
-	}
-
 	parts := []string{
 		m.styles.helpKey.Render(enterSymbol) + " send",
 	}
@@ -212,15 +207,15 @@ func (m *Model) getDefaultHelpParts() []string {
 		parts = append(parts, m.styles.helpKey.Render("^R")+" copy")
 	}
 
-	parts = append(parts, m.styles.helpKey.Render("Tab")+" "+modeIcon)
+	parts = append(parts, m.styles.helpKey.Render("Tab")+" "+m.chatMode.Label())
 
-	// Add YOLO mode hint
-	yoloHint := "yolo"
+	// Add auto-approve mode hint
+	autoApproveHint := "auto-approve"
 	if m.yoloMode {
-		yoloHint = "yolo ✓"
+		autoApproveHint = "auto-approve ✓"
 	}
 
-	parts = append(parts, m.styles.helpKey.Render("^Y")+" "+yoloHint)
+	parts = append(parts, m.styles.helpKey.Render("^Y")+" "+autoApproveHint)
 
 	// Conditionally add tools hint
 	if len(m.toolOrder) > 0 || m.hasToolsInMessages() {

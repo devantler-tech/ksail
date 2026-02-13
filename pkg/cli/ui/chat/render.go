@@ -56,18 +56,14 @@ func (m *Model) buildTaglineRow(contentWidth int) string {
 func (m *Model) buildStatusText() string {
 	var statusParts []string
 
-	// Mode icon: </> for Agent, ≡ for Plan
+	// Mode indicator with icon and label
 	modeStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiCyan))
-	if m.agentMode {
-		statusParts = append(statusParts, modeStyle.Render("</>"))
-	} else {
-		statusParts = append(statusParts, modeStyle.Render("≡"))
-	}
+	statusParts = append(statusParts, modeStyle.Render(m.chatMode.Label()))
 
-	// YOLO indicator
+	// Auto-approve indicator
 	if m.yoloMode {
 		yoloStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow)).Bold(true)
-		statusParts = append(statusParts, yoloStyle.Render("YOLO"))
+		statusParts = append(statusParts, yoloStyle.Render("auto-approve"))
 	}
 
 	// Model name

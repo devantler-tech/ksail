@@ -69,13 +69,8 @@ func (m *Model) renderMessage(builder *strings.Builder, msg *message, wrapWidth 
 // renderUserMessage renders a user message.
 func (m *Model) renderUserMessage(builder *strings.Builder, msg *message, wrapWidth uint) {
 	builder.WriteString("\n")
-	// Add mode indicator: </> for agent, ≡ for plan
-	modeIcon := "</>"
-	if !msg.agentMode {
-		modeIcon = "≡"
-	}
-
-	builder.WriteString(m.styles.userMsg.Render("▶ You " + modeIcon))
+	// Add mode indicator with icon and label
+	builder.WriteString(m.styles.userMsg.Render("▶ You " + msg.chatMode.Label()))
 	builder.WriteString("\n\n")
 
 	wrapped := wordwrap.WrapString(msg.content, wrapWidth)

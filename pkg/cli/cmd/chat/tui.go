@@ -54,17 +54,17 @@ func setupChatTools(
 	rootCmd *cobra.Command,
 	eventChan chan tea.Msg,
 	outputChan chan toolgen.OutputChunk,
-) (*chatui.AgentModeRef, *chatui.YoloModeRef) {
+) (*chatui.ChatModeRef, *chatui.YoloModeRef) {
 	tools, toolMetadata := chatsvc.GetKSailToolMetadata(rootCmd, outputChan)
-	agentModeRef := chatui.NewAgentModeRef(true)
+	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode)
 	yoloModeRef := chatui.NewYoloModeRef(false)
 	tools = WrapToolsWithPermissionAndModeMetadata(
-		tools, eventChan, agentModeRef, yoloModeRef, toolMetadata,
+		tools, eventChan, chatModeRef, yoloModeRef, toolMetadata,
 	)
 	sessionConfig.Tools = tools
 	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan, yoloModeRef)
 
-	return agentModeRef, yoloModeRef
+	return chatModeRef, yoloModeRef
 }
 
 // runTUIChat starts the TUI chat mode.
@@ -85,7 +85,7 @@ func runTUIChat(
 	eventChan := make(chan tea.Msg, eventChannelBuffer)
 	outputChan := make(chan toolgen.OutputChunk, outputChannelBuffer)
 	forwarderWg := startOutputForwarder(outputChan, eventChan)
-	agentModeRef, yoloModeRef := setupChatTools( //nolint:contextcheck
+	chatModeRef, yoloModeRef := setupChatTools( //nolint:contextcheck
 		sessionConfig, rootCmd, eventChan, outputChan,
 	)
 
@@ -117,7 +117,7 @@ func runTUIChat(
 		CurrentModel:  currentModel,
 		Timeout:       timeout,
 		EventChan:     eventChan,
-		AgentModeRef:  agentModeRef,
+		ChatModeRef:   chatModeRef,
 		YoloModeRef:   yoloModeRef,
 		Theme:         chatui.DefaultThemeConfig(),
 		ToolDisplay:   chatui.DefaultToolDisplayConfig(),
