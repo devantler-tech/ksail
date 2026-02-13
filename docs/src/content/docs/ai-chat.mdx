@@ -24,16 +24,31 @@ This opens an interactive TUI (Terminal User Interface) with markdown rendering,
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `-m, --model` | Model to use (e.g., `gpt-5`, `claude-sonnet-4`) | Auto-detected from config or `gpt-5` |
+| `-m, --model` | Model to use (e.g., `gpt-5`, `claude-sonnet-4`, `auto`) | Auto-detected from config or `gpt-5` |
+| `-r, --reasoning-effort` | Reasoning effort level for supported models (`low`, `medium`, `high`) | Model default |
 | `-s, --streaming` | Enable streaming responses | `true` |
 | `-t, --timeout` | Response timeout duration | `5m0s` |
 | `--tui` | Use interactive TUI mode with markdown rendering | `true` |
 
-**Example:**
+**Examples:**
 
 ``````bash
-ksail chat --model claude-sonnet-4.5 --timeout 10m
+# Use a specific model with high reasoning effort
+ksail chat --model gpt-5 --reasoning-effort high
+
+# Use auto model selection (applies 10% discount when available)
+ksail chat --model auto --timeout 10m
 ``````
+
+## Authentication
+
+The chat assistant supports multiple authentication methods via environment variables:
+
+- `KSAIL_COPILOT_TOKEN` - KSail-specific Copilot token (preferred)
+- `COPILOT_TOKEN` - General Copilot token
+- GitHub Copilot CLI authentication (default)
+
+**Note:** `GITHUB_TOKEN` and `GH_TOKEN` are intentionally filtered as they are general-purpose personal access tokens that may lack Copilot-specific scopes, which can cause authentication errors.
 
 ## Chat Modes
 
@@ -106,6 +121,61 @@ Ask mode allows the AI to execute read-only tools (inspect, list, describe) whil
 - "What CNI is currently installed?"
 - "List all workloads in the cluster"
 
+## Advanced Features
+
+### Reasoning Effort
+
+Supported models can use different reasoning effort levels to balance response quality and speed. Press **Ctrl+E** in the TUI to change the effort level during a chat session.
+
+| Level | Description | Use Case |
+|-------|-------------|----------|
+| `low` | Faster responses, less deep analysis | Quick questions, simple tasks |
+| `medium` | Balanced speed and quality | General usage, moderate complexity |
+| `high` | Slower, more thorough reasoning | Complex problems, critical decisions |
+
+**Example:**
+
+``````bash
+ksail chat --reasoning-effort high
+``````
+
+**In TUI:** Press `Ctrl+E` and select your desired effort level.
+
+### Auto Model Selection
+
+Use `--model auto` to enable automatic model selection with a 10% discount (when available). The TUI shows the resolved model transparently:
+
+```
+Model: auto → gpt-4o
+```
+
+This feature helps optimize costs while maintaining quality by automatically selecting the most suitable model for your subscription tier.
+
+### Quota Tracking
+
+The TUI displays premium request usage for subscriptions with usage limits:
+
+```
+300/300 reqs · 0% · resets Jan 2
+```
+
+For unlimited entitlements:
+
+```
+∞ reqs
+```
+
+This helps you monitor usage and plan your interactions accordingly.
+
+### Infinite Sessions
+
+Chat sessions support unlimited conversation length through automatic background compaction:
+
+- **Background Compaction Threshold**: 0.80 (80% of context window)
+- **Buffer Exhaustion Threshold**: 0.95 (95% of context window)
+
+When the conversation approaches these thresholds, the system automatically compacts older messages to preserve context while managing memory efficiently. This allows you to have extended conversations without hitting context limits.
+
 ## Keyboard Shortcuts
 
 ### Navigation
@@ -118,7 +188,8 @@ Ask mode allows the AI to execute read-only tools (inspect, list, describe) whil
 - **Tab** — Cycle chat mode (Agent → Plan → Ask → Agent)
 - **Ctrl+Y** — Toggle auto-approve mode (bypasses permission prompts)
 - **Ctrl+T** — Expand/collapse tool execution details
-- **Ctrl+O** — Change AI model
+- **Ctrl+O** — Change AI model (lazy-loaded picker)
+- **Ctrl+E** — Change reasoning effort level
 - **Ctrl+H** — View session history
 - **Ctrl+N** — Start new chat session
 
@@ -142,12 +213,13 @@ Ask mode allows the AI to execute read-only tools (inspect, list, describe) whil
 
 ## Configuration
 
-Set your preferred model in `ksail.yaml`:
+Set your preferred model and reasoning effort in `ksail.yaml`:
 
 ``````yaml
 spec:
   chat:
-    model: claude-sonnet-4.5  # or gpt-5, gpt-4o, etc.
+    model: claude-sonnet-4.5  # or gpt-5, gpt-4o, auto, etc.
+    reasoningEffort: medium    # low, medium, or high
 ``````
 
 If not set, the assistant uses the model specified via `--model` flag or defaults to `gpt-5`.
@@ -208,6 +280,8 @@ Sessions are stored in `~/.ksail/chat/sessions/` and persist across restarts.
 3. **Enable auto-approve** (`Ctrl+Y`) in Agent mode for trusted operations
 4. **Filter session history** (`Ctrl+H` then `/`) to find past conversations
 5. **Copy outputs** (`Ctrl+R`) to use in scripts or documentation
+6. **Adjust reasoning effort** (`Ctrl+E`) based on task complexity
+7. **Use auto model** (`--model auto`) to optimize costs
 
 ## Troubleshooting
 
@@ -229,6 +303,7 @@ Check available models:
 
 ``````bash
 ksail chat --model gpt-5  # Try different models
+ksail chat --model auto   # Use auto-selection
 ``````
 
 ### Timeout errors
@@ -238,6 +313,14 @@ Increase timeout for complex operations:
 ``````bash
 ksail chat --timeout 15m
 ``````
+
+### Authentication errors
+
+If you encounter authentication issues:
+
+1. Ensure Copilot CLI is authenticated: `copilot auth login`
+2. Use `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN` environment variables if needed
+3. Avoid using `GITHUB_TOKEN` or `GH_TOKEN` as they may lack Copilot-specific scopes
 
 ## See Also
 
