@@ -130,6 +130,27 @@ Ask mode allows the AI to execute read-only tools (inspect, list, describe) whil
 - **Esc** — Close modals or cancel current operation
 - **Ctrl+C** — Force quit
 
+## Usage Tracking
+
+The chat interface displays real-time quota information in the footer, right-aligned next to the help text. This shows your current usage of premium model requests.
+
+### Quota Display
+
+The quota indicator shows:
+- **Used/Total requests** — Current usage against your entitlement (e.g., `45/100 reqs`)
+- **Remaining percentage** — How much quota remains (e.g., `55%`)
+- **Reset date (when available)** — When your quota renews (e.g., `resets Feb 15`)
+
+**Example (with reset date available):** `45/100 reqs · 55% · resets Feb 15`
+
+### Display Behavior
+
+- Quota appears automatically when usage data is available from GitHub Copilot
+- Only the **premium** quota category is shown; other unlimited categories are hidden for clarity
+- When your premium quota is unlimited, it is still shown with an `∞ reqs` indicator instead of a numeric total
+- Help text takes priority — if the terminal is too narrow, quota is hidden to preserve help visibility
+- Reset date is included only when provided by GitHub Copilot
+- Updates in real-time as you interact with the assistant
 ## Mode Comparison
 
 | Feature | Agent Mode | Plan Mode | Ask Mode |
