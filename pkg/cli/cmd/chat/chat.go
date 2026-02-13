@@ -75,20 +75,20 @@ func parseChatFlags(cmd *cobra.Command) (flags, error) {
 	// Determine model: flag > config > "" (auto)
 	model := modelFlag
 	if model == "" {
-		if cfg.model != "" && cfg.model != "auto" {
-			model = cfg.model
+		if cfg.Model != "" && cfg.Model != "auto" {
+			model = cfg.Model
 		}
 	}
 
 	// Determine reasoning effort: flag > config > ""
 	reasoningEffort := reasoningEffortFlag
-	if reasoningEffort == "" && cfg.reasoningEffort != "" {
+	if reasoningEffort == "" && cfg.ReasoningEffort != "" {
 		// Validate config value
-		switch cfg.reasoningEffort {
+		switch cfg.ReasoningEffort {
 		case "low", "medium", "high":
-			reasoningEffort = cfg.reasoningEffort
+			reasoningEffort = cfg.ReasoningEffort
 		default:
-			return flags{}, fmt.Errorf("%w: %q (from config)", errInvalidReasoningEffort, cfg.reasoningEffort)
+			return flags{}, fmt.Errorf("%w: %q (from config)", errInvalidReasoningEffort, cfg.ReasoningEffort)
 		}
 	}
 
@@ -374,8 +374,8 @@ func handleChatRunE(cmd *cobra.Command) error {
 
 // chatConfig holds configuration values loaded from ksail.yaml.
 type chatConfig struct {
-	model           string
-	reasoningEffort string
+	Model           string
+	ReasoningEffort string
 }
 
 // loadChatConfig loads chat configuration from ksail.yaml.
@@ -399,7 +399,7 @@ func loadChatConfig() chatConfig {
 	}
 
 	return chatConfig{
-		model:           config.Spec.Chat.Model,
-		reasoningEffort: config.Spec.Chat.ReasoningEffort,
+		Model:           config.Spec.Chat.Model,
+		ReasoningEffort: config.Spec.Chat.ReasoningEffort,
 	}
 }

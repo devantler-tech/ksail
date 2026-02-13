@@ -1,6 +1,7 @@
 package chat_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -787,4 +788,111 @@ func assertAskModeAllowsReadTool(t *testing.T, metadata map[string]toolgen.ToolD
 	if readResult.ResultType != successResult {
 		t.Errorf("Expected success for read tool in ask mode, got %s", readResult.ResultType)
 	}
+}
+
+// TestLoadChatConfig verifies that chat configuration is loaded correctly from ksail.yaml.
+func TestLoadChatConfig(t *testing.T) {
+	tests := []struct {
+name                    string
+yamlContent             string
+expectModel             string
+expectReasoningEffort   string
+}{
+{
+name: "both model and reasoningEffort set",
+yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+kind: Cluster
+spec:
+  chat:
+    model: gpt-5
+    reasoningEffort: high
+`,
+expectModel:           "gpt-5",
+expectReasoningEffort: "high",
+},
+{
+name: "only model set",
+yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+kind: Cluster
+spec:
+  chat:
+    model: claude-sonnet-4.5
+`,
+expectModel:           "claude-sonnet-4.5",
+expectReasoningEffort: "",
+},
+{
+name: "only reasoningEffort set",
+yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+kind: Cluster
+spec:
+  chat:
+    reasoningEffort: medium
+`,
+expectModel:           "",
+expectReasoningEffort: "medium",
+},
+{
+name: "empty chat spec",
+yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+kind: Cluster
+spec:
+  chat: {}
+`,
+expectModel:           "",
+expectReasoningEffort: "",
+},
+{
+name: "no chat spec",
+yamlContent: `apiVersion: ksail.devantler.tech/v1alpha1
+kind: Cluster
+spec: {}
+`,
+expectModel:           "",
+expectReasoningEffort: "",
+},
+}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory for test
+			tmpDir := t.TempDir()
+
+// Save original working directory
+origDir, err := os.Getwd()
+if err != nil {
+t.Fatalf("Failed to get current directory: %v", err)
+}
+
+// Change to temp directory
+if err := os.Chdir(tmpDir); err != nil {
+t.Fatalf("Failed to change directory: %v", err)
+}
+
+// Restore original directory after test
+defer func() {
+if err := os.Chdir(origDir); err != nil {
+t.Errorf("Failed to restore directory: %v", err)
+}
+}()
+
+// Write ksail.yaml
+if err := os.WriteFile("ksail.yaml", []byte(tt.yamlContent), 0600); err != nil {
+t.Fatalf("Failed to write config file: %v", err)
+}
+
+// Load config
+cfg := chat.LoadChatConfig()
+
+// Verify model
+if cfg.Model != tt.expectModel {
+t.Errorf("Expected model %q, got %q", tt.expectModel, cfg.Model)
+}
+
+// Verify reasoningEffort
+if cfg.ReasoningEffort != tt.expectReasoningEffort {
+t.Errorf("Expected reasoningEffort %q, got %q", tt.expectReasoningEffort, cfg.ReasoningEffort)
+}
+})
+}
 }
