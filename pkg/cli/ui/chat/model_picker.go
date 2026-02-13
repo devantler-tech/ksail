@@ -129,8 +129,8 @@ func (m *Model) applyModelFilter() {
 // selectModel handles model selection from the picker.
 func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 	if m.modelPickerIndex == 0 {
-		// "auto" option selected
-		if m.currentModel != "" && m.currentModel != modelAuto {
+		// "auto" option selected — switch only if not already in auto mode
+		if !m.isAutoMode() {
 			return m.switchModel("")
 		}
 	} else if m.modelPickerIndex > 0 && m.modelPickerIndex < totalItems {
@@ -221,6 +221,37 @@ func (m *Model) renderModelItems(
 	}
 }
 
+// isAutoMode returns true when the user has selected "auto" model (not an explicit model).
+func (m *Model) isAutoMode() bool {
+	return m.sessionConfig.Model == "" || m.sessionConfig.Model == modelAuto
+}
+
+// resolvedAutoModel returns the server-resolved model ID when in auto mode,
+// or empty string if auto hasn't resolved yet.
+func (m *Model) resolvedAutoModel() string {
+	if !m.isAutoMode() {
+		return ""
+	}
+
+	if m.currentModel != "" && m.currentModel != modelAuto {
+		return m.currentModel
+	}
+
+	return ""
+}
+
+// findModelMultiplier looks up the billing multiplier for a model ID.
+// Returns 0 if the model is not found or has no billing info.
+func (m *Model) findModelMultiplier(modelID string) float64 {
+	for _, model := range m.availableModels {
+		if model.ID == modelID && model.Billing != nil {
+			return model.Billing.Multiplier
+		}
+	}
+
+	return 0
+}
+
 // formatModelItem formats a single model item for display.
 func (m *Model) formatModelItem(index int) (string, bool) {
 	prefix := "  "
@@ -229,9 +260,9 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 	}
 
 	if index == 0 {
-		line := prefix + "auto (let Copilot choose)"
+		line := prefix + m.formatAutoOption()
 
-		isCurrentModel := m.currentModel == "" || m.currentModel == modelAuto
+		isCurrentModel := m.isAutoMode()
 		if isCurrentModel {
 			line += checkmarkSuffix
 		}
@@ -248,12 +279,29 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 
 	line := fmt.Sprintf("%s%s%s", prefix, model.ID, multiplier)
 
-	isCurrentModel := model.ID == m.currentModel
+	// Check explicit model match (not auto-resolved)
+	isCurrentModel := !m.isAutoMode() && model.ID == m.currentModel
 	if isCurrentModel {
 		line += checkmarkSuffix
 	}
 
 	return line, isCurrentModel
+}
+
+// formatAutoOption formats the "auto" picker item, showing the resolved model
+// and its billing multiplier when available.
+func (m *Model) formatAutoOption() string {
+	resolved := m.resolvedAutoModel()
+	if resolved == "" {
+		return "auto (let Copilot choose)"
+	}
+
+	mult := m.findModelMultiplier(resolved)
+	if mult > 0 {
+		return fmt.Sprintf("auto (%s \u00b7 %.0fx)", resolved, mult)
+	}
+
+	return fmt.Sprintf("auto (%s)", resolved)
 }
 
 // styleModelItem applies styling to a model item.

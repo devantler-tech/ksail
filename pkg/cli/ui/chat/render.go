@@ -66,15 +66,8 @@ func (m *Model) buildStatusText() string {
 		statusParts = append(statusParts, yoloStyle.Render("auto-approve"))
 	}
 
-	// Model name
-	modelStyle := lipgloss.NewStyle().Foreground(m.theme.DimColor)
-
-	switch {
-	case m.currentModel != "":
-		statusParts = append(statusParts, modelStyle.Render(m.currentModel))
-	default:
-		statusParts = append(statusParts, modelStyle.Render(modelAuto))
-	}
+	// Model name — show "auto → resolved" when in auto mode, otherwise the explicit model
+	statusParts = append(statusParts, m.buildModelStatusText())
 
 	// Streaming state and feedback
 	switch {
@@ -125,4 +118,24 @@ func (m *Model) renderInputOrModal() string {
 // renderFooter renders the context-aware help text footer using bubbles/help.
 func (m *Model) renderFooter() string {
 	return lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(m.renderShortHelp())
+}
+
+// buildModelStatusText renders the model indicator for the status bar.
+// Shows "auto → resolved-model" when in auto mode with a resolved model,
+// plain "auto" when not yet resolved, or the explicit model ID otherwise.
+func (m *Model) buildModelStatusText() string {
+	modelStyle := lipgloss.NewStyle().Foreground(m.theme.DimColor)
+
+	switch {
+	case m.isAutoMode():
+		if resolved := m.resolvedAutoModel(); resolved != "" {
+			return modelStyle.Render(modelAuto + " \u2192 " + resolved)
+		}
+
+		return modelStyle.Render(modelAuto)
+	case m.currentModel != "":
+		return modelStyle.Render(m.currentModel)
+	default:
+		return modelStyle.Render(modelAuto)
+	}
 }

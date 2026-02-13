@@ -210,8 +210,10 @@ func (m *Model) handleOpenModelPicker() (tea.Model, tea.Cmd) {
 }
 
 // findCurrentModelIndex returns the picker index for the current model.
+// When auto mode is active, returns 0 (the auto option) regardless of
+// which model the server resolved to.
 func (m *Model) findCurrentModelIndex() int {
-	if m.currentModel == "" || m.currentModel == modelAuto {
+	if m.isAutoMode() {
 		return 0
 	}
 
