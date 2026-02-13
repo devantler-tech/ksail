@@ -726,11 +726,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2-0.20260122202528-d9cc6641c482 // indirect
 )
 
-tool (
-	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-	golang.org/x/tools/cmd/deadcode
-)
-
 // Pin docker/docker and docker/cli for k3d compatibility.
 // k3d v5.9.0-rc.0 uses docker/docker monolith types. docker/cli v29 migrated to
 // the new moby/moby/api and moby/moby/client split modules whose types are
@@ -739,4 +734,9 @@ tool (
 replace (
 	github.com/docker/cli => github.com/docker/cli v28.3.1+incompatible
 	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
+)
+
+tool (
+	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+	golang.org/x/tools/cmd/deadcode
 )
