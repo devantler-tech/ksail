@@ -17,6 +17,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
 - ☸️ **Simple Clusters** — Spin up Vanilla, K3s, or Talos clusters with one command. Same workflow across distributions.
+- 🔓 **No Lock-In** — Uses native configs (`kind.yaml`, `k3d.yaml`, Talos patches). Run clusters with or without KSail.
 - 📥 **Mirror Registries** — Avoid rate limits, and store images once. Same mirrors used by different clusters.
 - 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
 - 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.
@@ -91,6 +92,27 @@ ksail cluster update            # Apply configuration changes
 # 6. Connect to the cluster with K9s
 ksail cluster connect
 ```
+
+### Native Configuration Files
+
+KSail generates standard distribution configuration files that you can use directly with the underlying tools:
+
+```bash
+# After ksail cluster init, you'll find native configs:
+# - kind.yaml       (for Vanilla/Kind clusters)
+# - k3d.yaml        (for K3s clusters)  
+# - talos/          (for Talos clusters)
+
+# You can use these configs directly without KSail:
+kind create cluster --config kind.yaml
+k3d cluster create --config k3d.yaml
+talosctl cluster create --config-patch @talos/cluster/patches.yaml
+
+# Or let KSail manage the lifecycle:
+ksail cluster create
+```
+
+This means you're never locked into KSail — you can migrate away at any time or use both KSail and native tools interchangeably.
 
 ## Documentation
 
