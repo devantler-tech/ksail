@@ -1,0 +1,246 @@
+---
+title: AI Chat Assistant
+description: Interactive AI-powered chat for cluster configuration and troubleshooting
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+The AI Chat Assistant provides an interactive interface for cluster configuration, troubleshooting, and learning. Powered by GitHub Copilot, it understands KSail's CLI, configuration schemas, and can execute commands with your approval.
+
+## Prerequisites
+
+- [GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line) must be installed and authenticated
+- Set `COPILOT_CLI_PATH` environment variable if the CLI is not in your PATH
+
+## Starting a Chat Session
+
+``````bash
+ksail chat
+``````
+
+This opens an interactive TUI (Terminal User Interface) with markdown rendering, syntax highlighting, and conversation history.
+
+### Command Options
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-m, --model` | Model to use (e.g., `gpt-5`, `claude-sonnet-4`) | Auto-detected from config or `gpt-5` |
+| `-s, --streaming` | Enable streaming responses | `true` |
+| `-t, --timeout` | Response timeout duration | `5m0s` |
+| `--tui` | Use interactive TUI mode with markdown rendering | `true` |
+
+**Example:**
+
+``````bash
+ksail chat --model claude-sonnet-4.5 --timeout 10m
+``````
+
+## Chat Modes
+
+The assistant operates in three distinct modes, each designed for different use cases. Press **Tab** to cycle between modes.
+
+### Agent Mode (`</>`)
+
+**Full execution mode with user approval**
+
+Agent mode allows the AI to execute both read and write operations. Write operations (creating, modifying, or deleting resources) require explicit user confirmation before execution.
+
+**When to use:**
+- Performing cluster operations (create, update, delete)
+- Deploying workloads
+- Modifying configuration files
+- Installing or updating components
+
+**Behavior:**
+- Read tools execute automatically
+- Write tools prompt for permission (`y`/`n`/`a` for always)
+- Can make changes to your cluster and configuration
+
+**Example prompts:**
+- "Create a Vanilla cluster with Cilium CNI"
+- "Deploy my application to the cluster"
+- "Update the cluster to use 3 worker nodes"
+
+### Plan Mode (`≡`)
+
+**Research and planning mode with no execution**
+
+Plan mode blocks all tool execution. The AI describes what it would do and outlines the steps needed to accomplish a task without making any changes.
+
+**When to use:**
+- Learning how to perform operations manually
+- Understanding what a command or workflow would do
+- Getting step-by-step instructions
+- Reviewing potential changes before execution
+
+**Behavior:**
+- No tools are executed
+- Provides detailed explanations and step-by-step plans
+- Safe for exploratory questions
+
+**Example prompts:**
+- "How would I migrate from K3s to Talos?"
+- "What steps are needed to enable GitOps with Flux?"
+- "Explain how to configure mirror registries"
+
+### Ask Mode (`?`)
+
+**Investigation mode with read-only execution**
+
+Ask mode allows the AI to execute read-only tools (inspect, list, describe) while blocking write operations. This is ideal for gathering information and troubleshooting without risk of changes.
+
+**When to use:**
+- Troubleshooting cluster issues
+- Inspecting current configuration
+- Understanding cluster state
+- Gathering diagnostic information
+
+**Behavior:**
+- Read tools execute automatically
+- Write tools are blocked
+- Cannot make changes to your cluster or configuration
+
+**Example prompts:**
+- "Why are my pods failing to start?"
+- "Show me the current cluster configuration"
+- "What CNI is currently installed?"
+- "List all workloads in the cluster"
+
+## Keyboard Shortcuts
+
+### Navigation
+- **Enter** — Send message
+- **Alt + Enter** — New line in input
+- **↑/↓** — Navigate command history (when input is empty) or scroll viewport
+- **PgUp/PgDn** — Scroll conversation viewport
+
+### Modes & Settings
+- **Tab** — Cycle chat mode (Agent → Plan → Ask → Agent)
+- **Ctrl+Y** — Toggle auto-approve mode (bypasses permission prompts)
+- **Ctrl+T** — Expand/collapse tool execution details
+- **Ctrl+O** — Change AI model
+- **Ctrl+H** — View session history
+- **Ctrl+N** — Start new chat session
+
+### Output
+- **Ctrl+R** — Copy latest assistant response to clipboard
+
+### Help & Exit
+- **F1** — Toggle help overlay
+- **Esc** — Close modals or cancel current operation
+- **Ctrl+C** — Force quit
+
+## Mode Comparison
+
+| Feature | Agent Mode | Plan Mode | Ask Mode |
+|---------|-----------|-----------|----------|
+| **Icon** | `</>` | `≡` | `?` |
+| **Read Tools** | ✅ Auto | ❌ None | ✅ Auto |
+| **Write Tools** | ✅ With approval | ❌ None | ❌ None |
+| **Makes Changes** | Yes (approved) | No | No |
+| **Best For** | Execution | Learning | Investigation |
+
+## Configuration
+
+Set your preferred model in `ksail.yaml`:
+
+``````yaml
+spec:
+  chat:
+    model: claude-sonnet-4.5  # or gpt-5, gpt-4o, etc.
+``````
+
+If not set, the assistant uses the model specified via `--model` flag or defaults to `gpt-5`.
+
+## Common Workflows
+
+### Learning Workflow (Plan Mode)
+
+``````bash
+# Start in Plan mode (press Tab until you see ≡)
+1. Ask: "How do I enable LoadBalancer support?"
+2. Review the step-by-step plan
+3. Switch to Agent mode (Tab) to execute if needed
+``````
+
+### Troubleshooting Workflow (Ask Mode)
+
+``````bash
+# Start in Ask mode (press Tab until you see ?)
+1. Ask: "Why can't I connect to my service?"
+2. AI inspects pods, services, and network policies
+3. Receive diagnosis without risk of changes
+``````
+
+### Execution Workflow (Agent Mode)
+
+``````bash
+# Start in Agent mode (default, </>)
+1. Ask: "Create a K3s cluster with Calico"
+2. Review proposed commands
+3. Approve write operations when prompted
+4. Cluster is created and configured
+``````
+
+## Session Management
+
+### View Past Sessions
+
+Press **Ctrl+H** to open the session history picker. You can:
+- Navigate with **↑/↓**
+- Filter sessions with **/**
+- Rename sessions with **r**
+- Delete sessions with **d**
+- Select session with **Enter**
+
+### Start New Session
+
+Press **Ctrl+N** to start a fresh conversation. Previous sessions are automatically saved.
+
+### Session Storage
+
+Sessions are stored in `~/.ksail/chat/sessions/` and persist across restarts.
+
+## Tips
+
+1. **Start with Plan Mode** when learning new workflows
+2. **Use Ask Mode** for safe troubleshooting
+3. **Enable auto-approve** (`Ctrl+Y`) in Agent mode for trusted operations
+4. **Filter session history** (`Ctrl+H` then `/`) to find past conversations
+5. **Copy outputs** (`Ctrl+R`) to use in scripts or documentation
+
+## Troubleshooting
+
+### Chat won't start
+
+Ensure GitHub Copilot CLI is installed and authenticated:
+
+``````bash
+# Check if CLI is available
+which copilot
+
+# Authenticate if needed
+copilot auth login
+``````
+
+### Model not available
+
+Check available models:
+
+``````bash
+ksail chat --model gpt-5  # Try different models
+``````
+
+### Timeout errors
+
+Increase timeout for complex operations:
+
+``````bash
+ksail chat --timeout 15m
+``````
+
+## See Also
+
+- [CLI Flags Reference](/cli-flags/chat/chat-root/) — Complete flag documentation
+- [Configuration](/configuration/declarative-configuration/) — Chat configuration options
+- [MCP Server](/mcp/) — Expose KSail to other AI assistants

@@ -55,6 +55,7 @@ export default defineConfig({
         { label: "Concepts", link: "/concepts/" },
         { label: "Use Cases", link: "/use-cases/" },
         { label: "Support Matrix", link: "/support-matrix/" },
+        { label: "AI Chat Assistant", link: "/ai-chat/" },
         {
           label: "Help",
           items: [
