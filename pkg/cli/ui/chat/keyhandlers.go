@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	// clipboardResetMillis is the delay before clearing copy feedback.
-	clipboardResetMillis = 1500
+	// feedbackResetMillis is the delay before clearing transient UI feedback
+	// (e.g., copy confirmation, model-unavailable notice).
+	feedbackResetMillis = 1500
 )
 
 // handleKeyMsg handles keyboard input.
@@ -27,6 +28,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if m.showModelPicker {
 		return m.handleModelPickerKey(msg)
+	}
+
+	if m.showReasoningPicker {
+		return m.handleReasoningPickerKey(msg)
 	}
 
 	if m.showSessionPicker {
@@ -76,6 +81,8 @@ func (m *Model) handleChatShortcutKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "ctrl+o":
 		return m.handleOpenModelPicker()
+	case "ctrl+e":
+		return m.handleOpenReasoningPicker()
 	case "ctrl+h":
 		return m.handleOpenSessionPicker()
 	case "ctrl+n":
@@ -172,9 +179,31 @@ func (m *Model) handleEscape() (tea.Model, tea.Cmd) {
 }
 
 // handleOpenModelPicker opens the model selection picker.
+// If models have not been loaded yet, it attempts to fetch them lazily
+// (matching the session picker's on-demand pattern). If the fetch fails
+// or returns an empty list, transient feedback is shown to the user.
 func (m *Model) handleOpenModelPicker() (tea.Model, tea.Cmd) {
-	if m.isStreaming || len(m.availableModels) == 0 {
+	if m.isStreaming {
 		return m, nil
+	}
+
+	// Lazy-load models on first use (or retry after a previous failure)
+	if len(m.availableModels) == 0 {
+		allModels, err := m.client.ListModels(m.ctx)
+		if err != nil {
+			m.modelUnavailableReason = err.Error()
+		} else {
+			m.modelUnavailableReason = ""
+			m.availableModels = FilterEnabledModels(allModels)
+		}
+	}
+
+	if len(m.availableModels) == 0 {
+		m.showModelUnavailableFeedback = true
+
+		return m, tea.Tick(feedbackResetMillis*time.Millisecond, func(_ time.Time) tea.Msg {
+			return modelUnavailableClearMsg{}
+		})
 	}
 
 	m.showModelPicker = true
@@ -188,8 +217,10 @@ func (m *Model) handleOpenModelPicker() (tea.Model, tea.Cmd) {
 }
 
 // findCurrentModelIndex returns the picker index for the current model.
+// When auto mode is active, returns 0 (the auto option) regardless of
+// which model the server resolved to.
 func (m *Model) findCurrentModelIndex() int {
-	if m.currentModel == "" || m.currentModel == modelAuto {
+	if m.isAutoMode() {
 		return 0
 	}
 
@@ -202,13 +233,27 @@ func (m *Model) findCurrentModelIndex() int {
 	return 0
 }
 
+// handleOpenReasoningPicker opens the reasoning effort selection picker.
+// Only opens when not streaming. Shows the picker with the current effort pre-selected.
+func (m *Model) handleOpenReasoningPicker() (tea.Model, tea.Cmd) {
+	if m.isStreaming {
+		return m, nil
+	}
+
+	m.showReasoningPicker = true
+	m.updateDimensions()
+	m.reasoningPickerIndex = m.findCurrentReasoningIndex()
+
+	return m, nil
+}
+
 // handleOpenSessionPicker opens the session history picker.
 func (m *Model) handleOpenSessionPicker() (tea.Model, tea.Cmd) {
 	if m.isStreaming {
 		return m, nil
 	}
 
-	sessions, _ := ListSessions(m.client, m.theme.SessionDir)
+	sessions, _ := ListSessions(m.ctx, m.client, m.theme.SessionDir)
 	m.availableSessions = sessions
 	m.filteredSessions = sessions // Start with all sessions
 	m.sessionFilterText = ""      // Reset filter
@@ -411,7 +456,7 @@ func (m *Model) handleCopyOutput() (tea.Model, tea.Cmd) {
 			// Show feedback and schedule its clearing after 1.5 seconds
 			m.showCopyFeedback = true
 
-			return m, tea.Tick(clipboardResetMillis*time.Millisecond, func(_ time.Time) tea.Msg {
+			return m, tea.Tick(feedbackResetMillis*time.Millisecond, func(_ time.Time) tea.Msg {
 				return copyFeedbackClearMsg{}
 			})
 		}

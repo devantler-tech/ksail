@@ -189,6 +189,66 @@ func awaitToolPermission(
 	return true, nil
 }
 
+// BuildPreToolUseHook creates a PreToolUseHandler that enforces chat mode restrictions on ALL tool
+// invocations (both custom KSail tools and SDK-managed tools like git/shell/filesystem).
+// In plan mode, ALL tools are blocked. In ask mode, write tools and unknown tools are blocked.
+// In agent mode, the hook defers to existing permission mechanisms (Handler wrappers + OnPermissionRequest).
+func BuildPreToolUseHook(
+	chatModeRef *chatui.ChatModeRef,
+	toolMetadata map[string]toolgen.ToolDefinition,
+) copilot.PreToolUseHandler {
+	return func(input copilot.PreToolUseHookInput, _ copilot.HookInvocation) (*copilot.PreToolUseHookOutput, error) {
+		if chatModeRef == nil {
+			return &copilot.PreToolUseHookOutput{}, nil
+		}
+
+		switch chatModeRef.Mode() {
+		case chatui.PlanMode:
+			return &copilot.PreToolUseHookOutput{
+				PermissionDecision: "deny",
+				PermissionDecisionReason: "Tool execution blocked — currently in Plan mode. " +
+					"Switch to Agent mode (press Tab) to execute tools.",
+			}, nil
+		case chatui.AskMode:
+			return handleAskModeToolUse(input.ToolName, toolMetadata)
+		case chatui.AgentMode:
+			// Defer to existing handler wrappers and OnPermissionRequest
+			return &copilot.PreToolUseHookOutput{}, nil
+		}
+
+		return &copilot.PreToolUseHookOutput{}, nil
+	}
+}
+
+// handleAskModeToolUse determines if a tool should be allowed or denied in ask mode.
+// Known read-only tools (RequiresPermission=false) are allowed; write tools and unknown
+// (SDK-managed) tools are denied for safety.
+func handleAskModeToolUse(
+	toolName string,
+	toolMetadata map[string]toolgen.ToolDefinition,
+) (*copilot.PreToolUseHookOutput, error) {
+	if metadata, exists := toolMetadata[toolName]; exists {
+		if !metadata.RequiresPermission {
+			// Known read-only tool — allow
+			return &copilot.PreToolUseHookOutput{}, nil
+		}
+
+		// Known write tool — deny with a write-specific reason
+		return &copilot.PreToolUseHookOutput{
+			PermissionDecision: "deny",
+			PermissionDecisionReason: "Write tool blocked — currently in Ask mode (read-only). " +
+				"Switch to Agent mode (press Tab) to execute write tools.",
+		}, nil
+	}
+
+	// Unknown (SDK-managed) tool — deny with a generic reason
+	return &copilot.PreToolUseHookOutput{
+		PermissionDecision: "deny",
+		PermissionDecisionReason: "Tool blocked — currently in Ask mode (read-only). " +
+			"Switch to Agent mode (press Tab) to execute tools.",
+	}, nil
+}
+
 // WrapToolsWithPermissionAndModeMetadata wraps ALL tools with mode enforcement and permission prompts.
 // In plan mode, ALL tool execution is blocked (model can only describe what it would do).
 // In ask mode, write tools are blocked but read-only tools execute normally.

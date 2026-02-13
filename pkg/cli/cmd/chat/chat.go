@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -35,22 +36,34 @@ const (
 
 // Sentinel errors for the chat command.
 var (
-	errNotAuthenticated = errors.New("not authenticated with GitHub Copilot")
-	errResponseTimeout  = errors.New("response timeout")
-	errSessionError     = errors.New("session error")
+	errNotAuthenticated       = errors.New("not authenticated with GitHub Copilot")
+	errResponseTimeout        = errors.New("response timeout")
+	errSessionError           = errors.New("session error")
+	errInvalidReasoningEffort = errors.New("invalid reasoning effort: must be low, medium, or high")
 )
 
 // flags holds parsed flags for the chat command.
 type flags struct {
-	model     string
-	streaming bool
-	timeout   time.Duration
-	useTUI    bool
+	model           string
+	reasoningEffort string
+	streaming       bool
+	timeout         time.Duration
+	useTUI          bool
 }
 
 // parseChatFlags extracts and resolves chat command flags.
-func parseChatFlags(cmd *cobra.Command) flags {
+func parseChatFlags(cmd *cobra.Command) (flags, error) {
 	modelFlag, _ := cmd.Flags().GetString("model")
+	reasoningEffort, _ := cmd.Flags().GetString("reasoning-effort")
+
+	if reasoningEffort != "" {
+		switch reasoningEffort {
+		case "low", "medium", "high":
+		default:
+			return flags{}, fmt.Errorf("%w: %q", errInvalidReasoningEffort, reasoningEffort)
+		}
+	}
+
 	streaming, _ := cmd.Flags().GetBool("streaming")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 	useTUI, _ := cmd.Flags().GetBool("tui")
@@ -64,26 +77,84 @@ func parseChatFlags(cmd *cobra.Command) flags {
 	}
 
 	return flags{
-		model:     model,
-		streaming: streaming,
-		timeout:   timeout,
-		useTUI:    useTUI,
+		model:           model,
+		reasoningEffort: reasoningEffort,
+		streaming:       streaming,
+		timeout:         timeout,
+		useTUI:          useTUI,
+	}, nil
+}
+
+// setupCopilotClient starts the Copilot client, validates authentication,
+// and returns a cleanup function that should be deferred.
+func setupCopilotClient(
+	ctx context.Context,
+) (*copilot.Client, string, func(), error) {
+	client, err := startCopilotClient(ctx)
+	if err != nil {
+		return nil, "", nil, err
 	}
+
+	cleanup := func() {
+		select {
+		case <-ctx.Done():
+			os.Exit(signalExitCode)
+		default:
+			_ = client.Stop()
+		}
+	}
+
+	loginName, err := validateCopilotAuth(ctx, client)
+	if err != nil {
+		cleanup()
+
+		return nil, "", nil, err
+	}
+
+	return client, loginName, cleanup, nil
 }
 
 // startCopilotClient creates and starts a Copilot client.
-func startCopilotClient() (*copilot.Client, error) {
-	client := copilot.NewClient(&copilot.ClientOptions{
-		LogLevel: "error",
-	})
+// Authentication precedence:
+//  1. KSAIL_COPILOT_TOKEN / COPILOT_TOKEN — explicit Copilot token
+//  2. Copilot CLI's own OAuth credentials (device flow via `copilot auth login`)
+//
+// GITHUB_TOKEN is intentionally NOT used: it is a general-purpose PAT that
+// may lack Copilot-specific scopes, causing API endpoints like models.list
+// to return 400.
+func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
+	// Environment variables to check for explicit Copilot tokens (priority order).
+	tokenEnvVars := []string{"KSAIL_COPILOT_TOKEN", "COPILOT_TOKEN"}
 
-	err := client.Start()
+	// Environment variables filtered from the child copilot CLI process to
+	// prevent implicit auth interference. GITHUB_TOKEN and GH_TOKEN are
+	// general-purpose PATs that may not carry Copilot-specific scopes.
+	filteredEnvVars := []string{"GITHUB_TOKEN", "GH_TOKEN"}
+
+	opts := &copilot.ClientOptions{
+		LogLevel: "error",
+		Env:      filterEnvVars(os.Environ(), filteredEnvVars),
+	}
+
+	for _, envVar := range tokenEnvVars {
+		if token := os.Getenv(envVar); token != "" {
+			opts.GithubToken = token
+
+			break
+		}
+	}
+
+	client := copilot.NewClient(opts)
+
+	err := client.Start(ctx)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to start Copilot client: %w\n\n"+
 				"To fix:\n"+
 				"  1. Install GitHub Copilot CLI: npm install -g @githubnext/github-copilot-cli\n"+
-				"  2. Or set COPILOT_CLI_PATH to your installation",
+				"  2. Or set COPILOT_CLI_PATH to your installation\n"+
+				"  3. Or authenticate: copilot auth login\n"+
+				"  4. Or set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication",
 			err,
 		)
 	}
@@ -91,9 +162,34 @@ func startCopilotClient() (*copilot.Client, error) {
 	return client, nil
 }
 
+// filterEnvVars returns a copy of env with the specified variable names removed.
+// Comparison is case-sensitive (matching os.Environ() format "KEY=value").
+func filterEnvVars(env []string, remove []string) []string {
+	filtered := make([]string, 0, len(env))
+
+	for _, entry := range env {
+		exclude := false
+
+		for _, name := range remove {
+			prefix := name + "="
+			if len(entry) >= len(prefix) && entry[:len(prefix)] == prefix {
+				exclude = true
+
+				break
+			}
+		}
+
+		if !exclude {
+			filtered = append(filtered, entry)
+		}
+	}
+
+	return filtered
+}
+
 // validateCopilotAuth checks authentication and returns the login name.
-func validateCopilotAuth(client *copilot.Client) (string, error) {
-	authStatus, err := client.GetAuthStatus()
+func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, error) {
+	authStatus, err := client.GetAuthStatus(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to check authentication: %w", err)
 	}
@@ -102,8 +198,9 @@ func validateCopilotAuth(client *copilot.Client) (string, error) {
 		return "", fmt.Errorf(
 			"%w\n\n"+
 				"To fix:\n"+
-				"  1. Run: gh auth login\n"+
-				"  2. Ensure you have an active GitHub Copilot subscription",
+				"  1. Run: copilot auth login\n"+
+				"  2. Or set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
+				"  3. Ensure you have an active GitHub Copilot subscription",
 			errNotAuthenticated,
 		)
 	}
@@ -119,19 +216,32 @@ func validateCopilotAuth(client *copilot.Client) (string, error) {
 // buildSessionConfig creates the Copilot session configuration.
 func buildSessionConfig(
 	model string,
+	reasoningEffort string,
 	streaming bool,
 	systemContext string,
 ) *copilot.SessionConfig {
+	backgroundThreshold := 0.80
+	exhaustionThreshold := 0.95
+
 	config := &copilot.SessionConfig{
 		Streaming: streaming,
 		SystemMessage: &copilot.SystemMessageConfig{
 			Mode:    "append",
 			Content: systemContext,
 		},
+		InfiniteSessions: &copilot.InfiniteSessionConfig{
+			Enabled:                       new(true),
+			BackgroundCompactionThreshold: &backgroundThreshold,
+			BufferExhaustionThreshold:     &exhaustionThreshold,
+		},
 	}
 
 	if model != "" {
 		config.Model = model
+	}
+
+	if reasoningEffort != "" {
+		config.ReasoningEffort = reasoningEffort
 	}
 
 	return config
@@ -163,6 +273,10 @@ Write operations require explicit confirmation before execution.`,
 
 	// Optional flags
 	cmd.Flags().StringP("model", "m", "", "Model to use (e.g., gpt-5, claude-sonnet-4)")
+	cmd.Flags().StringP(
+		"reasoning-effort", "r", "",
+		"Reasoning effort level for models that support it (low, medium, high)",
+	)
 	cmd.Flags().BoolP("streaming", "s", true, "Enable streaming responses")
 	cmd.Flags().DurationP(
 		"timeout", "t", defaultTimeoutMinutes*time.Minute,
@@ -177,6 +291,16 @@ Write operations require explicit confirmation before execution.`,
 	return cmd
 }
 
+// notifyNonTUIStartup sends startup notifications when running outside the TUI.
+func notifyNonTUIStartup(writer io.Writer) {
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: "Starting KSail AI Assistant...",
+		Emoji:   "🤖",
+		Writer:  writer,
+	})
+}
+
 // handleChatRunE handles the chat command execution.
 func handleChatRunE(cmd *cobra.Command) error {
 	writer := cmd.OutOrStdout()
@@ -184,36 +308,22 @@ func handleChatRunE(cmd *cobra.Command) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	flags := parseChatFlags(cmd)
+	flags, err := parseChatFlags(cmd)
+	if err != nil {
+		return err
+	}
 
 	if !flags.useTUI {
 		setupNonTUISignalHandler(cancel, writer)
-		notify.WriteMessage(notify.Message{
-			Type:    notify.TitleType,
-			Content: "Starting KSail AI Assistant...",
-			Emoji:   "🤖",
-			Writer:  writer,
-		})
+		notifyNonTUIStartup(writer)
 	}
 
-	client, err := startCopilotClient()
+	client, loginName, cleanup, err := setupCopilotClient(ctx)
 	if err != nil {
 		return err
 	}
 
-	defer func() {
-		select {
-		case <-ctx.Done():
-			os.Exit(signalExitCode)
-		default:
-			_ = client.Stop()
-		}
-	}()
-
-	loginName, err := validateCopilotAuth(client)
-	if err != nil {
-		return err
-	}
+	defer cleanup()
 
 	if !flags.useTUI {
 		notify.WriteMessage(notify.Message{
@@ -232,7 +342,12 @@ func handleChatRunE(cmd *cobra.Command) error {
 		})
 	}
 
-	sessionConfig := buildSessionConfig(flags.model, flags.streaming, systemContext)
+	sessionConfig := buildSessionConfig(
+		flags.model,
+		flags.reasoningEffort,
+		flags.streaming,
+		systemContext,
+	)
 
 	if flags.useTUI {
 		return runTUIChat(ctx, client, sessionConfig, flags.timeout, cmd.Root())

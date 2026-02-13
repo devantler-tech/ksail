@@ -131,7 +131,7 @@ go build -p 8 -o ksail .
 go build -ldflags="-s -w" -o ksail .
 
 # Production build with optimizations
-go build -trimpath -ldflags="-s -w -X main.version=$(git describe --tags)" -o ksail .
+go build -trimpath -ldflags="-s -w -X github.com/devantler-tech/ksail/v5/internal/buildmeta.Version=$(git describe --tags)" -o ksail .
 ```
 
 ## Test Optimization

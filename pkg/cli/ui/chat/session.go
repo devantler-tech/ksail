@@ -2,6 +2,7 @@ package chat
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -113,9 +114,13 @@ func ensureSessionsDir(appDir string) (string, error) {
 // ListSessions returns all local session metadata from SDK, enriched with local metadata.
 // Remote sessions are excluded from the returned slice.
 // Sessions are sorted by ModifiedTime (most recent first).
-func ListSessions(client *copilot.Client, appDir string) ([]SessionMetadata, error) {
+func ListSessions(
+	ctx context.Context,
+	client *copilot.Client,
+	appDir string,
+) ([]SessionMetadata, error) {
 	// Get sessions from SDK
-	sdkSessions, err := client.ListSessions()
+	sdkSessions, err := client.ListSessions(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list SDK sessions: %w", err)
 	}
@@ -258,6 +263,7 @@ func SaveSession(session *SessionMetadata, appDir string) error {
 
 // DeleteSession removes a chat session from both SDK and local disk.
 func DeleteSession(
+	ctx context.Context,
 	client *copilot.Client,
 	sessionID string,
 	appDir string,
@@ -268,7 +274,7 @@ func DeleteSession(
 	}
 
 	// Delete from SDK first
-	err = client.DeleteSession(sessionID)
+	err = client.DeleteSession(ctx, sessionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete SDK session: %w", err)
 	}
@@ -309,9 +315,9 @@ func deleteLocalSession(
 // SyncSessionMetadata synchronizes local session files with SDK sessions.
 // It removes local session files that no longer exist in the SDK (excluding remote sessions).
 // Returns an error if sync fails (caller should display as non-blocking toast).
-func SyncSessionMetadata(client *copilot.Client, appDir string) error {
+func SyncSessionMetadata(ctx context.Context, client *copilot.Client, appDir string) error {
 	// Get all sessions from SDK
-	sdkSessions, err := client.ListSessions()
+	sdkSessions, err := client.ListSessions(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list SDK sessions: %w", err)
 	}
@@ -374,8 +380,12 @@ var ErrNoSessions = errors.New("no sessions available")
 
 // GetMostRecentSession returns the most recently updated session metadata.
 // Returns ErrNoSessions if no sessions exist.
-func GetMostRecentSession(client *copilot.Client, appDir string) (*SessionMetadata, error) {
-	sessions, err := ListSessions(client, appDir)
+func GetMostRecentSession(
+	ctx context.Context,
+	client *copilot.Client,
+	appDir string,
+) (*SessionMetadata, error) {
+	sessions, err := ListSessions(ctx, client, appDir)
 	if err != nil {
 		return nil, err
 	}
