@@ -11,12 +11,18 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	loftlog "github.com/loft-sh/log"
 	"github.com/loft-sh/vcluster/pkg/cli"
+	cliconfig "github.com/loft-sh/vcluster/pkg/cli/config"
 	"github.com/loft-sh/vcluster/pkg/cli/flags"
 	"github.com/sirupsen/logrus"
 )
 
 // defaultVClusterName is used when no name is provided.
 const defaultVClusterName = "vcluster-default"
+
+// defaultChartVersion is the vCluster Helm chart version used by the Docker driver.
+// Must be available on ghcr.io/loft-sh/vcluster-pro as an OCI artifact.
+// Check: https://ghcr.io/loft-sh/vcluster-pro for available tags.
+const defaultChartVersion = "0.31.0-alpha.0"
 
 // Provisioner implements the cluster provisioner interface for vCluster's Docker
 // driver (Vind). Create and Delete use the vCluster Go SDK directly, while
@@ -60,10 +66,11 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
 	opts := &cli.CreateOptions{
-		Driver:    "docker",
-		Connect:   false,
-		Upgrade:   false,
-		Distro:    "k8s",
+		Driver:       "docker",
+		ChartVersion: defaultChartVersion,
+		Connect:      false,
+		Upgrade:      false,
+		Distro:       "k8s",
 	}
 
 	if p.valuesPath != "" {
@@ -178,9 +185,17 @@ func (p *Provisioner) resolveName(name string) string {
 }
 
 // newGlobalFlags creates a minimal GlobalFlags for the vCluster Go SDK.
-// The Docker driver uses very few of these fields.
+// Config is set to the default path (~/.vcluster/config.json) so that
+// OCI image caches are stored persistently across runs.
 func newGlobalFlags() *flags.GlobalFlags {
-	return &flags.GlobalFlags{}
+	configPath, err := cliconfig.DefaultFilePath()
+	if err != nil {
+		configPath = ""
+	}
+
+	return &flags.GlobalFlags{
+		Config: configPath,
+	}
 }
 
 // newStreamLogger creates a loft-sh/log Logger that writes to stdout.

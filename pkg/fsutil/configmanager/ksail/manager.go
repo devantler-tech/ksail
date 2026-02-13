@@ -140,6 +140,10 @@ func (m *ConfigManager) loadConfigWithOptions(
 		if err != nil {
 			return nil, err
 		}
+	} else if m.configFileFound {
+		// Even when validation is skipped, load distribution config so that
+		// callers (e.g. simple lifecycle commands) can resolve the cluster name.
+		_ = m.loadAndCacheDistributionConfig()
 	}
 
 	if !silent {
