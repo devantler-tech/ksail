@@ -75,11 +75,6 @@ func (m *Model) buildStatusText() string {
 		statusParts = append(statusParts, effortText)
 	}
 
-	// Quota — show premium request usage when available
-	if quotaText := m.buildQuotaStatusText(); quotaText != "" {
-		statusParts = append(statusParts, quotaText)
-	}
-
 	// Streaming state and feedback
 	switch {
 	case m.isStreaming:
@@ -127,9 +122,28 @@ func (m *Model) renderInputOrModal() string {
 	return m.styles.input.Width(max(m.width-modalPadding, 1)).Render(m.textarea.View())
 }
 
-// renderFooter renders the context-aware help text footer using bubbles/help.
+// renderFooter renders the help text (left) and quota snapshot (right) on a single line.
+// Help text is always prioritised — quota is placed in remaining space and clipped if needed.
 func (m *Model) renderFooter() string {
-	return lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(m.renderShortHelp())
+	helpText := m.renderShortHelp()
+	quotaText := m.buildQuotaStatusText()
+
+	if quotaText == "" {
+		return lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(helpText)
+	}
+
+	helpWidth := lipgloss.Width(helpText)
+	quotaWidth := lipgloss.Width(quotaText)
+	spacing := m.width - helpWidth - quotaWidth
+
+	if spacing < minSpacing {
+		// Not enough room for quota — show help only.
+		return lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(helpText)
+	}
+
+	row := helpText + strings.Repeat(" ", spacing) + quotaText
+
+	return lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(row)
 }
 
 // buildModelStatusText renders the model indicator for the status bar.
