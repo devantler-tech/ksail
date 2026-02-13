@@ -99,6 +99,7 @@ func (m *Model) renderHelpOverlay() string {
 			m.styles.helpKey.Render("^R")+" copy"+helpSep+
 			m.styles.helpKey.Render("^H")+" sessions"+helpSep+
 			m.styles.helpKey.Render("^O")+" model"+helpSep+
+			m.styles.helpKey.Render("^E")+" effort"+helpSep+
 			m.styles.helpKey.Render("^N")+" new") + "\n")
 	content.WriteString(clipStyle.Render(
 		m.styles.helpKey.Render(keyEscape) + " close" + helpSep +
@@ -144,6 +145,9 @@ func (m *Model) getContextHelpParts() []string {
 	case m.showModelPicker:
 		return m.getModelPickerHelpParts()
 
+	case m.showReasoningPicker:
+		return m.getReasoningPickerHelpParts()
+
 	case m.showSessionPicker:
 		return m.getSessionPickerHelpParts()
 
@@ -170,6 +174,15 @@ func (m *Model) getModelPickerHelpParts() []string {
 	return []string{
 		m.styles.helpKey.Render(keyArrows) + " select",
 		m.styles.helpKey.Render("/") + " filter",
+		m.styles.helpKey.Render(enterSymbol) + " confirm",
+		m.styles.helpKey.Render(keyEscape) + " cancel",
+	}
+}
+
+// getReasoningPickerHelpParts returns help for reasoning effort picker state.
+func (m *Model) getReasoningPickerHelpParts() []string {
+	return []string{
+		m.styles.helpKey.Render(keyArrows) + " select",
 		m.styles.helpKey.Render(enterSymbol) + " confirm",
 		m.styles.helpKey.Render(keyEscape) + " cancel",
 	}
@@ -229,6 +242,17 @@ func (m *Model) getDefaultHelpParts() []string {
 
 	parts = append(parts, m.styles.helpKey.Render("^H")+" sessions")
 	parts = append(parts, m.styles.helpKey.Render("^O")+" model")
+
+	// Conditionally add reasoning effort hint
+	if m.currentModelSupportsReasoning() || m.sessionConfig.ReasoningEffort != "" {
+		effortLabel := "effort"
+		if m.sessionConfig.ReasoningEffort != "" {
+			effortLabel = m.sessionConfig.ReasoningEffort
+		}
+
+		parts = append(parts, m.styles.helpKey.Render("^E")+" "+effortLabel)
+	}
+
 	parts = append(parts, m.styles.helpKey.Render("^N")+" new")
 
 	return parts

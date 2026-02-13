@@ -36,9 +36,10 @@ const (
 
 // Sentinel errors for the chat command.
 var (
-	errNotAuthenticated = errors.New("not authenticated with GitHub Copilot")
-	errResponseTimeout  = errors.New("response timeout")
-	errSessionError     = errors.New("session error")
+	errNotAuthenticated       = errors.New("not authenticated with GitHub Copilot")
+	errResponseTimeout        = errors.New("response timeout")
+	errSessionError           = errors.New("session error")
+	errInvalidReasoningEffort = errors.New("invalid reasoning effort: must be low, medium, or high")
 )
 
 // flags holds parsed flags for the chat command.
@@ -51,9 +52,18 @@ type flags struct {
 }
 
 // parseChatFlags extracts and resolves chat command flags.
-func parseChatFlags(cmd *cobra.Command) flags {
+func parseChatFlags(cmd *cobra.Command) (flags, error) {
 	modelFlag, _ := cmd.Flags().GetString("model")
 	reasoningEffort, _ := cmd.Flags().GetString("reasoning-effort")
+
+	if reasoningEffort != "" {
+		switch reasoningEffort {
+		case "low", "medium", "high":
+		default:
+			return flags{}, fmt.Errorf("%w: %q", errInvalidReasoningEffort, reasoningEffort)
+		}
+	}
+
 	streaming, _ := cmd.Flags().GetBool("streaming")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 	useTUI, _ := cmd.Flags().GetBool("tui")
@@ -72,7 +82,36 @@ func parseChatFlags(cmd *cobra.Command) flags {
 		streaming:       streaming,
 		timeout:         timeout,
 		useTUI:          useTUI,
+	}, nil
+}
+
+// setupCopilotClient starts the Copilot client, validates authentication,
+// and returns a cleanup function that should be deferred.
+func setupCopilotClient(
+	ctx context.Context,
+) (*copilot.Client, string, func(), error) {
+	client, err := startCopilotClient(ctx)
+	if err != nil {
+		return nil, "", nil, err
 	}
+
+	cleanup := func() {
+		select {
+		case <-ctx.Done():
+			os.Exit(signalExitCode)
+		default:
+			_ = client.Stop()
+		}
+	}
+
+	loginName, err := validateCopilotAuth(ctx, client)
+	if err != nil {
+		cleanup()
+
+		return nil, "", nil, err
+	}
+
+	return client, loginName, cleanup, nil
 }
 
 // startCopilotClient creates and starts a Copilot client.
@@ -115,7 +154,7 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 				"  1. Install GitHub Copilot CLI: npm install -g @githubnext/github-copilot-cli\n"+
 				"  2. Or set COPILOT_CLI_PATH to your installation\n"+
 				"  3. Or authenticate: copilot auth login\n"+
-				"  4. Or set KSAIL_COPILOT_TOKEN for token-based authentication",
+				"  4. Or set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication",
 			err,
 		)
 	}
@@ -159,8 +198,9 @@ func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, e
 		return "", fmt.Errorf(
 			"%w\n\n"+
 				"To fix:\n"+
-				"  1. Run: gh auth login\n"+
-				"  2. Ensure you have an active GitHub Copilot subscription",
+				"  1. Run: copilot auth login\n"+
+				"  2. Or set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
+				"  3. Ensure you have an active GitHub Copilot subscription",
 			errNotAuthenticated,
 		)
 	}
@@ -268,31 +308,22 @@ func handleChatRunE(cmd *cobra.Command) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	flags := parseChatFlags(cmd)
+	flags, err := parseChatFlags(cmd)
+	if err != nil {
+		return err
+	}
 
 	if !flags.useTUI {
 		setupNonTUISignalHandler(cancel, writer)
 		notifyNonTUIStartup(writer)
 	}
 
-	client, err := startCopilotClient(ctx)
+	client, loginName, cleanup, err := setupCopilotClient(ctx)
 	if err != nil {
 		return err
 	}
 
-	defer func() {
-		select {
-		case <-ctx.Done():
-			os.Exit(signalExitCode)
-		default:
-			_ = client.Stop()
-		}
-	}()
-
-	loginName, err := validateCopilotAuth(ctx, client)
-	if err != nil {
-		return err
-	}
+	defer cleanup()
 
 	if !flags.useTUI {
 		notify.WriteMessage(notify.Message{

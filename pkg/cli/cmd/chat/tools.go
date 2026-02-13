@@ -232,13 +232,20 @@ func handleAskModeToolUse(
 			// Known read-only tool — allow
 			return &copilot.PreToolUseHookOutput{}, nil
 		}
+
+		// Known write tool — deny with a write-specific reason
+		return &copilot.PreToolUseHookOutput{
+			PermissionDecision: "deny",
+			PermissionDecisionReason: "Write tool blocked — currently in Ask mode (read-only). " +
+				"Switch to Agent mode (press Tab) to execute write tools.",
+		}, nil
 	}
 
-	// Write tool or unknown (SDK-managed) tool — deny in ask mode
+	// Unknown (SDK-managed) tool — deny with a generic reason
 	return &copilot.PreToolUseHookOutput{
 		PermissionDecision: "deny",
-		PermissionDecisionReason: "Write tool blocked — currently in Ask mode (read-only). " +
-			"Switch to Agent mode (press Tab) to execute write tools.",
+		PermissionDecisionReason: "Tool blocked — currently in Ask mode (read-only). " +
+			"Switch to Agent mode (press Tab) to execute tools.",
 	}, nil
 }
 

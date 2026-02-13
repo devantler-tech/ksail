@@ -275,6 +275,10 @@ type Model struct {
 	modelFilterActive bool                // true when filter input is focused
 	modelFilterText   string              // current filter text
 
+	// Reasoning effort selection
+	showReasoningPicker  bool // true when reasoning effort picker overlay is visible
+	reasoningPickerIndex int  // currently highlighted effort level in picker
+
 	// Permission request handling
 	pendingPermission *permissionRequestMsg // current permission request awaiting user response
 	permissionHistory []permissionResponse  // history of permission decisions

@@ -70,6 +70,11 @@ func (m *Model) buildStatusText() string {
 	// Model name — show "auto → resolved" when in auto mode, otherwise the explicit model
 	statusParts = append(statusParts, m.buildModelStatusText())
 
+	// Reasoning effort — show level when set
+	if effortText := m.buildReasoningEffortStatusText(); effortText != "" {
+		statusParts = append(statusParts, effortText)
+	}
+
 	// Quota — show premium request usage when available
 	if quotaText := m.buildQuotaStatusText(); quotaText != "" {
 		statusParts = append(statusParts, quotaText)
@@ -114,6 +119,10 @@ func (m *Model) renderInputOrModal() string {
 		return m.renderModelPickerModal()
 	}
 
+	if m.showReasoningPicker {
+		return m.renderReasoningPickerModal()
+	}
+
 	if m.showSessionPicker {
 		return m.renderSessionPickerModal()
 	}
@@ -154,6 +163,18 @@ func (m *Model) buildModelStatusText() string {
 	default:
 		return modelStyle.Render(modelAuto)
 	}
+}
+
+// buildReasoningEffortStatusText renders the reasoning effort indicator for the status bar.
+// Returns an empty string when no reasoning effort is set.
+func (m *Model) buildReasoningEffortStatusText() string {
+	if m.sessionConfig.ReasoningEffort == "" {
+		return ""
+	}
+
+	effortStyle := lipgloss.NewStyle().Foreground(m.theme.DimColor)
+
+	return effortStyle.Render(m.sessionConfig.ReasoningEffort + " effort")
 }
 
 // buildQuotaStatusText renders the premium request quota indicator for the status bar.
