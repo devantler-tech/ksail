@@ -5,7 +5,7 @@ description: |
 
 inputs:
   distribution:
-    description: Kubernetes distribution (Vanilla, K3s, Talos)
+    description: Kubernetes distribution (Vanilla, K3s, Talos, VCluster)
     required: true
   provider:
     description: Infrastructure provider (Docker, Hetzner)
