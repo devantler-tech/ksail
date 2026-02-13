@@ -245,7 +245,7 @@ func executeModeCheck(
 		return result, true, nil
 	case chatui.AskMode:
 		// In ask mode, only execute tools that are explicitly known and do not require permission.
-		// Unknown tools and tools requiring permission are blocked by default.
+		// Tools without metadata or that require permission are blocked by default.
 		metadata, metaExists := toolMetadata[toolName]
 		if !metaExists || metadata.RequiresPermission {
 			result := buildAskModeBlockedResult(toolName)
