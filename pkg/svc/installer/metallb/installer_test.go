@@ -35,7 +35,7 @@ func TestNewInstaller_CustomIPRange(t *testing.T) {
 	assert.NotNil(t, installer)
 }
 
-func TestInstaller_Uninstall(t *testing.T) {
+func TestUninstallSuccess(t *testing.T) {
 	t.Parallel()
 
 	installer, client := newInstallerWithDefaults(t)
@@ -50,7 +50,7 @@ func TestInstaller_Uninstall(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestInstaller_Uninstall_HelmError(t *testing.T) {
+func TestUninstallError(t *testing.T) {
 	t.Parallel()
 
 	installer, client := newInstallerWithDefaults(t)
@@ -67,7 +67,7 @@ func TestInstaller_Uninstall_HelmError(t *testing.T) {
 	require.ErrorIs(t, err, assert.AnError)
 }
 
-func TestInstaller_Uninstall_ContextCancellation(t *testing.T) {
+func TestUninstallContextCancellation(t *testing.T) {
 	t.Parallel()
 
 	installer, client := newInstallerWithDefaults(t)
@@ -86,16 +86,15 @@ func TestInstaller_Uninstall_ContextCancellation(t *testing.T) {
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)
-	assert.Contains(t, err.Error(), "uninstall")
+	assert.Contains(t, err.Error(), "failed to uninstall metallb release")
 }
 
 // Skipped: Install requires a real Kubernetes cluster (ensurePrivilegedNamespace calls k8s.NewClientset).
-func TestInstaller_Install_EnsurePrivilegedNamespace(t *testing.T) {
+func TestInstallEnsurePrivilegedNamespace(t *testing.T) {
 	t.Parallel()
 	t.Skip("requires Kubernetes cluster: ensurePrivilegedNamespace uses k8s.NewClientset")
 }
 
-// Skipped: Install calls ensurePrivilegedNamespace before Helm operations, blocking isolation.
 func newInstallerWithDefaults(
 	t *testing.T,
 ) (*metallbinstaller.Installer, *helm.MockInterface) {
