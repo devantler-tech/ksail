@@ -307,5 +307,11 @@ npm run dev                            # Test locally (if needed)
     - **Ask Mode**: Read-only investigation; write tools are blocked
   - **Mode Switching**: Press Tab to cycle between modes during chat sessions
   - **TUI Implementation**: Terminal UI in `pkg/cli/ui/chat/` with keyboard shortcuts and session management
+  - **Reasoning Effort**: `--reasoning-effort` flag (low, medium, high) for supported models; `^E` keybind in TUI to change effort level
+  - **Auto Model Selection**: Transparent model resolution with 10% discount; shows resolved model in picker and status bar (`auto → gpt-4o`)
+  - **Quota Tracking**: Displays premium request usage (`300/300 reqs · 0% · resets Jan 2`); for unlimited entitlements shows only `∞ reqs`
+  - **Infinite Sessions**: Background compaction enabled by default (BackgroundCompactionThreshold: 0.80, BufferExhaustionThreshold: 0.95) to manage long conversations
+  - **Authentication**: Supports `KSAIL_COPILOT_TOKEN` and `COPILOT_TOKEN` environment variables; filters `GITHUB_TOKEN`/`GH_TOKEN` to avoid scope issues
+  - **Enhanced Keybindings**: `^O` for model picker (lazy-loaded), `^E` for reasoning effort, `^H` for session history
 - **MCP Server**: Implemented Model Context Protocol server to expose KSail as a tool for Claude and other AI assistants (`pkg/svc/mcp/`)
 - **MetalLB LoadBalancer Support**: Completed LoadBalancer support for Talos × Docker with MetalLB installer (`pkg/svc/installer/metallb/`), configured with default IP pool (172.18.255.200-172.18.255.250) and Layer 2 mode

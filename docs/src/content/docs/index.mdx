@@ -26,10 +26,13 @@ import mentalModel from "../../assets/mental-model.svg";
 
 Setting up and operating Kubernetes clusters often requires juggling multiple CLI tools, writing bespoke scripts, and dealing with inconsistent workflows. KSail removes the tooling overhead so you can focus on your workloads.
 
+**No Vendor Lock-In:** KSail works with native distribution configurations (Kind's `kind.yaml`, K3d's config, Talos patches) — you can run the same cluster outside KSail using the underlying tools directly. KSail is a superset that provides a unified workflow while preserving full compatibility with Kind, K3d, and Talos.
+
 ## Key Features
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
 - ☸️ **Simple Clusters** — Spin up Vanilla, K3s, or Talos clusters with one command. Same workflow across distributions.
+- 🔓 **No Lock-In** — Uses native configs (`kind.yaml`, `k3d.yaml`, Talos patches). Run clusters with or without KSail.
 - 📥 **Mirror Registries** — Avoid rate limits, and store images once. Same mirrors used by different clusters.
 - 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
 - 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.

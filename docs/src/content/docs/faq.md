@@ -14,10 +14,39 @@ KSail is a CLI tool that bundles common Kubernetes tooling into a single binary.
 KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, flux, and argocd into one binary. You get:
 
 - **Consistent workflow** across distributions (Vanilla, K3s, Talos)
+- **Native configuration** — Works with standard `kind.yaml`, `k3d.yaml`, and Talos configs
+- **No vendor lock-in** — Use generated configs directly with native tools
 - **Declarative configuration** for reproducible environments
 - **Built-in best practices** for CNI, CSI, observability, and security
 - **GitOps integration** without manual setup
 - **One tool to learn** instead of many
+
+### Am I locked into KSail?
+
+**No.** KSail generates native distribution configuration files that work with the underlying tools:
+
+- **Vanilla clusters**: Use the generated `kind.yaml` with `kind create cluster --config kind.yaml`
+- **K3s clusters**: Use the generated `k3d.yaml` with `k3d cluster create --config k3d.yaml`
+- **Talos clusters**: Use the generated patches with `talosctl`
+
+You can migrate away from KSail at any time or use both KSail and native tools interchangeably. KSail is a superset that adds convenience without creating vendor lock-in.
+
+### Can I use KSail configs with native tools?
+
+**Yes!** That's one of KSail's core design principles. After running `ksail cluster init`, you'll have:
+
+```bash
+# For Vanilla distribution
+kind create cluster --config kind.yaml
+
+# For K3s distribution
+k3d cluster create --config k3d.yaml
+
+# For Talos distribution
+talosctl cluster create --config-patch @talos/cluster/patches.yaml
+```
+
+KSail-generated configurations are standard, valid configuration files for each distribution. This ensures portability and prevents lock-in.
 
 ### Is KSail production-ready?
 
