@@ -9,6 +9,20 @@ import (
 	copilot "github.com/github/copilot-sdk/go"
 )
 
+// FilterEnabledModels returns only models with an enabled policy state.
+// This is used by the lazy-load model picker and can be called from outside the package.
+func FilterEnabledModels(allModels []copilot.ModelInfo) []copilot.ModelInfo {
+	var models []copilot.ModelInfo
+
+	for _, m := range allModels {
+		if m.Policy != nil && m.Policy.State == "enabled" {
+			models = append(models, m)
+		}
+	}
+
+	return models
+}
+
 // handleModelPickerKey handles keyboard input when the model picker is active.
 func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	totalItems := len(m.filteredModels) + 1 // auto + filtered models
@@ -115,8 +129,8 @@ func (m *Model) applyModelFilter() {
 // selectModel handles model selection from the picker.
 func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 	if m.modelPickerIndex == 0 {
-		// "auto" option selected
-		if m.currentModel != "" && m.currentModel != modelAuto {
+		// "auto" option selected — switch only if not already in auto mode
+		if !m.isAutoMode() {
 			return m.switchModel("")
 		}
 	} else if m.modelPickerIndex > 0 && m.modelPickerIndex < totalItems {
@@ -145,7 +159,7 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 	m.sessionConfig.Model = newModelID
 	m.currentModel = newModelID
 
-	session, err := m.client.CreateSession(m.sessionConfig)
+	session, err := m.client.CreateSession(m.ctx, m.sessionConfig)
 	if err != nil {
 		m.err = fmt.Errorf("failed to switch model: %w", err)
 		m.showModelPicker = false
@@ -207,6 +221,43 @@ func (m *Model) renderModelItems(
 	}
 }
 
+// isAutoMode returns true when the user has selected "auto" model (not an explicit model).
+func (m *Model) isAutoMode() bool {
+	return m.sessionConfig.Model == "" || m.sessionConfig.Model == modelAuto
+}
+
+// resolvedAutoModel returns the server-resolved model ID when in auto mode,
+// or empty string if auto hasn't resolved yet.
+// Falls back to lastUsageModel from assistant.usage events since session.model_change
+// may not fire reliably in all cases.
+func (m *Model) resolvedAutoModel() string {
+	if !m.isAutoMode() {
+		return ""
+	}
+
+	if m.currentModel != "" && m.currentModel != modelAuto {
+		return m.currentModel
+	}
+
+	if m.lastUsageModel != "" {
+		return m.lastUsageModel
+	}
+
+	return ""
+}
+
+// findModelMultiplier looks up the billing multiplier for a model ID.
+// Returns 0 if the model is not found or has no billing info.
+func (m *Model) findModelMultiplier(modelID string) float64 {
+	for _, model := range m.availableModels {
+		if model.ID == modelID && model.Billing != nil {
+			return model.Billing.Multiplier
+		}
+	}
+
+	return 0
+}
+
 // formatModelItem formats a single model item for display.
 func (m *Model) formatModelItem(index int) (string, bool) {
 	prefix := "  "
@@ -215,9 +266,9 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 	}
 
 	if index == 0 {
-		line := prefix + "auto (let Copilot choose)"
+		line := prefix + m.formatAutoOption()
 
-		isCurrentModel := m.currentModel == "" || m.currentModel == modelAuto
+		isCurrentModel := m.isAutoMode()
 		if isCurrentModel {
 			line += checkmarkSuffix
 		}
@@ -234,12 +285,33 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 
 	line := fmt.Sprintf("%s%s%s", prefix, model.ID, multiplier)
 
-	isCurrentModel := model.ID == m.currentModel
+	// Check explicit model match (not auto-resolved)
+	isCurrentModel := !m.isAutoMode() && model.ID == m.currentModel
 	if isCurrentModel {
 		line += checkmarkSuffix
 	}
 
 	return line, isCurrentModel
+}
+
+// formatAutoOption formats the "auto" picker item, showing the resolved model
+// and its discounted billing multiplier when available.
+// Auto model selection provides a 10% multiplier discount on paid plans.
+// See: https://docs.github.com/en/copilot/concepts/auto-model-selection#multiplier-discounts
+func (m *Model) formatAutoOption() string {
+	resolved := m.resolvedAutoModel()
+	if resolved == "" {
+		return "auto (let Copilot choose \u00b7 -10%)"
+	}
+
+	mult := m.findModelMultiplier(resolved)
+	if mult > 0 {
+		discounted := mult * autoDiscountFactor
+
+		return fmt.Sprintf("auto (%s \u00b7 %.1fx)", resolved, discounted)
+	}
+
+	return fmt.Sprintf("auto (%s \u00b7 -10%%)", resolved)
 }
 
 // styleModelItem applies styling to a model item.

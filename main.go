@@ -7,15 +7,9 @@ import (
 	"os"
 	"runtime/debug"
 
+	"github.com/devantler-tech/ksail/v5/internal/buildmeta"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
-)
-
-//nolint:gochecknoglobals
-var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
 )
 
 func main() {
@@ -47,7 +41,7 @@ func runSafely(args []string, runner func([]string) int, errWriter io.Writer) (e
 }
 
 func runWithArgs(args []string) int {
-	rootCmd := cmd.NewRootCmd(version, commit, date)
+	rootCmd := cmd.NewRootCmd(buildmeta.Version, buildmeta.Commit, buildmeta.Date)
 	rootCmd.SetArgs(args)
 
 	err := cmd.Execute(rootCmd)

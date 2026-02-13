@@ -205,15 +205,17 @@ type Model struct {
 	spinner  spinner.Model
 
 	// State
-	messages         []message
-	currentResponse  strings.Builder
-	isStreaming      bool
-	justCompleted    bool // true when a response just finished, shows "Ready" indicator
-	showCopyFeedback bool // true when copy feedback should be shown briefly
-	userScrolled     bool // true when user has scrolled away from bottom (pause auto-scroll)
-	err              error
-	quitting         bool
-	ready            bool
+	messages                     []message
+	currentResponse              strings.Builder
+	isStreaming                  bool
+	justCompleted                bool   // true when a response just finished, shows "Ready" indicator
+	showCopyFeedback             bool   // true when copy feedback should be shown briefly
+	showModelUnavailableFeedback bool   // true when model-unavailable feedback should be shown
+	modelUnavailableReason       string // reason why models are unavailable (for status bar)
+	userScrolled                 bool   // true when user has scrolled away from bottom (pause auto-scroll)
+	err                          error
+	quitting                     bool
+	ready                        bool
 
 	// Configuration
 	theme        ThemeConfig
@@ -235,6 +237,18 @@ type Model struct {
 	sessionComplete bool       // true when SessionIdle has been received
 	unsubscribe     func()     // function to unsubscribe from session events
 	unsubscribeMu   sync.Mutex // protects unsubscribe access
+
+	// Token usage tracking (updated via AssistantUsage events)
+	lastUsageModel   string  // model used in the last usage event
+	lastInputTokens  float64 // input tokens from the last usage event
+	lastOutputTokens float64 // output tokens from the last usage event
+	lastCost         float64 // cost from the last usage event
+
+	// Quota tracking (updated via QuotaSnapshots in AssistantUsage events)
+	lastQuotaSnapshots map[string]quotaSnapshot // keyed by quota category (e.g., "premium")
+
+	// Compaction state (updated via SessionCompaction events)
+	isCompacting bool // true while context compaction is in progress
 
 	// Dimensions
 	width  int
@@ -260,6 +274,10 @@ type Model struct {
 	modelPickerIndex  int                 // currently highlighted model in picker
 	modelFilterActive bool                // true when filter input is focused
 	modelFilterText   string              // current filter text
+
+	// Reasoning effort selection
+	showReasoningPicker  bool // true when reasoning effort picker overlay is visible
+	reasoningPickerIndex int  // currently highlighted effort level in picker
 
 	// Permission request handling
 	pendingPermission *permissionRequestMsg // current permission request awaiting user response
@@ -433,11 +451,19 @@ func (m *Model) Update(
 	case streamChunkMsg, assistantMessageMsg, toolStartMsg, toolEndMsg,
 		toolOutputChunkMsg, ToolOutputChunkMsg, permissionRequestMsg,
 		PermissionRequestMsg, streamEndMsg, turnStartMsg, turnEndMsg,
-		reasoningMsg, abortMsg, snapshotRewindMsg, streamErrMsg:
+		reasoningMsg, abortMsg, snapshotRewindMsg, streamErrMsg,
+		usageMsg, compactionStartMsg, compactionCompleteMsg,
+		intentMsg, modelChangeMsg, shutdownMsg:
 		return m.handleStreamEvent(msg)
 
 	case copyFeedbackClearMsg:
 		m.showCopyFeedback = false
+
+		return m, nil
+
+	case modelUnavailableClearMsg:
+		m.showModelUnavailableFeedback = false
+		m.modelUnavailableReason = ""
 
 		return m, nil
 
@@ -495,7 +521,7 @@ func (m *Model) View() string {
 
 // handleStreamEvent dispatches streaming-related events to their specific handlers.
 //
-//nolint:cyclop // type-switch dispatcher for stream messages
+//nolint:cyclop,funlen // type-switch dispatcher for stream messages
 func (m *Model) handleStreamEvent(
 	msg tea.Msg,
 ) (tea.Model, tea.Cmd) {
@@ -550,6 +576,24 @@ func (m *Model) handleStreamEvent(
 
 	case streamErrMsg:
 		return m.handleStreamErr(msg)
+
+	case usageMsg:
+		return m.handleUsage(msg)
+
+	case compactionStartMsg:
+		return m.handleCompactionStart()
+
+	case compactionCompleteMsg:
+		return m.handleCompactionComplete(msg)
+
+	case intentMsg:
+		return m.handleIntent(msg)
+
+	case modelChangeMsg:
+		return m.handleModelChange(msg)
+
+	case shutdownMsg:
+		return m.handleShutdown(msg)
 
 	default:
 		return m, nil
@@ -700,7 +744,7 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		}
 
 		// Send the message
-		_, err := session.Send(copilot.MessageOptions{Prompt: prompt})
+		_, err := session.Send(m.ctx, copilot.MessageOptions{Prompt: prompt})
 		if err != nil {
 			// Clean up on error
 			m.unsubscribeMu.Lock()

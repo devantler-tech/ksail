@@ -128,7 +128,7 @@ func (m *Model) deleteSelectedSession() (tea.Model, tea.Cmd) {
 
 	session := m.filteredSessions[m.sessionPickerIndex-1]
 
-	deleteErr := DeleteSession(m.client, session.ID, m.theme.SessionDir)
+	deleteErr := DeleteSession(m.ctx, m.client, session.ID, m.theme.SessionDir)
 	if deleteErr != nil {
 		m.err = fmt.Errorf("failed to delete session: %w", deleteErr)
 
@@ -147,7 +147,7 @@ func (m *Model) deleteSelectedSession() (tea.Model, tea.Cmd) {
 
 // refreshSessionList reloads the session list from storage and re-applies filters.
 func (m *Model) refreshSessionList() error {
-	sessions, err := ListSessions(m.client, m.theme.SessionDir)
+	sessions, err := ListSessions(m.ctx, m.client, m.theme.SessionDir)
 	if err != nil {
 		m.err = fmt.Errorf("failed to refresh sessions: %w", err)
 
@@ -314,7 +314,7 @@ func (m *Model) startNewSession() error {
 
 	m.sessionConfig.SessionID = ""
 
-	session, err := m.client.CreateSession(m.sessionConfig)
+	session, err := m.client.CreateSession(m.ctx, m.sessionConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create new session: %w", err)
 	}
@@ -376,14 +376,21 @@ func (m *Model) resumeOrCreateSession(metadata *SessionMetadata) bool {
 	resumeConfig := &copilot.ResumeSessionConfig{
 		Tools:               m.sessionConfig.Tools,
 		OnPermissionRequest: m.sessionConfig.OnPermissionRequest,
+		ReasoningEffort:     m.sessionConfig.ReasoningEffort,
+		InfiniteSessions:    m.sessionConfig.InfiniteSessions,
+		Hooks:               m.sessionConfig.Hooks,
 	}
 
-	session, err := m.client.ResumeSessionWithOptions(metadata.ID, resumeConfig)
+	session, err := m.client.ResumeSessionWithOptions(
+		m.ctx,
+		metadata.ID,
+		resumeConfig,
+	)
 	if err != nil {
 		// If resume fails, try creating a new session with the same ID
 		m.sessionConfig.SessionID = metadata.ID
 
-		session, err = m.client.CreateSession(m.sessionConfig)
+		session, err = m.client.CreateSession(m.ctx, m.sessionConfig)
 		if err != nil {
 			m.err = fmt.Errorf("failed to resume session: %w", err)
 
@@ -398,7 +405,7 @@ func (m *Model) resumeOrCreateSession(metadata *SessionMetadata) bool {
 
 // loadSessionMessages loads and renders messages from a resumed session.
 func (m *Model) loadSessionMessages(metadata *SessionMetadata) {
-	events, err := m.session.GetMessages()
+	events, err := m.session.GetMessages(m.ctx)
 	if err != nil {
 		m.messages = []message{}
 	} else {

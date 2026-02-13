@@ -61,7 +61,7 @@ func runNonTUIChat(
 	sessionConfig.OnPermissionRequest = chatsvc.CreatePermissionHandler(writer)
 
 	// Create session
-	session, err := client.CreateSession(sessionConfig)
+	session, err := client.CreateSession(ctx, sessionConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create chat session: %w", err)
 	}

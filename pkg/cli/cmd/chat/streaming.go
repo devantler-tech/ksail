@@ -118,7 +118,7 @@ func sendChatWithStreaming(
 	})
 	defer unsubscribe()
 
-	_, err := session.Send(copilot.MessageOptions{Prompt: input})
+	_, err := session.Send(ctx, copilot.MessageOptions{Prompt: input})
 	if err != nil {
 		return fmt.Errorf("failed to send chat message: %w", err)
 	}
@@ -126,11 +126,11 @@ func sendChatWithStreaming(
 	select {
 	case <-state.done:
 	case <-ctx.Done():
-		_ = session.Abort()
+		_ = session.Abort(ctx)
 
 		return fmt.Errorf("streaming cancelled: %w", ctx.Err())
 	case <-time.After(timeout):
-		_ = session.Abort()
+		_ = session.Abort(ctx)
 
 		return fmt.Errorf("%w after %v", errResponseTimeout, timeout)
 	}
@@ -139,6 +139,8 @@ func sendChatWithStreaming(
 }
 
 // sendChatWithoutStreaming sends a message and waits for the complete response.
+// The timeout is enforced via a derived context so that SendAndWait (which uses
+// context-based cancellation) is bounded in time.
 func sendChatWithoutStreaming(
 	ctx context.Context,
 	session *copilot.Session,
@@ -146,6 +148,10 @@ func sendChatWithoutStreaming(
 	timeout time.Duration,
 	writer io.Writer,
 ) error {
+	// Wrap the parent context with a timeout so SendAndWait respects the deadline.
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	// Use a channel to make the blocking call cancellable
 	type result struct {
 		response *copilot.SessionEvent
@@ -155,16 +161,20 @@ func sendChatWithoutStreaming(
 	resultChan := make(chan result, 1)
 
 	go func() {
-		response, err := session.SendAndWait(copilot.MessageOptions{Prompt: input}, timeout)
+		response, err := session.SendAndWait(timeoutCtx, copilot.MessageOptions{Prompt: input})
 		resultChan <- result{response: response, err: err}
 	}()
 
 	select {
-	case <-ctx.Done():
-		// Abort the in-flight Copilot request when the context is cancelled.
-		_ = session.Abort()
+	case <-timeoutCtx.Done():
+		// Abort the in-flight Copilot request when the context is cancelled or timed out.
+		_ = session.Abort(ctx)
 
-		return fmt.Errorf("chat cancelled: %w", ctx.Err())
+		if ctx.Err() != nil {
+			return fmt.Errorf("chat cancelled: %w", ctx.Err())
+		}
+
+		return fmt.Errorf("%w after %v", errResponseTimeout, timeout)
 	case chatResult := <-resultChan:
 		if chatResult.err != nil {
 			return fmt.Errorf("failed to send chat message: %w", chatResult.err)
