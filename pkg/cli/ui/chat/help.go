@@ -83,33 +83,149 @@ func createHelpModel(styles uiStyles) help.Model {
 func (m *Model) renderHelpOverlay() string {
 	modalWidth := max(m.width-modalPadding, 1)
 	contentWidth := max(modalWidth-contentPadding, 1)
-	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 
-	// Compact help content fitting in input area height (3 lines of content)
-	var content strings.Builder
-	content.WriteString(clipStyle.Render(
-		m.styles.helpKey.Render(enterSymbol)+" send"+helpSep+
-			m.styles.helpKey.Render("Alt+"+enterSymbol)+" newline"+helpSep+
-			m.styles.helpKey.Render(keyArrows)+" history"+helpSep+
-			m.styles.helpKey.Render(keyPageNav)+" scroll") + "\n")
-	content.WriteString(clipStyle.Render(
-		m.styles.helpKey.Render("Tab")+" mode"+helpSep+
-			m.styles.helpKey.Render("^Y")+" auto-approve"+helpSep+
-			m.styles.helpKey.Render("^T")+" tools"+helpSep+
-			m.styles.helpKey.Render("^R")+" copy"+helpSep+
-			m.styles.helpKey.Render("^H")+" sessions"+helpSep+
-			m.styles.helpKey.Render("^O")+" model"+helpSep+
-			m.styles.helpKey.Render("^E")+" effort"+helpSep+
-			m.styles.helpKey.Render("^N")+" new") + "\n")
-	content.WriteString(clipStyle.Render(
-		m.styles.helpKey.Render(keyEscape) + " close" + helpSep +
-			m.styles.helpKey.Render("^C") + " quit"))
+	parts := m.helpOverlayParts()
 
-	// Use same height as input area (inputHeight = 3)
-	contentStr := content.String()
-	modalStyle := m.createPickerModalStyle(modalWidth, inputHeight)
+	needed := countFlowLines(parts, contentWidth)
+	contentLines := min(needed, m.maxHelpContentLines())
+	contentLines = max(contentLines, inputHeight)
+	contentStr := flowHelpParts(parts, contentWidth, contentLines)
+	modalStyle := m.createPickerModalStyle(modalWidth, contentLines)
 
 	return modalStyle.Render(contentStr)
+}
+
+// helpOverlayParts returns all help keybindings in display order.
+func (m *Model) helpOverlayParts() []string {
+	return []string{
+		m.styles.helpKey.Render(enterSymbol) + " send",
+		m.styles.helpKey.Render("Alt+"+enterSymbol) + " newline",
+		m.styles.helpKey.Render(keyArrows) + " history",
+		m.styles.helpKey.Render(keyPageNav) + " scroll",
+		m.styles.helpKey.Render("Tab") + " mode",
+		m.styles.helpKey.Render("^Y") + " auto-approve",
+		m.styles.helpKey.Render("^T") + " tools",
+		m.styles.helpKey.Render("^R") + " copy",
+		m.styles.helpKey.Render("^H") + " sessions",
+		m.styles.helpKey.Render("^O") + " model",
+		m.styles.helpKey.Render("^E") + " effort",
+		m.styles.helpKey.Render("^N") + " new",
+		m.styles.helpKey.Render(keyEscape) + " close",
+		m.styles.helpKey.Render("^C") + " quit",
+	}
+}
+
+// maxHelpContentLines returns the maximum content lines the help overlay
+// can use without pushing the layout outside the terminal viewport.
+func (m *Model) maxHelpContentLines() int {
+	// modalBorderLines accounts for the top+bottom border of the modal box.
+	const modalBorderLines = 2
+
+	avail := m.height - m.headerHeight - footerHeight - viewportHeightPadding - minHeight - modalBorderLines
+
+	return max(avail, 1)
+}
+
+// helpOverlayContentLines returns the number of content lines the help overlay
+// will occupy at the current terminal width.
+func (m *Model) helpOverlayContentLines() int {
+	modalWidth := max(m.width-modalPadding, 1)
+	contentWidth := max(modalWidth-contentPadding, 1)
+	parts := m.helpOverlayParts()
+	needed := countFlowLines(parts, contentWidth)
+
+	return max(min(needed, m.maxHelpContentLines()), 1)
+}
+
+// helpOverlayExtraHeight returns extra height beyond inputHeight for layout.
+func (m *Model) helpOverlayExtraHeight() int {
+	lines := m.helpOverlayContentLines()
+	if lines > inputHeight {
+		return lines - inputHeight
+	}
+
+	return 0
+}
+
+// countFlowLines counts how many lines are needed to flow parts within maxWidth.
+func countFlowLines(parts []string, maxWidth int) int {
+	lines := 1
+	lineWidth := 0
+	sepWidth := lipgloss.Width(helpSep)
+
+	for _, part := range parts {
+		partWidth := lipgloss.Width(part)
+		needsSep := lineWidth > 0
+
+		totalNeeded := partWidth
+		if needsSep {
+			totalNeeded += sepWidth
+		}
+
+		if needsSep && lineWidth+totalNeeded > maxWidth {
+			lines++
+			lineWidth = partWidth
+
+			continue
+		}
+
+		if needsSep {
+			lineWidth += sepWidth
+		}
+
+		lineWidth += partWidth
+	}
+
+	return lines
+}
+
+// flowHelpParts arranges help parts into lines that wrap within maxWidth,
+// returning at most maxLines lines. Parts that don't fit are omitted.
+func flowHelpParts(parts []string, maxWidth, maxLines int) string {
+	var lines []string
+
+	var line strings.Builder
+
+	lineWidth := 0
+	sepWidth := lipgloss.Width(helpSep)
+
+	for _, part := range parts {
+		partWidth := lipgloss.Width(part)
+		needsSep := lineWidth > 0
+
+		totalNeeded := partWidth
+		if needsSep {
+			totalNeeded += sepWidth
+		}
+
+		if needsSep && lineWidth+totalNeeded > maxWidth {
+			lines = append(lines, line.String())
+			if len(lines) >= maxLines {
+				break
+			}
+
+			line.Reset()
+
+			lineWidth = 0
+			needsSep = false
+		}
+
+		if needsSep {
+			line.WriteString(helpSep)
+
+			lineWidth += sepWidth
+		}
+
+		line.WriteString(part)
+
+		lineWidth += partWidth
+	}
+
+	if line.Len() > 0 && len(lines) < maxLines {
+		lines = append(lines, line.String())
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // renderShortHelp renders the context-aware footer help text using the KeyMap.

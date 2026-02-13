@@ -34,7 +34,7 @@ func (m *Model) calculateMaxPickerVisible() int {
 func (m *Model) activeModalHeight() int {
 	switch {
 	case m.showHelpOverlay:
-		return 0
+		return m.helpOverlayExtraHeight()
 	case m.pendingPermission != nil:
 		return m.permissionModalExtraHeight()
 	case m.showModelPicker || m.showSessionPicker:

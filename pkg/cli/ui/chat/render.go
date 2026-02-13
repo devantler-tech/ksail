@@ -83,10 +83,7 @@ func (m *Model) buildStatusText() string {
 	// Streaming state and feedback
 	switch {
 	case m.isStreaming:
-		statusParts = append(
-			statusParts,
-			m.spinner.View()+" "+m.styles.status.Render("Thinking..."),
-		)
+		statusParts = append(statusParts, m.spinner.View())
 	case m.showCopyFeedback:
 		statusParts = append(statusParts, m.styles.status.Render("Copied"+checkmarkSuffix))
 	case m.showModelUnavailableFeedback:
