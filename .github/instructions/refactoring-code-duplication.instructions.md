@@ -103,7 +103,7 @@ func ValidateProduct(product Product) error {
 
 **Strategy:**
 
-1. Create a shared utility package (e.g., `pkg/utils/validation`)
+1. Create a shared package with a descriptive name (e.g., `pkg/validation`, `pkg/stringutil`)
 2. Move common functions there
 3. Export functions with clear names
 4. Update all imports
@@ -127,7 +127,7 @@ func isValidEmail(email string) bool {
 After:
 
 ```go
-// pkg/utils/validation/email.go
+// pkg/validation/email.go
 package validation
 
 import "strings"
@@ -138,7 +138,7 @@ func IsValidEmail(email string) bool {
 }
 
 // pkg/user/validator.go
-import "github.com/devantler-tech/ksail/pkg/utils/validation"
+import "github.com/devantler-tech/ksail/pkg/validation"
 
 func ValidateUser(user User) error {
     if !validation.IsValidEmail(user.Email) {
