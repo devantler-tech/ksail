@@ -138,7 +138,7 @@ func IsValidEmail(email string) bool {
 }
 
 // pkg/user/validator.go
-import "github.com/devantler-tech/ksail/pkg/validation"
+import "github.com/devantler-tech/ksail/v5/pkg/validation"
 
 func ValidateUser(user User) error {
     if !validation.IsValidEmail(user.Email) {
