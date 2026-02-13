@@ -49,6 +49,7 @@ func generateSchema(t *testing.T) map[string]any {
 	return schema
 }
 
+//nolint:funlen // Table-driven test with multiple subtests is naturally long
 func TestGeneratedSchema(t *testing.T) {
 	t.Parallel()
 
@@ -101,6 +102,12 @@ func TestGeneratedSchema(t *testing.T) {
 		prov := mustMap(t, props["provider"], "provider")
 		assertEnum(t, prov, []string{"Docker", "Hetzner"})
 	})
+
+	testNoRequiredFields(t, schema)
+}
+
+func testNoRequiredFields(t *testing.T, schema map[string]any) {
+	t.Helper()
 
 	t.Run("no required fields on nested objects", func(t *testing.T) {
 		t.Parallel()

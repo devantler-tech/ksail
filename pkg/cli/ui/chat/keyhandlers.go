@@ -252,7 +252,7 @@ func (m *Model) handleNewChat() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleToggleMode toggles between agent and plan mode.
+// handleToggleMode cycles through chat modes: Agent -> Plan -> Ask -> Agent.
 func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 	// Prevent mode toggling while streaming to avoid mode mismatch between
 	// message submission and tool execution time
@@ -260,10 +260,10 @@ func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.agentMode = !m.agentMode
+	m.chatMode = m.chatMode.Next()
 	// Update the shared reference so tool handlers see the change
-	if m.agentModeRef != nil {
-		m.agentModeRef.SetEnabled(m.agentMode)
+	if m.chatModeRef != nil {
+		m.chatModeRef.SetMode(m.chatMode)
 	}
 
 	m.updateViewportContent()

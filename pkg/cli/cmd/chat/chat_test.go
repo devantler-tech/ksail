@@ -17,10 +17,10 @@ const (
 	failureResult = "failure"
 )
 
-// planModeTestCase defines a test case for plan/agent mode tool execution.
-type planModeTestCase struct {
+// modeTestCase defines a test case for mode-based tool execution.
+type modeTestCase struct {
 	name              string
-	agentModeEnabled  bool
+	chatMode          chatui.ChatMode
 	expectToolCalled  bool
 	expectResultType  string
 	expectMsgContains []string
@@ -42,20 +42,20 @@ func createTestTool(called *bool) copilot.Tool {
 	}
 }
 
-// TestPlanModeToolExecution verifies agent/plan mode tool execution behavior using table-driven tests.
-func TestPlanModeToolExecution(t *testing.T) {
+// TestModeToolExecution verifies agent/plan/ask mode tool execution behavior using table-driven tests.
+func TestModeToolExecution(t *testing.T) {
 	t.Parallel()
 
-	tests := []planModeTestCase{
+	tests := []modeTestCase{
 		{
 			name:             "AgentModeAllowsExecution",
-			agentModeEnabled: true,
+			chatMode:         chatui.AgentMode,
 			expectToolCalled: true,
 			expectResultType: successResult,
 		},
 		{
 			name:             "PlanModeBlocksExecution",
-			agentModeEnabled: false,
+			chatMode:         chatui.PlanMode,
 			expectToolCalled: false,
 			expectResultType: "failure",
 			expectMsgContains: []string{
@@ -68,22 +68,22 @@ func TestPlanModeToolExecution(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			runPlanModeTestCase(t, testCase)
+			runModeTestCase(t, testCase)
 		})
 	}
 }
 
-func runPlanModeTestCase(t *testing.T, testCase planModeTestCase) {
+func runModeTestCase(t *testing.T, testCase modeTestCase) {
 	t.Helper()
 
 	eventChan := make(chan tea.Msg, 10)
-	agentModeRef := chatui.NewAgentModeRef(testCase.agentModeEnabled)
+	chatModeRef := chatui.NewChatModeRef(testCase.chatMode)
 
 	toolCalled := false
 	testTool := createTestTool(&toolCalled)
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{testTool}, eventChan, agentModeRef, nil, nil,
+		[]copilot.Tool{testTool}, eventChan, chatModeRef, nil, nil,
 	)
 
 	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
@@ -109,12 +109,12 @@ func runPlanModeTestCase(t *testing.T, testCase planModeTestCase) {
 	}
 }
 
-// TestPlanModeToggle verifies that toggling between agent and plan modes works correctly.
-func TestPlanModeToggle(t *testing.T) {
+// TestModeToggle verifies that toggling between modes works correctly.
+func TestModeToggle(t *testing.T) {
 	t.Parallel()
 
 	eventChan := make(chan tea.Msg, 10)
-	agentModeRef := chatui.NewAgentModeRef(false) // Start in plan mode
+	chatModeRef := chatui.NewChatModeRef(chatui.PlanMode) // Start in plan mode
 
 	toolCalled := false
 	testTool := copilot.Tool{
@@ -131,7 +131,7 @@ func TestPlanModeToggle(t *testing.T) {
 	}
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{testTool}, eventChan, agentModeRef, nil, nil,
+		[]copilot.Tool{testTool}, eventChan, chatModeRef, nil, nil,
 	)
 	wrappedTool := wrappedTools[0]
 
@@ -151,7 +151,7 @@ func TestPlanModeToggle(t *testing.T) {
 	// Phase 2: Toggle to agent mode - should execute
 	toolCalled = false
 
-	agentModeRef.SetEnabled(true)
+	chatModeRef.SetMode(chatui.AgentMode)
 
 	result, _ = wrappedTool.Handler(copilot.ToolInvocation{
 		ToolCallID: "test2", ToolName: "test_tool",
@@ -171,7 +171,7 @@ func TestPlanModeBlocksMutableTools(t *testing.T) {
 	t.Parallel()
 
 	eventChan := make(chan tea.Msg, 10)
-	agentModeRef := chatui.NewAgentModeRef(false) // Start in plan mode
+	chatModeRef := chatui.NewChatModeRef(chatui.PlanMode) // Start in plan mode
 
 	mutableToolCalled := false
 	mutableTool := copilot.Tool{
@@ -188,7 +188,7 @@ func TestPlanModeBlocksMutableTools(t *testing.T) {
 	}
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{mutableTool}, eventChan, agentModeRef, nil, nil,
+		[]copilot.Tool{mutableTool}, eventChan, chatModeRef, nil, nil,
 	)
 
 	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
@@ -298,14 +298,14 @@ func TestWriteToolSendsPermissionRequest(t *testing.T) {
 	t.Parallel()
 
 	eventChan := make(chan tea.Msg, 10)
-	agentModeRef := chatui.NewAgentModeRef(true) // Agent mode enabled
+	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode) // Agent mode enabled
 
 	toolCalled := false
 	writeTool := createTestWriteTool("test_write_tool", &toolCalled)
 	metadata := createToolMetadata("test_write_tool")
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, agentModeRef, nil, metadata,
+		[]copilot.Tool{writeTool}, eventChan, chatModeRef, nil, metadata,
 	)
 
 	// Start tool invocation in goroutine since it will block waiting for permission
@@ -336,14 +336,14 @@ func TestWriteToolDeniedPermission(t *testing.T) {
 	t.Parallel()
 
 	eventChan := make(chan tea.Msg, 10)
-	agentModeRef := chatui.NewAgentModeRef(true) // Agent mode enabled
+	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode) // Agent mode enabled
 
 	toolCalled := false
 	writeTool := createTestWriteTool("test_write_tool2", &toolCalled)
 	metadata := createToolMetadata("test_write_tool2")
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, agentModeRef, nil, metadata,
+		[]copilot.Tool{writeTool}, eventChan, chatModeRef, nil, metadata,
 	)
 
 	// Start tool invocation in goroutine
@@ -384,7 +384,7 @@ func TestReadToolSkipsPermission(t *testing.T) {
 	t.Parallel()
 
 	eventChan := make(chan tea.Msg, 10)
-	agentModeRef := chatui.NewAgentModeRef(true) // Agent mode enabled
+	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode) // Agent mode enabled
 
 	toolCalled := false
 	readTool := copilot.Tool{
@@ -409,7 +409,7 @@ func TestReadToolSkipsPermission(t *testing.T) {
 	}
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{readTool}, eventChan, agentModeRef, nil, metadata,
+		[]copilot.Tool{readTool}, eventChan, chatModeRef, nil, metadata,
 	)
 
 	// Execute directly - should not send permission request
@@ -444,7 +444,7 @@ func TestYoloModeAutoApproves(t *testing.T) {
 	t.Parallel()
 
 	eventChan := make(chan tea.Msg, 10)
-	agentModeRef := chatui.NewAgentModeRef(true)
+	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode)
 	yoloModeRef := chatui.NewYoloModeRef(true) // YOLO mode enabled
 
 	toolCalled := false
@@ -452,7 +452,7 @@ func TestYoloModeAutoApproves(t *testing.T) {
 	metadata := createToolMetadata("test_yolo_tool")
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, agentModeRef, yoloModeRef, metadata,
+		[]copilot.Tool{writeTool}, eventChan, chatModeRef, yoloModeRef, metadata,
 	)
 
 	// Execute directly - should auto-approve without permission prompt
@@ -487,7 +487,7 @@ func TestYoloModeDisabledStillPrompts(t *testing.T) {
 	t.Parallel()
 
 	eventChan := make(chan tea.Msg, 10)
-	agentModeRef := chatui.NewAgentModeRef(true)
+	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode)
 	yoloModeRef := chatui.NewYoloModeRef(false) // YOLO mode disabled
 
 	toolCalled := false
@@ -495,7 +495,7 @@ func TestYoloModeDisabledStillPrompts(t *testing.T) {
 	metadata := createToolMetadata("test_yolo_off_tool")
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, agentModeRef, yoloModeRef, metadata,
+		[]copilot.Tool{writeTool}, eventChan, chatModeRef, yoloModeRef, metadata,
 	)
 
 	// Start tool invocation in goroutine since it will block waiting for permission
@@ -527,7 +527,7 @@ func TestForceInjection(t *testing.T) {
 	t.Parallel()
 
 	eventChan := make(chan tea.Msg, 10)
-	agentModeRef := chatui.NewAgentModeRef(true)
+	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode)
 	yoloModeRef := chatui.NewYoloModeRef(true) // YOLO mode to avoid permission prompt
 
 	var receivedArgs map[string]any
@@ -551,7 +551,7 @@ func TestForceInjection(t *testing.T) {
 	metadata := createToolMetadataWithForce("test_force_tool")
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, agentModeRef, yoloModeRef, metadata,
+		[]copilot.Tool{writeTool}, eventChan, chatModeRef, yoloModeRef, metadata,
 	)
 
 	_, err := wrappedTools[0].Handler(copilot.ToolInvocation{
@@ -590,7 +590,7 @@ func TestForceNotInjectedWithoutSchemaSupport(t *testing.T) {
 	t.Parallel()
 
 	eventChan := make(chan tea.Msg, 10)
-	agentModeRef := chatui.NewAgentModeRef(true)
+	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode)
 	yoloModeRef := chatui.NewYoloModeRef(true) // YOLO mode to avoid permission prompt
 
 	var receivedArgs map[string]any
@@ -615,7 +615,7 @@ func TestForceNotInjectedWithoutSchemaSupport(t *testing.T) {
 	metadata := createToolMetadata("test_no_force_tool")
 
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, agentModeRef, yoloModeRef, metadata,
+		[]copilot.Tool{writeTool}, eventChan, chatModeRef, yoloModeRef, metadata,
 	)
 
 	_, err := wrappedTools[0].Handler(copilot.ToolInvocation{
@@ -648,7 +648,7 @@ func TestForceNotInjectedWithoutSchemaSupport(t *testing.T) {
 func TestNilEventChanAutoApproves(t *testing.T) {
 	t.Parallel()
 
-	agentModeRef := chatui.NewAgentModeRef(true)
+	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode)
 
 	toolCalled := false
 	writeTool := createTestWriteTool("test_nil_chan_tool", &toolCalled)
@@ -656,7 +656,7 @@ func TestNilEventChanAutoApproves(t *testing.T) {
 
 	// Pass nil for eventChan — simulates non-TUI mode
 	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, nil, agentModeRef, nil, metadata,
+		[]copilot.Tool{writeTool}, nil, chatModeRef, nil, metadata,
 	)
 
 	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
@@ -673,5 +673,118 @@ func TestNilEventChanAutoApproves(t *testing.T) {
 
 	if result.ResultType != successResult {
 		t.Errorf("Expected success, got %s", result.ResultType)
+	}
+}
+
+// TestAskModeBlocksWriteToolsAllowsReadTools verifies that ask mode blocks write tools
+// (RequiresPermission=true) while allowing read-only tools to execute.
+func TestAskModeBlocksWriteToolsAllowsReadTools(t *testing.T) {
+	t.Parallel()
+
+	metadata := map[string]toolgen.ToolDefinition{
+		"test_ask_write": {
+			Name:               "test_ask_write",
+			RequiresPermission: true, // write tool
+		},
+		"test_ask_read": {
+			Name:               "test_ask_read",
+			RequiresPermission: false, // read-only tool
+		},
+	}
+
+	t.Run("BlocksWriteTools", func(t *testing.T) {
+		t.Parallel()
+		assertAskModeBlocksWriteTool(t, metadata)
+	})
+
+	t.Run("AllowsReadTools", func(t *testing.T) {
+		t.Parallel()
+		assertAskModeAllowsReadTool(t, metadata)
+	})
+}
+
+func assertAskModeBlocksWriteTool(t *testing.T, metadata map[string]toolgen.ToolDefinition) {
+	t.Helper()
+
+	eventChan := make(chan tea.Msg, 10)
+	chatModeRef := chatui.NewChatModeRef(chatui.AskMode)
+
+	writeToolCalled := false
+	writeTool := copilot.Tool{
+		Name:        "test_ask_write",
+		Description: "A write tool",
+		Handler: func(_ copilot.ToolInvocation) (copilot.ToolResult, error) {
+			writeToolCalled = true
+
+			return copilot.ToolResult{
+				TextResultForLLM: "Write executed",
+				ResultType:       successResult,
+			}, nil
+		},
+	}
+
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{writeTool}, eventChan, chatModeRef, nil, metadata,
+	)
+
+	writeResult, err := wrappedTools[0].Handler(copilot.ToolInvocation{
+		ToolCallID: "test_ask_w",
+		ToolName:   "test_ask_write",
+	})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	if writeToolCalled {
+		t.Error("Write tool should NOT be called in ask mode")
+	}
+
+	if writeResult.ResultType != failureResult {
+		t.Errorf("Expected failure for write tool in ask mode, got %s", writeResult.ResultType)
+	}
+
+	if !strings.Contains(writeResult.TextResultForLLM, "Write tool blocked") {
+		t.Errorf("Expected ask mode blocking message, got: %s", writeResult.TextResultForLLM)
+	}
+}
+
+func assertAskModeAllowsReadTool(t *testing.T, metadata map[string]toolgen.ToolDefinition) {
+	t.Helper()
+
+	eventChan := make(chan tea.Msg, 10)
+	chatModeRef := chatui.NewChatModeRef(chatui.AskMode)
+
+	readToolCalled := false
+	readTool := copilot.Tool{
+		Name:        "test_ask_read",
+		Description: "A read tool",
+		Handler: func(_ copilot.ToolInvocation) (copilot.ToolResult, error) {
+			readToolCalled = true
+
+			return copilot.ToolResult{
+				TextResultForLLM: "Read executed",
+				ResultType:       successResult,
+			}, nil
+		},
+	}
+
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{readTool}, eventChan, chatModeRef, nil, metadata,
+	)
+
+	readResult, err := wrappedTools[0].Handler(copilot.ToolInvocation{
+		ToolCallID: "test_ask_r",
+		ToolName:   "test_ask_read",
+	})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	if !readToolCalled {
+		t.Error("Read tool should be called in ask mode")
+	}
+
+	if readResult.ResultType != successResult {
+		t.Errorf("Expected success for read tool in ask mode, got %s", readResult.ResultType)
 	}
 }

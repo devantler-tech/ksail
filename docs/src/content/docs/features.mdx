@@ -244,7 +244,7 @@ spec:
 
 ## AI Chat Assistant
 
-Get interactive help with cluster configuration and troubleshooting using an AI-powered chat session.
+Get interactive help with cluster configuration and troubleshooting using an AI-powered chat session. The assistant operates in three modes: **Agent** (full execution with approval), **Plan** (no execution, just guidance), and **Ask** (read-only investigation).
 
 ```bash
 ksail chat
@@ -252,14 +252,20 @@ ksail chat
 
 **Capabilities:**
 
+- **Three chat modes** – Agent (`</>`), Plan (`≡`), and Ask (`?`) modes for different workflows
 - **Guided configuration** – Get recommendations for distributions, CNI, and other settings
-- **Troubleshooting** – Diagnose cluster issues with AI assistance
-- **Command execution** – Run KSail commands with your approval
+- **Troubleshooting** – Diagnose cluster issues with read-only investigation (Ask mode)
+- **Command execution** – Run KSail commands with your approval (Agent mode)
+- **Step-by-step planning** – Learn workflows without making changes (Plan mode)
 - **Context-aware** – Understands your ksail.yaml and project structure
+
+**Mode Switching:** Press **Tab** to cycle between modes during a chat session.
 
 **Prerequisites:** Requires [GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line) installed and authenticated.
 
 **Commands:** [`ksail chat`](/cli-flags/chat/chat-root/)
+
+**Full Guide:** [AI Chat Assistant](/ai-chat/) — Detailed mode explanations, keyboard shortcuts, and workflows
 
 ## VSCode Extension
 

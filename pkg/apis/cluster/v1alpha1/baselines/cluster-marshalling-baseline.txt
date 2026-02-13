@@ -1,0 +1,20 @@
+goos: linux
+goarch: amd64
+pkg: github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1
+cpu: AMD EPYC 9V74 80-Core Processor                
+BenchmarkCluster_MarshalYAML/Minimal-4         	  138902	     26335 ns/op	    6880 B/op	     179 allocs/op
+BenchmarkCluster_MarshalYAML/WithBasicConfig-4 	  139065	     25770 ns/op	    6880 B/op	     179 allocs/op
+BenchmarkCluster_MarshalYAML/WithCNI-4         	  138104	     25925 ns/op	    7472 B/op	     182 allocs/op
+BenchmarkCluster_MarshalYAML/WithGitOps-4      	  137491	     26260 ns/op	    7792 B/op	     185 allocs/op
+BenchmarkCluster_MarshalYAML/FullProductionCluster-4         	  129484	     27859 ns/op	    9816 B/op	     209 allocs/op
+BenchmarkCluster_MarshalJSON/Minimal-4                       	  135252	     26577 ns/op	    7089 B/op	     185 allocs/op
+BenchmarkCluster_MarshalJSON/WithBasicConfig-4               	  135385	     26499 ns/op	    7089 B/op	     185 allocs/op
+BenchmarkCluster_MarshalJSON/FullProductionCluster-4         	  120577	     29785 ns/op	    9204 B/op	     224 allocs/op
+BenchmarkYAMLEncode/Minimal-4                                	  116618	     30891 ns/op	   13816 B/op	     207 allocs/op
+BenchmarkYAMLEncode/FullProductionCluster-4                  	   91260	     39504 ns/op	   24944 B/op	     252 allocs/op
+BenchmarkJSONEncode-4                                        	  123312	     28939 ns/op	    8324 B/op	     203 allocs/op
+BenchmarkPruneClusterDefaults/MostlyDefaults-4               	  244219	     14551 ns/op	    3696 B/op	     117 allocs/op
+BenchmarkPruneClusterDefaults/MixedDefaultsAndCustom-4       	  243889	     14545 ns/op	    3696 B/op	     117 allocs/op
+BenchmarkPruneClusterDefaults/AllCustomValues-4              	  247639	     14448 ns/op	    3696 B/op	     117 allocs/op
+PASS
+ok  	github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1	53.932s
