@@ -35,6 +35,8 @@ const (
 	k3sDisableMetricsServerFlag = "--disable=metrics-server"
 	k3sDisableLocalStorageFlag  = "--disable=local-storage"
 	k3sDisableServiceLBFlag     = "--disable=servicelb"
+	k3sFlanelBackendNoneFlag    = "--flannel-backend=none"
+	k3sDisableNetworkPolicyFlag = "--disable-network-policy"
 )
 
 // newCreateLifecycleConfig creates the lifecycle configuration for cluster creation.
@@ -339,6 +341,43 @@ func maybeDisableK3dFeature(
 			NodeFilters: []string{"server:*"},
 		},
 	)
+}
+
+// setupK3dCNI configures K3d to disable flannel and network policy when a non-default
+// CNI (Cilium or Calico) is selected. Without this, K3s starts with flannel enabled,
+// causing conflicts when the custom CNI is installed post-creation.
+func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
+		return
+	}
+
+	cni := clusterCfg.Spec.Cluster.CNI
+	if cni != v1alpha1.CNICilium && cni != v1alpha1.CNICalico {
+		return
+	}
+
+	for _, flag := range []string{k3sFlanelBackendNoneFlag, k3sDisableNetworkPolicyFlag} {
+		if !hasK3sArg(k3dConfig, flag) {
+			k3dConfig.Options.K3sOptions.ExtraArgs = append(
+				k3dConfig.Options.K3sOptions.ExtraArgs,
+				v1alpha5.K3sArgWithNodeFilters{
+					Arg:         flag,
+					NodeFilters: []string{"server:*"},
+				},
+			)
+		}
+	}
+}
+
+// hasK3sArg checks whether a K3s arg flag is already present in the K3d config.
+func hasK3sArg(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg == flag {
+			return true
+		}
+	}
+
+	return false
 }
 
 func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
