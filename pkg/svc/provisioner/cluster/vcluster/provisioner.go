@@ -20,9 +20,10 @@ import (
 const defaultVClusterName = "vcluster-default"
 
 // defaultChartVersion is the vCluster Helm chart version used by the Docker driver.
+// This MUST match the SDK version in go.mod (github.com/loft-sh/vcluster) so the
+// generated config schema aligns with the binary's expected schema.
 // Must be available on ghcr.io/loft-sh/vcluster-pro as an OCI artifact.
-// Check: https://ghcr.io/loft-sh/vcluster-pro for available tags.
-const defaultChartVersion = "0.31.0-alpha.0"
+const defaultChartVersion = "0.32.0-rc.1"
 
 // Provisioner implements the cluster provisioner interface for vCluster's Docker
 // driver (Vind). Create and Delete use the vCluster Go SDK directly, while
