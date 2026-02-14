@@ -2,10 +2,14 @@ package vclusterprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
@@ -38,6 +42,31 @@ const defaultKubernetesVersion = "v1.34.0"
 // which is too short for CI runners. Retrying gives an effective timeout of
 // ~9 minutes (3 attempts x 3 minutes).
 const connectMaxAttempts = 3
+
+// controlPlaneContainerPrefix is the Docker container name prefix used by the
+// vCluster SDK for control plane containers.
+const controlPlaneContainerPrefix = "vcluster.cp."
+
+// dbusWaitTimeout is how long to wait for D-Bus to become available inside the
+// control plane container. On CI runners (GitHub Actions), systemd inside the
+// container may take several seconds to initialize D-Bus after container start.
+const dbusWaitTimeout = 30 * time.Second
+
+// dbusWaitInterval is the polling interval when waiting for D-Bus readiness.
+const dbusWaitInterval = 500 * time.Millisecond
+
+// dbusErrorSubstring identifies the D-Bus startup race condition error.
+// The SDK's install-standalone.sh runs "systemctl restart systemd-journald"
+// which fails when D-Bus hasn't initialized yet inside the privileged container.
+const dbusErrorSubstring = "Failed to connect to bus"
+
+// errDBusTimeout is returned when D-Bus does not become available
+// within the configured timeout.
+var errDBusTimeout = errors.New("D-Bus socket did not appear within timeout")
+
+// errEmptyJoinToken is returned when the SDK's persisted join token
+// file exists but is empty.
+var errEmptyJoinToken = errors.New("join token file is empty")
 
 // Provisioner implements the cluster provisioner interface for vCluster's Docker
 // driver (Vind). Create and Delete use the vCluster Go SDK directly, while
@@ -82,6 +111,11 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 // ConnectDocker has a hardcoded 3-minute readiness timeout (waitForVCluster)
 // which is too short for CI runners. We retry ConnectDocker up to
 // connectMaxAttempts times, giving an effective timeout of ~9 minutes.
+//
+// On CI runners (GitHub Actions), the SDK's install-standalone.sh may fail
+// because systemd inside the privileged container hasn't initialized D-Bus
+// yet. When this happens the container is already running, so we wait for
+// D-Bus readiness and re-run the install script.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
@@ -106,7 +140,16 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 
 	err = cli.CreateDocker(ctx, opts, globalFlags, target, logger)
 	if err != nil {
-		return fmt.Errorf("failed to create vCluster: %w", err)
+		if !strings.Contains(err.Error(), dbusErrorSubstring) {
+			return fmt.Errorf("failed to create vCluster: %w", err)
+		}
+
+		logger.Infof("D-Bus not ready in container — recovering...")
+
+		recoverErr := recoverFromDBusError(ctx, globalFlags, target, logger)
+		if recoverErr != nil {
+			return fmt.Errorf("failed to create vCluster (D-Bus recovery failed): %w", recoverErr)
+		}
 	}
 
 	return connectWithRetry(ctx, globalFlags, target, logger)
@@ -227,6 +270,123 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 	}
 
 	return slices.Contains(clusters, target), nil
+}
+
+// --- D-Bus recovery ---
+
+// recoverFromDBusError handles the case where CreateDocker fails because
+// systemd inside the container hasn't initialized D-Bus yet. The container
+// is already running at this point — we wait for D-Bus and re-run the
+// install script that the SDK originally attempted.
+func recoverFromDBusError(
+	ctx context.Context,
+	globalFlags *flags.GlobalFlags,
+	clusterName string,
+	logger loftlog.Logger,
+) error {
+	containerName := controlPlaneContainerPrefix + clusterName
+
+	err := waitForDBus(ctx, containerName)
+	if err != nil {
+		return fmt.Errorf("D-Bus never became available: %w", err)
+	}
+
+	logger.Infof("D-Bus ready, re-running install script...")
+
+	token, err := readJoinToken(globalFlags, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to read join token: %w", err)
+	}
+
+	err = rerunInstallScript(ctx, containerName, clusterName, token)
+	if err != nil {
+		return fmt.Errorf("install script re-run failed: %w", err)
+	}
+
+	return nil
+}
+
+// waitForDBus polls the container until the D-Bus system socket exists,
+// indicating that systemd has initialized far enough for systemctl to work.
+func waitForDBus(ctx context.Context, containerName string) error {
+	deadline := time.Now().Add(dbusWaitTimeout)
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for D-Bus: %w", ctx.Err())
+		default:
+		}
+
+		cmd := exec.CommandContext(ctx, "docker", "exec", containerName,
+			"test", "-e", "/run/dbus/system_bus_socket")
+
+		if cmd.Run() == nil {
+			return nil
+		}
+
+		time.Sleep(dbusWaitInterval)
+	}
+
+	return fmt.Errorf("%w: %v", errDBusTimeout, dbusWaitTimeout)
+}
+
+// readJoinToken reads the join token persisted by the SDK during container
+// creation. The token is stored alongside the SDK's config directory at
+// docker/vclusters/<name>/token.txt.
+func readJoinToken(globalFlags *flags.GlobalFlags, clusterName string) (string, error) {
+	tokenPath := filepath.Join(
+		filepath.Dir(globalFlags.Config),
+		"docker", "vclusters", clusterName, "token.txt",
+	)
+
+	//nolint:gosec // path is constructed from SDK config dir + cluster name.
+	data, err := os.ReadFile(tokenPath)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", tokenPath, err)
+	}
+
+	token := strings.TrimSpace(string(data))
+	if token == "" {
+		return "", fmt.Errorf("%w: %s", errEmptyJoinToken, tokenPath)
+	}
+
+	return token, nil
+}
+
+// rerunInstallScript executes the same install-standalone.sh that the SDK
+// originally ran, but now D-Bus is available so systemctl commands succeed.
+func rerunInstallScript(
+	ctx context.Context,
+	containerName string,
+	clusterName string,
+	joinToken string,
+) error {
+	scriptURL := fmt.Sprintf(
+		"https://github.com/loft-sh/vcluster/releases/download/v%s/install-standalone.sh",
+		defaultChartVersion,
+	)
+
+	installCmd := fmt.Sprintf(
+		"set -e -o pipefail; mount --make-rshared /; "+
+			`curl -sfLk "%s" | sh -s -- `+
+			"--skip-download --skip-wait "+
+			"--vcluster-name %s --join-token %s",
+		scriptURL, clusterName, joinToken,
+	)
+
+	cmd := exec.CommandContext( //nolint:gosec // args are internally controlled constants.
+		ctx, "docker", "exec", containerName, "bash", "-c", installCmd,
+	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("docker exec failed: %w", err)
+	}
+
+	return nil
 }
 
 // --- internals ---
