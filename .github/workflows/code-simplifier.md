@@ -59,6 +59,7 @@ git log --since="24 hours ago" --pretty=format:"%H %s" --no-merges
 ```
 
 Use GitHub tools to:
+
 - Search for pull requests merged in the last 24 hours: `repo:${{ github.repository }} is:pr is:merged merged:>=${YESTERDAY}`
 - Get details of merged PRs to understand what files were changed
 - List commits from the last 24 hours to identify modified files
@@ -66,6 +67,7 @@ Use GitHub tools to:
 ### 1.2 Extract Changed Files
 
 For each merged PR or recent commit:
+
 - Use `pull_request_read` with `method: get_files` to list changed files
 - Use `get_commit` to see file changes in recent commits
 - Focus on source code files (common extensions: `.go`, `.js`, `.ts`, `.tsx`, `.jsx`, `.py`, `.rb`, `.java`, `.cs`, `.php`, `.cpp`, `.c`, `.rs`, etc.)
@@ -87,6 +89,7 @@ If **files were changed**, proceed to Phase 2.
 ### 2.1 Review Project Standards
 
 Before simplifying, review the project's coding standards from relevant documentation:
+
 - Check for style guides, coding conventions, or contribution guidelines in the repository
 - Look for language-specific conventions (e.g., `STYLE.md`, `CONTRIBUTING.md`, `README.md`)
 - Identify established patterns in the codebase
@@ -96,11 +99,13 @@ Before simplifying, review the project's coding standards from relevant document
 Apply these refinements to the recently modified code:
 
 #### 1. Preserve Functionality
+
 - **NEVER** change what the code does - only how it does it
 - All original features, outputs, and behaviors must remain intact
 - Run tests before and after to ensure no behavioral changes
 
 #### 2. Enhance Clarity
+
 - Reduce unnecessary complexity and nesting
 - Eliminate redundant code and abstractions
 - Improve readability through clear variable and function names
@@ -110,13 +115,16 @@ Apply these refinements to the recently modified code:
 - Choose clarity over brevity - explicit code is often better than compact code
 
 #### 3. Apply Project Standards
+
 - Use project-specific conventions and patterns
 - Follow established naming conventions
 - Apply consistent formatting
 - Use appropriate language features (modern syntax where beneficial)
 
 #### 4. Maintain Balance
+
 Avoid over-simplification that could:
+
 - Reduce code clarity or maintainability
 - Create overly clever solutions that are hard to understand
 - Combine too many concerns into single functions
@@ -163,6 +171,7 @@ cargo test         # For Rust projects
 ```
 
 If tests fail:
+
 - Review the failures carefully
 - Revert changes that broke functionality
 - Adjust simplifications to preserve behavior
@@ -200,6 +209,7 @@ cargo build        # For Rust projects
 ### 4.1 Determine If PR Is Needed
 
 Only create a PR if:
+
 - ✅ You made actual code simplifications
 - ✅ All tests pass (or no tests exist)
 - ✅ Linting is clean (or no linter configured)
@@ -271,19 +281,23 @@ Create the pull request using the safe-outputs tool with the generated descripti
 ## Important Guidelines
 
 ### Scope Control
+
 - **Focus on recent changes**: Only refine code modified in the last 24 hours
 - **Don't over-refactor**: Avoid touching unrelated code
 - **Preserve interfaces**: Don't change public APIs
 - **Incremental improvements**: Make targeted, surgical changes
 
 ### Quality Standards
+
 - **Test first**: Always run tests after simplifications (when available)
 - **Preserve behavior**: Functionality must remain identical
 - **Follow conventions**: Apply project-specific patterns consistently
 - **Clear over clever**: Prioritize readability and maintainability
 
 ### Exit Conditions
+
 Exit gracefully without creating a PR if:
+
 - No code was changed in the last 24 hours
 - No simplifications are beneficial
 - Tests fail after changes
