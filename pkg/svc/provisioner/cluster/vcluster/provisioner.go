@@ -68,7 +68,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	opts := &cli.CreateOptions{
 		Driver:       "docker",
 		ChartVersion: defaultChartVersion,
-		Connect:      false,
+		Connect:      true,
 		Upgrade:      false,
 		Distro:       "k8s",
 	}
