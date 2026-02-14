@@ -167,17 +167,17 @@ func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *cluster
 	name := strings.TrimSpace(resolved.ClusterName)
 
 	// Each distribution uses a different kubeconfig context naming convention.
-	prefixes := []struct{ prefix, separator string }{
-		{"kind-", ""},
-		{"k3d-", ""},
-		{"vcluster-docker_", ""},
+	prefixes := []string{
+		"kind-",
+		"k3d-",
+		"vcluster-docker_",
 	}
 
-	for _, p := range prefixes {
+	for _, prefix := range prefixes {
 		contextName := ""
 
 		if name != "" {
-			contextName = p.prefix + p.separator + name
+			contextName = prefix + name
 		}
 
 		info, err := clusterdetector.DetectInfo(resolved.KubeconfigPath, contextName)

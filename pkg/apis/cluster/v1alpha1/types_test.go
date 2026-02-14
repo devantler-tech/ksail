@@ -76,7 +76,7 @@ type distributionBoolTestCase struct {
 }
 
 // distributionBoolTestCases returns shared test cases for `Provides*ByDefault`
-// methods where K3s and VCluster return true, and everything else returns false.
+// methods where K3s returns true, and everything else returns false.
 func distributionBoolTestCases(featureName string) []distributionBoolTestCase {
 	return []distributionBoolTestCase{
 		{
@@ -86,10 +86,10 @@ func distributionBoolTestCases(featureName string) []distributionBoolTestCase {
 			description:  "K3s should provide " + featureName + " by default",
 		},
 		{
-			name:         "returns_true_for_vcluster",
+			name:         "returns_false_for_vcluster",
 			distribution: v1alpha1.DistributionVCluster,
-			want:         true,
-			description:  "VCluster should provide " + featureName + " by default (inherited from host cluster)",
+			want:         false,
+			description:  "VCluster (Vind with Distro: k8s) should not provide " + featureName + " by default",
 		},
 		{
 			name:         "returns_false_for_kind",

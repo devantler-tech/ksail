@@ -420,57 +420,55 @@ func (p *Provider) listVClusterContainers(
 }
 
 // extractVClusterName extracts the cluster name from a vCluster container name.
+// It scans all container names (consistent with listVClusterContainers).
 func extractVClusterName(ctr container.Summary) string {
-	if len(ctr.Names) == 0 {
-		return ""
-	}
+	for _, rawName := range ctr.Names {
+		name := strings.TrimPrefix(rawName, "/")
 
-	name := strings.TrimPrefix(ctr.Names[0], "/")
-
-	// Control plane: vcluster.cp.<cluster-name>
-	if clusterName, ok := strings.CutPrefix(name, vclusterCPPrefix); ok {
-		return clusterName
-	}
-
-	// Worker: vcluster.node.<cluster-name>.<worker>
-	if rest, ok := strings.CutPrefix(name, vclusterNodePrefix); ok {
-		if idx := strings.IndexByte(rest, '.'); idx > 0 {
-			return rest[:idx]
+		// Control plane: vcluster.cp.<cluster-name>
+		if clusterName, ok := strings.CutPrefix(name, vclusterCPPrefix); ok {
+			return clusterName
 		}
 
-		return rest
-	}
+		// Worker: vcluster.node.<cluster-name>.<worker>
+		if rest, ok := strings.CutPrefix(name, vclusterNodePrefix); ok {
+			if idx := strings.IndexByte(rest, '.'); idx > 0 {
+				return rest[:idx]
+			}
 
-	// Load balancer: vcluster.lb.<cluster-name>.<lb>
-	if rest, ok := strings.CutPrefix(name, vclusterLBPrefix); ok {
-		if idx := strings.IndexByte(rest, '.'); idx > 0 {
-			return rest[:idx]
+			return rest
 		}
 
-		return rest
+		// Load balancer: vcluster.lb.<cluster-name>.<lb>
+		if rest, ok := strings.CutPrefix(name, vclusterLBPrefix); ok {
+			if idx := strings.IndexByte(rest, '.'); idx > 0 {
+				return rest[:idx]
+			}
+
+			return rest
+		}
 	}
 
 	return ""
 }
 
 // extractVClusterRole determines the role of a vCluster container from its name.
+// It scans all container names (consistent with listVClusterContainers).
 func extractVClusterRole(ctr container.Summary) string {
-	if len(ctr.Names) == 0 {
-		return ""
-	}
+	for _, rawName := range ctr.Names {
+		name := strings.TrimPrefix(rawName, "/")
 
-	name := strings.TrimPrefix(ctr.Names[0], "/")
+		if strings.HasPrefix(name, vclusterCPPrefix) {
+			return "control-plane"
+		}
 
-	if strings.HasPrefix(name, vclusterCPPrefix) {
-		return "control-plane"
-	}
+		if strings.HasPrefix(name, vclusterNodePrefix) {
+			return "worker"
+		}
 
-	if strings.HasPrefix(name, vclusterNodePrefix) {
-		return "worker"
-	}
-
-	if strings.HasPrefix(name, vclusterLBPrefix) {
-		return "load-balancer"
+		if strings.HasPrefix(name, vclusterLBPrefix) {
+			return "load-balancer"
+		}
 	}
 
 	return ""

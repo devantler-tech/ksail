@@ -96,8 +96,12 @@ func resolveNetworkName(
 
 		return trimmed
 	case v1alpha1.DistributionVCluster:
-		// VCluster manages its own networking; no Docker network name needed.
-		return ""
+		trimmed := strings.TrimSpace(clusterName)
+		if trimmed == "" {
+			trimmed = "vcluster-default"
+		}
+
+		return "vcluster." + trimmed
 	default:
 		return ""
 	}

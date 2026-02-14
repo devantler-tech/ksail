@@ -431,10 +431,10 @@ func TestDistribution_ProvidesCSIByDefault(t *testing.T) {
 			expected:     true,
 		},
 		{
-			name:         "vcluster_docker_provides_csi",
+			name:         "vcluster_docker_no_csi",
 			distribution: v1alpha1.DistributionVCluster,
 			provider:     v1alpha1.ProviderDocker,
-			expected:     true,
+			expected:     false,
 		},
 	}
 

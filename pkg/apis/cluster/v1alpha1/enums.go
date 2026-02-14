@@ -32,13 +32,13 @@ const (
 )
 
 // ProvidesMetricsServerByDefault returns true if the distribution includes metrics-server by default.
-// K3s includes metrics-server. VCluster inherits metrics-server from the host cluster.
-// Vanilla and Talos do not.
+// K3s includes metrics-server.
+// Vanilla, Talos, and VCluster (Vind with Distro: k8s) do not.
 func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 	switch *d {
-	case DistributionK3s, DistributionVCluster:
+	case DistributionK3s:
 		return true
-	case DistributionVanilla, DistributionTalos:
+	case DistributionVanilla, DistributionTalos, DistributionVCluster:
 		return false
 	default:
 		return false
@@ -46,13 +46,13 @@ func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 }
 
 // ProvidesStorageByDefault returns true if the distribution includes a storage provisioner by default.
-// K3s includes local-path-provisioner. VCluster inherits storage from the host cluster.
-// Vanilla and Talos do not have a default storage class.
+// K3s includes local-path-provisioner.
+// Vanilla, Talos, and VCluster (Vind with Distro: k8s) do not have a default storage class.
 func (d *Distribution) ProvidesStorageByDefault() bool {
 	switch *d {
-	case DistributionK3s, DistributionVCluster:
+	case DistributionK3s:
 		return true
-	case DistributionVanilla, DistributionTalos:
+	case DistributionVanilla, DistributionTalos, DistributionVCluster:
 		return false
 	default:
 		return false
@@ -62,19 +62,17 @@ func (d *Distribution) ProvidesStorageByDefault() bool {
 // ProvidesCSIByDefault returns true if the distribution × provider combination includes CSI by default.
 // - K3s includes local-path-provisioner by default (regardless of provider)
 // - Talos × Hetzner uses Hetzner CSI driver by default
-// - VCluster inherits CSI from the host cluster
-// - Vanilla and Talos × Docker do not have a default CSI.
+// - Vanilla, VCluster (Vind with Distro: k8s), and Talos × Docker do not have a default CSI.
 func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
 	switch *d {
-	case DistributionK3s, DistributionVCluster:
+	case DistributionK3s:
 		// K3s always includes local-path-provisioner
-		// VCluster inherits storage from the host cluster
 		return true
 	case DistributionTalos:
 		// Talos × Hetzner provides Hetzner CSI by default
 		return provider == ProviderHetzner
-	case DistributionVanilla:
-		// Vanilla (Kind) does not provide CSI by default
+	case DistributionVanilla, DistributionVCluster:
+		// Vanilla (Kind) and VCluster (Vind with Distro: k8s) do not provide CSI by default
 		return false
 	default:
 		return false
