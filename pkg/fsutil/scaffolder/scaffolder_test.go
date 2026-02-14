@@ -844,6 +844,8 @@ func generateDistributionContent(
 
 	case v1alpha1.DistributionTalos:
 		// Talos doesn't have a separate distribution config file to snapshot
+	case v1alpha1.DistributionVCluster:
+		// VCluster doesn't have a separate distribution config file to snapshot
 	}
 }
 
@@ -881,6 +883,16 @@ func createMinimalClusterForSnapshot(
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionTalos,
 				DistributionConfig: "talos",
+			},
+		}
+
+		return minimalCluster
+	case v1alpha1.DistributionVCluster:
+		// For VCluster, include distribution and distributionConfig
+		minimalCluster.Spec = v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       v1alpha1.DistributionVCluster,
+				DistributionConfig: "vcluster.yaml",
 			},
 		}
 

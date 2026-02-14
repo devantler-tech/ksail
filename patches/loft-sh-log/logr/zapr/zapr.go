@@ -106,7 +106,11 @@ const (
 // handleFields converts a bunch of arbitrary key-value pairs into Zap fields.  It takes
 // additional pre-converted Zap fields, for use with automatically attached fields, like
 // `error`.
-func (zl *zapLogger) handleFields(lvl int, args []interface{}, additional ...zap.Field) []zap.Field {
+func (zl *zapLogger) handleFields(
+	lvl int,
+	args []interface{},
+	additional ...zap.Field,
+) []zap.Field {
 	injectNumericLevel := zl.numericLevelKey != "" && lvl != noLevel
 
 	// a slightly modified version of zap.SugaredLogger.sweetenFields
@@ -142,7 +146,8 @@ func (zl *zapLogger) handleFields(lvl int, args []interface{}, additional ...zap
 				continue
 			}
 			if zl.panicMessages {
-				zl.l.WithOptions(zap.AddCallerSkip(1)).DPanic("strongly-typed Zap Field passed to logr", zapIt("zap field", args[i]))
+				zl.l.WithOptions(zap.AddCallerSkip(1)).
+					DPanic("strongly-typed Zap Field passed to logr", zapIt("zap field", args[i]))
 			}
 			break
 		}
@@ -150,7 +155,8 @@ func (zl *zapLogger) handleFields(lvl int, args []interface{}, additional ...zap
 		// make sure this isn't a mismatched key
 		if i == len(args)-1 {
 			if zl.panicMessages {
-				zl.l.WithOptions(zap.AddCallerSkip(1)).DPanic("odd number of arguments passed as key-value pairs for logging", zapIt("ignored key", args[i]))
+				zl.l.WithOptions(zap.AddCallerSkip(1)).
+					DPanic("odd number of arguments passed as key-value pairs for logging", zapIt("ignored key", args[i]))
 			}
 			break
 		}
@@ -162,7 +168,8 @@ func (zl *zapLogger) handleFields(lvl int, args []interface{}, additional ...zap
 		if !isString {
 			// if the key isn't a string, DPanic and stop logging
 			if zl.panicMessages {
-				zl.l.WithOptions(zap.AddCallerSkip(1)).DPanic("non-string key argument passed to logging, ignoring all later arguments", zapIt("invalid key", key))
+				zl.l.WithOptions(zap.AddCallerSkip(1)).
+					DPanic("non-string key argument passed to logging, ignoring all later arguments", zapIt("invalid key", key))
 			}
 			break
 		}
@@ -225,7 +232,8 @@ func (zl *zapLogger) Info(lvl int, msg string, keysAndVals ...interface{}) {
 
 func (zl *zapLogger) Error(err error, msg string, keysAndVals ...interface{}) {
 	if checkedEntry := zl.l.Check(zap.ErrorLevel, msg); checkedEntry != nil {
-		checkedEntry.Write(zl.handleFields(noLevel, keysAndVals, zap.NamedError(zl.errorKey, err))...)
+		checkedEntry.Write(
+			zl.handleFields(noLevel, keysAndVals, zap.NamedError(zl.errorKey, err))...)
 	}
 }
 
@@ -334,5 +342,7 @@ func DPanicOnBugs(enabled bool) Option {
 	}
 }
 
-var _ logr.LogSink = &zapLogger{}
-var _ logr.CallDepthLogSink = &zapLogger{}
+var (
+	_ logr.LogSink          = &zapLogger{}
+	_ logr.CallDepthLogSink = &zapLogger{}
+)

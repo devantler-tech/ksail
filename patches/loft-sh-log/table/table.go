@@ -15,7 +15,12 @@ func PrintTable(s log.Logger, header []string, values [][]string) {
 }
 
 // PrintTableWithOptions prints a table with header columns and string values
-func PrintTableWithOptions(s log.Logger, header []string, values [][]string, modify func(table *tablewriter.Table)) {
+func PrintTableWithOptions(
+	s log.Logger,
+	header []string,
+	values [][]string,
+	modify func(table *tablewriter.Table),
+) {
 	reader, writer := io.Pipe()
 	defer writer.Close()
 

@@ -49,8 +49,10 @@ var Colors = []string{
 	"white+b",
 }
 
-var stdout = goansi.NewAnsiStdout()
-var stderr = goansi.NewAnsiStderr()
+var (
+	stdout = goansi.NewAnsiStdout()
+	stderr = goansi.NewAnsiStderr()
+)
 
 type Format int
 
@@ -91,7 +93,11 @@ func NewStreamLogger(stdout, stderr io.Writer, level logrus.Level) *StreamLogger
 	}
 }
 
-func NewStreamLoggerWithFormat(stdout, stderr io.Writer, level logrus.Level, format Format) *StreamLogger {
+func NewStreamLoggerWithFormat(
+	stdout, stderr io.Writer,
+	level logrus.Level,
+	format Format,
+) *StreamLogger {
 	return &StreamLogger{
 		m:           &sync.Mutex{},
 		level:       level,
@@ -303,7 +309,8 @@ func (s *StreamLogger) writeMessage(fnType logFunctionType, message string) {
 	fnInformation := fnTypeInformationMap[fnType]
 	message = s.writePrefixes(message)
 	for _, s := range s.sinks {
-		if fnInformation.logLevel == logrus.PanicLevel || fnInformation.logLevel == logrus.FatalLevel {
+		if fnInformation.logLevel == logrus.PanicLevel ||
+			fnInformation.logLevel == logrus.FatalLevel {
 			s.Print(logrus.ErrorLevel, message)
 		} else {
 			s.Print(fnInformation.logLevel, message)
@@ -316,11 +323,37 @@ func (s *StreamLogger) writeMessage(fnType logFunctionType, message string) {
 			_, _ = stream.Write([]byte(message))
 		} else if s.format == TimeFormat {
 			now := time.Now()
-			_, _ = stream.Write([]byte(ansi.Color(formatInt(now.Hour())+":"+formatInt(now.Minute())+":"+formatInt(now.Second())+" ", "white+b")))
+			_, _ = stream.Write(
+				[]byte(
+					ansi.Color(
+						formatInt(
+							now.Hour(),
+						)+":"+formatInt(
+							now.Minute(),
+						)+":"+formatInt(
+							now.Second(),
+						)+" ",
+						"white+b",
+					),
+				),
+			)
 			_, _ = stream.Write([]byte(message))
 		} else if s.format == TextFormat {
 			now := time.Now()
-			_, _ = stream.Write([]byte(ansi.Color(formatInt(now.Hour())+":"+formatInt(now.Minute())+":"+formatInt(now.Second())+" ", "white+b")))
+			_, _ = stream.Write(
+				[]byte(
+					ansi.Color(
+						formatInt(
+							now.Hour(),
+						)+":"+formatInt(
+							now.Minute(),
+						)+":"+formatInt(
+							now.Second(),
+						)+" ",
+						"white+b",
+					),
+				),
+			)
 			_, _ = stream.Write([]byte(ansi.Color(fnInformation.tag, fnInformation.color)))
 			_, _ = stream.Write([]byte(message))
 		} else if s.format == JSONFormat {
@@ -559,14 +592,20 @@ func (s *StreamLogger) Question(params *survey.QuestionOptions) (string, error) 
 	defer s.m.Unlock()
 
 	if !s.isTerminal && !params.DefaultValueSet {
-		return "", fmt.Errorf("cannot ask question '%s' because currently you're not using devspace in a terminal and default value is also not provided", params.Question)
+		return "", fmt.Errorf(
+			"cannot ask question '%s' because currently you're not using devspace in a terminal and default value is also not provided",
+			params.Question,
+		)
 	} else if !s.isTerminal && params.DefaultValueSet {
 		return params.DefaultValue, nil
 	}
 
 	// Check if we can ask the question
 	if s.level < logrus.InfoLevel {
-		return "", errors.Errorf("cannot ask question '%s' because log level is too low", params.Question)
+		return "", errors.Errorf(
+			"cannot ask question '%s' because log level is too low",
+			params.Question,
+		)
 	}
 
 	_, _ = s.write(logrus.InfoLevel, []byte("\n"))

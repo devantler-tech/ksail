@@ -288,7 +288,7 @@ func (f DefaultFactory) createTalosProvisioner(
 }
 
 func (f DefaultFactory) createVClusterProvisioner(
-	cluster *v1alpha1.Cluster,
+	_ *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
 	if f.DistributionConfig.VCluster == nil {
 		return nil, nil, fmt.Errorf(

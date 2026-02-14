@@ -101,11 +101,11 @@ const (
 
 // Context holds cluster configuration for local registry operations.
 type Context struct {
-	ClusterCfg      *v1alpha1.Cluster
-	KindConfig      *kindv1alpha4.Cluster
-	K3dConfig       *k3dv1alpha5.SimpleConfig
-	TalosConfig     *talosconfigmanager.Configs
-	VClusterConfig  *clusterprovisioner.VClusterConfig
+	ClusterCfg     *v1alpha1.Cluster
+	KindConfig     *kindv1alpha4.Cluster
+	K3dConfig      *k3dv1alpha5.SimpleConfig
+	TalosConfig    *talosconfigmanager.Configs
+	VClusterConfig *clusterprovisioner.VClusterConfig
 }
 
 // NewContextFromConfigManager creates a Context from a config manager.

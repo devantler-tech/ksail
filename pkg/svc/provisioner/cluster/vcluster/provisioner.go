@@ -103,8 +103,8 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	opts := &cli.DeleteOptions{
-		Driver:        "docker",
-		DeleteContext: true,
+		Driver:         "docker",
+		DeleteContext:  true,
 		IgnoreNotFound: true,
 	}
 
@@ -138,7 +138,12 @@ func (p *Provisioner) List(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("%w for vCluster list", clustererr.ErrProviderNotSet)
 	}
 
-	return p.infraProvider.ListAllClusters(ctx)
+	clusters, err := p.infraProvider.ListAllClusters(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list vClusters: %w", err)
+	}
+
+	return clusters, nil
 }
 
 // Exists checks if a vCluster cluster exists by querying the Docker infrastructure provider.
@@ -164,13 +169,11 @@ func (p *Provisioner) withProvider(
 ) error {
 	target := p.resolveName(name)
 
-	if p.infraProvider == nil {
-		return fmt.Errorf("%w for cluster '%s'", clustererr.ErrProviderNotSet, target)
-	}
-
-	err := providerFunc(ctx, target)
+	err := clustererr.RunProviderOp(
+		ctx, p.infraProvider, target, operationName, providerFunc,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to %s cluster '%s': %w", operationName, target, err)
+		return fmt.Errorf("vcluster provider op: %w", err)
 	}
 
 	return nil

@@ -108,8 +108,15 @@ func (d *Distribution) Set(value string) error {
 		}
 	}
 
-	return fmt.Errorf("%w: %s (valid options: %s, %s, %s, %s)",
-		ErrInvalidDistribution, value, DistributionVanilla, DistributionK3s, DistributionTalos, DistributionVCluster)
+	return fmt.Errorf(
+		"%w: %s (valid options: %s, %s, %s, %s)",
+		ErrInvalidDistribution,
+		value,
+		DistributionVanilla,
+		DistributionK3s,
+		DistributionTalos,
+		DistributionVCluster,
+	)
 }
 
 // IsValid checks if the distribution value is supported.

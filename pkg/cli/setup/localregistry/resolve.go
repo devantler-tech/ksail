@@ -62,6 +62,9 @@ func resolveClusterName(
 		return k3dconfigmanager.ResolveClusterName(clusterCfg, k3dConfig)
 	case v1alpha1.DistributionTalos:
 		return talosconfigmanager.ResolveClusterName(clusterCfg, talosConfig)
+	case v1alpha1.DistributionVCluster:
+		// VCluster resolves its own cluster name from vcluster config.
+		fallthrough
 	default:
 		if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
 			return name
@@ -92,6 +95,9 @@ func resolveNetworkName(
 		}
 
 		return trimmed
+	case v1alpha1.DistributionVCluster:
+		// VCluster manages its own networking; no Docker network name needed.
+		return ""
 	default:
 		return ""
 	}

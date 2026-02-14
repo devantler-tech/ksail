@@ -383,7 +383,7 @@ func (p *Provider) extractRole(ctr container.Summary) string {
 //   - Worker nodes:  vcluster.node.<cluster-name>.<worker-name>
 //   - Load balancers: vcluster.lb.<cluster-name>.<lb-name>
 const (
-	vclusterCPPrefix = "vcluster.cp."
+	vclusterCPPrefix   = "vcluster.cp."
 	vclusterNodePrefix = "vcluster.node."
 	vclusterLBPrefix   = "vcluster.lb."
 )
@@ -407,7 +407,8 @@ func (p *Provider) listVClusterContainers(
 	for _, ctr := range containers {
 		for _, name := range ctr.Names {
 			name = strings.TrimPrefix(name, "/")
-			if name == cpPrefix || strings.HasPrefix(name, nodePrefix) || strings.HasPrefix(name, lbPrefix) {
+			if name == cpPrefix || strings.HasPrefix(name, nodePrefix) ||
+				strings.HasPrefix(name, lbPrefix) {
 				result = append(result, ctr)
 
 				break

@@ -129,7 +129,6 @@ func (f *discardLogger) Write(message []byte) (int, error) {
 }
 
 func (f *discardLogger) WriteString(level logrus.Level, message string) {
-
 }
 
 func (f *discardLogger) Question(params *survey.QuestionOptions) (string, error) {

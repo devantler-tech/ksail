@@ -25,7 +25,11 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 	}
 
 	// Write an empty YAML values file with explanatory comment.
-	content := []byte("# vCluster Helm values configuration.\n# See https://www.vcluster.com/docs/configure/vcluster-yaml for available options.\n{}\n")
+	const header = "# vCluster Helm values configuration.\n" +
+		"# See https://www.vcluster.com/docs/configure/vcluster-yaml" +
+		" for available options.\n{}\n"
+
+	content := []byte(header)
 
 	err := os.WriteFile(configPath, content, filePerm)
 	if err != nil {

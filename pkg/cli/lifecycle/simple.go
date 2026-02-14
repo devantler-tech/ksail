@@ -166,18 +166,53 @@ func clusterNameFromDistConfig(distCfg *clusterprovisioner.DistributionConfig) s
 		return ""
 	}
 
-	switch {
-	case distCfg.Kind != nil && distCfg.Kind.Name != "":
-		return distCfg.Kind.Name
-	case distCfg.K3d != nil && distCfg.K3d.Name != "":
-		return distCfg.K3d.Name
-	case distCfg.Talos != nil && distCfg.Talos.GetClusterName() != "":
-		return distCfg.Talos.GetClusterName()
-	case distCfg.VCluster != nil && distCfg.VCluster.Name != "":
-		return distCfg.VCluster.Name
-	default:
-		return ""
+	// Extract candidate names from each distribution config.
+	candidates := []string{
+		kindClusterName(distCfg),
+		k3dClusterName(distCfg),
+		talosClusterName(distCfg),
+		vclusterClusterName(distCfg),
 	}
+
+	for _, name := range candidates {
+		if name != "" {
+			return name
+		}
+	}
+
+	return ""
+}
+
+func kindClusterName(distCfg *clusterprovisioner.DistributionConfig) string {
+	if distCfg.Kind != nil {
+		return distCfg.Kind.Name
+	}
+
+	return ""
+}
+
+func k3dClusterName(distCfg *clusterprovisioner.DistributionConfig) string {
+	if distCfg.K3d != nil {
+		return distCfg.K3d.Name
+	}
+
+	return ""
+}
+
+func talosClusterName(distCfg *clusterprovisioner.DistributionConfig) string {
+	if distCfg.Talos != nil {
+		return distCfg.Talos.GetClusterName()
+	}
+
+	return ""
+}
+
+func vclusterClusterName(distCfg *clusterprovisioner.DistributionConfig) string {
+	if distCfg.VCluster != nil {
+		return distCfg.VCluster.Name
+	}
+
+	return ""
 }
 
 // resolveFromKubecontext fills missing cluster info from the current kubeconfig context.

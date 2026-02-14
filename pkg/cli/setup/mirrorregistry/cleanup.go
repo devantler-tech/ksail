@@ -185,6 +185,9 @@ func CleanupMirrorRegistries(
 			cleanupDeps,
 			clusterCfg.Spec.Cluster.Provider,
 		)
+	case v1alpha1.DistributionVCluster:
+		// VCluster does not use mirror registries at the Docker level.
+		return nil
 	default:
 		return nil
 	}

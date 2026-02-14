@@ -260,30 +260,50 @@ func (v *Validator) validateCNIAlignment(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
 ) {
-	// Validate Cilium CNI alignment
-	if config.Spec.Cluster.CNI == v1alpha1.CNICilium {
-		switch config.Spec.Cluster.Distribution {
-		case v1alpha1.DistributionVanilla:
-			v.validateKindCiliumCNIAlignment(result)
-		case v1alpha1.DistributionK3s:
-			v.validateK3dCiliumCNIAlignment(result)
-		case v1alpha1.DistributionTalos:
-			v.validateTalosCiliumCNIAlignment(result)
-		}
+	cni := config.Spec.Cluster.CNI
+	dist := config.Spec.Cluster.Distribution
 
-		return
+	switch cni {
+	case v1alpha1.CNICilium:
+		v.validateCiliumCNI(dist, result)
+	case v1alpha1.CNICalico:
+		// Calico CNI alignment validation not yet implemented.
+	case "", v1alpha1.CNIDefault:
+		v.validateDefaultCNI(dist, result)
 	}
+}
 
-	// Validate Default CNI alignment (empty string or explicit "Default")
-	if config.Spec.Cluster.CNI == "" || config.Spec.Cluster.CNI == v1alpha1.CNIDefault {
-		switch config.Spec.Cluster.Distribution {
-		case v1alpha1.DistributionVanilla:
-			v.validateKindDefaultCNIAlignment(result)
-		case v1alpha1.DistributionK3s:
-			v.validateK3dDefaultCNIAlignment(result)
-		case v1alpha1.DistributionTalos:
-			v.validateTalosDefaultCNIAlignment(result)
-		}
+// validateCiliumCNI checks that the distribution config has CNI disabled when Cilium is requested.
+func (v *Validator) validateCiliumCNI(
+	dist v1alpha1.Distribution,
+	result *validator.ValidationResult,
+) {
+	switch dist {
+	case v1alpha1.DistributionVanilla:
+		v.validateKindCiliumCNIAlignment(result)
+	case v1alpha1.DistributionK3s:
+		v.validateK3dCiliumCNIAlignment(result)
+	case v1alpha1.DistributionTalos:
+		v.validateTalosCiliumCNIAlignment(result)
+	case v1alpha1.DistributionVCluster:
+		// VCluster manages its own CNI internally; no alignment check needed.
+	}
+}
+
+// validateDefaultCNI checks that the distribution config does NOT have CNI disabled when Default CNI is used.
+func (v *Validator) validateDefaultCNI(
+	dist v1alpha1.Distribution,
+	result *validator.ValidationResult,
+) {
+	switch dist {
+	case v1alpha1.DistributionVanilla:
+		v.validateKindDefaultCNIAlignment(result)
+	case v1alpha1.DistributionK3s:
+		v.validateK3dDefaultCNIAlignment(result)
+	case v1alpha1.DistributionTalos:
+		v.validateTalosDefaultCNIAlignment(result)
+	case v1alpha1.DistributionVCluster:
+		// VCluster manages its own CNI internally; no alignment check needed.
 	}
 }
 

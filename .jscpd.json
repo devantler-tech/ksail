@@ -24,7 +24,8 @@
     "**/*_mocks.go",
     "**/mocks.go",
     "**/*mocks*.go",
-    "**/*_test.go"
+    "**/*_test.go",
+    "**/patches/**"
   ],
   "reporters": ["html", "markdown"],
   "threshold": 0

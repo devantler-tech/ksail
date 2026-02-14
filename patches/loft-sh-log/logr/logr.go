@@ -148,7 +148,9 @@ func GetLogLevel() (zap.AtomicLevel, string, error) {
 
 // loggerLevels returns the zap log level and the kubernetes verbosity level
 func loggerLevels(logLevel string) (zap.AtomicLevel, string, error) {
-	kubernetesVerbosityLevel := os.Getenv("KUBERNETES_VERBOSITY_LEVEL") // numerical values increasing: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+	kubernetesVerbosityLevel := os.Getenv(
+		"KUBERNETES_VERBOSITY_LEVEL",
+	) // numerical values increasing: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 	if kubernetesVerbosityLevel == "" {
 		kubernetesVerbosityLevel = "0"
 	}

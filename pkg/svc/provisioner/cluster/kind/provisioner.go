@@ -338,13 +338,11 @@ func (k *Provisioner) withProvider(
 ) error {
 	target := setName(name, k.kindConfig.Name)
 
-	if k.infraProvider == nil {
-		return fmt.Errorf("%w for cluster '%s'", clustererr.ErrProviderNotSet, target)
-	}
-
-	err := providerFunc(ctx, target)
+	err := clustererr.RunProviderOp(
+		ctx, k.infraProvider, target, operationName, providerFunc,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to %s cluster '%s': %w", operationName, target, err)
+		return fmt.Errorf("kind provider op: %w", err)
 	}
 
 	return nil
