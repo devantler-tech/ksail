@@ -137,6 +137,145 @@ ksail cluster init \
   --local-registry '${USER}:${MY_TOKEN}@ghcr.io/myorg/myrepo'
 ``````
 
+## LoadBalancer Issues
+
+### LoadBalancer Service Stuck in Pending
+
+**Symptom:** Service shows `<pending>` for `EXTERNAL-IP`:
+
+``````bash
+kubectl get svc
+# NAME     TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+# my-app   LoadBalancer   10.96.1.50     <pending>     80:30123/TCP   5m
+``````
+
+**Diagnosis:**
+
+1. **Check if LoadBalancer is enabled:**
+
+   ``````bash
+   # Check ksail.yaml
+   cat ksail.yaml | grep -A 5 "loadBalancer"
+   ``````
+
+2. **Verify LoadBalancer controller is running:**
+
+   **Vanilla (Cloud Provider KIND):**
+
+   ``````bash
+   docker ps | grep cpk-
+   # Should show a container named cpk-<cluster-name>
+   ``````
+
+   **Talos (MetalLB):**
+
+   ``````bash
+   kubectl get pods -n metallb-system
+   # Should show controller and speaker pods in Running state
+   ``````
+
+   **Hetzner:**
+
+   ``````bash
+   kubectl get pods -n kube-system | grep hcloud
+   # Should show hcloud-cloud-controller-manager pod
+   ``````
+
+**Solution:**
+
+``````bash
+# If LoadBalancer is disabled, re-initialize cluster with LoadBalancer enabled
+ksail cluster delete
+ksail cluster init --name my-cluster --load-balancer Enabled
+ksail cluster create
+
+# For Cloud Provider KIND issues, delete and recreate cluster
+# For MetalLB issues, check if IP pool is exhausted (see below)
+# For Hetzner issues, ensure HCLOUD_TOKEN was set during cluster creation
+``````
+
+### Cannot Access LoadBalancer IP
+
+**Symptom:** Service has external IP but connection fails:
+
+``````bash
+curl http://172.18.255.200
+# curl: (7) Failed to connect to 172.18.255.200 port 80: Connection refused
+``````
+
+**Diagnosis:**
+
+1. **Verify pods are running:**
+
+   ``````bash
+   kubectl get pods -l app=my-app
+   ``````
+
+2. **Check service endpoints:**
+
+   ``````bash
+   kubectl get endpoints my-app
+   # Should show pod IPs
+   ``````
+
+3. **Test from within cluster:**
+
+   ``````bash
+   kubectl run test --rm -it --image=curlimages/curl -- sh
+   curl http://my-app.default.svc.cluster.local
+   ``````
+
+**Solution:**
+
+``````bash
+# Wait for pods to reach Running state
+kubectl get pods -l app=my-app -w
+
+# Verify target port matches container port
+kubectl describe svc my-app
+
+# Check pod logs for application errors
+kubectl logs -l app=my-app
+
+# Verify application listens on 0.0.0.0, not 127.0.0.1
+kubectl exec -it <pod-name> -- netstat -tlnp
+``````
+
+### MetalLB IP Pool Exhausted
+
+**Symptom:** New LoadBalancer services remain pending after several successful allocations
+
+**Solution:**
+
+Expand the IP range by creating a new pool with additional addresses:
+
+``````yaml
+# expanded-pool.yaml
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: expanded-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 172.18.255.200-172.18.255.254  # Expanded from .250 to .254
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: expanded-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - expanded-pool
+``````
+
+``````bash
+kubectl apply -f expanded-pool.yaml
+``````
+
+For more LoadBalancer troubleshooting, see the [LoadBalancer Configuration Guide](/configuration/loadbalancer/#troubleshooting).
+
 ## Network Issues
 
 ### CNI Installation Failed
