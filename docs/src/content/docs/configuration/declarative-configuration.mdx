@@ -289,7 +289,6 @@ See [Distributions](/concepts/#distributions) for detailed information about eac
 - `Vanilla` – Standard upstream Kubernetes (implemented with [Kind](https://kind.sigs.k8s.io/))
 - `K3s` – Lightweight Kubernetes (implemented with [K3d](https://k3d.io/))
 - `Talos` – [Talos Linux](https://www.talos.dev/) in Docker containers or Hetzner Cloud servers
-- `VCluster` – Virtual clusters in Docker (implemented with [vCluster](https://www.vcluster.com/))
 
 #### provider
 
@@ -315,7 +314,6 @@ Path to the distribution-specific configuration file or directory. This tells KS
 - `Vanilla` → `kind.yaml`
 - `K3s` → `k3d.yaml`
 - `Talos` → `talos/` (directory)
-- `VCluster` → `vcluster.yaml`
 
 See [Distribution Configuration](#distribution-configuration) below for details on each format.
 
@@ -332,7 +330,6 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 - `Vanilla` → `kind-kind`
 - `K3s` → `k3d-k3d-default`
 - `Talos` → `admin@talos-default`
-- `VCluster` → `vcluster-docker_vcluster-default`
 
 **Timeout format:** Go duration string (e.g., `30s`, `5m`, `1h`)
 
