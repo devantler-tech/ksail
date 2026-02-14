@@ -1063,20 +1063,36 @@ func TestResolveReasoningEffort(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-
-			result, err := chat.GetResolveReasoningEffort()(testCase.flagValue, testCase.configValue)
-			if testCase.expectErr && err == nil {
-				t.Errorf("Expected error, got nil")
-			}
-
-			if !testCase.expectErr && err != nil {
-				t.Errorf("Expected no error, got %v", err)
-			}
-
-			if result != testCase.expected {
-				t.Errorf("Expected %q, got %q", testCase.expected, result)
-			}
+			assertResolveReasoningEffort(
+				t,
+				testCase.flagValue,
+				testCase.configValue,
+				testCase.expected,
+				testCase.expectErr,
+			)
 		})
+	}
+}
+
+func assertResolveReasoningEffort(
+	t *testing.T,
+	flagValue, configValue, expected string,
+	expectErr bool,
+) {
+	t.Helper()
+
+	result, err := chat.GetResolveReasoningEffort()(flagValue, configValue)
+
+	if expectErr && err == nil {
+		t.Errorf("Expected error, got nil")
+	}
+
+	if !expectErr && err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
 	}
 }
 
@@ -1097,8 +1113,13 @@ func TestFilterEnvVars(t *testing.T) {
 			expected:   []string{"PATH=/bin", "HOME=/home"},
 		},
 		{
-			name:       "filters multiple variables",
-			environ:    []string{"PATH=/bin", "GITHUB_TOKEN=secret", "GH_TOKEN=secret2", "HOME=/home"},
+			name: "filters multiple variables",
+			environ: []string{
+				"PATH=/bin",
+				"GITHUB_TOKEN=secret",
+				"GH_TOKEN=secret2",
+				"HOME=/home",
+			},
 			filterList: []string{"GITHUB_TOKEN", "GH_TOKEN"},
 			expected:   []string{"PATH=/bin", "HOME=/home"},
 		},
