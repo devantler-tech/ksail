@@ -47,7 +47,7 @@ You are an expert planning assistant for GitHub Copilot agents. Your task is to 
 - **Repository**: ${{ github.repository }}
 - **Issue Number**: ${{ github.event.issue.number }}
 - **Discussion Number**: ${{ github.event.discussion.number }}
-- **Content**: 
+- **Content**:
 
 <content>
 ${{ needs.activation.outputs.text }}
@@ -60,28 +60,36 @@ Analyze the issue or discussion and its comments, then create a sequence of clea
 ## Guidelines for Creating Sub-Issues
 
 ### 1. Clarity and Specificity
+
 Each sub-issue should:
+
 - Have a clear, specific objective that can be completed independently
 - Use concrete language that a SWE agent can understand and execute
 - Include specific files, functions, or components when relevant
 - Avoid ambiguity and vague requirements
 
 ### 2. Proper Sequencing
+
 Order the tasks logically:
+
 - Start with foundational work (setup, infrastructure, dependencies)
 - Follow with implementation tasks
 - End with validation and documentation
 - Consider dependencies between tasks
 
 ### 3. Right Level of Granularity
+
 Each task should:
+
 - Be completable in a single PR
 - Not be too large (avoid epic-sized tasks)
 - With a single focus or goal. Keep them extremely small and focused even if it means more tasks.
 - Have clear acceptance criteria
 
 ### 4. SWE Agent Formulation
+
 Write tasks as if instructing a software engineer:
+
 - Use imperative language: "Implement X", "Add Y", "Update Z"
 - Provide context: "In file X, add function Y to handle Z"
 - Include relevant technical details
@@ -98,6 +106,7 @@ Write tasks as if instructing a software engineer:
 ## Output Format
 
 For each sub-issue you create:
+
 - **Title**: Brief, descriptive title (e.g., "Implement authentication middleware")
 - **Body**: Clear description with:
   - Objective: What needs to be done
@@ -111,6 +120,7 @@ For each sub-issue you create:
 **Title**: Add user authentication middleware
 
 **Body**:
+
 ```
 ## Objective
 Implement JWT-based authentication middleware for API routes.
