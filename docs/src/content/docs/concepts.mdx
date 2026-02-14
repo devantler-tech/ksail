@@ -100,14 +100,14 @@ Vanilla uses [Kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker) to run sta
 
 ### VCluster (implemented with Vind)
 
-[vCluster](https://www.vcluster.com/) creates virtual Kubernetes clusters that run inside a host cluster. KSail uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run vCluster with Docker as the infrastructure provider. VCluster is ideal for lightweight, isolated environments that share the host cluster's networking, storage, and CNI without requiring dedicated infrastructure components.
+[vCluster](https://www.vcluster.com/) creates virtual Kubernetes clusters. KSail uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the vCluster control plane (and optional worker nodes) directly as Docker containers, without requiring a pre-existing host Kubernetes cluster. This makes VCluster ideal for lightweight, isolated environments that still behave like full Kubernetes clusters while using Docker as the only infrastructure provider.
 
 **Key characteristics:**
 
-- CNI, CSI, metrics-server, and LoadBalancer are inherited from the host cluster
-- No node management — VCluster runs as a single pod in the host
-- Fastest cluster creation time among all distributions
-- Uses the vCluster Helm chart for configuration
+- Control plane and optional worker nodes run as Docker containers via the Vind driver
+- No VM or physical node management — Docker manages container lifecycle
+- Very fast cluster creation time with a small resource footprint
+- Configured via `vcluster.yaml` and the vCluster Helm chart
 
 **Key resources:**
 

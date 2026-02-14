@@ -18,7 +18,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 - Docker provider requires Docker Desktop or Docker Engine installed locally
 - Hetzner provider requires `HCLOUD_TOKEN` environment variable and Talos ISO in your account
-- VCluster runs as a virtual cluster inside a host cluster using the [Vind](https://github.com/loft-sh/vcluster) Docker driver
+- VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
 
 ## Component × Distribution Matrix
 
@@ -58,10 +58,10 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
   - **Talos on Docker**: Uses MetalLB with default IP pool (172.18.255.200-172.18.255.250)
   - **Talos on Hetzner**: Uses Hetzner Cloud Load Balancer (cloud provider integration)
 - **VCluster footnotes:**
-  - ¹ CNI is managed by the host cluster — VCluster inherits networking from the host
-  - ² CSI is managed by the host cluster — VCluster inherits storage from the host
-  - ³ LoadBalancer is delegated to the host cluster
-  - ⁴ Metrics Server is managed by the host cluster
+  - ¹ CNI is managed internally by the vCluster control plane — Vind configures networking within the Docker containers
+  - ² CSI is managed internally by vCluster — no separate CSI driver needed
+  - ³ LoadBalancer is managed internally by vCluster
+  - ⁴ Metrics Server is managed internally by vCluster
   - ⁵ Mirror registries are not yet supported for VCluster (requires upstream Helm chart support)
 
 ## Secret Management × Provider Matrix

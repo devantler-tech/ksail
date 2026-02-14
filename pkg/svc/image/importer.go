@@ -88,7 +88,8 @@ func (i *Importer) validateImportParams(
 	providerType v1alpha1.Provider,
 ) error {
 	// Talos and VCluster are not supported - Talos is an immutable OS without shell access,
-	// VCluster nodes run as pods inside a host cluster without direct containerd access.
+	// VCluster (Vind) runs its own containerd inside Docker containers without standard
+	// exec-based image import support.
 	if distribution == v1alpha1.DistributionTalos ||
 		distribution == v1alpha1.DistributionVCluster {
 		return ErrUnsupportedDistribution
