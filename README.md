@@ -36,7 +36,7 @@ KSail works on all major operating systems and CPU architectures:
 |----------------------|--------------|
 | 🐧 Linux             | amd64, arm64 |
 | macOS                | arm64        |
-| ⊞ Windows (untested) | amd64, arm64 |
+| ⊞ Windows (native untested; WSL2 recommended) | amd64, arm64 |
 
 **Docker is required** for local clusters. Install Docker Desktop/Engine and ensure `docker ps` works.
 
