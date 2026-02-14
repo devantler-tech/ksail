@@ -112,6 +112,7 @@ func runClusterCreationWorkflow(
 		return err
 	}
 
+	setupK3dCNI(ctx.ClusterCfg, ctx.K3dConfig)
 	setupK3dMetricsServer(ctx.ClusterCfg, ctx.K3dConfig)
 	setupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
 	setupK3dLoadBalancer(ctx.ClusterCfg, ctx.K3dConfig)
