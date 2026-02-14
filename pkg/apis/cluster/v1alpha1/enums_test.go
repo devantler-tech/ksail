@@ -430,6 +430,12 @@ func TestDistribution_ProvidesCSIByDefault(t *testing.T) {
 			provider:     v1alpha1.ProviderHetzner,
 			expected:     true,
 		},
+		{
+			name:         "vcluster_docker_provides_csi",
+			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     true,
+		},
 	}
 
 	for _, testCase := range tests {
@@ -473,6 +479,12 @@ func TestDistribution_ProvidesLoadBalancerByDefault(t *testing.T) {
 			name:         "talos_hetzner_provides_loadbalancer",
 			distribution: v1alpha1.DistributionTalos,
 			provider:     v1alpha1.ProviderHetzner,
+			expected:     true,
+		},
+		{
+			name:         "vcluster_docker_provides_loadbalancer",
+			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderDocker,
 			expected:     true,
 		},
 		{

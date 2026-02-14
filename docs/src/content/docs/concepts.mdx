@@ -12,6 +12,7 @@ KSail builds upon established Kubernetes technologies and patterns. This page pr
 - **`kind.yaml`** for Vanilla (Kind) clusters — standard [Kind configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
 - **`k3d.yaml`** for K3s clusters — standard [K3d configuration](https://k3d.io/stable/usage/configfile/)
 - **`talos/` patches** for Talos clusters — standard [Talos configuration patches](https://www.talos.dev/latest/reference/configuration/)
+- **`vcluster.yaml`** for VCluster clusters — standard [vCluster configuration](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/)
 
 ### Why This Matters
 
@@ -32,6 +33,7 @@ While each distribution has its own configuration format, KSail provides a consi
 ksail cluster init --distribution Vanilla  # Generates kind.yaml
 ksail cluster init --distribution K3s      # Generates k3d.yaml
 ksail cluster init --distribution Talos    # Generates talos/ patches
+ksail cluster init --distribution VCluster # Generates vcluster.yaml
 
 # Consistent lifecycle management
 ksail cluster create   # Works with any distribution
@@ -48,6 +50,7 @@ KSail-generated configurations are fully portable:
 - **Vanilla (`kind.yaml`)**: Valid Kind configuration that can be used with `kind create cluster --config kind.yaml`
 - **K3s (`k3d.yaml`)**: Valid K3d configuration that can be used with `k3d cluster create --config k3d.yaml`
 - **Talos (patch files)**: Valid Talos patches that can be applied with `talosctl`
+- **VCluster (`vcluster.yaml`)**: Valid vCluster configuration that can be used with the [vCluster CLI](https://www.vcluster.com/docs/vcluster/deploy/control-plane/kubernetes-pod/basics)
 
 You maintain full control and can always "drop down" to the native tool if needed.
 
@@ -63,7 +66,7 @@ You maintain full control and can always "drop down" to the native tool if neede
 
 ## Distributions
 
-Kubernetes distributions package the Kubernetes components with additional tooling for specific use cases. KSail supports three distributions: Vanilla, K3s, and Talos. All distributions can run on the Docker provider; Talos can also run on the Hetzner provider.
+Kubernetes distributions package the Kubernetes components with additional tooling for specific use cases. KSail supports four distributions: Vanilla, K3s, Talos, and VCluster. All distributions can run on the Docker provider; Talos can also run on the Hetzner provider.
 
 ### Vanilla (implemented with Kind)
 
@@ -95,6 +98,23 @@ Vanilla uses [Kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker) to run sta
 - [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/)
 - [Talos Getting Started](https://www.talos.dev/latest/introduction/getting-started/)
 
+### VCluster (implemented with Vind)
+
+[vCluster](https://www.vcluster.com/) creates virtual Kubernetes clusters that run inside a host cluster. KSail uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run vCluster with Docker as the infrastructure provider. VCluster is ideal for lightweight, isolated environments that share the host cluster's networking, storage, and CNI without requiring dedicated infrastructure components.
+
+**Key characteristics:**
+
+- CNI, CSI, metrics-server, and LoadBalancer are inherited from the host cluster
+- No node management — VCluster runs as a single pod in the host
+- Fastest cluster creation time among all distributions
+- Uses the vCluster Helm chart for configuration
+
+**Key resources:**
+
+- [vCluster Documentation](https://www.vcluster.com/docs/)
+- [vCluster Configuration](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/)
+- [Vind Docker Driver](https://github.com/loft-sh/vcluster)
+
 ## Providers
 
 Providers are the infrastructure backends that run cluster nodes. KSail abstracts provider-specific operations so you can use the same workflow regardless of where your cluster runs.
@@ -103,7 +123,7 @@ Providers are the infrastructure backends that run cluster nodes. KSail abstract
 
 The Docker provider runs Kubernetes nodes as Docker containers on your local machine. This is the default provider for all distributions and requires only Docker to be installed.
 
-**Supported distributions:** Vanilla, K3s, Talos
+**Supported distributions:** Vanilla, K3s, Talos, VCluster
 
 **Key resources:**
 
@@ -248,7 +268,7 @@ Policy engines enforce security, compliance, and best practices in Kubernetes cl
 
 **Key resources:**
 
-- [Flux Documentation](https://fluxcd.io/docs/)
+- [Flux Documentation](https://fluxcd.io/flux/)
 - [Flux Concepts](https://fluxcd.io/flux/concepts/)
 - [FluxInstance CRD](https://fluxcd.io/flux/components/)
 
@@ -276,14 +296,14 @@ Policy engines enforce security, compliance, and best practices in Kubernetes cl
 
 SOPS supports multiple key management backends:
 
-| Provider        | Documentation                                                                |
-|-----------------|------------------------------------------------------------------------------|
-| age             | [age-encryption.org](https://age-encryption.org/)                            |
-| PGP             | [GnuPG](https://gnupg.org/)                                                  |
-| AWS KMS         | [AWS KMS Documentation](https://docs.aws.amazon.com/kms/)                    |
-| GCP KMS         | [Cloud KMS Documentation](https://cloud.google.com/kms/docs)                 |
-| Azure Key Vault | [Azure Key Vault Documentation](https://docs.microsoft.com/azure/key-vault/) |
-| HashiCorp Vault | [Vault Documentation](https://developer.hashicorp.com/vault/docs)            |
+| Provider        | Documentation                                                                       |
+| --------------- | ----------------------------------------------------------------------------------- |
+| age             | [age-encryption.org](https://age-encryption.org/)                                   |
+| PGP             | [GnuPG](https://gnupg.org/)                                                         |
+| AWS KMS         | [AWS KMS Documentation](https://docs.aws.amazon.com/kms/)                           |
+| GCP KMS         | [Cloud KMS Documentation](https://docs.cloud.google.com/kms/docs)                   |
+| Azure Key Vault | [Azure Key Vault Documentation](https://learn.microsoft.com/en-us/azure/key-vault/) |
+| HashiCorp Vault | [Vault Documentation](https://developer.hashicorp.com/vault/docs)                   |
 
 ## Kustomize
 

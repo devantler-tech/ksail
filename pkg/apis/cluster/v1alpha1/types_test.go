@@ -67,42 +67,55 @@ func TestPolicyEngineSet(t *testing.T) {
 	}
 }
 
-func TestDistribution_ProvidesMetricsServerByDefault(t *testing.T) {
-	t.Parallel()
+// distributionBoolTestCase defines a test case for Distribution methods that return bool.
+type distributionBoolTestCase struct {
+	name         string
+	distribution v1alpha1.Distribution
+	want         bool
+	description  string
+}
 
-	tests := []struct {
-		name         string
-		distribution v1alpha1.Distribution
-		want         bool
-		description  string
-	}{
+// distributionBoolTestCases returns shared test cases for `Provides*ByDefault`
+// methods where K3s and VCluster return true, and everything else returns false.
+func distributionBoolTestCases(featureName string) []distributionBoolTestCase {
+	return []distributionBoolTestCase{
 		{
 			name:         "returns_true_for_k3s",
 			distribution: v1alpha1.DistributionK3s,
 			want:         true,
-			description:  "K3s should provide metrics-server by default",
+			description:  "K3s should provide " + featureName + " by default",
+		},
+		{
+			name:         "returns_true_for_vcluster",
+			distribution: v1alpha1.DistributionVCluster,
+			want:         true,
+			description:  "VCluster should provide " + featureName + " by default (inherited from host cluster)",
 		},
 		{
 			name:         "returns_false_for_kind",
 			distribution: v1alpha1.DistributionVanilla,
 			want:         false,
-			description:  "Kind should not provide metrics-server by default",
+			description:  "Kind should not provide " + featureName + " by default",
 		},
 		{
 			name:         "returns_false_for_unknown_distribution",
 			distribution: v1alpha1.Distribution("unknown"),
 			want:         false,
-			description:  "Unknown distributions should not provide metrics-server by default",
+			description:  "Unknown distributions should not provide " + featureName + " by default",
 		},
 		{
 			name:         "returns_false_for_empty_distribution",
 			distribution: v1alpha1.Distribution(""),
 			want:         false,
-			description:  "Empty distribution should not provide metrics-server by default",
+			description:  "Empty distribution should not provide " + featureName + " by default",
 		},
 	}
+}
 
-	for _, testCase := range tests {
+func TestDistribution_ProvidesMetricsServerByDefault(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range distributionBoolTestCases("metrics-server") {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -116,39 +129,7 @@ func TestDistribution_ProvidesMetricsServerByDefault(t *testing.T) {
 func TestDistribution_ProvidesStorageByDefault(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name         string
-		distribution v1alpha1.Distribution
-		want         bool
-		description  string
-	}{
-		{
-			name:         "returns_true_for_k3s",
-			distribution: v1alpha1.DistributionK3s,
-			want:         true,
-			description:  "K3s should provide storage by default",
-		},
-		{
-			name:         "returns_false_for_kind",
-			distribution: v1alpha1.DistributionVanilla,
-			want:         false,
-			description:  "Kind should not provide storage by default",
-		},
-		{
-			name:         "returns_false_for_unknown_distribution",
-			distribution: v1alpha1.Distribution("unknown"),
-			want:         false,
-			description:  "Unknown distributions should not provide storage by default",
-		},
-		{
-			name:         "returns_false_for_empty_distribution",
-			distribution: v1alpha1.Distribution(""),
-			want:         false,
-			description:  "Empty distribution should not provide storage by default",
-		},
-	}
-
-	for _, testCase := range tests {
+	for _, testCase := range distributionBoolTestCases("storage") {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 

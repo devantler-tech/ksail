@@ -187,7 +187,7 @@ hcloud server list  # If you have hcloud CLI installed
 
 The default ISO ID may be outdated. Check your Hetzner Cloud project:
 
-1. Open [Hetzner Cloud Console](https://console.hetzner.cloud/)
+1. Open [Hetzner Cloud Console](https://console.hetzner.com/)
 2. Navigate to your project
 3. Go to **Images → ISOs**
 4. Find the Talos ISO ID

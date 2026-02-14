@@ -32,12 +32,13 @@ const (
 )
 
 // ProvidesMetricsServerByDefault returns true if the distribution includes metrics-server by default.
-// K3s includes metrics-server, Vanilla and Talos do not.
+// K3s includes metrics-server. VCluster inherits metrics-server from the host cluster.
+// Vanilla and Talos do not.
 func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 	switch *d {
-	case DistributionK3s:
+	case DistributionK3s, DistributionVCluster:
 		return true
-	case DistributionVanilla, DistributionTalos, DistributionVCluster:
+	case DistributionVanilla, DistributionTalos:
 		return false
 	default:
 		return false
@@ -45,12 +46,13 @@ func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 }
 
 // ProvidesStorageByDefault returns true if the distribution includes a storage provisioner by default.
-// K3s includes local-path-provisioner, Vanilla and Talos do not have a default storage class.
+// K3s includes local-path-provisioner. VCluster inherits storage from the host cluster.
+// Vanilla and Talos do not have a default storage class.
 func (d *Distribution) ProvidesStorageByDefault() bool {
 	switch *d {
-	case DistributionK3s:
+	case DistributionK3s, DistributionVCluster:
 		return true
-	case DistributionVanilla, DistributionTalos, DistributionVCluster:
+	case DistributionVanilla, DistributionTalos:
 		return false
 	default:
 		return false
@@ -60,17 +62,19 @@ func (d *Distribution) ProvidesStorageByDefault() bool {
 // ProvidesCSIByDefault returns true if the distribution × provider combination includes CSI by default.
 // - K3s includes local-path-provisioner by default (regardless of provider)
 // - Talos × Hetzner uses Hetzner CSI driver by default
+// - VCluster inherits CSI from the host cluster
 // - Vanilla and Talos × Docker do not have a default CSI.
 func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
 	switch *d {
-	case DistributionK3s:
+	case DistributionK3s, DistributionVCluster:
 		// K3s always includes local-path-provisioner
+		// VCluster inherits storage from the host cluster
 		return true
 	case DistributionTalos:
 		// Talos × Hetzner provides Hetzner CSI by default
 		return provider == ProviderHetzner
-	case DistributionVanilla, DistributionVCluster:
-		// Vanilla (Kind) and VCluster do not provide CSI by default
+	case DistributionVanilla:
+		// Vanilla (Kind) does not provide CSI by default
 		return false
 	default:
 		return false
@@ -81,17 +85,19 @@ func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
 // includes LoadBalancer support by default.
 // - K3s includes ServiceLB (Klipper-LB) by default (regardless of provider)
 // - Talos × Hetzner uses hcloud-cloud-controller-manager by default
+// - VCluster delegates LoadBalancer to the host cluster
 // - Vanilla and Talos × Docker do not have default LoadBalancer support.
 func (d *Distribution) ProvidesLoadBalancerByDefault(provider Provider) bool {
 	switch *d {
-	case DistributionK3s:
+	case DistributionK3s, DistributionVCluster:
 		// K3s always includes ServiceLB (Klipper-LB)
+		// VCluster delegates LoadBalancer to the host cluster
 		return true
 	case DistributionTalos:
 		// Talos × Hetzner provides hcloud-cloud-controller-manager by default
 		return provider == ProviderHetzner
-	case DistributionVanilla, DistributionVCluster:
-		// Vanilla (Kind) and VCluster do not provide LoadBalancer by default
+	case DistributionVanilla:
+		// Vanilla (Kind) does not provide LoadBalancer by default
 		return false
 	default:
 		return false
