@@ -255,13 +255,17 @@ func (k *Provisioner) Delete(ctx context.Context, name string) error {
 // Start starts a kind cluster.
 // Delegates to the infrastructure provider for container operations.
 func (k *Provisioner) Start(ctx context.Context, name string) error {
-	return k.withProvider(ctx, name, "start", k.infraProvider.StartNodes)
+	return k.withProvider(ctx, name, "start", func(ctx context.Context, clusterName string) error {
+		return k.infraProvider.StartNodes(ctx, clusterName)
+	})
 }
 
 // Stop stops a kind cluster.
 // Delegates to the infrastructure provider for container operations.
 func (k *Provisioner) Stop(ctx context.Context, name string) error {
-	return k.withProvider(ctx, name, "stop", k.infraProvider.StopNodes)
+	return k.withProvider(ctx, name, "stop", func(ctx context.Context, clusterName string) error {
+		return k.infraProvider.StopNodes(ctx, clusterName)
+	})
 }
 
 // List returns all kind clusters using kind's Cobra command.

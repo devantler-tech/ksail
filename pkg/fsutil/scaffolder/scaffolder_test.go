@@ -71,6 +71,11 @@ func TestScaffoldAppliesDistributionDefaults(t *testing.T) {
 			distribution: v1alpha1.DistributionTalos,
 			expected:     scaffolder.TalosConfigDir,
 		},
+		{
+			name:         "VCluster",
+			distribution: v1alpha1.DistributionVCluster,
+			expected:     scaffolder.VClusterConfigFile,
+		},
 		{name: "Unknown", distribution: "unknown", expected: scaffolder.KindConfigFile},
 	}
 
@@ -496,6 +501,13 @@ func TestScaffoldAppliesContextDefaults(t *testing.T) {
 			},
 		},
 		{
+			name: "VClusterDefaultContext",
+			scenario: scaffoldContextCase{
+				distribution: v1alpha1.DistributionVCluster,
+				expected:     v1alpha1.ExpectedContextName(v1alpha1.DistributionVCluster),
+			},
+		},
+		{
 			name: "KeepExistingContext",
 			scenario: scaffoldContextCase{
 				distribution: v1alpha1.DistributionVanilla,
@@ -790,6 +802,13 @@ func getScaffoldTestCases() []scaffoldTestCase {
 			expectError: false,
 		},
 		{
+			name:        "VCluster distribution",
+			setupFunc:   createVClusterCluster,
+			outputPath:  "/tmp/test-vcluster/",
+			force:       true,
+			expectError: false,
+		},
+		{
 			name:        "Unknown distribution",
 			setupFunc:   createUnknownCluster,
 			outputPath:  "/tmp/test-unknown/",
@@ -934,6 +953,14 @@ func createTalosCluster(name string) v1alpha1.Cluster {
 	c := createTestCluster(name)
 	c.Spec.Cluster.Distribution = v1alpha1.DistributionTalos
 	c.Spec.Cluster.DistributionConfig = scaffolder.TalosConfigDir
+
+	return c
+}
+
+func createVClusterCluster(name string) v1alpha1.Cluster {
+	c := createTestCluster(name)
+	c.Spec.Cluster.Distribution = v1alpha1.DistributionVCluster
+	c.Spec.Cluster.DistributionConfig = scaffolder.VClusterConfigFile
 
 	return c
 }
@@ -1313,6 +1340,49 @@ func TestScaffoldTalos_SetsCorrectDistribution(t *testing.T) {
 	assert.Contains(t, string(ksailContent), "distribution: Talos")
 }
 
+func TestScaffoldVCluster_CreatesConfigFile(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	cluster := createVClusterCluster("vcluster-test")
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	// Verify the vcluster.yaml config file was created
+	expectedPaths := []string{
+		filepath.Join(tempDir, scaffolder.VClusterConfigFile),
+		filepath.Join(tempDir, "ksail.yaml"),
+		filepath.Join(tempDir, "k8s", "kustomization.yaml"),
+	}
+
+	for _, path := range expectedPaths {
+		_, err := os.Stat(path)
+		require.NoError(t, err, "expected path to exist: %s", path)
+	}
+}
+
+func TestScaffoldVCluster_SetsCorrectDistribution(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buffer := &bytes.Buffer{}
+	cluster := createVClusterCluster("vcluster-context-test")
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, buffer, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	// Read the generated ksail.yaml to verify distribution is set
+	ksailPath := filepath.Join(tempDir, "ksail.yaml")
+	ksailContent, err := os.ReadFile(ksailPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+
+	// Verify the distribution is set correctly
+	assert.Contains(t, string(ksailContent), "distribution: VCluster")
+}
+
 // GitOps scaffolding tests.
 
 // TestScaffoldFluxGitOps_DoesNotCreateFluxInstanceManifest verifies that Instance
@@ -1430,6 +1500,12 @@ func TestWithClusterName_AppliesContextToKSailConfig(t *testing.T) {
 			distribution:    v1alpha1.DistributionTalos,
 			clusterName:     "prod-cluster",
 			expectedContext: "admin@prod-cluster",
+		},
+		{
+			name:            "vcluster_sets_vcluster_context",
+			distribution:    v1alpha1.DistributionVCluster,
+			clusterName:     "dev-cluster",
+			expectedContext: "vcluster-docker_dev-cluster",
 		},
 	}
 

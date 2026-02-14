@@ -101,6 +101,22 @@ func (m *ConfigManager) shouldSkipValidation(silent, skipValidation bool) bool {
 	return skipValidation || (silent && !m.configFileFound)
 }
 
+// validateOrLoadDistributionConfig runs full validation or, when validation is skipped,
+// loads the distribution config so callers can still resolve the cluster name.
+func (m *ConfigManager) validateOrLoadDistributionConfig(silent, skipValidation bool) error {
+	if !m.shouldSkipValidation(silent, skipValidation) {
+		return m.validateAndFinalizeConfig()
+	}
+
+	if m.configFileFound {
+		// Even when validation is skipped, load distribution config so that
+		// callers (e.g. simple lifecycle commands) can resolve the cluster name.
+		return m.loadAndCacheDistributionConfig()
+	}
+
+	return nil
+}
+
 // loadConfigWithOptions is the internal implementation with silent and skip validation options.
 func (m *ConfigManager) loadConfigWithOptions(
 	tmr timer.Timer,
@@ -135,15 +151,9 @@ func (m *ConfigManager) loadConfigWithOptions(
 	}
 
 	// Run validation unless skipped
-	if !m.shouldSkipValidation(silent, skipValidation) {
-		err = m.validateAndFinalizeConfig()
-		if err != nil {
-			return nil, err
-		}
-	} else if m.configFileFound {
-		// Even when validation is skipped, load distribution config so that
-		// callers (e.g. simple lifecycle commands) can resolve the cluster name.
-		_ = m.loadAndCacheDistributionConfig()
+	err = m.validateOrLoadDistributionConfig(silent, skipValidation)
+	if err != nil {
+		return nil, err
 	}
 
 	if !silent {

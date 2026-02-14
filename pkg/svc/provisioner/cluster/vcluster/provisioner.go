@@ -123,13 +123,17 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 // Start starts a stopped vCluster by starting its Docker containers.
 // Delegates to the infrastructure provider for container operations.
 func (p *Provisioner) Start(ctx context.Context, name string) error {
-	return p.withProvider(ctx, name, "start", p.infraProvider.StartNodes)
+	return p.withProvider(ctx, name, "start", func(ctx context.Context, clusterName string) error {
+		return p.infraProvider.StartNodes(ctx, clusterName)
+	})
 }
 
 // Stop stops a running vCluster by stopping its Docker containers.
 // Delegates to the infrastructure provider for container operations.
 func (p *Provisioner) Stop(ctx context.Context, name string) error {
-	return p.withProvider(ctx, name, "stop", p.infraProvider.StopNodes)
+	return p.withProvider(ctx, name, "stop", func(ctx context.Context, clusterName string) error {
+		return p.infraProvider.StopNodes(ctx, clusterName)
+	})
 }
 
 // List returns all vCluster clusters by querying the Docker infrastructure provider.
