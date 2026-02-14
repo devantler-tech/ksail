@@ -56,6 +56,7 @@ Use the GitHub tools to read these files. If no contribution guidelines exist, u
 ## Step 2: Retrieve PR Details
 
 Use the `get_pull_request` tool to fetch the full PR details including:
+
 - Title and description
 - Changed files list
 - Commit messages
@@ -76,10 +77,12 @@ Check the PR against the contribution guidelines for:
 ## Step 4: Take Action
 
 **If the PR meets all contribution guidelines:**
+
 - Add the `contribution-ready` label to the PR
 - Optionally add a brief welcoming comment acknowledging compliance
 
 **If the PR needs improvements:**
+
 - Add a helpful comment that includes:
   - A friendly greeting (be welcoming, especially to first-time contributors)
   - Specific guidelines that are not being met
