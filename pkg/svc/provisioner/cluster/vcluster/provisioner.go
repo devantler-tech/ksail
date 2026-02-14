@@ -25,6 +25,14 @@ const defaultVClusterName = "vcluster-default"
 // Must be available on ghcr.io/loft-sh/vcluster-pro as an OCI artifact.
 const defaultChartVersion = "0.32.0-alpha.2"
 
+// defaultKubernetesVersion overrides the SDK's default Kubernetes version.
+// The SDK defaults to v1.35.0, but ghcr.io/loft-sh/kubernetes:v1.35.0-full ships
+// a corrupt kine binary (9 bytes "Not Found" instead of ELF) on both amd64 and
+// arm64. This causes the vCluster service to crash-loop with "exec format error".
+// v1.34.0 is the latest version with a working kine binary.
+// Remove this override once the upstream v1.35.0 image is fixed.
+const defaultKubernetesVersion = "v1.34.0"
+
 // connectMaxAttempts is the number of times to retry ConnectDocker after cluster
 // creation. The SDK's waitForVCluster has a hardcoded 3-minute readiness timeout
 // which is too short for CI runners. Retrying gives an effective timeout of
@@ -85,14 +93,18 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		Distro:       "k8s",
 	}
 
-	if p.valuesPath != "" {
-		opts.Values = []string{p.valuesPath}
+	valuesFiles, cleanup, err := buildValuesFiles(p.valuesPath)
+	if err != nil {
+		return fmt.Errorf("failed to prepare values files: %w", err)
 	}
+	defer cleanup()
+
+	opts.Values = valuesFiles
 
 	globalFlags := newGlobalFlags()
 	logger := newStreamLogger()
 
-	err := cli.CreateDocker(ctx, opts, globalFlags, target, logger)
+	err = cli.CreateDocker(ctx, opts, globalFlags, target, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create vCluster: %w", err)
 	}
@@ -236,6 +248,49 @@ func (p *Provisioner) withProvider(
 	}
 
 	return nil
+}
+
+// buildValuesFiles returns the ordered list of Helm values files for CreateDocker.
+// A temp file with the default Kubernetes version is prepended so the user's
+// values file (if present) can override it. The returned cleanup function removes
+// the temp file and must be deferred by the caller.
+func buildValuesFiles(userValuesPath string) ([]string, func(), error) {
+	defaultsContent := fmt.Sprintf(
+		"controlPlane:\n  distro:\n    k8s:\n      image:\n        tag: %s\n",
+		defaultKubernetesVersion,
+	)
+
+	tmpFile, err := os.CreateTemp("", "ksail-vcluster-defaults-*.yaml")
+	if err != nil {
+		return nil, func() {}, fmt.Errorf("create temp values file: %w", err)
+	}
+
+	tmpName := tmpFile.Name()
+	cleanupFn := func() { _ = os.Remove(tmpName) }
+
+	_, writeErr := tmpFile.WriteString(defaultsContent)
+
+	closeErr := tmpFile.Close()
+
+	if writeErr != nil {
+		cleanupFn()
+
+		return nil, func() {}, fmt.Errorf("write default values: %w", writeErr)
+	}
+
+	if closeErr != nil {
+		cleanupFn()
+
+		return nil, func() {}, fmt.Errorf("close default values file: %w", closeErr)
+	}
+
+	// Defaults first, user values second — later files override earlier ones.
+	result := []string{tmpName}
+	if strings.TrimSpace(userValuesPath) != "" {
+		result = append(result, userValuesPath)
+	}
+
+	return result, cleanupFn, nil
 }
 
 func (p *Provisioner) resolveName(name string) string {

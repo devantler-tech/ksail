@@ -24,10 +24,18 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 		return nil
 	}
 
-	// Write an empty YAML values file with explanatory comment.
+	// Write a YAML values file with the default Kubernetes version override.
+	// The SDK defaults to a Kubernetes version whose upstream image has a
+	// broken kine binary. Pin to v1.34.0 which has a working binary.
+	// Users can change this version in the generated file.
 	const header = "# vCluster Helm values configuration.\n" +
 		"# See https://www.vcluster.com/docs/configure/vcluster-yaml" +
-		" for available options.\n{}\n"
+		" for available options.\n" +
+		"controlPlane:\n" +
+		"  distro:\n" +
+		"    k8s:\n" +
+		"      image:\n" +
+		"        tag: v1.34.0\n"
 
 	content := []byte(header)
 
