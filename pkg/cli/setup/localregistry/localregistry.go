@@ -271,6 +271,7 @@ func Cleanup(
 		distConfig.Kind,
 		distConfig.K3d,
 		distConfig.Talos,
+		distConfig.VCluster,
 		CleanupStageInfo(),
 		func(execCtx context.Context, svc registry.Service, regCtx registryContext) error {
 			registryName := registry.BuildLocalRegistryName(regCtx.clusterName)
@@ -327,7 +328,9 @@ func Disconnect(
 
 	distConfig := cfgManager.DistributionConfig
 
-	regCtx := newRegistryContext(clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.Talos)
+	regCtx := newRegistryContext(
+		clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.Talos, distConfig.VCluster,
+	)
 	registryName := registry.BuildLocalRegistryName(regCtx.clusterName)
 
 	// Use the cluster name as the network name for Talos
