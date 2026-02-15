@@ -20,13 +20,13 @@ import (
 
 // normalizeHomePaths replaces the user's home directory in help output
 // with a stable placeholder so snapshots are portable across machines and CI.
-func normalizeHomePaths(s string) string {
+func normalizeHomePaths(content string) string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return s
+		return content
 	}
 
-	return strings.ReplaceAll(s, home, "$HOME")
+	return strings.ReplaceAll(content, home, "$HOME")
 }
 
 func TestMain(m *testing.M) {
