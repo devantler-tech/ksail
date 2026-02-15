@@ -71,16 +71,34 @@ netstat -ano | findstr :5000
 
 **Symptom:** `ksail workload push` fails with authentication error
 
+**Possible causes:**
+
+- Registry credentials not configured
+- Docker config.json credentials not found
+- Environment variables not set
+
 **Solution:**
 
 ```bash
 # Verify local registry is running
 docker ps | grep registry
 
-# Check registry configuration in ksail.yaml
-# Ensure authentication is set if using external registry
+# Option 1: Use existing Docker credentials (automatic discovery)
+# KSail automatically reads credentials from ~/.docker/config.json
+docker login registry.example.com  # Authenticate once, KSail uses these credentials
+
+# Option 2: Set credentials via environment variables
+export REGISTRY_USER="myuser"
+export REGISTRY_TOKEN="mytoken"
 ksail cluster init \
-  --local-registry '${USER}:${TOKEN}@registry.example.com'
+  --local-registry '${REGISTRY_USER}:${REGISTRY_TOKEN}@registry.example.com'
+
+# Option 3: Inline credentials (not recommended for production)
+ksail cluster init \
+  --local-registry 'myuser:mytoken@registry.example.com'
+
+# Verify credentials are being used
+docker ps | grep registry  # Check registry proxy is running with auth
 ```
 
 ### Flux Operator Installation Timeout

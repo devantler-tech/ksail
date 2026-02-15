@@ -307,7 +307,7 @@ runs:
           echo ""
 
           # Check for Hetzner CSI
-          HETZNER_CSI=$($KUBECTL_CMD get csidriver csi.hetzner.cloud -o name 2>/dev/null || true)
+          HETZNER_CSI=$($KUBECTL_CMD get csidriver csi.hetzner.cloud --output name 2>/dev/null || true)
           if [ -n "$HETZNER_CSI" ]; then
             echo "--- Hetzner CSI ---"
             $KUBECTL_CMD get pods --namespace kube-system -l app.kubernetes.io/name=hcloud-csi -o wide || true

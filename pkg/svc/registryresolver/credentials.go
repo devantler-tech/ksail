@@ -118,6 +118,10 @@ type dockerAuthConfig struct {
 	Auth string `json:"auth"`
 }
 
+// dockerHubCanonicalKey is the canonical Docker config key used by `docker login`
+// and `kubectl create secret docker-registry` for Docker Hub.
+const dockerHubCanonicalKey = "https://index.docker.io/v1/"
+
 // parseDockerConfigCredentials extracts username and password from Docker config JSON.
 func parseDockerConfigCredentials(configData []byte, host string) (string, string) {
 	var config dockerConfig
@@ -127,13 +131,18 @@ func parseDockerConfigCredentials(configData []byte, host string) (string, strin
 		return "", ""
 	}
 
-	// Try exact host match first, then try with https:// prefix
-	authConfig, ok := config.Auths[host]
-	if !ok {
-		authConfig, ok = config.Auths["https://"+host]
+	// Try exact host match first, then try with https:// prefix.
+	authConfig, found := config.Auths[host]
+	if !found {
+		authConfig, found = config.Auths["https://"+host]
 	}
 
-	if !ok {
+	// Fall back to Docker Hub's canonical key when looking up docker.io.
+	if !found && host == "docker.io" {
+		authConfig, found = config.Auths[dockerHubCanonicalKey]
+	}
+
+	if !found {
 		return "", ""
 	}
 

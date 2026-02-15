@@ -34,8 +34,15 @@ func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
 				Atomic:          true,
 				Wait:            true,
 				WaitForJobs:     true,
+				UpgradeCRDs:     true,
 				Timeout:         timeout,
 				SetValues: map[string]string{
+					// Disable the chart's CRD upgrade hooks. The hooks create
+					// a ServiceAccount that Helm v4's kstatus watcher cannot
+					// assess (ServiceAccounts have no .status field), causing
+					// the install to fail with "status: Unknown". CRDs are
+					// still managed natively by Helm via UpgradeCRDs above.
+					"upgradeCRDs.enabled": "false",
 					// Use Ignore so webhooks do not block API requests when
 					// webhook pods are temporarily unreachable (e.g. during
 					// CNI churn on freshly bootstrapped clusters). Both
