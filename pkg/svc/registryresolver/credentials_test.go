@@ -10,19 +10,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testHost     = "registry.example.com"
+	testUsername = "testuser"
+	testPassword = "testpass"
+)
+
 // TestParseDockerConfigCredentials_ExactHostMatch tests credential parsing with exact host match.
 func TestParseDockerConfigCredentials_ExactHostMatch(t *testing.T) {
 	t.Parallel()
 
-	host := "registry.example.com"
-	username := "testuser"
-	password := "testpass"
+	host := testHost
+	username := testUsername
+	password := testPassword
 
 	// Create Docker config JSON with exact host match
 	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-	config := map[string]interface{}{
-		"auths": map[string]interface{}{
-			host: map[string]interface{}{
+	config := map[string]any{
+		"auths": map[string]any{
+			host: map[string]any{
 				"auth": auth,
 			},
 		},
@@ -42,15 +48,15 @@ func TestParseDockerConfigCredentials_ExactHostMatch(t *testing.T) {
 func TestParseDockerConfigCredentials_HTTPSPrefixMatch(t *testing.T) {
 	t.Parallel()
 
-	host := "registry.example.com"
-	username := "testuser"
-	password := "testpass"
+	host := testHost
+	username := testUsername
+	password := testPassword
 
 	// Create Docker config JSON with https:// prefix
 	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-	config := map[string]interface{}{
-		"auths": map[string]interface{}{
-			"https://" + host: map[string]interface{}{
+	config := map[string]any{
+		"auths": map[string]any{
+			"https://" + host: map[string]any{
 				"auth": auth,
 			},
 		},
@@ -70,15 +76,15 @@ func TestParseDockerConfigCredentials_HTTPSPrefixMatch(t *testing.T) {
 func TestParseDockerConfigCredentials_NoMatch(t *testing.T) {
 	t.Parallel()
 
-	host := "registry.example.com"
+	host := testHost
 	username := "testuser"
 	password := "testpass"
 
 	// Create Docker config JSON with different host
 	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-	config := map[string]interface{}{
-		"auths": map[string]interface{}{
-			"different.registry.com": map[string]interface{}{
+	config := map[string]any{
+		"auths": map[string]any{
+			"different.registry.com": map[string]any{
 				"auth": auth,
 			},
 		},
@@ -98,7 +104,7 @@ func TestParseDockerConfigCredentials_NoMatch(t *testing.T) {
 func TestParseDockerConfigCredentials_InvalidJSON(t *testing.T) {
 	t.Parallel()
 
-	host := "registry.example.com"
+	host := testHost
 	configData := []byte("invalid json {{{")
 
 	// Parse credentials - should handle error gracefully
@@ -112,12 +118,12 @@ func TestParseDockerConfigCredentials_InvalidJSON(t *testing.T) {
 func TestParseDockerConfigCredentials_InvalidBase64(t *testing.T) {
 	t.Parallel()
 
-	host := "registry.example.com"
+	host := testHost
 
 	// Create Docker config JSON with invalid base64 auth
-	config := map[string]interface{}{
-		"auths": map[string]interface{}{
-			host: map[string]interface{}{
+	config := map[string]any{
+		"auths": map[string]any{
+			host: map[string]any{
 				"auth": "not-valid-base64!@#$",
 			},
 		},
@@ -137,7 +143,7 @@ func TestParseDockerConfigCredentials_InvalidBase64(t *testing.T) {
 func TestParseDockerConfigCredentials_MalformedCredentials(t *testing.T) {
 	t.Parallel()
 
-	host := "registry.example.com"
+	host := testHost
 
 	tests := []struct {
 		name  string
@@ -157,15 +163,15 @@ func TestParseDockerConfigCredentials_MalformedCredentials(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			// Create Docker config JSON with malformed credentials
-			auth := base64.StdEncoding.EncodeToString([]byte(tt.creds))
-			config := map[string]interface{}{
-				"auths": map[string]interface{}{
-					host: map[string]interface{}{
+			auth := base64.StdEncoding.EncodeToString([]byte(testCase.creds))
+			config := map[string]any{
+				"auths": map[string]any{
+					host: map[string]any{
 						"auth": auth,
 					},
 				},
@@ -175,7 +181,10 @@ func TestParseDockerConfigCredentials_MalformedCredentials(t *testing.T) {
 			require.NoError(t, err)
 
 			// Parse credentials - should return empty strings for malformed input
-			gotUsername, gotPassword := registryresolver.ParseDockerConfigCredentials(configData, host)
+			gotUsername, gotPassword := registryresolver.ParseDockerConfigCredentials(
+				configData,
+				host,
+			)
 
 			assert.Empty(t, gotUsername)
 			assert.Empty(t, gotPassword)
@@ -187,12 +196,12 @@ func TestParseDockerConfigCredentials_MalformedCredentials(t *testing.T) {
 func TestParseDockerConfigCredentials_EmptyAuth(t *testing.T) {
 	t.Parallel()
 
-	host := "registry.example.com"
+	host := testHost
 
 	// Create Docker config JSON with empty auth
-	config := map[string]interface{}{
-		"auths": map[string]interface{}{
-			host: map[string]interface{}{
+	config := map[string]any{
+		"auths": map[string]any{
+			host: map[string]any{
 				"auth": "",
 			},
 		},
@@ -212,15 +221,15 @@ func TestParseDockerConfigCredentials_EmptyAuth(t *testing.T) {
 func TestParseDockerConfigCredentials_PasswordWithColon(t *testing.T) {
 	t.Parallel()
 
-	host := "registry.example.com"
+	host := testHost
 	username := "testuser"
 	password := "test:pass:with:colons"
 
 	// Create Docker config JSON
 	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-	config := map[string]interface{}{
-		"auths": map[string]interface{}{
-			host: map[string]interface{}{
+	config := map[string]any{
+		"auths": map[string]any{
+			host: map[string]any{
 				"auth": auth,
 			},
 		},
@@ -250,12 +259,12 @@ func TestParseDockerConfigCredentials_MultipleHosts(t *testing.T) {
 	// Create Docker config JSON with multiple hosts
 	auth1 := base64.StdEncoding.EncodeToString([]byte(username1 + ":" + password1))
 	auth2 := base64.StdEncoding.EncodeToString([]byte(username2 + ":" + password2))
-	config := map[string]interface{}{
-		"auths": map[string]interface{}{
-			host1: map[string]interface{}{
+	config := map[string]any{
+		"auths": map[string]any{
+			host1: map[string]any{
 				"auth": auth1,
 			},
-			host2: map[string]interface{}{
+			host2: map[string]any{
 				"auth": auth2,
 			},
 		},
@@ -279,11 +288,11 @@ func TestParseDockerConfigCredentials_MultipleHosts(t *testing.T) {
 func TestParseDockerConfigCredentials_EmptyConfig(t *testing.T) {
 	t.Parallel()
 
-	host := "registry.example.com"
+	host := testHost
 
 	// Create empty Docker config JSON
-	config := map[string]interface{}{
-		"auths": map[string]interface{}{},
+	config := map[string]any{
+		"auths": map[string]any{},
 	}
 
 	configData, err := json.Marshal(config)
@@ -300,10 +309,10 @@ func TestParseDockerConfigCredentials_EmptyConfig(t *testing.T) {
 func TestParseDockerConfigCredentials_MissingAuthsField(t *testing.T) {
 	t.Parallel()
 
-	host := "registry.example.com"
+	host := testHost
 
 	// Create Docker config JSON without auths field
-	config := map[string]interface{}{
+	config := map[string]any{
 		"other": "data",
 	}
 
@@ -327,9 +336,9 @@ func TestParseDockerConfigCredentials_DockerHubFormat(t *testing.T) {
 
 	// Create Docker config JSON with docker.io
 	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-	config := map[string]interface{}{
-		"auths": map[string]interface{}{
-			"https://index.docker.io/v1/": map[string]interface{}{
+	config := map[string]any{
+		"auths": map[string]any{
+			"https://index.docker.io/v1/": map[string]any{
 				"auth": auth,
 			},
 		},
@@ -358,9 +367,9 @@ func TestParseDockerConfigCredentials_GHCRFormat(t *testing.T) {
 
 	// Create Docker config JSON with ghcr.io
 	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-	config := map[string]interface{}{
-		"auths": map[string]interface{}{
-			host: map[string]interface{}{
+	config := map[string]any{
+		"auths": map[string]any{
+			host: map[string]any{
 				"auth": auth,
 			},
 		},
@@ -402,8 +411,8 @@ func TestParseDockerConfigCredentials_LocalhostFormat(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			username := "localuser"
@@ -411,9 +420,9 @@ func TestParseDockerConfigCredentials_LocalhostFormat(t *testing.T) {
 
 			// Create Docker config JSON
 			auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-			config := map[string]interface{}{
-				"auths": map[string]interface{}{
-					tt.configKey: map[string]interface{}{
+			config := map[string]any{
+				"auths": map[string]any{
+					testCase.configKey: map[string]any{
 						"auth": auth,
 					},
 				},
@@ -423,7 +432,10 @@ func TestParseDockerConfigCredentials_LocalhostFormat(t *testing.T) {
 			require.NoError(t, err)
 
 			// Parse credentials
-			gotUsername, gotPassword := registryresolver.ParseDockerConfigCredentials(configData, tt.host)
+			gotUsername, gotPassword := registryresolver.ParseDockerConfigCredentials(
+				configData,
+				testCase.host,
+			)
 
 			assert.Equal(t, username, gotUsername)
 			assert.Equal(t, password, gotPassword)
