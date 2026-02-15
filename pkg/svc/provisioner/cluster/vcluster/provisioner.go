@@ -315,24 +315,25 @@ func recoverFromDBusError(
 
 // waitForDBus polls the container until the D-Bus system socket exists,
 // indicating that systemd has initialized far enough for systemctl to work.
+// Uses a ticker with select to ensure immediate response to context cancellation.
 func waitForDBus(ctx context.Context, containerName string) error {
 	deadline := time.Now().Add(dbusWaitTimeout)
+
+	ticker := time.NewTicker(dbusWaitInterval)
+	defer ticker.Stop()
 
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled while waiting for D-Bus: %w", ctx.Err())
-		default:
+		case <-ticker.C:
+			cmd := exec.CommandContext(ctx, "docker", "exec", containerName,
+				"test", "-e", "/run/dbus/system_bus_socket")
+
+			if cmd.Run() == nil {
+				return nil
+			}
 		}
-
-		cmd := exec.CommandContext(ctx, "docker", "exec", containerName,
-			"test", "-e", "/run/dbus/system_bus_socket")
-
-		if cmd.Run() == nil {
-			return nil
-		}
-
-		time.Sleep(dbusWaitInterval)
 	}
 
 	return fmt.Errorf("%w: %v", errDBusTimeout, dbusWaitTimeout)
@@ -376,7 +377,7 @@ func rerunInstallScript(
 
 	installCmd := fmt.Sprintf(
 		"set -e -o pipefail; mount --make-rshared /; "+
-			`curl -sfLk "%s" | sh -s -- `+
+			`curl -sfL "%s" | sh -s -- `+
 			"--skip-download --skip-wait "+
 			"--vcluster-name %s --join-token %s",
 		scriptURL, clusterName, joinToken,
