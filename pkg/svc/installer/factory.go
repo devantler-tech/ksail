@@ -18,6 +18,7 @@ import (
 	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kubeletcsrapprover"
 	kyvernoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kyverno"
 	localpathstorageinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/localpathstorage"
+	metallbinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metallb"
 	metricsserverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metricsserver"
 	"github.com/docker/docker/client"
 )
@@ -206,6 +207,16 @@ func (f *Factory) addLoadBalancerInstaller(
 			f.dockerClient,
 		)
 	}
+
+	if f.needsMetalLB(spec) {
+		installers["metallb"] = metallbinstaller.NewInstaller(
+			f.helmClient,
+			f.kubeconfig,
+			f.kubecontext,
+			f.timeout,
+			"", // Use default IP range
+		)
+	}
 }
 
 // needsLocalPathStorage determines if local-path-storage is needed.
@@ -240,6 +251,20 @@ func (f *Factory) needsHetznerCSI(spec v1alpha1.ClusterSpec) bool {
 // needsCloudProviderKind determines if cloud-provider-kind is needed.
 func (f *Factory) needsCloudProviderKind(spec v1alpha1.ClusterSpec) bool {
 	if spec.Distribution != v1alpha1.DistributionVanilla {
+		return false
+	}
+
+	return spec.LoadBalancer == v1alpha1.LoadBalancerEnabled
+}
+
+// needsMetalLB determines if MetalLB is needed.
+// MetalLB provides LoadBalancer support for Talos clusters running on Docker.
+func (f *Factory) needsMetalLB(spec v1alpha1.ClusterSpec) bool {
+	if spec.Distribution != v1alpha1.DistributionTalos {
+		return false
+	}
+
+	if spec.Provider != v1alpha1.ProviderDocker {
 		return false
 	}
 
