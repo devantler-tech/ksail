@@ -1,6 +1,7 @@
 package talos_test
 
 import (
+	"fmt"
 	"testing"
 
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
@@ -284,4 +285,75 @@ func TestConfigs_WithName(t *testing.T) {
 			"should return same config when name is unchanged",
 		)
 	})
+}
+
+func TestConfigs_IsKubeletCertRotationEnabled(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns false when cert rotation not configured", func(t *testing.T) {
+		t.Parallel()
+
+		configs := loadConfigsWithoutPatch(t, "cert-rotation-test")
+
+		// Default config should not have cert rotation enabled
+		assert.False(t, configs.IsKubeletCertRotationEnabled())
+	})
+
+	t.Run("returns true when cert rotation is enabled via patch", func(t *testing.T) {
+		t.Parallel()
+
+		configs := loadConfigsWithCertRotationPatch(t, "cert-rotation-enabled", "true")
+
+		// Should detect cert rotation is enabled
+		assert.True(t, configs.IsKubeletCertRotationEnabled())
+	})
+
+	t.Run("returns false when rotate-server-certificates is false", func(t *testing.T) {
+		t.Parallel()
+
+		configs := loadConfigsWithCertRotationPatch(t, "cert-rotation-disabled", "false")
+
+		// Should detect cert rotation is not enabled
+		assert.False(t, configs.IsKubeletCertRotationEnabled())
+	})
+}
+
+func loadConfigsWithoutPatch(t *testing.T, clusterName string) *talos.Configs {
+	t.Helper()
+
+	manager := talos.NewConfigManager("", clusterName, "1.32.0", "10.5.0.0/24")
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, configs)
+
+	return configs
+}
+
+func loadConfigsWithCertRotationPatch(
+	t *testing.T,
+	clusterName, rotateValue string,
+) *talos.Configs {
+	t.Helper()
+
+	patchContent := fmt.Appendf(nil, `machine:
+  kubelet:
+    extraArgs:
+      rotate-server-certificates: "%s"
+`, rotateValue)
+
+	manager := talos.NewConfigManager("", clusterName, "1.32.0", "10.5.0.0/24")
+	manager = manager.WithAdditionalPatches([]talos.Patch{
+		{
+			Path:    "test-cert-rotation.yaml",
+			Scope:   talos.PatchScopeControlPlane,
+			Content: patchContent,
+		},
+	})
+
+	configs, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, configs)
+
+	return configs
 }
