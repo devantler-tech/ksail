@@ -83,6 +83,32 @@ ksail cluster init \
   --local-registry '${USER}:${TOKEN}@registry.example.com'
 ```
 
+### Flux Operator Installation Timeout
+
+**Symptom:** Cluster creation hangs during Flux operator installation, or times out after several minutes
+
+**Cause:** On resource-constrained systems (e.g., GitHub Actions runners, low-spec machines), Flux operator CRDs can take 7-10 minutes to become fully "Established" in the API server, even though the operator pod is running.
+
+**Solution:**
+
+KSail automatically handles this with a 12-minute timeout for Flux operator installations. If you still encounter timeouts:
+
+```bash
+# Wait for the installation to complete - it may take up to 12 minutes
+# Check Flux operator pod status
+ksail workload get pods -n flux-system
+
+# Verify CRDs are being established
+kubectl get crds | grep fluxcd.io
+kubectl get crd <crd-name> -o jsonpath='{.status.conditions[?(@.type=="Established")].status}'
+# Should show "True" when ready
+
+# If timeout persists, check system resources
+docker stats  # Ensure sufficient CPU/memory
+```
+
+For faster installations, ensure your system has adequate resources (4GB+ RAM recommended).
+
 ### Flux/ArgoCD Not Reconciling
 
 **Symptom:** Changes not appearing in cluster after `ksail workload reconcile`
