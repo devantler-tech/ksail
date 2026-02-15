@@ -347,12 +347,11 @@ func TestParseDockerConfigCredentials_DockerHubFormat(t *testing.T) {
 	configData, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	// Parse credentials - current implementation only matches exact host or https://host,
-	// not full URL paths like https://index.docker.io/v1/
+	// Parse credentials - Docker Hub canonical key should also be matched.
 	gotUsername, gotPassword := registryresolver.ParseDockerConfigCredentials(configData, host)
 
-	assert.Empty(t, gotUsername)
-	assert.Empty(t, gotPassword)
+	assert.Equal(t, username, gotUsername)
+	assert.Equal(t, password, gotPassword)
 }
 
 // TestParseDockerConfigCredentials_GHCRFormat tests GitHub Container Registry format.
