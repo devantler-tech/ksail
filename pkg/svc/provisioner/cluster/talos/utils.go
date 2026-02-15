@@ -5,7 +5,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // nthIPInNetwork returns the nth IP in the network (1-indexed).
@@ -55,22 +54,4 @@ func getStateDirectory() (string, error) {
 	}
 
 	return stateDir, nil
-}
-
-// containsModule checks if a module name appears in /proc/modules output.
-func containsModule(modulesContent, moduleName string) bool {
-	// /proc/modules format: "module_name size refcount deps state offset"
-	// Each module is on its own line, and the name is the first field
-	for line := range strings.SplitSeq(modulesContent, "\n") {
-		if len(line) == 0 {
-			continue
-		}
-		// Get the first field (module name)
-		fields := strings.Fields(line)
-		if len(fields) > 0 && fields[0] == moduleName {
-			return true
-		}
-	}
-
-	return false
 }
