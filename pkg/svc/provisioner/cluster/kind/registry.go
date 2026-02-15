@@ -169,25 +169,6 @@ func EscapeShellArg(arg string) string {
 	return registry.EscapeShellArg(arg)
 }
 
-// prepareKindRegistryManager is a helper that prepares the registry manager and registry infos
-// for Kind registry operations. Returns nil manager if mirrorSpecs is empty.
-// The clusterName is used as prefix for container names to ensure uniqueness.
-func prepareKindRegistryManager(
-	ctx context.Context,
-	mirrorSpecs []registry.MirrorSpec,
-	clusterName string,
-	dockerClient client.APIClient,
-) (registry.Backend, []registry.Info, error) {
-	mgr, infos, err := registry.PrepareRegistryManagerFromSpecs(
-		ctx, mirrorSpecs, clusterName, dockerClient,
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to prepare kind registry manager: %w", err)
-	}
-
-	return mgr, infos, nil
-}
-
 // SetupRegistries creates mirror registries based on mirror specifications.
 // Registries are created without network attachment first, as the "kind" network
 // doesn't exist until after the cluster is created. mirrorSpecs should contain the
@@ -201,11 +182,8 @@ func SetupRegistries(
 	mirrorSpecs []registry.MirrorSpec,
 	writer io.Writer,
 ) error {
-	registryMgr, registriesInfo, err := prepareKindRegistryManager(
-		ctx,
-		mirrorSpecs,
-		clusterName,
-		dockerClient,
+	registryMgr, registriesInfo, err := registry.PrepareRegistryManagerFromSpecs(
+		ctx, mirrorSpecs, clusterName, dockerClient,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to prepare kind registry manager: %w", err)
@@ -239,21 +217,9 @@ func ConnectRegistriesToNetwork(
 	dockerClient client.APIClient,
 	writer io.Writer,
 ) error {
-	if len(mirrorSpecs) == 0 {
-		return nil
-	}
-
-	registriesInfo := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil, clusterName)
-	if len(registriesInfo) == 0 {
-		return nil
-	}
-
-	errConnect := registry.ConnectRegistriesToNetwork(
-		ctx,
-		dockerClient,
-		registriesInfo,
-		kindconfigmanager.DefaultNetworkName,
-		writer,
+	errConnect := registry.ConnectMirrorSpecsToNetwork(
+		ctx, mirrorSpecs, clusterName,
+		kindconfigmanager.DefaultNetworkName, dockerClient, writer,
 	)
 	if errConnect != nil {
 		return fmt.Errorf("failed to connect kind registries to network: %w", errConnect)
@@ -270,31 +236,12 @@ func CleanupRegistries(
 	dockerClient client.APIClient,
 	deleteVolumes bool,
 ) error {
-	registryMgr, registriesInfo, err := prepareKindRegistryManager(
-		ctx,
-		mirrorSpecs,
-		clusterName,
-		dockerClient,
+	err := registry.CleanupMirrorSpecRegistries(
+		ctx, mirrorSpecs, clusterName, dockerClient,
+		deleteVolumes, kindconfigmanager.DefaultNetworkName,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to prepare registry manager for cleanup: %w", err)
-	}
-
-	if registryMgr == nil {
-		return nil
-	}
-
-	errCleanup := registry.CleanupRegistries(
-		ctx,
-		registryMgr,
-		registriesInfo,
-		clusterName,
-		deleteVolumes,
-		kindconfigmanager.DefaultNetworkName,
-		nil,
-	)
-	if errCleanup != nil {
-		return fmt.Errorf("failed to cleanup kind registries: %w", errCleanup)
+		return fmt.Errorf("failed to cleanup kind registries: %w", err)
 	}
 
 	return nil

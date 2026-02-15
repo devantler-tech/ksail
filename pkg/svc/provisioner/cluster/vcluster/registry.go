@@ -94,7 +94,7 @@ func SetupRegistries(
 	mirrorSpecs []registry.MirrorSpec,
 	writer io.Writer,
 ) error {
-	registryMgr, registriesInfo, err := prepareRegistryManager(
+	registryMgr, registriesInfo, err := registry.PrepareRegistryManagerFromSpecs(
 		ctx, mirrorSpecs, clusterName, dockerClient,
 	)
 	if err != nil {
@@ -124,19 +124,10 @@ func ConnectRegistriesToNetwork(
 	dockerClient client.APIClient,
 	writer io.Writer,
 ) error {
-	if len(mirrorSpecs) == 0 {
-		return nil
-	}
-
-	registriesInfo := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil, clusterName)
-	if len(registriesInfo) == 0 {
-		return nil
-	}
-
 	networkName := vclusterNetworkPrefix + clusterName
 
-	err := registry.ConnectRegistriesToNetwork(
-		ctx, dockerClient, registriesInfo, networkName, writer,
+	err := registry.ConnectMirrorSpecsToNetwork(
+		ctx, mirrorSpecs, clusterName, networkName, dockerClient, writer,
 	)
 	if err != nil {
 		return fmt.Errorf("connect registries to vcluster network: %w", err)
@@ -153,21 +144,10 @@ func CleanupRegistries(
 	dockerClient client.APIClient,
 	deleteVolumes bool,
 ) error {
-	registryMgr, registriesInfo, err := prepareRegistryManager(
-		ctx, mirrorSpecs, clusterName, dockerClient,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to prepare registry manager for cleanup: %w", err)
-	}
-
-	if registryMgr == nil {
-		return nil
-	}
-
 	networkName := vclusterNetworkPrefix + clusterName
 
-	err = registry.CleanupRegistries(
-		ctx, registryMgr, registriesInfo, clusterName, deleteVolumes, networkName, nil,
+	err := registry.CleanupMirrorSpecRegistries(
+		ctx, mirrorSpecs, clusterName, dockerClient, deleteVolumes, networkName,
 	)
 	if err != nil {
 		return fmt.Errorf("cleanup vcluster registries: %w", err)
@@ -178,21 +158,3 @@ func CleanupRegistries(
 
 // vclusterNetworkPrefix is the Docker network name prefix used by VCluster.
 const vclusterNetworkPrefix = "vcluster."
-
-// prepareRegistryManager creates a registry manager and builds registry infos
-// for VCluster registry operations. Returns nil manager if mirrorSpecs is empty.
-func prepareRegistryManager(
-	ctx context.Context,
-	mirrorSpecs []registry.MirrorSpec,
-	clusterName string,
-	dockerClient client.APIClient,
-) (registry.Backend, []registry.Info, error) {
-	mgr, infos, err := registry.PrepareRegistryManagerFromSpecs(
-		ctx, mirrorSpecs, clusterName, dockerClient,
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to prepare vcluster registry manager: %w", err)
-	}
-
-	return mgr, infos, nil
-}
