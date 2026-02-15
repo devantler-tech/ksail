@@ -1,0 +1,253 @@
+---
+title: MCP Server
+description: Expose KSail as an MCP server for AI assistants and automation tools
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+The KSail MCP (Model Context Protocol) server exposes all KSail commands as tools that can be used by MCP-compatible AI assistants and automation systems. This enables AI assistants like Claude Desktop to manage Kubernetes clusters directly.
+
+## What is MCP?
+
+[Model Context Protocol (MCP)](https://modelcontextprotocol.io/) is an open protocol that standardizes how AI applications communicate with data sources and tools. It provides a universal interface for AI assistants to access external capabilities while maintaining security and user control.
+
+## Why Use the KSail MCP Server?
+
+The MCP server enables:
+
+- **AI-Driven Cluster Management**: AI assistants can create, configure, and manage clusters
+- **Automated Workflows**: Scripts and automation tools can orchestrate complex cluster operations
+- **Interactive Exploration**: Ask natural language questions and have the AI execute the appropriate commands
+- **Unified Interface**: One protocol for all AI assistants that support MCP
+
+## Prerequisites
+
+- [KSail](https://ksail.devantler.tech/installation/) CLI installed and in PATH
+- Docker running (for local cluster operations)
+- An MCP-compatible client (Claude Desktop, VSCode with KSail extension, or custom MCP client)
+
+## Starting the Server
+
+The MCP server runs over stdio and is designed to be invoked by MCP clients:
+
+````bash
+ksail mcp
+````
+
+The server will:
+1. Start and listen for MCP requests on stdin
+2. Expose all KSail commands as MCP tools
+3. Run until the client disconnects or the process is terminated
+
+**Note:** The server is designed to be started by MCP clients, not run directly by users. See [Integration Examples](#integration-examples) for typical usage patterns.
+
+## Available Tools
+
+The MCP server automatically exposes all KSail commands except:
+
+- `ksail chat` — Interactive chat (use MCP client's native chat instead)
+- `ksail mcp` — The MCP server itself
+- `ksail completion` — Shell completion (not relevant for MCP)
+- `ksail help` — Built-in help (use MCP tool discovery)
+
+Available tool categories:
+
+- **Cluster Management**: `cluster init`, `cluster create`, `cluster delete`, `cluster start`, `cluster stop`, `cluster update`, `cluster info`, `cluster list`, `cluster connect`
+- **Workload Operations**: `workload apply`, `workload create`, `workload delete`, `workload gen`, and more
+- **Secret Management**: `cipher encrypt`, `cipher decrypt`, `cipher edit`
+
+MCP clients can discover available tools dynamically and toggle them on/off as needed.
+
+## Integration Examples
+
+### Claude Desktop
+
+Add KSail to your Claude Desktop configuration:
+
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+**Linux:** `~/.config/Claude/claude_desktop_config.json`
+
+````json
+{
+  "mcpServers": {
+    "ksail": {
+      "command": "ksail",
+      "args": ["mcp"]
+    }
+  }
+}
+````
+
+After restarting Claude Desktop, the KSail tools will be available. Try:
+
+> "Create a Vanilla Kubernetes cluster with Cilium CNI"
+
+Claude will use the `ksail cluster init` and `ksail cluster create` tools to fulfill your request.
+
+### VSCode Extension
+
+The [KSail VSCode extension](https://marketplace.visualstudio.com/items?itemName=devantler.ksail) automatically registers the MCP server with VSCode's native MCP infrastructure.
+
+**No manual configuration needed** — the extension handles server registration, process lifecycle, and working directory setup.
+
+Once installed:
+1. Open a workspace containing a `ksail.yaml` file (or run `KSail: Init Cluster` to create one)
+2. Use GitHub Copilot in agent mode
+3. Copilot can now execute KSail commands directly
+
+**Example workflow:**
+
+1. Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
+2. Run `Copilot: Chat`
+3. In agent mode, ask: "Create a K3s cluster and deploy my manifests from ./k8s"
+4. Copilot uses the KSail MCP tools to execute the commands
+
+### Custom MCP Client
+
+If you're building your own MCP client:
+
+````python
+# Example using the Python MCP SDK
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+async with stdio_client(
+    StdioServerParameters(
+        command="ksail",
+        args=["mcp"]
+    )
+) as (read, write):
+    async with ClientSession(read, write) as session:
+        # Initialize and discover tools
+        await session.initialize()
+        
+        # List available tools
+        tools = await session.list_tools()
+        print(f"Available tools: {[t.name for t in tools.tools]}")
+        
+        # Call a tool
+        result = await session.call_tool(
+            "cluster_info",
+            arguments={}
+        )
+        print(result.content)
+````
+
+**Note:** Tool names use underscores (e.g., `cluster_info` for `ksail cluster info`). Check the MCP SDK documentation for your language.
+
+## Tool Discovery
+
+MCP clients can discover available tools dynamically:
+
+````bash
+# Example using mcp-cli (if available)
+mcp list-tools --server "ksail mcp"
+````
+
+Each tool includes:
+- **Name**: Command path with underscores (e.g., `workload_apply`)
+- **Description**: Help text from the Cobra command
+- **Parameters**: JSON schema for command flags and arguments
+
+## Configuration
+
+### Server Behavior
+
+The server:
+- Uses **stdio** for communication (compatible with all MCP clients)
+- Runs commands in the **current working directory** (set by the client)
+- Keeps the connection alive for **30 seconds** after the last request
+- Returns results in **pages of 100 items** for large lists
+
+### Command Execution
+
+Tools execute KSail commands with:
+- The same permissions as the user running the server
+- Access to Docker (required for cluster operations)
+- Ability to read/write files in the working directory
+
+**Security Note:** The MCP server executes commands with your full permissions. Only run it with trusted MCP clients.
+
+## Troubleshooting
+
+### Server won't start
+
+Ensure KSail is installed and in your PATH:
+
+````bash
+which ksail
+# Should return the path to ksail binary
+````
+
+### Tools not appearing in MCP client
+
+1. Check the client configuration syntax (JSON formatting)
+2. Restart the MCP client after changing configuration
+3. Check client logs for connection errors
+
+### Commands fail with "Docker not running"
+
+Cluster operations require Docker:
+
+````bash
+docker ps
+# Should list running containers without errors
+````
+
+### Tool execution timeout
+
+Some operations (cluster creation, workload deployment) can take several minutes. Ensure your MCP client has appropriate timeout settings.
+
+### Working directory issues
+
+The server executes commands relative to the working directory set by the MCP client. For Claude Desktop and other clients that don't set a working directory, ensure:
+
+- You're in a directory with a `ksail.yaml` file when using cluster commands
+- Or use absolute paths in tool arguments
+
+The VSCode extension automatically sets the working directory to the workspace root.
+
+## Advanced Usage
+
+### Combining with AI Chat
+
+The MCP server is complementary to the [AI Chat](/ai-chat/) feature:
+
+- **Use `ksail chat`** for interactive, conversational workflows with a rich TUI
+- **Use `ksail mcp`** to expose KSail to external AI assistants like Claude Desktop
+
+You can use both simultaneously — the chat command is excluded from MCP tools to avoid conflicts.
+
+### Automation Scripts
+
+Combine MCP with automation frameworks:
+
+````python
+# Example: Automated cluster provisioning with MCP
+async def provision_dev_cluster():
+    async with mcp_session() as session:
+        # Initialize cluster configuration
+        await session.call_tool("cluster_init", {
+            "name": "dev",
+            "distribution": "K3s",
+            "cni": "Cilium"
+        })
+        
+        # Create the cluster
+        await session.call_tool("cluster_create", {})
+        
+        # Deploy workloads
+        await session.call_tool("workload_apply", {
+            "kustomize": "./k8s"
+        })
+````
+
+## See Also
+
+- [AI Chat](/ai-chat/) — Interactive chat powered by GitHub Copilot
+- [CLI Flags Reference](/cli-flags/mcp/mcp-root/) — MCP command flags
+- [VSCode Extension](https://marketplace.visualstudio.com/items?itemName=devantler.ksail) — VSCode integration with automatic MCP setup
+- [Model Context Protocol](https://modelcontextprotocol.io/) — Official MCP specification
