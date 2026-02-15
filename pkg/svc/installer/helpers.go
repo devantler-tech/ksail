@@ -27,8 +27,12 @@ const (
 	// which need extra time for the webhook and audit controller to become ready.
 	GatekeeperInstallTimeout = 7 * time.Minute
 	// FluxInstallTimeout is the timeout for Flux operator installs, which need
-	// extra time when running under heavy parallel load on resource-constrained nodes.
-	FluxInstallTimeout = 7 * time.Minute
+	// extra time for CRD establishment. On resource-constrained runners (e.g., GitHub Actions),
+	// the Flux operator CRDs can take 7-10 minutes to become fully "Established" in the API server,
+	// even though the operator pod is running. 12 minutes provides sufficient margin for slower
+	// environments while ensuring quick feedback for actual failures.
+	// See: https://github.com/devantler-tech/ksail/issues/2264
+	FluxInstallTimeout = 12 * time.Minute
 	// ArgoCDInstallTimeout is the timeout for ArgoCD installs, which need
 	// extra time for multiple components to become ready (server, repo-server,
 	// application-controller, and Redis).
