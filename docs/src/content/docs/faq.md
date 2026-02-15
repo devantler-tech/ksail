@@ -133,7 +133,13 @@ Yes! KSail supports:
 2. **Mirror registries** - Proxy to upstream registries (avoid rate limits)
 3. **External registries** - Use your own registry with authentication
 
-See [Registry Management](/features/#registry-management) for examples.
+KSail automatically discovers credentials from:
+
+- **Docker config** (`~/.docker/config.json`) - Uses existing Docker credentials
+- **Environment variables** - Set credentials via `${USER}:${PASS}@registry` syntax
+- **GitOps secrets** - Reads from Flux/ArgoCD cluster secrets
+
+See [Registry Management](/features/#registry-management) for configuration examples.
 
 ### What happens if I change the distribution or provider in ksail.yaml?
 
