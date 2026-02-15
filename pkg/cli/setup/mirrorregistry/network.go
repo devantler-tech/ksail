@@ -23,8 +23,6 @@ const DefaultNetworkMTU = "1500"
 //
 // The network is created with Talos-compatible labels and CIDR so that the Talos SDK
 // will recognize and reuse it when creating the cluster.
-//
-//nolint:funlen // Network creation requires multiple configuration steps
 func EnsureDockerNetworkExists(
 	ctx context.Context,
 	dockerClient client.APIClient,
@@ -32,15 +30,32 @@ func EnsureDockerNetworkExists(
 	networkCIDR string,
 	writer io.Writer,
 ) error {
-	// Check if network already exists
+	exists, err := networkExists(ctx, dockerClient, networkName, writer)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		return nil
+	}
+
+	return createDockerNetwork(ctx, dockerClient, networkName, networkCIDR, writer)
+}
+
+// networkExists checks if a Docker network with the given name already exists.
+func networkExists(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	networkName string,
+	writer io.Writer,
+) (bool, error) {
 	networks, err := dockerClient.NetworkList(ctx, network.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("name", networkName)),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list networks: %w", err)
+		return false, fmt.Errorf("failed to list networks: %w", err)
 	}
 
-	// Network with exact name match
 	for _, nw := range networks {
 		if nw.Name == networkName {
 			notify.WriteMessage(notify.Message{
@@ -50,12 +65,21 @@ func EnsureDockerNetworkExists(
 				Args:    []any{networkName},
 			})
 
-			return nil
+			return true, nil
 		}
 	}
 
-	// Create the network with Talos-compatible labels and CIDR
-	// This ensures the Talos SDK will recognize and reuse the network
+	return false, nil
+}
+
+// createDockerNetwork creates a Docker network with Talos-compatible configuration.
+func createDockerNetwork(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	networkName string,
+	networkCIDR string,
+	writer io.Writer,
+) error {
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
 		Content: "creating network '%s'",
@@ -63,6 +87,19 @@ func EnsureDockerNetworkExists(
 		Args:    []any{networkName},
 	})
 
+	createOptions := buildNetworkCreateOptions(networkName, networkCIDR)
+
+	_, err := dockerClient.NetworkCreate(ctx, networkName, createOptions)
+	if err != nil {
+		return fmt.Errorf("failed to create network: %w", err)
+	}
+
+	return nil
+}
+
+// buildNetworkCreateOptions constructs the Docker network creation configuration
+// with Talos-compatible labels, CIDR, and bridge options.
+func buildNetworkCreateOptions(networkName, networkCIDR string) network.CreateOptions {
 	createOptions := network.CreateOptions{
 		Driver: "bridge",
 		// Use Talos labels so the SDK recognizes this as a Talos network
@@ -92,10 +129,5 @@ func EnsureDockerNetworkExists(
 		}
 	}
 
-	_, err = dockerClient.NetworkCreate(ctx, networkName, createOptions)
-	if err != nil {
-		return fmt.Errorf("failed to create network: %w", err)
-	}
-
-	return nil
+	return createOptions
 }
