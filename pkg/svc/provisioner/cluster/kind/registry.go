@@ -1,10 +1,7 @@
 package kindprovisioner
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
@@ -13,13 +10,8 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
-
-// randomDelimiterBytes is the number of random bytes used to generate heredoc delimiters.
-// 8 bytes produces 16 hex characters, making collisions with user content extremely unlikely.
-const randomDelimiterBytes = 8
 
 // ConfigureContainerdRegistryMirrors injects hosts.toml files directly into Kind nodes
 // to configure containerd to use the local registry mirrors. This is called after the
@@ -47,7 +39,14 @@ func ConfigureContainerdRegistryMirrors(
 		return err
 	}
 
-	return injectHostsTomlIntoNodes(ctx, dockerClient, nodes, entriesToInject)
+	err = registry.InjectHostsTomlIntoNodes(
+		ctx, dockerClient, nodes, entriesToInject,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to inject hosts.toml into kind nodes: %w", err)
+	}
+
+	return nil
 }
 
 // getEntriesToInject returns mirror entries that need to be injected into Kind nodes.
@@ -101,32 +100,6 @@ func getKindNodesForCluster(
 	}
 
 	return nodes, nil
-}
-
-// injectHostsTomlIntoNodes injects hosts.toml files into all Kind nodes for the given entries.
-func injectHostsTomlIntoNodes(
-	ctx context.Context,
-	dockerClient client.APIClient,
-	nodes []string,
-	entries []registry.MirrorEntry,
-) error {
-	for _, entry := range entries {
-		hostsTomlContent := registry.GenerateHostsToml(entry)
-
-		for _, node := range nodes {
-			err := injectHostsToml(ctx, dockerClient, node, entry.Host, hostsTomlContent)
-			if err != nil {
-				return fmt.Errorf(
-					"failed to inject hosts.toml for %s into node %s: %w",
-					entry.Host,
-					node,
-					err,
-				)
-			}
-		}
-	}
-
-	return nil
 }
 
 // buildMountedHostsSet returns a set of registry hosts that have extraMounts configured
@@ -190,96 +163,10 @@ func listKindNodes(
 	return nodes, nil
 }
 
-// generateRandomDelimiter creates a random heredoc delimiter to prevent injection attacks.
-// The delimiter is prefixed with "EOF_" and followed by 16 random hex characters,
-// making it extremely unlikely to appear in user-controlled content.
-func generateRandomDelimiter() (string, error) {
-	randomBytes := make([]byte, randomDelimiterBytes)
-
-	_, err := rand.Read(randomBytes)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate random delimiter: %w", err)
-	}
-
-	return "EOF_" + hex.EncodeToString(randomBytes), nil
-}
-
-// injectHostsToml creates the hosts directory and writes the hosts.toml file inside a Kind node.
-func injectHostsToml(
-	ctx context.Context,
-	dockerClient client.APIClient,
-	nodeName string,
-	registryHost string,
-	hostsTomlContent string,
-) error {
-	// Create the directory structure: /etc/containerd/certs.d/<registry-host>/
-	certsDir := "/etc/containerd/certs.d/" + registryHost
-
-	// Escape the directory path for safe use in shell commands
-	escapedCertsDir := EscapeShellArg(certsDir)
-
-	// Generate a random heredoc delimiter to prevent injection attacks
-	delimiter, err := generateRandomDelimiter()
-	if err != nil {
-		return err
-	}
-
-	// Execute: mkdir -p <dir> && cat > <dir>/hosts.toml
-	// We use a shell command to create the directory and write the file in one go
-	// The heredoc delimiter is randomized to prevent content injection attacks
-	cmd := []string{
-		"sh", "-c",
-		fmt.Sprintf("mkdir -p %s && cat > %s/hosts.toml << '%s'\n%s\n%s",
-			escapedCertsDir, escapedCertsDir, delimiter, hostsTomlContent, delimiter),
-	}
-
-	execConfig := container.ExecOptions{
-		Cmd:          cmd,
-		AttachStdout: true,
-		AttachStderr: true,
-	}
-
-	execID, err := dockerClient.ContainerExecCreate(ctx, nodeName, execConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create exec: %w", err)
-	}
-
-	resp, err := dockerClient.ContainerExecAttach(ctx, execID.ID, container.ExecStartOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to attach to exec: %w", err)
-	}
-	defer resp.Close()
-
-	// Read and discard output
-	var stdout, stderr bytes.Buffer
-
-	_, _ = stdcopy.StdCopy(&stdout, &stderr, resp.Reader)
-
-	// Check exit code
-	inspectResp, err := dockerClient.ContainerExecInspect(ctx, execID.ID)
-	if err != nil {
-		return fmt.Errorf("failed to inspect exec: %w", err)
-	}
-
-	if inspectResp.ExitCode != 0 {
-		return fmt.Errorf(
-			"%w with exit code %d: %s",
-			ErrExecFailed,
-			inspectResp.ExitCode,
-			stderr.String(),
-		)
-	}
-
-	return nil
-}
-
 // EscapeShellArg escapes a string for safe use in POSIX shell commands.
 // It wraps the string in single quotes and escapes any single quotes within.
 func EscapeShellArg(arg string) string {
-	// Replace ' with '\'' (end quote, escaped quote, start quote)
-	escaped := strings.ReplaceAll(arg, "'", "'\\''")
-
-	return "'" + escaped + "'"
+	return registry.EscapeShellArg(arg)
 }
 
 // prepareKindRegistryManager is a helper that prepares the registry manager and registry infos
@@ -291,29 +178,14 @@ func prepareKindRegistryManager(
 	clusterName string,
 	dockerClient client.APIClient,
 ) (registry.Backend, []registry.Info, error) {
-	if len(mirrorSpecs) == 0 {
-		return nil, nil, nil
-	}
-
-	upstreams := registry.BuildUpstreamLookup(mirrorSpecs)
-
-	registryMgr, infos, err := registry.PrepareRegistryManager(
-		ctx,
-		dockerClient,
-		func(usedPorts map[int]struct{}) []registry.Info {
-			return registry.BuildRegistryInfosFromSpecs(
-				mirrorSpecs,
-				upstreams,
-				usedPorts,
-				clusterName,
-			)
-		},
+	mgr, infos, err := registry.PrepareRegistryManagerFromSpecs(
+		ctx, mirrorSpecs, clusterName, dockerClient,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to prepare registry manager: %w", err)
+		return nil, nil, fmt.Errorf("failed to prepare kind registry manager: %w", err)
 	}
 
-	return registryMgr, infos, nil
+	return mgr, infos, nil
 }
 
 // SetupRegistries creates mirror registries based on mirror specifications.

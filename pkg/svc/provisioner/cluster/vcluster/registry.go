@@ -1,10 +1,7 @@
 package vclusterprovisioner
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
@@ -12,12 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
 )
-
-// randomDelimiterBytes is the number of random bytes used to generate heredoc delimiters.
-// 8 bytes produces 16 hex characters, making collisions with user content extremely unlikely.
-const randomDelimiterBytes = 8
 
 // ConfigureContainerdRegistryMirrors injects hosts.toml files directly into VCluster
 // nodes to configure containerd to use the local registry mirrors. This is called after
@@ -51,7 +43,14 @@ func ConfigureContainerdRegistryMirrors(
 		return fmt.Errorf("%w: %s", ErrNoVClusterNodes, clusterName)
 	}
 
-	return injectHostsTomlIntoNodes(ctx, dockerClient, nodes, entries)
+	err = registry.InjectHostsTomlIntoNodes(
+		ctx, dockerClient, nodes, entries,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to inject hosts.toml into vcluster nodes: %w", err)
+	}
+
+	return nil
 }
 
 // listVClusterNodes returns the container names of VCluster nodes for the given cluster.
@@ -83,111 +82,6 @@ func listVClusterNodes(
 	}
 
 	return nodes, nil
-}
-
-// injectHostsTomlIntoNodes injects hosts.toml files into all VCluster nodes for the given entries.
-func injectHostsTomlIntoNodes(
-	ctx context.Context,
-	dockerClient client.APIClient,
-	nodes []string,
-	entries []registry.MirrorEntry,
-) error {
-	for _, entry := range entries {
-		hostsTomlContent := registry.GenerateHostsToml(entry)
-
-		for _, node := range nodes {
-			err := injectHostsToml(ctx, dockerClient, node, entry.Host, hostsTomlContent)
-			if err != nil {
-				return fmt.Errorf(
-					"failed to inject hosts.toml for %s into node %s: %w",
-					entry.Host,
-					node,
-					err,
-				)
-			}
-		}
-	}
-
-	return nil
-}
-
-// injectHostsToml creates the hosts directory and writes the hosts.toml file inside a VCluster node.
-func injectHostsToml(
-	ctx context.Context,
-	dockerClient client.APIClient,
-	nodeName string,
-	registryHost string,
-	hostsTomlContent string,
-) error {
-	certsDir := "/etc/containerd/certs.d/" + registryHost
-	escapedCertsDir := escapeShellArg(certsDir)
-
-	delimiter, err := generateRandomDelimiter()
-	if err != nil {
-		return err
-	}
-
-	cmd := []string{
-		"sh", "-c",
-		fmt.Sprintf("mkdir -p %s && cat > %s/hosts.toml << '%s'\n%s\n%s",
-			escapedCertsDir, escapedCertsDir, delimiter, hostsTomlContent, delimiter),
-	}
-
-	execConfig := container.ExecOptions{
-		Cmd:          cmd,
-		AttachStdout: true,
-		AttachStderr: true,
-	}
-
-	execID, err := dockerClient.ContainerExecCreate(ctx, nodeName, execConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create exec: %w", err)
-	}
-
-	resp, err := dockerClient.ContainerExecAttach(ctx, execID.ID, container.ExecStartOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to attach to exec: %w", err)
-	}
-	defer resp.Close()
-
-	var stdout, stderr bytes.Buffer
-
-	_, _ = stdcopy.StdCopy(&stdout, &stderr, resp.Reader)
-
-	inspectResp, err := dockerClient.ContainerExecInspect(ctx, execID.ID)
-	if err != nil {
-		return fmt.Errorf("failed to inspect exec: %w", err)
-	}
-
-	if inspectResp.ExitCode != 0 {
-		return fmt.Errorf(
-			"%w with exit code %d: %s",
-			ErrExecFailed,
-			inspectResp.ExitCode,
-			stderr.String(),
-		)
-	}
-
-	return nil
-}
-
-// generateRandomDelimiter creates a random heredoc delimiter to prevent injection attacks.
-func generateRandomDelimiter() (string, error) {
-	randomBytes := make([]byte, randomDelimiterBytes)
-
-	_, err := rand.Read(randomBytes)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate random delimiter: %w", err)
-	}
-
-	return "EOF_" + hex.EncodeToString(randomBytes), nil
-}
-
-// escapeShellArg escapes a string for safe use in POSIX shell commands.
-func escapeShellArg(arg string) string {
-	escaped := strings.ReplaceAll(arg, "'", "'\\''")
-
-	return "'" + escaped + "'"
 }
 
 // SetupRegistries creates mirror registries based on mirror specifications.
@@ -293,27 +187,12 @@ func prepareRegistryManager(
 	clusterName string,
 	dockerClient client.APIClient,
 ) (registry.Backend, []registry.Info, error) {
-	if len(mirrorSpecs) == 0 {
-		return nil, nil, nil
-	}
-
-	upstreams := registry.BuildUpstreamLookup(mirrorSpecs)
-
-	registryMgr, infos, err := registry.PrepareRegistryManager(
-		ctx,
-		dockerClient,
-		func(usedPorts map[int]struct{}) []registry.Info {
-			return registry.BuildRegistryInfosFromSpecs(
-				mirrorSpecs,
-				upstreams,
-				usedPorts,
-				clusterName,
-			)
-		},
+	mgr, infos, err := registry.PrepareRegistryManagerFromSpecs(
+		ctx, mirrorSpecs, clusterName, dockerClient,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to prepare registry manager: %w", err)
+		return nil, nil, fmt.Errorf("failed to prepare vcluster registry manager: %w", err)
 	}
 
-	return registryMgr, infos, nil
+	return mgr, infos, nil
 }
