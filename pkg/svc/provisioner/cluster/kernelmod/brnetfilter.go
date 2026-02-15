@@ -43,8 +43,10 @@ func EnsureBrNetfilter(ctx context.Context, logWriter io.Writer) error {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		// Try with sudo if direct modprobe fails (user may not have CAP_SYS_MODULE)
-		sudoCmd := exec.CommandContext(ctx, "sudo", "modprobe", "br_netfilter")
+		// Try with sudo if direct modprobe fails (user may not have CAP_SYS_MODULE).
+		// Use -n (non-interactive) so it fails fast in CI/headless environments
+		// instead of blocking on a password prompt.
+		sudoCmd := exec.CommandContext(ctx, "sudo", "-n", "modprobe", "br_netfilter")
 
 		sudoOutput, sudoErr := sudoCmd.CombinedOutput()
 		if sudoErr != nil {

@@ -189,7 +189,7 @@ func (e *Engine) checkLocalRegistryChange(
 				OldValue: oldSpec.LocalRegistry.Registry,
 				NewValue: newSpec.LocalRegistry.Registry,
 				Category: clusterupdate.ChangeCategoryInPlace,
-				Reason:   "VCluster delegates registry to host cluster",
+				Reason:   "VCluster manages registry independently via Docker networking",
 			})
 		}
 	}

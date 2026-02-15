@@ -23,7 +23,7 @@ strict: true
 
 # AI engine configuration
 engine:
-  id: claude
+  id: copilot
   max-turns: 90 # Reduce from avg 115 turns
 
 # Shared instructions
