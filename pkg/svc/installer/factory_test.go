@@ -366,91 +366,87 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 	})
 }
 
-func TestFactory_CreateInstallersForConfig_LoadBalancer(t *testing.T) {
+func TestFactory_CreateInstallersForConfig_LoadBalancer_VanillaDocker(t *testing.T) {
 	t.Parallel()
 
-	t.Run("vanilla_docker_loadbalancer_enabled_creates_cloud_provider_kind", func(t *testing.T) {
-		t.Parallel()
-
-		factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
-			clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
-			clusterSpec.Distribution = v1alpha1.DistributionVanilla
-			clusterSpec.Provider = v1alpha1.ProviderDocker
-		})
-
-		installers := factory.CreateInstallersForConfig(cfg)
-
-		assert.Contains(t, installers, "cloud-provider-kind")
-		assert.NotContains(t, installers, "metallb",
-			"MetalLB is for Talos, not Vanilla")
+	factory := newTestFactory(t, v1alpha1.DistributionVanilla)
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+		clusterSpec.Distribution = v1alpha1.DistributionVanilla
+		clusterSpec.Provider = v1alpha1.ProviderDocker
 	})
 
-	t.Run("talos_docker_loadbalancer_enabled_creates_metallb", func(t *testing.T) {
-		t.Parallel()
+	installers := factory.CreateInstallersForConfig(cfg)
 
-		factory := newTestFactory(t, v1alpha1.DistributionTalos)
-		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
-			clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
-			clusterSpec.Distribution = v1alpha1.DistributionTalos
-			clusterSpec.Provider = v1alpha1.ProviderDocker
-		})
+	assert.Contains(t, installers, "cloud-provider-kind")
+	assert.NotContains(t, installers, "metallb",
+		"MetalLB is for Talos, not Vanilla")
+}
 
-		installers := factory.CreateInstallersForConfig(cfg)
+func TestFactory_CreateInstallersForConfig_LoadBalancer_TalosDocker(t *testing.T) {
+	t.Parallel()
 
-		assert.Contains(t, installers, "metallb")
-		assert.NotContains(t, installers, "cloud-provider-kind",
-			"Cloud Provider KIND is for Vanilla, not Talos")
+	factory := newTestFactory(t, v1alpha1.DistributionTalos)
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+		clusterSpec.Distribution = v1alpha1.DistributionTalos
+		clusterSpec.Provider = v1alpha1.ProviderDocker
 	})
 
-	t.Run("talos_hetzner_loadbalancer_enabled_no_metallb", func(t *testing.T) {
-		t.Parallel()
+	installers := factory.CreateInstallersForConfig(cfg)
 
-		factory := newTestFactory(t, v1alpha1.DistributionTalos)
-		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
-			clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
-			clusterSpec.Distribution = v1alpha1.DistributionTalos
-			clusterSpec.Provider = v1alpha1.ProviderHetzner
-		})
+	assert.Contains(t, installers, "metallb")
+	assert.NotContains(t, installers, "cloud-provider-kind",
+		"Cloud Provider KIND is for Vanilla, not Talos")
+}
 
-		installers := factory.CreateInstallersForConfig(cfg)
+func TestFactory_CreateInstallersForConfig_LoadBalancer_TalosHetzner(t *testing.T) {
+	t.Parallel()
 
-		assert.NotContains(t, installers, "metallb",
-			"Talos on Hetzner uses hcloud-ccm, not MetalLB")
-		assert.NotContains(t, installers, "cloud-provider-kind")
+	factory := newTestFactory(t, v1alpha1.DistributionTalos)
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+		clusterSpec.Distribution = v1alpha1.DistributionTalos
+		clusterSpec.Provider = v1alpha1.ProviderHetzner
 	})
 
-	t.Run("k3s_loadbalancer_enabled_no_external_loadbalancer", func(t *testing.T) {
-		t.Parallel()
+	installers := factory.CreateInstallersForConfig(cfg)
 
-		factory := newTestFactory(t, v1alpha1.DistributionK3s)
-		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
-			clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
-			clusterSpec.Distribution = v1alpha1.DistributionK3s
-		})
+	assert.NotContains(t, installers, "metallb",
+		"Talos on Hetzner uses hcloud-ccm, not MetalLB")
+	assert.NotContains(t, installers, "cloud-provider-kind")
+}
 
-		installers := factory.CreateInstallersForConfig(cfg)
+func TestFactory_CreateInstallersForConfig_LoadBalancer_K3s(t *testing.T) {
+	t.Parallel()
 
-		assert.NotContains(t, installers, "metallb",
-			"K3s has built-in ServiceLB")
-		assert.NotContains(t, installers, "cloud-provider-kind")
+	factory := newTestFactory(t, v1alpha1.DistributionK3s)
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+		clusterSpec.Distribution = v1alpha1.DistributionK3s
 	})
 
-	t.Run("loadbalancer_disabled_no_installer", func(t *testing.T) {
-		t.Parallel()
+	installers := factory.CreateInstallersForConfig(cfg)
 
-		factory := newTestFactory(t, v1alpha1.DistributionTalos)
-		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
-			clusterSpec.LoadBalancer = v1alpha1.LoadBalancerDisabled
-			clusterSpec.Distribution = v1alpha1.DistributionTalos
-			clusterSpec.Provider = v1alpha1.ProviderDocker
-		})
+	assert.NotContains(t, installers, "metallb",
+		"K3s has built-in ServiceLB")
+	assert.NotContains(t, installers, "cloud-provider-kind")
+}
 
-		installers := factory.CreateInstallersForConfig(cfg)
+func TestFactory_CreateInstallersForConfig_LoadBalancer_Disabled(t *testing.T) {
+	t.Parallel()
 
-		assert.NotContains(t, installers, "metallb")
-		assert.NotContains(t, installers, "cloud-provider-kind")
+	factory := newTestFactory(t, v1alpha1.DistributionTalos)
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.LoadBalancer = v1alpha1.LoadBalancerDisabled
+		clusterSpec.Distribution = v1alpha1.DistributionTalos
+		clusterSpec.Provider = v1alpha1.ProviderDocker
 	})
+
+	installers := factory.CreateInstallersForConfig(cfg)
+
+	assert.NotContains(t, installers, "metallb")
+	assert.NotContains(t, installers, "cloud-provider-kind")
 }
 
 func TestFactory_CreateInstallersForConfig_MultipleComponents(t *testing.T) {
