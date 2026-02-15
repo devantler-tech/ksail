@@ -12,9 +12,11 @@ import (
 // Parameters:
 //   - name: default cluster name
 //   - valuesPath: optional path to a vcluster.yaml values file
+//   - disableFlannel: disable the built-in flannel CNI
 func CreateProvisioner(
 	name string,
 	valuesPath string,
+	disableFlannel bool,
 ) (*Provisioner, error) {
 	dockerClient, err := docker.GetConcreteDockerClient()
 	if err != nil {
@@ -23,5 +25,5 @@ func CreateProvisioner(
 
 	infraProvider := dockerprovider.NewProvider(dockerClient, dockerprovider.LabelSchemeVCluster)
 
-	return NewProvisioner(name, valuesPath, infraProvider), nil
+	return NewProvisioner(name, valuesPath, disableFlannel, infraProvider), nil
 }

@@ -217,7 +217,7 @@ func CreateMinimalProvisioner(
 		return provisioner, nil
 
 	case v1alpha1.DistributionVCluster:
-		provisioner, err := vclusterprovisioner.CreateProvisioner(clusterName, "")
+		provisioner, err := vclusterprovisioner.CreateProvisioner(clusterName, "", false)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create VCluster provisioner: %w", err)
 		}

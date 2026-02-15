@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	vclusterconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/vcluster"
 )
 
 // VClusterConfigFile is the default vCluster configuration filename.
@@ -25,17 +27,17 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 	}
 
 	// Write a YAML values file with the default Kubernetes version override.
-	// The SDK defaults to a Kubernetes version whose upstream image has a
-	// broken kine binary. Pin to v1.34.0 which has a working binary.
+	// The version is read from the embedded Dockerfile in the vcluster
+	// configmanager package, which is automatically updated by Dependabot.
 	// Users can change this version in the generated file.
-	const header = "# vCluster Helm values configuration.\n" +
+	header := "# vCluster Helm values configuration.\n" +
 		"# See https://www.vcluster.com/docs/configure/vcluster-yaml" +
 		" for available options.\n" +
 		"controlPlane:\n" +
 		"  distro:\n" +
 		"    k8s:\n" +
 		"      image:\n" +
-		"        tag: v1.34.0\n"
+		fmt.Sprintf("        tag: %s\n", vclusterconfigmanager.DefaultKubernetesVersion)
 
 	content := []byte(header)
 

@@ -49,6 +49,9 @@ type VClusterConfig struct {
 	Name string
 	// ValuesPath is the optional path to a vcluster.yaml values file.
 	ValuesPath string
+	// DisableFlannel disables the built-in flannel CNI in the vCluster.
+	// Set to true when a custom CNI (Cilium, Calico) is being installed.
+	DisableFlannel bool
 }
 
 // GetClusterName returns the vCluster cluster name.
@@ -302,6 +305,7 @@ func (f DefaultFactory) createVClusterProvisioner(
 	provisioner, err := vclusterprovisioner.CreateProvisioner(
 		vclusterConfig.Name,
 		vclusterConfig.ValuesPath,
+		vclusterConfig.DisableFlannel,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create VCluster provisioner: %w", err)

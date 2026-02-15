@@ -406,6 +406,29 @@ func setupK3dLoadBalancer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Simp
 	)
 }
 
+// setupVClusterCNI configures the vCluster to disable flannel when a non-default
+// CNI (Cilium or Calico) is selected. Without this, the vCluster starts flannel,
+// causing conflicts when the custom CNI is installed post-creation.
+func setupVClusterCNI(
+	clusterCfg *v1alpha1.Cluster,
+	vclusterConfig *clusterprovisioner.VClusterConfig,
+) {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionVCluster {
+		return
+	}
+
+	if vclusterConfig == nil {
+		return
+	}
+
+	cni := clusterCfg.Spec.Cluster.CNI
+	if cni != v1alpha1.CNICilium && cni != v1alpha1.CNICalico {
+		return
+	}
+
+	vclusterConfig.DisableFlannel = true
+}
+
 // applyClusterNameOverride updates distribution configs with the cluster name override.
 // This function mutates the distribution config pointers in ctx to apply the --name flag value.
 // The name override takes highest priority over distribution config or context-derived names.
