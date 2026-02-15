@@ -77,8 +77,8 @@ func TestParseDockerConfigCredentials_NoMatch(t *testing.T) {
 	t.Parallel()
 
 	host := testHost
-	username := "testuser"
-	password := "testpass"
+	username := testUsername
+	password := testPassword
 
 	// Create Docker config JSON with different host
 	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
@@ -347,12 +347,10 @@ func TestParseDockerConfigCredentials_DockerHubFormat(t *testing.T) {
 	configData, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	// Parse credentials - looking for "docker.io" won't match the https URL
-	// This documents current behavior
+	// Parse credentials - current implementation only matches exact host or https://host,
+	// not full URL paths like https://index.docker.io/v1/
 	gotUsername, gotPassword := registryresolver.ParseDockerConfigCredentials(configData, host)
 
-	// Current implementation won't match this - it only tries exact match and https://host
-	// not full paths like https://index.docker.io/v1/
 	assert.Empty(t, gotUsername)
 	assert.Empty(t, gotPassword)
 }
