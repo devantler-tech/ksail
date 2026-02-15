@@ -20,9 +20,6 @@ bots:
 network: defaults
 
 safe-outputs:
-  app:
-    app-id: ${{ vars.APP_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   create-pull-request:
     draft: true
 
@@ -32,7 +29,7 @@ tools:
   web-fetch:
   web-search:
   # By default this workflow allows all bash commands within the confine of Github Actions VM
-  bash: [":*"]
+  bash: true
 
 timeout-minutes: 15
 source: githubnext/agentics/workflows/update-docs.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
