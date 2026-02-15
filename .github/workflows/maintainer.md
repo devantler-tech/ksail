@@ -1,5 +1,8 @@
 ---
 on:
+  schedule:
+    # Every 3 days at 2am UTC
+    - cron: "0 2 */3 * *"
   workflow_dispatch:
   repository_dispatch:
     types: [maintainer]

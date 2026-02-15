@@ -24,12 +24,11 @@ if: ${{ github.event.workflow_run.conclusion == 'failure' }}
 permissions: read-all
 
 network:
-  allowed: [defaults, go, "storage.googleapis.com"]
+  allowed: [defaults, go]
+
+strict: false
 
 safe-outputs:
-  app:
-    app-id: ${{ vars.APP_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   create-issue:
     title-prefix: "${{ github.workflow }}"
     close-older-issues: true

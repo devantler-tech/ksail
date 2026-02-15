@@ -1,6 +1,7 @@
 package chat_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -786,5 +787,370 @@ func assertAskModeAllowsReadTool(t *testing.T, metadata map[string]toolgen.ToolD
 
 	if readResult.ResultType != successResult {
 		t.Errorf("Expected success for read tool in ask mode, got %s", readResult.ResultType)
+	}
+}
+
+//nolint:funlen // Test data structure
+func getLoadChatConfigTests() []struct {
+	name                  string
+	yamlContent           string
+	expectModel           string
+	expectReasoningEffort string
+} {
+	return []struct {
+		name                  string
+		yamlContent           string
+		expectModel           string
+		expectReasoningEffort string
+	}{
+		{
+			name: "both model and reasoningEffort set",
+			yamlContent: `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  chat:
+    model: gpt-5
+    reasoningEffort: high
+`,
+			expectModel:           "gpt-5",
+			expectReasoningEffort: "high",
+		},
+		{
+			name: "only model set",
+			yamlContent: `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  chat:
+    model: claude-sonnet-4.5
+`,
+			expectModel:           "claude-sonnet-4.5",
+			expectReasoningEffort: "",
+		},
+		{
+			name: "only reasoningEffort set",
+			yamlContent: `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  chat:
+    reasoningEffort: medium
+`,
+			expectModel:           "",
+			expectReasoningEffort: "medium",
+		},
+		{
+			name: "empty chat spec",
+			yamlContent: `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  chat: {}
+`,
+			expectModel:           "",
+			expectReasoningEffort: "",
+		},
+		{
+			name: "no chat spec",
+			yamlContent: `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec: {}
+`,
+			expectModel:           "",
+			expectReasoningEffort: "",
+		},
+	}
+}
+
+// TestLoadChatConfig verifies that chat configuration is loaded correctly from ksail.yaml.
+//
+//nolint:paralleltest // Cannot use t.Parallel() because subtests use t.Chdir()
+func TestLoadChatConfig(t *testing.T) {
+	for _, testCase := range getLoadChatConfigTests() {
+		t.Run(testCase.name, func(t *testing.T) {
+			runLoadChatConfigTest(
+				t, testCase.yamlContent, testCase.expectModel, testCase.expectReasoningEffort,
+			)
+		})
+	}
+}
+
+func runLoadChatConfigTest(t *testing.T, yamlContent, expectModel, expectReasoningEffort string) {
+	t.Helper()
+
+	// Create temp directory for test
+	tmpDir := t.TempDir()
+
+	// Change to temp directory (saves original and restores automatically)
+	t.Chdir(tmpDir)
+
+	// Write ksail.yaml
+	err := os.WriteFile("ksail.yaml", []byte(yamlContent), 0o600)
+	if err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	// Load config
+	cfg := chat.GetLoadChatConfig()()
+
+	// Verify model
+	if cfg.Model != expectModel {
+		t.Errorf("Expected model %q, got %q", expectModel, cfg.Model)
+	}
+
+	// Verify reasoningEffort
+	if cfg.ReasoningEffort != expectReasoningEffort {
+		t.Errorf("Expected reasoningEffort %q, got %q", expectReasoningEffort, cfg.ReasoningEffort)
+	}
+}
+
+// TestResolveModel verifies model resolution from flags and config.
+func TestResolveModel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		flagValue   string
+		configValue string
+		expected    string
+	}{
+		{
+			name:        "flag takes priority over config",
+			flagValue:   "gpt-5",
+			configValue: "claude-sonnet-4.5",
+			expected:    "gpt-5",
+		},
+		{
+			name:        "uses config when flag is empty",
+			flagValue:   "",
+			configValue: "claude-sonnet-4.5",
+			expected:    "claude-sonnet-4.5",
+		},
+		{
+			name:        "returns empty when both are empty",
+			flagValue:   "",
+			configValue: "",
+			expected:    "",
+		},
+		{
+			name:        "returns empty when config is auto",
+			flagValue:   "",
+			configValue: "auto",
+			expected:    "",
+		},
+		{
+			name:        "flag works when config is auto",
+			flagValue:   "gpt-5",
+			configValue: "auto",
+			expected:    "gpt-5",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := chat.GetResolveModel()(testCase.flagValue, testCase.configValue)
+			if result != testCase.expected {
+				t.Errorf("Expected %q, got %q", testCase.expected, result)
+			}
+		})
+	}
+}
+
+// TestValidateReasoningEffort verifies reasoning effort validation.
+func TestValidateReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		effort    string
+		expectErr bool
+	}{
+		{
+			name:      "valid low",
+			effort:    "low",
+			expectErr: false,
+		},
+		{
+			name:      "valid medium",
+			effort:    "medium",
+			expectErr: false,
+		},
+		{
+			name:      "valid high",
+			effort:    "high",
+			expectErr: false,
+		},
+		{
+			name:      "empty string is valid",
+			effort:    "",
+			expectErr: false,
+		},
+		{
+			name:      "invalid value",
+			effort:    "extreme",
+			expectErr: true,
+		},
+		{
+			name:      "case sensitive - Low should fail",
+			effort:    "Low",
+			expectErr: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := chat.GetValidateReasoningEffort()(testCase.effort)
+			if testCase.expectErr && err == nil {
+				t.Errorf("Expected error for effort %q, got nil", testCase.effort)
+			}
+
+			if !testCase.expectErr && err != nil {
+				t.Errorf("Expected no error for effort %q, got %v", testCase.effort, err)
+			}
+		})
+	}
+}
+
+// TestResolveReasoningEffort verifies reasoning effort resolution from flags and config.
+func TestResolveReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		flagValue   string
+		configValue string
+		expected    string
+		expectErr   bool
+	}{
+		{
+			name:        "flag takes priority over config",
+			flagValue:   "high",
+			configValue: "medium",
+			expected:    "high",
+			expectErr:   false,
+		},
+		{
+			name:        "uses valid config when flag is empty",
+			flagValue:   "",
+			configValue: "low",
+			expected:    "low",
+			expectErr:   false,
+		},
+		{
+			name:        "returns empty when both are empty",
+			flagValue:   "",
+			configValue: "",
+			expected:    "",
+			expectErr:   false,
+		},
+		{
+			name:        "flag ignores invalid config",
+			flagValue:   "medium",
+			configValue: "invalid",
+			expected:    "medium",
+			expectErr:   false,
+		},
+		{
+			name:        "error on invalid config when flag is empty",
+			flagValue:   "",
+			configValue: "invalid",
+			expected:    "",
+			expectErr:   true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			assertResolveReasoningEffort(
+				t,
+				testCase.flagValue,
+				testCase.configValue,
+				testCase.expected,
+				testCase.expectErr,
+			)
+		})
+	}
+}
+
+func assertResolveReasoningEffort(
+	t *testing.T,
+	flagValue, configValue, expected string,
+	expectErr bool,
+) {
+	t.Helper()
+
+	result, err := chat.GetResolveReasoningEffort()(flagValue, configValue)
+
+	if expectErr && err == nil {
+		t.Errorf("Expected error, got nil")
+	}
+
+	if !expectErr && err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+// TestFilterEnvVars verifies environment variable filtering.
+func TestFilterEnvVars(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		environ    []string
+		filterList []string
+		expected   []string
+	}{
+		{
+			name:       "filters single variable",
+			environ:    []string{"PATH=/bin", "GITHUB_TOKEN=secret", "HOME=/home"},
+			filterList: []string{"GITHUB_TOKEN"},
+			expected:   []string{"PATH=/bin", "HOME=/home"},
+		},
+		{
+			name: "filters multiple variables",
+			environ: []string{
+				"PATH=/bin",
+				"GITHUB_TOKEN=secret",
+				"GH_TOKEN=secret2",
+				"HOME=/home",
+			},
+			filterList: []string{"GITHUB_TOKEN", "GH_TOKEN"},
+			expected:   []string{"PATH=/bin", "HOME=/home"},
+		},
+		{
+			name:       "no filtering when list is empty",
+			environ:    []string{"PATH=/bin", "HOME=/home"},
+			filterList: []string{},
+			expected:   []string{"PATH=/bin", "HOME=/home"},
+		},
+		{
+			name:       "preserves order",
+			environ:    []string{"A=1", "B=2", "C=3", "D=4"},
+			filterList: []string{"B"},
+			expected:   []string{"A=1", "C=3", "D=4"},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := chat.GetFilterEnvVars()(testCase.environ, testCase.filterList)
+			if len(result) != len(testCase.expected) {
+				t.Fatalf("Expected %d vars, got %d", len(testCase.expected), len(result))
+			}
+
+			for i, expected := range testCase.expected {
+				if result[i] != expected {
+					t.Errorf("Position %d: expected %q, got %q", i, expected, result[i])
+				}
+			}
+		})
 	}
 }

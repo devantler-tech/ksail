@@ -13,14 +13,14 @@ This guide covers common issues you might encounter when using KSail and how to 
 
 **Solution:**
 
-``````bash
+```bash
 # Verify Docker is running
 docker ps
 
 # If not running, start Docker Desktop or Docker daemon
 # macOS: Open Docker Desktop application
 # Linux: sudo systemctl start docker
-``````
+```
 
 ### Cluster Creation Hangs
 
@@ -34,7 +34,7 @@ docker ps
 
 **Solution:**
 
-``````bash
+```bash
 # Check existing clusters
 ksail cluster list --all
 
@@ -44,7 +44,7 @@ ksail cluster delete --name <cluster-name>
 # Check Docker resources
 docker system df
 docker system prune  # Clean up if needed
-``````
+```
 
 ### Port Already in Use
 
@@ -52,7 +52,7 @@ docker system prune  # Clean up if needed
 
 **Solution:**
 
-``````bash
+```bash
 # Use a different local registry port by specifying host:port in --local-registry
 ksail cluster init --local-registry http://localhost:5050
 
@@ -63,7 +63,7 @@ lsof -ti:5000 | xargs kill -9
 # Windows:
 netstat -ano | findstr :5000
 # Then kill the process ID shown
-``````
+```
 
 ## GitOps Workflow Issues
 
@@ -73,7 +73,7 @@ netstat -ano | findstr :5000
 
 **Solution:**
 
-``````bash
+```bash
 # Verify local registry is running
 docker ps | grep registry
 
@@ -81,7 +81,7 @@ docker ps | grep registry
 # Ensure authentication is set if using external registry
 ksail cluster init \
   --local-registry '${USER}:${TOKEN}@registry.example.com'
-``````
+```
 
 ### Flux/ArgoCD Not Reconciling
 
@@ -89,7 +89,7 @@ ksail cluster init \
 
 **Solution:**
 
-``````bash
+```bash
 # Check GitOps controller status
 ksail workload get pods -n flux-system  # For Flux
 ksail workload get pods -n argocd       # For ArgoCD
@@ -100,7 +100,7 @@ ksail workload logs -n flux-system deployment/kustomize-controller
 
 # Force reconciliation
 ksail workload reconcile --timeout=5m
-``````
+```
 
 ## Configuration Issues
 
@@ -110,14 +110,14 @@ ksail workload reconcile --timeout=5m
 
 **Solution:**
 
-``````bash
+```bash
 # Validate against schema
 # The schema is available at:
 # https://github.com/devantler-tech/ksail/blob/main/schemas/ksail-config.schema.json
 
 # Re-initialize with correct values
 ksail cluster init --name my-cluster --distribution Vanilla
-``````
+```
 
 ### Environment Variables Not Expanding
 
@@ -125,7 +125,7 @@ ksail cluster init --name my-cluster --distribution Vanilla
 
 **Solution:**
 
-``````bash
+```bash
 # Ensure environment variables are set before running ksail
 export MY_TOKEN="secret-value"
 
@@ -135,7 +135,146 @@ echo $MY_TOKEN
 # Use the variable in configuration
 ksail cluster init \
   --local-registry '${USER}:${MY_TOKEN}@ghcr.io/myorg/myrepo'
-``````
+```
+
+## LoadBalancer Issues
+
+### LoadBalancer Service Stuck in Pending
+
+**Symptom:** Service shows `<pending>` for `EXTERNAL-IP`:
+
+```bash
+kubectl get svc
+# NAME     TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+# my-app   LoadBalancer   10.96.1.50     <pending>     80:30123/TCP   5m
+```
+
+**Diagnosis:**
+
+1. **Check if LoadBalancer is enabled:**
+
+   ```bash
+   # Check ksail.yaml
+   cat ksail.yaml | grep -A 5 "loadBalancer"
+   ```
+
+2. **Verify LoadBalancer controller is running:**
+
+   **Vanilla (Cloud Provider KIND):**
+
+   ```bash
+   docker ps | grep ksail-cloud-provider-kind
+   # Should show a container named ksail-cloud-provider-kind
+   ```
+
+   **Talos (MetalLB):**
+
+   ```bash
+   kubectl get pods -n metallb-system
+   # Should show controller and speaker pods in Running state
+   ```
+
+   **Hetzner:**
+
+   ```bash
+   kubectl get pods -n kube-system | grep hcloud
+   # Should show hcloud-cloud-controller-manager pod
+   ```
+
+**Solution:**
+
+```bash
+# If LoadBalancer is disabled, re-initialize cluster with LoadBalancer enabled
+ksail cluster delete
+ksail cluster init --name my-cluster --load-balancer Enabled
+ksail cluster create
+
+# For Cloud Provider KIND issues, delete and recreate cluster
+# For MetalLB issues, check if IP pool is exhausted (see below)
+# For Hetzner issues, ensure HCLOUD_TOKEN was set during cluster creation
+```
+
+### Cannot Access LoadBalancer IP
+
+**Symptom:** Service has external IP but connection fails:
+
+```bash
+curl http://172.18.255.200
+# curl: (7) Failed to connect to 172.18.255.200 port 80: Connection refused
+```
+
+**Diagnosis:**
+
+1. **Verify pods are running:**
+
+   ```bash
+   kubectl get pods -l app=my-app
+   ```
+
+2. **Check service endpoints:**
+
+   ```bash
+   kubectl get endpoints my-app
+   # Should show pod IPs
+   ```
+
+3. **Test from within cluster:**
+
+   ```bash
+   kubectl run test --rm -it --image=curlimages/curl -- sh
+   curl http://my-app.default.svc.cluster.local
+   ```
+
+**Solution:**
+
+```bash
+# Wait for pods to reach Running state
+kubectl get pods -l app=my-app -w
+
+# Verify target port matches container port
+kubectl describe svc my-app
+
+# Check pod logs for application errors
+kubectl logs -l app=my-app
+
+# Verify application listens on 0.0.0.0, not 127.0.0.1
+kubectl exec -it <pod-name> -- netstat -tlnp
+```
+
+### MetalLB IP Pool Exhausted
+
+**Symptom:** New LoadBalancer services remain pending after several successful allocations
+
+**Solution:**
+
+Expand the IP range by creating a new pool with additional addresses:
+
+```yaml
+# expanded-pool.yaml
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: expanded-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 172.18.255.200-172.18.255.254 # Expanded from .250 to .254
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: expanded-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - expanded-pool
+```
+
+```bash
+kubectl apply -f expanded-pool.yaml
+```
+
+For more LoadBalancer troubleshooting, see the [LoadBalancer Configuration Guide](/configuration/loadbalancer/#troubleshooting).
 
 ## Network Issues
 
@@ -145,7 +284,7 @@ ksail cluster init \
 
 **Solution:**
 
-``````bash
+```bash
 # Check CNI pods are running
 ksail workload get pods -n kube-system
 
@@ -159,7 +298,7 @@ ksail workload get pods -n kube-system -l k8s-app=calico-node
 ksail cluster delete
 ksail cluster init --cni Cilium
 ksail cluster create
-``````
+```
 
 ## Hetzner Cloud Issues
 
@@ -169,7 +308,7 @@ ksail cluster create
 
 **Solution:**
 
-``````bash
+```bash
 # Verify token has correct permissions (read/write)
 # Create token in Hetzner Cloud Console: Security → API Tokens
 
@@ -177,7 +316,7 @@ export HCLOUD_TOKEN="your-token-here"
 
 # Test token
 hcloud server list  # If you have hcloud CLI installed
-``````
+```
 
 ### Talos ISO Not Found
 

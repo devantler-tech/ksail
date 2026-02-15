@@ -49,7 +49,7 @@ KSail works on all major operating systems and CPU architectures:
 |----|--------------|
 | 🐧 Linux | amd64, arm64 |
 | macOS | arm64 |
-| ⊞ Windows (untested) | amd64, arm64 |
+| ⊞ Windows (native untested; WSL2 recommended) | amd64, arm64 |
 
 **Docker is required** for local clusters. Install Docker Desktop/Engine and ensure `docker ps` works.
 
@@ -62,7 +62,7 @@ Supported distributions run on different infrastructure providers:
 
 ## Quick Start
 
-``````bash
+```bash
 # 1. Initialize a new project
 ksail cluster init --name my-cluster --distribution Vanilla
 
@@ -79,7 +79,7 @@ ksail cluster update            # Apply configuration changes
 
 # 6. Connect with K9s
 ksail cluster connect
-``````
+```
 
 ## How It Works
 
