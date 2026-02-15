@@ -6,6 +6,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -79,20 +80,22 @@ type Handler struct {
 
 // Context contains all the configuration needed for registry stage execution.
 type Context struct {
-	Cmd         *cobra.Command
-	ClusterCfg  *v1alpha1.Cluster
-	KindConfig  *v1alpha4.Cluster
-	K3dConfig   *v1alpha5.SimpleConfig
-	TalosConfig *talosconfigmanager.Configs
-	MirrorSpecs []registry.MirrorSpec
+	Cmd            *cobra.Command
+	ClusterCfg     *v1alpha1.Cluster
+	KindConfig     *v1alpha4.Cluster
+	K3dConfig      *v1alpha5.SimpleConfig
+	TalosConfig    *talosconfigmanager.Configs
+	VClusterConfig *clusterprovisioner.VClusterConfig
+	MirrorSpecs    []registry.MirrorSpec
 }
 
 // Definition maps a stage role to its info and distribution-specific actions.
 type Definition struct {
-	Info        setup.StageInfo
-	KindAction  func(*Context) func(context.Context, client.APIClient) error
-	K3dAction   func(*Context) func(context.Context, client.APIClient) error
-	TalosAction func(*Context) func(context.Context, client.APIClient) error
+	Info           setup.StageInfo
+	KindAction     func(*Context) func(context.Context, client.APIClient) error
+	K3dAction      func(*Context) func(context.Context, client.APIClient) error
+	TalosAction    func(*Context) func(context.Context, client.APIClient) error
+	VClusterAction func(*Context) func(context.Context, client.APIClient) error
 }
 
 // RegistryInfo returns the stage info for registry creation.

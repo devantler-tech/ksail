@@ -189,14 +189,15 @@ func buildRegistryStageParams(
 	localDeps := getLocalRegistryDeps()
 
 	return mirrorregistry.StageParams{
-		Cmd:           cmd,
-		ClusterCfg:    ctx.ClusterCfg,
-		Deps:          deps,
-		CfgManager:    cfgManager,
-		KindConfig:    ctx.KindConfig,
-		K3dConfig:     ctx.K3dConfig,
-		TalosConfig:   ctx.TalosConfig,
-		DockerInvoker: localDeps.DockerInvoker,
+		Cmd:            cmd,
+		ClusterCfg:     ctx.ClusterCfg,
+		Deps:           deps,
+		CfgManager:     cfgManager,
+		KindConfig:     ctx.KindConfig,
+		K3dConfig:      ctx.K3dConfig,
+		TalosConfig:    ctx.TalosConfig,
+		VClusterConfig: ctx.VClusterConfig,
+		DockerInvoker:  localDeps.DockerInvoker,
 	}
 }
 

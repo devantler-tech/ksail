@@ -515,8 +515,15 @@ func EnsureArgoCDResources(
 		return fmt.Errorf("create argocd manager: %w", err)
 	}
 
+	// For VCluster, resolve the registry container's Docker IP since pods inside
+	// VCluster use CoreDNS which cannot resolve Docker container names.
+	registryHost, resolveErr := resolveRegistryHost(ctx, clusterCfg, clusterName)
+	if resolveErr != nil {
+		return fmt.Errorf("resolve registry host for argocd: %w", resolveErr)
+	}
+
 	// Build repository URL and credentials based on registry configuration
-	opts := buildArgoCDEnsureOptions(clusterCfg, clusterName)
+	opts := buildArgoCDEnsureOptions(clusterCfg, clusterName, registryHost)
 
 	err = mgr.Ensure(ctx, opts)
 	if err != nil {
@@ -527,9 +534,12 @@ func EnsureArgoCDResources(
 }
 
 // buildArgoCDEnsureOptions constructs ArgoCD ensure options based on registry config.
+// registryHost overrides the default registry hostname for the OCI repository URL.
+// Pass an empty string to use the default Docker container name.
 func buildArgoCDEnsureOptions(
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	registryHost string,
 ) argocdgitops.EnsureOptions {
 	opts := argocdgitops.EnsureOptions{
 		SourcePath:      ".",
@@ -541,7 +551,7 @@ func buildArgoCDEnsureOptions(
 	if localRegistry.IsExternal() {
 		applyExternalRegistryOptions(&opts, localRegistry)
 	} else {
-		applyLocalRegistryOptions(&opts, clusterCfg, clusterName)
+		applyLocalRegistryOptions(&opts, clusterCfg, clusterName, registryHost)
 	}
 
 	return opts
@@ -561,10 +571,13 @@ func applyExternalRegistryOptions(
 }
 
 // applyLocalRegistryOptions configures options for local in-cluster registries.
+// registryHostOverride replaces the default Docker container name when non-empty.
+// This is needed for VCluster where pods cannot resolve Docker container names.
 func applyLocalRegistryOptions(
 	opts *argocdgitops.EnsureOptions,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	registryHostOverride string,
 ) {
 	sourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
 	if sourceDir == "" {
@@ -572,7 +585,12 @@ func applyLocalRegistryOptions(
 	}
 
 	repoName := registry.SanitizeRepoName(sourceDir)
-	registryHost := registry.BuildLocalRegistryName(clusterName)
+
+	registryHost := strings.TrimSpace(registryHostOverride)
+	if registryHost == "" {
+		registryHost = registry.BuildLocalRegistryName(clusterName)
+	}
+
 	hostPort := net.JoinHostPort(
 		registryHost,
 		strconv.Itoa(dockerclient.DefaultRegistryPort),
