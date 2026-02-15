@@ -49,9 +49,11 @@ linters:
       align: false
       sort: true
     gomoddirectives:
+      replace-local: true
       replace-allow-list:
         - github.com/docker/docker
         - github.com/docker/cli
+        - github.com/loft-sh/log
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false
@@ -96,6 +98,8 @@ linters:
             - github.com/stretchr/testify
             - github.com/siderolabs
             - github.com/sirupsen/logrus
+            - github.com/loft-sh/log
+            - github.com/loft-sh/vcluster
             - github.com/yannh
             - filippo.io/age
             - golang.design/x

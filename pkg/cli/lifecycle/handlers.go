@@ -210,6 +210,11 @@ func ExtractClusterNameFromContext(context string, distribution v1alpha1.Distrib
 		if clusterName, ok := strings.CutPrefix(context, "admin@"); ok {
 			return clusterName
 		}
+	case v1alpha1.DistributionVCluster:
+		// vCluster Docker driver uses vcluster-docker_<cluster-name> context pattern
+		if clusterName, ok := strings.CutPrefix(context, "vcluster-docker_"); ok {
+			return clusterName
+		}
 	}
 
 	return ""

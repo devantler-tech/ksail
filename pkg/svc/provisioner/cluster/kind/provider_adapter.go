@@ -1,15 +1,12 @@
 package kindprovisioner
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/docker/docker/client"
 	"sigs.k8s.io/kind/pkg/cluster"
 )
-
-var errUnexpectedDockerClientType = errors.New("unexpected docker client type")
 
 // DefaultProviderAdapter provides a production-ready implementation of Provider
 // that wraps the kind library's Provider.
@@ -76,15 +73,10 @@ func (a *DefaultProviderAdapter) ListNodes(name string) ([]string, error) {
 // required by Provisioner.
 // Returns the concrete type to satisfy ireturn linter.
 func NewDefaultDockerClient() (*client.Client, error) {
-	dockerClient, err := docker.GetDockerClient()
+	c, err := docker.GetConcreteDockerClient()
 	if err != nil {
 		return nil, fmt.Errorf("create Docker client: %w", err)
 	}
 
-	clientPtr, ok := dockerClient.(*client.Client)
-	if !ok {
-		return nil, fmt.Errorf("%w: %T", errUnexpectedDockerClientType, dockerClient)
-	}
-
-	return clientPtr, nil
+	return c, nil
 }

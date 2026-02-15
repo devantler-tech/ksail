@@ -28,6 +28,7 @@ func allDistributions() []v1alpha1.Distribution {
 		v1alpha1.DistributionVanilla,
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionTalos,
+		v1alpha1.DistributionVCluster,
 	}
 }
 
@@ -281,6 +282,10 @@ func createEmptyDistributionConfig(
 	case v1alpha1.DistributionTalos:
 		return &clusterprovisioner.DistributionConfig{
 			Talos: &talosconfigmanager.Configs{},
+		}
+	case v1alpha1.DistributionVCluster:
+		return &clusterprovisioner.DistributionConfig{
+			VCluster: &clusterprovisioner.VClusterConfig{},
 		}
 	default:
 		return &clusterprovisioner.DistributionConfig{

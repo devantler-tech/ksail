@@ -314,6 +314,9 @@ func InstallLoadBalancerSilent(
 	case v1alpha1.DistributionK3s:
 		// K3s already has ServiceLB (Klipper) by default, no installation needed
 		return nil
+	case v1alpha1.DistributionVCluster:
+		// VCluster delegates LoadBalancer to the host cluster, no installation needed
+		return nil
 	}
 
 	return nil

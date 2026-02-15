@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"os"
-	"os/exec"
-	"runtime"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kernelmod"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/go-connections/nat"
@@ -23,9 +21,9 @@ import (
 // createDockerCluster creates a Talos-in-Docker cluster using the Talos SDK.
 func (p *Provisioner) createDockerCluster(ctx context.Context, clusterName string) error {
 	// Ensure required kernel modules are loaded (Linux only)
-	err := p.ensureKernelModules(ctx)
+	err := kernelmod.EnsureBrNetfilter(ctx, p.logWriter)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrKernelModuleLoadFailed, err)
 	}
 
 	// Verify Docker is available and running
@@ -573,49 +571,4 @@ func (p *Provisioner) getMappedTalosAPIEndpoint(
 	hostPort := bindings[0].HostPort
 
 	return net.JoinHostPort("127.0.0.1", hostPort), nil
-}
-
-// ensureKernelModules loads required kernel modules for Talos networking.
-// On Linux, this loads the br_netfilter module which is required for bridge networking.
-// On macOS and Windows, Docker Desktop handles this automatically via its Linux VM.
-func (p *Provisioner) ensureKernelModules(ctx context.Context) error {
-	// Only needed on Linux - Docker Desktop on macOS/Windows handles this in its VM
-	if runtime.GOOS != "linux" {
-		return nil
-	}
-
-	// Check if br_netfilter is already loaded by reading /proc/modules
-	data, err := os.ReadFile("/proc/modules")
-	if err == nil {
-		// Check if br_netfilter is in the loaded modules list
-		if containsModule(string(data), "br_netfilter") {
-			return nil // Already loaded
-		}
-	}
-
-	// Try to load the module using modprobe
-	_, _ = fmt.Fprintf(p.logWriter, "Loading br_netfilter kernel module...\n")
-
-	cmd := exec.CommandContext(ctx, "modprobe", "br_netfilter")
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Try with sudo if direct modprobe fails (user may not have CAP_SYS_MODULE)
-		sudoCmd := exec.CommandContext(ctx, "sudo", "modprobe", "br_netfilter")
-
-		sudoOutput, sudoErr := sudoCmd.CombinedOutput()
-		if sudoErr != nil {
-			return fmt.Errorf(
-				"%w: br_netfilter (modprobe failed: %w, sudo modprobe failed: %w, output: %s)",
-				ErrKernelModuleLoadFailed,
-				err,
-				sudoErr,
-				string(append(output, sudoOutput...)),
-			)
-		}
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "Successfully loaded br_netfilter kernel module\n")
-
-	return nil
 }

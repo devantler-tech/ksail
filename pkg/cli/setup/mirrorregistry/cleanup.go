@@ -185,6 +185,9 @@ func CleanupMirrorRegistries(
 			cleanupDeps,
 			clusterCfg.Spec.Cluster.Provider,
 		)
+	case v1alpha1.DistributionVCluster:
+		// VCluster does not use mirror registries at the Docker level.
+		return nil
 	default:
 		return nil
 	}
@@ -199,6 +202,8 @@ func getNetworkNameForDistribution(distribution v1alpha1.Distribution, clusterNa
 		return "k3d-" + clusterName
 	case v1alpha1.DistributionTalos:
 		return clusterName
+	case v1alpha1.DistributionVCluster:
+		return "vcluster." + clusterName
 	default:
 		return clusterName
 	}

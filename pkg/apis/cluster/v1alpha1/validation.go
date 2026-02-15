@@ -45,7 +45,12 @@ func ValidateClusterName(name string) error {
 
 // ValidDistributions returns supported distribution values.
 func ValidDistributions() []Distribution {
-	return []Distribution{DistributionVanilla, DistributionK3s, DistributionTalos}
+	return []Distribution{
+		DistributionVanilla,
+		DistributionK3s,
+		DistributionTalos,
+		DistributionVCluster,
+	}
 }
 
 // ValidGitOpsEngines enumerates supported GitOps engine values.

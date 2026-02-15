@@ -164,25 +164,26 @@ func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *cluster
 		return nil
 	}
 
-	// Try to detect using Kind context naming convention
-	contextName := ""
-	if strings.TrimSpace(resolved.ClusterName) != "" {
-		contextName = "kind-" + resolved.ClusterName
+	name := strings.TrimSpace(resolved.ClusterName)
+
+	// Each distribution uses a different kubeconfig context naming convention.
+	prefixes := []string{
+		"kind-",
+		"k3d-",
+		"vcluster-docker_",
 	}
 
-	clusterInfo, detectErr := clusterdetector.DetectInfo(resolved.KubeconfigPath, contextName)
-	if detectErr == nil && clusterInfo != nil {
-		return clusterInfo
-	}
+	for _, prefix := range prefixes {
+		contextName := ""
 
-	// Try to detect using K3d context naming convention
-	if strings.TrimSpace(resolved.ClusterName) != "" {
-		contextName = "k3d-" + resolved.ClusterName
-	}
+		if name != "" {
+			contextName = prefix + name
+		}
 
-	clusterInfo, detectErr = clusterdetector.DetectInfo(resolved.KubeconfigPath, contextName)
-	if detectErr == nil && clusterInfo != nil {
-		return clusterInfo
+		info, err := clusterdetector.DetectInfo(resolved.KubeconfigPath, contextName)
+		if err == nil && info != nil {
+			return info
+		}
 	}
 
 	return nil

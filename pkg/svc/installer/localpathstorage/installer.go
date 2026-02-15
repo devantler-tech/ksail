@@ -51,18 +51,12 @@ func NewInstaller(
 
 // Install installs local-path-provisioner if needed based on the distribution.
 func (l *Installer) Install(ctx context.Context) error {
-	// K3d already has local-path-provisioner by default, no action needed
+	// K3s already has local-path-provisioner by default, no action needed
 	if l.distribution.ProvidesStorageByDefault() {
 		return nil
 	}
 
-	// For Kind and Talos, install local-path-provisioner
-	if l.distribution == v1alpha1.DistributionVanilla ||
-		l.distribution == v1alpha1.DistributionTalos {
-		return l.installLocalPathProvisioner(ctx)
-	}
-
-	return nil
+	return l.installLocalPathProvisioner(ctx)
 }
 
 // Uninstall is a no-op as we don't support uninstalling storage provisioners.

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
@@ -119,6 +120,8 @@ func (m *ConfigManager) loadAndCacheDistributionConfig() error {
 		return m.cacheK3dConfig()
 	case v1alpha1.DistributionTalos:
 		return m.cacheTalosConfig()
+	case v1alpha1.DistributionVCluster:
+		return m.cacheVClusterConfig()
 	default:
 		return nil
 	}
@@ -225,4 +228,47 @@ func (m *ConfigManager) getDefaultTalosPatches() []talosconfigmanager.Patch {
 	}
 
 	return patches
+}
+
+func (m *ConfigManager) cacheVClusterConfig() error {
+	configPath := m.Config.Spec.Cluster.DistributionConfig
+	valuesPath := ""
+
+	// Check if a vcluster.yaml values file exists at the configured path
+	if configPath != "" {
+		_, err := os.Stat(configPath)
+		if err == nil {
+			// File exists, use it as the values file
+			valuesPath = configPath
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to stat vcluster config file: %w", err)
+		}
+		// If file doesn't exist, proceed with empty values (defaults only)
+	}
+
+	// Derive the cluster name from context or use default
+	clusterName := m.resolveVClusterName()
+
+	m.DistributionConfig.VCluster = &clusterprovisioner.VClusterConfig{
+		Name:       clusterName,
+		ValuesPath: valuesPath,
+	}
+
+	return nil
+}
+
+// resolveVClusterName extracts the cluster name from the configured context
+// or falls back to the default vCluster cluster name.
+func (m *ConfigManager) resolveVClusterName() string {
+	ctx := m.Config.Spec.Cluster.Connection.Context
+	if ctx != "" {
+		// vCluster Docker context pattern: "vcluster-docker_<cluster-name>"
+		const prefix = "vcluster-docker_"
+
+		if name, ok := strings.CutPrefix(ctx, prefix); ok && name != "" {
+			return name
+		}
+	}
+
+	return "vcluster-default"
 }

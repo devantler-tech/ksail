@@ -255,13 +255,17 @@ func (k *Provisioner) Delete(ctx context.Context, name string) error {
 // Start starts a kind cluster.
 // Delegates to the infrastructure provider for container operations.
 func (k *Provisioner) Start(ctx context.Context, name string) error {
-	return k.withProvider(ctx, name, "start", k.infraProvider.StartNodes)
+	return k.withProvider(ctx, name, "start", func(ctx context.Context, clusterName string) error {
+		return k.infraProvider.StartNodes(ctx, clusterName)
+	})
 }
 
 // Stop stops a kind cluster.
 // Delegates to the infrastructure provider for container operations.
 func (k *Provisioner) Stop(ctx context.Context, name string) error {
-	return k.withProvider(ctx, name, "stop", k.infraProvider.StopNodes)
+	return k.withProvider(ctx, name, "stop", func(ctx context.Context, clusterName string) error {
+		return k.infraProvider.StopNodes(ctx, clusterName)
+	})
 }
 
 // List returns all kind clusters using kind's Cobra command.
@@ -338,13 +342,11 @@ func (k *Provisioner) withProvider(
 ) error {
 	target := setName(name, k.kindConfig.Name)
 
-	if k.infraProvider == nil {
-		return fmt.Errorf("%w for cluster '%s'", clustererr.ErrProviderNotSet, target)
-	}
-
-	err := providerFunc(ctx, target)
+	err := clustererr.RunProviderOp(
+		ctx, k.infraProvider, target, operationName, providerFunc,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to %s cluster '%s': %w", operationName, target, err)
+		return fmt.Errorf("kind provider op: %w", err)
 	}
 
 	return nil

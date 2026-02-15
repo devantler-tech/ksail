@@ -1,13 +1,41 @@
-# 100..=103 - because it is default.
-# 200..=299 - because it is default.
-# 403 - because some websites return 403 Forbidden when we scan from GHA's IP range.
-# 415 - because some websites have unsupported Media Types.
-# 429 - because some websites have low rate limits.
+# ── Accepted Status Codes ──────────────────────────────────────────────
+# 100..=103 - informational (default).
+# 200..=299 - success (default).
+# 403       - some websites return Forbidden for CI/GHA IP ranges.
+# 415       - some websites have unsupported Media Type responses.
+# 429       - some websites have low rate limits.
 accept = ["100..=103", "200..=299", "403", "415", "429"]
 
-# Exclude package-lock.json — contains registry tarballs that are not browsable URLs.
-exclude_path = ["docs/package-lock.json"]
+# ── Resilience & Rate‑Limiting ────────────────────────────────────────
+# Retry transient failures (connection resets, 5xx, timeouts).
+max_retries = 3
+retry_wait_time = 2
 
-# Exclude site-relative documentation links that are valid in the Astro/Starlight
-# build but cannot be resolved by lychee without a running dev server.
+# Per-request timeout (seconds). Generous to accommodate slow servers.
+timeout = 30
+
+# Total concurrent requests. Lower than the default (128) to reduce the
+# chance of triggering rate-limits or connection-pool exhaustion on CI.
+max_concurrency = 32
+
+# Per-host concurrency cap + minimum gap between requests to the same
+# host. These two settings together prevent overwhelming any single
+# server — the most common cause of intermittent 429/503 failures.
+host_concurrency = 4
+host_request_interval = "200ms"
+
+# A realistic User-Agent avoids bot-detection blocks that return 403.
+user_agent = "Mozilla/5.0 (compatible; lychee-link-checker; +https://github.com/lycheeverse/lychee)"
+
+# ── Exclusions ────────────────────────────────────────────────────────
+# Files that should never be scanned:
+#   - package-lock.json: registry tarball URLs that are not browsable.
+#   - .github/workflows/*.md: agentic workflow templates that contain
+#     placeholder variables ({run_url}, {workflow_name}) — not real URLs.
+exclude_path = [
+  "docs/package-lock.json",
+  ".github/workflows/*.md",
+]
+
+# URL patterns to ignore (applied after successful URL construction).
 exclude = ['^/']

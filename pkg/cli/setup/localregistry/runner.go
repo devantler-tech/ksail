@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -103,6 +104,7 @@ func runStageFromBuilder(
 		ctx.KindConfig,
 		ctx.K3dConfig,
 		ctx.TalosConfig,
+		ctx.VClusterConfig,
 		info,
 		buildAction(ctx.ClusterCfg),
 		localDeps,
@@ -134,15 +136,16 @@ func wrapActionWithContext(
 
 // actionRunner encapsulates shared parameters for runAction and runCleanupAction.
 type actionRunner struct {
-	cmd         *cobra.Command
-	clusterCfg  *v1alpha1.Cluster
-	deps        lifecycle.Deps
-	kindConfig  *kindv1alpha4.Cluster
-	k3dConfig   *k3dv1alpha5.SimpleConfig
-	talosConfig *talosconfigmanager.Configs
-	info        setup.StageInfo
-	action      func(context.Context, registry.Service, registryContext) error
-	localDeps   Dependencies
+	cmd            *cobra.Command
+	clusterCfg     *v1alpha1.Cluster
+	deps           lifecycle.Deps
+	kindConfig     *kindv1alpha4.Cluster
+	k3dConfig      *k3dv1alpha5.SimpleConfig
+	talosConfig    *talosconfigmanager.Configs
+	vclusterConfig *clusterprovisioner.VClusterConfig
+	info           setup.StageInfo
+	action         func(context.Context, registry.Service, registryContext) error
+	localDeps      Dependencies
 }
 
 // prepareContext validates preconditions and creates the registry context.
@@ -163,7 +166,9 @@ func (r *actionRunner) prepareContext(checkLocalRegistry bool) *registryContext 
 		return nil
 	}
 
-	ctx := newRegistryContext(r.clusterCfg, r.kindConfig, r.k3dConfig, r.talosConfig)
+	ctx := newRegistryContext(
+		r.clusterCfg, r.kindConfig, r.k3dConfig, r.talosConfig, r.vclusterConfig,
+	)
 
 	return &ctx
 }
@@ -200,21 +205,23 @@ func runRegistryAction(
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
 	talosConfig *talosconfigmanager.Configs,
+	vclusterConfig *clusterprovisioner.VClusterConfig,
 	info setup.StageInfo,
 	action func(context.Context, registry.Service, registryContext) error,
 	localDeps Dependencies,
 	checkLocalRegistry, isCleanup bool,
 ) error {
 	runner := &actionRunner{
-		cmd:         cmd,
-		clusterCfg:  clusterCfg,
-		deps:        deps,
-		kindConfig:  kindConfig,
-		k3dConfig:   k3dConfig,
-		talosConfig: talosConfig,
-		info:        info,
-		action:      action,
-		localDeps:   localDeps,
+		cmd:            cmd,
+		clusterCfg:     clusterCfg,
+		deps:           deps,
+		kindConfig:     kindConfig,
+		k3dConfig:      k3dConfig,
+		talosConfig:    talosConfig,
+		vclusterConfig: vclusterConfig,
+		info:           info,
+		action:         action,
+		localDeps:      localDeps,
 	}
 
 	return runner.run(checkLocalRegistry, isCleanup)
