@@ -200,7 +200,7 @@ func prepareDockerDeletion(
 	}
 
 	preDiscovered := discoverRegistriesBeforeDelete(cmd, clusterInfo)
-	disconnectRegistriesBeforeDelete(cmd, resolved.ClusterName)
+	disconnectRegistriesBeforeDelete(cmd, clusterInfo)
 
 	return preDiscovered
 }
@@ -319,15 +319,29 @@ func discoverRegistriesBeforeDelete(
 }
 
 // disconnectRegistriesBeforeDelete disconnects registries from the cluster network.
-// This is required for Talos because it destroys the network during deletion,
-// and the deletion will fail if containers are still connected to the network.
-func disconnectRegistriesBeforeDelete(cmd *cobra.Command, clusterName string) {
+// This is required for distributions like Talos and VCluster because they destroy
+// the network during deletion, and the deletion will fail if containers are still
+// connected to the network.
+func disconnectRegistriesBeforeDelete(
+	cmd *cobra.Command,
+	clusterInfo *clusterdetector.Info,
+) {
 	cleanupDeps := getCleanupDeps()
 
-	// For Talos, the network name is the cluster name
-	// We silently disconnect registries - errors are ignored since the cluster
+	// Resolve the distribution-specific network name
+	distribution := clusterInfo.Distribution
+	if distribution == "" {
+		distribution = v1alpha1.DistributionTalos
+	}
+
+	networkName := mirrorregistry.GetNetworkNameForDistribution(
+		distribution,
+		clusterInfo.ClusterName,
+	)
+
+	// Silently disconnect registries - errors are ignored since the cluster
 	// may not have any registries connected, or the network may not exist
-	_ = mirrorregistry.DisconnectRegistriesFromNetwork(cmd, clusterName, cleanupDeps)
+	_ = mirrorregistry.DisconnectRegistriesFromNetwork(cmd, networkName, cleanupDeps)
 }
 
 // buildDeletionPreview builds a preview of resources that will be deleted.

@@ -65,7 +65,7 @@ func CleanupAll(
 		)
 	} else {
 		// Discover and cleanup registries by network (for Kind, K3d)
-		networkName := getNetworkNameForDistribution(
+		networkName := GetNetworkNameForDistribution(
 			clusterCfg.Spec.Cluster.Distribution,
 			clusterName,
 		)
@@ -122,7 +122,7 @@ func CleanupRegistriesByNetwork(
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
 ) error {
-	networkName := getNetworkNameForDistribution(distribution, clusterName)
+	networkName := GetNetworkNameForDistribution(distribution, clusterName)
 
 	registryNames, found, err := deleteRegistriesOnNetworkCore(
 		cmd,
@@ -193,8 +193,8 @@ func CleanupMirrorRegistries(
 	}
 }
 
-// getNetworkNameForDistribution returns the Docker network name for a given distribution.
-func getNetworkNameForDistribution(distribution v1alpha1.Distribution, clusterName string) string {
+// GetNetworkNameForDistribution returns the Docker network name for a given distribution.
+func GetNetworkNameForDistribution(distribution v1alpha1.Distribution, clusterName string) string {
 	switch distribution {
 	case v1alpha1.DistributionVanilla:
 		return "kind"
