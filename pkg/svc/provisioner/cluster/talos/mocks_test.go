@@ -3,6 +3,8 @@ package talosprovisioner_test
 import (
 	"context"
 
+	"github.com/siderolabs/talos/pkg/machinery/config"
+	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	"github.com/siderolabs/talos/pkg/provision"
@@ -74,12 +76,20 @@ func (m *MockProvisioner) Reflect(
 	return args.Get(0).(provision.Cluster), args.Error(1)
 }
 
-func (m *MockProvisioner) GenOptions(req provision.NetworkRequest) []generate.Option {
-	args := m.Called(req)
-	if args.Get(0) == nil {
-		return nil
+func (m *MockProvisioner) GenOptions(
+	req provision.NetworkRequest,
+	versionContract *config.VersionContract,
+) ([]generate.Option, []bundle.Option) {
+	args := m.Called(req, versionContract)
+	var genOpts []generate.Option
+	var bundleOpts []bundle.Option
+	if args.Get(0) != nil {
+		genOpts = args.Get(0).([]generate.Option)
 	}
-	return args.Get(0).([]generate.Option)
+	if args.Get(1) != nil {
+		bundleOpts = args.Get(1).([]bundle.Option)
+	}
+	return genOpts, bundleOpts
 }
 
 func (m *MockProvisioner) GetInClusterKubernetesControlPlaneEndpoint(
@@ -109,6 +119,11 @@ func (m *MockProvisioner) GetTalosAPIEndpoints(req provision.NetworkRequest) []s
 func (m *MockProvisioner) GetFirstInterface() v1alpha1.IfaceSelector {
 	args := m.Called()
 	return args.Get(0).(v1alpha1.IfaceSelector)
+}
+
+func (m *MockProvisioner) GetFirstInterfaceName() string {
+	args := m.Called()
+	return args.String(0)
 }
 
 func (m *MockProvisioner) Close() error {

@@ -241,7 +241,6 @@ func (p *Provisioner) k8sComponentsReadinessChecksWithoutStaticPodStatus() []che
 					return check.K8sAllNodesReportedAssertion(ctx, cluster)
 				},
 				talosAPIWaitTimeout,
-				nodeReportPollInterval,
 			)
 		},
 
@@ -255,7 +254,6 @@ func (p *Provisioner) k8sComponentsReadinessChecksWithoutStaticPodStatus() []che
 					return check.K8sFullControlPlaneAssertion(ctx, cluster)
 				},
 				talosAPIWaitTimeout,
-				retryInterval,
 			)
 		},
 	}
