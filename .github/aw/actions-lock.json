@@ -50,6 +50,11 @@
       "version": "v6.2.0",
       "sha": "7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5"
     },
+    "actions/setup-node@v6.2.0": {
+      "repo": "actions/setup-node",
+      "version": "v6.2.0",
+      "sha": "6044e13b5dc448c55e2357c09f80417699197238"
+    },
     "actions/upload-artifact@v6.0.0": {
       "repo": "actions/upload-artifact",
       "version": "v6.0.0",
