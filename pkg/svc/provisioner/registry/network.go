@@ -174,6 +174,33 @@ func calculateRegistryIPs(networkCIDR string, count int) []string {
 	return result
 }
 
+// SetupMirrorSpecRegistries prepares a registry manager from mirror specifications
+// and ensures that the matching registry containers exist. This is a convenience function
+// that combines PrepareRegistryManagerFromSpecs with SetupRegistries.
+func SetupMirrorSpecRegistries(
+	ctx context.Context,
+	mirrorSpecs []MirrorSpec,
+	clusterName string,
+	dockerClient client.APIClient,
+	networkName string,
+	writer io.Writer,
+) error {
+	registryMgr, registriesInfo, err := PrepareRegistryManagerFromSpecs(
+		ctx, mirrorSpecs, clusterName, dockerClient,
+	)
+	if err != nil {
+		return err
+	}
+
+	if registryMgr == nil {
+		return nil
+	}
+
+	return SetupRegistries(
+		ctx, registryMgr, registriesInfo, clusterName, networkName, writer,
+	)
+}
+
 // CleanupMirrorSpecRegistries prepares a registry manager from mirror specifications
 // and removes the matching registry containers. This is a convenience function that
 // combines PrepareRegistryManagerFromSpecs with CleanupRegistries.

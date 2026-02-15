@@ -94,19 +94,8 @@ func SetupRegistries(
 	mirrorSpecs []registry.MirrorSpec,
 	writer io.Writer,
 ) error {
-	registryMgr, registriesInfo, err := registry.PrepareRegistryManagerFromSpecs(
-		ctx, mirrorSpecs, clusterName, dockerClient,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to prepare vcluster registry manager: %w", err)
-	}
-
-	if registryMgr == nil {
-		return nil
-	}
-
-	err = registry.SetupRegistries(
-		ctx, registryMgr, registriesInfo, clusterName, "", writer,
+	err := registry.SetupMirrorSpecRegistries(
+		ctx, mirrorSpecs, clusterName, dockerClient, "", writer,
 	)
 	if err != nil {
 		return fmt.Errorf("setup vcluster registries: %w", err)

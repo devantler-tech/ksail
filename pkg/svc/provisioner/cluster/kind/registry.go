@@ -182,27 +182,12 @@ func SetupRegistries(
 	mirrorSpecs []registry.MirrorSpec,
 	writer io.Writer,
 ) error {
-	registryMgr, registriesInfo, err := registry.PrepareRegistryManagerFromSpecs(
+	err := registry.SetupMirrorSpecRegistries(
 		ctx, mirrorSpecs, clusterName, dockerClient,
+		kindconfigmanager.DefaultNetworkName, writer,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to prepare kind registry manager: %w", err)
-	}
-
-	if registryMgr == nil {
-		return nil
-	}
-
-	errSetup := registry.SetupRegistries(
-		ctx,
-		registryMgr,
-		registriesInfo,
-		clusterName,
-		kindconfigmanager.DefaultNetworkName,
-		writer,
-	)
-	if errSetup != nil {
-		return fmt.Errorf("failed to setup kind registries: %w", errSetup)
+		return fmt.Errorf("failed to setup kind registries: %w", err)
 	}
 
 	return nil
