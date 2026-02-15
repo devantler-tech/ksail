@@ -13,6 +13,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kernelmod"
 	loftlog "github.com/loft-sh/log"
 	"github.com/loft-sh/vcluster/pkg/cli"
 	cliconfig "github.com/loft-sh/vcluster/pkg/cli/config"
@@ -116,8 +117,17 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 // because systemd inside the privileged container hasn't initialized D-Bus
 // yet. When this happens the container is already running, so we wait for
 // D-Bus readiness and re-run the install script.
+//
+// On Linux, this method ensures the br_netfilter kernel module is loaded before
+// creating the cluster, as it's required for Docker bridge networking features.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	target := p.resolveName(name)
+
+	// Ensure required kernel modules are loaded (Linux only)
+	err := kernelmod.EnsureBrNetfilter(ctx, os.Stdout)
+	if err != nil {
+		return fmt.Errorf("failed to ensure kernel modules: %w", err)
+	}
 
 	opts := &cli.CreateOptions{
 		Driver:       "docker",
