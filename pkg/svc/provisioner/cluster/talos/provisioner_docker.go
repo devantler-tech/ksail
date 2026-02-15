@@ -572,4 +572,3 @@ func (p *Provisioner) getMappedTalosAPIEndpoint(
 
 	return net.JoinHostPort("127.0.0.1", hostPort), nil
 }
-
