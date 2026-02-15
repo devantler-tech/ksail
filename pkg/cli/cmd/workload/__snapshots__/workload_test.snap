@@ -77,7 +77,7 @@ Flags:
       --as-group stringArray            Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
       --as-uid string                   UID to impersonate for the operation.
       --as-user-extra stringArray       User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
-      --cache-dir string                Default cache directory (default "/Users/ndam/.kube/cache")
+      --cache-dir string                Default cache directory (default "$HOME/.kube/cache")
       --cascade string[="background"]   Must be "background", "orphan", or "foreground". Selects the deletion cascading strategy for the dependents (e.g. Pods created by a ReplicationController). Defaults to background. (default "background")
       --certificate-authority string    Path to a cert file for the certificate authority
       --client-certificate string       Path to a client certificate file for TLS
@@ -93,7 +93,7 @@ Flags:
       --grace-period int                Period of time in seconds given to the resource to terminate gracefully. Ignored if negative. Set to 1 for immediate shutdown. Can only be set to 0 when --force is true (force deletion). (default -1)
   -h, --help                            help for apply
       --insecure-skip-tls-verify        If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
-      --kubeconfig string               Path to the kubeconfig file to use for CLI requests. (default "/Users/ndam/.kube/config")
+      --kubeconfig string               Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
   -k, --kustomize string                Process a kustomization directory. This flag can't be used together with -f or -R.
   -n, --namespace string                If present, the namespace scope for this CLI request
       --openapi-patch                   If true, use openapi to calculate diff when the openapi presents and the resource can be found in the openapi spec. Otherwise, fall back to use baked-in types. (default true)
@@ -168,7 +168,7 @@ Flags:
       --as-group stringArray           Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
       --as-uid string                  UID to impersonate for the operation.
       --as-user-extra stringArray      User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
-      --cache-dir string               Default cache directory (default "/Users/ndam/.kube/cache")
+      --cache-dir string               Default cache directory (default "$HOME/.kube/cache")
       --certificate-authority string   Path to a cert file for the certificate authority
       --client-certificate string      Path to a client certificate file for TLS
       --client-key string              Path to a client key file for TLS
@@ -181,7 +181,7 @@ Flags:
   -f, --filename strings               Filename, directory, or URL to files to use to create the resource
   -h, --help                           help for create
       --insecure-skip-tls-verify       If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
-      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "/Users/ndam/.kube/config")
+      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
   -k, --kustomize string               Process the kustomization directory. This flag can't be used together with -f or -R.
   -n, --namespace string               If present, the namespace scope for this CLI request
   -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
@@ -309,7 +309,7 @@ Flags:
       --as-group stringArray            Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
       --as-uid string                   UID to impersonate for the operation.
       --as-user-extra stringArray       User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
-      --cache-dir string                Default cache directory (default "/Users/ndam/.kube/cache")
+      --cache-dir string                Default cache directory (default "$HOME/.kube/cache")
       --cascade string[="background"]   Must be "background", "orphan", or "foreground". Selects the deletion cascading strategy for the dependents (e.g. Pods created by a ReplicationController). Defaults to background. (default "background")
       --certificate-authority string    Path to a cert file for the certificate authority
       --client-certificate string       Path to a client certificate file for TLS
@@ -326,7 +326,7 @@ Flags:
       --ignore-not-found                Treat "resource not found" as a successful delete. Defaults to "true" when --all is specified.
       --insecure-skip-tls-verify        If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
   -i, --interactive                     If true, delete resource only when user confirms.
-      --kubeconfig string               Path to the kubeconfig file to use for CLI requests. (default "/Users/ndam/.kube/config")
+      --kubeconfig string               Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
   -k, --kustomize string                Process a kustomization directory. This flag can't be used together with -f or -R.
   -n, --namespace string                If present, the namespace scope for this CLI request
       --now                             If true, resources are signaled for immediate shutdown (same as --grace-period=1).
@@ -379,7 +379,7 @@ Flags:
       --as-group stringArray           Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
       --as-uid string                  UID to impersonate for the operation.
       --as-user-extra stringArray      User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
-      --cache-dir string               Default cache directory (default "/Users/ndam/.kube/cache")
+      --cache-dir string               Default cache directory (default "$HOME/.kube/cache")
       --certificate-authority string   Path to a cert file for the certificate authority
       --chunk-size int                 Return large lists in chunks rather than all at once. Pass 0 to disable. (default 500)
       --client-certificate string      Path to a client certificate file for TLS
@@ -390,7 +390,7 @@ Flags:
   -f, --filename strings               Filename, directory, or URL to files containing the resource to describe
   -h, --help                           help for describe
       --insecure-skip-tls-verify       If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
-      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "/Users/ndam/.kube/config")
+      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
   -k, --kustomize string               Process the kustomization directory. This flag can't be used together with -f or -R.
   -n, --namespace string               If present, the namespace scope for this CLI request
   -R, --recursive                      Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
@@ -467,7 +467,7 @@ Flags:
       --as-group stringArray           Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
       --as-uid string                  UID to impersonate for the operation.
       --as-user-extra stringArray      User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
-      --cache-dir string               Default cache directory (default "/Users/ndam/.kube/cache")
+      --cache-dir string               Default cache directory (default "$HOME/.kube/cache")
       --certificate-authority string   Path to a cert file for the certificate authority
       --client-certificate string      Path to a client certificate file for TLS
       --client-key string              Path to a client key file for TLS
@@ -478,7 +478,7 @@ Flags:
   -f, --filename strings               to use to exec into the resource
   -h, --help                           help for exec
       --insecure-skip-tls-verify       If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
-      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "/Users/ndam/.kube/config")
+      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
   -n, --namespace string               If present, the namespace scope for this CLI request
       --pod-running-timeout duration   The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (default 1m0s)
   -q, --quiet                          Only print output from the remote session
@@ -523,7 +523,7 @@ Flags:
       --as-group stringArray           Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
       --as-uid string                  UID to impersonate for the operation.
       --as-user-extra stringArray      User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
-      --cache-dir string               Default cache directory (default "/Users/ndam/.kube/cache")
+      --cache-dir string               Default cache directory (default "$HOME/.kube/cache")
       --certificate-authority string   Path to a cert file for the certificate authority
       --client-certificate string      Path to a client certificate file for TLS
       --client-key string              Path to a client key file for TLS
@@ -532,7 +532,7 @@ Flags:
       --disable-compression            If true, opt-out of response compression for all requests to the server
   -h, --help                           help for explain
       --insecure-skip-tls-verify       If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
-      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "/Users/ndam/.kube/config")
+      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
   -n, --namespace string               If present, the namespace scope for this CLI request
   -o, --output string                  Format in which to render the schema (plaintext, plaintext-openapiv2) (default "plaintext")
       --recursive                      Print the fields of fields (Currently only 1 level deep)
@@ -581,7 +581,7 @@ Flags:
       --as-group stringArray           Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
       --as-uid string                  UID to impersonate for the operation.
       --as-user-extra stringArray      User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
-      --cache-dir string               Default cache directory (default "/Users/ndam/.kube/cache")
+      --cache-dir string               Default cache directory (default "$HOME/.kube/cache")
       --certificate-authority string   Path to a cert file for the certificate authority
       --client-certificate string      Path to a client certificate file for TLS
       --client-key string              Path to a client key file for TLS
@@ -595,7 +595,7 @@ Flags:
   -f, --filename strings               Filename, directory, or URL to files identifying the resource to expose a service
   -h, --help                           help for expose
       --insecure-skip-tls-verify       If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
-      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "/Users/ndam/.kube/config")
+      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
   -k, --kustomize string               Process the kustomization directory. This flag can't be used together with -f or -R.
   -l, --labels string                  Labels to apply to the service created by this call.
       --load-balancer-ip string        IP to assign to the LoadBalancer. If empty, an ephemeral IP will be created and used (cloud-provider specific).
@@ -681,7 +681,7 @@ Flags:
       --as-group stringArray           Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
       --as-uid string                  UID to impersonate for the operation.
       --as-user-extra stringArray      User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
-      --cache-dir string               Default cache directory (default "/Users/ndam/.kube/cache")
+      --cache-dir string               Default cache directory (default "$HOME/.kube/cache")
       --certificate-authority string   Path to a cert file for the certificate authority
       --chunk-size int                 Return large lists in chunks rather than all at once. Pass 0 to disable. (default 500)
       --client-certificate string      Path to a client certificate file for TLS
@@ -694,7 +694,7 @@ Flags:
   -h, --help                           help for get
       --ignore-not-found               If set to true, suppresses NotFound error for specific objects that do not exist. Using this flag with commands that query for collections of resources has no effect when no resources are found.
       --insecure-skip-tls-verify       If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
-      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "/Users/ndam/.kube/config")
+      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
   -k, --kustomize string               Process the kustomization directory. This flag can't be used together with -f or -R.
   -L, --label-columns strings          Accepts a comma separated list of labels that are going to be presented as columns. Names are case-sensitive. You can also use multiple flag options like -L label1 -L label2...
   -n, --namespace string               If present, the namespace scope for this CLI request
@@ -810,7 +810,7 @@ Flags:
       --as-group stringArray               Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
       --as-uid string                      UID to impersonate for the operation.
       --as-user-extra stringArray          User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
-      --cache-dir string                   Default cache directory (default "/Users/ndam/.kube/cache")
+      --cache-dir string                   Default cache directory (default "$HOME/.kube/cache")
       --certificate-authority string       Path to a cert file for the certificate authority
       --client-certificate string          Path to a client certificate file for TLS
       --client-key string                  Path to a client key file for TLS
@@ -823,7 +823,7 @@ Flags:
       --ignore-errors                      If watching / following pod logs, allow for any errors that occur to be non-fatal
       --insecure-skip-tls-verify           If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
       --insecure-skip-tls-verify-backend   Skip verifying the identity of the kubelet that logs are requested from.  In theory, an attacker could provide invalid log content back. You might want to use this if your kubelet serving certificates have expired.
-      --kubeconfig string                  Path to the kubeconfig file to use for CLI requests. (default "/Users/ndam/.kube/config")
+      --kubeconfig string                  Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
       --limit-bytes int                    Maximum bytes of logs to return. Defaults to no limit.
       --max-log-requests int               Specify maximum number of concurrent logs to follow when using by a selector. Defaults to 5. (default 5)
   -n, --namespace string                   If present, the namespace scope for this CLI request
@@ -977,7 +977,7 @@ Flags:
       --as-group stringArray           Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
       --as-uid string                  UID to impersonate for the operation.
       --as-user-extra stringArray      User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
-      --cache-dir string               Default cache directory (default "/Users/ndam/.kube/cache")
+      --cache-dir string               Default cache directory (default "$HOME/.kube/cache")
       --certificate-authority string   Path to a cert file for the certificate authority
       --client-certificate string      Path to a client certificate file for TLS
       --client-key string              Path to a client key file for TLS
@@ -986,7 +986,7 @@ Flags:
       --disable-compression            If true, opt-out of response compression for all requests to the server
   -h, --help                           help for rollout
       --insecure-skip-tls-verify       If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
-      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "/Users/ndam/.kube/config")
+      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
   -n, --namespace string               If present, the namespace scope for this CLI request
       --request-timeout string         The length of time to wait before giving up on a single server request. Non-zero values should contain a corresponding time unit (e.g. 1s, 2m, 3h). A value of zero means don't timeout requests. (default "0")
   -s, --server string                  The address and port of the Kubernetes API server
@@ -1030,7 +1030,7 @@ Flags:
       --as-group stringArray           Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
       --as-uid string                  UID to impersonate for the operation.
       --as-user-extra stringArray      User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
-      --cache-dir string               Default cache directory (default "/Users/ndam/.kube/cache")
+      --cache-dir string               Default cache directory (default "$HOME/.kube/cache")
       --certificate-authority string   Path to a cert file for the certificate authority
       --client-certificate string      Path to a client certificate file for TLS
       --client-key string              Path to a client key file for TLS
@@ -1042,7 +1042,7 @@ Flags:
   -f, --filename strings               Filename, directory, or URL to files identifying the resource to set a new size
   -h, --help                           help for scale
       --insecure-skip-tls-verify       If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
-      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "/Users/ndam/.kube/config")
+      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
   -k, --kustomize string               Process the kustomization directory. This flag can't be used together with -f or -R.
   -n, --namespace string               If present, the namespace scope for this CLI request
   -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
