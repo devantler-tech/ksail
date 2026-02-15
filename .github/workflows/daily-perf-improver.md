@@ -15,12 +15,11 @@ timeout-minutes: 60
 permissions: read-all
 
 network:
-  allowed: [defaults, go, "storage.googleapis.com"]
+  allowed: [defaults, go]
+
+strict: false
 
 safe-outputs:
-  app:
-    app-id: ${{ vars.APP_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   create-discussion:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"

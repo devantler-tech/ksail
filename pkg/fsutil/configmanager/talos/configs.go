@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"time"
 
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
@@ -253,8 +254,13 @@ func (c *Configs) IsKubeletCertRotationEnabled() bool {
 	}
 
 	val, ok := extraArgs["rotate-server-certificates"]
+	if !ok {
+		return false
+	}
 
-	return ok && val == "true"
+	// ExtraArgs now returns map[string][]string (Talos SDK v1.13.0-alpha.1+)
+	// Check if "true" is present in the slice
+	return slices.Contains(val, "true")
 }
 
 // ExtractMirrorHosts returns a list of registry hosts that have mirror configurations.

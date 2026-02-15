@@ -14,12 +14,11 @@ timeout-minutes: 30
 permissions: read-all
 
 network:
-  allowed: [defaults, go, "storage.googleapis.com"]
+  allowed: [defaults, go]
+
+strict: false
 
 safe-outputs:
-  app:
-    app-id: ${{ vars.APP_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   create-discussion: # needed to create planning discussion
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
@@ -131,7 +130,7 @@ To decide which phase to perform:
 
 2. **Work towards your selected goal**. For the test coverage improvement goal you selected, do the following:
 
-   a. Create a new branch starting with "test/".
+   a. Create a new branch starting with "test/" (locally only - do not push yet).
 
    b. Write new tests to improve coverage. Ensure that the tests are meaningful and cover edge cases where applicable.
 
@@ -149,7 +148,9 @@ To decide which phase to perform:
 
 4. **Results and learnings**
 
-   a. If you succeeded in writing useful code changes that improve test coverage, create a **draft** pull request with your changes.
+   a. If you succeeded in writing useful code changes that improve test coverage, create a **draft** pull request with your changes using the `create_pull_request` safe-output tool.
+
+   **IMPORTANT:** Do NOT use `git push` to push branches - you don't have push permissions. Instead, use the `create_pull_request` tool which will handle branch creation and pushing for you in a separate privileged job.
 
    **Critical:** Exclude coverage reports and tool-generated files from PR. Double-check added files and remove any that don't belong.
 
@@ -167,7 +168,7 @@ To decide which phase to perform:
    **Reproducibility section:**
    Provide clear instructions to reproduce coverage testing, including setup commands (install dependencies, build code, run tests, generate coverage reports), measurement procedures, and expected results format.
 
-   After creation, check the pull request to ensure it is correct, includes all expected files, and doesn't include any unwanted files or changes. Make any necessary corrections by pushing further commits to the branch.
+   After creation, you can verify the pull request was created successfully by checking for it in the repository.
 
    b. If you think you found bugs in the code while adding tests, also create one single combined issue for all of them, starting the title of the issue with "${{ github.workflow }}". Do not include fixes in your pull requests unless you are 100% certain the bug is real and the fix is right.
 

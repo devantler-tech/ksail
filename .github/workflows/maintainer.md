@@ -10,7 +10,7 @@ on:
 permissions: read-all
 
 network: defaults
-engine: claude
+engine: copilot
 safe-outputs:
   create-pull-request:
   create-issue:

@@ -60,9 +60,6 @@ const (
 	retryInterval = 5 * time.Second
 	// longRetryInterval is the interval for longer operations.
 	longRetryInterval = 10 * time.Second
-	// nodeReportPollInterval is the poll interval for waiting for k8s nodes to report.
-	// Matches the upstream Talos SDK interval in K8sComponentsReadinessChecks.
-	nodeReportPollInterval = 30 * time.Second
 	// initialIPCapacity is the initial capacity for IP address slices.
 	initialIPCapacity = 2
 	// grpcFailedPrecondition is the gRPC status code for FailedPrecondition.

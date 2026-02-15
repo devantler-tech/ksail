@@ -233,6 +233,22 @@ This enables GitOps workflows without Git (useful for local development).
 
 Yes! After initialization, configure your GitOps engine to point to your Git repository. KSail scaffolds the initial CRs, but you customize them to use your repository.
 
+### Why does Flux operator installation take so long?
+
+Flux operator installation can take 7-12 minutes on resource-constrained systems (e.g., GitHub Actions runners, low-spec machines). This is due to CRD establishment delays in the Kubernetes API server, not a failure.
+
+**KSail automatically handles this** with a 12-minute timeout for Flux installations. The delay is normal on slower systems. You can monitor progress with:
+
+```bash
+# Check Flux operator pods
+ksail workload get pods -n flux-system
+
+# Verify CRDs are being established
+kubectl get crds | grep fluxcd.io
+```
+
+For faster installations, ensure your system has adequate resources (4GB+ RAM recommended). See [Troubleshooting - Flux Operator Installation Timeout](/troubleshooting/#flux-operator-installation-timeout) for more details.
+
 ## Configuration
 
 ### What's the difference between CLI flags and ksail.yaml?
