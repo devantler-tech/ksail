@@ -8,6 +8,7 @@
     "**/report/**",
     "**/megalinter-reports/**",
     "**/__snapshots__/**",
+    "**/.github/aw/logs/**",
     "**/hardis-report/**",
     "**/*cache*/**",
     "**/*.json",
