@@ -47,11 +47,6 @@ Supported distributions run on different infrastructure providers:
 | Docker   | ✅ (Kind) | ✅ (K3d) | ✅     |
 | Hetzner  | —        | —       | ✅     |
 
-> [!NOTE]
-> If you want to see more distributions or providers supported, please consider sponsoring development via [GitHub Sponsors](https://github.com/sponsors/devantler). Testing and maintaining distribution x cloud provider support comes with additional financial costs for me, so sponsorships help make that feasible.
->
-> Talos on Hetzner is supported because I use it for my personal homelab, and so the support is maintained as part of my own platform work.
-
 ### Installation
 
 See the [Installation Guide](https://ksail.devantler.tech/installation/) for detailed installation instructions.
