@@ -3,6 +3,7 @@ package toolgen
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -38,34 +39,44 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 			// MCP returns errors via IsError flag and error messages in content
 			// Include both the captured output (which contains the actual error details)
 			// and the error message (which contains the exit code)
-			errorMsg := fmt.Sprintf("Command '%s' failed", tool.CommandPath)
+			var b strings.Builder
+			b.Grow(len("Command '' failed") + len(tool.CommandPath) + len(output) + 50)
+			b.WriteString("Command '")
+			b.WriteString(tool.CommandPath)
+			b.WriteString("' failed")
 			if output != "" {
-				errorMsg += "\nOutput:\n" + output
+				b.WriteString("\nOutput:\n")
+				b.WriteString(output)
 			}
-
-			errorMsg += fmt.Sprintf("\nError: %v", err)
+			b.WriteString("\nError: ")
+			b.WriteString(err.Error())
 
 			return &mcp.CallToolResult{
 				IsError: true,
 				Content: []mcp.Content{
 					&mcp.TextContent{
-						Text: errorMsg,
+						Text: b.String(),
 					},
 				},
 			}, nil, nil
 		}
 
 		// Success - include command output in response
-		resultText := fmt.Sprintf("Command '%s' completed successfully", tool.CommandPath)
+		var b strings.Builder
+		b.Grow(len("Command '' completed successfully") + len(tool.CommandPath) + len(output) + 10)
+		b.WriteString("Command '")
+		b.WriteString(tool.CommandPath)
+		b.WriteString("' completed successfully")
 		if output != "" {
-			resultText += "\nOutput:\n" + output
+			b.WriteString("\nOutput:\n")
+			b.WriteString(output)
 		}
 
 		return &mcp.CallToolResult{
 			IsError: false,
 			Content: []mcp.Content{
 				&mcp.TextContent{
-					Text: resultText,
+					Text: b.String(),
 				},
 			},
 		}, nil, nil

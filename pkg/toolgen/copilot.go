@@ -77,13 +77,18 @@ func buildCopilotResult(fullCmd string, output string, err error) copilot.ToolRe
 		}
 	}
 
-	result := fmt.Sprintf("Command: %s\nStatus: SUCCESS", fullCmd)
+	var b strings.Builder
+	b.Grow(len("Command: \nStatus: SUCCESS") + len(fullCmd) + len(output) + 10)
+	b.WriteString("Command: ")
+	b.WriteString(fullCmd)
+	b.WriteString("\nStatus: SUCCESS")
 	if output != "" {
-		result += "\nOutput:\n" + output
+		b.WriteString("\nOutput:\n")
+		b.WriteString(output)
 	}
 
 	return copilot.ToolResult{
-		TextResultForLLM: result,
+		TextResultForLLM: b.String(),
 		ResultType:       "success",
 		SessionLog:       "[SUCCESS] " + fullCmd,
 		ToolTelemetry:    map[string]any{},
