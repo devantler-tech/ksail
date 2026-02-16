@@ -1,6 +1,6 @@
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/license/apache-2-0)
 [![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v5.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v5)
-[![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://codecov.io/gh/devantler-tech/ksail)
+[![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://app.codecov.io/gh/devantler-tech/ksail)
 [![CI - KSail](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
 
 # 🛥️🐳 KSail
@@ -13,13 +13,13 @@ KSail is a tool that bundles common Kubernetes tooling into a single binary. It 
 
 Setting up and operating Kubernetes clusters often requires juggling multiple CLI tools, writing bespoke scripts, and dealing with inconsistent workflows. KSail removes the tooling overhead so you can focus on your workloads.
 
-**No Vendor Lock-In:** KSail works with native distribution configurations (Kind's `kind.yaml`, K3d's config, Talos patches) — you can run the same cluster outside KSail using the underlying tools directly. KSail is a superset that provides a unified workflow while preserving full compatibility with Kind, K3d, and Talos.
+**No Vendor Lock-In:** KSail works with native distribution configurations (Kind's `kind.yaml`, K3d's config, Talos patches, vCluster's `vcluster.yaml`) — you can run the same cluster outside KSail using the underlying tools directly. KSail is a superset that provides a unified workflow while preserving full compatibility with Kind, K3d, Talos, and vCluster.
 
 ## Key Features
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
-- ☸️ **Simple Clusters** — Spin up Vanilla, K3s, or Talos clusters with one command. Same workflow across distributions.
-- 🔓 **No Lock-In** — Uses native configs (`kind.yaml`, `k3d.yaml`, Talos patches). Run clusters with or without KSail.
+- ☸️ **Simple Clusters** — Spin up Vanilla, K3s, Talos, or VCluster clusters with one command. Same workflow across distributions.
+- 🔓 **No Lock-In** — Uses native configs (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`). Run clusters with or without KSail.
 - 📥 **Mirror Registries** — Avoid rate limits, and store images once. Same mirrors used by different clusters.
 - 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
 - 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.
@@ -44,10 +44,10 @@ KSail works on all major operating systems and CPU architectures:
 
 Supported distributions run on different infrastructure providers:
 
-| Provider | Vanilla  | K3s     | Talos |
-|----------|----------|---------|-------|
-| Docker   | ✅ (Kind) | ✅ (K3d) | ✅     |
-| Hetzner  | —        | —       | ✅     |
+| Provider | Vanilla  | K3s     | Talos | VCluster |
+|----------|----------|---------|-------|----------|
+| Docker   | ✅ (Kind) | ✅ (K3d) | ✅     | ✅ (Vind) |
+| Hetzner  | —        | —       | ✅     | —        |
 
 ### Installation
 
@@ -65,7 +65,7 @@ For VSCode users, install the [KSail extension](https://marketplace.visualstudio
 # 1. Initialize a new project with your preferred stack
 ksail cluster init \
   --name <cluster-name> \
-  --distribution <Vanilla|K3s|Talos> \
+  --distribution <Vanilla|K3s|Talos|VCluster> \
   --cni <Default|Cilium|Calico> \
   --csi <Default|Enabled|Disabled> \
   --metrics-server <Default|Enabled|Disabled> \
@@ -99,11 +99,13 @@ KSail generates standard distribution configuration files that you can use direc
 # - kind.yaml       (for Vanilla/Kind clusters)
 # - k3d.yaml        (for K3s clusters)  
 # - talos/          (for Talos clusters)
+# - vcluster.yaml   (for VCluster clusters)
 
 # You can use these configs directly without KSail:
 kind create cluster --config kind.yaml
 k3d cluster create --config k3d.yaml
 talosctl cluster create --config-patch @talos/cluster/patches.yaml
+vcluster create my-cluster --values vcluster.yaml
 
 # Or let KSail manage the lifecycle:
 ksail cluster create
@@ -135,11 +137,11 @@ If you use KSail in your project, feel free to open a PR to add it to the list, 
 
 ## Blog Posts
 
-- [Local Kubernetes Development with KSail and Kind](https://devantler.tech/blog/local-kubernetes-development-with-ksail-and-kind)
-- [Local Kubernetes Development with KSail and K3d](https://devantler.tech/blog/local-kubernetes-development-with-ksail-and-k3d)
-- [Local Kubernetes Development with KSail and Talos](https://devantler.tech/blog/local-kubernetes-development-with-ksail-and-talos)
-- [Creating Kubernetes Clusters on Hetzner with KSail and Talos](https://devantler.tech/blog/creating-development-kubernetes-clusters-on-hetzner-with-ksail-and-talos)
-- [AI-first TUI for KSail with Copilot SDK and Bubbletea](https://devantler.tech/blog/building-an-ai-assistant-for-kubernetes-with-github-copilot-sdk)
+- [Local Kubernetes Development with KSail and Kind](https://devantler.tech/blog/local-kubernetes-development-with-ksail-and-kind/)
+- [Local Kubernetes Development with KSail and K3d](https://devantler.tech/blog/local-kubernetes-development-with-ksail-and-k3d/)
+- [Local Kubernetes Development with KSail and Talos](https://devantler.tech/blog/local-kubernetes-development-with-ksail-and-talos/)
+- [Creating Kubernetes Clusters on Hetzner with KSail and Talos](https://devantler.tech/blog/creating-development-kubernetes-clusters-on-hetzner-with-ksail-and-talos/)
+- [AI-first TUI for KSail with Copilot SDK and Bubbletea](https://devantler.tech/blog/building-an-ai-assistant-for-kubernetes-with-github-copilot-sdk/)
 
 ## Star History
 

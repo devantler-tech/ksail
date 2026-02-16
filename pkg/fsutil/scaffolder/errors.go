@@ -19,6 +19,9 @@ var (
 	// ErrTalosConfigGeneration wraps failures when creating Talos configuration.
 	ErrTalosConfigGeneration = errors.New("failed to generate talos configuration")
 
+	// ErrVClusterConfigGeneration wraps failures when creating vCluster configuration.
+	ErrVClusterConfigGeneration = errors.New("failed to generate vcluster configuration")
+
 	// ErrKustomizationGeneration wraps failures when creating kustomization.yaml.
 	ErrKustomizationGeneration = errors.New("failed to generate kustomization configuration")
 

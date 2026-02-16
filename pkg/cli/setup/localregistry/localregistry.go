@@ -17,6 +17,7 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -100,10 +101,11 @@ const (
 
 // Context holds cluster configuration for local registry operations.
 type Context struct {
-	ClusterCfg  *v1alpha1.Cluster
-	KindConfig  *kindv1alpha4.Cluster
-	K3dConfig   *k3dv1alpha5.SimpleConfig
-	TalosConfig *talosconfigmanager.Configs
+	ClusterCfg     *v1alpha1.Cluster
+	KindConfig     *kindv1alpha4.Cluster
+	K3dConfig      *k3dv1alpha5.SimpleConfig
+	TalosConfig    *talosconfigmanager.Configs
+	VClusterConfig *clusterprovisioner.VClusterConfig
 }
 
 // NewContextFromConfigManager creates a Context from a config manager.
@@ -111,10 +113,11 @@ func NewContextFromConfigManager(cfgManager *ksailconfigmanager.ConfigManager) *
 	distConfig := cfgManager.DistributionConfig
 
 	return &Context{
-		ClusterCfg:  cfgManager.Config,
-		KindConfig:  distConfig.Kind,
-		K3dConfig:   distConfig.K3d,
-		TalosConfig: distConfig.Talos,
+		ClusterCfg:     cfgManager.Config,
+		KindConfig:     distConfig.Kind,
+		K3dConfig:      distConfig.K3d,
+		TalosConfig:    distConfig.Talos,
+		VClusterConfig: distConfig.VCluster,
 	}
 }
 
@@ -268,6 +271,7 @@ func Cleanup(
 		distConfig.Kind,
 		distConfig.K3d,
 		distConfig.Talos,
+		distConfig.VCluster,
 		CleanupStageInfo(),
 		func(execCtx context.Context, svc registry.Service, regCtx registryContext) error {
 			registryName := registry.BuildLocalRegistryName(regCtx.clusterName)
@@ -324,7 +328,9 @@ func Disconnect(
 
 	distConfig := cfgManager.DistributionConfig
 
-	regCtx := newRegistryContext(clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.Talos)
+	regCtx := newRegistryContext(
+		clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.Talos, distConfig.VCluster,
+	)
 	registryName := registry.BuildLocalRegistryName(regCtx.clusterName)
 
 	// Use the cluster name as the network name for Talos

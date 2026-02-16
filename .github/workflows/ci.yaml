@@ -373,7 +373,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        distribution: [Vanilla, K3s, Talos]
+        distribution: [Vanilla, K3s, Talos, VCluster]
         provider: [Docker]
         init: [true, false]
         args:

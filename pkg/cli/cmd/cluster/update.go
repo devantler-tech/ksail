@@ -160,9 +160,10 @@ func createAndVerifyProvisioner(
 
 	factory := clusterprovisioner.DefaultFactory{
 		DistributionConfig: &clusterprovisioner.DistributionConfig{
-			Kind:  ctx.KindConfig,
-			K3d:   ctx.K3dConfig,
-			Talos: ctx.TalosConfig,
+			Kind:     ctx.KindConfig,
+			K3d:      ctx.K3dConfig,
+			Talos:    ctx.TalosConfig,
+			VCluster: ctx.VClusterConfig,
 		},
 		ComponentDetector: componentDetector,
 	}
