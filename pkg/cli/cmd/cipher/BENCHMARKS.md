@@ -39,12 +39,12 @@ go test -bench=BenchmarkEncrypt/Small -benchmem
 
 ```bash
 # CPU profiling
-go test -bench=BenchmarkEncrypt_Medium -cpuprofile=cpu.prof -benchmem
+go test -bench=BenchmarkEncrypt/Medium -cpuprofile=cpu.prof -benchmem
 go tool pprof cpu.prof
 # In pprof: top10, list encrypt, web
 
 # Memory profiling
-go test -bench=BenchmarkDecrypt_Large -memprofile=mem.prof -benchmem
+go test -bench=BenchmarkDecrypt/Large -memprofile=mem.prof -benchmem
 go tool pprof mem.prof
 # In pprof: top10, list decrypt
 ```
