@@ -6,6 +6,7 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	"github.com/stretchr/testify/assert"
@@ -23,6 +24,25 @@ func newTestFactory(
 	return installer.NewFactory(
 		helmMock,
 		nil, // dockerClient — nil is fine for factory creation logic tests
+		"/tmp/kubeconfig",
+		"test-context",
+		5*time.Minute,
+		distribution,
+	)
+}
+
+func newTestFactoryWithDockerClient(
+	t *testing.T,
+	distribution v1alpha1.Distribution,
+) *installer.Factory {
+	t.Helper()
+
+	helmMock := helm.NewMockInterface(t)
+	dockerMock := docker.NewMockAPIClient(t)
+
+	return installer.NewFactory(
+		helmMock,
+		dockerMock,
 		"/tmp/kubeconfig",
 		"test-context",
 		5*time.Minute,
@@ -364,6 +384,89 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 		assert.NotContains(t, installers, "hetzner-csi")
 		assert.NotContains(t, installers, "local-path-storage")
 	})
+}
+
+func TestFactory_CreateInstallersForConfig_LoadBalancer_VanillaDocker(t *testing.T) {
+	t.Parallel()
+
+	factory := newTestFactoryWithDockerClient(t, v1alpha1.DistributionVanilla)
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+		clusterSpec.Distribution = v1alpha1.DistributionVanilla
+		clusterSpec.Provider = v1alpha1.ProviderDocker
+	})
+
+	installers := factory.CreateInstallersForConfig(cfg)
+
+	assert.Contains(t, installers, "cloud-provider-kind")
+	assert.NotContains(t, installers, "metallb",
+		"MetalLB is for Talos, not Vanilla")
+}
+
+func TestFactory_CreateInstallersForConfig_LoadBalancer_TalosDocker(t *testing.T) {
+	t.Parallel()
+
+	factory := newTestFactory(t, v1alpha1.DistributionTalos)
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+		clusterSpec.Distribution = v1alpha1.DistributionTalos
+		clusterSpec.Provider = v1alpha1.ProviderDocker
+	})
+
+	installers := factory.CreateInstallersForConfig(cfg)
+
+	assert.Contains(t, installers, "metallb")
+	assert.NotContains(t, installers, "cloud-provider-kind",
+		"Cloud Provider KIND is for Vanilla, not Talos")
+}
+
+func TestFactory_CreateInstallersForConfig_LoadBalancer_TalosHetzner(t *testing.T) {
+	t.Parallel()
+
+	factory := newTestFactory(t, v1alpha1.DistributionTalos)
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+		clusterSpec.Distribution = v1alpha1.DistributionTalos
+		clusterSpec.Provider = v1alpha1.ProviderHetzner
+	})
+
+	installers := factory.CreateInstallersForConfig(cfg)
+
+	assert.NotContains(t, installers, "metallb",
+		"Talos on Hetzner uses hcloud-ccm, not MetalLB")
+	assert.NotContains(t, installers, "cloud-provider-kind")
+}
+
+func TestFactory_CreateInstallersForConfig_LoadBalancer_K3s(t *testing.T) {
+	t.Parallel()
+
+	factory := newTestFactory(t, v1alpha1.DistributionK3s)
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
+		clusterSpec.Distribution = v1alpha1.DistributionK3s
+	})
+
+	installers := factory.CreateInstallersForConfig(cfg)
+
+	assert.NotContains(t, installers, "metallb",
+		"K3s has built-in ServiceLB")
+	assert.NotContains(t, installers, "cloud-provider-kind")
+}
+
+func TestFactory_CreateInstallersForConfig_LoadBalancer_Disabled(t *testing.T) {
+	t.Parallel()
+
+	factory := newTestFactory(t, v1alpha1.DistributionTalos)
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.LoadBalancer = v1alpha1.LoadBalancerDisabled
+		clusterSpec.Distribution = v1alpha1.DistributionTalos
+		clusterSpec.Provider = v1alpha1.ProviderDocker
+	})
+
+	installers := factory.CreateInstallersForConfig(cfg)
+
+	assert.NotContains(t, installers, "metallb")
+	assert.NotContains(t, installers, "cloud-provider-kind")
 }
 
 func TestFactory_CreateInstallersForConfig_MultipleComponents(t *testing.T) {
