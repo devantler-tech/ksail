@@ -30,13 +30,18 @@ func BuildLocalRegistryURL(
 	localRegistry v1alpha1.LocalRegistry,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	registryHostOverride string,
 ) string {
-	return buildLocalRegistryURL(localRegistry, clusterCfg, clusterName)
+	return buildLocalRegistryURL(localRegistry, clusterCfg, clusterName, registryHostOverride)
 }
 
 // BuildInstance exports buildInstance for testing.
-func BuildInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInstance, error) {
-	return buildInstance(clusterCfg, clusterName)
+func BuildInstance(
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+	registryHostOverride string,
+) (*FluxInstance, error) {
+	return buildInstance(clusterCfg, clusterName, registryHostOverride)
 }
 
 // BuildRegistrySecret exports buildRegistrySecret for testing.

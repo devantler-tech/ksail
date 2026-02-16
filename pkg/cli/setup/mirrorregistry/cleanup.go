@@ -15,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
+	vclusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/vcluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/client"
@@ -65,7 +66,7 @@ func CleanupAll(
 		)
 	} else {
 		// Discover and cleanup registries by network (for Kind, K3d)
-		networkName := getNetworkNameForDistribution(
+		networkName := GetNetworkNameForDistribution(
 			clusterCfg.Spec.Cluster.Distribution,
 			clusterName,
 		)
@@ -122,7 +123,7 @@ func CleanupRegistriesByNetwork(
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
 ) error {
-	networkName := getNetworkNameForDistribution(distribution, clusterName)
+	networkName := GetNetworkNameForDistribution(distribution, clusterName)
 
 	registryNames, found, err := deleteRegistriesOnNetworkCore(
 		cmd,
@@ -185,13 +186,22 @@ func CleanupMirrorRegistries(
 			cleanupDeps,
 			clusterCfg.Spec.Cluster.Provider,
 		)
+	case v1alpha1.DistributionVCluster:
+		return cleanupVClusterMirrorRegistries(
+			cmd,
+			cfgManager,
+			deps,
+			clusterName,
+			deleteVolumes,
+			cleanupDeps,
+		)
 	default:
 		return nil
 	}
 }
 
-// getNetworkNameForDistribution returns the Docker network name for a given distribution.
-func getNetworkNameForDistribution(distribution v1alpha1.Distribution, clusterName string) string {
+// GetNetworkNameForDistribution returns the Docker network name for a given distribution.
+func GetNetworkNameForDistribution(distribution v1alpha1.Distribution, clusterName string) string {
 	switch distribution {
 	case v1alpha1.DistributionVanilla:
 		return "kind"
@@ -199,6 +209,8 @@ func getNetworkNameForDistribution(distribution v1alpha1.Distribution, clusterNa
 		return "k3d-" + clusterName
 	case v1alpha1.DistributionTalos:
 		return clusterName
+	case v1alpha1.DistributionVCluster:
+		return "vcluster." + clusterName
 	default:
 		return clusterName
 	}
@@ -553,6 +565,59 @@ func cleanupTalosMirrorRegistries(
 				deleteVolumes,
 				networkName,
 				nil,
+			)
+		},
+		cleanupDeps,
+	)
+}
+
+func cleanupVClusterMirrorRegistries(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	deps lifecycle.Deps,
+	clusterName string,
+	deleteVolumes bool,
+	cleanupDeps CleanupDependencies,
+) error {
+	// VCluster uses "vcluster.<clusterName>" as the network name
+	networkName := "vcluster." + clusterName
+
+	// Collect mirror specs from kind/mirrors directory (VCluster uses the same
+	// hosts.toml-based mirror configuration as Kind)
+	mirrorSpecs, registryNames, err := CollectMirrorSpecs(
+		cmd,
+		cfgManager,
+		GetKindMirrorsDir(cfgManager.Config),
+		cfgManager.Config.Spec.Cluster.Provider,
+	)
+	if err != nil {
+		return err
+	}
+
+	// If no registry specs found from config (non-scaffolded cluster),
+	// fall back to network-based discovery
+	if len(registryNames) == 0 {
+		return cleanupRegistriesByNetwork(
+			cmd,
+			deps,
+			networkName,
+			clusterName,
+			deleteVolumes,
+			cleanupDeps,
+		)
+	}
+
+	return runMirrorRegistryCleanup(
+		cmd,
+		deps,
+		registryNames,
+		func(dockerClient client.APIClient) error {
+			return vclusterprovisioner.CleanupRegistries(
+				cmd.Context(),
+				mirrorSpecs,
+				clusterName,
+				dockerClient,
+				deleteVolumes,
 			)
 		},
 		cleanupDeps,

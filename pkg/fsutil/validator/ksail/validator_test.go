@@ -265,6 +265,9 @@ func createValidKSailConfig(distribution v1alpha1.Distribution) *v1alpha1.Cluste
 	case v1alpha1.DistributionTalos:
 		distributionConfigFile = "talos"
 		contextName = "admin@talos-default" // Sample context name
+	case v1alpha1.DistributionVCluster:
+		distributionConfigFile = "vcluster.yaml"
+		contextName = "vcluster-docker_vcluster-default" // Sample context name
 	default:
 		distributionConfigFile = "cluster.yaml"
 		contextName = "ksail"

@@ -1,6 +1,6 @@
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/license/apache-2-0)
 [![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v5.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v5)
-[![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://codecov.io/gh/devantler-tech/ksail)
+[![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://app.codecov.io/gh/devantler-tech/ksail)
 [![CI - KSail](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
 
 # 🛥️🐳 KSail
@@ -135,11 +135,11 @@ If you use KSail in your project, feel free to open a PR to add it to the list, 
 
 ## Blog Posts
 
-- [Local Kubernetes Development with KSail and Kind](https://devantler.tech/blog/local-kubernetes-development-with-ksail-and-kind)
-- [Local Kubernetes Development with KSail and K3d](https://devantler.tech/blog/local-kubernetes-development-with-ksail-and-k3d)
-- [Local Kubernetes Development with KSail and Talos](https://devantler.tech/blog/local-kubernetes-development-with-ksail-and-talos)
-- [Creating Kubernetes Clusters on Hetzner with KSail and Talos](https://devantler.tech/blog/creating-development-kubernetes-clusters-on-hetzner-with-ksail-and-talos)
-- [AI-first TUI for KSail with Copilot SDK and Bubbletea](https://devantler.tech/blog/building-an-ai-assistant-for-kubernetes-with-github-copilot-sdk)
+- [Local Kubernetes Development with KSail and Kind](https://devantler.tech/blog/local-kubernetes-development-with-ksail-and-kind/)
+- [Local Kubernetes Development with KSail and K3d](https://devantler.tech/blog/local-kubernetes-development-with-ksail-and-k3d/)
+- [Local Kubernetes Development with KSail and Talos](https://devantler.tech/blog/local-kubernetes-development-with-ksail-and-talos/)
+- [Creating Kubernetes Clusters on Hetzner with KSail and Talos](https://devantler.tech/blog/creating-development-kubernetes-clusters-on-hetzner-with-ksail-and-talos/)
+- [AI-first TUI for KSail with Copilot SDK and Bubbletea](https://devantler.tech/blog/building-an-ai-assistant-for-kubernetes-with-github-copilot-sdk/)
 
 ## Star History
 

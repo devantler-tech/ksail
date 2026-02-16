@@ -249,6 +249,8 @@ func isClusterNetworkName(network string) bool {
 		return true
 	case strings.HasPrefix(network, "k3d-"):
 		return true
+	case strings.HasPrefix(network, "vcluster."):
+		return true
 	default:
 		return false
 	}

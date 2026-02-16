@@ -59,7 +59,7 @@ func NewClientWithStdio() *Client {
 
 // CreateApplyCommand creates a kubectl apply command with all its flags and behavior.
 func (c *Client) CreateApplyCommand(kubeConfigPath string) *cobra.Command {
-	factory := c.createFactory(kubeConfigPath)
+	factory, configFlags := c.createFactory(kubeConfigPath)
 	applyCmd := apply.NewCmdApply("ksail workload", factory, c.ioStreams)
 
 	c.customizeCommand(
@@ -67,6 +67,7 @@ func (c *Client) CreateApplyCommand(kubeConfigPath string) *cobra.Command {
 		"apply",
 		"Apply manifests",
 		"Apply local Kubernetes manifests to your cluster.",
+		configFlags,
 	)
 
 	return applyCmd
@@ -74,7 +75,7 @@ func (c *Client) CreateApplyCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateCreateCommand creates a kubectl create command with all its flags and behavior.
 func (c *Client) CreateCreateCommand(kubeConfigPath string) *cobra.Command {
-	factory := c.createFactory(kubeConfigPath)
+	factory, configFlags := c.createFactory(kubeConfigPath)
 	createCmd := create.NewCmdCreate(factory, c.ioStreams)
 
 	c.customizeCommand(
@@ -82,6 +83,7 @@ func (c *Client) CreateCreateCommand(kubeConfigPath string) *cobra.Command {
 		"create",
 		"Create resources",
 		"Create Kubernetes resources from files or stdin.",
+		configFlags,
 	)
 
 	return createCmd
@@ -89,7 +91,7 @@ func (c *Client) CreateCreateCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateEditCommand creates a kubectl edit command with all its flags and behavior.
 func (c *Client) CreateEditCommand(kubeConfigPath string) *cobra.Command {
-	factory := c.createFactory(kubeConfigPath)
+	factory, configFlags := c.createFactory(kubeConfigPath)
 	editCmd := edit.NewCmdEdit(factory, c.ioStreams)
 
 	c.customizeCommand(
@@ -97,6 +99,7 @@ func (c *Client) CreateEditCommand(kubeConfigPath string) *cobra.Command {
 		"edit",
 		"Edit a resource",
 		"Edit a Kubernetes resource from the default editor.",
+		configFlags,
 	)
 
 	return editCmd
@@ -104,7 +107,7 @@ func (c *Client) CreateEditCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateDeleteCommand creates a kubectl delete command with all its flags and behavior.
 func (c *Client) CreateDeleteCommand(kubeConfigPath string) *cobra.Command {
-	factory := c.createFactory(kubeConfigPath)
+	factory, configFlags := c.createFactory(kubeConfigPath)
 	deleteCmd := delete.NewCmdDelete(factory, c.ioStreams)
 
 	c.customizeCommand(
@@ -112,6 +115,7 @@ func (c *Client) CreateDeleteCommand(kubeConfigPath string) *cobra.Command {
 		"delete",
 		"Delete resources",
 		"Delete Kubernetes resources by file names, stdin, resources and names, or by resources and label selector.",
+		configFlags,
 	)
 
 	return deleteCmd
@@ -119,7 +123,7 @@ func (c *Client) CreateDeleteCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateDescribeCommand creates a kubectl describe command with all its flags and behavior.
 func (c *Client) CreateDescribeCommand(kubeConfigPath string) *cobra.Command {
-	factory := c.createFactory(kubeConfigPath)
+	factory, configFlags := c.createFactory(kubeConfigPath)
 	describeCmd := describe.NewCmdDescribe("ksail workload", factory, c.ioStreams)
 
 	c.customizeCommand(
@@ -127,6 +131,7 @@ func (c *Client) CreateDescribeCommand(kubeConfigPath string) *cobra.Command {
 		"describe",
 		"Describe resources",
 		"Show details of a specific resource or group of resources.",
+		configFlags,
 	)
 
 	return describeCmd
@@ -134,7 +139,7 @@ func (c *Client) CreateDescribeCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateExplainCommand creates a kubectl explain command with all its flags and behavior.
 func (c *Client) CreateExplainCommand(kubeConfigPath string) *cobra.Command {
-	factory := c.createFactory(kubeConfigPath)
+	factory, configFlags := c.createFactory(kubeConfigPath)
 	explainCmd := explain.NewCmdExplain("ksail workload", factory, c.ioStreams)
 
 	c.customizeCommand(
@@ -142,6 +147,7 @@ func (c *Client) CreateExplainCommand(kubeConfigPath string) *cobra.Command {
 		"explain",
 		"Get documentation for a resource",
 		"Get documentation for Kubernetes resources, including field descriptions and structure.",
+		configFlags,
 	)
 
 	return explainCmd
@@ -149,7 +155,7 @@ func (c *Client) CreateExplainCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateGetCommand creates a kubectl get command with all its flags and behavior.
 func (c *Client) CreateGetCommand(kubeConfigPath string) *cobra.Command {
-	factory := c.createFactory(kubeConfigPath)
+	factory, configFlags := c.createFactory(kubeConfigPath)
 	getCmd := get.NewCmdGet("ksail workload", factory, c.ioStreams)
 
 	c.customizeCommand(
@@ -157,6 +163,7 @@ func (c *Client) CreateGetCommand(kubeConfigPath string) *cobra.Command {
 		"get",
 		"Get resources",
 		"Display one or many Kubernetes resources from your cluster.",
+		configFlags,
 	)
 
 	return getCmd
@@ -164,7 +171,7 @@ func (c *Client) CreateGetCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateLogsCommand creates a kubectl logs command with all its flags and behavior.
 func (c *Client) CreateLogsCommand(kubeConfigPath string) *cobra.Command {
-	factory := c.createFactory(kubeConfigPath)
+	factory, configFlags := c.createFactory(kubeConfigPath)
 	logsCmd := logs.NewCmdLogs(factory, c.ioStreams)
 
 	c.customizeCommand(
@@ -173,6 +180,7 @@ func (c *Client) CreateLogsCommand(kubeConfigPath string) *cobra.Command {
 		"Print container logs",
 		"Print the logs for a container in a pod or specified resource. "+
 			"If the pod has only one container, the container name is optional.",
+		configFlags,
 	)
 
 	return logsCmd
@@ -180,7 +188,7 @@ func (c *Client) CreateLogsCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateRolloutCommand creates a kubectl rollout command with all its flags and behavior.
 func (c *Client) CreateRolloutCommand(kubeConfigPath string) *cobra.Command {
-	factory := c.createFactory(kubeConfigPath)
+	factory, configFlags := c.createFactory(kubeConfigPath)
 	rolloutCmd := rollout.NewCmdRollout(factory, c.ioStreams)
 
 	c.customizeCommand(
@@ -188,6 +196,7 @@ func (c *Client) CreateRolloutCommand(kubeConfigPath string) *cobra.Command {
 		"rollout",
 		"Manage the rollout of a resource",
 		"Manage the rollout of one or many resources.",
+		configFlags,
 	)
 
 	return rolloutCmd
@@ -195,7 +204,7 @@ func (c *Client) CreateRolloutCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateScaleCommand creates a kubectl scale command with all its flags and behavior.
 func (c *Client) CreateScaleCommand(kubeConfigPath string) *cobra.Command {
-	factory := c.createFactory(kubeConfigPath)
+	factory, configFlags := c.createFactory(kubeConfigPath)
 	scaleCmd := scale.NewCmdScale(factory, c.ioStreams)
 
 	c.customizeCommand(
@@ -203,6 +212,7 @@ func (c *Client) CreateScaleCommand(kubeConfigPath string) *cobra.Command {
 		"scale",
 		"Scale resources",
 		"Set a new size for a deployment, replica set, replication controller, or stateful set.",
+		configFlags,
 	)
 
 	return scaleCmd
@@ -210,7 +220,7 @@ func (c *Client) CreateScaleCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateExposeCommand creates a kubectl expose command with all its flags and behavior.
 func (c *Client) CreateExposeCommand(kubeConfigPath string) *cobra.Command {
-	factory := c.createFactory(kubeConfigPath)
+	factory, configFlags := c.createFactory(kubeConfigPath)
 	exposeCmd := expose.NewCmdExposeService(factory, c.ioStreams)
 
 	c.customizeCommand(
@@ -218,6 +228,7 @@ func (c *Client) CreateExposeCommand(kubeConfigPath string) *cobra.Command {
 		"expose",
 		"Expose a resource as a service",
 		"Expose a resource as a new Kubernetes service.",
+		configFlags,
 	)
 
 	return exposeCmd
@@ -262,7 +273,7 @@ func (c *Client) CreateClusterInfoCommand(kubeConfigPath string) *cobra.Command 
 
 // CreateExecCommand creates a kubectl exec command with all its flags and behavior.
 func (c *Client) CreateExecCommand(kubeConfigPath string) *cobra.Command {
-	factory := c.createFactory(kubeConfigPath)
+	factory, configFlags := c.createFactory(kubeConfigPath)
 	execCmd := exec.NewCmdExec(factory, c.ioStreams)
 
 	c.customizeCommand(
@@ -270,6 +281,7 @@ func (c *Client) CreateExecCommand(kubeConfigPath string) *cobra.Command {
 		"exec",
 		"Execute a command in a container",
 		"Execute a command in a container in a pod.",
+		configFlags,
 	)
 
 	return execCmd
@@ -380,7 +392,11 @@ func (c *Client) CreatePriorityClassCmd() (*cobra.Command, error) {
 // Factory and command customization helpers.
 
 // createFactory creates a kubectl factory with the given kubeconfig path.
-func (c *Client) createFactory(kubeConfigPath string) cmdutil.Factory {
+// It returns both the factory and config flags so callers can register
+// the flags (--namespace, --context, etc.) on their Cobra commands.
+func (c *Client) createFactory(
+	kubeConfigPath string,
+) (cmdutil.Factory, *genericclioptions.ConfigFlags) {
 	configFlags := genericclioptions.NewConfigFlags(true)
 	if kubeConfigPath != "" {
 		configFlags.KubeConfig = &kubeConfigPath
@@ -388,15 +404,25 @@ func (c *Client) createFactory(kubeConfigPath string) cmdutil.Factory {
 
 	matchVersionKubeConfigFlags := cmdutil.NewMatchVersionFlags(configFlags)
 
-	return cmdutil.NewFactory(matchVersionKubeConfigFlags)
+	return cmdutil.NewFactory(matchVersionKubeConfigFlags), configFlags
 }
 
 // customizeCommand applies standard customizations to a kubectl command.
-func (c *Client) customizeCommand(cmd *cobra.Command, use, short, long string) {
+// When configFlags is non-nil, it registers --namespace, --context, and other
+// kubectl config flags on the command so they can be used from the CLI.
+func (c *Client) customizeCommand(
+	cmd *cobra.Command,
+	use, short, long string,
+	configFlags *genericclioptions.ConfigFlags,
+) {
 	cmd.Use = use
 	cmd.Short = short
 	cmd.Long = long
 	replaceKubectlInExamples(cmd)
+
+	if configFlags != nil {
+		configFlags.AddFlags(cmd.Flags())
+	}
 }
 
 // replaceKubectlInExamples replaces "kubectl" with "ksail workload" in command examples.

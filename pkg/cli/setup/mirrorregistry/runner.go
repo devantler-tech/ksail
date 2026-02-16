@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -22,28 +23,32 @@ import (
 //nolint:gochecknoglobals // Registry stage definitions are constant configuration.
 var StageDefinitions = map[Role]Definition{
 	RoleRegistry: {
-		Info:        RegistryInfo,
-		KindAction:  KindRegistryAction,
-		K3dAction:   K3dRegistryAction,
-		TalosAction: TalosRegistryAction,
+		Info:           RegistryInfo,
+		KindAction:     KindRegistryAction,
+		K3dAction:      K3dRegistryAction,
+		TalosAction:    TalosRegistryAction,
+		VClusterAction: VClusterRegistryAction,
 	},
 	RoleNetwork: {
-		Info:        NetworkInfo,
-		KindAction:  KindNetworkAction,
-		K3dAction:   K3dNetworkAction,
-		TalosAction: TalosNetworkAction,
+		Info:           NetworkInfo,
+		KindAction:     KindNetworkAction,
+		K3dAction:      K3dNetworkAction,
+		TalosAction:    TalosNetworkAction,
+		VClusterAction: VClusterNetworkAction,
 	},
 	RoleConnect: {
-		Info:        ConnectInfo,
-		KindAction:  KindConnectAction,
-		K3dAction:   K3dConnectAction,
-		TalosAction: TalosConnectAction,
+		Info:           ConnectInfo,
+		KindAction:     KindConnectAction,
+		K3dAction:      K3dConnectAction,
+		TalosAction:    TalosConnectAction,
+		VClusterAction: VClusterConnectAction,
 	},
 	RolePostClusterConnect: {
-		Info:        PostClusterConnectInfo,
-		KindAction:  KindPostClusterConnectAction,
-		K3dAction:   K3dPostClusterConnectAction,
-		TalosAction: TalosPostClusterConnectAction,
+		Info:           PostClusterConnectInfo,
+		KindAction:     KindPostClusterConnectAction,
+		K3dAction:      K3dPostClusterConnectAction,
+		TalosAction:    TalosPostClusterConnectAction,
+		VClusterAction: VClusterPostClusterConnectAction,
 	},
 }
 
@@ -66,21 +71,14 @@ func RunStage(
 	kindConfig *v1alpha4.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
 	talosConfig *talosconfigmanager.Configs,
+	vclusterConfig *clusterprovisioner.VClusterConfig,
 	role Role,
 	dockerInvoker DockerClientInvoker,
 ) error {
-	// Get mirror specs with defaults applied
-	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager, clusterCfg.Spec.Cluster.Provider)
-	flagSpecs := registry.ParseMirrorSpecs(mirrors)
-
-	// Collect existing specs from hosts.toml files and Talos config
-	existingSpecs, err := collectExistingMirrorSpecs(clusterCfg, talosConfig)
+	mirrorSpecs, err := resolveMirrorSpecs(cmd, cfgManager, clusterCfg, talosConfig)
 	if err != nil {
 		return err
 	}
-
-	// Merge specs: flag specs override existing specs for the same host
-	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
 
 	definition, definitionExists := StageDefinitions[role]
 	if !definitionExists {
@@ -88,12 +86,13 @@ func RunStage(
 	}
 
 	stageCtx := &Context{
-		Cmd:         cmd,
-		ClusterCfg:  clusterCfg,
-		KindConfig:  kindConfig,
-		K3dConfig:   k3dConfig,
-		TalosConfig: talosConfig,
-		MirrorSpecs: mirrorSpecs,
+		Cmd:            cmd,
+		ClusterCfg:     clusterCfg,
+		KindConfig:     kindConfig,
+		K3dConfig:      k3dConfig,
+		TalosConfig:    talosConfig,
+		VClusterConfig: vclusterConfig,
+		MirrorSpecs:    mirrorSpecs,
 	}
 
 	handlers := newRegistryHandlers(
@@ -106,6 +105,7 @@ func RunStage(
 		definition.KindAction(stageCtx),
 		definition.K3dAction(stageCtx),
 		definition.TalosAction(stageCtx),
+		definition.VClusterAction(stageCtx),
 	)
 
 	handler, ok := handlers[clusterCfg.Spec.Cluster.Distribution]
@@ -121,6 +121,25 @@ func RunStage(
 		handler.Action,
 		dockerInvoker,
 	)
+}
+
+// resolveMirrorSpecs merges flag-specified mirror specs with existing specs
+// from hosts.toml files and Talos config.
+func resolveMirrorSpecs(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterCfg *v1alpha1.Cluster,
+	talosConfig *talosconfigmanager.Configs,
+) ([]registry.MirrorSpec, error) {
+	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager, clusterCfg.Spec.Cluster.Provider)
+	flagSpecs := registry.ParseMirrorSpecs(mirrors)
+
+	existingSpecs, err := collectExistingMirrorSpecs(clusterCfg, talosConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return registry.MergeSpecs(existingSpecs, flagSpecs), nil
 }
 
 // collectExistingMirrorSpecs reads existing mirror specs from hosts.toml files
@@ -167,6 +186,7 @@ func newRegistryHandlers(
 	kindAction func(context.Context, client.APIClient) error,
 	k3dAction func(context.Context, client.APIClient) error,
 	talosAction func(context.Context, client.APIClient) error,
+	vclusterAction func(context.Context, client.APIClient) error,
 ) map[v1alpha1.Distribution]Handler {
 	return map[v1alpha1.Distribution]Handler{
 		v1alpha1.DistributionVanilla: {
@@ -195,6 +215,12 @@ func newRegistryHandlers(
 				)
 			},
 			Action: talosAction,
+		},
+		v1alpha1.DistributionVCluster: {
+			Prepare: func() bool {
+				return PrepareVClusterConfigWithMirrors(clusterCfg, mirrorSpecs)
+			},
+			Action: vclusterAction,
 		},
 	}
 }
@@ -243,14 +269,15 @@ func runRegistryStage(
 // StageParams bundles all parameters needed for registry stage execution.
 // This reduces code duplication across registry stage functions.
 type StageParams struct {
-	Cmd           *cobra.Command
-	ClusterCfg    *v1alpha1.Cluster
-	Deps          lifecycle.Deps
-	CfgManager    *ksailconfigmanager.ConfigManager
-	KindConfig    *v1alpha4.Cluster
-	K3dConfig     *v1alpha5.SimpleConfig
-	TalosConfig   *talosconfigmanager.Configs
-	DockerInvoker DockerClientInvoker
+	Cmd            *cobra.Command
+	ClusterCfg     *v1alpha1.Cluster
+	Deps           lifecycle.Deps
+	CfgManager     *ksailconfigmanager.ConfigManager
+	KindConfig     *v1alpha4.Cluster
+	K3dConfig      *v1alpha5.SimpleConfig
+	TalosConfig    *talosconfigmanager.Configs
+	VClusterConfig *clusterprovisioner.VClusterConfig
+	DockerInvoker  DockerClientInvoker
 }
 
 // SetupRegistries creates and configures registry containers before cluster creation.
@@ -283,6 +310,7 @@ func runStageWithParams(params StageParams, role Role) error {
 		params.KindConfig,
 		params.K3dConfig,
 		params.TalosConfig,
+		params.VClusterConfig,
 		role,
 		params.DockerInvoker,
 	)
