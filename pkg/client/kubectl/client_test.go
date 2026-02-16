@@ -389,6 +389,7 @@ func TestCreateGetCommandHasFlags(t *testing.T) {
 		"expected --field-selector flag to be present",
 	)
 	require.NotNil(t, flags.Lookup("show-labels"), "expected --show-labels flag to be present")
+	require.NotNil(t, flags.Lookup("namespace"), "expected --namespace flag to be present")
 }
 
 func TestCreateScaleCommand(t *testing.T) {

@@ -87,9 +87,11 @@ func (i *Importer) validateImportParams(
 	distribution v1alpha1.Distribution,
 	providerType v1alpha1.Provider,
 ) error {
-	// Talos is not supported - it's an immutable OS without shell access
-	// and its Machine API doesn't expose image import functionality
-	if distribution == v1alpha1.DistributionTalos {
+	// Talos and VCluster are not supported - Talos is an immutable OS without shell access,
+	// VCluster (Vind) runs its own containerd inside Docker containers without standard
+	// exec-based image import support.
+	if distribution == v1alpha1.DistributionTalos ||
+		distribution == v1alpha1.DistributionVCluster {
 		return ErrUnsupportedDistribution
 	}
 

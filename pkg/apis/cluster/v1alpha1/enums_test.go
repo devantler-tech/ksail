@@ -26,7 +26,8 @@ func TestDistribution_ValidValues(t *testing.T) {
 	assert.Contains(t, values, "Vanilla")
 	assert.Contains(t, values, "K3s")
 	assert.Contains(t, values, "Talos")
-	assert.Len(t, values, 3)
+	assert.Contains(t, values, "VCluster")
+	assert.Len(t, values, 4)
 }
 
 func TestCNI_Default(t *testing.T) {
@@ -429,6 +430,12 @@ func TestDistribution_ProvidesCSIByDefault(t *testing.T) {
 			provider:     v1alpha1.ProviderHetzner,
 			expected:     true,
 		},
+		{
+			name:         "vcluster_docker_no_csi",
+			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     false,
+		},
 	}
 
 	for _, testCase := range tests {
@@ -472,6 +479,12 @@ func TestDistribution_ProvidesLoadBalancerByDefault(t *testing.T) {
 			name:         "talos_hetzner_provides_loadbalancer",
 			distribution: v1alpha1.DistributionTalos,
 			provider:     v1alpha1.ProviderHetzner,
+			expected:     true,
+		},
+		{
+			name:         "vcluster_docker_provides_loadbalancer",
+			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderDocker,
 			expected:     true,
 		},
 		{

@@ -209,6 +209,7 @@ func TestBuildLocalRegistryURL(t *testing.T) {
 				testCase.localRegistry,
 				testCase.clusterCfg,
 				testCase.clusterName,
+				"", // no registryHostOverride
 			)
 			for _, want := range testCase.wantContains {
 				assert.Contains(t, url, want)
@@ -267,6 +268,7 @@ func TestBuildInstance(t *testing.T) {
 			instance, err := fluxinstaller.BuildInstance(
 				testCase.clusterCfg,
 				testCase.clusterName,
+				"", // no registryHostOverride
 			)
 			require.NoError(t, err)
 			require.NotNil(t, instance)
@@ -503,6 +505,7 @@ func TestEnsureDefaultResources_NilConfig(t *testing.T) {
 		"",
 		nil,
 		"test-cluster",
+		"",   // registryHostOverride
 		true, // artifactPushed
 	)
 
@@ -525,7 +528,7 @@ func TestBuildLocalRegistryURL_CustomPort(t *testing.T) {
 		},
 	}
 
-	url := fluxinstaller.BuildLocalRegistryURL(localRegistry, clusterCfg, "test")
+	url := fluxinstaller.BuildLocalRegistryURL(localRegistry, clusterCfg, "test", "")
 
 	// Should use the resolved host:port from the local registry ref
 	assert.Contains(t, url, "oci://")

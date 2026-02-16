@@ -110,9 +110,10 @@ func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factor
 
 	return clusterprovisioner.DefaultFactory{
 		DistributionConfig: &clusterprovisioner.DistributionConfig{
-			Kind:  ctx.KindConfig,
-			K3d:   ctx.K3dConfig,
-			Talos: ctx.TalosConfig,
+			Kind:     ctx.KindConfig,
+			K3d:      ctx.K3dConfig,
+			Talos:    ctx.TalosConfig,
+			VCluster: ctx.VClusterConfig,
 		},
 	}
 }
@@ -138,12 +139,13 @@ func maybeImportCachedImages(
 		return
 	}
 
-	// Image import is not supported for Talos clusters
-	if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
+	// Image import is not supported for Talos and VCluster clusters
+	if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos ||
+		ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionVCluster {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
-			Content: "image import is not supported for Talos clusters; ignoring --import-images value %q",
-			Args:    []any{importPath},
+			Content: "image import is not supported for %s clusters; ignoring --import-images value %q",
+			Args:    []any{ctx.ClusterCfg.Spec.Cluster.Distribution, importPath},
 			Writer:  cmd.OutOrStderr(),
 		})
 
@@ -187,14 +189,15 @@ func buildRegistryStageParams(
 	localDeps := getLocalRegistryDeps()
 
 	return mirrorregistry.StageParams{
-		Cmd:           cmd,
-		ClusterCfg:    ctx.ClusterCfg,
-		Deps:          deps,
-		CfgManager:    cfgManager,
-		KindConfig:    ctx.KindConfig,
-		K3dConfig:     ctx.K3dConfig,
-		TalosConfig:   ctx.TalosConfig,
-		DockerInvoker: localDeps.DockerInvoker,
+		Cmd:            cmd,
+		ClusterCfg:     ctx.ClusterCfg,
+		Deps:           deps,
+		CfgManager:     cfgManager,
+		KindConfig:     ctx.KindConfig,
+		K3dConfig:      ctx.K3dConfig,
+		TalosConfig:    ctx.TalosConfig,
+		VClusterConfig: ctx.VClusterConfig,
+		DockerInvoker:  localDeps.DockerInvoker,
 	}
 }
 
@@ -404,6 +407,29 @@ func setupK3dLoadBalancer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Simp
 	)
 }
 
+// setupVClusterCNI configures the vCluster to disable flannel when a non-default
+// CNI (Cilium or Calico) is selected. Without this, the vCluster starts flannel,
+// causing conflicts when the custom CNI is installed post-creation.
+func setupVClusterCNI(
+	clusterCfg *v1alpha1.Cluster,
+	vclusterConfig *clusterprovisioner.VClusterConfig,
+) {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionVCluster {
+		return
+	}
+
+	if vclusterConfig == nil {
+		return
+	}
+
+	cni := clusterCfg.Spec.Cluster.CNI
+	if cni != v1alpha1.CNICilium && cni != v1alpha1.CNICalico {
+		return
+	}
+
+	vclusterConfig.DisableFlannel = true
+}
+
 // applyClusterNameOverride updates distribution configs with the cluster name override.
 // This function mutates the distribution config pointers in ctx to apply the --name flag value.
 // The name override takes highest priority over distribution config or context-derived names.
@@ -434,6 +460,11 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 		}
 
 		ctx.TalosConfig = newConfig
+	}
+
+	// Update VCluster config
+	if ctx.VClusterConfig != nil {
+		ctx.VClusterConfig.Name = name
 	}
 
 	// Update the ksail.yaml context to match the distribution pattern
@@ -510,6 +541,12 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 		return k3dconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.K3dConfig)
 	case v1alpha1.DistributionTalos:
 		return talosconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.TalosConfig)
+	case v1alpha1.DistributionVCluster:
+		if ctx.VClusterConfig != nil && ctx.VClusterConfig.Name != "" {
+			return ctx.VClusterConfig.Name
+		}
+
+		return "vcluster-default"
 	default:
 		// Fallback to context name or default
 		if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
