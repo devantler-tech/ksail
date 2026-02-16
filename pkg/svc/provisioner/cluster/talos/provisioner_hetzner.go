@@ -270,7 +270,10 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 	// Prepare and apply configs
 	err = p.prepareAndApplyConfigs(ctx, clusterName, controlPlaneServers, workerServers, allServers)
 	if err != nil {
-		return fmt.Errorf("failed while waiting for Talos API or applying machine configuration: %w", err)
+		return fmt.Errorf(
+			"failed while waiting for Talos API or applying machine configuration: %w",
+			err,
+		)
 	}
 
 	// Bootstrap, save configs, and wait for cluster readiness
