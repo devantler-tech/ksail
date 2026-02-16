@@ -269,7 +269,7 @@ npm run dev                            # Test locally (if needed)
   - `KindClusterProvisioner` (`pkg/svc/provisioner/cluster/kind/`): Uses Kind SDK for standard upstream Kubernetes
   - `K3dClusterProvisioner` (`pkg/svc/provisioner/cluster/k3d/`): Uses K3d via Cobra/SDK for lightweight K3s clusters
   - `TalosProvisioner` (`pkg/svc/provisioner/cluster/talos/`): Uses Talos SDK for immutable Talos Linux clusters
-  - `VClusterProvisioner` (`pkg/svc/provisioner/cluster/vcluster/`): Uses Vind SDK for virtual Kubernetes clusters
+  - `VClusterProvisioner` (`pkg/svc/provisioner/cluster/vcluster/`): Uses vCluster Go SDK (Vind Docker driver) for virtual Kubernetes clusters
 
 **Distribution Names (user-facing):**
 
