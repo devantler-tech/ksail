@@ -11,7 +11,7 @@ KSail is a Go-based CLI application that provides a unified SDK for spinning up 
 **CRITICAL**: Install Docker before using KSail:
 
 - Docker is the only required external dependency for local clusters (the Docker provider)
-- KSail embeds kubectl, helm, kind, k3d, flux, and argocd as Go libraries
+- KSail embeds kubectl, helm, kind, k3d, vcluster, flux, and argocd as Go libraries
 - No separate installation of these tools is needed
 - The Hetzner provider is supported for Talos clusters and requires cloud access/credentials (e.g., `HCLOUD_TOKEN`)
 
@@ -72,6 +72,7 @@ cd /path/to/repo
 ./ksail --help                    # Show all commands
 ./ksail cluster init --help       # Show init options
 ./ksail cluster init              # Initialize default project
+./ksail cluster init --distribution VCluster  # Initialize VCluster project
 ./ksail cluster create            # Create cluster (requires Docker)
 ./ksail cluster update            # Update cluster configuration
 ./ksail cluster info              # Show cluster info
@@ -144,7 +145,7 @@ go run main.go --help
 │   │   ├── lifecycle/      # Cluster lifecycle orchestration
 │   │   ├── setup/          # Component setup (CNI, mirror registries, etc.)
 │   │   └── ui/             # Terminal UI (ASCII art, chat TUI, confirmations)
-│   ├── client/             # Embedded tool clients (kubectl, helm, flux, etc.)
+│   ├── client/             # Embedded tool clients (kubectl, helm, flux, vcluster, etc.)
 │   ├── di/                 # Dependency injection
 │   ├── envvar/             # Environment variable utilities
 │   ├── fsutil/             # Filesystem utilities (includes configmanager)
@@ -157,7 +158,7 @@ go run main.go --help
 │       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
 │       ├── mcp/            # Model Context Protocol server
 │       ├── provider/       # Infrastructure providers (docker, hetzner)
-│       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos)
+│       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos, VCluster)
 │       └── image/          # Container image export/import services
 ├── docs/                   # Astro documentation source
 │   ├── dist/               # Generated site (after npm run build)
@@ -171,7 +172,7 @@ go run main.go --help
 
 ### Key Configuration Files
 
-- **go.mod**: Go module dependencies (includes embedded kubectl, helm, kind, k3d, flux, argocd)
+- **go.mod**: Go module dependencies (includes embedded kubectl, helm, kind, k3d, vcluster, flux, argocd)
 - **package.json**: Node.js dependencies for Astro documentation
 - **.github/workflows/\*.yaml**: CI/CD pipelines
 
@@ -203,6 +204,12 @@ Use the CLI help output as the source of truth:
 ```bash
 ksail cluster init --help
 # See also: docs/src/content/docs/cli-flags/cluster/cluster-init.mdx
+
+# Supported distributions:
+# --distribution Vanilla   # Standard Kubernetes via Kind
+# --distribution K3s       # Lightweight K3s via K3d
+# --distribution Talos     # Immutable Talos Linux
+# --distribution VCluster  # Virtual clusters via Vind
 ```
 
 ### Troubleshooting Build Issues
@@ -262,26 +269,28 @@ npm run dev                            # Test locally (if needed)
   - `KindClusterProvisioner` (`pkg/svc/provisioner/cluster/kind/`): Uses Kind SDK for standard upstream Kubernetes
   - `K3dClusterProvisioner` (`pkg/svc/provisioner/cluster/k3d/`): Uses K3d via Cobra/SDK for lightweight K3s clusters
   - `TalosProvisioner` (`pkg/svc/provisioner/cluster/talos/`): Uses Talos SDK for immutable Talos Linux clusters
+  - `VClusterProvisioner` (`pkg/svc/provisioner/cluster/vcluster/`): Uses Vind SDK for virtual Kubernetes clusters
 
 **Distribution Names (user-facing):**
 
-| Distribution | Tool  | Provider        | Description                  |
-|--------------|-------|-----------------|------------------------------|
-| `Vanilla`    | Kind  | Docker          | Standard upstream Kubernetes |
-| `K3s`        | K3d   | Docker          | Lightweight K3s in Docker    |
-| `Talos`      | Talos | Docker, Hetzner | Immutable Talos Linux        |
+| Distribution | Tool    | Provider | Description                      |
+|--------------|---------|----------|----------------------------------|
+| `Vanilla`    | Kind    | Docker   | Standard upstream Kubernetes     |
+| `K3s`        | K3d     | Docker   | Lightweight K3s in Docker        |
+| `Talos`      | Talos   | Docker, Hetzner | Immutable Talos Linux   |
+| `VCluster`   | Vind    | Docker   | Virtual clusters in Kubernetes   |
 
 **Key Packages:**
 
 - `pkg/toolgen/`: AI tool generation utilities for integrating with AI assistants
 - `pkg/apis/`: API types, schemas, and enums (`pkg/apis/cluster/v1alpha1/enums.go` defines Distribution values)
-- `pkg/client/`: Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
+- `pkg/client/`: Embedded tool clients (kubectl, helm, kind, k3d, vcluster, flux, argocd)
 - `pkg/svc/`: Services including installers, providers, and provisioners
   - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation
   - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.)
   - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner)
-  - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos)
+  - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster)
   - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
 - `pkg/client/reconciler/`: Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - `pkg/di/`: Dependency injection for wiring components
@@ -296,14 +305,15 @@ npm run dev                            # Test locally (if needed)
 ## Active Technologies
 
 - Go 1.26.0+ (see `go.mod`)
-- Embedded Kubernetes tools (kubectl, helm, kind, k3d, flux, argocd) as Go libraries
+- Embedded Kubernetes tools (kubectl, helm, kind, k3d, vcluster, flux, argocd) as Go libraries
 - Docker as the only external dependency
 - Astro with Starlight for documentation (Node.js-based)
 
 ## Recent Changes
 
 - Flattened package structure: moved from nested to flat organization in `pkg/`
-- **Provider/Provisioner Architecture**: Separated infrastructure providers (Docker, Hetzner) from distribution provisioners (Vanilla, K3s, Talos)
+- **Provider/Provisioner Architecture**: Separated infrastructure providers (Docker, Hetzner) from distribution provisioners (Vanilla, K3s, Talos, VCluster)
+- **VCluster Support**: Added VCluster as the fourth supported distribution via Vind provisioner, enabling virtual Kubernetes clusters within Docker
 - **Hetzner Provider**: Added support for running Talos clusters on Hetzner Cloud
 - **Registry Authentication**: Added support for external registries with username/password authentication
 - **Default Registry Mirrors**: Enabled docker.io and ghcr.io mirrors by default to avoid rate limits and improve CI/CD performance (`pkg/cli/setup/mirrorregistry/defaults.go`)
