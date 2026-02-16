@@ -54,7 +54,7 @@ go tool pprof mem.prof
 ### Encryption Benchmarks
 
 | Benchmark                  | Description                     | Typical Use Case         |
-| -------------------------- | ------------------------------- | ------------------------ |
+|----------------------------|---------------------------------|--------------------------|
 | `BenchmarkEncrypt/Minimal` | Single key-value (1 key)        | Simple password/token    |
 | `BenchmarkEncrypt/Small`   | Kubernetes Secret (5 keys)      | Basic app secrets        |
 | `BenchmarkEncrypt/Medium`  | Multi-service secrets (20 keys) | Production configuration |
@@ -64,7 +64,7 @@ go tool pprof mem.prof
 ### Decryption Benchmarks
 
 | Benchmark                      | Description                    | Notes               |
-| ------------------------------ | ------------------------------ | ------------------- |
+|--------------------------------|--------------------------------|---------------------|
 | `BenchmarkDecrypt/Minimal`     | Decrypt minimal secret         | Fastest scenario    |
 | `BenchmarkDecrypt/Small`       | Decrypt small secret           | Common case         |
 | `BenchmarkDecrypt/Medium`      | Decrypt medium secret          | Production workload |
@@ -75,7 +75,7 @@ go tool pprof mem.prof
 ### Round-trip Benchmarks
 
 | Benchmark                    | Description                | Use Case                 |
-| ---------------------------- | -------------------------- | ------------------------ |
+|------------------------------|----------------------------|--------------------------|
 | `BenchmarkRoundtrip_Minimal` | Full encrypt-decrypt cycle | Edit workflow simulation |
 
 ## Baseline Results
@@ -142,7 +142,7 @@ Based on typical KSail usage patterns:
 ### User Experience Targets
 
 | Operation | Size           | Target | Rationale                    |
-| --------- | -------------- | ------ | ---------------------------- |
+|-----------|----------------|--------|------------------------------|
 | Encrypt   | Minimal-Medium | <50ms  | Interactive CLI feedback     |
 | Decrypt   | Minimal-Medium | <30ms  | Fast secret access           |
 | Roundtrip | Small          | <80ms  | Edit workflow responsiveness |
