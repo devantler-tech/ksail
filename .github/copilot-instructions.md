@@ -313,7 +313,7 @@ npm run dev                            # Test locally (if needed)
 
 - Flattened package structure: moved from nested to flat organization in `pkg/`
 - **Provider/Provisioner Architecture**: Separated infrastructure providers (Docker, Hetzner) from distribution provisioners (Vanilla, K3s, Talos, VCluster)
-- **VCluster Support**: Added VCluster as the fourth supported distribution via Vind provisioner, enabling virtual Kubernetes clusters within Docker
+- **VCluster Support**: Added VCluster as the fourth supported distribution via VClusterProvisioner, enabling virtual Kubernetes clusters within Docker using the Vind driver
 - **Hetzner Provider**: Added support for running Talos clusters on Hetzner Cloud
 - **Registry Authentication**: Added support for external registries with username/password authentication
 - **Default Registry Mirrors**: Enabled docker.io and ghcr.io mirrors by default to avoid rate limits and improve CI/CD performance (`pkg/cli/setup/mirrorregistry/defaults.go`)
