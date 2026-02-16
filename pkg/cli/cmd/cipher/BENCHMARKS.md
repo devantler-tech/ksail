@@ -258,5 +258,4 @@ To track performance over time:
 ## References
 
 - [SOPS Documentation](https://github.com/getsops/sops)
-- [Go Benchmarking Guide](https://go.dev/blog/benchmarks)
 - [KSail Performance Optimization Guide](/.github/instructions/go-performance-optimization.md)
