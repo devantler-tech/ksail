@@ -55,30 +55,51 @@ func (p *Provisioner) createDockerCluster(ctx context.Context, clusterName strin
 }
 
 // deleteDockerCluster deletes a Talos-in-Docker cluster using the Talos SDK.
-//
-//nolint:cyclop,funlen // Inherent complexity from cluster cleanup with volume collection and config cleanup
 func (p *Provisioner) deleteDockerCluster(ctx context.Context, clusterName string) error {
 	_, err := p.validateClusterOperation(ctx, clusterName)
 	if err != nil {
 		return err
 	}
 
-	// Collect volumes used by Talos containers BEFORE destroying the cluster
-	// These are anonymous volumes that the Talos SDK doesn't clean up
-	containers, err := p.listTalosContainers(ctx, clusterName)
+	// Collect volumes before destroying cluster (they won't be accessible after)
+	volumes, err := p.collectClusterVolumes(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to list Talos containers: %w", err)
+		return err
 	}
 
-	volumes := p.collectContainerVolumes(ctx, containers)
+	// Destroy cluster using Talos SDK
+	err = p.destroyClusterWithProvisioner(ctx, clusterName)
+	if err != nil {
+		return err
+	}
 
-	// Get state directory for cluster state
+	// Clean up volumes and config files
+	p.cleanupVolumesAfterDestroy(ctx, volumes)
+	p.cleanupConfigFiles(clusterName)
+
+	_, _ = fmt.Fprintf(p.logWriter, "Successfully deleted Talos cluster %q\n", clusterName)
+
+	return nil
+}
+
+// collectClusterVolumes gathers all volumes used by Talos containers before cluster deletion.
+// These are anonymous volumes that the Talos SDK doesn't clean up automatically.
+func (p *Provisioner) collectClusterVolumes(ctx context.Context, clusterName string) ([]string, error) {
+	containers, err := p.listTalosContainers(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Talos containers: %w", err)
+	}
+
+	return p.collectContainerVolumes(ctx, containers), nil
+}
+
+// destroyClusterWithProvisioner reflects cluster state and destroys it using the Talos SDK.
+func (p *Provisioner) destroyClusterWithProvisioner(ctx context.Context, clusterName string) error {
 	stateDir, err := getStateDirectory()
 	if err != nil {
 		return fmt.Errorf("failed to get state directory: %w", err)
 	}
 
-	// Create Talos provisioner
 	talosProvisioner, err := p.provisionerFactory(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create Talos provisioner: %w", err)
@@ -86,13 +107,11 @@ func (p *Provisioner) deleteDockerCluster(ctx context.Context, clusterName strin
 
 	defer func() { _ = talosProvisioner.Close() }()
 
-	// Reflect to get cluster object from existing state
 	cluster, err := talosProvisioner.Reflect(ctx, clusterName, stateDir)
 	if err != nil {
 		return fmt.Errorf("failed to reflect cluster state: %w", err)
 	}
 
-	// Destroy the cluster
 	_, _ = fmt.Fprintf(p.logWriter, "Deleting Talos cluster %q...\n", clusterName)
 
 	err = talosProvisioner.Destroy(ctx, cluster, provision.WithLogWriter(p.logWriter))
@@ -100,42 +119,39 @@ func (p *Provisioner) deleteDockerCluster(ctx context.Context, clusterName strin
 		return fmt.Errorf("failed to destroy cluster: %w", err)
 	}
 
-	// Clean up the anonymous volumes used by Talos containers
-	// These are created by Docker for Talos node data and are not cleaned up by the Talos SDK
+	return nil
+}
+
+// cleanupVolumesAfterDestroy removes anonymous Docker volumes used by Talos containers.
+func (p *Provisioner) cleanupVolumesAfterDestroy(ctx context.Context, volumes []string) {
 	if len(volumes) > 0 {
 		_, _ = fmt.Fprintf(p.logWriter, "Cleaning up %d Talos node volumes...\n", len(volumes))
 		p.removeVolumes(ctx, volumes)
 	}
+}
 
-	// Clean up kubeconfig - remove only the context for this cluster
+// cleanupConfigFiles removes kubeconfig and talosconfig contexts for the deleted cluster.
+// Logs warnings but doesn't fail the delete operation if cleanup fails.
+func (p *Provisioner) cleanupConfigFiles(clusterName string) {
 	if p.options.KubeconfigPath != "" {
-		cleanupErr := p.cleanupKubeconfig(clusterName)
-		if cleanupErr != nil {
-			// Log warning but don't fail the delete operation
+		if err := p.cleanupKubeconfig(clusterName); err != nil {
 			_, _ = fmt.Fprintf(
 				p.logWriter,
 				"Warning: failed to clean up kubeconfig: %v\n",
-				cleanupErr,
+				err,
 			)
 		}
 	}
 
-	// Clean up talosconfig - remove only the context for this cluster
 	if p.options.TalosconfigPath != "" {
-		cleanupErr := p.cleanupTalosconfig(clusterName)
-		if cleanupErr != nil {
-			// Log warning but don't fail the delete operation
+		if err := p.cleanupTalosconfig(clusterName); err != nil {
 			_, _ = fmt.Fprintf(
 				p.logWriter,
 				"Warning: failed to clean up talosconfig: %v\n",
-				cleanupErr,
+				err,
 			)
 		}
 	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "Successfully deleted Talos cluster %q\n", clusterName)
-
-	return nil
 }
 
 // listTalosContainers lists all containers for a specific Talos cluster.
@@ -265,12 +281,42 @@ func (p *Provisioner) bootstrapAndSaveKubeconfig(
 	cluster provision.Cluster,
 	configBundle *bundle.Bundle,
 ) error {
+	// Configure endpoints for Docker-in-VM environments (macOS, Windows)
+	talosConfig, kubernetesEndpoint, err := p.setupClusterEndpoints(ctx, cluster, configBundle)
+	if err != nil {
+		return err
+	}
+
+	// Create cluster access adapter
+	clusterAccess, err := p.createClusterAccess(cluster, talosConfig, kubernetesEndpoint)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = clusterAccess.Close() }()
+
+	// Bootstrap cluster and wait for readiness
+	err = p.bootstrapAndWaitForReady(ctx, clusterAccess)
+	if err != nil {
+		return err
+	}
+
+	// Fetch and save kubeconfig
+	return p.fetchAndSaveKubeconfig(ctx, clusterAccess)
+}
+
+// setupClusterEndpoints configures Talos and Kubernetes API endpoints for Docker-in-VM environments.
+// Returns the modified talosconfig and kubernetes endpoint for cluster access.
+func (p *Provisioner) setupClusterEndpoints(
+	ctx context.Context,
+	cluster provision.Cluster,
+	configBundle *bundle.Bundle,
+) (*bundle.TalosConfig, string, error) {
 	// Get the mapped Talos API endpoint for Docker-in-VM environments (macOS, Windows).
 	// On these platforms, the container's internal IP is not accessible from the host,
 	// so we need to use 127.0.0.1 with the mapped port.
 	mappedEndpoint, err := p.getMappedTalosAPIEndpoint(ctx, cluster.Info().ClusterName)
 	if err != nil {
-		return fmt.Errorf("failed to get mapped Talos API endpoint: %w", err)
+		return nil, "", fmt.Errorf("failed to get mapped Talos API endpoint: %w", err)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Using Talos API endpoint: %s\n", mappedEndpoint)
@@ -288,11 +334,20 @@ func (p *Provisioner) bootstrapAndSaveKubeconfig(
 	// (https://127.0.0.1:<mapped-port>) when the cluster is created.
 	kubernetesEndpoint := cluster.Info().KubernetesEndpoint
 	if kubernetesEndpoint == "" {
-		return ErrMissingKubernetesEndpoint
+		return nil, "", ErrMissingKubernetesEndpoint
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Using Kubernetes API endpoint: %s\n", kubernetesEndpoint)
 
+	return talosConfig, kubernetesEndpoint, nil
+}
+
+// createClusterAccess creates an access adapter for cluster operations with configured endpoints.
+func (p *Provisioner) createClusterAccess(
+	cluster provision.Cluster,
+	talosConfig *bundle.TalosConfig,
+	kubernetesEndpoint string,
+) (*access.Adapter, error) {
 	// Create access adapter for cluster operations.
 	// WithKubernetesEndpoint sets ForceEndpoint which is used to rewrite the kubeconfig.
 	clusterAccess := access.NewAdapter(
@@ -301,12 +356,15 @@ func (p *Provisioner) bootstrapAndSaveKubeconfig(
 		provision.WithKubernetesEndpoint(kubernetesEndpoint),
 	)
 
-	defer func() { _ = clusterAccess.Close() }()
+	return clusterAccess, nil
+}
 
+// bootstrapAndWaitForReady bootstraps the cluster and waits for all components to be ready.
+func (p *Provisioner) bootstrapAndWaitForReady(ctx context.Context, clusterAccess *access.Adapter) error {
 	// Bootstrap the cluster
 	_, _ = fmt.Fprintf(p.logWriter, "Bootstrapping cluster...\n")
 
-	err = clusterAccess.Bootstrap(ctx, p.logWriter)
+	err := clusterAccess.Bootstrap(ctx, p.logWriter)
 	if err != nil {
 		return fmt.Errorf("bootstrap failed: %w", err)
 	}
@@ -331,7 +389,11 @@ func (p *Provisioner) bootstrapAndSaveKubeconfig(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Cluster is ready\n")
 
-	// Fetch kubeconfig from cluster
+	return nil
+}
+
+// fetchAndSaveKubeconfig retrieves the kubeconfig from the cluster and writes it to disk.
+func (p *Provisioner) fetchAndSaveKubeconfig(ctx context.Context, clusterAccess *access.Adapter) error {
 	_, _ = fmt.Fprintf(p.logWriter, "Fetching kubeconfig...\n")
 
 	kubeconfig, err := clusterAccess.Kubeconfig(ctx)
@@ -347,12 +409,7 @@ func (p *Provisioner) bootstrapAndSaveKubeconfig(
 	}
 
 	// Write kubeconfig to the configured path
-	err = p.writeKubeconfig(kubeconfig)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return p.writeKubeconfig(kubeconfig)
 }
 
 // provisionCluster creates the Talos cluster using the SDK.
