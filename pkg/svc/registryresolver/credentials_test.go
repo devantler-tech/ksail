@@ -362,13 +362,22 @@ func TestParseDockerConfigCredentials_DockerHubExactMatchPreferred(t *testing.T)
 	host := "docker.io"
 	exactUsername := "exact-user"
 	exactPassword := "exact-pass"
+	canonicalUsername := "canonical-user"
+	canonicalPassword := "canonical-pass"
 
-	// Create Docker config JSON with exact docker.io key
-	auth := base64.StdEncoding.EncodeToString([]byte(exactUsername + ":" + exactPassword))
+	// Create Docker config JSON with both exact docker.io key and Docker Hub canonical key.
+	// When host is docker.io, the exact match should be preferred over the canonical key.
+	exactAuth := base64.StdEncoding.EncodeToString([]byte(exactUsername + ":" + exactPassword))
+	canonicalAuth := base64.StdEncoding.EncodeToString(
+		[]byte(canonicalUsername + ":" + canonicalPassword),
+	)
 	config := map[string]any{
 		"auths": map[string]any{
 			"docker.io": map[string]any{
-				"auth": auth,
+				"auth": exactAuth,
+			},
+			"https://index.docker.io/v1/": map[string]any{
+				"auth": canonicalAuth,
 			},
 		},
 	}

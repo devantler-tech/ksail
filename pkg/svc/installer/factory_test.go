@@ -6,6 +6,7 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	"github.com/stretchr/testify/assert"
@@ -23,6 +24,25 @@ func newTestFactory(
 	return installer.NewFactory(
 		helmMock,
 		nil, // dockerClient — nil is fine for factory creation logic tests
+		"/tmp/kubeconfig",
+		"test-context",
+		5*time.Minute,
+		distribution,
+	)
+}
+
+func newTestFactoryWithDockerClient(
+	t *testing.T,
+	distribution v1alpha1.Distribution,
+) *installer.Factory {
+	t.Helper()
+
+	helmMock := helm.NewMockInterface(t)
+	dockerMock := docker.NewMockAPIClient(t)
+
+	return installer.NewFactory(
+		helmMock,
+		dockerMock,
 		"/tmp/kubeconfig",
 		"test-context",
 		5*time.Minute,
@@ -369,7 +389,7 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 func TestFactory_CreateInstallersForConfig_LoadBalancer_VanillaDocker(t *testing.T) {
 	t.Parallel()
 
-	factory := newTestFactory(t, v1alpha1.DistributionVanilla)
+	factory := newTestFactoryWithDockerClient(t, v1alpha1.DistributionVanilla)
 	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
 		clusterSpec.LoadBalancer = v1alpha1.LoadBalancerEnabled
 		clusterSpec.Distribution = v1alpha1.DistributionVanilla
