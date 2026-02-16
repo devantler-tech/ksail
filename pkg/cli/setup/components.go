@@ -61,13 +61,18 @@ type InstallerFactories struct {
 	// EnsureFluxResources enforces default Flux resources post-install.
 	// If artifactPushed is false, the function will skip waiting for FluxInstance readiness
 	// because the artifact doesn't exist yet (will be pushed later via workload push).
+	// registryHostOverride replaces the default Docker container name in the OCI URL
+	// when non-empty.
 	EnsureFluxResources func(
-		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string, artifactPushed bool,
+		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster,
+		clusterName string, registryHostOverride string, artifactPushed bool,
 	) error
 	// SetupFluxInstance creates the FluxInstance CR without waiting for readiness.
+	// registryHostOverride replaces the default Docker container name in the OCI URL
+	// when non-empty.
 	// Use with WaitForFluxReady after pushing artifacts.
 	SetupFluxInstance func(
-		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string,
+		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string, registryHostOverride string,
 	) error
 	// WaitForFluxReady waits for the FluxInstance to be ready.
 	// Call after pushing OCI artifacts.

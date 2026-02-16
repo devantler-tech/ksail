@@ -22,12 +22,19 @@ func VClusterRegistryAction(ctx *Context) func(context.Context, client.APIClient
 	}
 }
 
+// vclusterNetworkPrefix is the Docker network name prefix used by VCluster.
+const vclusterNetworkPrefix = "vcluster."
+
 // VClusterNetworkAction returns the action function for VCluster network creation.
-// For VCluster, the network is created by the VCluster SDK during cluster creation,
-// so this is a no-op. The network name is vcluster.<cluster-name>.
-func VClusterNetworkAction(_ *Context) func(context.Context, client.APIClient) error {
-	return func(_ context.Context, _ client.APIClient) error {
-		return nil
+// Pre-creates the Docker network so mirror registries can be connected before
+// cluster creation. The VCluster SDK reuses an existing network with this name.
+func VClusterNetworkAction(ctx *Context) func(context.Context, client.APIClient) error {
+	return func(execCtx context.Context, dockerClient client.APIClient) error {
+		clusterName := resolveVClusterClusterName(ctx.VClusterConfig)
+		networkName := vclusterNetworkPrefix + clusterName
+		writer := ctx.Cmd.OutOrStdout()
+
+		return EnsureDockerNetworkExists(execCtx, dockerClient, networkName, "", writer)
 	}
 }
 

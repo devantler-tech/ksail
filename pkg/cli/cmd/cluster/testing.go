@@ -148,7 +148,7 @@ func SetLocalRegistryServiceFactoryForTests(factory localregistry.ServiceFactory
 
 // SetSetupFluxInstanceForTests overrides the FluxInstance setup function.
 func SetSetupFluxInstanceForTests(
-	fn func(context.Context, string, *v1alpha1.Cluster, string) error,
+	fn func(context.Context, string, *v1alpha1.Cluster, string, string) error,
 ) func() {
 	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
 		f.SetupFluxInstance = fn

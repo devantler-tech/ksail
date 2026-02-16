@@ -447,8 +447,15 @@ func configureFlux(
 		notify.Message{Type: notify.ActivityType, Content: fluxResourcesActivity, Writer: writer},
 	)
 
+	// For VCluster, resolve the registry container's Docker IP since pods inside
+	// VCluster use CoreDNS which cannot resolve Docker container names.
+	registryHost, resolveErr := resolveRegistryHost(ctx, clusterCfg, clusterName)
+	if resolveErr != nil {
+		return fmt.Errorf("resolve registry host for flux: %w", resolveErr)
+	}
+
 	// Step 1: Setup FluxInstance CR (does not wait for readiness)
-	err := factories.SetupFluxInstance(ctx, kubeconfig, clusterCfg, clusterName)
+	err := factories.SetupFluxInstance(ctx, kubeconfig, clusterCfg, clusterName, registryHost)
 	if err != nil {
 		return fmt.Errorf("failed to setup FluxInstance: %w", err)
 	}

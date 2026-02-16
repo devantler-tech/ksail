@@ -59,9 +59,10 @@ var loadRESTConfig = func(kubeconfig string) (*rest.Config, error) {
 // setupParams holds the components needed for Flux setup operations.
 // Context is passed separately to setupFluxCore to avoid embedding it in a struct.
 type setupParams struct {
-	restConfig  *rest.Config
-	clusterCfg  *v1alpha1.Cluster
-	clusterName string
+	restConfig           *rest.Config
+	clusterCfg           *v1alpha1.Cluster
+	clusterName          string
+	registryHostOverride string
 }
 
 // setupFluxCore performs the common Flux setup: secret creation, FluxInstance creation, and OCIRepository patching.
@@ -79,7 +80,7 @@ func setupFluxCore(ctx context.Context, params setupParams) error {
 		fluxAPIAvailabilityPollInterval,
 	)
 
-	err = fluxMgr.setup(ctx, params.clusterCfg, params.clusterName)
+	err = fluxMgr.setup(ctx, params.clusterCfg, params.clusterName, params.registryHostOverride)
 	if err != nil {
 		return err
 	}
@@ -104,6 +105,8 @@ func setupFluxCore(ctx context.Context, params setupParams) error {
 // bootstrap controllers and sync from the local OCI registry.
 // If artifactPushed is false, the function will skip waiting for FluxInstance readiness
 // because the artifact doesn't exist yet (will be pushed later via workload push).
+// registryHostOverride replaces the default Docker container name in the OCI URL
+// when non-empty. Pass empty string to use the default container name.
 //
 //nolint:contextcheck // context passed from caller and used in nested functions
 func EnsureDefaultResources(
@@ -111,6 +114,7 @@ func EnsureDefaultResources(
 	kubeconfig string,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	registryHostOverride string,
 	artifactPushed bool,
 ) error {
 	if clusterCfg == nil {
@@ -127,9 +131,10 @@ func EnsureDefaultResources(
 	}
 
 	err = setupFluxCore(ctx, setupParams{
-		restConfig:  restConfig,
-		clusterCfg:  clusterCfg,
-		clusterName: clusterName,
+		restConfig:           restConfig,
+		clusterCfg:           clusterCfg,
+		clusterName:          clusterName,
+		registryHostOverride: registryHostOverride,
 	})
 	if err != nil {
 		return err
@@ -156,6 +161,8 @@ func EnsureDefaultResources(
 
 // SetupInstance creates the FluxInstance CR and configures OCIRepository settings.
 // This does NOT wait for FluxInstance to be ready - use WaitForFluxReady after pushing artifacts.
+// registryHostOverride replaces the default Docker container name in the OCI URL
+// when non-empty. Pass empty string to use the default container name.
 // Returns error if setup fails.
 //
 //nolint:contextcheck // context passed from caller and used in nested functions
@@ -164,6 +171,7 @@ func SetupInstance(
 	kubeconfig string,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	registryHostOverride string,
 ) error {
 	if clusterCfg == nil {
 		return errInvalidClusterConfig
@@ -179,9 +187,10 @@ func SetupInstance(
 	}
 
 	return setupFluxCore(ctx, setupParams{
-		restConfig:  restConfig,
-		clusterCfg:  clusterCfg,
-		clusterName: clusterName,
+		restConfig:           restConfig,
+		clusterCfg:           clusterCfg,
+		clusterName:          clusterName,
+		registryHostOverride: registryHostOverride,
 	})
 }
 
