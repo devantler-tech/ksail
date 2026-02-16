@@ -284,7 +284,7 @@ npm run dev                            # Test locally (if needed)
 
 - `pkg/toolgen/`: AI tool generation utilities for integrating with AI assistants
 - `pkg/apis/`: API types, schemas, and enums (`pkg/apis/cluster/v1alpha1/enums.go` defines Distribution values)
-- `pkg/client/`: Embedded tool clients (kubectl, helm, flux, argocd, etc.)
+- `pkg/client/`: Embedded tool clients (kubectl, helm, flux, argocd); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`.
 - `pkg/svc/`: Services including installers, providers, and provisioners
   - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation
   - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.)
