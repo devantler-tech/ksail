@@ -47,10 +47,13 @@ func newFluxInstanceManager(
 }
 
 // setup waits for the FluxInstance CRD, creates the client, and upserts the FluxInstance.
+// registryHostOverride replaces the default Docker container name in the OCI URL
+// when non-empty. Pass empty string to use the default container name.
 func (m *instanceManager) setup(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	registryHostOverride string,
 ) error {
 	// Wait for FluxInstance API to be fully ready
 	err := m.apiWaiter.waitForAPIReady(ctx, fluxInstanceGroupVersion, fluxInstanceCRDName)
@@ -71,7 +74,7 @@ func (m *instanceManager) setup(
 	case <-time.After(apiStabilizationDelay):
 	}
 
-	fluxInstance, err := buildInstance(clusterCfg, clusterName)
+	fluxInstance, err := buildInstance(clusterCfg, clusterName, registryHostOverride)
 	if err != nil {
 		return err
 	}
@@ -247,7 +250,13 @@ func (m *instanceManager) createAndVerify(
 }
 
 // buildInstance constructs a FluxInstance resource from cluster configuration.
-func buildInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInstance, error) {
+// registryHostOverride replaces the default Docker container name when non-empty.
+// This is needed for VCluster where pods cannot resolve Docker container names.
+func buildInstance(
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+	registryHostOverride string,
+) (*FluxInstance, error) {
 	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 
 	var repoURL, pullSecret, tag string
@@ -255,7 +264,9 @@ func buildInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInsta
 	if localRegistry.IsExternal() {
 		repoURL, pullSecret, tag = buildExternalRegistryURL(localRegistry)
 	} else {
-		repoURL = buildLocalRegistryURL(localRegistry, clusterCfg, clusterName)
+		repoURL = buildLocalRegistryURL(
+			localRegistry, clusterCfg, clusterName, registryHostOverride,
+		)
 	}
 
 	// Use configured tag if provided, otherwise default
@@ -309,10 +320,14 @@ func buildExternalRegistryURL(localRegistry v1alpha1.LocalRegistry) (string, str
 }
 
 // buildLocalRegistryURL builds the OCI URL for a local registry.
+// registryHostOverride replaces the default Docker container name when non-empty.
+// This is needed for VCluster where pods use CoreDNS which cannot resolve
+// Docker container names.
 func buildLocalRegistryURL(
 	localRegistry v1alpha1.LocalRegistry,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	registryHostOverride string,
 ) string {
 	sourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
 	if sourceDir == "" {
@@ -322,6 +337,12 @@ func buildLocalRegistryURL(
 	projectName := registry.SanitizeRepoName(sourceDir)
 	repoHost := registry.BuildLocalRegistryName(clusterName)
 	repoPort := dockerclient.DefaultRegistryPort
+
+	// Use the IP override for distributions where CoreDNS cannot resolve
+	// Docker container names (e.g., VCluster).
+	if override := strings.TrimSpace(registryHostOverride); override != "" {
+		repoHost = override
+	}
 
 	if !localRegistry.Enabled() {
 		hostPort := localRegistry.ResolvedPort()

@@ -69,20 +69,39 @@ Examples:
 Flags:
       --all-containers                     Get all containers' logs in the pod(s).
       --all-pods                           Get logs from all pod(s). Sets prefix to true.
+      --as string                          Username to impersonate for the operation. User could be a regular user or a service account in a namespace.
+      --as-group stringArray               Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
+      --as-uid string                      UID to impersonate for the operation.
+      --as-user-extra stringArray          User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
+      --cache-dir string                   Default cache directory (default "~/.kube/cache")
+      --certificate-authority string       Path to a cert file for the certificate authority
+      --client-certificate string          Path to a client certificate file for TLS
+      --client-key string                  Path to a client key file for TLS
+      --cluster string                     The name of the kubeconfig cluster to use
   -c, --container string                   Print the logs of this container
+      --context string                     The name of the kubeconfig context to use
+      --disable-compression                If true, opt-out of response compression for all requests to the server
   -f, --follow                             Specify if the logs should be streamed.
       --ignore-errors                      If watching / following pod logs, allow for any errors that occur to be non-fatal
+      --insecure-skip-tls-verify           If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
       --insecure-skip-tls-verify-backend   Skip verifying the identity of the kubelet that logs are requested from.  In theory, an attacker could provide invalid log content back. You might want to use this if your kubelet serving certificates have expired.
+      --kubeconfig string                  Path to the kubeconfig file to use for CLI requests. (default "~/.kube/config")
       --limit-bytes int                    Maximum bytes of logs to return. Defaults to no limit.
       --max-log-requests int               Specify maximum number of concurrent logs to follow when using by a selector. Defaults to 5. (default 5)
+  -n, --namespace string                   If present, the namespace scope for this CLI request
       --pod-running-timeout duration       The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (default 20s)
       --prefix                             Prefix each log line with the log source (pod name and container name)
   -p, --previous                           If true, print the logs for the previous instance of the container in a pod if it exists.
+      --request-timeout string             The length of time to wait before giving up on a single server request. Non-zero values should contain a corresponding time unit (e.g. 1s, 2m, 3h). A value of zero means don't timeout requests. (default "0")
   -l, --selector string                    Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints.
+  -s, --server string                      The address and port of the Kubernetes API server
       --since duration                     Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs. Only one of since-time / since may be used.
       --since-time string                  Only return logs after a specific date (RFC3339). Defaults to all logs. Only one of since-time / since may be used.
       --tail int                           Lines of recent log file to display. Defaults to -1 with no selector, showing all log lines otherwise 10, if a selector is provided. (default -1)
       --timestamps                         Include timestamps on each line in the log output
+      --tls-server-name string             Server name to use for server certificate validation. If it is not provided, the hostname used to contact the server is used
+      --token string                       Bearer token for authentication to the API server
+      --user string                        The name of the kubeconfig user to use
 
 Global Flags:
       --benchmark   Show per-activity benchmark output

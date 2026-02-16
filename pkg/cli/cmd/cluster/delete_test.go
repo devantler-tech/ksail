@@ -440,6 +440,9 @@ func getContainerTestCases() []containerTestCase {
 		// Talos patterns
 		{"talos_controlplane", "my-cluster-controlplane-1", "my-cluster", true},
 		{"talos_worker", "my-cluster-worker-1", "my-cluster", true},
+		// VCluster patterns
+		{"vcluster_cp", "vcluster.cp.my-cluster", "my-cluster", true},
+		{"vcluster_cp_different_cluster", "vcluster.cp.other-cluster", "my-cluster", false},
 		// Non-matching
 		{"different_cluster", "other-cluster-control-plane", "my-cluster", false},
 		{"registry_container", "registry.localhost", "my-cluster", false},

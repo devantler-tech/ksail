@@ -7,43 +7,45 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Distribution × Provider Matrix
 
-| Distribution   | Docker | Hetzner |
-| -------------- | ------ | ------- |
-| Vanilla (Kind) | ✅     | ❌      |
-| K3s (K3d)      | ✅     | ❌      |
-| Talos          | ✅     | ✅      |
+| Distribution    | Docker | Hetzner |
+| --------------- | ------ | ------- |
+| Vanilla (Kind)  | ✅     | ❌      |
+| K3s (K3d)       | ✅     | ❌      |
+| Talos           | ✅     | ✅      |
+| VCluster (Vind) | ✅     | ❌      |
 
 **Notes:**
 
 - Docker provider requires Docker Desktop or Docker Engine installed locally
 - Hetzner provider requires `HCLOUD_TOKEN` environment variable and Talos ISO in your account
+- VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
 
 ## Component × Distribution Matrix
 
-| Component                     | Vanilla | K3s      | Talos        |
-| ----------------------------- | ------- | -------- | ------------ |
+| Component                     | Vanilla | K3s      | Talos        | VCluster |
+| ----------------------------- | ------- | -------- | ------------ | -------- |
 | **CNI**                       |
-| Cilium                        | ✅      | ✅       | ✅           |
-| Calico                        | ✅      | ✅       | ✅           |
+| Cilium                        | ✅      | ✅       | ✅           | N/A¹     |
+| Calico                        | ✅      | ✅       | ✅           | N/A¹     |
 | **CSI**                       |
-| Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)  |
-| Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner) |
+| Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)  | N/A²     |
+| Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner) | ❌       |
 | **LoadBalancer**              |
-| LoadBalancer Support          | ✅      | Built-in | ✅ (Docker)  |
-| MetalLB                       | ❌      | ❌       | ✅ (Docker)  |
+| LoadBalancer Support          | ✅      | Built-in | ✅ (Docker)  | N/A³     |
+| MetalLB                       | ❌      | ❌       | ✅ (Docker)  | ❌       |
 | **GitOps**                    |
-| Flux                          | ✅      | ✅       | ✅           |
-| ArgoCD                        | ✅      | ✅       | ✅           |
+| Flux                          | ✅      | ✅       | ✅           | ✅       |
+| ArgoCD                        | ✅      | ✅       | ✅           | ✅       |
 | **Observability**             |
-| Metrics Server                | ✅      | Built-in | ✅           |
+| Metrics Server                | ✅      | Built-in | ✅           | N/A⁴     |
 | **Security**                  |
-| cert-manager                  | ✅      | ✅       | ✅           |
-| Kyverno                       | ✅      | ✅       | ✅           |
-| Gatekeeper                    | ✅      | ✅       | ✅           |
+| cert-manager                  | ✅      | ✅       | ✅           | ✅       |
+| Kyverno                       | ✅      | ✅       | ✅           | ✅       |
+| Gatekeeper                    | ✅      | ✅       | ✅           | ✅       |
 | **Registry**                  |
-| Local Registry                | ✅      | ✅       | ✅           |
-| Mirror Registries             | ✅      | ✅       | ✅           |
-| External Registries with Auth | ✅      | ✅       | ✅           |
+| Local Registry                | ✅      | ✅       | ✅           | ✅       |
+| Mirror Registries             | ✅      | ✅       | ✅           | ❌⁵      |
+| External Registries with Auth | ✅      | ✅       | ✅           | ✅       |
 
 **Notes:**
 
@@ -55,6 +57,12 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
   - **K3s on Docker**: Uses built-in ServiceLB (Klipper-LB)
   - **Talos on Docker**: Uses MetalLB with default IP pool (172.18.255.200-172.18.255.250)
   - **Talos on Hetzner**: Uses Hetzner Cloud Load Balancer (cloud provider integration)
+- **VCluster footnotes:**
+  - ¹ CNI is managed internally by the vCluster control plane — Vind configures networking within the Docker containers
+  - ² CSI is managed internally by vCluster — no separate CSI driver needed
+  - ³ LoadBalancer is managed internally by vCluster
+  - ⁴ Metrics Server is managed internally by vCluster
+  - ⁵ Mirror registries are not yet supported for VCluster (requires upstream Helm chart support)
 
 ## Secret Management × Provider Matrix
 
@@ -85,24 +93,24 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 The `ksail cluster update` command applies configuration changes to a running cluster.
 Changes are classified by impact: **in-place** (no disruption), **reboot-required** (node restart needed), or **recreate-required** (full cluster recreation).
 
-| Change                   | Vanilla (Kind) | K3s (K3d) | Talos    |
-| ------------------------ | -------------- | --------- | -------- |
-| Distribution             | Recreate       | Recreate  | Recreate |
-| Provider                 | Recreate       | Recreate  | Recreate |
-| CNI                      | In-place       | In-place  | In-place |
-| CSI                      | In-place       | In-place  | In-place |
-| Metrics Server           | In-place       | In-place  | In-place |
-| Load Balancer            | In-place       | In-place  | N/A¹     |
-| cert-manager             | In-place       | In-place  | In-place |
-| Policy Engine            | In-place       | In-place  | In-place |
-| GitOps Engine            | In-place       | In-place  | In-place |
-| Local Registry           | Recreate       | In-place  | In-place |
-| Mirrors Dir              | Recreate       | N/A       | N/A      |
-| Control Planes           | Recreate       | Recreate  | In-place |
-| Workers                  | Recreate       | In-place  | In-place |
-| Hetzner Server Type (CP) | N/A            | N/A       | Recreate |
-| Hetzner Location         | N/A            | N/A       | Recreate |
-| Hetzner Network          | N/A            | N/A       | Recreate |
+| Change                   | Vanilla (Kind) | K3s (K3d) | Talos    | VCluster (Vind) |
+| ------------------------ | -------------- | --------- | -------- | --------------- |
+| Distribution             | Recreate       | Recreate  | Recreate | Recreate        |
+| Provider                 | Recreate       | Recreate  | Recreate | Recreate        |
+| CNI                      | In-place       | In-place  | In-place | N/A             |
+| CSI                      | In-place       | In-place  | In-place | N/A             |
+| Metrics Server           | In-place       | In-place  | In-place | N/A             |
+| Load Balancer            | In-place       | In-place  | N/A¹     | N/A             |
+| cert-manager             | In-place       | In-place  | In-place | In-place        |
+| Policy Engine            | In-place       | In-place  | In-place | In-place        |
+| GitOps Engine            | In-place       | In-place  | In-place | In-place        |
+| Local Registry           | Recreate       | In-place  | In-place | In-place        |
+| Mirrors Dir              | Recreate       | N/A       | N/A      | N/A             |
+| Control Planes           | Recreate       | Recreate  | In-place | Recreate        |
+| Workers                  | Recreate       | In-place  | In-place | N/A             |
+| Hetzner Server Type (CP) | N/A            | N/A       | Recreate | N/A             |
+| Hetzner Location         | N/A            | N/A       | Recreate | N/A             |
+| Hetzner Network          | N/A            | N/A       | Recreate | N/A             |
 
 **Notes:**
 
@@ -111,6 +119,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 - Use `ksail cluster update --dry-run` to preview changes before applying
 - Talos supports the broadest set of in-place updates, including node scaling for both control-plane and worker nodes
 - Kind does not support any structural node changes after creation
+- VCluster (Vind) runs control-plane and optional worker nodes as Docker containers — CNI, CSI, metrics-server, and LoadBalancer are managed by the vCluster Helm chart and are N/A for update operations
 - **¹ Load Balancer for Talos+Docker**: LoadBalancer is currently not supported for Talos on Docker and is always `Disabled`. This row is N/A because the setting cannot be changed for this combination. See [FAQ](/faq/#which-distributions-support-loadbalancer-services) for more details.
 
 ## Platform Requirements
@@ -137,15 +146,16 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 
 KSail embeds specific versions of Kubernetes tooling:
 
-| Tool    | Embedded Version  | Purpose                    |
-| ------- | ----------------- | -------------------------- |
-| kubectl | Latest            | Kubernetes CLI             |
-| Helm    | v4 (with kstatus) | Package manager            |
-| Kind    | Latest            | Vanilla clusters           |
-| K3d     | Latest            | K3s clusters               |
-| Flux    | Latest            | GitOps toolkit             |
-| ArgoCD  | Latest            | GitOps continuous delivery |
-| SOPS    | Latest            | Secret encryption          |
+| Tool         | Embedded Version  | Purpose                    |
+| ------------ | ----------------- | -------------------------- |
+| kubectl      | Latest            | Kubernetes CLI             |
+| Helm         | v4 (with kstatus) | Package manager            |
+| Kind         | Latest            | Vanilla clusters           |
+| K3d          | Latest            | K3s clusters               |
+| vCluster SDK | v0.32.0-rc.1      | VCluster virtual clusters  |
+| Flux         | Latest            | GitOps toolkit             |
+| ArgoCD       | Latest            | GitOps continuous delivery |
+| SOPS         | Latest            | Secret encryption          |
 
 **Notes:**
 

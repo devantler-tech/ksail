@@ -45,7 +45,8 @@
               "enum": [
                 "Vanilla",
                 "K3s",
-                "Talos"
+                "Talos",
+                "VCluster"
               ]
             },
             "provider": {

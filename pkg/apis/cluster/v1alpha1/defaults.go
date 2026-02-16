@@ -7,6 +7,8 @@ const (
 	DefaultK3sDistributionConfig = "k3d.yaml"
 	// DefaultTalosDistributionConfig is the default Talos cluster distribution configuration directory.
 	DefaultTalosDistributionConfig = "talos"
+	// DefaultVClusterDistributionConfig is the default VCluster distribution configuration filename.
+	DefaultVClusterDistributionConfig = "vcluster.yaml"
 	// DefaultSourceDirectory is the default directory for Kubernetes manifests.
 	DefaultSourceDirectory = "k8s"
 	// DefaultKubeconfigPath is the default path to the kubeconfig file.
@@ -24,6 +26,8 @@ func ExpectedDistributionConfigName(distribution Distribution) string {
 		return DefaultK3sDistributionConfig
 	case DistributionTalos:
 		return DefaultTalosDistributionConfig
+	case DistributionVCluster:
+		return DefaultVClusterDistributionConfig
 	default:
 		return DefaultVanillaDistributionConfig
 	}
@@ -38,6 +42,8 @@ func ExpectedContextName(distribution Distribution) string {
 		return "k3d-k3d-default"
 	case DistributionTalos:
 		return "admin@talos-default"
+	case DistributionVCluster:
+		return "vcluster-docker_vcluster-default"
 	default:
 		return ""
 	}

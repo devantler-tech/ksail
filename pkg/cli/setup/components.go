@@ -61,13 +61,18 @@ type InstallerFactories struct {
 	// EnsureFluxResources enforces default Flux resources post-install.
 	// If artifactPushed is false, the function will skip waiting for FluxInstance readiness
 	// because the artifact doesn't exist yet (will be pushed later via workload push).
+	// registryHostOverride replaces the default Docker container name in the OCI URL
+	// when non-empty.
 	EnsureFluxResources func(
-		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string, artifactPushed bool,
+		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster,
+		clusterName string, registryHostOverride string, artifactPushed bool,
 	) error
 	// SetupFluxInstance creates the FluxInstance CR without waiting for readiness.
+	// registryHostOverride replaces the default Docker container name in the OCI URL
+	// when non-empty.
 	// Use with WaitForFluxReady after pushing artifacts.
 	SetupFluxInstance func(
-		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string,
+		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string, registryHostOverride string,
 	) error
 	// WaitForFluxReady waits for the FluxInstance to be ready.
 	// Call after pushing OCI artifacts.
@@ -285,9 +290,10 @@ func InstallMetricsServerSilent(
 		return err
 	}
 
-	msInstaller := metricsserverinstaller.NewInstaller(
+	msInstaller := metricsserverinstaller.NewInstallerWithDistribution(
 		helmClient,
 		timeout,
+		clusterCfg.Spec.Cluster.Distribution,
 	)
 
 	installErr := msInstaller.Install(ctx)
@@ -313,6 +319,9 @@ func InstallLoadBalancerSilent(
 		return installMetalLB(ctx, clusterCfg, factories)
 	case v1alpha1.DistributionK3s:
 		// K3s already has ServiceLB (Klipper) by default, no installation needed
+		return nil
+	case v1alpha1.DistributionVCluster:
+		// VCluster (Vind) handles LoadBalancer through its own networking stack, no installation needed
 		return nil
 	}
 
@@ -511,8 +520,15 @@ func EnsureArgoCDResources(
 		return fmt.Errorf("create argocd manager: %w", err)
 	}
 
+	// For VCluster, resolve the registry container's Docker IP since pods inside
+	// VCluster use CoreDNS which cannot resolve Docker container names.
+	registryHost, resolveErr := resolveRegistryHost(ctx, clusterCfg, clusterName)
+	if resolveErr != nil {
+		return fmt.Errorf("resolve registry host for argocd: %w", resolveErr)
+	}
+
 	// Build repository URL and credentials based on registry configuration
-	opts := buildArgoCDEnsureOptions(clusterCfg, clusterName)
+	opts := buildArgoCDEnsureOptions(clusterCfg, clusterName, registryHost)
 
 	err = mgr.Ensure(ctx, opts)
 	if err != nil {
@@ -523,9 +539,12 @@ func EnsureArgoCDResources(
 }
 
 // buildArgoCDEnsureOptions constructs ArgoCD ensure options based on registry config.
+// registryHost overrides the default registry hostname for the OCI repository URL.
+// Pass an empty string to use the default Docker container name.
 func buildArgoCDEnsureOptions(
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	registryHost string,
 ) argocdgitops.EnsureOptions {
 	opts := argocdgitops.EnsureOptions{
 		SourcePath:      ".",
@@ -537,7 +556,7 @@ func buildArgoCDEnsureOptions(
 	if localRegistry.IsExternal() {
 		applyExternalRegistryOptions(&opts, localRegistry)
 	} else {
-		applyLocalRegistryOptions(&opts, clusterCfg, clusterName)
+		applyLocalRegistryOptions(&opts, clusterCfg, clusterName, registryHost)
 	}
 
 	return opts
@@ -557,10 +576,13 @@ func applyExternalRegistryOptions(
 }
 
 // applyLocalRegistryOptions configures options for local in-cluster registries.
+// registryHostOverride replaces the default Docker container name when non-empty.
+// This is needed for VCluster where pods cannot resolve Docker container names.
 func applyLocalRegistryOptions(
 	opts *argocdgitops.EnsureOptions,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	registryHostOverride string,
 ) {
 	sourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
 	if sourceDir == "" {
@@ -568,7 +590,12 @@ func applyLocalRegistryOptions(
 	}
 
 	repoName := registry.SanitizeRepoName(sourceDir)
-	registryHost := registry.BuildLocalRegistryName(clusterName)
+
+	registryHost := strings.TrimSpace(registryHostOverride)
+	if registryHost == "" {
+		registryHost = registry.BuildLocalRegistryName(clusterName)
+	}
+
 	hostPort := net.JoinHostPort(
 		registryHost,
 		strconv.Itoa(dockerclient.DefaultRegistryPort),

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	metricsserverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metricsserver"
 	"github.com/stretchr/testify/assert"
@@ -21,6 +22,36 @@ func TestNewInstaller(t *testing.T) {
 	installer := metricsserverinstaller.NewInstaller(
 		client,
 		timeout,
+	)
+
+	assert.NotNil(t, installer)
+}
+
+func TestNewInstallerWithDistribution(t *testing.T) {
+	t.Parallel()
+
+	timeout := 5 * time.Minute
+
+	client := helm.NewMockInterface(t)
+	installer := metricsserverinstaller.NewInstallerWithDistribution(
+		client,
+		timeout,
+		v1alpha1.DistributionVCluster,
+	)
+
+	assert.NotNil(t, installer)
+}
+
+func TestNewInstallerWithDistributionNonVCluster(t *testing.T) {
+	t.Parallel()
+
+	timeout := 5 * time.Minute
+
+	client := helm.NewMockInterface(t)
+	installer := metricsserverinstaller.NewInstallerWithDistribution(
+		client,
+		timeout,
+		v1alpha1.DistributionVanilla,
 	)
 
 	assert.NotNil(t, installer)
