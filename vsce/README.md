@@ -46,7 +46,7 @@ All cluster operations are available via the Command Palette (`Cmd+Shift+P` / `C
 
 The **Init** and **Create** commands feature multi-step wizards with:
 
-- Distribution selection (Vanilla/K3s/Talos)
+- Distribution selection (Vanilla/K3s/Talos/VCluster)
 - Provider selection (Docker/Hetzner)
 - Component configuration (CNI, CSI, GitOps engine, etc.)
 - Output path selection for generated files
