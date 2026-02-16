@@ -1,14 +1,16 @@
-package cipher
+package cipher //nolint:testpackage // Benchmarks require access to internal encrypt/decrypt functions.
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"filippo.io/age"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
-	"github.com/getsops/sops/v3/age"
+	sopsage "github.com/getsops/sops/v3/age"
 	"github.com/getsops/sops/v3/keyservice"
 	"github.com/getsops/sops/v3/stores/yaml"
 )
@@ -20,6 +22,8 @@ import (
 // - Large config (100 keys)
 // - Nested structure
 // - Extract operations
+
+// --- Test data generators ---
 
 // generateMinimalSecret creates a minimal YAML secret for benchmarking.
 func generateMinimalSecret() []byte {
@@ -77,16 +81,13 @@ data:
 // generateLargeSecret creates a large YAML secret with 100 keys.
 func generateLargeSecret() []byte {
 	var buf bytes.Buffer
-	buf.WriteString("apiVersion: v1\nkind: Secret\nmetadata:\n  name: large-secrets\ntype: Opaque\ndata:\n")
 
-	for i := 0; i < 100; i++ {
-		buf.WriteString("  key-")
-		buf.WriteString(string(rune('0' + (i / 10))))
-		buf.WriteString(string(rune('0' + (i % 10))))
-		buf.WriteString(": \"secret-value-")
-		buf.WriteString(string(rune('0' + (i / 10))))
-		buf.WriteString(string(rune('0' + (i % 10))))
-		buf.WriteString("-abcdef123456\"\n")
+	buf.WriteString(
+		"apiVersion: v1\nkind: Secret\nmetadata:\n  name: large-secrets\ntype: Opaque\ndata:\n",
+	)
+
+	for i := range 100 {
+		fmt.Fprintf(&buf, "  key-%02d: \"secret-value-%02d-abcdef123456\"\n", i, i)
 	}
 
 	return buf.Bytes()
@@ -126,45 +127,56 @@ services:
 `)
 }
 
-// setupEncryptionTest creates a temp file with the given content and returns cleanup function.
-func setupEncryptionTest(b *testing.B, content []byte) (string, func()) {
+// --- Benchmark helpers ---
+
+// defaultKeyGroups generates an age key group for benchmarking and sets the
+// SOPS_AGE_KEY environment variable so decryption can find the private key.
+func defaultKeyGroups(b *testing.B) []sops.KeyGroup {
 	b.Helper()
 
-	tmpDir := b.TempDir()
-	filePath := filepath.Join(tmpDir, "secret.yaml")
-
-	err := os.WriteFile(filePath, content, 0o600)
+	identity, err := age.GenerateX25519Identity()
 	if err != nil {
-		b.Fatalf("Failed to write test file: %v", err)
+		b.Fatalf("Failed to generate age identity: %v", err)
 	}
 
-	cleanup := func() {
-		// TempDir auto-cleanup, but we can add explicit cleanup if needed
+	b.Setenv("SOPS_AGE_KEY", identity.String())
+
+	masterKey, err := sopsage.MasterKeyFromRecipient(identity.Recipient().String())
+	if err != nil {
+		b.Fatalf("Failed to create age master key: %v", err)
 	}
 
-	return filePath, cleanup
+	return []sops.KeyGroup{{masterKey}}
 }
 
-// setupDecryptionTest creates a temp file with encrypted content and returns cleanup function.
-func setupDecryptionTest(b *testing.B, content []byte) (string, func()) {
+// writeTempSecret writes content to a temp YAML file and returns its path.
+// Cleanup is handled automatically by b.TempDir().
+func writeTempSecret(b *testing.B, content []byte) string {
 	b.Helper()
 
-	tmpDir := b.TempDir()
-	filePath := filepath.Join(tmpDir, "secret.yaml")
+	filePath := filepath.Join(b.TempDir(), "secret.yaml")
 
-	// Write plaintext first
 	err := os.WriteFile(filePath, content, 0o600)
 	if err != nil {
 		b.Fatalf("Failed to write test file: %v", err)
 	}
 
-	// Encrypt it
-	inputStore := &yaml.Store{}
-	outputStore := &yaml.Store{}
+	return filePath
+}
 
-	opts := encryptOpts{
+// newEncryptOpts builds encryptOpts for the given file path with default settings.
+func newEncryptOpts(
+	filePath string,
+	keyGroups []sops.KeyGroup,
+) (encryptOpts, error) {
+	inputStore, outputStore, err := getStores(filePath)
+	if err != nil {
+		return encryptOpts{}, err
+	}
+
+	return encryptOpts{
 		encryptConfig: encryptConfig{
-			KeyGroups:      []sops.KeyGroup{},
+			KeyGroups:      keyGroups,
 			GroupThreshold: 0,
 		},
 		Cipher:        aes.NewCipher(),
@@ -173,6 +185,49 @@ func setupDecryptionTest(b *testing.B, content []byte) (string, func()) {
 		InputPath:     filePath,
 		ReadFromStdin: false,
 		KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+	}, nil
+}
+
+// newDecryptOpts builds decryptOpts for the given file path with default settings.
+func newDecryptOpts(
+	filePath string,
+	extract []any,
+) (decryptOpts, error) {
+	inputStore, outputStore, err := getDecryptStores(filePath, false)
+	if err != nil {
+		return decryptOpts{}, err
+	}
+
+	return decryptOpts{
+		Cipher:          aes.NewCipher(),
+		InputStore:      inputStore,
+		OutputStore:     outputStore,
+		InputPath:       filePath,
+		ReadFromStdin:   false,
+		IgnoreMAC:       false,
+		Extract:         extract,
+		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+		DecryptionOrder: []string{},
+	}, nil
+}
+
+// encryptToFile encrypts content and writes the ciphertext to a temp file,
+// returning the path. Used to set up decryption benchmarks.
+func encryptToFile(b *testing.B, content []byte, keyGroups []sops.KeyGroup) string {
+	b.Helper()
+
+	filePath := writeTempSecret(b, content)
+
+	opts := encryptOpts{
+		encryptConfig: encryptConfig{
+			KeyGroups:      keyGroups,
+			GroupThreshold: 0,
+		},
+		Cipher:      aes.NewCipher(),
+		InputStore:  &yaml.Store{},
+		OutputStore: &yaml.Store{},
+		InputPath:   filePath,
+		KeyServices: []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
 	}
 
 	encryptedData, err := encrypt(opts)
@@ -180,454 +235,109 @@ func setupDecryptionTest(b *testing.B, content []byte) (string, func()) {
 		b.Fatalf("Failed to encrypt test file: %v", err)
 	}
 
-	// Write encrypted data back
 	err = os.WriteFile(filePath, encryptedData, 0o600)
 	if err != nil {
 		b.Fatalf("Failed to write encrypted file: %v", err)
 	}
 
-	cleanup := func() {
-		// TempDir auto-cleanup
-	}
-
-	return filePath, cleanup
+	return filePath
 }
 
-// BenchmarkEncrypt_Minimal benchmarks encryption of a minimal secret (1 key).
-func BenchmarkEncrypt_Minimal(b *testing.B) {
-	content := generateMinimalSecret()
+// --- Encryption Benchmarks ---
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		filePath, cleanup := setupEncryptionTest(b, content)
-		b.StartTimer()
+func BenchmarkEncrypt(b *testing.B) {
+	keyGroups := defaultKeyGroups(b)
 
-		inputStore, outputStore, err := getStores(filePath)
-		if err != nil {
-			b.Fatal(err)
-		}
+	scenarios := []struct {
+		name    string
+		content []byte
+	}{
+		{"Minimal", generateMinimalSecret()},
+		{"Small", generateSmallSecret()},
+		{"Medium", generateMediumSecret()},
+		{"Large", generateLargeSecret()},
+		{"Nested", generateNestedSecret()},
+	}
 
-		opts := encryptOpts{
-			encryptConfig: encryptConfig{
-				KeyGroups:      []sops.KeyGroup{},
-				GroupThreshold: 0,
-			},
-			Cipher:        aes.NewCipher(),
-			InputStore:    inputStore,
-			OutputStore:   outputStore,
-			InputPath:     filePath,
-			ReadFromStdin: false,
-			KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-		}
+	for _, scenario := range scenarios {
+		b.Run(scenario.name, func(b *testing.B) {
+			b.ResetTimer()
 
-		_, err = encrypt(opts)
-		if err != nil {
-			b.Fatal(err)
-		}
+			for range b.N {
+				b.StopTimer()
+				filePath := writeTempSecret(b, scenario.content)
+				b.StartTimer()
 
-		b.StopTimer()
-		cleanup()
+				opts, err := newEncryptOpts(filePath, keyGroups)
+				if err != nil {
+					b.Fatal(err)
+				}
+
+				_, err = encrypt(opts)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 
-// BenchmarkEncrypt_Small benchmarks encryption of a small secret (5 keys).
-func BenchmarkEncrypt_Small(b *testing.B) {
-	content := generateSmallSecret()
+// --- Decryption Benchmarks ---
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		filePath, cleanup := setupEncryptionTest(b, content)
-		b.StartTimer()
+func BenchmarkDecrypt(b *testing.B) {
+	keyGroups := defaultKeyGroups(b)
 
-		inputStore, outputStore, err := getStores(filePath)
-		if err != nil {
-			b.Fatal(err)
-		}
+	scenarios := []struct {
+		name    string
+		content []byte
+		extract []any
+	}{
+		{"Minimal", generateMinimalSecret(), nil},
+		{"Small", generateSmallSecret(), nil},
+		{"Medium", generateMediumSecret(), nil},
+		{"Large", generateLargeSecret(), nil},
+		{"Nested", generateNestedSecret(), nil},
+		{"WithExtract", generateMediumSecret(), []any{"data", "db-password"}},
+	}
 
-		opts := encryptOpts{
-			encryptConfig: encryptConfig{
-				KeyGroups:      []sops.KeyGroup{},
-				GroupThreshold: 0,
-			},
-			Cipher:        aes.NewCipher(),
-			InputStore:    inputStore,
-			OutputStore:   outputStore,
-			InputPath:     filePath,
-			ReadFromStdin: false,
-			KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-		}
+	for _, scenario := range scenarios {
+		b.Run(scenario.name, func(b *testing.B) {
+			filePath := encryptToFile(b, scenario.content, keyGroups)
 
-		_, err = encrypt(opts)
-		if err != nil {
-			b.Fatal(err)
-		}
+			b.ResetTimer()
 
-		b.StopTimer()
-		cleanup()
+			for range b.N {
+				opts, err := newDecryptOpts(filePath, scenario.extract)
+				if err != nil {
+					b.Fatal(err)
+				}
+
+				_, err = decrypt(opts)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 
-// BenchmarkEncrypt_Medium benchmarks encryption of a medium secret (20 keys).
-func BenchmarkEncrypt_Medium(b *testing.B) {
-	content := generateMediumSecret()
+// --- Roundtrip Benchmark ---
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		filePath, cleanup := setupEncryptionTest(b, content)
-		b.StartTimer()
-
-		inputStore, outputStore, err := getStores(filePath)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		opts := encryptOpts{
-			encryptConfig: encryptConfig{
-				KeyGroups:      []sops.KeyGroup{},
-				GroupThreshold: 0,
-			},
-			Cipher:        aes.NewCipher(),
-			InputStore:    inputStore,
-			OutputStore:   outputStore,
-			InputPath:     filePath,
-			ReadFromStdin: false,
-			KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-		}
-
-		_, err = encrypt(opts)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		b.StopTimer()
-		cleanup()
-	}
-}
-
-// BenchmarkEncrypt_Large benchmarks encryption of a large secret (100 keys).
-func BenchmarkEncrypt_Large(b *testing.B) {
-	content := generateLargeSecret()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		filePath, cleanup := setupEncryptionTest(b, content)
-		b.StartTimer()
-
-		inputStore, outputStore, err := getStores(filePath)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		opts := encryptOpts{
-			encryptConfig: encryptConfig{
-				KeyGroups:      []sops.KeyGroup{},
-				GroupThreshold: 0,
-			},
-			Cipher:        aes.NewCipher(),
-			InputStore:    inputStore,
-			OutputStore:   outputStore,
-			InputPath:     filePath,
-			ReadFromStdin: false,
-			KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-		}
-
-		_, err = encrypt(opts)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		b.StopTimer()
-		cleanup()
-	}
-}
-
-// BenchmarkEncrypt_Nested benchmarks encryption of a nested secret structure.
-func BenchmarkEncrypt_Nested(b *testing.B) {
-	content := generateNestedSecret()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		filePath, cleanup := setupEncryptionTest(b, content)
-		b.StartTimer()
-
-		inputStore, outputStore, err := getStores(filePath)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		opts := encryptOpts{
-			encryptConfig: encryptConfig{
-				KeyGroups:      []sops.KeyGroup{},
-				GroupThreshold: 0,
-			},
-			Cipher:        aes.NewCipher(),
-			InputStore:    inputStore,
-			OutputStore:   outputStore,
-			InputPath:     filePath,
-			ReadFromStdin: false,
-			KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-		}
-
-		_, err = encrypt(opts)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		b.StopTimer()
-		cleanup()
-	}
-}
-
-// BenchmarkDecrypt_Minimal benchmarks decryption of a minimal encrypted secret.
-func BenchmarkDecrypt_Minimal(b *testing.B) {
-	content := generateMinimalSecret()
-
-	b.StopTimer()
-	filePath, cleanup := setupDecryptionTest(b, content)
-	defer cleanup()
-
-	b.StartTimer()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		inputStore, outputStore, err := getDecryptStores(filePath, false)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		opts := decryptOpts{
-			Cipher:          aes.NewCipher(),
-			InputStore:      inputStore,
-			OutputStore:     outputStore,
-			InputPath:       filePath,
-			ReadFromStdin:   false,
-			IgnoreMAC:       false,
-			Extract:         nil,
-			KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-			DecryptionOrder: []string{},
-		}
-
-		_, err = decrypt(opts)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkDecrypt_Small benchmarks decryption of a small encrypted secret.
-func BenchmarkDecrypt_Small(b *testing.B) {
-	content := generateSmallSecret()
-
-	b.StopTimer()
-	filePath, cleanup := setupDecryptionTest(b, content)
-	defer cleanup()
-
-	b.StartTimer()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		inputStore, outputStore, err := getDecryptStores(filePath, false)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		opts := decryptOpts{
-			Cipher:          aes.NewCipher(),
-			InputStore:      inputStore,
-			OutputStore:     outputStore,
-			InputPath:       filePath,
-			ReadFromStdin:   false,
-			IgnoreMAC:       false,
-			Extract:         nil,
-			KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-			DecryptionOrder: []string{},
-		}
-
-		_, err = decrypt(opts)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkDecrypt_Medium benchmarks decryption of a medium encrypted secret.
-func BenchmarkDecrypt_Medium(b *testing.B) {
-	content := generateMediumSecret()
-
-	b.StopTimer()
-	filePath, cleanup := setupDecryptionTest(b, content)
-	defer cleanup()
-
-	b.StartTimer()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		inputStore, outputStore, err := getDecryptStores(filePath, false)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		opts := decryptOpts{
-			Cipher:          aes.NewCipher(),
-			InputStore:      inputStore,
-			OutputStore:     outputStore,
-			InputPath:       filePath,
-			ReadFromStdin:   false,
-			IgnoreMAC:       false,
-			Extract:         nil,
-			KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-			DecryptionOrder: []string{},
-		}
-
-		_, err = decrypt(opts)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkDecrypt_Large benchmarks decryption of a large encrypted secret.
-func BenchmarkDecrypt_Large(b *testing.B) {
-	content := generateLargeSecret()
-
-	b.StopTimer()
-	filePath, cleanup := setupDecryptionTest(b, content)
-	defer cleanup()
-
-	b.StartTimer()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		inputStore, outputStore, err := getDecryptStores(filePath, false)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		opts := decryptOpts{
-			Cipher:          aes.NewCipher(),
-			InputStore:      inputStore,
-			OutputStore:     outputStore,
-			InputPath:       filePath,
-			ReadFromStdin:   false,
-			IgnoreMAC:       false,
-			Extract:         nil,
-			KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-			DecryptionOrder: []string{},
-		}
-
-		_, err = decrypt(opts)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkDecrypt_Nested benchmarks decryption of a nested encrypted secret.
-func BenchmarkDecrypt_Nested(b *testing.B) {
-	content := generateNestedSecret()
-
-	b.StopTimer()
-	filePath, cleanup := setupDecryptionTest(b, content)
-	defer cleanup()
-
-	b.StartTimer()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		inputStore, outputStore, err := getDecryptStores(filePath, false)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		opts := decryptOpts{
-			Cipher:          aes.NewCipher(),
-			InputStore:      inputStore,
-			OutputStore:     outputStore,
-			InputPath:       filePath,
-			ReadFromStdin:   false,
-			IgnoreMAC:       false,
-			Extract:         nil,
-			KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-			DecryptionOrder: []string{},
-		}
-
-		_, err = decrypt(opts)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkDecrypt_WithExtract benchmarks decryption with key extraction.
-func BenchmarkDecrypt_WithExtract(b *testing.B) {
-	content := generateMediumSecret()
-
-	b.StopTimer()
-	filePath, cleanup := setupDecryptionTest(b, content)
-	defer cleanup()
-
-	b.StartTimer()
-	b.ResetTimer()
-
-	extractPath := []any{"data", "db-password"}
-
-	for i := 0; i < b.N; i++ {
-		inputStore, outputStore, err := getDecryptStores(filePath, false)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		opts := decryptOpts{
-			Cipher:          aes.NewCipher(),
-			InputStore:      inputStore,
-			OutputStore:     outputStore,
-			InputPath:       filePath,
-			ReadFromStdin:   false,
-			IgnoreMAC:       false,
-			Extract:         extractPath,
-			KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-			DecryptionOrder: []string{},
-		}
-
-		_, err = decrypt(opts)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkRoundtrip_Minimal benchmarks full encrypt-decrypt cycle for minimal secret.
+// BenchmarkRoundtrip_Minimal benchmarks full encrypt-then-decrypt for a minimal secret.
 func BenchmarkRoundtrip_Minimal(b *testing.B) {
 	content := generateMinimalSecret()
+	keyGroups := defaultKeyGroups(b)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		b.StopTimer()
-		filePath, cleanup := setupEncryptionTest(b, content)
+		filePath := writeTempSecret(b, content)
 		b.StartTimer()
 
-		// Encrypt
-		inputStore, outputStore, err := getStores(filePath)
+		encOpts, err := newEncryptOpts(filePath, keyGroups)
 		if err != nil {
 			b.Fatal(err)
-		}
-
-		encOpts := encryptOpts{
-			encryptConfig: encryptConfig{
-				KeyGroups:      []sops.KeyGroup{},
-				GroupThreshold: 0,
-			},
-			Cipher:        aes.NewCipher(),
-			InputStore:    inputStore,
-			OutputStore:   outputStore,
-			InputPath:     filePath,
-			ReadFromStdin: false,
-			KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
 		}
 
 		encryptedData, err := encrypt(encOpts)
@@ -640,93 +350,14 @@ func BenchmarkRoundtrip_Minimal(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		// Decrypt
-		inputStore, outputStore, err = getDecryptStores(filePath, false)
+		decOpts, err := newDecryptOpts(filePath, nil)
 		if err != nil {
 			b.Fatal(err)
-		}
-
-		decOpts := decryptOpts{
-			Cipher:          aes.NewCipher(),
-			InputStore:      inputStore,
-			OutputStore:     outputStore,
-			InputPath:       filePath,
-			ReadFromStdin:   false,
-			IgnoreMAC:       false,
-			Extract:         nil,
-			KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-			DecryptionOrder: []string{},
 		}
 
 		_, err = decrypt(decOpts)
 		if err != nil {
 			b.Fatal(err)
 		}
-
-		b.StopTimer()
-		cleanup()
 	}
-}
-
-// BenchmarkEncryptWithAge benchmarks encryption using age encryption (if configured).
-// This benchmark will skip if age keys are not available.
-func BenchmarkEncryptWithAge(b *testing.B) {
-	content := generateSmallSecret()
-
-	// Try to create age key group
-	keyGroup, err := createAgeKeyGroup()
-	if err != nil {
-		b.Skipf("Skipping age benchmark: %v", err)
-
-		return
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		filePath, cleanup := setupEncryptionTest(b, content)
-		b.StartTimer()
-
-		inputStore, outputStore, err := getStores(filePath)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		opts := encryptOpts{
-			encryptConfig: encryptConfig{
-				KeyGroups:      []sops.KeyGroup{keyGroup},
-				GroupThreshold: 0,
-			},
-			Cipher:        aes.NewCipher(),
-			InputStore:    inputStore,
-			OutputStore:   outputStore,
-			InputPath:     filePath,
-			ReadFromStdin: false,
-			KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-		}
-
-		_, err = encrypt(opts)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		b.StopTimer()
-		cleanup()
-	}
-}
-
-// createAgeKeyGroup attempts to create an age key group for benchmarking.
-// Returns an error if age keys cannot be generated.
-func createAgeKeyGroup() (sops.KeyGroup, error) {
-	// Generate a temporary age key for benchmarking
-	ageKey, err := age.GenerateKeypair()
-	if err != nil {
-		return sops.KeyGroup{}, err
-	}
-
-	return sops.KeyGroup{
-		age.MasterKey{
-			Recipient: ageKey.PublicKey,
-		},
-	}, nil
 }
