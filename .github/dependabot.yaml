@@ -104,3 +104,12 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+
+  # Disabled: ghcr.io multi-arch image hits dependabot/dependabot-core#13383
+  # - package-ecosystem: docker
+  #   registries: [ghcr]
+  #   directory: /pkg/fsutil/configmanager/vcluster # vCluster Kubernetes image (embedded in Go via go:embed)
+  #   cooldown:
+  #     default-days: 7
+  #   schedule:
+  #     interval: daily

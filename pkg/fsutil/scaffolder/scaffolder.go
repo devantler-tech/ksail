@@ -341,6 +341,8 @@ func (s *Scaffolder) generateDistributionConfig(output string, force bool) error
 		return s.generateK3dConfig(output, force)
 	case v1alpha1.DistributionTalos:
 		return s.generateTalosConfig(output, force)
+	case v1alpha1.DistributionVCluster:
+		return s.generateVClusterConfig(output, force)
 	default:
 		return ErrUnknownDistribution
 	}

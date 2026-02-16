@@ -2,6 +2,7 @@
   "ignore": [
     "**/node_modules/**",
     "**/.git/**",
+    "**/.github/aw/logs/**",
     "**/.rbenv/**",
     "**/.venv/**",
     "**/.astro/**",
@@ -25,7 +26,8 @@
     "**/*_mocks.go",
     "**/mocks.go",
     "**/*mocks*.go",
-    "**/*_test.go"
+    "**/*_test.go",
+    "**/patches/**"
   ],
   "reporters": ["html", "markdown"],
   "threshold": 0

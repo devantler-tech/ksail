@@ -51,6 +51,11 @@ func IsClusterContainer(containerName, clusterName string) bool {
 		return true
 	}
 
+	// VCluster pattern: vcluster.cp.{cluster}
+	if containerName == "vcluster.cp."+clusterName {
+		return true
+	}
+
 	return false
 }
 

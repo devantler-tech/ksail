@@ -174,8 +174,8 @@ func (f *Factory) addMetricsServerInstaller(
 	if spec.MetricsServer == v1alpha1.MetricsServerEnabled ||
 		(spec.MetricsServer == v1alpha1.MetricsServerDefault &&
 			!spec.Distribution.ProvidesMetricsServerByDefault()) {
-		installers["metrics-server"] = metricsserverinstaller.NewInstaller(
-			f.helmClient, f.timeout,
+		installers["metrics-server"] = metricsserverinstaller.NewInstallerWithDistribution(
+			f.helmClient, f.timeout, f.distribution,
 		)
 	}
 }

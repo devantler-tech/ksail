@@ -13,6 +13,7 @@ import (
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
+	vclusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/vcluster"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/yaml"
@@ -38,6 +39,25 @@ type DistributionConfig struct {
 	K3d *k3dv1alpha5.SimpleConfig
 	// Talos holds the pre-loaded Talos machine configurations.
 	Talos *talosconfigmanager.Configs
+	// VCluster holds the pre-loaded vCluster configuration.
+	VCluster *VClusterConfig
+}
+
+// VClusterConfig holds vCluster-specific configuration.
+type VClusterConfig struct {
+	// Name is the cluster name.
+	Name string
+	// ValuesPath is the optional path to a vcluster.yaml values file.
+	ValuesPath string
+	// DisableFlannel disables the built-in flannel CNI in the vCluster.
+	// Set to true when a custom CNI (Cilium, Calico) is being installed.
+	DisableFlannel bool
+}
+
+// GetClusterName returns the vCluster cluster name.
+// This implements the ClusterNameProvider interface used by configmanager.GetClusterName.
+func (c *VClusterConfig) GetClusterName() string {
+	return c.Name
 }
 
 // Factory creates distribution-specific cluster provisioners based on the KSail cluster configuration.
@@ -86,6 +106,8 @@ func (f DefaultFactory) Create(
 		return f.createK3dProvisioner(cluster)
 	case v1alpha1.DistributionTalos:
 		return f.createTalosProvisioner(cluster)
+	case v1alpha1.DistributionVCluster:
+		return f.createVClusterProvisioner(cluster)
 	default:
 		return nil, "", fmt.Errorf(
 			"%w: %s",
@@ -266,6 +288,30 @@ func (f DefaultFactory) createTalosProvisioner(
 	}
 
 	return provisioner, f.DistributionConfig.Talos, nil
+}
+
+func (f DefaultFactory) createVClusterProvisioner(
+	_ *v1alpha1.Cluster,
+) (Provisioner, any, error) {
+	if f.DistributionConfig.VCluster == nil {
+		return nil, nil, fmt.Errorf(
+			"vcluster config is required for VCluster distribution: %w",
+			ErrMissingDistributionConfig,
+		)
+	}
+
+	vclusterConfig := f.DistributionConfig.VCluster
+
+	provisioner, err := vclusterprovisioner.CreateProvisioner(
+		vclusterConfig.Name,
+		vclusterConfig.ValuesPath,
+		vclusterConfig.DisableFlannel,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create VCluster provisioner: %w", err)
+	}
+
+	return provisioner, vclusterConfig, nil
 }
 
 // writeK3dConfigToTempFile writes the in-memory k3d config to a temporary file.

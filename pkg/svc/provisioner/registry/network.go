@@ -174,6 +174,83 @@ func calculateRegistryIPs(networkCIDR string, count int) []string {
 	return result
 }
 
+// SetupMirrorSpecRegistries prepares a registry manager from mirror specifications
+// and ensures that the matching registry containers exist. This is a convenience function
+// that combines PrepareRegistryManagerFromSpecs with SetupRegistries.
+func SetupMirrorSpecRegistries(
+	ctx context.Context,
+	mirrorSpecs []MirrorSpec,
+	clusterName string,
+	dockerClient client.APIClient,
+	networkName string,
+	writer io.Writer,
+) error {
+	registryMgr, registriesInfo, err := PrepareRegistryManagerFromSpecs(
+		ctx, mirrorSpecs, clusterName, dockerClient,
+	)
+	if err != nil {
+		return err
+	}
+
+	if registryMgr == nil {
+		return nil
+	}
+
+	return SetupRegistries(
+		ctx, registryMgr, registriesInfo, clusterName, networkName, writer,
+	)
+}
+
+// CleanupMirrorSpecRegistries prepares a registry manager from mirror specifications
+// and removes the matching registry containers. This is a convenience function that
+// combines PrepareRegistryManagerFromSpecs with CleanupRegistries.
+func CleanupMirrorSpecRegistries(
+	ctx context.Context,
+	mirrorSpecs []MirrorSpec,
+	clusterName string,
+	dockerClient client.APIClient,
+	deleteVolumes bool,
+	networkName string,
+) error {
+	registryMgr, registriesInfo, err := PrepareRegistryManagerFromSpecs(
+		ctx, mirrorSpecs, clusterName, dockerClient,
+	)
+	if err != nil {
+		return err
+	}
+
+	if registryMgr == nil {
+		return nil
+	}
+
+	return CleanupRegistries(
+		ctx, registryMgr, registriesInfo, clusterName, deleteVolumes, networkName, nil,
+	)
+}
+
+// ConnectMirrorSpecsToNetwork builds registry infos from mirror specifications and connects
+// them to the specified Docker network. This is a convenience function that combines
+// BuildRegistryInfosFromSpecs with ConnectRegistriesToNetwork.
+func ConnectMirrorSpecsToNetwork(
+	ctx context.Context,
+	mirrorSpecs []MirrorSpec,
+	clusterName string,
+	networkName string,
+	dockerClient client.APIClient,
+	writer io.Writer,
+) error {
+	if len(mirrorSpecs) == 0 {
+		return nil
+	}
+
+	registriesInfo := BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil, clusterName)
+	if len(registriesInfo) == 0 {
+		return nil
+	}
+
+	return ConnectRegistriesToNetwork(ctx, dockerClient, registriesInfo, networkName, writer)
+}
+
 // CleanupRegistries removes the provided registry. Errors are logged as warnings.
 func CleanupRegistries(
 	ctx context.Context,

@@ -121,7 +121,7 @@ func TestSetupRegistries_NilDockerClient(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to prepare kind registry manager")
+	require.ErrorContains(t, err, "failed to setup kind registries")
 }
 
 func TestSetupRegistries_CreateRegistryError(t *testing.T) {

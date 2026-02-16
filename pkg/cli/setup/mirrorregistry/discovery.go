@@ -64,7 +64,7 @@ func DiscoverRegistriesByNetwork(
 	clusterName string,
 	cleanupDeps CleanupDependencies,
 ) *DiscoveredRegistries {
-	networkName := getNetworkNameForDistribution(distribution, clusterName)
+	networkName := GetNetworkNameForDistribution(distribution, clusterName)
 
 	var registries []dockerclient.RegistryInfo
 

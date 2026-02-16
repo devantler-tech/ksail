@@ -18,6 +18,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// normalizeHomePaths replaces the user's home directory in help output
+// with a stable placeholder so snapshots are portable across machines and CI.
+func normalizeHomePaths(content string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return content
+	}
+
+	return strings.ReplaceAll(content, home, "$HOME")
+}
+
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 
@@ -107,7 +118,7 @@ func TestWorkloadHelpSnapshots(t *testing.T) {
 				strings.Join(testCase.args, " "),
 			)
 
-			snaps.MatchSnapshot(t, out.String())
+			snaps.MatchSnapshot(t, normalizeHomePaths(out.String()))
 		})
 	}
 }
@@ -182,5 +193,5 @@ func TestNewWorkloadCmdRunETriggersHelp(t *testing.T) {
 	err := command.Execute()
 	require.NoError(t, err)
 
-	snaps.MatchSnapshot(t, out.String())
+	snaps.MatchSnapshot(t, normalizeHomePaths(out.String()))
 }
