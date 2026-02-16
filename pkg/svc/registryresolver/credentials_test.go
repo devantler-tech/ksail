@@ -326,15 +326,15 @@ func TestParseDockerConfigCredentials_MissingAuthsField(t *testing.T) {
 	assert.Empty(t, gotPassword)
 }
 
-// TestParseDockerConfigCredentials_DockerHubFormat tests Docker Hub registry format.
-func TestParseDockerConfigCredentials_DockerHubFormat(t *testing.T) {
+// TestParseDockerConfigCredentials_DockerHubCanonicalKey tests Docker Hub canonical key fallback.
+func TestParseDockerConfigCredentials_DockerHubCanonicalKey(t *testing.T) {
 	t.Parallel()
 
 	host := "docker.io"
 	username := "dockeruser"
 	password := "dockerpass"
 
-	// Create Docker config JSON with docker.io
+	// Create Docker config JSON with Docker Hub canonical key
 	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
 	config := map[string]any{
 		"auths": map[string]any{
@@ -347,11 +347,49 @@ func TestParseDockerConfigCredentials_DockerHubFormat(t *testing.T) {
 	configData, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	// Parse credentials - Docker Hub canonical key should also be matched.
+	// Parse credentials - Docker Hub canonical key should be matched when host is docker.io
 	gotUsername, gotPassword := registryresolver.ParseDockerConfigCredentials(configData, host)
 
 	assert.Equal(t, username, gotUsername)
 	assert.Equal(t, password, gotPassword)
+}
+
+// TestParseDockerConfigCredentials_DockerHubExactMatchPreferred tests that exact docker.io match
+// is preferred over the canonical key fallback.
+func TestParseDockerConfigCredentials_DockerHubExactMatchPreferred(t *testing.T) {
+	t.Parallel()
+
+	host := "docker.io"
+	exactUsername := "exact-user"
+	exactPassword := "exact-pass"
+	canonicalUsername := "canonical-user"
+	canonicalPassword := "canonical-pass"
+
+	// Create Docker config JSON with both exact docker.io key and Docker Hub canonical key.
+	// When host is docker.io, the exact match should be preferred over the canonical key.
+	exactAuth := base64.StdEncoding.EncodeToString([]byte(exactUsername + ":" + exactPassword))
+	canonicalAuth := base64.StdEncoding.EncodeToString(
+		[]byte(canonicalUsername + ":" + canonicalPassword),
+	)
+	config := map[string]any{
+		"auths": map[string]any{
+			"docker.io": map[string]any{
+				"auth": exactAuth,
+			},
+			"https://index.docker.io/v1/": map[string]any{
+				"auth": canonicalAuth,
+			},
+		},
+	}
+
+	configData, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	// Parse credentials - exact match should be preferred over canonical key fallback
+	gotUsername, gotPassword := registryresolver.ParseDockerConfigCredentials(configData, host)
+
+	assert.Equal(t, exactUsername, gotUsername)
+	assert.Equal(t, exactPassword, gotPassword)
 }
 
 // TestParseDockerConfigCredentials_GHCRFormat tests GitHub Container Registry format.
