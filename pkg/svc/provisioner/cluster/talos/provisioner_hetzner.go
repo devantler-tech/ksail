@@ -73,23 +73,13 @@ func (p *Provisioner) ensureHetznerInfra(
 	}, nil
 }
 
-// validateHetznerProvider checks if the provider is a Hetzner provider.
-func (p *Provisioner) validateHetznerProvider() (*hetzner.Provider, error) {
-	hzProvider, ok := p.infraProvider.(*hetzner.Provider)
-	if !ok {
-		return nil, fmt.Errorf("%w: got %T", ErrHetznerProviderRequired, p.infraProvider)
-	}
-
-	return hzProvider, nil
-}
-
 // createHetznerNodeGroups creates both control plane and worker node groups.
 func (p *Provisioner) createHetznerNodeGroups(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
 	infra HetznerInfra,
 	clusterName string,
-) (controlPlane, workers []*hcloud.Server, err error) {
+) ([]*hcloud.Server, []*hcloud.Server, error) {
 	controlPlaneServers, err := p.createHetznerNodes(ctx, hzProvider, infra, HetznerNodeGroupOpts{
 		ClusterName: clusterName,
 		Role:        RoleControlPlane,
@@ -145,14 +135,9 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 func (p *Provisioner) prepareAndApplyConfigs(
 	ctx context.Context,
 	clusterName string,
-	controlPlaneServers, workerServers []*hcloud.Server,
+	controlPlaneServers, workerServers, allServers []*hcloud.Server,
 ) error {
 	configBundle := p.talosConfigs.Bundle()
-
-	// Build list of all servers
-	allServers := make([]*hcloud.Server, 0, len(controlPlaneServers)+len(workerServers))
-	allServers = append(allServers, controlPlaneServers...)
-	allServers = append(allServers, workerServers...)
 
 	// Wait for Talos API to be reachable on all nodes (maintenance mode)
 	_, _ = fmt.Fprintf(p.logWriter, "Waiting for Talos API on %d nodes...\n", len(allServers))
@@ -174,17 +159,35 @@ func (p *Provisioner) prepareAndApplyConfigs(
 	)
 }
 
-// finalizeHetznerCluster saves configs and waits for cluster readiness.
-func (p *Provisioner) finalizeHetznerCluster(
+// bootstrapAndFinalize bootstraps etcd, saves configs, and waits for cluster readiness.
+func (p *Provisioner) bootstrapAndFinalize(
 	ctx context.Context,
+	hzProvider *hetzner.Provider,
 	clusterName string,
-	controlPlaneServers, workerServers []*hcloud.Server,
+	controlPlaneServers, workerServers, allServers []*hcloud.Server,
 ) error {
+	// Detach ISOs and reboot
+	_, _ = fmt.Fprintf(p.logWriter, "Detaching ISOs and rebooting nodes...\n")
+
+	err := p.detachISOsAndReboot(ctx, hzProvider, allServers)
+	if err != nil {
+		return fmt.Errorf("failed to detach ISOs: %w", err)
+	}
+
+	// Bootstrap etcd cluster
+	_, _ = fmt.Fprintf(p.logWriter, "Bootstrapping etcd cluster...\n")
+
 	configBundle := p.talosConfigs.Bundle()
+
+	err = p.bootstrapHetznerCluster(ctx, controlPlaneServers[0], configBundle)
+	if err != nil {
+		return fmt.Errorf("failed to bootstrap cluster: %w", err)
+	}
 
 	// Save talosconfig
 	if p.options.TalosconfigPath != "" {
-		if err := p.saveTalosconfig(configBundle); err != nil {
+		err = p.saveTalosconfig(configBundle)
+		if err != nil {
 			return fmt.Errorf("failed to save talosconfig: %w", err)
 		}
 	}
@@ -193,20 +196,22 @@ func (p *Provisioner) finalizeHetznerCluster(
 	if p.options.KubeconfigPath != "" {
 		_, _ = fmt.Fprintf(p.logWriter, "Fetching and saving kubeconfig...\n")
 
-		if err := p.saveHetznerKubeconfig(ctx, controlPlaneServers[0], configBundle); err != nil {
+		err = p.saveHetznerKubeconfig(ctx, controlPlaneServers[0], configBundle)
+		if err != nil {
 			return fmt.Errorf("failed to save kubeconfig: %w", err)
 		}
 
 		// Wait for cluster to be fully ready before reporting success
 		_, _ = fmt.Fprintf(p.logWriter, "Waiting for cluster to be ready...\n")
 
-		if err := p.waitForHetznerClusterReady(
+		err = p.waitForHetznerClusterReady(
 			ctx,
 			clusterName,
 			controlPlaneServers,
 			workerServers,
 			configBundle,
-		); err != nil {
+		)
+		if err != nil {
 			return fmt.Errorf("cluster readiness check failed: %w", err)
 		}
 
@@ -218,7 +223,7 @@ func (p *Provisioner) finalizeHetznerCluster(
 
 // createHetznerCluster creates a Talos cluster on Hetzner Cloud infrastructure.
 func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName string) error {
-	hzProvider, err := p.validateHetznerProvider()
+	hzProvider, err := p.hetznerProvider()
 	if err != nil {
 		return err
 	}
@@ -242,7 +247,9 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 	}
 
 	// Create node groups
-	controlPlaneServers, workerServers, err := p.createHetznerNodeGroups(ctx, hzProvider, infra, clusterName)
+	controlPlaneServers, workerServers, err := p.createHetznerNodeGroups(
+		ctx, hzProvider, infra, clusterName,
+	)
 	if err != nil {
 		return err
 	}
@@ -250,36 +257,28 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 	_, _ = fmt.Fprintf(p.logWriter, "\nInfrastructure created. Bootstrapping Talos cluster...\n")
 
 	// Update configs with correct endpoint
-	if err := p.updateConfigsWithEndpoint(controlPlaneServers); err != nil {
+	err = p.updateConfigsWithEndpoint(controlPlaneServers)
+	if err != nil {
 		return err
 	}
 
-	// Prepare and apply configs
-	if err := p.prepareAndApplyConfigs(ctx, clusterName, controlPlaneServers, workerServers); err != nil {
-		return fmt.Errorf("failed to apply machine configuration: %w", err)
-	}
-
-	// Build list of all servers for ISO detachment
+	// Build combined server list (used for config application, ISO detachment, etc.)
 	allServers := make([]*hcloud.Server, 0, len(controlPlaneServers)+len(workerServers))
 	allServers = append(allServers, controlPlaneServers...)
 	allServers = append(allServers, workerServers...)
 
-	// Detach ISOs and reboot
-	_, _ = fmt.Fprintf(p.logWriter, "Detaching ISOs and rebooting nodes...\n")
-
-	if err := p.detachISOsAndReboot(ctx, hzProvider, allServers); err != nil {
-		return fmt.Errorf("failed to detach ISOs: %w", err)
+	// Prepare and apply configs
+	err = p.prepareAndApplyConfigs(ctx, clusterName, controlPlaneServers, workerServers, allServers)
+	if err != nil {
+		return fmt.Errorf("failed to apply machine configuration: %w", err)
 	}
 
-	// Bootstrap cluster
-	_, _ = fmt.Fprintf(p.logWriter, "Bootstrapping etcd cluster...\n")
-
-	if err := p.bootstrapHetznerCluster(ctx, controlPlaneServers[0], p.talosConfigs.Bundle()); err != nil {
-		return fmt.Errorf("failed to bootstrap cluster: %w", err)
-	}
-
-	// Finalize cluster (save configs and wait for readiness)
-	if err := p.finalizeHetznerCluster(ctx, clusterName, controlPlaneServers, workerServers); err != nil {
+	// Bootstrap, save configs, and wait for cluster readiness
+	err = p.bootstrapAndFinalize(
+		ctx, hzProvider, clusterName,
+		controlPlaneServers, workerServers, allServers,
+	)
+	if err != nil {
 		return err
 	}
 
@@ -293,10 +292,9 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 }
 
 func (p *Provisioner) deleteHetznerCluster(ctx context.Context, clusterName string) error {
-	// Type assert to get Hetzner-specific provider
-	hetznerProv, ok := p.infraProvider.(*hetzner.Provider)
-	if !ok {
-		return fmt.Errorf("%w: got %T", ErrHetznerProviderRequired, p.infraProvider)
+	hetznerProv, err := p.hetznerProvider()
+	if err != nil {
+		return err
 	}
 
 	// Check if cluster exists
