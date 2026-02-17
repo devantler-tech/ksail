@@ -3,6 +3,7 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
@@ -262,18 +263,12 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 		return err
 	}
 
-	// Build combined server list (used for config application, ISO detachment, etc.)
-	allServers := make([]*hcloud.Server, 0, len(controlPlaneServers)+len(workerServers))
-	allServers = append(allServers, controlPlaneServers...)
-	allServers = append(allServers, workerServers...)
+	allServers := slices.Concat(controlPlaneServers, workerServers)
 
 	// Prepare and apply configs
 	err = p.prepareAndApplyConfigs(ctx, clusterName, controlPlaneServers, workerServers, allServers)
 	if err != nil {
-		return fmt.Errorf(
-			"failed while waiting for Talos API or applying machine configuration: %w",
-			err,
-		)
+		return err
 	}
 
 	// Bootstrap, save configs, and wait for cluster readiness
