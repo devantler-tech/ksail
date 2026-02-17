@@ -36,6 +36,9 @@ runs:
           "--distribution K3s --cni Cilium --gitops-engine ArgoCD"
           "--distribution Talos --cni Cilium --gitops-engine Flux"
           "--distribution Talos --cni Cilium --gitops-engine ArgoCD"
+          "--distribution Talos --cni Cilium --load-balancer Enabled --gitops-engine Flux"
+          "--distribution VCluster --cni Cilium --gitops-engine Flux"
+          "--distribution VCluster --cni Cilium --gitops-engine ArgoCD"
         )
 
         IMAGES_FILE="/tmp/all-images.txt"
@@ -45,6 +48,10 @@ runs:
           # shellcheck disable=SC2086
           ksail workload images $config >> "$IMAGES_FILE" 2>/dev/null || true
         done
+
+        # Append VCluster provisioner-level images (must match warm-mirror-cache exactly)
+        echo "ghcr.io/loft-sh/vcluster-pro:0.32.0-alpha.2" >> "$IMAGES_FILE"
+        echo "ghcr.io/loft-sh/kubernetes:v1.32.3" >> "$IMAGES_FILE"
 
         # Deduplicate and sort (must match warm-mirror-cache exactly)
         sort -u "$IMAGES_FILE" > /tmp/unique-images.txt

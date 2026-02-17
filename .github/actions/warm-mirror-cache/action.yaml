@@ -42,8 +42,7 @@ runs:
       run: |
         echo "📋 Extracting images for all system test configurations..."
 
-        # All unique component combinations from CI matrix
-        # Distribution doesn't affect Helm chart images, only CSI/LoadBalancer selection
+        # All unique distribution × component combinations from CI matrix
         CONFIGS=(
           # Default (Cilium CNI)
           "--distribution Vanilla --cni Cilium"
@@ -61,6 +60,13 @@ runs:
           # Talos specific
           "--distribution Talos --cni Cilium --gitops-engine Flux"
           "--distribution Talos --cni Cilium --gitops-engine ArgoCD"
+
+          # Talos + MetalLB (only installed for Talos×Docker×LB=Enabled)
+          "--distribution Talos --cni Cilium --load-balancer Enabled --gitops-engine Flux"
+
+          # VCluster specific
+          "--distribution VCluster --cni Cilium --gitops-engine Flux"
+          "--distribution VCluster --cni Cilium --gitops-engine ArgoCD"
         )
 
         # Create temp file for all images
@@ -82,6 +88,13 @@ runs:
           echo "⚠️ Extraction errors (may be expected for some configs):"
           cat "$ERRORS_FILE"
         fi
+
+        # Append VCluster provisioner-level images that ksail workload images
+        # cannot enumerate (pulled by the vCluster SDK, not the installer factory).
+        # Source: pkg/svc/provisioner/cluster/vcluster/provisioner.go (defaultChartVersion)
+        # Source: pkg/fsutil/configmanager/vcluster/Dockerfile (DefaultKubernetesVersion)
+        echo "ghcr.io/loft-sh/vcluster-pro:0.32.0-alpha.2" >> "$IMAGES_FILE"
+        echo "ghcr.io/loft-sh/kubernetes:v1.32.3" >> "$IMAGES_FILE"
 
         # Deduplicate and sort
         sort -u "$IMAGES_FILE" > /tmp/unique-images.txt

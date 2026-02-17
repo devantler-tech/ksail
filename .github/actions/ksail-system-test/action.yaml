@@ -144,7 +144,7 @@ runs:
         fi
 
     - name: 📥 Restore Helm chart cache
-      uses: ./.github/actions/cache-helm-charts
+      uses: ./.github/actions/restore-helm-cache
 
     - name: 📥 Pre-pull registry image
       if: inputs.provider == 'Docker'
