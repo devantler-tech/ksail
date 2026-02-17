@@ -50,8 +50,8 @@ runs:
         done
 
         # Append VCluster provisioner-level images (must match warm-mirror-cache exactly)
-        echo "ghcr.io/loft-sh/vcluster-pro:0.32.0-alpha.2" >> "$IMAGES_FILE"
-        echo "ghcr.io/loft-sh/kubernetes:v1.32.3" >> "$IMAGES_FILE"
+        # Source of truth: pkg/fsutil/configmanager/vcluster/Dockerfile
+        grep '^FROM ' pkg/fsutil/configmanager/vcluster/Dockerfile | sed 's/^FROM //' >> "$IMAGES_FILE"
 
         # Deduplicate and sort (must match warm-mirror-cache exactly)
         sort -u "$IMAGES_FILE" > /tmp/unique-images.txt
