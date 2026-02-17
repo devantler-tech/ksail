@@ -126,6 +126,10 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 
 	_, _ = fmt.Fprintf(p.logWriter, "\nInfrastructure created. Bootstrapping Talos cluster...\n")
 
+	if len(controlPlaneServers) == 0 {
+		return fmt.Errorf("%w: %s", clustererr.ErrNoControlPlaneNodes, clusterName)
+	}
+
 	// Regenerate configs with the first control-plane node's public IP as the endpoint.
 	// This is necessary because:
 	// 1. The original configs were generated with internal network IPs
