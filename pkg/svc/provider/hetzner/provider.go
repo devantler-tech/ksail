@@ -317,8 +317,6 @@ type ServerRetryOpts struct {
 // CreateServerWithRetry creates a server with retry and location fallback support.
 // It handles transient Hetzner API errors with exponential backoff and can fallback
 // to alternative locations when the primary location has resource constraints.
-//
-//nolint:cyclop,funlen,gocognit // Complex retry logic with location fallback requires multiple conditions
 func (p *Provider) CreateServerWithRetry(
 	ctx context.Context,
 	opts CreateServerOpts,
@@ -328,8 +326,13 @@ func (p *Provider) CreateServerWithRetry(
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	locations := p.buildLocationList(opts.Location, retryOpts.FallbackLocations)
+	// Build list of locations to try: primary + fallbacks
+	locations := make([]string, 0, 1+len(retryOpts.FallbackLocations))
+	locations = append(locations, opts.Location)
+	locations = append(locations, retryOpts.FallbackLocations...)
+
 	var lastErr error
+
 	originalPlacementGroupID := opts.PlacementGroupID
 
 	for locationIdx, location := range locations {
@@ -355,17 +358,6 @@ func (p *Provider) CreateServerWithRetry(
 
 	// All locations exhausted
 	return nil, fmt.Errorf("%w: %s (last error: %w)", ErrAllLocationsFailed, opts.Name, lastErr)
-}
-
-// buildLocationList constructs the list of locations to try: primary + fallbacks.
-//
-//nolint:funcorder // Helper grouped with CreateServerWithRetry
-func (p *Provider) buildLocationList(primaryLocation string, fallbackLocations []string) []string {
-	locations := make([]string, 0, 1+len(fallbackLocations))
-	locations = append(locations, primaryLocation)
-	locations = append(locations, fallbackLocations...)
-
-	return locations
 }
 
 // attemptServerCreationInLocation tries to create a server in a specific location with retries.
@@ -405,8 +397,9 @@ func (p *Provider) attemptServerCreationInLocation(
 		}
 
 		// Handle placement errors with fallback
-		if p.shouldDisablePlacement(err, retryOpts, currentOpts.PlacementGroupID) {
+		if shouldDisablePlacement(err, retryOpts, currentOpts.PlacementGroupID) {
 			p.logPlacementFallback(retryOpts.LogWriter, opts.Name, location)
+
 			currentOpts.PlacementGroupID = 0
 			placementDisabledForLocation = true
 
@@ -414,34 +407,33 @@ func (p *Provider) attemptServerCreationInLocation(
 		}
 
 		// Check if we should retry this error
-		if !p.shouldRetryError(err) {
+		if !shouldRetryError(err) {
 			// Non-retryable error - try next location if available
 			return nil, err
 		}
 
 		// Wait before next retry
 		if attempt < DefaultMaxServerCreateRetries {
-			if err := p.waitForRetryDelay(
+			waitErr := p.waitForRetryDelay(
 				ctx,
 				retryOpts.LogWriter,
 				attempt,
 				opts.Name,
 				location,
 				err,
-			); err != nil {
-				return nil, err
+			)
+			if waitErr != nil {
+				return nil, waitErr
 			}
 		}
 	}
 
 	// All retries exhausted for this location
-	return nil, fmt.Errorf("all retry attempts failed in location %s", location)
+	return nil, fmt.Errorf("%w in location %s", ErrAllRetriesExhausted, location)
 }
 
 // shouldDisablePlacement checks if placement group should be disabled after an error.
-//
-//nolint:funcorder // Helper grouped with CreateServerWithRetry
-func (p *Provider) shouldDisablePlacement(
+func shouldDisablePlacement(
 	err error,
 	retryOpts ServerRetryOpts,
 	placementGroupID int64,
@@ -452,9 +444,7 @@ func (p *Provider) shouldDisablePlacement(
 }
 
 // shouldRetryError determines if an error should trigger a retry.
-//
-//nolint:funcorder // Helper grouped with CreateServerWithRetry
-func (p *Provider) shouldRetryError(err error) bool {
+func shouldRetryError(err error) bool {
 	return IsRetryableHetznerError(err) || IsPlacementError(err)
 }
 
@@ -540,7 +530,11 @@ func (p *Provider) logRetryAttempt(
 // logLocationFallback logs when moving to a fallback location.
 //
 //nolint:funcorder // Helper grouped with CreateServerWithRetry
-func (p *Provider) logLocationFallback(logWriter io.Writer, currentLocation string, nextLocation string) {
+func (p *Provider) logLocationFallback(
+	logWriter io.Writer,
+	currentLocation string,
+	nextLocation string,
+) {
 	p.logRetryf(
 		logWriter,
 		"  ⚠ All attempts failed in %s, trying fallback location %s...\n",
