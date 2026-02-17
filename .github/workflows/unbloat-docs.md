@@ -24,13 +24,10 @@ strict: true
 # AI engine configuration
 engine:
   id: copilot
-  max-turns: 90 # Reduce from avg 115 turns
 
 # Shared instructions
 imports:
-  - shared/mood.md
   - shared/reporting.md
-  - shared/docs-server-lifecycle.md
 
 # Network access for documentation best practices research
 network:
@@ -51,6 +48,7 @@ tools:
   playwright:
     args: ["--viewport-size", "1920x1080"]
   bash:
+    - "git *"
     - "find docs/src/content/docs -name '*.md'"
     - "wc -l *"
     - "grep -n *"
