@@ -25,10 +25,6 @@ import (
 // defaultVClusterName is used when no name is provided.
 const defaultVClusterName = "vcluster-default"
 
-// defaultChartVersion returns the vCluster Helm chart version from the embedded
-// Dockerfile, keeping it in sync with Dependabot updates automatically.
-var defaultChartVersion = vclusterconfigmanager.ChartVersion()
-
 // connectMaxAttempts is the number of times to retry ConnectDocker after cluster
 // creation. The SDK's waitForVCluster has a hardcoded 3-minute readiness timeout
 // which is too short for CI runners. Retrying gives an effective timeout of
@@ -126,7 +122,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 
 	opts := &cli.CreateOptions{
 		Driver:       "docker",
-		ChartVersion: defaultChartVersion,
+		ChartVersion: vclusterconfigmanager.ChartVersion(),
 		Connect:      false,
 		Upgrade:      false,
 		Distro:       "k8s",
@@ -370,7 +366,7 @@ func rerunInstallScript(
 ) error {
 	scriptURL := fmt.Sprintf(
 		"https://github.com/loft-sh/vcluster/releases/download/v%s/install-standalone.sh",
-		defaultChartVersion,
+		vclusterconfigmanager.ChartVersion(),
 	)
 
 	installCmd := fmt.Sprintf(
