@@ -272,6 +272,7 @@ runs:
 
     - name: 🧪 ksail cluster start
       shell: bash
+      timeout-minutes: 10
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
