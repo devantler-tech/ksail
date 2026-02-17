@@ -7,6 +7,7 @@ description: |
   agentic workflows throughout the development lifecycle.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: weekly
   workflow_dispatch:
 
@@ -17,6 +18,7 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  noop: false
   create-discussion:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
