@@ -91,17 +91,8 @@ runs:
 
         # Append VCluster provisioner-level images that ksail workload images
         # cannot enumerate (pulled by the vCluster SDK, not the installer factory).
-        #   - pkg/svc/provisioner/cluster/vcluster/provisioner.go (defaultChartVersion)
-        #   - pkg/fsutil/configmanager/vcluster/Dockerfile (DefaultKubernetesVersion)
-        VCLUSTER_CHART_VERSION=$(sed -n 's/.*defaultChartVersion[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' pkg/svc/provisioner/cluster/vcluster/provisioner.go | head -n 1)
-        K8S_VERSION=$(sed -n 's/^FROM[[:space:]]*ghcr\.io\/loft-sh\/kubernetes:\(.*\)/\1/p' pkg/fsutil/configmanager/vcluster/Dockerfile | head -n 1)
-
-        # Fallback to current known-good values if parsing fails
-        VCLUSTER_CHART_VERSION=${VCLUSTER_CHART_VERSION:-0.32.0-alpha.2}
-        K8S_VERSION=${K8S_VERSION:-v1.32.3}
-
-        echo "ghcr.io/loft-sh/vcluster-pro:${VCLUSTER_CHART_VERSION}" >> "$IMAGES_FILE"
-        echo "ghcr.io/loft-sh/kubernetes:${K8S_VERSION}" >> "$IMAGES_FILE"
+        # Source of truth: pkg/fsutil/configmanager/vcluster/Dockerfile
+        grep '^FROM ' pkg/fsutil/configmanager/vcluster/Dockerfile | sed 's/^FROM //' >> "$IMAGES_FILE"
 
         # Deduplicate and sort
         sort -u "$IMAGES_FILE" > /tmp/unique-images.txt
