@@ -2,6 +2,7 @@
 name: Documentation Unbloat
 description: Reviews and simplifies documentation by reducing verbosity while maintaining clarity and completeness
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   # Daily (scattered execution time)
   schedule: daily
 
@@ -69,6 +70,7 @@ tools:
 
 # Safe outputs configuration
 safe-outputs:
+  noop: false
   create-pull-request:
     expires: 2d
     title-prefix: "[docs] "

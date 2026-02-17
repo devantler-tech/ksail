@@ -6,6 +6,7 @@ description: |
   reports, identifies gaps, creates comprehensive test suites, and submits draft PRs.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   workflow_dispatch:
 
@@ -19,6 +20,7 @@ network:
 strict: false
 
 safe-outputs:
+  noop: false
   create-discussion: # needed to create planning discussion
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"

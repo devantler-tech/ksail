@@ -7,6 +7,7 @@ description: |
   strategic decision-making.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     # Every week, Monday (fuzzy scheduling to distribute load)
     - cron: "weekly on monday"
@@ -17,6 +18,7 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  noop: false
   create-discussion:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
