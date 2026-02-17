@@ -216,6 +216,8 @@ func (m *Model) renderShortHelp() string {
 	result := buildTruncatedHelp(parts, usableWidth)
 
 	var finalHelp strings.Builder
+	finalHelp.Grow(len(result) + len(helpSep) + len(helpToggle))
+
 	if result != "" {
 		finalHelp.WriteString(result)
 		finalHelp.WriteString(helpSep)

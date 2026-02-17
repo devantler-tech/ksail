@@ -69,15 +69,23 @@ func buildFullCommand(commandPath string, params map[string]any) string {
 // buildCopilotResult creates a Copilot ToolResult based on execution outcome.
 func buildCopilotResult(fullCmd string, output string, err error) copilot.ToolResult {
 	if err != nil {
+		var errText strings.Builder
+		errText.Grow(len("Command: \nStatus: FAILED\nError: ") + len(fullCmd) + len(err.Error()))
+		errText.WriteString("Command: ")
+		errText.WriteString(fullCmd)
+		errText.WriteString("\nStatus: FAILED\nError: ")
+		errText.WriteString(err.Error())
+
 		return copilot.ToolResult{
-			TextResultForLLM: fmt.Sprintf("Command: %s\nStatus: FAILED\nError: %v", fullCmd, err),
+			TextResultForLLM: errText.String(),
 			ResultType:       "failure",
-			SessionLog:       fmt.Sprintf("[FAILED] %s: %v", fullCmd, err),
+			SessionLog:       "[FAILED] " + fullCmd + ": " + err.Error(),
 			ToolTelemetry:    map[string]any{},
 		}
 	}
 
 	var result strings.Builder
+	result.Grow(len("Command: \nStatus: SUCCESS\nOutput:\n") + len(fullCmd) + len(output))
 
 	result.WriteString("Command: ")
 	result.WriteString(fullCmd)

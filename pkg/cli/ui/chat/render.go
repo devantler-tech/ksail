@@ -33,6 +33,7 @@ func (m *Model) renderHeader() string {
 	taglineRow = lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true).Render(taglineRow)
 
 	var headerContent strings.Builder
+	headerContent.Grow(len(logoRendered) + 1 + len(taglineRow))
 	headerContent.WriteString(logoRendered)
 	headerContent.WriteString("\n")
 	headerContent.WriteString(taglineRow)
@@ -88,6 +89,7 @@ func (m *Model) buildStatusText() string {
 		warnStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow))
 
 		var feedback strings.Builder
+		feedback.Grow(len("Models unavailable: ") + len(m.modelUnavailableReason))
 
 		feedback.WriteString("Models unavailable")
 

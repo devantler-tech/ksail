@@ -74,7 +74,10 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 }
 
 func buildMCPErrorText(commandPath, output string, err error) string {
+	const overhead = len("Command '' failed\nOutput:\n\nError: ")
+
 	var result strings.Builder
+	result.Grow(overhead + len(commandPath) + len(output) + len(err.Error()))
 
 	result.WriteString("Command '")
 	result.WriteString(commandPath)
@@ -92,7 +95,10 @@ func buildMCPErrorText(commandPath, output string, err error) string {
 }
 
 func buildMCPSuccessText(commandPath, output string) string {
+	const overhead = len("Command '' completed successfully\nOutput:\n")
+
 	var result strings.Builder
+	result.Grow(overhead + len(commandPath) + len(output))
 
 	result.WriteString("Command '")
 	result.WriteString(commandPath)
