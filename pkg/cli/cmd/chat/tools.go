@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
+	chatsvc "github.com/devantler-tech/ksail/v5/pkg/svc/chat"
 	"github.com/devantler-tech/ksail/v5/pkg/toolgen"
 	copilot "github.com/github/copilot-sdk/go"
 )
@@ -189,13 +190,20 @@ func awaitToolPermission(
 	return true, nil
 }
 
+// pathArgKeys returns the argument keys that SDK-managed file tools use for paths.
+// Checked in order; the first match is validated.
+func pathArgKeys() []string {
+	return []string{"path", "filePath", "file", "target", "directory"}
+}
+
 // BuildPreToolUseHook creates a PreToolUseHandler that enforces chat mode restrictions on ALL tool
 // invocations (both custom KSail tools and SDK-managed tools like git/shell/filesystem).
 // In plan mode, ALL tools are blocked. In ask mode, write tools and unknown tools are blocked.
-// In agent mode, the hook defers to existing permission mechanisms (Handler wrappers + OnPermissionRequest).
+// In agent mode, SDK-managed file tools are sandboxed to allowedRoot.
 func BuildPreToolUseHook(
 	chatModeRef *chatui.ChatModeRef,
 	toolMetadata map[string]toolgen.ToolDefinition,
+	allowedRoot string,
 ) copilot.PreToolUseHandler {
 	return func(input copilot.PreToolUseHookInput, _ copilot.HookInvocation) (*copilot.PreToolUseHookOutput, error) {
 		if chatModeRef == nil {
@@ -212,12 +220,52 @@ func BuildPreToolUseHook(
 		case chatui.AskMode:
 			return handleAskModeToolUse(input.ToolName, toolMetadata)
 		case chatui.AgentMode:
-			// Defer to existing handler wrappers and OnPermissionRequest
-			return &copilot.PreToolUseHookOutput{}, nil
+			return validatePathAccess(input, allowedRoot)
 		}
 
 		return &copilot.PreToolUseHookOutput{}, nil
 	}
+}
+
+// validatePathAccess checks whether a tool invocation's file path arguments fall within
+// the allowed root directory. Only SDK-managed tools (not in toolMetadata) are checked.
+func validatePathAccess(
+	input copilot.PreToolUseHookInput,
+	allowedRoot string,
+) (*copilot.PreToolUseHookOutput, error) {
+	if allowedRoot == "" {
+		return &copilot.PreToolUseHookOutput{}, nil
+	}
+
+	args, ok := input.ToolArgs.(map[string]any)
+	if !ok || len(args) == 0 {
+		return &copilot.PreToolUseHookOutput{}, nil
+	}
+
+	for _, key := range pathArgKeys() {
+		val, exists := args[key]
+		if !exists {
+			continue
+		}
+
+		pathStr, isStr := val.(string)
+		if !isStr || pathStr == "" {
+			continue
+		}
+
+		if !chatsvc.IsPathWithinDirectory(pathStr, allowedRoot) {
+			return &copilot.PreToolUseHookOutput{
+				PermissionDecision: "deny",
+				PermissionDecisionReason: fmt.Sprintf(
+					"Access denied — path %q is outside the project directory (%s). "+
+						"File access is restricted to the current working directory and its subdirectories.",
+					pathStr, allowedRoot,
+				),
+			}, nil
+		}
+	}
+
+	return &copilot.PreToolUseHookOutput{}, nil
 }
 
 // handleAskModeToolUse determines if a tool should be allowed or denied in ask mode.
