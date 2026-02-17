@@ -240,6 +240,26 @@ func (d *ComponentDetector) detectLoadBalancer(
 		}
 	}
 
+	// Talos: check for MetalLB Helm release (used by Talos × Docker;
+	// Talos × Hetzner also resolves correctly via ProvidesLoadBalancerByDefault).
+	if distribution == v1alpha1.DistributionTalos {
+		return d.detectMetalLB(ctx)
+	}
+
+	return v1alpha1.LoadBalancerDefault, nil
+}
+
+// detectMetalLB checks for a MetalLB Helm release.
+func (d *ComponentDetector) detectMetalLB(ctx context.Context) (v1alpha1.LoadBalancer, error) {
+	exists, err := d.helmClient.ReleaseExists(ctx, ReleaseMetalLB, NamespaceMetalLB)
+	if err != nil {
+		return v1alpha1.LoadBalancerDefault, fmt.Errorf("check metallb release: %w", err)
+	}
+
+	if exists {
+		return v1alpha1.LoadBalancerEnabled, nil
+	}
+
 	return v1alpha1.LoadBalancerDefault, nil
 }
 
