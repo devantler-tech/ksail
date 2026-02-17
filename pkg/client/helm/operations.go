@@ -13,9 +13,12 @@ const (
 	// the Go context doesn't cancel prematurely while Helm's kstatus wait is running.
 	ContextTimeoutBuffer = 5 * time.Minute
 
-	// chartInstallMaxRetries is the maximum number of retry attempts for chart
-	// installation when transient network errors occur.
-	chartInstallMaxRetries = 3
+	// Retry configuration for chart installation.
+	// Transient 429/5xx errors can occur during Helm installs in CI with many
+	// parallel jobs hitting the same chart registries.
+	chartInstallMaxRetries    = 5
+	chartInstallRetryBaseWait = 3 * time.Second
+	chartInstallRetryMaxWait  = 30 * time.Second
 )
 
 // InstallOrUpgradeChart performs a Helm install or upgrade operation.
@@ -59,11 +62,14 @@ func InstallOrUpgradeChart(
 	timeoutCtx, cancel := context.WithTimeout(ctx, contextTimeout)
 	defer cancel()
 
-	return installChartWithRetry(timeoutCtx, client, spec, repoConfig.RepoName)
+	return InstallChartWithRetry(timeoutCtx, client, spec, repoConfig.RepoName)
 }
 
-// installChartWithRetry attempts to install a chart, retrying on transient network errors.
-func installChartWithRetry(
+// InstallChartWithRetry attempts to install a chart, retrying on transient
+// network errors (429 rate limits, 5xx server errors, connection resets, etc.).
+// It is exported so that installers that bypass [InstallOrUpgradeChart] (e.g.
+// OCI-based charts) can still benefit from retry logic.
+func InstallChartWithRetry(
 	ctx context.Context,
 	client Interface,
 	spec *ChartSpec,
@@ -81,7 +87,11 @@ func installChartWithRetry(
 			break
 		}
 
-		delay := netretry.ExponentialDelay(attempt, repoIndexRetryBaseWait, repoIndexRetryMaxWait)
+		delay := netretry.ExponentialDelay(
+			attempt,
+			chartInstallRetryBaseWait,
+			chartInstallRetryMaxWait,
+		)
 
 		timer := time.NewTimer(delay)
 		select {

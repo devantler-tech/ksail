@@ -50,6 +50,11 @@ const (
 	// NamespaceLocalPathStorage is the namespace where local-path-provisioner is installed.
 	NamespaceLocalPathStorage = "local-path-storage"
 
+	// ReleaseMetalLB is the Helm release name for MetalLB.
+	ReleaseMetalLB = "metallb"
+	// NamespaceMetalLB is the namespace where MetalLB is installed.
+	NamespaceMetalLB = "metallb-system"
+
 	// ContainerCloudProviderKind is the Docker container name for cloud-provider-kind.
 	ContainerCloudProviderKind = "ksail-cloud-provider-kind"
 
