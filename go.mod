@@ -65,7 +65,7 @@ require (
 	github.com/loft-sh/vcluster v0.32.0-rc.1
 	github.com/modelcontextprotocol/go-sdk v1.3.0
 	github.com/siderolabs/go-retry v0.3.3
-	golang.org/x/text v0.33.0
+	golang.org/x/text v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
