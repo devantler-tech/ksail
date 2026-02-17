@@ -17,6 +17,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
+	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	specdiff "github.com/devantler-tech/ksail/v5/pkg/svc/diff"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
@@ -452,6 +453,35 @@ func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult)
 	notify.Infof(cmd.OutOrStdout(), block.String())
 }
 
+// confirmRecreate prompts the user to confirm cluster recreation unless --force is set.
+// Returns nil if confirmed or skipped, or nil with a cancellation message printed.
+func confirmRecreate(cmd *cobra.Command, clusterName string, force bool) bool {
+	if confirm.ShouldSkipPrompt(force) {
+		return true
+	}
+
+	var prompt strings.Builder
+
+	prompt.WriteString(
+		"Update will delete and recreate the cluster.\n",
+	)
+	prompt.WriteString("All workloads and data will be lost.")
+
+	notify.Warningf(cmd.OutOrStderr(), "%s", prompt.String())
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+		"Type \"yes\" to proceed with updating cluster %q: ", clusterName,
+	)
+
+	if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
+		notify.Infof(cmd.OutOrStdout(), "Update cancelled")
+
+		return false
+	}
+
+	return true
+}
+
 // executeRecreateFlow performs the delete + create flow with confirmation.
 func executeRecreateFlow(
 	cmd *cobra.Command,
@@ -463,26 +493,8 @@ func executeRecreateFlow(
 ) error {
 	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
 
-	// Show warning and get confirmation
-	if !confirm.ShouldSkipPrompt(force) {
-		var prompt strings.Builder
-
-		prompt.WriteString(
-			"Update will delete and recreate the cluster.\n",
-		)
-		prompt.WriteString("All workloads and data will be lost.")
-
-		notify.Warningf(cmd.OutOrStderr(), "%s", prompt.String())
-
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-			"Type \"yes\" to proceed with updating cluster %q: ", clusterName,
-		)
-
-		if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
-			notify.Infof(cmd.OutOrStdout(), "Update cancelled")
-
-			return nil
-		}
+	if !confirmRecreate(cmd, clusterName, force) {
+		return nil
 	}
 
 	// Create provisioner for delete
@@ -491,6 +503,17 @@ func executeRecreateFlow(
 	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
+	}
+
+	// Disconnect registries from Docker network before deletion.
+	// Required for distributions like VCluster and Talos because their provisioners
+	// destroy the Docker network during deletion, which fails if containers are
+	// still connected. Registries are reused on recreate, so only disconnect is needed.
+	if ctx.ClusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderDocker {
+		disconnectRegistriesBeforeDelete(cmd, &clusterdetector.Info{
+			Distribution: ctx.ClusterCfg.Spec.Cluster.Distribution,
+			ClusterName:  clusterName,
+		})
 	}
 
 	// Execute delete

@@ -42,6 +42,9 @@ var (
 	errNoSuchHost    = errors.New(
 		"dial tcp: lookup charts.example.com: no such host",
 	)
+	errContextDeadline = errors.New(
+		"context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
+	)
 )
 
 func TestIsRetryable(t *testing.T) {
@@ -76,6 +79,7 @@ func TestIsRetryable(t *testing.T) {
 		{name: "TLS handshake timeout", err: errTLSTimeout, expected: true},
 		{name: "unexpected EOF", err: errUnexpectedEOF, expected: true},
 		{name: "no such host", err: errNoSuchHost, expected: true},
+		{name: "context deadline exceeded", err: errContextDeadline, expected: true},
 	}
 
 	for _, tt := range tests {

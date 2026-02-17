@@ -29,6 +29,7 @@ func IsRetryable(err error) bool {
 		"connection reset by peer", "connection refused",
 		"i/o timeout", "TLS handshake timeout",
 		"unexpected EOF", "no such host",
+		"context deadline exceeded",
 	}
 
 	for _, pattern := range textPatterns {
