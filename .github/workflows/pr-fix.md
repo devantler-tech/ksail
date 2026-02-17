@@ -7,6 +7,7 @@ description: |
   development flowing.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   slash_command:
     name: pr-fix
   reaction: "eyes"
@@ -17,6 +18,7 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  noop: false
   push-to-pull-request-branch:
     if-no-changes: "warn"
   create-issue:

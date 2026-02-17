@@ -7,6 +7,7 @@ description: |
   prioritize incoming issues.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   issues:
     types: [opened, reopened]
   reaction: eyes
@@ -16,6 +17,7 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  noop: false
   add-labels:
     max: 5
   add-comment:

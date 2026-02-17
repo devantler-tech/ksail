@@ -2,7 +2,7 @@ package toolgen
 
 import (
 	"context"
-	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -38,34 +38,26 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 			// MCP returns errors via IsError flag and error messages in content
 			// Include both the captured output (which contains the actual error details)
 			// and the error message (which contains the exit code)
-			errorMsg := fmt.Sprintf("Command '%s' failed", tool.CommandPath)
-			if output != "" {
-				errorMsg += "\nOutput:\n" + output
-			}
-
-			errorMsg += fmt.Sprintf("\nError: %v", err)
+			errorText := buildMCPErrorText(tool.CommandPath, output, err)
 
 			return &mcp.CallToolResult{
 				IsError: true,
 				Content: []mcp.Content{
 					&mcp.TextContent{
-						Text: errorMsg,
+						Text: errorText,
 					},
 				},
 			}, nil, nil
 		}
 
 		// Success - include command output in response
-		resultText := fmt.Sprintf("Command '%s' completed successfully", tool.CommandPath)
-		if output != "" {
-			resultText += "\nOutput:\n" + output
-		}
+		successText := buildMCPSuccessText(tool.CommandPath, output)
 
 		return &mcp.CallToolResult{
 			IsError: false,
 			Content: []mcp.Content{
 				&mcp.TextContent{
-					Text: resultText,
+					Text: successText,
 				},
 			},
 		}, nil, nil
@@ -79,4 +71,43 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 	// This is acceptable for server initialization where failures should be fatal.
 	// The panic will propagate up and terminate the MCP server startup process.
 	mcp.AddTool(server, mcpTool, handler)
+}
+
+func buildMCPErrorText(commandPath, output string, err error) string {
+	const overhead = len("Command '' failed\nOutput:\n\nError: ")
+
+	var result strings.Builder
+	result.Grow(overhead + len(commandPath) + len(output) + len(err.Error()))
+
+	result.WriteString("Command '")
+	result.WriteString(commandPath)
+	result.WriteString("' failed")
+
+	if output != "" {
+		result.WriteString("\nOutput:\n")
+		result.WriteString(output)
+	}
+
+	result.WriteString("\nError: ")
+	result.WriteString(err.Error())
+
+	return result.String()
+}
+
+func buildMCPSuccessText(commandPath, output string) string {
+	const overhead = len("Command '' completed successfully\nOutput:\n")
+
+	var result strings.Builder
+	result.Grow(overhead + len(commandPath) + len(output))
+
+	result.WriteString("Command '")
+	result.WriteString(commandPath)
+	result.WriteString("' completed successfully")
+
+	if output != "" {
+		result.WriteString("\nOutput:\n")
+		result.WriteString(output)
+	}
+
+	return result.String()
 }

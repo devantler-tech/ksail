@@ -6,6 +6,7 @@ description: |
   and workflow configuration to help diagnose and resolve CI issues efficiently.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   workflow_run:
     workflows:
       - "CI - KSail"
@@ -29,6 +30,7 @@ network:
 strict: false
 
 safe-outputs:
+  noop: false
   create-issue:
     title-prefix: "${{ github.workflow }}"
     close-older-issues: true
