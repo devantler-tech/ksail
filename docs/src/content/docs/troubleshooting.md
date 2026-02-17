@@ -164,9 +164,8 @@ ksail workload reconcile --timeout=5m
 KSail automatically retries component installations with exponential backoff (5 attempts, 3-30 second delays). Most transient failures resolve automatically:
 
 ```bash
-# Installation typically succeeds after automatic retry
-# You'll see retry messages in the output:
-# "Retrying chart installation (attempt 2/5)..."
+# Installation typically succeeds after automatic retry, even if you see
+# temporary errors like 429, 500, or 503 during the process.
 
 # If all retries fail, wait a moment and recreate the cluster
 ksail cluster delete
@@ -206,8 +205,8 @@ curl -I https://registry-1.docker.io  # Test Docker Hub
 # Free up system resources
 docker system prune -a  # Clean up unused containers and images
 
-# Increase timeout for slower systems (if configuration option exists)
-# Check your ksail.yaml or use --timeout flags where available
+# Note: Component installation timeouts are currently fixed in KSail
+# and cannot be configured via ksail.yaml or CLI flags
 
 # For severely resource-constrained systems, consider:
 # - Increasing Docker Desktop resource limits
