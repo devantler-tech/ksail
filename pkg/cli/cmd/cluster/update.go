@@ -454,7 +454,7 @@ func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult)
 }
 
 // confirmRecreate prompts the user to confirm cluster recreation unless --force is set.
-// Returns nil if confirmed or skipped, or nil with a cancellation message printed.
+// It returns true if the update should proceed (confirmed or forced), and false if the user cancels.
 func confirmRecreate(cmd *cobra.Command, clusterName string, force bool) bool {
 	if confirm.ShouldSkipPrompt(force) {
 		return true
