@@ -37,7 +37,7 @@ func (m *Model) activeModalHeight() int {
 		return m.helpOverlayExtraHeight()
 	case m.pendingPermission != nil:
 		return m.permissionModalExtraHeight()
-	case m.showModelPicker || m.showSessionPicker:
+	case m.showModelPicker || m.showSessionPicker || m.showReasoningPicker:
 		return m.pickerModalExtraHeight()
 	default:
 		return 0
@@ -65,9 +65,13 @@ func (m *Model) permissionModalExtraHeight() int {
 // pickerModalExtraHeight calculates the extra height for picker modals.
 func (m *Model) pickerModalExtraHeight() int {
 	var totalItems int
-	if m.showSessionPicker {
+
+	switch {
+	case m.showSessionPicker:
 		totalItems = len(m.filteredSessions) + 1 // +1 for "New Chat" option
-	} else {
+	case m.showReasoningPicker:
+		totalItems = len(reasoningEffortLevels)
+	default:
 		totalItems = len(m.filteredModels) + 1 // +1 for "auto" option
 	}
 
