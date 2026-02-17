@@ -1,5 +1,6 @@
 ---
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     # Every 3 days at 2am UTC
     - cron: "0 2 */3 * *"
@@ -12,6 +13,7 @@ permissions: read-all
 network: defaults
 engine: copilot
 safe-outputs:
+  noop: false
   create-pull-request:
   create-issue:
 

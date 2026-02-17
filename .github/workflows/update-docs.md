@@ -8,6 +8,7 @@ description: |
   updates. Supports documentation-as-code philosophy.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   push:
     branches: [main]
   workflow_dispatch:
@@ -20,6 +21,7 @@ bots:
 network: defaults
 
 safe-outputs:
+  noop: false
   create-pull-request:
     draft: true
 
