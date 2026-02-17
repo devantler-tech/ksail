@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/go-connections/nat"
 	"github.com/siderolabs/talos/pkg/cluster/check"
+	"github.com/siderolabs/talos/pkg/machinery/client/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"github.com/siderolabs/talos/pkg/machinery/config/machine"
 	"github.com/siderolabs/talos/pkg/provision"
@@ -84,7 +85,10 @@ func (p *Provisioner) deleteDockerCluster(ctx context.Context, clusterName strin
 
 // collectClusterVolumes gathers all volumes used by Talos containers before cluster deletion.
 // These are anonymous volumes that the Talos SDK doesn't clean up automatically.
-func (p *Provisioner) collectClusterVolumes(ctx context.Context, clusterName string) ([]string, error) {
+func (p *Provisioner) collectClusterVolumes(
+	ctx context.Context,
+	clusterName string,
+) ([]string, error) {
 	containers, err := p.listTalosContainers(ctx, clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list Talos containers: %w", err)
@@ -134,7 +138,8 @@ func (p *Provisioner) cleanupVolumesAfterDestroy(ctx context.Context, volumes []
 // Logs warnings but doesn't fail the delete operation if cleanup fails.
 func (p *Provisioner) cleanupConfigFiles(clusterName string) {
 	if p.options.KubeconfigPath != "" {
-		if err := p.cleanupKubeconfig(clusterName); err != nil {
+		err := p.cleanupKubeconfig(clusterName)
+		if err != nil {
 			_, _ = fmt.Fprintf(
 				p.logWriter,
 				"Warning: failed to clean up kubeconfig: %v\n",
@@ -144,7 +149,8 @@ func (p *Provisioner) cleanupConfigFiles(clusterName string) {
 	}
 
 	if p.options.TalosconfigPath != "" {
-		if err := p.cleanupTalosconfig(clusterName); err != nil {
+		err := p.cleanupTalosconfig(clusterName)
+		if err != nil {
 			_, _ = fmt.Fprintf(
 				p.logWriter,
 				"Warning: failed to clean up talosconfig: %v\n",
@@ -274,8 +280,6 @@ func (p *Provisioner) getClusterContainers(
 }
 
 // bootstrapAndSaveKubeconfig bootstraps the cluster and saves the kubeconfig.
-//
-//nolint:cyclop,funlen // Bootstrap sequence is inherently complex but logically coherent
 func (p *Provisioner) bootstrapAndSaveKubeconfig(
 	ctx context.Context,
 	cluster provision.Cluster,
@@ -288,10 +292,8 @@ func (p *Provisioner) bootstrapAndSaveKubeconfig(
 	}
 
 	// Create cluster access adapter
-	clusterAccess, err := p.createClusterAccess(cluster, talosConfig, kubernetesEndpoint)
-	if err != nil {
-		return err
-	}
+	clusterAccess := p.createClusterAccess(cluster, talosConfig, kubernetesEndpoint)
+
 	defer func() { _ = clusterAccess.Close() }()
 
 	// Bootstrap cluster and wait for readiness
@@ -310,7 +312,7 @@ func (p *Provisioner) setupClusterEndpoints(
 	ctx context.Context,
 	cluster provision.Cluster,
 	configBundle *bundle.Bundle,
-) (*bundle.TalosConfig, string, error) {
+) (*config.Config, string, error) {
 	// Get the mapped Talos API endpoint for Docker-in-VM environments (macOS, Windows).
 	// On these platforms, the container's internal IP is not accessible from the host,
 	// so we need to use 127.0.0.1 with the mapped port.
@@ -345,22 +347,23 @@ func (p *Provisioner) setupClusterEndpoints(
 // createClusterAccess creates an access adapter for cluster operations with configured endpoints.
 func (p *Provisioner) createClusterAccess(
 	cluster provision.Cluster,
-	talosConfig *bundle.TalosConfig,
+	talosConfig *config.Config,
 	kubernetesEndpoint string,
-) (*access.Adapter, error) {
+) *access.Adapter {
 	// Create access adapter for cluster operations.
 	// WithKubernetesEndpoint sets ForceEndpoint which is used to rewrite the kubeconfig.
-	clusterAccess := access.NewAdapter(
+	return access.NewAdapter(
 		cluster,
 		provision.WithTalosConfig(talosConfig),
 		provision.WithKubernetesEndpoint(kubernetesEndpoint),
 	)
-
-	return clusterAccess, nil
 }
 
 // bootstrapAndWaitForReady bootstraps the cluster and waits for all components to be ready.
-func (p *Provisioner) bootstrapAndWaitForReady(ctx context.Context, clusterAccess *access.Adapter) error {
+func (p *Provisioner) bootstrapAndWaitForReady(
+	ctx context.Context,
+	clusterAccess *access.Adapter,
+) error {
 	// Bootstrap the cluster
 	_, _ = fmt.Fprintf(p.logWriter, "Bootstrapping cluster...\n")
 
@@ -393,7 +396,10 @@ func (p *Provisioner) bootstrapAndWaitForReady(ctx context.Context, clusterAcces
 }
 
 // fetchAndSaveKubeconfig retrieves the kubeconfig from the cluster and writes it to disk.
-func (p *Provisioner) fetchAndSaveKubeconfig(ctx context.Context, clusterAccess *access.Adapter) error {
+func (p *Provisioner) fetchAndSaveKubeconfig(
+	ctx context.Context,
+	clusterAccess *access.Adapter,
+) error {
 	_, _ = fmt.Fprintf(p.logWriter, "Fetching kubeconfig...\n")
 
 	kubeconfig, err := clusterAccess.Kubeconfig(ctx)
