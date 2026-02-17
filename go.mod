@@ -39,11 +39,11 @@ require (
 	golang.org/x/sync v0.19.0
 	golang.org/x/term v0.40.0
 	helm.sh/helm/v4 v4.1.1
-	k8s.io/api v0.35.0
-	k8s.io/apiextensions-apiserver v0.35.0
+	k8s.io/api v0.35.1
+	k8s.io/apiextensions-apiserver v0.35.1
 	k8s.io/apimachinery v0.35.1
 	k8s.io/cli-runtime v0.35.0
-	k8s.io/client-go v0.35.0
+	k8s.io/client-go v0.35.1
 	k8s.io/kubectl v0.35.0
 	sigs.k8s.io/controller-runtime v0.23.1
 	sigs.k8s.io/kind v0.31.0
@@ -757,9 +757,9 @@ require (
 	gorm.io/gorm v1.31.1 // indirect
 	helm.sh/helm/v3 v3.19.2 // indirect
 	honnef.co/go/tools v0.6.1 // indirect
-	k8s.io/apiserver v0.35.0 // indirect
+	k8s.io/apiserver v0.35.1 // indirect
 	k8s.io/cluster-bootstrap v0.35.0 // indirect
-	k8s.io/component-base v0.35.0 // indirect
+	k8s.io/component-base v0.35.1 // indirect
 	k8s.io/component-helpers v0.35.0 // indirect
 	k8s.io/cri-api v0.35.0 // indirect
 	k8s.io/cri-client v0.35.0 // indirect
