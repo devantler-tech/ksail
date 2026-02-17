@@ -44,7 +44,7 @@ runs:
           ~/.config/helm/repositories.yaml
         key: ${{ steps.generate-key.outputs.cache-key }}
         restore-keys: |
-          helm-cache-${{ inputs.cache-version }}-
+          helm-cache-${{ inputs.cache-version }}-${{ runner.os }}-${{ runner.arch }}-
 
     - name: ℹ️ Cache miss notice
       if: steps.restore-cache.outputs.cache-hit != 'true'

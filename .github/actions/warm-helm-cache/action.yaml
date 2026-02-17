@@ -52,7 +52,7 @@ runs:
           ~/.config/helm/repositories.yaml
         key: ${{ steps.generate-key.outputs.cache-key }}
         restore-keys: |
-          helm-cache-${{ inputs.cache-version }}-
+          helm-cache-${{ inputs.cache-version }}-${{ runner.os }}-${{ runner.arch }}-
 
     - name: 🔍 Check if cache is complete
       id: check-cache
