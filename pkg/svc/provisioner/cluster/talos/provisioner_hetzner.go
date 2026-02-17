@@ -317,29 +317,8 @@ func (p *Provisioner) deleteHetznerCluster(ctx context.Context, clusterName stri
 		return fmt.Errorf("failed to delete Hetzner nodes: %w", err)
 	}
 
-	// Clean up kubeconfig
-	if p.options.KubeconfigPath != "" {
-		cleanupErr := p.cleanupKubeconfig(clusterName)
-		if cleanupErr != nil {
-			_, _ = fmt.Fprintf(
-				p.logWriter,
-				"Warning: failed to clean up kubeconfig: %v\n",
-				cleanupErr,
-			)
-		}
-	}
-
-	// Clean up talosconfig
-	if p.options.TalosconfigPath != "" {
-		cleanupErr := p.cleanupTalosconfig(clusterName)
-		if cleanupErr != nil {
-			_, _ = fmt.Fprintf(
-				p.logWriter,
-				"Warning: failed to clean up talosconfig: %v\n",
-				cleanupErr,
-			)
-		}
-	}
+	// Clean up config files (kubeconfig and talosconfig)
+	p.cleanupConfigFiles(clusterName)
 
 	_, _ = fmt.Fprintf(p.logWriter, "Successfully deleted Talos cluster %q\n", clusterName)
 
