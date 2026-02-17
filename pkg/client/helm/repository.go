@@ -19,10 +19,11 @@ const (
 	repoFileMode = 0o640
 
 	// Retry configuration for repository index downloads.
-	// External Helm repositories may experience transient 5xx errors.
-	repoIndexMaxRetries    = 3
-	repoIndexRetryBaseWait = 2 * time.Second
-	repoIndexRetryMaxWait  = 15 * time.Second
+	// External Helm repositories may experience transient 429/5xx errors,
+	// especially in CI with many parallel jobs hitting the same chart servers.
+	repoIndexMaxRetries    = 5
+	repoIndexRetryBaseWait = 3 * time.Second
+	repoIndexRetryMaxWait  = 30 * time.Second
 )
 
 var (

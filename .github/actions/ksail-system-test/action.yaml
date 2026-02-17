@@ -143,6 +143,9 @@ runs:
           echo "✅ All 4 mirror cache volumes present"
         fi
 
+    - name: 📥 Restore Helm chart cache
+      uses: ./.github/actions/cache-helm-charts
+
     - name: 📥 Pre-pull registry image
       if: inputs.provider == 'Docker'
       shell: bash

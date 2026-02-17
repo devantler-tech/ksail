@@ -55,9 +55,9 @@ func (b *Base) Install(ctx context.Context) error {
 	installCtx, cancel := context.WithTimeout(ctx, b.timeout+helm.ContextTimeoutBuffer)
 	defer cancel()
 
-	_, err = b.client.InstallOrUpgradeChart(installCtx, b.spec)
+	err = helm.InstallChartWithRetry(installCtx, b.client, b.spec, b.name)
 	if err != nil {
-		return fmt.Errorf("failed to install %s chart: %w", b.name, err)
+		return fmt.Errorf("installing %s chart: %w", b.name, err)
 	}
 
 	return nil

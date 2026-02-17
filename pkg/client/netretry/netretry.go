@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// httpStatusCodePattern matches HTTP 5xx status codes at word boundaries
+// httpStatusCodePattern matches HTTP 429 and 5xx status codes at word boundaries
 // to avoid false positives on port numbers like ":5000".
-var httpStatusCodePattern = regexp.MustCompile(`\b50[0-4]\b`)
+var httpStatusCodePattern = regexp.MustCompile(`\b(429|50[0-4])\b`)
 
 // IsRetryable returns true if the error indicates a transient network error
 // that should be retried. This covers HTTP 5xx status codes and TCP-level errors
@@ -22,13 +22,15 @@ func IsRetryable(err error) bool {
 
 	errMsg := err.Error()
 
-	// HTTP 5xx status text patterns and TCP-level transient network errors.
+	// HTTP status text patterns and TCP-level transient network errors.
 	textPatterns := []string{
+		"Too Many Requests",
 		"Internal Server Error", "Bad Gateway",
 		"Service Unavailable", "Gateway Timeout",
 		"connection reset by peer", "connection refused",
 		"i/o timeout", "TLS handshake timeout",
 		"unexpected EOF", "no such host",
+		"context deadline exceeded",
 	}
 
 	for _, pattern := range textPatterns {
@@ -37,7 +39,7 @@ func IsRetryable(err error) bool {
 		}
 	}
 
-	// Match HTTP 5xx numeric codes at word boundaries to avoid false positives
+	// Match HTTP 429/5xx numeric codes at word boundaries to avoid false positives
 	// on port numbers like ":5000". Uses regexp for precise matching.
 	return httpStatusCodePattern.MatchString(errMsg)
 }
