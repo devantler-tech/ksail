@@ -30,9 +30,6 @@ go test -bench=BenchmarkDecrypt -benchmem
 
 # Roundtrip benchmarks
 go test -bench=BenchmarkRoundtrip -benchmem
-
-# Age encryption benchmark (requires age keys)
-go test -bench=BenchmarkEncrypt/Small -benchmem
 ```
 
 ### Profiling
@@ -258,4 +255,4 @@ To track performance over time:
 ## References
 
 - [SOPS Documentation](https://github.com/getsops/sops)
-- [KSail Performance Optimization Guide](/.github/instructions/go-performance-optimization.md)
+- [KSail Performance Optimization Guide](../../../../.github/instructions/go-performance-optimization.md)

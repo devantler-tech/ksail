@@ -16,12 +16,9 @@ import (
 )
 
 // Benchmark scenarios:
-// - Minimal secret (single key-value)
-// - Small config (5 keys)
-// - Medium config (20 keys)
-// - Large config (100 keys)
-// - Nested structure
-// - Extract operations
+// - Encrypt: Minimal (1 key), Small (5 keys), Medium (20 keys), Large (100 keys), Nested
+// - Decrypt: Same sizes + WithExtract (partial decryption)
+// - Roundtrip: Full encrypt-decrypt cycle
 
 // --- Test data generators ---
 
@@ -139,7 +136,14 @@ func defaultKeyGroups(b *testing.B) []sops.KeyGroup {
 		b.Fatalf("Failed to generate age identity: %v", err)
 	}
 
-	b.Setenv("SOPS_AGE_KEY", identity.String())
+	keyFile := filepath.Join(b.TempDir(), "keys.txt")
+
+	err = os.WriteFile(keyFile, []byte(identity.String()+"\n"), 0o600)
+	if err != nil {
+		b.Fatalf("Failed to write age key file: %v", err)
+	}
+
+	b.Setenv("SOPS_AGE_KEY_FILE", keyFile)
 
 	masterKey, err := sopsage.MasterKeyFromRecipient(identity.Recipient().String())
 	if err != nil {
