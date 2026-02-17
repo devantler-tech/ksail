@@ -32,9 +32,13 @@ func (m *Model) renderHeader() string {
 	taglineRow := m.buildTaglineRow(headerContentWidth)
 	taglineRow = lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true).Render(taglineRow)
 
-	headerContent := logoRendered + "\n" + taglineRow
+	var headerContent strings.Builder
+	headerContent.Grow(len(logoRendered) + 1 + len(taglineRow))
+	headerContent.WriteString(logoRendered)
+	headerContent.WriteString("\n")
+	headerContent.WriteString(taglineRow)
 
-	return m.styles.headerBox.Width(max(m.width-modalPadding, 1)).Render(headerContent)
+	return m.styles.headerBox.Width(max(m.width-modalPadding, 1)).Render(headerContent.String())
 }
 
 // buildTaglineRow builds the tagline row with right-aligned status indicator.
@@ -84,12 +88,17 @@ func (m *Model) buildStatusText() string {
 	case m.showModelUnavailableFeedback:
 		warnStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow))
 
-		feedback := "Models unavailable"
+		var feedback strings.Builder
+		feedback.Grow(len("Models unavailable: ") + len(m.modelUnavailableReason))
+
+		feedback.WriteString("Models unavailable")
+
 		if m.modelUnavailableReason != "" {
-			feedback += ": " + m.modelUnavailableReason
+			feedback.WriteString(": ")
+			feedback.WriteString(m.modelUnavailableReason)
 		}
 
-		statusParts = append(statusParts, warnStyle.Render(feedback))
+		statusParts = append(statusParts, warnStyle.Render(feedback.String()))
 	case m.justCompleted:
 		statusParts = append(statusParts, m.styles.status.Render("Ready"+checkmarkSuffix))
 	}
