@@ -11,10 +11,10 @@ KSail is a CLI tool that bundles common Kubernetes tooling into a single binary.
 
 ### Why use KSail instead of kubectl/helm/kind/k3d directly?
 
-KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, flux, and argocd into one binary. You get:
+KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, flux, and argocd into one binary. You get:
 
-- **Consistent workflow** across distributions (Vanilla, K3s, Talos)
-- **Native configuration** — Works with standard `kind.yaml`, `k3d.yaml`, and Talos configs
+- **Consistent workflow** across distributions (Vanilla, K3s, Talos, VCluster)
+- **Native configuration** — Works with standard `kind.yaml`, `k3d.yaml`, Talos configs, and `vcluster.yaml`
 - **No vendor lock-in** — Use generated configs directly with native tools
 - **Declarative configuration** for reproducible environments
 - **Built-in best practices** for CNI, CSI, observability, and security
@@ -28,6 +28,7 @@ KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, flux, and ar
 - **Vanilla clusters**: Use the generated `kind.yaml` with `kind create cluster --config kind.yaml`
 - **K3s clusters**: Use the generated `k3d.yaml` with `k3d cluster create --config k3d.yaml`
 - **Talos clusters**: Use the generated patches with `talosctl`
+- **VCluster clusters**: Use the generated `vcluster.yaml` with `vcluster create my-cluster --values vcluster.yaml`
 
 You can migrate away from KSail at any time or use both KSail and native tools interchangeably. KSail is a superset that adds convenience without creating vendor lock-in.
 
@@ -44,6 +45,9 @@ k3d cluster create --config k3d.yaml
 
 # For Talos distribution
 talosctl cluster create --config-patch @talos/cluster/patches.yaml
+
+# For VCluster distribution
+vcluster create my-cluster --values vcluster.yaml
 ```
 
 KSail-generated configurations are standard, valid configuration files for each distribution. This ensures portability and prevents lock-in.
@@ -68,7 +72,7 @@ See the [Installation Guide](/installation/) for details.
 
 ### Do I need to install Docker, kubectl, helm, etc.?
 
-**Docker is required** for local cluster creation (the Docker provider). KSail embeds kubectl, helm, kind, k3d, flux, and argocd as Go libraries, so you don't need to install them separately.
+**Docker is required** for local cluster creation (the Docker provider). KSail embeds kubectl, helm, kind, k3d, vcluster, flux, and argocd as Go libraries, so you don't need to install them separately.
 
 For Hetzner cloud clusters (Talos only), you need a Hetzner account and API token, but Docker is still used for the KSail binary.
 
@@ -91,11 +95,12 @@ go install github.com/devantler-tech/ksail/v5@latest
 
 ### Which Kubernetes distributions does KSail support?
 
-KSail supports three distributions:
+KSail supports four distributions:
 
 - **Vanilla** (via Kind) - Upstream Kubernetes
 - **K3s** (via K3d) - Lightweight Kubernetes
 - **Talos** - Immutable Kubernetes OS
+- **VCluster** (via Vind) - Virtual clusters in Docker
 
 See the [Support Matrix](/support-matrix/) for provider compatibility.
 
@@ -149,14 +154,15 @@ You must manually delete the old cluster first with `ksail cluster delete`, then
 
 ### Which distributions support LoadBalancer services?
 
-LoadBalancer support is available across all distributions:
+LoadBalancer support varies by distribution:
 
 - **Vanilla (Kind) on Docker** - ✅ Uses cloud-provider-kind (external Docker container)
 - **K3s on Docker** - ✅ Uses built-in ServiceLB (Klipper-LB)
 - **Talos on Docker** - ✅ Uses MetalLB with default IP pool (172.18.255.200-172.18.255.250)
 - **Talos on Hetzner** - ✅ Uses Hetzner Cloud Load Balancer
+- **VCluster on Docker** - ✅ Managed internally by vCluster
 
-All distributions now provide LoadBalancer service support. MetalLB was added for Talos on Docker in v5.31+.
+All distributions provide LoadBalancer service support. MetalLB was added for Talos on Docker in v5.31+.
 
 ### Can I add nodes to an existing cluster?
 
