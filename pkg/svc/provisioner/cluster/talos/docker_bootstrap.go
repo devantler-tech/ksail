@@ -3,11 +3,9 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
-	"io"
 	"time"
 
-	"github.com/siderolabs/talos/pkg/cluster/check"
-	"github.com/siderolabs/talos/pkg/conditions"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
@@ -47,7 +45,15 @@ func (p *Provisioner) waitForDockerClusterReadyAfterStart(
 	}
 
 	// Load TalosConfig from disk (since we don't have the config bundle during start)
-	talosConfig, err := clientconfig.Open("")
+	talosconfigPath := ""
+	if p.options.TalosconfigPath != "" {
+		talosconfigPath, err = fsutil.ExpandHomePath(p.options.TalosconfigPath)
+		if err != nil {
+			return fmt.Errorf("failed to expand talosconfig path: %w", err)
+		}
+	}
+
+	talosConfig, err := clientconfig.Open(talosconfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to load talosconfig: %w", err)
 	}
@@ -60,7 +66,7 @@ func (p *Provisioner) waitForDockerClusterReadyAfterStart(
 
 	defer clusterAccess.Close() //nolint:errcheck
 
-	err = p.runDockerClusterChecks(ctx, clusterAccess)
+	err = p.runClusterChecks(ctx, clusterAccess, dockerClusterReadinessTimeout)
 	if err != nil {
 		return err
 	}
@@ -68,49 +74,4 @@ func (p *Provisioner) waitForDockerClusterReadyAfterStart(
 	_, _ = fmt.Fprintf(p.logWriter, "✓ Cluster is ready\n")
 
 	return nil
-}
-
-// runDockerClusterChecks runs CNI-aware readiness checks on a Docker cluster.
-// It selects the appropriate checks based on CNI configuration, logs progress,
-// and waits for all checks to pass.
-func (p *Provisioner) runDockerClusterChecks(
-	ctx context.Context,
-	clusterAccess *access.Adapter,
-) error {
-	checks := p.clusterReadinessChecks()
-
-	if (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks {
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  Running pre-boot and K8s component checks (CNI not installed yet)...\n",
-		)
-	} else {
-		_, _ = fmt.Fprintf(p.logWriter, "  Running full cluster readiness checks...\n")
-	}
-
-	reporter := &dockerCheckReporter{writer: p.logWriter}
-
-	checkCtx, cancel := context.WithTimeout(ctx, dockerClusterReadinessTimeout)
-	defer cancel()
-
-	err := check.Wait(checkCtx, clusterAccess, checks, reporter)
-	if err != nil {
-		return fmt.Errorf("cluster readiness checks failed: %w", err)
-	}
-
-	return nil
-}
-
-// dockerCheckReporter implements check.Reporter to log check progress for Docker clusters.
-type dockerCheckReporter struct {
-	writer   io.Writer
-	lastLine string
-}
-
-func (r *dockerCheckReporter) Update(condition conditions.Condition) {
-	line := fmt.Sprintf("    %s", condition)
-	if line != r.lastLine {
-		_, _ = fmt.Fprintf(r.writer, "%s\n", line)
-		r.lastLine = line
-	}
 }

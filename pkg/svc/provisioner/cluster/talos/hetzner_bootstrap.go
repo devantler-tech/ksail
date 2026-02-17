@@ -3,15 +3,12 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/go-retry/retry"
-	"github.com/siderolabs/talos/pkg/cluster/check"
-	"github.com/siderolabs/talos/pkg/conditions"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
@@ -225,7 +222,7 @@ func (p *Provisioner) waitForHetznerClusterReady(
 
 	// Determine which checks to run based on CNI configuration
 	// When CNI is disabled, nodes won't become Ready until CNI is installed
-	return p.runHetznerClusterChecks(ctx, clusterAccess)
+	return p.runClusterChecks(ctx, clusterAccess, clusterReadinessTimeout)
 }
 
 // waitForHetznerClusterReadyAfterStart waits for a Hetzner cluster to be ready after starting.
@@ -267,7 +264,7 @@ func (p *Provisioner) waitForHetznerClusterReadyAfterStart(
 
 	defer clusterAccess.Close() //nolint:errcheck
 
-	err = p.runHetznerClusterChecks(ctx, clusterAccess)
+	err = p.runClusterChecks(ctx, clusterAccess, clusterReadinessTimeout)
 	if err != nil {
 		return err
 	}
@@ -321,49 +318,4 @@ func (p *Provisioner) discoverHetznerServers(
 	}
 
 	return controlPlaneServers, workerServers, nil
-}
-
-// runHetznerClusterChecks runs CNI-aware readiness checks on a Hetzner cluster.
-// It selects the appropriate checks based on CNI configuration, logs progress,
-// and waits for all checks to pass.
-func (p *Provisioner) runHetznerClusterChecks(
-	ctx context.Context,
-	clusterAccess *access.Adapter,
-) error {
-	checks := p.clusterReadinessChecks()
-
-	if (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks {
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  Running pre-boot and K8s component checks (CNI not installed yet)...\n",
-		)
-	} else {
-		_, _ = fmt.Fprintf(p.logWriter, "  Running full cluster readiness checks...\n")
-	}
-
-	reporter := &hetznerCheckReporter{writer: p.logWriter}
-
-	checkCtx, cancel := context.WithTimeout(ctx, clusterReadinessTimeout)
-	defer cancel()
-
-	err := check.Wait(checkCtx, clusterAccess, checks, reporter)
-	if err != nil {
-		return fmt.Errorf("cluster readiness checks failed: %w", err)
-	}
-
-	return nil
-}
-
-// hetznerCheckReporter implements check.Reporter to log check progress.
-type hetznerCheckReporter struct {
-	writer   io.Writer
-	lastLine string
-}
-
-func (r *hetznerCheckReporter) Update(condition conditions.Condition) {
-	line := fmt.Sprintf("    %s", condition)
-	if line != r.lastLine {
-		_, _ = fmt.Fprintf(r.writer, "%s\n", line)
-		r.lastLine = line
-	}
 }
