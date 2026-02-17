@@ -59,11 +59,6 @@ updates:
         patterns:
           - "*"
 
-  # ghcr.io multi-arch images hit a known Dependabot bug where manifest digests are fetched
-  # from the /blobs/ endpoint instead of /manifests/, causing 404 errors.
-  # Upstream issue: https://github.com/dependabot/dependabot-core/issues/13383
-  # The Talos entry is disabled until this is resolved.
-
   - package-ecosystem: docker
     registries: [dockerhub, ghcr]
     directory: /
@@ -73,21 +68,20 @@ updates:
       interval: daily
 
   - package-ecosystem: docker
-    registries: [dockerhub, ghcr]
-    directory: /.github/fixtures/reconcile-test
+    directory: /pkg/svc/installer/cloudproviderkind # cloud-provider-kind image (embedded in Go via go:embed)
     cooldown:
       default-days: 7
     schedule:
       interval: daily
 
-  # Disabled: ghcr.io multi-arch image hits dependabot/dependabot-core#13383
-  # - package-ecosystem: docker
-  #   registries: [ghcr]
-  #   directory: /pkg/fsutil/configmanager/talos # Talos image (embedded in Go via go:embed)
-  #   cooldown:
-  #     default-days: 7
-  #   schedule:
-  #     interval: daily
+  # Not working as-is because ghcr.io multi-arch image hits dependabot/dependabot-core#13383
+  - package-ecosystem: docker
+    registries: [ghcr]
+    directory: /pkg/fsutil/configmanager/talos # Talos image (embedded in Go via go:embed)
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
 
   - package-ecosystem: docker
     registries: [dockerhub, ghcr]
@@ -105,11 +99,11 @@ updates:
     schedule:
       interval: daily
 
-  # Disabled: ghcr.io multi-arch image hits dependabot/dependabot-core#13383
-  # - package-ecosystem: docker
-  #   registries: [ghcr]
-  #   directory: /pkg/fsutil/configmanager/vcluster # vCluster Kubernetes image (embedded in Go via go:embed)
-  #   cooldown:
-  #     default-days: 7
-  #   schedule:
-  #     interval: daily
+  # Not working as-is because ghcr.io multi-arch image hits dependabot/dependabot-core#13383
+  - package-ecosystem: docker
+    registries: [ghcr]
+    directory: /pkg/fsutil/configmanager/vcluster # vCluster images (embedded in Go via go:embed)
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
