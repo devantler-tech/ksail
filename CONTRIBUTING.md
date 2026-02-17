@@ -178,7 +178,7 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 - **apis/** - API types, schemas, and enums (distribution/provider values)
 - **client/** - Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
 - **svc/provider/** - Infrastructure providers (e.g., `docker.Provider` for running nodes as containers)
-- **svc/provisioner/** - Distribution provisioners (Vanilla, K3s, Talos)
+- **svc/provisioner/** - Distribution provisioners (Vanilla, K3s, Talos, VCluster)
 - **svc/installer/** - Component installers (CNI, CSI, metrics-server, etc.)
 - **svc/image/** - Container image export/import services for Vanilla and K3s distributions
 - **svc/reconciler/** - Common base for GitOps reconciliation clients (Flux and ArgoCD)
@@ -191,11 +191,12 @@ KSail separates infrastructure management from distribution configuration:
 - **Providers** manage the infrastructure lifecycle (start/stop containers)
 - **Provisioners** configure and manage Kubernetes distributions
 
-| Distribution | Provisioner            | Tool  | Provider        | Description                  |
-|--------------|------------------------|-------|-----------------|------------------------------|
-| `Vanilla`    | KindClusterProvisioner | Kind  | Docker          | Standard upstream Kubernetes |
-| `K3s`        | K3dClusterProvisioner  | K3d   | Docker          | Lightweight K3s in Docker    |
-| `Talos`      | TalosProvisioner       | Talos | Docker, Hetzner | Immutable Talos Linux        |
+| Distribution | Provisioner              | Tool     | Provider        | Description                            |
+|--------------|--------------------------|----------|-----------------|----------------------------------------|
+| `Vanilla`    | KindClusterProvisioner   | Kind     | Docker          | Standard upstream Kubernetes           |
+| `K3s`        | K3dClusterProvisioner    | K3d      | Docker          | Lightweight K3s in Docker              |
+| `Talos`      | TalosProvisioner         | Talos    | Docker, Hetzner | Immutable Talos Linux                  |
+| `VCluster`   | VClusterProvisioner      | vCluster | Docker          | Virtual clusters via vCluster in Docker |
 
 This project strives to be fully open-source friendly, and as such, all core functionality is implemented in the `pkg/` directory, and the `internal/` directory is not used. This allows external projects to import and use any part of the codebase.
 
