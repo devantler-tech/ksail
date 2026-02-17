@@ -190,6 +190,12 @@ ksail cluster init \
 4. Images are pulled through the authenticated mirror, avoiding rate limits
 5. Cached images persist across cluster restarts for faster subsequent pulls
 
+**Distribution support:** Mirror registries are supported across all distributions:
+- **Vanilla (Kind)**: Configured via containerd `hosts.toml` injection after cluster creation
+- **K3s (K3d)**: Configured via K3d registries configuration before cluster creation
+- **Talos**: Configured via machine config registry mirror patches
+- **VCluster**: Configured via containerd `hosts.toml` injection into vCluster control plane and worker containers after cluster creation
+
 ## Secret Management
 
 Encrypt and decrypt secrets using [SOPS](/concepts/#sops) with support for age, PGP, and cloud KMS providers.
