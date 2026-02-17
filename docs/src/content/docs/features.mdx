@@ -16,9 +16,9 @@ ksail cluster create
 
 **Capabilities:**
 
-- **Multi-distribution support** – [Vanilla, K3s, and Talos](/concepts/#distributions) distributions
-- **Native configuration** – Generates standard `kind.yaml`, `k3d.yaml`, and Talos patch files
-- **No vendor lock-in** – Use generated configs directly with Kind, K3d, or Talos CLI
+- **Multi-distribution support** – [Vanilla, K3s, Talos, and VCluster](/concepts/#distributions) distributions
+- **Native configuration** – Generates standard `kind.yaml`, `k3d.yaml`, Talos patch files, and `vcluster.yaml`
+- **No vendor lock-in** – Use generated configs directly with Kind, K3d, Talos, or vCluster CLI
 - **Component installation** – [CNI](/concepts/#container-network-interface-cni) (Cilium, Calico), [CSI](/concepts/#container-storage-interface-csi), [metrics-server](/concepts/#metrics-server) with [kubelet-csr-approver](/concepts/#kubelet-csr-approver), [cert-manager](/concepts/#cert-manager), and [policy engines](/concepts/#policy-engines)
 - **Custom cluster naming** – Set container, registry, and context names via `--name`
 - **Node configuration** – Control-plane and worker node counts via `--control-planes` and `--workers`
@@ -29,6 +29,7 @@ ksail cluster create
 > - **Vanilla**: `kind create cluster --config kind.yaml`
 > - **K3s**: `k3d cluster create --config k3d.yaml`
 > - **Talos**: `talosctl cluster create` with generated patches
+> - **VCluster**: `vcluster create my-cluster --values vcluster.yaml`
 >
 > KSail is a superset — you're never locked in.
 
