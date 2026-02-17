@@ -77,18 +77,19 @@ func buildCopilotResult(fullCmd string, output string, err error) copilot.ToolRe
 		}
 	}
 
-	var b strings.Builder
-	b.Grow(len("Command: \nStatus: SUCCESS") + len(fullCmd) + len(output) + 10)
-	b.WriteString("Command: ")
-	b.WriteString(fullCmd)
-	b.WriteString("\nStatus: SUCCESS")
+	var result strings.Builder
+
+	result.WriteString("Command: ")
+	result.WriteString(fullCmd)
+	result.WriteString("\nStatus: SUCCESS")
+
 	if output != "" {
-		b.WriteString("\nOutput:\n")
-		b.WriteString(output)
+		result.WriteString("\nOutput:\n")
+		result.WriteString(output)
 	}
 
 	return copilot.ToolResult{
-		TextResultForLLM: b.String(),
+		TextResultForLLM: result.String(),
 		ResultType:       "success",
 		SessionLog:       "[SUCCESS] " + fullCmd,
 		ToolTelemetry:    map[string]any{},

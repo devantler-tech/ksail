@@ -88,7 +88,9 @@ func (m *Model) buildStatusText() string {
 		warnStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow))
 
 		var feedback strings.Builder
+
 		feedback.WriteString("Models unavailable")
+
 		if m.modelUnavailableReason != "" {
 			feedback.WriteString(": ")
 			feedback.WriteString(m.modelUnavailableReason)

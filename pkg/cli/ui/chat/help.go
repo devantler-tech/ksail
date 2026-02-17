@@ -220,6 +220,7 @@ func (m *Model) renderShortHelp() string {
 		finalHelp.WriteString(result)
 		finalHelp.WriteString(helpSep)
 	}
+
 	finalHelp.WriteString(helpToggle)
 
 	return m.styles.help.Render("  " + finalHelp.String())

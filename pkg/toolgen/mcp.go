@@ -2,7 +2,6 @@ package toolgen
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -39,44 +38,26 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 			// MCP returns errors via IsError flag and error messages in content
 			// Include both the captured output (which contains the actual error details)
 			// and the error message (which contains the exit code)
-			var b strings.Builder
-			b.Grow(len("Command '' failed") + len(tool.CommandPath) + len(output) + 50)
-			b.WriteString("Command '")
-			b.WriteString(tool.CommandPath)
-			b.WriteString("' failed")
-			if output != "" {
-				b.WriteString("\nOutput:\n")
-				b.WriteString(output)
-			}
-			b.WriteString("\nError: ")
-			b.WriteString(err.Error())
+			errorText := buildMCPErrorText(tool.CommandPath, output, err)
 
 			return &mcp.CallToolResult{
 				IsError: true,
 				Content: []mcp.Content{
 					&mcp.TextContent{
-						Text: b.String(),
+						Text: errorText,
 					},
 				},
 			}, nil, nil
 		}
 
 		// Success - include command output in response
-		var b strings.Builder
-		b.Grow(len("Command '' completed successfully") + len(tool.CommandPath) + len(output) + 10)
-		b.WriteString("Command '")
-		b.WriteString(tool.CommandPath)
-		b.WriteString("' completed successfully")
-		if output != "" {
-			b.WriteString("\nOutput:\n")
-			b.WriteString(output)
-		}
+		successText := buildMCPSuccessText(tool.CommandPath, output)
 
 		return &mcp.CallToolResult{
 			IsError: false,
 			Content: []mcp.Content{
 				&mcp.TextContent{
-					Text: b.String(),
+					Text: successText,
 				},
 			},
 		}, nil, nil
@@ -90,4 +71,37 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 	// This is acceptable for server initialization where failures should be fatal.
 	// The panic will propagate up and terminate the MCP server startup process.
 	mcp.AddTool(server, mcpTool, handler)
+}
+
+func buildMCPErrorText(commandPath, output string, err error) string {
+	var result strings.Builder
+
+	result.WriteString("Command '")
+	result.WriteString(commandPath)
+	result.WriteString("' failed")
+
+	if output != "" {
+		result.WriteString("\nOutput:\n")
+		result.WriteString(output)
+	}
+
+	result.WriteString("\nError: ")
+	result.WriteString(err.Error())
+
+	return result.String()
+}
+
+func buildMCPSuccessText(commandPath, output string) string {
+	var result strings.Builder
+
+	result.WriteString("Command '")
+	result.WriteString(commandPath)
+	result.WriteString("' completed successfully")
+
+	if output != "" {
+		result.WriteString("\nOutput:\n")
+		result.WriteString(output)
+	}
+
+	return result.String()
 }
