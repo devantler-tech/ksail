@@ -196,7 +196,7 @@ KSail separates infrastructure management from distribution configuration:
 | `Vanilla`    | KindClusterProvisioner | Kind  | Docker          | Standard upstream Kubernetes            |
 | `K3s`        | K3dClusterProvisioner  | K3d   | Docker          | Lightweight K3s in Docker               |
 | `Talos`      | TalosProvisioner       | Talos | Docker, Hetzner | Immutable Talos Linux                   |
-| `VCluster`   | VClusterProvisioner    | Vind. | Docker          | Virtual clusters via vCluster in Docker |
+| `VCluster`   | VClusterProvisioner    | Vind  | Docker          | Virtual clusters via vCluster in Docker |
 
 This project strives to be fully open-source friendly, and as such, all core functionality is implemented in the `pkg/` directory, and the `internal/` directory is not used. This allows external projects to import and use any part of the codebase.
 
