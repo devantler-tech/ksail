@@ -20,6 +20,7 @@ ksail cluster create
 - **Native configuration** – Generates standard `kind.yaml`, `k3d.yaml`, Talos patch files, and `vcluster.yaml`
 - **No vendor lock-in** – Use generated configs directly with Kind, K3d, Talos, or vCluster CLI
 - **Component installation** – [CNI](/concepts/#container-network-interface-cni) (Cilium, Calico), [CSI](/concepts/#container-storage-interface-csi), [metrics-server](/concepts/#metrics-server) with [kubelet-csr-approver](/concepts/#kubelet-csr-approver), [cert-manager](/concepts/#cert-manager), and [policy engines](/concepts/#policy-engines)
+- **Resilient installations** – Automatic retry with exponential backoff for transient failures (HTTP 429 rate limits, network errors, timeouts)
 - **Custom cluster naming** – Set container, registry, and context names via `--name`
 - **Node configuration** – Control-plane and worker node counts via `--control-planes` and `--workers`
 - **Connection management** – Automatic kubeconfig and context configuration

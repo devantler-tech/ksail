@@ -2,6 +2,7 @@
 name: Daily Workflow Updater
 description: Automatically updates GitHub Actions versions and creates a PR if changes are detected
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     # Every day at 3am UTC
     - cron: daily
@@ -22,6 +23,7 @@ network:
     - github
 
 safe-outputs:
+  noop: false
   create-pull-request:
     expires: 1d
     title-prefix: "[actions] "

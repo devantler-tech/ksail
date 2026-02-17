@@ -7,6 +7,7 @@ description: |
   Creates discussions to coordinate and draft PRs with improvements.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   workflow_dispatch:
 
@@ -20,6 +21,7 @@ network:
 strict: false
 
 safe-outputs:
+  noop: false
   create-discussion:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"

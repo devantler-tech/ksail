@@ -43,7 +43,7 @@ const (
 	// Permission modal line counts.
 	permissionBaseLines = 6 // title + blank + tool + blank + "Allow?" + buttons
 	pickerOverhead      = 3 // title + top/bottom padding
-	minPickerHeight     = 6 // minimum content lines for picker modal
+	minPickerHeight     = 5 // minimum content lines for picker modal
 
 	// Help layout constants.
 	minHelpWidth = 20 // minimum width for help footer rendering
@@ -215,14 +215,17 @@ func (m *Model) renderShortHelp() string {
 	parts := m.getContextHelpParts()
 	result := buildTruncatedHelp(parts, usableWidth)
 
-	// Always append help toggle
+	var finalHelp strings.Builder
+	finalHelp.Grow(len(result) + len(helpSep) + len(helpToggle))
+
 	if result != "" {
-		result += helpSep
+		finalHelp.WriteString(result)
+		finalHelp.WriteString(helpSep)
 	}
 
-	result += helpToggle
+	finalHelp.WriteString(helpToggle)
 
-	return m.styles.help.Render("  " + result)
+	return m.styles.help.Render("  " + finalHelp.String())
 }
 
 // getContextHelpParts returns help parts based on current UI context.

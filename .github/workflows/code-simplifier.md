@@ -1,5 +1,6 @@
 ---
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   skip-if-match: is:pr is:open in:title "[code-simplifier]"
 permissions:
@@ -9,6 +10,7 @@ permissions:
 imports:
 - githubnext/agentics/workflows/shared/reporting.md@69b5e3ae5fa7f35fa555b0a22aee14c36ab57ebb
 safe-outputs:
+  noop: false
   create-pull-request:
     expires: 1d
     labels:

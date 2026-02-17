@@ -42,6 +42,12 @@ var (
 	errNoSuchHost    = errors.New(
 		"dial tcp: lookup charts.example.com: no such host",
 	)
+	errRateLimit429 = errors.New(
+		"failed to fetch index: 429",
+	)
+	errTooManyRequests = errors.New(
+		"response: Too Many Requests - rate limit exceeded",
+	)
 	errContextDeadline = errors.New(
 		"context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
 	)
@@ -79,6 +85,10 @@ func TestIsRetryable(t *testing.T) {
 		{name: "TLS handshake timeout", err: errTLSTimeout, expected: true},
 		{name: "unexpected EOF", err: errUnexpectedEOF, expected: true},
 		{name: "no such host", err: errNoSuchHost, expected: true},
+		// HTTP 429 rate-limit errors.
+		{name: "429 code", err: errRateLimit429, expected: true},
+		{name: "429 text", err: errTooManyRequests, expected: true},
+		// Context deadline exceeded.
 		{name: "context deadline exceeded", err: errContextDeadline, expected: true},
 	}
 

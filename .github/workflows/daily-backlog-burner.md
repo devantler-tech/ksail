@@ -6,6 +6,7 @@ description: |
   progress and gather maintainer feedback, helping reduce technical debt.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   workflow_dispatch:
 
@@ -16,6 +17,7 @@ network: defaults
 permissions: read-all
 
 safe-outputs:
+  noop: false
   create-discussion:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"

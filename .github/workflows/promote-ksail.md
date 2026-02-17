@@ -7,6 +7,7 @@ description: |
   ready-to-use content.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     # Weekly promotion, every Wednesday (fuzzy scheduling)
     - cron: "weekly on wednesday"
@@ -17,6 +18,7 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  noop: false
   create-discussion:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"

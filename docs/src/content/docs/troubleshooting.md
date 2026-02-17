@@ -146,6 +146,74 @@ ksail workload logs -n flux-system deployment/kustomize-controller
 ksail workload reconcile --timeout=5m
 ```
 
+## Component Installation Issues
+
+### Transient Installation Failures (Rate Limits)
+
+**Symptom:** Component installation (CNI, GitOps, cert-manager, etc.) fails with errors like:
+
+- `Error: 429 Too Many Requests`
+- `Error: 500 Internal Server Error`
+- `Error: 503 Service Unavailable`
+- `Error: context deadline exceeded`
+
+**Cause:** Helm chart registries may return transient errors during high load, especially in CI environments with parallel jobs. Network issues or temporary service outages can also cause these failures.
+
+**Solution:**
+
+KSail automatically retries component installations with exponential backoff (5 attempts, 3-30 second delays). Most transient failures resolve automatically:
+
+```bash
+# Installation typically succeeds after automatic retry, even if you see
+# temporary errors like 429, 500, or 503 during the process.
+
+# If all retries fail, wait a moment and recreate the cluster
+ksail cluster delete
+ksail cluster create
+
+# For persistent failures, check your network connection
+docker ps  # Ensure Docker is running
+ping registry.example.com  # Test connectivity to registries
+
+# Check for registry-specific issues
+# - Docker Hub: https://status.docker.com/
+# - GitHub Container Registry: https://www.githubstatus.com/
+```
+
+> **Note:** KSail caches Helm repository indexes and chart data in CI environments to reduce registry load and improve reliability.
+
+### Component Installation Timeout
+
+**Symptom:** Component installation hangs or times out after several minutes
+
+**Possible causes:**
+
+1. **Insufficient system resources** - Low CPU/memory can slow installation
+2. **Network latency** - Slow connection to chart registries
+3. **Large chart artifacts** - Complex charts take longer to install
+
+**Solution:**
+
+```bash
+# Check system resources
+docker stats  # Monitor CPU and memory usage
+
+# Verify network connectivity
+curl -I https://ghcr.io  # Test GitHub Container Registry
+curl -I https://registry-1.docker.io  # Test Docker Hub
+
+# Free up system resources
+docker system prune -a  # Clean up unused containers and images
+
+# Note: Component installation timeouts are currently fixed in KSail
+# and cannot be configured via ksail.yaml or CLI flags
+
+# For severely resource-constrained systems, consider:
+# - Increasing Docker Desktop resource limits
+# - Installing fewer components (e.g., skip metrics-server)
+# - Using K3s distribution (lighter than Vanilla)
+```
+
 ## Configuration Issues
 
 ### Invalid ksail.yaml
