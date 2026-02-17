@@ -80,7 +80,7 @@ For each workflow, review and flag:
    - Are `close-older-issues` or `close-older-discussions` used for daily reporting workflows?
 
 4. **Input Sanitization**:
-   - Are user inputs properly sanitized (using `${{ needs.activation.outputs.text }}` instead of raw event text)?
+   - Are user inputs properly sanitized (using `${{ steps.sanitized.outputs.text }}` instead of raw event text)?
    - Are there any potential injection vulnerabilities?
 
 5. **Tools and Permissions**:
