@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/helmutil"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -52,6 +53,10 @@ func EnsureSecret(ctx context.Context, kubeconfig, kubeContext string) error {
 
 	_, err = secrets.Get(ctx, SecretName, metav1.GetOptions{})
 	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get secret: %w", err)
+		}
+
 		_, err = secrets.Create(ctx, secret, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to create secret: %w", err)

@@ -292,5 +292,6 @@ func (f *Factory) needsHcloudCCM(spec v1alpha1.ClusterSpec) bool {
 		return false
 	}
 
-	return spec.LoadBalancer == v1alpha1.LoadBalancerEnabled
+	return spec.LoadBalancer == v1alpha1.LoadBalancerDefault ||
+		spec.LoadBalancer == v1alpha1.LoadBalancerEnabled
 }
