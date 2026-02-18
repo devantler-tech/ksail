@@ -14,6 +14,8 @@ var (
 	ErrPlacementFailed = errors.New("hetzner placement failed")
 	// ErrAllLocationsFailed indicates that server creation failed in all attempted locations.
 	ErrAllLocationsFailed = errors.New("server creation failed in all locations")
+	// ErrAllRetriesExhausted indicates that all retry attempts failed for a location.
+	ErrAllRetriesExhausted = errors.New("all retry attempts failed")
 )
 
 // retryableErrorCodes are Hetzner API error codes that warrant a retry.
