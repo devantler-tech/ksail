@@ -365,13 +365,13 @@ After improving ONE file:
      - Summary of changes made
      - **Screenshot URLs**: Links to the uploaded screenshots showing the modified documentation pages
      - **Blocked Domains (if any)**: List any CSS/font/resource domains that were blocked during screenshot capture
-   
+
    **Important**: The `create_pull_request` tool will automatically:
    - Create the branch
    - Commit your changes
    - Push to remote
    - Create the PR
-   
+
    You do NOT need to run `git checkout`, `git commit`, `git add`, or `git push` commands manually. Just make your edits to files using the `edit` tool, then call `create_pull_request` when ready.
 
 ## Example Improvements
