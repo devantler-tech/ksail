@@ -1,119 +1,38 @@
 ---
-name: Documentation Unbloat
-description: Reviews and simplifies documentation by reducing verbosity while maintaining clarity and completeness
+description: |
+  Reviews and simplifies documentation by reducing verbosity while maintaining clarity
+  and completeness. Scans docs for bloat (duplicate content, excessive bullet points,
+  redundant examples, verbose descriptions) and creates focused PRs with improvements.
+  Triggered daily, on /unbloat command, or manually.
+
 on:
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
-  # Daily (scattered execution time)
   schedule: daily
-
-  # Command trigger for /unbloat in PR comments
   slash_command:
     name: unbloat
     events: [pull_request_comment]
-
-  # Manual trigger for testing
   workflow_dispatch:
 
-# Minimal permissions - safe-outputs handles write operations
-permissions:
-  contents: read
-  pull-requests: read
-  issues: read
+timeout-minutes: 30
 
-strict: true
+permissions: read-all
 
-# AI engine configuration
-engine:
-  id: copilot
+network: defaults
 
-# Shared instructions
-imports:
-  - shared/reporting.md
-
-# Network access for documentation best practices research
-network:
-  allowed:
-    - defaults
-    - github
-
-# Sandbox configuration - AWF is enabled by default but making it explicit for clarity
-sandbox:
-  agent: awf
-
-# Tools configuration
-tools:
-  cache-memory: true
-  github:
-    toolsets: [default]
-  edit:
-  playwright:
-    args: ["--viewport-size", "1920x1080"]
-  bash:
-    - "git *"
-    - "find docs/src/content/docs -name '*.md'"
-    - "wc -l *"
-    - "grep -n *"
-    - "cat *"
-    - "head *"
-    - "tail *"
-    - "cd *"
-    - "node *"
-    - "npm *"
-    - "curl *"
-    - "ps *"
-    - "kill *"
-    - "sleep *"
-    - "echo *"
-    - "mkdir *"
-    - "cp *"
-    - "mv *"
-
-# Safe outputs configuration
 safe-outputs:
   noop: false
   create-pull-request:
-    expires: 2d
     title-prefix: "[docs] "
     labels: [documentation, automation]
-    reviewers: [copilot]
     draft: true
-    auto-merge: true
-    fallback-as-issue: false
   add-comment:
-    max: 1
-  upload-asset:
-  messages:
-    footer: "> 🗜️ *Compressed by [{workflow_name}]({run_url})*"
-    run-started: "📦 Time to slim down! [{workflow_name}]({run_url}) is trimming the excess from this {event_type}..."
-    run-success: "🗜️ Docs on a diet! [{workflow_name}]({run_url}) has removed the bloat. Lean and mean! 💪"
-    run-failure: "📦 Unbloating paused! [{workflow_name}]({run_url}) {status}. The docs remain... fluffy."
 
-# Timeout (increased from 12min after timeout issues; aligns with similar doc workflows)
-timeout-minutes: 30
-
-# Build steps for documentation
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@v6
-    with:
-      persist-credentials: false
-
-  - name: Setup Node.js
-    uses: actions/setup-node@v6
-    with:
-      node-version: "24"
-      cache: "npm"
-      cache-dependency-path: "docs/package-lock.json"
-
-  - name: Install dependencies
-    working-directory: ./docs
-    run: npm ci
-
-  - name: Build documentation
-    working-directory: ./docs
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    run: npm run build
+tools:
+  cache-memory: true
+  github:
+    toolsets: [all]
+  web-fetch:
+  bash: true
 ---
 
 # Documentation Unbloat Workflow
@@ -360,7 +279,7 @@ After improving ONE file:
    - **Title**: Brief description of what you improved (e.g., "Remove bloat from AI chat documentation")
    - **Body**: Include the following sections in the PR description:
      - Which file you improved
-     - What types of bloat you removed  
+     - What types of bloat you removed
      - Estimated word count or line reduction
      - Summary of changes made
      - **Screenshot URLs**: Links to the uploaded screenshots showing the modified documentation pages
