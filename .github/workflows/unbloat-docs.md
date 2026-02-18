@@ -17,7 +17,10 @@ timeout-minutes: 30
 
 permissions: read-all
 
-network: defaults
+network:
+  allowed:
+    - defaults
+    - cdn.playwright.dev
 
 safe-outputs:
   noop: false
@@ -26,12 +29,16 @@ safe-outputs:
     labels: [documentation, automation]
     draft: true
   add-comment:
+  upload-asset:
 
 tools:
   cache-memory: true
   github:
     toolsets: [all]
   web-fetch:
+  edit:
+  playwright:
+    args: ["--viewport-size", "1920x1080"]
   bash: true
 ---
 
