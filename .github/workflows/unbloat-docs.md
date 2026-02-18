@@ -48,31 +48,7 @@ tools:
   edit:
   playwright:
     args: ["--viewport-size", "1920x1080"]
-  bash:
-    - "git status"
-    - "git diff *"
-    - "git --no-pager status"
-    - "git --no-pager diff *"
-    - "find docs/src/content/docs -name '*.md'"
-    - "wc -l *"
-    - "grep -n *"
-    - "cat *"
-    - "head *"
-    - "tail *"
-    - "cd *"
-    - "node *"
-    - "npm *"
-    - "curl *"
-    - "ps *"
-    - "kill *"
-    - "sleep *"
-    - "echo *"
-    - "mkdir *"
-    - "cp *"
-    - "mv *"
-    - "ls *"
-    - "pwd"
-    - "date *"
+  bash: ["*"]
 
 # Safe outputs configuration
 safe-outputs:
