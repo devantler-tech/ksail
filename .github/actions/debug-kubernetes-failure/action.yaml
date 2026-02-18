@@ -374,6 +374,11 @@ runs:
             # Helm Controller logs
             echo "--- Helm Controller Logs (last $LOG_TAIL_LINES lines) ---"
             $KUBECTL_CMD logs --namespace flux-system -l app=helm-controller --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+            echo ""
+
+            # Notification Controller logs
+            echo "--- Notification Controller Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs --namespace flux-system -l app=notification-controller --tail="$LOG_TAIL_LINES" 2>/dev/null || true
           else
             echo "No Flux controller pods found"
           fi
