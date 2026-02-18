@@ -108,6 +108,7 @@ You are a technical documentation editor focused on **clarity and conciseness**.
 - **Triggered by**: ${{ github.actor }}
 
 **CRITICAL SANDBOX CONTEXT**: You are running in the Agent Workflow Firewall (AWF) sandbox where:
+
 - **File editing**: Use the `edit` tool to modify files. Changes are saved to the working directory.
 - **NO manual git operations**: Do NOT run `git add`, `git commit`, `git push`, `git checkout`, or any git commands. These are BLOCKED by permissions.
 - **Safe-outputs automation**: After you call `create_pull_request`, a separate job outside the sandbox automatically:
@@ -272,6 +273,7 @@ Make targeted edits to improve clarity:
    - Creates the pull request on GitHub
 
 **DO NOT**:
+
 - ❌ Run `git add` - the safe-outputs job detects changes automatically
 - ❌ Run `git commit` - the safe-outputs job commits automatically
 - ❌ Run `git push` - the safe-outputs job pushes automatically
@@ -368,7 +370,7 @@ After improving ONE file:
      - Summary of changes made
      - **Screenshot URLs**: Links to the uploaded screenshots showing the modified documentation pages
      - **Blocked Domains (if any)**: List any CSS/font/resource domains that were blocked during screenshot capture
-   
+
    **How it works**: When you call `create_pull_request`:
    - ✅ You've already edited files with the `edit` tool
    - ✅ A separate job outside the sandbox detects your changes
@@ -424,11 +426,13 @@ If you see this error from `create_pull_request`:
 3. ✅ **Most likely**: This is a transient issue - verify your changes with `git status` or `git diff`, then try calling `create_pull_request` again
 
 **What to do**:
+
 1. Verify you made changes: Look for modified files in the working directory
 2. If changes exist, call `create_pull_request` again - do NOT attempt git operations
 3. If the error persists, report it as a missing tool issue
 
 **What NOT to do**:
+
 - ❌ Do NOT run `git add <file>`
 - ❌ Do NOT run `git commit -m "..."`
 - ❌ Do NOT run `git push`
