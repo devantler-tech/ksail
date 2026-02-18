@@ -35,6 +35,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			expectedCount: 0,
 			expectedFields: map[string]bool{
 				"NeedsMetricsServer":      false,
+				"NeedsLoadBalancer":       false,
 				"NeedsKubeletCSRApprover": false,
 				"NeedsCSI":                false,
 				"NeedsCertManager":        false,
@@ -60,6 +61,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			expectedCount: 2, // metrics-server + kubelet-csr-approver
 			expectedFields: map[string]bool{
 				"NeedsMetricsServer":      true,
+				"NeedsLoadBalancer":       false,
 				"NeedsKubeletCSRApprover": true,
 				"NeedsCSI":                false,
 				"NeedsCertManager":        false,
@@ -85,6 +87,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			expectedCount: 0, // K3d provides metrics-server by default
 			expectedFields: map[string]bool{
 				"NeedsMetricsServer":      false,
+				"NeedsLoadBalancer":       false,
 				"NeedsKubeletCSRApprover": false,
 				"NeedsCSI":                false,
 				"NeedsCertManager":        false,
@@ -110,6 +113,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			expectedCount: 1,
 			expectedFields: map[string]bool{
 				"NeedsMetricsServer":      false,
+				"NeedsLoadBalancer":       false,
 				"NeedsKubeletCSRApprover": false,
 				"NeedsCSI":                true,
 				"NeedsCertManager":        false,
@@ -135,6 +139,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			expectedCount: 1,
 			expectedFields: map[string]bool{
 				"NeedsMetricsServer":      false,
+				"NeedsLoadBalancer":       false,
 				"NeedsKubeletCSRApprover": false,
 				"NeedsCSI":                false,
 				"NeedsCertManager":        true,
@@ -160,6 +165,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			expectedCount: 1,
 			expectedFields: map[string]bool{
 				"NeedsMetricsServer":      false,
+				"NeedsLoadBalancer":       false,
 				"NeedsKubeletCSRApprover": false,
 				"NeedsCSI":                false,
 				"NeedsCertManager":        false,
@@ -185,6 +191,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			expectedCount: 1,
 			expectedFields: map[string]bool{
 				"NeedsMetricsServer":      false,
+				"NeedsLoadBalancer":       false,
 				"NeedsKubeletCSRApprover": false,
 				"NeedsCSI":                false,
 				"NeedsCertManager":        false,
@@ -210,6 +217,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			expectedCount: 1,
 			expectedFields: map[string]bool{
 				"NeedsMetricsServer":      false,
+				"NeedsLoadBalancer":       false,
 				"NeedsKubeletCSRApprover": false,
 				"NeedsCSI":                false,
 				"NeedsCertManager":        false,
@@ -235,12 +243,69 @@ func TestGetComponentRequirements(t *testing.T) {
 			expectedCount: 6, // metrics-server, kubelet-csr-approver, CSI, cert-manager, policy-engine, flux
 			expectedFields: map[string]bool{
 				"NeedsMetricsServer":      true,
+				"NeedsLoadBalancer":       false,
 				"NeedsKubeletCSRApprover": true,
 				"NeedsCSI":                true,
 				"NeedsCertManager":        true,
 				"NeedsPolicyEngine":       true,
 				"NeedsArgoCD":             false,
 				"NeedsFlux":               true,
+			},
+		},
+		{
+			name: "Talos × Hetzner with LoadBalancer Default enables LoadBalancer",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution:  v1alpha1.DistributionTalos,
+						Provider:      v1alpha1.ProviderHetzner,
+						LoadBalancer:  v1alpha1.LoadBalancerDefault,
+						MetricsServer: v1alpha1.MetricsServerDefault,
+						CSI:           v1alpha1.CSIDefault,
+						CertManager:   v1alpha1.CertManagerDisabled,
+						PolicyEngine:  v1alpha1.PolicyEngineNone,
+						GitOpsEngine:  v1alpha1.GitOpsEngineNone,
+					},
+				},
+			},
+			expectedCount: 2, // LoadBalancer + CSI (Talos × Hetzner special case)
+			expectedFields: map[string]bool{
+				"NeedsMetricsServer":      false,
+				"NeedsLoadBalancer":       true,
+				"NeedsKubeletCSRApprover": false,
+				"NeedsCSI":                true,
+				"NeedsCertManager":        false,
+				"NeedsPolicyEngine":       false,
+				"NeedsArgoCD":             false,
+				"NeedsFlux":               false,
+			},
+		},
+		{
+			name: "Talos × Hetzner with LoadBalancer Enabled enables LoadBalancer",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution:  v1alpha1.DistributionTalos,
+						Provider:      v1alpha1.ProviderHetzner,
+						LoadBalancer:  v1alpha1.LoadBalancerEnabled,
+						MetricsServer: v1alpha1.MetricsServerDefault,
+						CSI:           v1alpha1.CSIDefault,
+						CertManager:   v1alpha1.CertManagerDisabled,
+						PolicyEngine:  v1alpha1.PolicyEngineNone,
+						GitOpsEngine:  v1alpha1.GitOpsEngineNone,
+					},
+				},
+			},
+			expectedCount: 2, // LoadBalancer + CSI (Talos × Hetzner special case)
+			expectedFields: map[string]bool{
+				"NeedsMetricsServer":      false,
+				"NeedsLoadBalancer":       true,
+				"NeedsKubeletCSRApprover": false,
+				"NeedsCSI":                true,
+				"NeedsCertManager":        false,
+				"NeedsPolicyEngine":       false,
+				"NeedsArgoCD":             false,
+				"NeedsFlux":               false,
 			},
 		},
 	}
@@ -260,6 +325,12 @@ func TestGetComponentRequirements(t *testing.T) {
 				testCase.expectedFields["NeedsMetricsServer"],
 				result.NeedsMetricsServer,
 				"unexpected NeedsMetricsServer value",
+			)
+			assert.Equal(
+				t,
+				testCase.expectedFields["NeedsLoadBalancer"],
+				result.NeedsLoadBalancer,
+				"unexpected NeedsLoadBalancer value",
 			)
 			assert.Equal(
 				t,
