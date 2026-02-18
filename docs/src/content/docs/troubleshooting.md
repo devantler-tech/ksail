@@ -22,7 +22,7 @@ ksail cluster delete --name <cluster-name>
 
 # Clean up Docker resources if needed
 docker system df
-docker system prune
+docker system prune -f
 ```
 
 ### Port Already in Use
@@ -91,7 +91,7 @@ If all retries fail, recreate the cluster or check network connectivity to regis
 ksail cluster delete && ksail cluster create
 
 # Check connectivity
-docker ps && ping registry.example.com
+docker ps && curl -I https://registry.example.com
 ```
 
 ### Component Installation Timeout
@@ -147,7 +147,7 @@ metadata:
   namespace: metallb-system
 spec:
   addresses:
-    - 172.18.255.200-172.18.255.254  # Expand as needed
+    - 172.18.255.200-172.18.255.254 # Expand as needed
 ---
 apiVersion: metallb.io/v1beta1
 kind: L2Advertisement
