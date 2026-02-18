@@ -44,7 +44,7 @@ require (
 	k8s.io/apimachinery v0.35.1
 	k8s.io/cli-runtime v0.35.1
 	k8s.io/client-go v0.35.1
-	k8s.io/kubectl v0.35.0
+	k8s.io/kubectl v0.35.1
 	sigs.k8s.io/controller-runtime v0.23.1
 	sigs.k8s.io/kind v0.31.0
 	sigs.k8s.io/kustomize/api v0.21.1
@@ -760,7 +760,7 @@ require (
 	k8s.io/apiserver v0.35.1 // indirect
 	k8s.io/cluster-bootstrap v0.35.0 // indirect
 	k8s.io/component-base v0.35.1 // indirect
-	k8s.io/component-helpers v0.35.0 // indirect
+	k8s.io/component-helpers v0.35.1 // indirect
 	k8s.io/cri-api v0.35.0 // indirect
 	k8s.io/cri-client v0.35.0 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
@@ -769,7 +769,7 @@ require (
 	k8s.io/kube-proxy v0.33.0 // indirect
 	k8s.io/kubelet v0.35.0 // indirect
 	k8s.io/kubernetes v1.35.0 // indirect
-	k8s.io/metrics v0.35.0 // indirect
+	k8s.io/metrics v0.35.1 // indirect
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570 // indirect
 	modernc.org/libc v1.66.10 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
