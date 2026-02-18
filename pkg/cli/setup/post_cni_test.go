@@ -8,15 +8,36 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func assertComponentRequirements(
+	t *testing.T,
+	result setup.ComponentRequirements,
+	expectedCount int,
+	expected setup.ComponentRequirements,
+) {
+	t.Helper()
+
+	assert.Equal(t, expectedCount, result.Count(), "count")
+	assert.Equal(t, expected.NeedsMetricsServer, result.NeedsMetricsServer, "MetricsServer")
+	assert.Equal(t, expected.NeedsLoadBalancer, result.NeedsLoadBalancer, "LoadBalancer")
+	assert.Equal(
+		t, expected.NeedsKubeletCSRApprover, result.NeedsKubeletCSRApprover, "KubeletCSRApprover",
+	)
+	assert.Equal(t, expected.NeedsCSI, result.NeedsCSI, "CSI")
+	assert.Equal(t, expected.NeedsCertManager, result.NeedsCertManager, "CertManager")
+	assert.Equal(t, expected.NeedsPolicyEngine, result.NeedsPolicyEngine, "PolicyEngine")
+	assert.Equal(t, expected.NeedsArgoCD, result.NeedsArgoCD, "ArgoCD")
+	assert.Equal(t, expected.NeedsFlux, result.NeedsFlux, "Flux")
+}
+
 //nolint:funlen // Table-driven test with comprehensive test cases
 func TestGetComponentRequirements(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		clusterCfg     *v1alpha1.Cluster
-		expectedCount  int
-		expectedFields map[string]bool
+		name          string
+		clusterCfg    *v1alpha1.Cluster
+		expectedCount int
+		expected      setup.ComponentRequirements
 	}{
 		{
 			name: "all components disabled returns zero count",
@@ -33,16 +54,7 @@ func TestGetComponentRequirements(t *testing.T) {
 				},
 			},
 			expectedCount: 0,
-			expectedFields: map[string]bool{
-				"NeedsMetricsServer":      false,
-				"NeedsLoadBalancer":       false,
-				"NeedsKubeletCSRApprover": false,
-				"NeedsCSI":                false,
-				"NeedsCertManager":        false,
-				"NeedsPolicyEngine":       false,
-				"NeedsArgoCD":             false,
-				"NeedsFlux":               false,
-			},
+			expected:      setup.ComponentRequirements{},
 		},
 		{
 			name: "metrics-server enabled on Kind enables kubelet-csr-approver",
@@ -59,15 +71,9 @@ func TestGetComponentRequirements(t *testing.T) {
 				},
 			},
 			expectedCount: 2, // metrics-server + kubelet-csr-approver
-			expectedFields: map[string]bool{
-				"NeedsMetricsServer":      true,
-				"NeedsLoadBalancer":       false,
-				"NeedsKubeletCSRApprover": true,
-				"NeedsCSI":                false,
-				"NeedsCertManager":        false,
-				"NeedsPolicyEngine":       false,
-				"NeedsArgoCD":             false,
-				"NeedsFlux":               false,
+			expected: setup.ComponentRequirements{
+				NeedsMetricsServer:      true,
+				NeedsKubeletCSRApprover: true,
 			},
 		},
 		{
@@ -85,16 +91,7 @@ func TestGetComponentRequirements(t *testing.T) {
 				},
 			},
 			expectedCount: 0, // K3d provides metrics-server by default
-			expectedFields: map[string]bool{
-				"NeedsMetricsServer":      false,
-				"NeedsLoadBalancer":       false,
-				"NeedsKubeletCSRApprover": false,
-				"NeedsCSI":                false,
-				"NeedsCertManager":        false,
-				"NeedsPolicyEngine":       false,
-				"NeedsArgoCD":             false,
-				"NeedsFlux":               false,
-			},
+			expected:      setup.ComponentRequirements{},
 		},
 		{
 			name: "CSI local-path-storage enabled",
@@ -111,15 +108,8 @@ func TestGetComponentRequirements(t *testing.T) {
 				},
 			},
 			expectedCount: 1,
-			expectedFields: map[string]bool{
-				"NeedsMetricsServer":      false,
-				"NeedsLoadBalancer":       false,
-				"NeedsKubeletCSRApprover": false,
-				"NeedsCSI":                true,
-				"NeedsCertManager":        false,
-				"NeedsPolicyEngine":       false,
-				"NeedsArgoCD":             false,
-				"NeedsFlux":               false,
+			expected: setup.ComponentRequirements{
+				NeedsCSI: true,
 			},
 		},
 		{
@@ -137,15 +127,8 @@ func TestGetComponentRequirements(t *testing.T) {
 				},
 			},
 			expectedCount: 1,
-			expectedFields: map[string]bool{
-				"NeedsMetricsServer":      false,
-				"NeedsLoadBalancer":       false,
-				"NeedsKubeletCSRApprover": false,
-				"NeedsCSI":                false,
-				"NeedsCertManager":        true,
-				"NeedsPolicyEngine":       false,
-				"NeedsArgoCD":             false,
-				"NeedsFlux":               false,
+			expected: setup.ComponentRequirements{
+				NeedsCertManager: true,
 			},
 		},
 		{
@@ -163,15 +146,8 @@ func TestGetComponentRequirements(t *testing.T) {
 				},
 			},
 			expectedCount: 1,
-			expectedFields: map[string]bool{
-				"NeedsMetricsServer":      false,
-				"NeedsLoadBalancer":       false,
-				"NeedsKubeletCSRApprover": false,
-				"NeedsCSI":                false,
-				"NeedsCertManager":        false,
-				"NeedsPolicyEngine":       true,
-				"NeedsArgoCD":             false,
-				"NeedsFlux":               false,
+			expected: setup.ComponentRequirements{
+				NeedsPolicyEngine: true,
 			},
 		},
 		{
@@ -189,15 +165,8 @@ func TestGetComponentRequirements(t *testing.T) {
 				},
 			},
 			expectedCount: 1,
-			expectedFields: map[string]bool{
-				"NeedsMetricsServer":      false,
-				"NeedsLoadBalancer":       false,
-				"NeedsKubeletCSRApprover": false,
-				"NeedsCSI":                false,
-				"NeedsCertManager":        false,
-				"NeedsPolicyEngine":       false,
-				"NeedsArgoCD":             true,
-				"NeedsFlux":               false,
+			expected: setup.ComponentRequirements{
+				NeedsArgoCD: true,
 			},
 		},
 		{
@@ -215,15 +184,8 @@ func TestGetComponentRequirements(t *testing.T) {
 				},
 			},
 			expectedCount: 1,
-			expectedFields: map[string]bool{
-				"NeedsMetricsServer":      false,
-				"NeedsLoadBalancer":       false,
-				"NeedsKubeletCSRApprover": false,
-				"NeedsCSI":                false,
-				"NeedsCertManager":        false,
-				"NeedsPolicyEngine":       false,
-				"NeedsArgoCD":             false,
-				"NeedsFlux":               true,
+			expected: setup.ComponentRequirements{
+				NeedsFlux: true,
 			},
 		},
 		{
@@ -241,15 +203,13 @@ func TestGetComponentRequirements(t *testing.T) {
 				},
 			},
 			expectedCount: 6, // metrics-server, kubelet-csr-approver, CSI, cert-manager, policy-engine, flux
-			expectedFields: map[string]bool{
-				"NeedsMetricsServer":      true,
-				"NeedsLoadBalancer":       false,
-				"NeedsKubeletCSRApprover": true,
-				"NeedsCSI":                true,
-				"NeedsCertManager":        true,
-				"NeedsPolicyEngine":       true,
-				"NeedsArgoCD":             false,
-				"NeedsFlux":               true,
+			expected: setup.ComponentRequirements{
+				NeedsMetricsServer:      true,
+				NeedsKubeletCSRApprover: true,
+				NeedsCSI:                true,
+				NeedsCertManager:        true,
+				NeedsPolicyEngine:       true,
+				NeedsFlux:               true,
 			},
 		},
 		{
@@ -269,15 +229,9 @@ func TestGetComponentRequirements(t *testing.T) {
 				},
 			},
 			expectedCount: 2, // LoadBalancer + CSI (Talos × Hetzner special case)
-			expectedFields: map[string]bool{
-				"NeedsMetricsServer":      false,
-				"NeedsLoadBalancer":       true,
-				"NeedsKubeletCSRApprover": false,
-				"NeedsCSI":                true,
-				"NeedsCertManager":        false,
-				"NeedsPolicyEngine":       false,
-				"NeedsArgoCD":             false,
-				"NeedsFlux":               false,
+			expected: setup.ComponentRequirements{
+				NeedsLoadBalancer: true,
+				NeedsCSI:          true,
 			},
 		},
 		{
@@ -297,15 +251,9 @@ func TestGetComponentRequirements(t *testing.T) {
 				},
 			},
 			expectedCount: 2, // LoadBalancer + CSI (Talos × Hetzner special case)
-			expectedFields: map[string]bool{
-				"NeedsMetricsServer":      false,
-				"NeedsLoadBalancer":       true,
-				"NeedsKubeletCSRApprover": false,
-				"NeedsCSI":                true,
-				"NeedsCertManager":        false,
-				"NeedsPolicyEngine":       false,
-				"NeedsArgoCD":             false,
-				"NeedsFlux":               false,
+			expected: setup.ComponentRequirements{
+				NeedsLoadBalancer: true,
+				NeedsCSI:          true,
 			},
 		},
 	}
@@ -315,39 +263,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			t.Parallel()
 
 			result := setup.GetComponentRequirements(testCase.clusterCfg)
-
-			// Verify count
-			assert.Equal(t, testCase.expectedCount, result.Count(), "unexpected component count")
-
-			// Verify individual fields
-			assert.Equal(
-				t,
-				testCase.expectedFields["NeedsMetricsServer"],
-				result.NeedsMetricsServer,
-				"unexpected NeedsMetricsServer value",
-			)
-			assert.Equal(
-				t,
-				testCase.expectedFields["NeedsLoadBalancer"],
-				result.NeedsLoadBalancer,
-				"unexpected NeedsLoadBalancer value",
-			)
-			assert.Equal(
-				t,
-				testCase.expectedFields["NeedsKubeletCSRApprover"],
-				result.NeedsKubeletCSRApprover,
-				"unexpected NeedsKubeletCSRApprover value",
-			)
-			assert.Equal(t, testCase.expectedFields["NeedsCSI"], result.NeedsCSI,
-				"unexpected NeedsCSI value")
-			assert.Equal(t, testCase.expectedFields["NeedsCertManager"], result.NeedsCertManager,
-				"unexpected NeedsCertManager value")
-			assert.Equal(t, testCase.expectedFields["NeedsPolicyEngine"], result.NeedsPolicyEngine,
-				"unexpected NeedsPolicyEngine value")
-			assert.Equal(t, testCase.expectedFields["NeedsArgoCD"], result.NeedsArgoCD,
-				"unexpected NeedsArgoCD value")
-			assert.Equal(t, testCase.expectedFields["NeedsFlux"], result.NeedsFlux,
-				"unexpected NeedsFlux value")
+			assertComponentRequirements(t, result, testCase.expectedCount, testCase.expected)
 		})
 	}
 }
