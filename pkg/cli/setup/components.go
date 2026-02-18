@@ -268,7 +268,8 @@ func NeedsLoadBalancerInstall(clusterCfg *v1alpha1.Cluster) bool {
 	// According to the distribution × provider matrix, hcloud-ccm must be
 	// installed by KSail for both Default and Enabled LoadBalancer settings.
 	if dist == v1alpha1.DistributionTalos && provider == v1alpha1.ProviderHetzner {
-		return lbSetting == v1alpha1.LoadBalancerDefault || lbSetting == v1alpha1.LoadBalancerEnabled
+		return lbSetting == v1alpha1.LoadBalancerDefault ||
+			lbSetting == v1alpha1.LoadBalancerEnabled
 	}
 
 	// Generic behavior for all other distribution × provider combinations.

@@ -22,31 +22,31 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Component × Distribution Matrix
 
-| Component                     | Vanilla | K3s      | Talos        | VCluster |
-| ----------------------------- | ------- | -------- | ------------ | -------- |
+| Component                     | Vanilla | K3s      | Talos               | VCluster |
+| ----------------------------- | ------- | -------- | ------------------- | -------- |
 | **CNI**                       |
-| Cilium                        | ✅      | ✅       | ✅           | N/A¹     |
-| Calico                        | ✅      | ✅       | ✅           | N/A¹     |
+| Cilium                        | ✅      | ✅       | ✅                  | N/A¹     |
+| Calico                        | ✅      | ✅       | ✅                  | N/A¹     |
 | **CSI**                       |
-| Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)  | N/A²     |
-| Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner) | ❌       |
+| Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)         | N/A²     |
+| Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner)        | ❌       |
 | **LoadBalancer**              |
 | LoadBalancer Support          | ✅      | Built-in | ✅ (Docker/Hetzner) | N/A³     |
-| MetalLB                       | ❌      | ❌       | ✅ (Docker)  | ❌       |
-| Hetzner CCM                   | ❌      | ❌       | ✅ (Hetzner) | ❌       |
+| MetalLB                       | ❌      | ❌       | ✅ (Docker)         | ❌       |
+| Hetzner CCM                   | ❌      | ❌       | ✅ (Hetzner)        | ❌       |
 | **GitOps**                    |
-| Flux                          | ✅      | ✅       | ✅           | ✅       |
-| ArgoCD                        | ✅      | ✅       | ✅           | ✅       |
+| Flux                          | ✅      | ✅       | ✅                  | ✅       |
+| ArgoCD                        | ✅      | ✅       | ✅                  | ✅       |
 | **Observability**             |
-| Metrics Server                | ✅      | Built-in | ✅           | N/A⁴     |
+| Metrics Server                | ✅      | Built-in | ✅                  | N/A⁴     |
 | **Security**                  |
-| cert-manager                  | ✅      | ✅       | ✅           | ✅       |
-| Kyverno                       | ✅      | ✅       | ✅           | ✅       |
-| Gatekeeper                    | ✅      | ✅       | ✅           | ✅       |
+| cert-manager                  | ✅      | ✅       | ✅                  | ✅       |
+| Kyverno                       | ✅      | ✅       | ✅                  | ✅       |
+| Gatekeeper                    | ✅      | ✅       | ✅                  | ✅       |
 | **Registry**                  |
-| Local Registry                | ✅      | ✅       | ✅           | ✅       |
-| Mirror Registries             | ✅      | ✅       | ✅           | ✅       |
-| External Registries with Auth | ✅      | ✅       | ✅           | ✅       |
+| Local Registry                | ✅      | ✅       | ✅                  | ✅       |
+| Mirror Registries             | ✅      | ✅       | ✅                  | ✅       |
+| External Registries with Auth | ✅      | ✅       | ✅                  | ✅       |
 
 **Notes:**
 

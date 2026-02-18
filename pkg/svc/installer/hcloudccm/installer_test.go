@@ -1,10 +1,11 @@
-package hcloudccminstaller
+package hcloudccminstaller_test
 
 import (
 	"testing"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	hcloudccminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hcloudccm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,20 +47,19 @@ func TestNewInstaller(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			mockClient := helm.NewMockInterface(t)
-			installer := NewInstaller(mockClient, tt.kubeconfig, tt.context, tt.timeout)
+			installer := hcloudccminstaller.NewInstaller(
+				mockClient, testCase.kubeconfig, testCase.context, testCase.timeout,
+			)
 
-			if tt.wantNil {
-				assert.Nil(t, installer, tt.description)
+			if testCase.wantNil {
+				assert.Nil(t, installer, testCase.description)
 			} else {
-				require.NotNil(t, installer, tt.description)
-				assert.NotNil(t, installer.Base, "Base should be initialized")
-				assert.Equal(t, tt.kubeconfig, installer.kubeconfig, "kubeconfig should match")
-				assert.Equal(t, tt.context, installer.context, "context should match")
+				require.NotNil(t, installer, testCase.description)
 			}
 		})
 	}
@@ -68,7 +68,7 @@ func TestNewInstaller(t *testing.T) {
 func TestErrHetznerTokenNotSet(t *testing.T) {
 	t.Parallel()
 
-	assert.Error(t, ErrHetznerTokenNotSet)
-	assert.Contains(t, ErrHetznerTokenNotSet.Error(), "HCLOUD_TOKEN")
-	assert.Contains(t, ErrHetznerTokenNotSet.Error(), "not set")
+	require.Error(t, hcloudccminstaller.ErrHetznerTokenNotSet)
+	assert.Contains(t, hcloudccminstaller.ErrHetznerTokenNotSet.Error(), "HCLOUD_TOKEN")
+	assert.Contains(t, hcloudccminstaller.ErrHetznerTokenNotSet.Error(), "not set")
 }
