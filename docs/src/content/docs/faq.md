@@ -11,7 +11,7 @@ KSail is a CLI tool that bundles common Kubernetes tooling into a single binary.
 
 ### Why use KSail instead of kubectl/helm/kind/k3d directly?
 
-KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, flux, and argocd into one binary with a consistent workflow across distributions. It works with standard native configuration files (kind.yaml, k3d.yaml, vcluster.yaml), provides declarative configuration with built-in best practices, and includes GitOps integration without manual setup—all without vendor lock-in.
+KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, flux, and argocd into one binary with a consistent workflow across distributions. It works with standard native configuration files (kind.yaml, k3d.yaml, vcluster.yaml) and provides declarative configuration with built-in best practices. GitOps integration is included without manual setup—all without vendor lock-in.
 
 ### Am I locked into KSail?
 
@@ -21,12 +21,12 @@ No. KSail generates native distribution configuration files that work directly w
 
 Yes! After running `ksail cluster init`, you can use the generated configuration files directly with native tools:
 
-````bash
+```bash
 kind create cluster --config kind.yaml          # Vanilla
 k3d cluster create --config k3d.yaml            # K3s
 talosctl cluster create --config-patch @talos/cluster/patches.yaml  # Talos
 vcluster create my-cluster --values vcluster.yaml  # VCluster
-````
+```
 
 ### Is KSail production-ready?
 
@@ -114,7 +114,7 @@ Changing the distribution (e.g., Vanilla to Talos) or provider (e.g., Docker to 
 
 ### Which distributions support LoadBalancer services?
 
-All distributions provide LoadBalancer support: Vanilla (Kind) uses cloud-provider-kind, K3s uses built-in ServiceLB, Talos on Docker uses MetalLB (IP pool 172.18.255.200-250), Talos on Hetzner uses Hetzner Cloud Load Balancer, and VCluster manages it internally.
+All distributions provide LoadBalancer support. Vanilla (Kind) uses cloud-provider-kind, K3s uses built-in ServiceLB, Talos on Docker uses MetalLB (IP pool 172.18.255.200-250), Talos on Hetzner uses Hetzner Cloud Load Balancer, and VCluster manages it internally.
 
 ### Can I add nodes to an existing cluster?
 
@@ -176,12 +176,12 @@ ksail cluster init --gitops-engine ArgoCD
 
 Not necessarily! KSail can package manifests as OCI artifacts and push to a local registry, enabling GitOps workflows without Git (useful for local development):
 
-````bash
+```bash
 ksail cluster init --gitops-engine Flux --local-registry
 ksail cluster create
 ksail workload push      # Package and push
 ksail workload reconcile # Sync to cluster
-````
+```
 
 ### Can I use my own Git repository?
 
@@ -248,10 +248,10 @@ Supports age, PGP, and cloud KMS providers. See [Secret Management](/features/#s
 
 KSail uses environment variables for sensitive data (`${VAR}` syntax in configuration). Values are expanded at runtime and never stored in config files:
 
-````bash
+```bash
 export REGISTRY_TOKEN="my-secret-token"
 ksail cluster init --local-registry 'user:${REGISTRY_TOKEN}@registry.example.com'
-````
+```
 
 ## Troubleshooting
 
