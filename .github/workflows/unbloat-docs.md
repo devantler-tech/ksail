@@ -17,10 +17,14 @@ timeout-minutes: 30
 
 permissions: read-all
 
+strict: false
+
 network:
   allowed:
     - defaults
+    - node
     - playwright
+  firewall: false
 
 safe-outputs:
   noop: false
@@ -218,28 +222,31 @@ After making changes to a documentation file, take screenshots of the rendered p
 
 #### Build and Start Documentation Server
 
-Follow the shared **Documentation Server Lifecycle Management** instructions:
+```bash
+cd docs && npm ci && npx astro dev --host 0.0.0.0 &
+```
 
-1. Start the preview server (section "Starting the Documentation Preview Server")
-2. Wait for readiness (section "Waiting for Server Readiness")
-3. Optionally verify accessibility (section "Verifying Server Accessibility")
+Wait for the server to be ready:
+
+```bash
+for i in $(seq 1 30); do curl -s http://localhost:4321/ > /dev/null && break || sleep 1; done
+```
 
 #### Take Screenshots with Playwright
 
 For the modified documentation file(s):
 
-1. Determine the URL path for the modified file (e.g., if you modified `docs/src/content/docs/guides/getting-started.md`, the URL would be `http://localhost:4321/gh-aw/guides/getting-started/`)
+1. Determine the URL path for the modified file (e.g., if you modified `docs/src/content/docs/guides/getting-started.md`, the URL would be `http://localhost:4321/guides/getting-started/`)
 2. Use Playwright to navigate to the documentation page URL
 3. Wait for the page to fully load (including all CSS, fonts, and images)
 4. Take a full-page HD screenshot of the documentation page (1920x1080 viewport is configured)
-5. The screenshot will be saved in `/tmp/gh-aw/mcp-logs/playwright/` by Playwright (e.g., `/tmp/gh-aw/mcp-logs/playwright/getting-started.png`)
+5. The screenshot will be saved in `/tmp/gh-aw/mcp-logs/playwright/`
 
 #### Verify Screenshots Were Saved
 
 **IMPORTANT**: Before uploading, verify that Playwright successfully saved the screenshots:
 
 ```bash
-# List files in the output directory to confirm screenshots were saved
 ls -lh /tmp/gh-aw/mcp-logs/playwright/
 ```
 
@@ -255,23 +262,13 @@ ls -lh /tmp/gh-aw/mcp-logs/playwright/
 2. The tool will return a URL for each uploaded screenshot
 3. Keep track of these URLs to include in the PR description
 
-#### Report Blocked Domains
-
-While taking screenshots, monitor the browser console for any blocked network requests:
-
-- Look for CSS files that failed to load
-- Look for font files that failed to load
-- Look for any other resources that were blocked by network policies
-
-If you encounter any blocked domains:
-
-1. Note the domain names and resource types (CSS, fonts, images, etc.)
-2. Include this information in the PR description under a "Blocked Domains" section
-3. Example format: "Blocked: fonts.googleapis.com (fonts), cdn.example.com (CSS)"
-
 #### Cleanup Server
 
-After taking screenshots, follow the shared **Documentation Server Lifecycle Management** instructions for cleanup (section "Stopping the Documentation Server").
+After taking screenshots, stop the dev server:
+
+```bash
+pkill -f 'astro dev' 2>/dev/null || true
+```
 
 ### 10. Create Pull Request
 
@@ -290,7 +287,6 @@ After improving ONE file:
      - Estimated word count or line reduction
      - Summary of changes made
      - **Screenshot URLs**: Links to the uploaded screenshots showing the modified documentation pages
-     - **Blocked Domains (if any)**: List any CSS/font/resource domains that were blocked during screenshot capture
 
    **Important**: The `create_pull_request` tool will automatically:
    - Create the branch
@@ -346,6 +342,5 @@ A successful run:
 - ✅ Creates a clear, reviewable pull request
 - ✅ Explains the improvements made
 - ✅ Includes HD screenshots (1920x1080) of the modified documentation page(s) in the Astro Starlight website
-- ✅ Reports any blocked domains for CSS/fonts (if encountered)
 
 Begin by scanning the docs directory and selecting the best candidate for improvement!
