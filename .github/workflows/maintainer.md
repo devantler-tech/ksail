@@ -41,7 +41,7 @@ steps:
       GH_TOKEN: ${{ github.token }}
 ---
 
-# Agentic Workflow Maintainer
+# Maintainer
 
 Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in the GitHub repository `${{ github.repository }}` to the latest version of gh-aw.
 

@@ -30,7 +30,7 @@
 #
 # gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"736b342535992b86f1f32e7dc90fd384f2f586026b1baf23771c0704aaf562a2"}
 
-name: "Daily Roadmap Progress"
+name: "Daily Progress"
 "on":
   schedule:
   - cron: "14 14 * * *"
@@ -45,7 +45,7 @@ permissions: {}
 concurrency:
   group: "gh-aw-${{ github.workflow }}"
 
-run-name: "Daily Roadmap Progress"
+run-name: "Daily Progress"
 
 jobs:
   activation:
@@ -313,7 +313,7 @@ jobs:
               version: "",
               agent_version: "0.0.410",
               cli_version: "v0.46.0",
-              workflow_name: "Daily Roadmap Progress",
+              workflow_name: "Daily Progress",
               experimental: false,
               supports_tools_allowlist: true,
               run_id: context.runId,
@@ -905,7 +905,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Daily Roadmap Progress"
+          GH_AW_WORKFLOW_NAME: "Daily Progress"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-progress.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/daily-progress.md"
         with:
@@ -920,7 +920,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Daily Roadmap Progress"
+          GH_AW_WORKFLOW_NAME: "Daily Progress"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-progress.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/daily-progress.md"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -942,7 +942,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Daily Roadmap Progress"
+          GH_AW_WORKFLOW_NAME: "Daily Progress"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-progress.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/daily-progress.md"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -959,7 +959,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Daily Roadmap Progress"
+          GH_AW_WORKFLOW_NAME: "Daily Progress"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-progress.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/daily-progress.md"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -1006,7 +1006,7 @@ jobs:
       - name: Setup threat detection
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          WORKFLOW_NAME: "Daily Roadmap Progress"
+          WORKFLOW_NAME: "Daily Progress"
           WORKFLOW_DESCRIPTION: "This workflow systematically delivers features from the project plan.\nOperates in two phases: research roadmap and feature landscape to create prioritized plan,\nthen implement selected high-priority features via pull requests. Creates discussions to\ncoordinate with maintainers and advance the project toward its strategic goals."
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
@@ -1098,7 +1098,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_SKIP_BOTS: dependabot[bot],renovate[bot]
-          GH_AW_WORKFLOW_NAME: "Daily Roadmap Progress"
+          GH_AW_WORKFLOW_NAME: "Daily Progress"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -1122,7 +1122,7 @@ jobs:
     env:
       GH_AW_ENGINE_ID: "copilot"
       GH_AW_WORKFLOW_ID: "daily-progress"
-      GH_AW_WORKFLOW_NAME: "Daily Roadmap Progress"
+      GH_AW_WORKFLOW_NAME: "Daily Progress"
       GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-progress.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
       GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/daily-progress.md"
     outputs:

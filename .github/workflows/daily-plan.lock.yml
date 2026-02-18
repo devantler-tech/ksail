@@ -33,7 +33,7 @@
 #
 # Effective stop-time: 2026-03-15 01:07:02
 
-name: "Agentic Planner"
+name: "Daily Plan"
 "on":
   schedule:
   - cron: "58 9 * * *"
@@ -47,7 +47,7 @@ permissions: {}
 concurrency:
   group: "gh-aw-${{ github.workflow }}"
 
-run-name: "Agentic Planner"
+run-name: "Daily Plan"
 
 jobs:
   activation:
@@ -315,7 +315,7 @@ jobs:
               version: "",
               agent_version: "0.0.410",
               cli_version: "v0.46.0",
-              workflow_name: "Agentic Planner",
+              workflow_name: "Daily Plan",
               experimental: false,
               supports_tools_allowlist: true,
               run_id: context.runId,
@@ -844,7 +844,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Agentic Planner"
+          GH_AW_WORKFLOW_NAME: "Daily Plan"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-plan.md@212e871f0e4527153d3643a8216dc64043eb89dd"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/212e871f0e4527153d3643a8216dc64043eb89dd/workflows/daily-plan.md"
         with:
@@ -859,7 +859,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Agentic Planner"
+          GH_AW_WORKFLOW_NAME: "Daily Plan"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-plan.md@212e871f0e4527153d3643a8216dc64043eb89dd"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/212e871f0e4527153d3643a8216dc64043eb89dd/workflows/daily-plan.md"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -881,7 +881,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Agentic Planner"
+          GH_AW_WORKFLOW_NAME: "Daily Plan"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-plan.md@212e871f0e4527153d3643a8216dc64043eb89dd"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/212e871f0e4527153d3643a8216dc64043eb89dd/workflows/daily-plan.md"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -929,7 +929,7 @@ jobs:
       - name: Setup threat detection
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          WORKFLOW_NAME: "Agentic Planner"
+          WORKFLOW_NAME: "Daily Plan"
           WORKFLOW_DESCRIPTION: "This workflow performs strategic project planning by maintaining and updating the project roadmap.\nAnalyzes repository state including open issues, PRs, and completed work to formulate\na comprehensive project plan. Creates or updates a planning discussion with prioritized\ntasks, dependencies, and suggested new issues (via gh commands but doesn't create them).\nIncorporates maintainer feedback from comments on the plan."
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
@@ -1021,7 +1021,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_STOP_TIME: 2026-03-15 01:07:02
-          GH_AW_WORKFLOW_NAME: "Agentic Planner"
+          GH_AW_WORKFLOW_NAME: "Daily Plan"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -1033,7 +1033,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_SKIP_BOTS: dependabot[bot],renovate[bot]
-          GH_AW_WORKFLOW_NAME: "Agentic Planner"
+          GH_AW_WORKFLOW_NAME: "Daily Plan"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -1056,7 +1056,7 @@ jobs:
     env:
       GH_AW_ENGINE_ID: "copilot"
       GH_AW_WORKFLOW_ID: "daily-plan"
-      GH_AW_WORKFLOW_NAME: "Agentic Planner"
+      GH_AW_WORKFLOW_NAME: "Daily Plan"
       GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-plan.md@212e871f0e4527153d3643a8216dc64043eb89dd"
       GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/212e871f0e4527153d3643a8216dc64043eb89dd/workflows/daily-plan.md"
     outputs:
