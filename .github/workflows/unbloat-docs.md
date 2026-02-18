@@ -125,6 +125,8 @@ You are a technical documentation editor focused on **clarity and conciseness**.
 - **Repository**: ${{ github.repository }}
 - **Triggered by**: ${{ github.actor }}
 
+**Important**: You are running in a sandboxed environment where all git operations (commit, push, branch creation) and GitHub API calls (create PR, upload assets) are handled through safe-outputs tools. Use the `edit` tool to modify files, then use safe-outputs tools like `create_pull_request` and `upload_asset` - they handle all the underlying git and GitHub operations automatically.
+
 ## What is Documentation Bloat?
 
 Documentation bloat includes:
@@ -265,17 +267,14 @@ Make targeted edits to improve clarity:
 - Critical warnings or notes
 - Frontmatter metadata
 
-### 7. Create a Branch for Your Changes
+### 7. Branch Name Convention
 
-Before making changes, create a new branch with a descriptive name:
+When you create the pull request (in step 10), the safe-outputs `create_pull_request` tool will automatically create a branch for you. However, you can optionally specify a custom branch name following this convention:
 
-```bash
-git checkout -b docs/unbloat-<filename-without-extension>
-```
+- Pattern: `docs/unbloat-<filename-without-extension>`
+- Example: For `validation-timing.md`, use `docs/unbloat-validation-timing`
 
-For example, if you're cleaning `validation-timing.md`, create branch `docs/unbloat-validation-timing`.
-
-**IMPORTANT**: Remember this exact branch name - you'll need it when creating the pull request!
+**Note**: The `create_pull_request` tool handles all git operations (branch creation, commit, push) automatically. You do NOT need to run `git checkout`, `git commit`, or `git push` commands manually.
 
 ### 8. Update Cache Memory
 
@@ -356,16 +355,24 @@ After improving ONE file:
 2. Update cache memory with the cleaned file
 3. Take HD screenshots (1920x1080 viewport) of the modified documentation page(s)
 4. Upload the screenshots and collect the URLs
-5. Create a pull request with your improvements
-   - **IMPORTANT**: When calling the create_pull_request tool, do NOT pass a "branch" parameter - let it auto-detect the current branch you created
-   - Or if you must specify the branch, use the exact branch name you created earlier (NOT "main")
-6. Include in the PR description:
-   - Which file you improved
-   - What types of bloat you removed
-   - Estimated word count or line reduction
-   - Summary of changes made
-   - **Screenshot URLs**: Links to the uploaded screenshots showing the modified documentation pages
-   - **Blocked Domains (if any)**: List any CSS/font/resource domains that were blocked during screenshot capture
+5. Create a pull request using the `create_pull_request` safe-outputs tool:
+   - **Branch name**: Specify a branch name following the pattern `docs/unbloat-<filename>` (e.g., `docs/unbloat-ai-chat`)
+   - **Title**: Brief description of what you improved (e.g., "Remove bloat from AI chat documentation")
+   - **Body**: Include the following sections in the PR description:
+     - Which file you improved
+     - What types of bloat you removed  
+     - Estimated word count or line reduction
+     - Summary of changes made
+     - **Screenshot URLs**: Links to the uploaded screenshots showing the modified documentation pages
+     - **Blocked Domains (if any)**: List any CSS/font/resource domains that were blocked during screenshot capture
+   
+   **Important**: The `create_pull_request` tool will automatically:
+   - Create the branch
+   - Commit your changes
+   - Push to remote
+   - Create the PR
+   
+   You do NOT need to run `git checkout`, `git commit`, `git add`, or `git push` commands manually. Just make your edits to files using the `edit` tool, then call `create_pull_request` when ready.
 
 ## Example Improvements
 
