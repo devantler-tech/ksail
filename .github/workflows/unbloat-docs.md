@@ -49,7 +49,10 @@ tools:
   playwright:
     args: ["--viewport-size", "1920x1080"]
   bash:
-    - "git *"
+    - "git status"
+    - "git diff *"
+    - "git --no-pager status"
+    - "git --no-pager diff *"
     - "find docs/src/content/docs -name '*.md'"
     - "wc -l *"
     - "grep -n *"
@@ -67,6 +70,9 @@ tools:
     - "mkdir *"
     - "cp *"
     - "mv *"
+    - "ls *"
+    - "pwd"
+    - "date *"
 
 # Safe outputs configuration
 safe-outputs:
@@ -125,7 +131,16 @@ You are a technical documentation editor focused on **clarity and conciseness**.
 - **Repository**: ${{ github.repository }}
 - **Triggered by**: ${{ github.actor }}
 
-**Important**: You are running in a sandboxed environment where all git operations (commit, push, branch creation) and GitHub API calls (create PR, upload assets) are handled through safe-outputs tools. Use the `edit` tool to modify files, then use safe-outputs tools like `create_pull_request` and `upload_asset` - they handle all the underlying git and GitHub operations automatically.
+**CRITICAL SANDBOX CONTEXT**: You are running in the Agent Workflow Firewall (AWF) sandbox where:
+- **File editing**: Use the `edit` tool to modify files. Changes are saved to the working directory.
+- **NO manual git operations**: Do NOT run `git add`, `git commit`, `git push`, `git checkout`, or any git commands. These are BLOCKED by permissions.
+- **Safe-outputs automation**: After you call `create_pull_request`, a separate job outside the sandbox automatically:
+  1. Detects your file changes in the working directory
+  2. Creates a new branch
+  3. Commits all changes
+  4. Pushes to remote
+  5. Creates the pull request
+- **Your role**: Just edit files and call `create_pull_request`. The system handles everything else.
 
 ## What is Documentation Bloat?
 
@@ -267,14 +282,26 @@ Make targeted edits to improve clarity:
 - Critical warnings or notes
 - Frontmatter metadata
 
-### 7. Branch Name Convention
+### 7. How Safe-Outputs Works (CRITICAL)
 
-When you create the pull request (in step 10), the safe-outputs `create_pull_request` tool will automatically create a branch for you. However, you can optionally specify a custom branch name following this convention:
+**IMPORTANT**: The `create_pull_request` tool works differently than you might expect:
 
-- Pattern: `docs/unbloat-<filename-without-extension>`
-- Example: For `validation-timing.md`, use `docs/unbloat-validation-timing`
+1. **You edit files** using the `edit` tool - changes are saved to the working directory
+2. **You call `create_pull_request`** with your PR details (title, body, branch name)
+3. **A separate job runs** outside the sandbox that:
+   - Detects all modified files in the working directory
+   - Automatically creates a new branch (or uses the one you specified)
+   - Automatically commits all changes
+   - Automatically pushes to remote
+   - Creates the pull request on GitHub
 
-**Note**: The `create_pull_request` tool handles all git operations (branch creation, commit, push) automatically. You do NOT need to run `git checkout`, `git commit`, or `git push` commands manually.
+**DO NOT**:
+- ❌ Run `git add` - the safe-outputs job detects changes automatically
+- ❌ Run `git commit` - the safe-outputs job commits automatically
+- ❌ Run `git push` - the safe-outputs job pushes automatically
+- ❌ Run `git checkout` or `git branch` - the safe-outputs job creates branches automatically
+
+**Branch naming** (optional): Specify a branch name like `docs/unbloat-<filename>` when calling `create_pull_request`. If not specified, an auto-generated branch name will be used.
 
 ### 8. Update Cache Memory
 
@@ -356,7 +383,7 @@ After improving ONE file:
 3. Take HD screenshots (1920x1080 viewport) of the modified documentation page(s)
 4. Upload the screenshots and collect the URLs
 5. Create a pull request using the `create_pull_request` safe-outputs tool:
-   - **Branch name**: Specify a branch name following the pattern `docs/unbloat-<filename>` (e.g., `docs/unbloat-ai-chat`)
+   - **Branch name**: (Optional) Specify `docs/unbloat-<filename>` (e.g., `docs/unbloat-ai-chat`)
    - **Title**: Brief description of what you improved (e.g., "Remove bloat from AI chat documentation")
    - **Body**: Include the following sections in the PR description:
      - Which file you improved
@@ -366,13 +393,11 @@ After improving ONE file:
      - **Screenshot URLs**: Links to the uploaded screenshots showing the modified documentation pages
      - **Blocked Domains (if any)**: List any CSS/font/resource domains that were blocked during screenshot capture
    
-   **Important**: The `create_pull_request` tool will automatically:
-   - Create the branch
-   - Commit your changes
-   - Push to remote
-   - Create the PR
-   
-   You do NOT need to run `git checkout`, `git commit`, `git add`, or `git push` commands manually. Just make your edits to files using the `edit` tool, then call `create_pull_request` when ready.
+   **How it works**: When you call `create_pull_request`:
+   - ✅ You've already edited files with the `edit` tool
+   - ✅ A separate job outside the sandbox detects your changes
+   - ✅ That job automatically stages, commits, pushes, and creates the PR
+   - ❌ Do NOT run any git commands yourself - they are blocked and unnecessary
 
 ## Example Improvements
 
@@ -409,6 +434,29 @@ Use it when you need X by following steps 1-5. [Learn more](url)
 4. **Maintain tone**: Keep the neutral, technical tone
 5. **Test locally**: If possible, verify links and formatting are still correct
 6. **Document changes**: Clearly explain what you improved in the PR
+
+## Troubleshooting
+
+### "No changes to commit" Error
+
+If you see this error from `create_pull_request`:
+
+**DO NOT** try to fix it by running `git add` or `git commit`. The error occurs when:
+
+1. ❌ You didn't actually edit any files (check that you used the `edit` tool)
+2. ❌ The edits you made were identical to existing content (no actual changes)
+3. ✅ **Most likely**: This is a transient issue - verify your changes with `git status` or `git diff`, then try calling `create_pull_request` again
+
+**What to do**:
+1. Verify you made changes: Look for modified files in the working directory
+2. If changes exist, call `create_pull_request` again - do NOT attempt git operations
+3. If the error persists, report it as a missing tool issue
+
+**What NOT to do**:
+- ❌ Do NOT run `git add <file>`
+- ❌ Do NOT run `git commit -m "..."`
+- ❌ Do NOT run `git push`
+- These commands are blocked and will cause the workflow to fail
 
 ## Success Criteria
 
