@@ -11,46 +11,22 @@ KSail is a CLI tool that bundles common Kubernetes tooling into a single binary.
 
 ### Why use KSail instead of kubectl/helm/kind/k3d directly?
 
-KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, flux, and argocd into one binary. You get:
-
-- **Consistent workflow** across distributions (Vanilla, K3s, Talos, VCluster)
-- **Native configuration** — Works with standard `kind.yaml`, `k3d.yaml`, Talos configs, and `vcluster.yaml`
-- **No vendor lock-in** — Use generated configs directly with native tools
-- **Declarative configuration** for reproducible environments
-- **Built-in best practices** for CNI, CSI, observability, and security
-- **GitOps integration** without manual setup
-- **One tool to learn** instead of many
+KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, flux, and argocd into one binary with a consistent workflow across distributions. It works with standard native configuration files (kind.yaml, k3d.yaml, vcluster.yaml), provides declarative configuration with built-in best practices, and includes GitOps integration without manual setup—all without vendor lock-in.
 
 ### Am I locked into KSail?
 
-**No.** KSail generates native distribution configuration files that work with the underlying tools:
-
-- **Vanilla clusters**: Use the generated `kind.yaml` with `kind create cluster --config kind.yaml`
-- **K3s clusters**: Use the generated `k3d.yaml` with `k3d cluster create --config k3d.yaml`
-- **Talos clusters**: Use the generated patches with `talosctl`
-- **VCluster clusters**: Use the generated `vcluster.yaml` with `vcluster create my-cluster --values vcluster.yaml`
-
-You can migrate away from KSail at any time or use both KSail and native tools interchangeably. KSail is a superset that adds convenience without creating vendor lock-in.
+No. KSail generates native distribution configuration files that work directly with underlying tools. Use the generated kind.yaml, k3d.yaml, Talos patches, or vcluster.yaml with their respective CLI tools at any time. You can migrate away or use both KSail and native tools interchangeably.
 
 ### Can I use KSail configs with native tools?
 
-**Yes!** That's one of KSail's core design principles. After running `ksail cluster init`, you'll have:
+Yes! After running `ksail cluster init`, you can use the generated configuration files directly with native tools:
 
-```bash
-# For Vanilla distribution
-kind create cluster --config kind.yaml
-
-# For K3s distribution
-k3d cluster create --config k3d.yaml
-
-# For Talos distribution
-talosctl cluster create --config-patch @talos/cluster/patches.yaml
-
-# For VCluster distribution
-vcluster create my-cluster --values vcluster.yaml
-```
-
-KSail-generated configurations are standard, valid configuration files for each distribution. This ensures portability and prevents lock-in.
+````bash
+kind create cluster --config kind.yaml          # Vanilla
+k3d cluster create --config k3d.yaml            # K3s
+talosctl cluster create --config-patch @talos/cluster/patches.yaml  # Talos
+vcluster create my-cluster --values vcluster.yaml  # VCluster
+````
 
 ### Is KSail production-ready?
 
@@ -72,9 +48,7 @@ See the [Installation Guide](/installation/) for details.
 
 ### Do I need to install Docker, kubectl, helm, etc.?
 
-**Docker is required** for local cluster creation (the Docker provider). KSail embeds kubectl, helm, kind, k3d, vcluster, flux, and argocd as Go libraries, so you don't need to install them separately.
-
-For Hetzner cloud clusters (Talos only), you need a Hetzner account and API token, but Docker is still used for the KSail binary.
+Docker is required for local cluster creation. KSail embeds kubectl, helm, kind, k3d, vcluster, flux, and argocd as Go libraries—no separate installation needed. For Hetzner cloud clusters, you need a Hetzner account and API token.
 
 ### How do I update KSail?
 
@@ -132,53 +106,23 @@ kubectl config use-context <cluster-name>
 
 ### Can I use my own container registry?
 
-Yes! KSail supports:
-
-1. **Local registry** - Runs on localhost with optional authentication
-2. **Mirror registries** - Proxy to upstream registries (avoid rate limits)
-3. **External registries** - Use your own registry with authentication
-
-KSail automatically discovers credentials from:
-
-- **Docker config** (`~/.docker/config.json`) - Uses existing Docker credentials
-- **Environment variables** - Set credentials via `${USER}:${PASS}@registry` syntax
-- **GitOps secrets** - Reads from Flux/ArgoCD cluster secrets
-
-See [Registry Management](/features/#registry-management) for configuration examples.
+Yes! KSail supports local registries with optional authentication, mirror registries to avoid rate limits, and external registries with authentication. Credentials are automatically discovered from Docker config (`~/.docker/config.json`), environment variables, or GitOps secrets. See [Registry Management](/features/#registry-management) for configuration examples.
 
 ### What happens if I change the distribution or provider in ksail.yaml?
 
-Changing the distribution (e.g., Vanilla to Talos) or provider (e.g., Docker to Hetzner) requires full cluster recreation.
-The current implementation does not automatically detect distribution/provider changes on an existing cluster.
-You must manually delete the old cluster first with `ksail cluster delete`, then run `ksail cluster create`.
+Changing the distribution (e.g., Vanilla to Talos) or provider (e.g., Docker to Hetzner) requires full cluster recreation. Delete the old cluster with `ksail cluster delete`, then run `ksail cluster create`.
 
 ### Which distributions support LoadBalancer services?
 
-LoadBalancer support varies by distribution:
-
-- **Vanilla (Kind) on Docker** - ✅ Uses cloud-provider-kind (external Docker container)
-- **K3s on Docker** - ✅ Uses built-in ServiceLB (Klipper-LB)
-- **Talos on Docker** - ✅ Uses MetalLB with default IP pool (172.18.255.200-172.18.255.250)
-- **Talos on Hetzner** - ✅ Uses Hetzner Cloud Load Balancer
-- **VCluster on Docker** - ✅ Managed internally by vCluster
-
-All distributions provide LoadBalancer service support. MetalLB was added for Talos on Docker in v5.31+.
+All distributions provide LoadBalancer support: Vanilla (Kind) uses cloud-provider-kind, K3s uses built-in ServiceLB, Talos on Docker uses MetalLB (IP pool 172.18.255.200-250), Talos on Hetzner uses Hetzner Cloud Load Balancer, and VCluster manages it internally.
 
 ### Can I add nodes to an existing cluster?
 
-It depends on the distribution:
-
-- **Talos** - Yes, both control-plane and worker nodes can be scaled via `ksail cluster update`
-- **K3s (K3d)** - Yes, worker (agent) nodes can be added/removed. Server (control-plane) scaling requires recreation
-- **Vanilla (Kind)** - No, Kind does not support node changes after creation. Requires recreation
-
-See the [Update Behavior](/support-matrix/#update-behavior) table for details.
+Node scaling support depends on the distribution: Talos supports both control-plane and worker nodes via `ksail cluster update`, K3s supports worker (agent) nodes only (server scaling requires recreation), and Vanilla (Kind) requires full recreation. See the [Update Behavior](/support-matrix/#update-behavior) table for details.
 
 ### What does `ksail cluster update --dry-run` show?
 
-The `--dry-run` flag previews all detected configuration changes without applying them.
-It lists each change with its classification (in-place, reboot-required, or recreate-required)
-and a summary of how many changes would be applied. This is useful for reviewing the impact before committing.
+Previews all detected configuration changes without applying them, including change classifications (in-place, reboot-required, or recreate-required) and a summary of impacts.
 
 ## Workload Management
 
@@ -230,16 +174,14 @@ ksail cluster init --gitops-engine ArgoCD
 
 ### Do I need a Git repository for GitOps?
 
-Not necessarily! KSail can package manifests as **OCI artifacts** and push to a local registry:
+Not necessarily! KSail can package manifests as OCI artifacts and push to a local registry, enabling GitOps workflows without Git (useful for local development):
 
-```bash
+````bash
 ksail cluster init --gitops-engine Flux --local-registry
 ksail cluster create
-ksail workload push      # Package and push to local registry
+ksail workload push      # Package and push
 ksail workload reconcile # Sync to cluster
-```
-
-This enables GitOps workflows without Git (useful for local development).
+````
 
 ### Can I use my own Git repository?
 
@@ -247,30 +189,13 @@ Yes! After initialization, configure your GitOps engine to point to your Git rep
 
 ### Why does Flux operator installation take so long?
 
-Flux operator installation can take 7-12 minutes on resource-constrained systems (e.g., GitHub Actions runners, low-spec machines). This is due to CRD establishment delays in the Kubernetes API server, not a failure.
-
-**KSail automatically handles this** with a 12-minute timeout for Flux installations. The delay is normal on slower systems. You can monitor progress with:
-
-```bash
-# Check Flux operator pods
-ksail workload get pods -n flux-system
-
-# Verify CRDs are being established
-kubectl get crds | grep fluxcd.io
-```
-
-For faster installations, ensure your system has adequate resources (4GB+ RAM recommended). See [Troubleshooting - Flux Operator Installation Timeout](/troubleshooting/#flux-operator-installation-timeout) for more details.
+Flux operator installation can take 7-12 minutes on resource-constrained systems due to CRD establishment delays. KSail handles this automatically with a 12-minute timeout. Monitor progress with `ksail workload get pods -n flux-system` or `kubectl get crds | grep fluxcd.io`. For faster installations, ensure 4GB+ RAM is available. See [Troubleshooting - Flux Operator Installation Timeout](/troubleshooting/#flux-operator-installation-timeout) for details.
 
 ## Configuration
 
 ### What's the difference between CLI flags and ksail.yaml?
 
-Both configure KSail:
-
-- **CLI flags** - Quick overrides, one-off changes, scripting
-- **ksail.yaml** - Declarative config, version-controlled, team consistency
-
-CLI flags override `ksail.yaml` values. See [Configuration Overview](/configuration/).
+CLI flags provide quick overrides and scripting support, while ksail.yaml offers declarative configuration suitable for version control and team consistency. CLI flags override ksail.yaml values. See [Configuration Overview](/configuration/).
 
 ### Can I version control my cluster configuration?
 
@@ -321,16 +246,12 @@ Supports age, PGP, and cloud KMS providers. See [Secret Management](/features/#s
 
 ### Are my credentials stored securely?
 
-KSail uses environment variables for sensitive data (`${VAR}` syntax in configuration). The values are expanded at runtime and never stored in config files.
+KSail uses environment variables for sensitive data (`${VAR}` syntax in configuration). Values are expanded at runtime and never stored in config files:
 
-```bash
-# Set credential
+````bash
 export REGISTRY_TOKEN="my-secret-token"
-
-# Use in configuration
-ksail cluster init \
-  --local-registry 'user:${REGISTRY_TOKEN}@registry.example.com'
-```
+ksail cluster init --local-registry 'user:${REGISTRY_TOKEN}@registry.example.com'
+````
 
 ## Troubleshooting
 
