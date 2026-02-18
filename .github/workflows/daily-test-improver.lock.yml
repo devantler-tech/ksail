@@ -30,7 +30,7 @@
 #
 # gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"f265648bee9ab6fdda8e39f437b9e543df91533353aa4fc1a8662a1a48c9b688"}
 
-name: "Daily Test Coverage Improver"
+name: "Daily Test Improver"
 "on":
   schedule:
   - cron: "32 7 * * *"
@@ -45,7 +45,7 @@ permissions: {}
 concurrency:
   group: "gh-aw-${{ github.workflow }}"
 
-run-name: "Daily Test Coverage Improver"
+run-name: "Daily Test Improver"
 
 jobs:
   activation:
@@ -313,7 +313,7 @@ jobs:
               version: "",
               agent_version: "0.0.410",
               cli_version: "v0.46.0",
-              workflow_name: "Daily Test Coverage Improver",
+              workflow_name: "Daily Test Improver",
               experimental: false,
               supports_tools_allowlist: true,
               run_id: context.runId,
@@ -979,7 +979,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver"
+          GH_AW_WORKFLOW_NAME: "Daily Test Improver"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-test-improver.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/daily-test-improver.md"
         with:
@@ -994,7 +994,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver"
+          GH_AW_WORKFLOW_NAME: "Daily Test Improver"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-test-improver.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/daily-test-improver.md"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -1016,7 +1016,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver"
+          GH_AW_WORKFLOW_NAME: "Daily Test Improver"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-test-improver.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/daily-test-improver.md"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -1033,7 +1033,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver"
+          GH_AW_WORKFLOW_NAME: "Daily Test Improver"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-test-improver.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/daily-test-improver.md"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -1080,7 +1080,7 @@ jobs:
       - name: Setup threat detection
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          WORKFLOW_NAME: "Daily Test Coverage Improver"
+          WORKFLOW_NAME: "Daily Test Improver"
           WORKFLOW_DESCRIPTION: "This workflow performs test enhancements by systematically improving test quality and coverage.\nOperates in three phases: research testing landscape and create coverage plan, infer build\nand coverage steps, then implement new tests targeting untested code. Generates coverage\nreports, identifies gaps, creates comprehensive test suites, and submits draft PRs."
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
@@ -1172,7 +1172,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_SKIP_BOTS: dependabot[bot],renovate[bot]
-          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver"
+          GH_AW_WORKFLOW_NAME: "Daily Test Improver"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -1196,7 +1196,7 @@ jobs:
     env:
       GH_AW_ENGINE_ID: "copilot"
       GH_AW_WORKFLOW_ID: "daily-test-improver"
-      GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver"
+      GH_AW_WORKFLOW_NAME: "Daily Test Improver"
       GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-test-improver.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
       GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/daily-test-improver.md"
     outputs:

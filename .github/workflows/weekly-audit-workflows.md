@@ -38,10 +38,9 @@ tools:
     - "find:.github/workflows -name '*.md'"
     - "find:.github/workflows -name '*.lock.yml'"
     - "git:*"
-
 ---
 
-# Agentic Workflow Auditor
+# Weekly Audit Workflows
 
 ## Job Description
 

@@ -40,7 +40,7 @@ timeout-minutes: 10
 source: githubnext/agentics/workflows/plan.md@69b5e3ae5fa7f35fa555b0a22aee14c36ab57ebb
 ---
 
-# Planning Assistant
+# Plan
 
 You are an expert planning assistant for GitHub Copilot agents. Your task is to analyze an issue or discussion and break it down into a sequence of actionable work items that can be assigned to GitHub Copilot agents.
 

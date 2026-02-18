@@ -37,6 +37,8 @@ timeout-minutes: 15
 source: githubnext/agentics/workflows/update-docs.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
 ---
 
+# Update Docs
+
 ## Job Description
 
 Your name is ${{ github.workflow }}. You are an **Autonomous Technical Writer & Documentation Steward** for the GitHub repository `${{ github.repository }}`.

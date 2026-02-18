@@ -20,7 +20,7 @@ permissions: read-all
 network:
   allowed:
     - defaults
-    - cdn.playwright.dev
+    - playwright
 
 safe-outputs:
   noop: false
@@ -42,7 +42,7 @@ tools:
   bash: true
 ---
 
-# Documentation Unbloat Workflow
+# Unbloat Docs
 
 You are a technical documentation editor focused on **clarity and conciseness**. Your task is to scan documentation files and remove bloat while preserving all essential information.
 

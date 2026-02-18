@@ -30,7 +30,7 @@
 #
 # gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"f266100aa7913f6604e98eddf3ff2c7e4a0a46f288df96cea72a26f22a9a5f2c"}
 
-name: "CI Failure Doctor"
+name: "CI Doctor"
 "on":
   # skip-bots: # Skip-bots processed as bot check in pre-activation job
   # - dependabot[bot] # Skip-bots processed as bot check in pre-activation job
@@ -53,7 +53,7 @@ permissions: {}
 concurrency:
   group: "gh-aw-${{ github.workflow }}"
 
-run-name: "CI Failure Doctor"
+run-name: "CI Doctor"
 
 jobs:
   activation:
@@ -362,7 +362,7 @@ jobs:
               version: "",
               agent_version: "0.0.410",
               cli_version: "v0.46.0",
-              workflow_name: "CI Failure Doctor",
+              workflow_name: "CI Doctor",
               experimental: false,
               supports_tools_allowlist: true,
               run_id: context.runId,
@@ -920,7 +920,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "CI Failure Doctor"
+          GH_AW_WORKFLOW_NAME: "CI Doctor"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/ci-doctor.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/ci-doctor.md"
         with:
@@ -935,7 +935,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "CI Failure Doctor"
+          GH_AW_WORKFLOW_NAME: "CI Doctor"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/ci-doctor.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/ci-doctor.md"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -955,7 +955,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "CI Failure Doctor"
+          GH_AW_WORKFLOW_NAME: "CI Doctor"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/ci-doctor.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/ci-doctor.md"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -1003,7 +1003,7 @@ jobs:
       - name: Setup threat detection
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          WORKFLOW_NAME: "CI Failure Doctor"
+          WORKFLOW_NAME: "CI Doctor"
           WORKFLOW_DESCRIPTION: "This workflow is an automated CI failure investigator that triggers when monitored workflows fail.\nPerforms deep analysis of GitHub Actions workflow failures to identify root causes,\npatterns, and provide actionable remediation steps. Analyzes logs, error messages,\nand workflow configuration to help diagnose and resolve CI issues efficiently."
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
@@ -1096,7 +1096,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_SKIP_BOTS: dependabot[bot],renovate[bot]
-          GH_AW_WORKFLOW_NAME: "CI Failure Doctor"
+          GH_AW_WORKFLOW_NAME: "CI Doctor"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -1119,7 +1119,7 @@ jobs:
     env:
       GH_AW_ENGINE_ID: "copilot"
       GH_AW_WORKFLOW_ID: "ci-doctor"
-      GH_AW_WORKFLOW_NAME: "CI Failure Doctor"
+      GH_AW_WORKFLOW_NAME: "CI Doctor"
       GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/ci-doctor.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32"
       GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32/workflows/ci-doctor.md"
     outputs:
