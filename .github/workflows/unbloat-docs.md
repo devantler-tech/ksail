@@ -57,6 +57,8 @@ You are a technical documentation editor focused on **clarity and conciseness**.
 
 **Important**: You are running in a sandboxed environment where all git operations (commit, push, branch creation) and GitHub API calls (create PR, upload assets) are handled through safe-outputs tools. Use the `edit` tool to modify files, then use safe-outputs tools like `create_pull_request` and `upload_asset` - they handle all the underlying git and GitHub operations automatically.
 
+**How safe-outputs tools work**: Safe-outputs tools (`create_pull_request`, `upload_asset`, `add_comment`, `noop`) are **direct function calls** available in your tool list — call them exactly like you call `edit` or `bash`. Do NOT try to access them via sockets, HTTP, netcat, or manual MCP JSON-RPC. Simply invoke the tool by name (e.g., call `create_pull_request` with title, body, and branch parameters).
+
 ## What is Documentation Bloat?
 
 Documentation bloat includes:
@@ -223,13 +225,13 @@ After making changes to a documentation file, take screenshots of the rendered p
 #### Build and Start Documentation Server
 
 ```bash
-cd docs && npm ci && npx astro dev --host 0.0.0.0 &
+cd docs && npm ci && npx astro dev --host 0.0.0.0 > /tmp/astro-dev.log 2>&1 & echo $! > /tmp/astro-dev.pid
 ```
 
-Wait for the server to be ready:
+Wait for the server to be ready (if it fails, continue without screenshots):
 
 ```bash
-for i in $(seq 1 30); do curl -s http://localhost:4321/ > /dev/null && break || sleep 1; done
+for i in $(seq 1 30); do curl -s http://localhost:4321/ > /dev/null && echo "Server ready" && break || sleep 1; done
 ```
 
 #### Take Screenshots with Playwright
@@ -244,30 +246,29 @@ For the modified documentation file(s):
 
 #### Verify Screenshots Were Saved
 
-**IMPORTANT**: Before uploading, verify that Playwright successfully saved the screenshots:
+Verify that Playwright successfully saved the screenshots:
 
 ```bash
 ls -lh /tmp/gh-aw/mcp-logs/playwright/
 ```
 
-**If no screenshot files are found:**
-
-- Report this in the PR description under an "Issues" section
-- Include the error message or reason why screenshots couldn't be captured
-- Do not proceed with upload-asset if no files exist
-
 #### Upload Screenshots
 
-1. Use the `upload asset` tool from safe-outputs to upload each screenshot file
+If screenshots exist:
+
+1. Use the `upload_asset` tool from safe-outputs to upload each screenshot file
 2. The tool will return a URL for each uploaded screenshot
 3. Keep track of these URLs to include in the PR description
 
+If no screenshot files are found or the dev server failed to start, **skip the screenshot step entirely** and proceed to create the PR without screenshots. Note the issue in the PR description but do NOT let it block PR creation.
+
 #### Cleanup Server
 
-After taking screenshots, stop the dev server:
+After taking screenshots, stop the dev server using its PID:
 
 ```bash
-pkill -f 'astro dev' 2>/dev/null || true
+# Find and kill the astro dev process by PID
+kill $(cat /tmp/astro-dev.pid 2>/dev/null) 2>/dev/null || true
 ```
 
 ### 10. Create Pull Request
@@ -276,9 +277,9 @@ After improving ONE file:
 
 1. Verify your changes preserve all essential information
 2. Update cache memory with the cleaned file
-3. Take HD screenshots (1920x1080 viewport) of the modified documentation page(s)
-4. Upload the screenshots and collect the URLs
-5. Create a pull request using the `create_pull_request` safe-outputs tool:
+3. **Best-effort**: Take HD screenshots (1920x1080 viewport) of the modified documentation page(s) — if the dev server fails, skip this step
+4. If screenshots were captured, upload them using the `upload_asset` tool and collect the URLs
+5. **Always create the PR** using the `create_pull_request` safe-outputs tool (this is a direct function call in your tool list):
    - **Branch name**: Specify a branch name following the pattern `docs/unbloat-<filename>` (e.g., `docs/unbloat-ai-chat`)
    - **Title**: Brief description of what you improved (e.g., "Remove bloat from AI chat documentation")
    - **Body**: Include the following sections in the PR description:
