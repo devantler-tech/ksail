@@ -2,15 +2,14 @@
 name: Documentation Unbloat
 description: Reviews and simplifies documentation by reducing verbosity while maintaining clarity and completeness
 on:
-  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   # Daily (scattered execution time)
   schedule: daily
-
+  
   # Command trigger for /unbloat in PR comments
   slash_command:
     name: unbloat
     events: [pull_request_comment]
-
+  
   # Manual trigger for testing
   workflow_dispatch:
 
@@ -24,11 +23,14 @@ strict: true
 
 # AI engine configuration
 engine:
-  id: copilot
+  id: claude
+  max-turns: 90  # Reduce from avg 115 turns
 
 # Shared instructions
 imports:
+  - shared/mood.md
   - shared/reporting.md
+  - shared/docs-server-lifecycle.md
 
 # Network access for documentation best practices research
 network:
@@ -48,11 +50,28 @@ tools:
   edit:
   playwright:
     args: ["--viewport-size", "1920x1080"]
-  bash: ["*"]
+  bash:
+    - "find docs/src/content/docs -name '*.md'"
+    - "wc -l *"
+    - "grep -n *"
+    - "git"
+    - "cat *"
+    - "head *"
+    - "tail *"
+    - "cd *"
+    - "node *"
+    - "npm *"
+    - "curl *"
+    - "ps *"
+    - "kill *"
+    - "sleep *"
+    - "echo *"
+    - "mkdir *"
+    - "cp *"
+    - "mv *"
 
 # Safe outputs configuration
 safe-outputs:
-  noop: false
   create-pull-request:
     expires: 2d
     title-prefix: "[docs] "
@@ -83,9 +102,9 @@ steps:
   - name: Setup Node.js
     uses: actions/setup-node@v6
     with:
-      node-version: "24"
-      cache: "npm"
-      cache-dependency-path: "docs/package-lock.json"
+      node-version: '24'
+      cache: 'npm'
+      cache-dependency-path: 'docs/package-lock.json'
 
   - name: Install dependencies
     working-directory: ./docs
@@ -106,18 +125,6 @@ You are a technical documentation editor focused on **clarity and conciseness**.
 
 - **Repository**: ${{ github.repository }}
 - **Triggered by**: ${{ github.actor }}
-
-**CRITICAL SANDBOX CONTEXT**: You are running in the Agent Workflow Firewall (AWF) sandbox where:
-
-- **File editing**: Use the `edit` tool to modify files. Changes are saved to the working directory.
-- **NO manual git operations**: Do NOT run `git add`, `git commit`, `git push`, `git checkout`, or any git commands. These are BLOCKED by permissions.
-- **Safe-outputs automation**: After you call `create_pull_request`, a separate job outside the sandbox automatically:
-  1. Detects your file changes in the working directory
-  2. Creates a new branch
-  3. Commits all changes
-  4. Pushes to remote
-  5. Creates the pull request
-- **Your role**: Just edit files and call `create_pull_request`. The system handles everything else.
 
 ## What is Documentation Bloat?
 
@@ -259,27 +266,16 @@ Make targeted edits to improve clarity:
 - Critical warnings or notes
 - Frontmatter metadata
 
-### 7. How Safe-Outputs Works (CRITICAL)
+### 7. Create a Branch for Your Changes
 
-**IMPORTANT**: The `create_pull_request` tool works differently than you might expect:
+Before making changes, create a new branch with a descriptive name:
+```bash
+git checkout -b docs/unbloat-<filename-without-extension>
+```
 
-1. **You edit files** using the `edit` tool - changes are saved to the working directory
-2. **You call `create_pull_request`** with your PR details (title, body, branch name)
-3. **A separate job runs** outside the sandbox that:
-   - Detects all modified files in the working directory
-   - Automatically creates a new branch (or uses the one you specified)
-   - Automatically commits all changes
-   - Automatically pushes to remote
-   - Creates the pull request on GitHub
+For example, if you're cleaning `validation-timing.md`, create branch `docs/unbloat-validation-timing`.
 
-**DO NOT**:
-
-- ❌ Run `git add` - the safe-outputs job detects changes automatically
-- ❌ Run `git commit` - the safe-outputs job commits automatically
-- ❌ Run `git push` - the safe-outputs job pushes automatically
-- ❌ Run `git checkout` or `git branch` - the safe-outputs job creates branches automatically
-
-**Branch naming** (optional): Specify a branch name like `docs/unbloat-<filename>` when calling `create_pull_request`. If not specified, an auto-generated branch name will be used.
+**IMPORTANT**: Remember this exact branch name - you'll need it when creating the pull request!
 
 ### 8. Update Cache Memory
 
@@ -355,27 +351,20 @@ After taking screenshots, follow the shared **Documentation Server Lifecycle Man
 ### 10. Create Pull Request
 
 After improving ONE file:
-
 1. Verify your changes preserve all essential information
 2. Update cache memory with the cleaned file
 3. Take HD screenshots (1920x1080 viewport) of the modified documentation page(s)
 4. Upload the screenshots and collect the URLs
-5. Create a pull request using the `create_pull_request` safe-outputs tool:
-   - **Branch name**: (Optional) Specify `docs/unbloat-<filename>` (e.g., `docs/unbloat-ai-chat`)
-   - **Title**: Brief description of what you improved (e.g., "Remove bloat from AI chat documentation")
-   - **Body**: Include the following sections in the PR description:
-     - Which file you improved
-     - What types of bloat you removed  
-     - Estimated word count or line reduction
-     - Summary of changes made
-     - **Screenshot URLs**: Links to the uploaded screenshots showing the modified documentation pages
-     - **Blocked Domains (if any)**: List any CSS/font/resource domains that were blocked during screenshot capture
-
-   **How it works**: When you call `create_pull_request`:
-   - ✅ You've already edited files with the `edit` tool
-   - ✅ A separate job outside the sandbox detects your changes
-   - ✅ That job automatically stages, commits, pushes, and creates the PR
-   - ❌ Do NOT run any git commands yourself - they are blocked and unnecessary
+5. Create a pull request with your improvements
+   - **IMPORTANT**: When calling the create_pull_request tool, do NOT pass a "branch" parameter - let it auto-detect the current branch you created
+   - Or if you must specify the branch, use the exact branch name you created earlier (NOT "main")
+6. Include in the PR description:
+   - Which file you improved
+   - What types of bloat you removed
+   - Estimated word count or line reduction
+   - Summary of changes made
+   - **Screenshot URLs**: Links to the uploaded screenshots showing the modified documentation pages
+   - **Blocked Domains (if any)**: List any CSS/font/resource domains that were blocked during screenshot capture
 
 ## Example Improvements
 
@@ -412,31 +401,6 @@ Use it when you need X by following steps 1-5. [Learn more](url)
 4. **Maintain tone**: Keep the neutral, technical tone
 5. **Test locally**: If possible, verify links and formatting are still correct
 6. **Document changes**: Clearly explain what you improved in the PR
-
-## Troubleshooting
-
-### "No changes to commit" Error
-
-If you see this error from `create_pull_request`:
-
-**DO NOT** try to fix it by running `git add` or `git commit`. The error occurs when:
-
-1. ❌ You didn't actually edit any files (check that you used the `edit` tool)
-2. ❌ The edits you made were identical to existing content (no actual changes)
-3. ✅ **Most likely**: This is a transient issue - verify your changes with `git status` or `git diff`, then try calling `create_pull_request` again
-
-**What to do**:
-
-1. Verify you made changes: Look for modified files in the working directory
-2. If changes exist, call `create_pull_request` again - do NOT attempt git operations
-3. If the error persists, report it as a missing tool issue
-
-**What NOT to do**:
-
-- ❌ Do NOT run `git add <file>`
-- ❌ Do NOT run `git commit -m "..."`
-- ❌ Do NOT run `git push`
-- These commands are blocked and will cause the workflow to fail
 
 ## Success Criteria
 
