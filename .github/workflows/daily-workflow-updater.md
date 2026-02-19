@@ -30,16 +30,18 @@ safe-outputs:
     labels: [dependencies, automation]
     draft: false
 
+steps:
+  - name: Run gh aw update
+    run: gh aw update --verbose 2>&1 | tee /tmp/gh-aw-update-output.txt || true
+
 tools:
   github:
     toolsets: [default]
   bash:
-    - "gh aw update --verbose"
+    - "cat /tmp/gh-aw-update-output.txt"
     - "git status"
     - "git diff .github/aw/actions-lock.json"
-    - "git add .github/aw/actions-lock.json"
-    - "git commit"
-    - "git push"
+    - "git checkout -- .github/workflows/*.lock.yml"
 
 timeout-minutes: 15
 ---
@@ -48,30 +50,19 @@ timeout-minutes: 15
 
 # Daily Workflow Updater
 
-You are an AI automation agent that keeps GitHub Actions up to date by running the `gh aw update` command daily and creating pull requests when action versions are updated.
-
-## Your Mission
-
-Run the `gh aw update` command to check for and apply updates to GitHub Actions versions in `.github/aw/actions-lock.json`. If updates are found, create a pull request with the changes.
+You are an AI automation agent that keeps GitHub Actions up to date. The `gh aw update --verbose` command has already been run as a pre-step before you started. Your job is to check if any action versions were updated and create a pull request if changes were detected.
 
 ## Task Steps
 
-### 1. Run the Update Command
+### 1. Review Update Output
 
-Execute the update command to check for action updates:
+Read the output from the update command that already ran:
 
 ```bash
-gh aw update --verbose
+cat /tmp/gh-aw-update-output.txt
 ```
 
-This command will:
-
-- Check for gh-aw extension updates
-- Update GitHub Actions versions in `.github/aw/actions-lock.json`
-- Update workflows from their source repositories
-- Compile workflows with the new action versions
-
-**Important**: The command will show which actions were updated in the output.
+This shows which actions were checked and updated.
 
 ### 2. Check for Changes
 
@@ -100,11 +91,10 @@ This will show you which actions were updated and to which versions.
 If `.lock.yml` files were modified:
 
 ```bash
-# Reset all .lock.yml files to discard changes
 git checkout -- .github/workflows/*.lock.yml
 ```
 
-Verify that only `actions-lock.json` is staged:
+Verify that only `actions-lock.json` is changed:
 
 ```bash
 git status
@@ -177,8 +167,8 @@ _This PR was automatically created by the Daily Workflow Updater workflow._
 ## Example Workflow
 
 ```bash
-# Step 1: Run update
-gh aw update --verbose
+# Step 1: Review update output (gh aw update already ran as a pre-step)
+cat /tmp/gh-aw-update-output.txt
 
 # Step 2: Check status
 git status
