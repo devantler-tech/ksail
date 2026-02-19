@@ -37,7 +37,7 @@ timeout-minutes: 15
 source: githubnext/agentics/workflows/daily-plan.md@212e871f0e4527153d3643a8216dc64043eb89dd
 ---
 
-# Agentic Planner
+# Daily Plan
 
 ## Job Description
 

@@ -1,9 +1,9 @@
 ---
 description: |
-  This workflow promotes KSail on various channels to increase project visibility 
+  This workflow promotes KSail on various channels to increase project visibility
   and adoption. It researches relevant content, identifies promotion opportunities,
-  and creates promotional content for social media, developer communities, and 
-  content platforms. Creates GitHub discussions with promotional strategies and 
+  and creates promotional content for social media, developer communities, and
+  content platforms. Creates GitHub discussions with promotional strategies and
   ready-to-use content.
 
 on:
@@ -31,7 +31,7 @@ tools:
 timeout-minutes: 15
 ---
 
-# KSail Promotion Strategy
+# Weekly Promote KSail
 
 ## Job Description
 

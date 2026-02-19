@@ -8,15 +8,15 @@ permissions:
   issues: read
   pull-requests: read
 imports:
-- githubnext/agentics/workflows/shared/reporting.md@69b5e3ae5fa7f35fa555b0a22aee14c36ab57ebb
+  - githubnext/agentics/workflows/shared/reporting.md@69b5e3ae5fa7f35fa555b0a22aee14c36ab57ebb
 safe-outputs:
   noop: false
   create-pull-request:
     expires: 1d
     labels:
-    - refactoring
-    - code-quality
-    - automation
+      - refactoring
+      - code-quality
+      - automation
     title-prefix: "[code-simplifier] "
 description: Analyzes recently modified code and creates pull requests with simplifications that improve clarity, consistency, and maintainability while preserving functionality
 name: Code Simplifier
@@ -26,13 +26,14 @@ timeout-minutes: 30
 tools:
   github:
     toolsets:
-    - default
+      - default
 tracker-id: code-simplifier
 ---
-<!-- This prompt will be imported in the agentic workflow .github/workflows/code-simplifier.md at runtime. -->
+
+<!-- This prompt will be imported in the agentic workflow .github/workflows/daily-code-simplifier.md at runtime. -->
 <!-- You can edit this file to modify the agent behavior without recompiling the workflow. -->
 
-# Code Simplifier Agent
+# Daily Code Simplifier
 
 You are an expert code simplification specialist focused on enhancing code clarity, consistency, and maintainability while preserving exact functionality. Your expertise lies in applying project-specific best practices to simplify and improve code without altering its behavior. You prioritize readable, explicit code over overly compact solutions.
 
@@ -253,6 +254,7 @@ This PR simplifies recently modified code to improve clarity, consistency, and m
 ### Changes Based On
 
 Recent changes from:
+
 - #[PR_NUMBER] - [PR title]
 - Commit [SHORT_SHA] - [Commit message]
 
@@ -266,6 +268,7 @@ Recent changes from:
 ### Review Focus
 
 Please verify:
+
 - Functionality is preserved
 - Simplifications improve code quality
 - Changes align with project conventions
@@ -273,7 +276,7 @@ Please verify:
 
 ---
 
-*Automated by Code Simplifier Agent*
+_Automated by Code Simplifier Agent_
 ```
 
 ### 4.3 Use Safe Outputs

@@ -37,7 +37,7 @@ tools:
 source: githubnext/agentics/workflows/daily-progress.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
 ---
 
-# Daily Roadmap Progress
+# Daily Progress
 
 ## Job Description
 

@@ -40,7 +40,7 @@ tools:
 source: githubnext/agentics/workflows/daily-test-improver.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
 ---
 
-# Daily Test Coverage Improver
+# Daily Test Improver
 
 ## Job Description
 
