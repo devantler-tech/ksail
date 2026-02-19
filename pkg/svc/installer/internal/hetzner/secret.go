@@ -57,7 +57,7 @@ func EnsureSecret(ctx context.Context, kubeconfig, kubeContext string) error {
 
 	secrets := clientset.CoreV1().Secrets(Namespace)
 
-	_, err = secrets.Get(ctx, SecretName, metav1.GetOptions{})
+	existingSecret, err := secrets.Get(ctx, SecretName, metav1.GetOptions{})
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to get secret: %w", err)
@@ -68,7 +68,11 @@ func EnsureSecret(ctx context.Context, kubeconfig, kubeContext string) error {
 			return fmt.Errorf("failed to create secret: %w", err)
 		}
 	} else {
-		_, err = secrets.Update(ctx, secret, metav1.UpdateOptions{})
+		// Update the existing secret's data while preserving its metadata
+		existingSecret.StringData = secret.StringData
+		existingSecret.Data = nil // Clear Data so StringData takes effect
+		
+		_, err = secrets.Update(ctx, existingSecret, metav1.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to update secret: %w", err)
 		}
