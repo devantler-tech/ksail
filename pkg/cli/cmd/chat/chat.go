@@ -180,6 +180,11 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 		Env:      filterEnvVars(os.Environ(), filteredEnvVars),
 	}
 
+	cwd, cwdErr := os.Getwd()
+	if cwdErr == nil {
+		opts.Cwd = cwd
+	}
+
 	for _, envVar := range tokenEnvVars {
 		if token := os.Getenv(envVar); token != "" {
 			opts.GithubToken = token

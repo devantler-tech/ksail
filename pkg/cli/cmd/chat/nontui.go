@@ -60,6 +60,12 @@ func runNonTUIChat(
 	// Set up permission handler for non-KSail tools (git, shell, etc.)
 	sessionConfig.OnPermissionRequest = chatsvc.CreatePermissionHandler(writer)
 
+	// Set up pre-tool-use hook for path sandboxing
+	allowedRoot, _ := os.Getwd()
+	sessionConfig.Hooks = &copilot.SessionHooks{
+		OnPreToolUse: BuildPreToolUseHook(nil, toolMetadata, allowedRoot),
+	}
+
 	// Create session
 	session, err := client.CreateSession(ctx, sessionConfig)
 	if err != nil {

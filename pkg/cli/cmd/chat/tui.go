@@ -50,8 +50,10 @@ func setupChatTools(
 	)
 	sessionConfig.Tools = tools
 	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan, yoloModeRef)
+
+	allowedRoot, _ := os.Getwd()
 	sessionConfig.Hooks = &copilot.SessionHooks{
-		OnPreToolUse: BuildPreToolUseHook(chatModeRef, toolMetadata),
+		OnPreToolUse: BuildPreToolUseHook(chatModeRef, toolMetadata, allowedRoot),
 	}
 
 	return chatModeRef, yoloModeRef
