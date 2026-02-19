@@ -316,9 +316,11 @@ func (p *Provisioner) Start(ctx context.Context, name string) error {
 				return fmt.Errorf("cluster started but not ready: %w", err)
 			}
 		case *dockerprovider.Provider:
-			// Docker containers are immediately ready after start
-			// The Talos API may take a moment to respond, but we don't need special checks
-			// since the Docker provider's StartNodes already waited for containers to start
+			// Docker containers start quickly, but Talos API needs time to initialize
+			err = p.waitForDockerClusterReadyAfterStart(ctx, clusterName)
+			if err != nil {
+				return fmt.Errorf("cluster started but not ready: %w", err)
+			}
 		}
 
 		_, _ = fmt.Fprintf(p.logWriter, "Successfully started Talos cluster %q\n", clusterName)

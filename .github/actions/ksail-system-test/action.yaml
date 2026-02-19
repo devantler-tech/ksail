@@ -278,7 +278,7 @@ runs:
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
-        ksail cluster start
+        timeout 600 ksail cluster start
 
     - name: 🧪 ksail cluster delete
       if: always()
