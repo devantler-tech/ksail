@@ -26,7 +26,7 @@
 # redundant examples, verbose descriptions) and creates focused PRs with improvements.
 # Triggered daily, on /unbloat command, or manually.
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"e48a4d6197465bb1b8095d10596c9f9fd81820c00808574b6a260f525b13622c"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"8be2d058f11f6ba6f9076f7f9a2ffa51dd9debf39847eec1f58d979d28f76b34"}
 
 name: "Unbloat Docs"
 "on":
@@ -408,7 +408,7 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
           cat > /opt/gh-aw/safeoutputs/config.json << 'GH_AW_SAFE_OUTPUTS_CONFIG_EOF'
-          {"add_comment":{"max":1},"create_pull_request":{},"missing_data":{},"missing_tool":{},"upload_asset":{"max":0}}
+          {"add_comment":{"max":1},"create_pull_request":{},"missing_data":{},"missing_tool":{},"upload_asset":{"max":5}}
           GH_AW_SAFE_OUTPUTS_CONFIG_EOF
           cat > /opt/gh-aw/safeoutputs/tools.json << 'GH_AW_SAFE_OUTPUTS_TOOLS_EOF'
           [
@@ -467,7 +467,7 @@ jobs:
               "name": "create_pull_request"
             },
             {
-              "description": "Upload a file as a URL-addressable asset that can be referenced in issues, PRs, or comments. The file is stored on an orphaned git branch and returns a permanent URL. Use this for images, diagrams, or other files that need to be embedded in GitHub content. CONSTRAINTS: Maximum file size: 10240KB. Allowed file extensions: [.png .jpg .jpeg].",
+              "description": "Upload a file as a URL-addressable asset that can be referenced in issues, PRs, or comments. The file is stored on an orphaned git branch and returns a permanent URL. Use this for images, diagrams, or other files that need to be embedded in GitHub content. CONSTRAINTS: Maximum 5 asset(s) can be uploaded. Maximum file size: 10240KB. Allowed file extensions: [.png .jpg .jpeg].",
               "inputSchema": {
                 "additionalProperties": false,
                 "properties": {
