@@ -24,7 +24,6 @@ network:
     - defaults
     - node
     - playwright
-  firewall: false
 
 safe-outputs:
   noop: false
