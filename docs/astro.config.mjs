@@ -40,6 +40,9 @@ export default defineConfig({
             { label: "Features", link: "/features/" },
           ],
         },
+        { label: "Concepts", link: "/concepts/" },
+        { label: "Use Cases", link: "/use-cases/" },
+        { label: "Support Matrix", link: "/support-matrix/" },
         {
           label: "Configuration",
           items: [
@@ -52,10 +55,13 @@ export default defineConfig({
             },
           ],
         },
-        { label: "Concepts", link: "/concepts/" },
-        { label: "Use Cases", link: "/use-cases/" },
-        { label: "Support Matrix", link: "/support-matrix/" },
-        { label: "AI Chat Assistant", link: "/ai-chat/" },
+        {
+          label: "AI & Automation",
+          items: [
+            { label: "AI Chat Assistant", link: "/ai-chat/" },
+            { label: "MCP Server", link: "/mcp/" },
+          ],
+        },
         {
           label: "Help",
           items: [
