@@ -48,6 +48,7 @@ func NewInstallerWithDistribution(
 				ReleaseName: "metrics-server",
 				ChartName:   "metrics-server/metrics-server",
 				Namespace:   "kube-system",
+				Version:     chartVersion(),
 				RepoURL:     "https://kubernetes-sigs.github.io/metrics-server/",
 				Atomic:      true,
 				Wait:        true,

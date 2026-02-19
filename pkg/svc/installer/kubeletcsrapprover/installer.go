@@ -32,6 +32,7 @@ func NewInstaller(
 				ReleaseName: "kubelet-csr-approver",
 				ChartName:   "kubelet-csr-approver/kubelet-csr-approver",
 				Namespace:   "kube-system",
+				Version:     chartVersion(),
 				RepoURL:     "https://postfinance.github.io/kubelet-csr-approver",
 				Atomic:      true,
 				Wait:        true,

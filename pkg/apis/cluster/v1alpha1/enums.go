@@ -81,10 +81,12 @@ func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
 
 // ProvidesLoadBalancerByDefault returns true if the distribution × provider combination
 // includes LoadBalancer support by default.
-// - K3s includes ServiceLB (Klipper-LB) by default (regardless of provider)
-// - Talos × Hetzner uses hcloud-cloud-controller-manager by default
-// - VCluster delegates LoadBalancer to the host cluster
-// - Vanilla and Talos × Docker do not have default LoadBalancer support.
+//   - K3s includes ServiceLB (Klipper-LB) by default (regardless of provider)
+//   - Talos × Hetzner: returns true because hcloud-ccm can provide LoadBalancer
+//     support, but it is not pre-installed — KSail installs it when LoadBalancer
+//     is Default or Enabled (see NeedsLoadBalancerInstall special case)
+//   - VCluster delegates LoadBalancer to the host cluster
+//   - Vanilla and Talos × Docker do not have default LoadBalancer support.
 func (d *Distribution) ProvidesLoadBalancerByDefault(provider Provider) bool {
 	switch *d {
 	case DistributionK3s, DistributionVCluster:
@@ -92,7 +94,7 @@ func (d *Distribution) ProvidesLoadBalancerByDefault(provider Provider) bool {
 		// VCluster delegates LoadBalancer to the host cluster
 		return true
 	case DistributionTalos:
-		// Talos × Hetzner provides hcloud-cloud-controller-manager by default
+		// Talos × Hetzner: hcloud-ccm provides LB support (installed by KSail)
 		return provider == ProviderHetzner
 	case DistributionVanilla:
 		// Vanilla (Kind) does not provide LoadBalancer by default

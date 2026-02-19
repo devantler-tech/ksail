@@ -14,6 +14,7 @@ import (
 	ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
 	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	gatekeeperinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/gatekeeper"
+	hcloudccminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hcloudccm"
 	hetznercsiinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hetznercsi"
 	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kubeletcsrapprover"
 	kyvernoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kyverno"
@@ -217,6 +218,15 @@ func (f *Factory) addLoadBalancerInstaller(
 			"", // Use default IP range
 		)
 	}
+
+	if f.needsHcloudCCM(spec) {
+		installers["hcloud-ccm"] = hcloudccminstaller.NewInstaller(
+			f.helmClient,
+			f.kubeconfig,
+			f.kubecontext,
+			f.timeout,
+		)
+	}
 }
 
 // needsLocalPathStorage determines if local-path-storage is needed.
@@ -269,4 +279,19 @@ func (f *Factory) needsMetalLB(spec v1alpha1.ClusterSpec) bool {
 	}
 
 	return spec.LoadBalancer == v1alpha1.LoadBalancerEnabled
+}
+
+// needsHcloudCCM determines if Hetzner Cloud Controller Manager is needed.
+// hcloud-ccm provides LoadBalancer support for Talos clusters running on Hetzner Cloud.
+func (f *Factory) needsHcloudCCM(spec v1alpha1.ClusterSpec) bool {
+	if spec.Distribution != v1alpha1.DistributionTalos {
+		return false
+	}
+
+	if spec.Provider != v1alpha1.ProviderHetzner {
+		return false
+	}
+
+	return spec.LoadBalancer == v1alpha1.LoadBalancerDefault ||
+		spec.LoadBalancer == v1alpha1.LoadBalancerEnabled
 }

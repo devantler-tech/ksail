@@ -107,3 +107,73 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+
+  # Helm chart version pins (embedded in Go via go:embed)
+  - package-ecosystem: docker
+    registries: [dockerhub]
+    directory: /pkg/svc/installer/cni/calico # Calico chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /pkg/svc/installer/cni/cilium # Cilium chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /pkg/svc/installer/metallb # MetalLB chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /pkg/svc/installer/certmanager # cert-manager chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    registries: [ghcr]
+    directory: /pkg/svc/installer/kyverno # Kyverno chart version (OCI chart artifact)
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    registries: [dockerhub]
+    directory: /pkg/svc/installer/gatekeeper # Gatekeeper chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    registries: [ghcr]
+    directory: /pkg/svc/installer/flux # Flux operator chart version (OCI chart artifact)
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    registries: [ghcr]
+    directory: /pkg/svc/installer/argocd # ArgoCD chart version (OCI chart artifact)
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    registries: [ghcr]
+    directory: /pkg/svc/installer/kubeletcsrapprover # kubelet-csr-approver chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily

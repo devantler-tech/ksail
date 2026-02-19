@@ -432,6 +432,8 @@ func TestFactory_CreateInstallersForConfig_LoadBalancer_TalosHetzner(t *testing.
 
 	installers := factory.CreateInstallersForConfig(cfg)
 
+	assert.Contains(t, installers, "hcloud-ccm",
+		"Talos on Hetzner requires hcloud-ccm for LoadBalancer support")
 	assert.NotContains(t, installers, "metallb",
 		"Talos on Hetzner uses hcloud-ccm, not MetalLB")
 	assert.NotContains(t, installers, "cloud-provider-kind")

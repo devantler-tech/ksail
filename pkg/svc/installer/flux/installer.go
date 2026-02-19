@@ -61,6 +61,7 @@ func (b *Installer) chartSpec() *helm.ChartSpec {
 		ReleaseName:     "flux-operator",
 		ChartName:       "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
 		Namespace:       "flux-system",
+		Version:         chartVersion(),
 		CreateNamespace: true,
 		Atomic:          true,
 		UpgradeCRDs:     true,

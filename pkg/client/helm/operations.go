@@ -43,6 +43,7 @@ func InstallOrUpgradeChart(
 		ReleaseName:     chartConfig.ReleaseName,
 		ChartName:       chartConfig.ChartName,
 		Namespace:       chartConfig.Namespace,
+		Version:         chartConfig.Version,
 		RepoURL:         chartConfig.RepoURL,
 		CreateNamespace: chartConfig.CreateNamespace,
 		Atomic:          true,

@@ -112,6 +112,95 @@ func TestNeedsMetricsServerInstall(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Table-driven test with comprehensive test cases
+func TestNeedsLoadBalancerInstall(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		provider     v1alpha1.Provider
+		loadBalancer v1alpha1.LoadBalancer
+		expected     bool
+	}{
+		{
+			name:         "Talos × Hetzner + Default returns true (special case)",
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderHetzner,
+			loadBalancer: v1alpha1.LoadBalancerDefault,
+			expected:     true,
+		},
+		{
+			name:         "Talos × Hetzner + Enabled returns true (special case)",
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderHetzner,
+			loadBalancer: v1alpha1.LoadBalancerEnabled,
+			expected:     true,
+		},
+		{
+			name:         "Talos × Hetzner + Disabled returns false",
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderHetzner,
+			loadBalancer: v1alpha1.LoadBalancerDisabled,
+			expected:     false,
+		},
+		{
+			name:         "Talos × Docker + Enabled returns true",
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			loadBalancer: v1alpha1.LoadBalancerEnabled,
+			expected:     true,
+		},
+		{
+			name:         "Vanilla × Docker + Enabled returns true",
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderDocker,
+			loadBalancer: v1alpha1.LoadBalancerEnabled,
+			expected:     true,
+		},
+		{
+			name:         "K3s × Docker + Enabled returns false (K3s provides by default)",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			loadBalancer: v1alpha1.LoadBalancerEnabled,
+			expected:     false,
+		},
+		{
+			name:         "Vanilla × Docker + Default returns false",
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderDocker,
+			loadBalancer: v1alpha1.LoadBalancerDefault,
+			expected:     false,
+		},
+		{
+			name:         "Vanilla × Docker + Disabled returns false",
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderDocker,
+			loadBalancer: v1alpha1.LoadBalancerDisabled,
+			expected:     false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			clusterCfg := &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: testCase.distribution,
+						Provider:     testCase.provider,
+						LoadBalancer: testCase.loadBalancer,
+					},
+				},
+			}
+
+			result := setup.NeedsLoadBalancerInstall(clusterCfg)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
+
 func TestInstallMetricsServerSilent_HelmClientError(t *testing.T) {
 	t.Parallel()
 

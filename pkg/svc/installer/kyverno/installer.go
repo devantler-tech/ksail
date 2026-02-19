@@ -29,6 +29,7 @@ func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
 				ReleaseName:     "kyverno",
 				ChartName:       "kyverno/kyverno",
 				Namespace:       "kyverno",
+				Version:         chartVersion(),
 				RepoURL:         "https://kyverno.github.io/kyverno/",
 				CreateNamespace: true,
 				Atomic:          true,
