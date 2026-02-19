@@ -52,129 +52,37 @@ The chat assistant supports multiple authentication methods via environment vari
 
 ## Chat Modes
 
-The assistant operates in three distinct modes, each designed for different use cases. Press **Tab** to cycle between modes.
+Press **Tab** to cycle between three modes:
 
 ### Agent Mode (`</>`)
 
-**Full execution mode with user approval**
-
-Agent mode allows the AI to execute both read and write operations. Write operations (creating, modifying, or deleting resources) require explicit user confirmation before execution.
-
-**When to use:**
-- Performing cluster operations (create, update, delete)
-- Deploying workloads
-- Modifying configuration files
-- Installing or updating components
-
-**Behavior:**
-- Read tools execute automatically
-- Write tools prompt for permission (`y`/`n`/`a` for always)
-- Can make changes to your cluster and configuration
-
-**Example prompts:**
-- "Create a Vanilla cluster with Cilium CNI"
-- "Deploy my application to the cluster"
-- "Update the cluster to use 3 worker nodes"
+Executes both read and write operations. Write operations (create, modify, delete) require explicit confirmation. Use for cluster operations, deploying workloads, and configuration changes.
 
 ### Plan Mode (`≡`)
 
-**Research and planning mode with no execution**
-
-Plan mode blocks all tool execution. The AI describes what it would do and outlines the steps needed to accomplish a task without making any changes.
-
-**When to use:**
-- Learning how to perform operations manually
-- Understanding what a command or workflow would do
-- Getting step-by-step instructions
-- Reviewing potential changes before execution
-
-**Behavior:**
-- No tools are executed
-- Provides detailed explanations and step-by-step plans
-- Safe for exploratory questions
-
-**Example prompts:**
-- "How would I migrate from K3s to Talos?"
-- "What steps are needed to enable GitOps with Flux?"
-- "Explain how to configure mirror registries"
+Blocks all tool execution and provides step-by-step explanations without making changes. Use for learning workflows or reviewing potential changes before execution.
 
 ### Ask Mode (`?`)
 
-**Investigation mode with read-only execution**
-
-Ask mode allows the AI to execute read-only tools (inspect, list, describe) while blocking write operations. This is ideal for gathering information and troubleshooting without risk of changes.
-
-**When to use:**
-- Troubleshooting cluster issues
-- Inspecting current configuration
-- Understanding cluster state
-- Gathering diagnostic information
-
-**Behavior:**
-- Read tools execute automatically
-- Write tools are blocked
-- Cannot make changes to your cluster or configuration
-
-**Example prompts:**
-- "Why are my pods failing to start?"
-- "Show me the current cluster configuration"
-- "What CNI is currently installed?"
-- "List all workloads in the cluster"
+Executes read-only tools (inspect, list, describe) while blocking writes. Use for troubleshooting and investigating cluster state without risk of changes.
 
 ## Advanced Features
 
 ### Reasoning Effort
 
-Supported models can use different reasoning effort levels to balance response quality and speed. Press **Ctrl+E** in the TUI to change the effort level during a chat session.
-
-| Level | Description | Use Case |
-|-------|-------------|----------|
-| `low` | Faster responses, less deep analysis | Quick questions, simple tasks |
-| `medium` | Balanced speed and quality | General usage, moderate complexity |
-| `high` | Slower, more thorough reasoning | Complex problems, critical decisions |
-
-**Example:**
-
-``````bash
-ksail chat --reasoning-effort high
-``````
-
-**In TUI:** Press `Ctrl+E` and select your desired effort level.
+Control analysis depth with `--reasoning-effort` (`low`, `medium`, `high`) or press **Ctrl+E** in the TUI. Higher effort provides more thorough reasoning for complex problems but takes longer.
 
 ### Auto Model Selection
 
-Use `--model auto` to enable automatic model selection with a 10% discount (when available). The TUI shows the resolved model transparently:
-
-```
-Model: auto → gpt-4o
-```
-
-This feature helps optimize costs while maintaining quality by automatically selecting the most suitable model for your subscription tier.
+Use `--model auto` for automatic model selection with 10% discount (when available). The TUI shows the resolved model (e.g., `Model: auto → gpt-4o`).
 
 ### Quota Tracking
 
-The TUI displays premium request usage for subscriptions with usage limits:
-
-```
-300/300 reqs · 0% · resets Jan 2
-```
-
-For unlimited entitlements:
-
-```
-∞ reqs
-```
-
-This helps you monitor usage and plan your interactions accordingly.
+The TUI displays your premium request usage (e.g., `300/300 reqs · 0% · resets Jan 2`) or `∞ reqs` for unlimited entitlements.
 
 ### Infinite Sessions
 
-Chat sessions support unlimited conversation length through automatic background compaction:
-
-- **Background Compaction Threshold**: 0.80 (80% of context window)
-- **Buffer Exhaustion Threshold**: 0.95 (95% of context window)
-
-When the conversation approaches these thresholds, the system automatically compacts older messages to preserve context while managing memory efficiently. This allows you to have extended conversations without hitting context limits.
+Chat sessions support unlimited conversation length through automatic background compaction at 80% and 95% of context window thresholds.
 
 ## Keyboard Shortcuts
 
@@ -203,25 +111,7 @@ When the conversation approaches these thresholds, the system automatically comp
 
 ## Usage Tracking
 
-The chat interface displays real-time quota information in the footer, right-aligned next to the help text. This shows your current usage of premium model requests.
-
-### Quota Display
-
-The quota indicator shows:
-- **Used/Total requests** — Current usage against your entitlement (e.g., `45/100 reqs`)
-- **Remaining percentage** — How much quota remains (e.g., `55%`)
-- **Reset date (when available)** — When your quota renews (e.g., `resets Feb 15`)
-
-**Example (with reset date available):** `45/100 reqs · 55% · resets Feb 15`
-
-### Display Behavior
-
-- Quota appears automatically when usage data is available from GitHub Copilot
-- Only the **premium** quota category is shown; other unlimited categories are hidden for clarity
-- When your premium quota is unlimited, it is still shown with an `∞ reqs` indicator instead of a numeric total
-- Help text takes priority — if the terminal is too narrow, quota is hidden to preserve help visibility
-- Reset date is included only when provided by GitHub Copilot
-- Updates in real-time as you interact with the assistant
+The footer displays real-time quota information showing used/total requests, remaining percentage, and reset date when available. Example: `45/100 reqs · 55% · resets Feb 15`. For unlimited premium quota, shows `∞ reqs` instead of numeric total.
 ## Mode Comparison
 
 | Feature | Agent Mode | Plan Mode | Ask Mode |
@@ -247,101 +137,31 @@ If not set, the assistant uses the model specified via `--model` flag or default
 
 ## Common Workflows
 
-### Learning Workflow (Plan Mode)
-
-``````bash
-# Start in Plan mode (press Tab until you see ≡)
-1. Ask: "How do I enable LoadBalancer support?"
-2. Review the step-by-step plan
-3. Switch to Agent mode (Tab) to execute if needed
-``````
-
-### Troubleshooting Workflow (Ask Mode)
-
-``````bash
-# Start in Ask mode (press Tab until you see ?)
-1. Ask: "Why can't I connect to my service?"
-2. AI inspects pods, services, and network policies
-3. Receive diagnosis without risk of changes
-``````
-
-### Execution Workflow (Agent Mode)
-
-``````bash
-# Start in Agent mode (default, </>)
-1. Ask: "Create a K3s cluster with Calico"
-2. Review proposed commands
-3. Approve write operations when prompted
-4. Cluster is created and configured
-``````
+Use **Plan mode** (`≡`) to learn workflows, **Ask mode** (`?`) for safe troubleshooting, and **Agent mode** (`</>`) to execute operations with approval. Press **Tab** to switch modes as needed.
 
 ## Session Management
 
 ### View Past Sessions
 
-Press **Ctrl+H** to open the session history picker. You can:
-- Navigate with **↑/↓**
-- Filter sessions with **/**
-- Rename sessions with **r**
-- Delete sessions with **d**
-- Select session with **Enter**
+Press **Ctrl+H** to open session history. Navigate with **↑/↓**, filter with **/**, rename with **r**, delete with **d**, or select with **Enter**. Sessions persist in `~/.ksail/chat/sessions/`.
 
 ### Start New Session
 
 Press **Ctrl+N** to start a fresh conversation. Previous sessions are automatically saved.
 
-### Session Storage
-
-Sessions are stored in `~/.ksail/chat/sessions/` and persist across restarts.
-
 ## Tips
 
-1. **Start with Plan Mode** when learning new workflows
-2. **Use Ask Mode** for safe troubleshooting
-3. **Enable auto-approve** (`Ctrl+Y`) in Agent mode for trusted operations
-4. **Filter session history** (`Ctrl+H` then `/`) to find past conversations
-5. **Copy outputs** (`Ctrl+R`) to use in scripts or documentation
-6. **Adjust reasoning effort** (`Ctrl+E`) based on task complexity
-7. **Use auto model** (`--model auto`) to optimize costs
+Start with Plan mode for learning, use Ask mode for safe troubleshooting, and enable auto-approve (`Ctrl+Y`) for trusted operations. Adjust reasoning effort (`Ctrl+E`) based on task complexity, use `--model auto` to optimize costs, and filter session history (`Ctrl+H` then `/`) to find past conversations.
 
 ## Troubleshooting
 
-### Chat won't start
+**Chat won't start:** Ensure GitHub Copilot CLI is installed (`which copilot`) and authenticated (`copilot auth login`).
 
-Ensure GitHub Copilot CLI is installed and authenticated:
+**Model not available:** Try different models (`--model gpt-5`) or use auto-selection (`--model auto`).
 
-``````bash
-# Check if CLI is available
-which copilot
+**Timeout errors:** Increase timeout for complex operations (`--timeout 15m`).
 
-# Authenticate if needed
-copilot auth login
-``````
-
-### Model not available
-
-Check available models:
-
-``````bash
-ksail chat --model gpt-5  # Try different models
-ksail chat --model auto   # Use auto-selection
-``````
-
-### Timeout errors
-
-Increase timeout for complex operations:
-
-``````bash
-ksail chat --timeout 15m
-``````
-
-### Authentication errors
-
-If you encounter authentication issues:
-
-1. Ensure Copilot CLI is authenticated: `copilot auth login`
-2. Use `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN` environment variables if needed
-3. Avoid using `GITHUB_TOKEN` or `GH_TOKEN` as they may lack Copilot-specific scopes
+**Authentication errors:** Authenticate Copilot CLI (`copilot auth login`), use `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN` environment variables, and avoid `GITHUB_TOKEN`/`GH_TOKEN` (may lack Copilot scopes).
 
 ## See Also
 
