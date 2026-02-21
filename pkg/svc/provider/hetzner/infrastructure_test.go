@@ -4,16 +4,11 @@ import (
 	"net"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// Helper function to create string pointers for easier testing
-func stringPtr(s string) *string {
-	return &s
-}
 
 func TestBuildFirewallRules(t *testing.T) {
 	t.Parallel()
@@ -24,19 +19,9 @@ func TestBuildFirewallRules(t *testing.T) {
 	t.Run("FirewallRulesStructure", func(t *testing.T) {
 		t.Parallel()
 
-		// Expected rule count for Talos
-		expectedRules := 6 // Talos API, K8s API, trustd, etcd, kubelet, ICMP
-
 		// Verify the constants used match expected values
 		assert.Equal(t, 32, hetzner.IPv4CIDRBits, "IPv4 CIDR bits should be 32")
 		assert.Equal(t, 128, hetzner.IPv6CIDRBits, "IPv6 CIDR bits should be 128")
-
-		// Verify we have the expected number of critical ports/services
-		criticalPorts := []string{"50000", "6443", "50001", "2379-2380", "10250"}
-		assert.Len(t, criticalPorts, 5, "Should have 5 critical port ranges")
-
-		// Document that we expect 6 total rules (5 TCP + 1 ICMP)
-		assert.Equal(t, expectedRules, 6, "Should have 6 firewall rules total")
 	})
 
 	t.Run("SourceIPRanges", func(t *testing.T) {
@@ -223,49 +208,9 @@ func TestSubnetCIDRLogic(t *testing.T) {
 func TestPlacementGroupStrategyHandling(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name           string
-		strategy       string
-		shouldCreate   bool
-		expectedResult bool
-	}{
-		{
-			name:           "None_SkipsCreation",
-			strategy:       "None",
-			shouldCreate:   false,
-			expectedResult: false,
-		},
-		{
-			name:           "Empty_SkipsCreation",
-			strategy:       "",
-			shouldCreate:   false,
-			expectedResult: false,
-		},
-		{
-			name:           "Spread_CreatesPlacementGroup",
-			strategy:       "Spread",
-			shouldCreate:   true,
-			expectedResult: true,
-		},
-		{
-			name:           "Other_CreatesPlacementGroup",
-			strategy:       "Custom",
-			shouldCreate:   true,
-			expectedResult: true,
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			// Logic from EnsurePlacementGroup
-			shouldSkip := testCase.strategy == "None" || testCase.strategy == ""
-
-			assert.Equal(t, !testCase.shouldCreate, shouldSkip)
-			assert.Equal(t, testCase.expectedResult, testCase.shouldCreate)
-		})
-	}
+	// TODO: Implement this test against a suitable exported helper or
+	// higher-level API instead of duplicating internal decision logic.
+	t.Skip("placement group strategy handling is not testable without accessing internal APIs")
 }
 
 func TestPlacementGroupNaming(t *testing.T) {
@@ -312,49 +257,6 @@ func TestPlacementGroupNaming(t *testing.T) {
 	}
 }
 
-func TestFirewallRuleDirection(t *testing.T) {
-	t.Parallel()
-
-	// Verify that firewall rules use correct direction
-	directionIn := hcloud.FirewallRuleDirectionIn
-
-	assert.Equal(t, "in", string(directionIn), "Firewall rules should allow inbound traffic")
-}
-
-func TestFirewallRuleProtocols(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		protocol hcloud.FirewallRuleProtocol
-		expected string
-	}{
-		{
-			name:     "TCP",
-			protocol: hcloud.FirewallRuleProtocolTCP,
-			expected: "tcp",
-		},
-		{
-			name:     "UDP",
-			protocol: hcloud.FirewallRuleProtocolUDP,
-			expected: "udp",
-		},
-		{
-			name:     "ICMP",
-			protocol: hcloud.FirewallRuleProtocolICMP,
-			expected: "icmp",
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, testCase.expected, string(testCase.protocol))
-		})
-	}
-}
-
 func TestDeleteRetryLogic(t *testing.T) {
 	t.Parallel()
 
@@ -396,63 +298,45 @@ func TestDeleteRetryLogic(t *testing.T) {
 	})
 }
 
-func TestNetworkZoneConstants(t *testing.T) {
-	t.Parallel()
-
-	// Verify that the expected network zone is defined in hcloud-go
-	zone := hcloud.NetworkZoneEUCentral
-
-	assert.Equal(t, "eu-central", string(zone), "Network zone should be eu-central")
-}
-
-func TestNetworkSubnetType(t *testing.T) {
-	t.Parallel()
-
-	// Verify that we use the correct subnet type
-	subnetType := hcloud.NetworkSubnetTypeCloud
-
-	assert.Equal(t, "cloud", string(subnetType), "Should use cloud subnet type")
-}
-
 func TestEnsureNetworkNilClient(t *testing.T) {
 	t.Parallel()
 
-	provider := hetzner.NewProvider(nil)
-	require.NotNil(t, provider)
+	p := hetzner.NewProvider(nil)
+	require.NotNil(t, p)
 
 	// Should return error when client is nil
-	network, err := provider.EnsureNetwork(nil, "test-cluster", "10.0.0.0/16")
+	network, err := p.EnsureNetwork(nil, "test-cluster", "10.0.0.0/16")
 
 	assert.Error(t, err)
 	assert.Nil(t, network)
-	assert.Contains(t, err.Error(), "unavailable")
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
 func TestEnsureFirewallNilClient(t *testing.T) {
 	t.Parallel()
 
-	provider := hetzner.NewProvider(nil)
-	require.NotNil(t, provider)
+	p := hetzner.NewProvider(nil)
+	require.NotNil(t, p)
 
 	// Should return error when client is nil
-	firewall, err := provider.EnsureFirewall(nil, "test-cluster")
+	firewall, err := p.EnsureFirewall(nil, "test-cluster")
 
 	assert.Error(t, err)
 	assert.Nil(t, firewall)
-	assert.Contains(t, err.Error(), "unavailable")
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
 func TestEnsurePlacementGroupNilClient(t *testing.T) {
 	t.Parallel()
 
-	provider := hetzner.NewProvider(nil)
-	require.NotNil(t, provider)
+	p := hetzner.NewProvider(nil)
+	require.NotNil(t, p)
 
 	t.Run("WithNoneStrategy", func(t *testing.T) {
 		t.Parallel()
 
 		// Should return nil without error when strategy is None
-		pg, err := provider.EnsurePlacementGroup(nil, "test-cluster", "None", "")
+		pg, err := p.EnsurePlacementGroup(nil, "test-cluster", "None", "")
 
 		assert.NoError(t, err)
 		assert.Nil(t, pg)
@@ -462,7 +346,7 @@ func TestEnsurePlacementGroupNilClient(t *testing.T) {
 		t.Parallel()
 
 		// Should return nil without error when strategy is empty
-		pg, err := provider.EnsurePlacementGroup(nil, "test-cluster", "", "")
+		pg, err := p.EnsurePlacementGroup(nil, "test-cluster", "", "")
 
 		assert.NoError(t, err)
 		assert.Nil(t, pg)
@@ -472,11 +356,11 @@ func TestEnsurePlacementGroupNilClient(t *testing.T) {
 		t.Parallel()
 
 		// Should return error when client is nil and strategy requires placement group
-		pg, err := provider.EnsurePlacementGroup(nil, "test-cluster", "Spread", "")
+		pg, err := p.EnsurePlacementGroup(nil, "test-cluster", "Spread", "")
 
 		assert.Error(t, err)
 		assert.Nil(t, pg)
-		assert.Contains(t, err.Error(), "unavailable")
+		require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 	})
 }
 
