@@ -491,63 +491,88 @@ func splitMirrorSpec(spec string) (host, remote, username, password string, ok b
 	//   user:pass@ghcr.io
 	//   ${USER}:${PASS}@ghcr.io=https://ghcr.io
 	//   docker.io=https://user:pass@registry-1.docker.io (@ in remote should not be parsed as credentials)
-	workingSpec := spec
 
+	// Extract credentials and remove them from the spec
+	remainingSpec, username, password := extractCredentialsFromSpec(spec)
+
+	// Parse host and remote from the remaining specification
+	host, remote, ok = parseHostAndRemote(remainingSpec)
+
+	return host, remote, username, password, ok
+}
+
+// extractCredentialsFromSpec extracts username and password from the credential portion of a spec.
+// Credentials (user:pass@) can only appear before the '=' sign.
+// Returns the remaining spec with credentials removed, and the extracted username and password.
+//
+//nolint:nonamedreturns // Named returns document what is extracted and what remains
+func extractCredentialsFromSpec(spec string) (remainingSpec, username, password string) {
 	// Find the position of '=' to determine where credentials can appear
-	// Credentials (user:pass@) can only appear BEFORE the '=' sign
-	eqIdx := strings.Index(workingSpec, "=")
+	// Credentials can only appear BEFORE the '=' sign
+	eqIdx := strings.Index(spec, "=")
 
 	// Determine the portion where we look for credentials
-	// If there's an '=', only look in the left-hand side (before '=')
-	// Otherwise, look in the entire spec
-	var credSearchPart string
+	credSearchPart := spec
 	if eqIdx > 0 {
-		credSearchPart = workingSpec[:eqIdx]
-	} else {
-		credSearchPart = workingSpec
+		credSearchPart = spec[:eqIdx]
 	}
 
-	// Extract credentials if present (user:pass@ prefix) - only from the left-hand side
-	if atIdx := strings.Index(credSearchPart, "@"); atIdx > 0 {
-		credPart := credSearchPart[:atIdx]
-		// Remove credentials from the spec
-		workingSpec = workingSpec[atIdx+1:]
-
-		// Parse user:pass from credPart
-		if colonIdx := strings.Index(credPart, ":"); colonIdx > 0 {
-			username = credPart[:colonIdx]
-			password = credPart[colonIdx+1:]
-		} else {
-			// Only username, no password
-			username = credPart
-		}
+	// Extract credentials if present (user:pass@ prefix)
+	atIdx := strings.Index(credSearchPart, "@")
+	if atIdx <= 0 {
+		return spec, "", ""
 	}
 
-	// Now parse host=endpoint from the remaining part
-	host, remote, found := strings.Cut(workingSpec, "=")
+	credPart := credSearchPart[:atIdx]
+	remainingSpec = spec[atIdx+1:]
+
+	// Parse user:pass from credPart
+	username, password = parseCredentialPair(credPart)
+
+	return remainingSpec, username, password
+}
+
+// parseCredentialPair splits a credential string into username and password.
+// Handles both "user:pass" and "user" formats.
+func parseCredentialPair(credPart string) (username, password string) {
+	colonIdx := strings.Index(credPart, ":")
+	if colonIdx > 0 {
+		return credPart[:colonIdx], credPart[colonIdx+1:]
+	}
+
+	return credPart, ""
+}
+
+// parseHostAndRemote extracts the host and remote URL from a spec string.
+// If no '=' is found, generates the remote URL from the host.
+// Returns empty strings and false if the spec is invalid.
+//
+//nolint:nonamedreturns // Named returns document the parsed components
+func parseHostAndRemote(spec string) (host, remote string, ok bool) {
+	host, remote, found := strings.Cut(spec, "=")
+
 	if !found {
 		// No '=' found - treat the whole spec as host and auto-generate the remote URL
-		host = strings.TrimSpace(workingSpec)
+		host = strings.TrimSpace(spec)
 		if host == "" {
-			return "", "", "", "", false
+			return "", "", false
 		}
 
-		return host, GenerateUpstreamURL(host), username, password, true
+		return host, GenerateUpstreamURL(host), true
 	}
 
+	// Validate host and remote
 	host = strings.TrimSpace(host)
 	if host == "" {
-		// Empty host (starts with =)
-		return "", "", "", "", false
+		return "", "", false
 	}
 
 	remote = strings.TrimSpace(remote)
 	if remote == "" {
-		// Ends with '=' but no remote value
-		return "", "", "", "", false
+		return "", "", false
 	}
 
-	return host, remote, username, password, true
+	return host, remote, true
 }
 
 // GenerateScaffoldedHostsToml generates a hosts.toml file content for scaffolded registry mirrors.
