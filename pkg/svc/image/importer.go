@@ -74,18 +74,18 @@ func (i *Importer) Import(
 	tmpBasePath := getTempPath(distribution)
 
 	// Import to all K8s nodes in parallel
-	var wg sync.WaitGroup
+	var waitGroup sync.WaitGroup
 	errChan := make(chan error, len(k8sNodes))
 
 	for _, node := range k8sNodes {
-		wg.Go(func() {
+		waitGroup.Go(func() {
 			if importErr := i.importImagesToNode(ctx, node.Name, inputPath, tmpBasePath); importErr != nil {
 				errChan <- fmt.Errorf("failed to import images to node %s: %w", node.Name, importErr)
 			}
 		})
 	}
 
-	wg.Wait()
+	waitGroup.Wait()
 	close(errChan)
 
 	// Collect all errors
