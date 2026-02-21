@@ -88,6 +88,7 @@ ksail workload reconcile
 
 Run local [OCI registries](/concepts/#oci-registries) for faster image pulls, GitOps integration, and isolated development. Support external registries with authentication using format `[user:pass@]host[:port][/path]` where credentials can use `${ENV_VAR}` placeholders.
 
+### Local Registry
 ```bash
 ksail cluster init --local-registry --local-registry-port 5050
 ksail cluster create
