@@ -44,17 +44,14 @@ benchstat before.txt after.txt
 
 ## Baseline Results
 
-As of 2026-02-19 (commit: TBD), on AMD EPYC 7763 64-Core Processor:
+Baseline results are hardware-, OS-, and Go-version dependent and can become stale quickly.
+Generate fresh baselines on your machine using the commands in [Running Benchmarks](#running-benchmarks)
+and record the results together with the relevant commit hash in your change log or performance notes.
 
-````
-BenchmarkCreateClient-4           1000000000    0.3118 ns/op        0 B/op        0 allocs/op
-BenchmarkCreateApplyCommand-4        26436   47235 ns/op    61939 B/op      311 allocs/op
-BenchmarkCreateGetCommand-4          46018   46380 ns/op    44430 B/op      205 allocs/op
-BenchmarkCreateDeleteCommand-4       91920   22066 ns/op    27382 B/op      121 allocs/op
-BenchmarkCreateDescribeCommand-4     92287   21908 ns/op    30120 B/op      142 allocs/op
-BenchmarkCreateLogsCommand-4         66558   40291 ns/op    31656 B/op      144 allocs/op
-BenchmarkCreateWaitCommand-4        135430   10202 ns/op    12768 B/op       92 allocs/op
-BenchmarkCreateNamespaceCmd-4         7353  249793 ns/op   280872 B/op     1561 allocs/op
+For example:
+
+````bash
+go test -bench=. -benchmem ./pkg/client/kubectl/ > baseline.txt
 ````
 
 ## Benchmarked Operations
@@ -74,7 +71,7 @@ BenchmarkCreateNamespaceCmd-4         7353  249793 ns/op   280872 B/op     1561 
 
 ### Fast Operations (< 50µs)
 
-- Client creation (~0.3ns) - essentially free, no allocations
+- Client creation - essentially free, no allocations
 - Wait command (~10µs, 92 allocs) - lightweight, minimal flags
 - Delete command (~22µs, 121 allocs) - simple command structure
 - Describe command (~22µs, 142 allocs) - similar to delete
@@ -88,8 +85,8 @@ BenchmarkCreateNamespaceCmd-4         7353  249793 ns/op   280872 B/op     1561 
 
 ### Observations
 
-1. **Client creation is negligible** - The `NewClient` constructor has zero allocation overhead
-2. **Command creation varies widely** - From 10µs (wait) to 250µs (namespace gen)
+1. **Client creation is negligible** - The `NewClient` constructor has minimal allocation overhead
+2. **Command creation varies widely** - From ~10µs (wait) to ~250µs (namespace gen)
 3. **Allocations correlate with complexity** - More flags/features = more allocations
 4. **Resource generators are heaviest** - Generator commands (~1500 allocs) vs basic commands (~100-300 allocs)
 
