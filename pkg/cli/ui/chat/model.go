@@ -197,6 +197,19 @@ type permissionResponse struct {
 	allowed  bool
 }
 
+// pendingPrompt represents a prompt that has been queued but not yet sent.
+// It captures the full state at the time of queuing so that mode changes
+// after queuing don't affect the prompt's execution.
+type pendingPrompt struct {
+	id              string        // unique identifier for deletion/tracking
+	content         string        // the prompt text
+	chatMode        ChatMode      // agent/plan/ask mode when queued
+	model           string        // model ID when queued
+	reasoningEffort string        // reasoning effort when queued (if applicable)
+	timestamp       time.Time     // when this prompt was queued
+	isQueued        bool          // true for queued, false for steering
+}
+
 // Model is the Bubbletea model for the chat TUI.
 type Model struct {
 	// Components
@@ -306,6 +319,12 @@ type Model struct {
 	yoloMode    bool         // true = auto-approve, false = prompt for confirmation
 	yoloModeRef *YoloModeRef // shared reference for tool handlers to check YOLO state
 
+	// Prompt queuing and steering
+	queuedPrompts   []pendingPrompt // FIFO queue for prompts to process after current turn
+	steeringPrompts []pendingPrompt // steering prompts to inject when session becomes idle
+	selectedPromptIndex int         // index of selected pending prompt for deletion (-1 = none)
+	processingQueued    bool        // true while auto-processing queued prompts
+
 	// Channel for async streaming events from Copilot
 	eventChan chan tea.Msg
 }
@@ -347,35 +366,38 @@ func NewModel(params Params) *Model {
 	}
 
 	return &Model{
-		theme:            theme,
-		toolDisplay:      toolDisplay,
-		styles:           styles,
-		headerHeight:     headerH,
-		viewport:         viewPort,
-		textarea:         textArea,
-		spinner:          spin,
-		renderer:         mdRenderer,
-		help:             createHelpModel(styles),
-		keys:             DefaultKeyMap(),
-		messages:         make([]message, 0),
-		session:          params.Session,
-		client:           params.Client,
-		sessionConfig:    params.SessionConfig,
-		currentSessionID: params.Session.SessionID, // Track the SDK's session ID
-		timeout:          params.Timeout,
-		ctx:              context.Background(),
-		eventChan:        eventChan,
-		width:            defaultWidth,
-		height:           defaultHeight,
-		tools:            make(map[string]*toolExecution),
-		toolOrder:        make([]string, 0),
-		history:          make([]string, 0),
-		historyIndex:     -1,
-		availableModels:  params.Models,
-		currentModel:     params.CurrentModel,
-		chatMode:         AgentMode,          // Default to agent mode
-		chatModeRef:      params.ChatModeRef, // Store reference for tool handlers
-		yoloModeRef:      params.YoloModeRef, // Store reference for YOLO mode
+		theme:               theme,
+		toolDisplay:         toolDisplay,
+		styles:              styles,
+		headerHeight:        headerH,
+		viewport:            viewPort,
+		textarea:            textArea,
+		spinner:             spin,
+		renderer:            mdRenderer,
+		help:                createHelpModel(styles),
+		keys:                DefaultKeyMap(),
+		messages:            make([]message, 0),
+		session:             params.Session,
+		client:              params.Client,
+		sessionConfig:       params.SessionConfig,
+		currentSessionID:    params.Session.SessionID, // Track the SDK's session ID
+		timeout:             params.Timeout,
+		ctx:                 context.Background(),
+		eventChan:           eventChan,
+		width:               defaultWidth,
+		height:              defaultHeight,
+		tools:               make(map[string]*toolExecution),
+		toolOrder:           make([]string, 0),
+		history:             make([]string, 0),
+		historyIndex:        -1,
+		availableModels:     params.Models,
+		currentModel:        params.CurrentModel,
+		chatMode:            AgentMode,          // Default to agent mode
+		chatModeRef:         params.ChatModeRef, // Store reference for tool handlers
+		yoloModeRef:         params.YoloModeRef, // Store reference for YOLO mode
+		queuedPrompts:       make([]pendingPrompt, 0),
+		steeringPrompts:     make([]pendingPrompt, 0),
+		selectedPromptIndex: -1, // No prompt selected
 	}
 }
 
@@ -805,4 +827,120 @@ func (m *Model) hasRunningTools() bool {
 	}
 
 	return false
+}
+
+// addQueuedPrompt adds a new queued prompt with current state captured.
+func (m *Model) addQueuedPrompt(content string) {
+	m.queuedPrompts = append(m.queuedPrompts, pendingPrompt{
+		id:              fmt.Sprintf("queued-%d", time.Now().UnixNano()),
+		content:         content,
+		chatMode:        m.chatMode,
+		model:           m.currentModel,
+		reasoningEffort: m.getReasoningEffort(),
+		timestamp:       time.Now(),
+		isQueued:        true,
+	})
+}
+
+// addSteeringPrompt adds a new steering prompt with current state captured.
+func (m *Model) addSteeringPrompt(content string) {
+	m.steeringPrompts = append(m.steeringPrompts, pendingPrompt{
+		id:              fmt.Sprintf("steering-%d", time.Now().UnixNano()),
+		content:         content,
+		chatMode:        m.chatMode,
+		model:           m.currentModel,
+		reasoningEffort: m.getReasoningEffort(),
+		timestamp:       time.Now(),
+		isQueued:        false,
+	})
+}
+
+// getReasoningEffort returns the current reasoning effort setting.
+func (m *Model) getReasoningEffort() string {
+	if m.sessionConfig == nil || m.sessionConfig.ReasoningEffort == nil {
+		return ""
+	}
+
+	return *m.sessionConfig.ReasoningEffort
+}
+
+// hasPendingPrompts returns true if there are any queued or steering prompts.
+func (m *Model) hasPendingPrompts() bool {
+	return len(m.queuedPrompts) > 0 || len(m.steeringPrompts) > 0
+}
+
+// pendingPromptCount returns the total number of pending prompts.
+func (m *Model) pendingPromptCount() int {
+	return len(m.queuedPrompts) + len(m.steeringPrompts)
+}
+
+// deleteSelectedPrompt removes the currently selected pending prompt.
+// Returns true if a prompt was deleted.
+func (m *Model) deleteSelectedPrompt() bool {
+	if m.selectedPromptIndex < 0 {
+		return false
+	}
+
+	totalPending := m.pendingPromptCount()
+	if m.selectedPromptIndex >= totalPending {
+		return false
+	}
+
+	// Steering prompts come first in selection order
+	steeringCount := len(m.steeringPrompts)
+	if m.selectedPromptIndex < steeringCount {
+		// Delete from steering prompts
+		m.steeringPrompts = append(
+			m.steeringPrompts[:m.selectedPromptIndex],
+			m.steeringPrompts[m.selectedPromptIndex+1:]...,
+		)
+	} else {
+		// Delete from queued prompts
+		queuedIndex := m.selectedPromptIndex - steeringCount
+		m.queuedPrompts = append(
+			m.queuedPrompts[:queuedIndex],
+			m.queuedPrompts[queuedIndex+1:]...,
+		)
+	}
+
+	// Adjust selection index
+	if m.selectedPromptIndex >= m.pendingPromptCount() {
+		m.selectedPromptIndex = m.pendingPromptCount() - 1
+	}
+
+	return true
+}
+
+// getNextPendingPrompt returns the next prompt to process (steering first, then queued).
+// Returns nil if no prompts are pending.
+func (m *Model) getNextPendingPrompt() *pendingPrompt {
+	if len(m.steeringPrompts) > 0 {
+		return &m.steeringPrompts[0]
+	}
+
+	if len(m.queuedPrompts) > 0 {
+		return &m.queuedPrompts[0]
+	}
+
+	return nil
+}
+
+// popNextPendingPrompt removes and returns the next pending prompt.
+// Returns nil if no prompts are pending.
+func (m *Model) popNextPendingPrompt() *pendingPrompt {
+	if len(m.steeringPrompts) > 0 {
+		prompt := m.steeringPrompts[0]
+		m.steeringPrompts = m.steeringPrompts[1:]
+
+		return &prompt
+	}
+
+	if len(m.queuedPrompts) > 0 {
+		prompt := m.queuedPrompts[0]
+		m.queuedPrompts = m.queuedPrompts[1:]
+
+		return &prompt
+	}
+
+	return nil
 }
