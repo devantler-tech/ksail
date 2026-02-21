@@ -47,38 +47,40 @@ benchstat before.txt after.txt
 As of 2026-02-19 (commit: TBD), on AMD EPYC 7763 64-Core Processor:
 
 ````
-BenchmarkCreateClient-4          	1000000000	   0.3118 ns/op	       0 B/op	       0 allocs/op
-BenchmarkCreateApplyCommand-4    	   26436	  47235 ns/op	   61939 B/op	     311 allocs/op
-BenchmarkCreateGetCommand-4      	   46018	  46380 ns/op	   44430 B/op	     205 allocs/op
-BenchmarkCreateDeleteCommand-4   	   91920	  22066 ns/op	   27382 B/op	     121 allocs/op
-BenchmarkCreateDescribeCommand-4 	   92287	  21908 ns/op	   30120 B/op	     142 allocs/op
-BenchmarkCreateLogsCommand-4     	   66558	  40291 ns/op	   31656 B/op	     144 allocs/op
-BenchmarkCreateWaitCommand-4     	  135430	  10202 ns/op	   12768 B/op	      92 allocs/op
-BenchmarkCreateNamespaceCmd-4    	    7353	 249793 ns/op	  280872 B/op	    1561 allocs/op
+BenchmarkCreateClient-4           1000000000    0.3118 ns/op        0 B/op        0 allocs/op
+BenchmarkCreateApplyCommand-4        26436   47235 ns/op    61939 B/op      311 allocs/op
+BenchmarkCreateGetCommand-4          46018   46380 ns/op    44430 B/op      205 allocs/op
+BenchmarkCreateDeleteCommand-4       91920   22066 ns/op    27382 B/op      121 allocs/op
+BenchmarkCreateDescribeCommand-4     92287   21908 ns/op    30120 B/op      142 allocs/op
+BenchmarkCreateLogsCommand-4         66558   40291 ns/op    31656 B/op      144 allocs/op
+BenchmarkCreateWaitCommand-4        135430   10202 ns/op    12768 B/op       92 allocs/op
+BenchmarkCreateNamespaceCmd-4         7353  249793 ns/op   280872 B/op     1561 allocs/op
 ````
 
 ## Benchmarked Operations
 
-| Benchmark | Description | Typical Use Case |
-|-----------|-------------|------------------|
-| `BenchmarkCreateClient` | Client instantiation | Every command invocation |
-| `BenchmarkCreateApplyCommand` | Apply command creation | `ksail workload apply` |
-| `BenchmarkCreateGetCommand` | Get command creation | `ksail workload get` |
-| `BenchmarkCreateDeleteCommand` | Delete command creation | `ksail workload delete` |
-| `BenchmarkCreateDescribeCommand` | Describe command creation | `ksail workload describe` |
-| `BenchmarkCreateLogsCommand` | Logs command creation | `ksail workload logs` |
-| `BenchmarkCreateWaitCommand` | Wait command creation | `ksail workload wait` |
-| `BenchmarkCreateNamespaceCmd` | Namespace generator | `ksail workload gen namespace` |
+| Benchmark                        | Description               | Typical Use Case               |
+|----------------------------------|---------------------------|--------------------------------|
+| `BenchmarkCreateClient`          | Client instantiation      | Every command invocation       |
+| `BenchmarkCreateApplyCommand`    | Apply command creation    | `ksail workload apply`         |
+| `BenchmarkCreateGetCommand`      | Get command creation      | `ksail workload get`           |
+| `BenchmarkCreateDeleteCommand`   | Delete command creation   | `ksail workload delete`        |
+| `BenchmarkCreateDescribeCommand` | Describe command creation | `ksail workload describe`      |
+| `BenchmarkCreateLogsCommand`     | Logs command creation     | `ksail workload logs`          |
+| `BenchmarkCreateWaitCommand`     | Wait command creation     | `ksail workload wait`          |
+| `BenchmarkCreateNamespaceCmd`    | Namespace generator       | `ksail workload gen namespace` |
 
 ## Performance Characteristics
 
 ### Fast Operations (< 50µs)
+
 - Client creation (~0.3ns) - essentially free, no allocations
 - Wait command (~10µs, 92 allocs) - lightweight, minimal flags
 - Delete command (~22µs, 121 allocs) - simple command structure
 - Describe command (~22µs, 142 allocs) - similar to delete
 
 ### Moderate Operations (50-250µs)
+
 - Get command (~46µs, 205 allocs) - more complex flag structure
 - Apply command (~47µs, 311 allocs) - highest allocation count for basic commands
 - Logs command (~40µs, 144 allocs) - streaming-related complexity
