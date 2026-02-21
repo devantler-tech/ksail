@@ -23,19 +23,23 @@ const (
 
 // updateViewportContent updates the viewport with rendered message content.
 func (m *Model) updateViewportContent() {
-	if len(m.messages) == 0 {
-		welcomeMsg := "  " + m.theme.WelcomeMessage + "\n"
-		m.viewport.SetContent(m.styles.status.Render(welcomeMsg))
-
-		return
-	}
-
 	wrapWidth := m.calculateWrapWidth()
 
 	var builder strings.Builder
 
-	for _, msg := range m.messages {
-		m.renderMessage(&builder, &msg, wrapWidth)
+	// Render conversation messages
+	if len(m.messages) == 0 {
+		welcomeMsg := "  " + m.theme.WelcomeMessage + "\n"
+		builder.WriteString(m.styles.status.Render(welcomeMsg))
+	} else {
+		for _, msg := range m.messages {
+			m.renderMessage(&builder, &msg, wrapWidth)
+		}
+	}
+
+	// Render pending prompts section
+	if m.hasPendingPrompts() {
+		m.renderPendingPrompts(&builder, wrapWidth)
 	}
 
 	m.viewport.SetContent(builder.String())
@@ -363,4 +367,70 @@ func (m *Model) truncateLine(text string, maxLen int) string {
 	}
 
 	return firstLine
+}
+
+// renderPendingPrompts renders the pending prompts section.
+func (m *Model) renderPendingPrompts(builder *strings.Builder, wrapWidth uint) {
+builder.WriteString("\n")
+builder.WriteString(m.styles.status.Render("─── Pending Prompts ───"))
+builder.WriteString("\n")
+
+// Render steering prompts first
+for i, prompt := range m.steeringPrompts {
+m.renderPendingPrompt(builder, &prompt, i, true, wrapWidth)
+}
+
+// Render queued prompts
+for i, prompt := range m.queuedPrompts {
+// Adjust index to account for steering prompts in selection
+displayIndex := i + len(m.steeringPrompts)
+m.renderPendingPrompt(builder, &prompt, displayIndex, false, wrapWidth)
+}
+}
+
+// renderPendingPrompt renders a single pending prompt.
+func (m *Model) renderPendingPrompt(
+builder *strings.Builder,
+prompt *pendingPrompt,
+index int,
+isSteering bool,
+wrapWidth uint,
+) {
+builder.WriteString("\n")
+
+// Determine if this prompt is selected
+isSelected := index == m.selectedPromptIndex
+
+// Build prompt label
+var label string
+if isSteering {
+label = "🎯 [STEERING]"
+} else {
+label = fmt.Sprintf("⏳ [QUEUED #%d]", index-len(m.steeringPrompts)+1)
+}
+
+// Add selection indicator
+if isSelected {
+label = "► " + label
+} else {
+label = "  " + label
+}
+
+// Add mode icon
+label += " " + prompt.chatMode.Icon()
+
+// Render label
+if isSteering {
+builder.WriteString(m.styles.assistantMsg.Render(label))
+} else {
+builder.WriteString(m.styles.userMsg.Render(label))
+}
+
+builder.WriteString("\n")
+
+// Render prompt content (first line truncated)
+truncated := m.truncateLine(prompt.content, 60)
+builder.WriteString("    ")
+builder.WriteString(truncated)
+builder.WriteString("\n")
 }

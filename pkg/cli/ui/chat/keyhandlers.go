@@ -67,6 +67,10 @@ func (m *Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textarea.InsertString("\n")
 
 		return m, nil
+	case "ctrl+q":
+		return m.handleQueuePrompt()
+	case "ctrl+s":
+		return m.handleSteerPrompt()
 	}
 
 	return m.handleChatShortcutKey(msg)
@@ -461,6 +465,37 @@ func (m *Model) handleCopyOutput() (tea.Model, tea.Cmd) {
 			})
 		}
 	}
+
+	return m, nil
+}
+
+// handleQueuePrompt adds the current textarea content as a queued prompt.
+// Queued prompts are processed in FIFO order after the current prompt completes.
+func (m *Model) handleQueuePrompt() (tea.Model, tea.Cmd) {
+	content := strings.TrimSpace(m.textarea.Value())
+	if content == "" {
+		return m, nil
+	}
+
+	m.addQueuedPrompt(content)
+	m.textarea.Reset()
+	m.updateViewportContent()
+
+	return m, nil
+}
+
+// handleSteerPrompt adds the current textarea content as a steering prompt.
+// Steering prompts are injected as soon as the session becomes idle,
+// allowing the user to provide guidance while a task is running.
+func (m *Model) handleSteerPrompt() (tea.Model, tea.Cmd) {
+	content := strings.TrimSpace(m.textarea.Value())
+	if content == "" {
+		return m, nil
+	}
+
+	m.addSteeringPrompt(content)
+	m.textarea.Reset()
+	m.updateViewportContent()
 
 	return m, nil
 }
