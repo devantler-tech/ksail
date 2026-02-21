@@ -7,23 +7,12 @@ KSail provides a unified CLI for Kubernetes development with built-in support fo
 
 ## Cluster Provisioning
 
-Create and manage local Kubernetes clusters with a single command. KSail supports multiple distributions and automatically configures networking, storage, and observability components.
+Create and manage local Kubernetes clusters with a single command. KSail supports [Vanilla, K3s, Talos, and VCluster](/concepts/#distributions) distributions, generates native configuration files (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`) that work directly with upstream tools, and automatically configures [CNI](/concepts/#container-network-interface-cni), [CSI](/concepts/#container-storage-interface-csi), [metrics-server](/concepts/#metrics-server), [cert-manager](/concepts/#cert-manager), and [policy engines](/concepts/#policy-engines). Component installations use automatic retry with exponential backoff for transient failures.
 
 ```bash
 ksail cluster init --name my-cluster --distribution Vanilla --cni Cilium
 ksail cluster create
 ```
-
-**Capabilities:**
-
-- **Multi-distribution support** – [Vanilla, K3s, Talos, and VCluster](/concepts/#distributions) distributions
-- **Native configuration** – Generates standard `kind.yaml`, `k3d.yaml`, Talos patch files, and `vcluster.yaml`
-- **No vendor lock-in** – Use generated configs directly with Kind, K3d, Talos, or vCluster CLI
-- **Component installation** – [CNI](/concepts/#container-network-interface-cni) (Cilium, Calico), [CSI](/concepts/#container-storage-interface-csi), [metrics-server](/concepts/#metrics-server) with [kubelet-csr-approver](/concepts/#kubelet-csr-approver), [cert-manager](/concepts/#cert-manager), and [policy engines](/concepts/#policy-engines)
-- **Resilient installations** – Automatic retry with exponential backoff for transient failures (HTTP 429 rate limits, network errors, timeouts)
-- **Custom cluster naming** – Set container, registry, and context names via `--name`
-- **Node configuration** – Control-plane and worker node counts via `--control-planes` and `--workers`
-- **Connection management** – Automatic kubeconfig and context configuration
 
 > [!TIP]
 > After `ksail cluster init`, you can use the generated configuration files directly:
@@ -52,20 +41,13 @@ ksail cluster create
 
 ## Workload Management
 
-Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns wrapped in consistent commands.
+Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; generate resources; debug with logs, exec, describe, and explain; and validate manifests against schemas.
 
 ```bash
 ksail workload apply -k k8s/
 ksail workload get pods
 ksail workload logs deployment/my-app
 ```
-
-**Capabilities:**
-
-- **Apply manifests** – [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML
-- **Generate resources** – Create deployments, services, secrets, and more
-- **Debug workloads** – Logs, exec, describe, and explain commands
-- **Validate manifests** – Schema validation before applying
 
 **Commands:** [`ksail workload`](/cli-flags/workload/workload-root/)
 
@@ -86,7 +68,7 @@ ksail workload logs deployment/my-app
 
 ## GitOps Workflows
 
-Enable GitOps with [Flux or ArgoCD](/concepts/#gitops) for declarative, Git-driven deployments. KSail scaffolds the required CRs and provides commands for pushing and reconciling workloads.
+Enable GitOps with [Flux or ArgoCD](/concepts/#gitops) for declarative, Git-driven deployments. KSail automatically installs the GitOps engine, scaffolds FluxInstance or ArgoCD Application CRs, and provides commands to package manifests as OCI artifacts, push to the local registry, and trigger reconciliation.
 
 ```bash
 ksail cluster init --gitops-engine Flux --local-registry
@@ -94,21 +76,6 @@ ksail cluster create
 ksail workload push
 ksail workload reconcile
 ```
-
-**Capabilities:**
-
-- **Engine installation** – Automatic Flux or ArgoCD setup
-- **CR scaffolding** – FluxInstance or ArgoCD Application generated automatically
-- **OCI artifact packaging** – Package manifests and push to local registry
-- **Reconciliation triggers** – Force sync and wait for completion
-
-**Workflow:**
-
-1. Initialize with GitOps engine and local registry enabled
-2. Create cluster (installs GitOps controllers)
-3. Edit manifests in source directory
-4. Push manifests as OCI artifact
-5. Trigger reconciliation
 
 **Commands:**
 
@@ -119,10 +86,9 @@ ksail workload reconcile
 
 ## Registry Management
 
-Run local [OCI registries](/concepts/#oci-registries) for faster development cycles, configure mirror registries to avoid rate limits, or use external registries with authentication.
+Run local [OCI registries](/concepts/#oci-registries) for faster image pulls, GitOps integration, and isolated development. Support external registries with authentication using format `[user:pass@]host[:port][/path]` where credentials can use `${ENV_VAR}` placeholders.
 
 ### Local Registry
-
 ```bash
 ksail cluster init --local-registry --local-registry-port 5050
 ksail cluster create
@@ -131,72 +97,18 @@ docker tag my-app localhost:5050/my-app
 docker push localhost:5050/my-app
 ```
 
-**Benefits:** Faster image pulls, GitOps integration, isolated development
-
-**With authentication (for external registries):**
-
-```bash
-ksail cluster init \
-  --local-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io/myorg/myrepo'
-```
-
-**Format:** `[user:pass@]host[:port][/path]`
-
-> [!NOTE]
-> Credentials support `${ENV_VAR}` placeholders for secure handling.
-
 ### Mirror Registries
 
-> [!NOTE]
-> **Default mirrors enabled:** KSail now enables `docker.io` and `ghcr.io` mirrors by default to avoid rate limits and improve CI/CD performance.
+KSail enables `docker.io` and `ghcr.io` mirrors by default to avoid rate limits and improve CI/CD performance. Mirror registries create local pull-through cache containers that authenticate to upstream registries using credentials resolved from `${ENV_VAR}` placeholders, with cached images persisting across restarts. Supported across all distributions via containerd `hosts.toml` injection (Vanilla, VCluster), K3d registries configuration (K3s), or machine config patches (Talos).
 
 ```bash
-# Mirrors are enabled by default (docker.io and ghcr.io)
+# Default mirrors (docker.io and ghcr.io)
 ksail cluster init
 
-# Add additional mirrors
-ksail cluster init \
-  --mirror-registry gcr.io=https://gcr.io
-```
-
-**Benefits:** Avoid Docker Hub rate limits, offline development, faster CI/CD
-
-**With authentication:**
-
-```bash
-# Using GitHub Container Registry
-export GITHUB_USER=your-username
-export GITHUB_TOKEN=ghp_yourtoken
-
+# Add authenticated mirrors (format: [user:pass@]host[=endpoint])
 ksail cluster init \
   --mirror-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io=https://ghcr.io'
-
-# Using Docker Hub to avoid rate limits
-export DOCKER_USER=your-username
-export DOCKER_TOKEN=your-token
-
-ksail cluster init \
-  --mirror-registry '${DOCKER_USER}:${DOCKER_TOKEN}@docker.io=https://registry-1.docker.io'
 ```
-
-**Format:** `[user:pass@]host[=endpoint]`
-
-> [!NOTE]
-> Credentials support `${ENV_VAR}` placeholders for secure handling. The registry proxy will authenticate to the upstream registry using the provided credentials, preventing rate limit issues for unauthenticated requests.
-
-**How it works:**
-
-1. KSail creates a local pull-through cache registry container for each mirror
-2. Credentials are resolved from environment variables at runtime
-3. The registry authenticates to the upstream using `REGISTRY_PROXY_USERNAME` and `REGISTRY_PROXY_PASSWORD`
-4. Images are pulled through the authenticated mirror, avoiding rate limits
-5. Cached images persist across cluster restarts for faster subsequent pulls
-
-**Distribution support:** Mirror registries are supported across all distributions:
-- **Vanilla (Kind)**: Configured via containerd `hosts.toml` injection after cluster creation
-- **K3s (K3d)**: Configured via K3d registries configuration before cluster creation
-- **Talos**: Configured via machine config registry mirror patches
-- **VCluster**: Configured via containerd `hosts.toml` injection into vCluster control plane and worker containers after cluster creation
 
 ## Secret Management
 
@@ -222,7 +134,7 @@ ksail cipher import AGE-SECRET-KEY-1...
 
 ## Code Generation
 
-Generate Kubernetes manifests, Helm releases, and Flux/ArgoCD resources using built-in generators.
+Generate Kubernetes resources (`Deployment`, `Service`, `ConfigMap`, `Secret`, `Ingress`), [Helm](/concepts/#helm) releases (HelmRelease CRs), and source resources (OCIRepository, GitRepository, HelmRepository) using built-in generators.
 
 ```bash
 ksail workload gen deployment my-app --image=nginx --port=80
@@ -230,17 +142,11 @@ ksail workload gen service my-app --port=80
 ksail workload gen helmrelease my-chart --source=oci://registry/chart
 ```
 
-**Capabilities:**
-
-- **Kubernetes resources** – Deployments, services, configmaps, secrets, ingress, and more
-- **[Helm](/concepts/#helm) releases** – HelmRelease CRs for Flux
-- **Source resources** – OCIRepository, GitRepository, HelmRepository
-
 **Commands:** [`ksail workload gen`](/cli-flags/workload/gen/workload-gen-root/), [`ksail workload create`](/cli-flags/workload/create/workload-create-root/)
 
 ## Declarative Configuration
 
-Define cluster configuration in `ksail.yaml` for reproducible, version-controlled environments.
+Define cluster configuration in `ksail.yaml` for team consistency, reproducible environments, and Git-tracked configuration.
 
 ```yaml
 # ksail.yaml
@@ -256,30 +162,15 @@ spec:
     sourceDirectory: k8s
 ```
 
-**Benefits:** Team consistency, reproducible environments, Git-tracked configuration
-
 **Reference:** [Declarative Configuration](/configuration/declarative-configuration/)
 
 ## AI Chat Assistant
 
-Get interactive help with cluster configuration and troubleshooting using an AI-powered chat session. The assistant operates in three modes: **Agent** (full execution with approval), **Plan** (no execution, just guidance), and **Ask** (read-only investigation).
+Get interactive help with cluster configuration and troubleshooting using an AI-powered chat session. Three modes: **Agent** (`</>`) for full execution with approval, **Plan** (`≡`) for step-by-step guidance without execution, and **Ask** (`?`) for read-only investigation. Press **Tab** to cycle between modes. Requires [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) installed and authenticated.
 
 ```bash
 ksail chat
 ```
-
-**Capabilities:**
-
-- **Three chat modes** – Agent (`</>`), Plan (`≡`), and Ask (`?`) modes for different workflows
-- **Guided configuration** – Get recommendations for distributions, CNI, and other settings
-- **Troubleshooting** – Diagnose cluster issues with read-only investigation (Ask mode)
-- **Command execution** – Run KSail commands with your approval (Agent mode)
-- **Step-by-step planning** – Learn workflows without making changes (Plan mode)
-- **Context-aware** – Understands your ksail.yaml and project structure
-
-**Mode Switching:** Press **Tab** to cycle between modes during a chat session.
-
-**Prerequisites:** Requires [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) installed and authenticated.
 
 **Commands:** [`ksail chat`](/cli-flags/chat/chat-root/)
 
@@ -287,38 +178,12 @@ ksail chat
 
 ## VSCode Extension
 
-Manage KSail clusters directly from Visual Studio Code with an integrated extension that provides cluster management, interactive wizards, and AI assistant integration.
+Manage KSail clusters directly from Visual Studio Code with cluster sidebar view, interactive wizards for init/create operations, command palette access, keyboard shortcuts (`Cmd+Shift+K`, then `I`/`C`/`D`), K9s integration, and MCP server provider for AI assistants. Requires [KSail CLI](/installation/) and [Docker](https://www.docker.com/get-started/) installed; [K9s](https://k9scli.io/) optional for cluster connection.
 
 ```bash
 # Install from VSCode Marketplace
 # Search for "KSail" in Extensions view
 ```
-
-**Capabilities:**
-
-- **Clusters sidebar view** — View and manage clusters with status indicators (running/stopped)
-- **Interactive wizards** — Step-by-step configuration for cluster init and create operations
-- **Command palette** — Full access to all cluster lifecycle commands
-- **Keyboard shortcuts** — Quick access to common operations (`Cmd+Shift+K` prefix)
-- **Smart context menus** — Right-click actions based on cluster state
-- **MCP server provider** — Exposes KSail as an MCP server for AI assistants
-
-**Features:**
-
-| Feature              | Description                                           |
-| -------------------- | ----------------------------------------------------- |
-| Cluster tree view    | Shows all clusters with provider and status info      |
-| Init wizard          | Multi-step configuration for new clusters             |
-| Create wizard        | Guided cluster creation with component selection      |
-| Command shortcuts    | `Cmd+Shift+K I` (init), `C` (create), `D` (delete)   |
-| K9s integration      | Open cluster in K9s terminal UI                       |
-| MCP integration      | Use KSail with Copilot and other AI tools             |
-
-**Prerequisites:**
-
-- [KSail CLI](https://ksail.devantler.tech/installation/) installed and in PATH
-- [Docker](https://www.docker.com/get-started/) running (for cluster operations)
-- [K9s](https://k9scli.io/) (optional, for cluster connection)
 
 **Installation:** See [VSCode Extension Installation](/installation/#vscode-extension) for setup instructions.
 
