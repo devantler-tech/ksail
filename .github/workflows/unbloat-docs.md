@@ -24,7 +24,6 @@ network:
     - defaults
     - node
     - playwright
-  firewall: false
 
 safe-outputs:
   noop: false
@@ -34,6 +33,7 @@ safe-outputs:
     draft: true
   add-comment:
   upload-asset:
+    max: 5
 
 tools:
   cache-memory: true
@@ -57,7 +57,7 @@ You are a technical documentation editor focused on **clarity and conciseness**.
 
 **Important**: You are running in a sandboxed environment where all git operations (commit, push, branch creation) and GitHub API calls (create PR, upload assets) are handled through safe-outputs tools. Use the `edit` tool to modify files, then use safe-outputs tools like `create_pull_request` and `upload_asset` - they handle all the underlying git and GitHub operations automatically.
 
-**How safe-outputs tools work**: Safe-outputs tools (`create_pull_request`, `upload_asset`, `add_comment`, `noop`) are **direct function calls** available in your tool list — call them exactly like you call `edit` or `bash`. Do NOT try to access them via sockets, HTTP, netcat, or manual MCP JSON-RPC. Simply invoke the tool by name (e.g., call `create_pull_request` with title, body, and branch parameters).
+**How safe-outputs tools work**: Safe-outputs tools (`create_pull_request`, `upload_asset`, `add_comment`) are **direct function calls** available in your tool list — call them exactly like you call `edit` or `bash`. Do NOT try to access them via sockets, HTTP, netcat, or manual MCP JSON-RPC. Simply invoke the tool by name (e.g., call `create_pull_request` with title, body, and branch parameters).
 
 ## What is Documentation Bloat?
 
@@ -218,9 +218,32 @@ echo "$(date -u +%Y-%m-%d) - Cleaned: <filename>" >> /tmp/gh-aw/cache-memory/cle
 
 This helps future runs avoid re-cleaning the same files.
 
-### 9. Take Screenshots of Modified Documentation
+### 9. Create Pull Request
 
-After making changes to a documentation file, take screenshots of the rendered page in the Astro Starlight website:
+**This step is mandatory** — always create the PR immediately after making edits, before attempting screenshots.
+
+1. Verify your changes preserve all essential information
+2. Update cache memory with the cleaned file
+3. **Create the PR** using the `create_pull_request` safe-outputs tool (this is a direct function call in your tool list):
+   - **Branch name**: Specify a branch name following the pattern `docs/unbloat-<filename>` (e.g., `docs/unbloat-ai-chat`)
+   - **Title**: Brief description of what you improved (e.g., "Remove bloat from AI chat documentation")
+   - **Body**: Include the following sections in the PR description:
+     - Which file you improved
+     - What types of bloat you removed
+     - Estimated word count or line reduction
+     - Summary of changes made
+
+   **Important**: The `create_pull_request` tool will automatically:
+   - Create the branch
+   - Commit your changes
+   - Push to remote
+   - Create the PR
+
+   You do NOT need to run `git checkout`, `git commit`, `git add`, or `git push` commands manually. Just make your edits to files using the `edit` tool, then call `create_pull_request` when ready.
+
+### 10. Best-Effort Screenshots
+
+After the PR is created, attempt to take screenshots of the modified documentation page. If any step in this section fails, **skip the rest and move on** — the PR is already created.
 
 #### Build and Start Documentation Server
 
@@ -228,7 +251,7 @@ After making changes to a documentation file, take screenshots of the rendered p
 cd docs && npm ci && npx astro dev --host 0.0.0.0 > /tmp/astro-dev.log 2>&1 & echo $! > /tmp/astro-dev.pid
 ```
 
-Wait for the server to be ready (if it fails, continue without screenshots):
+Wait for the server to be ready (if it fails, skip screenshots):
 
 ```bash
 for i in $(seq 1 30); do curl -s http://localhost:4321/ > /dev/null && echo "Server ready" && break || sleep 1; done
@@ -244,58 +267,23 @@ For the modified documentation file(s):
 4. Take a full-page HD screenshot of the documentation page (1920x1080 viewport is configured)
 5. The screenshot will be saved in `/tmp/gh-aw/mcp-logs/playwright/`
 
-#### Verify Screenshots Were Saved
-
-Verify that Playwright successfully saved the screenshots:
-
-```bash
-ls -lh /tmp/gh-aw/mcp-logs/playwright/
-```
-
-#### Upload Screenshots
+#### Upload Screenshots and Comment on PR
 
 If screenshots exist:
 
 1. Use the `upload_asset` tool from safe-outputs to upload each screenshot file
 2. The tool will return a URL for each uploaded screenshot
-3. Keep track of these URLs to include in the PR description
+3. Use the `add_comment` tool to post the screenshot URLs as a comment on the PR
 
-If no screenshot files are found or the dev server failed to start, **skip the screenshot step entirely** and proceed to create the PR without screenshots. Note the issue in the PR description but do NOT let it block PR creation.
+If no screenshot files are found or the dev server failed to start, **skip this entirely** — the PR is already created.
 
 #### Cleanup Server
 
-After taking screenshots, stop the dev server using its PID:
+Stop the dev server using its PID:
 
 ```bash
-# Find and kill the astro dev process by PID
 kill $(cat /tmp/astro-dev.pid 2>/dev/null) 2>/dev/null || true
 ```
-
-### 10. Create Pull Request
-
-After improving ONE file:
-
-1. Verify your changes preserve all essential information
-2. Update cache memory with the cleaned file
-3. **Best-effort**: Take HD screenshots (1920x1080 viewport) of the modified documentation page(s) — if the dev server fails, skip this step
-4. If screenshots were captured, upload them using the `upload_asset` tool and collect the URLs
-5. **Always create the PR** using the `create_pull_request` safe-outputs tool (this is a direct function call in your tool list):
-   - **Branch name**: Specify a branch name following the pattern `docs/unbloat-<filename>` (e.g., `docs/unbloat-ai-chat`)
-   - **Title**: Brief description of what you improved (e.g., "Remove bloat from AI chat documentation")
-   - **Body**: Include the following sections in the PR description:
-     - Which file you improved
-     - What types of bloat you removed
-     - Estimated word count or line reduction
-     - Summary of changes made
-     - **Screenshot URLs**: Links to the uploaded screenshots showing the modified documentation pages
-
-   **Important**: The `create_pull_request` tool will automatically:
-   - Create the branch
-   - Commit your changes
-   - Push to remote
-   - Create the PR
-
-   You do NOT need to run `git checkout`, `git commit`, `git add`, or `git push` commands manually. Just make your edits to files using the `edit` tool, then call `create_pull_request` when ready.
 
 ## Example Improvements
 
@@ -342,6 +330,6 @@ A successful run:
 - ✅ Preserves all essential information
 - ✅ Creates a clear, reviewable pull request
 - ✅ Explains the improvements made
-- ✅ Includes HD screenshots (1920x1080) of the modified documentation page(s) in the Astro Starlight website
+- ✅ Best-effort: HD screenshots of modified page(s) added as a PR comment (skip if dev server or Playwright fails)
 
 Begin by scanning the docs directory and selecting the best candidate for improvement!
