@@ -74,20 +74,15 @@ func (i *Importer) Import(
 	tmpBasePath := getTempPath(distribution)
 
 	// Import to all K8s nodes in parallel
-	// Use WaitGroup.Go pattern for Go 1.25+ (see go.mod: go 1.26.0)
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(k8sNodes))
 
 	for _, node := range k8sNodes {
-		wg.Add(1)
-
-		go func(nodeName string) {
-			defer wg.Done()
-
-			if importErr := i.importImagesToNode(ctx, nodeName, inputPath, tmpBasePath); importErr != nil {
-				errChan <- fmt.Errorf("failed to import images to node %s: %w", nodeName, importErr)
+		wg.Go(func() {
+			if importErr := i.importImagesToNode(ctx, node.Name, inputPath, tmpBasePath); importErr != nil {
+				errChan <- fmt.Errorf("failed to import images to node %s: %w", node.Name, importErr)
 			}
-		}(node.Name)
+		})
 	}
 
 	wg.Wait()
