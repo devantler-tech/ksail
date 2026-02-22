@@ -297,7 +297,7 @@ func TestMirrorSpec_ResolveCredentials_EnvVars(t *testing.T) {
 	}{
 		{
 			name: "env_var_credentials",
-			spec: registry.MirrorSpec{
+			spec: registry.MirrorSpec{ //nolint:gosec // G101: test credentials, not hardcoded secrets
 				Host:     "ghcr.io",
 				Remote:   "https://ghcr.io",
 				Username: "${TEST_USER}",
@@ -308,7 +308,7 @@ func TestMirrorSpec_ResolveCredentials_EnvVars(t *testing.T) {
 		},
 		{
 			name: "mixed_credentials",
-			spec: registry.MirrorSpec{
+			spec: registry.MirrorSpec{ //nolint:gosec // G101: test credentials, not hardcoded secrets
 				Host:     "quay.io",
 				Remote:   "https://quay.io",
 				Username: "literal-user",
@@ -449,7 +449,7 @@ func TestParseMirrorSpecs_AtSignInURL(t *testing.T) {
 				"docker.io=https://user:pass@registry-1.docker.io",
 			},
 			expected: []registry.MirrorSpec{
-				{
+				{ //nolint:gosec // G101: test URL with simulated credentials in remote
 					Host:     "docker.io",
 					Remote:   "https://user:pass@registry-1.docker.io",
 					Username: "",
@@ -463,7 +463,7 @@ func TestParseMirrorSpecs_AtSignInURL(t *testing.T) {
 				"myuser:mypass@docker.io=https://user:pass@registry-1.docker.io",
 			},
 			expected: []registry.MirrorSpec{
-				{
+				{ //nolint:gosec // G101: test URL with simulated credentials in remote
 					Host:     "docker.io",
 					Remote:   "https://user:pass@registry-1.docker.io",
 					Username: "myuser",
@@ -487,7 +487,7 @@ func TestBuildRegistryInfosFromSpecs_WithCredentials(t *testing.T) {
 	t.Parallel()
 
 	specs := []registry.MirrorSpec{
-		{
+		{ //nolint:gosec // G101: test credentials, not hardcoded secrets
 			Host:     "ghcr.io",
 			Remote:   "https://ghcr.io",
 			Username: "${GITHUB_USER}",
