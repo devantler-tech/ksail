@@ -342,6 +342,7 @@ func CreateMinimalProvisionerForProvider(
 			info.Provider,
 			v1alpha1.OptionsTalos{},
 			v1alpha1.OptionsHetzner{},
+			v1alpha1.OptionsOmni{},
 			false,
 		)
 		if err != nil {

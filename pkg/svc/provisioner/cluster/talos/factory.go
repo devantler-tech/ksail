@@ -10,9 +10,11 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	omniclient "github.com/siderolabs/omni/client/pkg/client"
 )
 
 // ErrUnsupportedProvider re-exports the shared error for backward compatibility.
@@ -21,6 +23,9 @@ var ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
 // ErrMissingHetznerToken is returned when the Hetzner API token is not set.
 var ErrMissingHetznerToken = errors.New("hetzner API token not set")
 
+// ErrMissingOmniConfig is returned when the Omni endpoint or service account key is not set.
+var ErrMissingOmniConfig = errors.New("omni configuration incomplete")
+
 // CreateProvisioner creates a Provisioner from a pre-loaded configuration.
 // The Talos config should be loaded via the configmanager before calling this function,
 // allowing any in-memory modifications (e.g., CNI patches, mirror registries) to be preserved.
@@ -28,9 +33,10 @@ var ErrMissingHetznerToken = errors.New("hetzner API token not set")
 // Parameters:
 //   - talosConfigs: Pre-loaded Talos machine configurations with all patches applied
 //   - kubeconfigPath: Path where the kubeconfig should be written
-//   - provider: Infrastructure provider (e.g., Docker, Hetzner)
+//   - provider: Infrastructure provider (e.g., Docker, Hetzner, Omni)
 //   - opts: Talos-specific options (node counts, etc.)
 //   - hetznerOpts: Hetzner-specific options (required when provider is Hetzner)
+//   - omniOpts: Omni-specific options (required when provider is Omni)
 //   - skipCNIChecks: Whether to skip CNI-dependent checks (CoreDNS, kube-proxy) during bootstrap.
 //     Set to true when KSail will install a custom CNI after cluster creation.
 func CreateProvisioner(
@@ -39,6 +45,7 @@ func CreateProvisioner(
 	providerType v1alpha1.Provider,
 	opts v1alpha1.OptionsTalos,
 	hetznerOpts v1alpha1.OptionsHetzner,
+	omniOpts v1alpha1.OptionsOmni,
 	skipCNIChecks bool,
 ) (*Provisioner, error) {
 	// Validate or default the provider
@@ -92,9 +99,18 @@ func CreateProvisioner(
 		// Store Talos options with defaults applied (includes ISO)
 		provisioner.WithTalosOptions(applyTalosDefaults(opts))
 
+	case v1alpha1.ProviderOmni:
+		omniProvider, err := createOmniProvider(omniOpts)
+		if err != nil {
+			return nil, err
+		}
+
+		infraProvider = omniProvider
+
 	default:
-		return nil, fmt.Errorf("%w: %s (supported: %s, %s)",
-			ErrUnsupportedProvider, providerType, v1alpha1.ProviderDocker, v1alpha1.ProviderHetzner)
+		return nil, fmt.Errorf("%w: %s (supported: %s, %s, %s)",
+			ErrUnsupportedProvider, providerType,
+			v1alpha1.ProviderDocker, v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni)
 	}
 
 	provisioner.WithInfraProvider(infraProvider)
@@ -171,4 +187,46 @@ func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner 
 	}
 
 	return opts
+}
+
+// Omni default values - keep in sync with OptionsOmni struct tags.
+const (
+	defaultOmniServiceAccountKeyEnvVar = "OMNI_SERVICE_ACCOUNT_KEY"
+)
+
+// createOmniProvider creates an Omni provider from the given options.
+func createOmniProvider(opts v1alpha1.OptionsOmni) (*omni.Provider, error) {
+	if opts.Endpoint == "" {
+		return nil, fmt.Errorf(
+			"%w: endpoint is required",
+			ErrMissingOmniConfig,
+		)
+	}
+
+	// Determine the service account key environment variable name
+	keyEnvVar := opts.ServiceAccountKeyEnvVar
+	if keyEnvVar == "" {
+		keyEnvVar = defaultOmniServiceAccountKeyEnvVar
+	}
+
+	// Get the service account key from the environment
+	serviceAccountKey := os.Getenv(keyEnvVar)
+	if serviceAccountKey == "" {
+		return nil, fmt.Errorf(
+			"%w: environment variable %s is not set",
+			ErrMissingOmniConfig,
+			keyEnvVar,
+		)
+	}
+
+	// Create the Omni client and provider
+	client, err := omniclient.New(
+		opts.Endpoint,
+		omniclient.WithServiceAccount(serviceAccountKey),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Omni client: %w", err)
+	}
+
+	return omni.NewProvider(client), nil
 }
