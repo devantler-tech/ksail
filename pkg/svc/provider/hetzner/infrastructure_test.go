@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
@@ -11,16 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	defaultNetworkCIDR = "10.0.0.0/16"
-	defaultSubnetCIDR  = "10.0.1.0/24"
-)
+const defaultNetworkCIDR = "10.0.0.0/16"
 
-func TestBuildFirewallRules(t *testing.T) {
+func TestFirewallCIDRConfiguration(t *testing.T) {
 	t.Parallel()
-
-	// Note: buildFirewallRules is not exported, so we test it indirectly through EnsureFirewall
-	// But we can validate the rule structure expectations
 
 	t.Run("FirewallRulesStructure", func(t *testing.T) {
 		t.Parallel()
@@ -155,59 +150,6 @@ func TestNetworkCIDRParsing(t *testing.T) {
 	}
 }
 
-func TestSubnetCIDRLogic(t *testing.T) {
-	t.Parallel()
-
-	t.Run("DefaultNetwork_UsesStandardSubnet", func(t *testing.T) {
-		t.Parallel()
-
-		networkCIDR := defaultNetworkCIDR
-		expectedSubnet := defaultSubnetCIDR
-
-		// Default logic: if CIDR is 10.0.0.0/16, use 10.0.1.0/24 subnet
-		subnetCIDR := defaultSubnetCIDR
-		if networkCIDR != defaultNetworkCIDR {
-			subnetCIDR = networkCIDR
-		}
-
-		assert.Equal(t, expectedSubnet, subnetCIDR)
-	})
-
-	t.Run("CustomNetwork_UsesProvidedCIDR", func(t *testing.T) {
-		t.Parallel()
-
-		networkCIDR := "192.168.0.0/16"
-		expectedSubnet := "192.168.0.0/16"
-
-		subnetCIDR := defaultSubnetCIDR
-		if networkCIDR != defaultNetworkCIDR {
-			subnetCIDR = networkCIDR
-		}
-
-		assert.Equal(t, expectedSubnet, subnetCIDR)
-	})
-
-	t.Run("SmallNetwork_UsesProvidedCIDR", func(t *testing.T) {
-		t.Parallel()
-
-		networkCIDR := "10.1.0.0/24"
-		expectedSubnet := "10.1.0.0/24"
-
-		subnetCIDR := defaultSubnetCIDR
-		if networkCIDR != defaultNetworkCIDR {
-			subnetCIDR = networkCIDR
-		}
-
-		assert.Equal(t, expectedSubnet, subnetCIDR)
-	})
-}
-
-func TestPlacementGroupStrategyHandling(t *testing.T) {
-	t.Parallel()
-
-	t.Skip("placement group strategy handling is not testable without accessing internal APIs")
-}
-
 func TestPlacementGroupNaming(t *testing.T) {
 	t.Parallel()
 
@@ -258,38 +200,19 @@ func TestDeleteRetryLogic(t *testing.T) {
 	t.Run("RetryCount", func(t *testing.T) {
 		t.Parallel()
 
-		maxRetries := hetzner.MaxDeleteRetries
-
-		assert.Positive(t, maxRetries)
-		assert.GreaterOrEqual(t, maxRetries, 3, "Should retry at least 3 times")
-		assert.LessOrEqual(t, maxRetries, 10, "Should not retry more than 10 times")
+		assert.Equal(t, 5, hetzner.MaxDeleteRetries)
 	})
 
 	t.Run("RetryDelay", func(t *testing.T) {
 		t.Parallel()
 
-		retryDelay := hetzner.DefaultDeleteRetryDelay
-
-		assert.Positive(t, retryDelay)
-		assert.GreaterOrEqual(
-			t,
-			retryDelay.Seconds(),
-			1.0,
-			"Retry delay should be at least 1 second",
-		)
+		assert.Equal(t, 2*time.Second, hetzner.DefaultDeleteRetryDelay)
 	})
 
 	t.Run("PreDeleteDelay", func(t *testing.T) {
 		t.Parallel()
 
-		preDeleteDelay := hetzner.DefaultPreDeleteDelay
-
-		assert.GreaterOrEqual(
-			t,
-			preDeleteDelay.Seconds(),
-			0.0,
-			"PreDelete delay should be non-negative",
-		)
+		assert.Equal(t, 5*time.Second, hetzner.DefaultPreDeleteDelay)
 	})
 }
 
@@ -365,7 +288,7 @@ func TestResourceLabelsConsistency(t *testing.T) {
 	clusterName := "test-cluster"
 
 	resourceLabels := hetzner.ResourceLabels(clusterName)
-	nodeLabels := hetzner.NodeLabels(clusterName, "worker", 0)
+	nodeLabels := hetzner.NodeLabels(clusterName, hetzner.NodeTypeWorker, 0)
 
 	// Resource labels should be a subset of node labels
 	for key, value := range resourceLabels {
