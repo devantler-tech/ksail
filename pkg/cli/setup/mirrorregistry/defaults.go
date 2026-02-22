@@ -45,33 +45,41 @@ func GetMirrorRegistriesWithDefaults(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	provider v1alpha1.Provider,
 ) []string {
-	// Check if the flag was explicitly set by the user
-	flagChanged := cmd.Flags().Changed(MirrorRegistryFlag)
-
-	if !flagChanged {
-		// Flag not set by user - check config values
-		configValues := cfgManager.Viper.GetStringSlice(MirrorRegistryFlag)
-		if len(configValues) > 0 {
-			return configValues
-		}
-		// No config value: use defaults only for providers that support local Docker mirrors
-		// Cloud providers (Hetzner) cannot access local Docker containers as mirrors
-		if provider == v1alpha1.ProviderHetzner {
-			return []string{}
-		}
-
-		return DefaultMirrors
+	if cmd.Flags().Changed(MirrorRegistryFlag) {
+		return getFlagMirrors(cmd)
 	}
 
-	// Flag was explicitly set: get flag values
+	return getConfigOrDefaultMirrors(cfgManager, provider)
+}
+
+// getFlagMirrors returns mirror registries from explicitly set flags.
+// Returns empty slice if user explicitly disabled mirrors with empty string.
+func getFlagMirrors(cmd *cobra.Command) []string {
 	flagValues, _ := cmd.Flags().GetStringSlice(MirrorRegistryFlag)
 
-	// Check if user explicitly disabled mirrors with empty string (--mirror-registry "")
-	// When --mirror-registry "" is used, the slice becomes empty
-	if len(flagValues) == 0 {
+	return flagValues
+}
+
+// getConfigOrDefaultMirrors returns mirror registries from config or provider-specific defaults.
+// Cloud providers like Hetzner cannot access local Docker mirrors, so no defaults are applied.
+func getConfigOrDefaultMirrors(
+	cfgManager *ksailconfigmanager.ConfigManager,
+	provider v1alpha1.Provider,
+) []string {
+	configValues := cfgManager.Viper.GetStringSlice(MirrorRegistryFlag)
+	if len(configValues) > 0 {
+		return configValues
+	}
+
+	return getProviderDefaultMirrors(provider)
+}
+
+// getProviderDefaultMirrors returns default mirrors for providers that support local Docker mirrors.
+// Cloud providers (Hetzner) cannot access local Docker containers, so they get no defaults.
+func getProviderDefaultMirrors(provider v1alpha1.Provider) []string {
+	if provider == v1alpha1.ProviderHetzner {
 		return []string{}
 	}
 
-	// Flag with values: REPLACE defaults (and config)
-	return flagValues
+	return DefaultMirrors
 }
