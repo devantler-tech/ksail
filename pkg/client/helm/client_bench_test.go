@@ -2,6 +2,7 @@ package helm_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -308,7 +309,7 @@ persistence:
 	// Create large set of override values
 	largeSetValues := make(map[string]string)
 	for i := 0; i < 50; i++ {
-		largeSetValues["config.key"+string(rune(i))] = "value"
+		largeSetValues["config.key"+strconv.Itoa(i)] = "value"
 	}
 
 	b.ReportAllocs()
