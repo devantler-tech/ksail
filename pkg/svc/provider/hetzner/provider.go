@@ -317,8 +317,6 @@ type ServerRetryOpts struct {
 // CreateServerWithRetry creates a server with retry and location fallback support.
 // It handles transient Hetzner API errors with exponential backoff and can fallback
 // to alternative locations when the primary location has resource constraints.
-//
-//nolint:cyclop,funlen,gocognit // Complex retry logic with location fallback requires multiple conditions
 func (p *Provider) CreateServerWithRetry(
 	ctx context.Context,
 	opts CreateServerOpts,
@@ -338,96 +336,211 @@ func (p *Provider) CreateServerWithRetry(
 	originalPlacementGroupID := opts.PlacementGroupID
 
 	for locationIdx, location := range locations {
-		// Update location for this attempt
-		currentOpts := opts
-		currentOpts.Location = location
-
-		// Reset placement group for each new location (may have been disabled in previous location)
-		currentOpts.PlacementGroupID = originalPlacementGroupID
-		placementDisabledForLocation := false
-
-		for attempt := 1; attempt <= DefaultMaxServerCreateRetries; attempt++ {
-			server, err := p.CreateServer(ctx, currentOpts)
-			if err == nil {
-				// Success - log if we had to fallback
-				if locationIdx > 0 || placementDisabledForLocation {
-					p.logRetryf(
-						retryOpts.LogWriter,
-						"  ✓ Server %s created successfully after fallback (location: %s, placement group: %v)\n",
-						opts.Name,
-						location,
-						currentOpts.PlacementGroupID > 0,
-					)
-				}
-
-				return server, nil
-			}
-
-			lastErr = err
-
-			// Check if this is a permanent error that shouldn't be retried
-			if IsResourceLimitError(err) {
-				return nil, fmt.Errorf("permanent error creating server %s: %w", opts.Name, err)
-			}
-
-			// Handle placement errors with optional fallback
-			if IsPlacementError(err) && retryOpts.AllowPlacementFallback &&
-				currentOpts.PlacementGroupID > 0 {
-				p.logRetryf(
-					retryOpts.LogWriter,
-					"  ⚠ Placement failed for %s in %s, retrying without placement group...\n",
-					opts.Name,
-					location,
-				)
-
-				currentOpts.PlacementGroupID = 0
-				placementDisabledForLocation = true
-
-				continue
-			}
-
-			// Check if we should retry this error
-			if !IsRetryableHetznerError(err) && !IsPlacementError(err) {
-				// Non-retryable error - try next location if available
-				break
-			}
-
-			// Log retry attempt
-			if attempt < DefaultMaxServerCreateRetries {
-				delay := p.calculateRetryDelay(attempt)
-				p.logRetryf(
-					retryOpts.LogWriter,
-					"  ⚠ Attempt %d/%d failed for %s in %s: %v. Retrying in %v...\n",
-					attempt,
-					DefaultMaxServerCreateRetries,
-					opts.Name,
-					location,
-					err,
-					delay,
-				)
-
-				select {
-				case <-ctx.Done():
-					return nil, fmt.Errorf("context cancelled during retry: %w", ctx.Err())
-				case <-time.After(delay):
-					// Continue to next attempt
-				}
-			}
+		server, err := p.attemptServerCreationInLocation(
+			ctx,
+			opts,
+			retryOpts,
+			location,
+			locationIdx,
+			originalPlacementGroupID,
+		)
+		if err == nil {
+			return server, nil
 		}
 
-		// All retries exhausted for this location, try next
+		lastErr = err
+
+		// Log fallback if more locations available
 		if locationIdx < len(locations)-1 {
-			p.logRetryf(
-				retryOpts.LogWriter,
-				"  ⚠ All attempts failed in %s, trying fallback location %s...\n",
-				location,
-				locations[locationIdx+1],
-			)
+			p.logLocationFallback(retryOpts.LogWriter, location, locations[locationIdx+1])
 		}
 	}
 
 	// All locations exhausted
 	return nil, fmt.Errorf("%w: %s (last error: %w)", ErrAllLocationsFailed, opts.Name, lastErr)
+}
+
+// attemptServerCreationInLocation tries to create a server in a specific location with retries.
+//
+//nolint:funcorder // Helper grouped with CreateServerWithRetry
+func (p *Provider) attemptServerCreationInLocation(
+	ctx context.Context,
+	opts CreateServerOpts,
+	retryOpts ServerRetryOpts,
+	location string,
+	locationIdx int,
+	originalPlacementGroupID int64,
+) (*hcloud.Server, error) {
+	currentOpts := opts
+	currentOpts.Location = location
+	currentOpts.PlacementGroupID = originalPlacementGroupID
+	placementDisabledForLocation := false
+
+	for attempt := 1; attempt <= DefaultMaxServerCreateRetries; attempt++ {
+		server, err := p.CreateServer(ctx, currentOpts)
+		if err == nil {
+			p.logSuccessfulFallback(
+				retryOpts.LogWriter,
+				opts.Name,
+				location,
+				locationIdx,
+				placementDisabledForLocation,
+				currentOpts.PlacementGroupID > 0,
+			)
+
+			return server, nil
+		}
+
+		// Check for permanent errors
+		if IsResourceLimitError(err) {
+			return nil, fmt.Errorf("permanent error creating server %s: %w", opts.Name, err)
+		}
+
+		// Handle placement errors with fallback
+		if shouldDisablePlacement(err, retryOpts, currentOpts.PlacementGroupID) {
+			p.logPlacementFallback(retryOpts.LogWriter, opts.Name, location)
+
+			currentOpts.PlacementGroupID = 0
+			placementDisabledForLocation = true
+
+			continue
+		}
+
+		// Check if we should retry this error
+		if !shouldRetryError(err) {
+			// Non-retryable error - try next location if available
+			return nil, err
+		}
+
+		// Wait before next retry
+		if attempt < DefaultMaxServerCreateRetries {
+			waitErr := p.waitForRetryDelay(
+				ctx,
+				retryOpts.LogWriter,
+				attempt,
+				opts.Name,
+				location,
+				err,
+			)
+			if waitErr != nil {
+				return nil, waitErr
+			}
+		}
+	}
+
+	// All retries exhausted for this location
+	return nil, fmt.Errorf("%w in location %s", ErrAllRetriesExhausted, location)
+}
+
+// shouldDisablePlacement checks if placement group should be disabled after an error.
+func shouldDisablePlacement(
+	err error,
+	retryOpts ServerRetryOpts,
+	placementGroupID int64,
+) bool {
+	return IsPlacementError(err) &&
+		retryOpts.AllowPlacementFallback &&
+		placementGroupID > 0
+}
+
+// shouldRetryError determines if an error should trigger a retry.
+func shouldRetryError(err error) bool {
+	return IsRetryableHetznerError(err) || IsPlacementError(err)
+}
+
+// waitForRetryDelay waits for the retry delay with context cancellation support.
+//
+//nolint:funcorder // Helper grouped with CreateServerWithRetry
+func (p *Provider) waitForRetryDelay(
+	ctx context.Context,
+	logWriter io.Writer,
+	attempt int,
+	serverName string,
+	location string,
+	err error,
+) error {
+	delay := p.calculateRetryDelay(attempt)
+	p.logRetryAttempt(logWriter, attempt, serverName, location, err, delay)
+
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context cancelled during retry: %w", ctx.Err())
+	case <-time.After(delay):
+		return nil
+	}
+}
+
+// logSuccessfulFallback logs when a server is created successfully after fallback.
+//
+//nolint:funcorder // Helper grouped with CreateServerWithRetry
+func (p *Provider) logSuccessfulFallback(
+	logWriter io.Writer,
+	serverName string,
+	location string,
+	locationIdx int,
+	placementDisabled bool,
+	hasPlacementGroup bool,
+) {
+	if locationIdx > 0 || placementDisabled {
+		p.logRetryf(
+			logWriter,
+			"  ✓ Server %s created successfully after fallback (location: %s, placement group: %v)\n",
+			serverName,
+			location,
+			hasPlacementGroup,
+		)
+	}
+}
+
+// logPlacementFallback logs when placement group is disabled for retry.
+//
+//nolint:funcorder // Helper grouped with CreateServerWithRetry
+func (p *Provider) logPlacementFallback(logWriter io.Writer, serverName string, location string) {
+	p.logRetryf(
+		logWriter,
+		"  ⚠ Placement failed for %s in %s, retrying without placement group...\n",
+		serverName,
+		location,
+	)
+}
+
+// logRetryAttempt logs information about a retry attempt.
+//
+//nolint:funcorder // Helper grouped with CreateServerWithRetry
+func (p *Provider) logRetryAttempt(
+	logWriter io.Writer,
+	attempt int,
+	serverName string,
+	location string,
+	err error,
+	delay time.Duration,
+) {
+	p.logRetryf(
+		logWriter,
+		"  ⚠ Attempt %d/%d failed for %s in %s: %v. Retrying in %v...\n",
+		attempt,
+		DefaultMaxServerCreateRetries,
+		serverName,
+		location,
+		err,
+		delay,
+	)
+}
+
+// logLocationFallback logs when moving to a fallback location.
+//
+//nolint:funcorder // Helper grouped with CreateServerWithRetry
+func (p *Provider) logLocationFallback(
+	logWriter io.Writer,
+	currentLocation string,
+	nextLocation string,
+) {
+	p.logRetryf(
+		logWriter,
+		"  ⚠ All attempts failed in %s, trying fallback location %s...\n",
+		currentLocation,
+		nextLocation,
+	)
 }
 
 // logRetryf writes a formatted message to the log writer if it's not nil.

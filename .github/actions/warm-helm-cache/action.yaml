@@ -1,0 +1,129 @@
+name: Warm Helm Cache
+description: |
+  Pre-warms the Helm chart cache by rendering templates for all component
+  combinations used in system tests. Rendering downloads charts as a side
+  effect into ~/.cache/helm/content/ (Helm v4 DiskCache).
+
+  Run this ONCE before the system test matrix so every matrix job can
+  restore the same pre-warmed cache via restore-helm-cache.
+
+inputs:
+  cache-version:
+    description: |
+      Version salt for cache key. Bump this to invalidate all caches.
+    required: false
+    default: "v1"
+
+outputs:
+  cache-hit:
+    description: Whether the cache was restored (warm start)
+    value: ${{ steps.restore-cache.outputs.cache-hit || 'false' }}
+  cache-key:
+    description: The cache key used for this operation
+    value: ${{ steps.generate-key.outputs.cache-key }}
+  chart-count:
+    description: Number of configurations warmed
+    value: ${{ steps.warm-charts.outputs.count }}
+
+runs:
+  using: composite
+  steps:
+    - name: 🔑 Generate cache key
+      id: generate-key
+      shell: bash
+      env:
+        CACHE_VERSION: ${{ inputs.cache-version }}
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+      run: |
+        # Hash installer source files — chart versions and repo URLs live here
+        INSTALLER_HASH=$(find pkg/svc/installer -name 'installer.go' -exec sha256sum {} + | sort | sha256sum | cut -c1-12)
+        CACHE_KEY="helm-cache-${CACHE_VERSION}-${INSTALLER_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
+        echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
+        echo "📦 Cache key: $CACHE_KEY"
+
+    - name: 📥 Restore Helm cache
+      id: restore-cache
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: |
+          ~/.cache/helm/content
+          ~/.cache/helm/repository
+          ~/.config/helm/repositories.yaml
+        key: ${{ steps.generate-key.outputs.cache-key }}
+        restore-keys: |
+          helm-cache-${{ inputs.cache-version }}-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: 🔍 Check if cache is complete
+      id: check-cache
+      if: steps.restore-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        if [ -d "$HOME/.cache/helm/content" ] && [ -n "$(ls -A "$HOME/.cache/helm/content" 2>/dev/null)" ]; then
+          echo "complete=true" >> "$GITHUB_OUTPUT"
+          CONTENT_SIZE=$(du -sh "$HOME/.cache/helm/content" | cut -f1)
+          echo "✅ Cache complete (content cache: $CONTENT_SIZE)"
+        else
+          echo "complete=false" >> "$GITHUB_OUTPUT"
+          echo "⚠️ Cache incomplete (no content cache), will re-warm"
+        fi
+
+    - name: 🔥 Warm Helm chart cache
+      id: warm-charts
+      if: steps.check-cache.outputs.complete != 'true'
+      shell: bash
+      run: |
+        echo "🔥 Warming Helm chart cache for all system test configurations..."
+
+        # These configurations cover ALL 9 Helm charts used in CI:
+        # Config 1: cilium, flux-operator, kyverno, cert-manager, metrics-server
+        # Config 2: calico, argocd, gatekeeper
+        # Config 3: metallb (Talos×Docker×LB=Enabled)
+        CONFIGS=(
+          "--distribution Vanilla --cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux"
+          "--distribution Vanilla --cni Calico --policy-engine Gatekeeper --gitops-engine ArgoCD"
+          "--distribution Talos --cni Cilium --load-balancer Enabled --gitops-engine Flux"
+        )
+
+        COUNT=0
+        FAILED=0
+        for config in "${CONFIGS[@]}"; do
+          COUNT=$((COUNT + 1))
+          echo "  [$COUNT/${#CONFIGS[@]}] Warming: $config"
+          # ksail workload images renders Helm templates, which downloads charts
+          # as a side effect into ~/.cache/helm/content/. We discard the image
+          # list output — only the cache side effect matters here.
+          # shellcheck disable=SC2086
+          if ! ksail workload images $config > /dev/null 2>&1; then
+            echo "  ⚠️ Warning: Failed to warm charts for: $config"
+            FAILED=$((FAILED + 1))
+          fi
+        done
+
+        echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+        echo ""
+        echo "✅ Warmed $((COUNT - FAILED))/$COUNT configurations"
+
+        if [ "$FAILED" -gt 0 ]; then
+          echo "⚠️ $FAILED configurations failed (charts may be missing from cache)"
+        fi
+
+        # Show cache sizes
+        if [ -d "$HOME/.cache/helm/content" ]; then
+          CONTENT_SIZE=$(du -sh "$HOME/.cache/helm/content" | cut -f1)
+          echo "📦 Content cache size: $CONTENT_SIZE"
+        fi
+        if [ -d "$HOME/.cache/helm/repository" ]; then
+          REPO_SIZE=$(du -sh "$HOME/.cache/helm/repository" | cut -f1)
+          echo "📦 Repository cache size: $REPO_SIZE"
+        fi
+
+    - name: 💾 Save Helm cache
+      if: steps.check-cache.outputs.complete != 'true'
+      uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: |
+          ~/.cache/helm/content
+          ~/.cache/helm/repository
+          ~/.config/helm/repositories.yaml
+        key: ${{ steps.generate-key.outputs.cache-key }}

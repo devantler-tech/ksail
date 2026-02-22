@@ -6,19 +6,21 @@ description: |
   reports, identifies gaps, creates comprehensive test suites, and submits draft PRs.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   workflow_dispatch:
 
-timeout-minutes: 30
+timeout-minutes: 45
 
 permissions: read-all
 
 network:
-  allowed: [defaults, go]
+  allowed: [defaults, go, dl.google.com]
 
 strict: false
 
 safe-outputs:
+  noop: false
   create-discussion: # needed to create planning discussion
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
@@ -38,7 +40,7 @@ tools:
 source: githubnext/agentics/workflows/daily-test-improver.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
 ---
 
-# Daily Test Coverage Improver
+# Daily Test Improver
 
 ## Job Description
 
@@ -138,15 +140,9 @@ To decide which phase to perform:
 
    d. Run the new tests to ensure they pass.
 
-   e. Re-run the test suite collecting coverage information. Check that overall coverage has improved. Document measurement attempts even if unsuccessful. If no improvement then iterate, revert, or try different approach.
+3. **Create the pull request immediately**
 
-3. **Finalizing changes**
-
-   a. Apply any automatic code formatting used in the repo. If necessary check CI files to understand what code formatting is used.
-
-   b. Run any appropriate code linter used in the repo and ensure no new linting errors remain. If necessary check CI files to understand what code linting is used.
-
-4. **Results and learnings**
+   **This step is mandatory** — always create the PR as soon as tests pass, before attempting full coverage verification.
 
    a. If you succeeded in writing useful code changes that improve test coverage, create a **draft** pull request with your changes using the `create_pull_request` safe-output tool.
 
@@ -171,5 +167,19 @@ To decide which phase to perform:
    After creation, you can verify the pull request was created successfully by checking for it in the repository.
 
    b. If you think you found bugs in the code while adding tests, also create one single combined issue for all of them, starting the title of the issue with "${{ github.workflow }}". Do not include fixes in your pull requests unless you are 100% certain the bug is real and the fix is right.
+
+4. **Best-effort coverage verification**
+
+   After the PR is created, attempt to measure coverage impact. If any step in this section fails or takes too long, **skip the rest and move on** — the PR is already created.
+
+   **Timing warning**: `go test -race ./...` takes 5-10 minutes for this repository. Only run the full test suite if you have at least 15 minutes remaining. Otherwise, run targeted tests for the changed package only and estimate the coverage impact.
+
+   a. Re-run the test suite collecting coverage information. Check that overall coverage has improved. Document measurement attempts even if unsuccessful.
+
+   b. Apply any automatic code formatting used in the repo. If necessary check CI files to understand what code formatting is used.
+
+   c. Run any appropriate code linter used in the repo and ensure no new linting errors remain. If necessary check CI files to understand what code linting is used.
+
+   d. If coverage numbers are available, update the PR description with the results.
 
 5. **Final update**: Add brief comment (1 or 2 sentences) to the discussion identified at the start of the workflow stating goal worked on, PR links, and progress made, reporting the coverage improvement numbers achieved and current overall coverage numbers.

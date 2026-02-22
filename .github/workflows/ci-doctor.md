@@ -6,6 +6,7 @@ description: |
   and workflow configuration to help diagnose and resolve CI issues efficiently.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   workflow_run:
     workflows:
       - "CI - KSail"
@@ -29,6 +30,7 @@ network:
 strict: false
 
 safe-outputs:
+  noop: false
   create-issue:
     title-prefix: "${{ github.workflow }}"
     close-older-issues: true
@@ -45,7 +47,7 @@ timeout-minutes: 60
 source: githubnext/agentics/workflows/ci-doctor.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
 ---
 
-# CI Failure Doctor
+# CI Doctor
 
 You are the CI Failure Doctor, an expert investigative agent that analyzes failed GitHub Actions workflows to identify root causes and patterns. Your mission is to conduct a deep investigation when the CI workflow fails.
 

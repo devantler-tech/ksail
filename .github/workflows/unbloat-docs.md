@@ -1,120 +1,52 @@
 ---
-name: Documentation Unbloat
-description: Reviews and simplifies documentation by reducing verbosity while maintaining clarity and completeness
-on:
-  # Daily (scattered execution time)
-  schedule: daily
+description: |
+  Reviews and simplifies documentation by reducing verbosity while maintaining clarity
+  and completeness. Scans docs for bloat (duplicate content, excessive bullet points,
+  redundant examples, verbose descriptions) and creates focused PRs with improvements.
+  Triggered daily, on /unbloat command, or manually.
 
-  # Command trigger for /unbloat in PR comments
+on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
+  schedule: daily
   slash_command:
     name: unbloat
     events: [pull_request_comment]
-
-  # Manual trigger for testing
   workflow_dispatch:
 
-# Minimal permissions - safe-outputs handles write operations
-permissions:
-  contents: read
-  pull-requests: read
-  issues: read
+timeout-minutes: 30
 
-strict: true
+permissions: read-all
 
-# AI engine configuration
-engine:
-  id: copilot
+strict: false
 
-# Shared instructions
-imports:
-  - shared/reporting.md
-
-# Network access for documentation best practices research
 network:
   allowed:
     - defaults
-    - github
+    - node
+    - playwright
 
-# Sandbox configuration - AWF is enabled by default but making it explicit for clarity
-sandbox:
-  agent: awf
+safe-outputs:
+  noop: false
+  create-pull-request:
+    title-prefix: "[docs] "
+    labels: [documentation, automation]
+    draft: true
+  add-comment:
+  upload-asset:
+    max: 5
 
-# Tools configuration
 tools:
   cache-memory: true
   github:
-    toolsets: [default]
+    toolsets: [all]
+  web-fetch:
   edit:
   playwright:
     args: ["--viewport-size", "1920x1080"]
-  bash:
-    - "git *"
-    - "find docs/src/content/docs -name '*.md'"
-    - "wc -l *"
-    - "grep -n *"
-    - "cat *"
-    - "head *"
-    - "tail *"
-    - "cd *"
-    - "node *"
-    - "npm *"
-    - "curl *"
-    - "ps *"
-    - "kill *"
-    - "sleep *"
-    - "echo *"
-    - "mkdir *"
-    - "cp *"
-    - "mv *"
-
-# Safe outputs configuration
-safe-outputs:
-  create-pull-request:
-    expires: 2d
-    title-prefix: "[docs] "
-    labels: [documentation, automation]
-    reviewers: [copilot]
-    draft: true
-    auto-merge: true
-    fallback-as-issue: false
-  add-comment:
-    max: 1
-  upload-asset:
-  messages:
-    footer: "> 🗜️ *Compressed by [{workflow_name}]({run_url})*"
-    run-started: "📦 Time to slim down! [{workflow_name}]({run_url}) is trimming the excess from this {event_type}..."
-    run-success: "🗜️ Docs on a diet! [{workflow_name}]({run_url}) has removed the bloat. Lean and mean! 💪"
-    run-failure: "📦 Unbloating paused! [{workflow_name}]({run_url}) {status}. The docs remain... fluffy."
-
-# Timeout (increased from 12min after timeout issues; aligns with similar doc workflows)
-timeout-minutes: 30
-
-# Build steps for documentation
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@v6
-    with:
-      persist-credentials: false
-
-  - name: Setup Node.js
-    uses: actions/setup-node@v6
-    with:
-      node-version: "24"
-      cache: "npm"
-      cache-dependency-path: "docs/package-lock.json"
-
-  - name: Install dependencies
-    working-directory: ./docs
-    run: npm ci
-
-  - name: Build documentation
-    working-directory: ./docs
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    run: npm run build
+  bash: true
 ---
 
-# Documentation Unbloat Workflow
+# Unbloat Docs
 
 You are a technical documentation editor focused on **clarity and conciseness**. Your task is to scan documentation files and remove bloat while preserving all essential information.
 
@@ -122,6 +54,10 @@ You are a technical documentation editor focused on **clarity and conciseness**.
 
 - **Repository**: ${{ github.repository }}
 - **Triggered by**: ${{ github.actor }}
+
+**Important**: You are running in a sandboxed environment where all git operations (commit, push, branch creation) and GitHub API calls (create PR, upload assets) are handled through safe-outputs tools. Use the `edit` tool to modify files, then use safe-outputs tools like `create_pull_request` and `upload_asset` - they handle all the underlying git and GitHub operations automatically.
+
+**How safe-outputs tools work**: Safe-outputs tools (`create_pull_request`, `upload_asset`, `add_comment`) are **direct function calls** available in your tool list — call them exactly like you call `edit` or `bash`. Do NOT try to access them via sockets, HTTP, netcat, or manual MCP JSON-RPC. Simply invoke the tool by name (e.g., call `create_pull_request` with title, body, and branch parameters).
 
 ## What is Documentation Bloat?
 
@@ -263,17 +199,14 @@ Make targeted edits to improve clarity:
 - Critical warnings or notes
 - Frontmatter metadata
 
-### 7. Create a Branch for Your Changes
+### 7. Branch Name Convention
 
-Before making changes, create a new branch with a descriptive name:
+When you create the pull request (in step 10), the safe-outputs `create_pull_request` tool will automatically create a branch for you. However, you can optionally specify a custom branch name following this convention:
 
-```bash
-git checkout -b docs/unbloat-<filename-without-extension>
-```
+- Pattern: `docs/unbloat-<filename-without-extension>`
+- Example: For `validation-timing.md`, use `docs/unbloat-validation-timing`
 
-For example, if you're cleaning `validation-timing.md`, create branch `docs/unbloat-validation-timing`.
-
-**IMPORTANT**: Remember this exact branch name - you'll need it when creating the pull request!
+**Note**: The `create_pull_request` tool handles all git operations (branch creation, commit, push) automatically. You do NOT need to run `git checkout`, `git commit`, or `git push` commands manually.
 
 ### 8. Update Cache Memory
 
@@ -285,85 +218,72 @@ echo "$(date -u +%Y-%m-%d) - Cleaned: <filename>" >> /tmp/gh-aw/cache-memory/cle
 
 This helps future runs avoid re-cleaning the same files.
 
-### 9. Take Screenshots of Modified Documentation
+### 9. Create Pull Request
 
-After making changes to a documentation file, take screenshots of the rendered page in the Astro Starlight website:
+**This step is mandatory** — always create the PR immediately after making edits, before attempting screenshots.
+
+1. Verify your changes preserve all essential information
+2. Update cache memory with the cleaned file
+3. **Create the PR** using the `create_pull_request` safe-outputs tool (this is a direct function call in your tool list):
+   - **Branch name**: Specify a branch name following the pattern `docs/unbloat-<filename>` (e.g., `docs/unbloat-ai-chat`)
+   - **Title**: Brief description of what you improved (e.g., "Remove bloat from AI chat documentation")
+   - **Body**: Include the following sections in the PR description:
+     - Which file you improved
+     - What types of bloat you removed
+     - Estimated word count or line reduction
+     - Summary of changes made
+
+   **Important**: The `create_pull_request` tool will automatically:
+   - Create the branch
+   - Commit your changes
+   - Push to remote
+   - Create the PR
+
+   You do NOT need to run `git checkout`, `git commit`, `git add`, or `git push` commands manually. Just make your edits to files using the `edit` tool, then call `create_pull_request` when ready.
+
+### 10. Best-Effort Screenshots
+
+After the PR is created, attempt to take screenshots of the modified documentation page. If any step in this section fails, **skip the rest and move on** — the PR is already created.
 
 #### Build and Start Documentation Server
 
-Follow the shared **Documentation Server Lifecycle Management** instructions:
+```bash
+cd docs && npm ci && npx astro dev --host 0.0.0.0 > /tmp/astro-dev.log 2>&1 & echo $! > /tmp/astro-dev.pid
+```
 
-1. Start the preview server (section "Starting the Documentation Preview Server")
-2. Wait for readiness (section "Waiting for Server Readiness")
-3. Optionally verify accessibility (section "Verifying Server Accessibility")
+Wait for the server to be ready (if it fails, skip screenshots):
+
+```bash
+for i in $(seq 1 30); do curl -s http://localhost:4321/ > /dev/null && echo "Server ready" && break || sleep 1; done
+```
 
 #### Take Screenshots with Playwright
 
 For the modified documentation file(s):
 
-1. Determine the URL path for the modified file (e.g., if you modified `docs/src/content/docs/guides/getting-started.md`, the URL would be `http://localhost:4321/gh-aw/guides/getting-started/`)
+1. Determine the URL path for the modified file (e.g., if you modified `docs/src/content/docs/guides/getting-started.md`, the URL would be `http://localhost:4321/guides/getting-started/`)
 2. Use Playwright to navigate to the documentation page URL
 3. Wait for the page to fully load (including all CSS, fonts, and images)
 4. Take a full-page HD screenshot of the documentation page (1920x1080 viewport is configured)
-5. The screenshot will be saved in `/tmp/gh-aw/mcp-logs/playwright/` by Playwright (e.g., `/tmp/gh-aw/mcp-logs/playwright/getting-started.png`)
+5. The screenshot will be saved in `/tmp/gh-aw/mcp-logs/playwright/`
 
-#### Verify Screenshots Were Saved
+#### Upload Screenshots and Comment on PR
 
-**IMPORTANT**: Before uploading, verify that Playwright successfully saved the screenshots:
+If screenshots exist:
 
-```bash
-# List files in the output directory to confirm screenshots were saved
-ls -lh /tmp/gh-aw/mcp-logs/playwright/
-```
-
-**If no screenshot files are found:**
-
-- Report this in the PR description under an "Issues" section
-- Include the error message or reason why screenshots couldn't be captured
-- Do not proceed with upload-asset if no files exist
-
-#### Upload Screenshots
-
-1. Use the `upload asset` tool from safe-outputs to upload each screenshot file
+1. Use the `upload_asset` tool from safe-outputs to upload each screenshot file
 2. The tool will return a URL for each uploaded screenshot
-3. Keep track of these URLs to include in the PR description
+3. Use the `add_comment` tool to post the screenshot URLs as a comment on the PR
 
-#### Report Blocked Domains
-
-While taking screenshots, monitor the browser console for any blocked network requests:
-
-- Look for CSS files that failed to load
-- Look for font files that failed to load
-- Look for any other resources that were blocked by network policies
-
-If you encounter any blocked domains:
-
-1. Note the domain names and resource types (CSS, fonts, images, etc.)
-2. Include this information in the PR description under a "Blocked Domains" section
-3. Example format: "Blocked: fonts.googleapis.com (fonts), cdn.example.com (CSS)"
+If no screenshot files are found or the dev server failed to start, **skip this entirely** — the PR is already created.
 
 #### Cleanup Server
 
-After taking screenshots, follow the shared **Documentation Server Lifecycle Management** instructions for cleanup (section "Stopping the Documentation Server").
+Stop the dev server using its PID:
 
-### 10. Create Pull Request
-
-After improving ONE file:
-
-1. Verify your changes preserve all essential information
-2. Update cache memory with the cleaned file
-3. Take HD screenshots (1920x1080 viewport) of the modified documentation page(s)
-4. Upload the screenshots and collect the URLs
-5. Create a pull request with your improvements
-   - **IMPORTANT**: When calling the create_pull_request tool, do NOT pass a "branch" parameter - let it auto-detect the current branch you created
-   - Or if you must specify the branch, use the exact branch name you created earlier (NOT "main")
-6. Include in the PR description:
-   - Which file you improved
-   - What types of bloat you removed
-   - Estimated word count or line reduction
-   - Summary of changes made
-   - **Screenshot URLs**: Links to the uploaded screenshots showing the modified documentation pages
-   - **Blocked Domains (if any)**: List any CSS/font/resource domains that were blocked during screenshot capture
+```bash
+kill $(cat /tmp/astro-dev.pid 2>/dev/null) 2>/dev/null || true
+```
 
 ## Example Improvements
 
@@ -410,7 +330,6 @@ A successful run:
 - ✅ Preserves all essential information
 - ✅ Creates a clear, reviewable pull request
 - ✅ Explains the improvements made
-- ✅ Includes HD screenshots (1920x1080) of the modified documentation page(s) in the Astro Starlight website
-- ✅ Reports any blocked domains for CSS/fonts (if encountered)
+- ✅ Best-effort: HD screenshots of modified page(s) added as a PR comment (skip if dev server or Playwright fails)
 
 Begin by scanning the docs directory and selecting the best candidate for improvement!

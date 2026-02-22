@@ -1,5 +1,6 @@
 ---
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     # Every 3 days at 2am UTC
     - cron: "0 2 */3 * *"
@@ -12,6 +13,7 @@ permissions: read-all
 network: defaults
 engine: copilot
 safe-outputs:
+  noop: false
   create-pull-request:
   create-issue:
 
@@ -39,7 +41,7 @@ steps:
       GH_TOKEN: ${{ github.token }}
 ---
 
-# Agentic Workflow Maintainer
+# Maintainer
 
 Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in the GitHub repository `${{ github.repository }}` to the latest version of gh-aw.
 
@@ -71,13 +73,28 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
    - Re-run `gh aw compile --validate` to verify the fixes work
    - Iterate until all workflows compile successfully or you've exhausted reasonable fix attempts
 
-5. **Create appropriate outputs**:
+5. **Reset lock files**:
+   - **CRITICAL**: After successful compilation, reset ALL `.lock.yml` file changes:
+
+     ```bash
+     git checkout -- .github/workflows/*.lock.yml
+     ```
+
+   - Verify only source `.md` files remain changed:
+
+     ```bash
+     git status
+     ```
+
+   - Lock files must be excluded because the `GITHUB_TOKEN` does not have the `workflows` permission needed to push files to `.github/workflows/*.lock.yml`. They will be recompiled after the PR is merged.
+
+6. **Create appropriate outputs**:
    - **If all workflows compile successfully**: Create a pull request with the title "Upgrade workflows to latest gh-aw version" containing:
-     - All updated workflow files (including any codemod changes from `gh aw fix`)
-     - Any generated `.lock.yml` files
+     - All updated workflow source files (`.md` files with codemod changes from `gh aw fix`)
      - A detailed description of what changed, referencing the gh-aw changelog
      - A summary of any automatic fixes applied by codemods
      - A summary of any manual fixes that were needed
+     - A note that workflow `.lock.yml` files are excluded and will need to be recompiled after merge
 
    - **If there are compilation errors you cannot fix**: Create an issue with the title "Failed to upgrade workflows to latest gh-aw version" containing:
      - The specific compilation errors you encountered
@@ -90,4 +107,5 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
 - The gh-aw CLI extension has already been installed and is available for use
 - Always check the gh-aw changelog first to understand breaking changes
 - Test each fix by running `gh aw compile --validate` before moving to the next error
+- **Never include `.lock.yml` files in the PR** — always reset them before creating the PR
 - Include context and reasoning in your PR or issue descriptions

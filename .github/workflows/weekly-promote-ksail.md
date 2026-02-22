@@ -1,12 +1,13 @@
 ---
 description: |
-  This workflow promotes KSail on various channels to increase project visibility 
+  This workflow promotes KSail on various channels to increase project visibility
   and adoption. It researches relevant content, identifies promotion opportunities,
-  and creates promotional content for social media, developer communities, and 
-  content platforms. Creates GitHub discussions with promotional strategies and 
+  and creates promotional content for social media, developer communities, and
+  content platforms. Creates GitHub discussions with promotional strategies and
   ready-to-use content.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     # Weekly promotion, every Wednesday (fuzzy scheduling)
     - cron: "weekly on wednesday"
@@ -17,6 +18,7 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  noop: false
   create-discussion:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
@@ -29,7 +31,7 @@ tools:
 timeout-minutes: 15
 ---
 
-# KSail Promotion Strategy
+# Weekly Promote KSail
 
 ## Job Description
 

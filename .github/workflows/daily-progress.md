@@ -6,6 +6,7 @@ description: |
   coordinate with maintainers and advance the project toward its strategic goals.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   workflow_dispatch:
 
@@ -16,6 +17,7 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  noop: false
   create-discussion:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
@@ -35,7 +37,7 @@ tools:
 source: githubnext/agentics/workflows/daily-progress.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
 ---
 
-# Daily Roadmap Progress
+# Daily Progress
 
 ## Job Description
 

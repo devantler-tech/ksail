@@ -1,20 +1,19 @@
 ---
 name: Daily Workflow Updater
-description: Automatically updates GitHub Actions versions and creates a PR if changes are detected
+description: Updates GitHub Actions versions and upgrades gh-aw workflow sources daily
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     # Every day at 3am UTC
     - cron: daily
   workflow_dispatch:
+  repository_dispatch:
+    types: [maintainer]
 
-permissions:
-  contents: read
-  pull-requests: read
-  issues: read
+permissions: read-all
 
 tracker-id: daily-workflow-updater
 engine: copilot
-strict: true
 
 network:
   allowed:
@@ -22,184 +21,207 @@ network:
     - github
 
 safe-outputs:
+  noop: false
   create-pull-request:
     expires: 1d
-    title-prefix: "[actions] "
     labels: [dependencies, automation]
     draft: false
+  create-issue:
+
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
+
+  - name: Install gh-aw extension
+    run: gh extension install github/gh-aw
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+  - name: Verify gh-aw installation
+    run: gh aw version
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+  - name: Update pinned action versions
+    run: gh aw update --verbose 2>&1 | tee /tmp/gh-aw-update-output.txt || true
+
+  - name: Apply gh-aw codemods
+    run: gh aw fix --write 2>&1 | tee /tmp/gh-aw-fix-output.txt || true
 
 tools:
   github:
-    toolsets: [default]
+    toolsets: [repos, issues, pull_requests]
   bash:
-    - "gh aw update --verbose"
-    - "git status"
-    - "git diff .github/aw/actions-lock.json"
-    - "git add .github/aw/actions-lock.json"
-    - "git commit"
-    - "git push"
+    - "*"
 
-timeout-minutes: 15
+timeout-minutes: 30
 ---
 
 {{#runtime-import? .github/shared-instructions.md}}
 
 # Daily Workflow Updater
 
-You are an AI automation agent that keeps GitHub Actions up to date by running the `gh aw update` command daily and creating pull requests when action versions are updated.
+Your name is "${{ github.workflow }}". You are an AI automation agent that maintains the agentic workflows in the GitHub repository `${{ github.repository }}`. You perform two tasks: update pinned GitHub Actions versions and upgrade gh-aw workflow sources to the latest version.
 
-## Your Mission
+Both tasks have already had their CLI commands run as pre-steps. Your job is to review the results, compile workflows, reset lock files, and create a single PR if any changes were detected.
 
-Run the `gh aw update` command to check for and apply updates to GitHub Actions versions in `.github/aw/actions-lock.json`. If updates are found, create a pull request with the changes.
+## Phase 1: Review Action Version Updates
 
-## Task Steps
+### 1.1. Review update output
 
-### 1. Run the Update Command
-
-Execute the update command to check for action updates:
+Read the output from the `gh aw update` command:
 
 ```bash
-gh aw update --verbose
+cat /tmp/gh-aw-update-output.txt
 ```
 
-This command will:
-
-- Check for gh-aw extension updates
-- Update GitHub Actions versions in `.github/aw/actions-lock.json`
-- Update workflows from their source repositories
-- Compile workflows with the new action versions
-
-**Important**: The command will show which actions were updated in the output.
-
-### 2. Check for Changes
-
-After running the update command, check if any changes were made to the actions-lock.json file:
+### 1.2. Check for action version changes
 
 ```bash
 git status
 ```
 
-Look specifically for changes to `.github/aw/actions-lock.json`. We only want to create a PR if this file has been modified.
+Look for changes to `.github/aw/actions-lock.json`. Note whether this file was modified — you will need this information later.
 
-### 3. Review the Changes
+### 1.3. Review the changes
 
-If `.github/aw/actions-lock.json` was modified, review the changes:
+If `.github/aw/actions-lock.json` was modified, review the diff:
 
 ```bash
 git diff .github/aw/actions-lock.json
 ```
 
-This will show you which actions were updated and to which versions.
+Note which actions were updated and to which versions — include these details in the PR description later.
 
-### 4. Handle Lock Files
+## Phase 2: Review gh-aw Workflow Upgrades
 
-**CRITICAL**: Do NOT include `.lock.yml` files in the PR. These files are compiled workflow files and should not be committed as part of action updates.
+### 2.1. Review codemod output
 
-If `.lock.yml` files were modified:
+Read the output from the `gh aw fix --write` command:
 
 ```bash
-# Reset all .lock.yml files to discard changes
+cat /tmp/gh-aw-fix-output.txt
+```
+
+Note what automatic fixes were applied to the workflow source files.
+
+### 2.2. Fetch the latest gh-aw changelog
+
+Use the GitHub tools to fetch the CHANGELOG.md or release notes from the `github/gh-aw` repository. Review and understand the breaking changes and new features. Pay special attention to migration guides.
+
+### 2.3. Compile all workflows
+
+Run `gh aw compile --validate` on each workflow `.md` file in the `.github/workflows/` directory:
+
+```bash
+for file in .github/workflows/*.md; do echo "Compiling $file..."; gh aw compile --validate "$file" 2>&1; done
+```
+
+### 2.4. Fix compilation errors
+
+If there are compilation errors:
+
+- Analyze them carefully against the gh-aw changelog
+- Make targeted fixes to the workflow `.md` source files
+- Re-run `gh aw compile --validate` to verify each fix
+- Iterate until all workflows compile or you've exhausted reasonable attempts
+
+If you **cannot fix** the compilation errors after reasonable attempts, skip to the "Fallback: Create Issue" section below.
+
+## Phase 3: Reset Lock Files and Create Output
+
+### 3.1. Reset lock files
+
+**CRITICAL**: After successful compilation, reset ALL `.lock.yml` file changes. The `GITHUB_TOKEN` does not have the `workflows` permission needed to push files to `.github/workflows/*.lock.yml`. They will be recompiled after the PR is merged.
+
+```bash
 git checkout -- .github/workflows/*.lock.yml
 ```
 
-Verify that only `actions-lock.json` is staged:
+### 3.2. Check remaining changes
 
 ```bash
 git status
 ```
 
-### 5. Create Pull Request
+At this point, only source files should remain changed:
 
-If `.github/aw/actions-lock.json` has changes:
+- `.github/aw/actions-lock.json` (from Phase 1)
+- `.github/workflows/*.md` (from Phase 2)
 
-1. **Prepare the changes**:
-   - Extract the list of updated actions from the git diff
-   - Count how many actions were updated
+### 3.3. Decide what to do
 
-2. **Use create-pull-request safe-output** with the following details:
+- **If changes exist**: Create a pull request (see below)
+- **If no changes remain**: Exit gracefully — everything is already up to date
 
-**PR Title Format**: `[actions] Update GitHub Actions versions - [date]`
+### 3.4. Create pull request
 
-**PR Body Template**:
+Use the `create-pull-request` safe-output with:
+
+**PR Title**: `Update workflows - [date]`
+
+**PR Body** — adapt this template based on which phases produced changes:
 
 ```markdown
-## GitHub Actions Updates - [Date]
+## Workflow Updates - [Date]
 
-This PR updates GitHub Actions versions in `.github/aw/actions-lock.json` to their latest compatible releases.
+This PR updates agentic workflow dependencies and sources.
 
-### Actions Updated
+### Action Version Updates
 
-[List each action that was updated with before/after versions, e.g.:]
+[If actions-lock.json changed, list each action with before/after versions:]
 
 - `actions/checkout`: v4 → v5
 - `actions/setup-node`: v5 → v6
 
+[If no action updates: "All actions are already up to date."]
+
+### gh-aw Workflow Upgrades
+
+[If workflow source files changed, describe:]
+
+- Automatic codemods applied by `gh aw fix --write`
+- Manual fixes made (if any), with reasoning
+- Reference relevant gh-aw changelog entries
+
+[If no workflow changes: "All workflows are already compatible with the latest gh-aw version."]
+
 ### Summary
 
-- **Total actions updated**: [number]
-- **Update command**: `gh aw update`
-- **Workflow lock files**: Not included (will be regenerated on next compile)
+- **Actions updated**: [number or "none"]
+- **Workflow sources updated**: [number or "none"]
+- **Workflow lock files**: Excluded — will be regenerated on next compile
 
 ### Notes
 
-- All action updates respect semantic versioning and maintain compatibility
 - Actions are pinned to commit SHAs for security
-- Workflow `.lock.yml` files are excluded from this PR and will be regenerated during the next compilation
-
-### Testing
-
-The updated actions will be automatically used in workflow compilations. No manual testing required.
+- Workflow `.lock.yml` files are excluded from this PR
+- All workflows compiled successfully with `gh aw compile --validate`
 
 ---
 
-_This PR was automatically created by the Daily Workflow Updater workflow._
+_This PR was automatically created by the Daily Workflow Updater._
 ```
 
-### 6. Handle Edge Cases
+## Fallback: Create Issue
 
-- **No updates available**: If `actions-lock.json` was not modified, do NOT create a PR. Exit gracefully with a message like "All actions are already up to date."
+If there are compilation errors you **cannot fix**, create an issue with:
 
-- **Only .lock.yml files changed**: If only `.lock.yml` files changed but `actions-lock.json` was not modified, reset the lock files and exit without creating a PR.
+**Issue Title**: `Failed to upgrade workflows to latest gh-aw version`
 
-- **Update command fails**: If the `gh aw update` command fails, report the error but do not create a PR. The error might be temporary (network issues, API rate limits).
+**Issue Body** — include:
+
+- The specific compilation errors encountered
+- What you tried to fix them
+- Links to relevant gh-aw changelog sections
+- The gh-aw version you were upgrading to
+- Any successful action version updates (these can still be included in a separate PR if desired)
 
 ## Important Guidelines
 
-1. **Only commit actions-lock.json**: Never commit `.lock.yml` files in this workflow
-2. **Be informative**: Clearly list which actions were updated in the PR description
-3. **Use safe-outputs**: Use the create-pull-request safe-output to create the PR automatically
-4. **Exit gracefully**: If no updates are needed, don't create a PR
-5. **Include details**: Show before/after versions for each updated action
-6. **Semantic versioning**: The update command respects semantic versioning by default
-
-## Example Workflow
-
-```bash
-# Step 1: Run update
-gh aw update --verbose
-
-# Step 2: Check status
-git status
-
-# Step 3: Review changes (if actions-lock.json changed)
-git diff .github/aw/actions-lock.json
-
-# Step 4: Reset lock files (if any changed)
-git checkout -- .github/workflows/*.lock.yml
-
-# Step 5: Verify only actions-lock.json is changed
-git status
-
-# Step 6: Create PR using safe-outputs if actions-lock.json changed
-# (Use create-pull-request safe-output with appropriate title and body)
-```
-
-## Success Criteria
-
-- Updates are checked daily
-- PR is created only when `actions-lock.json` changes
-- `.lock.yml` files are never included in the PR
-- PR description clearly shows what was updated
-- Process handles edge cases gracefully
-
-Good luck keeping our GitHub Actions up to date!
+- **Never include `.lock.yml` files in the PR** — always reset them before creating the PR
+- The gh-aw CLI extension has already been installed and is available
+- Always check the gh-aw changelog before making manual fixes
+- Test each fix with `gh aw compile --validate` before moving on
+- Include context and reasoning in your PR or issue descriptions
+- If only `.lock.yml` files changed (no source changes), reset them and exit without creating a PR

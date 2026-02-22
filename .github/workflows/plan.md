@@ -3,6 +3,7 @@ name: Plan Command
 description: Generates project plans and task breakdowns when invoked with /plan command in issues or PRs
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   slash_command:
     name: plan
     events: [issue_comment, discussion_comment]
@@ -28,6 +29,7 @@ tools:
     lockdown: false
 
 safe-outputs:
+  noop: false
   create-issue:
     title-prefix: "[task] "
     labels: [task, ai-generated]
@@ -38,7 +40,7 @@ timeout-minutes: 10
 source: githubnext/agentics/workflows/plan.md@69b5e3ae5fa7f35fa555b0a22aee14c36ab57ebb
 ---
 
-# Planning Assistant
+# Plan
 
 You are an expert planning assistant for GitHub Copilot agents. Your task is to analyze an issue or discussion and break it down into a sequence of actionable work items that can be assigned to GitHub Copilot agents.
 

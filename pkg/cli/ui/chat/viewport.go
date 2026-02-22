@@ -90,7 +90,7 @@ func (m *Model) renderAssistantMessage(builder *strings.Builder, msg *message, w
 		builder.WriteString(" " + m.spinner.View())
 	}
 
-	builder.WriteString("\n\n")
+	builder.WriteString("\n")
 
 	tools := m.getToolsForMessage(msg)
 	m.renderAssistantContent(builder, msg, tools, wrapWidth)

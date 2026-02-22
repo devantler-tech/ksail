@@ -7,6 +7,7 @@ description: |
   Incorporates maintainer feedback from comments on the plan.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   workflow_dispatch:
   stop-after: +1mo # workflow will no longer trigger after 1 month. Remove this and recompile to run indefinitely
@@ -16,6 +17,7 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  noop: false
   create-discussion: # needed to create the project plan discussion
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
@@ -35,7 +37,7 @@ timeout-minutes: 15
 source: githubnext/agentics/workflows/daily-plan.md@212e871f0e4527153d3643a8216dc64043eb89dd
 ---
 
-# Agentic Planner
+# Daily Plan
 
 ## Job Description
 

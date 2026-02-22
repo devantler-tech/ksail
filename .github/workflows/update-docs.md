@@ -8,6 +8,7 @@ description: |
   updates. Supports documentation-as-code philosophy.
 
 on:
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   push:
     branches: [main]
   workflow_dispatch:
@@ -20,6 +21,7 @@ bots:
 network: defaults
 
 safe-outputs:
+  noop: false
   create-pull-request:
     draft: true
 
@@ -34,6 +36,8 @@ tools:
 timeout-minutes: 15
 source: githubnext/agentics/workflows/update-docs.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
 ---
+
+# Update Docs
 
 ## Job Description
 

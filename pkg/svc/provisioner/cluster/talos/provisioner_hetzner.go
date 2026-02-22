@@ -112,6 +112,10 @@ func (p *Provisioner) createHetznerNodeGroups(
 func (p *Provisioner) updateConfigsWithEndpoint(
 	controlPlaneServers []*hcloud.Server,
 ) error {
+	if len(controlPlaneServers) == 0 {
+		return clustererr.ErrNoControlPlaneNodes
+	}
+
 	// Regenerate configs with the first control-plane node's public IP as the endpoint.
 	// This is necessary because:
 	// 1. The original configs were generated with internal network IPs
@@ -313,29 +317,8 @@ func (p *Provisioner) deleteHetznerCluster(ctx context.Context, clusterName stri
 		return fmt.Errorf("failed to delete Hetzner nodes: %w", err)
 	}
 
-	// Clean up kubeconfig
-	if p.options.KubeconfigPath != "" {
-		cleanupErr := p.cleanupKubeconfig(clusterName)
-		if cleanupErr != nil {
-			_, _ = fmt.Fprintf(
-				p.logWriter,
-				"Warning: failed to clean up kubeconfig: %v\n",
-				cleanupErr,
-			)
-		}
-	}
-
-	// Clean up talosconfig
-	if p.options.TalosconfigPath != "" {
-		cleanupErr := p.cleanupTalosconfig(clusterName)
-		if cleanupErr != nil {
-			_, _ = fmt.Fprintf(
-				p.logWriter,
-				"Warning: failed to clean up talosconfig: %v\n",
-				cleanupErr,
-			)
-		}
-	}
+	// Clean up config files (kubeconfig and talosconfig)
+	p.cleanupConfigFiles(clusterName)
 
 	_, _ = fmt.Fprintf(p.logWriter, "Successfully deleted Talos cluster %q\n", clusterName)
 
