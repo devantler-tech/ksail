@@ -14,6 +14,7 @@ import (
 
 // TestEnsureBrNetfilter_NonLinux verifies that the function is a no-op on non-Linux systems
 func TestEnsureBrNetfilter_NonLinux(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "linux" {
 		t.Skip("Skipping non-Linux test on Linux system")
 	}
@@ -29,6 +30,7 @@ func TestEnsureBrNetfilter_NonLinux(t *testing.T) {
 
 // TestEnsureBrNetfilter_AlreadyLoaded tests the scenario where br_netfilter is already loaded
 func TestEnsureBrNetfilter_AlreadyLoaded(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" {
 		t.Skip("Skipping Linux-specific test on non-Linux system")
 	}
@@ -61,6 +63,7 @@ func TestEnsureBrNetfilter_AlreadyLoaded(t *testing.T) {
 
 // TestEnsureBrNetfilter_WithLogWriter tests that log messages are written when provided
 func TestEnsureBrNetfilter_WithLogWriter(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" {
 		t.Skip("Skipping Linux-specific test on non-Linux system")
 	}
@@ -89,6 +92,7 @@ func TestEnsureBrNetfilter_WithLogWriter(t *testing.T) {
 
 // TestEnsureBrNetfilter_NilLogWriter tests that nil log writer doesn't cause panic
 func TestEnsureBrNetfilter_NilLogWriter(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" {
 		t.Skip("Skipping Linux-specific test on non-Linux system")
 	}
@@ -109,6 +113,7 @@ func TestEnsureBrNetfilter_NilLogWriter(t *testing.T) {
 
 // TestEnsureBrNetfilter_ContextCancellation tests behavior with cancelled context
 func TestEnsureBrNetfilter_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" {
 		t.Skip("Skipping Linux-specific test on non-Linux system")
 	}
@@ -135,6 +140,7 @@ func TestEnsureBrNetfilter_ContextCancellation(t *testing.T) {
 
 // TestContainsModule tests the internal containsModule logic indirectly via realistic scenarios
 func TestContainsModule_Integration(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" {
 		t.Skip("Skipping Linux-specific test on non-Linux system")
 	}
@@ -184,6 +190,7 @@ func TestContainsModule_Integration(t *testing.T) {
 
 // TestEnsureBrNetfilter_ErrorScenarios tests various error conditions
 func TestEnsureBrNetfilter_ErrorScenarios(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" {
 		t.Skip("Skipping Linux-specific test on non-Linux system")
 	}

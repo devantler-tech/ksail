@@ -8,6 +8,7 @@ import (
 
 // TestContainsModule tests the containsModule function with various inputs
 func TestContainsModule(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		modulesContent string
@@ -117,6 +118,7 @@ br_netfilter 32768 0 - Live 0x0000000000000000`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := containsModule(tt.modulesContent, tt.moduleName)
 			assert.Equal(t, tt.want, got, "containsModule(%q, %q)", tt.modulesContent, tt.moduleName)
 		})
@@ -125,6 +127,7 @@ br_netfilter 32768 0 - Live 0x0000000000000000`,
 
 // TestContainsModule_EdgeCases tests additional edge cases
 func TestContainsModule_EdgeCases(t *testing.T) {
+	t.Parallel()
 	// Test with realistic /proc/modules output format
 	realisticContent := `ccm 16384 0 - Live 0xffffffffc0b8e000
 snd_seq 94208 1 snd_seq_midi, Live 0xffffffffc0b58000
@@ -135,22 +138,27 @@ bridge 286720 1 br_netfilter, Live 0xffffffffc0a50000
 stp 16384 1 bridge, Live 0xffffffffc0a43000`
 
 	t.Run("realistic format with br_netfilter", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, containsModule(realisticContent, "br_netfilter"))
 	})
 
 	t.Run("realistic format with bridge", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, containsModule(realisticContent, "bridge"))
 	})
 
 	t.Run("realistic format with stp", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, containsModule(realisticContent, "stp"))
 	})
 
 	t.Run("realistic format without target", func(t *testing.T) {
+		t.Parallel()
 		assert.False(t, containsModule(realisticContent, "nonexistent_module"))
 	})
 
 	t.Run("case sensitivity check", func(t *testing.T) {
+		t.Parallel()
 		assert.False(t, containsModule(realisticContent, "BR_NETFILTER"))
 	})
 }
