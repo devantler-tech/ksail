@@ -13,7 +13,8 @@ import (
 func BenchmarkChartSpec(b *testing.B) {
 	b.Run("Basic", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+
+		for range b.N {
 			_ = &helm.ChartSpec{
 				ReleaseName: "test-release",
 				ChartName:   "test-chart",
@@ -24,7 +25,8 @@ func BenchmarkChartSpec(b *testing.B) {
 
 	b.Run("WithAllFields", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+
+		for range b.N {
 			_ = &helm.ChartSpec{
 				ReleaseName:     "my-release",
 				ChartName:       "my-chart",
@@ -58,7 +60,8 @@ func BenchmarkChartSpec(b *testing.B) {
 func BenchmarkRepositoryEntry(b *testing.B) {
 	b.Run("Basic", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+
+		for range b.N {
 			_ = &helm.RepositoryEntry{
 				Name: "test-repo",
 				URL:  "https://charts.example.com",
@@ -68,7 +71,8 @@ func BenchmarkRepositoryEntry(b *testing.B) {
 
 	b.Run("WithAuth", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+
+		for range b.N {
 			_ = &helm.RepositoryEntry{
 				Name:                  "secure-repo",
 				URL:                   "https://charts.secure.com",
@@ -86,8 +90,10 @@ func BenchmarkRepositoryEntry(b *testing.B) {
 // BenchmarkReleaseInfo measures the performance of ReleaseInfo struct initialization.
 func BenchmarkReleaseInfo(b *testing.B) {
 	now := time.Now()
+
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		_ = &helm.ReleaseInfo{
 			Name:       "my-release",
 			Namespace:  "default",
@@ -102,6 +108,8 @@ func BenchmarkReleaseInfo(b *testing.B) {
 }
 
 // BenchmarkMockClient measures the performance of mock client operations.
+//
+//nolint:funlen // Mock client subtests require individual setup for each operation.
 func BenchmarkMockClient(b *testing.B) {
 	ctx := context.Background()
 
@@ -119,7 +127,8 @@ func BenchmarkMockClient(b *testing.B) {
 
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+
+		for range b.N {
 			_ = client.AddRepository(ctx, entry, time.Minute)
 		}
 	})
@@ -148,7 +157,8 @@ func BenchmarkMockClient(b *testing.B) {
 
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+
+		for range b.N {
 			_, _ = client.InstallOrUpgradeChart(ctx, spec)
 		}
 	})
@@ -163,7 +173,8 @@ func BenchmarkMockClient(b *testing.B) {
 
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+
+		for range b.N {
 			_, _ = client.ReleaseExists(ctx, "test-release", "default")
 		}
 	})
@@ -178,7 +189,8 @@ func BenchmarkMockClient(b *testing.B) {
 
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+
+		for range b.N {
 			_ = client.UninstallRelease(ctx, "test-release", "default")
 		}
 	})
@@ -208,7 +220,8 @@ spec:
 
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+
+		for range b.N {
 			_, _ = client.TemplateChart(ctx, spec)
 		}
 	})
@@ -237,13 +250,16 @@ spec:
 
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+
+		for range b.N {
 			_, _ = client.InstallChart(ctx, spec)
 		}
 	})
 }
 
 // BenchmarkChartSpecWithLargeValues tests performance with large value configurations.
+//
+//nolint:funlen // Large YAML fixture makes this benchmark inherently longer than 60 lines.
 func BenchmarkChartSpecWithLargeValues(b *testing.B) {
 	// Simulate a large values.yaml structure
 	largeYAML := `
@@ -308,12 +324,13 @@ persistence:
 
 	// Create large set of override values
 	largeSetValues := make(map[string]string)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		largeSetValues["config.key"+strconv.Itoa(i)] = "value"
 	}
 
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		_ = &helm.ChartSpec{
 			ReleaseName:     "large-release",
 			ChartName:       "bitnami/nginx",
