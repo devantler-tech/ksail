@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
@@ -308,14 +309,19 @@ spec:
 	}
 
 	// Build the resources list for kustomization
-	kustomizationYAML := `apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-`
+	const kustomizationHeader = "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n"
+	var kustomizationBuilder strings.Builder
+	kustomizationBuilder.Grow(len(kustomizationHeader) + 40*10) // 40 chars per resource pair × 10 iterations
+	kustomizationBuilder.WriteString(kustomizationHeader)
 	for i := range 10 {
-		kustomizationYAML += "  - configmap-" + string(rune('a'+i)) + ".yaml\n"
-		kustomizationYAML += "  - service-" + string(rune('a'+i)) + ".yaml\n"
+		kustomizationBuilder.WriteString("  - configmap-")
+		kustomizationBuilder.WriteByte(byte('a' + i))
+		kustomizationBuilder.WriteString(".yaml\n")
+		kustomizationBuilder.WriteString("  - service-")
+		kustomizationBuilder.WriteByte(byte('a' + i))
+		kustomizationBuilder.WriteString(".yaml\n")
 	}
+	kustomizationYAML := kustomizationBuilder.String()
 
 	err := os.WriteFile(
 		filepath.Join(tmpDir, "kustomization.yaml"),
