@@ -56,6 +56,7 @@ func GetMirrorRegistriesWithDefaults(
 // Returns empty slice if user explicitly disabled mirrors with empty string.
 func getFlagMirrors(cmd *cobra.Command) []string {
 	flagValues, _ := cmd.Flags().GetStringSlice(MirrorRegistryFlag)
+
 	return flagValues
 }
 
