@@ -201,13 +201,13 @@ type permissionResponse struct {
 // It captures the full state at the time of queuing so that mode changes
 // after queuing don't affect the prompt's execution.
 type pendingPrompt struct {
-	id              string        // unique identifier for deletion/tracking
-	content         string        // the prompt text
-	chatMode        ChatMode      // agent/plan/ask mode when queued
-	model           string        // model ID when queued
-	reasoningEffort string        // reasoning effort when queued (if applicable)
-	timestamp       time.Time     // when this prompt was queued
-	isQueued        bool          // true for queued, false for steering
+	id              string    // unique identifier for deletion/tracking
+	content         string    // the prompt text
+	chatMode        ChatMode  // agent/plan/ask mode when queued
+	model           string    // model ID when queued
+	reasoningEffort string    // reasoning effort when queued (if applicable)
+	timestamp       time.Time // when this prompt was queued
+	isQueued        bool      // true for queued, false for steering
 }
 
 // Model is the Bubbletea model for the chat TUI.
@@ -322,8 +322,6 @@ type Model struct {
 	// Prompt queuing and steering
 	queuedPrompts   []pendingPrompt // FIFO queue for prompts to process after current turn
 	steeringPrompts []pendingPrompt // steering prompts to inject when session becomes idle
-	selectedPromptIndex int         // index of selected pending prompt for deletion (-1 = none)
-	processingQueued    bool        // true while auto-processing queued prompts
 
 	// Channel for async streaming events from Copilot
 	eventChan chan tea.Msg
@@ -366,38 +364,37 @@ func NewModel(params Params) *Model {
 	}
 
 	return &Model{
-		theme:               theme,
-		toolDisplay:         toolDisplay,
-		styles:              styles,
-		headerHeight:        headerH,
-		viewport:            viewPort,
-		textarea:            textArea,
-		spinner:             spin,
-		renderer:            mdRenderer,
-		help:                createHelpModel(styles),
-		keys:                DefaultKeyMap(),
-		messages:            make([]message, 0),
-		session:             params.Session,
-		client:              params.Client,
-		sessionConfig:       params.SessionConfig,
-		currentSessionID:    params.Session.SessionID, // Track the SDK's session ID
-		timeout:             params.Timeout,
-		ctx:                 context.Background(),
-		eventChan:           eventChan,
-		width:               defaultWidth,
-		height:              defaultHeight,
-		tools:               make(map[string]*toolExecution),
-		toolOrder:           make([]string, 0),
-		history:             make([]string, 0),
-		historyIndex:        -1,
-		availableModels:     params.Models,
-		currentModel:        params.CurrentModel,
-		chatMode:            AgentMode,          // Default to agent mode
-		chatModeRef:         params.ChatModeRef, // Store reference for tool handlers
-		yoloModeRef:         params.YoloModeRef, // Store reference for YOLO mode
-		queuedPrompts:       make([]pendingPrompt, 0),
-		steeringPrompts:     make([]pendingPrompt, 0),
-		selectedPromptIndex: -1, // No prompt selected
+		theme:            theme,
+		toolDisplay:      toolDisplay,
+		styles:           styles,
+		headerHeight:     headerH,
+		viewport:         viewPort,
+		textarea:         textArea,
+		spinner:          spin,
+		renderer:         mdRenderer,
+		help:             createHelpModel(styles),
+		keys:             DefaultKeyMap(),
+		messages:         make([]message, 0),
+		session:          params.Session,
+		client:           params.Client,
+		sessionConfig:    params.SessionConfig,
+		currentSessionID: params.Session.SessionID, // Track the SDK's session ID
+		timeout:          params.Timeout,
+		ctx:              context.Background(),
+		eventChan:        eventChan,
+		width:            defaultWidth,
+		height:           defaultHeight,
+		tools:            make(map[string]*toolExecution),
+		toolOrder:        make([]string, 0),
+		history:          make([]string, 0),
+		historyIndex:     -1,
+		availableModels:  params.Models,
+		currentModel:     params.CurrentModel,
+		chatMode:         AgentMode,          // Default to agent mode
+		chatModeRef:      params.ChatModeRef, // Store reference for tool handlers
+		yoloModeRef:      params.YoloModeRef, // Store reference for YOLO mode
+		queuedPrompts:    make([]pendingPrompt, 0),
+		steeringPrompts:  make([]pendingPrompt, 0),
 	}
 }
 
@@ -857,11 +854,11 @@ func (m *Model) addSteeringPrompt(content string) {
 
 // getReasoningEffort returns the current reasoning effort setting.
 func (m *Model) getReasoningEffort() string {
-	if m.sessionConfig == nil || m.sessionConfig.ReasoningEffort == nil {
+	if m.sessionConfig == nil || m.sessionConfig.ReasoningEffort == "" {
 		return ""
 	}
 
-	return *m.sessionConfig.ReasoningEffort
+	return m.sessionConfig.ReasoningEffort
 }
 
 // hasPendingPrompts returns true if there are any queued or steering prompts.
@@ -874,55 +871,23 @@ func (m *Model) pendingPromptCount() int {
 	return len(m.queuedPrompts) + len(m.steeringPrompts)
 }
 
-// deleteSelectedPrompt removes the currently selected pending prompt.
+// deleteLastPendingPrompt removes the most recently added pending prompt.
+// Queued prompts are removed first (most recent), then steering prompts.
 // Returns true if a prompt was deleted.
-func (m *Model) deleteSelectedPrompt() bool {
-	if m.selectedPromptIndex < 0 {
-		return false
-	}
-
-	totalPending := m.pendingPromptCount()
-	if m.selectedPromptIndex >= totalPending {
-		return false
-	}
-
-	// Steering prompts come first in selection order
-	steeringCount := len(m.steeringPrompts)
-	if m.selectedPromptIndex < steeringCount {
-		// Delete from steering prompts
-		m.steeringPrompts = append(
-			m.steeringPrompts[:m.selectedPromptIndex],
-			m.steeringPrompts[m.selectedPromptIndex+1:]...,
-		)
-	} else {
-		// Delete from queued prompts
-		queuedIndex := m.selectedPromptIndex - steeringCount
-		m.queuedPrompts = append(
-			m.queuedPrompts[:queuedIndex],
-			m.queuedPrompts[queuedIndex+1:]...,
-		)
-	}
-
-	// Adjust selection index
-	if m.selectedPromptIndex >= m.pendingPromptCount() {
-		m.selectedPromptIndex = m.pendingPromptCount() - 1
-	}
-
-	return true
-}
-
-// getNextPendingPrompt returns the next prompt to process (steering first, then queued).
-// Returns nil if no prompts are pending.
-func (m *Model) getNextPendingPrompt() *pendingPrompt {
-	if len(m.steeringPrompts) > 0 {
-		return &m.steeringPrompts[0]
-	}
-
+func (m *Model) deleteLastPendingPrompt() bool {
 	if len(m.queuedPrompts) > 0 {
-		return &m.queuedPrompts[0]
+		m.queuedPrompts = m.queuedPrompts[:len(m.queuedPrompts)-1]
+
+		return true
 	}
 
-	return nil
+	if len(m.steeringPrompts) > 0 {
+		m.steeringPrompts = m.steeringPrompts[:len(m.steeringPrompts)-1]
+
+		return true
+	}
+
+	return false
 }
 
 // popNextPendingPrompt removes and returns the next pending prompt.

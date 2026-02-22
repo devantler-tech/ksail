@@ -288,35 +288,25 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 
 	// Update reasoning effort if it was set
 	if prompt.reasoningEffort != "" && m.sessionConfig != nil {
-		m.sessionConfig.ReasoningEffort = &prompt.reasoningEffort
+		m.sessionConfig.ReasoningEffort = prompt.reasoningEffort
 	}
 
-	// Update model if different
-	if prompt.model != m.currentModel {
-		// Switch model if needed (requires new session)
-		// For now, we'll just use the current model
-		// TODO: Implement model switching for queued prompts
-	}
-
-	// Mark as processing queued prompt to prevent user confusion
-	m.processingQueued = true
+	// Prepare new turn state
+	m.prepareForNewTurn()
 
 	// Add user message to history
-	userMsg := message{
+	m.messages = append(m.messages, message{
 		role:     roleUser,
 		content:  prompt.content,
 		chatMode: prompt.chatMode,
-	}
-	m.messages = append(m.messages, userMsg)
+	})
 
 	// Add empty assistant message for streaming
-	assistantMsg := message{
+	m.messages = append(m.messages, message{
 		role:        roleAssistant,
 		content:     "",
 		isStreaming: true,
-	}
-	m.messages = append(m.messages, assistantMsg)
-	m.currentResponse.Reset()
+	})
 
 	// Update viewport to show the new messages
 	m.updateViewportContent()
