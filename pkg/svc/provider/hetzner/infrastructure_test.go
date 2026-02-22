@@ -1,6 +1,7 @@
 package hetzner_test
 
 import (
+	"context"
 	"net"
 	"testing"
 
@@ -8,6 +9,11 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	defaultNetworkCIDR = "10.0.0.0/16"
+	defaultSubnetCIDR  = "10.0.1.0/24"
 )
 
 func TestBuildFirewallRules(t *testing.T) {
@@ -94,49 +100,41 @@ func TestNetworkCIDRParsing(t *testing.T) {
 		name      string
 		cidr      string
 		wantError bool
-		wantValid bool
 	}{
 		{
 			name:      "ValidDefaultCIDR",
 			cidr:      "10.0.0.0/16",
 			wantError: false,
-			wantValid: true,
 		},
 		{
 			name:      "ValidCustomCIDR",
 			cidr:      "192.168.0.0/16",
 			wantError: false,
-			wantValid: true,
 		},
 		{
 			name:      "ValidSmallNetwork",
 			cidr:      "10.1.0.0/24",
 			wantError: false,
-			wantValid: true,
 		},
 		{
 			name:      "InvalidCIDR_NoMask",
 			cidr:      "10.0.0.0",
 			wantError: true,
-			wantValid: false,
 		},
 		{
 			name:      "InvalidCIDR_BadIP",
 			cidr:      "999.0.0.0/16",
 			wantError: true,
-			wantValid: false,
 		},
 		{
 			name:      "InvalidCIDR_BadMask",
 			cidr:      "10.0.0.0/99",
 			wantError: true,
-			wantValid: false,
 		},
 		{
 			name:      "EmptyCIDR",
 			cidr:      "",
 			wantError: true,
-			wantValid: false,
 		},
 	}
 
@@ -147,12 +145,11 @@ func TestNetworkCIDRParsing(t *testing.T) {
 			_, ipRange, err := net.ParseCIDR(testCase.cidr)
 
 			if testCase.wantError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, ipRange)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, ipRange)
-				assert.Equal(t, testCase.wantValid, ipRange != nil)
 			}
 		})
 	}
@@ -164,12 +161,12 @@ func TestSubnetCIDRLogic(t *testing.T) {
 	t.Run("DefaultNetwork_UsesStandardSubnet", func(t *testing.T) {
 		t.Parallel()
 
-		networkCIDR := "10.0.0.0/16"
-		expectedSubnet := "10.0.1.0/24"
+		networkCIDR := defaultNetworkCIDR
+		expectedSubnet := defaultSubnetCIDR
 
 		// Default logic: if CIDR is 10.0.0.0/16, use 10.0.1.0/24 subnet
-		subnetCIDR := "10.0.1.0/24"
-		if networkCIDR != "10.0.0.0/16" {
+		subnetCIDR := defaultSubnetCIDR
+		if networkCIDR != defaultNetworkCIDR {
 			subnetCIDR = networkCIDR
 		}
 
@@ -182,8 +179,8 @@ func TestSubnetCIDRLogic(t *testing.T) {
 		networkCIDR := "192.168.0.0/16"
 		expectedSubnet := "192.168.0.0/16"
 
-		subnetCIDR := "10.0.1.0/24"
-		if networkCIDR != "10.0.0.0/16" {
+		subnetCIDR := defaultSubnetCIDR
+		if networkCIDR != defaultNetworkCIDR {
 			subnetCIDR = networkCIDR
 		}
 
@@ -196,8 +193,8 @@ func TestSubnetCIDRLogic(t *testing.T) {
 		networkCIDR := "10.1.0.0/24"
 		expectedSubnet := "10.1.0.0/24"
 
-		subnetCIDR := "10.0.1.0/24"
-		if networkCIDR != "10.0.0.0/16" {
+		subnetCIDR := defaultSubnetCIDR
+		if networkCIDR != defaultNetworkCIDR {
 			subnetCIDR = networkCIDR
 		}
 
@@ -208,8 +205,6 @@ func TestSubnetCIDRLogic(t *testing.T) {
 func TestPlacementGroupStrategyHandling(t *testing.T) {
 	t.Parallel()
 
-	// TODO: Implement this test against a suitable exported helper or
-	// higher-level API instead of duplicating internal decision logic.
 	t.Skip("placement group strategy handling is not testable without accessing internal APIs")
 }
 
@@ -301,13 +296,13 @@ func TestDeleteRetryLogic(t *testing.T) {
 func TestEnsureNetworkNilClient(t *testing.T) {
 	t.Parallel()
 
-	p := hetzner.NewProvider(nil)
-	require.NotNil(t, p)
+	prov := hetzner.NewProvider(nil)
+	require.NotNil(t, prov)
 
 	// Should return error when client is nil
-	network, err := p.EnsureNetwork(nil, "test-cluster", "10.0.0.0/16")
+	network, err := prov.EnsureNetwork(context.TODO(), "test-cluster", defaultNetworkCIDR)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, network)
 	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
@@ -315,13 +310,13 @@ func TestEnsureNetworkNilClient(t *testing.T) {
 func TestEnsureFirewallNilClient(t *testing.T) {
 	t.Parallel()
 
-	p := hetzner.NewProvider(nil)
-	require.NotNil(t, p)
+	prov := hetzner.NewProvider(nil)
+	require.NotNil(t, prov)
 
 	// Should return error when client is nil
-	firewall, err := p.EnsureFirewall(nil, "test-cluster")
+	firewall, err := prov.EnsureFirewall(context.TODO(), "test-cluster")
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, firewall)
 	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
@@ -329,16 +324,16 @@ func TestEnsureFirewallNilClient(t *testing.T) {
 func TestEnsurePlacementGroupNilClient(t *testing.T) {
 	t.Parallel()
 
-	p := hetzner.NewProvider(nil)
-	require.NotNil(t, p)
+	prov := hetzner.NewProvider(nil)
+	require.NotNil(t, prov)
 
 	t.Run("WithNoneStrategy", func(t *testing.T) {
 		t.Parallel()
 
 		// Should return nil without error when strategy is None
-		pg, err := p.EnsurePlacementGroup(nil, "test-cluster", "None", "")
+		pg, err := prov.EnsurePlacementGroup(context.TODO(), "test-cluster", "None", "")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, pg)
 	})
 
@@ -346,9 +341,9 @@ func TestEnsurePlacementGroupNilClient(t *testing.T) {
 		t.Parallel()
 
 		// Should return nil without error when strategy is empty
-		pg, err := p.EnsurePlacementGroup(nil, "test-cluster", "", "")
+		pg, err := prov.EnsurePlacementGroup(context.TODO(), "test-cluster", "", "")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, pg)
 	})
 
@@ -356,9 +351,9 @@ func TestEnsurePlacementGroupNilClient(t *testing.T) {
 		t.Parallel()
 
 		// Should return error when client is nil and strategy requires placement group
-		pg, err := p.EnsurePlacementGroup(nil, "test-cluster", "Spread", "")
+		pg, err := prov.EnsurePlacementGroup(context.TODO(), "test-cluster", "Spread", "")
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, pg)
 		require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 	})
@@ -374,7 +369,13 @@ func TestResourceLabelsConsistency(t *testing.T) {
 
 	// Resource labels should be a subset of node labels
 	for key, value := range resourceLabels {
-		assert.Equal(t, value, nodeLabels[key], "Resource label %s should match in node labels", key)
+		assert.Equal(
+			t,
+			value,
+			nodeLabels[key],
+			"Resource label %s should match in node labels",
+			key,
+		)
 	}
 
 	// Node labels should have additional fields
