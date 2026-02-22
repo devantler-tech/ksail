@@ -75,13 +75,17 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
 
 5. **Reset lock files**:
    - **CRITICAL**: After successful compilation, reset ALL `.lock.yml` file changes:
+
      ```bash
      git checkout -- .github/workflows/*.lock.yml
      ```
+
    - Verify only source `.md` files remain changed:
+
      ```bash
      git status
      ```
+
    - Lock files must be excluded because the `GITHUB_TOKEN` does not have the `workflows` permission needed to push files to `.github/workflows/*.lock.yml`. They will be recompiled after the PR is merged.
 
 6. **Create appropriate outputs**:
