@@ -75,11 +75,13 @@ func (i *Importer) Import(
 
 	// Import to all K8s nodes in parallel
 	var waitGroup sync.WaitGroup
+
 	errChan := make(chan error, len(k8sNodes))
 
 	for _, node := range k8sNodes {
 		waitGroup.Go(func() {
-			if importErr := i.importImagesToNode(ctx, node.Name, inputPath, tmpBasePath); importErr != nil {
+			importErr := i.importImagesToNode(ctx, node.Name, inputPath, tmpBasePath)
+			if importErr != nil {
 				errChan <- fmt.Errorf("failed to import images to node %s: %w", node.Name, importErr)
 			}
 		})
