@@ -70,7 +70,10 @@ Examples:
   ksail cluster list --provider Docker
 
   # List only Hetzner clusters
-  ksail cluster list --provider Hetzner`
+  ksail cluster list --provider Hetzner
+
+  # List only Omni clusters
+  ksail cluster list --provider Omni`
 
 // NewListCmd creates the list command for clusters.
 func NewListCmd(runtimeContainer *di.Runtime) *cobra.Command {
