@@ -44,6 +44,10 @@ linters:
           - revive
         text: "var-naming: avoid meaningless package names"
         path: pkg/utils/doc.go
+      # Internal tests for backup/restore helpers need access to unexported functions
+      - linters:
+          - testpackage
+        path: pkg/cli/cmd/cluster/backup_test.go
   settings:
     tagalign:
       align: false

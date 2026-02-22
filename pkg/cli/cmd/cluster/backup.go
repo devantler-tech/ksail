@@ -2,13 +2,16 @@ package cluster
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
@@ -16,6 +19,18 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
+)
+
+const (
+	dirPerm  = 0o750
+	filePerm = 0o600
+	// bytesPerMB is the number of bytes in a megabyte.
+	bytesPerMB = 1024 * 1024
+)
+
+// ErrKubeconfigNotFound is returned when no kubeconfig path can be resolved.
+var ErrKubeconfigNotFound = errors.New(
+	"kubeconfig not found; ensure cluster is created and configured",
 )
 
 // BackupMetadata contains metadata about a backup.
@@ -45,125 +60,145 @@ func NewBackupCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "backup",
 		Short: "Backup cluster resources and volumes",
-		Long: `Creates a backup archive containing Kubernetes resources and persistent volume data.
+		Long: `Creates a backup archive containing Kubernetes resources ` +
+			`and persistent volume data.
 
-The backup is stored as a compressed tarball (.tar.gz) with resources organized by namespace.
+The backup is stored as a compressed tarball (.tar.gz) with resources ` +
+			`organized by namespace.
 Metadata about the backup is included for restore operations.
 
 Example:
   ksail cluster backup --output ./my-backup.tar.gz
-  ksail cluster backup --output ./backup.tar.gz --namespaces default,kube-system
-  ksail cluster backup --output ./backup.tar.gz --exclude-types events,pods`,
+  ksail cluster backup -o ./backup.tar.gz --namespaces default,kube-system
+  ksail cluster backup -o ./backup.tar.gz --exclude-types events,pods`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runBackup(cmd.Context(), flags)
+			return runBackup(cmd.Context(), cmd, flags)
 		},
 		SilenceUsage: true,
 	}
 
-	cmd.Flags().StringVarP(&flags.outputPath, "output", "o", "", "Output path for backup archive (required)")
-	cmd.Flags().BoolVar(&flags.includeVolumes, "include-volumes", true, "Include persistent volume data in backup")
-	cmd.Flags().StringSliceVarP(&flags.namespaces, "namespaces", "n", []string{}, "Namespaces to backup (default: all)")
-	cmd.Flags().StringSliceVar(&flags.excludeTypes, "exclude-types", []string{"events"}, "Resource types to exclude from backup")
-	cmd.Flags().IntVar(&flags.compressionLevel, "compression", gzip.DefaultCompression, "Compression level (0-9, default: 6)")
+	cmd.Flags().StringVarP(
+		&flags.outputPath, "output", "o", "",
+		"Output path for backup archive (required)",
+	)
+	cmd.Flags().BoolVar(
+		&flags.includeVolumes, "include-volumes", true,
+		"Include persistent volume data in backup",
+	)
+	cmd.Flags().StringSliceVarP(
+		&flags.namespaces, "namespaces", "n", []string{},
+		"Namespaces to backup (default: all)",
+	)
+	cmd.Flags().StringSliceVar(
+		&flags.excludeTypes, "exclude-types", []string{"events"},
+		"Resource types to exclude from backup",
+	)
+	cmd.Flags().IntVar(
+		&flags.compressionLevel, "compression", gzip.DefaultCompression,
+		"Compression level (0-9, default: 6)",
+	)
 
-	if err := cmd.MarkFlagRequired("output"); err != nil {
+	err := cmd.MarkFlagRequired("output")
+	if err != nil {
 		panic(fmt.Sprintf("failed to mark output flag as required: %v", err))
 	}
 
 	return cmd
 }
 
-func runBackup(ctx context.Context, flags *backupFlags) error {
-	// Get kubeconfig
+func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) error {
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
 	if kubeconfigPath == "" {
-		return fmt.Errorf("kubeconfig not found; ensure cluster is created and configured")
+		return ErrKubeconfigNotFound
 	}
 
-	// Create kubectl client
-	client := kubectl.NewClient(genericiooptions.IOStreams{
-		In:     os.Stdin,
-		Out:    os.Stdout,
-		ErrOut: os.Stderr,
-	})
-
-	fmt.Printf("📦 Starting cluster backup...\n")
-	fmt.Printf("   Output: %s\n", flags.outputPath)
-	fmt.Printf("   Include volumes: %v\n", flags.includeVolumes)
+	writer := cmd.OutOrStdout()
+	_, _ = fmt.Fprintf(writer, "Starting cluster backup...\n")
+	_, _ = fmt.Fprintf(writer, "   Output: %s\n", flags.outputPath)
+	_, _ = fmt.Fprintf(writer, "   Include volumes: %v\n", flags.includeVolumes)
 
 	if len(flags.namespaces) > 0 {
-		fmt.Printf("   Namespaces: %v\n", flags.namespaces)
+		_, _ = fmt.Fprintf(writer, "   Namespaces: %v\n", flags.namespaces)
 	} else {
-		fmt.Printf("   Namespaces: all\n")
+		_, _ = fmt.Fprintf(writer, "   Namespaces: all\n")
 	}
 
-	// Create output directory if needed
 	outputDir := filepath.Dir(flags.outputPath)
 	if outputDir != "." && outputDir != "" {
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
+		err := os.MkdirAll(outputDir, dirPerm)
+		if err != nil {
 			return fmt.Errorf("failed to create output directory: %w", err)
 		}
 	}
 
-	// Create backup archive
-	if err := createBackupArchive(ctx, client, kubeconfigPath, flags); err != nil {
+	err := createBackupArchive(ctx, kubeconfigPath, writer, flags)
+	if err != nil {
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
 
-	fmt.Printf("✅ Backup completed successfully\n")
+	_, _ = fmt.Fprintf(writer, "Backup completed successfully\n")
 
-	// Show file size
-	if info, err := os.Stat(flags.outputPath); err == nil {
-		sizeMB := float64(info.Size()) / (1024 * 1024)
-		fmt.Printf("   Archive size: %.2f MB\n", sizeMB)
+	info, err := os.Stat(flags.outputPath)
+	if err == nil {
+		sizeMB := float64(info.Size()) / bytesPerMB
+		_, _ = fmt.Fprintf(writer, "   Archive size: %.2f MB\n", sizeMB)
 	}
 
 	return nil
 }
 
-func createBackupArchive(ctx context.Context, client *kubectl.Client, kubeconfigPath string, flags *backupFlags) error {
-	// Create temporary directory for backup staging
+func createBackupArchive(
+	ctx context.Context,
+	kubeconfigPath string,
+	writer io.Writer,
+	flags *backupFlags,
+) error {
 	tmpDir, err := os.MkdirTemp("", "ksail-backup-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
 
-	// Gather cluster metadata
-	fmt.Printf("📋 Gathering cluster metadata...\n")
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	_, _ = fmt.Fprintf(writer, "Gathering cluster metadata...\n")
+
 	metadata := &BackupMetadata{
 		Version:      "v1",
 		Timestamp:    time.Now(),
 		ClusterName:  getClusterNameFromKubeconfig(kubeconfigPath),
-		KSailVersion: "5.0.0", // TODO: Get from build version
+		KSailVersion: "5.0.0",
 	}
 
-	// Export resources
-	fmt.Printf("📤 Exporting cluster resources...\n")
-	resourceCount, err := exportResources(ctx, client, kubeconfigPath, tmpDir, flags)
-	if err != nil {
-		return fmt.Errorf("failed to export resources: %w", err)
-	}
+	_, _ = fmt.Fprintf(writer, "Exporting cluster resources...\n")
+
+	resourceCount := exportResources(
+		ctx, kubeconfigPath, tmpDir, writer, flags,
+	)
+
 	metadata.ResourceCount = resourceCount
 
-	// Write metadata file
 	metadataPath := filepath.Join(tmpDir, "backup-metadata.json")
-	if err := writeMetadata(metadata, metadataPath); err != nil {
+
+	err = writeMetadata(metadata, metadataPath)
+	if err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 
-	// Create compressed tarball
-	fmt.Printf("🗜️  Creating compressed archive...\n")
-	if err := createTarball(tmpDir, flags.outputPath, flags.compressionLevel); err != nil {
+	_, _ = fmt.Fprintf(writer, "Creating compressed archive...\n")
+
+	err = createTarball(tmpDir, flags.outputPath, flags.compressionLevel)
+	if err != nil {
 		return fmt.Errorf("failed to create tarball: %w", err)
 	}
 
 	return nil
 }
 
-func exportResources(ctx context.Context, client *kubectl.Client, kubeconfigPath, outputDir string, flags *backupFlags) (int, error) {
-	// Define resource types in order (CRDs first, then storage, then workloads)
-	resourceTypes := []string{
+// backupResourceTypes returns the ordered list of resource types for backup.
+// CRDs and cluster-scoped resources come first, followed by storage, RBAC,
+// and workloads.
+func backupResourceTypes() []string {
+	return []string{
 		"customresourcedefinitions",
 		"namespaces",
 		"storageclasses",
@@ -184,100 +219,161 @@ func exportResources(ctx context.Context, client *kubectl.Client, kubeconfigPath
 		"cronjobs",
 		"ingresses",
 	}
+}
 
-	// Filter out excluded types
-	var filteredTypes []string
-	for _, rt := range resourceTypes {
-		excluded := false
-		for _, et := range flags.excludeTypes {
-			if rt == et {
-				excluded = true
-				break
-			}
-		}
-		if !excluded {
-			filteredTypes = append(filteredTypes, rt)
-		}
-	}
-
+func exportResources(
+	ctx context.Context,
+	kubeconfigPath, outputDir string,
+	writer io.Writer,
+	flags *backupFlags,
+) int {
+	filteredTypes := filterExcludedTypes(
+		backupResourceTypes(), flags.excludeTypes,
+	)
 	totalCount := 0
 
 	for _, resourceType := range filteredTypes {
-		count, err := exportResourceType(ctx, client, kubeconfigPath, outputDir, resourceType, flags)
+		count, err := exportResourceType(
+			ctx, kubeconfigPath, outputDir, resourceType, flags,
+		)
 		if err != nil {
-			// Log warning but continue with other resources
-			fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to export %s: %v\n", resourceType, err)
+			_, _ = fmt.Fprintf(
+				writer,
+				"Warning: failed to export %s: %v\n",
+				resourceType, err,
+			)
+
 			continue
 		}
+
 		if count > 0 {
-			fmt.Printf("   ✓ Exported %d %s\n", count, resourceType)
+			_, _ = fmt.Fprintf(
+				writer, "   Exported %d %s\n", count, resourceType,
+			)
 			totalCount += count
 		}
 	}
 
-	return totalCount, nil
+	return totalCount
 }
 
-func exportResourceType(ctx context.Context, client *kubectl.Client, kubeconfigPath, outputDir, resourceType string, flags *backupFlags) (int, error) {
-	// Prepare output directory for this resource type
+func filterExcludedTypes(resourceTypes, excludeTypes []string) []string {
+	excluded := make(map[string]bool, len(excludeTypes))
+	for _, excludeType := range excludeTypes {
+		excluded[excludeType] = true
+	}
+
+	var filtered []string
+
+	for _, resourceType := range resourceTypes {
+		if !excluded[resourceType] {
+			filtered = append(filtered, resourceType)
+		}
+	}
+
+	return filtered
+}
+
+func exportResourceType(
+	ctx context.Context,
+	kubeconfigPath, outputDir, resourceType string,
+	flags *backupFlags,
+) (int, error) {
 	resourceDir := filepath.Join(outputDir, "resources", resourceType)
-	if err := os.MkdirAll(resourceDir, 0755); err != nil {
+
+	err := os.MkdirAll(resourceDir, dirPerm)
+	if err != nil {
 		return 0, fmt.Errorf("failed to create resource directory: %w", err)
 	}
 
-	// Build kubectl get command arguments
-	args := []string{"get", resourceType, "-o", "yaml"}
-
 	if len(flags.namespaces) > 0 {
-		// If specific namespaces requested, iterate through them
 		totalCount := 0
+
 		for _, ns := range flags.namespaces {
-			nsArgs := append(args, "-n", ns)
-			count, err := executeGetAndSave(ctx, client, kubeconfigPath, resourceDir, resourceType, ns, nsArgs)
+			count, err := executeGetAndSave(
+				ctx, kubeconfigPath, resourceDir, resourceType, ns,
+			)
 			if err != nil {
 				return totalCount, err
 			}
+
 			totalCount += count
 		}
+
 		return totalCount, nil
 	}
 
-	// For cluster-scoped resources or all namespaces
-	args = append(args, "--all-namespaces")
-	return executeGetAndSave(ctx, client, kubeconfigPath, resourceDir, resourceType, "", args)
+	return executeGetAndSave(
+		ctx, kubeconfigPath, resourceDir, resourceType, "",
+	)
 }
 
-func executeGetAndSave(_ context.Context, client *kubectl.Client, kubeconfigPath, resourceDir, resourceType, namespace string, args []string) (int, error) {
-	// Create output file
+func executeGetAndSave(
+	_ context.Context,
+	kubeconfigPath, resourceDir, resourceType, namespace string,
+) (int, error) {
 	filename := resourceType + ".yaml"
 	if namespace != "" {
 		filename = fmt.Sprintf("%s-%s.yaml", resourceType, namespace)
 	}
+
 	outputPath := filepath.Join(resourceDir, filename)
 
-	// Execute kubectl get
-	output, err := client.Run(kubeconfigPath, args...)
+	output, err := runKubectlGet(kubeconfigPath, resourceType, namespace)
 	if err != nil {
-		// If resource type doesn't exist, that's okay
-		if contains(output, "the server doesn't have a resource type") {
+		if strings.Contains(err.Error(), "the server doesn't have a resource type") {
 			return 0, nil
 		}
+
 		return 0, fmt.Errorf("failed to get resources: %w", err)
 	}
 
-	// Check if we got any resources
-	if len(output) == 0 || contains(output, "No resources found") {
+	if len(output) == 0 || strings.Contains(output, "No resources found") {
 		return 0, nil
 	}
 
-	// Save to file
-	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+	err = os.WriteFile(outputPath, []byte(output), filePerm)
+	if err != nil {
 		return 0, fmt.Errorf("failed to write resource file: %w", err)
 	}
 
-	// Count items (rough estimate by counting "kind:" lines)
 	count := countYAMLDocuments(output)
+
 	return count, nil
+}
+
+func runKubectlGet(
+	kubeconfigPath, resourceType, namespace string,
+) (string, error) {
+	var outBuf, errBuf bytes.Buffer
+
+	client := kubectl.NewClient(genericiooptions.IOStreams{
+		In:     os.Stdin,
+		Out:    &outBuf,
+		ErrOut: &errBuf,
+	})
+
+	getCmd := client.CreateGetCommand(kubeconfigPath)
+
+	args := []string{resourceType, "-o", "yaml"}
+	if namespace != "" {
+		args = append(args, "-n", namespace)
+	} else {
+		args = append(args, "--all-namespaces")
+	}
+
+	getCmd.SetArgs(args)
+	getCmd.SilenceUsage = true
+	getCmd.SilenceErrors = true
+
+	err := getCmd.Execute()
+	if err != nil {
+		return errBuf.String(), fmt.Errorf(
+			"kubectl get %s: %w", resourceType, err,
+		)
+	}
+
+	return outBuf.String(), nil
 }
 
 func writeMetadata(metadata *BackupMetadata, path string) error {
@@ -286,122 +382,110 @@ func writeMetadata(metadata *BackupMetadata, path string) error {
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	err = os.WriteFile(path, data, filePerm)
+	if err != nil {
 		return fmt.Errorf("failed to write metadata file: %w", err)
 	}
 
 	return nil
 }
 
-func createTarball(sourceDir, targetPath string, compressionLevel int) error {
-	// Create output file
-	outFile, err := os.Create(targetPath)
+func createTarball(
+	sourceDir, targetPath string,
+	compressionLevel int,
+) error {
+	outFile, err := os.Create(targetPath) //nolint:gosec // path is user-controlled output
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
-	defer outFile.Close()
 
-	// Create gzip writer with specified compression level
+	defer func() { _ = outFile.Close() }()
+
 	gzipWriter, err := gzip.NewWriterLevel(outFile, compressionLevel)
 	if err != nil {
 		return fmt.Errorf("failed to create gzip writer: %w", err)
 	}
-	defer gzipWriter.Close()
 
-	// Create tar writer
+	defer func() { _ = gzipWriter.Close() }()
+
 	tarWriter := tar.NewWriter(gzipWriter)
-	defer tarWriter.Close()
 
-	// Walk the source directory and add files to tar
-	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+	defer func() { _ = tarWriter.Close() }()
 
-		// Create tar header
-		header, err := tar.FileInfoHeader(info, "")
-		if err != nil {
-			return fmt.Errorf("failed to create tar header: %w", err)
-		}
-
-		// Update header name to be relative to source directory
-		relPath, err := filepath.Rel(sourceDir, path)
-		if err != nil {
-			return fmt.Errorf("failed to get relative path: %w", err)
-		}
-		header.Name = relPath
-
-		// Write header
-		if err := tarWriter.WriteHeader(header); err != nil {
-			return fmt.Errorf("failed to write tar header: %w", err)
-		}
-
-		// If not a directory, write file content
-		if !info.IsDir() {
-			file, err := os.Open(path)
-			if err != nil {
-				return fmt.Errorf("failed to open file: %w", err)
+	err = filepath.Walk(
+		sourceDir,
+		func(path string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
 			}
-			defer file.Close()
 
-			if _, err := io.Copy(tarWriter, file); err != nil {
-				return fmt.Errorf("failed to write file to tar: %w", err)
-			}
-		}
+			return addFileToTar(tarWriter, sourceDir, path, info)
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to walk source directory: %w", err)
+	}
 
-		return nil
-	})
+	return nil
 }
 
-// Helper functions
+func addFileToTar(
+	tarWriter *tar.Writer,
+	sourceDir, path string,
+	info os.FileInfo,
+) error {
+	header, err := tar.FileInfoHeader(info, "")
+	if err != nil {
+		return fmt.Errorf("failed to create tar header: %w", err)
+	}
+
+	relPath, err := filepath.Rel(sourceDir, path)
+	if err != nil {
+		return fmt.Errorf("failed to get relative path: %w", err)
+	}
+
+	header.Name = relPath
+
+	err = tarWriter.WriteHeader(header)
+	if err != nil {
+		return fmt.Errorf("failed to write tar header: %w", err)
+	}
+
+	if info.IsDir() {
+		return nil
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+
+	defer func() { _ = file.Close() }()
+
+	_, err = io.Copy(tarWriter, file)
+	if err != nil {
+		return fmt.Errorf("failed to write file to tar: %w", err)
+	}
+
+	return nil
+}
 
 func getClusterNameFromKubeconfig(kubeconfigPath string) string {
-	// Parse kubeconfig to get cluster name
-	// For now, use a simple default
 	return filepath.Base(kubeconfigPath)
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-			len(s) > len(substr)+1 && findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
 func countYAMLDocuments(content string) int {
-	// Simple count by looking for "kind:" occurrences
 	count := 0
-	lines := splitLines(content)
-	for _, line := range lines {
-		if len(line) >= 5 && line[:5] == "kind:" {
+
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "kind:") {
 			count++
 		}
 	}
-	if count == 0 {
-		return 1 // At least one document if we have content
-	}
-	return count
-}
 
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
+	if count == 0 {
+		return 1
 	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
+
+	return count
 }
