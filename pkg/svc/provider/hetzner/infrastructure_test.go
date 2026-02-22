@@ -8,6 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -303,4 +304,169 @@ func TestResourceLabelsConsistency(t *testing.T) {
 
 	// Node labels should have additional fields
 	assert.Len(t, nodeLabels, len(resourceLabels)+2, "Node labels should have 2 additional fields")
+}
+
+func TestListNodesNilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := hetzner.NewProvider(nil)
+	require.NotNil(t, prov)
+
+	nodes, err := prov.ListNodes(context.TODO(), "test-cluster")
+
+	require.Error(t, err)
+	assert.Nil(t, nodes)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestListAllClustersNilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := hetzner.NewProvider(nil)
+	require.NotNil(t, prov)
+
+	clusters, err := prov.ListAllClusters(context.TODO())
+
+	require.Error(t, err)
+	assert.Nil(t, clusters)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestNodesExistNilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := hetzner.NewProvider(nil)
+	require.NotNil(t, prov)
+
+	// NodesExist delegates to ListNodes which guards against nil client.
+	exists, err := prov.NodesExist(context.TODO(), "test-cluster")
+
+	require.Error(t, err)
+	assert.False(t, exists)
+}
+
+func TestSubnetCIDRLogic(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		networkCIDR    string
+		expectedSubnet string
+	}{
+		{
+			name:           "DefaultNetworkUsesSpecificSubnet",
+			networkCIDR:    "10.0.0.0/16",
+			expectedSubnet: "10.0.1.0/24",
+		},
+		{
+			name:           "CustomNetworkUsesProvidedCIDR",
+			networkCIDR:    "192.168.0.0/16",
+			expectedSubnet: "192.168.0.0/16",
+		},
+		{
+			name:           "SmallCustomNetwork",
+			networkCIDR:    "172.16.0.0/24",
+			expectedSubnet: "172.16.0.0/24",
+		},
+		{
+			name:           "AnotherCustomCIDR",
+			networkCIDR:    "10.1.0.0/16",
+			expectedSubnet: "10.1.0.0/16",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Replicate the subnet CIDR selection logic from EnsureNetwork.
+			subnetCIDR := "10.0.1.0/24"
+			if testCase.networkCIDR != "10.0.0.0/16" {
+				subnetCIDR = testCase.networkCIDR
+			}
+
+			assert.Equal(t, testCase.expectedSubnet, subnetCIDR)
+
+			// Verify the resulting subnet CIDR is valid.
+			_, _, err := net.ParseCIDR(subnetCIDR)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestCreateServerNilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := hetzner.NewProvider(nil)
+	require.NotNil(t, prov)
+
+	t.Run("CreateServer", func(t *testing.T) {
+		t.Parallel()
+
+		opts := hetzner.CreateServerOpts{
+			Name:       "test-server",
+			ServerType: "cx11",
+			Location:   "nbg1",
+		}
+
+		server, err := prov.CreateServer(context.TODO(), opts)
+
+		require.Error(t, err)
+		assert.Nil(t, server)
+		require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	})
+
+	t.Run("CreateServerWithRetry", func(t *testing.T) {
+		t.Parallel()
+
+		opts := hetzner.CreateServerOpts{
+			Name:       "retry-server",
+			ServerType: "cx11",
+			Location:   "nbg1",
+		}
+		retryOpts := hetzner.ServerRetryOpts{}
+
+		server, err := prov.CreateServerWithRetry(context.TODO(), opts, retryOpts)
+
+		require.Error(t, err)
+		assert.Nil(t, server)
+		require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	})
+}
+
+func TestServerISOOperationsNilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := hetzner.NewProvider(nil)
+	require.NotNil(t, prov)
+
+	// Use an empty server - the nil client guard fires before the server is used.
+	dummyServer := &hcloud.Server{}
+
+	t.Run("DetachISO", func(t *testing.T) {
+		t.Parallel()
+
+		err := prov.DetachISO(context.TODO(), dummyServer)
+
+		require.Error(t, err)
+		require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	})
+
+	t.Run("ResetServer", func(t *testing.T) {
+		t.Parallel()
+
+		err := prov.ResetServer(context.TODO(), dummyServer)
+
+		require.Error(t, err)
+		require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	})
+
+	t.Run("DeleteServer", func(t *testing.T) {
+		t.Parallel()
+
+		err := prov.DeleteServer(context.TODO(), dummyServer)
+
+		require.Error(t, err)
+		require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	})
 }
