@@ -36,7 +36,8 @@ func (p *Provisioner) bootstrapHetznerCluster(
 	)
 
 	// Wait for node to become ready after installation
-	if err := p.waitForNodeReady(ctx, nodeIP, talosConfig); err != nil {
+	err := p.waitForNodeReady(ctx, nodeIP, talosConfig)
+	if err != nil {
 		return err
 	}
 
@@ -52,7 +53,8 @@ func (p *Provisioner) bootstrapHetznerCluster(
 	_, _ = fmt.Fprintf(p.logWriter, "  Bootstrapping etcd on %s...\n", bootstrapNode.Name)
 
 	// Bootstrap etcd cluster
-	if err := p.bootstrapEtcdCluster(ctx, talosClient); err != nil {
+	err = p.bootstrapEtcdCluster(ctx, talosClient)
+	if err != nil {
 		return err
 	}
 
@@ -60,7 +62,8 @@ func (p *Provisioner) bootstrapHetznerCluster(
 	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for Kubernetes to be ready...\n")
 
 	// Wait for Kubernetes to become ready
-	if err := p.waitForKubernetesReady(ctx, talosClient); err != nil {
+	err = p.waitForKubernetesReady(ctx, talosClient)
+	if err != nil {
 		return err
 	}
 
