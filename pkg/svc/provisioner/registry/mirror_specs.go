@@ -17,7 +17,7 @@ type MirrorSpec struct {
 	Host     string
 	Remote   string
 	Username string // Optional: username for registry authentication (supports ${ENV_VAR} placeholders)
-	Password string // Optional: password for registry authentication (supports ${ENV_VAR} placeholders)
+	Password string //nolint:gosec // G117: Password is a registry config field, not a hardcoded credential
 }
 
 // ResolveCredentials returns the username and password with environment variable placeholders expanded.
@@ -471,10 +471,10 @@ func GenerateHostsToml(entry MirrorEntry) string {
 		upstream = GenerateUpstreamURL(entry.Host)
 	}
 
-	builder.WriteString(fmt.Sprintf("server = %q\n\n", upstream))
+	fmt.Fprintf(&builder, "server = %q\n\n", upstream)
 
 	// Add local mirror endpoint configuration
-	builder.WriteString(fmt.Sprintf("[host.%q]\n", entry.Endpoint))
+	fmt.Fprintf(&builder, "[host.%q]\n", entry.Endpoint)
 	builder.WriteString("  capabilities = [\"pull\", \"resolve\"]\n")
 
 	return builder.String()
@@ -534,6 +534,8 @@ func extractCredentialsFromSpec(spec string) (remainingSpec, username, password 
 
 // parseCredentialPair splits a credential string into username and password.
 // Handles both "user:pass" and "user" formats.
+//
+//nolint:nonamedreturns // Named returns document the username and password components
 func parseCredentialPair(credPart string) (username, password string) {
 	colonIdx := strings.Index(credPart, ":")
 	if colonIdx > 0 {
@@ -600,12 +602,12 @@ func GenerateScaffoldedHostsToml(spec MirrorSpec) string {
 		serverURL = GenerateUpstreamURL(spec.Host)
 	}
 
-	builder.WriteString(fmt.Sprintf("server = %q\n\n", serverURL))
+	fmt.Fprintf(&builder, "server = %q\n\n", serverURL)
 
 	// The host block points to the local registry container
 	// The container will be named after the registry host (e.g., docker.io:5000)
 	localMirrorURL := "http://" + net.JoinHostPort(spec.Host, "5000")
-	builder.WriteString(fmt.Sprintf("[host.%q]\n", localMirrorURL))
+	fmt.Fprintf(&builder, "[host.%q]\n", localMirrorURL)
 	builder.WriteString("  capabilities = [\"pull\", \"resolve\"]\n")
 
 	return builder.String()
