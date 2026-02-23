@@ -32,7 +32,7 @@ func TestUpdateResult_NoChangesIsNoOp(t *testing.T) {
 	}
 }
 
-func TestUpdateResult_OnlyRecreateDoesNotHideInNoChangesCheck(t *testing.T) {
+func TestUpdateResult_RecreateChangesAreDetected(t *testing.T) {
 	t.Parallel()
 
 	result := clusterupdate.NewEmptyUpdateResult()
@@ -52,10 +52,13 @@ func TestUpdateResult_OnlyRecreateDoesNotHideInNoChangesCheck(t *testing.T) {
 		t.Error("result should have recreate-required changes")
 	}
 
-	// Verify that the "no in-place && no reboot" check from the update flow
-	// would correctly NOT match when there are recreate-required changes.
-	if !result.HasInPlaceChanges() && !result.HasRebootRequired() && result.TotalChanges() > 0 {
-		// This path should be reached: no in-place, no reboot, but total > 0.
-		// The update command should check HasRecreateRequired() BEFORE this.
+	// Recreate-required changes are not reflected in HasInPlaceChanges
+	// or HasRebootRequired, but TotalChanges must still count them.
+	if result.HasInPlaceChanges() {
+		t.Error("result should not have in-place changes")
+	}
+
+	if result.HasRebootRequired() {
+		t.Error("result should not have reboot-required changes")
 	}
 }
