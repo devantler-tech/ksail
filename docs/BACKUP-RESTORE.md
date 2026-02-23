@@ -5,6 +5,7 @@ KSail provides `cluster backup` and `cluster restore` commands for backing up an
 ## Overview
 
 The backup/restore functionality allows you to:
+
 - Create compressed archives of Kubernetes resources
 - Backup cluster state for disaster recovery
 - Migrate workloads between clusters
@@ -29,21 +30,25 @@ ksail cluster backup --output ./my-backup.tar.gz
 ### Examples
 
 **Backup all resources:**
+
 ````bash
 ksail cluster backup --output ./cluster-backup.tar.gz
 ````
 
 **Backup specific namespaces:**
+
 ````bash
 ksail cluster backup --output ./app-backup.tar.gz --namespaces default,kube-system
 ````
 
 **Exclude certain resource types:**
+
 ````bash
 ksail cluster backup --output ./backup.tar.gz --exclude-types events,pods
 ````
 
 **Maximum compression:**
+
 ````bash
 ksail cluster backup --output ./backup.tar.gz --compression 9
 ````
@@ -51,6 +56,7 @@ ksail cluster backup --output ./backup.tar.gz --compression 9
 ### What Gets Backed Up
 
 Resources are exported in order:
+
 1. CustomResourceDefinitions (CRDs)
 2. Namespaces
 3. StorageClasses
@@ -81,6 +87,7 @@ backup.tar.gz
 ### Backup Metadata
 
 Each backup includes a `backup-metadata.json` file with:
+
 - **version**: Backup format version (v1)
 - **timestamp**: When the backup was created
 - **clusterName**: Source cluster name
@@ -106,16 +113,19 @@ ksail cluster restore --input ./my-backup.tar.gz
 ### Examples
 
 **Restore from backup:**
+
 ````bash
 ksail cluster restore --input ./cluster-backup.tar.gz
 ````
 
 **Preview restore without applying:**
+
 ````bash
 ksail cluster restore --input ./backup.tar.gz --dry-run
 ````
 
 **Update existing resources during restore:**
+
 ````bash
 ksail cluster restore --input ./backup.tar.gz --existing-resource-policy update
 ````
@@ -134,12 +144,14 @@ Resources are restored in the same order they were backed up to ensure dependenc
 ### Disaster Recovery
 
 Backup your production cluster regularly:
+
 ````bash
 # Daily backup
 ksail cluster backup --output ./backups/prod-$(date +%Y%m%d).tar.gz
 ````
 
 Restore in case of failure:
+
 ````bash
 ksail cluster restore --input ./backups/prod-20260220.tar.gz
 ````
@@ -147,6 +159,7 @@ ksail cluster restore --input ./backups/prod-20260220.tar.gz
 ### Cluster Migration
 
 Move workloads between clusters:
+
 ````bash
 # Backup from source cluster
 ksail cluster backup --output ./migration.tar.gz
@@ -161,6 +174,7 @@ ksail cluster restore --input ./migration.tar.gz
 ### Development Snapshots
 
 Save and restore development cluster states:
+
 ````bash
 # Save working state
 ksail cluster backup --output ./dev-working-state.tar.gz
@@ -196,6 +210,7 @@ Planned for future versions:
 
 **"kubeconfig not found"**
 Ensure your cluster is running and kubeconfig is properly configured:
+
 ````bash
 ksail cluster info
 ````
@@ -205,12 +220,14 @@ Some resource types may not exist in your cluster. This is normal and can be ign
 
 **Large backup size**
 Use higher compression or exclude unnecessary resource types:
+
 ````bash
 ksail cluster backup --output ./backup.tar.gz --compression 9 --exclude-types events,pods
 ````
 
 **Restore conflicts**
 Use `--existing-resource-policy update` to overwrite existing resources:
+
 ````bash
 ksail cluster restore --input ./backup.tar.gz --existing-resource-policy update
 ````
