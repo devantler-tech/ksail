@@ -15,10 +15,10 @@ The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workf
 
 `benchstat` output contains three key columns per benchmark:
 
-| Column | Meaning | Goal |
-|--------|---------|------|
-| **sec/op** | Time per operation | Lower is better |
-| **B/op** | Bytes allocated per operation | Lower is better |
+| Column        | Meaning                        | Goal            |
+|---------------|--------------------------------|-----------------|
+| **sec/op**    | Time per operation             | Lower is better |
+| **B/op**      | Bytes allocated per operation  | Lower is better |
 | **allocs/op** | Heap allocations per operation | Lower is better |
 
 Each row shows `old` (main) vs `new` (PR) with a delta percentage and a p-value:
@@ -52,11 +52,11 @@ go install golang.org/x/perf/cmd/benchstat@latest
 
 ## Current Benchmark Coverage
 
-| Package | File | What It Tests |
-|---------|------|---------------|
+| Package                     | File                    | What It Tests                            |
+|-----------------------------|-------------------------|------------------------------------------|
 | `pkg/apis/cluster/v1alpha1` | `marshal_bench_test.go` | YAML/JSON marshalling of cluster configs |
-| `pkg/cli/cmd/cipher` | `cipher_bench_test.go` | SOPS encrypt/decrypt operations |
-| `pkg/k8s/readiness` | `polling_bench_test.go` | Kubernetes resource polling |
+| `pkg/cli/cmd/cipher`        | `cipher_bench_test.go`  | SOPS encrypt/decrypt operations          |
+| `pkg/k8s/readiness`         | `polling_bench_test.go` | Kubernetes resource polling              |
 
 See each package's `BENCHMARKS.md` for detailed baseline results and optimization opportunities.
 
