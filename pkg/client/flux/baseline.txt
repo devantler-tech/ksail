@@ -1,0 +1,20 @@
+goos: linux
+goarch: amd64
+pkg: github.com/devantler-tech/ksail/v5/pkg/client/flux
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkClient_CreateCreateCommand-4   	   53398	     20827 ns/op	   30208 B/op	     174 allocs/op
+BenchmarkGitRepository_Creation/Minimal-4         	34854878	        33.91 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGitRepository_Creation/WithReference-4   	12456487	        96.03 ns/op	      80 B/op	       1 allocs/op
+BenchmarkGitRepository_Creation/Production-4      	 2546485	       571.1 ns/op	     440 B/op	       5 allocs/op
+BenchmarkHelmRepository_Creation/Minimal-4        	45351068	        26.53 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHelmRepository_Creation/Production-4     	 3286471	       364.0 ns/op	     360 B/op	       4 allocs/op
+BenchmarkKustomization_Creation/Minimal-4         	25700598	        47.07 ns/op	       0 B/op	       0 allocs/op
+BenchmarkKustomization_Creation/Production-4      	 3396680	       356.8 ns/op	     344 B/op	       3 allocs/op
+BenchmarkHelmRelease_Creation/Minimal-4           	 6998480	       172.6 ns/op	     176 B/op	       1 allocs/op
+BenchmarkHelmRelease_Creation/Production-4        	 1889229	       630.7 ns/op	     656 B/op	       7 allocs/op
+BenchmarkCopySpec/GitRepository-4                 	 1640266	       729.7 ns/op	    1280 B/op	       2 allocs/op
+BenchmarkCopySpec/HelmRepository-4                	 2235440	       540.9 ns/op	     896 B/op	       2 allocs/op
+BenchmarkCopySpec/Kustomization-4                 	 1271904	       959.1 ns/op	    1792 B/op	       2 allocs/op
+BenchmarkCopySpec/HelmRelease-4                   	 1000000	      1101 ns/op	    1968 B/op	       3 allocs/op
+PASS
+ok  	github.com/devantler-tech/ksail/v5/pkg/client/flux	21.676s
