@@ -1,4 +1,4 @@
-package kubectl
+package kubectl_test
 
 import (
 	"bytes"
@@ -6,13 +6,16 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
 
 // Package-level sinks prevent the compiler from optimizing away benchmark calls.
+//
+//nolint:gochecknoglobals // Benchmark sink variables are required to prevent compiler optimization.
 var (
-	benchClientSink  *Client
+	benchClientSink  *kubectl.Client
 	benchCommandSink *cobra.Command
 )
 
@@ -31,7 +34,9 @@ func writeBenchKubeconfig(b *testing.B) string {
 	b.Helper()
 
 	path := filepath.Join(b.TempDir(), "kubeconfig")
-	if err := os.WriteFile(path, []byte(minimalKubeconfig), 0o600); err != nil {
+
+	err := os.WriteFile(path, []byte(minimalKubeconfig), 0o600)
+	if err != nil {
 		b.Fatalf("failed to write kubeconfig: %v", err)
 	}
 
@@ -39,8 +44,8 @@ func writeBenchKubeconfig(b *testing.B) string {
 }
 
 // newBenchClient returns a kubectl client backed by discarded IO streams.
-func newBenchClient() *Client {
-	return NewClient(genericiooptions.IOStreams{
+func newBenchClient() *kubectl.Client {
+	return kubectl.NewClient(genericiooptions.IOStreams{
 		In:     &bytes.Buffer{},
 		Out:    &bytes.Buffer{},
 		ErrOut: &bytes.Buffer{},
@@ -59,7 +64,7 @@ func BenchmarkCreateClient(b *testing.B) {
 	b.ResetTimer()
 
 	for range b.N {
-		benchClientSink = NewClient(streams)
+		benchClientSink = kubectl.NewClient(streams)
 	}
 }
 
