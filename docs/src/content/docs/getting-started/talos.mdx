@@ -55,7 +55,9 @@ Consider alternatives if you need:
     ksail cluster init \
       --name talos-dev \
       --distribution Talos \
-      --provider Docker
+      --provider Docker \
+      --control-planes 1 \
+      --workers 2
     ```
 
     This creates:
@@ -148,7 +150,9 @@ Consider alternatives if you need:
     ksail cluster init \
       --name talos-prod \
       --distribution Talos \
-      --provider Hetzner
+      --provider Hetzner \
+      --control-planes 1 \
+      --workers 2
     ```
 
     This creates:
@@ -347,7 +351,7 @@ talosctl -n <node-ip> upgrade --image ghcr.io/siderolabs/installer:v1.6.0
 ```
 
 > [!NOTE]
-> The `talosconfig` file is automatically created in the project directory during cluster creation.
+> The `talosconfig` file is written to the configured Talos config path during cluster creation (by default `~/.talos/config`), not the project directory. To use a project-local file instead, set `spec.cluster.talos.config` in your `ksail.yaml` to the desired path.
 
 ## Architecture
 
@@ -491,9 +495,9 @@ graph TB
    echo $HCLOUD_TOKEN  # Should output your token
    ```
 
-3. **View detailed logs:**
+3. **View available options and flags:**
    ```bash
-   ksail cluster create --verbose
+   ksail cluster create --help
    ```
 
 4. **Clean up and retry:**
@@ -569,7 +573,7 @@ graph TB
 
 1. **Check talosconfig exists:**
    ```bash
-   ls -la talosconfig
+   ls -la ~/.talos/config
    ```
 
 2. **Verify node IPs:**
@@ -579,7 +583,7 @@ graph TB
 
 3. **Use explicit node IP:**
    ```bash
-   talosctl -n <node-ip> --talosconfig=./talosconfig get members
+   talosctl -n <node-ip> --talosconfig ~/.talos/config get members
    ```
 
 4. **Regenerate talosconfig:**
@@ -599,7 +603,7 @@ Adjust the number of control plane and worker nodes:
 spec:
   cluster:
     distribution: Talos
-    nodes:
+    talos:
       controlPlanes: 3  # 3 control plane nodes (HA)
       workers: 5        # 5 worker nodes
 ```
@@ -610,15 +614,9 @@ ksail cluster create
 
 ### Custom Talos Version
 
-Specify a specific Talos version:
-
-**ksail.yaml:**
-```yaml
-spec:
-  cluster:
-    distribution: Talos
-    version: "v1.6.0"  # Specific Talos version
-```
+KSail currently uses a default Talos image/version that is tested with the corresponding KSail release.
+Explicit Talos version pinning via `ksail.yaml` is not yet supported; if you need to run a different
+Talos version, use Talos-specific configuration and tooling outside of KSail's cluster spec.
 
 ### Persistent Storage (Hetzner)
 
@@ -668,7 +666,7 @@ ksail cluster init \
   --name talos-gitops \
   --distribution Talos \
   --gitops-engine Flux \
-  --local-registry
+  --local-registry localhost:5050
 ```
 
 ```bash
