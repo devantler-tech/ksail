@@ -75,6 +75,7 @@ func runTUIChat(
 	eventChan := make(chan tea.Msg, eventChannelBuffer)
 	outputChan := make(chan toolgen.OutputChunk, outputChannelBuffer)
 	forwarderWg := startOutputForwarder(outputChan, eventChan)
+
 	chatModeRef, yoloModeRef, err := setupChatTools( //nolint:contextcheck
 		sessionConfig, rootCmd, eventChan, outputChan,
 	)

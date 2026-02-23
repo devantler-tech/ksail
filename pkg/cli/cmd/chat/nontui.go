@@ -65,6 +65,7 @@ func runNonTUIChat(
 	if err != nil {
 		return fmt.Errorf("failed to determine working directory for sandboxing: %w", err)
 	}
+
 	sessionConfig.Hooks = &copilot.SessionHooks{
 		OnPreToolUse: BuildPreToolUseHook(nil, toolMetadata, allowedRoot),
 	}
