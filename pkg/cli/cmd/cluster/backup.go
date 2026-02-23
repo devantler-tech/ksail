@@ -477,7 +477,7 @@ func getClusterNameFromKubeconfig(kubeconfigPath string) string {
 func countYAMLDocuments(content string) int {
 	count := 0
 
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		if strings.HasPrefix(line, "kind:") {
 			count++
 		}
