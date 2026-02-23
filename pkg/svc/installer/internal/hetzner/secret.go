@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -45,6 +46,12 @@ func EnsureSecret(ctx context.Context, kubeconfig, kubeContext string) error {
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
+	return ensureSecret(ctx, clientset, token)
+}
+
+// ensureSecret is the testable core of EnsureSecret. It accepts an injected
+// kubernetes.Interface so that unit tests can substitute a fake clientset.
+func ensureSecret(ctx context.Context, client kubernetes.Interface, token string) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      SecretName,
@@ -55,7 +62,7 @@ func EnsureSecret(ctx context.Context, kubeconfig, kubeContext string) error {
 		},
 	}
 
-	secrets := clientset.CoreV1().Secrets(Namespace)
+	secrets := client.CoreV1().Secrets(Namespace)
 
 	existingSecret, err := secrets.Get(ctx, SecretName, metav1.GetOptions{})
 	if err != nil {
@@ -71,7 +78,7 @@ func EnsureSecret(ctx context.Context, kubeconfig, kubeContext string) error {
 		// Update the existing secret's data while preserving its metadata
 		existingSecret.StringData = secret.StringData
 		existingSecret.Data = nil // Clear Data so StringData takes effect
-		
+
 		_, err = secrets.Update(ctx, existingSecret, metav1.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to update secret: %w", err)
@@ -82,24 +89,18 @@ func EnsureSecret(ctx context.Context, kubeconfig, kubeContext string) error {
 }
 
 // InstallWithSecret ensures the Hetzner Cloud API token secret exists and then
-// installs or upgrades a Helm chart via the given helmutil.Base. The name
-// parameter is used in error messages to identify the component.
+// installs or upgrades a Helm chart via the given helmutil.Base.
 func InstallWithSecret(
 	ctx context.Context,
 	base *helmutil.Base,
-	kubeconfig, kubeContext, name string,
+	kubeconfig, kubeContext string,
 ) error {
 	err := EnsureSecret(ctx, kubeconfig, kubeContext)
 	if err != nil {
 		return fmt.Errorf("failed to create hetzner secret: %w", err)
 	}
 
-	err = base.Install(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to install %s: %w", name, err)
-	}
-
-	return nil
+	return base.Install(ctx)
 }
 
 // Installer is a shared Hetzner Cloud installer that embeds helmutil.Base and
@@ -165,7 +166,7 @@ func NewInstaller(
 // Install creates the required Hetzner Cloud API token secret and then
 // installs or upgrades the component via its Helm chart.
 func (h *Installer) Install(ctx context.Context) error {
-	err := InstallWithSecret(ctx, h.Base, h.kubeconfig, h.context, h.name)
+	err := InstallWithSecret(ctx, h.Base, h.kubeconfig, h.context)
 	if err != nil {
 		return fmt.Errorf("install %s: %w", h.name, err)
 	}

@@ -14,12 +14,12 @@ LoadBalancer support varies by Kubernetes distribution and infrastructure provid
 | Vanilla (Kind) | Docker   | Cloud Provider KIND         | Disabled         | Yes                    |
 | K3s (K3d)      | Docker   | ServiceLB (Klipper)         | Enabled          | No                     |
 | Talos          | Docker   | MetalLB                     | Disabled         | Yes                    |
-| Talos          | Hetzner  | hcloud-cloud-controller-manager | Disabled         | Yes                    |
+| Talos          | Hetzner  | hcloud-cloud-controller-manager | Enabled          | No                     |
 
 **Key Points:**
 
-- **K3s** includes LoadBalancer support by default—no configuration needed
-- **Vanilla**, **Talos × Docker**, and **Talos × Hetzner** require explicit enablement during cluster initialization
+- **K3s** and **Talos × Hetzner** include LoadBalancer support by default—no configuration needed
+- **Vanilla** and **Talos × Docker** require explicit enablement during cluster initialization
 - LoadBalancer type is configured via `--load-balancer` flag or `ksail.yaml`
 
 ## Configuration Options
@@ -276,7 +276,9 @@ spec:
 
 Talos on Hetzner Cloud uses the [Hetzner Cloud Controller Manager](https://github.com/hetznercloud/hcloud-cloud-controller-manager) to provision real cloud load balancers.
 
-#### Enable LoadBalancer Support
+#### LoadBalancer Support
+
+LoadBalancer is **enabled by default** for Talos × Hetzner clusters. KSail automatically installs hcloud-ccm when `loadBalancer` is `Default` or `Enabled`.
 
 **CLI:**
 
@@ -285,8 +287,7 @@ export HCLOUD_TOKEN=your-token-here
 ksail cluster init \
   --name my-cluster \
   --distribution Talos \
-  --provider Hetzner \
-  --load-balancer Enabled
+  --provider Hetzner
 ksail cluster create
 ```
 
@@ -301,7 +302,6 @@ spec:
   cluster:
     distribution: Talos
     provider: Hetzner
-    loadBalancer: Enabled
 ```
 
 **Prerequisites:**

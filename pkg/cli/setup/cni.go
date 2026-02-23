@@ -199,9 +199,11 @@ func waitForCNIReadiness(
 	if err != nil {
 		diag := k8s.DiagnosePodFailures(ctx, clientset, cniNamespaces)
 		if diag != "" {
+			joined := errors.Join(ErrCNIReadinessTimeout, err)
+
 			return fmt.Errorf(
-				"%w after %s\n%s\n\nTip: check registry availability and rate limits",
-				ErrCNIReadinessTimeout, setup.timeout, diag,
+				"wait for node readiness after CNI install: %w (after %s)\n%s\n\nTip: check registry availability and rate limits",
+				joined, setup.timeout, diag,
 			)
 		}
 
