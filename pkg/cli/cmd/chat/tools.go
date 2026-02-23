@@ -207,7 +207,8 @@ func BuildPreToolUseHook(
 ) copilot.PreToolUseHandler {
 	return func(input copilot.PreToolUseHookInput, _ copilot.HookInvocation) (*copilot.PreToolUseHookOutput, error) {
 		if chatModeRef == nil {
-			return &copilot.PreToolUseHookOutput{}, nil
+			// Non-TUI mode is always in agent mode — still enforce path sandboxing.
+			return validatePathAccess(input, allowedRoot)
 		}
 
 		switch chatModeRef.Mode() {

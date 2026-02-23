@@ -69,7 +69,7 @@ func buildPathTests(root, subDir, nestedFile, outsideDir, outsideFile string) []
 		{"file inside root is allowed", nestedFile, root, true},
 		{"subdirectory inside root is allowed", subDir, root, true},
 		{
-			"relative path within root is allowed",
+			"absolute path within root is allowed",
 			filepath.Join(root, "sub", "file.txt"), root, true,
 		},
 		{

@@ -42,8 +42,12 @@ func resolveCanonicalPath(p string) (string, error) {
 
 	resolved, err := filepath.EvalSymlinks(abs)
 	if err != nil {
-		// If the path doesn't exist yet (e.g. a write target), fall back to
-		// resolving the parent directory and appending the final component.
+		if !os.IsNotExist(err) {
+			return "", fmt.Errorf("resolving symlinks: %w", err)
+		}
+
+		// Path doesn't exist yet (e.g. a write target): resolve the parent
+		// directory and append the final component.
 		dir := filepath.Dir(abs)
 		base := filepath.Base(abs)
 
