@@ -191,6 +191,8 @@ func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner 
 
 // Omni default values - keep in sync with OptionsOmni struct tags.
 const (
+	// defaultOmniServiceAccountKeyEnvVar is the default environment variable
+	// name for the Omni service account key used for API authentication.
 	defaultOmniServiceAccountKeyEnvVar = "OMNI_SERVICE_ACCOUNT_KEY"
 )
 
