@@ -56,18 +56,18 @@ go test -bench=. -benchmem ./pkg/client/kubectl/ > baseline.txt
 
 ## Benchmarked Operations
 
-| Benchmark                        | Description               | Typical Use Case               |
-|----------------------------------|---------------------------|--------------------------------|
-| `BenchmarkCreateClient`          | Client instantiation      | Every command invocation       |
-| `BenchmarkCreateApplyCommand`    | Apply command creation    | `ksail workload apply`         |
-| `BenchmarkCreateGetCommand`      | Get command creation      | `ksail workload get`           |
-| `BenchmarkCreateDeleteCommand`   | Delete command creation   | `ksail workload delete`        |
-| `BenchmarkCreateDescribeCommand` | Describe command creation | `ksail workload describe`      |
-| `BenchmarkCreateLogsCommand`     | Logs command creation     | `ksail workload logs`          |
-| `BenchmarkCreateWaitCommand`     | Wait command creation     | `ksail workload wait`          |
-| `BenchmarkCreateNamespaceCmd`    | Namespace generator       | `ksail workload gen namespace` |
+| Benchmark                        | Description               | Typical Use Case                |
+|----------------------------------|---------------------------|---------------------------------|
+| `BenchmarkCreateClient`          | Client instantiation      | Every command invocation        |
+| `BenchmarkCreateApplyCommand`    | Apply command creation    | `ksail workload apply`          |
+| `BenchmarkCreateGetCommand`      | Get command creation      | `ksail workload get`            |
+| `BenchmarkCreateDeleteCommand`   | Delete command creation   | `ksail workload delete`         |
+| `BenchmarkCreateDescribeCommand` | Describe command creation | `ksail workload describe`       |
+| `BenchmarkCreateLogsCommand`     | Logs command creation     | `ksail workload logs`           |
+| `BenchmarkCreateWaitCommand`     | Wait command creation     | `ksail workload wait`           |
+| `BenchmarkCreateNamespaceCmd`    | Namespace generator       | `ksail workload gen namespace`  |
 | `BenchmarkCreateDeploymentCmd`   | Deployment generator      | `ksail workload gen deployment` |
-| `BenchmarkCreateServiceCmd`      | Service generator         | `ksail workload gen service`   |
+| `BenchmarkCreateServiceCmd`      | Service generator         | `ksail workload gen service`    |
 
 ## Performance Characteristics
 
