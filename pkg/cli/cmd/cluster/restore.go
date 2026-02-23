@@ -30,6 +30,12 @@ var ErrInvalidResourcePolicy = errors.New(
 // traversal attempt.
 var ErrInvalidTarPath = errors.New("invalid tar entry path")
 
+// ErrSymlinkInArchive is returned when a tar archive contains
+// symbolic or hard links, which are not supported.
+var ErrSymlinkInArchive = errors.New(
+	"symbolic and hard links are not supported in backup archives",
+)
+
 type restoreFlags struct {
 	inputPath              string
 	existingResourcePolicy string
@@ -217,14 +223,10 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 			return fmt.Errorf("failed to read tar header: %w", err)
 		}
 
-		cleanName := filepath.Clean(header.Name)
-		if strings.HasPrefix(cleanName, "..") {
-			return fmt.Errorf(
-				"%w: %s", ErrInvalidTarPath, header.Name,
-			)
+		targetPath, err := validateTarEntry(header, destDir)
+		if err != nil {
+			return err
 		}
-
-		targetPath := filepath.Join(destDir, cleanName)
 
 		if header.Typeflag == tar.TypeDir {
 			err = os.MkdirAll(targetPath, dirPerm)
@@ -249,6 +251,34 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 	}
 
 	return nil
+}
+
+func validateTarEntry(
+	header *tar.Header,
+	destDir string,
+) (string, error) {
+	if header.Typeflag == tar.TypeSymlink ||
+		header.Typeflag == tar.TypeLink {
+		return "", ErrSymlinkInArchive
+	}
+
+	cleanName := filepath.Clean(header.Name)
+	if filepath.IsAbs(cleanName) ||
+		strings.HasPrefix(cleanName, "..") {
+		return "", fmt.Errorf(
+			"%w: %s", ErrInvalidTarPath, header.Name,
+		)
+	}
+
+	targetPath := filepath.Join(destDir, cleanName)
+
+	if !strings.HasPrefix(targetPath, destDir) {
+		return "", fmt.Errorf(
+			"%w: %s", ErrInvalidTarPath, header.Name,
+		)
+	}
+
+	return targetPath, nil
 }
 
 func extractFile(tarReader *tar.Reader, targetPath string) error {
