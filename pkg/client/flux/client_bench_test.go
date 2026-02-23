@@ -44,7 +44,8 @@ users:
     token: test-token
 `
 
-	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0600); err != nil {
+	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
+	if err != nil {
 		b.Fatalf("Failed to write kubeconfig: %v", err)
 	}
 
@@ -459,11 +460,18 @@ func BenchmarkCopySpec(b *testing.B) {
 
 			for range b.N {
 				// Deep copy to ensure each iteration starts fresh
-				src := scenario.src.DeepCopyObject().(client.Object)
-				dst := scenario.dst.DeepCopyObject().(client.Object)
+				srcObj, isSrcOk := scenario.src.DeepCopyObject().(client.Object)
+				if !isSrcOk {
+					b.Fatal("src.DeepCopyObject() does not implement client.Object")
+				}
+
+				dstObj, isDstOk := scenario.dst.DeepCopyObject().(client.Object)
+				if !isDstOk {
+					b.Fatal("dst.DeepCopyObject() does not implement client.Object")
+				}
 
 				// Measure DeepCopy performance as proxy for spec operations
-				_, _ = src, dst
+				_, _ = srcObj, dstObj
 			}
 		})
 	}
