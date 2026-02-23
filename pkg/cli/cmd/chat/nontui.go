@@ -61,7 +61,10 @@ func runNonTUIChat(
 	sessionConfig.OnPermissionRequest = chatsvc.CreatePermissionHandler(writer)
 
 	// Set up pre-tool-use hook for path sandboxing
-	allowedRoot, _ := os.Getwd()
+	allowedRoot, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to determine working directory for sandboxing: %w", err)
+	}
 	sessionConfig.Hooks = &copilot.SessionHooks{
 		OnPreToolUse: BuildPreToolUseHook(nil, toolMetadata, allowedRoot),
 	}
