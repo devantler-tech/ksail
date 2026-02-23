@@ -42,10 +42,14 @@ const (
 
 //nolint:gochecknoglobals // package-level timeout constants
 var (
-	// fluxAPIAvailabilityTimeout is the maximum time to wait for Flux CRDs to become available.
-	// This timeout should balance quick feedback for errors with enough time for slower
-	// environments like Talos on GitHub Actions. 5 minutes is typically sufficient.
-	fluxAPIAvailabilityTimeout      = 5 * time.Minute
+	// fluxAPIAvailabilityTimeout is the maximum time to wait for Flux CRDs to become available
+	// and for the FluxInstance to report Ready. This timeout should balance quick feedback for
+	// errors with enough time for slower environments like Talos on GitHub Actions, where Flux
+	// controllers (especially notification-controller) may need extra time to stabilize after
+	// transient CrashLoopBackOff episodes. 8 minutes aligns with other component timeouts
+	// (Kyverno 10m, CertManager 10m, Gatekeeper 7m).
+	// See: https://github.com/devantler-tech/ksail/issues/2320
+	fluxAPIAvailabilityTimeout      = 8 * time.Minute
 	fluxAPIAvailabilityPollInterval = 2 * time.Second
 )
 
