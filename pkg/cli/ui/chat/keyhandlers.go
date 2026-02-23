@@ -71,6 +71,8 @@ func (m *Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleQueuePrompt()
 	case "ctrl+s":
 		return m.handleSteerPrompt()
+	case "ctrl+d":
+		return m.handleDeletePendingPrompt()
 	}
 
 	return m.handleChatShortcutKey(msg)
@@ -495,6 +497,19 @@ func (m *Model) handleSteerPrompt() (tea.Model, tea.Cmd) {
 
 	m.addSteeringPrompt(content)
 	m.textarea.Reset()
+	m.updateViewportContent()
+
+	return m, nil
+}
+
+// handleDeletePendingPrompt removes the most recently added pending prompt.
+// Queued prompts are removed first, then steering prompts.
+func (m *Model) handleDeletePendingPrompt() (tea.Model, tea.Cmd) {
+	if !m.hasPendingPrompts() {
+		return m, nil
+	}
+
+	m.deleteLastPendingPrompt()
 	m.updateViewportContent()
 
 	return m, nil
