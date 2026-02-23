@@ -29,7 +29,7 @@ func TestBackupMetadata(t *testing.T) {
 		t.Fatal("metadata file was not created")
 	}
 
-	data, err := os.ReadFile(metadataPath) //nolint:gosec // test file path
+	data, err := os.ReadFile(metadataPath) //nolint:gosec // test-controlled path from t.TempDir()
 	if err != nil {
 		t.Fatalf("failed to read metadata file: %v", err)
 	}
