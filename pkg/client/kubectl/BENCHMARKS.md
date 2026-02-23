@@ -65,9 +65,9 @@ go test -bench=. -benchmem ./pkg/client/kubectl/ > baseline.txt
 | `BenchmarkCreateDescribeCommand` | Describe command creation | `ksail workload describe`      |
 | `BenchmarkCreateLogsCommand`     | Logs command creation     | `ksail workload logs`          |
 | `BenchmarkCreateWaitCommand`     | Wait command creation     | `ksail workload wait`          |
-| `BenchmarkCreateNamespaceCmd`    | Namespace generator       | `ksail workload gen namespace`  |
+| `BenchmarkCreateNamespaceCmd`    | Namespace generator       | `ksail workload gen namespace` |
 | `BenchmarkCreateDeploymentCmd`   | Deployment generator      | `ksail workload gen deployment` |
-| `BenchmarkCreateServiceCmd`      | Service generator         | `ksail workload gen service`    |
+| `BenchmarkCreateServiceCmd`      | Service generator         | `ksail workload gen service`   |
 
 ## Performance Characteristics
 
