@@ -423,7 +423,7 @@ export async function runClusterCreateWizard(): Promise<CreateClusterOptions | u
 
   const useDefaults = await showMultiStepQuickPick(defaultsItems, {
     title,
-    step: currentStep++,
+    step: currentStep,
     totalSteps,
     placeholder: "Use default settings?",
   });
@@ -535,7 +535,7 @@ async function runFullCustomizationWizard(
   const gitopsItems = createEnumQuickPickItems(gitopsValues, getGitopsDescription);
   const gitopsEngine = await showMultiStepQuickPick(gitopsItems, {
     title,
-    step: step++,
+    step: step,
     totalSteps,
     placeholder: "Select GitOps engine",
   });

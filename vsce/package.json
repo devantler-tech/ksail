@@ -215,6 +215,7 @@
     "clean": "rm -rf dist out"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^25.2.3",
     "@types/vscode": "^1.109.0",
     "@typescript-eslint/eslint-plugin": "^8.56.0",
