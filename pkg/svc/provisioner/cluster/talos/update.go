@@ -515,10 +515,10 @@ func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSp
 
 	// Introspect actual node counts from the running cluster
 	// to avoid false-positive diffs from hardcoded defaults.
-	cpCount, workerCount := p.introspectNodeCounts(ctx)
+	controlPlanes, workers := p.introspectNodeCounts(ctx)
 	spec.Talos = v1alpha1.OptionsTalos{
-		ControlPlanes: int32(cpCount),
-		Workers:       int32(workerCount),
+		ControlPlanes: controlPlanes,
+		Workers:       workers,
 	}
 
 	// If we have Hetzner options configured
@@ -536,7 +536,7 @@ func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSp
 // introspectNodeCounts determines the actual control-plane and worker node
 // counts from the running cluster. Falls back to safe defaults (1 CP, 0 workers)
 // when the cluster cannot be queried.
-func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int, int) {
+func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int32, int32) {
 	clusterName := p.resolveClusterName("")
 
 	if p.dockerClient != nil {
@@ -557,21 +557,21 @@ func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int, int) {
 }
 
 // countNodeRoles counts control-plane and worker nodes from a list of nodeWithRole.
-func countNodeRoles(nodes []nodeWithRole) (int, int) {
-	var cp, worker int
+func countNodeRoles(nodes []nodeWithRole) (int32, int32) {
+	var controlPlanes, workers int32
 
 	for _, n := range nodes {
 		switch n.Role {
 		case RoleControlPlane:
-			cp++
+			controlPlanes++
 		case RoleWorker:
-			worker++
+			workers++
 		}
 	}
 
-	if cp == 0 {
-		cp = 1
+	if controlPlanes == 0 {
+		controlPlanes = 1
 	}
 
-	return cp, worker
+	return controlPlanes, workers
 }
