@@ -7,7 +7,8 @@ import (
 )
 
 func TestBackupMetadata(t *testing.T) {
-	// Test metadata marshaling
+	t.Parallel()
+
 	metadata := &BackupMetadata{
 		Version:       "v1",
 		ClusterName:   "test-cluster",
@@ -18,18 +19,17 @@ func TestBackupMetadata(t *testing.T) {
 	tmpDir := t.TempDir()
 	metadataPath := filepath.Join(tmpDir, "backup-metadata.json")
 
-	// Test writing metadata
-	if err := writeMetadata(metadata, metadataPath); err != nil {
+	err := writeMetadata(metadata, metadataPath)
+	if err != nil {
 		t.Fatalf("failed to write metadata: %v", err)
 	}
 
-	// Verify file exists
-	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
+	_, statErr := os.Stat(metadataPath)
+	if os.IsNotExist(statErr) {
 		t.Fatal("metadata file was not created")
 	}
 
-	// Verify file is valid JSON
-	data, err := os.ReadFile(metadataPath)
+	data, err := os.ReadFile(metadataPath) //nolint:gosec // test-controlled path from t.TempDir()
 	if err != nil {
 		t.Fatalf("failed to read metadata file: %v", err)
 	}
@@ -40,45 +40,51 @@ func TestBackupMetadata(t *testing.T) {
 }
 
 func TestCreateTarball(t *testing.T) {
-	// Create a temporary source directory with test files
+	t.Parallel()
+
 	srcDir := t.TempDir()
+
 	testFile := filepath.Join(srcDir, "test.txt")
-	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+
+	err := os.WriteFile(testFile, []byte("test content"), filePerm)
+	if err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	// Create subdirectory
 	subDir := filepath.Join(srcDir, "subdir")
-	if err := os.MkdirAll(subDir, 0755); err != nil {
+
+	err = os.MkdirAll(subDir, dirPerm)
+	if err != nil {
 		t.Fatalf("failed to create subdirectory: %v", err)
 	}
+
 	subFile := filepath.Join(subDir, "sub.txt")
-	if err := os.WriteFile(subFile, []byte("sub content"), 0644); err != nil {
+
+	err = os.WriteFile(subFile, []byte("sub content"), filePerm)
+	if err != nil {
 		t.Fatalf("failed to create sub file: %v", err)
 	}
 
-	// Create output tarball
 	outputPath := filepath.Join(t.TempDir(), "test-backup.tar.gz")
-	if err := createTarball(srcDir, outputPath, 6); err != nil {
+
+	err = createTarball(srcDir, outputPath, 6)
+	if err != nil {
 		t.Fatalf("failed to create tarball: %v", err)
 	}
 
-	// Verify tarball exists
-	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
-		t.Fatal("tarball was not created")
-	}
-
-	// Verify file is not empty
 	info, err := os.Stat(outputPath)
 	if err != nil {
 		t.Fatalf("failed to stat tarball: %v", err)
 	}
+
 	if info.Size() == 0 {
 		t.Fatal("tarball is empty")
 	}
 }
 
 func TestCountYAMLDocuments(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		content  string
@@ -95,91 +101,118 @@ func TestCountYAMLDocuments(t *testing.T) {
 			expected: 3,
 		},
 		{
-			name:     "empty content",
-			content:  "",
+			name:     "no kind lines returns 1",
+			content:  "metadata:\n  name: test",
 			expected: 1,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			count := countYAMLDocuments(tt.content)
-			if tt.content == "" {
-				// Empty content should not count
-				return
-			}
-			if count != tt.expected {
-				t.Errorf("countYAMLDocuments() = %d, want %d", count, tt.expected)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			count := countYAMLDocuments(test.content)
+			if count != test.expected {
+				t.Errorf(
+					"countYAMLDocuments() = %d, want %d",
+					count, test.expected,
+				)
 			}
 		})
 	}
 }
 
-func TestContains(t *testing.T) {
+func TestFilterExcludedTypes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		name     string
-		s        string
-		substr   string
-		expected bool
+		name        string
+		types       []string
+		exclude     []string
+		expectedLen int
 	}{
-		{"substring at start", "hello world", "hello", true},
-		{"substring at end", "hello world", "world", true},
-		{"substring in middle", "hello world", "lo wo", true},
-		{"substring not found", "hello world", "xyz", false},
-		{"empty substring", "hello", "", true},
-		{"empty string", "", "test", false},
+		{
+			name:        "no exclusions",
+			types:       []string{"pods", "services", "deployments"},
+			exclude:     []string{},
+			expectedLen: 3,
+		},
+		{
+			name:        "exclude one",
+			types:       []string{"pods", "services", "deployments"},
+			exclude:     []string{"pods"},
+			expectedLen: 2,
+		},
+		{
+			name:        "exclude all",
+			types:       []string{"pods"},
+			exclude:     []string{"pods"},
+			expectedLen: 0,
+		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := contains(tt.s, tt.substr)
-			if result != tt.expected {
-				t.Errorf("contains(%q, %q) = %v, want %v", tt.s, tt.substr, result, tt.expected)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := filterExcludedTypes(test.types, test.exclude)
+			if len(result) != test.expectedLen {
+				t.Errorf(
+					"filterExcludedTypes() returned %d items, want %d",
+					len(result), test.expectedLen,
+				)
 			}
 		})
 	}
 }
 
-func TestSplitLines(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected []string
-	}{
-		{
-			name:     "single line",
-			input:    "hello",
-			expected: []string{"hello"},
-		},
-		{
-			name:     "multiple lines",
-			input:    "line1\nline2\nline3",
-			expected: []string{"line1", "line2", "line3"},
-		},
-		{
-			name:     "empty string",
-			input:    "",
-			expected: []string{},
-		},
-		{
-			name:     "trailing newline",
-			input:    "line1\nline2\n",
-			expected: []string{"line1", "line2", ""},
-		},
+func TestExtractAndReadMetadata(t *testing.T) {
+	t.Parallel()
+
+	srcDir := t.TempDir()
+	metadata := &BackupMetadata{
+		Version:       "v1",
+		ClusterName:   "roundtrip-cluster",
+		KSailVersion:  "5.0.0",
+		ResourceCount: 10,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := splitLines(tt.input)
-			if len(result) != len(tt.expected) {
-				t.Errorf("splitLines() returned %d lines, want %d", len(result), len(tt.expected))
-				return
-			}
-			for i := range result {
-				if result[i] != tt.expected[i] {
-					t.Errorf("splitLines()[%d] = %q, want %q", i, result[i], tt.expected[i])
-				}
-			}
-		})
+	metadataPath := filepath.Join(srcDir, "backup-metadata.json")
+
+	err := writeMetadata(metadata, metadataPath)
+	if err != nil {
+		t.Fatalf("failed to write metadata: %v", err)
+	}
+
+	archivePath := filepath.Join(t.TempDir(), "test.tar.gz")
+
+	err = createTarball(srcDir, archivePath, 6)
+	if err != nil {
+		t.Fatalf("failed to create tarball: %v", err)
+	}
+
+	tmpDir, restored, err := extractBackupArchive(archivePath)
+	if err != nil {
+		t.Fatalf("failed to extract backup archive: %v", err)
+	}
+
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	if restored.Version != "v1" {
+		t.Errorf("Version = %q, want %q", restored.Version, "v1")
+	}
+
+	if restored.ClusterName != "roundtrip-cluster" {
+		t.Errorf(
+			"ClusterName = %q, want %q",
+			restored.ClusterName, "roundtrip-cluster",
+		)
+	}
+
+	if restored.ResourceCount != 10 {
+		t.Errorf(
+			"ResourceCount = %d, want %d",
+			restored.ResourceCount, 10,
+		)
 	}
 }

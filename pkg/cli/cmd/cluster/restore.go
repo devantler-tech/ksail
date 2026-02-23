@@ -2,19 +2,38 @@ package cluster
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
+)
+
+// ErrInvalidResourcePolicy is returned when an unsupported
+// existing-resource-policy value is provided.
+var ErrInvalidResourcePolicy = errors.New(
+	"invalid existing-resource-policy: must be 'none' or 'update'",
+)
+
+// ErrInvalidTarPath is returned when a tar entry contains a path
+// traversal attempt.
+var ErrInvalidTarPath = errors.New("invalid tar entry path")
+
+// ErrSymlinkInArchive is returned when a tar archive contains
+// symbolic or hard links, which are not supported.
+var ErrSymlinkInArchive = errors.New(
+	"symbolic and hard links are not supported in backup archives",
 )
 
 type restoreFlags struct {
@@ -32,252 +51,351 @@ func NewRestoreCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "restore",
 		Short: "Restore cluster resources from backup",
-		Long: `Restores Kubernetes resources from a backup archive to the target cluster.
+		Long: `Restores Kubernetes resources from a backup archive ` +
+			`to the target cluster.
 
-Resources are restored in the correct order (CRDs first, then namespaces, storage, workloads).
+Resources are restored in the correct order ` +
+			`(CRDs first, then namespaces, storage, workloads).
 Existing resources can be skipped or updated based on the policy.
 
 Example:
   ksail cluster restore --input ./my-backup.tar.gz
-  ksail cluster restore --input ./backup.tar.gz --existing-resource-policy update
+  ksail cluster restore -i ./backup.tar.gz --existing-resource-policy update
   ksail cluster restore --input ./backup.tar.gz --dry-run`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runRestore(cmd.Context(), flags)
+			return runRestore(cmd.Context(), cmd, flags)
 		},
 		SilenceUsage: true,
 	}
 
-	cmd.Flags().StringVarP(&flags.inputPath, "input", "i", "", "Input backup archive path (required)")
-	cmd.Flags().StringVar(&flags.existingResourcePolicy, "existing-resource-policy", "none", "Policy for existing resources: none (skip) or update (patch)")
-	cmd.Flags().BoolVar(&flags.dryRun, "dry-run", false, "Print what would be restored without applying")
+	cmd.Flags().StringVarP(
+		&flags.inputPath, "input", "i", "",
+		"Input backup archive path (required)",
+	)
+	cmd.Flags().StringVar(
+		&flags.existingResourcePolicy,
+		"existing-resource-policy", "none",
+		"Policy for existing resources: none (skip) or update (patch)",
+	)
+	cmd.Flags().BoolVar(
+		&flags.dryRun, "dry-run", false,
+		"Print what would be restored without applying",
+	)
 
-	if err := cmd.MarkFlagRequired("input"); err != nil {
+	err := cmd.MarkFlagRequired("input")
+	if err != nil {
 		panic(fmt.Sprintf("failed to mark input flag as required: %v", err))
 	}
 
 	return cmd
 }
 
-func runRestore(ctx context.Context, flags *restoreFlags) error {
-	// Validate flags
-	if flags.existingResourcePolicy != "none" && flags.existingResourcePolicy != "update" {
-		return fmt.Errorf("invalid existing-resource-policy: must be 'none' or 'update'")
+func runRestore(
+	ctx context.Context,
+	cmd *cobra.Command,
+	flags *restoreFlags,
+) error {
+	if flags.existingResourcePolicy != "none" &&
+		flags.existingResourcePolicy != "update" {
+		return ErrInvalidResourcePolicy
 	}
 
-	// Get kubeconfig
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
 	if kubeconfigPath == "" {
-		return fmt.Errorf("kubeconfig not found; ensure cluster is created and configured")
+		return ErrKubeconfigNotFound
 	}
 
-	// Create kubectl client
-	client := kubectl.NewClient(genericiooptions.IOStreams{
-		In:     os.Stdin,
-		Out:    os.Stdout,
-		ErrOut: os.Stderr,
-	})
+	writer := cmd.OutOrStdout()
+	_, _ = fmt.Fprintf(writer, "Starting cluster restore...\n")
+	_, _ = fmt.Fprintf(writer, "   Input: %s\n", flags.inputPath)
+	_, _ = fmt.Fprintf(
+		writer, "   Policy: %s\n", flags.existingResourcePolicy,
+	)
 
-	fmt.Printf("📦 Starting cluster restore...\n")
-	fmt.Printf("   Input: %s\n", flags.inputPath)
-	fmt.Printf("   Policy: %s\n", flags.existingResourcePolicy)
 	if flags.dryRun {
-		fmt.Printf("   Mode: dry-run (no changes will be applied)\n")
+		_, _ = fmt.Fprintf(
+			writer, "   Mode: dry-run (no changes will be applied)\n",
+		)
 	}
 
-	// Extract backup archive
-	fmt.Printf("📂 Extracting backup archive...\n")
+	_, _ = fmt.Fprintf(writer, "Extracting backup archive...\n")
+
 	tmpDir, metadata, err := extractBackupArchive(flags.inputPath)
 	if err != nil {
 		return fmt.Errorf("failed to extract backup: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
 
-	// Display backup metadata
-	fmt.Printf("📋 Backup metadata:\n")
-	fmt.Printf("   Version: %s\n", metadata.Version)
-	fmt.Printf("   Timestamp: %s\n", metadata.Timestamp.Format("2006-01-02 15:04:05"))
-	fmt.Printf("   Cluster: %s\n", metadata.ClusterName)
-	fmt.Printf("   Resources: %d\n", metadata.ResourceCount)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	// Restore resources
-	fmt.Printf("📥 Restoring cluster resources...\n")
-	if err := restoreResources(ctx, client, kubeconfigPath, tmpDir, flags); err != nil {
+	printRestoreMetadata(writer, metadata)
+
+	_, _ = fmt.Fprintf(writer, "Restoring cluster resources...\n")
+
+	err = restoreResources(ctx, kubeconfigPath, tmpDir, writer, flags)
+	if err != nil {
 		return fmt.Errorf("failed to restore resources: %w", err)
 	}
 
 	if flags.dryRun {
-		fmt.Printf("✅ Dry-run completed successfully (no changes applied)\n")
+		_, _ = fmt.Fprintf(
+			writer,
+			"Dry-run completed successfully (no changes applied)\n",
+		)
 	} else {
-		fmt.Printf("✅ Restore completed successfully\n")
+		_, _ = fmt.Fprintf(writer, "Restore completed successfully\n")
 	}
 
 	return nil
 }
 
-func extractBackupArchive(inputPath string) (string, *BackupMetadata, error) {
-	// Create temporary directory for extraction
+func printRestoreMetadata(writer io.Writer, metadata *BackupMetadata) {
+	_, _ = fmt.Fprintf(writer, "Backup metadata:\n")
+	_, _ = fmt.Fprintf(writer, "   Version: %s\n", metadata.Version)
+	_, _ = fmt.Fprintf(
+		writer, "   Timestamp: %s\n",
+		metadata.Timestamp.Format("2006-01-02 15:04:05"),
+	)
+	_, _ = fmt.Fprintf(writer, "   Cluster: %s\n", metadata.ClusterName)
+	_, _ = fmt.Fprintf(
+		writer, "   Resources: %d\n", metadata.ResourceCount,
+	)
+}
+
+func extractBackupArchive(
+	inputPath string,
+) (string, *BackupMetadata, error) {
 	tmpDir, err := os.MkdirTemp("", "ksail-restore-*")
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to create temp directory: %w", err)
+		return "", nil, fmt.Errorf(
+			"failed to create temp directory: %w", err,
+		)
 	}
 
-	// Open archive file
-	file, err := os.Open(inputPath)
+	file, err := os.Open(inputPath) //nolint:gosec // user-provided input
 	if err != nil {
-		os.RemoveAll(tmpDir)
-		return "", nil, fmt.Errorf("failed to open backup archive: %w", err)
-	}
-	defer file.Close()
+		_ = os.RemoveAll(tmpDir)
 
-	// Create gzip reader
+		return "", nil, fmt.Errorf(
+			"failed to open backup archive: %w", err,
+		)
+	}
+
+	defer func() { _ = file.Close() }()
+
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
-		os.RemoveAll(tmpDir)
-		return "", nil, fmt.Errorf("failed to create gzip reader: %w", err)
-	}
-	defer gzipReader.Close()
+		_ = os.RemoveAll(tmpDir)
 
-	// Create tar reader
+		return "", nil, fmt.Errorf(
+			"failed to create gzip reader: %w", err,
+		)
+	}
+
+	defer func() { _ = gzipReader.Close() }()
+
 	tarReader := tar.NewReader(gzipReader)
 
-	// Extract files
+	err = extractTarEntries(tarReader, tmpDir)
+	if err != nil {
+		_ = os.RemoveAll(tmpDir)
+
+		return "", nil, err
+	}
+
+	metadata, err := readBackupMetadata(tmpDir)
+	if err != nil {
+		_ = os.RemoveAll(tmpDir)
+
+		return "", nil, err
+	}
+
+	return tmpDir, metadata, nil
+}
+
+func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 	for {
 		header, err := tarReader.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
+
 		if err != nil {
-			os.RemoveAll(tmpDir)
-			return "", nil, fmt.Errorf("failed to read tar header: %w", err)
+			return fmt.Errorf("failed to read tar header: %w", err)
 		}
 
-		// Construct target path
-		targetPath := filepath.Join(tmpDir, header.Name)
+		targetPath, err := validateTarEntry(header, destDir)
+		if err != nil {
+			return err
+		}
 
-		// Handle directories
 		if header.Typeflag == tar.TypeDir {
-			if err := os.MkdirAll(targetPath, 0755); err != nil {
-				os.RemoveAll(tmpDir)
-				return "", nil, fmt.Errorf("failed to create directory: %w", err)
+			err = os.MkdirAll(targetPath, dirPerm)
+			if err != nil {
+				return fmt.Errorf("failed to create directory: %w", err)
 			}
+
 			continue
 		}
 
-		// Create parent directory if needed
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-			os.RemoveAll(tmpDir)
-			return "", nil, fmt.Errorf("failed to create parent directory: %w", err)
-		}
-
-		// Create file
-		outFile, err := os.Create(targetPath)
+		err = os.MkdirAll(filepath.Dir(targetPath), dirPerm)
 		if err != nil {
-			os.RemoveAll(tmpDir)
-			return "", nil, fmt.Errorf("failed to create file: %w", err)
+			return fmt.Errorf(
+				"failed to create parent directory: %w", err,
+			)
 		}
 
-		// Copy content
-		if _, err := io.Copy(outFile, tarReader); err != nil {
-			outFile.Close()
-			os.RemoveAll(tmpDir)
-			return "", nil, fmt.Errorf("failed to write file: %w", err)
+		err = extractFile(tarReader, targetPath)
+		if err != nil {
+			return err
 		}
-		outFile.Close()
 	}
 
-	// Read metadata
-	metadataPath := filepath.Join(tmpDir, "backup-metadata.json")
-	metadataData, err := os.ReadFile(metadataPath)
+	return nil
+}
+
+func validateTarEntry(
+	header *tar.Header,
+	destDir string,
+) (string, error) {
+	if header.Typeflag == tar.TypeSymlink ||
+		header.Typeflag == tar.TypeLink {
+		return "", ErrSymlinkInArchive
+	}
+
+	cleanName := filepath.Clean(header.Name)
+	if filepath.IsAbs(cleanName) ||
+		strings.HasPrefix(cleanName, "..") {
+		return "", fmt.Errorf(
+			"%w: %s", ErrInvalidTarPath, header.Name,
+		)
+	}
+
+	targetPath := filepath.Join(destDir, cleanName)
+
+	if !strings.HasPrefix(targetPath, destDir) {
+		return "", fmt.Errorf(
+			"%w: %s", ErrInvalidTarPath, header.Name,
+		)
+	}
+
+	return targetPath, nil
+}
+
+func extractFile(tarReader *tar.Reader, targetPath string) error {
+	outFile, err := os.OpenFile( //nolint:gosec // path is sanitized by extractTarEntries
+		targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, filePerm,
+	)
 	if err != nil {
-		os.RemoveAll(tmpDir)
-		return "", nil, fmt.Errorf("failed to read backup metadata: %w", err)
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+
+	defer func() { _ = outFile.Close() }()
+
+	_, err = io.Copy(outFile, tarReader)
+	if err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return nil
+}
+
+func readBackupMetadata(tmpDir string) (*BackupMetadata, error) {
+	metadataPath := filepath.Join(tmpDir, "backup-metadata.json")
+
+	metadataData, err := os.ReadFile(metadataPath) //nolint:gosec // path is constructed internally
+	if err != nil {
+		return nil, fmt.Errorf("failed to read backup metadata: %w", err)
 	}
 
 	var metadata BackupMetadata
-	if err := json.Unmarshal(metadataData, &metadata); err != nil {
-		os.RemoveAll(tmpDir)
-		return "", nil, fmt.Errorf("failed to parse backup metadata: %w", err)
+
+	err = json.Unmarshal(metadataData, &metadata)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to parse backup metadata: %w", err,
+		)
 	}
 
-	return tmpDir, &metadata, nil
+	return &metadata, nil
 }
 
-func restoreResources(ctx context.Context, client *kubectl.Client, kubeconfigPath, tmpDir string, flags *restoreFlags) error {
-	// Define resource restoration order (same as backup order)
-	resourceTypes := []string{
-		"customresourcedefinitions",
-		"namespaces",
-		"storageclasses",
-		"persistentvolumes",
-		"persistentvolumeclaims",
-		"secrets",
-		"configmaps",
-		"serviceaccounts",
-		"roles",
-		"rolebindings",
-		"clusterroles",
-		"clusterrolebindings",
-		"services",
-		"deployments",
-		"statefulsets",
-		"daemonsets",
-		"jobs",
-		"cronjobs",
-		"ingresses",
-	}
-
+func restoreResources(
+	_ context.Context,
+	kubeconfigPath, tmpDir string,
+	writer io.Writer,
+	flags *restoreFlags,
+) error {
 	resourcesDir := filepath.Join(tmpDir, "resources")
 
-	for _, resourceType := range resourceTypes {
+	for _, resourceType := range backupResourceTypes() {
 		resourceDir := filepath.Join(resourcesDir, resourceType)
 
-		// Check if this resource type exists in backup
-		if _, err := os.Stat(resourceDir); os.IsNotExist(err) {
+		_, statErr := os.Stat(resourceDir)
+		if os.IsNotExist(statErr) {
 			continue
 		}
 
-		// Find all YAML files for this resource type
-		files, err := filepath.Glob(filepath.Join(resourceDir, "*.yaml"))
+		files, err := filepath.Glob(
+			filepath.Join(resourceDir, "*.yaml"),
+		)
 		if err != nil {
-			return fmt.Errorf("failed to list files for %s: %w", resourceType, err)
+			return fmt.Errorf(
+				"failed to list files for %s: %w", resourceType, err,
+			)
 		}
 
 		if len(files) == 0 {
 			continue
 		}
 
-		// Restore each file
 		for _, file := range files {
-			if err := restoreResourceFile(ctx, client, kubeconfigPath, file, resourceType, flags); err != nil {
-				fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to restore %s: %v\n", filepath.Base(file), err)
+			err = restoreResourceFile(kubeconfigPath, file, flags)
+			if err != nil {
+				_, _ = fmt.Fprintf(
+					writer,
+					"Warning: failed to restore %s: %v\n",
+					filepath.Base(file), err,
+				)
+
 				continue
 			}
 		}
 
-		fmt.Printf("   ✓ Restored %s\n", resourceType)
+		_, _ = fmt.Fprintf(writer, "   Restored %s\n", resourceType)
 	}
 
 	return nil
 }
 
-func restoreResourceFile(_ context.Context, client *kubectl.Client, kubeconfigPath, filePath, resourceType string, flags *restoreFlags) error {
-	// Build kubectl apply command
-	args := []string{"apply", "-f", filePath}
+func restoreResourceFile(
+	kubeconfigPath, filePath string,
+	flags *restoreFlags,
+) error {
+	var outBuf, errBuf bytes.Buffer
 
+	client := kubectl.NewClient(genericiooptions.IOStreams{
+		In:     os.Stdin,
+		Out:    &outBuf,
+		ErrOut: &errBuf,
+	})
+
+	applyCmd := client.CreateApplyCommand(kubeconfigPath)
+
+	args := []string{"-f", filePath}
 	if flags.dryRun {
 		args = append(args, "--dry-run=client")
 	}
 
-	// Handle existing resource policy
-	if flags.existingResourcePolicy == "none" {
-		// Use --dry-run=client first to check if resource exists, then apply if it doesn't
-		// For simplicity in v1, we'll use --force to overwrite (can be improved later)
-	}
+	applyCmd.SetArgs(args)
+	applyCmd.SilenceUsage = true
+	applyCmd.SilenceErrors = true
 
-	// Execute kubectl apply
-	output, err := client.Run(kubeconfigPath, args...)
+	err := applyCmd.Execute()
 	if err != nil {
-		return fmt.Errorf("kubectl apply failed: %w (output: %s)", err, output)
+		return fmt.Errorf(
+			"kubectl apply failed: %w (output: %s)",
+			err, errBuf.String(),
+		)
 	}
 
 	return nil
