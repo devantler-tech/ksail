@@ -175,6 +175,7 @@ Despite meeting all performance targets, future optimization opportunities inclu
    - Potential improvement: -20% to -30% allocations
 
 2. **Spec Copying Optimization**
+   - Current: 896 B - 2.0 KB per operation
    - Opportunity: Use sync.Pool for frequently copied specs
    - Potential improvement: -30% to -50% allocations in high-throughput scenarios
 
