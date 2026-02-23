@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
@@ -25,7 +26,6 @@ func setupTestKubeconfig(b *testing.B) (string, func()) {
 	tmpDir := b.TempDir()
 	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
 
-	// Create a minimal kubeconfig for testing
 	kubeconfigContent := `apiVersion: v1
 kind: Config
 clusters:
@@ -60,18 +60,19 @@ func BenchmarkClient_CreateCreateCommand(b *testing.B) {
 	kubeconfigPath, cleanup := setupTestKubeconfig(b)
 	defer cleanup()
 
+	ioStreams := genericiooptions.IOStreams{
+		In:     &bytes.Buffer{},
+		Out:    &bytes.Buffer{},
+		ErrOut: &bytes.Buffer{},
+	}
+
+	fluxClient := flux.NewClient(ioStreams, kubeconfigPath)
+
 	b.ReportAllocs()
+	b.ResetTimer()
 
 	for range b.N {
-		ioStreams := genericiooptions.IOStreams{
-			In:     &bytes.Buffer{},
-			Out:    &bytes.Buffer{},
-			ErrOut: &bytes.Buffer{},
-		}
-
-		c := flux.NewClient(ioStreams, kubeconfigPath)
-		cmd := c.CreateCreateCommand(kubeconfigPath)
-
+		cmd := fluxClient.CreateCreateCommand(kubeconfigPath)
 		if cmd == nil {
 			b.Fatal("CreateCreateCommand returned nil")
 		}
@@ -92,10 +93,8 @@ func BenchmarkGitRepository_Creation(b *testing.B) {
 					Namespace: "flux-system",
 				},
 				Spec: sourcev1.GitRepositorySpec{
-					URL: "https://github.com/example/repo",
-					Interval: metav1.Duration{
-						Duration: 300000000000, // 5 minutes in nanoseconds
-					},
+					URL:      "https://github.com/example/repo",
+					Interval: metav1.Duration{Duration: 5 * time.Minute},
 				},
 			},
 		},
@@ -113,9 +112,7 @@ func BenchmarkGitRepository_Creation(b *testing.B) {
 						Tag:    "v1.0.0",
 						Commit: "abc123def456",
 					},
-					Interval: metav1.Duration{
-						Duration: 300000000000,
-					},
+					Interval: metav1.Duration{Duration: 5 * time.Minute},
 				},
 			},
 		},
@@ -136,16 +133,12 @@ func BenchmarkGitRepository_Creation(b *testing.B) {
 					Reference: &sourcev1.GitRepositoryRef{
 						Branch: "main",
 					},
-					Interval: metav1.Duration{
-						Duration: 60000000000, // 1 minute
-					},
+					Interval: metav1.Duration{Duration: time.Minute},
 					SecretRef: &meta.LocalObjectReference{
 						Name: "git-credentials",
 					},
 					Suspend: false,
-					Timeout: &metav1.Duration{
-						Duration: 300000000000, // 5 minutes
-					},
+					Timeout: &metav1.Duration{Duration: 5 * time.Minute},
 				},
 			},
 		},
@@ -179,10 +172,8 @@ func BenchmarkHelmRepository_Creation(b *testing.B) {
 					Namespace: "flux-system",
 				},
 				Spec: sourcev1.HelmRepositorySpec{
-					URL: "https://charts.example.com",
-					Interval: metav1.Duration{
-						Duration: 300000000000,
-					},
+					URL:      "https://charts.example.com",
+					Interval: metav1.Duration{Duration: 5 * time.Minute},
 				},
 			},
 		},
@@ -198,16 +189,89 @@ func BenchmarkHelmRepository_Creation(b *testing.B) {
 					},
 				},
 				Spec: sourcev1.HelmRepositorySpec{
-					URL: "https://charts.example.com",
-					Interval: metav1.Duration{
-						Duration: 300000000000,
-					},
+					URL:      "https://charts.example.com",
+					Interval: metav1.Duration{Duration: 5 * time.Minute},
 					SecretRef: &meta.LocalObjectReference{
 						Name: "helm-credentials",
 					},
-					Timeout: &metav1.Duration{
-						Duration: 300000000000,
+					Timeout: &metav1.Duration{Duration: 5 * time.Minute},
+				},
+			},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		b.Run(scenario.name, func(b *testing.B) {
+			b.ReportAllocs()
+
+			for range b.N {
+				repo := scenario.repo.DeepCopy()
+				if repo == nil {
+					b.Fatal("DeepCopy failed")
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkOCIRepository_Creation benchmarks OCIRepository struct creation.
+func BenchmarkOCIRepository_Creation(b *testing.B) {
+	scenarios := []struct {
+		name string
+		repo *sourcev1.OCIRepository
+	}{
+		{
+			name: "Minimal",
+			repo: &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-oci-repo",
+					Namespace: "flux-system",
+				},
+				Spec: sourcev1.OCIRepositorySpec{
+					URL:      "oci://ghcr.io/example/repo",
+					Interval: metav1.Duration{Duration: 5 * time.Minute},
+				},
+			},
+		},
+		{
+			name: "WithReference",
+			repo: &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-oci-repo",
+					Namespace: "flux-system",
+				},
+				Spec: sourcev1.OCIRepositorySpec{
+					URL: "oci://ghcr.io/example/repo",
+					Reference: &sourcev1.OCIRepositoryRef{
+						Tag:    "v1.0.0",
+						SemVer: ">=1.0.0 <2.0.0",
 					},
+					Interval: metav1.Duration{Duration: 5 * time.Minute},
+				},
+			},
+		},
+		{
+			name: "Production",
+			repo: &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "production-oci-repo",
+					Namespace: "flux-system",
+					Labels: map[string]string{
+						"app":         "production",
+						"environment": "prod",
+					},
+				},
+				Spec: sourcev1.OCIRepositorySpec{
+					URL:      "oci://ghcr.io/example/production-repo",
+					Provider: "generic",
+					Reference: &sourcev1.OCIRepositoryRef{
+						Tag: "latest",
+					},
+					Interval: metav1.Duration{Duration: time.Minute},
+					SecretRef: &meta.LocalObjectReference{
+						Name: "oci-credentials",
+					},
+					Timeout: &metav1.Duration{Duration: 5 * time.Minute},
 				},
 			},
 		},
@@ -245,11 +309,9 @@ func BenchmarkKustomization_Creation(b *testing.B) {
 						Kind: "GitRepository",
 						Name: "test-repo",
 					},
-					Path:  "./",
-					Prune: true,
-					Interval: metav1.Duration{
-						Duration: 300000000000,
-					},
+					Path:     "./",
+					Prune:    true,
+					Interval: metav1.Duration{Duration: 5 * time.Minute},
 				},
 			},
 		},
@@ -270,16 +332,12 @@ func BenchmarkKustomization_Creation(b *testing.B) {
 						Name:      "production-repo",
 						Namespace: "flux-system",
 					},
-					Path:  "./kustomize/production",
-					Prune: true,
-					Interval: metav1.Duration{
-						Duration: 60000000000, // 1 minute
-					},
+					Path:            "./kustomize/production",
+					Prune:           true,
+					Interval:        metav1.Duration{Duration: time.Minute},
 					TargetNamespace: "production",
 					Wait:            true,
-					Timeout: &metav1.Duration{
-						Duration: 600000000000, // 10 minutes
-					},
+					Timeout:         &metav1.Duration{Duration: 10 * time.Minute},
 				},
 			},
 		},
@@ -322,9 +380,7 @@ func BenchmarkHelmRelease_Creation(b *testing.B) {
 							},
 						},
 					},
-					Interval: metav1.Duration{
-						Duration: 300000000000,
-					},
+					Interval: metav1.Duration{Duration: 5 * time.Minute},
 				},
 			},
 		},
@@ -351,19 +407,13 @@ func BenchmarkHelmRelease_Creation(b *testing.B) {
 							},
 						},
 					},
-					Interval: metav1.Duration{
-						Duration: 60000000000, // 1 minute
-					},
+					Interval: metav1.Duration{Duration: time.Minute},
 					Install: &helmv2.Install{
 						CreateNamespace: true,
-						Timeout: &metav1.Duration{
-							Duration: 600000000000, // 10 minutes
-						},
+						Timeout:         &metav1.Duration{Duration: 10 * time.Minute},
 					},
 					Upgrade: &helmv2.Upgrade{
-						Timeout: &metav1.Duration{
-							Duration: 600000000000, // 10 minutes
-						},
+						Timeout: &metav1.Duration{Duration: 10 * time.Minute},
 					},
 				},
 			},
@@ -384,73 +434,85 @@ func BenchmarkHelmRelease_Creation(b *testing.B) {
 	}
 }
 
-// BenchmarkCopySpec benchmarks spec copying with different Flux resource types.
+// BenchmarkCopySpec benchmarks the internal copySpec function with all Flux resource types.
 func BenchmarkCopySpec(b *testing.B) {
 	scenarios := []struct {
-		name string
-		src  client.Object
-		dst  client.Object
+		name   string
+		newSrc func() client.Object
+		newDst func() client.Object
 	}{
 		{
 			name: "GitRepository",
-			src: &sourcev1.GitRepository{
-				Spec: sourcev1.GitRepositorySpec{
-					URL: "https://github.com/example/repo",
-					Interval: metav1.Duration{
-						Duration: 300000000000,
+			newSrc: func() client.Object {
+				return &sourcev1.GitRepository{
+					Spec: sourcev1.GitRepositorySpec{
+						URL:      "https://github.com/example/repo",
+						Interval: metav1.Duration{Duration: 5 * time.Minute},
 					},
-				},
+				}
 			},
-			dst: &sourcev1.GitRepository{},
+			newDst: func() client.Object { return &sourcev1.GitRepository{} },
 		},
 		{
 			name: "HelmRepository",
-			src: &sourcev1.HelmRepository{
-				Spec: sourcev1.HelmRepositorySpec{
-					URL: "https://charts.example.com",
-					Interval: metav1.Duration{
-						Duration: 300000000000,
+			newSrc: func() client.Object {
+				return &sourcev1.HelmRepository{
+					Spec: sourcev1.HelmRepositorySpec{
+						URL:      "https://charts.example.com",
+						Interval: metav1.Duration{Duration: 5 * time.Minute},
 					},
-				},
+				}
 			},
-			dst: &sourcev1.HelmRepository{},
+			newDst: func() client.Object { return &sourcev1.HelmRepository{} },
+		},
+		{
+			name: "OCIRepository",
+			newSrc: func() client.Object {
+				return &sourcev1.OCIRepository{
+					Spec: sourcev1.OCIRepositorySpec{
+						URL:      "oci://ghcr.io/example/repo",
+						Interval: metav1.Duration{Duration: 5 * time.Minute},
+					},
+				}
+			},
+			newDst: func() client.Object { return &sourcev1.OCIRepository{} },
 		},
 		{
 			name: "Kustomization",
-			src: &kustomizev1.Kustomization{
-				Spec: kustomizev1.KustomizationSpec{
-					SourceRef: kustomizev1.CrossNamespaceSourceReference{
-						Kind: "GitRepository",
-						Name: "test-repo",
+			newSrc: func() client.Object {
+				return &kustomizev1.Kustomization{
+					Spec: kustomizev1.KustomizationSpec{
+						SourceRef: kustomizev1.CrossNamespaceSourceReference{
+							Kind: "GitRepository",
+							Name: "test-repo",
+						},
+						Path:     "./",
+						Prune:    true,
+						Interval: metav1.Duration{Duration: 5 * time.Minute},
 					},
-					Path:  "./",
-					Prune: true,
-					Interval: metav1.Duration{
-						Duration: 300000000000,
-					},
-				},
+				}
 			},
-			dst: &kustomizev1.Kustomization{},
+			newDst: func() client.Object { return &kustomizev1.Kustomization{} },
 		},
 		{
 			name: "HelmRelease",
-			src: &helmv2.HelmRelease{
-				Spec: helmv2.HelmReleaseSpec{
-					Chart: &helmv2.HelmChartTemplate{
-						Spec: helmv2.HelmChartTemplateSpec{
-							Chart: "nginx",
-							SourceRef: helmv2.CrossNamespaceObjectReference{
-								Kind: "HelmRepository",
-								Name: "test-helm-repo",
+			newSrc: func() client.Object {
+				return &helmv2.HelmRelease{
+					Spec: helmv2.HelmReleaseSpec{
+						Chart: &helmv2.HelmChartTemplate{
+							Spec: helmv2.HelmChartTemplateSpec{
+								Chart: "nginx",
+								SourceRef: helmv2.CrossNamespaceObjectReference{
+									Kind: "HelmRepository",
+									Name: "test-helm-repo",
+								},
 							},
 						},
+						Interval: metav1.Duration{Duration: 5 * time.Minute},
 					},
-					Interval: metav1.Duration{
-						Duration: 300000000000,
-					},
-				},
+				}
 			},
-			dst: &helmv2.HelmRelease{},
+			newDst: func() client.Object { return &helmv2.HelmRelease{} },
 		},
 	}
 
@@ -459,19 +521,13 @@ func BenchmarkCopySpec(b *testing.B) {
 			b.ReportAllocs()
 
 			for range b.N {
-				// Deep copy to ensure each iteration starts fresh
-				srcObj, isSrcOk := scenario.src.DeepCopyObject().(client.Object)
-				if !isSrcOk {
-					b.Fatal("src.DeepCopyObject() does not implement client.Object")
-				}
+				src := scenario.newSrc()
+				dst := scenario.newDst()
 
-				dstObj, isDstOk := scenario.dst.DeepCopyObject().(client.Object)
-				if !isDstOk {
-					b.Fatal("dst.DeepCopyObject() does not implement client.Object")
+				err := flux.CopySpec(src, dst)
+				if err != nil {
+					b.Fatalf("CopySpec failed: %v", err)
 				}
-
-				// Measure DeepCopy performance as proxy for spec operations
-				_, _ = srcObj, dstObj
 			}
 		})
 	}
