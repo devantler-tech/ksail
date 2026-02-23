@@ -45,12 +45,14 @@ func (p *Provisioner) waitForDockerClusterReadyAfterStart(
 	}
 
 	// Load TalosConfig from disk (since we don't have the config bundle during start)
-	talosconfigPath := ""
-	if p.options.TalosconfigPath != "" {
-		talosconfigPath, err = fsutil.ExpandHomePath(p.options.TalosconfigPath)
-		if err != nil {
-			return fmt.Errorf("failed to expand talosconfig path: %w", err)
-		}
+	rawTalosconfigPath := p.options.TalosconfigPath
+	if rawTalosconfigPath == "" {
+		rawTalosconfigPath = "~/.talos/config"
+	}
+
+	talosconfigPath, err := fsutil.ExpandHomePath(rawTalosconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to expand talosconfig path: %w", err)
 	}
 
 	talosConfig, err := clientconfig.Open(talosconfigPath)
