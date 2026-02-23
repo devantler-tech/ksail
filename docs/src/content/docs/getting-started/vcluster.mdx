@@ -139,7 +139,7 @@ docker ps | grep dev-cluster
 The generated `ksail.yaml` controls cluster behavior:
 
 ````yaml
-apiVersion: ksail.devantler.tech/v1alpha1
+apiVersion: ksail.io/v1alpha1
 kind: Cluster
 metadata:
   name: dev-cluster
@@ -147,7 +147,7 @@ spec:
   cluster:
     distribution: VCluster
     provider: Docker
-    gitopsEngine: Flux  # or ArgoCD
+    gitOpsEngine: Flux  # or ArgoCD
 ````
 
 ### VCluster-Specific Configuration
