@@ -342,6 +342,7 @@ func VerifyRegistryAccessWithTimeout(
 		verifyCtx, cancel := context.WithTimeout(ctx, timeout)
 
 		err := verifier.VerifyAccess(verifyCtx, opts)
+
 		cancel()
 
 		if err == nil {
