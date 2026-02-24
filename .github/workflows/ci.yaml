@@ -414,17 +414,16 @@ jobs:
           - "--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD"
           - "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
           - "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
-        # Temporarily disable Hetzner system tests as Hetzner has limited availability
-        # Add Talos x Hetzner combination
-        # include:
-        #   - distribution: Talos
-        #     provider: Hetzner
-        #     init: true
-        #     args: "--name system-test-cluster-with-scaffolding"
-        #   - distribution: Talos
-        #     provider: Hetzner
-        #     init: false
-        #     args: "--name system-test-cluster-without-scaffolding"
+        include:
+          - distribution: Talos
+            provider: Hetzner
+            init: true
+            args: "--name system-test-cluster-with-scaffolding"
+          - distribution: Talos
+            provider: Hetzner
+            init: false
+            args: "--name system-test-cluster-without-scaffolding"
+    continue-on-error: ${{ matrix.provider == 'Hetzner' }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
