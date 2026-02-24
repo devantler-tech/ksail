@@ -10,7 +10,7 @@ permissions:
 imports:
   - githubnext/agentics/workflows/shared/reporting.md@69b5e3ae5fa7f35fa555b0a22aee14c36ab57ebb
 safe-outputs:
-  noop: false
+  noop: true
   create-pull-request:
     expires: 1d
     labels:
@@ -313,8 +313,10 @@ Exit gracefully without creating a PR if:
 
 Your output MUST either:
 
-1. **If no changes in last 24 hours**: Output a brief status message
-2. **If no simplifications beneficial**: Output a brief status message
-3. **If simplifications made**: Create a PR with the changes
+1. **If no changes in last 24 hours**: Call the `noop` safe output with a brief explanation (e.g., "No code changes detected in the last 24 hours")
+2. **If no simplifications beneficial**: Call the `noop` safe output with a brief explanation (e.g., "Code analyzed from last 24 hours — no simplifications needed")
+3. **If simplifications made**: Create a PR with the changes using the `create_pull_request` safe output
+
+**IMPORTANT**: You MUST always produce a safe output — either `noop` or `create_pull_request`. Never exit without calling one of these.
 
 Begin your code simplification analysis now.

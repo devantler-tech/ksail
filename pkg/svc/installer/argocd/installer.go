@@ -64,6 +64,7 @@ func (a *Installer) chartSpec() *helm.ChartSpec {
 		ReleaseName:     argoCDReleaseName,
 		ChartName:       argoCDChartName,
 		Namespace:       argoCDNamespace,
+		Version:         chartVersion(),
 		CreateNamespace: true,
 		Atomic:          true,
 		UpgradeCRDs:     true,

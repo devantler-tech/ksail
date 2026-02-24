@@ -18,6 +18,9 @@ type ChartConfig struct {
 	ChartName string
 	// Namespace is the Kubernetes namespace for installation.
 	Namespace string
+	// Version is the chart version to install (e.g., "v3.31.3" or "1.19.0").
+	// When empty, Helm resolves the latest version from the repository.
+	Version string
 	// RepoURL is the Helm repository URL.
 	RepoURL string
 	// CreateNamespace determines if the namespace should be created.
