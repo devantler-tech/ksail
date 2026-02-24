@@ -59,9 +59,11 @@ jobs:
       - name: 🏃 Run benchmarks
         if: steps.discover.outputs.skip == 'false'
         shell: bash
+        env:
+          PACKAGES: ${{ steps.discover.outputs.packages }}
         run: |
           set -euo pipefail
-          echo "${{ steps.discover.outputs.packages }}" \
+          echo "$PACKAGES" \
             | xargs go test -bench=. -benchmem -count=5 -benchtime=1s -run='^$' -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
