@@ -256,7 +256,11 @@ func (p *Provisioner) waitForServerReachable(
 		RetryWithContext(ctx, func(ctx context.Context) error {
 			dialer := &net.Dialer{Timeout: retryInterval}
 
-			conn, dialErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(serverIP, strconv.Itoa(talosAPIPort)))
+			conn, dialErr := dialer.DialContext(
+				ctx,
+				"tcp",
+				net.JoinHostPort(serverIP, strconv.Itoa(talosAPIPort)),
+			)
 			if dialErr != nil {
 				return retry.ExpectedError(
 					fmt.Errorf("waiting for server to become reachable: %w", dialErr),
