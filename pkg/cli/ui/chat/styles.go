@@ -39,6 +39,8 @@ type uiStyles struct {
 	scrollIndicator lipgloss.Style
 	helpKey         lipgloss.Style
 	helpDesc        lipgloss.Style
+	pendingSteering lipgloss.Style
+	pendingQueued   lipgloss.Style
 }
 
 // newUIStyles creates a full set of UI styles from the given theme configuration.
@@ -90,6 +92,12 @@ func newUIStyles(theme ThemeConfig) uiStyles {
 			Foreground(theme.ToolColor),
 		helpDesc: lipgloss.NewStyle().
 			Foreground(theme.DimColor),
+		pendingSteering: lipgloss.NewStyle().
+			Foreground(theme.AccentColor).
+			Italic(true),
+		pendingQueued: lipgloss.NewStyle().
+			Foreground(theme.DimColor).
+			Italic(true),
 	}
 }
 

@@ -404,11 +404,11 @@ func (m *Model) renderPendingPrompt(
 		label = fmt.Sprintf("  [Q] [QUEUED #%d] %s", position, prompt.chatMode.Icon())
 	}
 
-	// Render label with appropriate styling
+	// Render label with dedicated pending prompt styling
 	if isSteering {
-		builder.WriteString(m.styles.assistantMsg.Render(label))
+		builder.WriteString(m.styles.pendingSteering.Render(label))
 	} else {
-		builder.WriteString(m.styles.userMsg.Render(label))
+		builder.WriteString(m.styles.pendingQueued.Render(label))
 	}
 
 	builder.WriteString("\n")

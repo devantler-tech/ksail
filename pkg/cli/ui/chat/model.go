@@ -828,7 +828,7 @@ func (m *Model) addQueuedPrompt(content string) {
 	m.queuedPrompts = append(m.queuedPrompts, pendingPrompt{
 		content:         content,
 		chatMode:        m.chatMode,
-		model:           m.currentModel,
+		model:           m.getSelectedModel(),
 		reasoningEffort: m.getReasoningEffort(),
 	})
 }
@@ -838,9 +838,20 @@ func (m *Model) addSteeringPrompt(content string) {
 	m.steeringPrompts = append(m.steeringPrompts, pendingPrompt{
 		content:         content,
 		chatMode:        m.chatMode,
-		model:           m.currentModel,
+		model:           m.getSelectedModel(),
 		reasoningEffort: m.getReasoningEffort(),
 	})
+}
+
+// getSelectedModel returns the user-selected model (from sessionConfig), not the
+// server-resolved model. This preserves the user's intent (including "auto" mode)
+// even when the server has resolved auto to a specific model.
+func (m *Model) getSelectedModel() string {
+	if m.sessionConfig != nil {
+		return m.sessionConfig.Model
+	}
+
+	return m.currentModel
 }
 
 // getReasoningEffort returns the current reasoning effort setting.
@@ -862,8 +873,8 @@ func (m *Model) pendingPromptCount() int {
 	return len(m.queuedPrompts) + len(m.steeringPrompts)
 }
 
-// deleteLastPendingPrompt removes the most recently added pending prompt.
-// Queued prompts are removed first (most recent), then steering prompts.
+// deleteLastPendingPrompt removes the most recently added queued prompt.
+// If there are no queued prompts, it removes the most recently added steering prompt instead.
 // Returns true if a prompt was deleted.
 func (m *Model) deleteLastPendingPrompt() bool {
 	if len(m.queuedPrompts) > 0 {
@@ -879,6 +890,21 @@ func (m *Model) deleteLastPendingPrompt() bool {
 	}
 
 	return false
+}
+
+// peekNextPendingPrompt returns the next pending prompt without removing it.
+// Steering prompts are checked first, followed by queued prompts.
+// Returns nil if no prompts are pending.
+func (m *Model) peekNextPendingPrompt() *pendingPrompt {
+	if len(m.steeringPrompts) > 0 {
+		return &m.steeringPrompts[0]
+	}
+
+	if len(m.queuedPrompts) > 0 {
+		return &m.queuedPrompts[0]
+	}
+
+	return nil
 }
 
 // popNextPendingPrompt removes and returns the next pending prompt.
