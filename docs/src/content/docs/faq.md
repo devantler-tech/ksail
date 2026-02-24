@@ -126,7 +126,7 @@ Previews all detected configuration changes without applying them, including cha
 
 ### What happens when I run `ksail cluster update` with no changes?
 
-The command compares the current cluster state against your `ksail.yaml` configuration. If no differences are detected, it exits immediately with "No changes detected" — no cluster modifications are made. This makes `ksail cluster update` safe to run frequently or in CI/CD pipelines; it is a no-op when the cluster is already in the desired state.
+The command compares the current cluster state against your `ksail.yaml` configuration. If no differences are detected, it prints `No changes detected` and exits without applying any changes, so no cluster modifications are made. This makes `ksail cluster update` safe to run frequently or in CI/CD pipelines; it is a no-op when the cluster is already in the desired state.
 
 ## Workload Management
 
