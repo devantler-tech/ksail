@@ -502,8 +502,8 @@ func (m *Model) handleSteerPrompt() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleDeletePendingPrompt removes the most recently added pending prompt.
-// Queued prompts are removed first, then steering prompts.
+// handleDeletePendingPrompt removes the last queued prompt if any exist;
+// if there are no queued prompts, it removes the last steering prompt.
 func (m *Model) handleDeletePendingPrompt() (tea.Model, tea.Cmd) {
 	if !m.hasPendingPrompts() {
 		return m, nil

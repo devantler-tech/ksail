@@ -313,7 +313,7 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 	}
 
 	// Setup succeeded - now remove the prompt from the queue
-	m.popNextPendingPrompt()
+	m.dropNextPendingPrompt()
 
 	// Prepare new turn state
 	m.prepareForNewTurn()

@@ -907,22 +907,16 @@ func (m *Model) peekNextPendingPrompt() *pendingPrompt {
 	return nil
 }
 
-// popNextPendingPrompt removes and returns the next pending prompt.
-// Returns nil if no prompts are pending.
-func (m *Model) popNextPendingPrompt() *pendingPrompt {
+// dropNextPendingPrompt removes the next pending prompt from the queue.
+// Steering prompts are checked first, followed by queued prompts.
+func (m *Model) dropNextPendingPrompt() {
 	if len(m.steeringPrompts) > 0 {
-		prompt := m.steeringPrompts[0]
 		m.steeringPrompts = m.steeringPrompts[1:]
 
-		return &prompt
+		return
 	}
 
 	if len(m.queuedPrompts) > 0 {
-		prompt := m.queuedPrompts[0]
 		m.queuedPrompts = m.queuedPrompts[1:]
-
-		return &prompt
 	}
-
-	return nil
 }
