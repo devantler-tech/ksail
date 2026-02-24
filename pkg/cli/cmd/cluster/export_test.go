@@ -23,19 +23,29 @@ func ExportResolveClusterNameFromContext(ctx *localregistry.Context) string {
 }
 
 // ExportWriteMetadata exports writeMetadata for testing.
-var ExportWriteMetadata = writeMetadata
+func ExportWriteMetadata(metadata *BackupMetadata, path string) error {
+	return writeMetadata(metadata, path)
+}
 
 // ExportCreateTarball exports createTarball for testing.
-var ExportCreateTarball = createTarball
+func ExportCreateTarball(sourceDir, targetPath string, compressionLevel int) error {
+	return createTarball(sourceDir, targetPath, compressionLevel)
+}
 
 // ExportCountYAMLDocuments exports countYAMLDocuments for testing.
-var ExportCountYAMLDocuments = countYAMLDocuments
+func ExportCountYAMLDocuments(content string) int {
+	return countYAMLDocuments(content)
+}
 
 // ExportFilterExcludedTypes exports filterExcludedTypes for testing.
-var ExportFilterExcludedTypes = filterExcludedTypes
+func ExportFilterExcludedTypes(resourceTypes, excludeTypes []string) []string {
+	return filterExcludedTypes(resourceTypes, excludeTypes)
+}
 
 // ExportExtractBackupArchive exports extractBackupArchive for testing.
-var ExportExtractBackupArchive = extractBackupArchive
+func ExportExtractBackupArchive(inputPath string) (string, *BackupMetadata, error) {
+	return extractBackupArchive(inputPath)
+}
 
 // ExportDirPerm exports dirPerm for testing.
 const ExportDirPerm = dirPerm
