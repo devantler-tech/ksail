@@ -16,12 +16,33 @@ import (
 var (
 	errMockStartNodesFailed      = errors.New("start nodes failed")
 	errMockStopNodesFailed       = errors.New("stop nodes failed")
-	errMockListClustersFailed    = errors.New("list clusters failed")
-	errMockNodesExistFailed      = errors.New("nodes exist check failed")
-	errMockDeleteNodesFailed     = errors.New("delete nodes failed")
-	errMockListNodesFailed       = errors.New("list nodes failed")
 	errMockListAllClustersFailed = errors.New("list all clusters failed")
 )
+
+// runNodeOperationTest is a shared helper for testing Start/Stop node lifecycle operations.
+func runNodeOperationTest(
+	t *testing.T,
+	clusterName, inputName, mockFn string,
+	mockErr error,
+	operation func(*vclusterprovisioner.Provisioner, context.Context, string) error,
+) {
+	t.Helper()
+
+	mockProvider := provider.NewMockProvider()
+	mockProvider.On(mockFn, mock.Anything, clusterName).Return(mockErr)
+
+	provisioner := vclusterprovisioner.NewProvisioner(clusterName, "", false, mockProvider)
+	err := operation(provisioner, context.Background(), inputName)
+
+	if mockErr != nil {
+		require.Error(t, err)
+		require.ErrorContains(t, err, mockErr.Error())
+	} else {
+		require.NoError(t, err)
+	}
+
+	mockProvider.AssertExpectations(t)
+}
 
 func TestNewProvisioner(t *testing.T) {
 	t.Parallel()
@@ -31,41 +52,36 @@ func TestNewProvisioner(t *testing.T) {
 		clusterName    string
 		valuesPath     string
 		disableFlannel bool
-		wantName       string
 	}{
 		{
 			name:           "creates_with_provided_name",
 			clusterName:    "test-cluster",
 			valuesPath:     "",
 			disableFlannel: false,
-			wantName:       "test-cluster",
 		},
 		{
 			name:           "uses_default_name_when_empty",
 			clusterName:    "",
 			valuesPath:     "/path/to/values.yaml",
 			disableFlannel: false,
-			wantName:       "vcluster-default",
 		},
 		{
 			name:           "preserves_all_options",
 			clusterName:    "custom",
 			valuesPath:     "/custom/path.yaml",
 			disableFlannel: true,
-			wantName:       "custom",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			mockProvider := provider.NewMockProvider()
-
 			provisioner := vclusterprovisioner.NewProvisioner(
-				tt.clusterName,
-				tt.valuesPath,
-				tt.disableFlannel,
+				testCase.clusterName,
+				testCase.valuesPath,
+				testCase.disableFlannel,
 				mockProvider,
 			)
 
@@ -87,341 +103,200 @@ func TestSetProvider(t *testing.T) {
 		mockProvider1,
 	)
 
-	// Set a new provider
 	provisioner.SetProvider(mockProvider2)
 
-	// Provider should be updated (we can't directly assert this, but we can
-	// verify by testing a method that uses the provider)
 	assert.NotNil(t, provisioner, "provisioner should still be valid after SetProvider")
 }
 
-func TestStart(t *testing.T) {
+func TestStart_Success(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		clusterName string
-		inputName   string
-		mockSetup   func(*provider.MockProvider, string)
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name:        "successful_start",
-			clusterName: "test-cluster",
-			inputName:   "test-cluster",
-			mockSetup: func(m *provider.MockProvider, name string) {
-				m.On("StartNodes", mock.Anything, name).Return(nil)
-			},
-			wantErr: false,
+	runNodeOperationTest(t, "test-cluster", "test-cluster", "StartNodes", nil,
+		func(p *vclusterprovisioner.Provisioner, ctx context.Context, name string) error {
+			return p.Start(ctx, name)
 		},
-		{
-			name:        "start_error_propagates",
-			clusterName: "test-cluster",
-			inputName:   "test-cluster",
-			mockSetup: func(m *provider.MockProvider, name string) {
-				m.On("StartNodes", mock.Anything, name).Return(errMockStartNodesFailed)
-			},
-			wantErr:     true,
-			errContains: "start nodes failed",
-		},
-		{
-			name:        "uses_default_name_when_empty",
-			clusterName: "default-cluster",
-			inputName:   "",
-			mockSetup: func(m *provider.MockProvider, name string) {
-				m.On("StartNodes", mock.Anything, "default-cluster").Return(nil)
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			mockProvider := provider.NewMockProvider()
-			tt.mockSetup(mockProvider, tt.clusterName)
-
-			provisioner := vclusterprovisioner.NewProvisioner(
-				tt.clusterName,
-				"",
-				false,
-				mockProvider,
-			)
-
-			err := provisioner.Start(context.Background(), tt.inputName)
-
-			if tt.wantErr {
-				require.Error(t, err, "Start() should return error")
-				if tt.errContains != "" {
-					assert.ErrorContains(t, err, tt.errContains, "error message")
-				}
-			} else {
-				require.NoError(t, err, "Start() should not return error")
-			}
-
-			mockProvider.AssertExpectations(t)
-		})
-	}
+	)
 }
 
-func TestStop(t *testing.T) {
+func TestStart_Error(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		clusterName string
-		inputName   string
-		mockSetup   func(*provider.MockProvider, string)
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name:        "successful_stop",
-			clusterName: "test-cluster",
-			inputName:   "test-cluster",
-			mockSetup: func(m *provider.MockProvider, name string) {
-				m.On("StopNodes", mock.Anything, name).Return(nil)
-			},
-			wantErr: false,
+	runNodeOperationTest(t, "test-cluster", "test-cluster", "StartNodes", errMockStartNodesFailed,
+		func(p *vclusterprovisioner.Provisioner, ctx context.Context, name string) error {
+			return p.Start(ctx, name)
 		},
-		{
-			name:        "stop_error_propagates",
-			clusterName: "test-cluster",
-			inputName:   "test-cluster",
-			mockSetup: func(m *provider.MockProvider, name string) {
-				m.On("StopNodes", mock.Anything, name).Return(errMockStopNodesFailed)
-			},
-			wantErr:     true,
-			errContains: "stop nodes failed",
-		},
-		{
-			name:        "uses_default_name_when_empty",
-			clusterName: "default-cluster",
-			inputName:   "",
-			mockSetup: func(m *provider.MockProvider, name string) {
-				m.On("StopNodes", mock.Anything, "default-cluster").Return(nil)
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			mockProvider := provider.NewMockProvider()
-			tt.mockSetup(mockProvider, tt.clusterName)
-
-			provisioner := vclusterprovisioner.NewProvisioner(
-				tt.clusterName,
-				"",
-				false,
-				mockProvider,
-			)
-
-			err := provisioner.Stop(context.Background(), tt.inputName)
-
-			if tt.wantErr {
-				require.Error(t, err, "Stop() should return error")
-				if tt.errContains != "" {
-					assert.ErrorContains(t, err, tt.errContains, "error message")
-				}
-			} else {
-				require.NoError(t, err, "Stop() should not return error")
-			}
-
-			mockProvider.AssertExpectations(t)
-		})
-	}
+	)
 }
 
-func TestList(t *testing.T) {
+func TestStart_DefaultName(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		mockSetup   func(*provider.MockProvider)
-		wantErr     bool
-		want        []string
-		errContains string
-	}{
-		{
-			name: "successful_list_with_clusters",
-			mockSetup: func(m *provider.MockProvider) {
-				m.On("ListAllClusters", mock.Anything).
-					Return([]string{"cluster1", "cluster2"}, nil)
-			},
-			wantErr: false,
-			want:    []string{"cluster1", "cluster2"},
+	runNodeOperationTest(t, "default-cluster", "", "StartNodes", nil,
+		func(p *vclusterprovisioner.Provisioner, ctx context.Context, name string) error {
+			return p.Start(ctx, name)
 		},
-		{
-			name: "successful_list_empty",
-			mockSetup: func(m *provider.MockProvider) {
-				m.On("ListAllClusters", mock.Anything).
-					Return([]string{}, nil)
-			},
-			wantErr: false,
-			want:    []string{},
+	)
+}
+
+func TestStop_Success(t *testing.T) {
+	t.Parallel()
+
+	runNodeOperationTest(t, "test-cluster", "test-cluster", "StopNodes", nil,
+		func(p *vclusterprovisioner.Provisioner, ctx context.Context, name string) error {
+			return p.Stop(ctx, name)
 		},
-		{
-			name: "list_error_propagates",
-			mockSetup: func(m *provider.MockProvider) {
-				m.On("ListAllClusters", mock.Anything).
-					Return([]string(nil), errMockListAllClustersFailed)
-			},
-			wantErr:     true,
-			errContains: "list all clusters failed",
+	)
+}
+
+func TestStop_Error(t *testing.T) {
+	t.Parallel()
+
+	runNodeOperationTest(t, "test-cluster", "test-cluster", "StopNodes", errMockStopNodesFailed,
+		func(p *vclusterprovisioner.Provisioner, ctx context.Context, name string) error {
+			return p.Stop(ctx, name)
 		},
-	}
+	)
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+func TestStop_DefaultName(t *testing.T) {
+	t.Parallel()
 
-			mockProvider := provider.NewMockProvider()
-			tt.mockSetup(mockProvider)
+	runNodeOperationTest(t, "default-cluster", "", "StopNodes", nil,
+		func(p *vclusterprovisioner.Provisioner, ctx context.Context, name string) error {
+			return p.Stop(ctx, name)
+		},
+	)
+}
 
-			provisioner := vclusterprovisioner.NewProvisioner(
-				"test-cluster",
-				"",
-				false,
-				mockProvider,
-			)
+func TestList_WithClusters(t *testing.T) {
+	t.Parallel()
 
-			clusters, err := provisioner.List(context.Background())
+	mockProvider := provider.NewMockProvider()
+	mockProvider.On("ListAllClusters", mock.Anything).
+		Return([]string{"cluster1", "cluster2"}, nil)
 
-			if tt.wantErr {
-				require.Error(t, err, "List() should return error")
-				if tt.errContains != "" {
-					assert.ErrorContains(t, err, tt.errContains, "error message")
-				}
-			} else {
-				require.NoError(t, err, "List() should not return error")
-				assert.Equal(t, tt.want, clusters, "cluster list should match")
-			}
+	provisioner := vclusterprovisioner.NewProvisioner("test-cluster", "", false, mockProvider)
+	clusters, err := provisioner.List(context.Background())
 
-			mockProvider.AssertExpectations(t)
-		})
-	}
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cluster1", "cluster2"}, clusters)
+	mockProvider.AssertExpectations(t)
+}
+
+func TestList_Empty(t *testing.T) {
+	t.Parallel()
+
+	mockProvider := provider.NewMockProvider()
+	mockProvider.On("ListAllClusters", mock.Anything).
+		Return([]string{}, nil)
+
+	provisioner := vclusterprovisioner.NewProvisioner("test-cluster", "", false, mockProvider)
+	clusters, err := provisioner.List(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{}, clusters)
+	mockProvider.AssertExpectations(t)
+}
+
+func TestList_Error(t *testing.T) {
+	t.Parallel()
+
+	mockProvider := provider.NewMockProvider()
+	mockProvider.On("ListAllClusters", mock.Anything).
+		Return([]string(nil), errMockListAllClustersFailed)
+
+	provisioner := vclusterprovisioner.NewProvisioner("test-cluster", "", false, mockProvider)
+	clusters, err := provisioner.List(context.Background())
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "list all clusters failed")
+	assert.Nil(t, clusters)
+	mockProvider.AssertExpectations(t)
 }
 
 func TestList_NilProvider(t *testing.T) {
 	t.Parallel()
 
-	// Create provisioner with nil provider
-	provisioner := vclusterprovisioner.NewProvisioner(
-		"test-cluster",
-		"",
-		false,
-		nil,
-	)
-
+	provisioner := vclusterprovisioner.NewProvisioner("test-cluster", "", false, nil)
 	clusters, err := provisioner.List(context.Background())
 
-	require.Error(t, err, "List() should return error with nil provider")
-	assert.ErrorIs(t, err, clustererr.ErrProviderNotSet, "should return ErrProviderNotSet")
+	require.Error(t, err)
+	require.ErrorIs(t, err, clustererr.ErrProviderNotSet, "should return ErrProviderNotSet")
 	assert.Nil(t, clusters, "clusters should be nil on error")
 }
 
-func TestExists(t *testing.T) {
+func TestExists_Found(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		clusterName string
-		inputName   string
-		mockSetup   func(*provider.MockProvider)
-		want        bool
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name:        "cluster_exists",
-			clusterName: "test-cluster",
-			inputName:   "test-cluster",
-			mockSetup: func(m *provider.MockProvider) {
-				m.On("ListAllClusters", mock.Anything).
-					Return([]string{"test-cluster", "other-cluster"}, nil)
-			},
-			want:    true,
-			wantErr: false,
-		},
-		{
-			name:        "cluster_does_not_exist",
-			clusterName: "test-cluster",
-			inputName:   "test-cluster",
-			mockSetup: func(m *provider.MockProvider) {
-				m.On("ListAllClusters", mock.Anything).
-					Return([]string{"other-cluster"}, nil)
-			},
-			want:    false,
-			wantErr: false,
-		},
-		{
-			name:        "empty_list",
-			clusterName: "test-cluster",
-			inputName:   "test-cluster",
-			mockSetup: func(m *provider.MockProvider) {
-				m.On("ListAllClusters", mock.Anything).
-					Return([]string{}, nil)
-			},
-			want:    false,
-			wantErr: false,
-		},
-		{
-			name:        "list_error_propagates",
-			clusterName: "test-cluster",
-			inputName:   "test-cluster",
-			mockSetup: func(m *provider.MockProvider) {
-				m.On("ListAllClusters", mock.Anything).
-					Return([]string(nil), errMockListAllClustersFailed)
-			},
-			want:        false,
-			wantErr:     true,
-			errContains: "list all clusters failed",
-		},
-		{
-			name:        "uses_default_name_when_empty",
-			clusterName: "default-cluster",
-			inputName:   "",
-			mockSetup: func(m *provider.MockProvider) {
-				m.On("ListAllClusters", mock.Anything).
-					Return([]string{"default-cluster"}, nil)
-			},
-			want:    true,
-			wantErr: false,
-		},
-	}
+	mockProvider := provider.NewMockProvider()
+	mockProvider.On("ListAllClusters", mock.Anything).
+		Return([]string{"test-cluster", "other-cluster"}, nil)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	provisioner := vclusterprovisioner.NewProvisioner("test-cluster", "", false, mockProvider)
+	exists, err := provisioner.Exists(context.Background(), "test-cluster")
 
-			mockProvider := provider.NewMockProvider()
-			tt.mockSetup(mockProvider)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	mockProvider.AssertExpectations(t)
+}
 
-			provisioner := vclusterprovisioner.NewProvisioner(
-				tt.clusterName,
-				"",
-				false,
-				mockProvider,
-			)
+func TestExists_NotFound(t *testing.T) {
+	t.Parallel()
 
-			exists, err := provisioner.Exists(context.Background(), tt.inputName)
+	mockProvider := provider.NewMockProvider()
+	mockProvider.On("ListAllClusters", mock.Anything).
+		Return([]string{"other-cluster"}, nil)
 
-			if tt.wantErr {
-				require.Error(t, err, "Exists() should return error")
-				if tt.errContains != "" {
-					assert.ErrorContains(t, err, tt.errContains, "error message")
-				}
-			} else {
-				require.NoError(t, err, "Exists() should not return error")
-				assert.Equal(t, tt.want, exists, "exists result should match")
-			}
+	provisioner := vclusterprovisioner.NewProvisioner("test-cluster", "", false, mockProvider)
+	exists, err := provisioner.Exists(context.Background(), "test-cluster")
 
-			mockProvider.AssertExpectations(t)
-		})
-	}
+	require.NoError(t, err)
+	assert.False(t, exists)
+	mockProvider.AssertExpectations(t)
+}
+
+func TestExists_EmptyList(t *testing.T) {
+	t.Parallel()
+
+	mockProvider := provider.NewMockProvider()
+	mockProvider.On("ListAllClusters", mock.Anything).
+		Return([]string{}, nil)
+
+	provisioner := vclusterprovisioner.NewProvisioner("test-cluster", "", false, mockProvider)
+	exists, err := provisioner.Exists(context.Background(), "test-cluster")
+
+	require.NoError(t, err)
+	assert.False(t, exists)
+	mockProvider.AssertExpectations(t)
+}
+
+func TestExists_Error(t *testing.T) {
+	t.Parallel()
+
+	mockProvider := provider.NewMockProvider()
+	mockProvider.On("ListAllClusters", mock.Anything).
+		Return([]string(nil), errMockListAllClustersFailed)
+
+	provisioner := vclusterprovisioner.NewProvisioner("test-cluster", "", false, mockProvider)
+	exists, err := provisioner.Exists(context.Background(), "test-cluster")
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "list all clusters failed")
+	assert.False(t, exists)
+	mockProvider.AssertExpectations(t)
+}
+
+func TestExists_DefaultName(t *testing.T) {
+	t.Parallel()
+
+	mockProvider := provider.NewMockProvider()
+	mockProvider.On("ListAllClusters", mock.Anything).
+		Return([]string{"default-cluster"}, nil)
+
+	provisioner := vclusterprovisioner.NewProvisioner("default-cluster", "", false, mockProvider)
+	exists, err := provisioner.Exists(context.Background(), "")
+
+	require.NoError(t, err)
+	assert.True(t, exists)
+	mockProvider.AssertExpectations(t)
 }
