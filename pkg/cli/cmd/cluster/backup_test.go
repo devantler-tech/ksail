@@ -3,6 +3,7 @@ package cluster_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	cluster "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
@@ -106,6 +107,14 @@ func TestCountYAMLDocuments(t *testing.T) {
 			name:     "no kind lines returns 1",
 			content:  "metadata:\n  name: test",
 			expected: 1,
+		},
+		{
+			name: "kubectl list output",
+			content: "apiVersion: v1\nkind: PodList\nmetadata:\n" +
+				"items:\n- apiVersion: v1\n  kind: Pod\n  metadata:\n" +
+				"    name: pod1\n- apiVersion: v1\n  kind: Pod\n  metadata:\n" +
+				"    name: pod2\n",
+			expected: 2,
 		},
 	}
 
@@ -216,5 +225,78 @@ func TestExtractAndReadMetadata(t *testing.T) {
 			"ResourceCount = %d, want %d",
 			restored.ResourceCount, 10,
 		)
+	}
+}
+
+func TestSanitizeYAMLOutput(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		input          string
+		wantStripped   []string
+		wantPreserved  []string
+	}{
+		{
+			name: "strips server-assigned metadata",
+			input: `apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod
+  namespace: default
+  resourceVersion: "12345"
+  uid: abc-123
+  managedFields:
+  - manager: kubectl
+  creationTimestamp: "2025-01-01T00:00:00Z"
+status:
+  phase: Running
+spec:
+  containers:
+  - name: nginx`,
+			wantStripped: []string{
+				"resourceVersion", "uid", "managedFields",
+				"creationTimestamp", "status",
+			},
+			wantPreserved: []string{
+				"name: test-pod", "namespace: default",
+				"kind: Pod", "apiVersion: v1",
+			},
+		},
+		{
+			name:          "handles non-YAML gracefully",
+			input:         "not valid yaml: [",
+			wantStripped:  []string{},
+			wantPreserved: []string{"not valid yaml"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := cluster.ExportSanitizeYAMLOutput(test.input)
+			if err != nil {
+				t.Fatalf("sanitizeYAMLOutput() error = %v", err)
+			}
+
+			for _, s := range test.wantStripped {
+				if strings.Contains(result, s) {
+					t.Errorf(
+						"sanitizeYAMLOutput() should have stripped %q",
+						s,
+					)
+				}
+			}
+
+			for _, s := range test.wantPreserved {
+				if !strings.Contains(result, s) {
+					t.Errorf(
+						"sanitizeYAMLOutput() should preserve %q",
+						s,
+					)
+				}
+			}
+		})
 	}
 }

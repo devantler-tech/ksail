@@ -19,8 +19,10 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 	"k8s.io/client-go/tools/clientcmd"
+	sigsyaml "sigs.k8s.io/yaml"
 )
 
 const (
@@ -66,7 +68,6 @@ type backupFlags struct {
 // NewBackupCmd creates the cluster backup command.
 func NewBackupCmd(_ *di.Runtime) *cobra.Command {
 	flags := &backupFlags{
-		includeVolumes:   true,
 		compressionLevel: gzip.DefaultCompression,
 	}
 
@@ -384,12 +385,17 @@ func executeGetAndSave(
 		return 0, nil
 	}
 
-	err = os.WriteFile(outputPath, []byte(output), filePerm)
+	sanitized, err := sanitizeYAMLOutput(output)
+	if err != nil {
+		return 0, fmt.Errorf("failed to sanitize output: %w", err)
+	}
+
+	err = os.WriteFile(outputPath, []byte(sanitized), filePerm)
 	if err != nil {
 		return 0, fmt.Errorf("failed to write resource file: %w", err)
 	}
 
-	count := countYAMLDocuments(output)
+	count := countYAMLDocuments(sanitized)
 
 	return count, nil
 }
@@ -428,6 +434,94 @@ func runKubectlGet(
 	}
 
 	return outBuf.String(), errBuf.String(), nil
+}
+
+// sanitizeYAMLOutput removes server-assigned metadata fields from kubectl
+// output to produce portable, apply-able manifests. Fields stripped include
+// resourceVersion, uid, selfLink, creationTimestamp, managedFields, and
+// the entire status block.
+func sanitizeYAMLOutput(output string) (string, error) {
+	var obj unstructured.Unstructured
+
+	err := sigsyaml.Unmarshal([]byte(output), &obj.Object)
+	if err != nil {
+		// If we can't parse it, return the original output unchanged.
+		return output, nil //nolint:nilerr // non-parseable output is kept as-is
+	}
+
+	kind := obj.GetKind()
+	if strings.HasSuffix(kind, "List") {
+		return sanitizeList(&obj)
+	}
+
+	sanitizeObject(&obj)
+
+	result, err := sigsyaml.Marshal(obj.Object)
+	if err != nil {
+		return output, nil //nolint:nilerr // marshal failure falls back to original
+	}
+
+	return string(result), nil
+}
+
+func sanitizeList(list *unstructured.Unstructured) (string, error) {
+	items, found, err := unstructured.NestedSlice(
+		list.Object, "items",
+	)
+	if err != nil || !found {
+		result, marshalErr := sigsyaml.Marshal(list.Object)
+		if marshalErr != nil {
+			return "", fmt.Errorf("failed to marshal list: %w", marshalErr)
+		}
+
+		return string(result), nil
+	}
+
+	var builder strings.Builder
+
+	for i, item := range items {
+		itemMap, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		obj := &unstructured.Unstructured{Object: itemMap}
+		sanitizeObject(obj)
+
+		data, marshalErr := sigsyaml.Marshal(obj.Object)
+		if marshalErr != nil {
+			continue
+		}
+
+		if i > 0 {
+			builder.WriteString("---\n")
+		}
+
+		builder.Write(data)
+	}
+
+	return builder.String(), nil
+}
+
+func sanitizeObject(obj *unstructured.Unstructured) {
+	// Remove server-assigned metadata fields
+	unstructured.RemoveNestedField(
+		obj.Object, "metadata", "resourceVersion",
+	)
+	unstructured.RemoveNestedField(obj.Object, "metadata", "uid")
+	unstructured.RemoveNestedField(obj.Object, "metadata", "selfLink")
+	unstructured.RemoveNestedField(
+		obj.Object, "metadata", "creationTimestamp",
+	)
+	unstructured.RemoveNestedField(
+		obj.Object, "metadata", "managedFields",
+	)
+	unstructured.RemoveNestedField(
+		obj.Object, "metadata", "generation",
+	)
+
+	// Remove status block
+	unstructured.RemoveNestedField(obj.Object, "status")
 }
 
 func writeMetadata(metadata *BackupMetadata, path string) error {
@@ -498,7 +592,7 @@ func addFileToTar(
 		return fmt.Errorf("failed to get relative path: %w", err)
 	}
 
-	header.Name = relPath
+	header.Name = filepath.ToSlash(relPath)
 
 	err = tarWriter.WriteHeader(header)
 	if err != nil {
@@ -541,8 +635,28 @@ func countYAMLDocuments(content string) int {
 	count := 0
 
 	for line := range strings.SplitSeq(content, "\n") {
-		if strings.HasPrefix(line, "kind:") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- apiVersion:") ||
+			strings.HasPrefix(line, "kind:") {
 			count++
+		}
+	}
+
+	// If we found "kind:" at the top level, check if it's a List wrapper.
+	// In that case, count represents 1 (the List) + items.
+	// Subtract the List wrapper if items were also counted.
+	if count > 1 {
+		for line := range strings.SplitSeq(content, "\n") {
+			if strings.HasPrefix(line, "kind:") {
+				kindValue := strings.TrimSpace(
+					strings.TrimPrefix(line, "kind:"),
+				)
+				if strings.HasSuffix(kindValue, "List") {
+					count--
+				}
+
+				break
+			}
 		}
 	}
 

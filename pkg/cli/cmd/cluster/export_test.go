@@ -47,6 +47,11 @@ func ExportExtractBackupArchive(inputPath string) (string, *BackupMetadata, erro
 	return extractBackupArchive(inputPath)
 }
 
+// ExportSanitizeYAMLOutput exports sanitizeYAMLOutput for testing.
+func ExportSanitizeYAMLOutput(output string) (string, error) {
+	return sanitizeYAMLOutput(output)
+}
+
 // ExportDirPerm exports dirPerm for testing.
 const ExportDirPerm = dirPerm
 

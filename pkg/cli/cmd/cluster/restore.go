@@ -264,9 +264,20 @@ func validateTarEntry(
 	header *tar.Header,
 	destDir string,
 ) (string, error) {
-	if header.Typeflag == tar.TypeSymlink ||
-		header.Typeflag == tar.TypeLink {
-		return "", ErrSymlinkInArchive
+	// Only allow regular files and directories; reject symlinks,
+	// hard links, char/block devices, FIFOs, and other special types.
+	if header.Typeflag != tar.TypeDir &&
+		header.Typeflag != tar.TypeReg &&
+		header.Typeflag != tar.TypeRegA {
+		if header.Typeflag == tar.TypeSymlink ||
+			header.Typeflag == tar.TypeLink {
+			return "", ErrSymlinkInArchive
+		}
+
+		return "", fmt.Errorf(
+			"%w: unsupported entry type %d for %s",
+			ErrInvalidTarPath, header.Typeflag, header.Name,
+		)
 	}
 
 	cleanName := filepath.Clean(header.Name)
@@ -336,6 +347,7 @@ func restoreResources(
 	flags *restoreFlags,
 ) error {
 	resourcesDir := filepath.Join(tmpDir, "resources")
+	var restoreErrors []string
 
 	for _, resourceType := range backupResourceTypes() {
 		resourceDir := filepath.Join(resourcesDir, resourceType)
@@ -361,6 +373,9 @@ func restoreResources(
 		for _, file := range files {
 			err = restoreResourceFile(kubeconfigPath, file, flags)
 			if err != nil {
+				msg := fmt.Sprintf("%s: %v", filepath.Base(file), err)
+				restoreErrors = append(restoreErrors, msg)
+
 				_, _ = fmt.Fprintf(
 					writer,
 					"Warning: failed to restore %s: %v\n",
@@ -372,6 +387,14 @@ func restoreResources(
 		}
 
 		_, _ = fmt.Fprintf(writer, "   Restored %s\n", resourceType)
+	}
+
+	if len(restoreErrors) > 0 {
+		return fmt.Errorf(
+			"%d resource(s) failed to restore: %s",
+			len(restoreErrors),
+			strings.Join(restoreErrors, "; "),
+		)
 	}
 
 	return nil
