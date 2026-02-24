@@ -39,6 +39,25 @@ func TestVerifyRegistryAccessWithTimeout_EmptyEndpoint(t *testing.T) {
 	assert.Contains(t, err.Error(), "registry endpoint is required")
 }
 
+func TestVerifyRegistryAccessWithTimeout_CancelledContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := oci.VerifyRegistryAccessWithTimeout(
+		ctx,
+		oci.VerifyOptions{
+			RegistryEndpoint: "ghcr.io",
+			Repository:       "test/repo",
+		},
+		100, // timeout
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "registry access verification failed")
+}
+
 //nolint:funlen // Table-driven test with many cases naturally exceeds limit
 func TestErrorVariables(t *testing.T) {
 	t.Parallel()

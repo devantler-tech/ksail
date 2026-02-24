@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v5/pkg/client/netretry"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -319,21 +320,53 @@ func extractErrorDetail(errStr string) string {
 	return errStr
 }
 
+// Registry verification retry constants.
+const (
+	verifyMaxRetries    = 3
+	verifyRetryBaseWait = 2 * time.Second
+	verifyRetryMaxWait  = 10 * time.Second
+)
+
 // VerifyRegistryAccessWithTimeout verifies registry access with a timeout.
+// Retries transient network errors (e.g., timeouts, 5xx) with exponential backoff.
 func VerifyRegistryAccessWithTimeout(
 	ctx context.Context,
 	opts VerifyOptions,
 	timeout time.Duration,
 ) error {
-	verifyCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
 	v := NewRegistryVerifier()
 
-	err := v.VerifyAccess(verifyCtx, opts)
-	if err != nil {
-		return fmt.Errorf("registry access verification failed: %w", err)
+	var lastErr error
+
+	for attempt := 1; attempt <= verifyMaxRetries; attempt++ {
+		verifyCtx, cancel := context.WithTimeout(ctx, timeout)
+
+		err := v.VerifyAccess(verifyCtx, opts)
+		cancel()
+
+		if err == nil {
+			return nil
+		}
+
+		lastErr = err
+
+		if !netretry.IsRetryable(lastErr) || attempt == verifyMaxRetries {
+			break
+		}
+
+		delay := netretry.ExponentialDelay(attempt, verifyRetryBaseWait, verifyRetryMaxWait)
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+
+			return fmt.Errorf("registry access verification cancelled: %w", ctx.Err())
+		case <-timer.C:
+		}
 	}
 
-	return nil
+	return fmt.Errorf("registry access verification failed: %w", lastErr)
 }
