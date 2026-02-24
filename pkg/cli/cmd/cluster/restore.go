@@ -236,7 +236,7 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 		}
 
 		if header.Typeflag == tar.TypeDir {
-			err = os.MkdirAll(targetPath, dirPerm) //nolint:gosec // validated
+			err = os.MkdirAll(targetPath, dirPerm)
 			if err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
@@ -244,7 +244,7 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 			continue
 		}
 
-		err = os.MkdirAll(filepath.Dir(targetPath), dirPerm) //nolint:gosec // validated
+		err = os.MkdirAll(filepath.Dir(targetPath), dirPerm)
 		if err != nil {
 			return fmt.Errorf(
 				"failed to create parent directory: %w", err,
@@ -425,7 +425,7 @@ func restoreResourceFile(
 }
 
 func allLinesContain(output, substr string) bool {
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue

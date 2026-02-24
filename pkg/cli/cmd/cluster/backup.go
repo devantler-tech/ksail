@@ -228,11 +228,11 @@ func createBackupArchive(
 func clusterScopedResourceTypes() map[string]bool {
 	return map[string]bool{
 		"customresourcedefinitions": true,
-		"namespaces":               true,
-		"storageclasses":           true,
-		"persistentvolumes":        true,
-		"clusterroles":             true,
-		"clusterrolebindings":      true,
+		"namespaces":                true,
+		"storageclasses":            true,
+		"persistentvolumes":         true,
+		"clusterroles":              true,
+		"clusterrolebindings":       true,
 	}
 }
 
@@ -509,7 +509,7 @@ func addFileToTar(
 		return nil
 	}
 
-	file, err := os.Open(path) //nolint:gosec // path from controlled Walk
+	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
