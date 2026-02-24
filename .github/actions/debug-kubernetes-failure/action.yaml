@@ -206,10 +206,10 @@ runs:
               POD_NS=$(echo "$POD_FULL" | cut -d'/' -f1)
               POD_NAME=$(echo "$POD_FULL" | cut -d'/' -f2)
               echo "--- Describe: $POD_NS/$POD_NAME ---"
-              $KUBECTL_CMD describe pod --namespace "$POD_NS" "$POD_NAME" 2>/dev/null || echo "  (unable to describe pod)"
+              $KUBECTL_CMD describe pod --namespace "$POD_NS" "$POD_NAME" || echo "  (unable to describe pod)"
               echo ""
               echo "--- Logs: $POD_NS/$POD_NAME ---"
-              $KUBECTL_CMD logs --namespace "$POD_NS" "$POD_NAME" --tail=50 --all-containers=true 2>/dev/null || echo "  (unable to fetch logs)"
+              $KUBECTL_CMD logs --namespace "$POD_NS" "$POD_NAME" --tail=50 --all-containers=true || echo "  (unable to fetch logs)"
               COUNT=$((COUNT + 1))
             done
           else
