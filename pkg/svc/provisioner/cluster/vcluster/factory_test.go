@@ -48,17 +48,17 @@ func TestCreateProvisioner(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			provisioner, err := vclusterprovisioner.CreateProvisioner(
-				tt.clusterName,
-				tt.valuesPath,
-				tt.disableFlannel,
+				testCase.clusterName,
+				testCase.valuesPath,
+				testCase.disableFlannel,
 			)
 
-			if tt.wantErr {
+			if testCase.wantErr {
 				require.Error(t, err, "CreateProvisioner() should return error")
 				assert.Nil(t, provisioner, "provisioner should be nil on error")
 			} else {
