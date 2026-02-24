@@ -150,9 +150,10 @@ func BenchmarkUpdateTargetRevisionOptions(b *testing.B) {
 }
 
 // BenchmarkManagerEnsure measures the performance of creating/updating ArgoCD Application and repository secret.
+//
+//nolint:funlen // Benchmark subtests require individual setup for each scenario.
 func BenchmarkManagerEnsure(b *testing.B) {
 	b.Run("FirstTimeCreate", func(b *testing.B) {
-		mgr := setupBenchmarkManager(b)
 		ctx := context.Background()
 
 		opts := argocd.EnsureOptions{
@@ -167,7 +168,8 @@ func BenchmarkManagerEnsure(b *testing.B) {
 		for range b.N {
 			b.StopTimer()
 			// Reset state by creating fresh manager
-			mgr = setupBenchmarkManager(b)
+			mgr := setupBenchmarkManager(b)
+
 			b.StartTimer()
 
 			err := mgr.Ensure(ctx, opts)
@@ -196,6 +198,7 @@ func BenchmarkManagerEnsure(b *testing.B) {
 			if err != nil {
 				b.Fatalf("Initial ensure failed: %v", err)
 			}
+
 			b.StartTimer()
 
 			// Measure update
@@ -211,7 +214,6 @@ func BenchmarkManagerEnsure(b *testing.B) {
 	})
 
 	b.Run("WithAuthentication", func(b *testing.B) {
-		mgr := setupBenchmarkManager(b)
 		ctx := context.Background()
 
 		opts := argocd.EnsureOptions{
@@ -219,7 +221,7 @@ func BenchmarkManagerEnsure(b *testing.B) {
 			ApplicationName: "secure-app",
 			TargetRevision:  "v1.0.0",
 			Username:        "deploy-bot",
-			Password:        "ghp_very_long_github_personal_access_token_here",
+			Password:        "test-password",
 		}
 
 		b.ResetTimer()
@@ -227,7 +229,8 @@ func BenchmarkManagerEnsure(b *testing.B) {
 
 		for range b.N {
 			b.StopTimer()
-			mgr = setupBenchmarkManager(b)
+			mgr := setupBenchmarkManager(b)
+
 			b.StartTimer()
 
 			err := mgr.Ensure(ctx, opts)
@@ -238,7 +241,6 @@ func BenchmarkManagerEnsure(b *testing.B) {
 	})
 
 	b.Run("ProductionConfig", func(b *testing.B) {
-		mgr := setupBenchmarkManager(b)
 		ctx := context.Background()
 
 		opts := argocd.EnsureOptions{
@@ -247,7 +249,7 @@ func BenchmarkManagerEnsure(b *testing.B) {
 			TargetRevision:  "v3.2.1",
 			SourcePath:      "k8s/overlays/production",
 			Username:        "argocd-sync-sa",
-			Password:        "eyJhbGciOiJSUzI1NiIsImtpZCI6IjEyMyJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig",
+			Password:        "test-token",
 			Insecure:        false,
 		}
 
@@ -256,7 +258,8 @@ func BenchmarkManagerEnsure(b *testing.B) {
 
 		for range b.N {
 			b.StopTimer()
-			mgr = setupBenchmarkManager(b)
+			mgr := setupBenchmarkManager(b)
+
 			b.StartTimer()
 
 			err := mgr.Ensure(ctx, opts)
