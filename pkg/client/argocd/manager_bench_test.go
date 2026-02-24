@@ -12,6 +12,15 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
+// Package-level sinks prevent the compiler from optimizing away benchmark calls.
+//
+//nolint:gochecknoglobals // Benchmark sink variables are required to prevent compiler optimization.
+var (
+	benchManagerSink                     *argocd.ManagerImpl
+	benchEnsureOptionsSink               argocd.EnsureOptions
+	benchUpdateTargetRevisionOptionsSink argocd.UpdateTargetRevisionOptions
+)
+
 // Benchmark helpers for manager creation.
 
 func setupBenchmarkManager(b *testing.B) *argocd.ManagerImpl {
@@ -74,7 +83,7 @@ func BenchmarkEnsureOptions(b *testing.B) {
 		b.ReportAllocs()
 
 		for range b.N {
-			_ = argocd.EnsureOptions{
+			benchEnsureOptionsSink = argocd.EnsureOptions{
 				RepositoryURL:  "oci://local-registry:5000/demo",
 				TargetRevision: "v1",
 			}
@@ -85,7 +94,7 @@ func BenchmarkEnsureOptions(b *testing.B) {
 		b.ReportAllocs()
 
 		for range b.N {
-			_ = argocd.EnsureOptions{
+			benchEnsureOptionsSink = argocd.EnsureOptions{
 				RepositoryURL:   "oci://local-registry:5000/demo",
 				ApplicationName: "my-app",
 				TargetRevision:  "v1.2.3",
@@ -97,7 +106,7 @@ func BenchmarkEnsureOptions(b *testing.B) {
 		b.ReportAllocs()
 
 		for range b.N {
-			_ = argocd.EnsureOptions{
+			benchEnsureOptionsSink = argocd.EnsureOptions{
 				RepositoryURL:   "oci://local-registry:5000/demo",
 				ApplicationName: "my-app",
 				TargetRevision:  "v1.2.3",
@@ -111,7 +120,7 @@ func BenchmarkEnsureOptions(b *testing.B) {
 		b.ReportAllocs()
 
 		for range b.N {
-			_ = argocd.EnsureOptions{
+			benchEnsureOptionsSink = argocd.EnsureOptions{
 				RepositoryURL:   "oci://ghcr.io/devantler-tech/ksail",
 				ApplicationName: "production-app",
 				TargetRevision:  "v1.2.3",
@@ -130,7 +139,7 @@ func BenchmarkUpdateTargetRevisionOptions(b *testing.B) {
 		b.ReportAllocs()
 
 		for range b.N {
-			_ = argocd.UpdateTargetRevisionOptions{
+			benchUpdateTargetRevisionOptionsSink = argocd.UpdateTargetRevisionOptions{
 				TargetRevision: "v2",
 			}
 		}
@@ -140,7 +149,7 @@ func BenchmarkUpdateTargetRevisionOptions(b *testing.B) {
 		b.ReportAllocs()
 
 		for range b.N {
-			_ = argocd.UpdateTargetRevisionOptions{
+			benchUpdateTargetRevisionOptionsSink = argocd.UpdateTargetRevisionOptions{
 				ApplicationName: "my-app",
 				TargetRevision:  "v2.1.0",
 				HardRefresh:     true,
@@ -271,6 +280,8 @@ func BenchmarkManagerEnsure(b *testing.B) {
 }
 
 // BenchmarkManagerUpdateTargetRevision measures the performance of updating Application target revision.
+//
+//nolint:funlen // Benchmark subtests require individual setup for each scenario.
 func BenchmarkManagerUpdateTargetRevision(b *testing.B) {
 	b.Run("TargetRevisionOnly", func(b *testing.B) {
 		ctx := context.Background()
@@ -364,6 +375,6 @@ func BenchmarkNewManager(b *testing.B) {
 	b.ReportAllocs()
 
 	for range b.N {
-		_ = argocd.NewManager(clientset, dyn)
+		benchManagerSink = argocd.NewManager(clientset, dyn)
 	}
 }
