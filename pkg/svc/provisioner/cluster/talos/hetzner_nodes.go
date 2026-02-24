@@ -220,7 +220,7 @@ func (p *Provisioner) logInstallationStart() {
 }
 
 // waitForServersToBeReachable waits for all servers to complete installation and reboot.
-// It detects completion by waiting for a TCP connection to succeed on port 50000.
+// It detects completion by waiting for a TCP connection to succeed on the Talos API port.
 func (p *Provisioner) waitForServersToBeReachable(
 	ctx context.Context,
 	servers []*hcloud.Server,
