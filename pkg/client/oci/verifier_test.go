@@ -3,6 +3,7 @@ package oci_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	"github.com/stretchr/testify/assert"
@@ -51,7 +52,7 @@ func TestVerifyRegistryAccessWithTimeout_CancelledContext(t *testing.T) {
 			RegistryEndpoint: "ghcr.io",
 			Repository:       "test/repo",
 		},
-		100, // timeout
+		100*time.Millisecond,
 	)
 
 	require.Error(t, err)
