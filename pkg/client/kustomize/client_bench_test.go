@@ -304,8 +304,6 @@ func setupLargeKustomizationBench(b *testing.B) string {
 // with a single resource (ConfigMap). This represents the minimal overhead of
 // the kustomize build process.
 func BenchmarkBuild_SmallKustomization(b *testing.B) {
-	b.Helper()
-
 	tmpDir := b.TempDir()
 
 	configMapYAML := `apiVersion: v1
@@ -349,8 +347,6 @@ data:
 // kustomization with multiple resources representing a typical application
 // deployment (Namespace, Deployment, Service, ConfigMap).
 func BenchmarkBuild_MediumKustomization(b *testing.B) {
-	b.Helper()
-
 	tmpDir := setupMediumKustomizationBench(b)
 	client := kustomize.NewClient()
 	ctx := context.Background()
@@ -370,8 +366,6 @@ func BenchmarkBuild_MediumKustomization(b *testing.B) {
 // applies labels to all resources. This tests the overhead of
 // kustomize transformations.
 func BenchmarkBuild_WithLabels(b *testing.B) {
-	b.Helper()
-
 	tmpDir := setupWithLabelsBench(b)
 	client := kustomize.NewClient()
 	ctx := context.Background()
@@ -390,8 +384,6 @@ func BenchmarkBuild_WithLabels(b *testing.B) {
 // BenchmarkBuild_LargeKustomization benchmarks building a large kustomization
 // with many resources. This tests performance with realistic complex applications.
 func BenchmarkBuild_LargeKustomization(b *testing.B) {
-	b.Helper()
-
 	tmpDir := setupLargeKustomizationBench(b)
 	client := kustomize.NewClient()
 	ctx := context.Background()
@@ -411,8 +403,6 @@ func BenchmarkBuild_LargeKustomization(b *testing.B) {
 // applies a name prefix to all resources. This tests another common
 // kustomize transformation pattern.
 func BenchmarkBuild_WithNamePrefix(b *testing.B) {
-	b.Helper()
-
 	tmpDir := b.TempDir()
 
 	deploymentYAML := `apiVersion: apps/v1
