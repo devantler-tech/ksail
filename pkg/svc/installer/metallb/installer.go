@@ -70,6 +70,7 @@ func NewInstaller(
 				ReleaseName:     metallbRelease,
 				ChartName:       metallbChartName,
 				Namespace:       metallbNamespace,
+				Version:         chartVersion(),
 				RepoURL:         metallbRepoURL,
 				CreateNamespace: true,
 				Atomic:          true,

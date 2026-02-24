@@ -28,6 +28,8 @@ timeout-minutes: 30
 steps:
   - name: Checkout repository
     uses: actions/checkout@v4
+    with:
+      persist-credentials: false
 
   - name: Install gh-aw extension
     run: |
