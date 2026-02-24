@@ -71,7 +71,7 @@ ksail workload logs deployment/my-app
 Enable GitOps with [Flux or ArgoCD](/concepts/#gitops) for declarative, Git-driven deployments. KSail automatically installs the GitOps engine, scaffolds FluxInstance or ArgoCD Application CRs, and provides commands to package manifests as OCI artifacts, push to the local registry, and trigger reconciliation.
 
 ```bash
-ksail cluster init --gitops-engine Flux --local-registry
+ksail cluster init --gitops-engine Flux --local-registry localhost:5050
 ksail cluster create
 ksail workload push
 ksail workload reconcile
@@ -90,7 +90,7 @@ Run local [OCI registries](/concepts/#oci-registries) for faster image pulls, Gi
 
 ### Local Registry
 ```bash
-ksail cluster init --local-registry --local-registry-port 5050
+ksail cluster init --local-registry localhost:5050
 ksail cluster create
 
 docker tag my-app localhost:5050/my-app
@@ -157,7 +157,8 @@ spec:
     distribution: Vanilla
     cni: Cilium
     gitOpsEngine: Flux
-    localRegistry: Enabled
+    localRegistry:
+      registry: localhost:5050
   workload:
     sourceDirectory: k8s
 ```
