@@ -321,7 +321,7 @@ func waitForDBus(ctx context.Context, containerName string) error {
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled while waiting for D-Bus: %w", ctx.Err())
 		case <-ticker.C:
-			//nolint:gosec // G204: container name is internally generated, not user-controlled
+
 			cmd := exec.CommandContext(ctx, "docker", "exec", containerName,
 				"test", "-e", "/run/dbus/system_bus_socket")
 
