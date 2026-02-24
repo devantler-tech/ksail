@@ -21,3 +21,24 @@ func ExportSetupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleC
 func ExportResolveClusterNameFromContext(ctx *localregistry.Context) string {
 	return resolveClusterNameFromContext(ctx)
 }
+
+// ExportWriteMetadata exports writeMetadata for testing.
+var ExportWriteMetadata = writeMetadata
+
+// ExportCreateTarball exports createTarball for testing.
+var ExportCreateTarball = createTarball
+
+// ExportCountYAMLDocuments exports countYAMLDocuments for testing.
+var ExportCountYAMLDocuments = countYAMLDocuments
+
+// ExportFilterExcludedTypes exports filterExcludedTypes for testing.
+var ExportFilterExcludedTypes = filterExcludedTypes
+
+// ExportExtractBackupArchive exports extractBackupArchive for testing.
+var ExportExtractBackupArchive = extractBackupArchive
+
+// ExportDirPerm exports dirPerm for testing.
+const ExportDirPerm = dirPerm
+
+// ExportFilePerm exports filePerm for testing.
+const ExportFilePerm = filePerm

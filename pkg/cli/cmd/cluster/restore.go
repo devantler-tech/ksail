@@ -271,7 +271,8 @@ func validateTarEntry(
 
 	cleanName := filepath.Clean(header.Name)
 	if filepath.IsAbs(cleanName) ||
-		strings.HasPrefix(cleanName, "..") {
+		cleanName == ".." ||
+		strings.HasPrefix(cleanName, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf(
 			"%w: %s", ErrInvalidTarPath, header.Name,
 		)
@@ -407,16 +408,33 @@ func restoreResourceFile(
 
 	err := cmd.Execute()
 	if err != nil {
+		stderr := errBuf.String()
+
 		if flags.existingResourcePolicy == resourcePolicyNone &&
-			strings.Contains(errBuf.String(), "already exists") {
+			allLinesContain(stderr, "already exists") {
 			return nil
 		}
 
 		return fmt.Errorf(
 			"kubectl failed: %w (output: %s)",
-			err, errBuf.String(),
+			err, stderr,
 		)
 	}
 
 	return nil
+}
+
+func allLinesContain(output, substr string) bool {
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		if !strings.Contains(trimmed, substr) {
+			return false
+		}
+	}
+
+	return true
 }
