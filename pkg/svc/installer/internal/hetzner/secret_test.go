@@ -92,11 +92,18 @@ func TestEnsureSecret_ConcurrentCreation(t *testing.T) {
 
 	errs := make([]error, goroutines)
 
+	// startCh is a barrier to ensure all goroutines begin EnsureSecretForTest together.
+	startCh := make(chan struct{})
+
 	for goroutineIdx := range goroutines {
 		waitGroup.Go(func() {
+			<-startCh
+
 			errs[goroutineIdx] = hetzner.EnsureSecretForTest(context.Background(), clientset, token)
 		})
 	}
+
+	close(startCh)
 
 	waitGroup.Wait()
 

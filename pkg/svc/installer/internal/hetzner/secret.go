@@ -2,6 +2,7 @@
 package hetzner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/retry"
 )
 
 const (
@@ -73,16 +75,7 @@ func ensureSecret(ctx context.Context, client kubernetes.Interface, token string
 		return createOrUpdateOnConflict(ctx, client, secret)
 	}
 
-	// Update the existing secret's data while preserving its metadata.
-	existingSecret.Data = secret.Data
-	existingSecret.StringData = nil
-
-	_, err = secretsClient.Update(ctx, existingSecret, metav1.UpdateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to update secret: %w", err)
-	}
-
-	return nil
+	return updateSecretIfNeeded(ctx, client, existingSecret, secret.Data)
 }
 
 // createOrUpdateOnConflict creates the secret. If a concurrent installer
@@ -107,13 +100,49 @@ func createOrUpdateOnConflict(
 			return fmt.Errorf("failed to get existing secret: %w", getErr)
 		}
 
-		existingSecret.Data = secret.Data
-		existingSecret.StringData = nil
+		return updateSecretIfNeeded(ctx, client, existingSecret, secret.Data)
+	}
 
-		_, updateErr := secretsClient.Update(ctx, existingSecret, metav1.UpdateOptions{})
-		if updateErr != nil {
-			return fmt.Errorf("failed to update secret after concurrent create: %w", updateErr)
+	return nil
+}
+
+// updateSecretIfNeeded skips the update when the existing token already matches
+// the desired value. Otherwise it uses retry.RetryOnConflict to handle 409
+// Conflict errors that arise under concurrent updaters.
+func updateSecretIfNeeded(
+	ctx context.Context,
+	client kubernetes.Interface,
+	existingSecret *corev1.Secret,
+	desiredData map[string][]byte,
+) error {
+	if bytes.Equal(existingSecret.Data["token"], desiredData["token"]) {
+		return nil
+	}
+
+	secretsClient := client.CoreV1().Secrets(Namespace)
+
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest, err := secretsClient.Get(ctx, SecretName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to get secret for update: %w", err)
 		}
+
+		if bytes.Equal(latest.Data["token"], desiredData["token"]) {
+			return nil
+		}
+
+		latest.Data = desiredData
+		latest.StringData = nil
+
+		_, err = secretsClient.Update(ctx, latest, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("update secret: %w", err)
+		}
+
+		return nil
+	})
+	if retryErr != nil {
+		return fmt.Errorf("failed to update secret: %w", retryErr)
 	}
 
 	return nil
