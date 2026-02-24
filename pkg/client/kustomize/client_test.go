@@ -10,6 +10,12 @@ import (
 	"github.com/gkampitakis/go-snaps/snaps"
 )
 
+const simpleConfigMapKustomization = `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+`
+
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 
@@ -54,15 +60,9 @@ data:
 	}
 
 	// Create a kustomization.yaml
-	kustomizationYAML := `apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - configmap.yaml
-`
-
 	err = os.WriteFile(
 		filepath.Join(tmpDir, "kustomization.yaml"),
-		[]byte(kustomizationYAML),
+		[]byte(simpleConfigMapKustomization),
 		0o600,
 	)
 	if err != nil {
@@ -302,15 +302,9 @@ data:
 		t.Fatalf("failed to write configmap: %v", err)
 	}
 
-	kustomizationYAML := `apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - configmap.yaml
-`
-
 	err = os.WriteFile(
 		filepath.Join(tmpDir, "kustomization.yaml"),
-		[]byte(kustomizationYAML),
+		[]byte(simpleConfigMapKustomization),
 		0o600,
 	)
 	if err != nil {

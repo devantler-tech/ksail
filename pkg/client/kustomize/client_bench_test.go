@@ -10,82 +10,15 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
 )
 
-// BenchmarkBuild_SmallKustomization benchmarks building a small kustomization
-// with a single resource (ConfigMap). This represents the minimal overhead of
-// the kustomize build process.
-func BenchmarkBuild_SmallKustomization(b *testing.B) {
-	b.Helper()
-	// Setup: Create a temporary directory with a simple kustomization
-	tmpDir := b.TempDir()
-
-	configMapYAML := `apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: test-config
-  namespace: default
-data:
-  key: value
-`
-
-	err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(configMapYAML), 0o600)
-	if err != nil {
-		b.Fatalf("failed to write configmap: %v", err)
-	}
-
-	kustomizationYAML := `apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - configmap.yaml
-`
-
-	err = os.WriteFile(
-		filepath.Join(tmpDir, "kustomization.yaml"),
-		[]byte(kustomizationYAML),
-		0o600,
-	)
-	if err != nil {
-		b.Fatalf("failed to write kustomization: %v", err)
-	}
-
-	// Create client and context once, reuse in benchmark loop
-	client := kustomize.NewClient()
-	ctx := context.Background()
-
-	// Report memory allocations
-	b.ReportAllocs()
-
-	// Reset timer to exclude setup time
-	b.ResetTimer()
-
-	// Benchmark loop
-	for range b.N {
-		_, err := client.Build(ctx, tmpDir)
-		if err != nil {
-			b.Fatalf("build failed: %v", err)
-		}
-	}
-}
-
-// BenchmarkBuild_MediumKustomization benchmarks building a medium-sized
-// kustomization with multiple resources representing a typical application
-// deployment (Namespace, Deployment, Service, ConfigMap).
-func BenchmarkBuild_MediumKustomization(b *testing.B) {
-	b.Helper()
-	// Setup: Create a temporary directory with multiple resources
-	tmpDir := b.TempDir()
-
-	namespaceYAML := `apiVersion: v1
+// Package-level constants for medium kustomization benchmark YAML content.
+const (
+	mediumNamespaceYAML = `apiVersion: v1
 kind: Namespace
 metadata:
   name: test-namespace
 `
 
-	err := os.WriteFile(filepath.Join(tmpDir, "namespace.yaml"), []byte(namespaceYAML), 0o600)
-	if err != nil {
-		b.Fatalf("failed to write namespace: %v", err)
-	}
-
-	deploymentYAML := `apiVersion: apps/v1
+	mediumDeploymentYAML = `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: test-deployment
@@ -107,12 +40,7 @@ spec:
         - containerPort: 80
 `
 
-	err = os.WriteFile(filepath.Join(tmpDir, "deployment.yaml"), []byte(deploymentYAML), 0o600)
-	if err != nil {
-		b.Fatalf("failed to write deployment: %v", err)
-	}
-
-	serviceYAML := `apiVersion: v1
+	mediumServiceYAML = `apiVersion: v1
 kind: Service
 metadata:
   name: test-service
@@ -125,12 +53,7 @@ spec:
     targetPort: 8080
 `
 
-	err = os.WriteFile(filepath.Join(tmpDir, "service.yaml"), []byte(serviceYAML), 0o600)
-	if err != nil {
-		b.Fatalf("failed to write service: %v", err)
-	}
-
-	configMapYAML := `apiVersion: v1
+	mediumConfigMapYAML = `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: test-config
@@ -141,12 +64,7 @@ data:
     setting2: value2
 `
 
-	err = os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(configMapYAML), 0o600)
-	if err != nil {
-		b.Fatalf("failed to write configmap: %v", err)
-	}
-
-	kustomizationYAML := `apiVersion: kustomize.config.k8s.io/v1beta1
+	mediumKustomizationYAML = `apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - namespace.yaml
@@ -154,39 +72,11 @@ resources:
   - service.yaml
   - configmap.yaml
 `
+)
 
-	err = os.WriteFile(
-		filepath.Join(tmpDir, "kustomization.yaml"),
-		[]byte(kustomizationYAML),
-		0o600,
-	)
-	if err != nil {
-		b.Fatalf("failed to write kustomization: %v", err)
-	}
-
-	client := kustomize.NewClient()
-	ctx := context.Background()
-
-	b.ReportAllocs()
-	b.ResetTimer()
-
-	for range b.N {
-		_, err := client.Build(ctx, tmpDir)
-		if err != nil {
-			b.Fatalf("build failed: %v", err)
-		}
-	}
-}
-
-// BenchmarkBuild_WithLabels benchmarks building a kustomization that
-// applies labels to all resources. This tests the overhead of
-// kustomize transformations.
-func BenchmarkBuild_WithLabels(b *testing.B) {
-	b.Helper()
-	// Setup
-	tmpDir := b.TempDir()
-
-	deploymentYAML := `apiVersion: apps/v1
+// Package-level constants for labels kustomization benchmark YAML content.
+const (
+	labelsDeploymentYAML = `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: test-deployment
@@ -206,12 +96,7 @@ spec:
         image: nginx:latest
 `
 
-	err := os.WriteFile(filepath.Join(tmpDir, "deployment.yaml"), []byte(deploymentYAML), 0o600)
-	if err != nil {
-		b.Fatalf("failed to write deployment: %v", err)
-	}
-
-	serviceYAML := `apiVersion: v1
+	labelsServiceYAML = `apiVersion: v1
 kind: Service
 metadata:
   name: test-service
@@ -223,12 +108,7 @@ spec:
   - port: 80
 `
 
-	err = os.WriteFile(filepath.Join(tmpDir, "service.yaml"), []byte(serviceYAML), 0o600)
-	if err != nil {
-		b.Fatalf("failed to write service: %v", err)
-	}
-
-	kustomizationYAML := `apiVersion: kustomize.config.k8s.io/v1beta1
+	labelsKustomizationYAML = `apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - deployment.yaml
@@ -239,10 +119,212 @@ labels:
       team: platform
       managed-by: kustomize
 `
+)
+
+// setupMediumKustomizationBench creates a temporary directory with a medium
+// kustomization (Namespace, Deployment, Service, ConfigMap).
+func setupMediumKustomizationBench(b *testing.B) string {
+	b.Helper()
+
+	tmpDir := b.TempDir()
+
+	err := os.WriteFile(filepath.Join(tmpDir, "namespace.yaml"), []byte(mediumNamespaceYAML), 0o600)
+	if err != nil {
+		b.Fatalf("failed to write namespace: %v", err)
+	}
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "deployment.yaml"),
+		[]byte(mediumDeploymentYAML),
+		0o600,
+	)
+	if err != nil {
+		b.Fatalf("failed to write deployment: %v", err)
+	}
+
+	err = os.WriteFile(filepath.Join(tmpDir, "service.yaml"), []byte(mediumServiceYAML), 0o600)
+	if err != nil {
+		b.Fatalf("failed to write service: %v", err)
+	}
+
+	err = os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(mediumConfigMapYAML), 0o600)
+	if err != nil {
+		b.Fatalf("failed to write configmap: %v", err)
+	}
 
 	err = os.WriteFile(
 		filepath.Join(tmpDir, "kustomization.yaml"),
-		[]byte(kustomizationYAML),
+		[]byte(mediumKustomizationYAML),
+		0o600,
+	)
+	if err != nil {
+		b.Fatalf("failed to write kustomization: %v", err)
+	}
+
+	return tmpDir
+}
+
+// setupWithLabelsBench creates a temporary directory with a kustomization
+// that applies labels to all resources.
+func setupWithLabelsBench(b *testing.B) string {
+	b.Helper()
+
+	tmpDir := b.TempDir()
+
+	err := os.WriteFile(
+		filepath.Join(tmpDir, "deployment.yaml"),
+		[]byte(labelsDeploymentYAML),
+		0o600,
+	)
+	if err != nil {
+		b.Fatalf("failed to write deployment: %v", err)
+	}
+
+	err = os.WriteFile(filepath.Join(tmpDir, "service.yaml"), []byte(labelsServiceYAML), 0o600)
+	if err != nil {
+		b.Fatalf("failed to write service: %v", err)
+	}
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "kustomization.yaml"),
+		[]byte(labelsKustomizationYAML),
+		0o600,
+	)
+	if err != nil {
+		b.Fatalf("failed to write kustomization: %v", err)
+	}
+
+	return tmpDir
+}
+
+// largeConfigMapYAML returns a ConfigMap YAML for the large benchmark,
+// using resourceIdx to generate a unique name (a-j).
+func largeConfigMapYAML(resourceIdx int) string {
+	letter := "abcdefghij"[resourceIdx : resourceIdx+1]
+
+	return `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-` + letter + `
+  namespace: default
+data:
+  key: value
+`
+}
+
+// largeServiceYAML returns a Service YAML for the large benchmark,
+// using resourceIdx to generate a unique name (a-j).
+func largeServiceYAML(resourceIdx int) string {
+	letter := "abcdefghij"[resourceIdx : resourceIdx+1]
+
+	return `apiVersion: v1
+kind: Service
+metadata:
+  name: service-` + letter + `
+  namespace: default
+spec:
+  selector:
+    app: test-` + letter + `
+  ports:
+  - port: 80
+    targetPort: 8080
+`
+}
+
+// buildLargeKustomizationYAML builds the kustomization.yaml content for the
+// large benchmark listing all 20 resources (10 ConfigMaps + 10 Services).
+func buildLargeKustomizationYAML() string {
+	const kustomizationHeader = "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n"
+
+	var builder strings.Builder
+
+	builder.Grow(len(kustomizationHeader) + 40*10) // 40 chars per resource pair × 10 iterations
+	builder.WriteString(kustomizationHeader)
+
+	for resourceIdx := range 10 {
+		letter := "abcdefghij"[resourceIdx : resourceIdx+1]
+
+		builder.WriteString("  - configmap-")
+		builder.WriteString(letter)
+		builder.WriteString(".yaml\n")
+		builder.WriteString("  - service-")
+		builder.WriteString(letter)
+		builder.WriteString(".yaml\n")
+	}
+
+	return builder.String()
+}
+
+// setupLargeKustomizationBench creates a temporary directory with a large
+// kustomization containing 20 resources (10 ConfigMaps + 10 Services).
+func setupLargeKustomizationBench(b *testing.B) string {
+	b.Helper()
+
+	tmpDir := b.TempDir()
+
+	for resourceIdx := range 10 {
+		letter := "abcdefghij"[resourceIdx : resourceIdx+1]
+
+		err := os.WriteFile(
+			filepath.Join(tmpDir, "configmap-"+letter+".yaml"),
+			[]byte(largeConfigMapYAML(resourceIdx)),
+			0o600,
+		)
+		if err != nil {
+			b.Fatalf("failed to write configmap: %v", err)
+		}
+	}
+
+	for resourceIdx := range 10 {
+		letter := "abcdefghij"[resourceIdx : resourceIdx+1]
+
+		err := os.WriteFile(
+			filepath.Join(tmpDir, "service-"+letter+".yaml"),
+			[]byte(largeServiceYAML(resourceIdx)),
+			0o600,
+		)
+		if err != nil {
+			b.Fatalf("failed to write service: %v", err)
+		}
+	}
+
+	err := os.WriteFile(
+		filepath.Join(tmpDir, "kustomization.yaml"),
+		[]byte(buildLargeKustomizationYAML()),
+		0o600,
+	)
+	if err != nil {
+		b.Fatalf("failed to write kustomization: %v", err)
+	}
+
+	return tmpDir
+}
+
+// BenchmarkBuild_SmallKustomization benchmarks building a small kustomization
+// with a single resource (ConfigMap). This represents the minimal overhead of
+// the kustomize build process.
+func BenchmarkBuild_SmallKustomization(b *testing.B) {
+	b.Helper()
+
+	tmpDir := b.TempDir()
+
+	configMapYAML := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+data:
+  key: value
+`
+
+	err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(configMapYAML), 0o600)
+	if err != nil {
+		b.Fatalf("failed to write configmap: %v", err)
+	}
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "kustomization.yaml"),
+		[]byte(simpleConfigMapKustomization),
 		0o600,
 	)
 	if err != nil {
@@ -263,75 +345,54 @@ labels:
 	}
 }
 
+// BenchmarkBuild_MediumKustomization benchmarks building a medium-sized
+// kustomization with multiple resources representing a typical application
+// deployment (Namespace, Deployment, Service, ConfigMap).
+func BenchmarkBuild_MediumKustomization(b *testing.B) {
+	b.Helper()
+
+	tmpDir := setupMediumKustomizationBench(b)
+	client := kustomize.NewClient()
+	ctx := context.Background()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for range b.N {
+		_, err := client.Build(ctx, tmpDir)
+		if err != nil {
+			b.Fatalf("build failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkBuild_WithLabels benchmarks building a kustomization that
+// applies labels to all resources. This tests the overhead of
+// kustomize transformations.
+func BenchmarkBuild_WithLabels(b *testing.B) {
+	b.Helper()
+
+	tmpDir := setupWithLabelsBench(b)
+	client := kustomize.NewClient()
+	ctx := context.Background()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for range b.N {
+		_, err := client.Build(ctx, tmpDir)
+		if err != nil {
+			b.Fatalf("build failed: %v", err)
+		}
+	}
+}
+
 // BenchmarkBuild_LargeKustomization benchmarks building a large kustomization
 // with many resources. This tests performance with realistic complex applications.
 func BenchmarkBuild_LargeKustomization(b *testing.B) {
 	b.Helper()
-	// Setup: Create a kustomization with 20 resources
-	tmpDir := b.TempDir()
 
-	// Create 10 ConfigMaps
-	for i := range 10 {
-		configMapYAML := `apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: config-` + string(rune('a'+i)) + `
-  namespace: default
-data:
-  key: value
-`
-		filename := "configmap-" + string(rune('a'+i)) + ".yaml"
-		err := os.WriteFile(filepath.Join(tmpDir, filename), []byte(configMapYAML), 0o600)
-		if err != nil {
-			b.Fatalf("failed to write configmap: %v", err)
-		}
-	}
-
-	// Create 10 Services
-	for i := range 10 {
-		serviceYAML := `apiVersion: v1
-kind: Service
-metadata:
-  name: service-` + string(rune('a'+i)) + `
-  namespace: default
-spec:
-  selector:
-    app: test-` + string(rune('a'+i)) + `
-  ports:
-  - port: 80
-    targetPort: 8080
-`
-		filename := "service-" + string(rune('a'+i)) + ".yaml"
-		err := os.WriteFile(filepath.Join(tmpDir, filename), []byte(serviceYAML), 0o600)
-		if err != nil {
-			b.Fatalf("failed to write service: %v", err)
-		}
-	}
-
-	// Build the resources list for kustomization
-	const kustomizationHeader = "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n"
-	var kustomizationBuilder strings.Builder
-	kustomizationBuilder.Grow(len(kustomizationHeader) + 40*10) // 40 chars per resource pair × 10 iterations
-	kustomizationBuilder.WriteString(kustomizationHeader)
-	for i := range 10 {
-		kustomizationBuilder.WriteString("  - configmap-")
-		kustomizationBuilder.WriteByte(byte('a' + i))
-		kustomizationBuilder.WriteString(".yaml\n")
-		kustomizationBuilder.WriteString("  - service-")
-		kustomizationBuilder.WriteByte(byte('a' + i))
-		kustomizationBuilder.WriteString(".yaml\n")
-	}
-	kustomizationYAML := kustomizationBuilder.String()
-
-	err := os.WriteFile(
-		filepath.Join(tmpDir, "kustomization.yaml"),
-		[]byte(kustomizationYAML),
-		0o600,
-	)
-	if err != nil {
-		b.Fatalf("failed to write kustomization: %v", err)
-	}
-
+	tmpDir := setupLargeKustomizationBench(b)
 	client := kustomize.NewClient()
 	ctx := context.Background()
 
@@ -351,7 +412,7 @@ spec:
 // kustomize transformation pattern.
 func BenchmarkBuild_WithNamePrefix(b *testing.B) {
 	b.Helper()
-	// Setup
+
 	tmpDir := b.TempDir()
 
 	deploymentYAML := `apiVersion: apps/v1
