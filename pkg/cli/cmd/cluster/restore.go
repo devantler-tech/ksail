@@ -26,6 +26,13 @@ var ErrInvalidResourcePolicy = errors.New(
 	"invalid existing-resource-policy: must be 'none' or 'update'",
 )
 
+const (
+	// resourcePolicyNone skips resources that already exist in the cluster.
+	resourcePolicyNone = "none"
+	// resourcePolicyUpdate updates resources that already exist in the cluster.
+	resourcePolicyUpdate = "update"
+)
+
 // ErrInvalidTarPath is returned when a tar entry contains a path
 // traversal attempt.
 var ErrInvalidTarPath = errors.New("invalid tar entry path")
@@ -45,7 +52,7 @@ type restoreFlags struct {
 // NewRestoreCmd creates the cluster restore command.
 func NewRestoreCmd(_ *di.Runtime) *cobra.Command {
 	flags := &restoreFlags{
-		existingResourcePolicy: "none",
+		existingResourcePolicy: resourcePolicyNone,
 	}
 
 	cmd := &cobra.Command{
@@ -74,7 +81,7 @@ Example:
 	)
 	cmd.Flags().StringVar(
 		&flags.existingResourcePolicy,
-		"existing-resource-policy", "none",
+		"existing-resource-policy", resourcePolicyNone,
 		"Policy for existing resources: none (skip) or update (patch)",
 	)
 	cmd.Flags().BoolVar(
@@ -91,12 +98,12 @@ Example:
 }
 
 func runRestore(
-	ctx context.Context,
+	_ context.Context,
 	cmd *cobra.Command,
 	flags *restoreFlags,
 ) error {
-	if flags.existingResourcePolicy != "none" &&
-		flags.existingResourcePolicy != "update" {
+	if flags.existingResourcePolicy != resourcePolicyNone &&
+		flags.existingResourcePolicy != resourcePolicyUpdate {
 		return ErrInvalidResourcePolicy
 	}
 
@@ -131,7 +138,7 @@ func runRestore(
 
 	_, _ = fmt.Fprintf(writer, "Restoring cluster resources...\n")
 
-	err = restoreResources(ctx, kubeconfigPath, tmpDir, writer, flags)
+	err = restoreResources(kubeconfigPath, tmpDir, writer, flags)
 	if err != nil {
 		return fmt.Errorf("failed to restore resources: %w", err)
 	}
@@ -229,7 +236,7 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 		}
 
 		if header.Typeflag == tar.TypeDir {
-			err = os.MkdirAll(targetPath, dirPerm)
+			err = os.MkdirAll(targetPath, dirPerm) //nolint:gosec // validated
 			if err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
@@ -237,7 +244,7 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 			continue
 		}
 
-		err = os.MkdirAll(filepath.Dir(targetPath), dirPerm)
+		err = os.MkdirAll(filepath.Dir(targetPath), dirPerm) //nolint:gosec // validated
 		if err != nil {
 			return fmt.Errorf(
 				"failed to create parent directory: %w", err,
@@ -272,7 +279,10 @@ func validateTarEntry(
 
 	targetPath := filepath.Join(destDir, cleanName)
 
-	if !strings.HasPrefix(targetPath, destDir) {
+	destPrefix := destDir + string(filepath.Separator)
+	targetPrefix := targetPath + string(filepath.Separator)
+
+	if !strings.HasPrefix(targetPrefix, destPrefix) {
 		return "", fmt.Errorf(
 			"%w: %s", ErrInvalidTarPath, header.Name,
 		)
@@ -320,7 +330,6 @@ func readBackupMetadata(tmpDir string) (*BackupMetadata, error) {
 }
 
 func restoreResources(
-	_ context.Context,
 	kubeconfigPath, tmpDir string,
 	writer io.Writer,
 	flags *restoreFlags,
@@ -379,21 +388,32 @@ func restoreResourceFile(
 		ErrOut: &errBuf,
 	})
 
-	applyCmd := client.CreateApplyCommand(kubeconfigPath)
+	var cmd *cobra.Command
+
+	if flags.existingResourcePolicy == resourcePolicyNone {
+		cmd = client.CreateCreateCommand(kubeconfigPath)
+	} else {
+		cmd = client.CreateApplyCommand(kubeconfigPath)
+	}
 
 	args := []string{"-f", filePath}
 	if flags.dryRun {
 		args = append(args, "--dry-run=client")
 	}
 
-	applyCmd.SetArgs(args)
-	applyCmd.SilenceUsage = true
-	applyCmd.SilenceErrors = true
+	cmd.SetArgs(args)
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
 
-	err := applyCmd.Execute()
+	err := cmd.Execute()
 	if err != nil {
+		if flags.existingResourcePolicy == resourcePolicyNone &&
+			strings.Contains(errBuf.String(), "already exists") {
+			return nil
+		}
+
 		return fmt.Errorf(
-			"kubectl apply failed: %w (output: %s)",
+			"kubectl failed: %w (output: %s)",
 			err, errBuf.String(),
 		)
 	}

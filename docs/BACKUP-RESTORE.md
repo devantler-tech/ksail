@@ -25,7 +25,7 @@ ksail cluster backup --output ./my-backup.tar.gz
 - `--include-volumes` (default: true): Include persistent volume data in backup
 - `--namespaces, -n`: Specific namespaces to backup (default: all)
 - `--exclude-types`: Resource types to exclude (default: events)
-- `--compression`: Compression level 0-9 (default: 6)
+- `--compression`: Compression level 0-9 (default: -1, gzip default)
 
 ### Examples
 
@@ -106,8 +106,8 @@ ksail cluster restore --input ./my-backup.tar.gz
 
 - `--input, -i` (required): Input backup archive path
 - `--existing-resource-policy`: How to handle existing resources
-  - `none` (default): Skip existing resources
-  - `update`: Update existing resources
+  - `none` (default): Skip existing resources (uses kubectl create; existing resources are left unchanged)
+  - `update`: Update existing resources (uses kubectl apply)
 - `--dry-run`: Show what would be restored without applying
 
 ### Examples
