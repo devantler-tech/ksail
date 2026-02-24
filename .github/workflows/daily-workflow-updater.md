@@ -2,6 +2,9 @@
 name: Daily Workflow Updater
 description: Updates GitHub Actions versions and upgrades gh-aw workflow sources daily
 on:
+  bots:
+    - "github-merge-queue[bot]"
+
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     # Every day at 3am UTC
