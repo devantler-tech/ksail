@@ -47,6 +47,22 @@ name: "CI Doctor"
       - CD
       - "Test - Pages"
       - "Publish - Pages"
+      - Release
+      - "Benchmark Regression"
+      - Maintenance
+      - "Sync labels"
+      - "TODOs"
+      - "Unbloat Docs"
+      - "Update Docs"
+      - "Daily Backlog Burner"
+      - "Code Simplifier"
+      - "Daily Perf Improver"
+      - "Daily Plan"
+      - "Daily Progress"
+      - "Daily Refactor"
+      - "Daily Test Improver"
+      - "Issue Triage"
+      - "PR Fix"
 
 permissions: {}
 
@@ -1084,6 +1100,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_REQUIRED_ROLES: admin,maintainer,write
+          GH_AW_ALLOWED_BOTS: github-merge-queue[bot]
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

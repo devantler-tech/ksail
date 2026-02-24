@@ -18,15 +18,18 @@ permissions: {}
 
 jobs:
   benchmark:
-    name: 📊 Benchmark Regression
+    name: 📊 Benchmark (${{ matrix.branch }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
+    strategy:
+      matrix:
+        branch: [pr, main]
     steps:
-      - name: 📄 Checkout PR branch
+      - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ matrix.branch == 'main' && 'main' || github.event.pull_request.head.sha }}
           persist-credentials: false
 
       - name: ⚙️ Setup Go
@@ -34,36 +37,77 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: 🔍 Discover benchmark packages
+        id: discover
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkgs=$(grep -rl '^func Benchmark' --include='*_test.go' . \
+            | xargs -I{} dirname {} \
+            | sort -u || true)
+          if [ -z "$pkgs" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "skip=false"
+              echo "packages<<EOF"
+              echo "$pkgs"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 🏃 Run benchmarks
+        if: steps.discover.outputs.skip == 'false'
+        shell: bash
+        env:
+          PACKAGES: ${{ steps.discover.outputs.packages }}
+        run: |
+          set -euo pipefail
+          echo "$PACKAGES" \
+            | xargs go test -bench=. -benchmem -count=5 -benchtime=1s -run='^$' -timeout=30m \
+            | tee "$RUNNER_TEMP/bench.txt"
+
+      - name: 📤 Upload results
+        if: steps.discover.outputs.skip == 'false'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: bench-${{ matrix.branch }}
+          path: ${{ runner.temp }}/bench.txt
+          retention-days: 1
+
+  compare:
+    name: 📊 Compare & Report
+    needs: benchmark
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version: stable
+
       - name: 📦 Install benchstat
         run: go install golang.org/x/perf/cmd/benchstat@latest
 
-      - name: 🏃 Run benchmarks on PR branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          go test -bench=. -benchmem -count=5 -benchtime=3s -run=^$ -timeout=30m ./... | tee "$RUNNER_TEMP/pr-bench.txt"
-
-      - name: 📄 Checkout main branch
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: 📥 Download results
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          ref: main
-          persist-credentials: false
-
-      - name: ⚙️ Setup Go (main)
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
-        with:
-          go-version-file: go.mod
-
-      - name: 🏃 Run benchmarks on main branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          go test -bench=. -benchmem -count=5 -benchtime=3s -run=^$ -timeout=30m ./... | tee "$RUNNER_TEMP/main-bench.txt"
+          path: ${{ runner.temp }}/benchmarks
 
       - name: 📊 Compare benchmarks
         id: benchstat
         run: |
-          result=$(benchstat "$RUNNER_TEMP/main-bench.txt" "$RUNNER_TEMP/pr-bench.txt" 2>&1) || true
+          main_file="${RUNNER_TEMP}/benchmarks/bench-main/bench.txt"
+          pr_file="${RUNNER_TEMP}/benchmarks/bench-pr/bench.txt"
+
+          if [ ! -f "$main_file" ] || [ ! -f "$pr_file" ]; then
+            echo "result=No benchmark results to compare (no benchmarks found)." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          result=$(benchstat "$main_file" "$pr_file" 2>&1) || true
           {
             echo "result<<BENCHSTAT_EOF"
             echo "$result"
