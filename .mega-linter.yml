@@ -27,5 +27,5 @@ FILTER_REGEX_EXCLUDE: megalinter-reports/.*
 JSON_V8R_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
 MARKDOWN_MARKDOWN_TABLE_FORMATTER_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)
 MARKDOWN_MARKDOWNLINT_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)
-SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (.github/copilot-instructions\.md|.*\.mdx|\.github/workflows/.*\.md)
+SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (.github/copilot-instructions\.md|.*\.mdx|docs/src/.*\.md|\.github/workflows/.*\.md)
 YAML_V8R_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
