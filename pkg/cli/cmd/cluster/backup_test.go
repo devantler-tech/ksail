@@ -276,60 +276,48 @@ func TestSanitizeYAMLOutput_nonYAML(t *testing.T) {
 	}
 }
 
-func TestValidateTarEntry(t *testing.T) {
-	t.Parallel()
+type validateTarEntryTest struct {
+	name    string
+	header  *tar.Header
+	wantErr bool
+	errType error
+}
 
-	destDir := t.TempDir()
+func pathTraversalTestCases() []validateTarEntryTest {
+	return []validateTarEntryTest{
+		{
+			name:   "valid regular file",
+			header: &tar.Header{Name: "resources/pods.yaml", Typeflag: tar.TypeReg},
+		},
+		{
+			name:   "valid directory",
+			header: &tar.Header{Name: "resources/", Typeflag: tar.TypeDir},
+		},
+		{
+			name:    "absolute path",
+			header:  &tar.Header{Name: "/etc/passwd", Typeflag: tar.TypeReg},
+			wantErr: true, errType: cluster.ErrInvalidTarPath,
+		},
+		{
+			name:    "parent directory traversal",
+			header:  &tar.Header{Name: "../../../etc/passwd", Typeflag: tar.TypeReg},
+			wantErr: true, errType: cluster.ErrInvalidTarPath,
+		},
+		{
+			name:    "embedded parent traversal",
+			header:  &tar.Header{Name: "resources/../../etc/passwd", Typeflag: tar.TypeReg},
+			wantErr: true, errType: cluster.ErrInvalidTarPath,
+		},
+		{
+			name:    "double dot only",
+			header:  &tar.Header{Name: "..", Typeflag: tar.TypeReg},
+			wantErr: true, errType: cluster.ErrInvalidTarPath,
+		},
+	}
+}
 
-	tests := []struct {
-		name    string
-		header  *tar.Header
-		wantErr bool
-		errType error
-	}{
-		{
-			name: "valid regular file",
-			header: &tar.Header{
-				Name:     "resources/pods.yaml",
-				Typeflag: tar.TypeReg,
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid directory",
-			header: &tar.Header{
-				Name:     "resources/",
-				Typeflag: tar.TypeDir,
-			},
-			wantErr: false,
-		},
-		{
-			name: "absolute path",
-			header: &tar.Header{
-				Name:     "/etc/passwd",
-				Typeflag: tar.TypeReg,
-			},
-			wantErr: true,
-			errType: cluster.ErrInvalidTarPath,
-		},
-		{
-			name: "parent directory traversal",
-			header: &tar.Header{
-				Name:     "../../../etc/passwd",
-				Typeflag: tar.TypeReg,
-			},
-			wantErr: true,
-			errType: cluster.ErrInvalidTarPath,
-		},
-		{
-			name: "embedded parent traversal",
-			header: &tar.Header{
-				Name:     "resources/../../etc/passwd",
-				Typeflag: tar.TypeReg,
-			},
-			wantErr: true,
-			errType: cluster.ErrInvalidTarPath,
-		},
+func specialTypeTestCases() []validateTarEntryTest {
+	return []validateTarEntryTest{
 		{
 			name: "symlink",
 			header: &tar.Header{
@@ -337,56 +325,35 @@ func TestValidateTarEntry(t *testing.T) {
 				Typeflag: tar.TypeSymlink,
 				Linkname: "/etc/passwd",
 			},
-			wantErr: true,
-			errType: cluster.ErrSymlinkInArchive,
+			wantErr: true, errType: cluster.ErrSymlinkInArchive,
 		},
 		{
-			name: "hard link",
-			header: &tar.Header{
-				Name:     "link.yaml",
-				Typeflag: tar.TypeLink,
-				Linkname: "other.yaml",
-			},
-			wantErr: true,
-			errType: cluster.ErrSymlinkInArchive,
+			name:    "hard link",
+			header:  &tar.Header{Name: "link.yaml", Typeflag: tar.TypeLink, Linkname: "other.yaml"},
+			wantErr: true, errType: cluster.ErrSymlinkInArchive,
 		},
 		{
-			name: "char device",
-			header: &tar.Header{
-				Name:     "dev",
-				Typeflag: tar.TypeChar,
-			},
-			wantErr: true,
-			errType: cluster.ErrInvalidTarPath,
+			name:    "char device",
+			header:  &tar.Header{Name: "dev", Typeflag: tar.TypeChar},
+			wantErr: true, errType: cluster.ErrInvalidTarPath,
 		},
 		{
-			name: "block device",
-			header: &tar.Header{
-				Name:     "dev",
-				Typeflag: tar.TypeBlock,
-			},
-			wantErr: true,
-			errType: cluster.ErrInvalidTarPath,
+			name:    "block device",
+			header:  &tar.Header{Name: "dev", Typeflag: tar.TypeBlock},
+			wantErr: true, errType: cluster.ErrInvalidTarPath,
 		},
 		{
-			name: "FIFO",
-			header: &tar.Header{
-				Name:     "fifo",
-				Typeflag: tar.TypeFifo,
-			},
-			wantErr: true,
-			errType: cluster.ErrInvalidTarPath,
-		},
-		{
-			name: "double dot only",
-			header: &tar.Header{
-				Name:     "..",
-				Typeflag: tar.TypeReg,
-			},
-			wantErr: true,
-			errType: cluster.ErrInvalidTarPath,
+			name:    "FIFO",
+			header:  &tar.Header{Name: "fifo", Typeflag: tar.TypeFifo},
+			wantErr: true, errType: cluster.ErrInvalidTarPath,
 		},
 	}
+}
+
+func runValidateTarEntryTests(
+	t *testing.T, destDir string, tests []validateTarEntryTest,
+) {
+	t.Helper()
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -410,6 +377,15 @@ func TestValidateTarEntry(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateTarEntry(t *testing.T) {
+	t.Parallel()
+
+	destDir := t.TempDir()
+
+	runValidateTarEntryTests(t, destDir, pathTraversalTestCases())
+	runValidateTarEntryTests(t, destDir, specialTypeTestCases())
 }
 
 func TestAllLinesContain(t *testing.T) {
