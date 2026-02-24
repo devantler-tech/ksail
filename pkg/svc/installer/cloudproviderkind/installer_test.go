@@ -21,6 +21,14 @@ import (
 
 const ciEnvValue = "true"
 
+var (
+	errNotFound             = errors.New("not found")
+	errDockerDaemonError    = errors.New("docker daemon error")
+	errStartFailed          = errors.New("start failed")
+	errListError            = errors.New("list error")
+	errNetworkAlreadyExists = errors.New("network already exists")
+)
+
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
@@ -208,8 +216,10 @@ func TestInstall_CreateNewContainer(t *testing.T) {
 		Once()
 
 	// Mock: create container
+	cname := cloudproviderkindinstaller.ContainerName
+
 	mockClient.EXPECT().
-		ContainerCreate(ctx, mock.Anything, mock.Anything, mock.Anything, (*v1.Platform)(nil), cloudproviderkindinstaller.ContainerName).
+		ContainerCreate(ctx, mock.Anything, mock.Anything, mock.Anything, (*v1.Platform)(nil), cname).
 		Return(container.CreateResponse{ID: "new-container-id"}, nil).
 		Once()
 
@@ -251,7 +261,7 @@ func TestInstall_CreateWithImagePull(t *testing.T) {
 	// Mock: image doesn't exist (need to pull)
 	mockClient.EXPECT().
 		ImageInspect(ctx, imageName).
-		Return(image.InspectResponse{}, errors.New("not found")).
+		Return(image.InspectResponse{}, errNotFound).
 		Once()
 
 	// Mock: pull image
@@ -268,8 +278,10 @@ func TestInstall_CreateWithImagePull(t *testing.T) {
 		Once()
 
 	// Mock: create and start container
+	cname := cloudproviderkindinstaller.ContainerName
+
 	mockClient.EXPECT().
-		ContainerCreate(ctx, mock.Anything, mock.Anything, mock.Anything, (*v1.Platform)(nil), cloudproviderkindinstaller.ContainerName).
+		ContainerCreate(ctx, mock.Anything, mock.Anything, mock.Anything, (*v1.Platform)(nil), cname).
 		Return(container.CreateResponse{ID: "new-id"}, nil).
 		Once()
 
@@ -282,7 +294,7 @@ func TestInstall_CreateWithImagePull(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestInstall_CreateWithNetworkCreation(t *testing.T) {
+func TestInstall_CreateWithNetworkCreation(t *testing.T) { //nolint:dupl
 	t.Parallel()
 
 	mockClient := dockerclient.NewMockAPIClient(t)
@@ -306,7 +318,7 @@ func TestInstall_CreateWithNetworkCreation(t *testing.T) {
 	// Mock: network doesn't exist (need to create)
 	mockClient.EXPECT().
 		NetworkInspect(ctx, cloudproviderkindinstaller.KindNetworkName, mock.Anything).
-		Return(network.Inspect{}, errors.New("not found")).
+		Return(network.Inspect{}, errNotFound).
 		Once()
 
 	// Mock: create network
@@ -316,8 +328,10 @@ func TestInstall_CreateWithNetworkCreation(t *testing.T) {
 		Once()
 
 	// Mock: create and start container
+	cname := cloudproviderkindinstaller.ContainerName
+
 	mockClient.EXPECT().
-		ContainerCreate(ctx, mock.Anything, mock.Anything, mock.Anything, (*v1.Platform)(nil), cloudproviderkindinstaller.ContainerName).
+		ContainerCreate(ctx, mock.Anything, mock.Anything, mock.Anything, (*v1.Platform)(nil), cname).
 		Return(container.CreateResponse{ID: "new-id"}, nil).
 		Once()
 
@@ -338,10 +352,9 @@ func TestInstall_ErrorCheckingIfRunning(t *testing.T) {
 	ctx := context.Background()
 
 	// Mock: error listing containers
-	expectedErr := errors.New("docker daemon error")
 	mockClient.EXPECT().
 		ContainerList(ctx, mock.Anything).
-		Return(nil, expectedErr).
+		Return(nil, errDockerDaemonError).
 		Once()
 
 	err := installer.Install(ctx)
@@ -363,10 +376,9 @@ func TestInstall_ErrorStartingExisting(t *testing.T) {
 		Times(2)
 
 	// Mock: error starting container
-	expectedErr := errors.New("start failed")
 	mockClient.EXPECT().
 		ContainerStart(ctx, cloudproviderkindinstaller.ContainerName, mock.Anything).
-		Return(expectedErr).
+		Return(errStartFailed).
 		Once()
 
 	err := installer.Install(ctx)
@@ -527,10 +539,9 @@ func TestUninstall_ErrorListingCPKContainers(t *testing.T) {
 		Once()
 
 	// Mock: error listing cpk- containers
-	expectedErr := errors.New("list error")
 	mockClient.EXPECT().
 		ContainerList(ctx, mock.Anything).
-		Return(nil, expectedErr).
+		Return(nil, errListError).
 		Once()
 
 	err := installer.Uninstall(ctx)
@@ -551,7 +562,7 @@ func TestImages_ReturnsCloudProviderKindImage(t *testing.T) {
 	assert.Equal(t, cloudproviderkindinstaller.CloudProviderKindImage(), images[0])
 }
 
-func TestInstall_NetworkAlreadyExists(t *testing.T) {
+func TestInstall_NetworkAlreadyExists(t *testing.T) { //nolint:dupl
 	t.Parallel()
 
 	mockClient := dockerclient.NewMockAPIClient(t)
@@ -575,17 +586,19 @@ func TestInstall_NetworkAlreadyExists(t *testing.T) {
 	// Mock: network creation returns "already exists" error
 	mockClient.EXPECT().
 		NetworkInspect(ctx, cloudproviderkindinstaller.KindNetworkName, mock.Anything).
-		Return(network.Inspect{}, errors.New("not found")).
+		Return(network.Inspect{}, errNotFound).
 		Once()
 
 	mockClient.EXPECT().
 		NetworkCreate(ctx, cloudproviderkindinstaller.KindNetworkName, mock.Anything).
-		Return(network.CreateResponse{}, errors.New("network already exists")).
+		Return(network.CreateResponse{}, errNetworkAlreadyExists).
 		Once()
 
 	// Mock: create and start container should still proceed
+	cname := cloudproviderkindinstaller.ContainerName
+
 	mockClient.EXPECT().
-		ContainerCreate(ctx, mock.Anything, mock.Anything, mock.Anything, (*v1.Platform)(nil), cloudproviderkindinstaller.ContainerName).
+		ContainerCreate(ctx, mock.Anything, mock.Anything, mock.Anything, (*v1.Platform)(nil), cname).
 		Return(container.CreateResponse{ID: "new-id"}, nil).
 		Once()
 
