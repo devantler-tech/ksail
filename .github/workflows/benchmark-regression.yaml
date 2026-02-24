@@ -48,10 +48,12 @@ jobs:
           if [ -z "$pkgs" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "packages<<EOF" >> "$GITHUB_OUTPUT"
-            echo "$pkgs" >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
+            {
+              echo "skip=false"
+              echo "packages<<EOF"
+              echo "$pkgs"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: 🏃 Run benchmarks
