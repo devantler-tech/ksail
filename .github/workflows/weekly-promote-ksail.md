@@ -7,6 +7,9 @@ description: |
   ready-to-use content.
 
 on:
+  bots:
+    - "github-merge-queue[bot]"
+
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     # Weekly promotion, every Wednesday (fuzzy scheduling)
