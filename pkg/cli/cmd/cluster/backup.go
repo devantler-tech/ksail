@@ -95,7 +95,7 @@ Example:
 	)
 	cmd.Flags().IntVar(
 		&flags.compressionLevel, "compression", gzip.DefaultCompression,
-		"Compression level (0-9, default: 6)",
+		"Compression level (0-9, default: -1 (gzip default))",
 	)
 
 	err := cmd.MarkFlagRequired("output")
@@ -106,7 +106,7 @@ Example:
 	return cmd
 }
 
-func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) error {
+func runBackup(_ context.Context, cmd *cobra.Command, flags *backupFlags) error {
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
 	if kubeconfigPath == "" {
 		return ErrKubeconfigNotFound
@@ -131,7 +131,7 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 		}
 	}
 
-	err := createBackupArchive(ctx, kubeconfigPath, writer, flags)
+	err := createBackupArchive(kubeconfigPath, writer, flags)
 	if err != nil {
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
@@ -148,7 +148,6 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 }
 
 func createBackupArchive(
-	ctx context.Context,
 	kubeconfigPath string,
 	writer io.Writer,
 	flags *backupFlags,
@@ -172,7 +171,7 @@ func createBackupArchive(
 	_, _ = fmt.Fprintf(writer, "Exporting cluster resources...\n")
 
 	resourceCount := exportResources(
-		ctx, kubeconfigPath, tmpDir, writer, flags,
+		kubeconfigPath, tmpDir, writer, flags,
 	)
 
 	metadata.ResourceCount = resourceCount
@@ -222,7 +221,6 @@ func backupResourceTypes() []string {
 }
 
 func exportResources(
-	ctx context.Context,
 	kubeconfigPath, outputDir string,
 	writer io.Writer,
 	flags *backupFlags,
@@ -234,7 +232,7 @@ func exportResources(
 
 	for _, resourceType := range filteredTypes {
 		count, err := exportResourceType(
-			ctx, kubeconfigPath, outputDir, resourceType, flags,
+			kubeconfigPath, outputDir, resourceType, flags,
 		)
 		if err != nil {
 			_, _ = fmt.Fprintf(
@@ -275,7 +273,6 @@ func filterExcludedTypes(resourceTypes, excludeTypes []string) []string {
 }
 
 func exportResourceType(
-	ctx context.Context,
 	kubeconfigPath, outputDir, resourceType string,
 	flags *backupFlags,
 ) (int, error) {
@@ -291,7 +288,7 @@ func exportResourceType(
 
 		for _, ns := range flags.namespaces {
 			count, err := executeGetAndSave(
-				ctx, kubeconfigPath, resourceDir, resourceType, ns,
+				kubeconfigPath, resourceDir, resourceType, ns,
 			)
 			if err != nil {
 				return totalCount, err
@@ -304,12 +301,11 @@ func exportResourceType(
 	}
 
 	return executeGetAndSave(
-		ctx, kubeconfigPath, resourceDir, resourceType, "",
+		kubeconfigPath, resourceDir, resourceType, "",
 	)
 }
 
 func executeGetAndSave(
-	_ context.Context,
 	kubeconfigPath, resourceDir, resourceType, namespace string,
 ) (int, error) {
 	filename := resourceType + ".yaml"
@@ -455,7 +451,7 @@ func addFileToTar(
 		return nil
 	}
 
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec // path from controlled Walk
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
