@@ -34,10 +34,10 @@ docker ps
 
 The supported Kubernetes distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution.
 
-| Provider | Vanilla   | K3s      | Talos |
-| -------- | --------- | -------- | ----- |
-| Docker   | ✅ (Kind) | ✅ (K3d) | ✅    |
-| Hetzner  | —         | —        | ✅    |
+| Provider | Vanilla   | K3s      | Talos | VCluster   |
+| -------- | --------- | -------- | ----- | ---------- |
+| Docker   | ✅ (Kind) | ✅ (K3d) | ✅    | ✅ (Vind)  |
+| Hetzner  | —         | —        | ✅    | —          |
 
 > [!NOTE]
 > Talos on Hetzner requires a Hetzner Cloud account and API token (`HCLOUD_TOKEN`). See the [Support Matrix](/support-matrix/) for more details.

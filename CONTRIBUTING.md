@@ -92,6 +92,8 @@ go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > after.txt
 benchstat before.txt after.txt
 ```
 
+PRs that modify Go code are automatically benchmarked against `main` and the comparison is posted as a PR comment. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details on interpreting results.
+
 See package-specific BENCHMARKS.md files (e.g., `pkg/k8s/readiness/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
 
 ### Documentation
