@@ -6,7 +6,10 @@ description: |
   progress and gather maintainer feedback, helping reduce technical debt.
 
 on:
-  skip-bots: ["dependabot[bot]", "renovate[bot]", "github-merge-queue[bot]"]
+  bots:
+    - "github-merge-queue[bot]"
+
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   workflow_dispatch:
 

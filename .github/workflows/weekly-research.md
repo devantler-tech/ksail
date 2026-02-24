@@ -7,7 +7,10 @@ description: |
   strategic decision-making.
 
 on:
-  skip-bots: ["dependabot[bot]", "renovate[bot]", "github-merge-queue[bot]"]
+  bots:
+    - "github-merge-queue[bot]"
+
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     # Every week, Monday (fuzzy scheduling to distribute load)
     - cron: "weekly on monday"

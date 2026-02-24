@@ -7,7 +7,10 @@ description: |
   Incorporates maintainer feedback from comments on the plan.
 
 on:
-  skip-bots: ["dependabot[bot]", "renovate[bot]", "github-merge-queue[bot]"]
+  bots:
+    - "github-merge-queue[bot]"
+
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   workflow_dispatch:
   stop-after: +1mo # workflow will no longer trigger after 1 month. Remove this and recompile to run indefinitely

@@ -1,6 +1,9 @@
 ---
 on:
-  skip-bots: ["dependabot[bot]", "renovate[bot]", "github-merge-queue[bot]"]
+  bots:
+    - "github-merge-queue[bot]"
+
+  skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     # Every 3 days at 2am UTC
     - cron: "0 2 */3 * *"
