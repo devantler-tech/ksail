@@ -201,13 +201,10 @@ type permissionResponse struct {
 // It captures the full state at the time of queuing so that mode changes
 // after queuing don't affect the prompt's execution.
 type pendingPrompt struct {
-	id              string    // unique identifier for deletion/tracking
-	content         string    // the prompt text
-	chatMode        ChatMode  // agent/plan/ask mode when queued
-	model           string    // model ID when queued
-	reasoningEffort string    // reasoning effort when queued (if applicable)
-	timestamp       time.Time // when this prompt was queued
-	isQueued        bool      // true for queued, false for steering
+	content         string   // the prompt text
+	chatMode        ChatMode // agent/plan/ask mode when queued
+	model           string   // model ID when queued
+	reasoningEffort string   // reasoning effort when queued (if applicable)
 }
 
 // Model is the Bubbletea model for the chat TUI.
@@ -829,26 +826,20 @@ func (m *Model) hasRunningTools() bool {
 // addQueuedPrompt adds a new queued prompt with current state captured.
 func (m *Model) addQueuedPrompt(content string) {
 	m.queuedPrompts = append(m.queuedPrompts, pendingPrompt{
-		id:              fmt.Sprintf("queued-%d", time.Now().UnixNano()),
 		content:         content,
 		chatMode:        m.chatMode,
 		model:           m.currentModel,
 		reasoningEffort: m.getReasoningEffort(),
-		timestamp:       time.Now(),
-		isQueued:        true,
 	})
 }
 
 // addSteeringPrompt adds a new steering prompt with current state captured.
 func (m *Model) addSteeringPrompt(content string) {
 	m.steeringPrompts = append(m.steeringPrompts, pendingPrompt{
-		id:              fmt.Sprintf("steering-%d", time.Now().UnixNano()),
 		content:         content,
 		chatMode:        m.chatMode,
 		model:           m.currentModel,
 		reasoningEffort: m.getReasoningEffort(),
-		timestamp:       time.Now(),
-		isQueued:        false,
 	})
 }
 

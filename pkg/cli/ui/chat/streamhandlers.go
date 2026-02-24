@@ -280,10 +280,17 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 
 	// Restore the prompt's captured state
 	m.chatMode = prompt.chatMode
-	m.currentModel = prompt.model
 
 	if m.chatModeRef != nil {
 		m.chatModeRef.SetMode(prompt.chatMode)
+	}
+
+	// Switch model with session recreation if needed
+	if prompt.model != m.currentModel {
+		mdl, cmd := m.switchModel(prompt.model)
+		if m.err != nil {
+			return mdl, cmd
+		}
 	}
 
 	// Update reasoning effort if it was set
@@ -293,6 +300,9 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 
 	// Prepare new turn state
 	m.prepareForNewTurn()
+
+	// Add to prompt history for Up/Down arrow recall
+	m.addToPromptHistory(prompt.content)
 
 	// Add user message to history
 	m.messages = append(m.messages, message{
@@ -364,6 +374,11 @@ func (m *Model) handleAbort() (tea.Model, tea.Cmd) {
 
 	m.updateViewportContent()
 
+	// Process next pending prompt if available
+	if m.hasPendingPrompts() {
+		return m.processNextPendingPrompt()
+	}
+
 	return m, nil
 }
 
@@ -397,6 +412,11 @@ func (m *Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.updateViewportContent()
+
+	// Process next pending prompt if available
+	if m.hasPendingPrompts() {
+		return m.processNextPendingPrompt()
+	}
 
 	// Don't wait for more events - response is complete (with error)
 	return m, nil
