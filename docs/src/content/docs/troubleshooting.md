@@ -27,7 +27,7 @@ docker system prune -f
 
 ### Port Already in Use
 
-If you encounter `Error: Port 5000 is already allocated`, either use a different port with `--local-registry http://localhost:5050` or kill the process using the port:
+If you encounter `Error: Port 5000 is already allocated`, either use a different port with `--local-registry localhost:5050` or kill the process using the port:
 
 ```bash
 # macOS/Linux
