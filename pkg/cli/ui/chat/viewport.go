@@ -51,12 +51,10 @@ func (m *Model) updateViewportContent() {
 
 // calculateWrapWidth calculates the content width for text wrapping.
 func (m *Model) calculateWrapWidth() uint {
+	// wrapWidth is guaranteed non-negative by max with minWrapWidth (20).
 	wrapWidth := max(m.viewport.Width-wrapPadding, minWrapWidth)
-	if wrapWidth < 0 {
-		return 0
-	}
 
-	return uint(wrapWidth)
+	return uint(wrapWidth) //nolint:gosec
 }
 
 // renderMessage renders a single message to the builder.
@@ -380,12 +378,12 @@ func (m *Model) renderPendingPrompts(builder *strings.Builder, _ uint) {
 
 	// Render steering prompts first (higher priority)
 	for i := range m.steeringPrompts {
-		m.renderPendingPrompt(builder, &m.steeringPrompts[i], true)
+		m.renderPendingPrompt(builder, &m.steeringPrompts[i], true, 0)
 	}
 
-	// Render queued prompts in FIFO order
+	// Render queued prompts in FIFO order with position numbers
 	for i := range m.queuedPrompts {
-		m.renderPendingPrompt(builder, &m.queuedPrompts[i], false)
+		m.renderPendingPrompt(builder, &m.queuedPrompts[i], false, i+1)
 	}
 }
 
@@ -394,15 +392,16 @@ func (m *Model) renderPendingPrompt(
 	builder *strings.Builder,
 	prompt *pendingPrompt,
 	isSteering bool,
+	position int,
 ) {
 	builder.WriteString("\n")
 
 	// Build prompt label with type indicator and mode icon
 	var label string
 	if isSteering {
-		label = "  \U0001F3AF [STEERING] " + prompt.chatMode.Icon()
+		label = "  [S] [STEERING] " + prompt.chatMode.Icon()
 	} else {
-		label = "  \u231B [QUEUED] " + prompt.chatMode.Icon()
+		label = fmt.Sprintf("  [Q] [QUEUED #%d] %s", position, prompt.chatMode.Icon())
 	}
 
 	// Render label with appropriate styling
