@@ -47,47 +47,49 @@ func runNodeOperationTest(
 func TestNewProvisioner(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name           string
-		clusterName    string
-		valuesPath     string
-		disableFlannel bool
-	}{
-		{
-			name:           "creates_with_provided_name",
-			clusterName:    "test-cluster",
-			valuesPath:     "",
-			disableFlannel: false,
-		},
-		{
-			name:           "uses_default_name_when_empty",
-			clusterName:    "",
-			valuesPath:     "/path/to/values.yaml",
-			disableFlannel: false,
-		},
-		{
-			name:           "preserves_all_options",
-			clusterName:    "custom",
-			valuesPath:     "/custom/path.yaml",
-			disableFlannel: true,
-		},
-	}
+	t.Run("creates_with_provided_name", func(t *testing.T) {
+		t.Parallel()
 
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
+		mockProvider := provider.NewMockProvider()
+		mockProvider.On("StartNodes", mock.Anything, "test-cluster").Return(nil)
 
-			mockProvider := provider.NewMockProvider()
-			provisioner := vclusterprovisioner.NewProvisioner(
-				testCase.clusterName,
-				testCase.valuesPath,
-				testCase.disableFlannel,
-				mockProvider,
-			)
+		provisioner := vclusterprovisioner.NewProvisioner("test-cluster", "", false, mockProvider)
+		require.NotNil(t, provisioner)
 
-			assert.NotNil(t, provisioner, "provisioner should not be nil")
-		})
-	}
+		err := provisioner.Start(context.Background(), "test-cluster")
+		require.NoError(t, err)
+		mockProvider.AssertExpectations(t)
+	})
+
+	t.Run("uses_default_name_when_empty", func(t *testing.T) {
+		t.Parallel()
+
+		mockProvider := provider.NewMockProvider()
+		// When cluster name is empty, the provisioner should use "vcluster-default"
+		mockProvider.On("StartNodes", mock.Anything, "vcluster-default").Return(nil)
+
+		provisioner := vclusterprovisioner.NewProvisioner("", "/path/to/values.yaml", false, mockProvider)
+		require.NotNil(t, provisioner)
+
+		// Pass empty name to Start; the provisioner should resolve to the default name
+		err := provisioner.Start(context.Background(), "")
+		require.NoError(t, err)
+		mockProvider.AssertExpectations(t)
+	})
+
+	t.Run("preserves_all_options", func(t *testing.T) {
+		t.Parallel()
+
+		mockProvider := provider.NewMockProvider()
+		mockProvider.On("StartNodes", mock.Anything, "custom").Return(nil)
+
+		provisioner := vclusterprovisioner.NewProvisioner("custom", "/custom/path.yaml", true, mockProvider)
+		require.NotNil(t, provisioner)
+
+		err := provisioner.Start(context.Background(), "custom")
+		require.NoError(t, err)
+		mockProvider.AssertExpectations(t)
+	})
 }
 
 func TestSetProvider(t *testing.T) {

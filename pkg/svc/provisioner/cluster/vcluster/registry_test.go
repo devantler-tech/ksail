@@ -136,6 +136,7 @@ func TestConfigureContainerdRegistryMirrors_ListError(t *testing.T) {
 		io.Discard,
 	)
 
+	require.ErrorIs(t, err, errMockContainerList)
 	require.ErrorContains(t, err, "container list failed", "error should contain list error")
 	mockClient.AssertExpectations(t)
 }
