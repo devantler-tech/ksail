@@ -3,19 +3,17 @@ package cloudproviderkindinstaller_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"strings"
 	"testing"
 
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cloudproviderkind"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
-	"github.com/opencontainers/image-spec/specs-go/v1"
-
-	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cloudproviderkind"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -582,7 +580,7 @@ func TestInstall_NetworkAlreadyExists(t *testing.T) {
 
 	mockClient.EXPECT().
 		NetworkCreate(ctx, cloudproviderkindinstaller.KindNetworkName, mock.Anything).
-		Return(network.CreateResponse{}, fmt.Errorf("network already exists")).
+		Return(network.CreateResponse{}, errors.New("network already exists")).
 		Once()
 
 	// Mock: create and start container should still proceed
