@@ -125,7 +125,7 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 func (p *Provider) NodesExist(ctx context.Context, clusterName string) (bool, error) {
 	exists, err := provider.CheckNodesExist(ctx, p, clusterName)
 	if err != nil {
-		return false, fmt.Errorf("omni nodes exist: %w", err)
+		return false, fmt.Errorf("omni: check nodes exist: %w", err)
 	}
 
 	return exists, nil
