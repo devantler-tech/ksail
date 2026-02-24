@@ -1,6 +1,8 @@
 package cluster
 
 import (
+	"archive/tar"
+
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
@@ -57,3 +59,13 @@ const ExportDirPerm = dirPerm
 
 // ExportFilePerm exports filePerm for testing.
 const ExportFilePerm = filePerm
+
+// ExportValidateTarEntry exports validateTarEntry for testing.
+func ExportValidateTarEntry(header *tar.Header, destDir string) (string, error) {
+	return validateTarEntry(header, destDir)
+}
+
+// ExportAllLinesContain exports allLinesContain for testing.
+func ExportAllLinesContain(output, substr string) bool {
+	return allLinesContain(output, substr)
+}

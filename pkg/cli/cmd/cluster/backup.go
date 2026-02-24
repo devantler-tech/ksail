@@ -43,9 +43,8 @@ var ErrKubeconfigNotFound = errors.New(
 
 // ErrInvalidCompressionLevel is returned when the compression level is
 // outside the valid range.
-var ErrInvalidCompressionLevel = fmt.Errorf(
-	"compression level must be between %d and %d",
-	minCompressionLevel, maxCompressionLevel,
+var ErrInvalidCompressionLevel = errors.New(
+	"compression level out of range",
 )
 
 // BackupMetadata contains metadata about a backup.
@@ -125,7 +124,11 @@ Example:
 func runBackup(_ context.Context, cmd *cobra.Command, flags *backupFlags) error {
 	if flags.compressionLevel < minCompressionLevel ||
 		flags.compressionLevel > maxCompressionLevel {
-		return ErrInvalidCompressionLevel
+		return fmt.Errorf(
+			"%w: must be between %d and %d",
+			ErrInvalidCompressionLevel,
+			minCompressionLevel, maxCompressionLevel,
+		)
 	}
 
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()

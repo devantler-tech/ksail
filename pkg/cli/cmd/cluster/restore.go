@@ -293,10 +293,8 @@ func validateTarEntry(
 
 	targetPath := filepath.Join(destDir, cleanName)
 
-	destPrefix := destDir + string(filepath.Separator)
-	targetPrefix := targetPath + string(filepath.Separator)
-
-	if !strings.HasPrefix(targetPrefix, destPrefix) {
+	relPath, err := filepath.Rel(destDir, targetPath)
+	if err != nil || strings.HasPrefix(relPath, "..") {
 		return "", fmt.Errorf(
 			"%w: %s", ErrInvalidTarPath, header.Name,
 		)
@@ -452,16 +450,20 @@ func restoreResourceFile(
 }
 
 func allLinesContain(output, substr string) bool {
+	hasNonEmptyLine := false
+
 	for line := range strings.SplitSeq(output, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
 		}
 
+		hasNonEmptyLine = true
+
 		if !strings.Contains(trimmed, substr) {
 			return false
 		}
 	}
 
-	return true
+	return hasNonEmptyLine
 }
