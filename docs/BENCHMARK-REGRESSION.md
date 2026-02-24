@@ -6,8 +6,8 @@ KSail includes automated benchmark regression testing to detect performance chan
 
 The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workflow runs automatically on PRs that change `**/*.go`, `go.mod`, or `go.sum` files. It:
 
-1. Runs all Go benchmarks on the PR branch (5 iterations, 3 s per benchmark)
-2. Runs the same benchmarks on `main` to establish a baseline
+1. Discovers packages that contain benchmark functions (avoids compiling the entire module)
+2. Runs benchmarks on the PR branch and `main` **in parallel** (5 iterations, 1 s per benchmark)
 3. Compares results with [`benchstat`](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat) for statistical analysis
 4. Posts (or updates) a comparison comment on the PR
 
@@ -59,6 +59,7 @@ go install golang.org/x/perf/cmd/benchstat@latest
 | `pkg/client/flux`           | `client_bench_test.go`  | Flux GitOps client operations            |
 | `pkg/client/helm`           | `client_bench_test.go`  | Helm client chart operations             |
 | `pkg/client/kubectl`        | `client_bench_test.go`  | Kubectl command execution                |
+| `pkg/client/kustomize`      | `client_bench_test.go`  | Kustomize build operations               |
 | `pkg/k8s/readiness`         | `polling_bench_test.go` | Kubernetes resource polling              |
 
 This table may not be exhaustive; additional benchmarks may exist in other packages.
