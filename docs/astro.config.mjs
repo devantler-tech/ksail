@@ -39,6 +39,7 @@ export default defineConfig({
             { label: "Installation", link: "/installation/" },
             { label: "Features", link: "/features/" },
             { label: "Talos", link: "/getting-started/talos/" },
+            { label: "VCluster Guide", link: "/getting-started/vcluster/" },
           ],
         },
         { label: "Concepts", link: "/concepts/" },
