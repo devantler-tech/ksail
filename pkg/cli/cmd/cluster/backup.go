@@ -406,11 +406,9 @@ func runKubectlGet(
 
 	args := []string{resourceType, "-o", "yaml"}
 
-	if clusterScoped {
-		// Cluster-scoped resources don't use namespace flags.
-	} else if namespace != "" {
+	if !clusterScoped && namespace != "" {
 		args = append(args, "-n", namespace)
-	} else {
+	} else if !clusterScoped {
 		args = append(args, "--all-namespaces")
 	}
 

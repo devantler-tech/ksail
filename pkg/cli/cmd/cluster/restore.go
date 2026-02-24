@@ -410,29 +410,9 @@ func restoreResourceFile(
 	if err != nil {
 		stderr := errBuf.String()
 
-		if flags.existingResourcePolicy == resourcePolicyNone {
-			// For "none" policy (kubectl create), skip only when all
-			// errors are AlreadyExists. Split by newline and verify
-			// each non-empty error line contains "already exists".
-			lines := strings.Split(stderr, "\n")
-			allAlreadyExist := true
-
-			for _, line := range lines {
-				trimmed := strings.TrimSpace(line)
-				if trimmed == "" {
-					continue
-				}
-
-				if !strings.Contains(trimmed, "already exists") {
-					allAlreadyExist = false
-
-					break
-				}
-			}
-
-			if allAlreadyExist {
-				return nil
-			}
+		if flags.existingResourcePolicy == resourcePolicyNone &&
+			allLinesContain(stderr, "already exists") {
+			return nil
 		}
 
 		return fmt.Errorf(
@@ -442,4 +422,19 @@ func restoreResourceFile(
 	}
 
 	return nil
+}
+
+func allLinesContain(output, substr string) bool {
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		if !strings.Contains(trimmed, substr) {
+			return false
+		}
+	}
+
+	return true
 }
