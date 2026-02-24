@@ -39,8 +39,8 @@ func TestEnsureSecret_CreateWhenNotFound(t *testing.T) {
 		t.Fatalf("failed to get created secret: %v", err)
 	}
 
-	if got.StringData["token"] != token {
-		t.Errorf("expected token %q, got %q", token, got.StringData["token"])
+	if string(got.Data["token"]) != token {
+		t.Errorf("expected token %q, got %q", token, string(got.Data["token"]))
 	}
 }
 
@@ -74,7 +74,7 @@ func TestEnsureSecret_UpdatePreservesResourceVersion(t *testing.T) {
 		t.Fatalf("failed to get updated secret: %v", err)
 	}
 
-	if got.StringData["token"] != updatedToken {
-		t.Errorf("expected updated token %q, got %q", updatedToken, got.StringData["token"])
+	if string(got.Data["token"]) != updatedToken {
+		t.Errorf("expected updated token %q, got %q", updatedToken, string(got.Data["token"]))
 	}
 }
