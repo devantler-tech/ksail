@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
@@ -242,7 +243,7 @@ func (p *Provisioner) waitForServersToBeReachable(
 	return nil
 }
 
-// waitForServerReachable polls a single server until a TCP connection succeeds on port 50000.
+// waitForServerReachable polls a single server until a TCP connection succeeds on the Talos API port.
 // This waits through the entire install cycle: connection refused during install,
 // connection refused during reboot, then success when booted from disk.
 func (p *Provisioner) waitForServerReachable(
@@ -255,7 +256,7 @@ func (p *Provisioner) waitForServerReachable(
 		RetryWithContext(ctx, func(ctx context.Context) error {
 			dialer := &net.Dialer{Timeout: retryInterval}
 
-			conn, dialErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(serverIP, "50000"))
+			conn, dialErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(serverIP, strconv.Itoa(talosAPIPort)))
 			if dialErr != nil {
 				return retry.ExpectedError(
 					fmt.Errorf("waiting for server to become reachable: %w", dialErr),
