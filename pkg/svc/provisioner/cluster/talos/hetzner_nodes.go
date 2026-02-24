@@ -253,7 +253,7 @@ func (p *Provisioner) waitForServerReachable(ctx context.Context, server *hcloud
 		RetryWithContext(ctx, func(ctx context.Context) error {
 			dialer := &net.Dialer{Timeout: retryInterval}
 
-			conn, dialErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(serverIP, "50000"))
+			conn, dialErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(serverIP, talosAPIPort))
 			if dialErr != nil {
 				return retry.ExpectedError(
 					fmt.Errorf("waiting for server to become reachable: %w", dialErr),
