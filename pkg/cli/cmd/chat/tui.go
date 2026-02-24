@@ -41,7 +41,7 @@ func setupChatTools(
 	rootCmd *cobra.Command,
 	eventChan chan tea.Msg,
 	outputChan chan toolgen.OutputChunk,
-) (*chatui.ChatModeRef, *chatui.YoloModeRef) {
+) (*chatui.ChatModeRef, *chatui.YoloModeRef, error) {
 	tools, toolMetadata := chatsvc.GetKSailToolMetadata(rootCmd, outputChan)
 	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode)
 	yoloModeRef := chatui.NewYoloModeRef(false)
@@ -50,11 +50,17 @@ func setupChatTools(
 	)
 	sessionConfig.Tools = tools
 	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan, yoloModeRef)
-	sessionConfig.Hooks = &copilot.SessionHooks{
-		OnPreToolUse: BuildPreToolUseHook(chatModeRef, toolMetadata),
+
+	allowedRoot, err := os.Getwd()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to determine working directory for sandboxing: %w", err)
 	}
 
-	return chatModeRef, yoloModeRef
+	sessionConfig.Hooks = &copilot.SessionHooks{
+		OnPreToolUse: BuildPreToolUseHook(chatModeRef, toolMetadata, allowedRoot),
+	}
+
+	return chatModeRef, yoloModeRef, nil
 }
 
 // runTUIChat starts the TUI chat mode.
@@ -69,9 +75,16 @@ func runTUIChat(
 	eventChan := make(chan tea.Msg, eventChannelBuffer)
 	outputChan := make(chan toolgen.OutputChunk, outputChannelBuffer)
 	forwarderWg := startOutputForwarder(outputChan, eventChan)
-	chatModeRef, yoloModeRef := setupChatTools( //nolint:contextcheck
+
+	chatModeRef, yoloModeRef, err := setupChatTools( //nolint:contextcheck
 		sessionConfig, rootCmd, eventChan, outputChan,
 	)
+	if err != nil {
+		close(outputChan)
+		forwarderWg.Wait()
+
+		return err
+	}
 
 	session, err := client.CreateSession(ctx, sessionConfig)
 	if err != nil {
