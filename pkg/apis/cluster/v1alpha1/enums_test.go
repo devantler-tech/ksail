@@ -265,6 +265,7 @@ func TestGitOpsEngine_ValidValues(t *testing.T) {
 
 // Provider tests.
 
+//nolint:funlen // Table-driven test with multiple provider cases is clearer as single function
 func TestProvider_Set(t *testing.T) {
 	t.Parallel()
 

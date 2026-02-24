@@ -7,7 +7,6 @@ import (
 	"github.com/cosi-project/runtime/pkg/resource"
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/cosi-project/runtime/pkg/state"
-
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	omniclient "github.com/siderolabs/omni/client/pkg/client"
 	omnires "github.com/siderolabs/omni/client/pkg/omni/resources/omni"
@@ -27,13 +26,35 @@ func NewProvider(client *omniclient.Client) *Provider {
 
 // StartNodes is a no-op for Omni. Omni manages the machine lifecycle
 // and nodes are automatically started when allocated to a cluster.
-func (p *Provider) StartNodes(_ context.Context, _ string) error {
+// It validates that the cluster has nodes and returns provider.ErrNoNodes
+// when no nodes exist for the given cluster.
+func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
+	nodes, err := p.ListNodes(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if len(nodes) == 0 {
+		return provider.ErrNoNodes
+	}
+
 	return nil
 }
 
 // StopNodes is a no-op for Omni. Omni manages the machine lifecycle
 // and nodes cannot be individually stopped through the provider.
-func (p *Provider) StopNodes(_ context.Context, _ string) error {
+// It validates that the cluster has nodes and returns provider.ErrNoNodes
+// when no nodes exist for the given cluster.
+func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
+	nodes, err := p.ListNodes(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if len(nodes) == 0 {
+		return provider.ErrNoNodes
+	}
+
 	return nil
 }
 

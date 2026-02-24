@@ -23,9 +23,6 @@ var ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
 // ErrMissingHetznerToken is returned when the Hetzner API token is not set.
 var ErrMissingHetznerToken = errors.New("hetzner API token not set")
 
-// ErrMissingOmniConfig is returned when the Omni endpoint or service account key is not set.
-var ErrMissingOmniConfig = errors.New("omni configuration incomplete")
-
 // CreateProvisioner creates a Provisioner from a pre-loaded configuration.
 // The Talos config should be loaded via the configmanager before calling this function,
 // allowing any in-memory modifications (e.g., CNI patches, mirror registries) to be preserved.
@@ -53,7 +50,26 @@ func CreateProvisioner(
 		providerType = v1alpha1.ProviderDocker
 	}
 
-	// Create options and apply configured node counts
+	provisioner := newProvisionerFromOptions(talosConfigs, kubeconfigPath, opts, skipCNIChecks)
+
+	// Configure the infrastructure provider
+	err := configureInfraProvider(
+		provisioner, providerType, opts, hetznerOpts, omniOpts,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return provisioner, nil
+}
+
+// newProvisionerFromOptions creates a provisioner with the given options applied.
+func newProvisionerFromOptions(
+	talosConfigs *talosconfigmanager.Configs,
+	kubeconfigPath string,
+	opts v1alpha1.OptionsTalos,
+	skipCNIChecks bool,
+) *Provisioner {
 	talosconfigPath := opts.Config
 	if talosconfigPath == "" {
 		talosconfigPath = "~/.talos/config"
@@ -63,6 +79,7 @@ func CreateProvisioner(
 		WithKubeconfigPath(kubeconfigPath).
 		WithTalosconfigPath(talosconfigPath).
 		WithSkipCNIChecks(skipCNIChecks)
+
 	if opts.ControlPlanes > 0 {
 		options.WithControlPlaneNodes(int(opts.ControlPlanes))
 	}
@@ -71,17 +88,24 @@ func CreateProvisioner(
 		options.WithWorkerNodes(int(opts.Workers))
 	}
 
-	// Create provisioner with loaded configs and options
-	provisioner := NewProvisioner(talosConfigs, options)
+	return NewProvisioner(talosConfigs, options)
+}
 
-	// Configure the infrastructure provider
+// configureInfraProvider configures the infrastructure provider on the provisioner.
+func configureInfraProvider(
+	provisioner *Provisioner,
+	providerType v1alpha1.Provider,
+	opts v1alpha1.OptionsTalos,
+	hetznerOpts v1alpha1.OptionsHetzner,
+	omniOpts v1alpha1.OptionsOmni,
+) error {
 	var infraProvider provider.Provider
 
 	switch providerType {
 	case v1alpha1.ProviderDocker:
 		dockerClient, err := kindprovisioner.NewDefaultDockerClient()
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Docker client: %w", err)
+			return fmt.Errorf("failed to create Docker client: %w", err)
 		}
 
 		provisioner.WithDockerClient(dockerClient)
@@ -90,7 +114,7 @@ func CreateProvisioner(
 	case v1alpha1.ProviderHetzner:
 		hetznerProvider, err := createHetznerProvider(hetznerOpts)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		infraProvider = hetznerProvider
@@ -102,20 +126,20 @@ func CreateProvisioner(
 	case v1alpha1.ProviderOmni:
 		omniProvider, err := createOmniProvider(omniOpts)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		infraProvider = omniProvider
 
 	default:
-		return nil, fmt.Errorf("%w: %s (supported: %s, %s, %s)",
+		return fmt.Errorf("%w: %s (supported: %s, %s, %s)",
 			ErrUnsupportedProvider, providerType,
 			v1alpha1.ProviderDocker, v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni)
 	}
 
 	provisioner.WithInfraProvider(infraProvider)
 
-	return provisioner, nil
+	return nil
 }
 
 // createHetznerProvider creates a Hetzner provider from the given options.
@@ -199,10 +223,7 @@ const (
 // createOmniProvider creates an Omni provider from the given options.
 func createOmniProvider(opts v1alpha1.OptionsOmni) (*omni.Provider, error) {
 	if opts.Endpoint == "" {
-		return nil, fmt.Errorf(
-			"%w: endpoint is required",
-			ErrMissingOmniConfig,
-		)
+		return nil, omni.ErrEndpointRequired
 	}
 
 	// Determine the service account key environment variable name
@@ -216,7 +237,7 @@ func createOmniProvider(opts v1alpha1.OptionsOmni) (*omni.Provider, error) {
 	if serviceAccountKey == "" {
 		return nil, fmt.Errorf(
 			"%w: environment variable %s is not set",
-			ErrMissingOmniConfig,
+			omni.ErrServiceAccountKeyRequired,
 			keyEnvVar,
 		)
 	}
