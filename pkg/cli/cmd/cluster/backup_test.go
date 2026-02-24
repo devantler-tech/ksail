@@ -1,6 +1,8 @@
 package cluster_test
 
 import (
+	"archive/tar"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -271,5 +273,199 @@ func TestSanitizeYAMLOutput_nonYAML(t *testing.T) {
 
 	if !strings.Contains(result, "not valid yaml") {
 		t.Error("should return original content for non-YAML input")
+	}
+}
+
+func TestValidateTarEntry(t *testing.T) {
+	t.Parallel()
+
+	destDir := t.TempDir()
+
+	tests := []struct {
+		name    string
+		header  *tar.Header
+		wantErr bool
+		errType error
+	}{
+		{
+			name: "valid regular file",
+			header: &tar.Header{
+				Name:     "resources/pods.yaml",
+				Typeflag: tar.TypeReg,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid directory",
+			header: &tar.Header{
+				Name:     "resources/",
+				Typeflag: tar.TypeDir,
+			},
+			wantErr: false,
+		},
+		{
+			name: "absolute path",
+			header: &tar.Header{
+				Name:     "/etc/passwd",
+				Typeflag: tar.TypeReg,
+			},
+			wantErr: true,
+			errType: cluster.ErrInvalidTarPath,
+		},
+		{
+			name: "parent directory traversal",
+			header: &tar.Header{
+				Name:     "../../../etc/passwd",
+				Typeflag: tar.TypeReg,
+			},
+			wantErr: true,
+			errType: cluster.ErrInvalidTarPath,
+		},
+		{
+			name: "embedded parent traversal",
+			header: &tar.Header{
+				Name:     "resources/../../etc/passwd",
+				Typeflag: tar.TypeReg,
+			},
+			wantErr: true,
+			errType: cluster.ErrInvalidTarPath,
+		},
+		{
+			name: "symlink",
+			header: &tar.Header{
+				Name:     "link.yaml",
+				Typeflag: tar.TypeSymlink,
+				Linkname: "/etc/passwd",
+			},
+			wantErr: true,
+			errType: cluster.ErrSymlinkInArchive,
+		},
+		{
+			name: "hard link",
+			header: &tar.Header{
+				Name:     "link.yaml",
+				Typeflag: tar.TypeLink,
+				Linkname: "other.yaml",
+			},
+			wantErr: true,
+			errType: cluster.ErrSymlinkInArchive,
+		},
+		{
+			name: "char device",
+			header: &tar.Header{
+				Name:     "dev",
+				Typeflag: tar.TypeChar,
+			},
+			wantErr: true,
+			errType: cluster.ErrInvalidTarPath,
+		},
+		{
+			name: "block device",
+			header: &tar.Header{
+				Name:     "dev",
+				Typeflag: tar.TypeBlock,
+			},
+			wantErr: true,
+			errType: cluster.ErrInvalidTarPath,
+		},
+		{
+			name: "FIFO",
+			header: &tar.Header{
+				Name:     "fifo",
+				Typeflag: tar.TypeFifo,
+			},
+			wantErr: true,
+			errType: cluster.ErrInvalidTarPath,
+		},
+		{
+			name: "double dot only",
+			header: &tar.Header{
+				Name:     "..",
+				Typeflag: tar.TypeReg,
+			},
+			wantErr: true,
+			errType: cluster.ErrInvalidTarPath,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := cluster.ExportValidateTarEntry(test.header, destDir)
+			if test.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+
+				if test.errType != nil &&
+					!errors.Is(err, test.errType) {
+					t.Errorf(
+						"expected error wrapping %v, got %v",
+						test.errType, err,
+					)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestAllLinesContain(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		output   string
+		substr   string
+		expected bool
+	}{
+		{
+			name:     "all lines match",
+			output:   "error: already exists\nerror: already exists\n",
+			substr:   "already exists",
+			expected: true,
+		},
+		{
+			name:     "one line does not match",
+			output:   "error: already exists\nerror: forbidden\n",
+			substr:   "already exists",
+			expected: false,
+		},
+		{
+			name:     "empty string",
+			output:   "",
+			substr:   "already exists",
+			expected: false,
+		},
+		{
+			name:     "whitespace only",
+			output:   "   \n  \n",
+			substr:   "already exists",
+			expected: false,
+		},
+		{
+			name:     "single matching line",
+			output:   "resource already exists",
+			substr:   "already exists",
+			expected: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := cluster.ExportAllLinesContain(
+				test.output, test.substr,
+			)
+			if result != test.expected {
+				t.Errorf(
+					"allLinesContain() = %v, want %v",
+					result, test.expected,
+				)
+			}
+		})
 	}
 }
