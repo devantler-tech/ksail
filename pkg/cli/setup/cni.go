@@ -202,7 +202,8 @@ func waitForCNIReadiness(
 			joined := errors.Join(ErrCNIReadinessTimeout, err)
 
 			return fmt.Errorf(
-				"wait for node readiness after CNI install: %w (after %s)\n%s\n\nTip: check registry availability and rate limits",
+				"wait for node readiness after CNI install: %w (after %s)\n%s"+
+					"\n\nTip: check registry availability and rate limits",
 				joined, setup.timeout, diag,
 			)
 		}
