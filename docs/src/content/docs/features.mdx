@@ -99,7 +99,7 @@ docker push localhost:5050/my-app
 
 ### Mirror Registries
 
-KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default to avoid rate limits and improve CI/CD performance. Mirror registries create local pull-through cache containers that authenticate to upstream registries using credentials resolved from `${ENV_VAR}` placeholders, with cached images persisting across restarts. Supported across all distributions via containerd `hosts.toml` injection (Vanilla, VCluster), K3d registries configuration (K3s), or machine config patches (Talos).
+For Docker-based clusters (local Vanilla, K3s, Talos-on-Docker, and VCluster), KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default to avoid rate limits and improve CI/CD performance. For these Docker-backed providers, mirror registries run as local pull-through cache containers that authenticate to upstream registries using credentials resolved from `${ENV_VAR}` placeholders, with cached images persisting across restarts via containerd `hosts.toml` injection (Vanilla, VCluster) or K3d registries configuration (K3s, Talos-on-Docker). For Talos clusters on Hetzner, no mirrors are enabled by default; instead you can configure externally reachable mirror endpoints via config/flags, which are applied through Talos machine config patches.
 
 ```bash
 # Default mirrors (docker.io, ghcr.io, quay.io, registry.k8s.io)
