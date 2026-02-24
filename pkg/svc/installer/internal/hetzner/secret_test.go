@@ -3,6 +3,7 @@ package hetzner_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	hetzner "github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/hetzner"
@@ -76,5 +77,47 @@ func TestEnsureSecret_UpdatePreservesResourceVersion(t *testing.T) {
 
 	if string(got.Data["token"]) != updatedToken {
 		t.Errorf("expected updated token %q, got %q", updatedToken, string(got.Data["token"]))
+	}
+}
+
+func TestEnsureSecret_ConcurrentCreation(t *testing.T) {
+	t.Parallel()
+
+	token := "concurrent-token"
+	clientset := fake.NewClientset()
+
+	const goroutines = 10
+
+	var wg sync.WaitGroup
+
+	errs := make([]error, goroutines)
+
+	for i := range goroutines {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			errs[i] = hetzner.EnsureSecretForTest(context.Background(), clientset, token)
+		}()
+	}
+
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("goroutine %d returned unexpected error: %v", i, err)
+		}
+	}
+
+	got, err := clientset.CoreV1().Secrets(hetzner.Namespace).Get(
+		context.Background(), hetzner.SecretName, metav1.GetOptions{},
+	)
+	if err != nil {
+		t.Fatalf("failed to get secret: %v", err)
+	}
+
+	if string(got.Data["token"]) != token {
+		t.Errorf("expected token %q, got %q", token, string(got.Data["token"]))
 	}
 }
