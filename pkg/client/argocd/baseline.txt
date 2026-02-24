@@ -1,0 +1,20 @@
+goos: linux
+goarch: amd64
+pkg: github.com/devantler-tech/ksail/v5/pkg/client/argocd
+cpu: AMD EPYC 9V74 80-Core Processor                
+BenchmarkEnsureOptions/Minimal-4         	1000000000	         0.3640 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEnsureOptions/WithApplicationName-4         	1000000000	         0.3521 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEnsureOptions/WithAuth-4                    	1000000000	         0.3524 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEnsureOptions/Production-4                  	1000000000	         0.3530 ns/op	       0 B/op	       0 allocs/op
+BenchmarkUpdateTargetRevisionOptions/MinimalUpdate-4 	1000000000	         0.3527 ns/op	       0 B/op	       0 allocs/op
+BenchmarkUpdateTargetRevisionOptions/WithHardRefresh-4         	1000000000	         0.3522 ns/op	       0 B/op	       0 allocs/op
+BenchmarkManagerEnsure/FirstTimeCreate-4                       	     319	   3640143 ns/op	 2258411 B/op	    5510 allocs/op
+BenchmarkManagerEnsure/UpdateExisting-4                        	     634	   2040968 ns/op	 1167333 B/op	    3221 allocs/op
+BenchmarkManagerEnsure/WithAuthentication-4                    	     327	   3667362 ns/op	 2258844 B/op	    5526 allocs/op
+BenchmarkManagerEnsure/ProductionConfig-4                      	     308	   3685463 ns/op	 2258855 B/op	    5525 allocs/op
+BenchmarkManagerUpdateTargetRevision/TargetRevisionOnly-4      	  118028	     10489 ns/op	    9575 B/op	      74 allocs/op
+BenchmarkManagerUpdateTargetRevision/WithHardRefresh-4         	   97990	     12886 ns/op	   11935 B/op	      89 allocs/op
+BenchmarkManagerUpdateTargetRevision/HardRefreshOnly-4         	   95473	     12988 ns/op	   11924 B/op	      88 allocs/op
+BenchmarkNewManager-4                                          	1000000000	         0.3527 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/devantler-tech/ksail/v5/pkg/client/argocd	16.167s
