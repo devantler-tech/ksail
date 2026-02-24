@@ -44,7 +44,7 @@ jobs:
           set -euo pipefail
           pkgs=$(grep -rl '^func Benchmark' --include='*_test.go' . \
             | xargs -I{} dirname {} \
-            | sort -u)
+            | sort -u || true)
           if [ -z "$pkgs" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
