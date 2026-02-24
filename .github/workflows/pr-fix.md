@@ -7,12 +7,12 @@ description: |
   development flowing.
 
 on:
+  roles: [admin, maintainer, write]
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   slash_command:
     name: pr-fix
   reaction: "eyes"
 
-roles: [admin, maintainer, write]
 permissions: read-all
 
 network: defaults
