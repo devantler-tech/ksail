@@ -51,6 +51,12 @@ Benchmarks DeepCopy performance for different resource configurations:
 - Minimal: Basic Helm chart repository
 - Production: Full configuration with authentication
 
+**OCIRepository**:
+
+- Minimal: Basic OCI repository with URL and interval
+- WithReference: Repository with tag and semver range references
+- Production: Full configuration with provider, authentication, timeout
+
 **Kustomization**:
 
 - Minimal: Basic kustomization with source reference
@@ -63,8 +69,8 @@ Benchmarks DeepCopy performance for different resource configurations:
 
 ### Spec Operations
 
-- **CopySpec**: Benchmarks spec copying between resource instances
-- Tests all 5 Flux resource types
+- **CopySpec**: Benchmarks the internal `copySpec` function that copies specs between resource instances
+- Tests all 5 Flux resource types: GitRepository, HelmRepository, OCIRepository, Kustomization, HelmRelease
 
 ## Baseline Results
 
@@ -104,6 +110,16 @@ Benchmarks DeepCopy performance for different resource configurations:
 
 **Analysis**: Similar performance to GitRepository. Minimal configs are extremely efficient.
 
+### OCIRepository Creation
+
+| Scenario      | Time/op | Memory/op | Allocs/op |
+|---------------|---------|-----------|-----------|
+| Minimal       | ~30ns   | 0 B       | 0         |
+| WithReference | ~81ns   | 64 B      | 1         |
+| Production    | ~431ns  | 424 B     | 5         |
+
+**Analysis**: Similar to GitRepository. Minimal configs have zero allocations ✅
+
 ### Kustomization Creation
 
 | Scenario   | Time/op | Memory/op | Allocs/op |
@@ -122,14 +138,15 @@ Benchmarks DeepCopy performance for different resource configurations:
 
 **Analysis**: Slightly more expensive due to nested Chart template structure, but still sub-microsecond ✅
 
-### Spec Copying (DeepCopy)
+### Spec Copying (copySpec)
 
 | Resource Type  | Time/op | Memory/op | Allocs/op |
 |----------------|---------|-----------|-----------|
-| GitRepository  | ~730ns  | 1.3 KB    | 2         |
-| HelmRepository | ~541ns  | 896 B     | 2         |
-| Kustomization  | ~959ns  | 1.8 KB    | 2         |
-| HelmRelease    | ~1.1μs  | 2.0 KB    | 3         |
+| GitRepository  | ~438ns  | 1.3 KB    | 2         |
+| HelmRepository | ~329ns  | 896 B     | 2         |
+| OCIRepository  | ~343ns  | 960 B     | 2         |
+| Kustomization  | ~593ns  | 1.8 KB    | 2         |
+| HelmRelease    | ~652ns  | 2.0 KB    | 3         |
 
 **Analysis**:
 
@@ -144,7 +161,7 @@ Benchmarks DeepCopy performance for different resource configurations:
 | Command creation             | <50μs  | ~21μs       | ✅      |
 | Minimal resource creation    | <100ns | 27-47ns     | ✅      |
 | Production resource creation | <1μs   | 364-631ns   | ✅      |
-| Spec copying                 | <2μs   | 541ns-1.1μs | ✅      |
+| Spec copying                 | <2μs   | 329ns-652ns | ✅      |
 
 **All targets met** ✅
 
