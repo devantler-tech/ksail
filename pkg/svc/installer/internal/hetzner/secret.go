@@ -57,8 +57,8 @@ func ensureSecret(ctx context.Context, client kubernetes.Interface, token string
 			Name:      SecretName,
 			Namespace: Namespace,
 		},
-		StringData: map[string]string{
-			"token": token,
+		Data: map[string][]byte{
+			"token": []byte(token),
 		},
 	}
 
@@ -76,8 +76,8 @@ func ensureSecret(ctx context.Context, client kubernetes.Interface, token string
 		}
 	} else {
 		// Update the existing secret's data while preserving its metadata
-		existingSecret.StringData = secret.StringData
-		existingSecret.Data = nil // Clear Data so StringData takes effect
+		existingSecret.Data = secret.Data
+		existingSecret.StringData = nil
 
 		_, err = secrets.Update(ctx, existingSecret, metav1.UpdateOptions{})
 		if err != nil {
