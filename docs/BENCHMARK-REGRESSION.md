@@ -56,7 +56,12 @@ go install golang.org/x/perf/cmd/benchstat@latest
 |-----------------------------|-------------------------|------------------------------------------|
 | `pkg/apis/cluster/v1alpha1` | `marshal_bench_test.go` | YAML/JSON marshalling of cluster configs |
 | `pkg/cli/cmd/cipher`        | `cipher_bench_test.go`  | SOPS encrypt/decrypt operations          |
+| `pkg/client/flux`           | `client_bench_test.go`  | Flux GitOps client operations            |
+| `pkg/client/helm`           | `client_bench_test.go`  | Helm client chart operations             |
+| `pkg/client/kubectl`        | `client_bench_test.go`  | Kubectl command execution                |
 | `pkg/k8s/readiness`         | `polling_bench_test.go` | Kubernetes resource polling              |
+
+This table may not be exhaustive; additional benchmarks may exist in other packages.
 
 See each package's `BENCHMARKS.md` for detailed baseline results and optimization opportunities.
 
