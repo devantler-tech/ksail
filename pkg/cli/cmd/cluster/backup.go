@@ -469,6 +469,9 @@ func sanitizeList(list *unstructured.Unstructured) (string, error) {
 		list.Object, "items",
 	)
 	if err != nil || !found {
+		// No items found; sanitize the list object itself.
+		sanitizeObject(list)
+
 		result, marshalErr := sigsyaml.Marshal(list.Object)
 		if marshalErr != nil {
 			return "", fmt.Errorf("failed to marshal list: %w", marshalErr)
@@ -482,7 +485,7 @@ func sanitizeList(list *unstructured.Unstructured) (string, error) {
 	for idx, item := range items {
 		itemMap, ok := item.(map[string]any)
 		if !ok {
-			continue
+			continue // Skip malformed items that aren't maps
 		}
 
 		obj := &unstructured.Unstructured{Object: itemMap}
@@ -490,7 +493,7 @@ func sanitizeList(list *unstructured.Unstructured) (string, error) {
 
 		data, marshalErr := sigsyaml.Marshal(obj.Object)
 		if marshalErr != nil {
-			continue
+			continue // Skip items that can't be marshaled
 		}
 
 		if idx > 0 {
@@ -633,31 +636,36 @@ func getClusterNameFromKubeconfig(kubeconfigPath string) string {
 
 func countYAMLDocuments(content string) int {
 	count := 0
+	isListWrapper := false
 
 	for line := range strings.SplitSeq(content, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "- apiVersion:") ||
-			strings.HasPrefix(line, "kind:") {
-			count++
-		}
-	}
 
-	// If we found "kind:" at the top level, check if it's a List wrapper.
-	// In that case, count represents 1 (the List) + items.
-	// Subtract the List wrapper if items were also counted.
-	if count > 1 {
-		for line := range strings.SplitSeq(content, "\n") {
-			if strings.HasPrefix(line, "kind:") {
+		// Count list items via "- apiVersion:" (indented in kubectl output).
+		if strings.HasPrefix(trimmed, "- apiVersion:") {
+			count++
+
+			continue
+		}
+
+		// Count top-level documents via non-indented "kind:" lines.
+		// Indented kind: lines belong to list items already counted above.
+		if strings.HasPrefix(line, "kind:") {
+			count++
+
+			if !isListWrapper {
 				kindValue := strings.TrimSpace(
 					strings.TrimPrefix(line, "kind:"),
 				)
-				if strings.HasSuffix(kindValue, "List") {
-					count--
-				}
 
-				break
+				isListWrapper = strings.HasSuffix(kindValue, "List")
 			}
 		}
+	}
+
+	// Subtract the List wrapper kind if items were counted.
+	if isListWrapper && count > 1 {
+		count--
 	}
 
 	if count == 0 {
