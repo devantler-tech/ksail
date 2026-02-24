@@ -334,14 +334,14 @@ func VerifyRegistryAccessWithTimeout(
 	opts VerifyOptions,
 	timeout time.Duration,
 ) error {
-	v := NewRegistryVerifier()
+	verifier := NewRegistryVerifier()
 
 	var lastErr error
 
 	for attempt := 1; attempt <= verifyMaxRetries; attempt++ {
 		verifyCtx, cancel := context.WithTimeout(ctx, timeout)
 
-		err := v.VerifyAccess(verifyCtx, opts)
+		err := verifier.VerifyAccess(verifyCtx, opts)
 		cancel()
 
 		if err == nil {
