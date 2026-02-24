@@ -100,7 +100,12 @@ func InstallWithSecret(
 		return fmt.Errorf("failed to create hetzner secret: %w", err)
 	}
 
-	return base.Install(ctx)
+	err = base.Install(ctx)
+	if err != nil {
+		return fmt.Errorf("install chart: %w", err)
+	}
+
+	return nil
 }
 
 // Installer is a shared Hetzner Cloud installer that embeds helmutil.Base and
