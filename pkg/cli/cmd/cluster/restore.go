@@ -43,6 +43,9 @@ var ErrSymlinkInArchive = errors.New(
 	"symbolic and hard links are not supported in backup archives",
 )
 
+// ErrRestoreFailed is returned when one or more resources fail to restore.
+var ErrRestoreFailed = errors.New("resource restore failed")
+
 type restoreFlags struct {
 	inputPath              string
 	existingResourcePolicy string
@@ -267,8 +270,7 @@ func validateTarEntry(
 	// Only allow regular files and directories; reject symlinks,
 	// hard links, char/block devices, FIFOs, and other special types.
 	if header.Typeflag != tar.TypeDir &&
-		header.Typeflag != tar.TypeReg &&
-		header.Typeflag != tar.TypeRegA {
+		header.Typeflag != tar.TypeReg {
 		if header.Typeflag == tar.TypeSymlink ||
 			header.Typeflag == tar.TypeLink {
 			return "", ErrSymlinkInArchive
@@ -347,6 +349,7 @@ func restoreResources(
 	flags *restoreFlags,
 ) error {
 	resourcesDir := filepath.Join(tmpDir, "resources")
+
 	var restoreErrors []string
 
 	for _, resourceType := range backupResourceTypes() {
@@ -391,7 +394,8 @@ func restoreResources(
 
 	if len(restoreErrors) > 0 {
 		return fmt.Errorf(
-			"%d resource(s) failed to restore: %s",
+			"%w: %d resource(s): %s",
+			ErrRestoreFailed,
 			len(restoreErrors),
 			strings.Join(restoreErrors, "; "),
 		)

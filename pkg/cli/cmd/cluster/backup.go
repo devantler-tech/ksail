@@ -479,7 +479,7 @@ func sanitizeList(list *unstructured.Unstructured) (string, error) {
 
 	var builder strings.Builder
 
-	for i, item := range items {
+	for idx, item := range items {
 		itemMap, ok := item.(map[string]any)
 		if !ok {
 			continue
@@ -493,7 +493,7 @@ func sanitizeList(list *unstructured.Unstructured) (string, error) {
 			continue
 		}
 
-		if i > 0 {
+		if idx > 0 {
 			builder.WriteString("---\n")
 		}
 

@@ -231,72 +231,45 @@ func TestExtractAndReadMetadata(t *testing.T) {
 func TestSanitizeYAMLOutput(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name           string
-		input          string
-		wantStripped   []string
-		wantPreserved  []string
-	}{
-		{
-			name: "strips server-assigned metadata",
-			input: `apiVersion: v1
-kind: Pod
-metadata:
-  name: test-pod
-  namespace: default
-  resourceVersion: "12345"
-  uid: abc-123
-  managedFields:
-  - manager: kubectl
-  creationTimestamp: "2025-01-01T00:00:00Z"
-status:
-  phase: Running
-spec:
-  containers:
-  - name: nginx`,
-			wantStripped: []string{
-				"resourceVersion", "uid", "managedFields",
-				"creationTimestamp", "status",
-			},
-			wantPreserved: []string{
-				"name: test-pod", "namespace: default",
-				"kind: Pod", "apiVersion: v1",
-			},
-		},
-		{
-			name:          "handles non-YAML gracefully",
-			input:         "not valid yaml: [",
-			wantStripped:  []string{},
-			wantPreserved: []string{"not valid yaml"},
-		},
+	input := "apiVersion: v1\nkind: Pod\nmetadata:\n  name: test-pod\n" +
+		"  namespace: default\n  resourceVersion: \"12345\"\n" +
+		"  uid: abc-123\n  managedFields:\n  - manager: kubectl\n" +
+		"  creationTimestamp: \"2025-01-01T00:00:00Z\"\n" +
+		"status:\n  phase: Running\nspec:\n  containers:\n  - name: nginx"
+
+	result, err := cluster.ExportSanitizeYAMLOutput(input)
+	if err != nil {
+		t.Fatalf("sanitizeYAMLOutput() error = %v", err)
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
+	for _, stripped := range []string{
+		"resourceVersion", "uid", "managedFields",
+		"creationTimestamp", "status",
+	} {
+		if strings.Contains(result, stripped) {
+			t.Errorf("should have stripped %q", stripped)
+		}
+	}
 
-			result, err := cluster.ExportSanitizeYAMLOutput(test.input)
-			if err != nil {
-				t.Fatalf("sanitizeYAMLOutput() error = %v", err)
-			}
+	for _, preserved := range []string{
+		"name: test-pod", "namespace: default",
+		"kind: Pod", "apiVersion: v1",
+	} {
+		if !strings.Contains(result, preserved) {
+			t.Errorf("should preserve %q", preserved)
+		}
+	}
+}
 
-			for _, s := range test.wantStripped {
-				if strings.Contains(result, s) {
-					t.Errorf(
-						"sanitizeYAMLOutput() should have stripped %q",
-						s,
-					)
-				}
-			}
+func TestSanitizeYAMLOutput_nonYAML(t *testing.T) {
+	t.Parallel()
 
-			for _, s := range test.wantPreserved {
-				if !strings.Contains(result, s) {
-					t.Errorf(
-						"sanitizeYAMLOutput() should preserve %q",
-						s,
-					)
-				}
-			}
-		})
+	result, err := cluster.ExportSanitizeYAMLOutput("not valid yaml: [")
+	if err != nil {
+		t.Fatalf("sanitizeYAMLOutput() error = %v", err)
+	}
+
+	if !strings.Contains(result, "not valid yaml") {
+		t.Error("should return original content for non-YAML input")
 	}
 }
