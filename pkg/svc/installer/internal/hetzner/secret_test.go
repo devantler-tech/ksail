@@ -88,21 +88,17 @@ func TestEnsureSecret_ConcurrentCreation(t *testing.T) {
 
 	const goroutines = 10
 
-	var wg sync.WaitGroup
+	var waitGroup sync.WaitGroup
 
 	errs := make([]error, goroutines)
 
-	for i := range goroutines {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
-			errs[i] = hetzner.EnsureSecretForTest(context.Background(), clientset, token)
-		}()
+	for goroutineIdx := range goroutines {
+		waitGroup.Go(func() {
+			errs[goroutineIdx] = hetzner.EnsureSecretForTest(context.Background(), clientset, token)
+		})
 	}
 
-	wg.Wait()
+	waitGroup.Wait()
 
 	for i, err := range errs {
 		if err != nil {

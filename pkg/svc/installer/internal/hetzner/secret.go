@@ -62,43 +62,57 @@ func ensureSecret(ctx context.Context, client kubernetes.Interface, token string
 		},
 	}
 
-	secrets := client.CoreV1().Secrets(Namespace)
+	secretsClient := client.CoreV1().Secrets(Namespace)
 
-	existingSecret, err := secrets.Get(ctx, SecretName, metav1.GetOptions{})
+	existingSecret, err := secretsClient.Get(ctx, SecretName, metav1.GetOptions{})
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to get secret: %w", err)
 		}
 
-		_, err = secrets.Create(ctx, secret, metav1.CreateOptions{})
-		if err != nil {
-			if !apierrors.IsAlreadyExists(err) {
-				return fmt.Errorf("failed to create secret: %w", err)
-			}
+		return createOrUpdateOnConflict(ctx, client, secret)
+	}
 
-			// Another concurrent installer created the secret between
-			// the Get and Create calls. Fetch and update it.
-			existingSecret, getErr := secrets.Get(ctx, SecretName, metav1.GetOptions{})
-			if getErr != nil {
-				return fmt.Errorf("failed to get existing secret: %w", getErr)
-			}
+	// Update the existing secret's data while preserving its metadata.
+	existingSecret.Data = secret.Data
+	existingSecret.StringData = nil
 
-			existingSecret.Data = secret.Data
-			existingSecret.StringData = nil
+	_, err = secretsClient.Update(ctx, existingSecret, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update secret: %w", err)
+	}
 
-			_, updateErr := secrets.Update(ctx, existingSecret, metav1.UpdateOptions{})
-			if updateErr != nil {
-				return fmt.Errorf("failed to update secret after concurrent create: %w", updateErr)
-			}
+	return nil
+}
+
+// createOrUpdateOnConflict creates the secret. If a concurrent installer
+// already created it (AlreadyExists), the secret is fetched and updated instead.
+func createOrUpdateOnConflict(
+	ctx context.Context,
+	client kubernetes.Interface,
+	secret *corev1.Secret,
+) error {
+	secretsClient := client.CoreV1().Secrets(Namespace)
+
+	_, err := secretsClient.Create(ctx, secret, metav1.CreateOptions{})
+	if err != nil {
+		if !apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create secret: %w", err)
 		}
-	} else {
-		// Update the existing secret's data while preserving its metadata
+
+		// Another concurrent installer created the secret between the Get and
+		// Create calls. Fetch and update it to ensure the token is current.
+		existingSecret, getErr := secretsClient.Get(ctx, SecretName, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("failed to get existing secret: %w", getErr)
+		}
+
 		existingSecret.Data = secret.Data
 		existingSecret.StringData = nil
 
-		_, err = secrets.Update(ctx, existingSecret, metav1.UpdateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to update secret: %w", err)
+		_, updateErr := secretsClient.Update(ctx, existingSecret, metav1.UpdateOptions{})
+		if updateErr != nil {
+			return fmt.Errorf("failed to update secret after concurrent create: %w", updateErr)
 		}
 	}
 
