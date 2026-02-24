@@ -17,7 +17,7 @@ Common causes include insufficient resources, firewall blocking Docker network a
 
 ```bash
 # Check and cleanup existing clusters
-ksail cluster list --all
+ksail cluster list
 ksail cluster delete --name <cluster-name>
 
 # Clean up Docker resources if needed
