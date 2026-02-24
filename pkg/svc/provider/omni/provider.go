@@ -123,12 +123,12 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 
 // NodesExist returns true if machines are allocated to the given cluster in Omni.
 func (p *Provider) NodesExist(ctx context.Context, clusterName string) (bool, error) {
-	nodes, err := p.ListNodes(ctx, clusterName)
+	exists, err := provider.CheckNodesExist(ctx, p, clusterName)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("omni nodes exist: %w", err)
 	}
 
-	return len(nodes) > 0, nil
+	return exists, nil
 }
 
 // DeleteNodes removes all machines for the given cluster by deleting the cluster in Omni.

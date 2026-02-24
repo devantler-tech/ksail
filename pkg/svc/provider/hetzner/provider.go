@@ -216,12 +216,12 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 
 // NodesExist returns true if nodes exist for the given cluster name.
 func (p *Provider) NodesExist(ctx context.Context, clusterName string) (bool, error) {
-	nodes, err := p.ListNodes(ctx, clusterName)
+	exists, err := provider.CheckNodesExist(ctx, p, clusterName)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("hetzner nodes exist: %w", err)
 	}
 
-	return len(nodes) > 0, nil
+	return exists, nil
 }
 
 // DeleteNodes removes all servers for the given cluster.
