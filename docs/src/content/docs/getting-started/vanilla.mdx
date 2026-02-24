@@ -373,8 +373,13 @@ docker ps
 # Check available disk space
 df -h
 
-# Clean up Docker resources
-docker system prune -a
+# Clean up unused containers, networks, and dangling images (safer)
+docker system prune
+
+# OPTIONAL (more aggressive):
+# This will remove ALL unused images (not just dangling ones) and may affect other projects.
+# Use only if the above prune is not sufficient and you understand the impact.
+# docker system prune -a
 
 # Retry cluster creation
 ksail cluster create
@@ -564,11 +569,11 @@ KSail generates standard `kind.yaml` files:
 # Use Kind CLI directly
 kind create cluster --config kind.yaml
 
-# Import existing Kind cluster
+# Export kubeconfig for an existing Kind cluster
 kind export kubeconfig --name my-cluster
 ````
 
-No vendor lock-in—configurations are portable.
+No vendor lock-in—configurations are portable, and KSail can interact with any Kind cluster accessible via your kubeconfig.
 
 ## Next Steps
 
