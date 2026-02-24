@@ -34,6 +34,7 @@ user_agent = "Mozilla/5.0 (compatible; lychee-link-checker; +https://github.com/
 #     placeholder variables ({run_url}, {workflow_name}) — not real URLs.
 exclude_path = [
   "docs/package-lock.json",
+  "vsce/package-lock.json",
   ".github/workflows/*.md",
 ]
 

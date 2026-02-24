@@ -513,10 +513,12 @@ func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSp
 		}
 	}
 
-	// Set Talos-specific options from the provisioner state
+	// Introspect actual node counts from the running cluster
+	// to avoid false-positive diffs from hardcoded defaults.
+	controlPlanes, workers := p.introspectNodeCounts(ctx)
 	spec.Talos = v1alpha1.OptionsTalos{
-		ControlPlanes: 1, // Default, actual value would need cluster inspection
-		Workers:       0,
+		ControlPlanes: controlPlanes,
+		Workers:       workers,
 	}
 
 	// If we have Hetzner options configured
@@ -529,4 +531,47 @@ func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSp
 	clusterupdate.ApplyGitOpsLocalRegistryDefault(spec)
 
 	return spec, nil
+}
+
+// introspectNodeCounts determines the actual control-plane and worker node
+// counts from the running cluster. Falls back to safe defaults (1 CP, 0 workers)
+// when the cluster cannot be queried.
+func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int32, int32) {
+	clusterName := p.resolveClusterName("")
+
+	if p.dockerClient != nil {
+		nodes, err := p.getDockerNodesByRole(ctx, clusterName)
+		if err == nil {
+			return countNodeRoles(nodes)
+		}
+	}
+
+	if p.infraProvider != nil {
+		nodes, err := p.getHetznerNodesByRole(ctx, clusterName)
+		if err == nil {
+			return countNodeRoles(nodes)
+		}
+	}
+
+	return 1, 0
+}
+
+// countNodeRoles counts control-plane and worker nodes from a list of nodeWithRole.
+func countNodeRoles(nodes []nodeWithRole) (int32, int32) {
+	var controlPlanes, workers int32
+
+	for _, n := range nodes {
+		switch n.Role {
+		case RoleControlPlane:
+			controlPlanes++
+		case RoleWorker:
+			workers++
+		}
+	}
+
+	if controlPlanes == 0 {
+		controlPlanes = 1
+	}
+
+	return controlPlanes, workers
 }

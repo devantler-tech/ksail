@@ -90,7 +90,7 @@ ksail cluster init --name staging-cluster
 ksail cluster create
 ```
 
-List all clusters with `ksail cluster list --all`.
+List all clusters with `ksail cluster list`.
 
 ### How do I switch between clusters?
 
@@ -177,7 +177,7 @@ ksail cluster init --gitops-engine ArgoCD
 Not necessarily! KSail can package manifests as OCI artifacts and push to a local registry, enabling GitOps workflows without Git (useful for local development):
 
 ```bash
-ksail cluster init --gitops-engine Flux --local-registry
+ksail cluster init --gitops-engine Flux --local-registry localhost:5050
 ksail cluster create
 ksail workload push      # Package and push
 ksail workload reconcile # Sync to cluster
