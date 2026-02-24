@@ -344,4 +344,4 @@ For end-to-end performance testing, use system tests with real clusters.
 
 - Performance Research & Optimization Plan: #1822
 - Related benchmarks: kubectl (#2383), helm (#2392), flux (#2428), kustomize (#2402)
-- Go benchmark best practices: https://dave.cheney.net/2013/06/30/how-to-write-benchmarks-in-go
+- Go benchmark best practices: https://pkg.go.dev/testing#hdr-Benchmarks
