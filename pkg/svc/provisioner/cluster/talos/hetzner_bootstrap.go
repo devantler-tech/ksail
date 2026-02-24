@@ -3,15 +3,12 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/go-retry/retry"
-	"github.com/siderolabs/talos/pkg/cluster/check"
-	"github.com/siderolabs/talos/pkg/conditions"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
@@ -21,14 +18,13 @@ import (
 )
 
 // bootstrapHetznerCluster bootstraps the etcd cluster on the first control-plane node.
-//
-//nolint:funlen // Bootstrap sequence is inherently complex but logically coherent
 func (p *Provisioner) bootstrapHetznerCluster(
 	ctx context.Context,
 	bootstrapNode *hcloud.Server,
 	configBundle *bundle.Bundle,
 ) error {
 	nodeIP := bootstrapNode.PublicNet.IPv4.IP.String()
+	talosConfig := configBundle.TalosConfig()
 
 	_, _ = fmt.Fprintf(
 		p.logWriter,
@@ -36,11 +32,51 @@ func (p *Provisioner) bootstrapHetznerCluster(
 		bootstrapNode.Name,
 	)
 
-	// After config is applied, nodes will reboot. We need to wait for the Talos API
-	// to come back up with the applied configuration (authenticated mode).
-	talosConfig := configBundle.TalosConfig()
+	// Wait for node to become ready after installation
+	err := p.waitForNodeReady(ctx, nodeIP, talosConfig)
+	if err != nil {
+		return err
+	}
 
-	// Wait for the node to come back after installation
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Node %s is ready\n", bootstrapNode.Name)
+
+	// Create authenticated client for bootstrap
+	talosClient, err := p.createAuthenticatedClient(ctx, nodeIP, talosConfig)
+	if err != nil {
+		return err
+	}
+	defer talosClient.Close() //nolint:errcheck
+
+	_, _ = fmt.Fprintf(p.logWriter, "  Bootstrapping etcd on %s...\n", bootstrapNode.Name)
+
+	// Bootstrap etcd cluster
+	err = p.bootstrapEtcdCluster(ctx, talosClient)
+	if err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Etcd cluster bootstrapped\n")
+	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for Kubernetes to be ready...\n")
+
+	// Wait for Kubernetes to become ready
+	err = p.waitForKubernetesReady(ctx, talosClient)
+	if err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Kubernetes is ready\n")
+
+	return nil
+}
+
+// waitForNodeReady waits for a Talos node to be ready after installation.
+// After config is applied, nodes will reboot. We need to wait for the Talos API
+// to come back up with the applied configuration (authenticated mode).
+func (p *Provisioner) waitForNodeReady(
+	ctx context.Context,
+	nodeIP string,
+	talosConfig *clientconfig.Config,
+) error {
 	timeout := clusterReadinessTimeout
 
 	err := retry.Constant(timeout, retry.WithUnits(longRetryInterval)).
@@ -68,23 +104,32 @@ func (p *Provisioner) bootstrapHetznerCluster(
 		return fmt.Errorf("timeout waiting for node to be ready after installation: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Node %s is ready\n", bootstrapNode.Name)
+	return nil
+}
 
-	// Create authenticated client for bootstrap
+// createAuthenticatedClient creates an authenticated Talos client for the given node.
+func (p *Provisioner) createAuthenticatedClient(
+	ctx context.Context,
+	nodeIP string,
+	talosConfig *clientconfig.Config,
+) (*talosclient.Client, error) {
 	talosClient, err := talosclient.New(ctx,
 		talosclient.WithEndpoints(nodeIP),
 		talosclient.WithConfig(talosConfig),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create Talos client: %w", err)
+		return nil, fmt.Errorf("failed to create Talos client: %w", err)
 	}
 
-	defer talosClient.Close() //nolint:errcheck
+	return talosClient, nil
+}
 
-	_, _ = fmt.Fprintf(p.logWriter, "  Bootstrapping etcd on %s...\n", bootstrapNode.Name)
-
-	// Bootstrap the cluster
-	err = retry.Constant(bootstrapTimeout, retry.WithUnits(retryInterval)).
+// bootstrapEtcdCluster bootstraps the etcd cluster on the given node.
+func (p *Provisioner) bootstrapEtcdCluster(
+	ctx context.Context,
+	talosClient *talosclient.Client,
+) error {
+	err := retry.Constant(bootstrapTimeout, retry.WithUnits(retryInterval)).
 		RetryWithContext(ctx, func(ctx context.Context) error {
 			bootstrapErr := talosClient.Bootstrap(ctx, &machineapi.BootstrapRequest{})
 			if bootstrapErr != nil {
@@ -102,12 +147,17 @@ func (p *Provisioner) bootstrapHetznerCluster(
 		return fmt.Errorf("failed to bootstrap cluster: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Etcd cluster bootstrapped\n")
+	return nil
+}
 
-	// Wait for cluster to be ready
-	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for Kubernetes to be ready...\n")
+// waitForKubernetesReady waits for Kubernetes to become ready by attempting to fetch the kubeconfig.
+func (p *Provisioner) waitForKubernetesReady(
+	ctx context.Context,
+	talosClient *talosclient.Client,
+) error {
+	timeout := clusterReadinessTimeout
 
-	err = retry.Constant(timeout, retry.WithUnits(longRetryInterval)).
+	err := retry.Constant(timeout, retry.WithUnits(longRetryInterval)).
 		RetryWithContext(ctx, func(ctx context.Context) error {
 			// Try to fetch kubeconfig as an indicator that K8s is ready
 			_, kubeconfigErr := talosClient.Kubeconfig(ctx)
@@ -120,8 +170,6 @@ func (p *Provisioner) bootstrapHetznerCluster(
 	if err != nil {
 		return fmt.Errorf("timeout waiting for Kubernetes to be ready: %w", err)
 	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Kubernetes is ready\n")
 
 	return nil
 }
@@ -225,7 +273,7 @@ func (p *Provisioner) waitForHetznerClusterReady(
 
 	// Determine which checks to run based on CNI configuration
 	// When CNI is disabled, nodes won't become Ready until CNI is installed
-	return p.runHetznerClusterChecks(ctx, clusterAccess)
+	return p.runClusterChecks(ctx, clusterAccess, clusterReadinessTimeout)
 }
 
 // waitForHetznerClusterReadyAfterStart waits for a Hetzner cluster to be ready after starting.
@@ -267,7 +315,7 @@ func (p *Provisioner) waitForHetznerClusterReadyAfterStart(
 
 	defer clusterAccess.Close() //nolint:errcheck
 
-	err = p.runHetznerClusterChecks(ctx, clusterAccess)
+	err = p.runClusterChecks(ctx, clusterAccess, clusterReadinessTimeout)
 	if err != nil {
 		return err
 	}
@@ -321,49 +369,4 @@ func (p *Provisioner) discoverHetznerServers(
 	}
 
 	return controlPlaneServers, workerServers, nil
-}
-
-// runHetznerClusterChecks runs CNI-aware readiness checks on a Hetzner cluster.
-// It selects the appropriate checks based on CNI configuration, logs progress,
-// and waits for all checks to pass.
-func (p *Provisioner) runHetznerClusterChecks(
-	ctx context.Context,
-	clusterAccess *access.Adapter,
-) error {
-	checks := p.clusterReadinessChecks()
-
-	if (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks {
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  Running pre-boot and K8s component checks (CNI not installed yet)...\n",
-		)
-	} else {
-		_, _ = fmt.Fprintf(p.logWriter, "  Running full cluster readiness checks...\n")
-	}
-
-	reporter := &hetznerCheckReporter{writer: p.logWriter}
-
-	checkCtx, cancel := context.WithTimeout(ctx, clusterReadinessTimeout)
-	defer cancel()
-
-	err := check.Wait(checkCtx, clusterAccess, checks, reporter)
-	if err != nil {
-		return fmt.Errorf("cluster readiness checks failed: %w", err)
-	}
-
-	return nil
-}
-
-// hetznerCheckReporter implements check.Reporter to log check progress.
-type hetznerCheckReporter struct {
-	writer   io.Writer
-	lastLine string
-}
-
-func (r *hetznerCheckReporter) Update(condition conditions.Condition) {
-	line := fmt.Sprintf("    %s", condition)
-	if line != r.lastLine {
-		_, _ = fmt.Fprintf(r.writer, "%s\n", line)
-		r.lastLine = line
-	}
 }

@@ -4,10 +4,12 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
@@ -71,12 +73,31 @@ func (i *Importer) Import(
 	// Get the appropriate temp path for this distribution
 	tmpBasePath := getTempPath(distribution)
 
-	// Import to all K8s nodes
+	// Import to all K8s nodes in parallel
+	var waitGroup sync.WaitGroup
+
+	errChan := make(chan error, len(k8sNodes))
+
 	for _, node := range k8sNodes {
-		err = i.importImagesToNode(ctx, node.Name, inputPath, tmpBasePath)
-		if err != nil {
-			return fmt.Errorf("failed to import images to node %s: %w", node.Name, err)
-		}
+		waitGroup.Go(func() {
+			importErr := i.importImagesToNode(ctx, node.Name, inputPath, tmpBasePath)
+			if importErr != nil {
+				errChan <- fmt.Errorf("failed to import images to node %s: %w", node.Name, importErr)
+			}
+		})
+	}
+
+	waitGroup.Wait()
+	close(errChan)
+
+	// Collect all errors
+	var errs []error
+	for importErr := range errChan {
+		errs = append(errs, importErr)
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 
 	return nil
