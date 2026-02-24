@@ -196,7 +196,8 @@ func (p *Provisioner) detachISOsAndReboot(
 ) error {
 	p.logInstallationStart()
 
-	if err := p.waitForServersToBeReachable(ctx, servers); err != nil {
+	err := p.waitForServersToBeReachable(ctx, servers)
+	if err != nil {
 		return err
 	}
 
@@ -231,7 +232,8 @@ func (p *Provisioner) waitForServersToBeReachable(
 			server.Name,
 		)
 
-		if err := p.waitForServerReachable(ctx, server); err != nil {
+		err := p.waitForServerReachable(ctx, server)
+		if err != nil {
 			return err
 		}
 
