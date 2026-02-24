@@ -29,6 +29,7 @@ func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
 				ReleaseName:     "cert-manager",
 				ChartName:       "jetstack/cert-manager",
 				Namespace:       "cert-manager",
+				Version:         chartVersion(),
 				RepoURL:         "https://charts.jetstack.io",
 				CreateNamespace: true,
 				Atomic:          true,
