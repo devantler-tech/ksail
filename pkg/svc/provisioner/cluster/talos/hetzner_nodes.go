@@ -189,13 +189,24 @@ func (p *Provisioner) applyHetznerConfigs(
 //
 // Note: We cannot reliably poll STATE partition because the server reboots automatically
 // during install, which breaks our insecure TLS connection.
-//
-//nolint:funlen // Sequential steps for cloud provisioning
 func (p *Provisioner) detachISOsAndReboot(
 	ctx context.Context,
 	hetznerProv *hetzner.Provider,
 	servers []*hcloud.Server,
 ) error {
+	p.logInstallationStart()
+
+	if err := p.waitForServersToBeReachable(ctx, servers); err != nil {
+		return err
+	}
+
+	p.detachISOsFromServers(ctx, hetznerProv, servers)
+
+	return nil
+}
+
+// logInstallationStart logs the initial message for the installation and reboot phase.
+func (p *Provisioner) logInstallationStart() {
 	_, _ = fmt.Fprintf(
 		p.logWriter,
 		"  Waiting for installation and automatic reboot to complete...\n",
@@ -204,66 +215,77 @@ func (p *Provisioner) detachISOsAndReboot(
 		p.logWriter,
 		"  (Talos will install to disk and reboot automatically - this takes 3-5 minutes)\n",
 	)
+}
 
-	// Wait for all servers to complete installation and reboot
-	// During this time:
-	// - Nodes install Talos to disk (1-2 minutes)
-	// - Nodes automatically reboot (from install sequence)
-	// - Nodes boot from disk and come up with authenticated TLS
-	//
-	// We detect completion by waiting for a TCP connection to succeed on port 50000
-	// (the server will be unreachable during reboot, then come back)
+// waitForServersToBeReachable waits for all servers to complete installation and reboot.
+// During this time nodes install Talos to disk, automatically reboot, and boot from disk
+// with authenticated TLS. Completion is detected by a successful TCP connection on port 50000.
+func (p *Provisioner) waitForServersToBeReachable(
+	ctx context.Context,
+	servers []*hcloud.Server,
+) error {
 	for _, server := range servers {
-		serverIP := server.PublicNet.IPv4.IP.String()
-
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"  Waiting for %s to install, reboot, and become reachable...\n",
 			server.Name,
 		)
 
-		// Wait for server to become reachable after installation + reboot
-		// This waits through the entire install cycle:
-		// - Initial "connection refused" during install
-		// - Then more "connection refused" during reboot
-		// - Finally success when booted from disk
-		err := retry.Constant(clusterReadinessTimeout, retry.WithUnits(longRetryInterval)).
-			RetryWithContext(ctx, func(ctx context.Context) error {
-				// Just check if we can establish a TCP connection
-				// We don't care about TLS here, just network reachability
-				dialer := &net.Dialer{Timeout: retryInterval}
-
-				conn, dialErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(serverIP, "50000"))
-				if dialErr != nil {
-					return retry.ExpectedError(
-						fmt.Errorf("waiting for server to become reachable: %w", dialErr),
-					)
-				}
-
-				_ = conn.Close()
-
-				return nil
-			})
-		if err != nil {
-			return fmt.Errorf(
-				"timeout waiting for %s to become reachable after install: %w",
-				server.Name,
-				err,
-			)
+		if err := p.waitForServerReachable(ctx, server); err != nil {
+			return err
 		}
 
 		_, _ = fmt.Fprintf(p.logWriter, "  ✓ %s is reachable after install\n", server.Name)
 	}
 
-	// Now detach ISOs for cleanliness
-	// This isn't strictly required (disk has boot priority after install)
-	// but it's good practice to clean up
+	return nil
+}
+
+// waitForServerReachable polls a single server until a TCP connection on port 50000 succeeds.
+// It waits through the entire install cycle: connection refused during install, connection
+// refused during reboot, and finally success when booted from disk.
+func (p *Provisioner) waitForServerReachable(ctx context.Context, server *hcloud.Server) error {
+	serverIP := server.PublicNet.IPv4.IP.String()
+
+	err := retry.Constant(clusterReadinessTimeout, retry.WithUnits(longRetryInterval)).
+		RetryWithContext(ctx, func(ctx context.Context) error {
+			dialer := &net.Dialer{Timeout: retryInterval}
+
+			conn, dialErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(serverIP, "50000"))
+			if dialErr != nil {
+				return retry.ExpectedError(
+					fmt.Errorf("waiting for server to become reachable: %w", dialErr),
+				)
+			}
+
+			_ = conn.Close()
+
+			return nil
+		})
+	if err != nil {
+		return fmt.Errorf(
+			"timeout waiting for %s to become reachable after install: %w",
+			server.Name,
+			err,
+		)
+	}
+
+	return nil
+}
+
+// detachISOsFromServers detaches ISOs from all servers for cleanliness.
+// This is not strictly required (disk has boot priority after install) but is good practice.
+// Failures are logged but do not cause the function to return an error.
+func (p *Provisioner) detachISOsFromServers(
+	ctx context.Context,
+	hetznerProv *hetzner.Provider,
+	servers []*hcloud.Server,
+) {
 	for _, server := range servers {
 		_, _ = fmt.Fprintf(p.logWriter, "  Detaching ISO from %s...\n", server.Name)
 
 		err := hetznerProv.DetachISO(ctx, server)
 		if err != nil {
-			// Log but don't fail - ISO detachment is not critical
 			_, _ = fmt.Fprintf(
 				p.logWriter,
 				"  Warning: Failed to detach ISO from %s: %v\n",
@@ -274,8 +296,6 @@ func (p *Provisioner) detachISOsAndReboot(
 			_, _ = fmt.Fprintf(p.logWriter, "  ✓ ISO detached from %s\n", server.Name)
 		}
 	}
-
-	return nil
 }
 
 // applyConfigToNode applies machine configuration to a single Hetzner node.
