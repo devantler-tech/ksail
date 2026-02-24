@@ -273,7 +273,6 @@ func BenchmarkManagerEnsure(b *testing.B) {
 // BenchmarkManagerUpdateTargetRevision measures the performance of updating Application target revision.
 func BenchmarkManagerUpdateTargetRevision(b *testing.B) {
 	b.Run("TargetRevisionOnly", func(b *testing.B) {
-		mgr := setupBenchmarkManagerWithApp(b, "benchmark-app")
 		ctx := context.Background()
 
 		opts := argocd.UpdateTargetRevisionOptions{
@@ -285,6 +284,11 @@ func BenchmarkManagerUpdateTargetRevision(b *testing.B) {
 		b.ReportAllocs()
 
 		for range b.N {
+			b.StopTimer()
+			mgr := setupBenchmarkManagerWithApp(b, "benchmark-app")
+
+			b.StartTimer()
+
 			err := mgr.UpdateTargetRevision(ctx, opts)
 			if err != nil {
 				b.Fatalf("UpdateTargetRevision failed: %v", err)
@@ -293,7 +297,6 @@ func BenchmarkManagerUpdateTargetRevision(b *testing.B) {
 	})
 
 	b.Run("WithHardRefresh", func(b *testing.B) {
-		mgr := setupBenchmarkManagerWithApp(b, "benchmark-app")
 		ctx := context.Background()
 
 		opts := argocd.UpdateTargetRevisionOptions{
@@ -306,6 +309,11 @@ func BenchmarkManagerUpdateTargetRevision(b *testing.B) {
 		b.ReportAllocs()
 
 		for range b.N {
+			b.StopTimer()
+			mgr := setupBenchmarkManagerWithApp(b, "benchmark-app")
+
+			b.StartTimer()
+
 			err := mgr.UpdateTargetRevision(ctx, opts)
 			if err != nil {
 				b.Fatalf("UpdateTargetRevision with hard refresh failed: %v", err)
@@ -314,7 +322,6 @@ func BenchmarkManagerUpdateTargetRevision(b *testing.B) {
 	})
 
 	b.Run("HardRefreshOnly", func(b *testing.B) {
-		mgr := setupBenchmarkManagerWithApp(b, "benchmark-app")
 		ctx := context.Background()
 
 		opts := argocd.UpdateTargetRevisionOptions{
@@ -326,6 +333,11 @@ func BenchmarkManagerUpdateTargetRevision(b *testing.B) {
 		b.ReportAllocs()
 
 		for range b.N {
+			b.StopTimer()
+			mgr := setupBenchmarkManagerWithApp(b, "benchmark-app")
+
+			b.StartTimer()
+
 			err := mgr.UpdateTargetRevision(ctx, opts)
 			if err != nil {
 				b.Fatalf("UpdateTargetRevision hard refresh only failed: %v", err)
