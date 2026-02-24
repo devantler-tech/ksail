@@ -8,7 +8,7 @@ description: |
 
 on:
   roles: [admin, maintainer, write]
-  skip-bots: ["dependabot[bot]", "renovate[bot]"]
+  skip-bots: ["dependabot[bot]", "renovate[bot]", "github-merge-queue[bot]"]
   slash_command:
     name: pr-fix
   reaction: "eyes"

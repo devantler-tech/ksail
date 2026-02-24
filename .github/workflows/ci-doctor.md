@@ -6,13 +6,29 @@ description: |
   and workflow configuration to help diagnose and resolve CI issues efficiently.
 
 on:
-  skip-bots: ["dependabot[bot]", "renovate[bot]"]
+  skip-bots: ["dependabot[bot]", "renovate[bot]", "github-merge-queue[bot]"]
   workflow_run:
     workflows:
       - "CI - KSail"
       - "CD"
       - "Test - Pages"
       - "Publish - Pages"
+      - "Release"
+      - "Benchmark Regression"
+      - "Maintenance"
+      - "Sync labels"
+      - "TODOs"
+      - "Unbloat Docs"
+      - "Update Docs"
+      - "Daily Backlog Burner"
+      - "Code Simplifier"
+      - "Daily Perf Improver"
+      - "Daily Plan"
+      - "Daily Progress"
+      - "Daily Refactor"
+      - "Daily Test Improver"
+      - "Issue Triage"
+      - "PR Fix"
     types:
       - completed
     branches:

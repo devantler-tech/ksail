@@ -1,6 +1,6 @@
 ---
 on:
-  skip-bots: ["dependabot[bot]", "renovate[bot]"]
+  skip-bots: ["dependabot[bot]", "renovate[bot]", "github-merge-queue[bot]"]
   schedule: daily
   skip-if-match: is:pr is:open in:title "[code-simplifier]"
 permissions:

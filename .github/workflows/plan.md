@@ -3,7 +3,7 @@ name: Plan Command
 description: Generates project plans and task breakdowns when invoked with /plan command in issues or PRs
 
 on:
-  skip-bots: ["dependabot[bot]", "renovate[bot]"]
+  skip-bots: ["dependabot[bot]", "renovate[bot]", "github-merge-queue[bot]"]
   slash_command:
     name: plan
     events: [issue_comment, discussion_comment]

@@ -7,7 +7,7 @@ description: |
   prioritize incoming issues.
 
 on:
-  skip-bots: ["dependabot[bot]", "renovate[bot]"]
+  skip-bots: ["dependabot[bot]", "renovate[bot]", "github-merge-queue[bot]"]
   issues:
     types: [opened, reopened]
   reaction: eyes

@@ -11,7 +11,7 @@ on:
   bots:
     - "github-merge-queue[bot]"
 
-  skip-bots: ["dependabot[bot]", "renovate[bot]"]
+  skip-bots: ["dependabot[bot]", "renovate[bot]", "github-merge-queue[bot]"]
   push:
     branches: [main]
   workflow_dispatch:

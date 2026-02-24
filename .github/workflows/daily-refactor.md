@@ -6,7 +6,7 @@ description: |
   Creates discussions to coordinate and draft PRs with improvements.
 
 on:
-  skip-bots: ["dependabot[bot]", "renovate[bot]"]
+  skip-bots: ["dependabot[bot]", "renovate[bot]", "github-merge-queue[bot]"]
   schedule: daily
   workflow_dispatch:
 
