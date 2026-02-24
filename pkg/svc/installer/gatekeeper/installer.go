@@ -29,6 +29,7 @@ func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
 				ReleaseName:     "gatekeeper",
 				ChartName:       "gatekeeper/gatekeeper",
 				Namespace:       "gatekeeper-system",
+				Version:         chartVersion(),
 				RepoURL:         "https://open-policy-agent.github.io/gatekeeper/charts",
 				CreateNamespace: true,
 				Atomic:          true,

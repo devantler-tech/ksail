@@ -8,15 +8,15 @@ description: |
   updates. Supports documentation-as-code philosophy.
 
 on:
+  bots:
+    - "github-merge-queue[bot]"
+
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions: read-all
-
-bots:
-  - "github-merge-queue[bot]"
 
 network: defaults
 

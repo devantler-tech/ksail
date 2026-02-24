@@ -23,6 +23,9 @@ import (
 // ErrUnsupportedCNI is returned when an unsupported CNI type is encountered.
 var ErrUnsupportedCNI = errors.New("unsupported CNI type")
 
+// ErrCNIReadinessTimeout is returned when nodes fail to become ready after CNI installation.
+var ErrCNIReadinessTimeout = errors.New("CNI node readiness timed out")
+
 // cniInstaller provides methods for installing CNI components.
 type cniInstaller interface {
 	Install(ctx context.Context) error
@@ -110,7 +113,9 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		clusterCfg.Spec.Cluster.Distribution,
 	)
 
-	return runCNIInstallation(cmd, ciliumInst, "cilium", tmr, setup, clusterCfg)
+	return runCNIInstallation(
+		cmd, ciliumInst, "cilium", tmr, setup, clusterCfg, []string{"kube-system"},
+	)
 }
 
 func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
@@ -129,7 +134,10 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		clusterCfg.Spec.Cluster.Distribution,
 	)
 
-	return runCNIInstallation(cmd, calicoInst, "calico", tmr, setup, clusterCfg)
+	return runCNIInstallation(
+		cmd, calicoInst, "calico", tmr, setup, clusterCfg,
+		[]string{"tigera-operator", "calico-system"},
+	)
 }
 
 func runCNIInstallation(
@@ -139,6 +147,7 @@ func runCNIInstallation(
 	tmr timer.Timer,
 	setup *cniSetupResult,
 	clusterCfg *v1alpha1.Cluster,
+	cniNamespaces []string,
 ) error {
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
@@ -155,7 +164,7 @@ func runCNIInstallation(
 	// This is critical for CNIs like Calico that use SkipWait (Helm returns
 	// before pods are ready), ensuring the network layer is functional
 	// before post-CNI components begin installing.
-	err = waitForCNIReadiness(cmd.Context(), setup, clusterCfg)
+	err = waitForCNIReadiness(cmd.Context(), setup, clusterCfg, cniNamespaces)
 	if err != nil {
 		return fmt.Errorf("node readiness check after %s install failed: %w", cniName, err)
 	}
@@ -171,10 +180,12 @@ func runCNIInstallation(
 }
 
 // waitForCNIReadiness waits for at least one node to become Ready after CNI installation.
+// On timeout, it diagnoses pod failures in the CNI namespaces to provide actionable errors.
 func waitForCNIReadiness(
 	ctx context.Context,
 	setup *cniSetupResult,
 	clusterCfg *v1alpha1.Cluster,
+	cniNamespaces []string,
 ) error {
 	clientset, err := k8s.NewClientset(
 		setup.kubeconfig,
@@ -186,6 +197,17 @@ func waitForCNIReadiness(
 
 	err = readiness.WaitForNodeReady(ctx, clientset, setup.timeout)
 	if err != nil {
+		diag := k8s.DiagnosePodFailures(ctx, clientset, cniNamespaces)
+		if diag != "" {
+			joined := errors.Join(ErrCNIReadinessTimeout, err)
+
+			return fmt.Errorf(
+				"wait for node readiness after CNI install: %w (after %s)\n%s"+
+					"\n\nTip: check registry availability and rate limits",
+				joined, setup.timeout, diag,
+			)
+		}
+
 		return fmt.Errorf("wait for node readiness after CNI install: %w", err)
 	}
 
