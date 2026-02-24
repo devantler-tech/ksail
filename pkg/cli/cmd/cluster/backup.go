@@ -162,15 +162,19 @@ func runBackup(_ context.Context, cmd *cobra.Command, flags *backupFlags) error 
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
 
+	printBackupSummary(writer, flags.outputPath)
+
+	return nil
+}
+
+func printBackupSummary(writer io.Writer, outputPath string) {
 	_, _ = fmt.Fprintf(writer, "Backup completed successfully\n")
 
-	info, err := os.Stat(flags.outputPath)
+	info, err := os.Stat(outputPath)
 	if err == nil {
 		sizeMB := float64(info.Size()) / bytesPerMB
 		_, _ = fmt.Fprintf(writer, "   Archive size: %.2f MB\n", sizeMB)
 	}
-
-	return nil
 }
 
 func createBackupArchive(
