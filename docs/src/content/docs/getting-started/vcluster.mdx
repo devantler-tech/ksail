@@ -141,12 +141,9 @@ The generated `ksail.yaml` controls cluster behavior:
 ````yaml
 apiVersion: ksail.io/v1alpha1
 kind: Cluster
-metadata:
-  name: dev-cluster
 spec:
   cluster:
     distribution: VCluster
-    provider: Docker
     gitOpsEngine: Flux  # or ArgoCD
 ````
 
