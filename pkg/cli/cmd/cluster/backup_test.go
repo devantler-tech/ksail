@@ -3,6 +3,7 @@ package cluster_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	cluster "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
@@ -106,6 +107,14 @@ func TestCountYAMLDocuments(t *testing.T) {
 			name:     "no kind lines returns 1",
 			content:  "metadata:\n  name: test",
 			expected: 1,
+		},
+		{
+			name: "kubectl list output",
+			content: "apiVersion: v1\nkind: PodList\nmetadata:\n" +
+				"items:\n- apiVersion: v1\n  kind: Pod\n  metadata:\n" +
+				"    name: pod1\n- apiVersion: v1\n  kind: Pod\n  metadata:\n" +
+				"    name: pod2\n",
+			expected: 2,
 		},
 	}
 
@@ -216,5 +225,51 @@ func TestExtractAndReadMetadata(t *testing.T) {
 			"ResourceCount = %d, want %d",
 			restored.ResourceCount, 10,
 		)
+	}
+}
+
+func TestSanitizeYAMLOutput(t *testing.T) {
+	t.Parallel()
+
+	input := "apiVersion: v1\nkind: Pod\nmetadata:\n  name: test-pod\n" +
+		"  namespace: default\n  resourceVersion: \"12345\"\n" +
+		"  uid: abc-123\n  managedFields:\n  - manager: kubectl\n" +
+		"  creationTimestamp: \"2025-01-01T00:00:00Z\"\n" +
+		"status:\n  phase: Running\nspec:\n  containers:\n  - name: nginx"
+
+	result, err := cluster.ExportSanitizeYAMLOutput(input)
+	if err != nil {
+		t.Fatalf("sanitizeYAMLOutput() error = %v", err)
+	}
+
+	for _, stripped := range []string{
+		"resourceVersion", "uid", "managedFields",
+		"creationTimestamp", "status",
+	} {
+		if strings.Contains(result, stripped) {
+			t.Errorf("should have stripped %q", stripped)
+		}
+	}
+
+	for _, preserved := range []string{
+		"name: test-pod", "namespace: default",
+		"kind: Pod", "apiVersion: v1",
+	} {
+		if !strings.Contains(result, preserved) {
+			t.Errorf("should preserve %q", preserved)
+		}
+	}
+}
+
+func TestSanitizeYAMLOutput_nonYAML(t *testing.T) {
+	t.Parallel()
+
+	result, err := cluster.ExportSanitizeYAMLOutput("not valid yaml: [")
+	if err != nil {
+		t.Fatalf("sanitizeYAMLOutput() error = %v", err)
+	}
+
+	if !strings.Contains(result, "not valid yaml") {
+		t.Error("should return original content for non-YAML input")
 	}
 }
