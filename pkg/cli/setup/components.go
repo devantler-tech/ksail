@@ -22,6 +22,7 @@ import (
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cloudproviderkind"
 	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	gatekeeperinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/gatekeeper"
+	hcloudccminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hcloudccm"
 	hetznercsiinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hetznercsi"
 	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kubeletcsrapprover"
 	kyvernoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kyverno"
@@ -251,17 +252,33 @@ func NeedsMetricsServerInstall(clusterCfg *v1alpha1.Cluster) bool {
 }
 
 // NeedsLoadBalancerInstall determines if LoadBalancer support needs to be installed.
-// Returns true only when LoadBalancer is Enabled AND the distribution × provider doesn't provide it by default.
-// When LoadBalancer is Default, we don't install (rely on distribution × provider default behavior).
+//
+// In general, we install LoadBalancer only when it is explicitly Enabled AND the
+// distribution × provider combination does not provide it by default.
+//
+// Special case:
+//   - Talos × Hetzner: hcloud-ccm is not pre-installed and must be installed
+//     by KSail when LoadBalancer is either Default or Enabled.
 func NeedsLoadBalancerInstall(clusterCfg *v1alpha1.Cluster) bool {
-	if clusterCfg.Spec.Cluster.LoadBalancer != v1alpha1.LoadBalancerEnabled {
+	dist := clusterCfg.Spec.Cluster.Distribution
+	provider := clusterCfg.Spec.Cluster.Provider
+	lbSetting := clusterCfg.Spec.Cluster.LoadBalancer
+
+	// Special handling for Talos clusters on Hetzner:
+	// According to the distribution × provider matrix, hcloud-ccm must be
+	// installed by KSail for both Default and Enabled LoadBalancer settings.
+	if dist == v1alpha1.DistributionTalos && provider == v1alpha1.ProviderHetzner {
+		return lbSetting == v1alpha1.LoadBalancerDefault ||
+			lbSetting == v1alpha1.LoadBalancerEnabled
+	}
+
+	// Generic behavior for all other distribution × provider combinations.
+	if lbSetting != v1alpha1.LoadBalancerEnabled {
 		return false
 	}
 
-	// Don't install if distribution × provider provides it by default
-	return !clusterCfg.Spec.Cluster.Distribution.ProvidesLoadBalancerByDefault(
-		clusterCfg.Spec.Cluster.Provider,
-	)
+	// Don't install if distribution × provider provides it by default.
+	return !dist.ProvidesLoadBalancerByDefault(provider)
 }
 
 // helmClientSetup creates a Helm client and retrieves the install timeout.
@@ -307,6 +324,7 @@ func InstallMetricsServerSilent(
 // InstallLoadBalancerSilent installs LoadBalancer support silently for parallel execution.
 // For Vanilla (Kind) × Docker, starts the Cloud Provider KIND controller as a Docker container.
 // For Talos × Docker, installs MetalLB.
+// For Talos × Hetzner, installs hcloud-cloud-controller-manager.
 func InstallLoadBalancerSilent(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -316,7 +334,14 @@ func InstallLoadBalancerSilent(
 	case v1alpha1.DistributionVanilla:
 		return installCloudProviderKind(ctx, clusterCfg)
 	case v1alpha1.DistributionTalos:
-		return installMetalLB(ctx, clusterCfg, factories)
+		switch clusterCfg.Spec.Cluster.Provider {
+		case v1alpha1.ProviderDocker:
+			return installMetalLB(ctx, clusterCfg, factories)
+		case v1alpha1.ProviderHetzner:
+			return installHcloudCCM(ctx, clusterCfg, factories)
+		default:
+			return nil
+		}
 	case v1alpha1.DistributionK3s:
 		// K3s already has ServiceLB (Klipper) by default, no installation needed
 		return nil
@@ -357,11 +382,6 @@ func installMetalLB(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	// Talos × Hetzner: LoadBalancer support is expected to be provided by default.
-	if clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
-		return nil
-	}
-
 	if clusterCfg.Spec.Cluster.Provider != v1alpha1.ProviderDocker {
 		return nil
 	}
@@ -382,6 +402,36 @@ func installMetalLB(
 	installErr := lbInstaller.Install(ctx)
 	if installErr != nil {
 		return fmt.Errorf("metallb installation failed: %w", installErr)
+	}
+
+	return nil
+}
+
+// installHcloudCCM installs the Hetzner Cloud Controller Manager for Talos × Hetzner LoadBalancer support.
+func installHcloudCCM(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) error {
+	if clusterCfg.Spec.Cluster.Provider != v1alpha1.ProviderHetzner {
+		return nil
+	}
+
+	helmClient, kubeconfigPath, timeout, err := helmClientSetup(clusterCfg, factories)
+	if err != nil {
+		return fmt.Errorf("failed to setup helm client for hcloud-ccm: %w", err)
+	}
+
+	ccmInstaller := hcloudccminstaller.NewInstaller(
+		helmClient,
+		kubeconfigPath,
+		clusterCfg.Spec.Cluster.Connection.Context,
+		timeout,
+	)
+
+	installErr := ccmInstaller.Install(ctx)
+	if installErr != nil {
+		return fmt.Errorf("hcloud-ccm installation failed: %w", installErr)
 	}
 
 	return nil

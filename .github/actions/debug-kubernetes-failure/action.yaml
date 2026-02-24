@@ -196,7 +196,7 @@ runs:
             echo "Found pods with issues:"
             echo "$ERROR_PODS"
             echo ""
-            # Show logs for error pods (limit to first 5)
+            # Show describe and logs for error pods (limit to first 5)
             COUNT=0
             for POD_FULL in $ERROR_PODS; do
               if [ $COUNT -ge 5 ]; then
@@ -205,8 +205,11 @@ runs:
               fi
               POD_NS=$(echo "$POD_FULL" | cut -d'/' -f1)
               POD_NAME=$(echo "$POD_FULL" | cut -d'/' -f2)
+              echo "--- Describe: $POD_NS/$POD_NAME ---"
+              $KUBECTL_CMD describe pod --namespace "$POD_NS" "$POD_NAME" || echo "  (unable to describe pod)"
+              echo ""
               echo "--- Logs: $POD_NS/$POD_NAME ---"
-              $KUBECTL_CMD logs --namespace "$POD_NS" "$POD_NAME" --tail=50 2>/dev/null || echo "  (unable to fetch logs)"
+              $KUBECTL_CMD logs --namespace "$POD_NS" "$POD_NAME" --tail=50 --all-containers=true || echo "  (unable to fetch logs)"
               COUNT=$((COUNT + 1))
             done
           else

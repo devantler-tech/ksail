@@ -1,0 +1,598 @@
+---
+title: Getting Started with Vanilla (Kind)
+description: Learn how to create and manage standard upstream Kubernetes clusters with KSail using Kind for local development, testing, and learning.
+---
+
+[Kind (Kubernetes in Docker)](https://kind.sigs.k8s.io/) runs upstream Kubernetes clusters using Docker containers as nodes. It provides a lightweight, fast way to run standard Kubernetes locally without requiring a VM. This guide shows you how to use Vanilla (Kind) with KSail for local development, testing, and learning.
+
+## What is Vanilla (Kind)?
+
+Vanilla is KSail's name for the **upstream Kubernetes distribution** running via Kind. It provides:
+
+- **Standard Kubernetes:** Unmodified upstream K8s with full compatibility
+- **Fast cluster creation:** 30-60 seconds for a working cluster
+- **Docker-only:** Runs entirely in Docker containers (no VM overhead)
+- **Multi-node support:** Simulate production topologies locally
+- **Native configuration:** Uses standard `kind.yaml` files (no lock-in)
+
+### When to Use Vanilla
+
+Vanilla (Kind) is ideal for:
+
+- **Learning Kubernetes:** Upstream K8s without distribution-specific modifications
+- **Application development:** Fast local iterative development with full K8s API compatibility
+- **CI/CD testing:** Ephemeral clusters for integration tests and validation
+- **GitOps workflows:** Test Flux/ArgoCD configurations locally before production
+- **Multi-node testing:** Simulate production topologies (control plane + workers)
+- **Kubernetes contributors:** Test upstream features and changes
+
+### When NOT to Use Vanilla
+
+Consider alternatives if you need:
+
+- **Minimal resource usage:** K3s is lighter (single-binary, fewer components)
+- **Built-in LoadBalancer:** K3s has ServiceLB; Vanilla requires Cloud Provider KIND
+- **Virtual clusters:** VCluster provides isolation without separate nodes
+- **Production deployments:** Talos offers immutable infrastructure and enhanced security
+- **Embedded storage:** K3s includes local-path-provisioner; Vanilla requires explicit CSI
+
+## Quick Start
+
+Create your first Vanilla cluster in under 60 seconds.
+
+### Prerequisites
+
+- Docker Desktop or Docker Engine installed and running
+- `docker ps` command works
+
+### Step 1: Initialize Project
+
+````bash
+ksail cluster init \
+  --name my-cluster \
+  --distribution Vanilla \
+  --control-planes 1 \
+  --workers 2
+````
+
+This creates:
+- `ksail.yaml` — KSail configuration
+- `kind.yaml` — Kind-specific cluster configuration
+
+### Step 2: Create Cluster
+
+````bash
+ksail cluster create
+````
+
+KSail will:
+1. Generate Kind configuration from `ksail.yaml`
+2. Create Docker containers as Kubernetes nodes
+3. Install Kubernetes components
+4. Configure kubectl context
+5. Install CNI (Cilium by default)
+
+**Expected output:**
+```
+✓ Creating Vanilla cluster with Kind...
+✓ Installing Cilium CNI...
+✓ Cluster ready!
+
+Cluster:  my-cluster
+Nodes:    3 (1 control plane, 2 workers)
+Provider: Docker
+```
+
+### Step 3: Verify Cluster
+
+````bash
+# Check cluster info
+ksail cluster info
+
+# View nodes
+kubectl get nodes
+
+# Expected output:
+# NAME                       STATUS   ROLES           AGE   VERSION
+# my-cluster-control-plane   Ready    control-plane   2m    v1.31.0
+# my-cluster-worker          Ready    <none>          2m    v1.31.0
+# my-cluster-worker2         Ready    <none>          2m    v1.31.0
+````
+
+### Step 4: Deploy Sample Application
+
+````bash
+# Create a deployment
+kubectl create deployment nginx --image=nginx
+
+# Expose as ClusterIP service
+kubectl expose deployment nginx --port=80
+
+# Verify deployment
+kubectl get pods
+````
+
+### Step 5: Cleanup
+
+````bash
+# Delete cluster and all resources
+ksail cluster delete
+````
+
+## Configuration
+
+### Basic Configuration
+
+The `ksail.yaml` file controls your cluster:
+
+````yaml
+name: my-cluster
+distribution: Vanilla
+provider: Docker
+controlPlanes: 1
+workers: 2
+kubernetesVersion: "1.31"
+````
+
+### Kind-Specific Configuration
+
+Customize Kind behavior in `kind.yaml`:
+
+````yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    # Port mapping for accessing services
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+  - role: worker
+  - role: worker
+
+# Containerd configuration
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
+      endpoint = ["http://localhost:5000"]
+````
+
+### LoadBalancer Support
+
+Enable LoadBalancer services with Cloud Provider KIND:
+
+````yaml
+# ksail.yaml
+name: my-cluster
+distribution: Vanilla
+provider: Docker
+controlPlanes: 1
+workers: 2
+loadBalancer:
+  enabled: true
+````
+
+When enabled, KSail installs Cloud Provider KIND, which:
+- Creates `cpk-*` Docker containers as LoadBalancer proxies
+- Assigns external IPs to LoadBalancer services
+- Automatically cleans up on cluster deletion
+
+**Example LoadBalancer service:**
+
+````bash
+# Create LoadBalancer service
+kubectl expose deployment nginx --type=LoadBalancer --port=80
+
+# Get external IP
+kubectl get svc nginx
+
+# Access from host
+curl http://<EXTERNAL-IP>
+````
+
+### Registry Mirrors
+
+Configure registry mirrors to avoid rate limits:
+
+````yaml
+# ksail.yaml
+registries:
+  mirrors:
+    - name: docker-mirror
+      registry: docker.io
+      mirror: http://localhost:5000
+````
+
+KSail injects containerd registry configuration into all Kind nodes.
+
+## Common Use Cases
+
+### 1. Local Application Development
+
+**Scenario:** Develop a microservices application with hot-reload workflows.
+
+````bash
+# Initialize development cluster
+ksail cluster init --name dev --distribution Vanilla --workers 1
+
+# Create cluster
+ksail cluster create
+
+# Deploy application
+kubectl apply -f k8s/
+
+# Watch for changes and redeploy
+kubectl rollout restart deployment/my-app
+````
+
+**Why Vanilla:** Fast cluster creation, standard K8s API, compatible with production manifests.
+
+### 2. CI/CD Integration Testing
+
+**Scenario:** Run integration tests in ephemeral Kubernetes clusters.
+
+````bash
+# CI pipeline script
+ksail cluster init --name ci-test --distribution Vanilla
+ksail cluster create
+
+# Run tests
+kubectl apply -f test-manifests/
+./run-integration-tests.sh
+
+# Cleanup
+ksail cluster delete
+````
+
+**Why Vanilla:** Predictable environment, fast creation/deletion, standard Kubernetes.
+
+### 3. GitOps Testing (Flux/ArgoCD)
+
+**Scenario:** Test GitOps configurations locally before production deployment.
+
+````bash
+# Initialize with GitOps
+ksail cluster init \
+  --name gitops-test \
+  --distribution Vanilla \
+  --gitops Flux
+
+# Create and bootstrap Flux
+ksail cluster create
+ksail workload apply
+
+# Test manifests reconciliation
+kubectl get kustomizations -A
+````
+
+**Why Vanilla:** Full compatibility with production GitOps workflows, standard K8s APIs.
+
+### 4. Multi-Node Topology Testing
+
+**Scenario:** Test pod scheduling, node affinity, and multi-node features.
+
+````bash
+# Create 3-node cluster
+ksail cluster init \
+  --name topology-test \
+  --distribution Vanilla \
+  --control-planes 1 \
+  --workers 3
+
+ksail cluster create
+
+# Test node affinity
+kubectl label nodes topology-test-worker zone=us-east-1a
+kubectl label nodes topology-test-worker2 zone=us-east-1b
+
+# Deploy with affinity rules
+kubectl apply -f deployment-with-affinity.yaml
+````
+
+**Why Vanilla:** Simulates multi-node production environments, supports node labels and taints.
+
+## Architecture
+
+### Cluster Components
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Docker Host                         │
+│                                                         │
+│  ┌───────────────────────────────────────────────────┐ │
+│  │  Control Plane Node (Docker Container)           │ │
+│  │  • kube-apiserver                                 │ │
+│  │  • kube-controller-manager                        │ │
+│  │  • kube-scheduler                                 │ │
+│  │  • etcd                                           │ │
+│  │  • kubelet                                        │ │
+│  │  • containerd (container runtime)                │ │
+│  └───────────────────────────────────────────────────┘ │
+│                                                         │
+│  ┌──────────────────┐  ┌──────────────────┐           │
+│  │ Worker Node 1    │  │ Worker Node 2    │           │
+│  │ • kubelet        │  │ • kubelet        │           │
+│  │ • containerd     │  │ • containerd     │           │
+│  │ • kube-proxy     │  │ • kube-proxy     │           │
+│  │ • CNI (Cilium)   │  │ • CNI (Cilium)   │           │
+│  └──────────────────┘  └──────────────────┘           │
+│                                                         │
+│  ┌───────────────────────────────────────────────────┐ │
+│  │  Optional: Cloud Provider KIND (cpk- containers)  │ │
+│  │  • LoadBalancer proxy containers                  │ │
+│  └───────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+```
+
+### How It Works
+
+1. **Node Creation:** Kind creates Docker containers running systemd
+2. **Kubernetes Install:** Standard upstream K8s components installed via kubeadm
+3. **Networking:** Bridge network connects all nodes
+4. **Storage:** Each node has ephemeral storage (lost on cluster delete)
+5. **LoadBalancer:** Optional Cloud Provider KIND creates proxy containers
+
+### KSail Integration
+
+- **Provisioner:** `pkg/svc/provisioner/cluster/kind/` wraps Kind SDK
+- **Infrastructure:** Docker provider manages container lifecycle (start/stop)
+- **Configuration:** Generates `kind.yaml` from `ksail.yaml` declaratively
+- **Installers:** CNI (Cilium), CSI (local-path-storage), metrics-server, Cloud Provider KIND
+
+## Distribution Comparison
+
+| Feature | Vanilla (Kind) | K3s (K3d) | Talos | VCluster |
+|---------|----------------|-----------|-------|----------|
+| **Kubernetes Type** | Upstream | Lightweight | Upstream | Virtual |
+| **Resource Usage** | Medium | Low | Medium | Very Low |
+| **Startup Time** | 30-60s | 15-30s | 60-90s | 10-20s |
+| **LoadBalancer** | Cloud Provider KIND | ServiceLB (built-in) | MetalLB/hcloud-ccm | Host cluster LB |
+| **Storage** | local-path (optional) | local-path (built-in) | Hetzner CSI | Host cluster storage |
+| **Production Ready** | ❌ Local only | ❌ Local only | ✅ Docker + Cloud | ❌ Virtual only |
+| **Multi-Node** | ✅ Yes | ✅ Yes | ✅ Yes | ❌ Single pod |
+| **Shell Access** | ✅ Docker exec | ✅ Docker exec | ❌ No shell | ✅ kubectl exec |
+| **GitOps Support** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
+| **Best For** | Learning, Testing | Quick dev, CI/CD | Production, Security | Multi-tenancy, CI |
+| **API Compatibility** | 100% Upstream | 99% Compatible | 100% Upstream | 100% Upstream |
+| **Node Isolation** | Full | Full | Full | Virtual |
+| **Cluster Lifecycle** | Create/Delete | Create/Delete | Create/Delete/Update | Create/Delete |
+
+## Troubleshooting
+
+### 1. Cluster Creation Fails
+
+**Symptom:** `ksail cluster create` fails with Docker errors.
+
+**Solutions:**
+
+````bash
+# Check Docker is running
+docker ps
+
+# Check available disk space
+df -h
+
+# Clean up unused containers, networks, and dangling images (safer)
+docker system prune
+
+# OPTIONAL (more aggressive):
+# This will remove ALL unused images (not just dangling ones) and may affect other projects.
+# Use only if the above prune is not sufficient and you understand the impact.
+# docker system prune -a
+
+# Retry cluster creation
+ksail cluster create
+````
+
+### 2. Nodes Not Ready
+
+**Symptom:** `kubectl get nodes` shows `NotReady` status.
+
+**Solutions:**
+
+````bash
+# Check node conditions
+kubectl describe node <node-name>
+
+# Check CNI pods
+kubectl get pods -n kube-system | grep cilium
+
+# Restart CNI if needed
+kubectl rollout restart daemonset/cilium -n kube-system
+````
+
+### 3. LoadBalancer Stuck in Pending
+
+**Symptom:** LoadBalancer service never gets EXTERNAL-IP.
+
+**Solutions:**
+
+````bash
+# Check Cloud Provider KIND is enabled
+kubectl get pods -A | grep cloud-provider-kind
+
+# Verify LoadBalancer enabled in ksail.yaml
+cat ksail.yaml | grep -A2 loadBalancer
+
+# Enable LoadBalancer if missing
+# Edit ksail.yaml:
+loadBalancer:
+  enabled: true
+
+# Update cluster
+ksail cluster update
+````
+
+### 4. Port Already in Use
+
+**Symptom:** `address already in use` error during cluster creation.
+
+**Solutions:**
+
+````bash
+# Check existing Kind clusters
+kind get clusters
+
+# Delete conflicting cluster
+kind delete cluster --name <conflicting-cluster>
+
+# Or use different name
+ksail cluster init --name my-cluster-2
+````
+
+### 5. Out of Memory or Disk Space
+
+**Symptom:** Cluster creation fails with resource errors.
+
+**Solutions:**
+
+````bash
+# Reduce node count
+# Edit ksail.yaml:
+controlPlanes: 1
+workers: 0  # Single-node cluster
+
+# Increase Docker resources (Docker Desktop)
+# Settings → Resources → Adjust CPU/Memory/Disk
+
+# Clean up Docker
+docker system prune -a --volumes
+````
+
+## Advanced Topics
+
+### Multi-Node Clusters
+
+Create production-like topologies:
+
+````yaml
+# ksail.yaml
+name: multi-node
+distribution: Vanilla
+provider: Docker
+controlPlanes: 3  # HA control plane
+workers: 5        # Multiple workers
+````
+
+### Kubernetes Version Selection
+
+Pin specific Kubernetes versions:
+
+````yaml
+# ksail.yaml
+kubernetesVersion: "1.31"  # Uses latest 1.31.x
+````
+
+Supported versions: Check [Kind release notes](https://github.com/kubernetes-sigs/kind/releases) for image availability.
+
+### Custom CNI
+
+Override default Cilium CNI:
+
+````yaml
+# ksail.yaml
+cni:
+  installer: Calico
+````
+
+Available CNI options: Cilium (default), Calico, Flannel.
+
+### Port Mappings
+
+Expose services on host ports:
+
+````yaml
+# kind.yaml
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080  # NodePort service
+        hostPort: 8080
+        protocol: TCP
+````
+
+Access services at `http://localhost:8080`.
+
+### Storage Configuration
+
+Enable persistent storage:
+
+````yaml
+# ksail.yaml
+csi:
+  enabled: true
+  installer: LocalPathProvisioner
+````
+
+Create PersistentVolumeClaims:
+
+````bash
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+EOF
+````
+
+### Cluster Lifecycle Management
+
+````bash
+# Stop cluster (preserves state)
+ksail cluster stop
+
+# Start stopped cluster
+ksail cluster start
+
+# Update cluster (may require recreation)
+ksail cluster update
+
+# List all clusters
+ksail cluster list
+
+# Get cluster info
+ksail cluster info
+````
+
+### Integration with Native Kind
+
+KSail generates standard `kind.yaml` files:
+
+````bash
+# Use Kind CLI directly
+kind create cluster --config kind.yaml
+
+# Export kubeconfig for an existing Kind cluster
+kind export kubeconfig --name my-cluster
+````
+
+No vendor lock-in—configurations are portable, and KSail can interact with any Kind cluster accessible via your kubeconfig.
+
+## Next Steps
+
+### Explore KSail Features
+
+- [**GitOps Integration**](/features/gitops/): Bootstrap Flux or ArgoCD
+- [**Secret Management**](/features/secrets/): Encrypt secrets with SOPS
+- [**AI Chat**](/features/chat/): Interactive cluster management with GitHub Copilot
+- [**VSCode Extension**](/extensions/vscode/): Manage clusters from your editor
+
+### Try Other Distributions
+
+- [**K3s (K3d)**](/getting-started/k3s/): Lightweight K3s for minimal resource usage
+- [**Talos**](/getting-started/talos/): Immutable infrastructure for production
+- [**VCluster**](/getting-started/vcluster/): Virtual clusters for multi-tenancy
+
+### Learn More
+
+- [**Installation Guide**](/installation/): Install KSail on your system
+- [**CLI Reference**](/cli-flags/): Comprehensive command documentation
+- [**Configuration Reference**](/configuration/): Detailed YAML options
+- [**Contributing**](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md): Contribute to KSail development
