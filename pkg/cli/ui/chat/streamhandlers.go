@@ -288,6 +288,7 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 	// Switch model with session recreation if needed
 	if prompt.model != m.currentModel {
 		m.err = nil // Clear stale errors before model switch
+
 		mdl, cmd := m.switchModel(prompt.model)
 		if m.err != nil {
 			return mdl, cmd
