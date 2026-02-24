@@ -12,26 +12,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEnsureBrNetfilter_NonLinux verifies that the function is a no-op on non-Linux systems
+const goosLinux = "linux"
+
+// TestEnsureBrNetfilter_NonLinux verifies that the function is a no-op on non-Linux systems.
 func TestEnsureBrNetfilter_NonLinux(t *testing.T) {
 	t.Parallel()
-	if runtime.GOOS == "linux" {
+
+	if runtime.GOOS == goosLinux {
 		t.Skip("Skipping non-Linux test on Linux system")
 	}
 
 	ctx := context.Background()
+
 	var logOutput strings.Builder
 
 	err := kernelmod.EnsureBrNetfilter(ctx, &logOutput)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Empty(t, logOutput.String(), "Should not write any logs on non-Linux systems")
 }
 
-// TestEnsureBrNetfilter_AlreadyLoaded tests the scenario where br_netfilter is already loaded
+// TestEnsureBrNetfilter_AlreadyLoaded tests the scenario where br_netfilter is already loaded.
 func TestEnsureBrNetfilter_AlreadyLoaded(t *testing.T) {
 	t.Parallel()
-	if runtime.GOOS != "linux" {
+
+	if runtime.GOOS != goosLinux {
 		t.Skip("Skipping Linux-specific test on non-Linux system")
 	}
 
@@ -45,26 +50,29 @@ func TestEnsureBrNetfilter_AlreadyLoaded(t *testing.T) {
 	alreadyLoaded := strings.Contains(string(data), "br_netfilter")
 
 	ctx := context.Background()
+
 	var logOutput strings.Builder
 
 	err = kernelmod.EnsureBrNetfilter(ctx, &logOutput)
 
 	if alreadyLoaded {
 		// If module was already loaded, function should succeed without trying to load
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, logOutput.String(), "Should not write logs when module already loaded")
 	} else {
 		// If module was not loaded, function will try to load it
 		// This may fail in containers or CI without proper permissions
 		// We can't assert on the outcome without knowing the environment
-		t.Logf("Module not pre-loaded, load attempt result: err=%v, log=%q", err, logOutput.String())
+		t.Logf("Module not pre-loaded, load attempt result: err=%v, log=%q",
+			err, logOutput.String())
 	}
 }
 
-// TestEnsureBrNetfilter_WithLogWriter tests that log messages are written when provided
+// TestEnsureBrNetfilter_WithLogWriter tests that log messages are written when provided.
 func TestEnsureBrNetfilter_WithLogWriter(t *testing.T) {
 	t.Parallel()
-	if runtime.GOOS != "linux" {
+
+	if runtime.GOOS != goosLinux {
 		t.Skip("Skipping Linux-specific test on non-Linux system")
 	}
 
@@ -75,6 +83,7 @@ func TestEnsureBrNetfilter_WithLogWriter(t *testing.T) {
 	}
 
 	ctx := context.Background()
+
 	var logOutput strings.Builder
 
 	// Run the function
@@ -90,10 +99,11 @@ func TestEnsureBrNetfilter_WithLogWriter(t *testing.T) {
 	}
 }
 
-// TestEnsureBrNetfilter_NilLogWriter tests that nil log writer doesn't cause panic
+// TestEnsureBrNetfilter_NilLogWriter tests that nil log writer doesn't cause panic.
 func TestEnsureBrNetfilter_NilLogWriter(t *testing.T) {
 	t.Parallel()
-	if runtime.GOOS != "linux" {
+
+	if runtime.GOOS != goosLinux {
 		t.Skip("Skipping Linux-specific test on non-Linux system")
 	}
 
@@ -111,10 +121,11 @@ func TestEnsureBrNetfilter_NilLogWriter(t *testing.T) {
 	})
 }
 
-// TestEnsureBrNetfilter_ContextCancellation tests behavior with cancelled context
+// TestEnsureBrNetfilter_ContextCancellation tests behavior with cancelled context.
 func TestEnsureBrNetfilter_ContextCancellation(t *testing.T) {
 	t.Parallel()
-	if runtime.GOOS != "linux" {
+
+	if runtime.GOOS != goosLinux {
 		t.Skip("Skipping Linux-specific test on non-Linux system")
 	}
 
@@ -138,10 +149,11 @@ func TestEnsureBrNetfilter_ContextCancellation(t *testing.T) {
 	t.Logf("Context cancellation test result: err=%v", err)
 }
 
-// TestContainsModule tests the internal containsModule logic indirectly via realistic scenarios
+// TestContainsModule_Integration tests containsModule logic indirectly via realistic scenarios.
 func TestContainsModule_Integration(t *testing.T) {
 	t.Parallel()
-	if runtime.GOOS != "linux" {
+
+	if runtime.GOOS != goosLinux {
 		t.Skip("Skipping Linux-specific test on non-Linux system")
 	}
 
@@ -157,10 +169,12 @@ func TestContainsModule_Integration(t *testing.T) {
 
 	// Find at least one real module name from the first line
 	var realModuleName string
+
 	for _, line := range lines {
 		fields := strings.Fields(line)
 		if len(fields) > 0 {
 			realModuleName = fields[0]
+
 			break
 		}
 	}
@@ -171,35 +185,32 @@ func TestContainsModule_Integration(t *testing.T) {
 
 	t.Logf("Testing with real module name: %s", realModuleName)
 
-	// The containsModule function is not exported, but we can test it indirectly
-	// by checking if the EnsureBrNetfilter function detects loaded modules correctly.
-	// For a more direct test, we would need to export the function or use a test file
-	// in the same package (not _test package).
-
 	// Verify that if a module appears in /proc/modules, the early return works
 	if strings.Contains(content, "br_netfilter") {
 		ctx := context.Background()
+
 		var logOutput strings.Builder
 
 		err := kernelmod.EnsureBrNetfilter(ctx, &logOutput)
 
-		assert.NoError(t, err, "Should succeed when br_netfilter is already loaded")
+		require.NoError(t, err, "Should succeed when br_netfilter is already loaded")
 		assert.Empty(t, logOutput.String(), "Should not attempt to load when already present")
 	}
 }
 
-// TestEnsureBrNetfilter_ErrorScenarios tests various error conditions
+// TestEnsureBrNetfilter_ErrorScenarios tests various error conditions.
 func TestEnsureBrNetfilter_ErrorScenarios(t *testing.T) {
 	t.Parallel()
-	if runtime.GOOS != "linux" {
+
+	if runtime.GOOS != goosLinux {
 		t.Skip("Skipping Linux-specific test on non-Linux system")
 	}
 
 	// This test documents expected behavior in error scenarios
 	// In containers without CAP_SYS_MODULE or in CI environments,
 	// the function may fail to load the module
-
 	ctx := context.Background()
+
 	var logOutput strings.Builder
 
 	err := kernelmod.EnsureBrNetfilter(ctx, &logOutput)
