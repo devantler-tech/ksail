@@ -272,8 +272,9 @@ func (m *Model) tryFinalizeResponse() (tea.Model, tea.Cmd) {
 
 // processNextPendingPrompt processes the next pending prompt in the queue.
 // Steering prompts are processed first, followed by queued prompts in FIFO order.
+// The prompt is only removed from the queue after successful setup to avoid data loss.
 func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
-	prompt := m.popNextPendingPrompt()
+	prompt := m.peekNextPendingPrompt()
 	if prompt == nil {
 		return m, nil
 	}
@@ -285,20 +286,26 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 		m.chatModeRef.SetMode(prompt.chatMode)
 	}
 
-	// Switch model with session recreation if needed
-	if prompt.model != m.currentModel {
+	// Switch model with session recreation if needed.
+	// Compare against user-selected model (sessionConfig.Model), not server-resolved.
+	selectedModel := m.getSelectedModel()
+	if prompt.model != selectedModel {
 		m.err = nil // Clear stale errors before model switch
 
 		mdl, cmd := m.switchModel(prompt.model)
 		if m.err != nil {
+			// Model switch failed - leave prompt in queue for retry
 			return mdl, cmd
 		}
 	}
 
-	// Update reasoning effort if it was set
-	if prompt.reasoningEffort != "" && m.sessionConfig != nil {
+	// Restore reasoning effort from the captured prompt state
+	if m.sessionConfig != nil {
 		m.sessionConfig.ReasoningEffort = prompt.reasoningEffort
 	}
+
+	// Setup succeeded - now remove the prompt from the queue
+	m.popNextPendingPrompt()
 
 	// Prepare new turn state
 	m.prepareForNewTurn()
@@ -323,8 +330,8 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 	// Update viewport to show the new messages
 	m.updateViewportContent()
 
-	// Send the prompt
-	return m, tea.Batch(m.spinner.Tick, m.streamResponseCmd(prompt.content))
+	// Send the prompt and start listening for events
+	return m, tea.Batch(m.spinner.Tick, m.streamResponseCmd(prompt.content), m.waitForEvent())
 }
 
 // handleTurnEnd handles assistant turn end events (AssistantTurnEnd).
@@ -415,12 +422,8 @@ func (m *Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
 
 	m.updateViewportContent()
 
-	// Process next pending prompt if available
-	if m.hasPendingPrompts() {
-		return m.processNextPendingPrompt()
-	}
-
-	// Don't wait for more events - response is complete (with error)
+	// Don't wait for more events - response is complete (with error).
+	// Pending prompts, if any, remain queued and require explicit user action to process.
 	return m, nil
 }
 
