@@ -42,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pkgs=$(grep -rl 'func Benchmark' --include='*_test.go' . \
+          pkgs=$(grep -rl '^func Benchmark' --include='*_test.go' . \
             | xargs -I{} dirname {} \
             | sort -u)
           if [ -z "$pkgs" ]; then
