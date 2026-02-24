@@ -10,26 +10,26 @@ The kubectl client benchmarks measure the performance of command creation operat
 
 ### All Benchmarks
 
-````bash
+```bash
 go test -bench=. -benchmem ./pkg/client/kubectl/
-````
+```
 
 ### Specific Benchmark
 
-````bash
+```bash
 go test -bench=BenchmarkCreateApplyCommand -benchmem ./pkg/client/kubectl/
-````
+```
 
 ### With CPU Profiling
 
-````bash
+```bash
 go test -bench=. -cpuprofile=cpu.prof -benchmem ./pkg/client/kubectl/
 go tool pprof cpu.prof
-````
+```
 
 ### Comparing Before/After Changes
 
-````bash
+```bash
 # Before changes
 go test -bench=. -benchmem ./pkg/client/kubectl/ > before.txt
 
@@ -40,7 +40,7 @@ go test -bench=. -benchmem ./pkg/client/kubectl/ > after.txt
 
 # Compare (requires benchstat: go install golang.org/x/perf/cmd/benchstat@latest)
 benchstat before.txt after.txt
-````
+```
 
 ## Baseline Results
 
@@ -50,9 +50,9 @@ and record the results together with the relevant commit hash in your change log
 
 For example:
 
-````bash
+```bash
 go test -bench=. -benchmem ./pkg/client/kubectl/ > baseline.txt
-````
+```
 
 ## Benchmarked Operations
 
