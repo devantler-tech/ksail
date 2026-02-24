@@ -1,20 +1,20 @@
 goos: linux
 goarch: amd64
 pkg: github.com/devantler-tech/ksail/v5/pkg/client/argocd
-cpu: AMD EPYC 9V74 80-Core Processor                
-BenchmarkEnsureOptions/Minimal-4         	1000000000	         0.3640 ns/op	       0 B/op	       0 allocs/op
-BenchmarkEnsureOptions/WithApplicationName-4         	1000000000	         0.3521 ns/op	       0 B/op	       0 allocs/op
-BenchmarkEnsureOptions/WithAuth-4                    	1000000000	         0.3524 ns/op	       0 B/op	       0 allocs/op
-BenchmarkEnsureOptions/Production-4                  	1000000000	         0.3530 ns/op	       0 B/op	       0 allocs/op
-BenchmarkUpdateTargetRevisionOptions/MinimalUpdate-4 	1000000000	         0.3527 ns/op	       0 B/op	       0 allocs/op
-BenchmarkUpdateTargetRevisionOptions/WithHardRefresh-4         	1000000000	         0.3522 ns/op	       0 B/op	       0 allocs/op
-BenchmarkManagerEnsure/FirstTimeCreate-4                       	     319	   3640143 ns/op	 2258411 B/op	    5510 allocs/op
-BenchmarkManagerEnsure/UpdateExisting-4                        	     634	   2040968 ns/op	 1167333 B/op	    3221 allocs/op
-BenchmarkManagerEnsure/WithAuthentication-4                    	     327	   3667362 ns/op	 2258844 B/op	    5526 allocs/op
-BenchmarkManagerEnsure/ProductionConfig-4                      	     308	   3685463 ns/op	 2258855 B/op	    5525 allocs/op
-BenchmarkManagerUpdateTargetRevision/TargetRevisionOnly-4      	  118028	     10489 ns/op	    9575 B/op	      74 allocs/op
-BenchmarkManagerUpdateTargetRevision/WithHardRefresh-4         	   97990	     12886 ns/op	   11935 B/op	      89 allocs/op
-BenchmarkManagerUpdateTargetRevision/HardRefreshOnly-4         	   95473	     12988 ns/op	   11924 B/op	      88 allocs/op
-BenchmarkNewManager-4                                          	1000000000	         0.3527 ns/op	       0 B/op	       0 allocs/op
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkEnsureOptions/Minimal-4         	550357982	         2.182 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEnsureOptions/WithApplicationName-4         	550528371	         2.180 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEnsureOptions/WithAuth-4                    	549878227	         2.182 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEnsureOptions/Production-4                  	550092406	         2.179 ns/op	       0 B/op	       0 allocs/op
+BenchmarkUpdateTargetRevisionOptions/MinimalUpdate-4 	1000000000	         1.068 ns/op	       0 B/op	       0 allocs/op
+BenchmarkUpdateTargetRevisionOptions/WithHardRefresh-4         	1000000000	         1.125 ns/op	       0 B/op	       0 allocs/op
+BenchmarkManagerEnsure/FirstTimeCreate-4                       	     319	   3793530 ns/op	 2258613 B/op	    5514 allocs/op
+BenchmarkManagerEnsure/UpdateExisting-4                        	     547	   2068579 ns/op	 1167420 B/op	    3221 allocs/op
+BenchmarkManagerEnsure/WithAuthentication-4                    	     314	   3809959 ns/op	 2258967 B/op	    5529 allocs/op
+BenchmarkManagerEnsure/ProductionConfig-4                      	     314	   3768036 ns/op	 2258738 B/op	    5523 allocs/op
+BenchmarkManagerUpdateTargetRevision/TargetRevisionOnly-4      	   70064	     17321 ns/op	    9443 B/op	      76 allocs/op
+BenchmarkManagerUpdateTargetRevision/WithHardRefresh-4         	   60986	     19307 ns/op	   11139 B/op	      87 allocs/op
+BenchmarkManagerUpdateTargetRevision/HardRefreshOnly-4         	   60470	     19257 ns/op	   11123 B/op	      86 allocs/op
+BenchmarkNewManager-4                                          	31696992	        36.07 ns/op	      32 B/op	       1 allocs/op
 PASS
-ok  	github.com/devantler-tech/ksail/v5/pkg/client/argocd	16.167s
+ok  	github.com/devantler-tech/ksail/v5/pkg/client/argocd	36.255s
