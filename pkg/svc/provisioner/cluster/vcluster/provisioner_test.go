@@ -68,7 +68,12 @@ func TestNewProvisioner(t *testing.T) {
 		// When cluster name is empty, the provisioner should use "vcluster-default"
 		mockProvider.On("StartNodes", mock.Anything, "vcluster-default").Return(nil)
 
-		provisioner := vclusterprovisioner.NewProvisioner("", "/path/to/values.yaml", false, mockProvider)
+		provisioner := vclusterprovisioner.NewProvisioner(
+			"",
+			"/path/to/values.yaml",
+			false,
+			mockProvider,
+		)
 		require.NotNil(t, provisioner)
 
 		// Pass empty name to Start; the provisioner should resolve to the default name
@@ -83,7 +88,12 @@ func TestNewProvisioner(t *testing.T) {
 		mockProvider := provider.NewMockProvider()
 		mockProvider.On("StartNodes", mock.Anything, "custom").Return(nil)
 
-		provisioner := vclusterprovisioner.NewProvisioner("custom", "/custom/path.yaml", true, mockProvider)
+		provisioner := vclusterprovisioner.NewProvisioner(
+			"custom",
+			"/custom/path.yaml",
+			true,
+			mockProvider,
+		)
 		require.NotNil(t, provisioner)
 
 		err := provisioner.Start(context.Background(), "custom")
