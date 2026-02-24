@@ -1,6 +1,7 @@
 package chat_test
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,11 +40,11 @@ func TestQueuePrompt_VisibleInView(t *testing.T) {
 	// View should show pending prompts section
 	output := updatedModel.View()
 
-	if !containsSubstring(output, "Pending Prompts") {
+	if !strings.Contains(output, "Pending Prompts") {
 		t.Error("expected 'Pending Prompts' section in view after queueing")
 	}
 
-	if !containsSubstring(output, "QUEUED") {
+	if !strings.Contains(output, "QUEUED") {
 		t.Error("expected 'QUEUED' label in view after queueing")
 	}
 }
@@ -64,11 +65,11 @@ func TestSteerPrompt_VisibleInView(t *testing.T) {
 
 	output := updatedModel.View()
 
-	if !containsSubstring(output, "Pending Prompts") {
+	if !strings.Contains(output, "Pending Prompts") {
 		t.Error("expected 'Pending Prompts' section in view after steering")
 	}
 
-	if !containsSubstring(output, "STEERING") {
+	if !strings.Contains(output, "STEERING") {
 		t.Error("expected 'STEERING' label in view after steering")
 	}
 }
@@ -93,7 +94,7 @@ func TestDeletePendingPrompt_RemovesFromView(t *testing.T) {
 	// Should no longer show pending prompts section
 	output := updatedModel.View()
 
-	if containsSubstring(output, "Pending Prompts") {
+	if strings.Contains(output, "Pending Prompts") {
 		t.Error("expected no 'Pending Prompts' section after deleting all pending prompts")
 	}
 }
@@ -110,7 +111,7 @@ func TestEmptyInput_IgnoredByQueue(t *testing.T) {
 
 	output := updatedModel.View()
 
-	if containsSubstring(output, "Pending Prompts") {
+	if strings.Contains(output, "Pending Prompts") {
 		t.Error("empty input should not create a pending prompt")
 	}
 }
@@ -127,7 +128,7 @@ func TestEmptyInput_IgnoredBySteer(t *testing.T) {
 
 	output := updatedModel.View()
 
-	if containsSubstring(output, "Pending Prompts") {
+	if strings.Contains(output, "Pending Prompts") {
 		t.Error("empty input should not create a steering prompt")
 	}
 }
@@ -155,11 +156,11 @@ func TestMultipleQueuedPrompts_ShowNumbered(t *testing.T) {
 
 	output := updatedModel.View()
 
-	if !containsSubstring(output, "QUEUED #1") {
+	if !strings.Contains(output, "QUEUED #1") {
 		t.Error("expected 'QUEUED #1' in view")
 	}
 
-	if !containsSubstring(output, "QUEUED #2") {
+	if !strings.Contains(output, "QUEUED #2") {
 		t.Error("expected 'QUEUED #2' in view")
 	}
 }
@@ -179,21 +180,7 @@ func TestFooterShowsPendingCount(t *testing.T) {
 
 	output := updatedModel.View()
 
-	if !containsSubstring(output, "1 pending") {
+	if !strings.Contains(output, "1 pending") {
 		t.Error("expected '1 pending' in footer after queueing a prompt")
 	}
-}
-
-func containsSubstring(haystack, needle string) bool {
-	return len(haystack) >= len(needle) && searchSubstring(haystack, needle)
-}
-
-func searchSubstring(haystack, needle string) bool {
-	for idx := 0; idx <= len(haystack)-len(needle); idx++ {
-		if haystack[idx:idx+len(needle)] == needle {
-			return true
-		}
-	}
-
-	return false
 }
