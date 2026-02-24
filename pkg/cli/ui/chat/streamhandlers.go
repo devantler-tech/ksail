@@ -299,9 +299,17 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Restore reasoning effort from the captured prompt state
-	if m.sessionConfig != nil {
-		m.sessionConfig.ReasoningEffort = prompt.reasoningEffort
+	// Restore reasoning effort with session recreation if needed.
+	// Reasoning effort changes only take effect after recreating the session.
+	currentEffort := m.getReasoningEffort()
+	if prompt.reasoningEffort != currentEffort && m.sessionConfig != nil {
+		m.err = nil // Clear stale errors before effort switch
+
+		mdl, cmd := m.switchReasoningEffort(prompt.reasoningEffort)
+		if m.err != nil {
+			// Reasoning effort switch failed - leave prompt in queue for retry
+			return mdl, cmd
+		}
 	}
 
 	// Setup succeeded - now remove the prompt from the queue
@@ -383,11 +391,8 @@ func (m *Model) handleAbort() (tea.Model, tea.Cmd) {
 
 	m.updateViewportContent()
 
-	// Process next pending prompt if available
-	if m.hasPendingPrompts() {
-		return m.processNextPendingPrompt()
-	}
-
+	// Don't auto-process pending prompts after abort.
+	// Pending prompts, if any, remain queued and require explicit user action to process.
 	return m, nil
 }
 
