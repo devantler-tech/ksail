@@ -1,15 +1,19 @@
 # Cluster Backup and Restore
 
-KSail provides `cluster backup` and `cluster restore` commands for backing up and restoring Kubernetes cluster resources and persistent volumes.
+KSail provides `cluster backup` and `cluster restore` commands for backing up and restoring Kubernetes cluster resource manifests.
 
 ## Overview
 
 The backup/restore functionality allows you to:
 
-- Create compressed archives of Kubernetes resources
+- Create compressed archives of Kubernetes resource manifests (YAML)
 - Backup cluster state for disaster recovery
 - Migrate workloads between clusters
 - Restore resources in the correct order
+
+> **Note:** The current implementation (v1) backs up resource manifests only.
+> Persistent volume contents (actual data on disk) are not included.
+> PV and PVC objects are backed up as YAML definitions.
 
 ## Backup Command
 
@@ -22,7 +26,7 @@ ksail cluster backup --output ./my-backup.tar.gz
 ### Options
 
 - `--output, -o` (required): Output path for the backup archive
-- `--include-volumes` (default: true): Include persistent volume data in backup
+- `--include-volumes` (default: false): Include persistent volume data in backup (not yet implemented; setting this flag emits a warning)
 - `--namespaces, -n`: Specific namespaces to backup (default: all)
 - `--exclude-types`: Resource types to exclude (default: events)
 - `--compression`: Compression level 0-9 (default: -1, gzip default)
@@ -55,7 +59,7 @@ ksail cluster backup --output ./backup.tar.gz --compression 9
 
 ### What Gets Backed Up
 
-Resources are exported in order:
+Resource manifests (YAML definitions) are exported in order:
 
 1. CustomResourceDefinitions (CRDs)
 2. Namespaces
@@ -70,6 +74,8 @@ Resources are exported in order:
 11. Ingresses
 
 ### Backup Archive Structure
+
+Resources are organized by type within the archive:
 
 ````
 backup.tar.gz
@@ -189,8 +195,9 @@ ksail cluster restore --input ./dev-working-state.tar.gz
 
 Current limitations in the initial implementation:
 
+- **Resource manifests only**: Only Kubernetes resource definitions (YAML) are backed up. Persistent volume contents (actual data stored in volumes) are not included. PV/PVC objects are backed up as manifest definitions only.
 - **No secret encryption**: Secrets are exported as plain YAML. Use SOPS or similar tools separately for secret management.
-- **No cloud snapshots**: Volume backups use file system approach only. Cloud provider volume snapshots (AWS EBS, GCP PD, Azure Disk) are not supported.
+- **No cloud snapshots**: Cloud provider volume snapshots (AWS EBS, GCP PD, Azure Disk) are not supported.
 - **No block storage snapshots**: Hetzner/block storage snapshots are not included.
 - **No selective restore**: Cannot restore individual resources or namespaces from a backup (full restore only).
 
@@ -198,6 +205,7 @@ Current limitations in the initial implementation:
 
 Planned for future versions:
 
+- Persistent volume data backup (volume contents)
 - Secret encryption integration (SOPS, Sealed Secrets)
 - Cloud provider volume snapshots
 - Selective restore (specific namespaces or resources)

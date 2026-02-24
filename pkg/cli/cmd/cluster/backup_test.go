@@ -1,15 +1,17 @@
-package cluster
+package cluster_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	cluster "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 )
 
 func TestBackupMetadata(t *testing.T) {
 	t.Parallel()
 
-	metadata := &BackupMetadata{
+	metadata := &cluster.BackupMetadata{
 		Version:       "v1",
 		ClusterName:   "test-cluster",
 		KSailVersion:  "5.0.0",
@@ -19,7 +21,7 @@ func TestBackupMetadata(t *testing.T) {
 	tmpDir := t.TempDir()
 	metadataPath := filepath.Join(tmpDir, "backup-metadata.json")
 
-	err := writeMetadata(metadata, metadataPath)
+	err := cluster.ExportWriteMetadata(metadata, metadataPath)
 	if err != nil {
 		t.Fatalf("failed to write metadata: %v", err)
 	}
@@ -46,28 +48,28 @@ func TestCreateTarball(t *testing.T) {
 
 	testFile := filepath.Join(srcDir, "test.txt")
 
-	err := os.WriteFile(testFile, []byte("test content"), filePerm)
+	err := os.WriteFile(testFile, []byte("test content"), cluster.ExportFilePerm)
 	if err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
 	subDir := filepath.Join(srcDir, "subdir")
 
-	err = os.MkdirAll(subDir, dirPerm)
+	err = os.MkdirAll(subDir, cluster.ExportDirPerm)
 	if err != nil {
 		t.Fatalf("failed to create subdirectory: %v", err)
 	}
 
 	subFile := filepath.Join(subDir, "sub.txt")
 
-	err = os.WriteFile(subFile, []byte("sub content"), filePerm)
+	err = os.WriteFile(subFile, []byte("sub content"), cluster.ExportFilePerm)
 	if err != nil {
 		t.Fatalf("failed to create sub file: %v", err)
 	}
 
 	outputPath := filepath.Join(t.TempDir(), "test-backup.tar.gz")
 
-	err = createTarball(srcDir, outputPath, 6)
+	err = cluster.ExportCreateTarball(srcDir, outputPath, 6)
 	if err != nil {
 		t.Fatalf("failed to create tarball: %v", err)
 	}
@@ -111,7 +113,7 @@ func TestCountYAMLDocuments(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			count := countYAMLDocuments(test.content)
+			count := cluster.ExportCountYAMLDocuments(test.content)
 			if count != test.expected {
 				t.Errorf(
 					"countYAMLDocuments() = %d, want %d",
@@ -155,7 +157,7 @@ func TestFilterExcludedTypes(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := filterExcludedTypes(test.types, test.exclude)
+			result := cluster.ExportFilterExcludedTypes(test.types, test.exclude)
 			if len(result) != test.expectedLen {
 				t.Errorf(
 					"filterExcludedTypes() returned %d items, want %d",
@@ -170,7 +172,7 @@ func TestExtractAndReadMetadata(t *testing.T) {
 	t.Parallel()
 
 	srcDir := t.TempDir()
-	metadata := &BackupMetadata{
+	metadata := &cluster.BackupMetadata{
 		Version:       "v1",
 		ClusterName:   "roundtrip-cluster",
 		KSailVersion:  "5.0.0",
@@ -179,19 +181,19 @@ func TestExtractAndReadMetadata(t *testing.T) {
 
 	metadataPath := filepath.Join(srcDir, "backup-metadata.json")
 
-	err := writeMetadata(metadata, metadataPath)
+	err := cluster.ExportWriteMetadata(metadata, metadataPath)
 	if err != nil {
 		t.Fatalf("failed to write metadata: %v", err)
 	}
 
 	archivePath := filepath.Join(t.TempDir(), "test.tar.gz")
 
-	err = createTarball(srcDir, archivePath, 6)
+	err = cluster.ExportCreateTarball(srcDir, archivePath, 6)
 	if err != nil {
 		t.Fatalf("failed to create tarball: %v", err)
 	}
 
-	tmpDir, restored, err := extractBackupArchive(archivePath)
+	tmpDir, restored, err := cluster.ExportExtractBackupArchive(archivePath)
 	if err != nil {
 		t.Fatalf("failed to extract backup archive: %v", err)
 	}

@@ -14,11 +14,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v5/internal/buildmeta"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -26,11 +28,22 @@ const (
 	filePerm = 0o600
 	// bytesPerMB is the number of bytes in a megabyte.
 	bytesPerMB = 1024 * 1024
+	// minCompressionLevel is the minimum gzip compression level.
+	minCompressionLevel = -1
+	// maxCompressionLevel is the maximum gzip compression level.
+	maxCompressionLevel = 9
 )
 
 // ErrKubeconfigNotFound is returned when no kubeconfig path can be resolved.
 var ErrKubeconfigNotFound = errors.New(
 	"kubeconfig not found; ensure cluster is created and configured",
+)
+
+// ErrInvalidCompressionLevel is returned when the compression level is
+// outside the valid range.
+var ErrInvalidCompressionLevel = fmt.Errorf(
+	"compression level must be between %d and %d",
+	minCompressionLevel, maxCompressionLevel,
 )
 
 // BackupMetadata contains metadata about a backup.
@@ -59,13 +72,15 @@ func NewBackupCmd(_ *di.Runtime) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "backup",
-		Short: "Backup cluster resources and volumes",
-		Long: `Creates a backup archive containing Kubernetes resources ` +
-			`and persistent volume data.
+		Short: "Backup cluster resources",
+		Long: `Creates a backup archive containing Kubernetes resource manifests.
 
 The backup is stored as a compressed tarball (.tar.gz) with resources ` +
-			`organized by namespace.
+			`organized by type.
 Metadata about the backup is included for restore operations.
+
+Note: This backs up resource manifests (YAML) only. Persistent volume
+contents are not included in the current implementation.
 
 Example:
   ksail cluster backup --output ./my-backup.tar.gz
@@ -82,8 +97,8 @@ Example:
 		"Output path for backup archive (required)",
 	)
 	cmd.Flags().BoolVar(
-		&flags.includeVolumes, "include-volumes", true,
-		"Include persistent volume data in backup",
+		&flags.includeVolumes, "include-volumes", false,
+		"Include persistent volume data in backup (not yet implemented)",
 	)
 	cmd.Flags().StringSliceVarP(
 		&flags.namespaces, "namespaces", "n", []string{},
@@ -107,6 +122,11 @@ Example:
 }
 
 func runBackup(_ context.Context, cmd *cobra.Command, flags *backupFlags) error {
+	if flags.compressionLevel < minCompressionLevel ||
+		flags.compressionLevel > maxCompressionLevel {
+		return ErrInvalidCompressionLevel
+	}
+
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
 	if kubeconfigPath == "" {
 		return ErrKubeconfigNotFound
@@ -115,7 +135,13 @@ func runBackup(_ context.Context, cmd *cobra.Command, flags *backupFlags) error 
 	writer := cmd.OutOrStdout()
 	_, _ = fmt.Fprintf(writer, "Starting cluster backup...\n")
 	_, _ = fmt.Fprintf(writer, "   Output: %s\n", flags.outputPath)
-	_, _ = fmt.Fprintf(writer, "   Include volumes: %v\n", flags.includeVolumes)
+
+	if flags.includeVolumes {
+		_, _ = fmt.Fprintln(writer,
+			"Warning: --include-volumes is not yet implemented;"+
+				" volume data will NOT be included in this backup.",
+		)
+	}
 
 	if len(flags.namespaces) > 0 {
 		_, _ = fmt.Fprintf(writer, "   Namespaces: %v\n", flags.namespaces)
@@ -165,7 +191,7 @@ func createBackupArchive(
 		Version:      "v1",
 		Timestamp:    time.Now(),
 		ClusterName:  getClusterNameFromKubeconfig(kubeconfigPath),
-		KSailVersion: "5.0.0",
+		KSailVersion: buildmeta.Version,
 	}
 
 	_, _ = fmt.Fprintf(writer, "Exporting cluster resources...\n")
@@ -191,6 +217,19 @@ func createBackupArchive(
 	}
 
 	return nil
+}
+
+// clusterScopedResourceTypes returns resource types that are cluster-scoped
+// (not namespaced). These should never use -n or --all-namespaces flags.
+func clusterScopedResourceTypes() map[string]bool {
+	return map[string]bool{
+		"customresourcedefinitions": true,
+		"namespaces":               true,
+		"storageclasses":           true,
+		"persistentvolumes":        true,
+		"clusterroles":             true,
+		"clusterrolebindings":      true,
+	}
 }
 
 // backupResourceTypes returns the ordered list of resource types for backup.
@@ -283,12 +322,22 @@ func exportResourceType(
 		return 0, fmt.Errorf("failed to create resource directory: %w", err)
 	}
 
+	isClusterScoped := clusterScopedResourceTypes()[resourceType]
+
+	// Cluster-scoped resources are always fetched without namespace flags,
+	// even when specific namespaces are requested.
+	if isClusterScoped {
+		return executeGetAndSave(
+			kubeconfigPath, resourceDir, resourceType, "", true,
+		)
+	}
+
 	if len(flags.namespaces) > 0 {
 		totalCount := 0
 
 		for _, ns := range flags.namespaces {
 			count, err := executeGetAndSave(
-				kubeconfigPath, resourceDir, resourceType, ns,
+				kubeconfigPath, resourceDir, resourceType, ns, false,
 			)
 			if err != nil {
 				return totalCount, err
@@ -301,12 +350,13 @@ func exportResourceType(
 	}
 
 	return executeGetAndSave(
-		kubeconfigPath, resourceDir, resourceType, "",
+		kubeconfigPath, resourceDir, resourceType, "", false,
 	)
 }
 
 func executeGetAndSave(
 	kubeconfigPath, resourceDir, resourceType, namespace string,
+	clusterScoped bool,
 ) (int, error) {
 	filename := resourceType + ".yaml"
 	if namespace != "" {
@@ -315,9 +365,11 @@ func executeGetAndSave(
 
 	outputPath := filepath.Join(resourceDir, filename)
 
-	output, err := runKubectlGet(kubeconfigPath, resourceType, namespace)
+	output, stderr, err := runKubectlGet(
+		kubeconfigPath, resourceType, namespace, clusterScoped,
+	)
 	if err != nil {
-		if strings.Contains(err.Error(), "the server doesn't have a resource type") {
+		if strings.Contains(stderr, "the server doesn't have a resource type") {
 			return 0, nil
 		}
 
@@ -340,7 +392,8 @@ func executeGetAndSave(
 
 func runKubectlGet(
 	kubeconfigPath, resourceType, namespace string,
-) (string, error) {
+	clusterScoped bool,
+) (string, string, error) {
 	var outBuf, errBuf bytes.Buffer
 
 	client := kubectl.NewClient(genericiooptions.IOStreams{
@@ -352,7 +405,10 @@ func runKubectlGet(
 	getCmd := client.CreateGetCommand(kubeconfigPath)
 
 	args := []string{resourceType, "-o", "yaml"}
-	if namespace != "" {
+
+	if clusterScoped {
+		// Cluster-scoped resources don't use namespace flags.
+	} else if namespace != "" {
 		args = append(args, "-n", namespace)
 	} else {
 		args = append(args, "--all-namespaces")
@@ -364,12 +420,12 @@ func runKubectlGet(
 
 	err := getCmd.Execute()
 	if err != nil {
-		return errBuf.String(), fmt.Errorf(
+		return outBuf.String(), errBuf.String(), fmt.Errorf(
 			"kubectl get %s: %w", resourceType, err,
 		)
 	}
 
-	return outBuf.String(), nil
+	return outBuf.String(), errBuf.String(), nil
 }
 
 func writeMetadata(metadata *BackupMetadata, path string) error {
@@ -467,6 +523,15 @@ func addFileToTar(
 }
 
 func getClusterNameFromKubeconfig(kubeconfigPath string) string {
+	config, err := clientcmd.LoadFromFile(kubeconfigPath)
+	if err != nil {
+		return filepath.Base(kubeconfigPath)
+	}
+
+	if config.CurrentContext != "" {
+		return config.CurrentContext
+	}
+
 	return filepath.Base(kubeconfigPath)
 }
 
