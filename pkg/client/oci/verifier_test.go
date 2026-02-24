@@ -2,6 +2,8 @@ package oci_test
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -9,6 +11,30 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// mockVerifier is a test double for RegistryVerifier that tracks call count
+// and returns configurable errors per attempt.
+type mockVerifier struct {
+	callCount atomic.Int32
+	// errors is a list of errors to return per attempt. If fewer errors than
+	// attempts, the last error is repeated.
+	errors []error
+}
+
+func (m *mockVerifier) VerifyAccess(_ context.Context, _ oci.VerifyOptions) error {
+	idx := int(m.callCount.Add(1)) - 1
+	if idx < len(m.errors) {
+		return m.errors[idx]
+	}
+
+	return m.errors[len(m.errors)-1]
+}
+
+func (m *mockVerifier) ArtifactExists(
+	_ context.Context, _ oci.ArtifactExistsOptions,
+) (bool, error) {
+	return false, nil
+}
 
 func TestVerifyOptions_EmptyEndpoint(t *testing.T) {
 	t.Parallel()
@@ -157,4 +183,59 @@ func TestErrorsAreDistinct(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestVerifyWithRetry_RetriesOnRetryableError(t *testing.T) {
+	t.Parallel()
+
+	retryableErr := errors.New("context deadline exceeded")
+	mock := &mockVerifier{errors: []error{retryableErr, retryableErr, nil}}
+
+	err := oci.VerifyWithRetry(
+		context.Background(),
+		mock,
+		oci.VerifyOptions{RegistryEndpoint: "ghcr.io", Repository: "test/repo"},
+		100*time.Millisecond,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(3), mock.callCount.Load())
+}
+
+func TestVerifyWithRetry_NonRetryableErrorStopsImmediately(t *testing.T) {
+	t.Parallel()
+
+	nonRetryableErr := errors.New("unauthorized access")
+	mock := &mockVerifier{errors: []error{nonRetryableErr}}
+
+	err := oci.VerifyWithRetry(
+		context.Background(),
+		mock,
+		oci.VerifyOptions{RegistryEndpoint: "ghcr.io", Repository: "test/repo"},
+		100*time.Millisecond,
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "registry access verification failed")
+	assert.Contains(t, err.Error(), "unauthorized access")
+	assert.Equal(t, int32(1), mock.callCount.Load())
+}
+
+func TestVerifyWithRetry_AllAttemptsExhausted(t *testing.T) {
+	t.Parallel()
+
+	retryableErr := errors.New("502 Bad Gateway")
+	mock := &mockVerifier{errors: []error{retryableErr}}
+
+	err := oci.VerifyWithRetry(
+		context.Background(),
+		mock,
+		oci.VerifyOptions{RegistryEndpoint: "ghcr.io", Repository: "test/repo"},
+		100*time.Millisecond,
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "registry access verification failed")
+	assert.Contains(t, err.Error(), "502 Bad Gateway")
+	assert.Equal(t, int32(3), mock.callCount.Load())
 }

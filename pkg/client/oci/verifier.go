@@ -322,7 +322,7 @@ func extractErrorDetail(errStr string) string {
 
 // Registry verification retry constants.
 const (
-	verifyMaxRetries    = 3
+	verifyMaxAttempts   = 3
 	verifyRetryBaseWait = 2 * time.Second
 	verifyRetryMaxWait  = 10 * time.Second
 )
@@ -334,14 +334,23 @@ func VerifyRegistryAccessWithTimeout(
 	opts VerifyOptions,
 	timeout time.Duration,
 ) error {
-	verifier := NewRegistryVerifier()
+	return verifyWithRetry(ctx, NewRegistryVerifier(), opts, timeout)
+}
 
+// verifyWithRetry is the core retry loop for registry verification.
+// It accepts a RegistryVerifier for testability.
+func verifyWithRetry(
+	ctx context.Context,
+	registryVerifier RegistryVerifier,
+	opts VerifyOptions,
+	timeout time.Duration,
+) error {
 	var lastErr error
 
-	for attempt := 1; attempt <= verifyMaxRetries; attempt++ {
+	for attempt := 1; attempt <= verifyMaxAttempts; attempt++ {
 		verifyCtx, cancel := context.WithTimeout(ctx, timeout)
 
-		err := verifier.VerifyAccess(verifyCtx, opts)
+		err := registryVerifier.VerifyAccess(verifyCtx, opts)
 
 		cancel()
 
@@ -351,7 +360,7 @@ func VerifyRegistryAccessWithTimeout(
 
 		lastErr = err
 
-		if !netretry.IsRetryable(lastErr) || attempt == verifyMaxRetries {
+		if !netretry.IsRetryable(lastErr) || attempt == verifyMaxAttempts {
 			break
 		}
 
