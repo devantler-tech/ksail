@@ -105,7 +105,17 @@ func handleUpdateRunE(
 	// Check if provisioner supports updates
 	updater, supportsUpdate := provisioner.(clusterprovisioner.Updater)
 	if !supportsUpdate {
+		// Compute a spec-level diff to determine if there are actual changes
+		// before falling back to recreation. No-op when nothing changed.
+		specDiff := computeSpecOnlyDiff(cmd, ctx)
+		if specDiff.TotalChanges() == 0 {
+			notify.Infof(cmd.OutOrStdout(), "No changes detected")
+
+			return nil
+		}
+
 		if cfgManager.Viper.GetBool("dry-run") {
+			displayChangesSummary(cmd, specDiff)
 			notify.Infof(
 				cmd.OutOrStdout(),
 				"Provisioner does not support in-place updates; "+
@@ -118,20 +128,11 @@ func handleUpdateRunE(
 		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 	}
 
-	// Compute full diff (falls back to nil diff if config retrieval fails)
-	currentSpec, diff := computeUpdateDiff(cmd, ctx, updater, clusterName)
-	if diff == nil {
-		if cfgManager.Viper.GetBool("dry-run") {
-			notify.Infof(
-				cmd.OutOrStdout(),
-				"Could not retrieve current configuration; "+
-					"recreation would be required.\nDry run complete. No changes applied.",
-			)
-
-			return nil
-		}
-
-		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
+	// Compute full diff; return error if current config cannot be retrieved
+	// instead of falling back to recreation, which would be destructive.
+	currentSpec, diff, diffErr := computeUpdateDiff(cmd, ctx, updater, clusterName)
+	if diffErr != nil {
+		return diffErr
 	}
 
 	// Display changes summary
@@ -222,28 +223,25 @@ func buildComponentDetector(
 }
 
 // computeUpdateDiff retrieves current config and computes the full diff.
-// Returns nil diff if current config could not be retrieved (caller should fall back to recreate).
+// Returns an error if current config could not be retrieved; the caller should
+// surface the error rather than silently recreating the cluster.
 func computeUpdateDiff(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
 	updater clusterprovisioner.Updater,
 	clusterName string,
-) (*v1alpha1.ClusterSpec, *clusterupdate.UpdateResult) {
+) (*v1alpha1.ClusterSpec, *clusterupdate.UpdateResult, error) {
+	currentSpec, err := updater.GetCurrentConfig(cmd.Context())
+	if err != nil {
+		return nil, nil, fmt.Errorf(
+			"could not retrieve current cluster configuration: %w", err,
+		)
+	}
+
 	diffEngine := specdiff.NewEngine(
 		ctx.ClusterCfg.Spec.Cluster.Distribution,
 		ctx.ClusterCfg.Spec.Cluster.Provider,
 	)
-
-	currentSpec, err := updater.GetCurrentConfig(cmd.Context())
-	if err != nil {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.WarningType,
-			Content: "Could not retrieve current cluster configuration, falling back to recreate",
-			Writer:  cmd.OutOrStderr(),
-		})
-
-		return nil, nil
-	}
 
 	diff := diffEngine.ComputeDiff(currentSpec, &ctx.ClusterCfg.Spec.Cluster)
 
@@ -254,7 +252,49 @@ func computeUpdateDiff(
 		specdiff.MergeProvisionerDiff(diff, provisionerDiff)
 	}
 
-	return currentSpec, diff
+	return currentSpec, diff, nil
+}
+
+// computeSpecOnlyDiff computes a spec-level diff using default values as
+// the baseline current state. This is used for provisioners that do not
+// implement the Updater interface (e.g., VCluster) to avoid blind recreation
+// when there are no actual configuration changes.
+func computeSpecOnlyDiff(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+) *clusterupdate.UpdateResult {
+	currentSpec := clusterupdate.DefaultCurrentSpec(
+		ctx.ClusterCfg.Spec.Cluster.Distribution,
+		ctx.ClusterCfg.Spec.Cluster.Provider,
+	)
+
+	clusterupdate.ApplyGitOpsLocalRegistryDefault(currentSpec)
+
+	// Use component detection when available to get more accurate baseline.
+	componentDetector := buildComponentDetector(cmd, ctx)
+	if componentDetector != nil {
+		detected, err := componentDetector.DetectComponents(
+			cmd.Context(),
+			ctx.ClusterCfg.Spec.Cluster.Distribution,
+			ctx.ClusterCfg.Spec.Cluster.Provider,
+		)
+		if err == nil {
+			currentSpec.CNI = detected.CNI
+			currentSpec.CSI = detected.CSI
+			currentSpec.MetricsServer = detected.MetricsServer
+			currentSpec.LoadBalancer = detected.LoadBalancer
+			currentSpec.CertManager = detected.CertManager
+			currentSpec.PolicyEngine = detected.PolicyEngine
+			currentSpec.GitOpsEngine = detected.GitOpsEngine
+		}
+	}
+
+	diffEngine := specdiff.NewEngine(
+		ctx.ClusterCfg.Spec.Cluster.Distribution,
+		ctx.ClusterCfg.Spec.Cluster.Provider,
+	)
+
+	return diffEngine.ComputeDiff(currentSpec, &ctx.ClusterCfg.Spec.Cluster)
 }
 
 // applyOrReportChanges handles dry-run, recreate-required, no-changes, and

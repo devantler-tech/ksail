@@ -70,10 +70,9 @@ ksail cluster init \
   --name dev \
   --distribution K3s \
   --cni Cilium \
-  --csi LocalPathProvisioner \
+  --csi Enabled \
   --gitops-engine Flux \
-  --local-registry \
-  --local-registry-port 5050
+  --local-registry localhost:5050
 ```
 
 **Why this configuration:**
@@ -140,11 +139,11 @@ apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
-    name: ci-test
     distribution: K3s
     cni: Cilium
     gitOpsEngine: Flux
-    localRegistry: Enabled
+    localRegistry:
+      registry: localhost:5050
   workload:
     sourceDirectory: k8s
 ```

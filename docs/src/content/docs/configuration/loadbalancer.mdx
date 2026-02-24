@@ -14,7 +14,7 @@ LoadBalancer support varies by Kubernetes distribution and infrastructure provid
 | Vanilla (Kind) | Docker   | Cloud Provider KIND         | Disabled         | Yes                    |
 | K3s (K3d)      | Docker   | ServiceLB (Klipper)         | Enabled          | No                     |
 | Talos          | Docker   | MetalLB                     | Disabled         | Yes                    |
-| Talos          | Hetzner  | Hetzner Cloud Load Balancer | Enabled          | No                     |
+| Talos          | Hetzner  | hcloud-cloud-controller-manager | Enabled          | No                     |
 
 **Key Points:**
 
@@ -54,10 +54,8 @@ ksail cluster init \
 **ksail.yaml:**
 
 ```yaml
-apiVersion: ksail.devantler.tech/v1alpha1
+apiVersion: ksail.io/v1alpha1
 kind: Cluster
-metadata:
-  name: my-cluster
 spec:
   cluster:
     distribution: Vanilla
@@ -188,10 +186,8 @@ ksail cluster init \
 **ksail.yaml:**
 
 ```yaml
-apiVersion: ksail.devantler.tech/v1alpha1
+apiVersion: ksail.io/v1alpha1
 kind: Cluster
-metadata:
-  name: my-cluster
 spec:
   cluster:
     distribution: Talos
@@ -272,19 +268,40 @@ spec:
 
 ### Talos on Hetzner
 
-**Implementation:** Hetzner Cloud Load Balancer
+**Implementation:** hcloud-cloud-controller-manager
 
-Talos on Hetzner Cloud uses the native [Hetzner Cloud Controller Manager](https://github.com/hetznercloud/hcloud-cloud-controller-manager) to provision real cloud load balancers.
+Talos on Hetzner Cloud uses the [Hetzner Cloud Controller Manager](https://github.com/hetznercloud/hcloud-cloud-controller-manager) to provision real cloud load balancers.
 
-#### Default Configuration
+#### LoadBalancer Support
 
-LoadBalancer support is **enabled by default** when using Talos on Hetzner—no additional configuration needed:
+LoadBalancer is **enabled by default** for Talos × Hetzner clusters. KSail automatically installs hcloud-ccm when `loadBalancer` is `Default` or `Enabled`.
+
+**CLI:**
 
 ```bash
 export HCLOUD_TOKEN=your-token-here
-ksail cluster init --name my-cluster --distribution Talos --provider Hetzner
+ksail cluster init \
+  --name my-cluster \
+  --distribution Talos \
+  --provider Hetzner
 ksail cluster create
 ```
+
+**ksail.yaml:**
+
+```yaml
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Talos
+    provider: Hetzner
+```
+
+**Prerequisites:**
+
+- `HCLOUD_TOKEN` environment variable must be set with a valid Hetzner Cloud API token
+- The token requires read/write permissions for Load Balancers
 
 #### How It Works
 

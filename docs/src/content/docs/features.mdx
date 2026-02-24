@@ -71,7 +71,7 @@ ksail workload logs deployment/my-app
 Enable GitOps with [Flux or ArgoCD](/concepts/#gitops) for declarative, Git-driven deployments. KSail automatically installs the GitOps engine, scaffolds FluxInstance or ArgoCD Application CRs, and provides commands to package manifests as OCI artifacts, push to the local registry, and trigger reconciliation.
 
 ```bash
-ksail cluster init --gitops-engine Flux --local-registry
+ksail cluster init --gitops-engine Flux --local-registry localhost:5050
 ksail cluster create
 ksail workload push
 ksail workload reconcile
@@ -90,7 +90,7 @@ Run local [OCI registries](/concepts/#oci-registries) for faster image pulls, Gi
 
 ### Local Registry
 ```bash
-ksail cluster init --local-registry --local-registry-port 5050
+ksail cluster init --local-registry localhost:5050
 ksail cluster create
 
 docker tag my-app localhost:5050/my-app
@@ -99,10 +99,10 @@ docker push localhost:5050/my-app
 
 ### Mirror Registries
 
-KSail enables `docker.io` and `ghcr.io` mirrors by default to avoid rate limits and improve CI/CD performance. Mirror registries create local pull-through cache containers that authenticate to upstream registries using credentials resolved from `${ENV_VAR}` placeholders, with cached images persisting across restarts. Supported across all distributions via containerd `hosts.toml` injection (Vanilla, VCluster), K3d registries configuration (K3s), or machine config patches (Talos).
+KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default to avoid rate limits and improve CI/CD performance. Mirror registries create local pull-through cache containers that authenticate to upstream registries using credentials resolved from `${ENV_VAR}` placeholders, with cached images persisting across restarts. Supported across all distributions via containerd `hosts.toml` injection (Vanilla, VCluster), K3d registries configuration (K3s), or machine config patches (Talos).
 
 ```bash
-# Default mirrors (docker.io and ghcr.io)
+# Default mirrors (docker.io, ghcr.io, quay.io, registry.k8s.io)
 ksail cluster init
 
 # Add authenticated mirrors (format: [user:pass@]host[=endpoint])
@@ -157,7 +157,8 @@ spec:
     distribution: Vanilla
     cni: Cilium
     gitOpsEngine: Flux
-    localRegistry: Enabled
+    localRegistry:
+      registry: localhost:5050
   workload:
     sourceDirectory: k8s
 ```
