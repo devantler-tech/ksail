@@ -12,6 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test sentinel errors for retry behavior tests.
+var (
+	errDeadlineExceeded = errors.New("context deadline exceeded")
+	errUnauthorized     = errors.New("unauthorized access")
+	errBadGateway       = errors.New("502 Bad Gateway")
+)
+
 // mockVerifier is a test double for RegistryVerifier that tracks call count
 // and returns configurable errors per attempt.
 type mockVerifier struct {
@@ -188,8 +195,7 @@ func TestErrorsAreDistinct(t *testing.T) {
 func TestVerifyWithRetry_RetriesOnRetryableError(t *testing.T) {
 	t.Parallel()
 
-	retryableErr := errors.New("context deadline exceeded")
-	mock := &mockVerifier{errors: []error{retryableErr, retryableErr, nil}}
+	mock := &mockVerifier{errors: []error{errDeadlineExceeded, errDeadlineExceeded, nil}}
 
 	err := oci.VerifyWithRetry(
 		context.Background(),
@@ -205,8 +211,7 @@ func TestVerifyWithRetry_RetriesOnRetryableError(t *testing.T) {
 func TestVerifyWithRetry_NonRetryableErrorStopsImmediately(t *testing.T) {
 	t.Parallel()
 
-	nonRetryableErr := errors.New("unauthorized access")
-	mock := &mockVerifier{errors: []error{nonRetryableErr}}
+	mock := &mockVerifier{errors: []error{errUnauthorized}}
 
 	err := oci.VerifyWithRetry(
 		context.Background(),
@@ -224,8 +229,7 @@ func TestVerifyWithRetry_NonRetryableErrorStopsImmediately(t *testing.T) {
 func TestVerifyWithRetry_AllAttemptsExhausted(t *testing.T) {
 	t.Parallel()
 
-	retryableErr := errors.New("502 Bad Gateway")
-	mock := &mockVerifier{errors: []error{retryableErr}}
+	mock := &mockVerifier{errors: []error{errBadGateway}}
 
 	err := oci.VerifyWithRetry(
 		context.Background(),
