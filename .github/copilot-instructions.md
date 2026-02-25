@@ -279,12 +279,12 @@ npm run dev                            # Test locally (if needed)
 
 **Distribution Names (user-facing):**
 
-| Distribution | Tool  | Provider               | Description                                    |
-|--------------|-------|------------------------|------------------------------------------------|
-| `Vanilla`    | Kind  | Docker                 | Standard upstream Kubernetes                   |
-| `K3s`        | K3d   | Docker                 | Lightweight K3s in Docker                      |
-| `Talos`      | Talos | Docker, Hetzner, Omni  | Immutable Talos Linux                          |
-| `VCluster`   | Vind  | Docker                 | Virtual clusters via vCluster (Vind) in Docker |
+| Distribution | Tool  | Provider              | Description                                    |
+|--------------|-------|-----------------------|------------------------------------------------|
+| `Vanilla`    | Kind  | Docker                | Standard upstream Kubernetes                   |
+| `K3s`        | K3d   | Docker                | Lightweight K3s in Docker                      |
+| `Talos`      | Talos | Docker, Hetzner, Omni | Immutable Talos Linux                          |
+| `VCluster`   | Vind  | Docker                | Virtual clusters via vCluster (Vind) in Docker |
 
 **Key Packages:**
 
