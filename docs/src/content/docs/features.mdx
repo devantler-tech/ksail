@@ -41,7 +41,7 @@ ksail cluster create
 
 ## Workload Management
 
-Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; generate resources; debug with logs, exec, describe, and explain; and validate manifests against schemas.
+Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; create, edit, delete, and inspect resources; debug with logs, exec, describe, and explain; expose services; export and import container images; and validate manifests against schemas.
 
 ```bash
 ksail workload apply -k k8s/
@@ -51,20 +51,26 @@ ksail workload logs deployment/my-app
 
 **Commands:** [`ksail workload`](/cli-flags/workload/workload-root/)
 
-| Command                   | Description                        |
-| ------------------------- | ---------------------------------- |
-| `ksail workload apply`    | Apply manifests to cluster         |
-| `ksail workload get`      | Get resources                      |
-| `ksail workload describe` | Describe resources                 |
-| `ksail workload logs`     | View container logs                |
-| `ksail workload exec`     | Execute command in container       |
-| `ksail workload gen`      | Generate Kubernetes manifests      |
-| `ksail workload validate` | Validate manifests against schemas |
-| `ksail workload install`  | Install Helm charts                |
-| `ksail workload scale`    | Scale deployments                  |
-| `ksail workload rollout`  | Manage rollouts                    |
-| `ksail workload wait`     | Wait for conditions                |
-| `ksail workload images`   | List required container images     |
+| Command                    | Description                              |
+| -------------------------- | ---------------------------------------- |
+| `ksail workload apply`     | Apply manifests to cluster               |
+| `ksail workload get`       | Get resources                            |
+| `ksail workload describe`  | Describe resources                       |
+| `ksail workload delete`    | Delete Kubernetes resources              |
+| `ksail workload edit`      | Edit a resource in-place                 |
+| `ksail workload explain`   | Get documentation for a resource type    |
+| `ksail workload logs`      | View container logs                      |
+| `ksail workload exec`      | Execute command in container             |
+| `ksail workload expose`    | Expose a resource as a service           |
+| `ksail workload export`    | Export container images to tar archive   |
+| `ksail workload import`    | Import container images from tar archive |
+| `ksail workload gen`       | Generate Kubernetes manifests            |
+| `ksail workload validate`  | Validate manifests against schemas       |
+| `ksail workload install`   | Install Helm charts                      |
+| `ksail workload scale`     | Scale deployments                        |
+| `ksail workload rollout`   | Manage rollouts                          |
+| `ksail workload wait`      | Wait for conditions                      |
+| `ksail workload images`    | List required container images           |
 
 ## GitOps Workflows
 
