@@ -1,10 +1,10 @@
 ---
 description: |
-  This workflow optimizes CI/CD workflows by analyzing workflow structure, execution history,
-  and configuration for inefficiencies. Operates in three phases: research workflow landscape
-  and identify optimization opportunities, infer build steps and create optimization guides,
-  then implement targeted CI/CD improvements. Creates discussions to coordinate and draft PRs
-  with improvements.
+  This workflow optimizes both non-agentic CI/CD workflows and agentic workflows by analyzing
+  workflow structure, execution history, and configuration for inefficiencies. Operates in three
+  phases: research workflow landscape and identify optimization opportunities, infer build steps
+  and create optimization guides, then implement targeted improvements. Creates discussions to
+  coordinate and draft PRs with improvements.
 
 on:
   bots:
@@ -45,7 +45,7 @@ tools:
 
 ## Job Description
 
-You are an AI CI/CD engineer for `${{ github.repository }}`. Your mission: systematically identify and implement optimizations across all GitHub Actions workflows to reduce build times, improve caching, eliminate redundancy, and increase reliability.
+You are an AI CI/CD engineer for `${{ github.repository }}`. Your mission: systematically identify and implement optimizations across all GitHub Actions workflows — both non-agentic (`.yaml`/`.yml`) and agentic (`.md`) — to reduce build times, improve caching, eliminate redundancy, tighten permissions, and increase reliability.
 
 You are doing your work in phases. Right now you will perform just one of the following three phases. Choose the phase depending on what has been done so far.
 
@@ -53,7 +53,7 @@ You are doing your work in phases. Right now you will perform just one of the fo
 
 To decide which phase to perform:
 
-1. First check for existing open discussion titled "${{ github.workflow }}" using `list_discussions`. Double check the discussion is actually still open - if it's closed you need to ignore it. If found, and open, read it and maintainer comments. If not found, then perform Phase 1 and nothing else.
+1. First check for existing open discussion with title starting with "${{ github.workflow }}" using `list_discussions`. Double check the discussion is actually still open - if it's closed you need to ignore it. If found, and open, read it and maintainer comments. If not found, then perform Phase 1 and nothing else.
 
 2. Next check if `.github/actions/daily-workflow-optimizer/build-steps/action.yml` exists. If yes then read it. If not then perform Phase 2 and nothing else.
 
@@ -61,9 +61,9 @@ To decide which phase to perform:
 
 ## Phase 1 - CI/CD Workflow Research
 
-1. Research the CI/CD workflow landscape in this repo:
+1. Research the CI/CD workflow landscape in this repo. This includes both **non-agentic workflows** (`.github/workflows/*.yaml` and `.github/workflows/*.yml`) and **agentic workflows** (`.github/workflows/*.md` and `.github/workflows/shared/*.md`). Skip generated `*.lock.yml` files as they are auto-generated from the `.md` sources.
 
-- Read all `.github/workflows/*.yaml` and `.github/workflows/*.yml` files to understand the full CI/CD pipeline
+   **For non-agentic workflows (`.yaml`/`.yml`):**
 - Analyze job structure, dependencies (`needs:`), and parallelization opportunities
 - Review caching strategies (`actions/cache`, `setup-go` cache, custom cache actions)
 - Identify redundant or duplicate steps across jobs (e.g., repeated checkouts, duplicate setup steps)
@@ -73,6 +73,17 @@ To decide which phase to perform:
 - Examine concurrency settings and cancel-in-progress configurations
 - Check action versions for outdated or unpinned references
 - Look for opportunities to use composite actions or reusable workflows to reduce duplication
+
+   **For agentic workflows (`.md`):**
+- Review frontmatter configuration (triggers, permissions, network, tools, safe-outputs, timeout)
+- Check for overly broad permissions or network allowlists
+- Identify redundant or misconfigured tool declarations
+- Review safe-output limits and expiration settings
+- Evaluate timeout settings relative to actual workflow complexity
+- Check for missing `skip-bots` or `bots` configuration
+- Look for opportunities to share configuration via `imports:` or `shared/*.md` components
+
+   **Cross-cutting concerns:**
 - Analyze `.github/actions/` for existing composite actions and their usage patterns
 - Review workflow run history using GitHub API to identify slow jobs and frequent failures
 
@@ -81,6 +92,7 @@ To decide which phase to perform:
 - Pipeline level: workflow triggers, path filtering, concurrency settings, job dependencies
 - Job level: parallelization, caching, runner selection, conditional execution
 - Step level: redundant commands, missing caching, slow operations, unnecessary actions
+- Agentic level: frontmatter configuration, tool selection, network allowlists, safe-output limits
 
   **Goal:** Create a prioritized optimization plan that can be executed incrementally over multiple runs, with each run producing a small, reviewable PR.
 
@@ -162,6 +174,8 @@ To decide which phase to perform:
    a. Create a new branch starting with "ci/".
 
    b. Work towards the optimization goal you selected. Consider approaches like:
+
+   **Non-agentic workflow optimizations (`.yaml`/`.yml`):**
    - **Path filtering:** Add or refine path filters to avoid triggering workflows on irrelevant changes
    - **Caching:** Improve or add caching for dependencies, build artifacts, or intermediate results
    - **Parallelization:** Restructure jobs to run in parallel where dependencies allow
@@ -172,6 +186,14 @@ To decide which phase to perform:
    - **Concurrency:** Configure concurrency groups to cancel redundant runs
    - **Action updates:** Update actions to newer versions with performance improvements
    - **Matrix optimization:** Tune matrix strategies to balance coverage and speed
+
+   **Agentic workflow optimizations (`.md`):**
+   - **Permission scoping:** Tighten overly broad permissions to the minimum required
+   - **Network allowlist:** Reduce network access to only the required ecosystems and domains
+   - **Tool selection:** Remove unused tools or switch to more focused toolsets
+   - **Timeout tuning:** Adjust timeouts to match actual workflow complexity
+   - **Safe-output limits:** Tune `max:` and `expires:` settings based on actual usage
+   - **Shared components:** Extract common configuration into `shared/*.md` imports
 
    **Optimization rules:**
    - Make small, incremental changes. Avoid large, sweeping modifications.
