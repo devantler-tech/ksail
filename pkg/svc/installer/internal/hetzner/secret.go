@@ -72,7 +72,23 @@ func ensureSecret(ctx context.Context, client kubernetes.Interface, token string
 
 		_, err = secrets.Create(ctx, secret, metav1.CreateOptions{})
 		if err != nil {
-			return fmt.Errorf("failed to create secret: %w", err)
+			if !apierrors.IsAlreadyExists(err) {
+				return fmt.Errorf("failed to create secret: %w", err)
+			}
+
+			// Another installer created the secret concurrently; fall back to update.
+			existingSecret, err = secrets.Get(ctx, SecretName, metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to get secret after conflict: %w", err)
+			}
+
+			existingSecret.Data = secret.Data
+			existingSecret.StringData = nil
+
+			_, err = secrets.Update(ctx, existingSecret, metav1.UpdateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to update secret after conflict: %w", err)
+			}
 		}
 	} else {
 		// Update the existing secret's data while preserving its metadata
