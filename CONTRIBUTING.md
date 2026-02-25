@@ -94,7 +94,7 @@ benchstat before.txt after.txt
 
 PRs that modify Go code are automatically benchmarked against `main` and the comparison is posted as a PR comment. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details on interpreting results.
 
-See package-specific BENCHMARKS.md files (e.g., `pkg/k8s/readiness/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
+See package-specific BENCHMARKS.md files (e.g., `pkg/k8s/readiness/BENCHMARKS.md`, `pkg/client/flux/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
 
 ### Documentation
 
@@ -179,11 +179,15 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 
 - **apis/** - API types, schemas, and enums (distribution/provider values)
 - **client/** - Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
+- **client/reconciler/** - Common base for GitOps reconciliation clients (Flux and ArgoCD)
+- **svc/detector/** - Detects installed Kubernetes components (Helm releases and Kubernetes API); used by the update command to build accurate baseline cluster state
+- **svc/diff/** - Computes configuration differences between ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
+- **svc/image/** - Container image export/import services for Vanilla and K3s distributions
+- **svc/installer/** - Component installers (CNI, CSI, metrics-server, etc.)
 - **svc/provider/** - Infrastructure providers (e.g., `docker.Provider` for running nodes as containers)
 - **svc/provisioner/** - Distribution provisioners (Vanilla, K3s, Talos, VCluster)
-- **svc/installer/** - Component installers (CNI, CSI, metrics-server, etc.)
-- **svc/image/** - Container image export/import services for Vanilla and K3s distributions
-- **client/reconciler/** - Common base for GitOps reconciliation clients (Flux and ArgoCD)
+- **svc/registryresolver/** - OCI registry detection, resolution, and artifact push utilities
+- **svc/state/** - Cluster state persistence for distributions that cannot introspect their running configuration (Kind, K3d)
 - **di/** - Dependency injection for wiring components
 
 ### Architecture: Providers vs Provisioners
