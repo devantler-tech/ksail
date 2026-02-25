@@ -57,12 +57,14 @@ const dbusWaitInterval = 500 * time.Millisecond
 // which fails when D-Bus hasn't initialized yet inside the privileged container.
 const dbusErrorSubstring = "Failed to connect to bus"
 
-// transientExitStatuses lists exit status substrings that indicate potentially
+// transientExitStatuses returns exit status substrings that indicate potentially
 // transient infrastructure failures during vCluster standalone startup.
 // Exit status 22 (EINVAL) has been observed on CI runners where the Docker
 // daemon or container runtime hits a temporary invalid-argument condition.
-var transientExitStatuses = []string{
-	"exit status 22",
+func transientExitStatuses() []string {
+	return []string{
+		"exit status 22",
+	}
 }
 
 // errDBusTimeout is returned when D-Bus does not become available
@@ -156,7 +158,8 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	globalFlags := newGlobalFlags()
 	logger := newStreamLogger()
 
-	if err := createWithRetry(ctx, opts, globalFlags, target, logger); err != nil {
+	err = createWithRetry(ctx, opts, globalFlags, target, logger)
+	if err != nil {
 		return err
 	}
 
@@ -231,7 +234,7 @@ func createWithRetry(
 func isTransientCreateError(err error) bool {
 	msg := err.Error()
 
-	for _, s := range transientExitStatuses {
+	for _, s := range transientExitStatuses() {
 		if strings.Contains(msg, s) {
 			return true
 		}
