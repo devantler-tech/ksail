@@ -27,13 +27,15 @@ docker system prune -f
 
 ### Port Already in Use
 
-If you encounter `Error: Port 5000 is already allocated`, either use a different port with `--local-registry localhost:5050` or kill the process using the port:
+If you encounter `Error: Port 5000 is already allocated`, either configure a different local registry address (for example, `--local-registry localhost:5050`) or kill the process currently using the port:
 
 ```bash
 # macOS/Linux
 lsof -ti:5000 | xargs kill -9
 
-# Windows: netstat -ano | findstr :5000, then kill the process ID
+# Windows: find the PID, then kill it
+netstat -ano | findstr :5000
+taskkill /PID <process-id> /F
 ```
 
 ## GitOps Workflow Issues
