@@ -82,6 +82,7 @@ func testNewSimpleLifecycleCmdWithFlags(t *testing.T) {
 		Success:      "Cluster started",
 		Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
 			actionCalled = true
+
 			return nil
 		},
 	}
@@ -167,6 +168,7 @@ func TestSimpleLifecycleConfig_Struct(t *testing.T) {
 			Success:      "Started",
 			Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
 				actionCalled = true
+
 				return nil
 			},
 		}
@@ -204,6 +206,7 @@ func TestLifecycleConfig_Struct(t *testing.T) {
 			ErrorMessagePrefix: "Failed to start",
 			Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
 				actionCalled = true
+
 				return nil
 			},
 		}
@@ -288,9 +291,10 @@ func TestActionSignature(t *testing.T) {
 			provisioner clusterprovisioner.Provisioner,
 			clusterName string,
 		) error {
-			receivedCtx = ctx
+			receivedCtx := ctx
 			receivedProvisioner = provisioner
 			receivedClusterName = clusterName
+
 			return nil
 		})
 

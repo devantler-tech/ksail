@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/spf13/cobra"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -30,9 +30,9 @@ type mockTimer struct {
 	completed bool
 }
 
-func (m *mockTimer) Start()                              { m.started = true }
-func (m *mockTimer) NewStage()                           { m.stages++ }
-func (m *mockTimer) Stop()                               { m.completed = true }
+func (m *mockTimer) Start()                                    { m.started = true }
+func (m *mockTimer) NewStage()                                 { m.stages++ }
+func (m *mockTimer) Stop()                                     { m.completed = true }
 func (m *mockTimer) GetTiming() (time.Duration, time.Duration) { return 0, 0 }
 
 // mockFactory implements clusterprovisioner.Factory for testing.
@@ -58,31 +58,37 @@ type mockProvisioner struct {
 
 func (m *mockProvisioner) Create(_ context.Context, _ string) error {
 	m.called = true
+
 	return m.actionErr
 }
 
 func (m *mockProvisioner) Start(_ context.Context, _ string) error {
 	m.called = true
+
 	return m.actionErr
 }
 
 func (m *mockProvisioner) Stop(_ context.Context, _ string) error {
 	m.called = true
+
 	return m.actionErr
 }
 
 func (m *mockProvisioner) Delete(_ context.Context, _ string) error {
 	m.called = true
+
 	return m.actionErr
 }
 
 func (m *mockProvisioner) List(_ context.Context) ([]string, error) {
 	m.called = true
+
 	return nil, m.actionErr
 }
 
 func (m *mockProvisioner) Exists(_ context.Context, _ string) (bool, error) {
 	m.called = true
+
 	return false, m.actionErr
 }
 
@@ -281,6 +287,7 @@ func testRunWithConfigActionError(t *testing.T) {
 		ActivityContent: "Cluster is starting...",
 		Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
 			actionCalled = true
+
 			return errActionFailed
 		},
 	}
@@ -310,7 +317,9 @@ func testRunWithConfigSuccess(t *testing.T) {
 		},
 	}
 	deps := lifecycle.Deps{Timer: &mockTimer{}, Factory: factory}
+
 	var receivedClusterName string
+
 	config := lifecycle.Config{
 		TitleEmoji:      "🚀",
 		TitleContent:    "Starting Cluster",
@@ -318,6 +327,7 @@ func testRunWithConfigSuccess(t *testing.T) {
 		SuccessContent:  "Cluster started",
 		Action: func(_ context.Context, _ clusterprovisioner.Provisioner, name string) error {
 			receivedClusterName = name
+
 			return nil
 		},
 	}
@@ -342,10 +352,10 @@ func TestNewStandardRunE(t *testing.T) {
 		cfgManager := ksailconfigmanager.NewConfigManager(nil)
 
 		config := lifecycle.Config{
-			TitleEmoji:   "🚀",
-			TitleContent: "Testing",
-			ActivityContent:     "Running test",
-			SuccessContent:      "Test completed",
+			TitleEmoji:      "🚀",
+			TitleContent:    "Testing",
+			ActivityContent: "Running test",
+			SuccessContent:  "Test completed",
 			Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
 				return nil
 			},
@@ -370,6 +380,7 @@ func TestWrapHandler(t *testing.T) {
 		handlerCalled := false
 		handler := func(_ *cobra.Command, _ *ksailconfigmanager.ConfigManager, _ lifecycle.Deps) error {
 			handlerCalled = true
+
 			return nil
 		}
 
