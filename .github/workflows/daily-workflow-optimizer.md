@@ -19,7 +19,7 @@ timeout-minutes: 30
 permissions: read-all
 
 network:
-  allowed: [defaults]
+  allowed: [defaults, go]
 
 strict: false
 
