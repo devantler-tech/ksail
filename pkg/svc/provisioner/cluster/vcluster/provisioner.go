@@ -67,6 +67,32 @@ func transientExitStatuses() []string {
 	}
 }
 
+// createDockerFn matches the signature of cli.CreateDocker for dependency injection.
+type createDockerFn func(
+	ctx context.Context,
+	opts *cli.CreateOptions,
+	globalFlags *flags.GlobalFlags,
+	name string,
+	logger loftlog.Logger,
+) error
+
+// retryCleanupFn is the signature for the cleanup function called between
+// retry attempts to remove partially-created cluster state.
+type retryCleanupFn func(
+	ctx context.Context,
+	globalFlags *flags.GlobalFlags,
+	clusterName string,
+	logger loftlog.Logger,
+)
+
+// dbusRecoverFn is the signature for the D-Bus error recovery function.
+type dbusRecoverFn func(
+	ctx context.Context,
+	globalFlags *flags.GlobalFlags,
+	clusterName string,
+	logger loftlog.Logger,
+) error
+
 // errDBusTimeout is returned when D-Bus does not become available
 // within the configured timeout.
 var errDBusTimeout = errors.New("D-Bus socket did not appear within timeout")
@@ -158,7 +184,10 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	globalFlags := newGlobalFlags()
 	logger := newStreamLogger()
 
-	err = createWithRetry(ctx, opts, globalFlags, target, logger)
+	err = createWithRetry(
+		ctx, opts, globalFlags, target, logger,
+		createRetryDelay, cli.CreateDocker, cleanupFailedCreate, recoverFromDBusError,
+	)
 	if err != nil {
 		return err
 	}
@@ -175,6 +204,10 @@ func createWithRetry(
 	globalFlags *flags.GlobalFlags,
 	clusterName string,
 	logger loftlog.Logger,
+	retryDelay time.Duration,
+	create createDockerFn,
+	cleanup retryCleanupFn,
+	recoverDBus dbusRecoverFn,
 ) error {
 	var lastErr error
 
@@ -185,16 +218,16 @@ func createWithRetry(
 				attempt+1, createMaxAttempts,
 			)
 
-			cleanupFailedCreate(ctx, globalFlags, clusterName, logger)
+			cleanup(ctx, globalFlags, clusterName, logger)
 
 			select {
 			case <-ctx.Done():
 				return fmt.Errorf("context cancelled during create retry: %w", ctx.Err())
-			case <-time.After(createRetryDelay):
+			case <-time.After(retryDelay):
 			}
 		}
 
-		lastErr = cli.CreateDocker(ctx, opts, globalFlags, clusterName, logger)
+		lastErr = create(ctx, opts, globalFlags, clusterName, logger)
 		if lastErr == nil {
 			return nil
 		}
@@ -204,7 +237,7 @@ func createWithRetry(
 		if strings.Contains(lastErr.Error(), dbusErrorSubstring) {
 			logger.Infof("D-Bus not ready in container — recovering...")
 
-			recoverErr := recoverFromDBusError(ctx, globalFlags, clusterName, logger)
+			recoverErr := recoverDBus(ctx, globalFlags, clusterName, logger)
 			if recoverErr != nil {
 				return fmt.Errorf(
 					"failed to create vCluster (D-Bus recovery failed): %w",
