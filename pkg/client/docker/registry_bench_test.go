@@ -28,9 +28,9 @@ func BenchmarkNewRegistryManager(b *testing.B) {
 	b.ResetTimer()
 
 	for range b.N {
-		benchRegistryManagerSink, benchError = docker.NewRegistryManager(mockClient)
-		if benchError != nil {
-			b.Fatalf("NewRegistryManager failed: %v", benchError)
+		benchRegistryManagerSink, errBench = docker.NewRegistryManager(mockClient)
+		if errBench != nil {
+			b.Fatalf("NewRegistryManager failed: %v", errBench)
 		}
 	}
 }
@@ -42,7 +42,7 @@ func BenchmarkNewRegistryManagerNilClient(b *testing.B) {
 	b.ResetTimer()
 
 	for range b.N {
-		_, benchError = docker.NewRegistryManager(nil)
+		_, errBench = docker.NewRegistryManager(nil)
 		// Expected error - don't fail
 	}
 }
@@ -86,14 +86,14 @@ func setupBenchmarkRegistryManager() *docker.RegistryManager {
 // BenchmarkBuildContainerConfig benchmarks container config generation.
 // This happens during registry creation (inlined in real usage).
 func BenchmarkBuildContainerConfig_Minimal(b *testing.B) {
-	rm := setupBenchmarkRegistryManager()
+	registryManager := setupBenchmarkRegistryManager()
 	config := minimalRegistryConfig()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for range b.N {
-		containerConfig, err := rm.ExportBuildContainerConfig(config)
+		containerConfig, err := registryManager.ExportBuildContainerConfig(config)
 		if err != nil {
 			b.Fatalf("ExportBuildContainerConfig failed: %v", err)
 		}
@@ -104,14 +104,14 @@ func BenchmarkBuildContainerConfig_Minimal(b *testing.B) {
 
 // BenchmarkBuildContainerConfig_Production benchmarks container config with authentication.
 func BenchmarkBuildContainerConfig_Production(b *testing.B) {
-	rm := setupBenchmarkRegistryManager()
+	registryManager := setupBenchmarkRegistryManager()
 	config := productionRegistryConfig()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for range b.N {
-		containerConfig, err := rm.ExportBuildContainerConfig(config)
+		containerConfig, err := registryManager.ExportBuildContainerConfig(config)
 		if err != nil {
 			b.Fatalf("ExportBuildContainerConfig failed: %v", err)
 		}
@@ -122,7 +122,7 @@ func BenchmarkBuildContainerConfig_Production(b *testing.B) {
 
 // BenchmarkBuildHostConfig benchmarks host config generation.
 func BenchmarkBuildHostConfig_Minimal(b *testing.B) {
-	rm := setupBenchmarkRegistryManager()
+	registryManager := setupBenchmarkRegistryManager()
 	config := minimalRegistryConfig()
 	volumeName := "test-volume"
 
@@ -130,46 +130,46 @@ func BenchmarkBuildHostConfig_Minimal(b *testing.B) {
 	b.ResetTimer()
 
 	for range b.N {
-		benchHostConfigSink = rm.ExportBuildHostConfig(config, volumeName)
+		benchHostConfigSink = registryManager.ExportBuildHostConfig(config, volumeName)
 	}
 }
 
 // BenchmarkBuildNetworkConfig benchmarks network config generation.
 func BenchmarkBuildNetworkConfig_Minimal(b *testing.B) {
-	rm := setupBenchmarkRegistryManager()
+	registryManager := setupBenchmarkRegistryManager()
 	config := minimalRegistryConfig()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for range b.N {
-		benchNetworkConfigSink = rm.ExportBuildNetworkConfig(config)
+		benchNetworkConfigSink = registryManager.ExportBuildNetworkConfig(config)
 	}
 }
 
 // BenchmarkResolveVolumeName benchmarks volume name resolution.
 func BenchmarkResolveVolumeName_Minimal(b *testing.B) {
-	rm := setupBenchmarkRegistryManager()
+	registryManager := setupBenchmarkRegistryManager()
 	config := minimalRegistryConfig()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for range b.N {
-		benchVolumeName = rm.ExportResolveVolumeName(config)
+		benchVolumeName = registryManager.ExportResolveVolumeName(config)
 	}
 }
 
 // BenchmarkBuildProxyCredentialsEnv benchmarks credential environment variable building.
 func BenchmarkBuildProxyCredentialsEnv_WithCredentials(b *testing.B) {
-	rm := setupBenchmarkRegistryManager()
+	registryManager := setupBenchmarkRegistryManager()
 	config := productionRegistryConfig()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for range b.N {
-		env, err := rm.ExportBuildProxyCredentialsEnv(config.Username, config.Password)
+		env, err := registryManager.ExportBuildProxyCredentialsEnv(config.Username, config.Password)
 		if err != nil {
 			b.Fatalf("ExportBuildProxyCredentialsEnv failed: %v", err)
 		}
@@ -179,13 +179,13 @@ func BenchmarkBuildProxyCredentialsEnv_WithCredentials(b *testing.B) {
 
 // BenchmarkBuildProxyCredentialsEnv_NoCredentials benchmarks the case without credentials.
 func BenchmarkBuildProxyCredentialsEnv_NoCredentials(b *testing.B) {
-	rm := setupBenchmarkRegistryManager()
+	registryManager := setupBenchmarkRegistryManager()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for range b.N {
-		env, err := rm.ExportBuildProxyCredentialsEnv("", "")
+		env, err := registryManager.ExportBuildProxyCredentialsEnv("", "")
 		if err != nil {
 			b.Fatalf("ExportBuildProxyCredentialsEnv failed: %v", err)
 		}

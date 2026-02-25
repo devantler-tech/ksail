@@ -13,7 +13,7 @@ import (
 var (
 	benchAPIClientSink     dockerclient.APIClient
 	benchConcreteClientSink *dockerclient.Client
-	benchError             error
+	errBench               error
 )
 
 // BenchmarkGetDockerClient benchmarks the creation of a Docker client from environment.
@@ -23,9 +23,9 @@ func BenchmarkGetDockerClient(b *testing.B) {
 	b.ResetTimer()
 
 	for range b.N {
-		benchAPIClientSink, benchError = docker.GetDockerClient()
-		if benchError != nil {
-			b.Fatalf("GetDockerClient failed: %v", benchError)
+		benchAPIClientSink, errBench = docker.GetDockerClient()
+		if errBench != nil {
+			b.Fatalf("GetDockerClient failed: %v", errBench)
 		}
 	}
 }
@@ -37,9 +37,9 @@ func BenchmarkGetConcreteDockerClient(b *testing.B) {
 	b.ResetTimer()
 
 	for range b.N {
-		benchConcreteClientSink, benchError = docker.GetConcreteDockerClient()
-		if benchError != nil {
-			b.Fatalf("GetConcreteDockerClient failed: %v", benchError)
+		benchConcreteClientSink, errBench = docker.GetConcreteDockerClient()
+		if errBench != nil {
+			b.Fatalf("GetConcreteDockerClient failed: %v", errBench)
 		}
 	}
 }
