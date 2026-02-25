@@ -52,6 +52,13 @@ Creates nodes as Hetzner Cloud servers for production-grade clusters. **Supporte
 > [!NOTE]
 > KSail only enables Hetzner-backed operations when `HCLOUD_TOKEN` is set; if it's unset, Hetzner is skipped.
 
+### Omni
+
+Manages Talos clusters through the [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) SaaS platform API. **Supported distributions:** Talos. **Requirements:** a Sidero Omni account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.cluster.omni.endpoint`. See [Omni docs](https://omni.siderolabs.com/docs/) and [Talos on Omni](https://omni.siderolabs.com/docs/how-to-guides/how-to-create-a-cluster/).
+
+> [!NOTE]
+> Omni provider is only supported with the `Talos` distribution.
+
 ## Container Network Interface (CNI)
 
 [CNI](https://www.cni.dev/) is a specification for configuring network interfaces in Linux containers, providing pod networking, policies, and observability.
