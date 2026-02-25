@@ -64,6 +64,7 @@ To decide which phase to perform:
 1. Research the CI/CD workflow landscape in this repo. This includes both **non-agentic workflows** (`.github/workflows/*.yaml` and `.github/workflows/*.yml`) and **agentic workflows** (`.github/workflows/*.md` and `.github/workflows/shared/*.md`). Skip generated `*.lock.yml` files as they are auto-generated from the `.md` sources.
 
    **For non-agentic workflows (`.yaml`/`.yml`):**
+
 - Analyze job structure, dependencies (`needs:`), and parallelization opportunities
 - Review caching strategies (`actions/cache`, `setup-go` cache, custom cache actions)
 - Identify redundant or duplicate steps across jobs (e.g., repeated checkouts, duplicate setup steps)
