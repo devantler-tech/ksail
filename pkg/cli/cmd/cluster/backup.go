@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/internal/buildmeta"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
@@ -90,6 +91,9 @@ Example:
 			return runBackup(cmd.Context(), cmd, flags)
 		},
 		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
+		},
 	}
 
 	cmd.Flags().StringVarP(
@@ -121,7 +125,7 @@ Example:
 	return cmd
 }
 
-func runBackup(_ context.Context, cmd *cobra.Command, flags *backupFlags) error {
+func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) error {
 	if flags.compressionLevel < minCompressionLevel ||
 		flags.compressionLevel > maxCompressionLevel {
 		return fmt.Errorf(
@@ -161,7 +165,7 @@ func runBackup(_ context.Context, cmd *cobra.Command, flags *backupFlags) error 
 		}
 	}
 
-	err := createBackupArchive(kubeconfigPath, writer, flags)
+	err := createBackupArchive(ctx, kubeconfigPath, writer, flags)
 	if err != nil {
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
@@ -182,6 +186,7 @@ func printBackupSummary(writer io.Writer, outputPath string) {
 }
 
 func createBackupArchive(
+	ctx context.Context,
 	kubeconfigPath string,
 	writer io.Writer,
 	flags *backupFlags,
@@ -205,7 +210,7 @@ func createBackupArchive(
 	_, _ = fmt.Fprintf(writer, "Exporting cluster resources...\n")
 
 	resourceCount := exportResources(
-		kubeconfigPath, tmpDir, writer, flags,
+		ctx, kubeconfigPath, tmpDir, writer, flags,
 	)
 
 	metadata.ResourceCount = resourceCount
@@ -268,6 +273,7 @@ func backupResourceTypes() []string {
 }
 
 func exportResources(
+	ctx context.Context,
 	kubeconfigPath, outputDir string,
 	writer io.Writer,
 	flags *backupFlags,
@@ -279,7 +285,7 @@ func exportResources(
 
 	for _, resourceType := range filteredTypes {
 		count, err := exportResourceType(
-			kubeconfigPath, outputDir, resourceType, flags,
+			ctx, kubeconfigPath, outputDir, resourceType, flags,
 		)
 		if err != nil {
 			_, _ = fmt.Fprintf(
@@ -320,6 +326,7 @@ func filterExcludedTypes(resourceTypes, excludeTypes []string) []string {
 }
 
 func exportResourceType(
+	ctx context.Context,
 	kubeconfigPath, outputDir, resourceType string,
 	flags *backupFlags,
 ) (int, error) {
@@ -336,7 +343,7 @@ func exportResourceType(
 	// even when specific namespaces are requested.
 	if isClusterScoped {
 		return executeGetAndSave(
-			kubeconfigPath, resourceDir, resourceType, "", true,
+			ctx, kubeconfigPath, resourceDir, resourceType, "", true,
 		)
 	}
 
@@ -345,7 +352,7 @@ func exportResourceType(
 
 		for _, ns := range flags.namespaces {
 			count, err := executeGetAndSave(
-				kubeconfigPath, resourceDir, resourceType, ns, false,
+				ctx, kubeconfigPath, resourceDir, resourceType, ns, false,
 			)
 			if err != nil {
 				return totalCount, err
@@ -358,11 +365,12 @@ func exportResourceType(
 	}
 
 	return executeGetAndSave(
-		kubeconfigPath, resourceDir, resourceType, "", false,
+		ctx, kubeconfigPath, resourceDir, resourceType, "", false,
 	)
 }
 
 func executeGetAndSave(
+	ctx context.Context,
 	kubeconfigPath, resourceDir, resourceType, namespace string,
 	clusterScoped bool,
 ) (int, error) {
@@ -374,7 +382,7 @@ func executeGetAndSave(
 	outputPath := filepath.Join(resourceDir, filename)
 
 	output, stderr, err := runKubectlGet(
-		kubeconfigPath, resourceType, namespace, clusterScoped,
+		ctx, kubeconfigPath, resourceType, namespace, clusterScoped,
 	)
 	if err != nil {
 		if strings.Contains(stderr, "the server doesn't have a resource type") {
@@ -404,6 +412,7 @@ func executeGetAndSave(
 }
 
 func runKubectlGet(
+	ctx context.Context,
 	kubeconfigPath, resourceType, namespace string,
 	clusterScoped bool,
 ) (string, string, error) {
@@ -429,7 +438,7 @@ func runKubectlGet(
 	getCmd.SilenceUsage = true
 	getCmd.SilenceErrors = true
 
-	err := getCmd.Execute()
+	err := getCmd.ExecuteContext(ctx)
 	if err != nil {
 		return outBuf.String(), errBuf.String(), fmt.Errorf(
 			"kubectl get %s: %w", resourceType, err,
@@ -484,6 +493,11 @@ func sanitizeList(list *unstructured.Unstructured) (string, error) {
 	}
 
 	var builder strings.Builder
+
+	// Pre-allocate capacity: estimate ~256 bytes per item for YAML output
+	// plus separator overhead.
+	const estimatedBytesPerItem = 256
+	builder.Grow(len(items) * estimatedBytesPerItem)
 
 	for idx, item := range items {
 		itemMap, ok := item.(map[string]any)
