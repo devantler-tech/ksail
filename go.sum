@@ -673,12 +673,12 @@ github.com/fluxcd/cli-utils v0.37.0-flux.1 h1:k/VvPNT3tGa/l2N+qzHduaQr3GVbgoWS6n
 github.com/fluxcd/cli-utils v0.37.0-flux.1/go.mod h1:aND5wX3LuTFtB7eUT7vsWr8mmxRVSPR2Wkvbn0SqPfw=
 github.com/fluxcd/helm-controller/api v1.4.5 h1:hMEBtgXUbJjp+ah0jPI3OOQNVngoToOQvTgFgVpAjNg=
 github.com/fluxcd/helm-controller/api v1.4.5/go.mod h1:rCgx3qhjjtoIH+1EbzFC2vN71/pp0PgMDrZnGCZX5XY=
-github.com/fluxcd/kustomize-controller/api v1.7.3 h1:g+C9Il+H33DQi/ZiQ8KpTvL9KXebXnS4oM/0uJ/C8Gw=
-github.com/fluxcd/kustomize-controller/api v1.7.3/go.mod h1:Yj80JyfQpBUgLhsUZ/c86qcvPGO2+P1VCKsb8fL+L/k=
+github.com/fluxcd/kustomize-controller/api v1.8.0 h1:NqDgjqUwotXaHhvd5z46xOhe1O/NPzycXExbuHRmt38=
+github.com/fluxcd/kustomize-controller/api v1.8.0/go.mod h1:+ZJB/dIGbnSzZ5J/kiJ8n0USmLNAjfeZU6Xfra0oMZA=
 github.com/fluxcd/pkg/apis/acl v0.9.0 h1:wBpgsKT+jcyZEcM//OmZr9RiF8klL3ebrDp2u2ThsnA=
 github.com/fluxcd/pkg/apis/acl v0.9.0/go.mod h1:TttNS+gocsGLwnvmgVi3/Yscwqrjc17+vhgYfqkfrV4=
-github.com/fluxcd/pkg/apis/kustomize v1.14.0 h1:PmWqMpRX0v7/aCAUNWfohe4o1qa9G3Cg/vVr5PCedI4=
-github.com/fluxcd/pkg/apis/kustomize v1.14.0/go.mod h1:CGRpU9Od4ht5+MHL6QlMfWaW87U9UTfGVM5CM4PZ28I=
+github.com/fluxcd/pkg/apis/kustomize v1.15.0 h1:p8wPIxdmn0vy0a664rsE9JKCfnliZz4HUsDcTy4ZOxA=
+github.com/fluxcd/pkg/apis/kustomize v1.15.0/go.mod h1:XWdsx8P15OiMaQIvmUjYWdmD3zAwhl5q9osl5iCqcOk=
 github.com/fluxcd/pkg/apis/meta v1.25.0 h1:fmZgMoe7yITGfhFqdOs7w2GOu3Y/2Vvz4+4p/eay3eA=
 github.com/fluxcd/pkg/apis/meta v1.25.0/go.mod h1:1D92RqAet0/n/cH5S0khBXweirHWkw9rCO0V4NCY6xc=
 github.com/fluxcd/source-controller/api v1.8.0 h1:ndrYmcv6ZMcdQHFSUkOrFVDO7h16SfDBSw/DOqf/LPo=
