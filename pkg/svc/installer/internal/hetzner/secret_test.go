@@ -89,40 +89,20 @@ func TestEnsureSecret_AlreadyExistsRace(t *testing.T) {
 
 	token := "race-token-123"
 
-	clientset := fake.NewClientset()
-
-	// Simulate a race: the first Create returns AlreadyExists, as if another
-	// goroutine created the secret between our Get (NotFound) and Create.
-	var created atomic.Bool
-	clientset.PrependReactor("create", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		if created.CompareAndSwap(false, true) {
-			// First call: let the real Create succeed so the secret exists.
-			return false, nil, nil
-		}
-
-		// Should not be reached, but guard anyway.
-		return false, nil, nil
-	})
-
-	// Pre-create so the second caller's Create hits AlreadyExists.
-	_, err := clientset.CoreV1().Secrets(hetzner.Namespace).Create(
-		context.Background(),
-		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      hetzner.SecretName,
-				Namespace: hetzner.Namespace,
-			},
-			Data: map[string][]byte{"token": []byte("old-token")},
+	// Pre-populate the secret so that Create will naturally return
+	// AlreadyExists, simulating another installer winning the race.
+	existing := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            hetzner.SecretName,
+			Namespace:       hetzner.Namespace,
+			ResourceVersion: "1",
 		},
-		metav1.CreateOptions{},
-	)
-	if err != nil {
-		t.Fatalf("pre-create failed: %v", err)
+		Data: map[string][]byte{"token": []byte("old-token")},
 	}
+	clientset := fake.NewClientset(existing)
 
-	// Now make Get return NotFound on the first call, simulating the race
-	// where the secret didn't exist when we checked but was created before
-	// our Create call.
+	// Make the first Get return NotFound so ensureSecret takes the Create
+	// path, which will hit AlreadyExists and fall back to Get+Update.
 	var getCalled atomic.Bool
 	clientset.PrependReactor("get", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		if getCalled.CompareAndSwap(false, true) {
@@ -130,11 +110,10 @@ func TestEnsureSecret_AlreadyExistsRace(t *testing.T) {
 				schema.GroupResource{Group: "", Resource: "secrets"}, hetzner.SecretName,
 			)
 		}
-		// Subsequent Gets use the default (real) handler.
 		return false, nil, nil
 	})
 
-	err = hetzner.EnsureSecretForTest(context.Background(), clientset, token)
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, token)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
