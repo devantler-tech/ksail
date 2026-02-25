@@ -40,7 +40,7 @@ lsof -ti:5000 | xargs kill -9
 
 ### Registry Access Verification Failed
 
-During `ksail cluster create` and `ksail cluster update`, KSail verifies access to the configured external registry before proceeding. Transient network errors (timeouts, 5xx responses) are automatically retried with exponential backoff (3 attempts, 2–10s delays).
+During `ksail cluster create` and `ksail cluster update`, KSail verifies access to the configured external registry before proceeding. Transient network errors (including timeouts, HTTP 429, and 5xx responses) are automatically retried with exponential backoff (up to 3 attempts with 2s then 4s delays between attempts, each attempt using a 30s timeout).
 
 If verification consistently fails, check credentials and connectivity:
 
@@ -48,11 +48,14 @@ If verification consistently fails, check credentials and connectivity:
 # Test registry connectivity
 curl -I https://registry.example.com/v2/
 
-# Verify credentials work
+# (Optional) Manually verify credentials; KSail does not use Docker's credential store
 docker login registry.example.com
 
-# Reconfigure with correct credentials
-ksail cluster init --local-registry 'user:token@registry.example.com/my-org/my-repo'
+# Configure KSail with registry credentials via env vars (recommended to avoid leaking tokens)
+# Example:
+#   export REG_USER='your-username'
+#   export REG_TOKEN='your-access-token'
+ksail cluster init --local-registry '${REG_USER}:${REG_TOKEN}@registry.example.com/my-org/my-repo'
 ```
 
 Common errors and causes:
