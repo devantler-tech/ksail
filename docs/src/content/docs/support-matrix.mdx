@@ -117,6 +117,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 
 - "In-place" changes are applied without cluster downtime via Helm or provider APIs
 - "Recreate" changes require `ksail cluster delete && ksail cluster create` or `ksail cluster update --force`
+- If no changes are detected, `ksail cluster update` exits immediately with no modifications (idempotent no-op)
 - Use `ksail cluster update --dry-run` to preview changes before applying
 - Talos supports the broadest set of in-place updates, including node scaling for both control-plane and worker nodes
 - Kind does not support any structural node changes after creation

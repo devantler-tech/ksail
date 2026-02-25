@@ -404,6 +404,7 @@ jobs:
       contents: read
       packages: write
     strategy:
+      max-parallel: 10
       matrix:
         distribution: [Vanilla, K3s, Talos, VCluster]
         provider: [Docker]

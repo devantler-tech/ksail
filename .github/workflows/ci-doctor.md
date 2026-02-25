@@ -6,6 +6,9 @@ description: |
   and workflow configuration to help diagnose and resolve CI issues efficiently.
 
 on:
+  bots:
+    - "github-merge-queue[bot]"
+
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   workflow_run:
     workflows:
@@ -13,6 +16,22 @@ on:
       - "CD"
       - "Test - Pages"
       - "Publish - Pages"
+      - "Release"
+      - "Benchmark Regression"
+      - "Maintenance"
+      - "Sync labels"
+      - "TODOs"
+      - "Unbloat Docs"
+      - "Update Docs"
+      - "Daily Backlog Burner"
+      - "Code Simplifier"
+      - "Daily Perf Improver"
+      - "Daily Plan"
+      - "Daily Progress"
+      - "Daily Refactor"
+      - "Daily Test Improver"
+      - "Issue Triage"
+      - "PR Fix"
     types:
       - completed
     branches:

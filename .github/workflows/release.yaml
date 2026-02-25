@@ -13,6 +13,6 @@ permissions:
 
 jobs:
   release:
-    uses: devantler-tech/reusable-workflows/.github/workflows/release.yaml@d5220ca536bd22c2e3ffe69b243a83fdf0beea03 # v1.29.0
+    uses: devantler-tech/reusable-workflows/.github/workflows/release.yaml@0f7b26323a6983141526673207d381445851aec3 # v1.29.1
     secrets:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

@@ -6,6 +6,9 @@ description: |
   reports, identifies gaps, creates comprehensive test suites, and submits draft PRs.
 
 on:
+  bots:
+    - "github-merge-queue[bot]"
+
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   workflow_dispatch:
