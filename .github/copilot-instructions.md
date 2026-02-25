@@ -14,7 +14,7 @@ KSail is a Go-based CLI application that provides a unified SDK for spinning up 
 - KSail embeds kubectl, helm, kind, k3d, vcluster, flux, and argocd as Go libraries
 - No separate installation of these tools is needed
 - The Hetzner provider is supported for Talos clusters and requires cloud access/credentials (e.g., `HCLOUD_TOKEN`)
-- The Omni provider is supported for Talos clusters and requires a Sidero Omni account and credentials (e.g., `OMNI_SERVICE_ACCOUNT_KEY`)
+- The Omni provider is supported for Talos clusters and requires a Sidero Omni account and credentials (e.g., `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.cluster.omni.serviceAccountKeyEnvVar`)
 
 **Required for Documentation**:
 
@@ -325,7 +325,7 @@ npm run dev                            # Test locally (if needed)
 - **Provider/Provisioner Architecture**: Separated infrastructure providers (Docker, Hetzner, Omni) from distribution provisioners (Vanilla, K3s, Talos, VCluster)
 - **VCluster Support**: Added VCluster as the fourth supported distribution via VClusterProvisioner, enabling virtual Kubernetes clusters within Docker using the Vind driver
 - **Hetzner Provider**: Added support for running Talos clusters on Hetzner Cloud
-- **Omni Provider**: Added support for managing Talos clusters through the Sidero Omni SaaS API (`pkg/svc/provider/omni/`); requires `OMNI_SERVICE_ACCOUNT_KEY` and `spec.cluster.omni.endpoint`
+- **Omni Provider**: Added support for managing Talos clusters through the Sidero Omni SaaS API (`pkg/svc/provider/omni/`); requires `spec.cluster.omni.endpoint` and a service account key env var (default: `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.cluster.omni.serviceAccountKeyEnvVar`)
 - **Registry Authentication**: Added support for external registries with username/password authentication
 - **Default Registry Mirrors**: Enabled docker.io, ghcr.io, quay.io, and registry.k8s.io mirrors by default to avoid rate limits and improve CI/CD performance (`pkg/cli/setup/mirrorregistry/defaults.go`)
 - **Distribution Naming**: Changed user-facing names from `Kind`/`K3d` to `Vanilla`/`K3s` to focus on the Kubernetes distribution rather than the underlying tool

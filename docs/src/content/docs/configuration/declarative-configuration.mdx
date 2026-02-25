@@ -303,7 +303,7 @@ See [Providers](/concepts/#providers) for more details.
 
 - `Docker` – Run nodes as Docker containers (local development)
 - `Hetzner` – Run nodes on Hetzner Cloud servers (requires `HCLOUD_TOKEN`)
-- `Omni` – Manage nodes through Sidero Omni SaaS (requires `OMNI_SERVICE_ACCOUNT_KEY` and `spec.cluster.omni.endpoint`)
+- `Omni` – Manage nodes through Sidero Omni SaaS (requires the env var named by `spec.cluster.omni.serviceAccountKeyEnvVar` (default: `OMNI_SERVICE_ACCOUNT_KEY`) and `spec.cluster.omni.endpoint`)
 
 > [!NOTE]
 > Both `Hetzner` and `Omni` providers are only supported with the `Talos` distribution.
