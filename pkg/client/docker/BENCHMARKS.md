@@ -10,6 +10,7 @@ The Docker client benchmarks measure the performance of:
 2. **Registry Manager Operations** - Container registry lifecycle configuration
 
 These operations are critical to KSail's cluster provisioning performance, particularly for:
+
 - Vanilla (Kind) distribution - uses Docker containers for cluster nodes
 - K3s (K3d) distribution - uses Docker containers for cluster nodes
 - Registry mirror operations - pull-through caching for faster image pulls
@@ -58,41 +59,41 @@ Generate fresh baselines on your machine using the commands in [Running Benchmar
 Example baseline (AMD EPYC 7763, Linux, Go 1.26.0):
 
 ```
-BenchmarkGetDockerClient-4                            	  780775	      1499 ns/op	    1784 B/op	      23 allocs/op
-BenchmarkGetConcreteDockerClient-4                    	  766017	      1495 ns/op	    1784 B/op	      23 allocs/op
-BenchmarkNewRegistryManager-4                         	47744233	        24.15 ns/op	      16 B/op	       1 allocs/op
-BenchmarkNewRegistryManagerNilClient-4                	1000000000	         0.6232 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBuildContainerConfig_Minimal-4               	 2890894	       414.9 ns/op	     992 B/op	       7 allocs/op
-BenchmarkBuildContainerConfig_Production-4            	 1373319	       911.6 ns/op	    1196 B/op	      17 allocs/op
-BenchmarkBuildHostConfig_Minimal-4                    	 3678830	       327.4 ns/op	    1312 B/op	       3 allocs/op
-BenchmarkBuildNetworkConfig_Minimal-4                 	397080200	         3.026 ns/op	       0 B/op	       0 allocs/op
-BenchmarkResolveVolumeName_Minimal-4                  	143685614	         8.118 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBuildProxyCredentialsEnv_WithCredentials-4   	 3380788	       356.8 ns/op	     161 B/op	       9 allocs/op
-BenchmarkBuildProxyCredentialsEnv_NoCredentials-4     	428624280	         2.832 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGetDockerClient-4                               780775       1499 ns/op     1784 B/op       23 allocs/op
+BenchmarkGetConcreteDockerClient-4                       766017       1495 ns/op     1784 B/op       23 allocs/op
+BenchmarkNewRegistryManager-4                          47744233         24.15 ns/op       16 B/op        1 allocs/op
+BenchmarkNewRegistryManagerNilClient-4                 1000000000          0.6232 ns/op        0 B/op        0 allocs/op
+BenchmarkBuildContainerConfig_Minimal-4                 2890894        414.9 ns/op      992 B/op        7 allocs/op
+BenchmarkBuildContainerConfig_Production-4              1373319        911.6 ns/op     1196 B/op       17 allocs/op
+BenchmarkBuildHostConfig_Minimal-4                      3678830        327.4 ns/op     1312 B/op        3 allocs/op
+BenchmarkBuildNetworkConfig_Minimal-4                  397080200          3.026 ns/op        0 B/op        0 allocs/op
+BenchmarkResolveVolumeName_Minimal-4                   143685614          8.118 ns/op        0 B/op        0 allocs/op
+BenchmarkBuildProxyCredentialsEnv_WithCredentials-4     3380788        356.8 ns/op      161 B/op        9 allocs/op
+BenchmarkBuildProxyCredentialsEnv_NoCredentials-4      428624280          2.832 ns/op        0 B/op        0 allocs/op
 ```
 
 ## Benchmarked Operations
 
 ### Docker Engine Operations
 
-| Benchmark                          | Description                    | Typical Use Case                     |
-|------------------------------------|--------------------------------|--------------------------------------|
-| `BenchmarkGetDockerClient`         | Create Docker API client       | Every cluster provisioning operation |
-| `BenchmarkGetConcreteDockerClient` | Create concrete client type    | Advanced Docker API operations       |
+| Benchmark                          | Description                 | Typical Use Case                     |
+|------------------------------------|-----------------------------|--------------------------------------|
+| `BenchmarkGetDockerClient`         | Create Docker API client    | Every cluster provisioning operation |
+| `BenchmarkGetConcreteDockerClient` | Create concrete client type | Advanced Docker API operations       |
 
 ### Registry Manager Operations
 
-| Benchmark                                       | Description                    | Typical Use Case                       |
-|-------------------------------------------------|--------------------------------|----------------------------------------|
-| `BenchmarkNewRegistryManager`                   | Manager instantiation          | Once per cluster provisioning          |
-| `BenchmarkNewRegistryManagerNilClient`          | Error validation               | Input validation overhead              |
-| `BenchmarkBuildContainerConfig_Minimal`         | Basic container config         | Simple registry without auth           |
-| `BenchmarkBuildContainerConfig_Production`      | Container config with auth     | Registry with upstream authentication  |
-| `BenchmarkBuildHostConfig_Minimal`              | Host config (ports, volumes)   | Every registry container               |
-| `BenchmarkBuildNetworkConfig_Minimal`           | Network configuration          | Every registry container               |
-| `BenchmarkResolveVolumeName_Minimal`            | Volume name resolution         | Every registry container               |
-| `BenchmarkBuildProxyCredentialsEnv_WithCredentials` | Credential env vars        | Authenticated upstream registries      |
-| `BenchmarkBuildProxyCredentialsEnv_NoCredentials`   | No-credential case         | Public upstream registries             |
+| Benchmark                                           | Description                  | Typical Use Case                      |
+|-----------------------------------------------------|------------------------------|---------------------------------------|
+| `BenchmarkNewRegistryManager`                       | Manager instantiation        | Once per cluster provisioning         |
+| `BenchmarkNewRegistryManagerNilClient`              | Error validation             | Input validation overhead             |
+| `BenchmarkBuildContainerConfig_Minimal`             | Basic container config       | Simple registry without auth          |
+| `BenchmarkBuildContainerConfig_Production`          | Container config with auth   | Registry with upstream authentication |
+| `BenchmarkBuildHostConfig_Minimal`                  | Host config (ports, volumes) | Every registry container              |
+| `BenchmarkBuildNetworkConfig_Minimal`               | Network configuration        | Every registry container              |
+| `BenchmarkResolveVolumeName_Minimal`                | Volume name resolution       | Every registry container              |
+| `BenchmarkBuildProxyCredentialsEnv_WithCredentials` | Credential env vars          | Authenticated upstream registries     |
+| `BenchmarkBuildProxyCredentialsEnv_NoCredentials`   | No-credential case           | Public upstream registries            |
 
 ## Performance Characteristics
 
@@ -161,6 +162,7 @@ Based on KSail's cluster provisioning goals:
 - **Memory efficiency**: Minimize allocations in hot paths
 
 All current benchmarks meet or exceed performance targets. Future optimizations should focus on:
+
 - Reducing allocations in production container config
 - Caching strategies for frequently-used configurations
 - Docker client lifecycle management
