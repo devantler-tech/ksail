@@ -206,7 +206,10 @@ func createWithRetry(
 
 			recoverErr := recoverFromDBusError(ctx, globalFlags, clusterName, logger)
 			if recoverErr != nil {
-				return fmt.Errorf("failed to create vCluster (D-Bus recovery failed): %w", recoverErr)
+				return fmt.Errorf(
+					"failed to create vCluster (D-Bus recovery failed): %w",
+					recoverErr,
+				)
 			}
 
 			return nil
