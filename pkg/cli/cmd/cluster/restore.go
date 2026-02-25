@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
@@ -76,6 +77,9 @@ Example:
 			return runRestore(cmd.Context(), cmd, flags)
 		},
 		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
+		},
 	}
 
 	cmd.Flags().StringVarP(
@@ -101,7 +105,7 @@ Example:
 }
 
 func runRestore(
-	_ context.Context,
+	ctx context.Context,
 	cmd *cobra.Command,
 	flags *restoreFlags,
 ) error {
@@ -141,7 +145,7 @@ func runRestore(
 
 	_, _ = fmt.Fprintf(writer, "Restoring cluster resources...\n")
 
-	err = restoreResources(kubeconfigPath, tmpDir, writer, flags)
+	err = restoreResources(ctx, kubeconfigPath, tmpDir, writer, flags)
 	if err != nil {
 		return fmt.Errorf("failed to restore resources: %w", err)
 	}
@@ -342,6 +346,7 @@ func readBackupMetadata(tmpDir string) (*BackupMetadata, error) {
 }
 
 func restoreResources(
+	ctx context.Context,
 	kubeconfigPath, tmpDir string,
 	writer io.Writer,
 	flags *restoreFlags,
@@ -372,7 +377,7 @@ func restoreResources(
 		}
 
 		for _, file := range files {
-			err = restoreResourceFile(kubeconfigPath, file, flags)
+			err = restoreResourceFile(ctx, kubeconfigPath, file, flags)
 			if err != nil {
 				msg := fmt.Sprintf("%s: %v", filepath.Base(file), err)
 				restoreErrors = append(restoreErrors, msg)
@@ -403,6 +408,7 @@ func restoreResources(
 }
 
 func restoreResourceFile(
+	ctx context.Context,
 	kubeconfigPath, filePath string,
 	flags *restoreFlags,
 ) error {
@@ -431,7 +437,7 @@ func restoreResourceFile(
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 
-	err := cmd.Execute()
+	err := cmd.ExecuteContext(ctx)
 	if err != nil {
 		stderr := errBuf.String()
 
