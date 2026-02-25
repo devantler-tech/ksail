@@ -27,7 +27,7 @@ import (
 
 // Registry verification constants.
 const (
-	registryVerifyTimeout = 10 * time.Second
+	registryVerifyTimeout = 30 * time.Second
 )
 
 // Option configures local registry dependencies.
