@@ -876,7 +876,6 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-      workflows: write
     outputs:
       tools_reported: ${{ steps.missing_tool.outputs.tools_reported }}
       total_count: ${{ steps.missing_tool.outputs.total_count }}
@@ -1108,7 +1107,6 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-      workflows: write
     timeout-minutes: 15
     env:
       GH_AW_ENGINE_ID: "copilot"
