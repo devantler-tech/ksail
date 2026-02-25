@@ -55,7 +55,7 @@ func TestResolveClusterInfo(t *testing.T) {
 		// No flags, no config file, no kubeconfig context
 		resolved, err := lifecycle.ResolveClusterInfo("", "", "")
 
-		assert.ErrorIs(t, err, lifecycle.ErrClusterNameRequired)
+		require.ErrorIs(t, err, lifecycle.ErrClusterNameRequired)
 		assert.Nil(t, resolved)
 	})
 }
