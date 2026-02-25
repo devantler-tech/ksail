@@ -25,6 +25,15 @@ import (
 // defaultVClusterName is used when no name is provided.
 const defaultVClusterName = "vcluster-default"
 
+// createMaxAttempts is the number of times to retry CreateDocker for transient
+// startup failures. Exit status 22 (EINVAL) and similar infrastructure errors
+// are often transient on CI runners (GitHub Actions).
+const createMaxAttempts = 3
+
+// createRetryDelay is the delay between CreateDocker retry attempts, giving
+// Docker and the runner time to recover from transient issues.
+const createRetryDelay = 5 * time.Second
+
 // connectMaxAttempts is the number of times to retry ConnectDocker after cluster
 // creation. The SDK's waitForVCluster has a hardcoded 3-minute readiness timeout
 // which is too short for CI runners. Retrying gives an effective timeout of
@@ -47,6 +56,14 @@ const dbusWaitInterval = 500 * time.Millisecond
 // The SDK's install-standalone.sh runs "systemctl restart systemd-journald"
 // which fails when D-Bus hasn't initialized yet inside the privileged container.
 const dbusErrorSubstring = "Failed to connect to bus"
+
+// transientExitStatuses lists exit status substrings that indicate potentially
+// transient infrastructure failures during vCluster standalone startup.
+// Exit status 22 (EINVAL) has been observed on CI runners where the Docker
+// daemon or container runtime hits a temporary invalid-argument condition.
+var transientExitStatuses = []string{
+	"exit status 22",
+}
 
 // errDBusTimeout is returned when D-Bus does not become available
 // within the configured timeout.
@@ -139,21 +156,110 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	globalFlags := newGlobalFlags()
 	logger := newStreamLogger()
 
-	err = cli.CreateDocker(ctx, opts, globalFlags, target, logger)
-	if err != nil {
-		if !strings.Contains(err.Error(), dbusErrorSubstring) {
-			return fmt.Errorf("failed to create vCluster: %w", err)
-		}
-
-		logger.Infof("D-Bus not ready in container — recovering...")
-
-		recoverErr := recoverFromDBusError(ctx, globalFlags, target, logger)
-		if recoverErr != nil {
-			return fmt.Errorf("failed to create vCluster (D-Bus recovery failed): %w", recoverErr)
-		}
+	if err := createWithRetry(ctx, opts, globalFlags, target, logger); err != nil {
+		return err
 	}
 
 	return connectWithRetry(ctx, globalFlags, target, logger)
+}
+
+// createWithRetry calls CreateDocker and retries on transient errors. D-Bus
+// errors receive their own in-place recovery (the container is already running);
+// other transient errors (e.g. exit status 22) trigger a full delete-and-retry.
+func createWithRetry(
+	ctx context.Context,
+	opts *cli.CreateOptions,
+	globalFlags *flags.GlobalFlags,
+	clusterName string,
+	logger loftlog.Logger,
+) error {
+	var lastErr error
+
+	for attempt := range createMaxAttempts {
+		if attempt > 0 {
+			logger.Warnf(
+				"Retrying vCluster create (attempt %d/%d)...",
+				attempt+1, createMaxAttempts,
+			)
+
+			cleanupFailedCreate(ctx, globalFlags, clusterName, logger)
+
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("context cancelled during create retry: %w", ctx.Err())
+			case <-time.After(createRetryDelay):
+			}
+		}
+
+		lastErr = cli.CreateDocker(ctx, opts, globalFlags, clusterName, logger)
+		if lastErr == nil {
+			return nil
+		}
+
+		// D-Bus race condition: container is running but systemd hasn't
+		// initialised D-Bus yet. Recover in-place without a full retry.
+		if strings.Contains(lastErr.Error(), dbusErrorSubstring) {
+			logger.Infof("D-Bus not ready in container — recovering...")
+
+			recoverErr := recoverFromDBusError(ctx, globalFlags, clusterName, logger)
+			if recoverErr != nil {
+				return fmt.Errorf("failed to create vCluster (D-Bus recovery failed): %w", recoverErr)
+			}
+
+			return nil
+		}
+
+		// Non-transient error — fail immediately.
+		if !isTransientCreateError(lastErr) {
+			return fmt.Errorf("failed to create vCluster: %w", lastErr)
+		}
+
+		logger.Warnf(
+			"vCluster create attempt %d/%d failed (transient): %v",
+			attempt+1, createMaxAttempts, lastErr,
+		)
+	}
+
+	return fmt.Errorf(
+		"failed to create vCluster after %d attempts: %w",
+		createMaxAttempts, lastErr,
+	)
+}
+
+// isTransientCreateError returns true when the error message matches a known
+// transient exit status that may succeed on retry.
+func isTransientCreateError(err error) bool {
+	msg := err.Error()
+
+	for _, s := range transientExitStatuses {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// cleanupFailedCreate attempts to delete a partially-created vCluster so that
+// the next CreateDocker call starts from a clean state. Errors are logged but
+// not propagated because the subsequent retry is expected to handle any
+// remaining state.
+func cleanupFailedCreate(
+	ctx context.Context,
+	globalFlags *flags.GlobalFlags,
+	clusterName string,
+	logger loftlog.Logger,
+) {
+	deleteOpts := &cli.DeleteOptions{
+		Driver:         "docker",
+		DeleteContext:  true,
+		IgnoreNotFound: true,
+	}
+
+	err := cli.DeleteDocker(ctx, nil, deleteOpts, globalFlags, clusterName, logger)
+	if err != nil {
+		logger.Warnf("cleanup of failed vCluster %q before retry: %v", clusterName, err)
+	}
 }
 
 // connectWithRetry calls ConnectDocker in a retry loop to work around the SDK's
