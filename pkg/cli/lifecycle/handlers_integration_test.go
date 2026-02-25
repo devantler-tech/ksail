@@ -18,6 +18,11 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
+var (
+	errFactoryError = errors.New("factory error")
+	errActionFailed = errors.New("action failed")
+)
+
 // mockTimer implements the timer.Timer interface for testing.
 type mockTimer struct {
 	started   bool
@@ -85,304 +90,245 @@ func (m *mockProvisioner) Exists(_ context.Context, _ string) (bool, error) {
 func TestGetClusterNameFromConfig(t *testing.T) {
 	t.Parallel()
 
-	t.Run("nil_config_returns_error", func(t *testing.T) {
-		t.Parallel()
+	t.Run("nil_config_returns_error", testGetClusterNameNilConfig)
+	t.Run("factory_create_error", testGetClusterNameFactoryError)
+	t.Run("extract_from_context_kind", testGetClusterNameKindContext)
+	t.Run("extract_from_context_k3d", testGetClusterNameK3dContext)
+	t.Run("extract_from_context_talos", testGetClusterNameTalosContext)
+	t.Run("extract_from_context_vcluster", testGetClusterNameVClusterContext)
+}
 
-		factory := &mockFactory{}
-		name, err := lifecycle.GetClusterNameFromConfig(nil, factory)
+func testGetClusterNameNilConfig(t *testing.T) {
+	t.Parallel()
 
-		assert.ErrorIs(t, err, lifecycle.ErrClusterConfigRequired)
-		assert.Empty(t, name)
-	})
+	factory := &mockFactory{}
+	name, err := lifecycle.GetClusterNameFromConfig(nil, factory)
 
-	t.Run("factory_create_error", func(t *testing.T) {
-		t.Parallel()
+	require.ErrorIs(t, err, lifecycle.ErrClusterConfigRequired)
+	assert.Empty(t, name)
+}
 
-		factory := &mockFactory{
-			createErr: errors.New("factory error"),
-		}
+func testGetClusterNameFactoryError(t *testing.T) {
+	t.Parallel()
 
-		cfg := &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Distribution: v1alpha1.DistributionVanilla,
-				},
+	factory := &mockFactory{createErr: errFactoryError}
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVanilla,
 			},
-		}
+		},
+	}
 
-		name, err := lifecycle.GetClusterNameFromConfig(cfg, factory)
+	name, err := lifecycle.GetClusterNameFromConfig(cfg, factory)
 
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to load distribution config")
-		assert.Empty(t, name)
-	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to load distribution config")
+	assert.Empty(t, name)
+}
 
-	t.Run("extract_from_context_kind", func(t *testing.T) {
-		t.Parallel()
+func testGetClusterNameKindContext(t *testing.T) {
+	t.Parallel()
 
-		factory := &mockFactory{}
-
-		cfg := &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Distribution: v1alpha1.DistributionVanilla,
-					Connection: v1alpha1.Connection{
-						Context: "kind-test-cluster",
-					},
-				},
+	factory := &mockFactory{}
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVanilla,
+				Connection:   v1alpha1.Connection{Context: "kind-test-cluster"},
 			},
-		}
+		},
+	}
 
-		name, err := lifecycle.GetClusterNameFromConfig(cfg, factory)
+	name, err := lifecycle.GetClusterNameFromConfig(cfg, factory)
 
-		require.NoError(t, err)
-		assert.Equal(t, "test-cluster", name)
-	})
+	require.NoError(t, err)
+	assert.Equal(t, "test-cluster", name)
+}
 
-	t.Run("extract_from_context_k3d", func(t *testing.T) {
-		t.Parallel()
+func testGetClusterNameK3dContext(t *testing.T) {
+	t.Parallel()
 
-		factory := &mockFactory{}
-
-		cfg := &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Distribution: v1alpha1.DistributionK3s,
-					Connection: v1alpha1.Connection{
-						Context: "k3d-my-cluster",
-					},
-				},
+	factory := &mockFactory{}
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				Connection:   v1alpha1.Connection{Context: "k3d-my-cluster"},
 			},
-		}
+		},
+	}
 
-		name, err := lifecycle.GetClusterNameFromConfig(cfg, factory)
+	name, err := lifecycle.GetClusterNameFromConfig(cfg, factory)
 
-		require.NoError(t, err)
-		assert.Equal(t, "my-cluster", name)
-	})
+	require.NoError(t, err)
+	assert.Equal(t, "my-cluster", name)
+}
 
-	t.Run("extract_from_context_talos", func(t *testing.T) {
-		t.Parallel()
+func testGetClusterNameTalosContext(t *testing.T) {
+	t.Parallel()
 
-		factory := &mockFactory{}
-
-		cfg := &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Distribution: v1alpha1.DistributionTalos,
-					Connection: v1alpha1.Connection{
-						Context: "admin@homelab",
-					},
-				},
+	factory := &mockFactory{}
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionTalos,
+				Connection:   v1alpha1.Connection{Context: "admin@homelab"},
 			},
-		}
+		},
+	}
 
-		name, err := lifecycle.GetClusterNameFromConfig(cfg, factory)
+	name, err := lifecycle.GetClusterNameFromConfig(cfg, factory)
 
-		require.NoError(t, err)
-		assert.Equal(t, "homelab", name)
-	})
+	require.NoError(t, err)
+	assert.Equal(t, "homelab", name)
+}
 
-	t.Run("extract_from_context_vcluster", func(t *testing.T) {
-		t.Parallel()
+func testGetClusterNameVClusterContext(t *testing.T) {
+	t.Parallel()
 
-		factory := &mockFactory{}
-
-		cfg := &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Distribution: v1alpha1.DistributionVCluster,
-					Connection: v1alpha1.Connection{
-						Context: "vcluster-docker_vcluster",
-					},
-				},
+	factory := &mockFactory{}
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVCluster,
+				Connection:   v1alpha1.Connection{Context: "vcluster-docker_vcluster"},
 			},
-		}
+		},
+	}
 
-		name, err := lifecycle.GetClusterNameFromConfig(cfg, factory)
+	name, err := lifecycle.GetClusterNameFromConfig(cfg, factory)
 
-		require.NoError(t, err)
-		assert.Equal(t, "vcluster", name)
-	})
+	require.NoError(t, err)
+	assert.Equal(t, "vcluster", name)
 }
 
 // TestRunWithConfig tests the RunWithConfig function.
 func TestRunWithConfig(t *testing.T) {
 	t.Parallel()
 
-	t.Run("factory_create_error", func(t *testing.T) {
-		t.Parallel()
+	t.Run("factory_create_error", testRunWithConfigFactoryError)
+	t.Run("nil_provisioner_error", testRunWithConfigNilProvisioner)
+	t.Run("action_error", testRunWithConfigActionError)
+	t.Run("success_with_context_extraction", testRunWithConfigSuccess)
+}
 
-		factory := &mockFactory{
-			createErr: errors.New("factory error"),
-		}
+func testRunWithConfigFactoryError(t *testing.T) {
+	t.Parallel()
 
-		cfg := &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Distribution: v1alpha1.DistributionVanilla,
-				},
+	factory := &mockFactory{createErr: errFactoryError}
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVanilla},
+		},
+	}
+	deps := lifecycle.Deps{Timer: &mockTimer{}, Factory: factory}
+	config := lifecycle.Config{
+		Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
+			return nil
+		},
+	}
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	cmd.SetOut(new(bytes.Buffer))
+
+	err := lifecycle.RunWithConfig(cmd, deps, config, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve cluster provisioner")
+}
+
+func testRunWithConfigNilProvisioner(t *testing.T) {
+	t.Parallel()
+
+	factory := &mockFactory{provisioner: nil}
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVanilla},
+		},
+	}
+	deps := lifecycle.Deps{Timer: &mockTimer{}, Factory: factory}
+	config := lifecycle.Config{
+		Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
+			return nil
+		},
+	}
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	cmd.SetOut(new(bytes.Buffer))
+
+	err := lifecycle.RunWithConfig(cmd, deps, config, cfg)
+
+	require.ErrorIs(t, err, lifecycle.ErrMissingProvisionerDependency)
+}
+
+func testRunWithConfigActionError(t *testing.T) {
+	t.Parallel()
+
+	provisioner := &mockProvisioner{actionErr: errActionFailed}
+	kindConfig := &v1alpha4.Cluster{Name: "test-cluster"}
+	factory := &mockFactory{provisioner: provisioner, distributionConfig: kindConfig}
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVanilla},
+		},
+	}
+	deps := lifecycle.Deps{Timer: &mockTimer{}, Factory: factory}
+	actionCalled := false
+	config := lifecycle.Config{
+		TitleEmoji:      "🚀",
+		TitleContent:    "Starting Cluster",
+		ActivityContent: "Cluster is starting...",
+		Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
+			actionCalled = true
+			return errActionFailed
+		},
+	}
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	cmd.SetOut(new(bytes.Buffer))
+
+	err := lifecycle.RunWithConfig(cmd, deps, config, cfg)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "action failed")
+	assert.True(t, actionCalled)
+}
+
+func testRunWithConfigSuccess(t *testing.T) {
+	t.Parallel()
+
+	provisioner := &mockProvisioner{}
+	kindConfig := &v1alpha4.Cluster{Name: "should-not-use-this"}
+	factory := &mockFactory{provisioner: provisioner, distributionConfig: kindConfig}
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVanilla,
+				Connection:   v1alpha1.Connection{Context: "kind-from-context"},
 			},
-		}
+		},
+	}
+	deps := lifecycle.Deps{Timer: &mockTimer{}, Factory: factory}
+	var receivedClusterName string
+	config := lifecycle.Config{
+		TitleEmoji:      "🚀",
+		TitleContent:    "Starting Cluster",
+		ActivityContent: "Cluster is starting...",
+		SuccessContent:  "Cluster started",
+		Action: func(_ context.Context, _ clusterprovisioner.Provisioner, name string) error {
+			receivedClusterName = name
+			return nil
+		},
+	}
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	cmd.SetOut(new(bytes.Buffer))
 
-		deps := lifecycle.Deps{
-			Timer:   &mockTimer{},
-			Factory: factory,
-		}
+	err := lifecycle.RunWithConfig(cmd, deps, config, cfg)
 
-		config := lifecycle.Config{
-			Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
-				return nil
-			},
-		}
-
-		cmd := &cobra.Command{}
-		cmd.SetContext(context.Background())
-		cmd.SetOut(new(bytes.Buffer))
-
-		err := lifecycle.RunWithConfig(cmd, deps, config, cfg)
-
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to resolve cluster provisioner")
-	})
-
-	t.Run("nil_provisioner_error", func(t *testing.T) {
-		t.Parallel()
-
-		factory := &mockFactory{
-			provisioner: nil,
-		}
-
-		cfg := &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Distribution: v1alpha1.DistributionVanilla,
-				},
-			},
-		}
-
-		deps := lifecycle.Deps{
-			Timer:   &mockTimer{},
-			Factory: factory,
-		}
-
-		config := lifecycle.Config{
-			Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
-				return nil
-			},
-		}
-
-		cmd := &cobra.Command{}
-		cmd.SetContext(context.Background())
-		cmd.SetOut(new(bytes.Buffer))
-
-		err := lifecycle.RunWithConfig(cmd, deps, config, cfg)
-
-		assert.ErrorIs(t, err, lifecycle.ErrMissingProvisionerDependency)
-	})
-
-	t.Run("action_error", func(t *testing.T) {
-		t.Parallel()
-
-		provisioner := &mockProvisioner{
-			actionErr: errors.New("action failed"),
-		}
-
-		kindConfig := &v1alpha4.Cluster{
-			Name: "test-cluster",
-		}
-
-		factory := &mockFactory{
-			provisioner:        provisioner,
-			distributionConfig: kindConfig,
-		}
-
-		cfg := &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Distribution: v1alpha1.DistributionVanilla,
-				},
-			},
-		}
-
-		deps := lifecycle.Deps{
-			Timer:   &mockTimer{},
-			Factory: factory,
-		}
-
-		actionCalled := false
-		config := lifecycle.Config{
-			TitleEmoji:      "🚀",
-			TitleContent:    "Starting Cluster",
-			ActivityContent: "Cluster is starting...",
-			Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
-				actionCalled = true
-				return errors.New("action failed")
-			},
-		}
-
-		cmd := &cobra.Command{}
-		cmd.SetContext(context.Background())
-		cmd.SetOut(new(bytes.Buffer))
-
-		err := lifecycle.RunWithConfig(cmd, deps, config, cfg)
-
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "action failed")
-		assert.True(t, actionCalled)
-	})
-
-	t.Run("success_with_context_extraction", func(t *testing.T) {
-		t.Parallel()
-
-		provisioner := &mockProvisioner{}
-
-		kindConfig := &v1alpha4.Cluster{
-			Name: "should-not-use-this",
-		}
-
-		factory := &mockFactory{
-			provisioner:        provisioner,
-			distributionConfig: kindConfig,
-		}
-
-		cfg := &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Distribution: v1alpha1.DistributionVanilla,
-					Connection: v1alpha1.Connection{
-						Context: "kind-from-context",
-					},
-				},
-			},
-		}
-
-		deps := lifecycle.Deps{
-			Timer:   &mockTimer{},
-			Factory: factory,
-		}
-
-		var receivedClusterName string
-		config := lifecycle.Config{
-			TitleEmoji:   "🚀",
-			TitleContent: "Starting Cluster",
-			ActivityContent:     "Cluster is starting...",
-			SuccessContent:      "Cluster started",
-			Action: func(_ context.Context, _ clusterprovisioner.Provisioner, name string) error {
-				receivedClusterName = name
-				return nil
-			},
-		}
-
-		cmd := &cobra.Command{}
-		cmd.SetContext(context.Background())
-		cmd.SetOut(new(bytes.Buffer))
-
-		err := lifecycle.RunWithConfig(cmd, deps, config, cfg)
-
-		require.NoError(t, err)
-		assert.Equal(t, "from-context", receivedClusterName)
-	})
+	require.NoError(t, err)
+	assert.Equal(t, "from-context", receivedClusterName)
 }
 
 // TestNewStandardRunE tests the NewStandardRunE function.
