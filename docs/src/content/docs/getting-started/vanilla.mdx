@@ -126,12 +126,13 @@ ksail cluster delete
 The `ksail.yaml` file controls your cluster:
 
 ````yaml
-name: my-cluster
-distribution: Vanilla
-provider: Docker
-controlPlanes: 1
-workers: 2
-kubernetesVersion: "1.31"
+# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Vanilla
+    distributionConfig: kind.yaml
 ````
 
 ### Kind-Specific Configuration
@@ -164,13 +165,12 @@ Enable LoadBalancer services with Cloud Provider KIND:
 
 ````yaml
 # ksail.yaml
-name: my-cluster
-distribution: Vanilla
-provider: Docker
-controlPlanes: 1
-workers: 2
-loadBalancer:
-  enabled: true
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Vanilla
+    loadBalancer: Enabled
 ````
 
 When enabled, KSail installs Cloud Provider KIND, which:
@@ -193,15 +193,12 @@ curl http://<EXTERNAL-IP>
 
 ### Registry Mirrors
 
-Configure registry mirrors to avoid rate limits:
+Configure registry mirrors to avoid rate limits. KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default. Override with `--mirror-registry` flags:
 
-````yaml
-# ksail.yaml
-registries:
-  mirrors:
-    - name: docker-mirror
-      registry: docker.io
-      mirror: http://localhost:5000
+````bash
+ksail cluster init --name my-cluster --distribution Vanilla \
+  --mirror-registry 'docker.io=https://registry-1.docker.io' \
+  --mirror-registry 'ghcr.io=https://ghcr.io'
 ````
 
 KSail injects containerd registry configuration into all Kind nodes.
@@ -256,7 +253,7 @@ ksail cluster delete
 ksail cluster init \
   --name gitops-test \
   --distribution Vanilla \
-  --gitops Flux
+  --gitops-engine Flux
 
 # Create and bootstrap Flux
 ksail cluster create
@@ -416,9 +413,7 @@ kubectl get pods -A | grep cloud-provider-kind
 cat ksail.yaml | grep -A2 loadBalancer
 
 # Enable LoadBalancer if missing
-# Edit ksail.yaml:
-loadBalancer:
-  enabled: true
+# Edit ksail.yaml and set spec.cluster.loadBalancer: Enabled
 
 # Update cluster
 ksail cluster update
@@ -448,10 +443,8 @@ ksail cluster init --name my-cluster-2
 **Solutions:**
 
 ````bash
-# Reduce node count
-# Edit ksail.yaml:
-controlPlanes: 1
-workers: 0  # Single-node cluster
+# Use fewer nodes (single-node cluster)
+ksail cluster init --name my-cluster --distribution Vanilla --control-planes 1 --workers 0
 
 # Increase Docker resources (Docker Desktop)
 # Settings → Resources → Adjust CPU/Memory/Disk
@@ -468,35 +461,47 @@ Create production-like topologies:
 
 ````yaml
 # ksail.yaml
-name: multi-node
-distribution: Vanilla
-provider: Docker
-controlPlanes: 3  # HA control plane
-workers: 5        # Multiple workers
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Vanilla
+````
+
+````bash
+ksail cluster init \
+  --name multi-node \
+  --distribution Vanilla \
+  --control-planes 3 \
+  --workers 5
 ````
 
 ### Kubernetes Version Selection
 
-Pin specific Kubernetes versions:
+Kind determines the Kubernetes version via the node image tag. To use a specific version, configure the node image in your `kind.yaml`:
 
 ````yaml
-# ksail.yaml
-kubernetesVersion: "1.31"  # Uses latest 1.31.x
+# kind.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.31.0
+  - role: worker
+    image: kindest/node:v1.31.0
 ````
 
 Supported versions: Check [Kind release notes](https://github.com/kubernetes-sigs/kind/releases) for image availability.
 
 ### Custom CNI
 
-Override default Cilium CNI:
+Override default CNI:
 
-````yaml
-# ksail.yaml
-cni:
-  installer: Calico
+````bash
+ksail cluster init --name my-cluster --distribution Vanilla --cni Calico
 ````
 
-Available CNI options: Cilium (default), Calico, Flannel.
+Available CNI options: `Default`, `Cilium`, `Calico`.
 
 ### Port Mappings
 
@@ -518,11 +523,8 @@ Access services at `http://localhost:8080`.
 
 Enable persistent storage:
 
-````yaml
-# ksail.yaml
-csi:
-  enabled: true
-  installer: LocalPathProvisioner
+````bash
+ksail cluster init --name my-cluster --distribution Vanilla --csi Enabled
 ````
 
 Create PersistentVolumeClaims:
@@ -579,20 +581,20 @@ No vendor lock-in—configurations are portable, and KSail can interact with any
 
 ### Explore KSail Features
 
-- [**GitOps Integration**](/features/gitops/): Bootstrap Flux or ArgoCD
-- [**Secret Management**](/features/secrets/): Encrypt secrets with SOPS
-- [**AI Chat**](/features/chat/): Interactive cluster management with GitHub Copilot
-- [**VSCode Extension**](/extensions/vscode/): Manage clusters from your editor
+- [**GitOps Integration**](/features/#gitops-workflows): Bootstrap Flux or ArgoCD
+- [**Secret Management**](/features/#secret-management): Encrypt secrets with SOPS
+- [**AI Chat**](/ai-chat/): Interactive cluster management with GitHub Copilot
+- [**VSCode Extension**](/features/#vscode-extension): Manage clusters from your editor
 
 ### Try Other Distributions
 
-- [**K3s (K3d)**](/getting-started/k3s/): Lightweight K3s for minimal resource usage
+- [**K3s (K3d)**](/getting-started/k3s/): Lightweight K3s for resource-constrained environments and CI/CD
 - [**Talos**](/getting-started/talos/): Immutable infrastructure for production
 - [**VCluster**](/getting-started/vcluster/): Virtual clusters for multi-tenancy
 
 ### Learn More
 
 - [**Installation Guide**](/installation/): Install KSail on your system
-- [**CLI Reference**](/cli-flags/): Comprehensive command documentation
+- [**CLI Flags**](/cli-flags/): Comprehensive command documentation
 - [**Configuration Reference**](/configuration/): Detailed YAML options
 - [**Contributing**](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md): Contribute to KSail development

@@ -92,6 +92,8 @@ go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/... > after.txt
 benchstat before.txt after.txt
 ```
 
+PRs that modify Go code are automatically benchmarked against `main` and the comparison is posted as a PR comment. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details on interpreting results.
+
 See package-specific BENCHMARKS.md files (e.g., `pkg/k8s/readiness/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
 
 ### Documentation
@@ -181,7 +183,7 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 - **svc/provisioner/** - Distribution provisioners (Vanilla, K3s, Talos, VCluster)
 - **svc/installer/** - Component installers (CNI, CSI, metrics-server, etc.)
 - **svc/image/** - Container image export/import services for Vanilla and K3s distributions
-- **svc/reconciler/** - Common base for GitOps reconciliation clients (Flux and ArgoCD)
+- **client/reconciler/** - Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - **di/** - Dependency injection for wiring components
 
 ### Architecture: Providers vs Provisioners

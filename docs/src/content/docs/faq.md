@@ -90,7 +90,7 @@ ksail cluster init --name staging-cluster
 ksail cluster create
 ```
 
-List all clusters with `ksail cluster list --all`.
+List all clusters with `ksail cluster list`.
 
 ### How do I switch between clusters?
 
@@ -123,6 +123,10 @@ Node scaling support depends on the distribution: Talos supports both control-pl
 ### What does `ksail cluster update --dry-run` show?
 
 Previews all detected configuration changes without applying them, including change classifications (in-place, reboot-required, or recreate-required) and a summary of impacts.
+
+### What happens when I run `ksail cluster update` with no changes?
+
+The command compares the current cluster state against your `ksail.yaml` configuration. If no differences are detected, it prints `No changes detected` and exits without applying any changes, so no cluster modifications are made. This makes `ksail cluster update` safe to run frequently or in CI/CD pipelines; it is a no-op when the cluster is already in the desired state.
 
 ## Workload Management
 
@@ -177,7 +181,7 @@ ksail cluster init --gitops-engine ArgoCD
 Not necessarily! KSail can package manifests as OCI artifacts and push to a local registry, enabling GitOps workflows without Git (useful for local development):
 
 ```bash
-ksail cluster init --gitops-engine Flux --local-registry
+ksail cluster init --gitops-engine Flux --local-registry localhost:5050
 ksail cluster create
 ksail workload push      # Package and push
 ksail workload reconcile # Sync to cluster

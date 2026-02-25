@@ -82,11 +82,11 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## CLI Commands
 
-| Command Group    | Commands Available                                                                                                                  |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `ksail cluster`  | `init`, `create`, `update`, `delete`, `start`, `stop`, `info`, `list`, `connect`                                                    |
-| `ksail workload` | `apply`, `get`, `describe`, `logs`, `exec`, `gen`, `validate`, `install`, `scale`, `rollout`, `wait`, `push`, `reconcile`, `create` |
-| `ksail cipher`   | `encrypt`, `decrypt`, `edit`, `import`                                                                                              |
+| Command Group    | Commands Available                                                                                                                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ksail cluster`  | `init`, `create`, `update`, `delete`, `start`, `stop`, `info`, `list`, `connect`                                                                                                                |
+| `ksail workload` | `apply`, `create`, `delete`, `describe`, `edit`, `exec`, `explain`, `export`, `expose`, `gen`, `get`, `images`, `import`, `install`, `logs`, `push`, `reconcile`, `rollout`, `scale`, `validate`, `wait` |
+| `ksail cipher`   | `encrypt`, `decrypt`, `edit`, `import`                                                                                                                                                          |
 
 ## Update Behavior
 
@@ -116,6 +116,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 
 - "In-place" changes are applied without cluster downtime via Helm or provider APIs
 - "Recreate" changes require `ksail cluster delete && ksail cluster create` or `ksail cluster update --force`
+- If no changes are detected, `ksail cluster update` exits immediately with no modifications (idempotent no-op)
 - Use `ksail cluster update --dry-run` to preview changes before applying
 - Talos supports the broadest set of in-place updates, including node scaling for both control-plane and worker nodes
 - Kind does not support any structural node changes after creation
@@ -135,7 +136,6 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 
 | OS                    | Support |
 | --------------------- | ------- |
-| macOS (Intel)         | ✅      |
 | macOS (Apple Silicon) | ✅      |
 | Linux (x86_64)        | ✅      |
 | Linux (arm64)         | ✅      |

@@ -6,6 +6,9 @@ description: |
   coordinate with maintainers and advance the project toward its strategic goals.
 
 on:
+  bots:
+    - "github-merge-queue[bot]"
+
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   workflow_dispatch:
