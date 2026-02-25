@@ -138,6 +138,8 @@ func ShowDeletionPreview(writer io.Writer, preview *DeletionPreview) {
 		writeDockerResources(&previewText, preview)
 	case v1alpha1.ProviderHetzner:
 		writeHetznerResources(&previewText, preview)
+	case v1alpha1.ProviderOmni:
+		writeOmniResources(&previewText, preview)
 	}
 
 	notify.Warningf(writer, "%s", previewText.String())
@@ -193,6 +195,17 @@ func writeHetznerResources(previewText *strings.Builder, preview *DeletionPrevie
 
 	if preview.Network != "" {
 		previewText.WriteString("\n  Network: " + preview.Network)
+	}
+}
+
+// writeOmniResources writes Omni-specific resources to the preview.
+func writeOmniResources(previewText *strings.Builder, preview *DeletionPreview) {
+	if len(preview.Servers) > 0 {
+		previewText.WriteString("\n  Machines:")
+
+		for _, machine := range preview.Servers {
+			previewText.WriteString("\n    - " + machine)
+		}
 	}
 }
 

@@ -382,6 +382,10 @@ func buildDeletionPreview(
 		// Add a placeholder to indicate servers will be deleted
 		serverPlaceholder := "(all servers labeled with cluster: " + resolved.ClusterName + ")"
 		preview.Servers = []string{serverPlaceholder}
+	case v1alpha1.ProviderOmni:
+		// For Omni, the cluster resource will be destroyed which deallocates all machines
+		machinePlaceholder := "(all machines allocated to cluster: " + resolved.ClusterName + ")"
+		preview.Servers = []string{machinePlaceholder}
 	}
 
 	return preview
