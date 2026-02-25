@@ -59,6 +59,7 @@ ksail cluster init --local-registry '${REG_USER}:${REG_TOKEN}@registry.example.c
 ```
 
 Common errors and causes:
+
 - **"registry requires authentication"** — missing or incorrect credentials in `--local-registry`
 - **"registry access denied"** — credentials lack write permission to the repository
 - **"registry is unreachable"** — DNS resolution failure, firewall block, or registry is down
