@@ -52,6 +52,7 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/configuration/" },
             { label: "Declarative Configuration", link: "/configuration/declarative-configuration/" },
+            { label: "LoadBalancer", link: "/configuration/loadbalancer/" },
             {
               label: "CLI Flags",
               collapsed: true,
