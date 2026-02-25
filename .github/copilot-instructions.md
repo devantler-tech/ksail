@@ -155,11 +155,15 @@ go run main.go --help
 │   ├── timer/              # Command timing and performance tracking
 │   └── svc/                # Services (installers, managers, etc.)
 │       ├── chat/           # AI chat integration (GitHub Copilot SDK)
+│       ├── detector/       # Detects installed Kubernetes components (Helm releases, K8s API)
+│       ├── diff/           # Computes ClusterSpec config diffs and classifies update impact
+│       ├── image/          # Container image export/import services
 │       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
 │       ├── mcp/            # Model Context Protocol server
 │       ├── provider/       # Infrastructure providers (docker, hetzner)
 │       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos, VCluster)
-│       └── image/          # Container image export/import services
+│       ├── registryresolver/ # OCI registry detection, resolution, and artifact push
+│       └── state/          # Cluster state persistence for distributions without introspection
 ├── docs/                   # Astro documentation source
 │   ├── dist/               # Generated site (after npm run build)
 │   └── package.json        # Node.js dependencies for documentation
@@ -287,11 +291,15 @@ npm run dev                            # Test locally (if needed)
 - `pkg/client/`: Embedded tool clients (kubectl, helm, flux, argocd); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`.
 - `pkg/svc/`: Services including installers, providers, and provisioners
   - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation
+  - `pkg/svc/detector/`: Detects installed Kubernetes components by querying Helm release history and the Kubernetes API; used by the update command to build accurate baseline state
+  - `pkg/svc/diff/`: Computes configuration differences between old and new ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
+  - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
   - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.)
   - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner)
   - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster)
-  - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
+  - `pkg/svc/registryresolver/`: OCI registry detection, resolution, and artifact push utilities
+  - `pkg/svc/state/`: Cluster state persistence for distributions that cannot introspect running configuration (Kind, K3d); stores spec as JSON in `~/.ksail/clusters/<name>/spec.json`
 - `pkg/client/reconciler/`: Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - `pkg/di/`: Dependency injection for wiring components
 - `pkg/k8s/`: Kubernetes helpers and templates
