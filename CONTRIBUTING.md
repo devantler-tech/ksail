@@ -178,7 +178,7 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 ### Key Packages in pkg/
 
 - **apis/** - API types, schemas, and enums (distribution/provider values)
-- **client/** - Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
+- **client/** - Embedded tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kustomize, oci, netretry); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`
 - **client/reconciler/** - Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - **svc/detector/** - Detects installed Kubernetes components (Helm releases and Kubernetes API); used by the update command to build accurate baseline cluster state
 - **svc/diff/** - Computes configuration differences between ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
