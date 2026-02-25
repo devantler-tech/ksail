@@ -130,23 +130,26 @@ runs:
       run: |
         CONFIG_FILE="ksail.yaml"
         if [ ! -f "$CONFIG_FILE" ]; then
-          # Create minimal config for non-init flow
-          cat > "$CONFIG_FILE" <<'EOF'
+          # Create minimal config for non-init flow with endpoint set directly
+          cat > "$CONFIG_FILE" <<EOF
         apiVersion: ksail.io/v1alpha1
         kind: Cluster
         spec:
           cluster:
             omni:
-              endpoint: ""
+              endpoint: "${OMNI_ENDPOINT}"
         EOF
+        else
+          # Patch existing config from init flow
+          python3 -c "
+        import yaml, os
+        with open('$CONFIG_FILE') as f:
+            data = yaml.safe_load(f) or {}
+        data.setdefault('spec', {}).setdefault('cluster', {}).setdefault('omni', {})['endpoint'] = os.environ['OMNI_ENDPOINT']
+        with open('$CONFIG_FILE', 'w') as f:
+            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+        "
         fi
-        # Inject Omni endpoint into spec.cluster.omni.endpoint
-        # Use yq to set the field; install if not available
-        if ! command -v yq &> /dev/null; then
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
-        fi
-        yq -i '.spec.cluster.omni.endpoint = env(OMNI_ENDPOINT)' "$CONFIG_FILE"
         echo "✅ Omni endpoint configured in $CONFIG_FILE"
 
     - name: 📥 Restore mirror cache
