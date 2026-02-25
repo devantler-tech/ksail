@@ -172,15 +172,12 @@ K3s includes these components by default—KSail does **not** reinstall them:
 
 ### Registry Mirrors
 
-Configure registry mirrors to avoid rate limits:
+Configure registry mirrors to avoid rate limits. KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default. Override with `--mirror-registry` flags:
 
-```yaml
-# ksail.yaml
-spec:
-  cluster:
-    mirrorRegistries:
-      - host: docker.io
-        mirror: https://mirror.example.com
+```bash
+ksail cluster init --name my-cluster --distribution K3s \
+  --mirror-registry 'docker.io=https://registry-1.docker.io' \
+  --mirror-registry 'ghcr.io=https://ghcr.io'
 ```
 
 K3d injects registry configuration so all nodes use your mirrors automatically.
