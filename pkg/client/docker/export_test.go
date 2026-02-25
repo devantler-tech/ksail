@@ -39,17 +39,24 @@ var CleanupOrphanedRegistryVolume = cleanupOrphanedRegistryVolume
 var RemoveRegistryVolume = removeRegistryVolume
 
 // ExportBuildContainerConfig exports buildContainerConfig for benchmarking.
-func (rm *RegistryManager) ExportBuildContainerConfig(config RegistryConfig) (*dockertypes.Config, error) {
+func (rm *RegistryManager) ExportBuildContainerConfig(
+	config RegistryConfig,
+) (*dockertypes.Config, error) {
 	return rm.buildContainerConfig(config)
 }
 
 // ExportBuildHostConfig exports buildHostConfig for benchmarking.
-func (rm *RegistryManager) ExportBuildHostConfig(config RegistryConfig, volumeName string) *dockertypes.HostConfig {
+func (rm *RegistryManager) ExportBuildHostConfig(
+	config RegistryConfig,
+	volumeName string,
+) *dockertypes.HostConfig {
 	return rm.buildHostConfig(config, volumeName)
 }
 
 // ExportBuildNetworkConfig exports buildNetworkConfig for benchmarking.
-func (rm *RegistryManager) ExportBuildNetworkConfig(config RegistryConfig) *network.NetworkingConfig {
+func (rm *RegistryManager) ExportBuildNetworkConfig(
+	config RegistryConfig,
+) *network.NetworkingConfig {
 	return rm.buildNetworkConfig(config)
 }
 
@@ -59,6 +66,8 @@ func (rm *RegistryManager) ExportResolveVolumeName(config RegistryConfig) string
 }
 
 // ExportBuildProxyCredentialsEnv exports buildProxyCredentialsEnv for benchmarking.
-func (rm *RegistryManager) ExportBuildProxyCredentialsEnv(username, password string) ([]string, error) {
+func (rm *RegistryManager) ExportBuildProxyCredentialsEnv(
+	username, password string,
+) ([]string, error) {
 	return rm.buildProxyCredentialsEnv(username, password)
 }

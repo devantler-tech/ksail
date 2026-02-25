@@ -11,9 +11,9 @@ import (
 //
 //nolint:gochecknoglobals // Benchmark sink variables are required to prevent compiler optimization.
 var (
-	benchAPIClientSink     dockerclient.APIClient
+	benchAPIClientSink      dockerclient.APIClient
 	benchConcreteClientSink *dockerclient.Client
-	errBench               error
+	errBench                error
 )
 
 // BenchmarkGetDockerClient benchmarks the creation of a Docker client from environment.

@@ -173,6 +173,7 @@ func BenchmarkBuildProxyCredentialsEnv_WithCredentials(b *testing.B) {
 		if err != nil {
 			b.Fatalf("ExportBuildProxyCredentialsEnv failed: %v", err)
 		}
+
 		_ = env // Use the result
 	}
 }
@@ -189,6 +190,7 @@ func BenchmarkBuildProxyCredentialsEnv_NoCredentials(b *testing.B) {
 		if err != nil {
 			b.Fatalf("ExportBuildProxyCredentialsEnv failed: %v", err)
 		}
+
 		_ = env // Use the result
 	}
 }
