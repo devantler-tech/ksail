@@ -41,7 +41,7 @@ export default defineConfig({
             { label: "Vanilla (Kind)", link: "/getting-started/vanilla/" },
             { label: "K3s (K3d)", link: "/getting-started/k3s/" },
             { label: "Talos", link: "/getting-started/talos/" },
-            { label: "VCluster Guide", link: "/getting-started/vcluster/" },
+            { label: "VCluster", link: "/getting-started/vcluster/" },
           ],
         },
         { label: "Concepts", link: "/concepts/" },
