@@ -326,8 +326,8 @@ func CreateMinimalProvisionerForProvider(
 		// that tries each distribution in order
 		return clusterprovisioner.NewMultiProvisioner(info.ClusterName), nil
 
-	case v1alpha1.ProviderHetzner:
-		// Hetzner only supports Talos
+	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
+		// Hetzner and Omni only support Talos
 		talosConfig := &talosconfigmanager.Configs{Name: info.ClusterName}
 
 		// Use default kubeconfig path for cleanup operations
@@ -342,6 +342,7 @@ func CreateMinimalProvisionerForProvider(
 			info.Provider,
 			v1alpha1.OptionsTalos{},
 			v1alpha1.OptionsHetzner{},
+			v1alpha1.OptionsOmni{},
 			false,
 		)
 		if err != nil {

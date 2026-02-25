@@ -53,6 +53,7 @@ type ClusterSpec struct {
 
 	// Provider-specific options
 	Hetzner OptionsHetzner `json:"hetzner,omitzero"`
+	Omni    OptionsOmni    `json:"omni,omitzero"`
 }
 
 // WorkloadSpec defines workload-related configuration.
