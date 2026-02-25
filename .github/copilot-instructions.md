@@ -341,5 +341,6 @@ npm run dev                            # Test locally (if needed)
   - **Authentication**: Supports `KSAIL_COPILOT_TOKEN` and `COPILOT_TOKEN` environment variables; filters `GITHUB_TOKEN`/`GH_TOKEN` to avoid scope issues
   - **Enhanced Keybindings**: `^O` for model picker (lazy-loaded), `^E` for reasoning effort, `^H` for session history
 - **MCP Server**: Implemented Model Context Protocol server to expose KSail as a tool for Claude and other AI assistants (`pkg/svc/mcp/`)
+- **Cloud Provider KIND LoadBalancer Support**: Completed LoadBalancer support for Vanilla (Kind) × Docker using the Cloud Provider KIND controller (`pkg/svc/installer/cloudproviderkind/`); runs as an external Docker container named `ksail-cloud-provider-kind` and allocates IPs from the Docker bridge network; per-service containers use a `cpk-` prefix
 - **MetalLB LoadBalancer Support**: Completed LoadBalancer support for Talos × Docker with MetalLB installer (`pkg/svc/installer/metallb/`), configured with default IP pool (172.18.255.200-172.18.255.250) and Layer 2 mode
 - **String Building Optimization**: Replaced string concatenation with strings.Builder in tool generation (`pkg/toolgen/`) and chat UI (`pkg/cli/ui/chat/`) for better memory efficiency and reduced allocations; added Grow() pre-allocation for optimal performance (PR #2307)
