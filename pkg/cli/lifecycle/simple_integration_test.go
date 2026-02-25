@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var errTestError = errors.New("test error")
+
 // TestResolveClusterInfo tests the ResolveClusterInfo function.
 func TestResolveClusterInfo(t *testing.T) {
 	t.Parallel()
@@ -62,69 +64,69 @@ func TestResolveClusterInfo(t *testing.T) {
 func TestNewSimpleLifecycleCmd(t *testing.T) {
 	t.Parallel()
 
-	t.Run("creates_command_with_flags", func(t *testing.T) {
-		t.Parallel()
+	t.Run("creates_command_with_flags", testNewSimpleLifecycleCmdWithFlags)
+	t.Run("command_requires_cluster_name", testNewSimpleLifecycleCmdRequiresName)
+}
 
-		actionCalled := false
-		config := lifecycle.SimpleLifecycleConfig{
-			Use:          "start",
-			Short:        "Start a cluster",
-			Long:         "Start a Kubernetes cluster",
-			TitleEmoji:   "🚀",
-			TitleContent: "Starting Cluster",
-			Activity:     "Cluster is starting...",
-			Success:      "Cluster started",
-			Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
-				actionCalled = true
-				return nil
-			},
-		}
+func testNewSimpleLifecycleCmdWithFlags(t *testing.T) {
+	t.Parallel()
 
-		cmd := lifecycle.NewSimpleLifecycleCmd(config)
+	actionCalled := false
+	config := lifecycle.SimpleLifecycleConfig{
+		Use:          "start",
+		Short:        "Start a cluster",
+		Long:         "Start a Kubernetes cluster",
+		TitleEmoji:   "🚀",
+		TitleContent: "Starting Cluster",
+		Activity:     "Cluster is starting...",
+		Success:      "Cluster started",
+		Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
+			actionCalled = true
+			return nil
+		},
+	}
 
-		require.NotNil(t, cmd)
-		assert.Equal(t, "start", cmd.Use)
-		assert.Equal(t, "Start a cluster", cmd.Short)
-		assert.Equal(t, "Start a Kubernetes cluster", cmd.Long)
+	cmd := lifecycle.NewSimpleLifecycleCmd(config)
 
-		// Verify flags exist
-		nameFlag := cmd.Flags().Lookup("name")
-		require.NotNil(t, nameFlag)
-		assert.Equal(t, "n", nameFlag.Shorthand)
+	require.NotNil(t, cmd)
+	assert.Equal(t, "start", cmd.Use)
+	assert.Equal(t, "Start a cluster", cmd.Short)
+	assert.Equal(t, "Start a Kubernetes cluster", cmd.Long)
 
-		providerFlag := cmd.Flags().Lookup("provider")
-		require.NotNil(t, providerFlag)
-		assert.Equal(t, "p", providerFlag.Shorthand)
+	nameFlag := cmd.Flags().Lookup("name")
+	require.NotNil(t, nameFlag)
+	assert.Equal(t, "n", nameFlag.Shorthand)
 
-		// Action should not be called yet
-		assert.False(t, actionCalled)
-	})
+	providerFlag := cmd.Flags().Lookup("provider")
+	require.NotNil(t, providerFlag)
+	assert.Equal(t, "p", providerFlag.Shorthand)
 
-	t.Run("command_requires_cluster_name", func(t *testing.T) {
-		t.Parallel()
+	assert.False(t, actionCalled)
+}
 
-		config := lifecycle.SimpleLifecycleConfig{
-			Use:          "start",
-			Short:        "Start a cluster",
-			TitleEmoji:   "🚀",
-			TitleContent: "Starting Cluster",
-			Activity:     "Cluster is starting...",
-			Success:      "Cluster started",
-			Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
-				return nil
-			},
-		}
+func testNewSimpleLifecycleCmdRequiresName(t *testing.T) {
+	t.Parallel()
 
-		cmd := lifecycle.NewSimpleLifecycleCmd(config)
-		cmd.SetOut(new(bytes.Buffer))
-		cmd.SetErr(new(bytes.Buffer))
+	config := lifecycle.SimpleLifecycleConfig{
+		Use:          "start",
+		Short:        "Start a cluster",
+		TitleEmoji:   "🚀",
+		TitleContent: "Starting Cluster",
+		Activity:     "Cluster is starting...",
+		Success:      "Cluster started",
+		Action: func(_ context.Context, _ clusterprovisioner.Provisioner, _ string) error {
+			return nil
+		},
+	}
 
-		// Run without name flag should fail
-		err := cmd.Execute()
+	cmd := lifecycle.NewSimpleLifecycleCmd(config)
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetErr(new(bytes.Buffer))
 
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, lifecycle.ErrClusterNameRequired)
-	})
+	err := cmd.Execute()
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, lifecycle.ErrClusterNameRequired)
 }
 
 // TestResolvedClusterInfo_Struct tests the ResolvedClusterInfo structure.
@@ -307,18 +309,16 @@ func TestActionSignature(t *testing.T) {
 	t.Run("action_can_return_error", func(t *testing.T) {
 		t.Parallel()
 
-		expectedErr := errors.New("test error")
-
 		action := lifecycle.Action(func(
 			_ context.Context,
 			_ clusterprovisioner.Provisioner,
 			_ string,
 		) error {
-			return expectedErr
+			return errTestError
 		})
 
 		err := action(context.Background(), nil, "test")
 
-		assert.ErrorIs(t, err, expectedErr)
+		assert.ErrorIs(t, err, errTestError)
 	})
 }
