@@ -195,6 +195,8 @@ ksail cluster stop                     # Stop running cluster
 ksail cluster info                     # Show cluster status
 ksail cluster list [--all]             # List clusters
 ksail cluster connect                  # Connect to cluster with K9s
+ksail cluster backup                   # Backup cluster resources to .tar.gz
+ksail cluster restore                  # Restore cluster resources from .tar.gz
 ksail workload apply                   # Apply workloads
 ksail workload gen <resource>          # Generate resources
 ksail cipher <command>                 # Manage secrets with SOPS
