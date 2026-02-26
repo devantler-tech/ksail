@@ -201,7 +201,7 @@ KSail separates infrastructure management from distribution configuration:
 |--------------|------------------------|-------|-----------------|-----------------------------------------|
 | `Vanilla`    | KindClusterProvisioner | Kind  | Docker          | Standard upstream Kubernetes            |
 | `K3s`        | K3dClusterProvisioner  | K3d   | Docker          | Lightweight K3s in Docker               |
-| `Talos`      | TalosProvisioner       | Talos | Docker, Hetzner | Immutable Talos Linux                   |
+| `Talos`      | TalosProvisioner       | Talos | Docker, Hetzner, Omni | Immutable Talos Linux              |
 | `VCluster`   | VClusterProvisioner    | Vind  | Docker          | Virtual clusters via vCluster in Docker |
 
 This project strives to be fully open-source friendly, and as such, all core functionality is implemented in the `pkg/` directory, and the `internal/` directory is not used. This allows external projects to import and use any part of the codebase.
@@ -237,6 +237,17 @@ To test the Hetzner provider locally, you need:
 **Note:** CI includes a safety-net cleanup job (`cleanup-hetzner`) that runs after system tests and deletes any Hetzner resources labeled `ksail.owned=true`. This is implemented as a GitHub Action at `.github/actions/cleanup-hetzner/action.yaml` and is not intended for local execution.
 
 **Warning:** The cleanup action is destructive and will delete all KSail-managed Hetzner resources (servers, placement groups, firewalls, and networks) in your project that are labeled `ksail.owned=true`. Manual cleanup of any remaining resources should be done via the Hetzner Cloud Console or `hcloud` CLI if needed.
+
+#### Omni Provider Testing
+
+To test the Omni provider locally, you need:
+
+- **`OMNI_SERVICE_ACCOUNT_KEY`** – A Sidero Omni service account key with cluster management permissions. The environment variable name is configurable via `spec.cluster.omni.serviceAccountKeyEnvVar` in `ksail.yaml`.
+- **Omni endpoint** – The URL of your Sidero Omni instance, configured via `spec.cluster.omni.endpoint` in `ksail.yaml` (there is no CLI flag for this value).
+
+**Note:** Omni requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account and does not run locally. Omni manages the Talos machine lifecycle; `StartNodes` and `StopNodes` are no-ops in the Omni provider.
+
+**Note:** Omni tests are not automatically triggered unless both the `OMNI_SERVICE_ACCOUNT_KEY` and endpoint are configured.
 
 ## CD
 
