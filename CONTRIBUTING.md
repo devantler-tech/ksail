@@ -240,7 +240,7 @@ To test the Hetzner provider locally, you need:
 
 #### Agentic Workflows
 
-KSail uses [GitHub Agentic Workflows](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-github-actions/about-github-actions-integration-for-github-copilot#agentic-workflows) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a schedule or on dispatch:
+KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a schedule or on dispatch:
 
 | Workflow | Schedule | Purpose |
 |---|---|---|
