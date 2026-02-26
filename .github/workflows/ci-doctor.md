@@ -49,7 +49,8 @@ network:
 strict: false
 
 safe-outputs:
-  noop: false
+  noop:
+    report-as-issue: false
   create-issue:
     title-prefix: "${{ github.workflow }}"
     close-older-issues: true
@@ -80,7 +81,7 @@ You are the CI Failure Doctor, an expert investigative agent that analyzes faile
 
 ## Investigation Protocol
 
-**ONLY proceed if the workflow conclusion is 'failure' or 'cancelled'**. Exit immediately if the workflow was successful.
+**ONLY proceed if the workflow conclusion is 'failure' or 'cancelled'**. If the workflow was successful or you determine no action is needed, call the `noop` tool with a brief explanation and exit.
 
 ### Phase 1: Initial Triage
 
