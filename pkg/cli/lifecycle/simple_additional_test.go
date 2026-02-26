@@ -52,8 +52,12 @@ func TestResolveClusterInfo(t *testing.T) {
 	t.Run("error_when_no_name_available", func(t *testing.T) {
 		t.Parallel()
 
-		// No flags, no config file, no kubeconfig context
-		resolved, err := lifecycle.ResolveClusterInfo("", "", "")
+		// No flags, no config file, and an explicit invalid kubeconfig path
+		resolved, err := lifecycle.ResolveClusterInfo(
+			"",
+			"",
+			"/non-existent-kubeconfig",
+		)
 
 		require.ErrorIs(t, err, lifecycle.ErrClusterNameRequired)
 		assert.Nil(t, resolved)
@@ -123,6 +127,7 @@ func testNewSimpleLifecycleCmdRequiresName(t *testing.T) {
 	cmd := lifecycle.NewSimpleLifecycleCmd(config)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetErr(new(bytes.Buffer))
+	cmd.SetArgs([]string{}) // Prevent Cobra from parsing os.Args (includes -test.* flags)
 
 	err := cmd.Execute()
 
