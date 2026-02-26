@@ -108,7 +108,7 @@ docker push localhost:5050/my-app
 
 ### Mirror Registries
 
-For Docker-based clusters (local Vanilla, K3s, Talos-on-Docker, and VCluster), KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default to avoid rate limits and improve CI/CD performance. For these Docker-backed providers, mirror registries run as local pull-through cache containers that authenticate to upstream registries using credentials resolved from `${ENV_VAR}` placeholders, with cached images persisting across restarts via containerd `hosts.toml` injection (Vanilla, VCluster) or K3d registries configuration (K3s, Talos-on-Docker). For Talos clusters on Hetzner, no mirrors are enabled by default; instead you can configure externally reachable mirror endpoints via config/flags, which are applied through Talos machine config patches.
+For Docker-based clusters (local Vanilla, K3s, Talos-on-Docker, and VCluster), KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default to avoid rate limits and improve CI/CD performance. For these clusters, mirror registries run as local pull-through cache containers that authenticate to upstream registries using credentials resolved from `${ENV_VAR}` placeholders. Cached images persist across restarts via containerd `hosts.toml` injection for Vanilla and VCluster, or via K3d registries configuration for K3s and Talos-on-Docker. For Talos clusters on Hetzner, no mirrors are enabled by default. Instead, you can configure externally reachable mirror endpoints via config/flags, which are applied through Talos machine config patches.
 
 ```bash
 # Default mirrors (docker.io, ghcr.io, quay.io, registry.k8s.io)
@@ -207,7 +207,16 @@ spec:
 
 ## AI Chat Assistant
 
-Get interactive help with cluster configuration and troubleshooting using an AI-powered chat session. Three modes: **Agent** (`</>`) for full execution with approval, **Plan** (`≡`) for step-by-step guidance without execution, and **Ask** (`?`) for read-only investigation. Press **Tab** to cycle between modes. Requires [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) installed and authenticated.
+Get interactive help with cluster configuration and troubleshooting using an AI-powered chat session.
+
+Three modes are available:
+
+- **Agent** (`</>`) for full execution with approval
+- **Plan** (`≡`) for step-by-step guidance without execution
+- **Ask** (`?`) for read-only investigation
+
+Press **Tab** to cycle between modes.
+Requires [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) installed and authenticated.
 
 ```bash
 ksail chat
