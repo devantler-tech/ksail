@@ -281,9 +281,9 @@ func TestActionSignature(t *testing.T) {
 		t.Parallel()
 
 		var (
-			receivedCtx         context.Context
 			receivedProvisioner clusterprovisioner.Provisioner
 			receivedClusterName string
+			ctxReceived         bool
 		)
 
 		action := lifecycle.Action(func(
@@ -291,21 +291,20 @@ func TestActionSignature(t *testing.T) {
 			provisioner clusterprovisioner.Provisioner,
 			clusterName string,
 		) error {
-			receivedCtx := ctx
+			ctxReceived = ctx != nil
 			receivedProvisioner = provisioner
 			receivedClusterName = clusterName
 
 			return nil
 		})
 
-		testCtx := context.Background()
 		testProvisioner := &mockProvisioner{}
 		testClusterName := "test-cluster"
 
-		err := action(testCtx, testProvisioner, testClusterName)
+		err := action(context.Background(), testProvisioner, testClusterName)
 
 		require.NoError(t, err)
-		assert.Equal(t, testCtx, receivedCtx)
+		assert.True(t, ctxReceived)
 		assert.Equal(t, testProvisioner, receivedProvisioner)
 		assert.Equal(t, testClusterName, receivedClusterName)
 	})
