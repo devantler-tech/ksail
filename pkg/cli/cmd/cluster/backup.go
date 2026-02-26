@@ -244,7 +244,10 @@ func createBackupArchive(
 }
 
 // populateClusterInfo uses the cluster detector to populate
-// distribution and provider fields in the metadata.
+// distribution and provider fields in the metadata. Errors are
+// intentionally ignored because detection may fail when the
+// kubeconfig context pattern is unrecognized (e.g., imported configs);
+// in that case the fields remain empty strings.
 func populateClusterInfo(metadata *BackupMetadata, kubeconfigPath string) {
 	info, err := clusterdetector.DetectInfo(kubeconfigPath, "")
 	if err != nil {
