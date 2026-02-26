@@ -230,4 +230,4 @@ If there are compilation errors you **cannot fix**, create an issue with:
 - Test each fix with `gh aw compile --validate` before moving on
 - Include context and reasoning in your PR or issue descriptions
 - If only `.lock.yml` files changed (no source changes), reset them and call `noop`
-- **You MUST always produce a safe output** — either `noop`, `create_pull_request`, or `create_issue`. Never exit without calling one of these
+- **You MUST always produce a safe output** — either `noop`, `create_pull_request`, or `create_issue` (the corresponding frontmatter keys are `create-pull-request` and `create-issue`). Never exit without calling one of these
