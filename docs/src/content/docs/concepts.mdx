@@ -19,7 +19,7 @@ KSail builds upon established Kubernetes technologies and patterns. This page pr
 
 ## Distributions
 
-Kubernetes distributions package core components with additional tooling for specific use cases. KSail supports four distributions: Vanilla, K3s, Talos, and VCluster. All run on Docker; Talos also supports Hetzner Cloud.
+Kubernetes distributions package core components with additional tooling for specific use cases. KSail supports four distributions: Vanilla, K3s, Talos, and VCluster. All run on Docker; Talos also supports Hetzner Cloud and Sidero Omni.
 
 ### Vanilla (Kind)
 
@@ -51,6 +51,10 @@ Creates nodes as Hetzner Cloud servers for production-grade clusters. **Supporte
 
 > [!NOTE]
 > KSail only enables Hetzner-backed operations when `HCLOUD_TOKEN` is set; if it's unset, Hetzner is skipped.
+
+### Omni
+
+Manages Talos clusters through [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/), a SaaS platform for centralized cluster lifecycle management. **Supported distributions:** Talos. **Requirements:** Sidero Omni account, `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and Omni API endpoint configured in `spec.cluster.omni.endpoint`. See [Omni docs](https://omni.siderolabs.com/docs/) and [Talos on Omni](https://www.talos.dev/latest/talos-guides/install/cloud-platforms/omni/).
 
 ## Container Network Interface (CNI)
 
