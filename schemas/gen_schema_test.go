@@ -34,6 +34,7 @@ func generateSchema(t *testing.T) map[string]any {
 	if !ok {
 		t.Fatal("unable to determine test file path")
 	}
+
 	cmd.Dir = filepath.Dir(thisFile)
 
 	out, err := cmd.CombinedOutput()
