@@ -261,12 +261,12 @@ Consider alternatives if you need:
     ```
 
     This creates:
-    - `ksail.yaml` — KSail configuration (including `spec.cluster.omni.endpoint`)
+    - `ksail.yaml` — KSail configuration
     - `talos/` directory — Talos configuration patches
 
-    #### Step 3: Set the Omni Endpoint
+    #### Step 3: Add the Omni Endpoint
 
-    Open `ksail.yaml` and set the `spec.cluster.omni.endpoint` field:
+    The scaffolder does not generate the `omni:` block automatically. Open `ksail.yaml` and add `spec.cluster.omni.endpoint` manually:
 
     ```yaml
     spec:
