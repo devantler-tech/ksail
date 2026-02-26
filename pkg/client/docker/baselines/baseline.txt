@@ -1,0 +1,17 @@
+goos: linux
+goarch: amd64
+pkg: github.com/devantler-tech/ksail/v5/pkg/client/docker
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkGetDockerClient-4                            	  718558	      1651 ns/op	    1784 B/op	      23 allocs/op
+BenchmarkGetConcreteDockerClient-4                    	  720540	      1591 ns/op	    1784 B/op	      23 allocs/op
+BenchmarkNewRegistryManager-4                         	45103809	        26.32 ns/op	      16 B/op	       1 allocs/op
+BenchmarkNewRegistryManagerNilClient-4                	1000000000	         0.6359 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuildContainerConfig_Minimal-4               	 2803899	       424.5 ns/op	     992 B/op	       7 allocs/op
+BenchmarkBuildContainerConfig_Production-4            	 1319427	       926.9 ns/op	    1196 B/op	      17 allocs/op
+BenchmarkBuildHostConfig_Minimal-4                    	 3558907	       322.9 ns/op	    1312 B/op	       3 allocs/op
+BenchmarkBuildNetworkConfig_Minimal-4                 	398900667	         3.016 ns/op	       0 B/op	       0 allocs/op
+BenchmarkResolveVolumeName_Minimal-4                  	148005811	         8.116 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuildProxyCredentialsEnv_WithCredentials-4   	 3009960	       391.4 ns/op	     161 B/op	       9 allocs/op
+BenchmarkBuildProxyCredentialsEnv_NoCredentials-4     	427759789	         2.806 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/devantler-tech/ksail/v5/pkg/client/docker	23.213s

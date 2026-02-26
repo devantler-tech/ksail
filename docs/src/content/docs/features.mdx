@@ -36,6 +36,8 @@ ksail cluster create
 | `ksail cluster info`    | Show cluster information    |
 | `ksail cluster list`    | List clusters               |
 | `ksail cluster connect` | Connect to cluster with K9s |
+| `ksail cluster backup`  | Backup cluster resources    |
+| `ksail cluster restore` | Restore cluster resources   |
 
 **Configuration:** [Declarative Configuration](/configuration/declarative-configuration/)
 
@@ -54,6 +56,7 @@ ksail workload logs deployment/my-app
 | Command                    | Description                              |
 | -------------------------- | ---------------------------------------- |
 | `ksail workload apply`     | Apply manifests to cluster               |
+| `ksail workload create`    | Create resources imperatively            |
 | `ksail workload get`       | Get resources                            |
 | `ksail workload describe`  | Describe resources                       |
 | `ksail workload delete`    | Delete Kubernetes resources              |
@@ -137,6 +140,37 @@ ksail cipher import AGE-SECRET-KEY-1...
 | `ksail cipher import`  | Import age private key        |
 
 **Supported KMS:** See [Key Management Systems](/concepts/#key-management-systems) for supported providers and documentation links.
+
+## Cluster Backup & Restore
+
+Export cluster resource manifests to a compressed archive and restore them to a target cluster. Backups capture resource YAML in dependency order (CRDs → namespaces → storage → workloads), strip server-assigned metadata for portability, and embed a metadata file with version, timestamp, cluster name, and resource count.
+
+```bash
+# Backup all namespaces
+ksail cluster backup --output ./backup.tar.gz
+
+# Backup specific namespaces and exclude resource types
+ksail cluster backup -o ./backup.tar.gz -n default,kube-system --exclude-types events,pods
+
+# Restore, skipping already-existing resources
+ksail cluster restore --input ./backup.tar.gz
+
+# Restore, updating existing resources
+ksail cluster restore -i ./backup.tar.gz --existing-resource-policy update
+
+# Dry-run: preview what would be restored
+ksail cluster restore --input ./backup.tar.gz --dry-run
+```
+
+**Commands:** [`ksail cluster backup`](/cli-flags/cluster/cluster-backup/), [`ksail cluster restore`](/cli-flags/cluster/cluster-restore/)
+
+| Command                 | Description                      |
+| ----------------------- | -------------------------------- |
+| `ksail cluster backup`  | Export resources to a `.tar.gz`  |
+| `ksail cluster restore` | Apply resources from a `.tar.gz` |
+
+> [!NOTE]
+> This feature backs up resource manifests (YAML) only. Persistent volume data is not included in the current implementation.
 
 ## Code Generation
 
