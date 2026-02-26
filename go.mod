@@ -63,7 +63,7 @@ require (
 	github.com/hetznercloud/hcloud-go/v2 v2.36.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
-	github.com/loft-sh/vcluster v0.32.0-rc.1
+	github.com/loft-sh/vcluster v0.32.0
 	github.com/modelcontextprotocol/go-sdk v1.3.1
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/omni/client v1.5.5
