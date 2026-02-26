@@ -15,7 +15,7 @@
 2. **Implement robust error handling for copilot CLI calls:**
    - Use `set -euo pipefail` at script start
    - Capture both stdout and stderr separately
-   - Add timeout protection (e.g., `timeout 5m copilot ...`)
+   - Add timeout protection (e.g., `timeout 10m copilot ...`); tune based on expected analysis duration
    - Upload all logs on failure, not just detection.log
 
 3. **Test with minimal configuration first:**
@@ -23,5 +23,6 @@
    - Add restrictions incrementally with validation
 
 4. **Provide fallback mechanisms:**
-   - If detection fails, capture full state for post-mortem
-   - Consider allowing workflow to continue with warning if detection is non-critical
+   - If detection fails, capture full state (environment, logs, artifacts) for post-mortem analysis
+   - Detection is security-critical; failures should block workflow completion by default
+   - Only downgrade to a warning when the failure is clearly an infrastructure issue (e.g., CLI install failure, network timeout), not a potential security concern
