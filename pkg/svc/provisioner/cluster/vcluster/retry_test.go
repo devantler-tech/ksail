@@ -7,21 +7,24 @@ import (
 	"testing"
 	"time"
 
+	vclusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/vcluster"
 	loftlog "github.com/loft-sh/log"
 	"github.com/loft-sh/vcluster/pkg/cli"
 	"github.com/loft-sh/vcluster/pkg/cli/flags"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	vclusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/vcluster"
 )
 
 var (
 	errTransient    = errors.New("failed to start vCluster standalone: exit status 22")
 	errNonTransient = errors.New("failed to start vCluster standalone: permission denied")
-	errDBus         = errors.New("Failed to connect to bus: No such file or directory")
-	errDBusRecover  = errors.New("D-Bus recovery failed")
+	//nolint:staticcheck // Must match the exact SDK error string which is capitalised.
+	errDBus        = errors.New("Failed to connect to bus: No such file or directory")
+	errDBusRecover = errors.New("D-Bus recovery failed")
+	errExitStatus1 = errors.New("exit status 1")
+	errWrapped22   = errors.New("something went wrong: exit status 22")
+	errEmpty       = errors.New("")
 )
 
 func newTestLogger() loftlog.Logger {
@@ -55,17 +58,17 @@ func TestIsTransientCreateError(t *testing.T) {
 		},
 		{
 			name: "exit_status_22_in_wrapped_error",
-			err:  errors.New("something went wrong: exit status 22"),
+			err:  errWrapped22,
 			want: true,
 		},
 		{
 			name: "exit_status_1_is_not_transient",
-			err:  errors.New("exit status 1"),
+			err:  errExitStatus1,
 			want: false,
 		},
 		{
 			name: "empty_error_is_not_transient",
-			err:  errors.New(""),
+			err:  errEmpty,
 			want: false,
 		},
 	}
@@ -88,6 +91,7 @@ func TestCreateWithRetry_Success(t *testing.T) {
 	createCalls := 0
 	create := func(_ context.Context, _ *cli.CreateOptions, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
 		createCalls++
+
 		return nil
 	}
 
@@ -97,6 +101,7 @@ func TestCreateWithRetry_Success(t *testing.T) {
 
 	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
 		t.Error("D-Bus recovery should not be called on success")
+
 		return nil
 	}
 
@@ -123,6 +128,7 @@ func TestCreateWithRetry_TransientErrorRetries(t *testing.T) {
 		if createCalls < 3 {
 			return errTransient
 		}
+
 		return nil
 	}
 
@@ -133,6 +139,7 @@ func TestCreateWithRetry_TransientErrorRetries(t *testing.T) {
 
 	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
 		t.Error("D-Bus recovery should not be called for transient errors")
+
 		return nil
 	}
 
@@ -157,6 +164,7 @@ func TestCreateWithRetry_TransientErrorExhaustsAttempts(t *testing.T) {
 	createCalls := 0
 	create := func(_ context.Context, _ *cli.CreateOptions, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
 		createCalls++
+
 		return errTransient
 	}
 
@@ -180,8 +188,8 @@ func TestCreateWithRetry_TransientErrorExhaustsAttempts(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to create vCluster after 3 attempts")
-	assert.ErrorIs(t, err, errTransient)
+	require.ErrorContains(t, err, "failed to create vCluster after 3 attempts")
+	require.ErrorIs(t, err, errTransient)
 	assert.Equal(t, 3, createCalls, "create should be called maxAttempts times")
 	assert.Equal(t, 2, cleanupCalls, "cleanup should be called before retries 2 and 3")
 }
@@ -192,6 +200,7 @@ func TestCreateWithRetry_NonTransientErrorFailsImmediately(t *testing.T) {
 	createCalls := 0
 	create := func(_ context.Context, _ *cli.CreateOptions, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
 		createCalls++
+
 		return errNonTransient
 	}
 
@@ -201,6 +210,7 @@ func TestCreateWithRetry_NonTransientErrorFailsImmediately(t *testing.T) {
 
 	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
 		t.Error("D-Bus recovery should not be called for non-transient errors")
+
 		return nil
 	}
 
@@ -215,8 +225,8 @@ func TestCreateWithRetry_NonTransientErrorFailsImmediately(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to create vCluster")
-	assert.ErrorIs(t, err, errNonTransient)
+	require.ErrorContains(t, err, "failed to create vCluster")
+	require.ErrorIs(t, err, errNonTransient)
 	assert.Equal(t, 1, createCalls, "create should be called exactly once")
 }
 
@@ -234,6 +244,7 @@ func TestCreateWithRetry_DBusErrorTriggersRecovery(t *testing.T) {
 	recoverCalls := 0
 	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
 		recoverCalls++
+
 		return nil
 	}
 
@@ -275,8 +286,8 @@ func TestCreateWithRetry_DBusRecoveryFailure(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "D-Bus recovery failed")
-	assert.ErrorIs(t, err, errDBusRecover)
+	require.ErrorContains(t, err, "D-Bus recovery failed")
+	require.ErrorIs(t, err, errDBusRecover)
 }
 
 func TestCreateWithRetry_ContextCancellation(t *testing.T) {
@@ -287,7 +298,9 @@ func TestCreateWithRetry_ContextCancellation(t *testing.T) {
 	createCalls := 0
 	create := func(_ context.Context, _ *cli.CreateOptions, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
 		createCalls++
+
 		cancel()
+
 		return errTransient
 	}
 
@@ -311,7 +324,7 @@ func TestCreateWithRetry_ContextCancellation(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "context cancelled during create retry")
+	require.ErrorContains(t, err, "context cancelled during create retry")
 	assert.Equal(t, 1, createCalls, "create should be called once before context is cancelled")
 	assert.Equal(t, 1, cleanupCalls, "cleanup should be called before the cancelled retry delay")
 }
@@ -325,6 +338,7 @@ func TestCreateWithRetry_CleanupErrorDoesNotPropagate(t *testing.T) {
 		if createCalls == 1 {
 			return errTransient
 		}
+
 		return nil
 	}
 

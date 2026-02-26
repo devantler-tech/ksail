@@ -232,20 +232,8 @@ func createWithRetry(
 			return nil
 		}
 
-		// D-Bus race condition: container is running but systemd hasn't
-		// initialised D-Bus yet. Recover in-place without a full retry.
 		if strings.Contains(lastErr.Error(), dbusErrorSubstring) {
-			logger.Infof("D-Bus not ready in container — recovering...")
-
-			recoverErr := recoverDBus(ctx, globalFlags, clusterName, logger)
-			if recoverErr != nil {
-				return fmt.Errorf(
-					"failed to create vCluster (D-Bus recovery failed): %w",
-					recoverErr,
-				)
-			}
-
-			return nil
+			return tryDBusRecovery(ctx, globalFlags, clusterName, logger, recoverDBus)
 		}
 
 		// Non-transient error — fail immediately.
@@ -263,6 +251,29 @@ func createWithRetry(
 		"failed to create vCluster after %d attempts: %w",
 		createMaxAttempts, lastErr,
 	)
+}
+
+// tryDBusRecovery handles the D-Bus race condition where CreateDocker fails
+// because systemd inside the container hasn't initialized D-Bus yet. The
+// container is already running, so we recover in-place without a full retry.
+func tryDBusRecovery(
+	ctx context.Context,
+	globalFlags *flags.GlobalFlags,
+	clusterName string,
+	logger loftlog.Logger,
+	recoverDBus dbusRecoverFn,
+) error {
+	logger.Infof("D-Bus not ready in container — recovering...")
+
+	recoverErr := recoverDBus(ctx, globalFlags, clusterName, logger)
+	if recoverErr != nil {
+		return fmt.Errorf(
+			"failed to create vCluster (D-Bus recovery failed): %w",
+			recoverErr,
+		)
+	}
+
+	return nil
 }
 
 // isTransientCreateError returns true when the error message matches a known
@@ -466,6 +477,7 @@ func waitForDBus(ctx context.Context, containerName string) error {
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled while waiting for D-Bus: %w", ctx.Err())
 		case <-ticker.C:
+			//nolint:gosec // args are internally controlled constants.
 			cmd := exec.CommandContext(ctx, "docker", "exec", containerName,
 				"test", "-e", "/run/dbus/system_bus_socket")
 
