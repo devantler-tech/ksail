@@ -238,6 +238,29 @@ To test the Hetzner provider locally, you need:
 
 **Warning:** The cleanup action is destructive and will delete all KSail-managed Hetzner resources (servers, placement groups, firewalls, and networks) in your project that are labeled `ksail.owned=true`. Manual cleanup of any remaining resources should be done via the Hetzner Cloud Console or `hcloud` CLI if needed.
 
+#### Agentic Workflows
+
+KSail uses [GitHub Agentic Workflows](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-github-actions/about-github-actions-integration-for-github-copilot#agentic-workflows) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a daily schedule or on dispatch and operate in multiple phases (research, configuration, implementation):
+
+| Workflow | Purpose |
+|---|---|
+| `daily-refactor` | Incremental code refactoring for maintainability |
+| `daily-perf-improver` | Performance optimization |
+| `daily-test-improver` | Test coverage improvements |
+| `daily-workflow-optimizer` | CI/CD workflow optimization (both `.yaml` and `.md` workflows) |
+| `daily-code-simplifier` | Code simplification and readability |
+| `daily-backlog-burner` | Backlog issue resolution |
+| `ci-doctor` | CI health diagnostics |
+
+Each agentic workflow creates a GitHub Discussion to coordinate its multi-phase work and opens draft PRs with incremental improvements. You can control them using the `gh aw` CLI:
+
+```sh
+gh aw disable daily-workflow-optimizer --repo devantler-tech/ksail
+gh aw enable daily-workflow-optimizer --repo devantler-tech/ksail
+gh aw run daily-workflow-optimizer --repo devantler-tech/ksail
+gh aw logs daily-workflow-optimizer --repo devantler-tech/ksail
+```
+
 ## CD
 
 ### Release Process

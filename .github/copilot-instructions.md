@@ -180,6 +180,7 @@ go run main.go --help
 - **go.mod**: Go module dependencies (includes embedded kubectl, helm, kind, k3d, vcluster, flux, argocd)
 - **package.json**: Node.js dependencies for Astro documentation
 - **.github/workflows/\*.yaml**: CI/CD pipelines
+- **.github/workflows/\*.md**: Agentic workflows (daily-refactor, daily-perf-improver, daily-test-improver, daily-workflow-optimizer, etc.); each runs on a schedule or dispatch and operates in multiple phases
 
 ### CLI Commands Reference
 
@@ -347,3 +348,4 @@ npm run dev                            # Test locally (if needed)
 - **Cloud Provider KIND LoadBalancer Support**: Completed LoadBalancer support for Vanilla (Kind) × Docker using the Cloud Provider KIND controller (`pkg/svc/installer/cloudproviderkind/`); runs as an external Docker container named `ksail-cloud-provider-kind` and allocates IPs from the `kind` Docker network subnet; per-service containers use a `cpk-` prefix
 - **MetalLB LoadBalancer Support**: Completed LoadBalancer support for Talos × Docker with MetalLB installer (`pkg/svc/installer/metallb/`), configured with default IP pool (172.18.255.200-172.18.255.250) and Layer 2 mode
 - **String Building Optimization**: Replaced string concatenation with strings.Builder in tool generation (`pkg/toolgen/`) and chat UI (`pkg/cli/ui/chat/`) for better memory efficiency and reduced allocations; added Grow() pre-allocation for optimal performance (PR #2307)
+- **Daily Workflow Optimizer**: Added `daily-workflow-optimizer` agentic workflow (`.github/workflows/daily-workflow-optimizer.md`) that systematically identifies and implements optimizations across all GitHub Actions workflows (both `.yaml`/`.yml` and agentic `.md`); operates in three phases: CI/CD research and planning, build-steps inference and guide creation, then targeted implementation
