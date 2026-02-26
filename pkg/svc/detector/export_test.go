@@ -98,7 +98,7 @@ func NewReleaseMappingForTest[T ~string](
 func ExportDetectFirstRelease[T ~string](
 	ctx context.Context,
 	helmClient helm.Interface,
-	mappings []releaseMapping[T],
+	mappings []ReleaseMappingForTest[T],
 	defaultVal T,
 ) (T, error) {
 	return detectFirstRelease(ctx, helmClient, mappings, defaultVal)

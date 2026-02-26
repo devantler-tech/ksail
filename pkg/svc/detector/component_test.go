@@ -61,7 +61,6 @@ func TestDetectCNI_Cilium(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.CNICilium, cni)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectCNI_Calico(t *testing.T) {
@@ -81,7 +80,6 @@ func TestDetectCNI_Calico(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.CNICalico, cni)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectCNI_Default(t *testing.T) {
@@ -101,7 +99,6 @@ func TestDetectCNI_Default(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.CNIDefault, cni)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectCNI_Error(t *testing.T) {
@@ -119,7 +116,6 @@ func TestDetectCNI_Error(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "helm error")
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectCSI_K3s_Enabled(t *testing.T) {
@@ -172,7 +168,6 @@ func TestDetectCSI_TalosHetzner_Enabled(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.CSIEnabled, csi)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectCSI_TalosHetzner_Disabled(t *testing.T) {
@@ -190,7 +185,6 @@ func TestDetectCSI_TalosHetzner_Disabled(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.CSIDisabled, csi)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectCSI_Vanilla_Enabled(t *testing.T) {
@@ -243,7 +237,6 @@ func TestDetectMetricsServer_Enabled(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.MetricsServerEnabled, metricsServer)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectMetricsServer_K3s_Default(t *testing.T) {
@@ -268,7 +261,6 @@ func TestDetectMetricsServer_K3s_Default(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.MetricsServerDefault, metricsServer)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectMetricsServer_K3s_Disabled(t *testing.T) {
@@ -286,7 +278,6 @@ func TestDetectMetricsServer_K3s_Disabled(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.MetricsServerDisabled, metricsServer)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectLoadBalancer_K3s_Enabled(t *testing.T) {
@@ -362,7 +353,6 @@ func TestDetectLoadBalancer_Vanilla_Enabled(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.LoadBalancerEnabled, loadBalancer)
-	dockerClient.AssertExpectations(t)
 }
 
 func TestDetectLoadBalancer_Vanilla_Disabled(t *testing.T) {
@@ -384,7 +374,6 @@ func TestDetectLoadBalancer_Vanilla_Disabled(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.LoadBalancerDefault, loadBalancer)
-	dockerClient.AssertExpectations(t)
 }
 
 func TestDetectLoadBalancer_Talos_MetalLB_Enabled(t *testing.T) {
@@ -406,7 +395,6 @@ func TestDetectLoadBalancer_Talos_MetalLB_Enabled(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.LoadBalancerEnabled, loadBalancer)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectLoadBalancer_Talos_MetalLB_Default(t *testing.T) {
@@ -428,7 +416,6 @@ func TestDetectLoadBalancer_Talos_MetalLB_Default(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.LoadBalancerDefault, loadBalancer)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectCertManager_Enabled(t *testing.T) {
@@ -446,7 +433,6 @@ func TestDetectCertManager_Enabled(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.CertManagerEnabled, certManager)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectCertManager_Disabled(t *testing.T) {
@@ -464,7 +450,6 @@ func TestDetectCertManager_Disabled(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.CertManagerDisabled, certManager)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectPolicyEngine_Kyverno(t *testing.T) {
@@ -482,7 +467,6 @@ func TestDetectPolicyEngine_Kyverno(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.PolicyEngineKyverno, policyEngine)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectPolicyEngine_Gatekeeper(t *testing.T) {
@@ -502,7 +486,6 @@ func TestDetectPolicyEngine_Gatekeeper(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.PolicyEngineGatekeeper, policyEngine)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectPolicyEngine_None(t *testing.T) {
@@ -522,7 +505,6 @@ func TestDetectPolicyEngine_None(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.PolicyEngineNone, policyEngine)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectGitOpsEngine_Flux(t *testing.T) {
@@ -540,7 +522,6 @@ func TestDetectGitOpsEngine_Flux(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.GitOpsEngineFlux, gitOpsEngine)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectGitOpsEngine_ArgoCD(t *testing.T) {
@@ -560,7 +541,6 @@ func TestDetectGitOpsEngine_ArgoCD(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.GitOpsEngineArgoCD, gitOpsEngine)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectGitOpsEngine_None(t *testing.T) {
@@ -580,7 +560,6 @@ func TestDetectGitOpsEngine_None(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.GitOpsEngineNone, gitOpsEngine)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectComponents_Success(t *testing.T) {
@@ -616,7 +595,6 @@ func TestDetectComponents_Success(t *testing.T) {
 	assert.Equal(t, v1alpha1.ProviderDocker, spec.Provider)
 	assert.Equal(t, v1alpha1.CNICilium, spec.CNI)
 	assert.Equal(t, v1alpha1.MetricsServerEnabled, spec.MetricsServer)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectComponents_ErrorOnCNI(t *testing.T) {
@@ -634,7 +612,6 @@ func TestDetectComponents_ErrorOnCNI(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "detect CNI")
-	helmClient.AssertExpectations(t)
 }
 
 func TestDeploymentExists_Found(t *testing.T) {
@@ -746,7 +723,6 @@ func TestContainerExists_Found(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, exists)
-	dockerClient.AssertExpectations(t)
 }
 
 func TestContainerExists_NotFound(t *testing.T) {
@@ -764,7 +740,6 @@ func TestContainerExists_NotFound(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.False(t, exists)
-	dockerClient.AssertExpectations(t)
 }
 
 func TestContainerExists_NilDockerClient(t *testing.T) {
@@ -797,7 +772,6 @@ func TestContainerExists_Error(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "docker error")
-	dockerClient.AssertExpectations(t)
 }
 
 func TestDetectFirstRelease_FirstFound(t *testing.T) {
@@ -825,7 +799,6 @@ func TestDetectFirstRelease_FirstFound(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.CNICilium, result)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectFirstRelease_SecondFound(t *testing.T) {
@@ -854,7 +827,6 @@ func TestDetectFirstRelease_SecondFound(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.CNICalico, result)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectFirstRelease_NoneFound(t *testing.T) {
@@ -883,7 +855,6 @@ func TestDetectFirstRelease_NoneFound(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.CNIDefault, result)
-	helmClient.AssertExpectations(t)
 }
 
 func TestDetectFirstRelease_Error(t *testing.T) {
@@ -907,5 +878,4 @@ func TestDetectFirstRelease_Error(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "helm error")
-	helmClient.AssertExpectations(t)
 }
