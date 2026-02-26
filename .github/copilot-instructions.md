@@ -181,6 +181,7 @@ go run main.go --help
 - **package.json**: Node.js dependencies for Astro documentation
 - **.github/workflows/\*.yaml**: CI/CD pipelines
 - **.github/workflows/\*.md**: Agentic workflows (daily-refactor, daily-perf-improver, daily-test-improver, daily-workflow-optimizer, etc.); each runs on a schedule or dispatch, and many operate in multiple phases
+- **.github/instructions/\*.instructions.md**: Copilot coding instructions scoped to file globs (go.instructions.md, copilot-sdk-go.instructions.md, refactoring-\*.instructions.md, agentic-workflows.instructions.md); automatically applied by GitHub Copilot when editing matching files
 
 ### CLI Commands Reference
 
@@ -353,3 +354,4 @@ npm run dev                            # Test locally (if needed)
 - **Daily Workflow Optimizer**: Added `daily-workflow-optimizer` agentic workflow (`.github/workflows/daily-workflow-optimizer.md`) that systematically identifies and implements optimizations across all GitHub Actions workflows (both `.yaml`/`.yml` and agentic `.md`); operates in three phases: CI/CD research and planning, build-steps inference and guide creation, then targeted implementation
 - **Hetzner Secret Race Fix**: Extracted shared Hetzner secret logic to `pkg/svc/installer/internal/hetzner/`; `EnsureSecret` now handles the TOCTOU race between concurrent `hcloud-ccm` and `hetzner-csi` installers via `createOrUpdateOnConflict` and `retry.RetryOnConflict` (PR #2488)
 - **VCluster Transient Startup Retry**: Added `createWithRetry` in the VCluster provisioner (`pkg/svc/provisioner/cluster/vcluster/`) to automatically retry transient `CreateDocker` failures (e.g. exit status 22 / EINVAL on CI runners); performs up to 3 total attempts (initial attempt plus 2 retries) with a 5-second delay between attempts, cleaning up partial state between attempts. D-Bus recovery is handled by a separate `tryDBusRecovery` helper. Both helpers accept injectable function types (`createDockerFn`, `retryCleanupFn`, `dbusRecoverFn`) for unit-test isolation; tests use the `export_test.go` pattern with static error sentinels (PR #2530)
+- **Agentic Workflows Threat Detection Instructions**: Added `.github/instructions/agentic-workflows.instructions.md` with guidelines for reliable threat detection in agentic workflow jobs: diagnostic output before CLI invocation, robust error handling (`set -euo pipefail`, separate stdout/stderr capture, timeout protection), incremental tool restriction validation, and fallback mechanisms for security-critical detection failures (PR #2575)
