@@ -294,7 +294,7 @@ npm run dev                            # Test locally (if needed)
   - `pkg/svc/detector/`: Detects installed Kubernetes components by querying Helm release history and the Kubernetes API; used by the update command to build accurate baseline state
   - `pkg/svc/diff/`: Computes configuration differences between old and new ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
   - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
-  - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.)
+  - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.); `internal/hetzner/` holds shared utilities for the Hetzner installers—`hcloudccm.Installer` and `hetznercsi.Installer` are type aliases for `hetzner.Installer` and share a single `EnsureSecret` implementation
   - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner)
   - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster)
@@ -343,3 +343,4 @@ npm run dev                            # Test locally (if needed)
 - **MCP Server**: Implemented Model Context Protocol server to expose KSail as a tool for Claude and other AI assistants (`pkg/svc/mcp/`)
 - **MetalLB LoadBalancer Support**: Completed LoadBalancer support for Talos × Docker with MetalLB installer (`pkg/svc/installer/metallb/`), configured with default IP pool (172.18.255.200-172.18.255.250) and Layer 2 mode
 - **String Building Optimization**: Replaced string concatenation with strings.Builder in tool generation (`pkg/toolgen/`) and chat UI (`pkg/cli/ui/chat/`) for better memory efficiency and reduced allocations; added Grow() pre-allocation for optimal performance (PR #2307)
+- **Hetzner Secret Race Fix**: Extracted shared Hetzner secret logic to `pkg/svc/installer/internal/hetzner/`; `EnsureSecret` now handles the TOCTOU race between concurrent `hcloud-ccm` and `hetzner-csi` installers via `createOrUpdateOnConflict` and `retry.RetryOnConflict` (PR #2488)
