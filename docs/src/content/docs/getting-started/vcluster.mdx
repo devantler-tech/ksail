@@ -358,6 +358,12 @@ ksail cluster delete
 ksail cluster create
 ````
 
+### Transient Startup Failures on CI Runners
+
+**Symptom:** `ksail cluster create` fails with `exit status 22` (EINVAL) on CI runners.
+
+KSail automatically retries transient VCluster startup failures with up to 3 attempts and a 5-second delay between attempts, cleaning up partial state between retries. If the issue persists after automatic retries, check Docker resource limits and D-Bus availability on the runner.
+
 ### kubectl Commands Fail
 
 **Symptom:** `kubectl get nodes` returns connection errors
