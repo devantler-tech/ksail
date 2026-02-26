@@ -140,15 +140,18 @@ runs:
               endpoint: "${OMNI_ENDPOINT}"
         EOF
         else
-          # Patch existing config from init flow
-          python3 -c "
-        import yaml, os
-        with open('$CONFIG_FILE') as f:
-            data = yaml.safe_load(f) or {}
-        data.setdefault('spec', {}).setdefault('cluster', {}).setdefault('omni', {})['endpoint'] = os.environ['OMNI_ENDPOINT']
-        with open('$CONFIG_FILE', 'w') as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-        "
+          # Patch existing config from init flow by appending an override section.
+          # YAML parsers typically honor the last occurrence of a key, so this
+          # ensures the configured Omni endpoint takes precedence without
+          # requiring external dependencies like PyYAML.
+          {
+            echo ""
+            echo "# KSail CI override for Omni endpoint"
+            echo "spec:"
+            echo "  cluster:"
+            echo "    omni:"
+            echo "      endpoint: \"${OMNI_ENDPOINT}\""
+          } >> "$CONFIG_FILE"
         fi
         echo "✅ Omni endpoint configured in $CONFIG_FILE"
 
