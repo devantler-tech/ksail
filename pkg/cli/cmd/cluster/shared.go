@@ -173,9 +173,9 @@ func runClusterCreationWorkflow(
 
 	// Persist the ClusterSpec used at creation time so the update command can
 	// compare against it instead of inferring defaults from component detection.
-	if saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster); saveErr != nil {
+	if err := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster); err != nil {
 		notify.Warningf(cmd.OutOrStderr(),
-			"Failed to save cluster state (update may detect false changes): %v", saveErr)
+			"Failed to save cluster state (update may detect false changes): %v", err)
 	}
 
 	return nil
