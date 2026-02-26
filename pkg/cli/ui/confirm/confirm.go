@@ -16,6 +16,9 @@ import (
 // ErrDeletionCancelled is returned when the user cancels a deletion operation.
 var ErrDeletionCancelled = errors.New("deletion cancelled")
 
+// deletionPreviewBufSize is the initial buffer capacity for building deletion preview text.
+const deletionPreviewBufSize = 256
+
 // DeletionPreview contains all resources that will be deleted.
 type DeletionPreview struct {
 	ClusterName string
@@ -127,10 +130,12 @@ func ShouldSkipPrompt(force bool) bool {
 func ShowDeletionPreview(writer io.Writer, preview *DeletionPreview) {
 	// Build the preview content as a single block
 	var previewText strings.Builder
+	previewText.Grow(deletionPreviewBufSize)
 
-	previewText.WriteString("The following resources will be deleted:\n")
-	previewText.WriteString("  Cluster:  " + preview.ClusterName + "\n")
-	previewText.WriteString("  Provider: " + preview.Provider.String())
+	previewText.WriteString("The following resources will be deleted:\n  Cluster:  ")
+	previewText.WriteString(preview.ClusterName)
+	previewText.WriteString("\n  Provider: ")
+	previewText.WriteString(preview.Provider.String())
 
 	// Show provider-specific resources
 	switch preview.Provider {

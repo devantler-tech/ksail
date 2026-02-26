@@ -380,15 +380,11 @@ func displayListResults(
 			continue
 		}
 
-		// Format each cluster with explicit prefix for clarity
-		namedClusters := make([]string, len(clusters))
-		copy(namedClusters, clusters)
-
 		_, _ = fmt.Fprintf(
 			writer,
 			"%s: %s\n",
 			strings.ToLower(string(prov)),
-			strings.Join(namedClusters, ", "),
+			strings.Join(clusters, ", "),
 		)
 	}
 }
