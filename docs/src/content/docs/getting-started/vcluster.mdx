@@ -331,7 +331,9 @@ ksail cluster create
 
 **Symptom:** `ksail cluster create` hangs or fails
 
-**Common causes:**
+**Automatic retry:** KSail automatically retries transient startup failures up to 3 times (with 5-second delays between attempts). If you see log messages like `Retrying vCluster create (attempt 2/3)...`, this is expected — KSail is recovering from a transient Docker or D-Bus error without any action needed from you.
+
+**Common causes for persistent failures:**
 1. **Docker not running**
    ````bash
    docker ps  # Should list containers
@@ -349,7 +351,7 @@ ksail cluster create
    docker info | grep -i memory
    ````
 
-**Fix:**
+**Fix (if all retry attempts fail):**
 ````bash
 # Delete and recreate
 ksail cluster delete
