@@ -35,7 +35,12 @@ func generateSchema(t *testing.T) map[string]any {
 		t.Fatal("unable to determine test file path")
 	}
 
-	cmd.Dir = filepath.Dir(thisFile)
+	schemasDir, err := filepath.Abs(filepath.Dir(thisFile))
+	if err != nil {
+		t.Fatalf("unable to determine absolute schemas directory: %v", err)
+	}
+
+	cmd.Dir = schemasDir
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {

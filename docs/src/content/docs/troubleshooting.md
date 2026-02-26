@@ -32,7 +32,9 @@ If you encounter `Error: Port 5000 is already allocated`, either configure a dif
 ```bash
 # macOS/Linux
 lsof -ti:5000 | xargs kill -9
+```
 
+```powershell
 # Windows: find the PID, then kill it
 netstat -ano | findstr :5000
 taskkill /PID <process-id> /F
