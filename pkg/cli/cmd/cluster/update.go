@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -23,7 +22,6 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
@@ -109,7 +107,7 @@ func handleUpdateRunE(
 	if !supportsUpdate {
 		// Compute a spec-level diff to determine if there are actual changes
 		// before falling back to recreation. No-op when nothing changed.
-		specDiff := computeSpecOnlyDiff(cmd, ctx, clusterName)
+		specDiff := computeSpecOnlyDiff(cmd, ctx)
 		if specDiff.TotalChanges() == 0 {
 			notify.Infof(cmd.OutOrStdout(), "No changes detected")
 
@@ -257,52 +255,14 @@ func computeUpdateDiff(
 	return currentSpec, diff, nil
 }
 
-// computeSpecOnlyDiff computes a spec-level diff using the saved creation-time
-// state as the baseline current spec. When no saved state exists (clusters
-// created before state persistence was added), it falls back to defaults
-// augmented by live component detection.
+// computeSpecOnlyDiff computes a spec-level diff using default values as
+// the baseline current state. This is used for provisioners that do not
+// implement the Updater interface (e.g., VCluster) to avoid blind recreation
+// when there are no actual configuration changes.
 func computeSpecOnlyDiff(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
-	clusterName string,
 ) *clusterupdate.UpdateResult {
-	currentSpec := loadOrInferCurrentSpec(cmd, ctx, clusterName)
-
-	diffEngine := specdiff.NewEngine(
-		ctx.ClusterCfg.Spec.Cluster.Distribution,
-		ctx.ClusterCfg.Spec.Cluster.Provider,
-	)
-
-	return diffEngine.ComputeDiff(currentSpec, &ctx.ClusterCfg.Spec.Cluster)
-}
-
-// loadOrInferCurrentSpec loads the saved ClusterSpec for the given cluster.
-// If no saved state is available, it falls back to DefaultCurrentSpec
-// augmented by live component detection.
-func loadOrInferCurrentSpec(
-	cmd *cobra.Command,
-	ctx *localregistry.Context,
-	clusterName string,
-) *v1alpha1.ClusterSpec {
-	saved, err := state.LoadClusterSpec(clusterName)
-	if err == nil {
-		return saved
-	}
-
-	if !errors.Is(err, state.ErrStateNotFound) {
-		notify.Warningf(cmd.OutOrStderr(),
-			"Failed to load saved cluster state, falling back to detection: %v", err)
-	}
-
-	return inferCurrentSpec(cmd, ctx)
-}
-
-// inferCurrentSpec builds a baseline ClusterSpec from static defaults and
-// live component detection. This is the fallback when no saved state exists.
-func inferCurrentSpec(
-	cmd *cobra.Command,
-	ctx *localregistry.Context,
-) *v1alpha1.ClusterSpec {
 	currentSpec := clusterupdate.DefaultCurrentSpec(
 		ctx.ClusterCfg.Spec.Cluster.Distribution,
 		ctx.ClusterCfg.Spec.Cluster.Provider,
@@ -331,7 +291,12 @@ func inferCurrentSpec(
 	// GitOps engine value is used to infer the default local registry address.
 	clusterupdate.ApplyGitOpsLocalRegistryDefault(currentSpec)
 
-	return currentSpec
+	diffEngine := specdiff.NewEngine(
+		ctx.ClusterCfg.Spec.Cluster.Distribution,
+		ctx.ClusterCfg.Spec.Cluster.Provider,
+	)
+
+	return diffEngine.ComputeDiff(currentSpec, &ctx.ClusterCfg.Spec.Cluster)
 }
 
 // applyOrReportChanges handles dry-run, recreate-required, no-changes, and
