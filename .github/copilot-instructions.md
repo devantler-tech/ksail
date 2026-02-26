@@ -181,7 +181,7 @@ go run main.go --help
 - **package.json**: Node.js dependencies for Astro documentation
 - **.github/workflows/\*.yaml**: CI/CD pipelines
 - **.github/workflows/\*.md**: Agentic workflows (daily-refactor, daily-perf-improver, daily-test-improver, daily-workflow-optimizer, etc.); each runs on a schedule or dispatch, and many operate in multiple phases
-- **.github/instructions/\*.instructions.md**: Copilot coding instructions scoped to file globs (go.instructions.md, copilot-sdk-go.instructions.md, refactoring-\*.instructions.md, agentic-workflows.instructions.md); automatically applied by GitHub Copilot when editing matching files
+- **.github/instructions/\*.instructions.md**: Copilot coding instructions that can be scoped to file globs via optional `applyTo` frontmatter (go.instructions.md, copilot-sdk-go.instructions.md, refactoring-\*.instructions.md, agentic-workflows.instructions.md); when `applyTo` is omitted, the instructions may apply globally and are automatically applied by GitHub Copilot where relevant
 
 ### CLI Commands Reference
 
