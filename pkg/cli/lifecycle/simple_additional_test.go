@@ -69,7 +69,6 @@ func TestNewSimpleLifecycleCmd(t *testing.T) {
 	t.Parallel()
 
 	t.Run("creates_command_with_flags", testNewSimpleLifecycleCmdWithFlags)
-	t.Run("command_requires_cluster_name", testNewSimpleLifecycleCmdRequiresName)
 }
 
 func testNewSimpleLifecycleCmdWithFlags(t *testing.T) {
@@ -109,8 +108,10 @@ func testNewSimpleLifecycleCmdWithFlags(t *testing.T) {
 	assert.False(t, actionCalled)
 }
 
-func testNewSimpleLifecycleCmdRequiresName(t *testing.T) {
-	t.Parallel()
+// TestNewSimpleLifecycleCmdRequiresName tests that the command fails when no cluster name is available.
+func TestNewSimpleLifecycleCmdRequiresName(t *testing.T) {
+	// Not parallel: t.Setenv modifies the process environment.
+	t.Setenv("KUBECONFIG", "/non-existent-kubeconfig")
 
 	config := lifecycle.SimpleLifecycleConfig{
 		Use:          "start",
