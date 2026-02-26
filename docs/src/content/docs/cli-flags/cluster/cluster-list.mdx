@@ -32,11 +32,14 @@ Examples:
   # List only Hetzner clusters
   ksail cluster list --provider Hetzner
 
+  # List only Omni clusters
+  ksail cluster list --provider Omni
+
 Usage:
   ksail cluster list [flags]
 
 Flags:
-  -p, --provider Provider   Filter by provider (Docker, Hetzner). If not specified, lists all providers.
+  -p, --provider Provider   Filter by provider (Docker, Hetzner, Omni). If not specified, lists all providers.
 
 Global Flags:
       --benchmark   Show per-activity benchmark output

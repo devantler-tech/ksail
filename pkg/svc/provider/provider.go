@@ -46,12 +46,17 @@ type Provider interface {
 	DeleteNodes(ctx context.Context, clusterName string) error
 }
 
+// NodeLister can list nodes for a cluster. This minimal interface is used by
+// shared helpers to avoid coupling to the full Provider interface.
+type NodeLister interface {
+	ListNodes(ctx context.Context, clusterName string) ([]NodeInfo, error)
+}
+
 // AvailableProvider is a provider that can report whether it's available.
 type AvailableProvider interface {
+	NodeLister
 	// IsAvailable returns true if the provider is ready for use.
 	IsAvailable() bool
-	// ListNodes returns all nodes for a specific cluster.
-	ListNodes(ctx context.Context, clusterName string) ([]NodeInfo, error)
 }
 
 // EnsureAvailableAndListNodes validates provider availability and returns node list.
@@ -71,4 +76,16 @@ func EnsureAvailableAndListNodes(
 	}
 
 	return nodes, nil
+}
+
+// CheckNodesExist returns true if the given cluster has at least one node.
+// This is a shared helper for provider implementations that delegate
+// NodesExist to ListNodes.
+func CheckNodesExist(ctx context.Context, lister NodeLister, clusterName string) (bool, error) {
+	nodes, err := lister.ListNodes(ctx, clusterName)
+	if err != nil {
+		return false, fmt.Errorf("check nodes exist: %w", err)
+	}
+
+	return len(nodes) > 0, nil
 }

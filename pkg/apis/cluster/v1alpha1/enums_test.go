@@ -265,6 +265,7 @@ func TestGitOpsEngine_ValidValues(t *testing.T) {
 
 // Provider tests.
 
+//nolint:funlen // Table-driven test with multiple provider cases is clearer as single function
 func TestProvider_Set(t *testing.T) {
 	t.Parallel()
 
@@ -296,6 +297,12 @@ func TestProvider_Set(t *testing.T) {
 			name:      "hetzner_mixed_case",
 			input:     "Hetzner",
 			expected:  v1alpha1.ProviderHetzner,
+			wantError: false,
+		},
+		{
+			name:      "omni_lowercase",
+			input:     "omni",
+			expected:  v1alpha1.ProviderOmni,
 			wantError: false,
 		},
 		{
@@ -346,7 +353,8 @@ func TestProvider_ValidValues(t *testing.T) {
 	values := provider.ValidValues()
 	assert.Contains(t, values, "Docker")
 	assert.Contains(t, values, "Hetzner")
-	assert.Len(t, values, 2)
+	assert.Contains(t, values, "Omni")
+	assert.Len(t, values, 3)
 }
 
 func TestProvider_ValidateForDistribution_ValidCombinations(t *testing.T) {
@@ -361,6 +369,7 @@ func TestProvider_ValidateForDistribution_ValidCombinations(t *testing.T) {
 		{"docker_for_k3s", v1alpha1.ProviderDocker, v1alpha1.DistributionK3s},
 		{"docker_for_talos", v1alpha1.ProviderDocker, v1alpha1.DistributionTalos},
 		{"hetzner_for_talos", v1alpha1.ProviderHetzner, v1alpha1.DistributionTalos},
+		{"omni_for_talos", v1alpha1.ProviderOmni, v1alpha1.DistributionTalos},
 		{"empty_provider_defaults_to_docker", v1alpha1.Provider(""), v1alpha1.DistributionVanilla},
 	}
 
@@ -384,6 +393,8 @@ func TestProvider_ValidateForDistribution_InvalidCombinations(t *testing.T) {
 	}{
 		{"hetzner_for_vanilla_invalid", v1alpha1.ProviderHetzner, v1alpha1.DistributionVanilla},
 		{"hetzner_for_k3s_invalid", v1alpha1.ProviderHetzner, v1alpha1.DistributionK3s},
+		{"omni_for_vanilla_invalid", v1alpha1.ProviderOmni, v1alpha1.DistributionVanilla},
+		{"omni_for_k3s_invalid", v1alpha1.ProviderOmni, v1alpha1.DistributionK3s},
 		{"unknown_distribution", v1alpha1.ProviderDocker, v1alpha1.Distribution("Unknown")},
 	}
 

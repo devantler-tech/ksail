@@ -7,17 +7,18 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Distribution × Provider Matrix
 
-| Distribution    | Docker | Hetzner |
-| --------------- | ------ | ------- |
-| Vanilla (Kind)  | ✅     | ❌      |
-| K3s (K3d)       | ✅     | ❌      |
-| Talos           | ✅     | ✅      |
-| VCluster (Vind) | ✅     | ❌      |
+| Distribution    | Docker | Hetzner | Omni |
+| --------------- | ------ | ------- | ---- |
+| Vanilla (Kind)  | ✅     | ❌      | ❌   |
+| K3s (K3d)       | ✅     | ❌      | ❌   |
+| Talos           | ✅     | ✅      | ✅   |
+| VCluster (Vind) | ✅     | ❌      | ❌   |
 
 **Notes:**
 
 - Docker provider requires Docker Desktop or Docker Engine installed locally
 - Hetzner provider requires `HCLOUD_TOKEN` environment variable and Talos ISO in your account
+- Omni provider requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.cluster.omni.endpoint` in your KSail configuration
 - VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
 
 ## Component × Distribution Matrix
@@ -32,6 +33,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 | Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner)        | ❌       |
 | **LoadBalancer**              |
 | LoadBalancer Support          | ✅      | Built-in | ✅ (Docker/Hetzner) | N/A³     |
+| Cloud Provider KIND           | ✅      | ❌       | ❌                  | ❌       |
 | MetalLB                       | ❌      | ❌       | ✅ (Docker)         | ❌       |
 | Hetzner CCM                   | ❌      | ❌       | ✅ (Hetzner)        | ❌       |
 | **GitOps**                    |

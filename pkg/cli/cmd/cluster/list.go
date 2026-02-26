@@ -11,10 +11,12 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
+	omniclient "github.com/siderolabs/omni/client/pkg/client"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -37,6 +39,7 @@ func allProviders() []v1alpha1.Provider {
 	return []v1alpha1.Provider{
 		v1alpha1.ProviderDocker,
 		v1alpha1.ProviderHetzner,
+		v1alpha1.ProviderOmni,
 	}
 }
 
@@ -70,7 +73,10 @@ Examples:
   ksail cluster list --provider Docker
 
   # List only Hetzner clusters
-  ksail cluster list --provider Hetzner`
+  ksail cluster list --provider Hetzner
+
+  # List only Omni clusters
+  ksail cluster list --provider Omni`
 
 // NewListCmd creates the list command for clusters.
 func NewListCmd(runtimeContainer *di.Runtime) *cobra.Command {
@@ -111,6 +117,10 @@ type ListDeps struct {
 	// HetznerProvider is an optional Hetzner provider for listing Hetzner clusters.
 	// If nil, a real provider will be created if HCLOUD_TOKEN is set.
 	HetznerProvider *hetzner.Provider
+
+	// OmniProvider is an optional Omni provider for listing Omni clusters.
+	// If nil, a real provider will be created if OMNI_SERVICE_ACCOUNT_KEY is set.
+	OmniProvider *omni.Provider
 }
 
 // HandleListRunE handles the list command.
@@ -174,6 +184,8 @@ func getProviderClusters(
 		return getDockerClusters(ctx, deps)
 	case v1alpha1.ProviderHetzner:
 		return getHetznerClusters(ctx, deps)
+	case v1alpha1.ProviderOmni:
+		return getOmniClusters(ctx, deps)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
 	}
@@ -221,6 +233,50 @@ func getHetznerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 	clusters, err := provider.ListAllClusters(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list Hetzner clusters: %w", err)
+	}
+
+	return clusters, nil
+}
+
+// getOmniClusters returns all Omni-based clusters.
+func getOmniClusters(ctx context.Context, deps ListDeps) ([]string, error) {
+	// Use injected provider if available (for testing)
+	if deps.OmniProvider != nil {
+		clusters, err := deps.OmniProvider.ListAllClusters(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list Omni clusters: %w", err)
+		}
+
+		return clusters, nil
+	}
+
+	// Check for OMNI_SERVICE_ACCOUNT_KEY
+	serviceAccountKey := os.Getenv("OMNI_SERVICE_ACCOUNT_KEY")
+	if serviceAccountKey == "" {
+		// No key, skip Omni silently
+		return nil, nil
+	}
+
+	// Check for OMNI_ENDPOINT
+	endpoint := os.Getenv("OMNI_ENDPOINT")
+	if endpoint == "" {
+		// No endpoint, skip Omni silently
+		return nil, nil
+	}
+
+	client, err := omniclient.New(
+		endpoint,
+		omniclient.WithServiceAccount(serviceAccountKey),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Omni client: %w", err)
+	}
+
+	provider := omni.NewProvider(client)
+
+	clusters, err := provider.ListAllClusters(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Omni clusters: %w", err)
 	}
 
 	return clusters, nil

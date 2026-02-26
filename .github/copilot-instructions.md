@@ -14,6 +14,7 @@ KSail is a Go-based CLI application that provides a unified SDK for spinning up 
 - KSail embeds kubectl, helm, kind, k3d, vcluster, flux, and argocd as Go libraries
 - No separate installation of these tools is needed
 - The Hetzner provider is supported for Talos clusters and requires cloud access/credentials (e.g., `HCLOUD_TOKEN`)
+- The Omni provider is supported for Talos clusters and requires a Sidero Omni account and credentials (e.g., `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.cluster.omni.serviceAccountKeyEnvVar`)
 
 **Required for Documentation**:
 
@@ -155,11 +156,15 @@ go run main.go --help
 │   ├── timer/              # Command timing and performance tracking
 │   └── svc/                # Services (installers, managers, etc.)
 │       ├── chat/           # AI chat integration (GitHub Copilot SDK)
+│       ├── detector/       # Detects installed Kubernetes components (Helm releases, K8s API)
+│       ├── diff/           # Computes ClusterSpec config diffs and classifies update impact
+│       ├── image/          # Container image export/import services
 │       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
 │       ├── mcp/            # Model Context Protocol server
 │       ├── provider/       # Infrastructure providers (docker, hetzner)
 │       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos, VCluster)
-│       └── image/          # Container image export/import services
+│       ├── registryresolver/ # OCI registry detection, resolution, and artifact push
+│       └── state/          # Cluster state persistence for distributions without introspection
 ├── docs/                   # Astro documentation source
 │   ├── dist/               # Generated site (after npm run build)
 │   └── package.json        # Node.js dependencies for documentation
@@ -190,6 +195,8 @@ ksail cluster stop                     # Stop running cluster
 ksail cluster info                     # Show cluster status
 ksail cluster list [--all]             # List clusters
 ksail cluster connect                  # Connect to cluster with K9s
+ksail cluster backup                   # Backup cluster resources to .tar.gz
+ksail cluster restore                  # Restore cluster resources from .tar.gz
 ksail workload apply                   # Apply workloads
 ksail workload gen <resource>          # Generate resources
 ksail cipher <command>                 # Manage secrets with SOPS
@@ -265,6 +272,7 @@ npm run dev                            # Test locally (if needed)
 - **Providers** (`pkg/svc/provider/`) manage infrastructure lifecycle (start/stop containers or cloud servers)
   - `docker.Provider`: Runs Kubernetes nodes as Docker containers
   - `hetzner.Provider`: Runs Kubernetes nodes as Hetzner Cloud servers
+  - `omni.Provider`: Manages Talos cluster nodes through the Sidero Omni SaaS API
 - **Provisioners** (`pkg/svc/provisioner/`) configure and manage Kubernetes distributions
   - `KindClusterProvisioner` (`pkg/svc/provisioner/cluster/kind/`): Uses Kind SDK for standard upstream Kubernetes
   - `K3dClusterProvisioner` (`pkg/svc/provisioner/cluster/k3d/`): Uses K3d via Cobra/SDK for lightweight K3s clusters
@@ -273,25 +281,29 @@ npm run dev                            # Test locally (if needed)
 
 **Distribution Names (user-facing):**
 
-| Distribution | Tool  | Provider        | Description                                    |
-|--------------|-------|-----------------|------------------------------------------------|
-| `Vanilla`    | Kind  | Docker          | Standard upstream Kubernetes                   |
-| `K3s`        | K3d   | Docker          | Lightweight K3s in Docker                      |
-| `Talos`      | Talos | Docker, Hetzner | Immutable Talos Linux                          |
-| `VCluster`   | Vind  | Docker          | Virtual clusters via vCluster (Vind) in Docker |
+| Distribution | Tool  | Provider              | Description                                    |
+|--------------|-------|-----------------------|------------------------------------------------|
+| `Vanilla`    | Kind  | Docker                | Standard upstream Kubernetes                   |
+| `K3s`        | K3d   | Docker                | Lightweight K3s in Docker                      |
+| `Talos`      | Talos | Docker, Hetzner, Omni | Immutable Talos Linux                          |
+| `VCluster`   | Vind  | Docker                | Virtual clusters via vCluster (Vind) in Docker |
 
 **Key Packages:**
 
 - `pkg/toolgen/`: AI tool generation utilities for integrating with AI assistants
 - `pkg/apis/`: API types, schemas, and enums (`pkg/apis/cluster/v1alpha1/enums.go` defines Distribution values)
-- `pkg/client/`: Embedded tool clients (kubectl, helm, flux, argocd); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`.
+- `pkg/client/`: Embedded tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kustomize, oci, netretry); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`.
 - `pkg/svc/`: Services including installers, providers, and provisioners
   - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation
+  - `pkg/svc/detector/`: Detects installed Kubernetes components by querying Helm release history and the Kubernetes API; used by the update command to build accurate baseline state
+  - `pkg/svc/diff/`: Computes configuration differences between old and new ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
+  - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
   - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.)
   - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants
-  - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner)
+  - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner, omni)
   - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster)
-  - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
+  - `pkg/svc/registryresolver/`: OCI registry detection, resolution, and artifact push utilities
+  - `pkg/svc/state/`: Cluster state persistence for distributions that cannot introspect running configuration (Kind, K3d); stores spec as JSON in `~/.ksail/clusters/<name>/spec.json`
 - `pkg/client/reconciler/`: Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - `pkg/di/`: Dependency injection for wiring components
 - `pkg/k8s/`: Kubernetes helpers and templates
@@ -312,9 +324,10 @@ npm run dev                            # Test locally (if needed)
 ## Recent Changes
 
 - Flattened package structure: moved from nested to flat organization in `pkg/`
-- **Provider/Provisioner Architecture**: Separated infrastructure providers (Docker, Hetzner) from distribution provisioners (Vanilla, K3s, Talos, VCluster)
+- **Provider/Provisioner Architecture**: Separated infrastructure providers (Docker, Hetzner, Omni) from distribution provisioners (Vanilla, K3s, Talos, VCluster)
 - **VCluster Support**: Added VCluster as the fourth supported distribution via VClusterProvisioner, enabling virtual Kubernetes clusters within Docker using the Vind driver
 - **Hetzner Provider**: Added support for running Talos clusters on Hetzner Cloud
+- **Omni Provider**: Added support for managing Talos clusters through the Sidero Omni SaaS API (`pkg/svc/provider/omni/`); requires `spec.cluster.omni.endpoint` and a service account key env var (default: `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.cluster.omni.serviceAccountKeyEnvVar`)
 - **Registry Authentication**: Added support for external registries with username/password authentication
 - **Default Registry Mirrors**: Enabled docker.io, ghcr.io, quay.io, and registry.k8s.io mirrors by default to avoid rate limits and improve CI/CD performance (`pkg/cli/setup/mirrorregistry/defaults.go`)
 - **Distribution Naming**: Changed user-facing names from `Kind`/`K3d` to `Vanilla`/`K3s` to focus on the Kubernetes distribution rather than the underlying tool
@@ -333,5 +346,6 @@ npm run dev                            # Test locally (if needed)
   - **Authentication**: Supports `KSAIL_COPILOT_TOKEN` and `COPILOT_TOKEN` environment variables; filters `GITHUB_TOKEN`/`GH_TOKEN` to avoid scope issues
   - **Enhanced Keybindings**: `^O` for model picker (lazy-loaded), `^E` for reasoning effort, `^H` for session history
 - **MCP Server**: Implemented Model Context Protocol server to expose KSail as a tool for Claude and other AI assistants (`pkg/svc/mcp/`)
+- **Cloud Provider KIND LoadBalancer Support**: Completed LoadBalancer support for Vanilla (Kind) × Docker using the Cloud Provider KIND controller (`pkg/svc/installer/cloudproviderkind/`); runs as an external Docker container named `ksail-cloud-provider-kind` and allocates IPs from the `kind` Docker network subnet; per-service containers use a `cpk-` prefix
 - **MetalLB LoadBalancer Support**: Completed LoadBalancer support for Talos × Docker with MetalLB installer (`pkg/svc/installer/metallb/`), configured with default IP pool (172.18.255.200-172.18.255.250) and Layer 2 mode
 - **String Building Optimization**: Replaced string concatenation with strings.Builder in tool generation (`pkg/toolgen/`) and chat UI (`pkg/cli/ui/chat/`) for better memory efficiency and reduced allocations; added Grow() pre-allocation for optimal performance (PR #2307)

@@ -7,335 +7,144 @@ KSail builds upon established Kubernetes technologies and patterns. This page pr
 
 ## Native Configuration Philosophy
 
-**KSail is a superset, not a replacement.** One of KSail's core design principles is to work with native distribution configurations rather than creating proprietary formats. When you run `ksail cluster init`, KSail generates:
+**KSail is a superset, not a replacement.** KSail works with native distribution configurations rather than creating proprietary formats. When you run `ksail cluster init`, KSail generates standard configuration files: `kind.yaml` ([Kind](https://kind.sigs.k8s.io/docs/user/configuration/)) for Vanilla, `k3d.yaml` ([K3d](https://k3d.io/stable/usage/configfile/)) for K3s, `talos/` patches ([Talos](https://www.talos.dev/latest/reference/configuration/)), and `vcluster.yaml` ([vCluster](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/)) for VCluster.
 
-- **`kind.yaml`** for Vanilla (Kind) clusters — standard [Kind configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
-- **`k3d.yaml`** for K3s clusters — standard [K3d configuration](https://k3d.io/stable/usage/configfile/)
-- **`talos/` patches** for Talos clusters — standard [Talos configuration patches](https://www.talos.dev/latest/reference/configuration/)
-- **`vcluster.yaml`** for VCluster clusters — standard [vCluster configuration](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/)
+**No vendor lock-in:** These files work directly with underlying tools without KSail, providing freedom to migrate, use native CLI tools alongside KSail, and maintain team flexibility. Your configurations match official documentation and remain valid even if you stop using KSail.
 
-### Why This Matters
-
-**No vendor lock-in:** You can use these configuration files directly with the underlying tools (Kind, K3d, Talos CLI) without KSail. This means:
-
-- **Freedom to migrate:** Run `kind create cluster --config kind.yaml` anytime
-- **Standard tooling:** Use native CLI tools alongside KSail
-- **Team flexibility:** Team members can choose KSail or native tools
-- **Learning path:** Configurations match official documentation
-- **Future-proof:** Your investment in learning stays valid even if you stop using KSail
-
-### Unified Workflow Across Distributions
-
-While each distribution has its own configuration format, KSail provides a consistent workflow:
-
-```bash
-# Same commands work across all distributions
-ksail cluster init --distribution Vanilla  # Generates kind.yaml
-ksail cluster init --distribution K3s      # Generates k3d.yaml
-ksail cluster init --distribution Talos    # Generates talos/ patches
-ksail cluster init --distribution VCluster # Generates vcluster.yaml
-
-# Consistent lifecycle management
-ksail cluster create   # Works with any distribution
-ksail cluster update   # Works with any distribution
-ksail cluster delete   # Works with any distribution
-```
-
-This consistency makes it easy to switch distributions or work on multiple projects using different Kubernetes flavors.
-
-### Configuration Portability
-
-KSail-generated configurations are fully portable:
-
-- **Vanilla (`kind.yaml`)**: Valid Kind configuration that can be used with `kind create cluster --config kind.yaml`
-- **K3s (`k3d.yaml`)**: Valid K3d configuration that can be used with `k3d cluster create --config k3d.yaml`
-- **Talos (patch files)**: Valid Talos patches that can be applied with `talosctl`
-- **VCluster (`vcluster.yaml`)**: Valid vCluster configuration that can be used with the [vCluster CLI](https://www.vcluster.com/docs/vcluster/deploy/control-plane/kubernetes-pod/basics)
-
-You maintain full control and can always "drop down" to the native tool if needed.
+**Unified workflow:** KSail provides consistent commands (`cluster init`, `create`, `update`, `delete`) across all distributions, making it easy to switch between Kubernetes flavors or work on multiple projects.
 
 ## Kubernetes
 
-[Kubernetes](https://kubernetes.io/) is an open-source container orchestration platform for automating deployment, scaling, and management of containerized applications.
-
-**Key resources:**
-
-- [Kubernetes Documentation](https://kubernetes.io/docs/home/)
-- [Kubernetes Concepts](https://kubernetes.io/docs/concepts/)
-- [kubectl Reference](https://kubernetes.io/docs/reference/kubectl/)
+[Kubernetes](https://kubernetes.io/) is an open-source container orchestration platform for automating deployment, scaling, and management of containerized applications. See [documentation](https://kubernetes.io/docs/home/), [concepts](https://kubernetes.io/docs/concepts/), and [kubectl reference](https://kubernetes.io/docs/reference/kubectl/).
 
 ## Distributions
 
-Kubernetes distributions package the Kubernetes components with additional tooling for specific use cases. KSail supports four distributions: Vanilla, K3s, Talos, and VCluster. All distributions can run on the Docker provider; Talos can also run on the Hetzner provider.
+Kubernetes distributions package core components with additional tooling for specific use cases. KSail supports four distributions: Vanilla, K3s, Talos, and VCluster. All run on Docker; Talos also supports Hetzner Cloud.
 
-### Vanilla (implemented with Kind)
+### Vanilla (Kind)
 
-Vanilla uses [Kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker) to run standard upstream Kubernetes clusters using Docker containers as nodes. This distribution provides upstream Kubernetes without modifications, making it ideal for testing against standard Kubernetes behavior.
+Vanilla uses [Kind](https://kind.sigs.k8s.io/) to run standard upstream Kubernetes in Docker containers, ideal for testing against unmodified Kubernetes behavior. See [documentation](https://kind.sigs.k8s.io/), [configuration](https://kind.sigs.k8s.io/docs/user/configuration/), and [quick start](https://kind.sigs.k8s.io/docs/user/quick-start/).
 
-**Key resources:**
+### K3s (K3d)
 
-- [Kind Documentation](https://kind.sigs.k8s.io/)
-- [Kind Configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
-- [Kind Quick Start](https://kind.sigs.k8s.io/docs/user/quick-start/)
-
-### K3s (implemented with K3d)
-
-[K3s](https://k3s.io/) is a lightweight, certified Kubernetes distribution built for resource-constrained environments. KSail uses [K3d](https://k3d.io/) to run K3s clusters in Docker containers. K3s includes sensible defaults like an embedded load balancer, local storage provisioner, and metrics server.
-
-**Key resources:**
-
-- [K3s Documentation](https://docs.k3s.io/)
-- [K3d Documentation](https://k3d.io/)
-- [K3d Configuration](https://k3d.io/stable/usage/configfile/)
+[K3s](https://k3s.io/) is a lightweight, certified Kubernetes distribution for resource-constrained environments. KSail uses [K3d](https://k3d.io/) to run K3s clusters in Docker with embedded load balancer, storage, and metrics. See [K3s docs](https://docs.k3s.io/), [K3d docs](https://k3d.io/), and [configuration](https://k3d.io/stable/usage/configfile/).
 
 ### Talos
 
-[Talos Linux](https://www.talos.dev/) is a minimal, immutable operating system designed specifically for Kubernetes. Provides enhanced security through API-driven configuration with no shell access.
+[Talos Linux](https://www.talos.dev/) is a minimal, immutable OS designed for Kubernetes with API-driven configuration and no shell access for enhanced security. See [documentation](https://www.talos.dev/latest/), [configuration reference](https://www.talos.dev/latest/reference/configuration/), and [getting started](https://www.talos.dev/latest/introduction/getting-started/).
 
-**Key resources:**
+### VCluster (Vind)
 
-- [Talos Documentation](https://www.talos.dev/latest/)
-- [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/)
-- [Talos Getting Started](https://www.talos.dev/latest/introduction/getting-started/)
-
-### VCluster (implemented with Vind)
-
-[vCluster](https://www.vcluster.com/) creates virtual Kubernetes clusters. KSail uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the vCluster control plane (and optional worker nodes) directly as Docker containers, without requiring a pre-existing host Kubernetes cluster. This makes VCluster ideal for lightweight, isolated environments that still behave like full Kubernetes clusters while using Docker as the only infrastructure provider.
-
-**Key characteristics:**
-
-- Control plane and optional worker nodes run as Docker containers via the Vind driver
-- No VM or physical node management — Docker manages container lifecycle
-- Very fast cluster creation time with a small resource footprint
-- Configured via `vcluster.yaml` and the vCluster Helm chart
-
-**Key resources:**
-
-- [vCluster Documentation](https://www.vcluster.com/docs/)
-- [vCluster Configuration](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/)
-- [Vind Docker Driver](https://github.com/loft-sh/vcluster)
+[vCluster](https://www.vcluster.com/) creates virtual Kubernetes clusters. KSail uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run control plane and optional workers as containers, requiring only Docker. Fast creation with small footprint. See [documentation](https://www.vcluster.com/docs/), [configuration](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/), and [Vind driver](https://github.com/loft-sh/vcluster).
 
 ## Providers
 
-Providers are the infrastructure backends that run cluster nodes. KSail abstracts provider-specific operations so you can use the same workflow regardless of where your cluster runs.
+Providers are infrastructure backends that run cluster nodes. KSail abstracts provider-specific operations for consistent workflows.
 
 ### Docker
 
-The Docker provider runs Kubernetes nodes as Docker containers on your local machine. This is the default provider for all distributions and requires only Docker to be installed.
-
-**Supported distributions:** Vanilla, K3s, Talos, VCluster
-
-**Key resources:**
-
-- [Docker Documentation](https://docs.docker.com/)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+Runs Kubernetes nodes as Docker containers locally. Default provider for all distributions, requires only Docker. **Supported distributions:** Vanilla, K3s, Talos, VCluster. See [Docker docs](https://docs.docker.com/) and [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 ### Hetzner
 
-The Hetzner provider creates Kubernetes nodes as Hetzner Cloud servers. This provider enables running production-grade clusters on Hetzner's infrastructure with full lifecycle management.
-
-**Supported distributions:** Talos
-
-**Requirements:**
-
-- Hetzner Cloud API token (set via `HCLOUD_TOKEN` environment variable)
-- Talos ISO available in your Hetzner account
+Creates nodes as Hetzner Cloud servers for production-grade clusters. **Supported distributions:** Talos. **Requirements:** `HCLOUD_TOKEN` environment variable and Talos ISO. See [Hetzner Cloud docs](https://docs.hetzner.com/cloud/), [API](https://docs.hetzner.cloud/), and [Talos on Hetzner](https://www.talos.dev/latest/talos-guides/install/cloud-platforms/hetzner/).
 
 > [!NOTE]
 > KSail only enables Hetzner-backed operations when `HCLOUD_TOKEN` is set; if it's unset, Hetzner is skipped.
 
-**Key resources:**
+### Omni
 
-- [Hetzner Cloud Documentation](https://docs.hetzner.com/cloud/)
-- [Hetzner Cloud API](https://docs.hetzner.cloud/)
-- [Talos on Hetzner](https://www.talos.dev/latest/talos-guides/install/cloud-platforms/hetzner/)
+Manages Talos clusters through the [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) SaaS platform API. **Supported distributions:** Talos. **Requirements:** a Sidero Omni account, a service account key provided via an environment variable (default name `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.cluster.omni.serviceAccountKeyEnvVar`), and an Omni API endpoint configured via `spec.cluster.omni.endpoint`. See [Omni docs](https://omni.siderolabs.com/docs/) and [Talos on Omni](https://omni.siderolabs.com/docs/how-to-guides/how-to-create-a-cluster/).
+
+> [!NOTE]
+> Omni provider is only supported with the `Talos` distribution.
 
 ## Container Network Interface (CNI)
 
-[CNI](https://www.cni.dev/) is a specification for configuring network interfaces in Linux containers. CNI plugins provide pod networking, network policies, and observability.
+[CNI](https://www.cni.dev/) is a specification for configuring network interfaces in Linux containers, providing pod networking, policies, and observability.
 
 ### Cilium
 
-[Cilium](https://cilium.io/) is an eBPF-based CNI providing networking, security, and observability. Offers advanced features like transparent encryption and service mesh.
-
-**Key resources:**
-
-- [Cilium Documentation](https://docs.cilium.io/)
-- [Cilium Concepts](https://docs.cilium.io/en/stable/overview/intro/)
-- [Network Policies with Cilium](https://docs.cilium.io/en/stable/security/policy/)
+[Cilium](https://cilium.io/) is an eBPF-based CNI offering networking, security, and observability with features like transparent encryption and service mesh. See [documentation](https://docs.cilium.io/), [concepts](https://docs.cilium.io/en/stable/overview/intro/), and [network policies](https://docs.cilium.io/en/stable/security/policy/).
 
 ### Calico
 
-[Calico](https://www.tigera.io/project-calico/) provides networking and network security for Kubernetes. Known for its network policy enforcement capabilities.
-
-**Key resources:**
-
-- [Calico Documentation](https://docs.tigera.io/calico/latest/about/)
-- [Calico Network Policy](https://docs.tigera.io/calico/latest/network-policy/)
-- [Calico Getting Started](https://docs.tigera.io/calico/latest/getting-started/)
+[Calico](https://www.tigera.io/project-calico/) provides networking and network security with strong policy enforcement. See [documentation](https://docs.tigera.io/calico/latest/about/), [network policy](https://docs.tigera.io/calico/latest/network-policy/), and [getting started](https://docs.tigera.io/calico/latest/getting-started/).
 
 ## Container Storage Interface (CSI)
 
-[CSI](https://kubernetes-csi.github.io/docs/) is a standard for exposing storage systems to containerized workloads. CSI drivers provide persistent storage for stateful applications.
+[CSI](https://kubernetes-csi.github.io/docs/) is a standard for exposing storage systems to containerized workloads, providing persistent storage for stateful applications.
 
 ### Local Path Provisioner
 
-[Local Path Provisioner](https://github.com/rancher/local-path-provisioner) creates PersistentVolumes using local storage on nodes. Suitable for development and single-node clusters.
-
-**Key resources:**
-
-- [Local Path Provisioner GitHub](https://github.com/rancher/local-path-provisioner)
-- [Kubernetes Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)
-- [Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/)
+[Local Path Provisioner](https://github.com/rancher/local-path-provisioner) creates PersistentVolumes using local storage on nodes, suitable for development and single-node clusters. See [GitHub](https://github.com/rancher/local-path-provisioner), [persistent volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/), and [storage classes](https://kubernetes.io/docs/concepts/storage/storage-classes/).
 
 ## Metrics Server
 
-[Metrics Server](https://github.com/kubernetes-sigs/metrics-server) collects resource metrics from kubelets and exposes them via the Kubernetes API. Required for Horizontal Pod Autoscaler (HPA) and `kubectl top`.
-
-**Key resources:**
-
-- [Metrics Server GitHub](https://github.com/kubernetes-sigs/metrics-server)
-- [Resource Metrics Pipeline](https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/)
-- [Horizontal Pod Autoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
+[Metrics Server](https://github.com/kubernetes-sigs/metrics-server) collects resource metrics from kubelets and exposes them via the Kubernetes API, required for HPA and `kubectl top`. See [GitHub](https://github.com/kubernetes-sigs/metrics-server), [resource metrics pipeline](https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/), and [HPA](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/).
 
 ## Kubelet CSR Approver
 
-[Kubelet CSR Approver](https://github.com/postfinance/kubelet-csr-approver) automatically approves Certificate Signing Requests (CSRs) for kubelet serving certificates. When `serverTLSBootstrap: true` is enabled on kubelets, they request proper TLS certificates via CSR instead of using self-signed certificates. This controller approves those requests, enabling secure TLS communication between components like metrics-server and kubelets.
-
-**Why it matters:**
-
-- Metrics-server requires secure TLS communication with kubelets
-- Without approved CSRs, kubelets use self-signed certificates that metrics-server rejects
-- KSail automatically installs kubelet-csr-approver when metrics-server is enabled on Vanilla or Talos
-
-**Key resources:**
-
-- [Kubelet CSR Approver GitHub](https://github.com/postfinance/kubelet-csr-approver)
-- [Kubernetes TLS Bootstrapping](https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/)
-- [Certificate Signing Requests](https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/)
+[Kubelet CSR Approver](https://github.com/postfinance/kubelet-csr-approver) automatically approves Certificate Signing Requests for kubelet serving certificates. When `serverTLSBootstrap: true` is enabled, kubelets request proper TLS certificates via CSR instead of self-signed certificates. This controller approves those requests, enabling secure TLS communication with metrics-server. KSail auto-installs this on Vanilla and Talos when metrics-server is enabled. See [GitHub](https://github.com/postfinance/kubelet-csr-approver), [TLS bootstrapping](https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/), and [CSRs](https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/).
 
 ## cert-manager
 
-[cert-manager](https://cert-manager.io/) automates TLS certificate management in Kubernetes. Supports ACME (Let's Encrypt), self-signed, and external CA certificates.
-
-**Key resources:**
-
-- [cert-manager Documentation](https://cert-manager.io/docs/)
-- [cert-manager Concepts](https://cert-manager.io/docs/concepts/)
-- [Issuer Types](https://cert-manager.io/docs/configuration/)
+[cert-manager](https://cert-manager.io/) automates TLS certificate management in Kubernetes, supporting ACME (Let's Encrypt), self-signed, and external CA certificates. See [documentation](https://cert-manager.io/docs/), [concepts](https://cert-manager.io/docs/concepts/), and [issuer types](https://cert-manager.io/docs/configuration/).
 
 ## Policy Engines
 
-Policy engines enforce security, compliance, and best practices in Kubernetes clusters through admission control and continuous validation.
+Policy engines enforce security, compliance, and best practices through admission control and continuous validation.
 
 ### Kyverno
 
-[Kyverno](https://kyverno.io/) is a Kubernetes-native policy engine designed for ease of use. Policies are written as Kubernetes resources using YAML, without requiring a new language.
-
-**Key resources:**
-
-- [Kyverno Documentation](https://kyverno.io/docs/)
-- [Kyverno Policies](https://kyverno.io/policies/)
-- [Policy Reports](https://kyverno.io/docs/policy-reports/)
+[Kyverno](https://kyverno.io/) is a Kubernetes-native policy engine with policies written as YAML resources without new languages. See [documentation](https://kyverno.io/docs/), [policies](https://kyverno.io/policies/), and [policy reports](https://kyverno.io/docs/policy-reports/).
 
 ### Gatekeeper
 
-[OPA Gatekeeper](https://open-policy-agent.github.io/gatekeeper/) brings Open Policy Agent (OPA) to Kubernetes as an admission controller. Policies are written in Rego, a declarative policy language.
-
-**Key resources:**
-
-- [Gatekeeper Documentation](https://open-policy-agent.github.io/gatekeeper/website/docs/)
-- [OPA Documentation](https://www.openpolicyagent.org/docs/latest/)
-- [Gatekeeper Library](https://open-policy-agent.github.io/gatekeeper-library/website/)
+[OPA Gatekeeper](https://open-policy-agent.github.io/gatekeeper/) brings Open Policy Agent to Kubernetes with policies in Rego. See [Gatekeeper docs](https://open-policy-agent.github.io/gatekeeper/website/docs/), [OPA docs](https://www.openpolicyagent.org/docs/latest/), and [library](https://open-policy-agent.github.io/gatekeeper-library/website/).
 
 ## OCI Registries
 
-[OCI Distribution](https://github.com/opencontainers/distribution-spec) defines a standard for storing and distributing container images and other artifacts.
-
-**Key resources:**
-
-- [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec)
-- [Docker Registry](https://distribution.github.io/distribution/)
-- [OCI Artifacts](https://github.com/opencontainers/artifacts)
+[OCI Distribution](https://github.com/opencontainers/distribution-spec) defines a standard for storing and distributing container images and artifacts. See [specification](https://github.com/opencontainers/distribution-spec), [Docker Registry](https://distribution.github.io/distribution/), and [OCI Artifacts](https://github.com/opencontainers/artifacts).
 
 ## GitOps
 
-[GitOps](https://opengitops.dev/) is an operational framework using Git as the single source of truth for declarative infrastructure and applications.
+[GitOps](https://opengitops.dev/) uses Git as the single source of truth for declarative infrastructure and applications.
 
 ### Flux
 
-[Flux](https://fluxcd.io/) is a GitOps toolkit for Kubernetes that keeps clusters in sync with configuration stored in Git or OCI registries.
-
-**Key resources:**
-
-- [Flux Documentation](https://fluxcd.io/flux/)
-- [Flux Concepts](https://fluxcd.io/flux/concepts/)
-- [FluxInstance CRD](https://fluxcd.io/flux/components/)
+[Flux](https://fluxcd.io/) keeps clusters in sync with configuration in Git or OCI registries. See [documentation](https://fluxcd.io/flux/), [concepts](https://fluxcd.io/flux/concepts/), and [FluxInstance CRD](https://fluxcd.io/flux/components/).
 
 ### ArgoCD
 
-[Argo CD](https://argo-cd.readthedocs.io/) is a declarative GitOps continuous delivery tool with a web UI for visualizing application state.
-
-**Key resources:**
-
-- [Argo CD Documentation](https://argo-cd.readthedocs.io/)
-- [Argo CD Concepts](https://argo-cd.readthedocs.io/en/stable/core_concepts/)
-- [Application CRD](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/)
+[Argo CD](https://argo-cd.readthedocs.io/) provides declarative GitOps with a web UI for visualizing application state. See [documentation](https://argo-cd.readthedocs.io/), [concepts](https://argo-cd.readthedocs.io/en/stable/core_concepts/), and [Application CRD](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/).
 
 ## SOPS
 
-[SOPS](https://github.com/getsops/sops) (Secrets OPerationS) is an editor for encrypted files supporting multiple key management backends.
-
-**Key resources:**
-
-- [SOPS Documentation](https://github.com/getsops/sops)
-- [age Encryption](https://age-encryption.org/)
-- [SOPS with Flux](https://fluxcd.io/flux/guides/mozilla-sops/)
+[SOPS](https://github.com/getsops/sops) (Secrets OPerationS) edits encrypted files with multiple key management backends. See [documentation](https://github.com/getsops/sops), [age encryption](https://age-encryption.org/), and [SOPS with Flux](https://fluxcd.io/flux/guides/mozilla-sops/).
 
 ### Key Management Systems
-
-SOPS supports multiple key management backends:
 
 | Provider        | Documentation                                                                       |
 | --------------- | ----------------------------------------------------------------------------------- |
 | age             | [age-encryption.org](https://age-encryption.org/)                                   |
 | PGP             | [GnuPG](https://gnupg.org/)                                                         |
-| AWS KMS         | [AWS KMS Documentation](https://docs.aws.amazon.com/kms/)                           |
-| GCP KMS         | [Cloud KMS Documentation](https://docs.cloud.google.com/kms/docs)                   |
-| Azure Key Vault | [Azure Key Vault Documentation](https://learn.microsoft.com/en-us/azure/key-vault/) |
-| HashiCorp Vault | [Vault Documentation](https://developer.hashicorp.com/vault/docs)                   |
+| AWS KMS         | [AWS KMS](https://docs.aws.amazon.com/kms/)                                         |
+| GCP KMS         | [Cloud KMS](https://docs.cloud.google.com/kms/docs)                                 |
+| Azure Key Vault | [Azure Key Vault](https://learn.microsoft.com/en-us/azure/key-vault/)              |
+| HashiCorp Vault | [Vault](https://developer.hashicorp.com/vault/docs)                                 |
 
 ## Kustomize
 
-[Kustomize](https://kustomize.io/) is a template-free customization tool for Kubernetes manifests. It uses overlays to patch base configurations.
-
-**Key resources:**
-
-- [Kustomize Documentation](https://kubectl.docs.kubernetes.io/references/kustomize/)
-- [Kustomize Examples](https://github.com/kubernetes-sigs/kustomize/tree/master/examples)
-- [Kustomization File Reference](https://kubectl.docs.kubernetes.io/references/kustomize/kustomization/)
+[Kustomize](https://kustomize.io/) is a template-free customization tool using overlays to patch base configurations. See [documentation](https://kubectl.docs.kubernetes.io/references/kustomize/), [examples](https://github.com/kubernetes-sigs/kustomize/tree/master/examples), and [file reference](https://kubectl.docs.kubernetes.io/references/kustomize/kustomization/).
 
 ## Helm
 
-[Helm](https://helm.sh/) is the package manager for Kubernetes. It uses charts to define, install, and upgrade applications.
+[Helm](https://helm.sh/) is the package manager for Kubernetes, using charts to define, install, and upgrade applications.
 
 ### kstatus Wait Support
 
-KSail uses Helm v4 which includes support for [HIP-0022](https://helm.sh/community/hips/hip-0022/) – enhanced resource waiting using [kstatus](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md). When `Wait: true` is enabled in chart installations, Helm leverages kstatus to:
-
-- **Wait for custom resources** to be ready (not just built-in resources)
-- **Ensure full reconciliation** of all resources (including cleanup of old pods in deployments)
-- **Monitor status conditions** using the standard Kubernetes ready condition
-
-All KSail component installers use kstatus-based waiting to ensure reliable deployments.
-
-**Key resources:**
-
-- [Helm Documentation](https://helm.sh/docs/)
-- [Helm Charts](https://helm.sh/docs/topics/charts/)
-- [HIP-0022: Wait With kstatus](https://helm.sh/community/hips/hip-0022/)
-- [kstatus Documentation](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md)
-- [Artifact Hub](https://artifacthub.io/) – Find and publish Helm charts
+KSail uses Helm v4 with [HIP-0022](https://helm.sh/community/hips/hip-0022/) support for enhanced resource waiting via [kstatus](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md). When `Wait: true` is enabled, Helm uses kstatus to wait for custom resources, ensure full reconciliation, and monitor status conditions. All KSail installers use kstatus-based waiting. See [Helm docs](https://helm.sh/docs/), [charts](https://helm.sh/docs/topics/charts/), [HIP-0022](https://helm.sh/community/hips/hip-0022/), [kstatus](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md), and [Artifact Hub](https://artifacthub.io/).
 
 ## Next Steps
 
