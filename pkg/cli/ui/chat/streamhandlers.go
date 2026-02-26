@@ -473,3 +473,23 @@ func (m *Model) handleShutdown(_ shutdownMsg) (tea.Model, tea.Cmd) {
 
 	return m, nil
 }
+
+// handleWarning handles session warning events.
+func (m *Model) handleWarning(msg warningMsg) (tea.Model, tea.Cmd) {
+	if msg.message != "" && len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		if last.role == roleAssistant {
+			last.content += "\n\n⚠️ " + msg.message
+			last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
+		}
+	}
+
+	m.updateViewportContent()
+
+	return m, m.waitForEvent()
+}
+
+// handleModeChanged handles server-side mode change events.
+func (m *Model) handleModeChanged(_ modeChangedMsg) (tea.Model, tea.Cmd) {
+	return m, m.waitForEvent()
+}

@@ -595,6 +595,12 @@ func (m *Model) handleStreamEvent(
 	case shutdownMsg:
 		return m.handleShutdown(msg)
 
+	case warningMsg:
+		return m.handleWarning(msg)
+
+	case modeChangedMsg:
+		return m.handleModeChanged(msg)
+
 	default:
 		return m, nil
 	}

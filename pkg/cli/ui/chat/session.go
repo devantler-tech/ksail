@@ -120,7 +120,7 @@ func ListSessions(
 	appDir string,
 ) ([]SessionMetadata, error) {
 	// Get sessions from SDK
-	sdkSessions, err := client.ListSessions(ctx)
+	sdkSessions, err := client.ListSessions(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list SDK sessions: %w", err)
 	}
@@ -317,7 +317,7 @@ func deleteLocalSession(
 // Returns an error if sync fails (caller should display as non-blocking toast).
 func SyncSessionMetadata(ctx context.Context, client *copilot.Client, appDir string) error {
 	// Get all sessions from SDK
-	sdkSessions, err := client.ListSessions(ctx)
+	sdkSessions, err := client.ListSessions(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to list SDK sessions: %w", err)
 	}
