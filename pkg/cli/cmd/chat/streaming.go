@@ -32,6 +32,7 @@ const (
 	actionDelta                        // write delta content
 	actionToolStart                    // write tool execution start
 	actionToolComplete                 // write tool completion
+	actionWarning                      // write warning message
 )
 
 // streamingOutput holds the data needed for post-unlock I/O.
@@ -81,6 +82,10 @@ func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) s
 		}
 	case copilot.ToolExecutionComplete:
 		return streamingOutput{action: actionToolComplete}
+	case copilot.SessionWarning:
+		if event.Data.Message != nil {
+			return streamingOutput{action: actionWarning, text: *event.Data.Message}
+		}
 	default:
 		// Ignore other event types
 	}
@@ -97,6 +102,8 @@ func writeStreamingOutput(output streamingOutput, writer io.Writer) {
 		_, _ = fmt.Fprint(writer, output.text)
 	case actionToolComplete:
 		_, _ = fmt.Fprint(writer, "✓ Done\n")
+	case actionWarning:
+		_, _ = fmt.Fprintf(writer, "\n⚠️ Warning: %s\n", output.text)
 	case actionNone:
 		// Nothing to write
 	}

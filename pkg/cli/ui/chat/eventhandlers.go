@@ -70,6 +70,10 @@ func (d *sessionEventDispatcher) dispatch(
 		d.handleModelChange(event)
 	case copilot.SessionShutdown:
 		d.handleShutdown(event)
+	case copilot.SessionWarning:
+		d.handleWarning(event)
+	case copilot.SessionModeChanged:
+		d.handleModeChanged(event)
 	}
 }
 
@@ -269,4 +273,18 @@ func (d *sessionEventDispatcher) handleShutdown(event copilot.SessionEvent) {
 	}
 
 	d.eventChan <- msg
+}
+
+func (d *sessionEventDispatcher) handleWarning(event copilot.SessionEvent) {
+	msg := warningMsg{}
+
+	if event.Data.Message != nil {
+		msg.message = *event.Data.Message
+	}
+
+	d.eventChan <- msg
+}
+
+func (d *sessionEventDispatcher) handleModeChanged(_ copilot.SessionEvent) {
+	d.eventChan <- modeChangedMsg{}
 }

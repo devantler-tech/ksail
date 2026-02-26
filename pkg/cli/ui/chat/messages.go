@@ -150,3 +150,11 @@ type modelChangeMsg struct {
 type shutdownMsg struct {
 	shutdownType string
 }
+
+// warningMsg carries a warning from the session.
+type warningMsg struct {
+	message string
+}
+
+// modeChangedMsg signals a server-side mode change (e.g., autopilot → plan).
+type modeChangedMsg struct{}
