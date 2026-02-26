@@ -601,9 +601,9 @@ func TestEngine_VCluster_LoadBalancerIgnored(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		oldLB      v1alpha1.LoadBalancer
-		newLB      v1alpha1.LoadBalancer
+		name  string
+		oldLB v1alpha1.LoadBalancer
+		newLB v1alpha1.LoadBalancer
 	}{
 		{
 			name:  "Default vs Disabled produces no diff",
