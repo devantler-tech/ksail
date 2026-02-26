@@ -303,10 +303,9 @@ See [Providers](/concepts/#providers) for more details.
 
 - `Docker` – Run nodes as Docker containers (local development)
 - `Hetzner` – Run nodes on Hetzner Cloud servers (requires `HCLOUD_TOKEN`)
-- `Omni` – Manage nodes through Sidero Omni SaaS (requires the env var named by `spec.cluster.omni.serviceAccountKeyEnvVar` (default: `OMNI_SERVICE_ACCOUNT_KEY`) and `spec.cluster.omni.endpoint`)
 
 > [!NOTE]
-> Both `Hetzner` and `Omni` providers are only supported with the `Talos` distribution.
+> Hetzner provider is only supported with the `Talos` distribution.
 
 #### distributionConfig
 
@@ -458,11 +457,6 @@ Advanced configuration options are direct fields under `spec.cluster`. See [Sche
 - `networkCidr` – Network CIDR block (default: `10.0.0.0/16`)
 - `sshKeyName` – SSH key name for server access (optional)
 - `tokenEnvVar` – Environment variable for API token (default: `HCLOUD_TOKEN`)
-
-**Omni options (`spec.cluster.omni`):**
-
-- `endpoint` – Omni API endpoint URL (e.g., `https://<account>.omni.siderolabs.io:443`)
-- `serviceAccountKeyEnvVar` – Environment variable for base64-encoded service account key (default: `OMNI_SERVICE_ACCOUNT_KEY`)
 
 **Vanilla options (`spec.cluster.vanilla`):**
 
