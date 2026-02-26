@@ -127,7 +127,7 @@ func testNewSimpleLifecycleCmdRequiresName(t *testing.T) {
 	cmd := lifecycle.NewSimpleLifecycleCmd(config)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetErr(new(bytes.Buffer))
-	cmd.SetArgs([]string{})
+	cmd.SetArgs([]string{}) // Prevent Cobra from parsing os.Args (includes -test.* flags)
 
 	err := cmd.Execute()
 
