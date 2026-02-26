@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -27,7 +28,19 @@ func generateSchema(t *testing.T) map[string]any {
 		"gen_schema.go",
 		outPath,
 	)
-	cmd.Dir = filepath.Join("..", "schemas")
+
+	// Determine the absolute path to the schemas directory based on this test file's location.
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("unable to determine test file path")
+	}
+
+	schemasDir, err := filepath.Abs(filepath.Dir(thisFile))
+	if err != nil {
+		t.Fatalf("unable to determine absolute schemas directory: %v", err)
+	}
+
+	cmd.Dir = schemasDir
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
