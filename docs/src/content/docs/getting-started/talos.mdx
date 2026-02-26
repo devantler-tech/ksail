@@ -1,11 +1,11 @@
 ---
 title: Getting Started with Talos
-description: Learn how to create and manage Talos Linux clusters with KSail for immutable, secure Kubernetes infrastructure on Docker or Hetzner Cloud.
+description: Learn how to create and manage Talos Linux clusters with KSail for immutable, secure Kubernetes infrastructure on Docker, Hetzner Cloud, or Sidero Omni.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components";
 
-[Talos Linux](https://www.talos.dev/) is a minimal, immutable operating system designed specifically for running Kubernetes. It provides enhanced security through API-driven configuration with no shell access, automatic updates, and a reduced attack surface. This guide shows you how to use Talos with KSail for both local development (Docker provider) and production deployments (Hetzner Cloud provider).
+[Talos Linux](https://www.talos.dev/) is a minimal, immutable operating system designed specifically for running Kubernetes. It provides enhanced security through API-driven configuration with no shell access, automatic updates, and a reduced attack surface. This guide shows you how to use Talos with KSail for local development (Docker provider), cloud deployments (Hetzner Cloud provider), or managed clusters through [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) (Omni provider).
 
 ## What is Talos?
 
@@ -225,6 +225,108 @@ Consider alternatives if you need:
 
     > [!WARNING]
     > This deletes the Hetzner Cloud servers and load balancers. You will stop being charged, but the operation is irreversible.
+
+  </TabItem>
+
+  <TabItem label="Omni (Managed)">
+    ### Managed Deployment via Sidero Omni
+
+    Create a Talos cluster managed through [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/), which handles machine lifecycle and cluster orchestration via a SaaS API.
+
+    #### Prerequisites
+
+    - A [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account
+    - Omni service account key (create one in the Omni web UI under **Settings → Service Accounts**)
+    - Your Omni API endpoint URL (e.g., `https://<account>.omni.siderolabs.io:443`)
+    - Machines already registered in Omni and available for allocation
+
+    #### Step 1: Configure Credentials
+
+    ```bash
+    export OMNI_SERVICE_ACCOUNT_KEY=your-base64-encoded-service-account-key
+    ```
+
+    > [!TIP]
+    > Add `OMNI_SERVICE_ACCOUNT_KEY` to your shell profile (`~/.bashrc`, `~/.zshrc`) to persist across sessions.
+
+    #### Step 2: Initialize Project
+
+    ```bash
+    ksail cluster init \
+      --name talos-omni \
+      --distribution Talos \
+      --provider Omni \
+      --control-planes 1 \
+      --workers 2
+    ```
+
+    This creates:
+    - `ksail.yaml` — KSail configuration (including `spec.cluster.omni.endpoint`)
+    - `talos/` directory — Talos configuration patches
+
+    #### Step 3: Set the Omni Endpoint
+
+    Open `ksail.yaml` and set the `spec.cluster.omni.endpoint` field:
+
+    ```yaml
+    spec:
+      cluster:
+        omni:
+          endpoint: "https://<account>.omni.siderolabs.io:443"
+    ```
+
+    > [!NOTE]
+    > The endpoint is specific to your Omni account. You can find it in the Omni web UI.
+
+    #### Step 4: Create Cluster
+
+    ```bash
+    ksail cluster create
+    ```
+
+    KSail will:
+    1. Connect to your Omni instance using the service account key
+    2. Allocate registered machines to the cluster
+    3. Apply Talos configuration patches via the Omni API
+    4. Bootstrap the Kubernetes cluster
+    5. Configure kubectl context
+
+    **Expected output:**
+
+    ```
+    ✓ Connecting to Omni...
+    ✓ Allocating machines...
+    ✓ Bootstrapping Kubernetes...
+    ✓ Installing Cilium CNI...
+    ✓ Cluster ready!
+
+    Cluster:  talos-omni
+    Nodes:    3 (1 control plane, 2 workers)
+    Provider: Omni
+    ```
+
+    #### Step 5: Verify Cluster
+
+    ```bash
+    # Check cluster info
+    ksail cluster info
+
+    # View nodes
+    kubectl get nodes
+
+    # View all pods
+    kubectl get pods -A
+    ```
+
+    #### Step 6: Cleanup
+
+    ```bash
+    # Delete the cluster (deallocates machines in Omni, does not wipe them)
+    ksail cluster delete
+    ```
+
+    > [!NOTE]
+    > Deleting the cluster removes the Omni cluster resource and deallocates machines. The machines remain registered in Omni and can be reused.
 
   </TabItem>
 </Tabs>
@@ -706,5 +808,7 @@ See [GitOps Workflows](/features/#gitops-workflows) for details.
 - **Talos Linux:** [https://www.talos.dev/](https://www.talos.dev/)
 - **Talos GitHub:** [https://github.com/siderolabs/talos](https://github.com/siderolabs/talos)
 - **Hetzner Cloud:** [https://www.hetzner.com/cloud](https://www.hetzner.com/cloud)
+- **Sidero Omni:** [https://www.siderolabs.com/platform/saas-for-kubernetes/](https://www.siderolabs.com/platform/saas-for-kubernetes/)
+- **Omni Documentation:** [https://omni.siderolabs.com/docs/](https://omni.siderolabs.com/docs/)
 - **MetalLB:** [https://metallb.universe.tf/](https://metallb.universe.tf/)
 - **Talos Configuration Reference:** [https://www.talos.dev/latest/reference/configuration/](https://www.talos.dev/latest/reference/configuration/)
