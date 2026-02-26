@@ -54,7 +54,10 @@ Creates nodes as Hetzner Cloud servers for production-grade clusters. **Supporte
 
 ### Omni
 
-Manages Talos clusters through [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/), a SaaS platform for centralized cluster lifecycle management. **Supported distributions:** Talos. **Requirements:** Sidero Omni account, `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and Omni API endpoint configured in `spec.cluster.omni.endpoint`. See [Omni docs](https://omni.siderolabs.com/docs/) and [Talos on Omni](https://www.talos.dev/latest/talos-guides/install/cloud-platforms/omni/).
+Manages Talos clusters through the [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) SaaS platform API. **Supported distributions:** Talos. **Requirements:** a Sidero Omni account, a service account key provided via an environment variable (default name `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.cluster.omni.serviceAccountKeyEnvVar`), and an Omni API endpoint configured via `spec.cluster.omni.endpoint`. See [Omni docs](https://omni.siderolabs.com/docs/) and [Talos on Omni](https://omni.siderolabs.com/docs/how-to-guides/how-to-create-a-cluster/).
+
+> [!NOTE]
+> Omni provider is only supported with the `Talos` distribution.
 
 ## Container Network Interface (CNI)
 
