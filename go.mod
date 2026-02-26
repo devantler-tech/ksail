@@ -59,7 +59,7 @@ require (
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/cosi-project/runtime v1.14.0
-	github.com/github/copilot-sdk/go v0.1.23
+	github.com/github/copilot-sdk/go v0.1.25
 	github.com/hetznercloud/hcloud-go/v2 v2.36.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
