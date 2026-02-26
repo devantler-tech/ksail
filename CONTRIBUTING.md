@@ -240,21 +240,36 @@ To test the Hetzner provider locally, you need:
 
 #### Agentic Workflows
 
-KSail uses [GitHub Agentic Workflows](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-github-actions/about-github-actions-integration-for-github-copilot#agentic-workflows) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a daily schedule or on dispatch and operate in multiple phases (research, configuration, implementation):
+KSail uses [GitHub Agentic Workflows](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-github-actions/about-github-actions-integration-for-github-copilot#agentic-workflows) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a schedule or on dispatch:
 
-| Workflow | Purpose |
-|---|---|
-| `daily-refactor` | Incremental code refactoring for maintainability |
-| `daily-perf-improver` | Performance optimization |
-| `daily-test-improver` | Test coverage improvements |
-| `daily-workflow-optimizer` | CI/CD workflow optimization (both `.yaml` and `.md` workflows) |
-| `daily-code-simplifier` | Code simplification and readability |
-| `daily-backlog-burner` | Backlog issue resolution |
-| `ci-doctor` | CI health diagnostics |
+| Workflow | Schedule | Purpose |
+|---|---|---|
+| `daily-refactor` | Daily | Incremental code refactoring for maintainability |
+| `daily-perf-improver` | Daily | Performance optimization |
+| `daily-test-improver` | Daily | Test coverage improvements |
+| `daily-workflow-optimizer` | Daily | CI/CD workflow optimization (both `.yaml` and `.md` workflows) |
+| `daily-code-simplifier` | Daily | Code simplification and readability |
+| `daily-backlog-burner` | Daily | Backlog issue resolution |
+| `daily-plan` | Daily | Strategic project planning and roadmap maintenance |
+| `daily-progress` | Daily | Feature delivery from the project plan |
+| `daily-workflow-updater` | Daily | GitHub Actions version updates and workflow source upgrades |
+| `weekly-research` | Weekly | Industry insights and competitive analysis |
+| `weekly-promote-ksail` | Weekly | Project promotion and visibility |
+| `ci-doctor` | On CI failure | CI failure investigation and diagnostics |
+| `issue-triage` | On issue open/reopen | Issue labeling, spam detection, and analysis |
+| `pr-fix` | On `/pr-fix` command | On-demand PR failure fixes |
+| `plan` | On `/plan` command | Project plan and task breakdown generation |
+| `update-docs` | On push to `main` | Documentation synchronization with code changes |
+| `unbloat-docs` | Daily / On `/unbloat` | Documentation simplification and verbosity reduction |
+| `maintainer` | Every 3 days | Repository maintenance and housekeeping |
 
-Each agentic workflow creates a GitHub Discussion to coordinate its multi-phase work and opens draft PRs with incremental improvements. You can control them using the `gh aw` CLI:
+Each agentic workflow creates a GitHub Discussion to coordinate its work and, depending on its purpose, may open draft PRs or create issues with incremental improvements. You can control them using the [`gh aw`](https://github.com/github/gh-aw) CLI extension:
 
 ```sh
+# Install the gh-aw extension (prerequisite)
+gh ext install github/gh-aw
+
+# Manage a specific workflow
 gh aw disable daily-workflow-optimizer --repo devantler-tech/ksail
 gh aw enable daily-workflow-optimizer --repo devantler-tech/ksail
 gh aw run daily-workflow-optimizer --repo devantler-tech/ksail
