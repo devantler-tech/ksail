@@ -197,12 +197,12 @@ KSail separates infrastructure management from distribution configuration:
 - **Providers** manage the infrastructure lifecycle (start/stop containers)
 - **Provisioners** configure and manage Kubernetes distributions
 
-| Distribution | Provisioner            | Tool  | Provider              | Description                             |
-|--------------|------------------------|-------|-----------------------|-----------------------------------------|
-| `Vanilla`    | KindClusterProvisioner | Kind  | Docker                | Standard upstream Kubernetes            |
-| `K3s`        | K3dClusterProvisioner  | K3d   | Docker                | Lightweight K3s in Docker               |
-| `Talos`      | TalosProvisioner       | Talos | Docker, Hetzner, Omni | Immutable Talos Linux                   |
-| `VCluster`   | VClusterProvisioner    | Vind  | Docker                | Virtual clusters via vCluster in Docker |
+| Distribution | Provisioner            | Tool  | Provider              | Description                                    |
+|--------------|------------------------|-------|-----------------------|------------------------------------------------|
+| `Vanilla`    | KindClusterProvisioner | Kind  | Docker                | Standard upstream Kubernetes                   |
+| `K3s`        | K3dClusterProvisioner  | K3d   | Docker                | Lightweight K3s in Docker                      |
+| `Talos`      | TalosProvisioner       | Talos | Docker, Hetzner, Omni | Immutable Talos Linux                          |
+| `VCluster`   | VClusterProvisioner    | Vind  | Docker                | Virtual clusters via vCluster (Vind) in Docker |
 
 This project strives to be fully open-source friendly, and as such, all core functionality is implemented in the `pkg/` directory, and the `internal/` directory is not used. This allows external projects to import and use any part of the codebase.
 
@@ -247,7 +247,7 @@ To test the Omni provider locally, you need:
 
 **Note:** Omni requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account and does not run locally. Omni manages the Talos machine lifecycle; `StartNodes` and `StopNodes` are no-ops in the Omni provider.
 
-**Note:** Omni tests are not automatically triggered unless both the `OMNI_SERVICE_ACCOUNT_KEY` and endpoint are configured.
+**Note:** Omni system tests are not part of the default CI workflows. This section only applies to running Omni provider tests locally: those tests are not triggered unless both the `OMNI_SERVICE_ACCOUNT_KEY` and Omni endpoint are configured.
 
 #### Agentic Workflows
 
