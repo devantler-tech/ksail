@@ -19,6 +19,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
+	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
@@ -53,8 +54,11 @@ type BackupMetadata struct {
 	Version       string    `json:"version"`
 	Timestamp     time.Time `json:"timestamp"`
 	ClusterName   string    `json:"clusterName"`
+	Distribution  string    `json:"distribution,omitempty"`
+	Provider      string    `json:"provider,omitempty"`
 	KSailVersion  string    `json:"ksailVersion"`
 	ResourceCount int       `json:"resourceCount"`
+	ResourceTypes []string  `json:"resourceTypes,omitempty"`
 }
 
 type backupFlags struct {
@@ -101,7 +105,7 @@ Example:
 		"Output path for backup archive (required)",
 	)
 	cmd.Flags().BoolVar(
-		&flags.includeVolumes, "include-volumes", false,
+		&flags.includeVolumes, "include-volumes", true,
 		"Include persistent volume data in backup (not yet implemented)",
 	)
 	cmd.Flags().StringSliceVarP(
@@ -207,13 +211,20 @@ func createBackupArchive(
 		KSailVersion: buildmeta.Version,
 	}
 
+	populateClusterInfo(metadata, kubeconfigPath)
+
 	_, _ = fmt.Fprintf(writer, "Exporting cluster resources...\n")
 
-	resourceCount := exportResources(
-		ctx, kubeconfigPath, tmpDir, writer, flags,
+	filteredTypes := filterExcludedTypes(
+		backupResourceTypes(), flags.excludeTypes,
+	)
+
+	resourceCount, backedUpTypes := exportResources(
+		ctx, kubeconfigPath, tmpDir, writer, flags, filteredTypes,
 	)
 
 	metadata.ResourceCount = resourceCount
+	metadata.ResourceTypes = backedUpTypes
 
 	metadataPath := filepath.Join(tmpDir, "backup-metadata.json")
 
@@ -230,6 +241,18 @@ func createBackupArchive(
 	}
 
 	return nil
+}
+
+// populateClusterInfo uses the cluster detector to populate
+// distribution and provider fields in the metadata.
+func populateClusterInfo(metadata *BackupMetadata, kubeconfigPath string) {
+	info, err := clusterdetector.DetectInfo(kubeconfigPath, "")
+	if err != nil {
+		return
+	}
+
+	metadata.Distribution = string(info.Distribution)
+	metadata.Provider = string(info.Provider)
 }
 
 // clusterScopedResourceTypes returns resource types that are cluster-scoped
@@ -277,11 +300,10 @@ func exportResources(
 	kubeconfigPath, outputDir string,
 	writer io.Writer,
 	flags *backupFlags,
-) int {
-	filteredTypes := filterExcludedTypes(
-		backupResourceTypes(), flags.excludeTypes,
-	)
+	filteredTypes []string,
+) (int, []string) {
 	totalCount := 0
+	var backedUpTypes []string
 
 	for _, resourceType := range filteredTypes {
 		count, err := exportResourceType(
@@ -302,10 +324,11 @@ func exportResources(
 				writer, "   Exported %d %s\n", count, resourceType,
 			)
 			totalCount += count
+			backedUpTypes = append(backedUpTypes, resourceType)
 		}
 	}
 
-	return totalCount
+	return totalCount, backedUpTypes
 }
 
 func filterExcludedTypes(resourceTypes, excludeTypes []string) []string {

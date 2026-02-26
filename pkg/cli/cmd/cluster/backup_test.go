@@ -17,8 +17,11 @@ func TestBackupMetadata(t *testing.T) {
 	metadata := &cluster.BackupMetadata{
 		Version:       "v1",
 		ClusterName:   "test-cluster",
+		Distribution:  "Vanilla",
+		Provider:      "Docker",
 		KSailVersion:  "5.0.0",
 		ResourceCount: 42,
+		ResourceTypes: []string{"deployments", "services"},
 	}
 
 	tmpDir := t.TempDir()
@@ -41,6 +44,15 @@ func TestBackupMetadata(t *testing.T) {
 
 	if len(data) == 0 {
 		t.Fatal("metadata file is empty")
+	}
+
+	content := string(data)
+	for _, field := range []string{
+		`"distribution"`, `"provider"`, `"resourceTypes"`,
+	} {
+		if !strings.Contains(content, field) {
+			t.Errorf("metadata file should contain %s", field)
+		}
 	}
 }
 
@@ -186,8 +198,11 @@ func TestExtractAndReadMetadata(t *testing.T) {
 	metadata := &cluster.BackupMetadata{
 		Version:       "v1",
 		ClusterName:   "roundtrip-cluster",
+		Distribution:  "K3s",
+		Provider:      "Docker",
 		KSailVersion:  "5.0.0",
 		ResourceCount: 10,
+		ResourceTypes: []string{"deployments", "services"},
 	}
 
 	metadataPath := filepath.Join(srcDir, "backup-metadata.json")
@@ -226,6 +241,27 @@ func TestExtractAndReadMetadata(t *testing.T) {
 		t.Errorf(
 			"ResourceCount = %d, want %d",
 			restored.ResourceCount, 10,
+		)
+	}
+
+	if restored.Distribution != "K3s" {
+		t.Errorf(
+			"Distribution = %q, want %q",
+			restored.Distribution, "K3s",
+		)
+	}
+
+	if restored.Provider != "Docker" {
+		t.Errorf(
+			"Provider = %q, want %q",
+			restored.Provider, "Docker",
+		)
+	}
+
+	if len(restored.ResourceTypes) != 2 {
+		t.Errorf(
+			"ResourceTypes length = %d, want %d",
+			len(restored.ResourceTypes), 2,
 		)
 	}
 }
@@ -443,5 +479,212 @@ func TestAllLinesContain(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func TestDeriveBackupName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "tar.gz extension",
+			input:    "/path/to/my-backup.tar.gz",
+			expected: "my-backup",
+		},
+		{
+			name:     "tgz extension",
+			input:    "/path/to/backup.tgz",
+			expected: "backup",
+		},
+		{
+			name:     "no matching extension",
+			input:    "/path/to/backup.zip",
+			expected: "backup.zip",
+		},
+		{
+			name:     "simple filename",
+			input:    "cluster-backup.tar.gz",
+			expected: "cluster-backup",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := cluster.ExportDeriveBackupName(test.input)
+			if result != test.expected {
+				t.Errorf(
+					"deriveBackupName() = %q, want %q",
+					result, test.expected,
+				)
+			}
+		})
+	}
+}
+
+func TestAddLabelsToDocument(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		doc         string
+		backupName  string
+		restoreName string
+		wantLabels  []string
+		wantErr     bool
+	}{
+		{
+			name: "adds labels to document without existing labels",
+			doc: "apiVersion: v1\nkind: Pod\nmetadata:\n" +
+				"  name: test-pod\n  namespace: default\n",
+			backupName:  "my-backup",
+			restoreName: "restore-123",
+			wantLabels: []string{
+				"ksail.io/backup-name",
+				"ksail.io/restore-name",
+			},
+		},
+		{
+			name: "preserves existing labels",
+			doc: "apiVersion: v1\nkind: Pod\nmetadata:\n" +
+				"  name: test-pod\n  labels:\n    app: nginx\n",
+			backupName:  "backup-1",
+			restoreName: "restore-1",
+			wantLabels: []string{
+				"app",
+				"ksail.io/backup-name",
+				"ksail.io/restore-name",
+			},
+		},
+		{
+			name:        "returns original for empty doc",
+			doc:         "\n",
+			backupName:  "backup",
+			restoreName: "restore",
+			wantErr:     false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := cluster.ExportAddLabelsToDocument(
+				test.doc, test.backupName, test.restoreName,
+			)
+			if test.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			for _, label := range test.wantLabels {
+				if !strings.Contains(result, label) {
+					t.Errorf("result should contain label %q", label)
+				}
+			}
+		})
+	}
+}
+
+func TestSplitYAMLDocuments(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		content  string
+		expected int
+	}{
+		{
+			name:     "single document",
+			content:  "apiVersion: v1\nkind: Pod\n",
+			expected: 1,
+		},
+		{
+			name:     "two documents",
+			content:  "apiVersion: v1\nkind: Pod\n---\napiVersion: v1\nkind: Service\n",
+			expected: 2,
+		},
+		{
+			name:     "three documents",
+			content:  "kind: A\n---\nkind: B\n---\nkind: C\n",
+			expected: 3,
+		},
+		{
+			name:     "empty content",
+			content:  "",
+			expected: 0,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := cluster.ExportSplitYAMLDocuments(test.content)
+			if len(result) != test.expected {
+				t.Errorf(
+					"splitYAMLDocuments() returned %d docs, want %d",
+					len(result), test.expected,
+				)
+			}
+		})
+	}
+}
+
+func TestInjectRestoreLabels(t *testing.T) {
+	t.Parallel()
+
+	content := "apiVersion: v1\nkind: Pod\nmetadata:\n  name: test\n"
+
+	tmpDir := t.TempDir()
+	inputPath := filepath.Join(tmpDir, "test.yaml")
+
+	err := os.WriteFile(inputPath, []byte(content), cluster.ExportFilePerm)
+	if err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	labeledPath, err := cluster.ExportInjectRestoreLabels(
+		inputPath, "my-backup", "restore-42",
+	)
+	if err != nil {
+		t.Fatalf("injectRestoreLabels() error: %v", err)
+	}
+
+	defer func() { _ = os.Remove(labeledPath) }()
+
+	data, err := os.ReadFile(labeledPath) //nolint:gosec // test-controlled temp path
+	if err != nil {
+		t.Fatalf("failed to read labeled file: %v", err)
+	}
+
+	result := string(data)
+
+	if !strings.Contains(result, "ksail.io/backup-name") {
+		t.Error("labeled file should contain ksail.io/backup-name")
+	}
+
+	if !strings.Contains(result, "ksail.io/restore-name") {
+		t.Error("labeled file should contain ksail.io/restore-name")
+	}
+
+	if !strings.Contains(result, "my-backup") {
+		t.Error("labeled file should contain backup name value")
+	}
+
+	if !strings.Contains(result, "restore-42") {
+		t.Error("labeled file should contain restore name value")
 	}
 }
