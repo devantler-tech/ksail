@@ -7,6 +7,8 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	"github.com/spf13/cobra"
 )
 
@@ -164,5 +166,17 @@ func runClusterCreationWorkflow(
 
 	maybeImportCachedImages(cmd, ctx, deps.Timer)
 
-	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
+	err = handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
+	if err != nil {
+		return err
+	}
+
+	// Persist the ClusterSpec used at creation time so the update command can
+	// compare against it instead of inferring defaults from component detection.
+	if saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster); saveErr != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Failed to save cluster state (update may detect false changes): %v", saveErr)
+	}
+
+	return nil
 }
