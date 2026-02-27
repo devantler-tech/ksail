@@ -9,18 +9,20 @@ LoadBalancer services expose applications to external traffic by automatically p
 
 LoadBalancer support varies by Kubernetes distribution and infrastructure provider:
 
-| Distribution   | Provider | Implementation              | Default Behavior | Configuration Required |
-| -------------- | -------- | --------------------------- | ---------------- | ---------------------- |
-| Vanilla (Kind) | Docker   | Cloud Provider KIND         | Disabled         | Yes                    |
-| K3s (K3d)      | Docker   | ServiceLB (Klipper)         | Enabled          | No                     |
-| Talos          | Docker   | MetalLB                     | Disabled         | Yes                    |
-| Talos          | Hetzner  | hcloud-cloud-controller-manager | Enabled          | No                     |
+| Distribution    | Provider | Implementation                   | Default Behavior | Configuration Required |
+| --------------- | -------- | --------------------------------- | ---------------- | ---------------------- |
+| Vanilla (Kind)  | Docker   | Cloud Provider KIND               | Disabled         | Yes                    |
+| K3s (K3d)       | Docker   | ServiceLB (Klipper)               | Enabled          | No                     |
+| Talos           | Docker   | MetalLB                           | Disabled         | Yes                    |
+| Talos           | Hetzner  | hcloud-cloud-controller-manager   | Enabled          | No                     |
+| VCluster (Vind) | Docker   | Delegated to host cluster         | N/A              | N/A                    |
 
 **Key Points:**
 
 - **K3s** and **Talos × Hetzner** include LoadBalancer support by default—no configuration needed
 - **Vanilla** and **Talos × Docker** require explicit enablement during cluster initialization
 - LoadBalancer type is configured via `--load-balancer` flag or `ksail.yaml`
+- **VCluster** delegates LoadBalancer to the host cluster. The `spec.cluster.loadBalancer` setting has no effect on VCluster clusters—KSail does not install or uninstall any LoadBalancer controller. Changing this setting will not trigger a cluster update.
 
 ## Configuration Options
 

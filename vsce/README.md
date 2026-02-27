@@ -41,6 +41,8 @@ All cluster operations are available via the Command Palette (`Cmd+Shift+P` / `C
 | `KSail: Start Cluster`            | Start an existing cluster                 | -               |
 | `KSail: Stop Cluster`             | Stop a running cluster                    | -               |
 | `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI (embedded in KSail)  | -               |
+| `KSail: Refresh Clusters`         | Refresh the clusters tree view            | -               |
+| `KSail: Show Output`              | Open the KSail output channel             | -               |
 
 ### Interactive Wizards
 
