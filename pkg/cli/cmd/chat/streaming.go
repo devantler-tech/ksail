@@ -67,11 +67,7 @@ func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) s
 	case copilot.SessionIdle:
 		state.markDone()
 	case copilot.SessionError:
-		if event.Data.Message != nil {
-			state.responseErr = fmt.Errorf("%w: %s", errSessionError, *event.Data.Message)
-		}
-
-		state.markDone()
+		recordSessionError(event, state)
 	case copilot.ToolExecutionStart:
 		toolName := getToolName(event)
 		toolArgs := getToolArgs(event)
@@ -91,6 +87,16 @@ func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) s
 	}
 
 	return streamingOutput{action: actionNone}
+}
+
+// recordSessionError stores the error from a SessionError event and marks streaming as done.
+// Extracted to reduce cyclomatic complexity of computeStreamingOutput.
+func recordSessionError(event copilot.SessionEvent, state *streamingState) {
+	if event.Data.Message != nil {
+		state.responseErr = fmt.Errorf("%w: %s", errSessionError, *event.Data.Message)
+	}
+
+	state.markDone()
 }
 
 // writeStreamingOutput performs the I/O operation outside the critical section.
