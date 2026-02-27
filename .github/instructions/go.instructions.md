@@ -312,6 +312,12 @@ go generate ./pkg/svc/chat/...    # Embedded documentation
 - Use `_test` package suffix for black-box testing
 - Name test files with `_test.go` suffix
 - Place test files next to the code they test
+- Use `export_test.go` to expose unexported symbols for black-box tests:
+  - Name the file `export_test.go` in the package directory
+  - Declare it with the **regular** package name (e.g., `package detector`), not `package detector_test` — Go only compiles it for test binaries
+  - Export thin wrappers or type aliases that delegate to unexported functions/methods
+  - Tests in `package detector_test` can then call these exported helpers without the production binary ever exposing them
+  - See `pkg/svc/detector/export_test.go` and `pkg/svc/provisioner/cluster/vcluster/export_test.go` for examples
 
 ### Writing Tests
 
