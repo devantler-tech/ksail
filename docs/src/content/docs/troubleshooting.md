@@ -92,6 +92,25 @@ ksail workload get pods -n flux-system
 kubectl get crd <crd-name> -o jsonpath='{.status.conditions[?(@.type=="Established")].status}'
 ```
 
+### Flux/ArgoCD CrashLoopBackOff After Component Installation
+
+**Symptom:** After installing infrastructure components (MetalLB, Kyverno, cert-manager, etc.), Flux or ArgoCD enters `CrashLoopBackOff` with API timeout errors such as `dial tcp 10.96.0.1:443: i/o timeout`.
+
+**Cause:** Infrastructure components register webhooks and CRDs that can temporarily destabilize API server connectivity. If GitOps engines start installing before the API server has fully recovered, they can fail to reach the Kubernetes API.
+
+**Resolution:** KSail automatically waits for the API server to stabilize between Phase 1 (infrastructure components) and Phase 2 (GitOps engines). It requires 3 consecutive successful API server health checks within a 2-minute timeout before proceeding. No manual action is required in most cases.
+
+If the 2-minute wait expires and you see `API server not stable after infrastructure installation`, your cluster may be under excessive load. Try:
+
+```bash
+# Check node and pod resource pressure
+ksail workload get nodes
+ksail workload get pods -A | grep -v Running
+
+# Recreate with fewer components enabled
+ksail cluster delete && ksail cluster create
+```
+
 ### Flux/ArgoCD Not Reconciling
 
 If changes don't appear after `ksail workload reconcile`, check controller status and logs:
