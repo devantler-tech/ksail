@@ -143,7 +143,7 @@ ksail cipher import AGE-SECRET-KEY-1...
 
 ## Cluster Backup & Restore
 
-Export cluster resource manifests to a compressed archive and restore them to a target cluster. Backups capture resource YAML in dependency order (CRDs → namespaces → storage → workloads), strip server-assigned metadata for portability, and embed a metadata file with version, timestamp, cluster name, and resource count.
+Export cluster resource manifests to a compressed archive and restore them to a target cluster. Backups capture resource YAML in dependency order (CRDs → namespaces → storage → workloads), strip server-assigned metadata for portability, and embed a `backup-metadata.json` file containing version, timestamp, cluster name, distribution, provider, KSail version, resource count, and resource types. Each restored resource is automatically labeled with `ksail.io/backup-name` (derived from the archive filename) and `ksail.io/restore-name` (unique per restore operation) for traceability.
 
 ```bash
 # Backup all namespaces
