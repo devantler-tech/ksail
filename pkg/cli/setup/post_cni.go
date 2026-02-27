@@ -249,8 +249,12 @@ func installComponentsInPhases(
 		// temporarily destabilize API server connectivity, causing GitOps
 		// operators to enter CrashLoopBackOff with API timeout errors.
 		if len(infraTasks) > 0 {
-			if err := waitForAPIServerStability(ctx, clusterCfg); err != nil {
-				return fmt.Errorf("API server not stable after infrastructure installation: %w", err)
+			stabilityErr := waitForAPIServerStability(ctx, clusterCfg)
+			if stabilityErr != nil {
+				return fmt.Errorf(
+					"API server not stable after infrastructure installation: %w",
+					stabilityErr,
+				)
 			}
 		}
 
@@ -363,9 +367,14 @@ func waitForAPIServerStability(
 		return fmt.Errorf("create clientset for API server check: %w", err)
 	}
 
-	return readiness.WaitForAPIServerStable(
+	err = readiness.WaitForAPIServerStable(
 		ctx, clientset, apiServerStabilityTimeout, apiServerStabilitySuccesses,
 	)
+	if err != nil {
+		return fmt.Errorf("wait for API server stability: %w", err)
+	}
+
+	return nil
 }
 
 type silentInstallFunc func(ctx context.Context, cfg *v1alpha1.Cluster, f *InstallerFactories) error
