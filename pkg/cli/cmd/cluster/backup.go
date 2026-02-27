@@ -623,7 +623,7 @@ func addFileToTar(
 		return nil
 	}
 
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- path from filepath.Walk within backup directory
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}

@@ -52,7 +52,7 @@ type BuildOptions struct {
 	Username string
 	// Password is the optional password for registry authentication.
 	// When provided with Username, enables basic authentication for the registry push.
-	Password string
+	Password string //nolint:gosec // G117: field name required by API schema
 }
 
 // ValidatedBuildOptions represents sanitized inputs ready for use by the builder implementation.
@@ -74,7 +74,7 @@ type ValidatedBuildOptions struct {
 	// Username is the optional username for registry authentication.
 	Username string
 	// Password is the optional password for registry authentication.
-	Password string
+	Password string //nolint:gosec // G117: field name required by API schema
 }
 
 // BuildResult describes the outcome of a successful artifact build.
@@ -102,7 +102,7 @@ type EmptyBuildOptions struct {
 	// Username is the optional username for registry authentication.
 	Username string
 	// Password is the optional password for registry authentication.
-	Password string
+	Password string //nolint:gosec // G117: field name required by API schema
 }
 
 // ValidatedEmptyBuildOptions represents sanitized inputs ready for building an empty artifact.
@@ -122,5 +122,5 @@ type ValidatedEmptyBuildOptions struct {
 	// Username is the optional username for registry authentication.
 	Username string
 	// Password is the optional password for registry authentication.
-	Password string
+	Password string //nolint:gosec // G117: field name required by API schema
 }

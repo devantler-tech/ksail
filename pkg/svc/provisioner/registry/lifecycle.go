@@ -19,7 +19,7 @@ type Info struct {
 	Port     int
 	Volume   string
 	Username string // Optional: username for registry authentication (supports ${ENV_VAR} placeholders)
-	Password string
+	Password string //nolint:gosec // G117: field name required by API schema
 }
 
 // Registry Lifecycle Management

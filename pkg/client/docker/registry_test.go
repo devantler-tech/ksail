@@ -1121,9 +1121,13 @@ func TestCreateRegistry_WithCredentials(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "ghp_test123")
 
 	mockClient, manager, _ := setupTestRegistryManager(t)
+	//nolint:gosec // G101: test data using env var placeholders
 	config := docker.RegistryConfig{
-		Name: "ghcr.io", Port: 5000, UpstreamURL: "https://ghcr.io",
-		Username: "${GITHUB_USER}", Password: "${GITHUB_TOKEN}",
+		Name:        "ghcr.io",
+		Port:        5000,
+		UpstreamURL: "https://ghcr.io",
+		Username:    "${GITHUB_USER}",
+		Password:    "${GITHUB_TOKEN}",
 	}
 
 	mockRegistryNotExists(context.Background(), mockClient)
