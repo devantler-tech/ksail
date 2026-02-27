@@ -196,6 +196,27 @@ See the [LoadBalancer Configuration Guide](/configuration/loadbalancer/#troubles
 
 If pods are stuck in `ContainerCreating` with CNI errors, check CNI pods are running with `ksail workload get pods -n kube-system -l k8s-app=cilium` (or `calico-node` for Calico). If failed, recreate the cluster: `ksail cluster init --cni Cilium && ksail cluster create`
 
+## VCluster Issues
+
+### Transient Startup Failures
+
+**Symptom:** `ksail cluster create` fails with `exit status 22` (EINVAL) or similar D-Bus errors on CI runners.
+
+KSail automatically retries transient VCluster startup failures with up to 3 attempts and a 5-second delay between attempts, cleaning up partial state between retries. If you see log messages like `Retrying vCluster create (attempt 2/3)...`, this is expected behavior — no action is required.
+
+If all retries fail, check Docker resource limits and D-Bus availability on the runner. See the [VCluster Getting Started guide](/getting-started/vcluster/#troubleshooting) for detailed steps.
+
+### kubectl Commands Fail After VCluster Creation
+
+**Symptom:** `kubectl get nodes` returns connection errors immediately after creating a VCluster.
+
+VCluster control planes can take a moment to become fully ready. Wait a few seconds and retry, or check that the kubeconfig context is set correctly:
+
+```bash
+kubectl config current-context
+ksail workload get nodes
+```
+
 ## Hetzner Cloud Issues
 
 ### HCLOUD_TOKEN Not Working
