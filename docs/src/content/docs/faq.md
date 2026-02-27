@@ -114,7 +114,7 @@ Changing the distribution (e.g., Vanilla to Talos) or provider (e.g., Docker to 
 
 ### Which distributions support LoadBalancer services?
 
-All distributions provide LoadBalancer support. Vanilla (Kind) uses cloud-provider-kind, K3s uses built-in ServiceLB, Talos on Docker uses MetalLB (IP pool 172.18.255.200-250), Talos on Hetzner uses Hetzner Cloud Load Balancer, and VCluster delegates LoadBalancer to the host cluster. The `spec.cluster.loadBalancer` setting has no effect on VCluster clusters—KSail does not install or uninstall any LoadBalancer controller for VCluster.
+All distributions provide LoadBalancer support. Vanilla (Kind) uses cloud-provider-kind, K3s uses built-in ServiceLB, Talos on Docker uses MetalLB (IP pool 172.18.255.200-172.18.255.250), Talos on Hetzner uses Hetzner Cloud Load Balancer, and VCluster delegates LoadBalancer to the host cluster. The `spec.cluster.loadBalancer` setting has no effect on VCluster clusters—KSail does not install or uninstall any LoadBalancer controller for VCluster.
 
 ### Can I add nodes to an existing cluster?
 
