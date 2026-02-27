@@ -597,6 +597,57 @@ func TestEngine_DefaultVsDisabled_DetectedOnK3s(t *testing.T) {
 	}
 }
 
+func TestEngine_VCluster_LoadBalancerIgnored(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		oldLB v1alpha1.LoadBalancer
+		newLB v1alpha1.LoadBalancer
+	}{
+		{
+			name:  "Default vs Disabled produces no diff",
+			oldLB: v1alpha1.LoadBalancerDefault,
+			newLB: v1alpha1.LoadBalancerDisabled,
+		},
+		{
+			name:  "Default vs Enabled produces no diff",
+			oldLB: v1alpha1.LoadBalancerDefault,
+			newLB: v1alpha1.LoadBalancerEnabled,
+		},
+		{
+			name:  "Enabled vs Disabled produces no diff",
+			oldLB: v1alpha1.LoadBalancerEnabled,
+			newLB: v1alpha1.LoadBalancerDisabled,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			old := newBaseSpec()
+			old.Distribution = v1alpha1.DistributionVCluster
+			old.LoadBalancer = testCase.oldLB
+
+			newer := clone(old)
+			newer.LoadBalancer = testCase.newLB
+
+			engine := diff.NewEngine(v1alpha1.DistributionVCluster, v1alpha1.ProviderDocker)
+			result := engine.ComputeDiff(old, newer)
+
+			for _, change := range result.AllChanges() {
+				if change.Field == "cluster.loadBalancer" {
+					t.Errorf(
+						"VCluster should not report LoadBalancer diff (%s -> %s)",
+						testCase.oldLB, testCase.newLB,
+					)
+				}
+			}
+		})
+	}
+}
+
 func assertSingleChange(
 	t *testing.T,
 	changes []clusterupdate.Change,
