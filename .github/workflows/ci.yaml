@@ -424,7 +424,7 @@ jobs:
             provider: Hetzner
             init: false
             args: "--name system-test-cluster-without-scaffolding"
-    continue-on-error: true
+    continue-on-error: ${{ matrix.provider == 'Hetzner' }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -510,7 +510,6 @@ jobs:
             ${{ needs.generate-docs.result }}
             ${{ needs.coverage.result }}
             ${{ needs.warm-helm-cache.result }}
-            ${{ needs.system-test.result }}
             ${{ needs.cleanup-hetzner.result }}
             ${{ needs.audit-docs.result }}
             ${{ needs.audit-vsce.result }}
