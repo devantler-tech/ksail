@@ -123,19 +123,8 @@ func runRestore(
 	}
 
 	writer := cmd.OutOrStdout()
-	_, _ = fmt.Fprintf(writer, "Starting cluster restore...\n")
-	_, _ = fmt.Fprintf(writer, "   Input: %s\n", flags.inputPath)
-	_, _ = fmt.Fprintf(
-		writer, "   Policy: %s\n", flags.existingResourcePolicy,
-	)
 
-	if flags.dryRun {
-		_, _ = fmt.Fprintf(
-			writer, "   Mode: dry-run (no changes will be applied)\n",
-		)
-	}
-
-	_, _ = fmt.Fprintf(writer, "Extracting backup archive...\n")
+	printRestoreHeader(writer, flags)
 
 	tmpDir, metadata, err := extractBackupArchive(flags.inputPath)
 	if err != nil {
@@ -147,7 +136,7 @@ func runRestore(
 	printRestoreMetadata(writer, metadata)
 
 	backupName := deriveBackupName(flags.inputPath)
-	restoreName := fmt.Sprintf("restore-%d", time.Now().Unix())
+	restoreName := fmt.Sprintf("restore-%d", time.Now().UnixNano())
 
 	_, _ = fmt.Fprintf(writer, "Restoring cluster resources...\n")
 
@@ -169,6 +158,22 @@ func runRestore(
 	}
 
 	return nil
+}
+
+func printRestoreHeader(writer io.Writer, flags *restoreFlags) {
+	_, _ = fmt.Fprintf(writer, "Starting cluster restore...\n")
+	_, _ = fmt.Fprintf(writer, "   Input: %s\n", flags.inputPath)
+	_, _ = fmt.Fprintf(
+		writer, "   Policy: %s\n", flags.existingResourcePolicy,
+	)
+
+	if flags.dryRun {
+		_, _ = fmt.Fprintf(
+			writer, "   Mode: dry-run (no changes will be applied)\n",
+		)
+	}
+
+	_, _ = fmt.Fprintf(writer, "Extracting backup archive...\n")
 }
 
 func printRestoreMetadata(writer io.Writer, metadata *BackupMetadata) {
@@ -388,46 +393,15 @@ func restoreResources(
 	var restoreErrors []string
 
 	for _, resourceType := range backupResourceTypes() {
-		resourceDir := filepath.Join(resourcesDir, resourceType)
-
-		_, statErr := os.Stat(resourceDir)
-		if os.IsNotExist(statErr) {
-			continue
-		}
-
-		files, err := filepath.Glob(
-			filepath.Join(resourceDir, "*.yaml"),
+		errs, err := restoreResourceType(
+			ctx, kubeconfigPath, resourcesDir, resourceType,
+			writer, flags, backupName, restoreName,
 		)
 		if err != nil {
-			return fmt.Errorf(
-				"failed to list files for %s: %w", resourceType, err,
-			)
+			return err
 		}
 
-		if len(files) == 0 {
-			continue
-		}
-
-		for _, file := range files {
-			err = restoreResourceFile(
-				ctx, kubeconfigPath, file, flags,
-				backupName, restoreName,
-			)
-			if err != nil {
-				msg := fmt.Sprintf("%s: %v", filepath.Base(file), err)
-				restoreErrors = append(restoreErrors, msg)
-
-				_, _ = fmt.Fprintf(
-					writer,
-					"Warning: failed to restore %s: %v\n",
-					filepath.Base(file), err,
-				)
-
-				continue
-			}
-		}
-
-		_, _ = fmt.Fprintf(writer, "   Restored %s\n", resourceType)
+		restoreErrors = append(restoreErrors, errs...)
 	}
 
 	if len(restoreErrors) > 0 {
@@ -440,6 +414,59 @@ func restoreResources(
 	}
 
 	return nil
+}
+
+func restoreResourceType(
+	ctx context.Context,
+	kubeconfigPath, resourcesDir, resourceType string,
+	writer io.Writer,
+	flags *restoreFlags,
+	backupName, restoreName string,
+) ([]string, error) {
+	resourceDir := filepath.Join(resourcesDir, resourceType)
+
+	_, statErr := os.Stat(resourceDir)
+	if os.IsNotExist(statErr) {
+		return nil, nil
+	}
+
+	files, err := filepath.Glob(
+		filepath.Join(resourceDir, "*.yaml"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to list files for %s: %w", resourceType, err,
+		)
+	}
+
+	if len(files) == 0 {
+		return nil, nil
+	}
+
+	var errs []string
+
+	for _, file := range files {
+		err = restoreResourceFile(
+			ctx, kubeconfigPath, file, flags,
+			backupName, restoreName,
+		)
+		if err != nil {
+			msg := fmt.Sprintf("%s: %v", filepath.Base(file), err)
+			errs = append(errs, msg)
+
+			_, _ = fmt.Fprintf(
+				writer,
+				"Warning: failed to restore %s: %v\n",
+				filepath.Base(file), err,
+			)
+
+			continue
+		}
+	}
+
+	_, _ = fmt.Fprintf(writer, "   Restored %s\n", resourceType)
+
+	return errs, nil
 }
 
 func restoreResourceFile(
@@ -527,7 +554,9 @@ func injectRestoreLabels(
 			doc, backupName, restoreName,
 		)
 		if labelErr != nil {
-			labeled = doc
+			return "", fmt.Errorf(
+				"failed to inject restore labels: %w", labelErr,
+			)
 		}
 
 		if idx > 0 {

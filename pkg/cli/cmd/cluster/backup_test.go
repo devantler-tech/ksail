@@ -226,43 +226,34 @@ func TestExtractAndReadMetadata(t *testing.T) {
 
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
+	assertMetadataRoundtrip(t, restored)
+}
+
+func assertMetadataRoundtrip(t *testing.T, restored *cluster.BackupMetadata) {
+	t.Helper()
+
 	if restored.Version != "v1" {
 		t.Errorf("Version = %q, want %q", restored.Version, "v1")
 	}
 
 	if restored.ClusterName != "roundtrip-cluster" {
-		t.Errorf(
-			"ClusterName = %q, want %q",
-			restored.ClusterName, "roundtrip-cluster",
-		)
+		t.Errorf("ClusterName = %q, want %q", restored.ClusterName, "roundtrip-cluster")
 	}
 
 	if restored.ResourceCount != 10 {
-		t.Errorf(
-			"ResourceCount = %d, want %d",
-			restored.ResourceCount, 10,
-		)
+		t.Errorf("ResourceCount = %d, want %d", restored.ResourceCount, 10)
 	}
 
 	if restored.Distribution != "K3s" {
-		t.Errorf(
-			"Distribution = %q, want %q",
-			restored.Distribution, "K3s",
-		)
+		t.Errorf("Distribution = %q, want %q", restored.Distribution, "K3s")
 	}
 
 	if restored.Provider != "Docker" {
-		t.Errorf(
-			"Provider = %q, want %q",
-			restored.Provider, "Docker",
-		)
+		t.Errorf("Provider = %q, want %q", restored.Provider, "Docker")
 	}
 
 	if len(restored.ResourceTypes) != 2 {
-		t.Errorf(
-			"ResourceTypes length = %d, want %d",
-			len(restored.ResourceTypes), 2,
-		)
+		t.Errorf("ResourceTypes length = %d, want %d", len(restored.ResourceTypes), 2)
 	}
 }
 
@@ -530,14 +521,45 @@ func TestDeriveBackupName(t *testing.T) {
 func TestAddLabelsToDocument(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		doc         string
-		backupName  string
-		restoreName string
-		wantLabels  []string
-		wantErr     bool
-	}{
+	for _, test := range addLabelsTestCases() {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := cluster.ExportAddLabelsToDocument(
+				test.doc, test.backupName, test.restoreName,
+			)
+			if test.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			for _, label := range test.wantLabels {
+				if !strings.Contains(result, label) {
+					t.Errorf("result should contain label %q", label)
+				}
+			}
+		})
+	}
+}
+
+type addLabelsTestCase struct {
+	name        string
+	doc         string
+	backupName  string
+	restoreName string
+	wantLabels  []string
+	wantErr     bool
+}
+
+func addLabelsTestCases() []addLabelsTestCase {
+	return []addLabelsTestCase{
 		{
 			name: "adds labels to document without existing labels",
 			doc: "apiVersion: v1\nkind: Pod\nmetadata:\n" +
@@ -568,33 +590,6 @@ func TestAddLabelsToDocument(t *testing.T) {
 			restoreName: "restore",
 			wantErr:     false,
 		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			result, err := cluster.ExportAddLabelsToDocument(
-				test.doc, test.backupName, test.restoreName,
-			)
-			if test.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-
-				return
-			}
-
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-
-			for _, label := range test.wantLabels {
-				if !strings.Contains(result, label) {
-					t.Errorf("result should contain label %q", label)
-				}
-			}
-		})
 	}
 }
 

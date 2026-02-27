@@ -54,11 +54,11 @@ type BackupMetadata struct {
 	Version       string    `json:"version"`
 	Timestamp     time.Time `json:"timestamp"`
 	ClusterName   string    `json:"clusterName"`
-	Distribution  string    `json:"distribution,omitempty"`
-	Provider      string    `json:"provider,omitempty"`
+	Distribution  string    `json:"distribution"`
+	Provider      string    `json:"provider"`
 	KSailVersion  string    `json:"ksailVersion"`
 	ResourceCount int       `json:"resourceCount"`
-	ResourceTypes []string  `json:"resourceTypes,omitempty"`
+	ResourceTypes []string  `json:"resourceTypes"`
 }
 
 type backupFlags struct {
@@ -211,6 +211,7 @@ func createBackupArchive(
 		KSailVersion: buildmeta.Version,
 	}
 
+	//nolint:contextcheck // best-effort detection; DetectInfo API does not accept context
 	populateClusterInfo(metadata, kubeconfigPath)
 
 	_, _ = fmt.Fprintf(writer, "Exporting cluster resources...\n")
@@ -306,6 +307,7 @@ func exportResources(
 	filteredTypes []string,
 ) (int, []string) {
 	totalCount := 0
+
 	var backedUpTypes []string
 
 	for _, resourceType := range filteredTypes {
@@ -327,6 +329,7 @@ func exportResources(
 				writer, "   Exported %d %s\n", count, resourceType,
 			)
 			totalCount += count
+
 			backedUpTypes = append(backedUpTypes, resourceType)
 		}
 	}
