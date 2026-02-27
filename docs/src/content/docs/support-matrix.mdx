@@ -122,7 +122,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 - Use `ksail cluster update --dry-run` to preview changes before applying
 - Talos supports the broadest set of in-place updates, including node scaling for both control-plane and worker nodes
 - Kind does not support any structural node changes after creation
-- VCluster (Vind) runs control-plane and optional worker nodes as Docker containers — CNI, CSI, metrics-server, and LoadBalancer are managed by the vCluster Helm chart and are N/A for update operations; `spec.cluster.loadBalancer` has no effect on VCluster and changing it will not trigger a cluster update
+- VCluster (Vind) runs control-plane and optional worker nodes as Docker containers — CNI, CSI, and metrics-server are managed by the vCluster Helm chart and are N/A for update operations; LoadBalancer services are provided by the host cluster, and `spec.cluster.loadBalancer` is ignored for VCluster and will not trigger a cluster update
 - **¹ Load Balancer for Talos**: For Talos, the provider determines which LoadBalancer implementation is used (MetalLB on Docker, Hetzner Cloud Controller Manager on Hetzner). The `spec.cluster.loadBalancer` setting controls whether KSail installs LoadBalancer support. See [FAQ](/faq/#which-distributions-support-loadbalancer-services) for details.
 
 ## Platform Requirements
