@@ -136,7 +136,7 @@ func runRestore(
 	printRestoreMetadata(writer, metadata)
 
 	backupName := deriveBackupName(flags.inputPath)
-	restoreName := fmt.Sprintf("restore-%d", time.Now().UnixNano())
+	restoreName := fmt.Sprintf("restore-%d", time.Now().UTC().UnixNano())
 
 	_, _ = fmt.Fprintf(writer, "Restoring cluster resources...\n")
 
@@ -160,6 +160,7 @@ func runRestore(
 	return nil
 }
 
+// printRestoreHeader writes the initial restore status lines to the writer.
 func printRestoreHeader(writer io.Writer, flags *restoreFlags) {
 	_, _ = fmt.Fprintf(writer, "Starting cluster restore...\n")
 	_, _ = fmt.Fprintf(writer, "   Input: %s\n", flags.inputPath)
@@ -416,6 +417,8 @@ func restoreResources(
 	return nil
 }
 
+// restoreResourceType restores all YAML files for a single resource type
+// from the backup directory, returning any per-file errors.
 func restoreResourceType(
 	ctx context.Context,
 	kubeconfigPath, resourcesDir, resourceType string,
