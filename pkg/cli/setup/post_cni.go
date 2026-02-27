@@ -7,10 +7,14 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/kind"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
@@ -22,6 +26,16 @@ import (
 const (
 	fluxResourcesActivity   = "applying custom resources"
 	argoCDResourcesActivity = "configuring argocd resources"
+
+	// apiServerStabilityTimeout is the maximum time to wait for the API server
+	// to stabilize between infrastructure and GitOps installation phases.
+	// Infrastructure components (MetalLB, Kyverno, cert-manager, etc.) register
+	// webhooks and CRDs that can temporarily destabilize API server connectivity.
+	apiServerStabilityTimeout = 2 * time.Minute
+
+	// apiServerStabilitySuccesses is the number of consecutive successful
+	// API server health checks required before declaring stability.
+	apiServerStabilitySuccesses = 3
 )
 
 // ShouldPushOCIArtifact determines if OCI artifact push should happen for GitOps engines.
@@ -230,6 +244,16 @@ func installComponentsInPhases(
 	// and won't cause intermittent kstatus watch timeouts.
 	gitopsTasks := buildGitOpsTasks(clusterCfg, factories, reqs)
 	if len(gitopsTasks) > 0 {
+		// Wait for API server to stabilize after infrastructure installations.
+		// Infrastructure components register webhooks and CRDs that can
+		// temporarily destabilize API server connectivity, causing GitOps
+		// operators to enter CrashLoopBackOff with API timeout errors.
+		if len(infraTasks) > 0 {
+			if err := waitForAPIServerStability(ctx, clusterCfg); err != nil {
+				return fmt.Errorf("API server not stable after infrastructure installation: %w", err)
+			}
+		}
+
 		gitopsGroup := notify.NewProgressGroup(
 			"Installing GitOps engines",
 			"📦",
@@ -317,6 +341,31 @@ func buildGitOpsTasks(
 	}
 
 	return tasks
+}
+
+// waitForAPIServerStability waits for the Kubernetes API server to respond
+// consistently before starting GitOps engine installations. This prevents
+// operators like Flux from entering CrashLoopBackOff due to transient API
+// server connectivity issues after infrastructure components are installed.
+func waitForAPIServerStability(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("get kubeconfig path for API server check: %w", err)
+	}
+
+	clientset, err := k8s.NewClientset(
+		kubeconfigPath, clusterCfg.Spec.Cluster.Connection.Context,
+	)
+	if err != nil {
+		return fmt.Errorf("create clientset for API server check: %w", err)
+	}
+
+	return readiness.WaitForAPIServerStable(
+		ctx, clientset, apiServerStabilityTimeout, apiServerStabilitySuccesses,
+	)
 }
 
 type silentInstallFunc func(ctx context.Context, cfg *v1alpha1.Cluster, f *InstallerFactories) error
