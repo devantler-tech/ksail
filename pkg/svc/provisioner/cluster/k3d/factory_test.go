@@ -46,23 +46,22 @@ func TestCreateProvisioner_Factory(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			provisioner := k3dprovisioner.CreateProvisioner(tt.config, tt.configPath)
+			provisioner := k3dprovisioner.CreateProvisioner(testCase.config, testCase.configPath)
 
 			require.NotNil(t, provisioner, "CreateProvisioner should never return nil")
 			assert.IsType(t, &k3dprovisioner.Provisioner{}, provisioner)
+			assert.Equal(t, testCase.config, provisioner.ExportSimpleCfg())
+			assert.Equal(t, testCase.configPath, provisioner.ExportConfigPath())
 		})
 	}
 }
 
 func TestCreateProvisioner_PreservesConfig(t *testing.T) {
 	t.Parallel()
-
-	// Test that CreateProvisioner preserves the configuration passed to it
-	// This is important for mirror registry modifications made in-memory
 
 	config := &k3dv1alpha5.SimpleConfig{
 		Servers: 2,
@@ -81,11 +80,11 @@ mirrors:
 	provisioner := k3dprovisioner.CreateProvisioner(config, "/tmp/test-config.yaml")
 
 	require.NotNil(t, provisioner)
-
-	// The provisioner should preserve the config, including any
-	// in-memory modifications to mirror registries
-	// (We can't easily verify this without accessing internal state,
-	// but we document the expected behavior)
+	assert.Equal(t, config, provisioner.ExportSimpleCfg())
+	assert.Equal(t, "/tmp/test-config.yaml", provisioner.ExportConfigPath())
+	assert.Equal(t, 2, provisioner.ExportSimpleCfg().Servers)
+	assert.Equal(t, 4, provisioner.ExportSimpleCfg().Agents)
+	assert.Equal(t, "rancher/k3s:v1.29.0-k3s1", provisioner.ExportSimpleCfg().Image)
 }
 
 func TestCreateProvisioner_ConfigPath(t *testing.T) {
@@ -113,8 +112,8 @@ func TestCreateProvisioner_ConfigPath(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			config := &k3dv1alpha5.SimpleConfig{
@@ -122,11 +121,10 @@ func TestCreateProvisioner_ConfigPath(t *testing.T) {
 				Agents:  1,
 			}
 
-			provisioner := k3dprovisioner.CreateProvisioner(config, tt.configPath)
+			provisioner := k3dprovisioner.CreateProvisioner(config, testCase.configPath)
 
 			require.NotNil(t, provisioner)
-			// The config path is needed for cluster operations like update
-			// but is stored internally and not directly accessible
+			assert.Equal(t, testCase.configPath, provisioner.ExportConfigPath())
 		})
 	}
 }

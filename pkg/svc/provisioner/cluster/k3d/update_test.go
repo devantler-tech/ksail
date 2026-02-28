@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,19 +40,19 @@ func TestProvisioner_Update_NilSpecs(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			result, err := provisioner.Update(
 				ctx,
 				"test-cluster",
-				tt.oldSpec,
-				tt.newSpec,
+				testCase.oldSpec,
+				testCase.newSpec,
 				clusterupdate.UpdateOptions{},
 			)
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, result)
 			assert.Empty(t, result.InPlaceChanges)
 			assert.Empty(t, result.RecreateRequired)
@@ -79,83 +79,103 @@ func TestProvisioner_DiffConfig_NilSimpleConfig(t *testing.T) {
 	assert.Empty(t, result.RecreateRequired)
 }
 
-func TestProvisioner_DiffConfig_ServerCountChange(t *testing.T) {
+func TestParseClusterNodes_EmptyAndInvalid(t *testing.T) {
 	t.Parallel()
 
-	// Note: This test can't easily run DiffConfig without a real cluster
-	// because it calls countRunningNodes which requires k3d node list
-	// So we test the logic indirectly through the structure
+	t.Run("empty output", func(t *testing.T) {
+		t.Parallel()
 
-	tests := []struct {
-		name           string
-		desiredServers int
-		expectedReason string
-	}{
-		{
-			name:           "servers increase",
-			desiredServers: 3,
-			expectedReason: "K3d does not support adding/removing server (control-plane) nodes after creation",
-		},
-		{
-			name:           "servers decrease",
-			desiredServers: 0, // Will default to 1
-			expectedReason: "K3d does not support adding/removing server (control-plane) nodes after creation",
-		},
-	}
+		nodes, err := k3dprovisioner.ParseClusterNodesForTest("", "test")
+		require.NoError(t, err)
+		assert.Empty(t, nodes)
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	t.Run("invalid JSON", func(t *testing.T) {
+		t.Parallel()
 
-			// We can't easily test this without a running cluster
-			// but we verify the function signature and structure
-			simpleCfg := &k3dv1alpha5.SimpleConfig{
-				Servers: tt.desiredServers,
-				Agents:  2,
-			}
-			provisioner := k3dprovisioner.NewProvisioner(simpleCfg, "")
-			assert.NotNil(t, provisioner)
-		})
-	}
+		_, err := k3dprovisioner.ParseClusterNodesForTest("not json", "test")
+		require.Error(t, err)
+	})
+
+	t.Run("empty array", func(t *testing.T) {
+		t.Parallel()
+
+		nodes, err := k3dprovisioner.ParseClusterNodesForTest(`[]`, "test")
+		require.NoError(t, err)
+		assert.Empty(t, nodes)
+	})
 }
 
-func TestProvisioner_DiffConfig_AgentCountChange(t *testing.T) {
+func TestParseClusterNodes_NodeCounting(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name          string
-		desiredAgents int
-		description   string
-	}{
-		{
-			name:          "agents increase",
-			desiredAgents: 5,
-			description:   "Should detect agent increase",
-		},
-		{
-			name:          "agents decrease",
-			desiredAgents: 1,
-			description:   "Should detect agent decrease",
-		},
-		{
-			name:          "zero agents",
-			desiredAgents: 0,
-			description:   "Should handle zero agents",
-		},
-	}
+	t.Run("single server node", func(t *testing.T) {
+		t.Parallel()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+		nodes, err := k3dprovisioner.ParseClusterNodesForTest(
+			`[{"name":"k3d-mycluster-server-0","role":"server","labels":{}}]`,
+			"mycluster",
+		)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		assert.Equal(t, "server", nodes[0].Role)
+	})
 
-			simpleCfg := &k3dv1alpha5.SimpleConfig{
-				Servers: 1,
-				Agents:  tt.desiredAgents,
-			}
-			provisioner := k3dprovisioner.NewProvisioner(simpleCfg, "")
-			assert.NotNil(t, provisioner)
-		})
-	}
+	t.Run("server and agents", func(t *testing.T) {
+		t.Parallel()
+
+		jsonOutput := `[
+			{"name":"k3d-mycluster-server-0","role":"server","labels":{}},
+			{"name":"k3d-mycluster-agent-0","role":"agent","labels":{}},
+			{"name":"k3d-mycluster-agent-1","role":"agent","labels":{}}
+		]`
+
+		nodes, err := k3dprovisioner.ParseClusterNodesForTest(jsonOutput, "mycluster")
+		require.NoError(t, err)
+		assert.Len(t, nodes, 3)
+	})
+}
+
+func TestParseClusterNodes_Filtering(t *testing.T) {
+	t.Parallel()
+
+	t.Run("filters by cluster name", func(t *testing.T) {
+		t.Parallel()
+
+		jsonOutput := `[
+			{"name":"k3d-cluster-a-server-0","role":"server","labels":{}},
+			{"name":"k3d-cluster-b-server-0","role":"server","labels":{}},
+			{"name":"k3d-cluster-a-agent-0","role":"agent","labels":{}}
+		]`
+
+		nodes, err := k3dprovisioner.ParseClusterNodesForTest(jsonOutput, "cluster-a")
+		require.NoError(t, err)
+		assert.Len(t, nodes, 2)
+	})
+
+	t.Run("no matching nodes", func(t *testing.T) {
+		t.Parallel()
+
+		nodes, err := k3dprovisioner.ParseClusterNodesForTest(
+			`[{"name":"k3d-other-server-0","role":"server","labels":{}}]`,
+			"mycluster",
+		)
+		require.NoError(t, err)
+		assert.Empty(t, nodes)
+	})
+
+	t.Run("node names with leading slash", func(t *testing.T) {
+		t.Parallel()
+
+		jsonOutput := `[
+			{"name":"/k3d-mycluster-server-0","role":"server","labels":{}},
+			{"name":"/k3d-mycluster-agent-0","role":"agent","labels":{}}
+		]`
+
+		nodes, err := k3dprovisioner.ParseClusterNodesForTest(jsonOutput, "mycluster")
+		require.NoError(t, err)
+		assert.Len(t, nodes, 2)
+	})
 }
 
 func TestProvisioner_GetCurrentConfig_NoDetector(t *testing.T) {
@@ -168,61 +188,24 @@ func TestProvisioner_GetCurrentConfig_NoDetector(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, spec)
 
-	// Should return default spec
 	assert.Equal(t, v1alpha1.DistributionK3s, spec.Distribution)
 	assert.Equal(t, v1alpha1.ProviderDocker, spec.Provider)
 }
 
-func TestProvisioner_Update_DefaultServerCount(t *testing.T) {
-	t.Parallel()
-
-	// Test that zero servers defaults to 1 in the logic
-	simpleCfg := &k3dv1alpha5.SimpleConfig{
-		Servers: 0, // Should default to 1
-		Agents:  2,
-	}
-
-	provisioner := k3dprovisioner.NewProvisioner(simpleCfg, "")
-	assert.NotNil(t, provisioner)
-
-	// The actual defaulting happens in DiffConfig when comparing
-	// desiredServers == 0 → defaults to 1
-}
-
-func TestProvisioner_Update_WithImage(t *testing.T) {
+func TestProvisioner_DiffConfig_NilSimpleConfig_PreservesConfig(t *testing.T) {
 	t.Parallel()
 
 	simpleCfg := &k3dv1alpha5.SimpleConfig{
-		Servers: 1,
-		Agents:  2,
+		Servers: 3,
+		Agents:  5,
 		Image:   "rancher/k3s:v1.30.0-k3s1",
 	}
 
-	provisioner := k3dprovisioner.NewProvisioner(simpleCfg, "")
-	assert.NotNil(t, provisioner)
+	provisioner := k3dprovisioner.NewProvisioner(simpleCfg, "/tmp/cfg.yaml")
 
-	// Verify that image is set in config
-	// The image will be used when creating new nodes
-}
-
-func TestCreateProvisioner_WithConfig(t *testing.T) {
-	t.Parallel()
-
-	simpleCfg := &k3dv1alpha5.SimpleConfig{
-		Servers: 1,
-		Agents:  3,
-		Image:   "rancher/k3s:v1.30.0-k3s1",
-	}
-
-	configPath := "/tmp/k3d-config.yaml"
-	provisioner := k3dprovisioner.CreateProvisioner(simpleCfg, configPath)
-
-	require.NotNil(t, provisioner)
-}
-
-func TestCreateProvisioner_NilConfig(t *testing.T) {
-	t.Parallel()
-
-	provisioner := k3dprovisioner.CreateProvisioner(nil, "")
-	require.NotNil(t, provisioner)
+	assert.Equal(t, simpleCfg, provisioner.ExportSimpleCfg())
+	assert.Equal(t, "/tmp/cfg.yaml", provisioner.ExportConfigPath())
+	assert.Equal(t, 3, provisioner.ExportSimpleCfg().Servers)
+	assert.Equal(t, 5, provisioner.ExportSimpleCfg().Agents)
+	assert.Equal(t, "rancher/k3s:v1.30.0-k3s1", provisioner.ExportSimpleCfg().Image)
 }
