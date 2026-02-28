@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,19 +40,19 @@ func TestProvisioner_Update_NilSpecs(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			result, err := provisioner.Update(
 				ctx,
 				"test-cluster",
-				tt.oldSpec,
-				tt.newSpec,
+				testCase.oldSpec,
+				testCase.newSpec,
 				clusterupdate.UpdateOptions{},
 			)
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, result)
 			assert.Empty(t, result.InPlaceChanges)
 			assert.Empty(t, result.RecreateRequired)
@@ -103,14 +103,14 @@ func TestProvisioner_DiffConfig_ServerCountChange(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			// We can't easily test this without a running cluster
 			// but we verify the function signature and structure
 			simpleCfg := &k3dv1alpha5.SimpleConfig{
-				Servers: tt.desiredServers,
+				Servers: testCase.desiredServers,
 				Agents:  2,
 			}
 			provisioner := k3dprovisioner.NewProvisioner(simpleCfg, "")
@@ -144,13 +144,13 @@ func TestProvisioner_DiffConfig_AgentCountChange(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			simpleCfg := &k3dv1alpha5.SimpleConfig{
 				Servers: 1,
-				Agents:  tt.desiredAgents,
+				Agents:  testCase.desiredAgents,
 			}
 			provisioner := k3dprovisioner.NewProvisioner(simpleCfg, "")
 			assert.NotNil(t, provisioner)
