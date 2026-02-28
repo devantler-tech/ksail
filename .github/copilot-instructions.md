@@ -142,7 +142,10 @@ go run main.go --help
 │   ├── cli/                # CLI wiring, UI, and Cobra commands
 │   │   ├── annotations/    # Command annotation constants
 │   │   ├── cmd/            # CLI command implementations
-│   │   ├── helpers/        # CLI helper utilities
+│   │   ├── dockerutil/     # Docker client lifecycle management utilities
+│   │   ├── editor/         # Editor configuration resolution
+│   │   ├── flags/          # CLI flag handling utilities
+│   │   ├── kubeconfig/     # Kubeconfig file path helpers
 │   │   ├── lifecycle/      # Cluster lifecycle orchestration
 │   │   ├── setup/          # Component setup (CNI, mirror registries, etc.)
 │   │   └── ui/             # Terminal UI (ASCII art, chat TUI, confirmations)
@@ -161,7 +164,7 @@ go run main.go --help
 │       ├── image/          # Container image export/import services
 │       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
 │       ├── mcp/            # Model Context Protocol server
-│       ├── provider/       # Infrastructure providers (docker, hetzner)
+│       ├── provider/       # Infrastructure providers (docker, hetzner, omni)
 │       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos, VCluster)
 │       ├── registryresolver/ # OCI registry detection, resolution, and artifact push
 │       └── state/          # Cluster state persistence for distributions without introspection
