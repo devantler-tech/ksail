@@ -1,4 +1,3 @@
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 package k3dprovisioner
 
 import "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -14,4 +13,6 @@ func (p *Provisioner) ExportConfigPath() string {
 }
 
 // ParseClusterNodesForTest exposes parseClusterNodes for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern: exposes unexported function for black-box tests
 var ParseClusterNodesForTest = parseClusterNodes

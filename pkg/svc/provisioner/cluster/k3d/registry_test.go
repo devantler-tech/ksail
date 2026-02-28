@@ -201,22 +201,22 @@ func TestExtractRegistriesFromConfig_ClusterNamePrefix(t *testing.T) {
 	tests := []struct {
 		name        string
 		clusterName string
-		wantPrefix  string
+		wantName    string
 	}{
 		{
 			name:        "simple cluster name",
 			clusterName: "dev",
-			wantPrefix:  "dev-",
+			wantName:    "dev-docker.io",
 		},
 		{
 			name:        "cluster name with hyphens",
 			clusterName: "my-cluster",
-			wantPrefix:  "my-cluster-",
+			wantName:    "my-cluster-docker.io",
 		},
 		{
 			name:        "empty cluster name",
 			clusterName: "",
-			wantPrefix:  "",
+			wantName:    "docker.io",
 		},
 	}
 
@@ -238,8 +238,7 @@ mirrors:
 			result := k3dprovisioner.ExtractRegistriesFromConfig(simpleCfg, testCase.clusterName)
 			require.NotNil(t, result)
 			require.Len(t, result, 1)
-			require.NotEmpty(t, result[0].Name)
-			assert.Contains(t, result[0].Name, testCase.wantPrefix)
+			assert.Equal(t, testCase.wantName, result[0].Name)
 		})
 	}
 }
