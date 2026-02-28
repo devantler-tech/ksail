@@ -424,6 +424,14 @@ jobs:
             provider: Hetzner
             init: false
             args: "--name system-test-cluster-without-scaffolding"
+          - distribution: Talos
+            provider: Omni
+            init: true
+            args: "--name system-test-cluster-with-scaffolding"
+          - distribution: Talos
+            provider: Omni
+            init: false
+            args: "--name system-test-cluster-without-scaffolding"
     continue-on-error: ${{ matrix.provider == 'Hetzner' }}
     steps:
       - name: 📄 Checkout
@@ -456,6 +464,8 @@ jobs:
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           hcloud-token: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }}
+          omni-service-account-key: ${{ matrix.provider == 'Omni' && secrets.OMNI_SERVICE_ACCOUNT_KEY || '' }}
+          omni-endpoint: ${{ matrix.provider == 'Omni' && secrets.OMNI_ENDPOINT || '' }}
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
 
