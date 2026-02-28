@@ -1,22 +1,36 @@
-// Package marshaller_test provides benchmarks for the marshaller package.
 package marshaller_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller"
 )
 
-// BenchmarkYAMLMarshaller_Marshal benchmarks YAML marshalling performance.
-func BenchmarkYAMLMarshaller_Marshal(b *testing.B) {
+// BenchmarkYAMLMarshaller_Marshal_Simple benchmarks simple model marshalling.
+func BenchmarkYAMLMarshaller_Marshal_Simple(b *testing.B) {
+	b.ReportAllocs()
+
+	yamlMarshaller := marshaller.NewYAMLMarshaller[TestModel]()
+	model := TestModel{Name: "test", Value: 42}
+
+	b.ResetTimer()
+
+	for range b.N {
+		_, err := yamlMarshaller.Marshal(model)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkYAMLMarshaller_Marshal_Nested benchmarks nested model marshalling.
+func BenchmarkYAMLMarshaller_Marshal_Nested(b *testing.B) {
 	tests := []struct {
 		name  string
-		model interface{}
+		model NestedModel
 	}{
-		{
-			name:  "simple",
-			model: TestModel{Name: "test", Value: 42},
-		},
 		{
 			name: "nested",
 			model: NestedModel{
@@ -55,51 +69,59 @@ func BenchmarkYAMLMarshaller_Marshal(b *testing.B) {
 		},
 	}
 
-	for _, tt := range tests {
-		b.Run(tt.name, func(b *testing.B) {
+	for _, testCase := range tests {
+		b.Run(testCase.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			switch model := tt.model.(type) {
-			case TestModel:
-				m := marshaller.NewYAMLMarshaller[TestModel]()
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					_, err := m.Marshal(model)
-					if err != nil {
-						b.Fatal(err)
-					}
-				}
-			case NestedModel:
-				m := marshaller.NewYAMLMarshaller[NestedModel]()
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					_, err := m.Marshal(model)
-					if err != nil {
-						b.Fatal(err)
-					}
+			yamlMarshaller := marshaller.NewYAMLMarshaller[NestedModel]()
+
+			b.ResetTimer()
+
+			for range b.N {
+				_, err := yamlMarshaller.Marshal(testCase.model)
+				if err != nil {
+					b.Fatal(err)
 				}
 			}
 		})
 	}
 }
 
-// BenchmarkYAMLMarshaller_Unmarshal benchmarks YAML unmarshalling performance.
-func BenchmarkYAMLMarshaller_Unmarshal(b *testing.B) {
+// BenchmarkYAMLMarshaller_Unmarshal_Simple benchmarks simple YAML unmarshalling.
+func BenchmarkYAMLMarshaller_Unmarshal_Simple(b *testing.B) {
+	b.ReportAllocs()
+
+	yamlMarshaller := marshaller.NewYAMLMarshaller[TestModel]()
+	data := []byte("Name: test\nValue: 42\n")
+
+	b.ResetTimer()
+
+	for range b.N {
+		var model TestModel
+
+		err := yamlMarshaller.Unmarshal(data, &model)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkYAMLMarshaller_Unmarshal_Nested benchmarks nested YAML unmarshalling.
+func BenchmarkYAMLMarshaller_Unmarshal_Nested(b *testing.B) {
 	tests := []struct {
 		name string
 		data []byte
 	}{
-		{
-			name: "simple",
-			data: []byte("Name: test\nValue: 42\n"),
-		},
 		{
 			name: "nested",
 			data: []byte("ID: parent\nInner:\n  Name: child\n  Value: 10\n"),
 		},
 		{
 			name: "slice",
-			data: []byte("ID: list\nItems:\n  - Name: first\n    Value: 1\n  - Name: second\n    Value: 2\n  - Name: third\n    Value: 3\n"),
+			data: []byte(
+				"ID: list\nItems:\n  - Name: first\n    Value: 1\n" +
+					"  - Name: second\n    Value: 2\n  - Name: third\n    Value: 3\n",
+			),
 		},
 		{
 			name: "map",
@@ -111,29 +133,20 @@ func BenchmarkYAMLMarshaller_Unmarshal(b *testing.B) {
 		},
 	}
 
-	for _, tt := range tests {
-		b.Run(tt.name, func(b *testing.B) {
+	for _, testCase := range tests {
+		b.Run(testCase.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			if tt.name == "simple" {
-				m := marshaller.NewYAMLMarshaller[TestModel]()
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					var model TestModel
-					err := m.Unmarshal(tt.data, &model)
-					if err != nil {
-						b.Fatal(err)
-					}
-				}
-			} else {
-				m := marshaller.NewYAMLMarshaller[NestedModel]()
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					var model NestedModel
-					err := m.Unmarshal(tt.data, &model)
-					if err != nil {
-						b.Fatal(err)
-					}
+			yamlMarshaller := marshaller.NewYAMLMarshaller[NestedModel]()
+
+			b.ResetTimer()
+
+			for range b.N {
+				var model NestedModel
+
+				err := yamlMarshaller.Unmarshal(testCase.data, &model)
+				if err != nil {
+					b.Fatal(err)
 				}
 			}
 		})
@@ -160,15 +173,18 @@ func BenchmarkYAMLMarshaller_UnmarshalString(b *testing.B) {
 		},
 	}
 
-	for _, tt := range tests {
-		b.Run(tt.name, func(b *testing.B) {
+	for _, testCase := range tests {
+		b.Run(testCase.name, func(b *testing.B) {
 			b.ReportAllocs()
-			m := marshaller.NewYAMLMarshaller[TestModel]()
+
+			yamlMarshaller := marshaller.NewYAMLMarshaller[TestModel]()
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+
+			for range b.N {
 				var model TestModel
-				err := m.UnmarshalString(tt.data, &model)
+
+				err := yamlMarshaller.UnmarshalString(testCase.data, &model)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -197,22 +213,23 @@ func BenchmarkYAMLMarshaller_RoundTrip(b *testing.B) {
 		},
 	}
 
-	for _, tt := range tests {
-		b.Run(tt.name, func(b *testing.B) {
+	for _, testCase := range tests {
+		b.Run(testCase.name, func(b *testing.B) {
 			b.ReportAllocs()
-			m := marshaller.NewYAMLMarshaller[TestModel]()
+
+			yamlMarshaller := marshaller.NewYAMLMarshaller[TestModel]()
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				// Marshal
-				yamlStr, err := m.Marshal(tt.model)
+
+			for range b.N {
+				yamlStr, err := yamlMarshaller.Marshal(testCase.model)
 				if err != nil {
 					b.Fatal(err)
 				}
 
-				// Unmarshal
 				var result TestModel
-				err = m.UnmarshalString(yamlStr, &result)
+
+				err = yamlMarshaller.UnmarshalString(yamlStr, &result)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -235,41 +252,48 @@ func BenchmarkYAMLMarshaller_RoundTrip_Nested(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	m := marshaller.NewYAMLMarshaller[NestedModel]()
+
+	yamlMarshaller := marshaller.NewYAMLMarshaller[NestedModel]()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		// Marshal
-		yamlStr, err := m.Marshal(model)
+
+	for range b.N {
+		yamlStr, err := yamlMarshaller.Marshal(model)
 		if err != nil {
 			b.Fatal(err)
 		}
 
-		// Unmarshal
 		var result NestedModel
-		err = m.UnmarshalString(yamlStr, &result)
+
+		err = yamlMarshaller.UnmarshalString(yamlStr, &result)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// Helper functions for benchmark data generation
+// Helper functions for benchmark data generation.
 func makeLargeSlice(size int) []TestModel {
 	items := make([]TestModel, size)
-	for i := 0; i < size; i++ {
+
+	for i := range size {
 		items[i] = TestModel{
 			Name:  "item",
 			Value: i,
 		}
 	}
+
 	return items
 }
 
 func makeLargeYAML(size int) []byte {
-	yaml := "ID: large\nItems:\n"
-	for i := 0; i < size; i++ {
-		yaml += "  - Name: item\n    Value: " + string(rune('0'+i%10)) + "\n"
+	var builder strings.Builder
+
+	builder.WriteString("ID: large\nItems:\n")
+
+	for i := range size {
+		fmt.Fprintf(&builder, "  - Name: item\n    Value: %d\n", i%10)
 	}
-	return []byte(yaml)
+
+	return []byte(builder.String())
 }
