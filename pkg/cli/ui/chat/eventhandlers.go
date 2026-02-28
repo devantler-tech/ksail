@@ -285,6 +285,16 @@ func (d *sessionEventDispatcher) handleWarning(event copilot.SessionEvent) {
 	d.eventChan <- msg
 }
 
-func (d *sessionEventDispatcher) handleModeChanged(_ copilot.SessionEvent) {
-	d.eventChan <- modeChangedMsg{}
+func (d *sessionEventDispatcher) handleModeChanged(event copilot.SessionEvent) {
+	msg := modeChangedMsg{}
+
+	if event.Data.PreviousMode != nil {
+		msg.previousMode = *event.Data.PreviousMode
+	}
+
+	if event.Data.NewMode != nil {
+		msg.newMode = *event.Data.NewMode
+	}
+
+	d.eventChan <- msg
 }

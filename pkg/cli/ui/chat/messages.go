@@ -157,4 +157,7 @@ type warningMsg struct {
 }
 
 // modeChangedMsg signals a server-side mode change (e.g., autopilot → plan).
-type modeChangedMsg struct{}
+type modeChangedMsg struct {
+	previousMode string
+	newMode      string
+}

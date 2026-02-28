@@ -490,6 +490,29 @@ func (m *Model) handleWarning(msg warningMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleModeChanged handles server-side mode change events.
-func (m *Model) handleModeChanged(_ modeChangedMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleModeChanged(msg modeChangedMsg) (tea.Model, tea.Cmd) {
+	if msg.newMode != "" {
+		newMode := sdkModeToChatMode(msg.newMode)
+		m.chatMode = newMode
+
+		if m.chatModeRef != nil {
+			m.chatModeRef.SetMode(newMode)
+		}
+
+		m.updateViewportContent()
+	}
+
 	return m, m.waitForEvent()
+}
+
+// sdkModeToChatMode converts an SDK agent mode string to a ChatMode.
+func sdkModeToChatMode(sdkMode string) ChatMode {
+	switch sdkMode {
+	case "plan":
+		return PlanMode
+	case "interactive":
+		return AskMode
+	default:
+		return AgentMode
+	}
 }
