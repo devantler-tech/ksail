@@ -17,6 +17,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errTest       = errors.New("test error")
+	errWrappedMCP = errors.New("running MCP server: test error")
+)
+
 func TestNewMCPCmd(t *testing.T) {
 	t.Parallel()
 
@@ -36,19 +41,19 @@ func TestNewMCPCmd(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			cmd := mcpcmd.NewMCPCmd(tt.runtime)
+			cmd := mcpcmd.NewMCPCmd(testCase.runtime)
 
 			require.NotNil(t, cmd, "NewMCPCmd should return non-nil command")
-			assert.Equal(t, tt.expectedUse, cmd.Use, "Use field mismatch")
-			assert.Equal(t, tt.expectedShort, cmd.Short, "Short field mismatch")
+			assert.Equal(t, testCase.expectedUse, cmd.Use, "Use field mismatch")
+			assert.Equal(t, testCase.expectedShort, cmd.Short, "Short field mismatch")
 			assert.NotEmpty(t, cmd.Long, "Long description should not be empty")
 
 			// Verify exclude annotation
-			if tt.expectedExcludeAnnot {
+			if testCase.expectedExcludeAnnot {
 				require.NotNil(t, cmd.Annotations, "Annotations should not be nil")
 				val, ok := cmd.Annotations[annotations.AnnotationExclude]
 				assert.True(t, ok, "Exclude annotation should exist")
@@ -163,6 +168,7 @@ func TestNewMCPCmd_CommandStructure(t *testing.T) {
 
 	// Verify no flags (mcp command has no flags)
 	flagCount := 0
+
 	cmd.Flags().VisitAll(func(*pflag.Flag) {
 		flagCount++
 	})
@@ -249,13 +255,13 @@ func TestNewMCPCmd_VersionAnnotation(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			rootCmd := &cobra.Command{
 				Use:         "ksail",
-				Annotations: tt.rootAnnotations,
+				Annotations: testCase.rootAnnotations,
 			}
 
 			runtime := &di.Runtime{}
@@ -269,15 +275,15 @@ func TestNewMCPCmd_VersionAnnotation(t *testing.T) {
 
 			if root.Annotations != nil {
 				if v, ok := root.Annotations["version"]; ok {
-					assert.Contains(t, v, tt.expectedContains,
+					assert.Contains(t, v, testCase.expectedContains,
 						"Version annotation content mismatch")
 				} else {
 					// No version annotation, default to "dev" behavior
-					assert.Equal(t, "dev", tt.expectedContains)
+					assert.Equal(t, "dev", testCase.expectedContains)
 				}
 			} else {
 				// Nil annotations, should default to "dev"
-				assert.Equal(t, "dev", tt.expectedContains)
+				assert.Equal(t, "dev", testCase.expectedContains)
 			}
 		})
 	}
@@ -291,7 +297,7 @@ func TestNewMCPCmd_WorkingDirectory(t *testing.T) {
 
 	runtime := &di.Runtime{}
 	cmd := mcpcmd.NewMCPCmd(runtime)
-	
+
 	// Use cmd to avoid unused variable
 	assert.NotNil(t, cmd, "Command should be created")
 
@@ -313,7 +319,7 @@ func TestNewMCPCmd_ErrorPropagation(t *testing.T) {
 	// We can't easily test the actual execution, but we can verify
 	// that errors would be wrapped properly by checking the function signature
 	// The RunE function signature allows error return
-	
+
 	// Use cmd to avoid unused variable
 	assert.NotNil(t, cmd)
 }
@@ -434,13 +440,9 @@ func TestNewMCPCmd_ErrorMessages(t *testing.T) {
 
 	require.NotNil(t, cmd.RunE, "RunE must be defined")
 
-	// Test error wrapping by simulating an error
-	testErr := errors.New("test error")
-	wrappedErr := errors.New("running MCP server: " + testErr.Error())
-
-	assert.Contains(t, wrappedErr.Error(), "test error",
+	assert.Contains(t, errWrappedMCP.Error(), errTest.Error(),
 		"Error should preserve original message")
-	assert.Contains(t, wrappedErr.Error(), "MCP server",
+	assert.Contains(t, errWrappedMCP.Error(), "MCP server",
 		"Error should provide context")
 }
 
