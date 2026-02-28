@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -19,7 +20,7 @@ import (
 
 var (
 	errTest       = errors.New("test error")
-	errWrappedMCP = errors.New("running MCP server: test error")
+	errWrappedMCP = fmt.Errorf("running MCP server: %w", errTest)
 )
 
 func TestNewMCPCmd(t *testing.T) {
@@ -440,6 +441,8 @@ func TestNewMCPCmd_ErrorMessages(t *testing.T) {
 
 	require.NotNil(t, cmd.RunE, "RunE must be defined")
 
+	require.ErrorIs(t, errWrappedMCP, errTest,
+		"Wrapped error should contain original error")
 	assert.Contains(t, errWrappedMCP.Error(), errTest.Error(),
 		"Error should preserve original message")
 	assert.Contains(t, errWrappedMCP.Error(), "MCP server",
