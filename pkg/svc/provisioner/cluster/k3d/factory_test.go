@@ -113,8 +113,8 @@ func TestCreateProvisioner_ConfigPath(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			config := &k3dv1alpha5.SimpleConfig{
@@ -122,7 +122,7 @@ func TestCreateProvisioner_ConfigPath(t *testing.T) {
 				Agents:  1,
 			}
 
-			provisioner := k3dprovisioner.CreateProvisioner(config, tt.configPath)
+			provisioner := k3dprovisioner.CreateProvisioner(config, testCase.configPath)
 
 			require.NotNil(t, provisioner)
 			// The config path is needed for cluster operations like update

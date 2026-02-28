@@ -220,8 +220,8 @@ func TestExtractRegistriesFromConfig_ClusterNamePrefix(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			simpleCfg := &k3dv1alpha5.SimpleConfig{
@@ -235,11 +235,12 @@ mirrors:
 				},
 			}
 
-			result := k3dprovisioner.ExtractRegistriesFromConfig(simpleCfg, tt.clusterName)
+			result := k3dprovisioner.ExtractRegistriesFromConfig(simpleCfg, testCase.clusterName)
 			require.NotNil(t, result)
 			require.Len(t, result, 1)
-			if tt.wantPrefix != "" {
-				assert.Contains(t, result[0].Name, tt.wantPrefix)
+
+			if testCase.wantPrefix != "" {
+				assert.Contains(t, result[0].Name, testCase.wantPrefix)
 			}
 		})
 	}
@@ -267,8 +268,8 @@ mirrors:
 	require.Len(t, result, 2)
 
 	// Ports should be allocated starting from 5000
-	assert.Greater(t, result[0].Port, 0)
-	assert.Greater(t, result[1].Port, 0)
+	assert.Positive(t, result[0].Port)
+	assert.Positive(t, result[1].Port)
 	// Ports should be different
 	assert.NotEqual(t, result[0].Port, result[1].Port)
 }
