@@ -107,8 +107,10 @@ If the 2-minute wait expires and you see `API server not stable after infrastruc
 ksail workload get nodes
 ksail workload get pods -A | grep -v Running
 
-# Recreate with fewer components enabled
-ksail cluster delete && ksail cluster create
+# Disable non-essential components in ksail.yaml (GitOps engine, policy engine, cert-manager, etc.),
+# then recreate the cluster with the updated configuration
+ksail cluster delete
+ksail cluster create
 ```
 
 ### Flux/ArgoCD Not Reconciling
