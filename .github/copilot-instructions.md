@@ -136,6 +136,8 @@ go run main.go --help
 ```text
 /
 ├── main.go                 # Main entry point
+├── internal/               # Internal (non-exported) packages
+│   └── buildmeta/          # Build-time version metadata (Version, Commit, Date) injected via ldflags
 ├── pkg/                    # Core packages
 │   ├── toolgen/            # Tool generation for AI assistants
 │   ├── apis/               # API types and schemas
