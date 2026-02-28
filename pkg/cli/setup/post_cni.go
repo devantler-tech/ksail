@@ -367,9 +367,10 @@ func waitForAPIServerStability(
 		return fmt.Errorf("create clientset for API server check: %w", err)
 	}
 
-	if err := readiness.WaitForAPIServerStable(
+	err = readiness.WaitForAPIServerStable(
 		ctx, clientset, apiServerStabilityTimeout, apiServerStabilitySuccesses,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("wait for API server stability: %w", err)
 	}
 
