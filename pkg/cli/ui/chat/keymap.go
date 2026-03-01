@@ -17,6 +17,7 @@ type KeyMap struct {
 	Send          key.Binding
 	Queue         key.Binding
 	DeletePending key.Binding
+	NewLine       key.Binding
 	Cancel        key.Binding
 	Quit          key.Binding
 	ToggleMode    key.Binding
@@ -85,6 +86,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		// Column 1: Navigation
 		{
 			k.Send,
+			k.NewLine,
 			k.Queue,
 			k.DeletePending,
 			k.Up,
@@ -158,6 +160,10 @@ func setActionKeys(keyMap *KeyMap) {
 		key.WithKeys("ctrl+d"),
 		key.WithHelp("Ctrl+D", "delete pending prompt"),
 	)
+	keyMap.NewLine = key.NewBinding(
+		key.WithKeys("alt+enter"),
+		key.WithHelp("Alt+⏎", "insert newline"),
+	)
 	keyMap.Cancel = key.NewBinding(
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "cancel / quit"),
@@ -168,7 +174,7 @@ func setActionKeys(keyMap *KeyMap) {
 	)
 	keyMap.ToggleMode = key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("Tab", "cycle mode (agent/plan/ask)"),
+		key.WithHelp("Tab", "cycle mode (agent/plan)"),
 	)
 	keyMap.ToggleHelp = key.NewBinding(
 		key.WithKeys("f1"),

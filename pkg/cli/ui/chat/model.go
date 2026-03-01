@@ -201,7 +201,7 @@ type permissionResponse struct {
 // after queuing don't affect the prompt's execution.
 type pendingPrompt struct {
 	content         string   // the prompt text
-	chatMode        ChatMode // agent/plan mode when queued
+	chatMode        ChatMode // agent/plan mode when queued (AskMode was removed)
 	model           string   // model ID when queued
 	reasoningEffort string   // reasoning effort when queued (if applicable)
 	seq             uint64   // insertion sequence number for global ordering
@@ -392,8 +392,8 @@ func NewModel(params Params) *Model {
 		chatMode:         AgentMode,          // Default to agent mode
 		chatModeRef:      params.ChatModeRef, // Store reference for tool handlers
 		yoloModeRef:      params.YoloModeRef, // Store reference for YOLO mode
-		queuedPrompts:    make([]pendingPrompt, 0),
-		steeringPrompts:  make([]pendingPrompt, 0),
+		queuedPrompts:    nil,
+		steeringPrompts:  nil,
 	}
 }
 

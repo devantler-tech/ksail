@@ -39,7 +39,7 @@ func (m *Model) updateViewportContent() {
 
 	// Render pending prompts section
 	if m.hasPendingPrompts() {
-		m.renderPendingPrompts(&builder, wrapWidth)
+		m.renderPendingPrompts(&builder)
 	}
 
 	m.viewport.SetContent(builder.String())
@@ -371,7 +371,7 @@ func (m *Model) truncateLine(text string, maxLen int) string {
 }
 
 // renderPendingPrompts renders the pending prompts section.
-func (m *Model) renderPendingPrompts(builder *strings.Builder, _ uint) {
+func (m *Model) renderPendingPrompts(builder *strings.Builder) {
 	builder.WriteString("\n")
 	builder.WriteString(m.styles.status.Render("─── Pending Prompts ───"))
 	builder.WriteString("\n")

@@ -67,6 +67,12 @@ func TestSteerPrompt_VisibleInView(t *testing.T) {
 
 	updatedModel := typeText(model, "steer this")
 
+	// Re-assert streaming state before steering. typeText may alter model state,
+	// and steering only activates while streaming.
+	if s, ok := updatedModel.(interface{ SetStreaming(streaming bool) }); ok {
+		s.SetStreaming(true)
+	}
+
 	// Press Enter to steer (Enter steers during streaming)
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
