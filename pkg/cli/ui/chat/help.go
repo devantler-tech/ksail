@@ -46,6 +46,10 @@ const (
 	pickerOverhead      = 3 // title + top/bottom padding
 	minPickerHeight     = 5 // minimum content lines for picker modal
 
+	// Exit confirmation modal constants.
+	exitConfirmLines      = 5 // title + blank + message + blank + buttons
+	exitModalWidthDivisor = 2 // modal is half the terminal width
+
 	// Help layout constants.
 	minHelpWidth = 20 // minimum width for help footer rendering
 
@@ -99,11 +103,9 @@ func (m *Model) renderHelpOverlay() string {
 // helpOverlayParts returns all help keybindings in display order.
 func (m *Model) helpOverlayParts() []string {
 	return []string{
-		m.styles.helpKey.Render(enterSymbol) + " send",
+		m.styles.helpKey.Render(enterSymbol) + " send / steer",
 		m.styles.helpKey.Render("^Q") + " queue",
-		m.styles.helpKey.Render("^S") + " steer",
 		m.styles.helpKey.Render("^D") + " delete pending",
-		m.styles.helpKey.Render("Alt+"+enterSymbol) + " newline",
 		m.styles.helpKey.Render(keyArrows) + " history",
 		m.styles.helpKey.Render(keyPageNav) + " scroll",
 		m.styles.helpKey.Render("Tab") + " mode",
@@ -315,13 +317,14 @@ func (m *Model) getSessionPickerHelpParts() []string {
 
 // getDefaultHelpParts returns help for the default chat view.
 func (m *Model) getDefaultHelpParts() []string {
-	parts := []string{
-		m.styles.helpKey.Render(enterSymbol) + " send",
-	}
+	var parts []string
 
-	// Add queuing/steering hints
-	parts = append(parts, m.styles.helpKey.Render("^Q")+" queue")
-	parts = append(parts, m.styles.helpKey.Render("^S")+" steer")
+	if m.isStreaming {
+		parts = append(parts, m.styles.helpKey.Render(enterSymbol)+" steer")
+		parts = append(parts, m.styles.helpKey.Render("^Q")+" queue")
+	} else {
+		parts = append(parts, m.styles.helpKey.Render(enterSymbol)+" send")
+	}
 
 	// Add pending count and delete hint if there are pending prompts
 	if m.hasPendingPrompts() {

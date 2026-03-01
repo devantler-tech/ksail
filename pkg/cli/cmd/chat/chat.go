@@ -203,8 +203,7 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 		return nil, fmt.Errorf(
 			"failed to start Copilot client: %w\n\n"+
 				"To fix:\n"+
-				"  1. Set COPILOT_CLI_PATH if the Copilot CLI is not in your PATH\n"+
-				"  2. Or set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication",
+				"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication",
 			err,
 		)
 	}
@@ -374,8 +373,7 @@ The assistant understands KSail's CLI, configuration schemas, and can help with:
   - Running KSail commands with your approval
 
 Prerequisites:
-  - GitHub Copilot CLI must be installed and authenticated
-  - Set COPILOT_CLI_PATH if the CLI is not in your PATH
+  - An active GitHub Copilot subscription
 
 Write operations require explicit confirmation before execution.`,
 		SilenceUsage: true,

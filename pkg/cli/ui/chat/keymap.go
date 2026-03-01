@@ -15,9 +15,7 @@ type KeyMap struct {
 
 	// Actions
 	Send          key.Binding
-	NewLine       key.Binding
 	Queue         key.Binding
-	Steer         key.Binding
 	DeletePending key.Binding
 	Cancel        key.Binding
 	Quit          key.Binding
@@ -69,7 +67,6 @@ func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Send,
 		k.Queue,
-		k.Steer,
 		k.Up,
 		k.PageUp,
 		k.ToggleMode,
@@ -89,9 +86,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{
 			k.Send,
 			k.Queue,
-			k.Steer,
 			k.DeletePending,
-			k.NewLine,
 			k.Up,
 			k.Down,
 			k.PageUp,
@@ -155,17 +150,9 @@ func setActionKeys(keyMap *KeyMap) {
 		key.WithKeys("enter"),
 		key.WithHelp(enterSymbol, "send message"),
 	)
-	keyMap.NewLine = key.NewBinding(
-		key.WithKeys("alt+enter"),
-		key.WithHelp("Alt+"+enterSymbol, "new line"),
-	)
 	keyMap.Queue = key.NewBinding(
 		key.WithKeys("ctrl+q"),
-		key.WithHelp("Ctrl+Q", "queue prompt"),
-	)
-	keyMap.Steer = key.NewBinding(
-		key.WithKeys("ctrl+s"),
-		key.WithHelp("Ctrl+S", "steer prompt"),
+		key.WithHelp("^Q", "queue prompt"),
 	)
 	keyMap.DeletePending = key.NewBinding(
 		key.WithKeys("ctrl+d"),

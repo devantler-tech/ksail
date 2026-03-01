@@ -46,7 +46,7 @@ func setupChatTools(
 	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode)
 	yoloModeRef := chatui.NewYoloModeRef(false)
 	tools = WrapToolsWithPermissionAndModeMetadata(
-		tools, eventChan, chatModeRef, yoloModeRef, toolMetadata,
+		tools, eventChan, yoloModeRef, toolMetadata,
 	)
 	sessionConfig.Tools = tools
 	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan, yoloModeRef)
@@ -57,7 +57,7 @@ func setupChatTools(
 	}
 
 	sessionConfig.Hooks = &copilot.SessionHooks{
-		OnPreToolUse: BuildPreToolUseHook(chatModeRef, toolMetadata, allowedRoot),
+		OnPreToolUse: BuildPreToolUseHook(allowedRoot),
 	}
 
 	return chatModeRef, yoloModeRef, nil

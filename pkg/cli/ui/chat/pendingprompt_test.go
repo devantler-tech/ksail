@@ -22,22 +22,31 @@ func newTestParams() chat.Params {
 	}
 }
 
+// typeText sends each rune in text as a KeyRunes message.
+func typeText(m tea.Model, text string) tea.Model {
+	for _, char := range text {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{char}})
+	}
+
+	return m
+}
+
+// ctrlQKey returns a KeyMsg for Ctrl+Q (queue keybind).
+func ctrlQKey() tea.KeyMsg {
+	return tea.KeyMsg{Type: tea.KeyCtrlQ}
+}
+
 func TestQueuePrompt_VisibleInView(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
+	model.SetStreaming(true)
 
-	// Type a prompt
-	var updatedModel tea.Model = model
+	updatedModel := typeText(model, "hello world")
 
-	for _, char := range "hello world" {
-		updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{char}})
-	}
+	// Press Ctrl+Q to queue (only works during streaming)
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
 
-	// Press Ctrl+Q to queue
-	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
-
-	// View should show pending prompts section
 	output := updatedModel.View()
 
 	if !strings.Contains(output, "Pending Prompts") {
@@ -53,15 +62,12 @@ func TestSteerPrompt_VisibleInView(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
+	model.SetStreaming(true)
 
-	var updatedModel tea.Model = model
+	updatedModel := typeText(model, "steer this")
 
-	for _, char := range "steer this" {
-		updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{char}})
-	}
-
-	// Press Ctrl+S to steer
-	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	// Press Enter to steer (Enter steers during streaming)
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	output := updatedModel.View()
 
@@ -78,20 +84,16 @@ func TestDeletePendingPrompt_RemovesFromView(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
+	model.SetStreaming(true)
 
-	var updatedModel tea.Model = model
+	updatedModel := typeText(model, "test prompt")
 
-	// Queue a prompt
-	for _, char := range "test prompt" {
-		updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{char}})
-	}
-
-	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	// Queue a prompt (requires streaming)
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
 
 	// Delete it
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
 
-	// Should no longer show pending prompts section
 	output := updatedModel.View()
 
 	if strings.Contains(output, "Pending Prompts") {
@@ -99,15 +101,33 @@ func TestDeletePendingPrompt_RemovesFromView(t *testing.T) {
 	}
 }
 
-func TestEmptyInput_IgnoredByQueue(t *testing.T) {
+func TestQueuePrompt_IgnoredWhenNotStreaming(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
 
+	updatedModel := typeText(model, "hello")
+
+	// Press Ctrl+Q when NOT streaming — should be ignored
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	output := updatedModel.View()
+
+	if strings.Contains(output, "Pending Prompts") {
+		t.Error("queueing should be ignored when not streaming")
+	}
+}
+
+func TestEmptyInput_IgnoredByQueue(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	model.SetStreaming(true)
+
 	var updatedModel tea.Model = model
 
 	// Press Ctrl+Q with empty textarea
-	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
 
 	output := updatedModel.View()
 
@@ -120,11 +140,12 @@ func TestEmptyInput_IgnoredBySteer(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
+	model.SetStreaming(true)
 
 	var updatedModel tea.Model = model
 
-	// Press Ctrl+S with empty textarea
-	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	// Press Enter with empty textarea during streaming
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	output := updatedModel.View()
 
@@ -137,22 +158,15 @@ func TestMultipleQueuedPrompts_ShowNumbered(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
+	model.SetStreaming(true)
 
-	var updatedModel tea.Model = model
+	updatedModel := typeText(model, "first task")
 
-	// Queue first prompt
-	for _, char := range "first task" {
-		updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{char}})
-	}
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
 
-	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	updatedModel = typeText(updatedModel, "second task")
 
-	// Queue second prompt
-	for _, char := range "second task" {
-		updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{char}})
-	}
-
-	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
 
 	output := updatedModel.View()
 
@@ -169,14 +183,11 @@ func TestFooterShowsPendingCount(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
+	model.SetStreaming(true)
 
-	var updatedModel tea.Model = model
+	updatedModel := typeText(model, "test")
 
-	for _, char := range "test" {
-		updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{char}})
-	}
-
-	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
 
 	output := updatedModel.View()
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/github/copilot-sdk/go/rpc"
 )
 
 const (
@@ -19,6 +20,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle help overlay with highest priority (only F1 or esc can close it)
 	if m.showHelpOverlay {
 		return m.handleHelpOverlayKey(msg)
+	}
+
+	// Handle exit confirmation (before other overlays)
+	if m.confirmExit {
+		return m.handleExitConfirmKey(msg)
 	}
 
 	// Handle overlays first (highest priority)
@@ -63,14 +69,8 @@ func (m *Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEscape()
 	case keyEnter:
 		return m.handleEnter()
-	case "alt+enter":
-		m.textarea.InsertString("\n")
-
-		return m, nil
 	case "ctrl+q":
 		return m.handleQueuePrompt()
-	case "ctrl+s":
-		return m.handleSteerPrompt()
 	case "ctrl+d":
 		return m.handleDeletePendingPrompt()
 	}
@@ -181,7 +181,23 @@ func (m *Model) handleEscape() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	return m.handleQuit(true)
+	m.confirmExit = true
+
+	return m, nil
+}
+
+// handleExitConfirmKey handles keyboard input on the exit confirmation modal.
+func (m *Model) handleExitConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		return m.handleQuit(true)
+	case "n", "N", keyEscape:
+		m.confirmExit = false
+
+		return m, nil
+	}
+
+	return m, nil
 }
 
 // handleOpenModelPicker opens the model selection picker.
@@ -266,6 +282,7 @@ func (m *Model) handleOpenSessionPicker() (tea.Model, tea.Cmd) {
 	m.sessionFilterActive = false // Start in navigation mode
 	m.showSessionPicker = true
 	m.confirmDeleteSession = false
+	m.confirmExit = false
 	m.updateDimensions()
 	m.sessionPickerIndex = m.findCurrentSessionIndex()
 
@@ -303,7 +320,7 @@ func (m *Model) handleNewChat() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleToggleMode cycles through chat modes: Agent -> Plan -> Ask -> Agent.
+// handleToggleMode cycles through chat modes: Agent -> Plan -> Agent.
 func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 	// Prevent mode toggling while streaming to avoid mode mismatch between
 	// message submission and tool execution time
@@ -315,6 +332,14 @@ func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 	// Update the shared reference so tool handlers see the change
 	if m.chatModeRef != nil {
 		m.chatModeRef.SetMode(m.chatMode)
+	}
+
+	// Notify the Copilot CLI server of the mode change so it can enforce
+	// mode-specific behavior (e.g., blocking tools in plan mode).
+	if m.session != nil {
+		_, _ = m.session.RPC.Mode.Set(m.ctx, &rpc.SessionModeSetParams{
+			Mode: m.chatMode.ToSDKMode(),
+		})
 	}
 
 	m.updateViewportContent()
@@ -412,10 +437,14 @@ func (m *Model) handleHistoryDown() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleEnter sends the current message.
+// handleEnter sends the current message, or steers if streaming.
 func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
-	if m.isStreaming || strings.TrimSpace(m.textarea.Value()) == "" {
+	if strings.TrimSpace(m.textarea.Value()) == "" {
 		return m, nil
+	}
+
+	if m.isStreaming {
+		return m.handleSteerPrompt()
 	}
 
 	content := m.textarea.Value()
@@ -473,7 +502,12 @@ func (m *Model) handleCopyOutput() (tea.Model, tea.Cmd) {
 
 // handleQueuePrompt adds the current textarea content as a queued prompt.
 // Queued prompts are processed in FIFO order after the current prompt completes.
+// Only available while streaming.
 func (m *Model) handleQueuePrompt() (tea.Model, tea.Cmd) {
+	if !m.isStreaming {
+		return m, nil
+	}
+
 	content := strings.TrimSpace(m.textarea.Value())
 	if content == "" {
 		return m, nil

@@ -25,13 +25,6 @@ func TestChatModeRef(t *testing.T) {
 		t.Errorf("Expected plan mode after SetMode(PlanMode), got %v", ref.Mode())
 	}
 
-	// Test setting to ask mode
-	ref.SetMode(chat.AskMode)
-
-	if ref.Mode() != chat.AskMode {
-		t.Errorf("Expected ask mode after SetMode(AskMode), got %v", ref.Mode())
-	}
-
 	// Test setting back to agent mode
 	ref.SetMode(chat.AgentMode)
 
@@ -46,7 +39,7 @@ func TestChatModeRefConcurrency(t *testing.T) {
 
 	ref := chat.NewChatModeRef(chat.AgentMode)
 
-	modes := []chat.ChatMode{chat.AgentMode, chat.PlanMode, chat.AskMode}
+	modes := []chat.ChatMode{chat.AgentMode, chat.PlanMode}
 
 	var waitGroup sync.WaitGroup
 

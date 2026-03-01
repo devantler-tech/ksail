@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	copilot "github.com/github/copilot-sdk/go"
+	"github.com/github/copilot-sdk/go/rpc"
 )
 
 const (
@@ -40,12 +41,6 @@ const (
 
 
 `
-	askModePrefix = `[ASK MODE] You are in read-only investigation mode. ` +
-		`Use available read-only tools to research and gather information, then provide a thorough answer. ` +
-		`Do NOT execute any tools that create, modify, or delete resources:
-
-
-`
 )
 
 // ChatMode represents the chat interaction mode.
@@ -56,8 +51,6 @@ const (
 	AgentMode ChatMode = iota
 	// PlanMode blocks all tool execution; the model describes what it would do.
 	PlanMode
-	// AskMode allows read-only tool execution; write tools are blocked.
-	AskMode
 )
 
 // String returns a human-readable label for the chat mode.
@@ -67,8 +60,6 @@ func (m ChatMode) String() string {
 		return "agent"
 	case PlanMode:
 		return "plan"
-	case AskMode:
-		return "ask"
 	default:
 		return "agent"
 	}
@@ -81,8 +72,6 @@ func (m ChatMode) Icon() string {
 		return "</>"
 	case PlanMode:
 		return "\u2261" // ≡
-	case AskMode:
-		return "?"
 	default:
 		return "</>"
 	}
@@ -93,17 +82,27 @@ func (m ChatMode) Label() string {
 	return m.Icon() + " " + m.String()
 }
 
-// Next cycles to the next chat mode: Agent -> Plan -> Ask -> Agent.
+// Next cycles to the next chat mode: Agent -> Plan -> Agent.
 func (m ChatMode) Next() ChatMode {
 	switch m {
 	case AgentMode:
 		return PlanMode
 	case PlanMode:
-		return AskMode
-	case AskMode:
 		return AgentMode
 	default:
 		return AgentMode
+	}
+}
+
+// ToSDKMode maps the KSail chat mode to the corresponding Copilot SDK RPC mode.
+func (m ChatMode) ToSDKMode() rpc.Mode {
+	switch m {
+	case PlanMode:
+		return rpc.Plan
+	case AgentMode:
+		return rpc.Interactive
+	default:
+		return rpc.Interactive
 	}
 }
 
@@ -225,6 +224,7 @@ type Model struct {
 	userScrolled                 bool   // true when user has scrolled away from bottom (pause auto-scroll)
 	err                          error
 	quitting                     bool
+	confirmExit                  bool
 	ready                        bool
 
 	// Configuration
@@ -519,6 +519,12 @@ func (m *Model) View() string {
 		return m.styles.logo.Render(m.theme.Logo()) + "\n\n" + goodbye
 	}
 
+	if m.confirmExit {
+		modal := m.renderExitConfirmModal()
+
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
+	}
+
 	sections := make([]string, 0, viewSectionCount)
 
 	// Header, chat viewport, input/modal, and footer
@@ -753,8 +759,6 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		switch chatMode {
 		case PlanMode:
 			prompt = planModePrefix + userMessage
-		case AskMode:
-			prompt = askModePrefix + userMessage
 		case AgentMode:
 			// No prefix needed
 		}
