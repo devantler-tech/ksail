@@ -6,3 +6,12 @@ var IsTransientCreateErrorForTest = isTransientCreateError
 
 // CreateWithRetryForTest exposes createWithRetry for unit testing.
 var CreateWithRetryForTest = createWithRetry
+
+// WaitForNetworkRemovalForTest exposes waitForNetworkRemoval for unit testing.
+var WaitForNetworkRemovalForTest = waitForNetworkRemoval
+
+// NetworkExistsFnForTest exposes the networkExistsFn type for unit testing.
+type NetworkExistsFnForTest = networkExistsFn
+
+// RemoveNetworkFnForTest exposes the removeNetworkFn type for unit testing.
+type RemoveNetworkFnForTest = removeNetworkFn

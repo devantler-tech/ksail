@@ -365,3 +365,115 @@ func TestCreateWithRetry_CleanupErrorDoesNotPropagate(t *testing.T) {
 	require.NoError(t, err, "cleanup errors should not prevent successful retry")
 	assert.Equal(t, 2, createCalls)
 }
+
+// --- waitForNetworkRemoval tests ---
+
+func TestWaitForNetworkRemoval_NetworkAlreadyGone(t *testing.T) {
+	t.Parallel()
+
+	existsCalls := 0
+	networkExists := func(_ context.Context, _ string) bool {
+		existsCalls++
+
+		return false
+	}
+
+	removeNetwork := func(_ context.Context, _ string, _ loftlog.Logger) {
+		t.Error("removeNetwork should not be called when network does not exist")
+	}
+
+	vclusterprovisioner.WaitForNetworkRemovalForTest(
+		context.Background(),
+		"test-cluster",
+		newTestLogger(),
+		networkExists,
+		removeNetwork,
+	)
+
+	assert.Equal(t, 1, existsCalls, "should check existence once and return immediately")
+}
+
+func TestWaitForNetworkRemoval_RemovedImmediately(t *testing.T) {
+	t.Parallel()
+
+	existsCalls := 0
+	networkExists := func(_ context.Context, _ string) bool {
+		existsCalls++
+
+		// First call: network exists; second call (after rm): gone.
+		return existsCalls <= 1
+	}
+
+	removeCalls := 0
+	removeNetwork := func(_ context.Context, _ string, _ loftlog.Logger) {
+		removeCalls++
+	}
+
+	vclusterprovisioner.WaitForNetworkRemovalForTest(
+		context.Background(),
+		"test-cluster",
+		newTestLogger(),
+		networkExists,
+		removeNetwork,
+	)
+
+	assert.Equal(t, 2, existsCalls, "should check before and after removal")
+	assert.Equal(t, 1, removeCalls, "should attempt removal once")
+}
+
+func TestWaitForNetworkRemoval_LingeringNetworkDisappearsAfterRetries(t *testing.T) {
+	t.Parallel()
+
+	existsCalls := 0
+	networkExists := func(_ context.Context, _ string) bool {
+		existsCalls++
+
+		// Disappears after 3 existence checks (initial + 2 post-remove).
+		return existsCalls <= 3
+	}
+
+	removeCalls := 0
+	removeNetwork := func(_ context.Context, _ string, _ loftlog.Logger) {
+		removeCalls++
+	}
+
+	vclusterprovisioner.WaitForNetworkRemovalForTest(
+		context.Background(),
+		"test-cluster",
+		newTestLogger(),
+		networkExists,
+		removeNetwork,
+	)
+
+	assert.Equal(t, 4, existsCalls, "should check until network disappears")
+	assert.GreaterOrEqual(t, removeCalls, 2, "should attempt removal multiple times")
+}
+
+func TestWaitForNetworkRemoval_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	existsCalls := 0
+	networkExists := func(_ context.Context, _ string) bool {
+		existsCalls++
+		if existsCalls == 2 {
+			cancel()
+		}
+
+		return true // always exists
+	}
+
+	removeNetwork := func(_ context.Context, _ string, _ loftlog.Logger) {}
+
+	vclusterprovisioner.WaitForNetworkRemovalForTest(
+		ctx,
+		"test-cluster",
+		newTestLogger(),
+		networkExists,
+		removeNetwork,
+	)
+
+	// Should exit due to context cancellation, not loop forever.
+	assert.GreaterOrEqual(t, existsCalls, 2, "should have checked existence before cancellation")
+}
