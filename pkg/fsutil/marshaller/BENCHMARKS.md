@@ -15,16 +15,16 @@ The YAML marshaller benchmarks measure performance of marshalling and unmarshall
 
 ```bash
 # Run all YAML marshaller benchmarks
-go test -bench=. -benchmem ./pkg/fsutil/marshaller/...
+go test -run=^$ -bench=. -benchmem ./pkg/fsutil/marshaller/...
 
 # Run specific benchmark
-go test -bench=BenchmarkYAMLMarshaller_Marshal_Simple -benchmem ./pkg/fsutil/marshaller/...
+go test -run=^$ -bench=BenchmarkYAMLMarshaller_Marshal_Simple -benchmem ./pkg/fsutil/marshaller/...
 
 # Save results for comparison
-go test -bench=. -benchmem ./pkg/fsutil/marshaller/... > baseline.txt
+go test -run=^$ -bench=. -benchmem ./pkg/fsutil/marshaller/... > baseline.txt
 
 # Compare before/after changes
-go test -bench=. -benchmem ./pkg/fsutil/marshaller/... > new.txt
+go test -run=^$ -bench=. -benchmem ./pkg/fsutil/marshaller/... > new.txt
 benchstat baseline.txt new.txt
 ```
 
