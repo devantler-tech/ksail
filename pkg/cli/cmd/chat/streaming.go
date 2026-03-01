@@ -32,6 +32,7 @@ const (
 	actionDelta                        // write delta content
 	actionToolStart                    // write tool execution start
 	actionToolComplete                 // write tool completion
+	actionWarning                      // write warning message
 )
 
 // streamingOutput holds the data needed for post-unlock I/O.
@@ -66,11 +67,7 @@ func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) s
 	case copilot.SessionIdle:
 		state.markDone()
 	case copilot.SessionError:
-		if event.Data.Message != nil {
-			state.responseErr = fmt.Errorf("%w: %s", errSessionError, *event.Data.Message)
-		}
-
-		state.markDone()
+		recordSessionError(event, state)
 	case copilot.ToolExecutionStart:
 		toolName := getToolName(event)
 		toolArgs := getToolArgs(event)
@@ -81,11 +78,25 @@ func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) s
 		}
 	case copilot.ToolExecutionComplete:
 		return streamingOutput{action: actionToolComplete}
+	case copilot.SessionWarning:
+		if event.Data.Message != nil {
+			return streamingOutput{action: actionWarning, text: *event.Data.Message}
+		}
 	default:
 		// Ignore other event types
 	}
 
 	return streamingOutput{action: actionNone}
+}
+
+// recordSessionError stores the error from a SessionError event and marks streaming as done.
+// Extracted to reduce cyclomatic complexity of computeStreamingOutput.
+func recordSessionError(event copilot.SessionEvent, state *streamingState) {
+	if event.Data.Message != nil {
+		state.responseErr = fmt.Errorf("%w: %s", errSessionError, *event.Data.Message)
+	}
+
+	state.markDone()
 }
 
 // writeStreamingOutput performs the I/O operation outside the critical section.
@@ -97,6 +108,8 @@ func writeStreamingOutput(output streamingOutput, writer io.Writer) {
 		_, _ = fmt.Fprint(writer, output.text)
 	case actionToolComplete:
 		_, _ = fmt.Fprint(writer, "✓ Done\n")
+	case actionWarning:
+		_, _ = fmt.Fprintf(writer, "\n⚠️ Warning: %s\n", output.text)
 	case actionNone:
 		// Nothing to write
 	}

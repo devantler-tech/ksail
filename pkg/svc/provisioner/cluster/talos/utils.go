@@ -25,14 +25,13 @@ func nthIPInNetwork(prefix netip.Prefix, offset int) (netip.Addr, error) {
 			return netip.Addr{}, ErrNegativeOffset
 		}
 
-		//nolint:gosec // G115: offset validated above and bounded by cluster size
-		ipValue += uint32(offset)
+		ipValue += uint32(offset) //nolint:gosec // G115: validated above
 
 		return netip.AddrFrom4([4]byte{
 			byte(ipValue >> byte0Shift),
-			byte(ipValue >> byte1Shift),
-			byte(ipValue >> byte2Shift),
-			byte(ipValue),
+			byte(ipValue >> byte1Shift), //nolint:gosec // G115
+			byte(ipValue >> byte2Shift), //nolint:gosec // G115
+			byte(ipValue),               //nolint:gosec // G115
 		}), nil
 	}
 

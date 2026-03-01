@@ -119,7 +119,7 @@ type ChartSpec struct {
 
 	RepoURL               string
 	Username              string
-	Password              string
+	Password              string //nolint:gosec // G117: field name required by Helm API
 	CertFile              string
 	KeyFile               string
 	CaFile                string
@@ -132,7 +132,7 @@ type RepositoryEntry struct {
 	Name                  string
 	URL                   string
 	Username              string
-	Password              string
+	Password              string //nolint:gosec // G117: field name required by Helm API
 	CertFile              string
 	KeyFile               string
 	CaFile                string

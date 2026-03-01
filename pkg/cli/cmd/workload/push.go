@@ -258,8 +258,8 @@ type pushParams struct {
 	SourceDir    string
 	GitOpsEngine v1alpha1.GitOpsEngine
 	Username     string
-	Password     string
-	IsExternal   bool // True if this is an external registry (no auto-detection needed)
+	Password     string //nolint:gosec // G117: field name required by API schema
+	IsExternal   bool   // True if this is an external registry (no auto-detection needed)
 }
 
 // resolvePushParams resolves all push parameters using priority-based detection.

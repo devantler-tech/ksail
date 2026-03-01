@@ -55,10 +55,10 @@ func mockDockerStreamResponse(stdout, stderr string) dockertypes.HijackedRespons
 		header := make([]byte, 8)
 		header[0] = 1 // stdout
 		payload := []byte(stdout)
-		header[4] = byte(len(payload) >> 24)
-		header[5] = byte(len(payload) >> 16)
-		header[6] = byte(len(payload) >> 8)
-		header[7] = byte(len(payload))
+		header[4] = byte(len(payload) >> 24) // #nosec G115 -- Docker stream protocol encoding
+		header[5] = byte(len(payload) >> 16) // #nosec G115
+		header[6] = byte(len(payload) >> 8)  // #nosec G115
+		header[7] = byte(len(payload))       // #nosec G115
 		data = append(data, header...)
 		data = append(data, payload...)
 	}
@@ -67,10 +67,10 @@ func mockDockerStreamResponse(stdout, stderr string) dockertypes.HijackedRespons
 		header := make([]byte, 8)
 		header[0] = 2 // stderr
 		payload := []byte(stderr)
-		header[4] = byte(len(payload) >> 24)
-		header[5] = byte(len(payload) >> 16)
-		header[6] = byte(len(payload) >> 8)
-		header[7] = byte(len(payload))
+		header[4] = byte(len(payload) >> 24) // #nosec G115 -- Docker stream protocol encoding
+		header[5] = byte(len(payload) >> 16) // #nosec G115
+		header[6] = byte(len(payload) >> 8)  // #nosec G115
+		header[7] = byte(len(payload))       // #nosec G115
 		data = append(data, header...)
 		data = append(data, payload...)
 	}
