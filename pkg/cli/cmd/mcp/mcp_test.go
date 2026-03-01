@@ -141,12 +141,8 @@ func TestNewMCPCmd_ExecuteWithoutServer(t *testing.T) {
 	require.NotNil(t, cmd)
 	assert.NotNil(t, cmd.RunE, "RunE function should be defined")
 
-	// Verify Args validator behavior if set
-	if cmd.Args != nil {
-		// Test with no arguments
-		err := cmd.Args(cmd, []string{})
-		assert.NoError(t, err, "Command should accept no arguments when Args is set")
-	}
+	// Verify Args validator configuration: MCP command does not define a custom Args validator
+	assert.Nil(t, cmd.Args, "MCP command should not define a custom Args validator")
 }
 
 func TestNewMCPCmd_CommandStructure(t *testing.T) {
