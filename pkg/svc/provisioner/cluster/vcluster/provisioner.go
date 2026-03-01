@@ -279,8 +279,8 @@ func tryDBusRecovery(
 	return nil
 }
 
-// isTransientCreateError returns true when the error message matches a known
-// transient exit status that may succeed on retry.
+// isTransientCreateError returns true when the error message contains a known
+// transient error substring that may succeed on retry.
 func isTransientCreateError(err error) bool {
 	msg := err.Error()
 
