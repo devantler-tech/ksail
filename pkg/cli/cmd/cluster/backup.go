@@ -652,7 +652,7 @@ func addFileToTar(
 		return nil
 	}
 
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec // G304: path comes from filepath.Walk, not user input
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
