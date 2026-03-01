@@ -20,6 +20,9 @@ builds:
       - CGO_ENABLED=0
     ldflags:
       - -s -w
+    hooks:
+      pre:
+        - go tool bundler --platform {{ .Os }}/{{ .Arch }}
 
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"

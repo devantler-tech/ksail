@@ -137,7 +137,7 @@ func (m *Model) renderPermissionModal() string {
 func CreateTUIPermissionHandler(
 	eventChan chan<- tea.Msg,
 	yoloModeRef *YoloModeRef,
-) copilot.PermissionHandler {
+) copilot.PermissionHandlerFunc {
 	return func(
 		request copilot.PermissionRequest,
 		_ copilot.PermissionInvocation,

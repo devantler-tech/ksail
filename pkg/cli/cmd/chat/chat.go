@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -187,7 +190,7 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 
 	for _, envVar := range tokenEnvVars {
 		if token := os.Getenv(envVar); token != "" {
-			opts.GithubToken = token
+			opts.GitHubToken = token
 
 			break
 		}
@@ -200,10 +203,8 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 		return nil, fmt.Errorf(
 			"failed to start Copilot client: %w\n\n"+
 				"To fix:\n"+
-				"  1. Install GitHub Copilot CLI: npm install -g @githubnext/github-copilot-cli\n"+
-				"  2. Or set COPILOT_CLI_PATH to your installation\n"+
-				"  3. Or authenticate: copilot auth login\n"+
-				"  4. Or set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication",
+				"  1. Set COPILOT_CLI_PATH if the Copilot CLI is not in your PATH\n"+
+				"  2. Or set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication",
 			err,
 		)
 	}
@@ -236,7 +237,8 @@ func filterEnvVars(env []string, remove []string) []string {
 	return filtered
 }
 
-// validateCopilotAuth checks authentication and returns the login name.
+// validateCopilotAuth checks authentication. If not authenticated, it attempts
+// an inline `copilot auth login` device flow before returning an error.
 func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, error) {
 	authStatus, err := client.GetAuthStatus(ctx)
 	if err != nil {
@@ -244,14 +246,38 @@ func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, e
 	}
 
 	if !authStatus.IsAuthenticated {
-		return "", fmt.Errorf(
-			"%w\n\n"+
-				"To fix:\n"+
-				"  1. Run: copilot auth login\n"+
-				"  2. Or set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
-				"  3. Ensure you have an active GitHub Copilot subscription",
-			errNotAuthenticated,
-		)
+		cliPath, pathErr := resolveCopilotCLIPath()
+		if pathErr != nil {
+			return "", fmt.Errorf(
+				"%w\n\n"+
+					"could not find the Copilot CLI to start login flow: %v\n\n"+
+					"To fix:\n"+
+					"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
+					"  - Ensure you have an active GitHub Copilot subscription",
+				errNotAuthenticated, pathErr,
+			)
+		}
+
+		fmt.Fprintln(os.Stderr, "\nNot authenticated with GitHub Copilot. Starting login...")
+
+		loginErr := runCopilotAuthLogin(ctx, cliPath)
+		if loginErr != nil {
+			return "", fmt.Errorf("%w: login failed: %v", errNotAuthenticated, loginErr)
+		}
+
+		authStatus, err = client.GetAuthStatus(ctx)
+		if err != nil {
+			return "", fmt.Errorf("failed to verify authentication after login: %w", err)
+		}
+
+		if !authStatus.IsAuthenticated {
+			msg := "login completed but authentication check still fails"
+			if authStatus.StatusMessage != nil {
+				msg += ": " + *authStatus.StatusMessage
+			}
+
+			return "", fmt.Errorf("%w: %s", errNotAuthenticated, msg)
+		}
 	}
 
 	loginName := "unknown"
@@ -260,6 +286,44 @@ func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, e
 	}
 
 	return loginName, nil
+}
+
+// resolveCopilotCLIPath finds the Copilot CLI binary, checking:
+//  1. COPILOT_CLI_PATH environment variable
+//  2. SDK cache directory (bundled CLI)
+//  3. System PATH
+func resolveCopilotCLIPath() (string, error) {
+	if p := os.Getenv("COPILOT_CLI_PATH"); p != "" {
+		return p, nil
+	}
+
+	if cacheDir, err := os.UserCacheDir(); err == nil {
+		sdkDir := filepath.Join(cacheDir, "copilot-sdk")
+
+		entries, readErr := os.ReadDir(sdkDir)
+		if readErr == nil {
+			for _, e := range entries {
+				name := e.Name()
+				if !e.IsDir() && strings.HasPrefix(name, "copilot") &&
+					!strings.HasSuffix(name, ".lock") &&
+					!strings.HasSuffix(name, ".license") {
+					return filepath.Join(sdkDir, name), nil
+				}
+			}
+		}
+	}
+
+	return exec.LookPath("copilot")
+}
+
+// runCopilotAuthLogin spawns `copilot login` as an interactive subprocess.
+func runCopilotAuthLogin(ctx context.Context, cliPath string) error {
+	cmd := exec.CommandContext(ctx, cliPath, "login")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
 }
 
 // buildSessionConfig creates the Copilot session configuration.

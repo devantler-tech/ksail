@@ -20,7 +20,7 @@ import (
 //   - Shell command (for command execution)
 //   - Arguments and file paths involved
 //   - Content preview for write operations (truncated to 200 chars)
-func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandler {
+func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandlerFunc {
 	return func(
 		request copilot.PermissionRequest, _ copilot.PermissionInvocation,
 	) (copilot.PermissionRequestResult, error) {

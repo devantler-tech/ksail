@@ -91,9 +91,10 @@ runs:
             chmod +x "$output_target"
           fi
         else
-          # Build binary (first generate embedded docs)
+          # Build binary (generate embedded docs + bundle Copilot CLI)
           mkdir -p ./.cache
           go generate ./pkg/svc/chat/...
+          go tool bundler
           go build -ldflags="-s -w" -o ./.cache/ksail .
           # Copy to target location
           if [[ "$output_target" = /* ]]; then
