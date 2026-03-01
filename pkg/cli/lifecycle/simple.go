@@ -166,48 +166,18 @@ func clusterNameFromDistConfig(distCfg *clusterprovisioner.DistributionConfig) s
 		return ""
 	}
 
-	// Extract candidate names from each distribution config.
-	candidates := []string{
-		kindClusterName(distCfg),
-		k3dClusterName(distCfg),
-		talosClusterName(distCfg),
-		vclusterClusterName(distCfg),
-	}
-
-	for _, name := range candidates {
-		if name != "" {
-			return name
-		}
-	}
-
-	return ""
-}
-
-func kindClusterName(distCfg *clusterprovisioner.DistributionConfig) string {
 	if distCfg.Kind != nil {
 		return distCfg.Kind.Name
 	}
 
-	return ""
-}
-
-func k3dClusterName(distCfg *clusterprovisioner.DistributionConfig) string {
 	if distCfg.K3d != nil {
 		return distCfg.K3d.Name
 	}
 
-	return ""
-}
-
-func talosClusterName(distCfg *clusterprovisioner.DistributionConfig) string {
 	if distCfg.Talos != nil {
 		return distCfg.Talos.GetClusterName()
 	}
 
-	return ""
-}
-
-func vclusterClusterName(distCfg *clusterprovisioner.DistributionConfig) string {
 	if distCfg.VCluster != nil {
 		return distCfg.VCluster.Name
 	}
@@ -326,8 +296,8 @@ func CreateMinimalProvisionerForProvider(
 		// that tries each distribution in order
 		return clusterprovisioner.NewMultiProvisioner(info.ClusterName), nil
 
-	case v1alpha1.ProviderHetzner:
-		// Hetzner only supports Talos
+	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
+		// Hetzner and Omni only support Talos
 		talosConfig := &talosconfigmanager.Configs{Name: info.ClusterName}
 
 		// Use default kubeconfig path for cleanup operations
@@ -342,6 +312,7 @@ func CreateMinimalProvisionerForProvider(
 			info.Provider,
 			v1alpha1.OptionsTalos{},
 			v1alpha1.OptionsHetzner{},
+			v1alpha1.OptionsOmni{},
 			false,
 		)
 		if err != nil {

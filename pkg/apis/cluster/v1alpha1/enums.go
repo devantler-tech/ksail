@@ -695,6 +695,8 @@ const (
 	ProviderDocker Provider = "Docker"
 	// ProviderHetzner runs cluster nodes as Hetzner Cloud servers.
 	ProviderHetzner Provider = "Hetzner"
+	// ProviderOmni runs cluster nodes managed by Sidero Omni.
+	ProviderOmni Provider = "Omni"
 )
 
 // Set for Provider (pflag.Value interface).
@@ -708,11 +710,12 @@ func (p *Provider) Set(value string) error {
 	}
 
 	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s)",
+		"%w: %s (valid options: %s, %s, %s)",
 		ErrInvalidProvider,
 		value,
 		ProviderDocker,
 		ProviderHetzner,
+		ProviderOmni,
 	)
 }
 
@@ -733,7 +736,7 @@ func (p *Provider) Default() any {
 
 // ValidValues returns all valid Provider values as strings.
 func (p *Provider) ValidValues() []string {
-	return []string{string(ProviderDocker), string(ProviderHetzner)}
+	return []string{string(ProviderDocker), string(ProviderHetzner), string(ProviderOmni)}
 }
 
 // supportedProviders returns the valid providers for a given distribution.
@@ -742,7 +745,7 @@ func supportedProviders(distribution Distribution) []Provider {
 	case DistributionVanilla, DistributionK3s, DistributionVCluster:
 		return []Provider{ProviderDocker}
 	case DistributionTalos:
-		return []Provider{ProviderDocker, ProviderHetzner}
+		return []Provider{ProviderDocker, ProviderHetzner, ProviderOmni}
 	default:
 		return nil
 	}

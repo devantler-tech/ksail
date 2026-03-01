@@ -96,8 +96,15 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			field:    "cluster.loadBalancer",
 			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "load balancer can be enabled/disabled via Helm",
-			getVal: func(s *v1alpha1.ClusterSpec) string {
-				return string(s.LoadBalancer.EffectiveValue(e.distribution, e.provider))
+			getVal: func(spec *v1alpha1.ClusterSpec) string {
+				// VCluster delegates LoadBalancer to the host cluster; KSail does
+				// not install or uninstall anything, so the setting has no effect.
+				// Always return "Default" for both sides to prevent false-positive diffs.
+				if e.distribution == v1alpha1.DistributionVCluster {
+					return string(v1alpha1.LoadBalancerDefault)
+				}
+
+				return string(spec.LoadBalancer.EffectiveValue(e.distribution, e.provider))
 			},
 		},
 		{

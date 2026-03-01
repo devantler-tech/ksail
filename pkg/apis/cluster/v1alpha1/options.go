@@ -86,3 +86,15 @@ type OptionsHetzner struct {
 	// Defaults to false to preserve HA guarantees; set to true for best-effort provisioning.
 	PlacementGroupFallbackToNone bool `json:"placementGroupFallbackToNone,omitzero"`
 }
+
+// OptionsOmni defines options specific to the Sidero Omni provider.
+// These options are used when Provider is set to "Omni" for the Talos distribution.
+type OptionsOmni struct {
+	// Endpoint is the Omni API endpoint URL.
+	// Example: "https://<account>.omni.siderolabs.io:443".
+	Endpoint string `json:"endpoint,omitzero"`
+	// ServiceAccountKeyEnvVar is the environment variable containing the
+	// base64-encoded Omni service account key.
+	// Defaults to "OMNI_SERVICE_ACCOUNT_KEY".
+	ServiceAccountKeyEnvVar string `default:"OMNI_SERVICE_ACCOUNT_KEY" json:"serviceAccountKeyEnvVar,omitzero"`
+}

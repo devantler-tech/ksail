@@ -2,6 +2,7 @@
 package hetzner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/retry"
 )
 
 const (
@@ -62,27 +64,85 @@ func ensureSecret(ctx context.Context, client kubernetes.Interface, token string
 		},
 	}
 
-	secrets := client.CoreV1().Secrets(Namespace)
+	secretsClient := client.CoreV1().Secrets(Namespace)
 
-	existingSecret, err := secrets.Get(ctx, SecretName, metav1.GetOptions{})
+	existingSecret, err := secretsClient.Get(ctx, SecretName, metav1.GetOptions{})
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to get secret: %w", err)
 		}
 
-		_, err = secrets.Create(ctx, secret, metav1.CreateOptions{})
-		if err != nil {
+		return createOrUpdateOnConflict(ctx, client, secret)
+	}
+
+	return updateSecretIfNeeded(ctx, client, existingSecret, secret.Data)
+}
+
+// createOrUpdateOnConflict creates the secret. If a concurrent installer
+// already created it (AlreadyExists), the secret is fetched and updated instead.
+func createOrUpdateOnConflict(
+	ctx context.Context,
+	client kubernetes.Interface,
+	secret *corev1.Secret,
+) error {
+	secretsClient := client.CoreV1().Secrets(Namespace)
+
+	_, err := secretsClient.Create(ctx, secret, metav1.CreateOptions{})
+	if err != nil {
+		if !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("failed to create secret: %w", err)
 		}
-	} else {
-		// Update the existing secret's data while preserving its metadata
-		existingSecret.Data = secret.Data
-		existingSecret.StringData = nil
 
-		_, err = secrets.Update(ctx, existingSecret, metav1.UpdateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to update secret: %w", err)
+		// Another concurrent installer created the secret between the Get and
+		// Create calls. Fetch and update it to ensure the token is current.
+		existingSecret, getErr := secretsClient.Get(ctx, SecretName, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("failed to get existing secret: %w", getErr)
 		}
+
+		return updateSecretIfNeeded(ctx, client, existingSecret, secret.Data)
+	}
+
+	return nil
+}
+
+// updateSecretIfNeeded skips the update when the existing token already matches
+// the desired value. Otherwise it uses retry.RetryOnConflict to handle 409
+// Conflict errors that arise under concurrent updaters.
+func updateSecretIfNeeded(
+	ctx context.Context,
+	client kubernetes.Interface,
+	existingSecret *corev1.Secret,
+	desiredData map[string][]byte,
+) error {
+	if bytes.Equal(existingSecret.Data["token"], desiredData["token"]) {
+		return nil
+	}
+
+	secretsClient := client.CoreV1().Secrets(Namespace)
+
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest, err := secretsClient.Get(ctx, SecretName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to get secret for update: %w", err)
+		}
+
+		if bytes.Equal(latest.Data["token"], desiredData["token"]) {
+			return nil
+		}
+
+		latest.Data = desiredData
+		latest.StringData = nil
+
+		_, err = secretsClient.Update(ctx, latest, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("update secret: %w", err)
+		}
+
+		return nil
+	})
+	if retryErr != nil {
+		return fmt.Errorf("failed to update secret: %w", retryErr)
 	}
 
 	return nil

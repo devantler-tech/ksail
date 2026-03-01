@@ -94,7 +94,7 @@ benchstat before.txt after.txt
 
 PRs that modify Go code are automatically benchmarked against `main` and the comparison is posted as a PR comment. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details on interpreting results.
 
-See package-specific BENCHMARKS.md files (e.g., `pkg/k8s/readiness/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
+See package-specific BENCHMARKS.md files (e.g., `pkg/k8s/readiness/BENCHMARKS.md`, `pkg/client/docker/BENCHMARKS.md`, `pkg/client/flux/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
 
 ### Documentation
 
@@ -178,12 +178,16 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 ### Key Packages in pkg/
 
 - **apis/** - API types, schemas, and enums (distribution/provider values)
-- **client/** - Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
+- **client/** - Embedded tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kustomize, oci, netretry); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`
+- **client/reconciler/** - Common base for GitOps reconciliation clients (Flux and ArgoCD)
+- **svc/detector/** - Detects installed Kubernetes components (Helm releases and Kubernetes API); used by the update command to build accurate baseline cluster state
+- **svc/diff/** - Computes configuration differences between ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
+- **svc/image/** - Container image export/import services for Vanilla and K3s distributions
+- **svc/installer/** - Component installers (CNI, CSI, metrics-server, etc.)
 - **svc/provider/** - Infrastructure providers (e.g., `docker.Provider` for running nodes as containers)
 - **svc/provisioner/** - Distribution provisioners (Vanilla, K3s, Talos, VCluster)
-- **svc/installer/** - Component installers (CNI, CSI, metrics-server, etc.)
-- **svc/image/** - Container image export/import services for Vanilla and K3s distributions
-- **svc/reconciler/** - Common base for GitOps reconciliation clients (Flux and ArgoCD)
+- **svc/registryresolver/** - OCI registry detection, resolution, and artifact push utilities
+- **svc/state/** - Cluster state persistence for distributions that cannot introspect their running configuration (Kind, K3d)
 - **di/** - Dependency injection for wiring components
 
 ### Architecture: Providers vs Provisioners
@@ -193,14 +197,14 @@ KSail separates infrastructure management from distribution configuration:
 - **Providers** manage the infrastructure lifecycle (start/stop containers)
 - **Provisioners** configure and manage Kubernetes distributions
 
-| Distribution | Provisioner            | Tool  | Provider        | Description                             |
-|--------------|------------------------|-------|-----------------|-----------------------------------------|
-| `Vanilla`    | KindClusterProvisioner | Kind  | Docker          | Standard upstream Kubernetes            |
-| `K3s`        | K3dClusterProvisioner  | K3d   | Docker          | Lightweight K3s in Docker               |
-| `Talos`      | TalosProvisioner       | Talos | Docker, Hetzner | Immutable Talos Linux                   |
-| `VCluster`   | VClusterProvisioner    | Vind  | Docker          | Virtual clusters via vCluster in Docker |
+| Distribution | Provisioner            | Tool  | Provider              | Description                                    |
+|--------------|------------------------|-------|-----------------------|------------------------------------------------|
+| `Vanilla`    | KindClusterProvisioner | Kind  | Docker                | Standard upstream Kubernetes                   |
+| `K3s`        | K3dClusterProvisioner  | K3d   | Docker                | Lightweight K3s in Docker                      |
+| `Talos`      | TalosProvisioner       | Talos | Docker, Hetzner, Omni | Immutable Talos Linux                          |
+| `VCluster`   | VClusterProvisioner    | Vind  | Docker                | Virtual clusters via vCluster (Vind) in Docker |
 
-This project strives to be fully open-source friendly, and as such, all core functionality is implemented in the `pkg/` directory, and the `internal/` directory is not used. This allows external projects to import and use any part of the codebase.
+This project strives to be fully open-source friendly. All core functionality is implemented in the `pkg/` directory so external projects can import and use any package under `pkg/`. The `internal/` directory is intentionally minimal — it holds only `internal/buildmeta`, which carries build-time version metadata injected via ldflags (not useful to external consumers).
 
 For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail/v5](https://pkg.go.dev/github.com/devantler-tech/ksail/v5).
 
@@ -233,6 +237,55 @@ To test the Hetzner provider locally, you need:
 **Note:** CI includes a safety-net cleanup job (`cleanup-hetzner`) that runs after system tests and deletes any Hetzner resources labeled `ksail.owned=true`. This is implemented as a GitHub Action at `.github/actions/cleanup-hetzner/action.yaml` and is not intended for local execution.
 
 **Warning:** The cleanup action is destructive and will delete all KSail-managed Hetzner resources (servers, placement groups, firewalls, and networks) in your project that are labeled `ksail.owned=true`. Manual cleanup of any remaining resources should be done via the Hetzner Cloud Console or `hcloud` CLI if needed.
+
+#### Omni Provider Testing
+
+To test the Omni provider locally, you need:
+
+- **`OMNI_SERVICE_ACCOUNT_KEY`** – A Sidero Omni service account key with cluster management permissions. The environment variable name is configurable via `spec.cluster.omni.serviceAccountKeyEnvVar` in `ksail.yaml`.
+- **Omni endpoint** – The URL of your Sidero Omni instance, configured via `spec.cluster.omni.endpoint` in `ksail.yaml` (there is no CLI flag for this value).
+
+**Note:** Omni requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account and does not run locally. Omni manages the Talos machine lifecycle; `StartNodes` and `StopNodes` are no-ops in the Omni provider.
+
+**Note:** Omni system tests are not part of the default CI workflows. This section only applies to running Omni provider tests locally: those tests are not triggered unless both the `OMNI_SERVICE_ACCOUNT_KEY` and Omni endpoint are configured.
+
+#### Agentic Workflows
+
+KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a schedule or on dispatch:
+
+| Workflow                   | Schedule              | Purpose                                                        |
+|----------------------------|-----------------------|----------------------------------------------------------------|
+| `daily-refactor`           | Daily                 | Incremental code refactoring for maintainability               |
+| `daily-perf-improver`      | Daily                 | Performance optimization                                       |
+| `daily-test-improver`      | Daily                 | Test coverage improvements                                     |
+| `daily-workflow-optimizer` | Daily                 | CI/CD workflow optimization (both `.yaml` and `.md` workflows) |
+| `daily-code-simplifier`    | Daily                 | Code simplification and readability                            |
+| `daily-backlog-burner`     | Daily                 | Backlog issue resolution                                       |
+| `daily-plan`               | Daily                 | Strategic project planning and roadmap maintenance             |
+| `daily-progress`           | Daily                 | Feature delivery from the project plan                         |
+| `daily-workflow-updater`   | Daily                 | GitHub Actions version updates and workflow source upgrades    |
+| `weekly-research`          | Weekly                | Industry insights and competitive analysis                     |
+| `weekly-promote-ksail`     | Weekly                | Project promotion and visibility                               |
+| `ci-doctor`                | On CI failure         | CI failure investigation and diagnostics                       |
+| `issue-triage`             | On issue open/reopen  | Issue labeling, spam detection, and analysis                   |
+| `pr-fix`                   | On `/pr-fix` command  | On-demand PR failure fixes                                     |
+| `plan`                     | On `/plan` command    | Project plan and task breakdown generation                     |
+| `update-docs`              | On push to `main`     | Documentation synchronization with code changes                |
+| `unbloat-docs`             | Daily / On `/unbloat` | Documentation simplification and verbosity reduction           |
+| `maintainer`               | Every 3 days          | Repository maintenance and housekeeping                        |
+
+Each agentic workflow creates a GitHub Discussion to coordinate its work and, depending on its purpose, may open draft PRs or create issues with incremental improvements. You can control them using the [`gh aw`](https://github.com/github/gh-aw) CLI extension:
+
+```sh
+# Install the gh-aw extension (prerequisite)
+gh ext install github/gh-aw
+
+# Manage a specific workflow
+gh aw disable daily-workflow-optimizer --repo devantler-tech/ksail
+gh aw enable daily-workflow-optimizer --repo devantler-tech/ksail
+gh aw run daily-workflow-optimizer --repo devantler-tech/ksail
+gh aw logs daily-workflow-optimizer --repo devantler-tech/ksail
+```
 
 ## CD
 

@@ -41,13 +41,15 @@ All cluster operations are available via the Command Palette (`Cmd+Shift+P` / `C
 | `KSail: Start Cluster`            | Start an existing cluster                 | -               |
 | `KSail: Stop Cluster`             | Stop a running cluster                    | -               |
 | `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI (embedded in KSail)  | -               |
+| `KSail: Refresh Clusters`         | Refresh the clusters tree view            | -               |
+| `KSail: Show Output`              | Open the KSail output channel             | -               |
 
 ### Interactive Wizards
 
 The **Init** and **Create** commands feature multi-step wizards with:
 
 - Distribution selection (Vanilla/K3s/Talos/VCluster)
-- Provider selection (Docker/Hetzner)
+- Provider selection (Docker/Hetzner/Omni)
 - Component configuration (CNI, CSI, GitOps engine, etc.)
 - Output path selection for generated files
 

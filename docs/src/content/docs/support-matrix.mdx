@@ -7,17 +7,18 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Distribution × Provider Matrix
 
-| Distribution    | Docker | Hetzner |
-| --------------- | ------ | ------- |
-| Vanilla (Kind)  | ✅     | ❌      |
-| K3s (K3d)       | ✅     | ❌      |
-| Talos           | ✅     | ✅      |
-| VCluster (Vind) | ✅     | ❌      |
+| Distribution    | Docker | Hetzner | Omni |
+| --------------- | ------ | ------- | ---- |
+| Vanilla (Kind)  | ✅     | ❌      | ❌   |
+| K3s (K3d)       | ✅     | ❌      | ❌   |
+| Talos           | ✅     | ✅      | ✅   |
+| VCluster (Vind) | ✅     | ❌      | ❌   |
 
 **Notes:**
 
 - Docker provider requires Docker Desktop or Docker Engine installed locally
 - Hetzner provider requires `HCLOUD_TOKEN` environment variable and Talos ISO in your account
+- Omni provider requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.cluster.omni.endpoint` in your KSail configuration
 - VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
 
 ## Component × Distribution Matrix
@@ -32,6 +33,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 | Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner)        | ❌       |
 | **LoadBalancer**              |
 | LoadBalancer Support          | ✅      | Built-in | ✅ (Docker/Hetzner) | N/A³     |
+| Cloud Provider KIND           | ✅      | ❌       | ❌                  | ❌       |
 | MetalLB                       | ❌      | ❌       | ✅ (Docker)         | ❌       |
 | Hetzner CCM                   | ❌      | ❌       | ✅ (Hetzner)        | ❌       |
 | **GitOps**                    |
@@ -61,7 +63,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 - **VCluster footnotes:**
   - ¹ CNI is managed internally by the vCluster control plane — Vind configures networking within the Docker containers
   - ² CSI is managed internally by vCluster — no separate CSI driver needed
-  - ³ LoadBalancer is managed internally by vCluster
+  - ³ LoadBalancer is delegated to the host cluster by vCluster — `spec.cluster.loadBalancer` has no effect on VCluster and KSail does not install any LoadBalancer controller
   - ⁴ Metrics Server is managed internally by vCluster
 
 ## Secret Management × Provider Matrix
@@ -84,7 +86,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 | Command Group    | Commands Available                                                                                                                                                                              |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ksail cluster`  | `init`, `create`, `update`, `delete`, `start`, `stop`, `info`, `list`, `connect`                                                                                                                |
+| `ksail cluster`  | `init`, `create`, `update`, `delete`, `start`, `stop`, `info`, `list`, `connect`, `backup`, `restore`                                                                                           |
 | `ksail workload` | `apply`, `create`, `delete`, `describe`, `edit`, `exec`, `explain`, `export`, `expose`, `gen`, `get`, `images`, `import`, `install`, `logs`, `push`, `reconcile`, `rollout`, `scale`, `validate`, `wait` |
 | `ksail cipher`   | `encrypt`, `decrypt`, `edit`, `import`                                                                                                                                                          |
 
@@ -120,7 +122,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 - Use `ksail cluster update --dry-run` to preview changes before applying
 - Talos supports the broadest set of in-place updates, including node scaling for both control-plane and worker nodes
 - Kind does not support any structural node changes after creation
-- VCluster (Vind) runs control-plane and optional worker nodes as Docker containers — CNI, CSI, metrics-server, and LoadBalancer are managed by the vCluster Helm chart and are N/A for update operations
+- VCluster (Vind) runs control-plane and optional worker nodes as Docker containers — CNI, CSI, and metrics-server are managed by the vCluster Helm chart and are N/A for update operations; LoadBalancer services are provided by the host cluster, and `spec.cluster.loadBalancer` is ignored for VCluster and will not trigger a cluster update
 - **¹ Load Balancer for Talos**: For Talos, the provider determines which LoadBalancer implementation is used (MetalLB on Docker, Hetzner Cloud Controller Manager on Hetzner). The `spec.cluster.loadBalancer` setting controls whether KSail installs LoadBalancer support. See [FAQ](/faq/#which-distributions-support-loadbalancer-services) for details.
 
 ## Platform Requirements
