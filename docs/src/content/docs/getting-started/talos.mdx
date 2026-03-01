@@ -19,22 +19,7 @@ Talos Linux is fundamentally different from traditional Linux distributions:
 
 ### When to Use Talos
 
-Talos is ideal for:
-
-- **Security-focused environments:** Compliance requirements, production workloads, or regulated industries
-- **Production Kubernetes:** Reduced operational overhead with immutable infrastructure
-- **GitOps-first teams:** All configuration as code with no manual SSH access
-- **Multi-cloud deployments:** Consistent experience across local Docker and cloud providers
-- **Learning immutable infrastructure:** Understand modern infrastructure patterns
-
-### When NOT to Use Talos
-
-Consider alternatives if you need:
-
-- **Shell access for debugging:** Talos has no shell—use kubectl and Talos API instead
-- **Traditional Linux tools:** No apt/yum, no traditional system utilities
-- **Quick prototyping:** Vanilla (Kind) or K3s are faster for rapid iteration
-- **Windows or macOS nodes:** Talos is Linux-only
+Talos is ideal for security-focused production workloads, GitOps workflows, and multi-cloud deployments requiring immutable infrastructure. However, it's not suitable for quick prototyping (use Vanilla or K3s instead), scenarios requiring shell access or traditional Linux tools, or non-Linux environments.
 
 ## Quick Start
 
@@ -333,127 +318,21 @@ Consider alternatives if you need:
 
 ## Use Cases
 
-### Immutable Infrastructure
+Talos excels at **immutable infrastructure** where all changes happen via declarative configuration patches stored in version control—making configuration drift impossible. It's particularly valuable for **security-focused production** deployments where no SSH access, API-driven operations, and a minimal attack surface are requirements (ideal for compliance-regulated workloads with GitOps tooling like Flux or ArgoCD).
 
-Talos enforces immutability at the OS level—no runtime modifications possible.
+For **multi-environment consistency**, use the same Talos distribution from local Docker development through production Hetzner Cloud deployments—configuration patches are portable and behavior is identical across providers, eliminating "works on my machine" issues.
 
-**Scenario:** You need to change a Kubernetes component configuration.
-
-**With Talos:**
-1. Update the configuration patch in `talos/` directory
-2. Run `ksail cluster update` to apply changes
-3. Talos reboots nodes with the new configuration atomically
-
-**Benefits:**
-- Configuration drift is impossible
-- All changes are auditable and versioned
-- Rollback is simple (revert patch and update)
-
-**Example:** Enable audit logging:
-
-````yaml
-# talos/controlplane.patch.yaml
-machine:
-  features:
-    kubernetesTalosAPIAccess:
-      enabled: true
-      allowedRoles:
-        - os:admin
-      allowedKubernetesNamespaces:
-        - kube-system
-
-cluster:
-  apiServer:
-    auditPolicy:
-      apiVersion: audit.k8s.io/v1
-      kind: Policy
-      rules:
-        - level: Metadata
-````
+**Common operations via Talos API:**
 
 ```bash
-ksail cluster update
-```
-
-### Security-Focused Production
-
-Talos reduces attack surface by eliminating unnecessary components.
-
-**Scenario:** Run a production Kubernetes cluster for a compliance-regulated application.
-
-**Why Talos:**
-- No SSH access reduces attack vectors
-- Immutable OS prevents persistent malware
-- API-driven configuration ensures audit trail
-- Automatic security updates via Talos releases
-
-**Best practices:**
-- Use Hetzner provider for production (or other cloud providers in future)
-- Enable network policies with Cilium CNI
-- Use GitOps (Flux or ArgoCD) for workload management
-- Store Talos configs in version control (encrypted with SOPS)
-
-**Example initialization:**
-
-```bash
-ksail cluster init \
-  --name secure-prod \
-  --distribution Talos \
-  --provider Hetzner \
-  --cni Cilium \
-  --gitops-engine Flux \
-  --load-balancer Enabled
-```
-
-### Multi-Environment Consistency
-
-Use the same distribution across development and production.
-
-**Scenario:** Develop locally, deploy to Hetzner Cloud—same Talos configuration.
-
-**Setup:**
-
-**Development (Docker):**
-```bash
-ksail cluster init --name talos-dev --distribution Talos --provider Docker
-ksail cluster create
-```
-
-**Production (Hetzner):**
-```bash
-export HCLOUD_TOKEN=your-token
-ksail cluster init --name talos-prod --distribution Talos --provider Hetzner
-ksail cluster create
-```
-
-**Benefits:**
-- Identical Kubernetes behavior across environments
-- Configuration patches portable between providers
-- Test production configurations locally
-- Reduced "works on my machine" issues
-
-### API-Driven Operations
-
-Interact with Talos nodes programmatically using the Talos API.
-
-**Example operations:**
-
-```bash
-# View machine configuration (requires talosconfig)
-talosctl -n <node-ip> get machineconfig
-
-# Check Talos version
-talosctl -n <node-ip> version
-
-# View system logs
-talosctl -n <node-ip> logs
-
-# Upgrade Talos (without cluster recreation)
+talosctl -n <node-ip> get machineconfig   # View configuration
+talosctl -n <node-ip> version             # Check Talos version
+talosctl -n <node-ip> logs                # System logs
 talosctl -n <node-ip> upgrade --image ghcr.io/siderolabs/installer:v1.6.0
 ```
 
 > [!NOTE]
-> The `talosconfig` file is written to the configured Talos config path during cluster creation (by default `~/.talos/config`), not the project directory. To use a project-local file instead, set `spec.cluster.talos.config` in your `ksail.yaml` to the desired path.
+> The `talosconfig` file is written to `~/.talos/config` by default. Set `spec.cluster.talos.config` in `ksail.yaml` for a custom path.
 
 ## Architecture
 
@@ -582,147 +461,37 @@ graph TB
 
 ### Cluster Creation Fails
 
-**Symptom:** `ksail cluster create` hangs or fails.
-
-**Solutions:**
-
-1. **Check Docker (for Docker provider):**
-   ```bash
-   docker ps  # Should list containers
-   docker network ls  # Should show networks
-   ```
-
-2. **Check Hetzner token (for Hetzner provider):**
-   ```bash
-   echo $HCLOUD_TOKEN  # Should output your token
-   ```
-
-3. **View available options and flags:**
-   ```bash
-   ksail cluster create --help
-   ```
-
-4. **Clean up and retry:**
-   ```bash
-   ksail cluster delete
-   ksail cluster create
-   ```
+Check Docker status (`docker ps`, `docker network ls`), verify `HCLOUD_TOKEN` for Hetzner, or try cleaning up and retrying with `ksail cluster delete && ksail cluster create`.
 
 ### Nodes Not Ready
 
-**Symptom:** `kubectl get nodes` shows nodes in `NotReady` state.
-
-**Solutions:**
-
-1. **Check CNI installation:**
-   ```bash
-   kubectl get pods -n kube-system | grep cilium
-   # or
-   kubectl get pods -n kube-system | grep calico
-   ```
-
-   If CNI pods are not running, reinstall:
-   ```bash
-   ksail cluster update  # Reinstalls CNI
-   ```
-
-2. **Check Talos node status:**
-   ```bash
-   talosctl -n <node-ip> get members
-   talosctl -n <node-ip> health
-   ```
-
-3. **View kubelet logs:**
-   ```bash
-   talosctl -n <node-ip> logs kubelet
-   ```
+Check CNI pods are running (`kubectl get pods -n kube-system | grep cilium`), verify Talos health (`talosctl -n <node-ip> health`), or reinstall CNI with `ksail cluster update`.
 
 ### LoadBalancer Not Working (Docker)
 
-**Symptom:** LoadBalancer service stuck in `Pending` state on Talos × Docker.
-
-**Solutions:**
-
-1. **Verify MetalLB is enabled:**
-   ```bash
-   grep -A 2 "loadBalancer" ksail.yaml
-   # Should show: loadBalancer: Enabled
-   ```
-
-2. **Check MetalLB pods:**
-   ```bash
-   kubectl get pods -n metallb-system
-   ```
-
-3. **Verify IP pool:**
-   ```bash
-   kubectl get ipaddresspools -n metallb-system
-   ```
-
-   Default pool should be `172.18.255.200-172.18.255.250`.
-
-4. **Re-enable LoadBalancer:**
-   ```bash
-   # Edit ksail.yaml and set loadBalancer: Enabled
-   ksail cluster update
-   ```
+Verify MetalLB is enabled in `ksail.yaml` (`loadBalancer: Enabled`), check MetalLB pods (`kubectl get pods -n metallb-system`), and verify IP pool exists (`kubectl get ipaddresspools -n metallb-system`).
 
 ### Cannot Access Talos API
 
-**Symptom:** `talosctl` commands fail with connection errors.
-
-**Solutions:**
-
-1. **Check talosconfig exists:**
-   ```bash
-   ls -la ~/.talos/config
-   ```
-
-2. **Verify node IPs:**
-   ```bash
-   kubectl get nodes -o wide
-   ```
-
-3. **Use explicit node IP:**
-   ```bash
-   talosctl -n <node-ip> --talosconfig ~/.talos/config get members
-   ```
-
-4. **Regenerate talosconfig:**
-   ```bash
-   ksail cluster delete
-   ksail cluster create  # Recreates talosconfig
-   ```
+Check `~/.talos/config` exists, verify node IPs with `kubectl get nodes -o wide`, and use explicit node IP with `talosctl -n <node-ip> --talosconfig ~/.talos/config get members`.
 
 ## Advanced Topics
 
 ### Custom Node Counts
 
-Adjust the number of control plane and worker nodes:
+Adjust control plane and worker nodes in `ksail.yaml`:
 
-**ksail.yaml:**
 ```yaml
 spec:
   cluster:
-    distribution: Talos
     talos:
-      controlPlanes: 3  # 3 control plane nodes (HA)
-      workers: 5        # 5 worker nodes
+      controlPlanes: 3  # HA setup
+      workers: 5
 ```
-
-```bash
-ksail cluster create
-```
-
-### Custom Talos Version
-
-KSail currently uses a default Talos image/version that is tested with the corresponding KSail release.
-Explicit Talos version pinning via `ksail.yaml` is not yet supported; if you need to run a different
-Talos version, use Talos-specific configuration and tooling outside of KSail's cluster spec.
 
 ### Persistent Storage (Hetzner)
 
-Hetzner CSI driver provides persistent volumes:
+Use Hetzner CSI driver for cloud volumes:
 
 ```yaml
 apiVersion: v1
@@ -730,54 +499,20 @@ kind: PersistentVolumeClaim
 metadata:
   name: data-pvc
 spec:
-  accessModes:
-    - ReadWriteOnce
+  accessModes: [ReadWriteOnce]
+  storageClassName: hcloud-volumes
   resources:
     requests:
       storage: 10Gi
-  storageClassName: hcloud-volumes
 ```
-
-```bash
-kubectl apply -f pvc.yaml
-```
-
-Hetzner will provision a real cloud volume attached to your nodes.
 
 ### Talos Upgrades
 
-Upgrade Talos without recreating the cluster:
+Upgrade without cluster recreation: `talosctl -n <node-ip> upgrade --image ghcr.io/siderolabs/installer:v1.6.0`. See [Talos upgrade docs](https://www.talos.dev/latest/talos-guides/upgrading-talos/) for coordination details.
 
-```bash
-# Upgrade to Talos v1.6.0
-talosctl -n <node-ip> upgrade --image ghcr.io/siderolabs/installer:v1.6.0
+### GitOps Integration
 
-# Check upgrade status
-talosctl -n <node-ip> get machineconfig
-```
-
-> [!NOTE]
-> Talos upgrades require coordination across nodes. See [Talos upgrade documentation](https://www.talos.dev/latest/talos-guides/upgrading-talos/) for details.
-
-### GitOps with Flux/ArgoCD
-
-Enable GitOps for declarative workload management:
-
-```bash
-ksail cluster init \
-  --name talos-gitops \
-  --distribution Talos \
-  --gitops-engine Flux \
-  --local-registry localhost:5050
-```
-
-```bash
-ksail cluster create
-ksail workload push      # Package manifests as OCI artifact
-ksail workload reconcile # Trigger Flux sync
-```
-
-See [GitOps Workflows](/features/#gitops-workflows) for details.
+Enable Flux or ArgoCD for declarative workload management—see [GitOps Workflows](/features/#gitops-workflows).
 
 ## Next Steps
 
