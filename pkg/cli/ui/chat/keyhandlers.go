@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -341,9 +342,12 @@ func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 	// Notify the Copilot CLI server of the mode change so it can enforce
 	// mode-specific behavior (e.g., blocking tools in plan mode).
 	if m.session != nil {
-		_, _ = m.session.RPC.Mode.Set(m.ctx, &rpc.SessionModeSetParams{
+		_, err := m.session.RPC.Mode.Set(m.ctx, &rpc.SessionModeSetParams{
 			Mode: m.chatMode.ToSDKMode(),
 		})
+		if err != nil {
+			m.err = fmt.Errorf("failed to set mode: %w", err)
+		}
 	}
 
 	m.updateViewportContent()
@@ -540,8 +544,8 @@ func (m *Model) handleSteerPrompt() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleDeletePendingPrompt removes the last queued prompt if any exist;
-// if there are no queued prompts, it removes the last steering prompt.
+// handleDeletePendingPrompt removes the most recently added pending prompt,
+// regardless of whether it is a queued or steering prompt.
 func (m *Model) handleDeletePendingPrompt() (tea.Model, tea.Cmd) {
 	if !m.hasPendingPrompts() {
 		return m, nil

@@ -10,7 +10,8 @@ import (
 )
 
 // newTestParams returns minimal Params for testing queue behavior.
-// Uses a mock session via copilot.Session{} zero value.
+// Uses a zero-value copilot.Session pointer; this is safe because the tests
+// only exercise view/queue logic and never invoke session RPC methods.
 func newTestParams() chat.Params {
 	return chat.Params{
 		Session:       &copilot.Session{},

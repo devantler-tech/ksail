@@ -292,10 +292,10 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 	if prompt.model != selectedModel {
 		m.err = nil // Clear stale errors before model switch
 
-		mdl, cmd := m.switchModel(prompt.model)
+		resultModel, resultCmd := m.switchModel(prompt.model)
 		if m.err != nil {
 			// Model switch failed - leave prompt in queue for retry
-			return mdl, cmd
+			return resultModel, resultCmd
 		}
 	}
 
@@ -305,10 +305,10 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 	if prompt.reasoningEffort != currentEffort && m.sessionConfig != nil {
 		m.err = nil // Clear stale errors before effort switch
 
-		mdl, cmd := m.switchReasoningEffort(prompt.reasoningEffort)
+		resultModel, resultCmd := m.switchReasoningEffort(prompt.reasoningEffort)
 		if m.err != nil {
 			// Reasoning effort switch failed - leave prompt in queue for retry
-			return mdl, cmd
+			return resultModel, resultCmd
 		}
 	}
 
