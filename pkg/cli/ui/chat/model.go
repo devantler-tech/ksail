@@ -197,6 +197,16 @@ type permissionResponse struct {
 	allowed  bool
 }
 
+// pendingPrompt represents a prompt that has been queued but not yet sent.
+// It captures the full state at the time of queuing so that mode changes
+// after queuing don't affect the prompt's execution.
+type pendingPrompt struct {
+	content         string   // the prompt text
+	chatMode        ChatMode // agent/plan/ask mode when queued
+	model           string   // model ID when queued
+	reasoningEffort string   // reasoning effort when queued (if applicable)
+}
+
 // Model is the Bubbletea model for the chat TUI.
 type Model struct {
 	// Components
@@ -306,6 +316,10 @@ type Model struct {
 	yoloMode    bool         // true = auto-approve, false = prompt for confirmation
 	yoloModeRef *YoloModeRef // shared reference for tool handlers to check YOLO state
 
+	// Prompt queuing and steering
+	queuedPrompts   []pendingPrompt // FIFO queue for prompts to process after current turn
+	steeringPrompts []pendingPrompt // steering prompts to inject when session becomes idle
+
 	// Channel for async streaming events from Copilot
 	eventChan chan tea.Msg
 }
@@ -376,6 +390,8 @@ func NewModel(params Params) *Model {
 		chatMode:         AgentMode,          // Default to agent mode
 		chatModeRef:      params.ChatModeRef, // Store reference for tool handlers
 		yoloModeRef:      params.YoloModeRef, // Store reference for YOLO mode
+		queuedPrompts:    make([]pendingPrompt, 0),
+		steeringPrompts:  make([]pendingPrompt, 0),
 	}
 }
 
@@ -805,4 +821,102 @@ func (m *Model) hasRunningTools() bool {
 	}
 
 	return false
+}
+
+// addQueuedPrompt adds a new queued prompt with current state captured.
+func (m *Model) addQueuedPrompt(content string) {
+	m.queuedPrompts = append(m.queuedPrompts, pendingPrompt{
+		content:         content,
+		chatMode:        m.chatMode,
+		model:           m.getSelectedModel(),
+		reasoningEffort: m.getReasoningEffort(),
+	})
+}
+
+// addSteeringPrompt adds a new steering prompt with current state captured.
+func (m *Model) addSteeringPrompt(content string) {
+	m.steeringPrompts = append(m.steeringPrompts, pendingPrompt{
+		content:         content,
+		chatMode:        m.chatMode,
+		model:           m.getSelectedModel(),
+		reasoningEffort: m.getReasoningEffort(),
+	})
+}
+
+// getSelectedModel returns the user-selected model (from sessionConfig), not the
+// server-resolved model. This preserves the user's intent (including "auto" mode)
+// even when the server has resolved auto to a specific model.
+func (m *Model) getSelectedModel() string {
+	if m.sessionConfig != nil {
+		return m.sessionConfig.Model
+	}
+
+	return m.currentModel
+}
+
+// getReasoningEffort returns the current reasoning effort setting.
+func (m *Model) getReasoningEffort() string {
+	if m.sessionConfig == nil || m.sessionConfig.ReasoningEffort == "" {
+		return ""
+	}
+
+	return m.sessionConfig.ReasoningEffort
+}
+
+// hasPendingPrompts returns true if there are any queued or steering prompts.
+func (m *Model) hasPendingPrompts() bool {
+	return len(m.queuedPrompts) > 0 || len(m.steeringPrompts) > 0
+}
+
+// pendingPromptCount returns the total number of pending prompts.
+func (m *Model) pendingPromptCount() int {
+	return len(m.queuedPrompts) + len(m.steeringPrompts)
+}
+
+// deleteLastPendingPrompt removes the most recently added queued prompt.
+// If there are no queued prompts, it removes the most recently added steering prompt instead.
+// Returns true if a prompt was deleted.
+func (m *Model) deleteLastPendingPrompt() bool {
+	if len(m.queuedPrompts) > 0 {
+		m.queuedPrompts = m.queuedPrompts[:len(m.queuedPrompts)-1]
+
+		return true
+	}
+
+	if len(m.steeringPrompts) > 0 {
+		m.steeringPrompts = m.steeringPrompts[:len(m.steeringPrompts)-1]
+
+		return true
+	}
+
+	return false
+}
+
+// peekNextPendingPrompt returns the next pending prompt without removing it.
+// Steering prompts are checked first, followed by queued prompts.
+// Returns nil if no prompts are pending.
+func (m *Model) peekNextPendingPrompt() *pendingPrompt {
+	if len(m.steeringPrompts) > 0 {
+		return &m.steeringPrompts[0]
+	}
+
+	if len(m.queuedPrompts) > 0 {
+		return &m.queuedPrompts[0]
+	}
+
+	return nil
+}
+
+// dropNextPendingPrompt removes the next pending prompt from the queue.
+// Steering prompts are checked first, followed by queued prompts.
+func (m *Model) dropNextPendingPrompt() {
+	if len(m.steeringPrompts) > 0 {
+		m.steeringPrompts = m.steeringPrompts[1:]
+
+		return
+	}
+
+	if len(m.queuedPrompts) > 0 {
+		m.queuedPrompts = m.queuedPrompts[1:]
+	}
 }

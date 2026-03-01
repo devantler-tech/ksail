@@ -262,7 +262,84 @@ func (m *Model) tryFinalizeResponse() (tea.Model, tea.Cmd) {
 	// Auto-save session after each completed turn
 	_ = m.saveCurrentSession()
 
+	// Check for pending prompts and process them automatically
+	if m.hasPendingPrompts() {
+		return m.processNextPendingPrompt()
+	}
+
 	return m, nil
+}
+
+// processNextPendingPrompt processes the next pending prompt in the queue.
+// Steering prompts are processed first, followed by queued prompts in FIFO order.
+// The prompt is only removed from the queue after successful setup to avoid data loss.
+func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
+	prompt := m.peekNextPendingPrompt()
+	if prompt == nil {
+		return m, nil
+	}
+
+	// Restore the prompt's captured state
+	m.chatMode = prompt.chatMode
+
+	if m.chatModeRef != nil {
+		m.chatModeRef.SetMode(prompt.chatMode)
+	}
+
+	// Switch model with session recreation if needed.
+	// Compare against user-selected model (sessionConfig.Model), not server-resolved.
+	selectedModel := m.getSelectedModel()
+	if prompt.model != selectedModel {
+		m.err = nil // Clear stale errors before model switch
+
+		mdl, cmd := m.switchModel(prompt.model)
+		if m.err != nil {
+			// Model switch failed - leave prompt in queue for retry
+			return mdl, cmd
+		}
+	}
+
+	// Restore reasoning effort with session recreation if needed.
+	// Reasoning effort changes only take effect after recreating the session.
+	currentEffort := m.getReasoningEffort()
+	if prompt.reasoningEffort != currentEffort && m.sessionConfig != nil {
+		m.err = nil // Clear stale errors before effort switch
+
+		mdl, cmd := m.switchReasoningEffort(prompt.reasoningEffort)
+		if m.err != nil {
+			// Reasoning effort switch failed - leave prompt in queue for retry
+			return mdl, cmd
+		}
+	}
+
+	// Setup succeeded - now remove the prompt from the queue
+	m.dropNextPendingPrompt()
+
+	// Prepare new turn state
+	m.prepareForNewTurn()
+
+	// Add to prompt history for Up/Down arrow recall
+	m.addToPromptHistory(prompt.content)
+
+	// Add user message to history
+	m.messages = append(m.messages, message{
+		role:     roleUser,
+		content:  prompt.content,
+		chatMode: prompt.chatMode,
+	})
+
+	// Add empty assistant message for streaming
+	m.messages = append(m.messages, message{
+		role:        roleAssistant,
+		content:     "",
+		isStreaming: true,
+	})
+
+	// Update viewport to show the new messages
+	m.updateViewportContent()
+
+	// Send the prompt and start listening for events
+	return m, tea.Batch(m.spinner.Tick, m.streamResponseCmd(prompt.content), m.waitForEvent())
 }
 
 // handleTurnEnd handles assistant turn end events (AssistantTurnEnd).
@@ -314,6 +391,8 @@ func (m *Model) handleAbort() (tea.Model, tea.Cmd) {
 
 	m.updateViewportContent()
 
+	// Don't auto-process pending prompts after abort.
+	// Pending prompts, if any, remain queued and require explicit user action to process.
 	return m, nil
 }
 
@@ -348,7 +427,8 @@ func (m *Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
 
 	m.updateViewportContent()
 
-	// Don't wait for more events - response is complete (with error)
+	// Don't wait for more events - response is complete (with error).
+	// Pending prompts, if any, remain queued and require explicit user action to process.
 	return m, nil
 }
 

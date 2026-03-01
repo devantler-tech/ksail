@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -99,6 +100,9 @@ func (m *Model) renderHelpOverlay() string {
 func (m *Model) helpOverlayParts() []string {
 	return []string{
 		m.styles.helpKey.Render(enterSymbol) + " send",
+		m.styles.helpKey.Render("^Q") + " queue",
+		m.styles.helpKey.Render("^S") + " steer",
+		m.styles.helpKey.Render("^D") + " delete pending",
 		m.styles.helpKey.Render("Alt+"+enterSymbol) + " newline",
 		m.styles.helpKey.Render(keyArrows) + " history",
 		m.styles.helpKey.Render(keyPageNav) + " scroll",
@@ -313,6 +317,17 @@ func (m *Model) getSessionPickerHelpParts() []string {
 func (m *Model) getDefaultHelpParts() []string {
 	parts := []string{
 		m.styles.helpKey.Render(enterSymbol) + " send",
+	}
+
+	// Add queuing/steering hints
+	parts = append(parts, m.styles.helpKey.Render("^Q")+" queue")
+	parts = append(parts, m.styles.helpKey.Render("^S")+" steer")
+
+	// Add pending count and delete hint if there are pending prompts
+	if m.hasPendingPrompts() {
+		count := m.pendingPromptCount()
+		parts = append(parts, fmt.Sprintf("(%d pending)", count))
+		parts = append(parts, m.styles.helpKey.Render("^D")+" delete")
 	}
 
 	// Conditionally add copy hint

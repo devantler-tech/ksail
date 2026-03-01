@@ -23,19 +23,23 @@ const (
 
 // updateViewportContent updates the viewport with rendered message content.
 func (m *Model) updateViewportContent() {
-	if len(m.messages) == 0 {
-		welcomeMsg := "  " + m.theme.WelcomeMessage + "\n"
-		m.viewport.SetContent(m.styles.status.Render(welcomeMsg))
-
-		return
-	}
-
 	wrapWidth := m.calculateWrapWidth()
 
 	var builder strings.Builder
 
-	for _, msg := range m.messages {
-		m.renderMessage(&builder, &msg, wrapWidth)
+	// Render conversation messages
+	if len(m.messages) == 0 {
+		welcomeMsg := "  " + m.theme.WelcomeMessage + "\n"
+		builder.WriteString(m.styles.status.Render(welcomeMsg))
+	} else {
+		for _, msg := range m.messages {
+			m.renderMessage(&builder, &msg, wrapWidth)
+		}
+	}
+
+	// Render pending prompts section
+	if m.hasPendingPrompts() {
+		m.renderPendingPrompts(&builder, wrapWidth)
 	}
 
 	m.viewport.SetContent(builder.String())
@@ -47,9 +51,10 @@ func (m *Model) updateViewportContent() {
 
 // calculateWrapWidth calculates the content width for text wrapping.
 func (m *Model) calculateWrapWidth() uint {
+	// wrapWidth is guaranteed non-negative by max with minWrapWidth (20).
 	wrapWidth := max(m.viewport.Width-wrapPadding, minWrapWidth)
 
-	return uint(wrapWidth) //nolint:gosec // wrapWidth is guaranteed >= minWrapWidth
+	return uint(wrapWidth) //nolint:gosec
 }
 
 // renderMessage renders a single message to the builder.
@@ -363,4 +368,55 @@ func (m *Model) truncateLine(text string, maxLen int) string {
 	}
 
 	return firstLine
+}
+
+// renderPendingPrompts renders the pending prompts section.
+func (m *Model) renderPendingPrompts(builder *strings.Builder, _ uint) {
+	builder.WriteString("\n")
+	builder.WriteString(m.styles.status.Render("─── Pending Prompts ───"))
+	builder.WriteString("\n")
+
+	// Render steering prompts first (higher priority)
+	for i := range m.steeringPrompts {
+		m.renderPendingPrompt(builder, &m.steeringPrompts[i], true, 0)
+	}
+
+	// Render queued prompts in FIFO order with position numbers
+	for i := range m.queuedPrompts {
+		m.renderPendingPrompt(builder, &m.queuedPrompts[i], false, i+1)
+	}
+}
+
+// renderPendingPrompt renders a single pending prompt.
+func (m *Model) renderPendingPrompt(
+	builder *strings.Builder,
+	prompt *pendingPrompt,
+	isSteering bool,
+	position int,
+) {
+	builder.WriteString("\n")
+
+	// Build prompt label with type indicator and mode icon
+	var label string
+	if isSteering {
+		label = "  [S] [STEERING] " + prompt.chatMode.Icon()
+	} else {
+		label = fmt.Sprintf("  [Q] [QUEUED #%d] %s", position, prompt.chatMode.Icon())
+	}
+
+	// Render label with dedicated pending prompt styling
+	if isSteering {
+		builder.WriteString(m.styles.pendingSteering.Render(label))
+	} else {
+		builder.WriteString(m.styles.pendingQueued.Render(label))
+	}
+
+	builder.WriteString("\n")
+
+	// Render prompt content (first line truncated)
+	truncated := m.truncateLine(prompt.content, firstLineTruncateLen)
+
+	builder.WriteString("    ")
+	builder.WriteString(truncated)
+	builder.WriteString("\n")
 }

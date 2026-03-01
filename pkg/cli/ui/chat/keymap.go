@@ -14,12 +14,15 @@ type KeyMap struct {
 	PageDown key.Binding
 
 	// Actions
-	Send       key.Binding
-	NewLine    key.Binding
-	Cancel     key.Binding
-	Quit       key.Binding
-	ToggleMode key.Binding
-	ToggleHelp key.Binding
+	Send          key.Binding
+	NewLine       key.Binding
+	Queue         key.Binding
+	Steer         key.Binding
+	DeletePending key.Binding
+	Cancel        key.Binding
+	Quit          key.Binding
+	ToggleMode    key.Binding
+	ToggleHelp    key.Binding
 
 	// Tools
 	ExpandTools key.Binding
@@ -65,6 +68,8 @@ func DefaultKeyMap() KeyMap {
 func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Send,
+		k.Queue,
+		k.Steer,
 		k.Up,
 		k.PageUp,
 		k.ToggleMode,
@@ -83,6 +88,9 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		// Column 1: Navigation
 		{
 			k.Send,
+			k.Queue,
+			k.Steer,
+			k.DeletePending,
 			k.NewLine,
 			k.Up,
 			k.Down,
@@ -150,6 +158,18 @@ func setActionKeys(keyMap *KeyMap) {
 	keyMap.NewLine = key.NewBinding(
 		key.WithKeys("alt+enter"),
 		key.WithHelp("Alt+"+enterSymbol, "new line"),
+	)
+	keyMap.Queue = key.NewBinding(
+		key.WithKeys("ctrl+q"),
+		key.WithHelp("Ctrl+Q", "queue prompt"),
+	)
+	keyMap.Steer = key.NewBinding(
+		key.WithKeys("ctrl+s"),
+		key.WithHelp("Ctrl+S", "steer prompt"),
+	)
+	keyMap.DeletePending = key.NewBinding(
+		key.WithKeys("ctrl+d"),
+		key.WithHelp("Ctrl+D", "delete pending prompt"),
 	)
 	keyMap.Cancel = key.NewBinding(
 		key.WithKeys("esc"),
