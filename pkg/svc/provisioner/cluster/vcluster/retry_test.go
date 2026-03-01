@@ -188,10 +188,10 @@ func TestCreateWithRetry_TransientErrorExhaustsAttempts(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to create vCluster after 3 attempts")
+	require.ErrorContains(t, err, "failed to create vCluster after 5 attempts")
 	require.ErrorIs(t, err, errTransient)
-	assert.Equal(t, 3, createCalls, "create should be called maxAttempts times")
-	assert.Equal(t, 2, cleanupCalls, "cleanup should be called before retries 2 and 3")
+	assert.Equal(t, 5, createCalls, "create should be called maxAttempts times")
+	assert.Equal(t, 4, cleanupCalls, "cleanup should be called before retries 2 through 5")
 }
 
 func TestCreateWithRetry_NonTransientErrorFailsImmediately(t *testing.T) {

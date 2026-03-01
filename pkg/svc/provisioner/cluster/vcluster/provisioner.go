@@ -27,8 +27,9 @@ const defaultVClusterName = "vcluster-default"
 
 // createMaxAttempts is the number of times to retry CreateDocker for transient
 // startup failures. Exit status 22 (EINVAL) and similar infrastructure errors
-// are often transient on CI runners (GitHub Actions).
-const createMaxAttempts = 3
+// are often transient on CI runners (GitHub Actions). Five attempts handles
+// persistent-but-transient runner states where 3 attempts are insufficient.
+const createMaxAttempts = 5
 
 // createRetryDelay is the delay between CreateDocker retry attempts, giving
 // Docker and the runner time to recover from transient issues.
@@ -39,6 +40,14 @@ const createRetryDelay = 5 * time.Second
 // which is too short for CI runners. Retrying gives an effective timeout of
 // ~9 minutes (3 attempts x 3 minutes).
 const connectMaxAttempts = 3
+
+// networkRemovalTimeout is how long to wait for Docker network cleanup between
+// retry attempts. On CI runners, the network may have lingering active endpoints
+// that prevent immediate removal.
+const networkRemovalTimeout = 30 * time.Second
+
+// networkRemovalInterval is the polling interval for Docker network removal checks.
+const networkRemovalInterval = 2 * time.Second
 
 // controlPlaneContainerPrefix is the Docker container name prefix used by the
 // vCluster SDK for control plane containers.
@@ -291,9 +300,11 @@ func isTransientCreateError(err error) bool {
 }
 
 // cleanupFailedCreate attempts to delete a partially-created vCluster so that
-// the next CreateDocker call starts from a clean state. Errors are logged but
-// not propagated because the subsequent retry is expected to handle any
-// remaining state.
+// the next CreateDocker call starts from a clean state. After deletion, it
+// verifies the Docker network is fully removed — lingering networks with active
+// endpoints can cause subsequent attempts to inherit broken state. Errors are
+// logged but not propagated because the subsequent retry is expected to handle
+// any remaining state.
 func cleanupFailedCreate(
 	ctx context.Context,
 	globalFlags *flags.GlobalFlags,
@@ -309,6 +320,75 @@ func cleanupFailedCreate(
 	err := cli.DeleteDocker(ctx, nil, deleteOpts, globalFlags, clusterName, logger)
 	if err != nil {
 		logger.Warnf("cleanup of failed vCluster %q before retry: %v", clusterName, err)
+	}
+
+	waitForNetworkRemoval(ctx, clusterName, logger)
+}
+
+// waitForNetworkRemoval waits for the Docker network associated with the
+// vCluster to be fully removed. The vCluster SDK creates a network named
+// "vcluster.<name>" which may linger with active endpoints even after
+// DeleteDocker returns success (a known condition on CI runners).
+func waitForNetworkRemoval(
+	ctx context.Context,
+	clusterName string,
+	logger loftlog.Logger,
+) {
+	networkName := vclusterNetworkPrefix + clusterName
+	deadline := time.Now().Add(networkRemovalTimeout)
+
+	ticker := time.NewTicker(networkRemovalInterval)
+	defer ticker.Stop()
+
+	for time.Now().Before(deadline) {
+		if !dockerNetworkExists(ctx, networkName) {
+			return
+		}
+
+		logger.Infof("Docker network %q still exists, attempting removal...", networkName)
+		removeDockerNetwork(ctx, networkName, logger)
+
+		select {
+		case <-ctx.Done():
+			logger.Warnf("context cancelled while waiting for network %q removal", networkName)
+
+			return
+		case <-ticker.C:
+		}
+	}
+
+	logger.Warnf(
+		"Docker network %q still exists after %v; proceeding with retry",
+		networkName, networkRemovalTimeout,
+	)
+}
+
+// dockerNetworkExists checks whether a Docker network with the given name
+// exists. Returns false if the network is not found or if Docker is unavailable.
+func dockerNetworkExists(ctx context.Context, networkName string) bool {
+	//nolint:gosec // args are internally controlled.
+	cmd := exec.CommandContext(ctx, "docker", "network", "inspect", networkName)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	return cmd.Run() == nil
+}
+
+// removeDockerNetwork attempts to remove a Docker network. Errors are logged
+// but not returned because network removal is best-effort during cleanup.
+func removeDockerNetwork(
+	ctx context.Context,
+	networkName string,
+	logger loftlog.Logger,
+) {
+	//nolint:gosec // args are internally controlled.
+	cmd := exec.CommandContext(ctx, "docker", "network", "rm", networkName)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	err := cmd.Run()
+	if err != nil {
+		logger.Warnf("failed to remove Docker network %q: %v", networkName, err)
 	}
 }
 
