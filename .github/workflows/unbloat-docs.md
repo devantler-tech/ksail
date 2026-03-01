@@ -6,9 +6,6 @@ description: |
   Triggered daily, on /unbloat command, or manually.
 
 on:
-  bots:
-    - "github-merge-queue[bot]"
-
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   slash_command:
