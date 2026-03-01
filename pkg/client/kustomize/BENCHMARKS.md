@@ -9,17 +9,17 @@ The Kustomize client benchmarks measure the performance of `Build` operations ac
 ## Running Benchmarks
 
 ```bash
-# Run all Kustomize client benchmarks
-go test -bench=. -benchmem ./pkg/client/kustomize/...
+# Run all Kustomize client benchmarks (benchmarks only, no tests)
+go test -run=^$ -bench=. -benchmem ./pkg/client/kustomize/...
 
-# Run a specific benchmark
-go test -bench=BenchmarkBuild_SmallKustomization -benchmem ./pkg/client/kustomize/...
+# Run a specific benchmark (benchmarks only, no tests)
+go test -run=^$ -bench=BenchmarkBuild_SmallKustomization -benchmem ./pkg/client/kustomize/...
 
-# Save results for comparison
-go test -bench=. -benchmem ./pkg/client/kustomize/... > baseline.txt
+# Save results for comparison (benchmarks only, no tests)
+go test -run=^$ -bench=. -benchmem ./pkg/client/kustomize/... > baseline.txt
 
-# Compare before/after changes
-go test -bench=. -benchmem ./pkg/client/kustomize/... > new.txt
+# Compare before/after changes (benchmarks only, no tests)
+go test -run=^$ -bench=. -benchmem ./pkg/client/kustomize/... > new.txt
 benchstat baseline.txt new.txt
 ```
 

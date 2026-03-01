@@ -10,16 +10,16 @@ The Helm client benchmarks measure the performance of struct initialization and 
 
 ```bash
 # Run all Helm client benchmarks
-go test -bench=. -benchmem ./pkg/client/helm/...
+go test -run=^$ -bench=. -benchmem ./pkg/client/helm/...
 
 # Run a specific benchmark
-go test -bench='^BenchmarkChartSpec($|/)' -benchmem ./pkg/client/helm/...
+go test -run=^$ -bench='^BenchmarkChartSpec($|/)' -benchmem ./pkg/client/helm/...
 
 # Save results for comparison
-go test -bench=. -benchmem ./pkg/client/helm/... > baseline.txt
+go test -run=^$ -bench=. -benchmem ./pkg/client/helm/... > baseline.txt
 
 # Compare before/after changes
-go test -bench=. -benchmem ./pkg/client/helm/... > new.txt
+go test -run=^$ -bench=. -benchmem ./pkg/client/helm/... > new.txt
 benchstat baseline.txt new.txt
 ```
 
@@ -54,6 +54,8 @@ These benchmarks use a generated mock to measure dispatch overhead without real 
 Baseline results are hardware-, OS-, and Go-version dependent. Generate fresh baselines on your machine using the commands in [Running Benchmarks](#running-benchmarks).
 
 Example baseline (AMD EPYC 7763, Linux, Go 1.26.0):
+
+**Note:** Some struct-initialization benchmarks (e.g. `BenchmarkChartSpec/Basic`, `BenchmarkRepositoryEntry/Basic`) report sub-nanosecond results. At that scale, measurements are dominated by loop/timer overhead and compiler optimizations, so these values are noisy and should not be used for regression comparison. Focus on benchmarks with measurable allocations or higher ns/op values.
 
 ```
 BenchmarkChartSpec/Basic-4                                1000000000      0.3124 ns/op       0 B/op    0 allocs/op
