@@ -102,5 +102,6 @@ type RegistryConfig struct {
 	NetworkName string
 	VolumeName  string
 	Username    string // Optional: username for upstream registry authentication (supports ${ENV_VAR} placeholders)
-	Password    string //nolint:gosec // G117: field name required by API schema
+	// Password is optional and supports ${ENV_VAR} placeholders for upstream registry authentication.
+	Password string //nolint:gosec // G117: field name required by API schema
 }
