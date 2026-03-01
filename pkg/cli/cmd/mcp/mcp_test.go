@@ -35,18 +35,19 @@ func TestNewMCPCmd(t *testing.T) {
 	}
 
 	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
+		currentTest := testCase
+		t.Run(currentTest.name, func(t *testing.T) {
 			t.Parallel()
 
-			cmd := mcpcmd.NewMCPCmd(testCase.runtime)
+			cmd := mcpcmd.NewMCPCmd(currentTest.runtime)
 
 			require.NotNil(t, cmd, "NewMCPCmd should return non-nil command")
-			assert.Equal(t, testCase.expectedUse, cmd.Use, "Use field mismatch")
-			assert.Equal(t, testCase.expectedShort, cmd.Short, "Short field mismatch")
+			assert.Equal(t, currentTest.expectedUse, cmd.Use, "Use field mismatch")
+			assert.Equal(t, currentTest.expectedShort, cmd.Short, "Short field mismatch")
 			assert.NotEmpty(t, cmd.Long, "Long description should not be empty")
 
 			// Verify exclude annotation
-			if testCase.expectedExcludeAnnot {
+			if currentTest.expectedExcludeAnnot {
 				require.NotNil(t, cmd.Annotations, "Annotations should not be nil")
 				val, ok := cmd.Annotations[annotations.AnnotationExclude]
 				assert.True(t, ok, "Exclude annotation should exist")
