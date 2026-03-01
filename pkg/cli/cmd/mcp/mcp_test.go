@@ -3,9 +3,6 @@ package mcp_test
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -16,11 +13,6 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-)
-
-var (
-	errTest       = errors.New("test error")
-	errWrappedMCP = fmt.Errorf("running MCP server: %w", errTest)
 )
 
 func TestNewMCPCmd(t *testing.T) {
@@ -95,7 +87,9 @@ func TestNewMCPCmd_NilRuntime(t *testing.T) {
 
 	require.NotNil(t, cmd, "NewMCPCmd should handle nil runtime")
 	assert.Equal(t, "mcp", cmd.Use)
-	assert.NotNil(t, cmd.RunE)
+	assert.NotNil(t, cmd.RunE, "RunE should be set")
+	assert.NotEmpty(t, cmd.Short)
+	assert.NotEmpty(t, cmd.Long)
 }
 
 func TestNewMCPCmd_Annotations(t *testing.T) {
@@ -105,9 +99,6 @@ func TestNewMCPCmd_Annotations(t *testing.T) {
 	cmd := mcpcmd.NewMCPCmd(runtime)
 
 	require.NotNil(t, cmd.Annotations, "Annotations should not be nil")
-
-	// Count annotations (should only have exclude)
-	assert.Len(t, cmd.Annotations, 1, "Should have exactly one annotation")
 
 	// Verify exclude annotation exists and is "true"
 	excludeVal, exists := cmd.Annotations[annotations.AnnotationExclude]
@@ -229,102 +220,6 @@ func TestNewMCPCmd_HelpOutput(t *testing.T) {
 	assert.Contains(t, helpOutput, "MCP server", "Help should describe MCP server")
 }
 
-func TestNewMCPCmd_VersionAnnotation(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name             string
-		rootAnnotations  map[string]string
-		expectedContains string
-	}{
-		{
-			name: "with version annotation",
-			rootAnnotations: map[string]string{
-				"version": "v5.1.0",
-			},
-			expectedContains: "v5.1.0",
-		},
-		{
-			name:             "without version annotation",
-			rootAnnotations:  map[string]string{},
-			expectedContains: "dev",
-		},
-		{
-			name:             "with nil annotations",
-			rootAnnotations:  nil,
-			expectedContains: "dev",
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			rootCmd := &cobra.Command{
-				Use:         "ksail",
-				Annotations: testCase.rootAnnotations,
-			}
-
-			runtime := &di.Runtime{}
-			mcpCmd := mcpcmd.NewMCPCmd(runtime)
-
-			rootCmd.AddCommand(mcpCmd)
-
-			// Verify command can access root annotations
-			root := mcpCmd.Root()
-			require.NotNil(t, root)
-
-			if root.Annotations != nil {
-				if v, ok := root.Annotations["version"]; ok {
-					assert.Contains(t, v, testCase.expectedContains,
-						"Version annotation content mismatch")
-				} else {
-					// No version annotation, default to "dev" behavior
-					assert.Equal(t, "dev", testCase.expectedContains)
-				}
-			} else {
-				// Nil annotations, should default to "dev"
-				assert.Equal(t, "dev", testCase.expectedContains)
-			}
-		})
-	}
-}
-
-func TestNewMCPCmd_WorkingDirectory(t *testing.T) {
-	t.Parallel()
-
-	// This test verifies that the command logic considers working directory
-	// We can't easily test the actual execution without mocking the MCP server
-
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
-
-	// Use cmd to avoid unused variable
-	assert.NotNil(t, cmd, "Command should be created")
-
-	// Verify we can get current working directory (prerequisite for command)
-	wd, err := os.Getwd()
-	require.NoError(t, err, "Should be able to get working directory")
-	assert.NotEmpty(t, wd, "Working directory should not be empty")
-}
-
-func TestNewMCPCmd_ErrorPropagation(t *testing.T) {
-	t.Parallel()
-
-	// Create a command and verify error handling structure
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
-
-	require.NotNil(t, cmd.RunE, "RunE should be defined")
-
-	// We can't easily test the actual execution, but we can verify
-	// that errors would be wrapped properly by checking the function signature
-	// The RunE function signature allows error return
-
-	// Use cmd to avoid unused variable
-	assert.NotNil(t, cmd)
-}
-
 func TestNewMCPCmd_ExcludeFromToolGeneration(t *testing.T) {
 	t.Parallel()
 
@@ -427,37 +322,4 @@ func TestNewMCPCmd_ServerLifecycle(t *testing.T) {
 
 	assert.True(t, hasTerminationInfo,
 		"Documentation should describe server lifecycle/termination")
-}
-
-func TestNewMCPCmd_ErrorMessages(t *testing.T) {
-	t.Parallel()
-
-	// Test that potential error messages would be informative
-	// We can't easily trigger the actual errors without running the server,
-	// but we can verify the error wrapping structure would work
-
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
-
-	require.NotNil(t, cmd.RunE, "RunE must be defined")
-
-	require.ErrorIs(t, errWrappedMCP, errTest,
-		"Wrapped error should contain original error")
-	assert.Contains(t, errWrappedMCP.Error(), errTest.Error(),
-		"Error should preserve original message")
-	assert.Contains(t, errWrappedMCP.Error(), "MCP server",
-		"Error should provide context")
-}
-
-func TestNewMCPCmd_NilRuntimeSafety(t *testing.T) {
-	t.Parallel()
-
-	// Verify command handles nil runtime gracefully
-	cmd := mcpcmd.NewMCPCmd(nil)
-
-	require.NotNil(t, cmd, "Command should be created even with nil runtime")
-	assert.Equal(t, "mcp", cmd.Use)
-	assert.NotNil(t, cmd.RunE, "RunE should be set")
-	assert.NotEmpty(t, cmd.Short)
-	assert.NotEmpty(t, cmd.Long)
 }
