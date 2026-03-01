@@ -268,8 +268,6 @@ func computeSpecOnlyDiff(
 		ctx.ClusterCfg.Spec.Cluster.Provider,
 	)
 
-	clusterupdate.ApplyGitOpsLocalRegistryDefault(currentSpec)
-
 	// Use component detection when available to get more accurate baseline.
 	componentDetector := buildComponentDetector(cmd, ctx)
 	if componentDetector != nil {
@@ -288,6 +286,10 @@ func computeSpecOnlyDiff(
 			currentSpec.GitOpsEngine = detected.GitOpsEngine
 		}
 	}
+
+	// Apply GitOps local registry default AFTER detection so the detected
+	// GitOps engine value is used to infer the default local registry address.
+	clusterupdate.ApplyGitOpsLocalRegistryDefault(currentSpec)
 
 	diffEngine := specdiff.NewEngine(
 		ctx.ClusterCfg.Spec.Cluster.Distribution,

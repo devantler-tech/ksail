@@ -19,7 +19,7 @@ KSail builds upon established Kubernetes technologies and patterns. This page pr
 
 ## Distributions
 
-Kubernetes distributions package core components with additional tooling for specific use cases. KSail supports four distributions: Vanilla, K3s, Talos, and VCluster. All run on Docker; Talos also supports Hetzner Cloud.
+Kubernetes distributions package core components with additional tooling for specific use cases. KSail supports four distributions: Vanilla, K3s, Talos, and VCluster. All can run on Docker; Talos can also run on Hetzner Cloud and Sidero Omni.
 
 ### Vanilla (Kind)
 
@@ -33,9 +33,9 @@ Vanilla uses [Kind](https://kind.sigs.k8s.io/) to run standard upstream Kubernet
 
 [Talos Linux](https://www.talos.dev/) is a minimal, immutable OS designed for Kubernetes with API-driven configuration and no shell access for enhanced security. See [documentation](https://www.talos.dev/latest/), [configuration reference](https://www.talos.dev/latest/reference/configuration/), and [getting started](https://www.talos.dev/latest/introduction/getting-started/).
 
-### VCluster (Vind)
+### vCluster (Vind)
 
-[vCluster](https://www.vcluster.com/) creates virtual Kubernetes clusters. KSail uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run control plane and optional workers as containers, requiring only Docker. Fast creation with small footprint. See [documentation](https://www.vcluster.com/docs/), [configuration](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/), and [Vind driver](https://github.com/loft-sh/vcluster).
+[vCluster](https://www.vcluster.com/) creates virtual Kubernetes clusters. KSail uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run control plane and optional workers as containers, requiring only Docker. This enables fast creation with a small footprint. See [documentation](https://www.vcluster.com/docs/), [configuration](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/), and [Vind driver](https://github.com/loft-sh/vcluster).
 
 ## Providers
 

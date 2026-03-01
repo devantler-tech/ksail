@@ -166,48 +166,18 @@ func clusterNameFromDistConfig(distCfg *clusterprovisioner.DistributionConfig) s
 		return ""
 	}
 
-	// Extract candidate names from each distribution config.
-	candidates := []string{
-		kindClusterName(distCfg),
-		k3dClusterName(distCfg),
-		talosClusterName(distCfg),
-		vclusterClusterName(distCfg),
-	}
-
-	for _, name := range candidates {
-		if name != "" {
-			return name
-		}
-	}
-
-	return ""
-}
-
-func kindClusterName(distCfg *clusterprovisioner.DistributionConfig) string {
 	if distCfg.Kind != nil {
 		return distCfg.Kind.Name
 	}
 
-	return ""
-}
-
-func k3dClusterName(distCfg *clusterprovisioner.DistributionConfig) string {
 	if distCfg.K3d != nil {
 		return distCfg.K3d.Name
 	}
 
-	return ""
-}
-
-func talosClusterName(distCfg *clusterprovisioner.DistributionConfig) string {
 	if distCfg.Talos != nil {
 		return distCfg.Talos.GetClusterName()
 	}
 
-	return ""
-}
-
-func vclusterClusterName(distCfg *clusterprovisioner.DistributionConfig) string {
 	if distCfg.VCluster != nil {
 		return distCfg.VCluster.Name
 	}

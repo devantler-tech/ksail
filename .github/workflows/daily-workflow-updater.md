@@ -24,7 +24,7 @@ network:
     - github
 
 safe-outputs:
-  noop: false
+  noop: true
   create-pull-request:
     expires: 1d
     labels: [dependencies, automation]
@@ -157,7 +157,7 @@ At this point, only source files should remain changed:
 ### 3.3. Decide what to do
 
 - **If changes exist**: Create a pull request (see below)
-- **If no changes remain**: Exit gracefully — everything is already up to date
+- **If no changes remain**: Call the `noop` safe output with a message (e.g., "All actions and workflow sources are already up to date — no changes needed")
 
 ### 3.4. Create pull request
 
@@ -229,4 +229,5 @@ If there are compilation errors you **cannot fix**, create an issue with:
 - Always check the gh-aw changelog before making manual fixes
 - Test each fix with `gh aw compile --validate` before moving on
 - Include context and reasoning in your PR or issue descriptions
-- If only `.lock.yml` files changed (no source changes), reset them and exit without creating a PR
+- If only `.lock.yml` files changed (no source changes), reset them and call `noop`
+- **You MUST always produce a safe output** — either `noop`, `create_pull_request`, or `create_issue` (the corresponding frontmatter keys are `create-pull-request` and `create-issue`). Never exit without calling one of these

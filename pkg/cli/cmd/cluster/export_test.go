@@ -69,3 +69,23 @@ func ExportValidateTarEntry(header *tar.Header, destDir string) (string, error) 
 func ExportAllLinesContain(output, substr string) bool {
 	return allLinesContain(output, substr)
 }
+
+// ExportDeriveBackupName exports deriveBackupName for testing.
+func ExportDeriveBackupName(inputPath string) string {
+	return deriveBackupName(inputPath)
+}
+
+// ExportAddLabelsToDocument exports addLabelsToDocument for testing.
+func ExportAddLabelsToDocument(doc, backupName, restoreName string) (string, error) {
+	return addLabelsToDocument(doc, backupName, restoreName)
+}
+
+// ExportSplitYAMLDocuments exports splitYAMLDocuments for testing.
+func ExportSplitYAMLDocuments(content string) []string {
+	return splitYAMLDocuments(content)
+}
+
+// ExportInjectRestoreLabels exports injectRestoreLabels for testing.
+func ExportInjectRestoreLabels(filePath, backupName, restoreName string) (string, error) {
+	return injectRestoreLabels(filePath, backupName, restoreName)
+}

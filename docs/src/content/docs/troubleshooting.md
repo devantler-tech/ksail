@@ -27,13 +27,17 @@ docker system prune -f
 
 ### Port Already in Use
 
-If you encounter `Error: Port 5000 is already allocated`, either use a different port with `--local-registry localhost:5050` or kill the process using the port:
+If you encounter `Error: Port 5000 is already allocated`, either configure a different local registry address (for example, `--local-registry localhost:5050`) or kill the process currently using the port:
 
 ```bash
 # macOS/Linux
 lsof -ti:5000 | xargs kill -9
+```
 
-# Windows: netstat -ano | findstr :5000, then kill the process ID
+```powershell
+# Windows: find the PID, then kill it
+netstat -ano | findstr :5000
+taskkill /PID <process-id> /F
 ```
 
 ## GitOps Workflow Issues
@@ -86,6 +90,27 @@ ksail workload get pods -n flux-system
 
 # Verify CRDs are established (should show "True")
 kubectl get crd <crd-name> -o jsonpath='{.status.conditions[?(@.type=="Established")].status}'
+```
+
+### Flux/ArgoCD CrashLoopBackOff After Component Installation
+
+**Symptom:** After installing infrastructure components (MetalLB, Kyverno, cert-manager, etc.), Flux or ArgoCD enters `CrashLoopBackOff` with API timeout errors such as `dial tcp 10.96.0.1:443: i/o timeout`.
+
+**Cause:** Infrastructure components register webhooks and CRDs that can temporarily destabilize API server connectivity. If GitOps engines start installing before the API server has fully recovered, they can fail to reach the Kubernetes API.
+
+**Resolution:** KSail automatically waits for the API server to stabilize between Phase 1 (infrastructure components) and Phase 2 (GitOps engines). It requires 3 consecutive successful API server health checks within a 2-minute timeout before proceeding. No manual action is required in most cases.
+
+If the 2-minute wait expires and you see `API server not stable after infrastructure installation`, your cluster may be under excessive load. Try:
+
+```bash
+# Check node and pod resource pressure
+ksail workload get nodes
+ksail workload get pods -A | grep -v Running
+
+# Disable non-essential components in ksail.yaml (GitOps engine, policy engine, cert-manager, etc.),
+# then recreate the cluster with the updated configuration
+ksail cluster delete
+ksail cluster create
 ```
 
 ### Flux/ArgoCD Not Reconciling
@@ -191,6 +216,27 @@ See the [LoadBalancer Configuration Guide](/configuration/loadbalancer/#troubles
 ### CNI Installation Failed
 
 If pods are stuck in `ContainerCreating` with CNI errors, check CNI pods are running with `ksail workload get pods -n kube-system -l k8s-app=cilium` (or `calico-node` for Calico). If failed, recreate the cluster: `ksail cluster init --cni Cilium && ksail cluster create`
+
+## VCluster Issues
+
+### Transient Startup Failures
+
+**Symptom:** `ksail cluster create` fails with `exit status 22` (EINVAL) or similar D-Bus errors on CI runners.
+
+KSail automatically retries transient VCluster startup failures with up to 3 attempts and a 5-second delay between attempts, cleaning up partial state between retries. If you see log messages like `Retrying vCluster create (attempt 2/3)...`, this is expected behavior — no action is required.
+
+If all retries fail, check Docker resource limits and D-Bus availability on the runner. See the [VCluster Getting Started guide](/getting-started/vcluster/#troubleshooting) for detailed steps.
+
+### kubectl Commands Fail After VCluster Creation
+
+**Symptom:** `kubectl get nodes` returns connection errors immediately after creating a VCluster.
+
+VCluster control planes can take a moment to become fully ready. Wait a few seconds and retry, or check that the kubeconfig context is set correctly:
+
+```bash
+kubectl config current-context
+ksail workload get nodes
+```
 
 ## Hetzner Cloud Issues
 

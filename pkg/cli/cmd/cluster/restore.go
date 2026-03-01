@@ -12,13 +12,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
+	sigsyaml "sigs.k8s.io/yaml"
 )
 
 // ErrInvalidResourcePolicy is returned when an unsupported
@@ -120,19 +123,8 @@ func runRestore(
 	}
 
 	writer := cmd.OutOrStdout()
-	_, _ = fmt.Fprintf(writer, "Starting cluster restore...\n")
-	_, _ = fmt.Fprintf(writer, "   Input: %s\n", flags.inputPath)
-	_, _ = fmt.Fprintf(
-		writer, "   Policy: %s\n", flags.existingResourcePolicy,
-	)
 
-	if flags.dryRun {
-		_, _ = fmt.Fprintf(
-			writer, "   Mode: dry-run (no changes will be applied)\n",
-		)
-	}
-
-	_, _ = fmt.Fprintf(writer, "Extracting backup archive...\n")
+	printRestoreHeader(writer, flags)
 
 	tmpDir, metadata, err := extractBackupArchive(flags.inputPath)
 	if err != nil {
@@ -143,9 +135,15 @@ func runRestore(
 
 	printRestoreMetadata(writer, metadata)
 
+	backupName := deriveBackupName(flags.inputPath)
+	restoreName := fmt.Sprintf("restore-%d", time.Now().UTC().UnixNano())
+
 	_, _ = fmt.Fprintf(writer, "Restoring cluster resources...\n")
 
-	err = restoreResources(ctx, kubeconfigPath, tmpDir, writer, flags)
+	err = restoreResources(
+		ctx, kubeconfigPath, tmpDir, writer, flags,
+		backupName, restoreName,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to restore resources: %w", err)
 	}
@@ -162,6 +160,23 @@ func runRestore(
 	return nil
 }
 
+// printRestoreHeader writes the initial restore status lines to the writer.
+func printRestoreHeader(writer io.Writer, flags *restoreFlags) {
+	_, _ = fmt.Fprintf(writer, "Starting cluster restore...\n")
+	_, _ = fmt.Fprintf(writer, "   Input: %s\n", flags.inputPath)
+	_, _ = fmt.Fprintf(
+		writer, "   Policy: %s\n", flags.existingResourcePolicy,
+	)
+
+	if flags.dryRun {
+		_, _ = fmt.Fprintf(
+			writer, "   Mode: dry-run (no changes will be applied)\n",
+		)
+	}
+
+	_, _ = fmt.Fprintf(writer, "Extracting backup archive...\n")
+}
+
 func printRestoreMetadata(writer io.Writer, metadata *BackupMetadata) {
 	_, _ = fmt.Fprintf(writer, "Backup metadata:\n")
 	_, _ = fmt.Fprintf(writer, "   Version: %s\n", metadata.Version)
@@ -170,9 +185,31 @@ func printRestoreMetadata(writer io.Writer, metadata *BackupMetadata) {
 		metadata.Timestamp.Format("2006-01-02 15:04:05"),
 	)
 	_, _ = fmt.Fprintf(writer, "   Cluster: %s\n", metadata.ClusterName)
+
+	if metadata.Distribution != "" {
+		_, _ = fmt.Fprintf(
+			writer, "   Distribution: %s\n", metadata.Distribution,
+		)
+	}
+
+	if metadata.Provider != "" {
+		_, _ = fmt.Fprintf(
+			writer, "   Provider: %s\n", metadata.Provider,
+		)
+	}
+
 	_, _ = fmt.Fprintf(
 		writer, "   Resources: %d\n", metadata.ResourceCount,
 	)
+}
+
+// deriveBackupName extracts a human-readable backup name from the archive path.
+func deriveBackupName(inputPath string) string {
+	base := filepath.Base(inputPath)
+	name := strings.TrimSuffix(base, ".tar.gz")
+	name = strings.TrimSuffix(name, ".tgz")
+
+	return name
 }
 
 func extractBackupArchive(
@@ -350,49 +387,22 @@ func restoreResources(
 	kubeconfigPath, tmpDir string,
 	writer io.Writer,
 	flags *restoreFlags,
+	backupName, restoreName string,
 ) error {
 	resourcesDir := filepath.Join(tmpDir, "resources")
 
 	var restoreErrors []string
 
 	for _, resourceType := range backupResourceTypes() {
-		resourceDir := filepath.Join(resourcesDir, resourceType)
-
-		_, statErr := os.Stat(resourceDir)
-		if os.IsNotExist(statErr) {
-			continue
-		}
-
-		files, err := filepath.Glob(
-			filepath.Join(resourceDir, "*.yaml"),
+		errs, err := restoreResourceType(
+			ctx, kubeconfigPath, resourcesDir, resourceType,
+			writer, flags, backupName, restoreName,
 		)
 		if err != nil {
-			return fmt.Errorf(
-				"failed to list files for %s: %w", resourceType, err,
-			)
+			return err
 		}
 
-		if len(files) == 0 {
-			continue
-		}
-
-		for _, file := range files {
-			err = restoreResourceFile(ctx, kubeconfigPath, file, flags)
-			if err != nil {
-				msg := fmt.Sprintf("%s: %v", filepath.Base(file), err)
-				restoreErrors = append(restoreErrors, msg)
-
-				_, _ = fmt.Fprintf(
-					writer,
-					"Warning: failed to restore %s: %v\n",
-					filepath.Base(file), err,
-				)
-
-				continue
-			}
-		}
-
-		_, _ = fmt.Fprintf(writer, "   Restored %s\n", resourceType)
+		restoreErrors = append(restoreErrors, errs...)
 	}
 
 	if len(restoreErrors) > 0 {
@@ -407,11 +417,76 @@ func restoreResources(
 	return nil
 }
 
+// restoreResourceType restores all YAML files for a single resource type
+// from the backup directory, returning any per-file errors.
+func restoreResourceType(
+	ctx context.Context,
+	kubeconfigPath, resourcesDir, resourceType string,
+	writer io.Writer,
+	flags *restoreFlags,
+	backupName, restoreName string,
+) ([]string, error) {
+	resourceDir := filepath.Join(resourcesDir, resourceType)
+
+	_, statErr := os.Stat(resourceDir)
+	if os.IsNotExist(statErr) {
+		return nil, nil
+	}
+
+	files, err := filepath.Glob(
+		filepath.Join(resourceDir, "*.yaml"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to list files for %s: %w", resourceType, err,
+		)
+	}
+
+	if len(files) == 0 {
+		return nil, nil
+	}
+
+	var errs []string
+
+	for _, file := range files {
+		err = restoreResourceFile(
+			ctx, kubeconfigPath, file, flags,
+			backupName, restoreName,
+		)
+		if err != nil {
+			msg := fmt.Sprintf("%s: %v", filepath.Base(file), err)
+			errs = append(errs, msg)
+
+			_, _ = fmt.Fprintf(
+				writer,
+				"Warning: failed to restore %s: %v\n",
+				filepath.Base(file), err,
+			)
+
+			continue
+		}
+	}
+
+	_, _ = fmt.Fprintf(writer, "   Restored %s\n", resourceType)
+
+	return errs, nil
+}
+
 func restoreResourceFile(
 	ctx context.Context,
 	kubeconfigPath, filePath string,
 	flags *restoreFlags,
+	backupName, restoreName string,
 ) error {
+	labeledPath, err := injectRestoreLabels(
+		filePath, backupName, restoreName,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to inject labels: %w", err)
+	}
+
+	defer func() { _ = os.Remove(labeledPath) }()
+
 	var outBuf, errBuf bytes.Buffer
 
 	client := kubectl.NewClient(genericiooptions.IOStreams{
@@ -428,7 +503,7 @@ func restoreResourceFile(
 		cmd = client.CreateApplyCommand(kubeconfigPath)
 	}
 
-	args := []string{"-f", filePath}
+	args := []string{"-f", labeledPath}
 	if flags.dryRun {
 		args = append(args, "--dry-run=client")
 	}
@@ -437,7 +512,7 @@ func restoreResourceFile(
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 
-	err := cmd.ExecuteContext(ctx)
+	err = cmd.ExecuteContext(ctx)
 	if err != nil {
 		stderr := errBuf.String()
 
@@ -453,6 +528,126 @@ func restoreResourceFile(
 	}
 
 	return nil
+}
+
+// injectRestoreLabels reads a YAML file, adds restore labels to each
+// document, and writes the result to a temporary file. Returns the path
+// to the temporary file.
+func injectRestoreLabels(
+	filePath, backupName, restoreName string,
+) (string, error) {
+	data, err := os.ReadFile(filePath) //nolint:gosec // path from extracted temp dir
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+
+	docs := splitYAMLDocuments(string(data))
+
+	var builder strings.Builder
+
+	const estimatedBytesPerDoc = 512
+	builder.Grow(len(docs) * estimatedBytesPerDoc)
+
+	for idx, doc := range docs {
+		if strings.TrimSpace(doc) == "" {
+			continue
+		}
+
+		labeled, labelErr := addLabelsToDocument(
+			doc, backupName, restoreName,
+		)
+		if labelErr != nil {
+			return "", fmt.Errorf(
+				"failed to inject restore labels: %w", labelErr,
+			)
+		}
+
+		if idx > 0 {
+			builder.WriteString("---\n")
+		}
+
+		builder.WriteString(labeled)
+	}
+
+	tmpFile, err := os.CreateTemp("", "ksail-restore-labeled-*.yaml")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+
+	defer func() { _ = tmpFile.Close() }()
+
+	_, err = tmpFile.WriteString(builder.String())
+	if err != nil {
+		_ = os.Remove(tmpFile.Name())
+
+		return "", fmt.Errorf("failed to write labeled file: %w", err)
+	}
+
+	return tmpFile.Name(), nil
+}
+
+// addLabelsToDocument parses a single YAML document and adds restore labels.
+func addLabelsToDocument(
+	doc, backupName, restoreName string,
+) (string, error) {
+	var obj unstructured.Unstructured
+
+	err := sigsyaml.Unmarshal([]byte(doc), &obj.Object)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	if obj.Object == nil {
+		return doc, nil
+	}
+
+	labels := obj.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+
+	labels["ksail.io/backup-name"] = backupName
+	labels["ksail.io/restore-name"] = restoreName
+	obj.SetLabels(labels)
+
+	result, err := sigsyaml.Marshal(obj.Object)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal YAML: %w", err)
+	}
+
+	return string(result), nil
+}
+
+// splitYAMLDocuments splits a multi-document YAML string into individual
+// documents using the "---" separator.
+func splitYAMLDocuments(content string) []string {
+	if strings.TrimSpace(content) == "" {
+		return nil
+	}
+
+	var docs []string
+
+	current := strings.Builder{}
+
+	for line := range strings.SplitSeq(content, "\n") {
+		if line == "---" {
+			if current.Len() > 0 {
+				docs = append(docs, current.String())
+				current.Reset()
+			}
+
+			continue
+		}
+
+		current.WriteString(line)
+		current.WriteString("\n")
+	}
+
+	if current.Len() > 0 {
+		docs = append(docs, current.String())
+	}
+
+	return docs
 }
 
 func allLinesContain(output, substr string) bool {

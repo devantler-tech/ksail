@@ -331,7 +331,11 @@ ksail cluster create
 
 **Symptom:** `ksail cluster create` hangs or fails
 
-**Common causes:**
+**Automatic retry (create phase):** KSail automatically retries transient startup failures up to 3 times (with 5-second delays between attempts). If you see log messages like `Retrying vCluster create (attempt 2/3)...`, this is expected — KSail is recovering from a transient Docker or D-Bus error without any action needed from you.
+
+**Automatic retry (connect phase):** After the cluster is created, KSail also retries the readiness check up to 3 times. Each attempt allows up to 3 minutes for the cluster to become ready, giving an effective timeout of ~9 minutes. If you see log messages like `Retrying vCluster connect (attempt 2/3)...`, this is expected behavior on slower machines or CI runners — KSail will keep waiting without any action needed from you.
+
+**Common causes for persistent failures:**
 1. **Docker not running**
    ````bash
    docker ps  # Should list containers
@@ -349,12 +353,18 @@ ksail cluster create
    docker info | grep -i memory
    ````
 
-**Fix:**
+**Fix (if all retry attempts fail):**
 ````bash
 # Delete and recreate
 ksail cluster delete
 ksail cluster create
 ````
+
+### Transient Startup Failures on CI Runners
+
+**Symptom:** `ksail cluster create` fails with `exit status 22` (EINVAL) on CI runners.
+
+KSail automatically retries transient VCluster startup failures with up to 3 attempts and a 5-second delay between attempts, cleaning up partial state between retries. If the issue persists after automatic retries, check Docker resource limits and D-Bus availability on the runner.
 
 ### kubectl Commands Fail
 

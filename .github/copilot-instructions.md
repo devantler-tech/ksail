@@ -136,13 +136,18 @@ go run main.go --help
 ```text
 /
 ├── main.go                 # Main entry point
+├── internal/               # Internal (import-restricted/private) packages
+│   └── buildmeta/          # Build-time version metadata (Version, Commit, Date) injected via ldflags
 ├── pkg/                    # Core packages
 │   ├── toolgen/            # Tool generation for AI assistants
 │   ├── apis/               # API types and schemas
 │   ├── cli/                # CLI wiring, UI, and Cobra commands
 │   │   ├── annotations/    # Command annotation constants
 │   │   ├── cmd/            # CLI command implementations
-│   │   ├── helpers/        # CLI helper utilities
+│   │   ├── dockerutil/     # Docker client lifecycle management utilities
+│   │   ├── editor/         # Editor configuration resolution
+│   │   ├── flags/          # CLI flag handling utilities
+│   │   ├── kubeconfig/     # Kubeconfig file path helpers
 │   │   ├── lifecycle/      # Cluster lifecycle orchestration
 │   │   ├── setup/          # Component setup (CNI, mirror registries, etc.)
 │   │   └── ui/             # Terminal UI (ASCII art, chat TUI, confirmations)
@@ -161,7 +166,7 @@ go run main.go --help
 │       ├── image/          # Container image export/import services
 │       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
 │       ├── mcp/            # Model Context Protocol server
-│       ├── provider/       # Infrastructure providers (docker, hetzner)
+│       ├── provider/       # Infrastructure providers (docker, hetzner, omni)
 │       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos, VCluster)
 │       ├── registryresolver/ # OCI registry detection, resolution, and artifact push
 │       └── state/          # Cluster state persistence for distributions without introspection
@@ -180,6 +185,8 @@ go run main.go --help
 - **go.mod**: Go module dependencies (includes embedded kubectl, helm, kind, k3d, vcluster, flux, argocd)
 - **package.json**: Node.js dependencies for Astro documentation
 - **.github/workflows/\*.yaml**: CI/CD pipelines
+- **.github/workflows/\*.md**: Agentic workflows (daily-refactor, daily-perf-improver, daily-test-improver, daily-workflow-optimizer, etc.); each runs on a schedule or dispatch, and many operate in multiple phases
+- **.github/instructions/\*.instructions.md**: Copilot coding instructions that can be scoped to file globs via optional `applyTo` frontmatter (go.instructions.md, copilot-sdk-go.instructions.md, refactoring-\*.instructions.md, agentic-workflows.instructions.md); when `applyTo` is omitted, the instructions may apply globally and are automatically applied by GitHub Copilot where relevant
 
 ### CLI Commands Reference
 
@@ -349,4 +356,13 @@ npm run dev                            # Test locally (if needed)
 - **Cloud Provider KIND LoadBalancer Support**: Completed LoadBalancer support for Vanilla (Kind) × Docker using the Cloud Provider KIND controller (`pkg/svc/installer/cloudproviderkind/`); runs as an external Docker container named `ksail-cloud-provider-kind` and allocates IPs from the `kind` Docker network subnet; per-service containers use a `cpk-` prefix
 - **MetalLB LoadBalancer Support**: Completed LoadBalancer support for Talos × Docker with MetalLB installer (`pkg/svc/installer/metallb/`), configured with default IP pool (172.18.255.200-172.18.255.250) and Layer 2 mode
 - **String Building Optimization**: Replaced string concatenation with strings.Builder in tool generation (`pkg/toolgen/`) and chat UI (`pkg/cli/ui/chat/`) for better memory efficiency and reduced allocations; added Grow() pre-allocation for optimal performance (PR #2307)
+- **Daily Workflow Optimizer**: Added `daily-workflow-optimizer` agentic workflow (`.github/workflows/daily-workflow-optimizer.md`) that systematically identifies and implements optimizations across all GitHub Actions workflows (both `.yaml`/`.yml` and agentic `.md`); operates in three phases: CI/CD research and planning, build-steps inference and guide creation, then targeted implementation
 - **Hetzner Secret Race Fix**: Extracted shared Hetzner secret logic to `pkg/svc/installer/internal/hetzner/`; `EnsureSecret` now handles the TOCTOU race between concurrent `hcloud-ccm` and `hetzner-csi` installers via `createOrUpdateOnConflict` and `retry.RetryOnConflict` (PR #2488)
+- **VCluster Transient Startup Retry**: Added `createWithRetry` in the VCluster provisioner (`pkg/svc/provisioner/cluster/vcluster/`) to automatically retry transient `CreateDocker` failures (e.g. exit status 22 / EINVAL on CI runners); performs up to 3 total attempts (initial attempt plus 2 retries) with a 5-second delay between attempts, cleaning up partial state between attempts. D-Bus recovery is handled by a separate `tryDBusRecovery` helper. Both helpers accept injectable function types (`createDockerFn`, `retryCleanupFn`, `dbusRecoverFn`) for unit-test isolation; tests use the `export_test.go` pattern with static error sentinels (PR #2530)
+- **Detector Component Tests**: Added comprehensive unit tests for `pkg/svc/detector/` covering CNI, CSI, MetricsServer, LoadBalancer, CertManager, PolicyEngine, and GitOpsEngine detection (0% → 86.9% coverage); follows the `export_test.go` pattern (exports `ExportDetectCNI`, `ExportDetectCSI`, etc. and `NewReleaseMappingForTest`) for black-box testing of unexported methods; uses `fake.NewClientset()`, static error sentinels, `t.Parallel()`, and `require.NoError/Error` (PR #2562)
+- **Agentic Workflows Threat Detection Instructions**: Added `.github/instructions/agentic-workflows.instructions.md` with globally applicable guidelines for reliable threat detection in agentic workflow jobs (intentionally no `applyTo` YAML frontmatter so Copilot can use these instructions across all contexts): diagnostic output before CLI invocation, robust error handling (`set -euo pipefail`, separate stdout/stderr capture, timeout protection), incremental tool restriction validation, and fallback mechanisms for security-critical detection failures (PR #2575)
+- **VCluster Troubleshooting Docs**: Added a VCluster-specific section to `docs/src/content/docs/troubleshooting.md` covering transient startup failures (exit status 22 / EINVAL on CI runners) with cross-reference to auto-retry behavior (3 attempts, 5s delay), and kubectl connection errors immediately after VCluster creation; cross-references the VCluster Getting Started guide for detailed steps (PR #2599)
+- **export_test.go Pattern Documented**: Codified the `export_test.go` convention in `.github/instructions/go.instructions.md` under Test Organization; the pattern exposes unexported symbols to `_test` packages without leaking them into production binaries — file uses the regular package name so Go only compiles it for test builds (PR #2603)
+- **VCluster False-Positive Diff Fix**: Fixed `ksail cluster update` incorrectly reporting LoadBalancer and GitOps registry diffs for VCluster when nothing had changed. Two root causes resolved: (1) `ApplyGitOpsLocalRegistryDefault` now runs after component detection in the fallback path so the detected GitOps engine value correctly triggers the `localhost:5050` default; (2) the diff engine (`pkg/svc/diff/`) skips LoadBalancer comparison for VCluster (returns `LoadBalancerDefault` for both sides) since VCluster delegates LoadBalancer to the host cluster and KSail never installs or uninstalls anything — `spec.cluster.loadBalancer` has no effect on VCluster (PR #2549)
+- **API Server Stability Check**: Added `waitForAPIServerStability` between Phase 1 (infrastructure components) and Phase 2 (GitOps engines) in `installComponentsInPhases` (`pkg/cli/setup/post_cni.go`); requires 3 consecutive successful API server health checks within a 2-minute timeout before GitOps engines begin installation; prevents Flux/ArgoCD from entering CrashLoopBackOff with `dial tcp 10.96.0.1:443: i/o timeout` errors caused by infrastructure components (MetalLB, Kyverno, cert-manager, etc.) temporarily destabilizing API server connectivity while registering webhooks and CRDs (PR #2601)
+- **Backup/Restore Metadata and Labeling**: Extended `BackupMetadata` struct in `pkg/cli/cmd/cluster/backup.go` with `Distribution`, `Provider`, `KSailVersion`, `ResourceCount`, and `ResourceTypes` fields written to `backup-metadata.json`; restore in `pkg/cli/cmd/cluster/restore.go` now applies `ksail.io/backup-name` and `ksail.io/restore-name` labels to restored resources for provenance tracking (PR #2613)
