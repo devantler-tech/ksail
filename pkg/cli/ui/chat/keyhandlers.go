@@ -69,6 +69,10 @@ func (m *Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEscape()
 	case keyEnter:
 		return m.handleEnter()
+	case "alt+enter":
+		m.textarea.InsertString("\n")
+
+		return m, nil
 	case "ctrl+q":
 		return m.handleQueuePrompt()
 	case "ctrl+d":
