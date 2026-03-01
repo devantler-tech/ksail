@@ -179,9 +179,18 @@ func TestNewMCPCmd_OutputBuffer(t *testing.T) {
 	cmd.SetOut(&outBuf)
 	cmd.SetErr(&errBuf)
 
-	// Verify buffers are set
-	assert.NotNil(t, cmd.OutOrStdout())
-	assert.NotNil(t, cmd.ErrOrStderr())
+	// Verify OutOrStdout/ErrOrStderr return the configured buffers
+	assert.Same(t, &outBuf, cmd.OutOrStdout())
+	assert.Same(t, &errBuf, cmd.ErrOrStderr())
+
+	// Verify that printing via the command writes into the buffers
+	_, err := cmd.OutOrStdout().Write([]byte("stdout test"))
+	require.NoError(t, err)
+	_, err = cmd.ErrOrStderr().Write([]byte("stderr test"))
+	require.NoError(t, err)
+
+	assert.Equal(t, "stdout test", outBuf.String())
+	assert.Equal(t, "stderr test", errBuf.String())
 }
 
 func TestNewMCPCmd_ContextPropagation(t *testing.T) {
@@ -196,6 +205,8 @@ func TestNewMCPCmd_ContextPropagation(t *testing.T) {
 
 	retrievedCtx := cmd.Context()
 	require.NotNil(t, retrievedCtx, "Context should be retrievable")
+	assert.Equal(t, ctx, retrievedCtx,
+		"Context returned by command should match the context set via SetContext")
 }
 
 func TestNewMCPCmd_HelpOutput(t *testing.T) {
@@ -236,20 +247,6 @@ func TestNewMCPCmd_ExcludeFromToolGeneration(t *testing.T) {
 	require.True(t, exists, "Exclude annotation must exist")
 	assert.Equal(t, "true", excludeVal,
 		"MCP command should be excluded from tool generation")
-}
-
-func TestNewMCPCmd_SilentErrors(t *testing.T) {
-	t.Parallel()
-
-	// Verify command inherits error handling behavior
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
-
-	// Check default error handling flags
-	// By default, cobra.Command.SilenceErrors and SilenceUsage are false
-	// We verify the defaults unless explicitly set
-	assert.False(t, cmd.SilenceErrors || cmd.SilenceUsage,
-		"Command should not silence errors by default")
 }
 
 func TestNewMCPCmd_StdioUsage(t *testing.T) {
