@@ -269,7 +269,7 @@ func attemptInlineLogin(
 	if pathErr != nil {
 		return nil, fmt.Errorf(
 			"%w\n\n"+
-				"could not find the Copilot CLI to start login flow: %w\n\n"+
+				"could not find the Copilot CLI to start login flow: %v\n\n"+
 				"To fix:\n"+
 				"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
 				"  - Ensure you have an active GitHub Copilot subscription",

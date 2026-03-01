@@ -280,7 +280,7 @@ func (rm *RegistryManager) checkRegistryHealth(
 		return false, fmt.Errorf("failed to create health check request: %w", reqErr)
 	}
 
-	resp, respErr := httpClient.Do( //nolint:gosec // G704: URL from known host
+	resp, respErr := httpClient.Do( //nolint:gosec // G107: URL constructed from known registry host
 		req,
 	)
 	if respErr != nil {

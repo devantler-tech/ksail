@@ -131,12 +131,16 @@ func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 	if m.modelPickerIndex == 0 {
 		// "auto" option selected — switch only if not already in auto mode
 		if !m.isAutoMode() {
-			return m.switchModel("")
+			_ = m.switchModel("")
+
+			return m, nil
 		}
 	} else if m.modelPickerIndex > 0 && m.modelPickerIndex < totalItems {
 		selectedModel := m.filteredModels[m.modelPickerIndex-1]
 		if selectedModel.ID != m.currentModel {
-			return m.switchModel(selectedModel.ID)
+			_ = m.switchModel(selectedModel.ID)
+
+			return m, nil
 		}
 	}
 
@@ -149,7 +153,7 @@ func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 }
 
 // switchModel changes to a new model by recreating the session.
-func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
+func (m *Model) switchModel(newModelID string) error {
 	m.cleanup()
 
 	if m.session != nil {
@@ -165,7 +169,7 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 		m.showModelPicker = false
 		m.updateDimensions()
 
-		return m, nil
+		return m.err
 	}
 
 	m.session = session
@@ -177,7 +181,7 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 	m.updateDimensions()
 	m.updateViewportContent()
 
-	return m, nil
+	return nil
 }
 
 // renderModelPickerModal renders the model picker as an inline modal section.

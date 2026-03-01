@@ -59,7 +59,9 @@ func (m *Model) selectReasoningEffort() (tea.Model, tea.Cmd) {
 
 	// Only recreate session if the value actually changed
 	if newEffort != m.sessionConfig.ReasoningEffort {
-		return m.switchReasoningEffort(newEffort)
+		_ = m.switchReasoningEffort(newEffort)
+
+		return m, nil
 	}
 
 	m.showReasoningPicker = false
@@ -69,7 +71,7 @@ func (m *Model) selectReasoningEffort() (tea.Model, tea.Cmd) {
 }
 
 // switchReasoningEffort changes the reasoning effort by recreating the session.
-func (m *Model) switchReasoningEffort(newEffort string) (tea.Model, tea.Cmd) {
+func (m *Model) switchReasoningEffort(newEffort string) error {
 	m.cleanup()
 
 	if m.session != nil {
@@ -84,7 +86,7 @@ func (m *Model) switchReasoningEffort(newEffort string) (tea.Model, tea.Cmd) {
 		m.showReasoningPicker = false
 		m.updateDimensions()
 
-		return m, nil
+		return m.err
 	}
 
 	m.session = session
@@ -94,7 +96,7 @@ func (m *Model) switchReasoningEffort(newEffort string) (tea.Model, tea.Cmd) {
 	m.updateDimensions()
 	m.updateViewportContent()
 
-	return m, nil
+	return nil
 }
 
 // renderReasoningPickerModal renders the reasoning effort picker as an inline modal.

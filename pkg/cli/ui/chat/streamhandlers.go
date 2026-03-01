@@ -290,12 +290,10 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 	// Compare against user-selected model (sessionConfig.Model), not server-resolved.
 	selectedModel := m.getSelectedModel()
 	if prompt.model != selectedModel {
-		m.err = nil // Clear stale errors before model switch
-
-		resultModel, resultCmd := m.switchModel(prompt.model)
-		if m.err != nil {
+		switchErr := m.switchModel(prompt.model)
+		if switchErr != nil {
 			// Model switch failed - leave prompt in queue for retry
-			return resultModel, resultCmd
+			return m, nil
 		}
 	}
 
@@ -303,12 +301,10 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 	// Reasoning effort changes only take effect after recreating the session.
 	currentEffort := m.getReasoningEffort()
 	if prompt.reasoningEffort != currentEffort && m.sessionConfig != nil {
-		m.err = nil // Clear stale errors before effort switch
-
-		resultModel, resultCmd := m.switchReasoningEffort(prompt.reasoningEffort)
-		if m.err != nil {
+		switchErr := m.switchReasoningEffort(prompt.reasoningEffort)
+		if switchErr != nil {
 			// Reasoning effort switch failed - leave prompt in queue for retry
-			return resultModel, resultCmd
+			return m, nil
 		}
 	}
 
