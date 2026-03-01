@@ -361,16 +361,16 @@ func findCopilotInSDKCache() (string, bool) {
 	return "", false
 }
 
-// runCopilotAuthLogin spawns `copilot login` as an interactive subprocess.
+// runCopilotAuthLogin spawns `copilot auth login` as an interactive subprocess.
 func runCopilotAuthLogin(ctx context.Context, cliPath string) error {
-	cmd := exec.CommandContext(ctx, cliPath, "login")
+	cmd := exec.CommandContext(ctx, cliPath, "auth", "login")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("copilot login failed: %w", err)
+		return fmt.Errorf("copilot auth login failed: %w", err)
 	}
 
 	return nil

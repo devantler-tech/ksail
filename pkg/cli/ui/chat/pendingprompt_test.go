@@ -99,7 +99,7 @@ func TestDeletePendingPrompt_RemovesFromView(t *testing.T) {
 	updatedModel, _ = updatedModel.Update(ctrlQKey())
 
 	// Delete it
-	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
 
 	output := updatedModel.View()
 
@@ -170,6 +170,12 @@ func TestMultipleQueuedPrompts_ShowNumbered(t *testing.T) {
 	updatedModel := typeText(model, "first task")
 
 	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	// Re-assert streaming state before queuing next prompt; typeText may
+	// alter internal model state through the full update path.
+	if s, ok := updatedModel.(interface{ SetStreaming(streaming bool) }); ok {
+		s.SetStreaming(true)
+	}
 
 	updatedModel = typeText(updatedModel, "second task")
 

@@ -59,7 +59,10 @@ func (m *Model) selectReasoningEffort() (tea.Model, tea.Cmd) {
 
 	// Only recreate session if the value actually changed
 	if newEffort != m.sessionConfig.ReasoningEffort {
-		_ = m.switchReasoningEffort(newEffort)
+		err := m.switchReasoningEffort(newEffort)
+		if err != nil {
+			return m, nil
+		}
 
 		return m, nil
 	}
