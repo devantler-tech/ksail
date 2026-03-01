@@ -58,12 +58,11 @@ const dbusWaitInterval = 500 * time.Millisecond
 const dbusErrorSubstring = "Failed to connect to bus"
 
 // transientCreateErrors returns error substrings that indicate potentially
-// transient infrastructure failures during vCluster standalone startup.
+// transient infrastructure failures during vCluster cluster creation.
 // Exit status 22 (EINVAL) has been observed on CI runners where the Docker
 // daemon or container runtime hits a temporary invalid-argument condition.
 // "fetching blob: denied: denied" has been observed when GHCR transiently
-// rejects blob downloads mid-pull for the VCluster Kubernetes base image
-// (see issue #2625).
+// rejects blob downloads mid-pull for the VCluster Kubernetes base image.
 func transientCreateErrors() []string {
 	return []string{
 		"exit status 22",
