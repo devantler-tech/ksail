@@ -286,4 +286,4 @@ runs:
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
-        ksail cluster delete || true
+        ksail cluster delete || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"

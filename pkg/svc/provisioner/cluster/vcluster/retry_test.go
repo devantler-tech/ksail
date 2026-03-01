@@ -25,7 +25,7 @@ var (
 	errExitStatus1    = errors.New("exit status 1")
 	errWrapped22      = errors.New("something went wrong: exit status 22")
 	errEmpty          = errors.New("")
-	errRegistryDenied = errors.New("fetching blob: denied: denied")
+	errRegistryDenied = errors.New("copying system image from manifest list: reading blob sha256:abc123: fetching blob: denied: denied")
 )
 
 func newTestLogger() loftlog.Logger {
