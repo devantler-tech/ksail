@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-gitops
+  namespace: hello-gitops
+  labels:
+    app: hello-gitops
+spec:
+  type: ClusterIP
+  selector:
+    app: hello-gitops
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http

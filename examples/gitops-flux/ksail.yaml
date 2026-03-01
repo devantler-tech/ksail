@@ -1,0 +1,12 @@
+cluster:
+  name: ksail
+  distribution: Vanilla
+  provider:
+    type: Docker
+  vanilla:
+    nodes:
+      - role: control-plane
+  cni: Default
+  loadBalancer: Default
+  gitOpsEngine: Flux
+  gitOpsLocalRegistry: localhost:5050

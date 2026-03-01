@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-ksail
+  namespace: hello-ksail
+  labels:
+    app: hello-ksail
+spec:
+  type: LoadBalancer
+  selector:
+    app: hello-ksail
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http

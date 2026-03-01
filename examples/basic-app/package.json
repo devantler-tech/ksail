@@ -1,0 +1,13 @@
+{
+  "name": "hello-ksail",
+  "version": "1.0.0",
+  "description": "Simple web server for KSail basic-app example",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["ksail", "kubernetes", "example"],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

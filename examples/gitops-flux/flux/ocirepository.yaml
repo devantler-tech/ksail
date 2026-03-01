@@ -1,0 +1,11 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: hello-gitops
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: oci://localhost:5050/hello-gitops
+  ref:
+    tag: latest
+  insecure: true

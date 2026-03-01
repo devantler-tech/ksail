@@ -1,0 +1,6 @@
+cluster:
+  name: ksail
+  distribution: VCluster
+  provider:
+    type: Docker
+  cni: Default
