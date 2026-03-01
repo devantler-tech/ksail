@@ -53,7 +53,8 @@
               "type": "string",
               "enum": [
                 "Docker",
-                "Hetzner"
+                "Hetzner",
+                "Omni"
               ]
             },
             "cni": {
@@ -192,6 +193,18 @@
                 },
                 "placementGroupFallbackToNone": {
                   "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            },
+            "omni": {
+              "properties": {
+                "endpoint": {
+                  "type": "string"
+                },
+                "serviceAccountKeyEnvVar": {
+                  "type": "string"
                 }
               },
               "additionalProperties": false,

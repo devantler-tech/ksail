@@ -53,6 +53,7 @@ linters:
       replace-allow-list:
         - github.com/docker/docker
         - github.com/docker/cli
+        - github.com/opencontainers/runtime-spec
         - github.com/loft-sh/log
     wsl_v5:
       allow-first-in-block: true
@@ -83,6 +84,7 @@ linters:
             - github.com/wk8/go-ordered-map
             - github.com/samber/do/v2
             - github.com/containerd
+            - github.com/cosi-project
             - github.com/docker
             - github.com/fatih/color
             - github.com/fluxcd

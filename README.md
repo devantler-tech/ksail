@@ -48,6 +48,7 @@ Supported distributions run on different infrastructure providers:
 |----------|----------|---------|-------|----------|
 | Docker   | ✅ (Kind) | ✅ (K3d) | ✅     | ✅ (Vind) |
 | Hetzner  | —        | —       | ✅     | —        |
+| Omni     | —        | —       | ✅     | —        |
 
 ### Installation
 

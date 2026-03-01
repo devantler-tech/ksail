@@ -231,7 +231,8 @@ func TestValidProviders(t *testing.T) {
 
 	assert.Contains(t, providers, v1alpha1.ProviderDocker)
 	assert.Contains(t, providers, v1alpha1.ProviderHetzner)
-	assert.Len(t, providers, 2)
+	assert.Contains(t, providers, v1alpha1.ProviderOmni)
+	assert.Len(t, providers, 3)
 }
 
 func TestValidPlacementGroupStrategies(t *testing.T) {

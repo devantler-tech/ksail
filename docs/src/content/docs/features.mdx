@@ -36,12 +36,14 @@ ksail cluster create
 | `ksail cluster info`    | Show cluster information    |
 | `ksail cluster list`    | List clusters               |
 | `ksail cluster connect` | Connect to cluster with K9s |
+| `ksail cluster backup`  | Backup cluster resources    |
+| `ksail cluster restore` | Restore cluster resources   |
 
 **Configuration:** [Declarative Configuration](/configuration/declarative-configuration/)
 
 ## Workload Management
 
-Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; generate resources; debug with logs, exec, describe, and explain; and validate manifests against schemas.
+Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; create, edit, delete, and inspect resources; debug with logs, exec, describe, and explain; expose services; export and import container images; and validate manifests against schemas.
 
 ```bash
 ksail workload apply -k k8s/
@@ -51,20 +53,27 @@ ksail workload logs deployment/my-app
 
 **Commands:** [`ksail workload`](/cli-flags/workload/workload-root/)
 
-| Command                   | Description                        |
-| ------------------------- | ---------------------------------- |
-| `ksail workload apply`    | Apply manifests to cluster         |
-| `ksail workload get`      | Get resources                      |
-| `ksail workload describe` | Describe resources                 |
-| `ksail workload logs`     | View container logs                |
-| `ksail workload exec`     | Execute command in container       |
-| `ksail workload gen`      | Generate Kubernetes manifests      |
-| `ksail workload validate` | Validate manifests against schemas |
-| `ksail workload install`  | Install Helm charts                |
-| `ksail workload scale`    | Scale deployments                  |
-| `ksail workload rollout`  | Manage rollouts                    |
-| `ksail workload wait`     | Wait for conditions                |
-| `ksail workload images`   | List required container images     |
+| Command                    | Description                              |
+| -------------------------- | ---------------------------------------- |
+| `ksail workload apply`     | Apply manifests to cluster               |
+| `ksail workload create`    | Create resources imperatively            |
+| `ksail workload get`       | Get resources                            |
+| `ksail workload describe`  | Describe resources                       |
+| `ksail workload delete`    | Delete Kubernetes resources              |
+| `ksail workload edit`      | Edit a resource in-place                 |
+| `ksail workload explain`   | Get documentation for a resource type    |
+| `ksail workload logs`      | View container logs                      |
+| `ksail workload exec`      | Execute command in container             |
+| `ksail workload expose`    | Expose a resource as a service           |
+| `ksail workload export`    | Export container images to tar archive   |
+| `ksail workload import`    | Import container images from tar archive |
+| `ksail workload gen`       | Generate Kubernetes manifests            |
+| `ksail workload validate`  | Validate manifests against schemas       |
+| `ksail workload install`   | Install Helm charts                      |
+| `ksail workload scale`     | Scale deployments                        |
+| `ksail workload rollout`   | Manage rollouts                          |
+| `ksail workload wait`      | Wait for conditions                      |
+| `ksail workload images`    | List required container images           |
 
 ## GitOps Workflows
 
@@ -99,7 +108,7 @@ docker push localhost:5050/my-app
 
 ### Mirror Registries
 
-KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default to avoid rate limits and improve CI/CD performance. Mirror registries create local pull-through cache containers that authenticate to upstream registries using credentials resolved from `${ENV_VAR}` placeholders, with cached images persisting across restarts. Supported across all distributions via containerd `hosts.toml` injection (Vanilla, VCluster), K3d registries configuration (K3s), or machine config patches (Talos).
+For Docker-based clusters (local Vanilla, K3s, Talos-on-Docker, and VCluster), KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default to avoid rate limits and improve CI/CD performance. For these clusters, mirror registries run as local pull-through cache containers that authenticate to upstream registries using credentials resolved from `${ENV_VAR}` placeholders. Cached images persist across restarts via containerd `hosts.toml` injection for Vanilla and VCluster, or via K3d registries configuration for K3s and Talos-on-Docker. For Talos clusters on Hetzner, no mirrors are enabled by default. Instead, you can configure externally reachable mirror endpoints via config/flags, which are applied through Talos machine config patches.
 
 ```bash
 # Default mirrors (docker.io, ghcr.io, quay.io, registry.k8s.io)
@@ -131,6 +140,37 @@ ksail cipher import AGE-SECRET-KEY-1...
 | `ksail cipher import`  | Import age private key        |
 
 **Supported KMS:** See [Key Management Systems](/concepts/#key-management-systems) for supported providers and documentation links.
+
+## Cluster Backup & Restore
+
+Export cluster resource manifests to a compressed archive and restore them to a target cluster. Backups capture resource YAML in dependency order (CRDs → namespaces → storage → workloads), strip server-assigned metadata for portability, and embed a `backup-metadata.json` file containing version, timestamp, cluster name, distribution, provider, KSail version, resource count, and resource types. Each restored resource is automatically labeled with `ksail.io/backup-name` (derived from the archive filename) and `ksail.io/restore-name` (unique per restore operation) for traceability.
+
+```bash
+# Backup all namespaces
+ksail cluster backup --output ./backup.tar.gz
+
+# Backup specific namespaces and exclude resource types
+ksail cluster backup -o ./backup.tar.gz -n default,kube-system --exclude-types events,pods
+
+# Restore, skipping already-existing resources
+ksail cluster restore --input ./backup.tar.gz
+
+# Restore, updating existing resources
+ksail cluster restore -i ./backup.tar.gz --existing-resource-policy update
+
+# Dry-run: preview what would be restored
+ksail cluster restore --input ./backup.tar.gz --dry-run
+```
+
+**Commands:** [`ksail cluster backup`](/cli-flags/cluster/cluster-backup/), [`ksail cluster restore`](/cli-flags/cluster/cluster-restore/)
+
+| Command                 | Description                      |
+| ----------------------- | -------------------------------- |
+| `ksail cluster backup`  | Export resources to a `.tar.gz`  |
+| `ksail cluster restore` | Apply resources from a `.tar.gz` |
+
+> [!NOTE]
+> This feature backs up resource manifests (YAML) only. Persistent volume data is not included in the current implementation.
 
 ## Code Generation
 
@@ -167,7 +207,16 @@ spec:
 
 ## AI Chat Assistant
 
-Get interactive help with cluster configuration and troubleshooting using an AI-powered chat session. Three modes: **Agent** (`</>`) for full execution with approval, **Plan** (`≡`) for step-by-step guidance without execution, and **Ask** (`?`) for read-only investigation. Press **Tab** to cycle between modes. Requires [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) installed and authenticated.
+Get interactive help with cluster configuration and troubleshooting using an AI-powered chat session.
+
+Three modes are available:
+
+- **Agent** (`</>`) for full execution with approval
+- **Plan** (`≡`) for step-by-step guidance without execution
+- **Ask** (`?`) for read-only investigation
+
+Press **Tab** to cycle between modes.
+Requires [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) installed and authenticated.
 
 ```bash
 ksail chat

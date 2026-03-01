@@ -277,6 +277,7 @@ func (f DefaultFactory) createTalosProvisioner(
 		cluster.Spec.Cluster.Provider,
 		cluster.Spec.Cluster.Talos,
 		cluster.Spec.Cluster.Hetzner,
+		cluster.Spec.Cluster.Omni,
 		skipCNIChecks,
 	)
 	if err != nil {

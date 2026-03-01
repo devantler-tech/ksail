@@ -339,7 +339,8 @@ func InstallLoadBalancerSilent(
 			return installMetalLB(ctx, clusterCfg, factories)
 		case v1alpha1.ProviderHetzner:
 			return installHcloudCCM(ctx, clusterCfg, factories)
-		default:
+		case v1alpha1.ProviderOmni:
+			// Omni manages the machine lifecycle; MetalLB is not applicable
 			return nil
 		}
 	case v1alpha1.DistributionK3s:
