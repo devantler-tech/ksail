@@ -310,21 +310,8 @@ func resolveCopilotCLIPath() (string, error) {
 		return p, nil
 	}
 
-	cacheDir, err := os.UserCacheDir()
-	if err == nil {
-		sdkDir := filepath.Join(cacheDir, "copilot-sdk")
-
-		entries, readErr := os.ReadDir(sdkDir)
-		if readErr == nil {
-			for _, e := range entries {
-				name := e.Name()
-				if !e.IsDir() && strings.HasPrefix(name, "copilot") &&
-					!strings.HasSuffix(name, ".lock") &&
-					!strings.HasSuffix(name, ".license") {
-					return filepath.Join(sdkDir, name), nil
-				}
-			}
-		}
+	if p, found := findCopilotInSDKCache(); found {
+		return p, nil
 	}
 
 	p, lookErr := exec.LookPath("copilot")
@@ -333,6 +320,45 @@ func resolveCopilotCLIPath() (string, error) {
 	}
 
 	return p, nil
+}
+
+// findCopilotInSDKCache looks for a copilot executable in the SDK cache directory.
+func findCopilotInSDKCache() (string, bool) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", false
+	}
+
+	sdkDir := filepath.Join(cacheDir, "copilot-sdk")
+
+	entries, err := os.ReadDir(sdkDir)
+	if err != nil {
+		return "", false
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() ||
+			!strings.HasPrefix(name, "copilot") ||
+			strings.HasSuffix(name, ".lock") ||
+			strings.HasSuffix(name, ".license") {
+			continue
+		}
+
+		info, statErr := entry.Info()
+		if statErr != nil {
+			continue
+		}
+
+		// Require at least one executable bit to be set.
+		if info.Mode()&0o111 == 0 {
+			continue
+		}
+
+		return filepath.Join(sdkDir, name), true
+	}
+
+	return "", false
 }
 
 // runCopilotAuthLogin spawns `copilot login` as an interactive subprocess.

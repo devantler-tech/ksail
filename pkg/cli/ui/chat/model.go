@@ -201,9 +201,10 @@ type permissionResponse struct {
 // after queuing don't affect the prompt's execution.
 type pendingPrompt struct {
 	content         string   // the prompt text
-	chatMode        ChatMode // agent/plan/ask mode when queued
+	chatMode        ChatMode // agent/plan mode when queued
 	model           string   // model ID when queued
 	reasoningEffort string   // reasoning effort when queued (if applicable)
+	seq             uint64   // insertion sequence number for global ordering
 }
 
 // Model is the Bubbletea model for the chat TUI.
@@ -319,6 +320,7 @@ type Model struct {
 	// Prompt queuing and steering
 	queuedPrompts   []pendingPrompt // FIFO queue for prompts to process after current turn
 	steeringPrompts []pendingPrompt // steering prompts to inject when session becomes idle
+	promptSeq       uint64          // monotonic counter for pending prompt insertion order
 
 	// Channel for async streaming events from Copilot
 	eventChan chan tea.Msg
@@ -829,21 +831,25 @@ func (m *Model) hasRunningTools() bool {
 
 // addQueuedPrompt adds a new queued prompt with current state captured.
 func (m *Model) addQueuedPrompt(content string) {
+	m.promptSeq++
 	m.queuedPrompts = append(m.queuedPrompts, pendingPrompt{
 		content:         content,
 		chatMode:        m.chatMode,
 		model:           m.getSelectedModel(),
 		reasoningEffort: m.getReasoningEffort(),
+		seq:             m.promptSeq,
 	})
 }
 
 // addSteeringPrompt adds a new steering prompt with current state captured.
 func (m *Model) addSteeringPrompt(content string) {
+	m.promptSeq++
 	m.steeringPrompts = append(m.steeringPrompts, pendingPrompt{
 		content:         content,
 		chatMode:        m.chatMode,
 		model:           m.getSelectedModel(),
 		reasoningEffort: m.getReasoningEffort(),
+		seq:             m.promptSeq,
 	})
 }
 
@@ -877,23 +883,40 @@ func (m *Model) pendingPromptCount() int {
 	return len(m.queuedPrompts) + len(m.steeringPrompts)
 }
 
-// deleteLastPendingPrompt removes the most recently added queued prompt.
-// If there are no queued prompts, it removes the most recently added steering prompt instead.
-// Returns true if a prompt was deleted.
+// deleteLastPendingPrompt removes the most recently added pending prompt
+// across both queued and steering lists, using insertion sequence numbers
+// to determine which was added last. Returns true if a prompt was deleted.
 func (m *Model) deleteLastPendingPrompt() bool {
-	if len(m.queuedPrompts) > 0 {
+	hasQueued := len(m.queuedPrompts) > 0
+	hasSteering := len(m.steeringPrompts) > 0
+
+	if !hasQueued && !hasSteering {
+		return false
+	}
+
+	// Compare sequence numbers to find the most recently added prompt
+	if hasQueued && hasSteering {
+		lastQueued := m.queuedPrompts[len(m.queuedPrompts)-1].seq
+		lastSteering := m.steeringPrompts[len(m.steeringPrompts)-1].seq
+
+		if lastSteering > lastQueued {
+			m.steeringPrompts = m.steeringPrompts[:len(m.steeringPrompts)-1]
+		} else {
+			m.queuedPrompts = m.queuedPrompts[:len(m.queuedPrompts)-1]
+		}
+
+		return true
+	}
+
+	if hasQueued {
 		m.queuedPrompts = m.queuedPrompts[:len(m.queuedPrompts)-1]
 
 		return true
 	}
 
-	if len(m.steeringPrompts) > 0 {
-		m.steeringPrompts = m.steeringPrompts[:len(m.steeringPrompts)-1]
+	m.steeringPrompts = m.steeringPrompts[:len(m.steeringPrompts)-1]
 
-		return true
-	}
-
-	return false
+	return true
 }
 
 // peekNextPendingPrompt returns the next pending prompt without removing it.
