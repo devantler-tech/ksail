@@ -428,7 +428,7 @@ func TestWaitForNetworkRemoval_LingeringNetworkDisappearsAfterRetries(t *testing
 	networkExists := func(_ context.Context, _ string) bool {
 		existsCalls++
 
-		// Disappears after 3 existence checks (initial + 2 post-remove).
+		// Disappears on the 4th existence check (initial + 2 post-remove retries + final).
 		return existsCalls <= 3
 	}
 
@@ -446,7 +446,7 @@ func TestWaitForNetworkRemoval_LingeringNetworkDisappearsAfterRetries(t *testing
 	)
 
 	assert.Equal(t, 4, existsCalls, "should check until network disappears")
-	assert.GreaterOrEqual(t, removeCalls, 2, "should attempt removal multiple times")
+	assert.Equal(t, 3, removeCalls, "should attempt removal once per loop iteration")
 }
 
 func TestWaitForNetworkRemoval_ContextCancellation(t *testing.T) {
