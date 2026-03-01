@@ -852,11 +852,8 @@ The SDK manages the CLI process lifecycle automatically. All communication happe
 ## Resources
 
 - **GitHub Repository**: https://github.com/github/copilot-sdk
-- **Getting Started Tutorial**: https://github.com/github/copilot-sdk/blob/main/docs/tutorials/first-app.md
 - **GitHub MCP Server**: https://github.com/github/github-mcp-server
 - **MCP Servers Directory**: https://github.com/modelcontextprotocol/servers
-- **Cookbook**: https://github.com/github/copilot-sdk/tree/main/cookbook
-- **Samples**: https://github.com/github/copilot-sdk/tree/main/samples
 
 ## Status
 

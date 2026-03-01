@@ -19,6 +19,24 @@ const (
 	scrollIndicatorLines = 2
 )
 
+// modalContentStyles holds precomputed styles for rendering modal content.
+type modalContentStyles struct {
+	clipStyle    lipgloss.Style
+	warningStyle lipgloss.Style
+	contentWidth int
+}
+
+// newModalContentStyles creates the common styles used by modal content renderers.
+func newModalContentStyles(modalWidth int) modalContentStyles {
+	contentWidth := max(modalWidth-contentPadding, 1)
+
+	return modalContentStyles{
+		clipStyle:    lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true),
+		warningStyle: lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow)),
+		contentWidth: contentWidth,
+	}
+}
+
 // uiStyles holds all computed lipgloss styles derived from a ThemeConfig.
 // Stored on the Model to allow multiple instances with different themes.
 type uiStyles struct {

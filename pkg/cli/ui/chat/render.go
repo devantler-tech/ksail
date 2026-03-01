@@ -134,15 +134,15 @@ func (m *Model) renderInputOrModal() string {
 // renderExitConfirmModal renders the exit confirmation modal.
 func (m *Model) renderExitConfirmModal() string {
 	modalWidth := max(m.width/exitModalWidthDivisor, 1)
-	contentWidth := max(modalWidth-contentPadding, 1)
-	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
-	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow))
+	mStyles := newModalContentStyles(modalWidth)
 
 	var content strings.Builder
 
-	content.WriteString(clipStyle.Render(warningStyle.Render("Exit KSail chat?")) + "\n\n")
-	content.WriteString(clipStyle.Render("Unsent input will be lost.") + "\n\n")
-	content.WriteString(clipStyle.Render("Y to exit, N to cancel"))
+	content.WriteString(
+		mStyles.clipStyle.Render(mStyles.warningStyle.Render("Exit KSail chat?")) + "\n\n",
+	)
+	content.WriteString(mStyles.clipStyle.Render("Unsent input will be lost.") + "\n\n")
+	content.WriteString(mStyles.clipStyle.Render("Y to exit, N to cancel"))
 
 	modalStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).

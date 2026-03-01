@@ -82,26 +82,26 @@ func (m *Model) renderPermissionModal() string {
 	}
 
 	modalWidth := max(m.width-modalPadding, 1)
-	contentWidth := max(modalWidth-contentPadding, 1)
-	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
-	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow))
+	mStyles := newModalContentStyles(modalWidth)
 
 	var content strings.Builder
 
 	contentLines := 0
 
-	content.WriteString(clipStyle.Render(warningStyle.Render("⚠️  Permission Required")) + "\n\n")
+	content.WriteString(
+		mStyles.clipStyle.Render(mStyles.warningStyle.Render("⚠️  Permission Required")) + "\n\n",
+	)
 
 	contentLines += 2
 
 	humanName := humanizeToolName(m.pendingPermission.toolName, m.toolDisplay.NameMappings)
-	content.WriteString(clipStyle.Render("Tool: "+humanName) + "\n")
+	content.WriteString(mStyles.clipStyle.Render("Tool: "+humanName) + "\n")
 
 	contentLines++
 
 	if m.pendingPermission.command != "" {
 		content.WriteString(
-			clipStyle.Render("Command: "+m.pendingPermission.command) + "\n",
+			mStyles.clipStyle.Render("Command: "+m.pendingPermission.command) + "\n",
 		)
 
 		contentLines++
@@ -109,13 +109,13 @@ func (m *Model) renderPermissionModal() string {
 
 	if m.pendingPermission.arguments != "" {
 		content.WriteString(
-			clipStyle.Render("Arguments: "+m.pendingPermission.arguments) + "\n",
+			mStyles.clipStyle.Render("Arguments: "+m.pendingPermission.arguments) + "\n",
 		)
 
 		contentLines++
 	}
 
-	content.WriteString("\n" + clipStyle.Render("Allow this operation?") + "\n")
+	content.WriteString("\n" + mStyles.clipStyle.Render("Allow this operation?") + "\n")
 
 	contentLines += 3
 
