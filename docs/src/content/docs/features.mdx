@@ -160,6 +160,12 @@ ksail cluster restore -i ./backup.tar.gz --existing-resource-policy update
 
 # Dry-run: preview what would be restored
 ksail cluster restore --input ./backup.tar.gz --dry-run
+
+# Query all resources from a specific backup archive (strip .tar.gz from the filename)
+kubectl get all -l ksail.io/backup-name=backup --all-namespaces
+
+# Inspect backup metadata (inside the archive)
+tar -xOzf ./backup.tar.gz backup-metadata.json | jq .
 ```
 
 **Commands:** [`ksail cluster backup`](/cli-flags/cluster/cluster-backup/), [`ksail cluster restore`](/cli-flags/cluster/cluster-restore/)
