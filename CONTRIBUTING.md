@@ -204,7 +204,7 @@ KSail separates infrastructure management from distribution configuration:
 | `Talos`      | TalosProvisioner       | Talos | Docker, Hetzner, Omni | Immutable Talos Linux                          |
 | `VCluster`   | VClusterProvisioner    | Vind  | Docker                | Virtual clusters via vCluster (Vind) in Docker |
 
-This project strives to be fully open-source friendly, and as such, all core functionality is implemented in the `pkg/` directory, and the `internal/` directory is not used. This allows external projects to import and use any part of the codebase.
+This project strives to be fully open-source friendly. All core functionality is implemented in the `pkg/` directory so external projects can import and use any package under `pkg/`. The `internal/` directory is intentionally minimal — it holds only `internal/buildmeta`, which carries build-time version metadata injected via ldflags (not useful to external consumers).
 
 For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail/v5](https://pkg.go.dev/github.com/devantler-tech/ksail/v5).
 
