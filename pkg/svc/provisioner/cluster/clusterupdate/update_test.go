@@ -353,7 +353,7 @@ func TestPrepareUpdate_DryRun(t *testing.T) {
 
 	result, shouldContinue, err := clusterupdate.PrepareUpdate(diff, nil, opts, errRecreateRequired)
 
-	assert.Equal(t, diff, result)
+	assert.Same(t, diff, result)
 	assert.False(t, shouldContinue)
 	require.NoError(t, err)
 }
