@@ -86,11 +86,11 @@ BenchmarkYAMLMarshaller_RoundTrip_Nested-4                      37820     31700 
 
 Each column in the benchmark output means:
 
-| Column | Description |
-|--------|-------------|
-| `N` | Number of iterations |
-| `ns/op` | Nanoseconds per operation (lower is better) |
-| `B/op` | Bytes allocated per operation (lower is better) |
+| Column      | Description                                                |
+|-------------|------------------------------------------------------------|
+| `N`         | Number of iterations                                       |
+| `ns/op`     | Nanoseconds per operation (lower is better)                |
+| `B/op`      | Bytes allocated per operation (lower is better)            |
 | `allocs/op` | Number of heap allocations per operation (lower is better) |
 
 ## Optimization Opportunities

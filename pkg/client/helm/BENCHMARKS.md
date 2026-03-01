@@ -27,27 +27,27 @@ benchstat baseline.txt new.txt
 
 ### Struct Initialization
 
-| Benchmark | Description |
-|-----------|-------------|
-| `BenchmarkChartSpec/Basic` | Minimal `ChartSpec` with name and namespace |
-| `BenchmarkChartSpec/WithAllFields` | Full `ChartSpec` with values, overrides, and install options |
+| Benchmark                           | Description                                                          |
+|-------------------------------------|----------------------------------------------------------------------|
+| `BenchmarkChartSpec/Basic`          | Minimal `ChartSpec` with name and namespace                          |
+| `BenchmarkChartSpec/WithAllFields`  | Full `ChartSpec` with values, overrides, and install options         |
 | `BenchmarkChartSpecWithLargeValues` | `ChartSpec` with a large `values.yaml` blob and 50 `--set` overrides |
-| `BenchmarkRepositoryEntry/Basic` | Minimal `RepositoryEntry` with name and URL |
-| `BenchmarkRepositoryEntry/WithAuth` | `RepositoryEntry` with TLS certificates and credentials |
-| `BenchmarkReleaseInfo` | `ReleaseInfo` struct with all fields populated |
+| `BenchmarkRepositoryEntry/Basic`    | Minimal `RepositoryEntry` with name and URL                          |
+| `BenchmarkRepositoryEntry/WithAuth` | `RepositoryEntry` with TLS certificates and credentials              |
+| `BenchmarkReleaseInfo`              | `ReleaseInfo` struct with all fields populated                       |
 
 ### Mock Client Operations
 
 These benchmarks use a generated mock to measure dispatch overhead without real Helm API calls, isolating the cost of interface dispatch and argument passing.
 
-| Benchmark | Description |
-|-----------|-------------|
-| `BenchmarkMockClient/AddRepository` | Repository registration call |
+| Benchmark                                   | Description                       |
+|---------------------------------------------|-----------------------------------|
+| `BenchmarkMockClient/AddRepository`         | Repository registration call      |
 | `BenchmarkMockClient/InstallOrUpgradeChart` | Install-or-upgrade lifecycle call |
-| `BenchmarkMockClient/ReleaseExists` | Existence check call |
-| `BenchmarkMockClient/UninstallRelease` | Release removal call |
-| `BenchmarkMockClient/TemplateChart` | Dry-run template rendering call |
-| `BenchmarkMockClient/InstallChart` | Chart install call |
+| `BenchmarkMockClient/ReleaseExists`         | Existence check call              |
+| `BenchmarkMockClient/UninstallRelease`      | Release removal call              |
+| `BenchmarkMockClient/TemplateChart`         | Dry-run template rendering call   |
+| `BenchmarkMockClient/InstallChart`          | Chart install call                |
 
 ## Baseline Results
 
@@ -74,11 +74,11 @@ BenchmarkMockClient/InstallChart-4                          29834512     40.22 n
 
 Each column in the benchmark output means:
 
-| Column | Description |
-|--------|-------------|
-| `N` | Number of iterations |
-| `ns/op` | Nanoseconds per operation (lower is better) |
-| `B/op` | Bytes allocated per operation (lower is better) |
+| Column      | Description                                                |
+|-------------|------------------------------------------------------------|
+| `N`         | Number of iterations                                       |
+| `ns/op`     | Nanoseconds per operation (lower is better)                |
+| `B/op`      | Bytes allocated per operation (lower is better)            |
 | `allocs/op` | Number of heap allocations per operation (lower is better) |
 
 ## Optimization Opportunities

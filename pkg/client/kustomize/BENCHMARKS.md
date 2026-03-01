@@ -27,13 +27,13 @@ benchstat baseline.txt new.txt
 
 ### Build Operations
 
-| Benchmark | Resources | Description |
-|-----------|-----------|-------------|
-| `BenchmarkBuild_SmallKustomization` | 1 (ConfigMap) | Minimum overhead of the kustomize build pipeline |
-| `BenchmarkBuild_MediumKustomization` | 4 (Namespace, Deployment, Service, ConfigMap) | Typical single-application deployment |
-| `BenchmarkBuild_WithLabels` | 2 + labels transformer | Transformation overhead for label patching |
-| `BenchmarkBuild_WithNamePrefix` | 1 + namePrefix transformer | Transformation overhead for name prefixing |
-| `BenchmarkBuild_LargeKustomization` | 20 (10 ConfigMaps + 10 Services) | Complex multi-resource application |
+| Benchmark                            | Resources                                     | Description                                      |
+|--------------------------------------|-----------------------------------------------|--------------------------------------------------|
+| `BenchmarkBuild_SmallKustomization`  | 1 (ConfigMap)                                 | Minimum overhead of the kustomize build pipeline |
+| `BenchmarkBuild_MediumKustomization` | 4 (Namespace, Deployment, Service, ConfigMap) | Typical single-application deployment            |
+| `BenchmarkBuild_WithLabels`          | 2 + labels transformer                        | Transformation overhead for label patching       |
+| `BenchmarkBuild_WithNamePrefix`      | 1 + namePrefix transformer                    | Transformation overhead for name prefixing       |
+| `BenchmarkBuild_LargeKustomization`  | 20 (10 ConfigMaps + 10 Services)              | Complex multi-resource application               |
 
 ### Benchmark Goals
 
@@ -60,11 +60,11 @@ BenchmarkBuild_LargeKustomization-4       312   3840000 ns/op    4038656 B/op   
 
 Each column in the benchmark output means:
 
-| Column | Description |
-|--------|-------------|
-| `N` | Number of iterations |
-| `ns/op` | Nanoseconds per operation (lower is better) |
-| `B/op` | Bytes allocated per operation (lower is better) |
+| Column      | Description                                                |
+|-------------|------------------------------------------------------------|
+| `N`         | Number of iterations                                       |
+| `ns/op`     | Nanoseconds per operation (lower is better)                |
+| `B/op`      | Bytes allocated per operation (lower is better)            |
 | `allocs/op` | Number of heap allocations per operation (lower is better) |
 
 ## Optimization Opportunities
