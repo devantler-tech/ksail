@@ -335,16 +335,17 @@ func waitForNetworkRemoval(
 	logger loftlog.Logger,
 ) {
 	networkName := vclusterNetworkPrefix + clusterName
+
+	if !dockerNetworkExists(ctx, networkName) {
+		return
+	}
+
 	deadline := time.Now().Add(networkRemovalTimeout)
 
 	ticker := time.NewTicker(networkRemovalInterval)
 	defer ticker.Stop()
 
 	for time.Now().Before(deadline) {
-		if !dockerNetworkExists(ctx, networkName) {
-			return
-		}
-
 		logger.Infof("Docker network %q still exists, attempting removal...", networkName)
 		removeDockerNetwork(ctx, networkName, logger)
 
@@ -354,6 +355,10 @@ func waitForNetworkRemoval(
 
 			return
 		case <-ticker.C:
+		}
+
+		if !dockerNetworkExists(ctx, networkName) {
+			return
 		}
 	}
 
