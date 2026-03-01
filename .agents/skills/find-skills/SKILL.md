@@ -29,7 +29,7 @@ The Skills CLI (`npx skills`) is the package manager for the open agent skills e
 - `npx skills check` - Check for skill updates
 - `npx skills update` - Update all installed skills
 
-**Browse skills at:** https://skills.sh/
+**Browse skills at:** <https://skills.sh/>
 
 ## How to Help Users Find Skills
 
@@ -99,7 +99,7 @@ The `-g` flag installs globally (user-level) and `-y` skips confirmation prompts
 When searching, consider these common categories:
 
 | Category        | Example Queries                          |
-| --------------- | ---------------------------------------- |
+|-----------------|------------------------------------------|
 | Web Development | react, nextjs, typescript, css, tailwind |
 | Testing         | testing, jest, playwright, e2e           |
 | DevOps          | deploy, docker, kubernetes, ci-cd        |

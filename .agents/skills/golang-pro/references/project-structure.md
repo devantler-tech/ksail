@@ -252,68 +252,68 @@ GOFLAGS=-v
 
 # Build the application
 build:
-	$(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+ $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 
 # Run tests
 test:
-	$(GO) test -v -race -coverprofile=coverage.out ./...
+ $(GO) test -v -race -coverprofile=coverage.out ./...
 
 # Run tests with coverage report
 test-coverage: test
-	$(GO) tool cover -html=coverage.out
+ $(GO) tool cover -html=coverage.out
 
 # Run linters
 lint:
-	golangci-lint run ./...
+ golangci-lint run ./...
 
 # Format code
 fmt:
-	$(GO) fmt ./...
-	goimports -w .
+ $(GO) fmt ./...
+ goimports -w .
 
 # Run the application
 run:
-	$(GO) run ./cmd/server
+ $(GO) run ./cmd/server
 
 # Clean build artifacts
 clean:
-	rm -rf $(BUILD_DIR)
-	rm -f coverage.out
+ rm -rf $(BUILD_DIR)
+ rm -f coverage.out
 
 # Install dependencies
 deps:
-	$(GO) mod download
-	$(GO) mod tidy
+ $(GO) mod download
+ $(GO) mod tidy
 
 # Build for multiple platforms
 build-all:
-	GOOS=linux GOARCH=amd64 $(GO) build -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/server
-	GOOS=darwin GOARCH=amd64 $(GO) build -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/server
-	GOOS=windows GOARCH=amd64 $(GO) build -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./cmd/server
+ GOOS=linux GOARCH=amd64 $(GO) build -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/server
+ GOOS=darwin GOARCH=amd64 $(GO) build -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/server
+ GOOS=windows GOARCH=amd64 $(GO) build -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./cmd/server
 
 # Run with race detector
 run-race:
-	$(GO) run -race ./cmd/server
+ $(GO) run -race ./cmd/server
 
 # Generate code
 generate:
-	$(GO) generate ./...
+ $(GO) generate ./...
 
 # Docker build
 docker-build:
-	docker build -t $(BINARY_NAME):latest .
+ docker build -t $(BINARY_NAME):latest .
 
 # Help
 help:
-	@echo "Available targets:"
-	@echo "  build         - Build the application"
-	@echo "  test          - Run tests"
-	@echo "  test-coverage - Run tests with coverage report"
-	@echo "  lint          - Run linters"
-	@echo "  fmt           - Format code"
-	@echo "  run           - Run the application"
-	@echo "  clean         - Clean build artifacts"
-	@echo "  deps          - Install dependencies"
+ @echo "Available targets:"
+ @echo "  build         - Build the application"
+ @echo "  test          - Run tests"
+ @echo "  test-coverage - Run tests with coverage report"
+ @echo "  lint          - Run linters"
+ @echo "  fmt           - Format code"
+ @echo "  run           - Run the application"
+ @echo "  clean         - Clean build artifacts"
+ @echo "  deps          - Install dependencies"
 ```
 
 ## Dockerfile Multi-Stage Build
@@ -465,13 +465,13 @@ func Load() (*Config, error) {
 
 ## Quick Reference
 
-| Command | Description |
-|---------|-------------|
-| `go mod init` | Initialize module |
-| `go mod tidy` | Add/remove dependencies |
-| `go mod download` | Download dependencies |
-| `go get package@version` | Add/update dependency |
-| `go build -ldflags "-X ..."` | Set version info |
-| `go generate ./...` | Run code generation |
-| `GOOS=linux go build` | Cross-compile |
-| `go work init` | Initialize workspace |
+| Command                      | Description             |
+|------------------------------|-------------------------|
+| `go mod init`                | Initialize module       |
+| `go mod tidy`                | Add/remove dependencies |
+| `go mod download`            | Download dependencies   |
+| `go get package@version`     | Add/update dependency   |
+| `go build -ldflags "-X ..."` | Set version info        |
+| `go generate ./...`          | Run code generation     |
+| `GOOS=linux go build`        | Cross-compile           |
+| `go work init`               | Initialize workspace    |

@@ -24,7 +24,7 @@ Create standardized, semantic git commits using the Conventional Commits specifi
 ## Commit Types
 
 | Type       | Purpose                        |
-| ---------- | ------------------------------ |
+|------------|--------------------------------|
 | `feat`     | New feature                    |
 | `fix`      | Bug fix                        |
 | `docs`     | Documentation only             |

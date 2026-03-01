@@ -1965,7 +1965,7 @@ gh agent-task create --description "My task"
 ## Global Flags
 
 | Flag                       | Description                            |
-| -------------------------- | -------------------------------------- |
+|----------------------------|----------------------------------------|
 | `--help` / `-h`            | Show help for command                  |
 | `--version`                | Show gh version                        |
 | `--repo [HOST/]OWNER/REPO` | Select another repository              |
@@ -2158,6 +2158,7 @@ git config --global credential.helper github
    ```
 
 5. **Caching**: Use cache control for frequently accessed data
+
    ```bash
    gh api /user --cache force
    ```
@@ -2181,7 +2182,7 @@ gh help accessibility
 
 ## References
 
-- Official Manual: https://cli.github.com/manual/
-- GitHub Docs: https://docs.github.com/en/github-cli
-- REST API: https://docs.github.com/en/rest
-- GraphQL API: https://docs.github.com/en/graphql
+- Official Manual: <https://cli.github.com/manual/>
+- GitHub Docs: <https://docs.github.com/en/github-cli>
+- REST API: <https://docs.github.com/en/rest>
+- GraphQL API: <https://docs.github.com/en/graphql>

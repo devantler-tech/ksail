@@ -18,6 +18,7 @@ Astro is the web framework for content-driven websites.
 ## Quick Reference
 
 ### File Location
+
 CLI looks for `astro.config.js`, `astro.config.mjs`, `astro.config.cjs`, and `astro.config.ts` in: `./`. Use `--config` for custom path.
 
 ### CLI Commands
@@ -48,8 +49,8 @@ Astro leverages an opinionated folder layout for your project. Every Astro proje
 
 ## Core Config Options
 
-| Option | Notes |
-|--------|-------|
+| Option | Notes                                                                                                               |
+|--------|---------------------------------------------------------------------------------------------------------------------|
 | `site` | Your final, deployed URL. Astro uses this full URL to generate your sitemap and canonical URLs in your final build. |
 
 ---
@@ -59,21 +60,25 @@ Astro leverages an opinionated folder layout for your project. Every Astro proje
 Deploy to your favorite server, serverless, or edge host with build adapters. Use an adapter to enable on-demand rendering in your Astro project.
 
 **Add [Node.js](https://docs.astro.build/en/guides/integrations-guide/node) adapter using astro add:**
+
 ```
 npx astro add node --yes
 ```
 
 **Add [Cloudflare](https://docs.astro.build/en/guides/integrations-guide/cloudflare) adapter using astro add:**
+
 ```
 npx astro add cloudflare --yes
 ```
 
 **Add [Netlify](https://docs.astro.build/en/guides/integrations-guide/netlify) adapter using astro add:**
+
 ```
 npx astro add netlify --yes
 ```
 
 **Add [Vercel](https://docs.astro.build/en/guides/integrations-guide/vercel) adapter using astro add:**
+
 ```
 npx astro add vercel --yes
 ```
