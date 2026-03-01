@@ -30,9 +30,9 @@ func nthIPInNetwork(prefix netip.Prefix, offset int) (netip.Addr, error) {
 
 		return netip.AddrFrom4([4]byte{
 			byte(ipValue >> byte0Shift),
-			byte(ipValue >> byte1Shift),
-			byte(ipValue >> byte2Shift),
-			byte(ipValue),
+			byte(ipValue >> byte1Shift), //nolint:gosec // G115: uint32 byte extraction
+			byte(ipValue >> byte2Shift), //nolint:gosec // G115: uint32 byte extraction
+			byte(ipValue),               //nolint:gosec // G115: uint32 byte extraction
 		}), nil
 	}
 

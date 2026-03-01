@@ -168,7 +168,7 @@ func NewProgressGroup(
 	// Detect if we're outputting to a TTY
 	isTTY := false
 	if file, ok := writer.(*os.File); ok {
-		isTTY = term.IsTerminal(int(file.Fd()))
+		isTTY = term.IsTerminal(int(file.Fd())) //nolint:gosec // G115: fd fits int
 	}
 
 	progressGroup := &ProgressGroup{

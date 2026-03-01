@@ -245,37 +245,9 @@ func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, e
 	}
 
 	if !authStatus.IsAuthenticated {
-		cliPath, pathErr := resolveCopilotCLIPath()
-		if pathErr != nil {
-			return "", fmt.Errorf(
-				"%w\n\n"+
-					"could not find the Copilot CLI to start login flow: %v\n\n"+
-					"To fix:\n"+
-					"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
-					"  - Ensure you have an active GitHub Copilot subscription",
-				errNotAuthenticated, pathErr,
-			)
-		}
-
-		fmt.Fprintln(os.Stderr, "\nNot authenticated with GitHub Copilot. Starting login...")
-
-		loginErr := runCopilotAuthLogin(ctx, cliPath)
-		if loginErr != nil {
-			return "", fmt.Errorf("%w: login failed: %v", errNotAuthenticated, loginErr)
-		}
-
-		authStatus, err = client.GetAuthStatus(ctx)
+		authStatus, err = attemptInlineLogin(ctx, client)
 		if err != nil {
-			return "", fmt.Errorf("failed to verify authentication after login: %w", err)
-		}
-
-		if !authStatus.IsAuthenticated {
-			msg := "login completed but authentication check still fails"
-			if authStatus.StatusMessage != nil {
-				msg += ": " + *authStatus.StatusMessage
-			}
-
-			return "", fmt.Errorf("%w: %s", errNotAuthenticated, msg)
+			return "", err
 		}
 	}
 
@@ -287,6 +259,48 @@ func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, e
 	return loginName, nil
 }
 
+// attemptInlineLogin runs an interactive `copilot auth login` device flow
+// and returns the updated auth status on success.
+func attemptInlineLogin(
+	ctx context.Context,
+	client *copilot.Client,
+) (*copilot.GetAuthStatusResponse, error) {
+	cliPath, pathErr := resolveCopilotCLIPath()
+	if pathErr != nil {
+		return nil, fmt.Errorf(
+			"%w\n\n"+
+				"could not find the Copilot CLI to start login flow: %w\n\n"+
+				"To fix:\n"+
+				"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
+				"  - Ensure you have an active GitHub Copilot subscription",
+			errNotAuthenticated, pathErr,
+		)
+	}
+
+	fmt.Fprintln(os.Stderr, "\nNot authenticated with GitHub Copilot. Starting login...")
+
+	loginErr := runCopilotAuthLogin(ctx, cliPath)
+	if loginErr != nil {
+		return nil, fmt.Errorf("%w: login failed: %w", errNotAuthenticated, loginErr)
+	}
+
+	authStatus, err := client.GetAuthStatus(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify authentication after login: %w", err)
+	}
+
+	if !authStatus.IsAuthenticated {
+		msg := "login completed but authentication check still fails"
+		if authStatus.StatusMessage != nil {
+			msg += ": " + *authStatus.StatusMessage
+		}
+
+		return nil, fmt.Errorf("%w: %s", errNotAuthenticated, msg)
+	}
+
+	return authStatus, nil
+}
+
 // resolveCopilotCLIPath finds the Copilot CLI binary, checking:
 //  1. COPILOT_CLI_PATH environment variable
 //  2. SDK cache directory (bundled CLI)
@@ -296,7 +310,8 @@ func resolveCopilotCLIPath() (string, error) {
 		return p, nil
 	}
 
-	if cacheDir, err := os.UserCacheDir(); err == nil {
+	cacheDir, err := os.UserCacheDir()
+	if err == nil {
 		sdkDir := filepath.Join(cacheDir, "copilot-sdk")
 
 		entries, readErr := os.ReadDir(sdkDir)
@@ -312,7 +327,12 @@ func resolveCopilotCLIPath() (string, error) {
 		}
 	}
 
-	return exec.LookPath("copilot")
+	p, lookErr := exec.LookPath("copilot")
+	if lookErr != nil {
+		return "", fmt.Errorf("copilot CLI not found in PATH: %w", lookErr)
+	}
+
+	return p, nil
 }
 
 // runCopilotAuthLogin spawns `copilot login` as an interactive subprocess.
@@ -322,7 +342,12 @@ func runCopilotAuthLogin(ctx context.Context, cliPath string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	return cmd.Run()
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("copilot login failed: %w", err)
+	}
+
+	return nil
 }
 
 // buildSessionConfig creates the Copilot session configuration.
