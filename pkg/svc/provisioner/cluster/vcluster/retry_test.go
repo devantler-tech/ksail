@@ -20,11 +20,12 @@ var (
 	errTransient    = errors.New("failed to start vCluster standalone: exit status 22")
 	errNonTransient = errors.New("failed to start vCluster standalone: permission denied")
 	//nolint:staticcheck // Must match the exact SDK error string which is capitalised.
-	errDBus        = errors.New("Failed to connect to bus: No such file or directory")
-	errDBusRecover = errors.New("D-Bus recovery failed")
-	errExitStatus1 = errors.New("exit status 1")
-	errWrapped22   = errors.New("something went wrong: exit status 22")
-	errEmpty       = errors.New("")
+	errDBus           = errors.New("Failed to connect to bus: No such file or directory")
+	errDBusRecover    = errors.New("D-Bus recovery failed")
+	errExitStatus1    = errors.New("exit status 1")
+	errWrapped22      = errors.New("something went wrong: exit status 22")
+	errEmpty          = errors.New("")
+	errRegistryDenied = errors.New("fetching blob: denied: denied")
 )
 
 func newTestLogger() loftlog.Logger {
@@ -65,6 +66,11 @@ func TestIsTransientCreateError(t *testing.T) {
 			name: "exit_status_1_is_not_transient",
 			err:  errExitStatus1,
 			want: false,
+		},
+		{
+			name: "registry_denied_is_transient",
+			err:  errRegistryDenied,
+			want: true,
 		},
 		{
 			name: "empty_error_is_not_transient",
