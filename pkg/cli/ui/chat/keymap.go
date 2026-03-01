@@ -157,8 +157,8 @@ func setActionKeys(keyMap *KeyMap) {
 		key.WithHelp("^Q", "queue prompt"),
 	)
 	keyMap.DeletePending = key.NewBinding(
-		key.WithKeys("ctrl+d"),
-		key.WithHelp("Ctrl+D", "delete pending prompt"),
+		key.WithKeys("ctrl+x"),
+		key.WithHelp("^X", "delete last pending"),
 	)
 	keyMap.NewLine = key.NewBinding(
 		key.WithKeys("alt+enter"),

@@ -105,7 +105,7 @@ func (m *Model) helpOverlayParts() []string {
 	return []string{
 		m.styles.helpKey.Render(enterSymbol) + " send / steer",
 		m.styles.helpKey.Render("^Q") + " queue",
-		m.styles.helpKey.Render("^D") + " delete pending",
+		m.styles.helpKey.Render("^X") + " delete last pending",
 		m.styles.helpKey.Render(keyArrows) + " history",
 		m.styles.helpKey.Render(keyPageNav) + " scroll",
 		m.styles.helpKey.Render("Tab") + " mode",
@@ -330,7 +330,7 @@ func (m *Model) getDefaultHelpParts() []string {
 	if m.hasPendingPrompts() {
 		count := m.pendingPromptCount()
 		parts = append(parts, fmt.Sprintf("(%d pending)", count))
-		parts = append(parts, m.styles.helpKey.Render("^D")+" delete")
+		parts = append(parts, m.styles.helpKey.Render("^X")+" delete last")
 	}
 
 	// Conditionally add copy hint
