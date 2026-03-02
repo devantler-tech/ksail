@@ -9,34 +9,26 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
+	fcolor "github.com/fatih/color"
 )
 
-// BenchmarkProgressGroup_Sequential benchmarks progress group with tasks running sequentially
-// (simulates scenarios where tasks cannot be parallelized).
+// NOTE: These benchmarks use io.Discard and bytes.Buffer as writers, which are
+// non-TTY. This means only the CI output path (runCI) is benchmarked, not the
+// interactive TTY path (runInteractive) with animated spinners. Benchmarking the
+// TTY path would require a real terminal file descriptor.
+
+// BenchmarkProgressGroup_Sequential benchmarks progress group when work runs sequentially
+// within a single task (simulates scenarios where tasks cannot be parallelized).
 func BenchmarkProgressGroup_Sequential(b *testing.B) {
 	// Use a no-op writer to avoid I/O overhead in benchmarks
 	writer := io.Discard
 
 	tasks := []notify.ProgressTask{
 		{
-			Name: "task-1",
+			Name: "sequential-task",
 			Fn: func(_ context.Context) error {
 				time.Sleep(10 * time.Millisecond)
-
-				return nil
-			},
-		},
-		{
-			Name: "task-2",
-			Fn: func(_ context.Context) error {
 				time.Sleep(10 * time.Millisecond)
-
-				return nil
-			},
-		},
-		{
-			Name: "task-3",
-			Fn: func(_ context.Context) error {
 				time.Sleep(10 * time.Millisecond)
 
 				return nil
@@ -48,7 +40,11 @@ func BenchmarkProgressGroup_Sequential(b *testing.B) {
 
 	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
-		_ = pg.Run(context.Background(), tasks...)
+
+		err := pg.Run(context.Background(), tasks...)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -104,7 +100,11 @@ func BenchmarkProgressGroup_Parallel_Fast(b *testing.B) {
 
 	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
-		_ = pg.Run(context.Background(), tasks...)
+
+		err := pg.Run(context.Background(), tasks...)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -144,7 +144,11 @@ func BenchmarkProgressGroup_Parallel_Slow(b *testing.B) {
 
 	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
-		_ = pg.Run(context.Background(), tasks...)
+
+		err := pg.Run(context.Background(), tasks...)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -170,7 +174,11 @@ func BenchmarkProgressGroup_ManyTasks(b *testing.B) {
 
 	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
-		_ = pg.Run(context.Background(), tasks...)
+
+		err := pg.Run(context.Background(), tasks...)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -209,8 +217,13 @@ func BenchmarkProgressGroup_WithTimer(b *testing.B) {
 
 	for range b.N {
 		tmr := timer.New()
+		tmr.Start()
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer, notify.WithTimer(tmr))
-		_ = pg.Run(context.Background(), tasks...)
+
+		err := pg.Run(context.Background(), tasks...)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -219,6 +232,14 @@ func BenchmarkProgressGroup_WithTimer(b *testing.B) {
 func BenchmarkProgressGroup_CI_Mode(b *testing.B) {
 	// Use a buffer to simulate CI output (not a TTY)
 	var buf bytes.Buffer
+
+	// Force color off to accurately model CI/piped output
+	origNoColor := fcolor.NoColor
+	fcolor.NoColor = true
+
+	b.Cleanup(func() {
+		fcolor.NoColor = origNoColor
+	})
 
 	tasks := []notify.ProgressTask{
 		{
@@ -252,7 +273,11 @@ func BenchmarkProgressGroup_CI_Mode(b *testing.B) {
 	for range b.N {
 		buf.Reset()
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", &buf)
-		_ = pg.Run(context.Background(), tasks...)
+
+		err := pg.Run(context.Background(), tasks...)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -285,7 +310,11 @@ func BenchmarkProgressGroup_CustomLabels(b *testing.B) {
 
 	for range b.N {
 		pg := notify.NewProgressGroup("Installing", "📦", writer, notify.WithLabels(labels))
-		_ = pg.Run(context.Background(), tasks...)
+
+		err := pg.Run(context.Background(), tasks...)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -309,7 +338,11 @@ func BenchmarkProgressGroup_SingleTask(b *testing.B) {
 
 	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
-		_ = pg.Run(context.Background(), tasks...)
+
+		err := pg.Run(context.Background(), tasks...)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -328,7 +361,11 @@ func BenchmarkProgressGroup_NoOp(b *testing.B) {
 
 	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
-		_ = pg.Run(context.Background(), tasks...)
+
+		err := pg.Run(context.Background(), tasks...)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -376,6 +413,10 @@ func BenchmarkProgressGroup_VaryingTaskDurations(b *testing.B) {
 
 	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
-		_ = pg.Run(context.Background(), tasks...)
+
+		err := pg.Run(context.Background(), tasks...)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
