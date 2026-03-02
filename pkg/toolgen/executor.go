@@ -171,6 +171,7 @@ func executeCommand(
 		defer cancel()
 	}
 
+	//nolint:gosec // G204 -- command from trusted tool definitions
 	cmd := exec.CommandContext(execCtx, command, args...)
 	cmd.Dir = opts.WorkingDirectory
 
