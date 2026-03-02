@@ -442,6 +442,13 @@ jobs:
       - name: 🧹 Free disk space
         uses: ./.github/actions/free-disk-space
 
+      - name: 🔐 Login to Docker Hub
+        if: ${{ vars.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: ⚙️ Setup Go
         id: setup-go
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
@@ -487,6 +494,37 @@ jobs:
         with:
           hcloud-token: ${{ secrets.HCLOUD_TOKEN }}
 
+  rate-limit-check:
+    name: 📊 Rate Limit Status
+    runs-on: ubuntu-latest
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: 📊 GitHub API rate limit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "## GitHub API Rate Limit" >> "$GITHUB_STEP_SUMMARY"
+          curl -sf -H "Authorization: token $GH_TOKEN" \
+            https://api.github.com/rate_limit | \
+            jq -r '"| Resource | Remaining | Limit | Reset |", "|---|---|---|---|", (.resources | to_entries[] | "| \(.key) | \(.value.remaining) | \(.value.limit) | \(.value.reset | todate) |")' \
+            >> "$GITHUB_STEP_SUMMARY"
+      - name: 📊 Docker Hub rate limit
+        run: |
+          echo "## Docker Hub Rate Limit" >> "$GITHUB_STEP_SUMMARY"
+          TOKEN=$(curl -sf "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/alpine:pull" | jq -r .token)
+          HEADERS=$(curl -sf -I -H "Authorization: Bearer $TOKEN" \
+            https://registry-1.docker.io/v2/library/alpine/manifests/latest 2>&1)
+          REMAINING=$(echo "$HEADERS" | grep -i "ratelimit-remaining" | head -1 || true)
+          LIMIT=$(echo "$HEADERS" | grep -i "ratelimit-limit" | head -1 || true)
+          if [ -n "$REMAINING" ]; then
+            echo "- $LIMIT" >> "$GITHUB_STEP_SUMMARY"
+            echo "- $REMAINING" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No rate limit headers — runner may be exempt" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   status:
     name: CI - KSail
     runs-on: ubuntu-latest
@@ -501,6 +539,7 @@ jobs:
         warm-helm-cache,
         system-test,
         cleanup-hetzner,
+        rate-limit-check,
         audit-docs,
         audit-vsce,
         vscode-extension,
@@ -522,6 +561,7 @@ jobs:
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.system-test.result }}
             ${{ needs.cleanup-hetzner.result }}
+            ${{ needs.rate-limit-check.result }}
             ${{ needs.audit-docs.result }}
             ${{ needs.audit-vsce.result }}
             ${{ needs.vscode-extension.result }}
