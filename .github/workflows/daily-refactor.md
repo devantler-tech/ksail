@@ -10,12 +10,17 @@ on:
     - "github-merge-queue[bot]"
 
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
-  schedule: daily
+  schedule:
+    - cron: "0 2 * * *"
+  skip-if-match: is:pr is:open in:title "${{ github.workflow }}"
   workflow_dispatch:
 
 timeout-minutes: 30
 
 permissions: read-all
+
+imports:
+  - githubnext/agentics/workflows/shared/reporting.md@69b5e3ae5fa7f35fa555b0a22aee14c36ab57ebb
 
 network:
   allowed: [defaults, go]
@@ -36,6 +41,10 @@ safe-outputs:
     target: "*"
   create-pull-request:
     draft: true
+    labels:
+      - refactoring
+      - code-quality
+      - automation
 
 tools:
   github:
@@ -141,7 +150,25 @@ To decide which phase to perform:
 
 1. **Goal selection**. Build an understanding of what to work on and select a refactoring target from the plan.
 
-   a. Repository is now refactoring-ready. Review `build-steps/action.yml` and `build-steps.log` to understand setup. If build failed then create fix PR and exit.
+   a. **Reactive scan of recent changes (code simplification).** Before consulting the research plan, check for recently modified code from the last 24 hours that could benefit from simplification:
+
+      - Search for merged PRs and commits from the last 24h:
+        ```bash
+        YESTERDAY=$(date -v-1d '+%Y-%m-%d' 2>/dev/null || date -d '1 day ago' '+%Y-%m-%d')
+        git log --since="24 hours ago" --pretty=format:"%H %s" --no-merges
+        ```
+      - Use GitHub tools to search: `repo:${{ github.repository }} is:pr is:merged merged:>=${YESTERDAY}`
+      - Extract changed source files (exclude test files, lock files, generated files, vendored dependencies)
+      - If recent changes exist, analyze them for simplification opportunities:
+        - Redundant code or unnecessary complexity
+        - Unclear variable/function names
+        - Non-idiomatic patterns
+        - Excessive nesting or overly compact solutions
+      - **Simplification principles**: Preserve functionality, enhance clarity (prefer explicit over compact), apply project standards, maintain balance (avoid over-simplification that reduces readability)
+      - If simplification targets are found in recently changed code, prioritize those over the planned refactoring goals and skip to step 2
+      - If no recent changes or no simplification opportunities, continue to step 1b
+
+   b. Repository is now refactoring-ready. Review `build-steps/action.yml` and `build-steps.log` to understand setup. If build failed then create fix PR and exit.
 
    b. Read the plan in the discussion mentioned earlier, along with comments.
 
