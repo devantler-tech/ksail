@@ -140,18 +140,11 @@ runs:
               endpoint: "${OMNI_ENDPOINT}"
         EOF
         else
-          # Patch existing config from init flow by appending an override section.
-          # YAML parsers typically honor the last occurrence of a key, so this
-          # ensures the configured Omni endpoint takes precedence without
-          # requiring external dependencies like PyYAML.
-          {
-            echo ""
-            echo "# KSail CI override for Omni endpoint"
-            echo "spec:"
-            echo "  cluster:"
-            echo "    omni:"
-            echo "      endpoint: \"${OMNI_ENDPOINT}\""
-          } >> "$CONFIG_FILE"
+          # Patch existing config from init flow by updating the Omni endpoint in-place.
+          # Use yq to avoid creating duplicate top-level keys that would overwrite the
+          # existing spec (distribution, provider, etc.).
+          echo "🔧 Patching existing Omni endpoint in ${CONFIG_FILE} with yq..."
+          yq e '.spec.cluster.omni.endpoint = env(OMNI_ENDPOINT)' -i "$CONFIG_FILE"
         fi
         echo "✅ Omni endpoint configured in $CONFIG_FILE"
 
