@@ -171,7 +171,7 @@ func executeCommand(
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext( //nolint:gosec // G204: validated tool defs
+	cmd := exec.CommandContext(
 		execCtx,
 		command,
 		args...)
