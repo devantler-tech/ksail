@@ -283,13 +283,11 @@ func tryDBusRecovery(
 // transient error substring that may succeed on retry.
 func isTransientCreateError(err error) bool {
 	msg := err.Error()
-
 	for _, s := range transientCreateErrors() {
 		if strings.Contains(msg, s) {
 			return true
 		}
 	}
-
 	return false
 }
 

@@ -159,7 +159,6 @@ func countFlowLines(parts []string, maxWidth int) int {
 // returning at most maxLines lines. Parts that don't fit are omitted.
 func flowHelpParts(parts []string, maxWidth, maxLines int) string {
 	var lines []string
-
 	var line strings.Builder
 
 	lineWidth := 0
@@ -174,6 +173,7 @@ func flowHelpParts(parts []string, maxWidth, maxLines int) string {
 			totalNeeded += sepWidth
 		}
 
+		// Start new line if current part doesn't fit
 		if needsSep && lineWidth+totalNeeded > maxWidth {
 			lines = append(lines, line.String())
 			if len(lines) >= maxLines {
@@ -181,19 +181,16 @@ func flowHelpParts(parts []string, maxWidth, maxLines int) string {
 			}
 
 			line.Reset()
-
 			lineWidth = 0
 			needsSep = false
 		}
 
 		if needsSep {
 			line.WriteString(helpSep)
-
 			lineWidth += sepWidth
 		}
 
 		line.WriteString(part)
-
 		lineWidth += partWidth
 	}
 
@@ -356,12 +353,10 @@ func (m *Model) getDefaultHelpParts() []string {
 // buildTruncatedHelp builds a help string that fits within maxWidth.
 func buildTruncatedHelp(parts []string, maxWidth int) string {
 	var result strings.Builder
-
 	currentWidth := 0
 
 	for idx, part := range parts {
 		partWidth := lipgloss.Width(part)
-
 		sepWidth := 0
 		if idx > 0 {
 			sepWidth = lipgloss.Width(helpSep)
@@ -374,9 +369,7 @@ func buildTruncatedHelp(parts []string, maxWidth int) string {
 		if idx > 0 {
 			result.WriteString(helpSep)
 		}
-
 		result.WriteString(part)
-
 		currentWidth += sepWidth + partWidth
 	}
 

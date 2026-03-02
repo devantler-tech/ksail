@@ -65,7 +65,6 @@ func (m *Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEnter()
 	case "alt+enter":
 		m.textarea.InsertString("\n")
-
 		return m, nil
 	}
 
@@ -77,7 +76,6 @@ func (m *Model) handleChatShortcutKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "f1":
 		m.showHelpOverlay = true
-
 		return m, nil
 	case "ctrl+o":
 		return m.handleOpenModelPicker()
