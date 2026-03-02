@@ -362,7 +362,7 @@ func findCopilotInSDKCache() (string, bool) {
 }
 
 // isCopilotBinaryName returns true for names that match the Copilot CLI binary pattern:
-// "copilot", "copilot.exe", or "copilot-<os>-<arch>" (e.g., "copilot-linux-amd64").
+// "copilot", "copilot.exe", or "copilot-<os>-<arch>[.exe]" (e.g., "copilot-linux-amd64").
 func isCopilotBinaryName(name string) bool {
 	if name == "copilot" || name == "copilot.exe" {
 		return true
@@ -373,12 +373,15 @@ func isCopilotBinaryName(name string) bool {
 		return false
 	}
 
+	// Strip optional .exe suffix for platform-specific binaries (e.g., "copilot-windows-amd64.exe").
+	base := strings.TrimSuffix(name, ".exe")
+
 	// Match "copilot-<os>-<arch>" pattern (exactly two dashes after "copilot").
-	if !strings.HasPrefix(name, "copilot-") {
+	if !strings.HasPrefix(base, "copilot-") {
 		return false
 	}
 
-	rest := strings.TrimPrefix(name, "copilot-")
+	rest := strings.TrimPrefix(base, "copilot-")
 
 	// Must have exactly one more dash: <os>-<arch>
 	return strings.Count(rest, "-") == 1
