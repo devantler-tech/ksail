@@ -133,7 +133,7 @@ func TestWaitForCRDs_UnexpectedError(t *testing.T) {
 	t.Skip("fake dynamic client always returns 404; can't simulate RBAC/network errors")
 }
 
-func TestEnsureIPAddressPool_Success(t *testing.T) {
+func TestNewInstaller_IPRangeFormats(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -176,13 +176,7 @@ func TestEnsureIPAddressPool_Success(t *testing.T) {
 				testCase.ipRange,
 			)
 
-			// Note: The fake dynamic client doesn't fully support Server-Side Apply (SSA).
-			// Apply() returns "not found" for resources that don't exist yet.
-			// Real integration testing would require a test cluster with MetalLB CRDs.
-			// This test documents that the installer can be constructed with various IP ranges.
-			assert.NotNil(t, installer)
-
-			_ = testCase.want // Documentation: this is the expected IP range in the pool spec
+			assert.Equal(t, testCase.want, metallbinstaller.ExportIPRange(installer))
 		})
 	}
 }
