@@ -376,14 +376,16 @@ func isCopilotBinaryName(name string) bool {
 	// Strip optional .exe suffix for platform-specific binaries (e.g., "copilot-windows-amd64.exe").
 	base := strings.TrimSuffix(name, ".exe")
 
-	// Match "copilot-<os>-<arch>" pattern (exactly one dash in the "<os>-<arch>" portion).
+	// Match "copilot-<segment>-<segment>" pattern (exactly one dash in the portion after "copilot-").
+	// This matches platform-specific binaries like "copilot-linux-amd64" without validating
+	// actual OS or architecture values.
 	if !strings.HasPrefix(base, "copilot-") {
 		return false
 	}
 
 	rest := strings.TrimPrefix(base, "copilot-")
 
-	// Must have exactly one more dash: <os>-<arch>
+	// Must have exactly one dash separating two segments
 	return strings.Count(rest, "-") == 1
 }
 

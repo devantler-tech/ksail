@@ -580,7 +580,7 @@ func injectRestoreLabels(
 
 	_, err = tmpFile.WriteString(builder.String())
 	if err != nil {
-		//nolint:gosec // G304: cleaning up temp file created by os.CreateTemp
+		//nolint:gosec // G703: cleaning up temp file created by os.CreateTemp in this scope
 		_ = os.Remove(tmpFile.Name())
 
 		return "", fmt.Errorf("failed to write labeled file: %w", err)
