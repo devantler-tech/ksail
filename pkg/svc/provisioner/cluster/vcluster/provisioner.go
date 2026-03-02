@@ -329,7 +329,11 @@ func cleanupFailedCreate(
 		logger.Warnf("cleanup of failed vCluster %q before retry: %v", clusterName, err)
 	}
 
-	waitForNetworkRemoval(ctx, clusterName, logger, dockerNetworkExists, removeDockerNetwork)
+	waitForNetworkRemoval(
+		ctx, clusterName, logger,
+		dockerNetworkExists, removeDockerNetwork,
+		networkRemovalInterval,
+	)
 }
 
 // waitForNetworkRemoval waits for the Docker network associated with the
@@ -338,13 +342,16 @@ func cleanupFailedCreate(
 // DeleteDocker returns success (a known condition on CI runners).
 //
 // A timeout-scoped context bounds all Docker CLI calls so that a hanging
-// Docker daemon cannot block the cleanup step indefinitely.
+// Docker daemon cannot block the cleanup step indefinitely. The pollInterval
+// controls the delay between removal attempts (use networkRemovalInterval in
+// production; tests can pass a smaller value to avoid slow test suites).
 func waitForNetworkRemoval(
 	ctx context.Context,
 	clusterName string,
 	logger loftlog.Logger,
 	networkExists networkExistsFn,
 	removeNetwork removeNetworkFn,
+	pollInterval time.Duration,
 ) {
 	networkName := vclusterNetworkPrefix + clusterName
 
@@ -356,7 +363,7 @@ func waitForNetworkRemoval(
 		return
 	}
 
-	ticker := time.NewTicker(networkRemovalInterval)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -384,6 +391,7 @@ func waitForNetworkRemoval(
 // dockerNetworkExists checks whether a Docker network with the given name
 // exists. Returns false if the network is not found or if Docker is unavailable.
 func dockerNetworkExists(ctx context.Context, networkName string) bool {
+	//nolint:gosec // args are internally controlled.
 	cmd := exec.CommandContext(ctx, "docker", "network", "inspect", networkName)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
@@ -392,19 +400,29 @@ func dockerNetworkExists(ctx context.Context, networkName string) bool {
 }
 
 // removeDockerNetwork attempts to remove a Docker network. Errors are logged
-// but not returned because network removal is best-effort during cleanup.
+// including the Docker CLI stderr output (e.g. "has active endpoints") so
+// operators can diagnose why the network couldn't be removed.
 func removeDockerNetwork(
 	ctx context.Context,
 	networkName string,
 	logger loftlog.Logger,
 ) {
+	//nolint:gosec // args are internally controlled.
 	cmd := exec.CommandContext(ctx, "docker", "network", "rm", networkName)
 	cmd.Stdout = nil
-	cmd.Stderr = nil
+
+	var stderr strings.Builder
+
+	cmd.Stderr = &stderr
 
 	err := cmd.Run()
 	if err != nil {
-		logger.Warnf("failed to remove Docker network %q: %v", networkName, err)
+		stderrMsg := strings.TrimSpace(stderr.String())
+		if stderrMsg != "" {
+			logger.Warnf("failed to remove Docker network %q: %v (%s)", networkName, err, stderrMsg)
+		} else {
+			logger.Warnf("failed to remove Docker network %q: %v", networkName, err)
+		}
 	}
 }
 
@@ -573,6 +591,7 @@ func waitForDBus(ctx context.Context, containerName string) error {
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled while waiting for D-Bus: %w", ctx.Err())
 		case <-ticker.C:
+			//nolint:gosec // args are internally controlled constants.
 			cmd := exec.CommandContext(ctx, "docker", "exec", containerName,
 				"test", "-e", "/run/dbus/system_bus_socket")
 

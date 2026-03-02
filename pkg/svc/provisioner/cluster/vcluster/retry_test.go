@@ -388,6 +388,7 @@ func TestWaitForNetworkRemoval_NetworkAlreadyGone(t *testing.T) {
 		newTestLogger(),
 		networkExists,
 		removeNetwork,
+		vclusterprovisioner.TestPollInterval,
 	)
 
 	assert.Equal(t, 1, existsCalls, "should check existence once and return immediately")
@@ -415,6 +416,7 @@ func TestWaitForNetworkRemoval_RemovedImmediately(t *testing.T) {
 		newTestLogger(),
 		networkExists,
 		removeNetwork,
+		vclusterprovisioner.TestPollInterval,
 	)
 
 	assert.Equal(t, 2, existsCalls, "should check before and after removal")
@@ -443,6 +445,7 @@ func TestWaitForNetworkRemoval_LingeringNetworkDisappearsAfterRetries(t *testing
 		newTestLogger(),
 		networkExists,
 		removeNetwork,
+		vclusterprovisioner.TestPollInterval,
 	)
 
 	assert.Equal(t, 4, existsCalls, "should check until network disappears")
@@ -472,6 +475,7 @@ func TestWaitForNetworkRemoval_ContextCancellation(t *testing.T) {
 		newTestLogger(),
 		networkExists,
 		removeNetwork,
+		vclusterprovisioner.TestPollInterval,
 	)
 
 	// Should exit due to context cancellation, not loop forever.
