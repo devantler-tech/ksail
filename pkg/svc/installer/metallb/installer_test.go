@@ -27,16 +27,40 @@ func TestNewInstaller(t *testing.T) {
 func TestNewInstaller_CustomIPRange(t *testing.T) {
 	t.Parallel()
 
-	client := helm.NewMockInterface(t)
-	installer := metallbinstaller.NewInstaller(
-		client,
-		"~/.kube/config",
-		"test-context",
-		5*time.Minute,
-		"10.0.0.100-10.0.0.200",
-	)
+	tests := []struct {
+		name    string
+		ipRange string
+	}{
+		{
+			name:    "range format",
+			ipRange: "10.0.0.100-10.0.0.200",
+		},
+		{
+			name:    "single IP",
+			ipRange: "192.168.1.50",
+		},
+		{
+			name:    "CIDR notation",
+			ipRange: "10.96.0.0/24",
+		},
+	}
 
-	assert.NotNil(t, installer)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := helm.NewMockInterface(t)
+			installer := metallbinstaller.NewInstaller(
+				client,
+				"~/.kube/config",
+				"test-context",
+				5*time.Minute,
+				testCase.ipRange,
+			)
+
+			assert.NotNil(t, installer)
+		})
+	}
 }
 
 // Skipped: Install requires a real Kubernetes cluster (ensurePrivilegedNamespace calls k8s.NewClientset).
@@ -73,7 +97,10 @@ func TestWaitForCRDs_Success(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	err := installer.TestWaitForCRDs(ctx, dynamicClient)
+	// Use injectable poll interval/timeout to avoid blocking for 2s.
+	err := metallbinstaller.ExportWaitForCRDsWithOptions(
+		installer, ctx, dynamicClient, 1*time.Millisecond, 100*time.Millisecond,
+	)
 
 	require.NoError(t, err)
 }
@@ -106,59 +133,6 @@ func TestWaitForCRDs_UnexpectedError(t *testing.T) {
 	t.Skip("fake dynamic client always returns 404; can't simulate RBAC/network errors")
 }
 
-func TestEnsureIPAddressPool_Success(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		ipRange string
-		want    string
-	}{
-		{
-			name:    "default IP range",
-			ipRange: "",
-			want:    "172.18.255.200-172.18.255.250",
-		},
-		{
-			name:    "custom IP range",
-			ipRange: "10.0.0.100-10.0.0.200",
-			want:    "10.0.0.100-10.0.0.200",
-		},
-		{
-			name:    "single IP",
-			ipRange: "192.168.1.50",
-			want:    "192.168.1.50",
-		},
-		{
-			name:    "CIDR notation",
-			ipRange: "10.96.0.0/24",
-			want:    "10.96.0.0/24",
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			client := helm.NewMockInterface(t)
-			installer := metallbinstaller.NewInstaller(
-				client,
-				"~/.kube/config",
-				"test-context",
-				5*time.Minute,
-				testCase.ipRange,
-			)
-
-			// Note: The fake dynamic client doesn't fully support Server-Side Apply (SSA).
-			// Apply() returns "not found" for resources that don't exist yet.
-			// Real integration testing would require a test cluster with MetalLB CRDs.
-			// This test documents that the installer can be constructed with various IP ranges.
-			assert.NotNil(t, installer)
-			_ = testCase.want // Documentation: this is the expected IP range in the pool spec
-		})
-	}
-}
-
 func TestEnsureIPAddressPool_ContextCancelled(t *testing.T) {
 	t.Parallel()
 
@@ -170,7 +144,7 @@ func TestEnsureIPAddressPool_ContextCancelled(t *testing.T) {
 func TestEnsureL2Advertisement_Success(t *testing.T) {
 	t.Parallel()
 
-	// Same SSA limitation as TestEnsureIPAddressPool_Success.
+	// Same SSA limitation as TestEnsureIPAddressPool.
 	t.Skip("fake dynamic client doesn't support Server-Side Apply")
 }
 

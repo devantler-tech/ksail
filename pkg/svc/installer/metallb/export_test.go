@@ -1,31 +1,11 @@
+//nolint:gochecknoglobals // export_test.go exposes unexported symbols for testing via package-level vars.
 package metallbinstaller
 
-import (
-	"context"
-	"time"
+// ExportWaitForCRDsWithOptions exposes (*Installer).waitForCRDsWithOptions for testing.
+var ExportWaitForCRDsWithOptions = (*Installer).waitForCRDsWithOptions
 
-	"k8s.io/client-go/dynamic"
-)
+// ExportEnsureIPAddressPool exposes (*Installer).ensureIPAddressPool for testing.
+var ExportEnsureIPAddressPool = (*Installer).ensureIPAddressPool
 
-// Exported for testing only - allows black-box tests to call unexported methods.
-
-// TestWaitForCRDs exposes waitForCRDs for testing.
-func (m *Installer) TestWaitForCRDs(ctx context.Context, client dynamic.Interface) error {
-	return m.waitForCRDs(ctx, client)
-}
-
-// TestEnsureIPAddressPool exposes ensureIPAddressPool for testing.
-func (m *Installer) TestEnsureIPAddressPool(ctx context.Context, client dynamic.Interface) error {
-	return m.ensureIPAddressPool(ctx, client)
-}
-
-// TestEnsureL2Advertisement exposes ensureL2Advertisement for testing.
-func (m *Installer) TestEnsureL2Advertisement(ctx context.Context, client dynamic.Interface) error {
-	return m.ensureL2Advertisement(ctx, client)
-}
-
-// TestCRDPollInterval exposes crdPollInterval for testing.
-const TestCRDPollInterval = 1 * time.Millisecond
-
-// TestCRDPollTimeout exposes crdPollTimeout for testing.
-const TestCRDPollTimeout = 100 * time.Millisecond
+// ExportEnsureL2Advertisement exposes (*Installer).ensureL2Advertisement for testing.
+var ExportEnsureL2Advertisement = (*Installer).ensureL2Advertisement
