@@ -18,13 +18,35 @@ func BenchmarkProgressGroup_Sequential(b *testing.B) {
 	writer := io.Discard
 
 	tasks := []notify.ProgressTask{
-		{Name: "task-1", Fn: func(ctx context.Context) error { time.Sleep(10 * time.Millisecond); return nil }},
-		{Name: "task-2", Fn: func(ctx context.Context) error { time.Sleep(10 * time.Millisecond); return nil }},
-		{Name: "task-3", Fn: func(ctx context.Context) error { time.Sleep(10 * time.Millisecond); return nil }},
+		{
+			Name: "task-1",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-2",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-3",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
+				return nil
+			},
+		},
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
 		_ = pg.Run(context.Background(), tasks...)
 	}
@@ -36,15 +58,51 @@ func BenchmarkProgressGroup_Parallel_Fast(b *testing.B) {
 	writer := io.Discard
 
 	tasks := []notify.ProgressTask{
-		{Name: "task-1", Fn: func(ctx context.Context) error { time.Sleep(1 * time.Millisecond); return nil }},
-		{Name: "task-2", Fn: func(ctx context.Context) error { time.Sleep(1 * time.Millisecond); return nil }},
-		{Name: "task-3", Fn: func(ctx context.Context) error { time.Sleep(1 * time.Millisecond); return nil }},
-		{Name: "task-4", Fn: func(ctx context.Context) error { time.Sleep(1 * time.Millisecond); return nil }},
-		{Name: "task-5", Fn: func(ctx context.Context) error { time.Sleep(1 * time.Millisecond); return nil }},
+		{
+			Name: "task-1",
+			Fn: func(_ context.Context) error {
+				time.Sleep(1 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-2",
+			Fn: func(_ context.Context) error {
+				time.Sleep(1 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-3",
+			Fn: func(_ context.Context) error {
+				time.Sleep(1 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-4",
+			Fn: func(_ context.Context) error {
+				time.Sleep(1 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-5",
+			Fn: func(_ context.Context) error {
+				time.Sleep(1 * time.Millisecond)
+
+				return nil
+			},
+		},
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
 		_ = pg.Run(context.Background(), tasks...)
 	}
@@ -56,13 +114,35 @@ func BenchmarkProgressGroup_Parallel_Slow(b *testing.B) {
 	writer := io.Discard
 
 	tasks := []notify.ProgressTask{
-		{Name: "task-1", Fn: func(ctx context.Context) error { time.Sleep(50 * time.Millisecond); return nil }},
-		{Name: "task-2", Fn: func(ctx context.Context) error { time.Sleep(50 * time.Millisecond); return nil }},
-		{Name: "task-3", Fn: func(ctx context.Context) error { time.Sleep(50 * time.Millisecond); return nil }},
+		{
+			Name: "task-1",
+			Fn: func(_ context.Context) error {
+				time.Sleep(50 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-2",
+			Fn: func(_ context.Context) error {
+				time.Sleep(50 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-3",
+			Fn: func(_ context.Context) error {
+				time.Sleep(50 * time.Millisecond)
+
+				return nil
+			},
+		},
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
 		_ = pg.Run(context.Background(), tasks...)
 	}
@@ -75,19 +155,20 @@ func BenchmarkProgressGroup_ManyTasks(b *testing.B) {
 
 	// Create 20 tasks
 	tasks := make([]notify.ProgressTask, 20)
-	for i := 0; i < 20; i++ {
-		taskNum := i
+	for i := range 20 {
 		tasks[i] = notify.ProgressTask{
-			Name: string(rune('a' + taskNum)),
-			Fn: func(ctx context.Context) error {
+			Name: string(rune('a' + i)),
+			Fn: func(_ context.Context) error {
 				time.Sleep(5 * time.Millisecond)
+
 				return nil
 			},
 		}
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
 		_ = pg.Run(context.Background(), tasks...)
 	}
@@ -98,13 +179,35 @@ func BenchmarkProgressGroup_WithTimer(b *testing.B) {
 	writer := io.Discard
 
 	tasks := []notify.ProgressTask{
-		{Name: "task-1", Fn: func(ctx context.Context) error { time.Sleep(5 * time.Millisecond); return nil }},
-		{Name: "task-2", Fn: func(ctx context.Context) error { time.Sleep(5 * time.Millisecond); return nil }},
-		{Name: "task-3", Fn: func(ctx context.Context) error { time.Sleep(5 * time.Millisecond); return nil }},
+		{
+			Name: "task-1",
+			Fn: func(_ context.Context) error {
+				time.Sleep(5 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-2",
+			Fn: func(_ context.Context) error {
+				time.Sleep(5 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-3",
+			Fn: func(_ context.Context) error {
+				time.Sleep(5 * time.Millisecond)
+
+				return nil
+			},
+		},
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		tmr := timer.New()
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer, notify.WithTimer(tmr))
 		_ = pg.Run(context.Background(), tasks...)
@@ -118,13 +221,35 @@ func BenchmarkProgressGroup_CI_Mode(b *testing.B) {
 	var buf bytes.Buffer
 
 	tasks := []notify.ProgressTask{
-		{Name: "task-1", Fn: func(ctx context.Context) error { time.Sleep(5 * time.Millisecond); return nil }},
-		{Name: "task-2", Fn: func(ctx context.Context) error { time.Sleep(5 * time.Millisecond); return nil }},
-		{Name: "task-3", Fn: func(ctx context.Context) error { time.Sleep(5 * time.Millisecond); return nil }},
+		{
+			Name: "task-1",
+			Fn: func(_ context.Context) error {
+				time.Sleep(5 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-2",
+			Fn: func(_ context.Context) error {
+				time.Sleep(5 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-3",
+			Fn: func(_ context.Context) error {
+				time.Sleep(5 * time.Millisecond)
+
+				return nil
+			},
+		},
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		buf.Reset()
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", &buf)
 		_ = pg.Run(context.Background(), tasks...)
@@ -136,14 +261,29 @@ func BenchmarkProgressGroup_CustomLabels(b *testing.B) {
 	writer := io.Discard
 
 	tasks := []notify.ProgressTask{
-		{Name: "task-1", Fn: func(ctx context.Context) error { time.Sleep(5 * time.Millisecond); return nil }},
-		{Name: "task-2", Fn: func(ctx context.Context) error { time.Sleep(5 * time.Millisecond); return nil }},
+		{
+			Name: "task-1",
+			Fn: func(_ context.Context) error {
+				time.Sleep(5 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "task-2",
+			Fn: func(_ context.Context) error {
+				time.Sleep(5 * time.Millisecond)
+
+				return nil
+			},
+		},
 	}
 
 	labels := notify.InstallingLabels()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		pg := notify.NewProgressGroup("Installing", "📦", writer, notify.WithLabels(labels))
 		_ = pg.Run(context.Background(), tasks...)
 	}
@@ -155,11 +295,19 @@ func BenchmarkProgressGroup_SingleTask(b *testing.B) {
 	writer := io.Discard
 
 	tasks := []notify.ProgressTask{
-		{Name: "task-1", Fn: func(ctx context.Context) error { time.Sleep(5 * time.Millisecond); return nil }},
+		{
+			Name: "task-1",
+			Fn: func(_ context.Context) error {
+				time.Sleep(5 * time.Millisecond)
+
+				return nil
+			},
+		},
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
 		_ = pg.Run(context.Background(), tasks...)
 	}
@@ -171,13 +319,14 @@ func BenchmarkProgressGroup_NoOp(b *testing.B) {
 	writer := io.Discard
 
 	tasks := []notify.ProgressTask{
-		{Name: "task-1", Fn: func(ctx context.Context) error { return nil }},
-		{Name: "task-2", Fn: func(ctx context.Context) error { return nil }},
-		{Name: "task-3", Fn: func(ctx context.Context) error { return nil }},
+		{Name: "task-1", Fn: func(_ context.Context) error { return nil }},
+		{Name: "task-2", Fn: func(_ context.Context) error { return nil }},
+		{Name: "task-3", Fn: func(_ context.Context) error { return nil }},
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
 		_ = pg.Run(context.Background(), tasks...)
 	}
@@ -189,14 +338,43 @@ func BenchmarkProgressGroup_VaryingTaskDurations(b *testing.B) {
 	writer := io.Discard
 
 	tasks := []notify.ProgressTask{
-		{Name: "fast", Fn: func(ctx context.Context) error { time.Sleep(1 * time.Millisecond); return nil }},
-		{Name: "medium", Fn: func(ctx context.Context) error { time.Sleep(10 * time.Millisecond); return nil }},
-		{Name: "slow", Fn: func(ctx context.Context) error { time.Sleep(50 * time.Millisecond); return nil }},
-		{Name: "fast-2", Fn: func(ctx context.Context) error { time.Sleep(2 * time.Millisecond); return nil }},
+		{
+			Name: "fast",
+			Fn: func(_ context.Context) error {
+				time.Sleep(1 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "medium",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "slow",
+			Fn: func(_ context.Context) error {
+				time.Sleep(50 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "fast-2",
+			Fn: func(_ context.Context) error {
+				time.Sleep(2 * time.Millisecond)
+
+				return nil
+			},
+		},
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		pg := notify.NewProgressGroup("Benchmarking", "⏱", writer)
 		_ = pg.Run(context.Background(), tasks...)
 	}
