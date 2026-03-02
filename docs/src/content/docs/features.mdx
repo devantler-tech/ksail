@@ -95,28 +95,24 @@ ksail workload reconcile
 
 ## Registry Management
 
-Run local [OCI registries](/concepts/#oci-registries) for faster image pulls, GitOps integration, and isolated development. Support external registries with authentication using format `[user:pass@]host[:port][/path]` where credentials can use `${ENV_VAR}` placeholders.
+Run local [OCI registries](/concepts/#oci-registries) for faster image pulls and GitOps integration. External registries use format `[user:pass@]host[:port][/path]` with `${ENV_VAR}` credential placeholders.
 
 ### Local Registry
 ```bash
 ksail cluster init --local-registry localhost:5050
 ksail cluster create
-
-docker tag my-app localhost:5050/my-app
 docker push localhost:5050/my-app
 ```
 
 ### Mirror Registries
 
-For Docker-based clusters (local Vanilla, K3s, Talos-on-Docker, and VCluster), KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default to avoid rate limits and improve CI/CD performance. For these clusters, mirror registries run as local pull-through cache containers that authenticate to upstream registries using credentials resolved from `${ENV_VAR}` placeholders. Cached images persist across restarts via containerd `hosts.toml` injection for Vanilla and VCluster, or via K3d registries configuration for K3s and Talos-on-Docker. For Talos clusters on Hetzner, no mirrors are enabled by default. Instead, you can configure externally reachable mirror endpoints via config/flags, which are applied through Talos machine config patches.
+Docker-based clusters (Vanilla, K3s, Talos-on-Docker, VCluster) enable `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default. These run as local pull-through cache containers with `${ENV_VAR}` credential support. Talos on Hetzner requires explicit mirror configuration via flags.
 
 ```bash
-# Default mirrors (docker.io, ghcr.io, quay.io, registry.k8s.io)
-ksail cluster init
+ksail cluster init  # Default mirrors enabled
 
-# Add authenticated mirrors (format: [user:pass@]host[=endpoint])
-ksail cluster init \
-  --mirror-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io=https://ghcr.io'
+# Authenticated mirrors: [user:pass@]host[=endpoint]
+ksail cluster init --mirror-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io=https://ghcr.io'
 ```
 
 ## Secret Management
@@ -143,52 +139,29 @@ ksail cipher import AGE-SECRET-KEY-1...
 
 ## Cluster Backup & Restore
 
-Export cluster resource manifests to a compressed archive and restore them to a target cluster. Backups capture resource YAML in dependency order (CRDs → namespaces → storage → workloads), strip server-assigned metadata for portability, and embed a `backup-metadata.json` file containing version, timestamp, cluster name, distribution, provider, KSail version, resource count, and resource types. Each restored resource is automatically labeled with `ksail.io/backup-name` (derived from the archive filename) and `ksail.io/restore-name` (unique per restore operation) for traceability.
+Export cluster resources to a compressed archive and restore to any cluster. Backups capture YAML in dependency order (CRDs → namespaces → storage → workloads), strip server metadata, and include metadata JSON with version, timestamp, and resource inventory. Restored resources receive `ksail.io/backup-name` and `ksail.io/restore-name` labels for traceability.
 
 ```bash
-# Backup all namespaces
 ksail cluster backup --output ./backup.tar.gz
-
-# Backup specific namespaces and exclude resource types
-ksail cluster backup -o ./backup.tar.gz -n default,kube-system --exclude-types events,pods
-
-# Restore, skipping already-existing resources
 ksail cluster restore --input ./backup.tar.gz
-
-# Restore, updating existing resources
-ksail cluster restore -i ./backup.tar.gz --existing-resource-policy update
-
-# Dry-run: preview what would be restored
-ksail cluster restore --input ./backup.tar.gz --dry-run
-
-# Query all resources from a specific backup archive (strip .tar.gz from the filename)
-kubectl get all -l ksail.io/backup-name=backup --all-namespaces
-
-# Inspect backup metadata (inside the archive)
-tar -xOzf ./backup.tar.gz backup-metadata.json | jq .
+ksail cluster restore -i ./backup.tar.gz --existing-resource-policy update --dry-run
 ```
 
 **Commands:** [`ksail cluster backup`](/cli-flags/cluster/cluster-backup/), [`ksail cluster restore`](/cli-flags/cluster/cluster-restore/)
 
-| Command                 | Description                      |
-| ----------------------- | -------------------------------- |
-| `ksail cluster backup`  | Export resources to a `.tar.gz`  |
-| `ksail cluster restore` | Apply resources from a `.tar.gz` |
-
 > [!NOTE]
-> This feature backs up resource manifests (YAML) only. Persistent volume data is not included in the current implementation.
+> This feature backs up resource manifests (YAML) only. Persistent volume data is not included.
 
 ## Code Generation
 
-Generate Kubernetes resources (`Deployment`, `Service`, `ConfigMap`, `Secret`, `Ingress`), [Helm](/concepts/#helm) releases (HelmRelease CRs), and source resources (OCIRepository, GitRepository, HelmRepository) using built-in generators.
+Generate Kubernetes resources (Deployment, Service, ConfigMap, Secret, Ingress), Helm releases (HelmRelease CRs), and sources (OCIRepository, GitRepository, HelmRepository).
 
 ```bash
 ksail workload gen deployment my-app --image=nginx --port=80
-ksail workload gen service my-app --port=80
 ksail workload gen helmrelease my-chart --source=oci://registry/chart
 ```
 
-**Commands:** [`ksail workload gen`](/cli-flags/workload/gen/workload-gen-root/), [`ksail workload create`](/cli-flags/workload/create/workload-create-root/)
+**Commands:** [`ksail workload gen`](/cli-flags/workload/gen/workload-gen-root/)
 
 ## Declarative Configuration
 
@@ -213,37 +186,17 @@ spec:
 
 ## AI Chat Assistant
 
-Get interactive help with cluster configuration and troubleshooting using an AI-powered chat session.
-
-Three modes are available:
-
-- **Agent** (`</>`) for full execution with approval
-- **Plan** (`≡`) for step-by-step guidance without execution
-- **Ask** (`?`) for read-only investigation
-
-Press **Tab** to cycle between modes.
-Requires [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) installed and authenticated.
+Interactive help with cluster configuration and troubleshooting powered by AI. Three modes: **Agent** (`</>`) executes with approval, **Plan** (`≡`) guides without execution, **Ask** (`?`) investigates read-only. Press **Tab** to cycle modes. Requires [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli).
 
 ```bash
 ksail chat
 ```
 
-**Commands:** [`ksail chat`](/cli-flags/chat/chat-root/)
-
-**Full Guide:** [AI Chat Assistant](/ai-chat/) — Detailed mode explanations, keyboard shortcuts, and workflows
+**Full Guide:** [AI Chat Assistant](/ai-chat/)
 
 ## VSCode Extension
 
-Manage KSail clusters directly from Visual Studio Code with cluster sidebar view, interactive wizards for init/create operations, command palette access, keyboard shortcuts (`Cmd+Shift+K`, then `I`/`C`/`D`), K9s integration, and MCP server provider for AI assistants. Requires [KSail CLI](/installation/) and [Docker](https://www.docker.com/get-started/) installed; [K9s](https://k9scli.io/) optional for cluster connection.
-
-```bash
-# Install from VSCode Marketplace
-# Search for "KSail" in Extensions view
-```
-
-**Installation:** See [VSCode Extension Installation](/installation/#vscode-extension) for setup instructions.
-
-**Repository:** [vsce/](https://github.com/devantler-tech/ksail/tree/main/vsce)
+Manage clusters from Visual Studio Code with cluster sidebar, interactive wizards, command palette (`Cmd+Shift+K`), K9s integration, and MCP server for AI assistants. Requires [KSail CLI](/installation/) and [Docker](https://www.docker.com/get-started/); [K9s](https://k9scli.io/) optional.
 
 **Marketplace:** [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=devantler.ksail)
 
