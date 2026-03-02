@@ -238,7 +238,6 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 		}
 
 		lastErr = pullErr
-
 		if !netretry.IsRetryable(lastErr) || attempt == imagePullMaxRetries {
 			break
 		}
