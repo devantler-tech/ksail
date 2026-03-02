@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/github/copilot-sdk/go/rpc"
 )
 
 // errStreamTimeout is a sentinel error for streaming event timeouts.
@@ -283,21 +282,11 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 	// Restore the prompt's captured state
 	m.chatMode = prompt.chatMode
 
-	if m.chatModeRef != nil {
-		m.chatModeRef.SetMode(prompt.chatMode)
-	}
+	err := m.applyMode(m.chatMode)
+	if err != nil {
+		m.err = err
 
-	// Notify the Copilot CLI server of the mode change so it can enforce
-	// mode-specific behavior (e.g., blocking tools in plan mode).
-	if m.session != nil {
-		_, err := m.session.RPC.Mode.Set(m.ctx, &rpc.SessionModeSetParams{
-			Mode: m.chatMode.ToSDKMode(),
-		})
-		if err != nil {
-			m.err = fmt.Errorf("failed to set mode: %w", err)
-
-			return m, nil
-		}
+		return m, nil
 	}
 
 	// Switch model with session recreation if needed.

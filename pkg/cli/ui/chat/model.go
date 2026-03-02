@@ -947,3 +947,23 @@ func (m *Model) dropNextPendingPrompt() {
 		m.queuedPrompts = m.queuedPrompts[1:]
 	}
 }
+
+// applyMode updates the shared chat mode reference and notifies the Copilot CLI
+// server of the mode change so it can enforce mode-specific behavior
+// (e.g., blocking tools in plan mode).
+func (m *Model) applyMode(mode ChatMode) error {
+	if m.chatModeRef != nil {
+		m.chatModeRef.SetMode(mode)
+	}
+
+	if m.session != nil {
+		_, err := m.session.RPC.Mode.Set(m.ctx, &rpc.SessionModeSetParams{
+			Mode: mode.ToSDKMode(),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to set mode: %w", err)
+		}
+	}
+
+	return nil
+}
