@@ -19,7 +19,7 @@ Talos Linux is fundamentally different from traditional Linux distributions:
 
 ### When to Use Talos
 
-Talos is ideal for security-focused production workloads, GitOps workflows, and multi-cloud deployments requiring immutable infrastructure. However, it's not suitable for quick prototyping (use Vanilla or K3s instead), scenarios requiring shell access or traditional Linux tools, or non-Linux environments.
+Talos is ideal for security-focused production workloads, GitOps workflows, and multi-cloud deployments requiring immutable infrastructure. However, it's not suitable for quick prototyping (use Vanilla or K3s instead), scenarios requiring shell access or traditional Linux tools, or environments that require Windows/macOS nodes or a general-purpose Linux OS with shell and package management.
 
 ## Quick Start
 
@@ -465,7 +465,7 @@ Check Docker status (`docker ps`, `docker network ls`), verify `HCLOUD_TOKEN` fo
 
 ### Nodes Not Ready
 
-Check CNI pods are running (`kubectl get pods -n kube-system | grep cilium`), verify Talos health (`talosctl -n <node-ip> health`), or reinstall CNI with `ksail cluster update`.
+Check CNI pods are running (`kubectl get pods -n kube-system` and look for your CNI pods, e.g. `cilium-` or `calico-`), verify Talos health (`talosctl -n <node-ip> health`), or reinstall CNI with `ksail cluster update`.
 
 ### LoadBalancer Not Working (Docker)
 
@@ -479,11 +479,13 @@ Check `~/.talos/config` exists, verify node IPs with `kubectl get nodes -o wide`
 
 ### Custom Node Counts
 
-Adjust control plane and worker nodes in `ksail.yaml`:
+Adjust control plane and worker nodes in your existing `ksail.yaml` (requires `distribution: Talos`):
 
 ```yaml
+# Partial snippet — add to your existing ksail.yaml
 spec:
   cluster:
+    distribution: Talos
     talos:
       controlPlanes: 3  # HA setup
       workers: 5
