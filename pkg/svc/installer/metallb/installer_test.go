@@ -154,6 +154,7 @@ func TestEnsureIPAddressPool_Success(t *testing.T) {
 			// Real integration testing would require a test cluster with MetalLB CRDs.
 			// This test documents that the installer can be constructed with various IP ranges.
 			assert.NotNil(t, installer)
+
 			_ = testCase.want // Documentation: this is the expected IP range in the pool spec
 		})
 	}
