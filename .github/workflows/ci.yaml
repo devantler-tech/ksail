@@ -244,10 +244,33 @@ jobs:
 
       - name: 📋 Apply patches
         run: |
+          set -euo pipefail
+          shopt -s nullglob
+
           for patch in /tmp/patches/*.patch; do
             if [ -s "$patch" ]; then
-              echo "Applying $(basename "$patch")..."
-              git apply "$patch"
+              patch_name="$(basename "$patch")"
+              echo "Applying ${patch_name}..."
+
+              if git apply --3way "$patch"; then
+                echo "Applied ${patch_name} with 3-way merge."
+              else
+                echo "3-way apply failed for ${patch_name}; falling back to direct apply with rejects..." >&2
+
+                if git apply --reject "$patch"; then
+                  echo "Applied ${patch_name} with rejects."
+                  rej_files=$(find . -name '*.rej' 2>/dev/null || true)
+                  if [ -n "$rej_files" ]; then
+                    echo "::warning::Reject files found: ${rej_files}"
+                  fi
+                else
+                  echo "::error::Failed to apply patch ${patch_name}. See diagnostics above." >&2
+                  git status --short || true
+                  exit 1
+                fi
+              fi
+            else
+              echo "Skipping empty patch $(basename "$patch")"
             fi
           done
 
