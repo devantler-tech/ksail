@@ -332,6 +332,7 @@ func addFileToArchive(
 		return fmt.Errorf("get relative path for %s: %w", path, err)
 	}
 
+	//nolint:gosec // G304 -- path from filepath.Walk
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read file %s: %w", path, err)
