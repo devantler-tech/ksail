@@ -39,4 +39,6 @@ exclude_path = [
 ]
 
 # URL patterns to ignore (applied after successful URL construction).
-exclude = ['^/']
+#   - ^/: root-relative paths (not real URLs).
+#   - %s: Go fmt.Sprintf template URLs (e.g. version placeholders).
+exclude = ['^/', '%s']
