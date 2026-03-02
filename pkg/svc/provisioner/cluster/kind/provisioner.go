@@ -171,6 +171,7 @@ func (k *Provisioner) Create(ctx context.Context, name string) error {
 	}
 
 	defer func() { _ = tmpFile.Close() }()
+	//nolint:gosec // G703: tmpFile.Name() is a path from os.CreateTemp, not user-controlled
 	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	marshaller := marshaller.NewYAMLMarshaller[*v1alpha4.Cluster]()
@@ -182,6 +183,7 @@ func (k *Provisioner) Create(ctx context.Context, name string) error {
 
 	const configFilePerms = 0o600
 
+	//nolint:gosec // G703: tmpFile.Name() is a path from os.CreateTemp, not user-controlled
 	err = os.WriteFile(tmpFile.Name(), []byte(configYAML), configFilePerms)
 	if err != nil {
 		return fmt.Errorf("write temp config file: %w", err)

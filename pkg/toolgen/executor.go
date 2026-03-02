@@ -171,6 +171,7 @@ func executeCommand(
 		defer cancel()
 	}
 
+	//nolint:gosec // G204: command and args are provided by the toolgen caller, intentional subprocess execution
 	cmd := exec.CommandContext(execCtx, command, args...)
 	cmd.Dir = opts.WorkingDirectory
 
