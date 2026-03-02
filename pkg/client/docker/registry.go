@@ -102,5 +102,5 @@ type RegistryConfig struct {
 	NetworkName string
 	VolumeName  string
 	Username    string // Optional: username for upstream registry authentication (supports ${ENV_VAR} placeholders)
-	Password    string //nolint:gosec // G101: optional password for upstream registry authentication (supports ${ENV_VAR} placeholders); resolved at runtime
+	Password    string //nolint:gosec // G101: resolved at runtime
 }

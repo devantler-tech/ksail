@@ -295,6 +295,8 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 		})
 		if err != nil {
 			m.err = fmt.Errorf("failed to set mode: %w", err)
+
+			return m, nil
 		}
 	}
 

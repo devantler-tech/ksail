@@ -41,7 +41,7 @@ func TestQueuePrompt_VisibleInView(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	model.SetStreaming(true)
+	chat.ExportSetStreaming(model, true)
 
 	updatedModel := typeText(model, "hello world")
 
@@ -63,14 +63,14 @@ func TestSteerPrompt_VisibleInView(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	model.SetStreaming(true)
+	chat.ExportSetStreaming(model, true)
 
 	updatedModel := typeText(model, "steer this")
 
 	// Re-assert streaming state before steering. typeText may alter model state,
 	// and steering only activates while streaming.
-	if s, ok := updatedModel.(interface{ SetStreaming(streaming bool) }); ok {
-		s.SetStreaming(true)
+	if m, ok := updatedModel.(*chat.Model); ok {
+		chat.ExportSetStreaming(m, true)
 	}
 
 	// Press Enter to steer (Enter steers during streaming)
@@ -91,7 +91,7 @@ func TestDeletePendingPrompt_RemovesFromView(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	model.SetStreaming(true)
+	chat.ExportSetStreaming(model, true)
 
 	updatedModel := typeText(model, "test prompt")
 
@@ -112,15 +112,15 @@ func TestDeletePendingPrompt_RemovesLastAdded_SteeringBeforeQueued(t *testing.T)
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	model.SetStreaming(true)
+	chat.ExportSetStreaming(model, true)
 
 	// Queue a prompt first
 	updatedModel := typeText(model, "queued task")
 	updatedModel, _ = updatedModel.Update(ctrlQKey())
 
 	// Re-assert streaming state
-	if s, ok := updatedModel.(interface{ SetStreaming(streaming bool) }); ok {
-		s.SetStreaming(true)
+	if m, ok := updatedModel.(*chat.Model); ok {
+		chat.ExportSetStreaming(m, true)
 	}
 
 	// Then steer (added after queued, so has higher seq)
@@ -146,20 +146,20 @@ func TestDeletePendingPrompt_SequenceOrdering_QueuedAfterSteering(t *testing.T) 
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	model.SetStreaming(true)
+	chat.ExportSetStreaming(model, true)
 
 	// Steer first
 	updatedModel := typeText(model, "steering first")
 
-	if s, ok := updatedModel.(interface{ SetStreaming(streaming bool) }); ok {
-		s.SetStreaming(true)
+	if m, ok := updatedModel.(*chat.Model); ok {
+		chat.ExportSetStreaming(m, true)
 	}
 
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	// Re-assert streaming state
-	if s, ok := updatedModel.(interface{ SetStreaming(streaming bool) }); ok {
-		s.SetStreaming(true)
+	if m, ok := updatedModel.(*chat.Model); ok {
+		chat.ExportSetStreaming(m, true)
 	}
 
 	// Then queue (added after steering, so has higher seq)
@@ -202,7 +202,7 @@ func TestEmptyInput_IgnoredByQueue(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	model.SetStreaming(true)
+	chat.ExportSetStreaming(model, true)
 
 	var updatedModel tea.Model = model
 
@@ -220,7 +220,7 @@ func TestEmptyInput_IgnoredBySteer(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	model.SetStreaming(true)
+	chat.ExportSetStreaming(model, true)
 
 	var updatedModel tea.Model = model
 
@@ -238,7 +238,7 @@ func TestMultipleQueuedPrompts_ShowNumbered(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	model.SetStreaming(true)
+	chat.ExportSetStreaming(model, true)
 
 	updatedModel := typeText(model, "first task")
 
@@ -246,8 +246,8 @@ func TestMultipleQueuedPrompts_ShowNumbered(t *testing.T) {
 
 	// Re-assert streaming state before queuing next prompt; typeText may
 	// alter internal model state through the full update path.
-	if s, ok := updatedModel.(interface{ SetStreaming(streaming bool) }); ok {
-		s.SetStreaming(true)
+	if m, ok := updatedModel.(*chat.Model); ok {
+		chat.ExportSetStreaming(m, true)
 	}
 
 	updatedModel = typeText(updatedModel, "second task")
@@ -269,7 +269,7 @@ func TestFooterShowsPendingCount(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
-	model.SetStreaming(true)
+	chat.ExportSetStreaming(model, true)
 
 	updatedModel := typeText(model, "test")
 
