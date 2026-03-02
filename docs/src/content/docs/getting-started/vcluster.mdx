@@ -331,7 +331,7 @@ ksail cluster create
 
 **Symptom:** `ksail cluster create` hangs or fails
 
-**Automatic retry (create phase):** KSail automatically retries transient startup failures up to 3 times (with 5-second delays between attempts). If you see log messages like `Retrying vCluster create (attempt 2/3)...`, this is expected — KSail is recovering from a transient Docker or D-Bus error without any action needed from you.
+**Automatic retry (create phase):** KSail automatically retries transient startup failures up to 3 times (with 5-second delays between attempts). If you see log messages like `Retrying vCluster create (attempt 2/3)...`, this is expected — KSail is recovering from a transient Docker, D-Bus, or GHCR registry error without any action needed from you.
 
 **Automatic retry (connect phase):** After the cluster is created, KSail also retries the readiness check up to 3 times. Each attempt allows up to 3 minutes for the cluster to become ready, giving an effective timeout of ~9 minutes. If you see log messages like `Retrying vCluster connect (attempt 2/3)...`, this is expected behavior on slower machines or CI runners — KSail will keep waiting without any action needed from you.
 
@@ -362,7 +362,7 @@ ksail cluster create
 
 ### Transient Startup Failures on CI Runners
 
-**Symptom:** `ksail cluster create` fails with `exit status 22` (EINVAL) on CI runners.
+**Symptom:** `ksail cluster create` fails with `exit status 22` (EINVAL), D-Bus errors, or `fetching blob: denied: denied` (transient GHCR registry denial) on CI runners.
 
 KSail automatically retries transient VCluster startup failures with up to 3 attempts and a 5-second delay between attempts, cleaning up partial state between retries. If the issue persists after automatic retries, check Docker resource limits and D-Bus availability on the runner.
 

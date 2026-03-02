@@ -221,7 +221,7 @@ If pods are stuck in `ContainerCreating` with CNI errors, check CNI pods are run
 
 ### Transient Startup Failures
 
-**Symptom:** `ksail cluster create` fails with `exit status 22` (EINVAL) or similar D-Bus errors on CI runners.
+**Symptom:** `ksail cluster create` fails with `exit status 22` (EINVAL), D-Bus errors, or `fetching blob: denied: denied` (transient GHCR registry denial) on CI runners.
 
 KSail automatically retries transient VCluster startup failures with up to 3 attempts and a 5-second delay between attempts, cleaning up partial state between retries. If you see log messages like `Retrying vCluster create (attempt 2/3)...`, this is expected behavior — no action is required.
 
