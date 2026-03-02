@@ -234,6 +234,7 @@ func (m *Model) handleOpenModelPicker() (tea.Model, tea.Cmd) {
 	}
 
 	m.showModelPicker = true
+	m.confirmExit = false
 	m.filteredModels = m.availableModels // Start with all models
 	m.modelFilterText = ""               // Reset filter
 	m.modelFilterActive = false          // Start in navigation mode
@@ -268,6 +269,7 @@ func (m *Model) handleOpenReasoningPicker() (tea.Model, tea.Cmd) {
 	}
 
 	m.showReasoningPicker = true
+	m.confirmExit = false
 	m.updateDimensions()
 	m.reasoningPickerIndex = m.findCurrentReasoningIndex()
 

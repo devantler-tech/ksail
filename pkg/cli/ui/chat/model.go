@@ -201,7 +201,7 @@ type permissionResponse struct {
 // after queuing don't affect the prompt's execution.
 type pendingPrompt struct {
 	content         string   // the prompt text
-	chatMode        ChatMode // agent/plan mode when queued (AskMode was removed)
+	chatMode        ChatMode // agent/plan mode when queued
 	model           string   // model ID when queued
 	reasoningEffort string   // reasoning effort when queued (if applicable)
 	seq             uint64   // insertion sequence number for global ordering

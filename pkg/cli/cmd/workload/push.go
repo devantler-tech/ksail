@@ -258,7 +258,7 @@ type pushParams struct {
 	SourceDir    string
 	GitOpsEngine v1alpha1.GitOpsEngine
 	Username     string
-	Password     string //nolint:gosec // G117: credential resolved at runtime
+	Password     string //nolint:gosec // G101: field name contains 'password' but value is resolved at runtime
 	IsExternal   bool   // True if this is an external registry (no auto-detection needed)
 }
 

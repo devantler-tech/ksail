@@ -57,7 +57,7 @@ type VerifyOptions struct {
 	// Username is the optional username for authentication.
 	Username string
 	// Password is the optional password/token for authentication.
-	Password string //nolint:gosec // G117: resolved at runtime
+	Password string //nolint:gosec // G101: field name contains 'password' but value is resolved at runtime
 	// Insecure allows HTTP connections (for local registries).
 	Insecure bool
 }
@@ -73,7 +73,7 @@ type ArtifactExistsOptions struct {
 	// Username is the optional username for authentication.
 	Username string
 	// Password is the optional password/token for authentication.
-	Password string //nolint:gosec // G117: resolved at runtime
+	Password string //nolint:gosec // G101: field name contains 'password' but value is resolved at runtime
 	// Insecure allows HTTP connections (for local registries).
 	Insecure bool
 }

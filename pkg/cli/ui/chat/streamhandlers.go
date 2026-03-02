@@ -288,6 +288,8 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 
 	// Switch model with session recreation if needed.
 	// Compare against user-selected model (sessionConfig.Model), not server-resolved.
+	// NOTE: switchModel updates m.session internally; streamResponseCmd below
+	// relies on m.session being the newly created session after a switch.
 	selectedModel := m.getSelectedModel()
 	if prompt.model != selectedModel {
 		switchErr := m.switchModel(prompt.model)
@@ -299,6 +301,7 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 
 	// Restore reasoning effort with session recreation if needed.
 	// Reasoning effort changes only take effect after recreating the session.
+	// NOTE: switchReasoningEffort also updates m.session internally.
 	currentEffort := m.getReasoningEffort()
 	if prompt.reasoningEffort != currentEffort && m.sessionConfig != nil {
 		switchErr := m.switchReasoningEffort(prompt.reasoningEffort)

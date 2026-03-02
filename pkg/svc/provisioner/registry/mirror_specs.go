@@ -17,7 +17,7 @@ type MirrorSpec struct {
 	Host     string
 	Remote   string
 	Username string // Optional: username for registry authentication (supports ${ENV_VAR} placeholders)
-	Password string //nolint:gosec // G117: resolved at runtime
+	Password string //nolint:gosec // G101: field name contains 'password' but value is resolved at runtime
 }
 
 // ResolveCredentials returns the username and password with environment variable placeholders expanded.
