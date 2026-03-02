@@ -339,4 +339,4 @@ runs:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
       run: |
-        ksail cluster delete
+        ksail cluster delete || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"

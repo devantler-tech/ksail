@@ -255,4 +255,3 @@ To track performance over time:
 ## References
 
 - [SOPS Documentation](https://github.com/getsops/sops)
-- [KSail Performance Optimization Guide](../../../../.github/instructions/go-performance-optimization.md)
