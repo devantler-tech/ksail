@@ -287,6 +287,17 @@ gh aw run daily-workflow-optimizer --repo devantler-tech/ksail
 gh aw logs daily-workflow-optimizer --repo devantler-tech/ksail
 ```
 
+#### Copilot Skills
+
+KSail uses [GitHub Copilot Skills](https://docs.github.com/en/copilot/customizing-copilot/adding-custom-instructions-for-github-copilot) to give AI assistants reusable, context-aware capabilities. Skills are markdown files that describe a focused task or domain of expertise.
+
+There are two kinds of skills in this repository:
+
+- **Local skills** — defined directly in `.github/skills/<name>/SKILL.md`. These are authored and maintained in this repo (e.g., `refactor`).
+- **External skills** — sourced from third-party skill registries (e.g., `github/awesome-copilot`) and downloaded into `.agents/skills/<name>/SKILL.md`. External skills are tracked in `skills-lock.json` at the repository root, which records the source, source type, and a content hash for each skill.
+
+`skills-lock.json` is analogous to a `package-lock.json` — it pins the exact version of each external skill so the repository state is reproducible. Do not edit it manually; update it through the appropriate tooling.
+
 ## CD
 
 ### Release Process
