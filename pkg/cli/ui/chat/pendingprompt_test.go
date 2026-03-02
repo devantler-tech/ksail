@@ -108,6 +108,79 @@ func TestDeletePendingPrompt_RemovesFromView(t *testing.T) {
 	}
 }
 
+func TestDeletePendingPrompt_RemovesLastAdded_SteeringBeforeQueued(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	model.SetStreaming(true)
+
+	// Queue a prompt first
+	updatedModel := typeText(model, "queued task")
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	// Re-assert streaming state
+	if s, ok := updatedModel.(interface{ SetStreaming(streaming bool) }); ok {
+		s.SetStreaming(true)
+	}
+
+	// Then steer (added after queued, so has higher seq)
+	updatedModel = typeText(updatedModel, "steering guidance")
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// Delete should remove the steering prompt (highest seq) first
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+
+	output := updatedModel.View()
+
+	// Queued prompt should still be present
+	if !strings.Contains(output, "QUEUED") {
+		t.Error("expected queued prompt to remain after deleting last added (steering)")
+	}
+
+	if strings.Contains(output, "STEERING") {
+		t.Error("expected steering prompt to be deleted (it was added last)")
+	}
+}
+
+func TestDeletePendingPrompt_SequenceOrdering_QueuedAfterSteering(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	model.SetStreaming(true)
+
+	// Steer first
+	updatedModel := typeText(model, "steering first")
+
+	if s, ok := updatedModel.(interface{ SetStreaming(streaming bool) }); ok {
+		s.SetStreaming(true)
+	}
+
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// Re-assert streaming state
+	if s, ok := updatedModel.(interface{ SetStreaming(streaming bool) }); ok {
+		s.SetStreaming(true)
+	}
+
+	// Then queue (added after steering, so has higher seq)
+	updatedModel = typeText(updatedModel, "queued second")
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	// Delete should remove the queued prompt (highest seq) first
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+
+	output := updatedModel.View()
+
+	// Steering prompt should still be present
+	if !strings.Contains(output, "STEERING") {
+		t.Error("expected steering prompt to remain after deleting last added (queued)")
+	}
+
+	if strings.Contains(output, "QUEUED") {
+		t.Error("expected queued prompt to be deleted (it was added last)")
+	}
+}
+
 func TestQueuePrompt_IgnoredWhenNotStreaming(t *testing.T) {
 	t.Parallel()
 

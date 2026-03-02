@@ -322,7 +322,9 @@ func resolveCopilotCLIPath() (string, error) {
 	return p, nil
 }
 
-// findCopilotInSDKCache looks for a copilot executable in the SDK cache directory.
+// findCopilotInSDKCache looks for the copilot executable in the SDK cache directory.
+// Only matches files named exactly "copilot" or "copilot-<platform>" (e.g., "copilot-linux-amd64").
+// Files like "copilot-config" or "copilot-backup" are excluded.
 func findCopilotInSDKCache() (string, bool) {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
@@ -339,9 +341,7 @@ func findCopilotInSDKCache() (string, bool) {
 	for _, entry := range entries {
 		name := entry.Name()
 		if entry.IsDir() ||
-			!strings.HasPrefix(name, "copilot") ||
-			strings.HasSuffix(name, ".lock") ||
-			strings.HasSuffix(name, ".license") {
+			!isCopilotBinaryName(name) {
 			continue
 		}
 
@@ -359,6 +359,42 @@ func findCopilotInSDKCache() (string, bool) {
 	}
 
 	return "", false
+}
+
+// isCopilotBinaryName returns true for names that match the Copilot CLI binary pattern:
+// "copilot", "copilot.exe", or "copilot-<os>-<arch>" (e.g., "copilot-linux-amd64").
+func isCopilotBinaryName(name string) bool {
+	if name == "copilot" || name == "copilot.exe" {
+		return true
+	}
+
+	// Reject known non-binary suffixes.
+	if hasNonBinarySuffix(name) {
+		return false
+	}
+
+	// Match "copilot-<os>-<arch>" pattern (exactly two dashes after "copilot").
+	if !strings.HasPrefix(name, "copilot-") {
+		return false
+	}
+
+	rest := strings.TrimPrefix(name, "copilot-")
+
+	// Must have exactly one more dash: <os>-<arch>
+	return strings.Count(rest, "-") == 1
+}
+
+// hasNonBinarySuffix returns true if the filename has a known non-binary extension.
+func hasNonBinarySuffix(name string) bool {
+	nonBinarySuffixes := []string{".lock", ".license", ".json", ".yaml", ".yml", ".txt", ".log"}
+
+	for _, suffix := range nonBinarySuffixes {
+		if strings.HasSuffix(name, suffix) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // runCopilotAuthLogin spawns `copilot auth login` as an interactive subprocess.

@@ -104,6 +104,7 @@ func (m *Model) renderHelpOverlay() string {
 func (m *Model) helpOverlayParts() []string {
 	return []string{
 		m.styles.helpKey.Render(enterSymbol) + " send / steer",
+		m.styles.helpKey.Render("Alt+"+enterSymbol) + " newline",
 		m.styles.helpKey.Render("^Q") + " queue",
 		m.styles.helpKey.Render("^X") + " delete last pending",
 		m.styles.helpKey.Render(keyArrows) + " history",

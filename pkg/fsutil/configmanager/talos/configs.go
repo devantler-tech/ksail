@@ -483,7 +483,7 @@ type MirrorRegistry struct {
 	Username string
 	// Password is the optional password for registry authentication.
 	// Environment variable placeholders should be resolved before passing.
-	Password string //nolint:gosec // G117: resolved at runtime
+	Password string //nolint:gosec // G101: field name contains 'password' but value is resolved at runtime
 }
 
 // ApplyMirrorRegistries modifies the configs to add registry mirror configurations.
