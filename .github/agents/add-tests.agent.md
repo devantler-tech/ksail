@@ -18,6 +18,7 @@ You are a super expert Go developer tasked with adding unit tests to this Go cod
 - Use table-driven tests where applicable.
 - Maintain one test file per source file (e.g., source.go <-> source_test.go).
 - Focus on black-box tests; avoid testing internal/unexported functions directly.
+- When a black-box test needs access to an unexported symbol, use the **`export_test.go` pattern**: create an `export_test.go` file in the package directory using the **regular package name** (not `_test` suffix), expose the symbol via a package-level variable (e.g., `var IsTransientErrorForTest = isTransientError`), and add `//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions`. Go only compiles this file during test builds, so it never leaks into production binaries.
 - Ensure tests never depend on external infrastructure or the file system.
 - Use go-snaps for snapshot testing whenever output validation is relevant: https://github.com/gkampitakis/go-snaps
 - Use mockery to generate testify mocks when mocking is needed.
