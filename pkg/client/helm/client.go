@@ -117,8 +117,9 @@ type ChartSpec struct {
 	SetFileVals map[string]string
 	SetJSONVals map[string]string
 
-	RepoURL               string
-	Username              string
+	RepoURL  string
+	Username string
+	//nolint:gosec // G117: Password is a configuration field name, not a hardcoded credential
 	Password              string
 	CertFile              string
 	KeyFile               string
@@ -129,9 +130,10 @@ type ChartSpec struct {
 // RepositoryEntry describes a Helm repository that should be added locally
 // before performing chart operations.
 type RepositoryEntry struct {
-	Name                  string
-	URL                   string
-	Username              string
+	Name     string
+	URL      string
+	Username string
+	//nolint:gosec // G117: Password is a configuration field name, not a hardcoded credential
 	Password              string
 	CertFile              string
 	KeyFile               string
