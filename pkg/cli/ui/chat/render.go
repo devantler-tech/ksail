@@ -141,7 +141,15 @@ func (m *Model) renderExitConfirmModal() string {
 	content.WriteString(
 		mStyles.clipStyle.Render(mStyles.warningStyle.Render("Exit KSail chat?")) + "\n\n",
 	)
-	content.WriteString(mStyles.clipStyle.Render("Unsent input will be lost.") + "\n\n")
+
+	if count := m.pendingPromptCount(); count > 0 {
+		content.WriteString(mStyles.clipStyle.Render(
+			fmt.Sprintf("You have %d pending prompt(s) that will be lost.", count),
+		) + "\n\n")
+	} else {
+		content.WriteString(mStyles.clipStyle.Render("Unsent input will be lost.") + "\n\n")
+	}
+
 	content.WriteString(mStyles.clipStyle.Render("Y to exit, N to cancel"))
 
 	modalStyle := lipgloss.NewStyle().

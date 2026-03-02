@@ -362,31 +362,38 @@ func findCopilotInSDKCache() (string, bool) {
 }
 
 // isCopilotBinaryName returns true for names that match the Copilot CLI binary pattern:
-// "copilot", "copilot.exe", or "copilot-<os>-<arch>[.exe]" (e.g., "copilot-linux-amd64").
+// "copilot", "copilot.exe", or "copilot-<segment>[<segment>...][.exe]"
+// (e.g., "copilot-linux-amd64").
 func isCopilotBinaryName(name string) bool {
 	if name == "copilot" || name == "copilot.exe" {
 		return true
 	}
 
-	// Reject known non-binary suffixes.
-	if hasNonBinarySuffix(name) {
-		return false
-	}
-
-	// Strip optional .exe suffix for platform-specific binaries (e.g., "copilot-windows-amd64.exe").
+	// Strip optional .exe suffix for platform-specific binaries
+	// (e.g., "copilot-windows-amd64.exe").
 	base := strings.TrimSuffix(name, ".exe")
 
-	// Match "copilot-<segment>-<segment>" pattern (exactly one dash in the portion after "copilot-").
-	// This matches platform-specific binaries like "copilot-linux-amd64" without validating
-	// actual OS or architecture values.
+	// Require a "copilot-" prefix for platform-specific binaries.
 	if !strings.HasPrefix(base, "copilot-") {
 		return false
 	}
 
-	rest := strings.TrimPrefix(base, "copilot-")
+	// Reject known non-binary suffixes for names that otherwise
+	// look like Copilot binaries.
+	if hasNonBinarySuffix(name) {
+		return false
+	}
 
-	// Must have exactly one dash separating two segments
-	return strings.Count(rest, "-") == 1
+	rest := strings.TrimPrefix(base, "copilot-")
+	if rest == "" {
+		return false
+	}
+
+	// Allow one or more non-empty segments separated by dashes
+	// (e.g., "linux-amd64", "linux").
+	return !strings.Contains(rest, "--") &&
+		!strings.HasPrefix(rest, "-") &&
+		!strings.HasSuffix(rest, "-")
 }
 
 // hasNonBinarySuffix returns true if the filename has a known non-binary extension.
@@ -403,6 +410,7 @@ func hasNonBinarySuffix(name string) bool {
 }
 
 // runCopilotAuthLogin spawns `copilot auth login` as an interactive subprocess.
+// cliPath is trusted user input from COPILOT_CLI_PATH or the Copilot SDK directory.
 func runCopilotAuthLogin(ctx context.Context, cliPath string) error {
 	cmd := exec.CommandContext(ctx, cliPath, "auth", "login")
 	cmd.Stdin = os.Stdin
