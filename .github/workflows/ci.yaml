@@ -101,20 +101,12 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
     permissions:
-      contents: write
+      contents: read
     steps:
-      - name: 🔑 Generate GitHub App Token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
-        id: generate-token
-        with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          persist-credentials: true
-          token: ${{ steps.generate-token.outputs.token }}
+          persist-credentials: false
 
       - name: ⚙️ Setup Go
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
@@ -127,14 +119,21 @@ jobs:
           go mod tidy
           echo "✅ Module dependencies synced"
 
-      - name: 📤 Commit and push module changes
-        if: github.event_name != 'merge_group'
-        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+      - name: 📤 Upload patch
+        run: |
+          git add -N .
+          git diff > /tmp/sync-modules.patch
+          if [ -s /tmp/sync-modules.patch ]; then
+            echo "Changes detected"
+          else
+            echo "No changes"
+          fi
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # 6.0.0
         with:
-          commit_message: "chore: sync Go module dependencies"
-          commit_user_name: module-sync-bot
-          commit_user_email: module-sync-bot@users.noreply.github.com
-          file_pattern: "go.mod go.sum"
+          name: sync-modules-patch
+          path: /tmp/sync-modules.patch
+          if-no-files-found: ignore
+          retention-days: 1
 
   generate-schema:
     name: 📝 Generate JSON Schema
@@ -142,20 +141,12 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.schema == 'true'
     permissions:
-      contents: write
+      contents: read
     steps:
-      - name: 🔑 Generate GitHub App Token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
-        id: generate-token
-        with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          persist-credentials: true
-          token: ${{ steps.generate-token.outputs.token }}
+          persist-credentials: false
 
       - name: ⚙️ Setup Go
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
@@ -165,19 +156,69 @@ jobs:
       - name: 📝 Generate JSON schema
         run: go generate ./schemas/...
 
-      - name: 📤 Commit and push schema changes
-        if: github.event_name != 'merge_group'
-        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+      - name: 📤 Upload patch
+        run: |
+          git add -N .
+          git diff > /tmp/generate-schema.patch
+          if [ -s /tmp/generate-schema.patch ]; then
+            echo "Changes detected"
+          else
+            echo "No changes"
+          fi
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # 6.0.0
         with:
-          commit_message: "chore: update generated JSON schema"
-          commit_user_name: generator-bot
-          commit_user_email: generator-bot@users.noreply.github.com
+          name: generate-schema-patch
+          path: /tmp/generate-schema.patch
+          if-no-files-found: ignore
+          retention-days: 1
 
   generate-docs:
     name: 📚 Generate Reference Docs
     runs-on: ubuntu-latest
     needs: [changes]
     if: needs.changes.outputs.cli == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version-file: go.mod
+
+      - name: 📚 Generate reference documentation
+        run: go generate ./docs/...
+
+      - name: 📤 Upload patch
+        run: |
+          git add -N .
+          git diff > /tmp/generate-docs.patch
+          if [ -s /tmp/generate-docs.patch ]; then
+            echo "Changes detected"
+          else
+            echo "No changes"
+          fi
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # 6.0.0
+        with:
+          name: generate-docs-patch
+          path: /tmp/generate-docs.patch
+          if-no-files-found: ignore
+          retention-days: 1
+
+  auto-commit:
+    name: 📤 Auto-Commit Generated Changes
+    runs-on: ubuntu-latest
+    needs: [changes, sync-modules, generate-schema, generate-docs]
+    if: >-
+      always()
+      && github.event_name != 'merge_group'
+      && (needs.sync-modules.result == 'success'
+        || needs.generate-schema.result == 'success'
+        || needs.generate-docs.result == 'success')
     permissions:
       contents: write
     steps:
@@ -194,19 +235,26 @@ jobs:
           persist-credentials: true
           token: ${{ steps.generate-token.outputs.token }}
 
-      - name: ⚙️ Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+      - name: 📥 Download patches
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          go-version-file: go.mod
+          pattern: "*-patch"
+          merge-multiple: true
+          path: /tmp/patches
 
-      - name: 📚 Generate reference documentation
-        run: go generate ./docs/...
+      - name: 📋 Apply patches
+        run: |
+          for patch in /tmp/patches/*.patch; do
+            if [ -s "$patch" ]; then
+              echo "Applying $(basename "$patch")..."
+              git apply "$patch"
+            fi
+          done
 
-      - name: 📤 Commit and push generated docs
-        if: github.event_name != 'merge_group'
+      - name: 📤 Commit and push generated changes
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
         with:
-          commit_message: "chore: update generated reference docs"
+          commit_message: "chore: sync modules and update generated files"
           commit_user_name: generator-bot
           commit_user_email: generator-bot@users.noreply.github.com
 
@@ -357,6 +405,7 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
+          save: 'false'
 
       - name: 🔥 Warm Helm chart cache
         id: warm
@@ -389,6 +438,7 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
+          save: 'false'
 
       - name: 🔥 Warm mirror cache
         id: warm
@@ -446,6 +496,7 @@ jobs:
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: 📦 Cache KSail Binary
         uses: ./.github/actions/cache-ksail-binary
@@ -453,6 +504,7 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
+          save: 'false'
 
       - name: 🧪 Run KSail System Test
         uses: ./.github/actions/ksail-system-test
@@ -487,7 +539,7 @@ jobs:
   rate-limit-check:
     name: 📊 Rate Limit Status
     runs-on: ubuntu-latest
-    if: always()
+    if: github.event_name == 'merge_group'
     permissions:
       contents: read
     steps:
@@ -525,6 +577,7 @@ jobs:
         sync-modules,
         generate-schema,
         generate-docs,
+        auto-commit,
         coverage,
         warm-helm-cache,
         system-test,
@@ -547,6 +600,7 @@ jobs:
             ${{ needs.sync-modules.result }}
             ${{ needs.generate-schema.result }}
             ${{ needs.generate-docs.result }}
+            ${{ needs.auto-commit.result }}
             ${{ needs.coverage.result }}
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.system-test.result }}
