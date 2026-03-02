@@ -238,5 +238,4 @@ If adding network-dependent benchmarks:
 
 ## Related Documentation
 
-- [Go Performance Optimization Guide](/.github/instructions/go-performance-optimization.md)
 - [Daily Perf Improver Research](https://github.com/devantler-tech/ksail/discussions/1822)

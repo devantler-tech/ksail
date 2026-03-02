@@ -20,6 +20,9 @@ https://x-access-token/
 https://githubnext.github.io/gh-aw/llms-create-agentic-workflows.txt
 https://githubnext.github.io/gh-aw/_llms-txt/agentic-workflows.txt
 
+# Intermittent Network Errors (codecov badge returns 502 occasionally)
+https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg
+
 # Intermittent Network Errors
 http://host.docker.internal:8765/
 http://localhost:8765/
