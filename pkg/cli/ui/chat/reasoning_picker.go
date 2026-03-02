@@ -59,7 +59,9 @@ func (m *Model) selectReasoningEffort() (tea.Model, tea.Cmd) {
 
 	// Only recreate session if the value actually changed
 	if newEffort != m.sessionConfig.ReasoningEffort {
-		// switchReasoningEffort dismisses the picker in both success and error paths.
+		// switchReasoningEffort returns error (not tea.Cmd) because it only performs
+		// synchronous session recreation. The error is stored in m.err internally.
+		// The picker is dismissed in both success and error paths within switchReasoningEffort.
 		_ = m.switchReasoningEffort(newEffort)
 
 		return m, nil

@@ -129,7 +129,9 @@ func (m *Model) applyModelFilter() {
 // selectModel handles model selection from the picker.
 func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 	if m.modelPickerIndex == 0 && !m.isAutoMode() {
-		// switchModel dismisses the picker in both success and error paths.
+		// switchModel returns error (not tea.Cmd) because it only performs synchronous
+		// session recreation. The error is stored in m.err internally.
+		// The picker is dismissed in both success and error paths within switchModel.
 		_ = m.switchModel("")
 
 		return m, nil
@@ -138,7 +140,9 @@ func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 	if m.modelPickerIndex > 0 && m.modelPickerIndex < totalItems {
 		selectedModel := m.filteredModels[m.modelPickerIndex-1]
 		if selectedModel.ID != m.currentModel {
-			// switchModel dismisses the picker in both success and error paths.
+			// switchModel returns error (not tea.Cmd) because it only performs synchronous
+			// session recreation. The error is stored in m.err internally.
+			// The picker is dismissed in both success and error paths within switchModel.
 			_ = m.switchModel(selectedModel.ID)
 
 			return m, nil

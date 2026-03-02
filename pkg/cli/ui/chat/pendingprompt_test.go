@@ -32,6 +32,19 @@ func typeText(m tea.Model, text string) tea.Model {
 	return m
 }
 
+// reassertStreaming casts the tea.Model to *chat.Model and re-enables streaming.
+// Fails the test if the type assertion fails.
+func reassertStreaming(t *testing.T, model tea.Model) {
+	t.Helper()
+
+	chatModel, assertionOK := model.(*chat.Model)
+	if !assertionOK {
+		t.Fatal("expected model to be *chat.Model")
+	}
+
+	chat.ExportSetStreaming(chatModel, true)
+}
+
 // ctrlQKey returns a KeyMsg for Ctrl+Q (queue keybind).
 func ctrlQKey() tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyCtrlQ}
@@ -69,9 +82,7 @@ func TestSteerPrompt_VisibleInView(t *testing.T) {
 
 	// Re-assert streaming state before steering. typeText may alter model state,
 	// and steering only activates while streaming.
-	if m, ok := updatedModel.(*chat.Model); ok {
-		chat.ExportSetStreaming(m, true)
-	}
+	reassertStreaming(t, updatedModel)
 
 	// Press Enter to steer (Enter steers during streaming)
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -119,9 +130,7 @@ func TestDeletePendingPrompt_RemovesLastAdded_SteeringBeforeQueued(t *testing.T)
 	updatedModel, _ = updatedModel.Update(ctrlQKey())
 
 	// Re-assert streaming state
-	if m, ok := updatedModel.(*chat.Model); ok {
-		chat.ExportSetStreaming(m, true)
-	}
+	reassertStreaming(t, updatedModel)
 
 	// Then steer (added after queued, so has higher seq)
 	updatedModel = typeText(updatedModel, "steering guidance")
@@ -151,16 +160,12 @@ func TestDeletePendingPrompt_SequenceOrdering_QueuedAfterSteering(t *testing.T) 
 	// Steer first
 	updatedModel := typeText(model, "steering first")
 
-	if m, ok := updatedModel.(*chat.Model); ok {
-		chat.ExportSetStreaming(m, true)
-	}
+	reassertStreaming(t, updatedModel)
 
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	// Re-assert streaming state
-	if m, ok := updatedModel.(*chat.Model); ok {
-		chat.ExportSetStreaming(m, true)
-	}
+	reassertStreaming(t, updatedModel)
 
 	// Then queue (added after steering, so has higher seq)
 	updatedModel = typeText(updatedModel, "queued second")
@@ -246,9 +251,7 @@ func TestMultipleQueuedPrompts_ShowNumbered(t *testing.T) {
 
 	// Re-assert streaming state before queuing next prompt; typeText may
 	// alter internal model state through the full update path.
-	if m, ok := updatedModel.(*chat.Model); ok {
-		chat.ExportSetStreaming(m, true)
-	}
+	reassertStreaming(t, updatedModel)
 
 	updatedModel = typeText(updatedModel, "second task")
 
