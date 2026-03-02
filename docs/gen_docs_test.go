@@ -15,7 +15,7 @@ import (
 // countCommands returns the number of non-helper leaf and group-root
 // commands in the Cobra tree (matching the shell script's behaviour).
 func countCommands(c *cobra.Command) int {
-	var subs []*cobra.Command
+	subs := make([]*cobra.Command, 0, len(c.Commands()))
 
 	for _, sub := range c.Commands() {
 		if sub.Name() == "help" || sub.Name() == "completion" {
