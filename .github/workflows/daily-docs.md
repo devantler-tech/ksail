@@ -169,6 +169,7 @@ find docs/src/content/docs -path 'docs/src/content/docs/blog' -prune -o -name '*
 ```
 
 **Exclude**:
+
 - `docs/src/content/docs/blog/` — different writing style
 - `frontmatter-full.md` — auto-generated from JSON schema
 - Files with `disable-agentic-editing: true` in frontmatter
@@ -206,6 +207,7 @@ echo "$(date -u +%Y-%m-%d) - Cleaned: <filename>" >> /tmp/gh-aw/cache-memory/cle
 #### 6. Create Pull Request
 
 Use the `create_pull_request` safe-outputs tool with:
+
 - Branch name: `docs/unbloat-<filename-without-extension>`
 - Include which file improved, types of bloat removed, estimated reduction
 

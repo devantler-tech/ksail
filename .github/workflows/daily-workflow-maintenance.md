@@ -140,6 +140,7 @@ for file in .github/workflows/*.md; do echo "Compiling $file..."; gh aw compile 
 #### 2.4. Fix compilation errors
 
 If there are compilation errors:
+
 - Analyze them against the gh-aw changelog
 - Make targeted fixes to workflow `.md` source files
 - Re-run `gh aw compile --validate` to verify fixes
@@ -223,6 +224,7 @@ To decide which deep-mode phase to perform:
 2. Create a discussion with title "${{ github.workflow }} - Research and Plan"
 
    **Include "How to Control this Workflow" and "What Happens Next" sections** with commands:
+
    ```
    gh aw disable daily-workflow-maintenance --repo ${{ github.repository }}
    gh aw enable daily-workflow-maintenance --repo ${{ github.repository }}

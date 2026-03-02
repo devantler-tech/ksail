@@ -153,10 +153,12 @@ To decide which phase to perform:
    a. **Reactive scan of recent changes (code simplification).** Before consulting the research plan, check for recently modified code from the last 24 hours that could benefit from simplification:
 
       - Search for merged PRs and commits from the last 24h:
+
         ```bash
         YESTERDAY=$(date -v-1d '+%Y-%m-%d' 2>/dev/null || date -d '1 day ago' '+%Y-%m-%d')
         git log --since="24 hours ago" --pretty=format:"%H %s" --no-merges
         ```
+
       - Use GitHub tools to search: `repo:${{ github.repository }} is:pr is:merged merged:>=${YESTERDAY}`
       - Extract changed source files (exclude test files, lock files, generated files, vendored dependencies)
       - If recent changes exist, analyze them for simplification opportunities:

@@ -405,7 +405,7 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
-          save: 'false'
+          save: "false"
 
       - name: 🔥 Warm Helm chart cache
         id: warm
@@ -438,7 +438,7 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
-          save: 'false'
+          save: "false"
 
       - name: 🔥 Warm mirror cache
         id: warm
@@ -504,7 +504,7 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
-          save: 'false'
+          save: "false"
 
       - name: 🧪 Run KSail System Test
         uses: ./.github/actions/ksail-system-test

@@ -16,7 +16,7 @@ inputs:
   save:
     description: Whether to save the cache after building. Set to 'false' for restore-only consumers like system-test.
     required: false
-    default: 'true'
+    default: "true"
 
 outputs:
   cache-hit:
