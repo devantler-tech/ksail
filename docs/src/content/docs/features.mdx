@@ -101,12 +101,13 @@ Run local [OCI registries](/concepts/#oci-registries) for faster image pulls and
 ```bash
 ksail cluster init --local-registry localhost:5050
 ksail cluster create
+docker build -t localhost:5050/my-app .
 docker push localhost:5050/my-app
 ```
 
 ### Mirror Registries
 
-Docker-based clusters (Vanilla, K3s, Talos-on-Docker, VCluster) enable `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default. These run as local pull-through cache containers with `${ENV_VAR}` credential support. Talos on Hetzner requires explicit mirror configuration via flags.
+Docker-based clusters (Vanilla, K3s, Talos-on-Docker, VCluster) enable `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default. These run as local pull-through cache containers with `${ENV_VAR}` credential support. Talos on Hetzner requires explicit mirror configuration via flags or `ksail.yaml`.
 
 ```bash
 ksail cluster init  # Default mirrors enabled
@@ -186,7 +187,7 @@ spec:
 
 ## AI Chat Assistant
 
-Interactive help with cluster configuration and troubleshooting powered by AI. Three modes: **Agent** (`</>`) executes with approval, **Plan** (`≡`) guides without execution, **Ask** (`?`) investigates read-only. Press **Tab** to cycle modes. Requires [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli).
+Interactive help with cluster configuration and troubleshooting powered by AI. Three modes: **Agent** (`</>`) executes with approval, **Plan** (`≡`) guides without execution, **Ask** (`?`) investigates read-only. Press **Tab** to cycle modes. Requires [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) to be installed and authenticated.
 
 ```bash
 ksail chat
