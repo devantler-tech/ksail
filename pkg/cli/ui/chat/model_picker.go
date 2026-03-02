@@ -129,10 +129,8 @@ func (m *Model) applyModelFilter() {
 // selectModel handles model selection from the picker.
 func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 	if m.modelPickerIndex == 0 && !m.isAutoMode() {
-		err := m.switchModel("")
-		if err != nil {
-			return m, nil
-		}
+		// switchModel dismisses the picker in both success and error paths.
+		_ = m.switchModel("")
 
 		return m, nil
 	}
@@ -140,10 +138,8 @@ func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 	if m.modelPickerIndex > 0 && m.modelPickerIndex < totalItems {
 		selectedModel := m.filteredModels[m.modelPickerIndex-1]
 		if selectedModel.ID != m.currentModel {
-			err := m.switchModel(selectedModel.ID)
-			if err != nil {
-				return m, nil
-			}
+			// switchModel dismisses the picker in both success and error paths.
+			_ = m.switchModel(selectedModel.ID)
 
 			return m, nil
 		}

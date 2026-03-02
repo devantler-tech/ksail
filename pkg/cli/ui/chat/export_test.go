@@ -1,7 +1,6 @@
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 package chat
 
-// SetStreaming exposes Model.isStreaming for testing.
-func (m *Model) SetStreaming(streaming bool) {
+// ExportSetStreaming sets Model.isStreaming for testing.
+var ExportSetStreaming = func(m *Model, streaming bool) {
 	m.isStreaming = streaming
 }
