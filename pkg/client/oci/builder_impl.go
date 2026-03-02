@@ -332,7 +332,7 @@ func addFileToArchive(
 		return fmt.Errorf("get relative path for %s: %w", path, err)
 	}
 
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(path) //nolint:gosec // G304: path validated by OCI builder
 	if err != nil {
 		return fmt.Errorf("read file %s: %w", path, err)
 	}
