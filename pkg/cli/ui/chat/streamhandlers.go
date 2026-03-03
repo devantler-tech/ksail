@@ -279,10 +279,7 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Restore the prompt's captured state
-	m.chatMode = prompt.chatMode
-
-	err := m.applyMode(m.chatMode)
+	err := m.applyMode(prompt.chatMode)
 	if err != nil {
 		m.err = err
 
@@ -314,7 +311,8 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Setup succeeded - now remove the prompt from the queue
+	// Setup succeeded - now commit all state changes and remove the prompt from the queue
+	m.chatMode = prompt.chatMode
 	m.dropNextPendingPrompt()
 
 	// Prepare new turn state
