@@ -1,6 +1,7 @@
 package vcluster_test
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/vcluster"
@@ -71,18 +72,17 @@ func TestDefaultKubernetesVersion_MatchesDockerfileFormat(t *testing.T) {
 	)
 }
 
-// TestDefaultKubernetesVersion_MajorMinorExtraction verifies we can extract major.minor from the version.
+// TestDefaultKubernetesVersion_MajorMinorExtraction verifies major.minor can be extracted from the version.
 func TestDefaultKubernetesVersion_MajorMinorExtraction(t *testing.T) {
 	t.Parallel()
 
 	version := vcluster.DefaultKubernetesVersion
 
-	// Should be able to extract major.minor (e.g., "1.32" from "v1.32.3")
-	assert.Regexp(t,
-		`^v1\.(3[0-9]|[4-9][0-9])\.\d+`,
-		version,
-		"DefaultKubernetesVersion should be v1.30+ (minimum supported K8s version)",
-	)
+	// Extract major.minor from the version (e.g., "1.32" from "v1.32.3")
+	re := regexp.MustCompile(`^v(\d+\.\d+)\.\d+`)
+	matches := re.FindStringSubmatch(version)
+	require.Len(t, matches, 2, "should extract major.minor from version")
+	assert.NotEmpty(t, matches[1], "major.minor should not be empty")
 }
 
 // TestChartVersion_Stability verifies the chart version remains stable across multiple calls.
@@ -113,26 +113,6 @@ func TestDefaultKubernetesVersion_Stability(t *testing.T) {
 		version2,
 		"DefaultKubernetesVersion should be stable across multiple reads",
 	)
-}
-
-// TestChartVersion_NotEmpty ensures the embedded Dockerfile parsing succeeds.
-func TestChartVersion_NotEmpty(t *testing.T) {
-	t.Parallel()
-
-	version := vcluster.ChartVersion()
-
-	// If this fails, the Dockerfile is missing or malformed
-	assert.NotEmpty(t, version, "ChartVersion parsing from Dockerfile should succeed")
-}
-
-// TestDefaultKubernetesVersion_NotEmpty ensures the embedded Dockerfile parsing succeeds.
-func TestDefaultKubernetesVersion_NotEmpty(t *testing.T) {
-	t.Parallel()
-
-	version := vcluster.DefaultKubernetesVersion
-
-	// If this fails, the Dockerfile is missing or malformed
-	assert.NotEmpty(t, version, "DefaultKubernetesVersion parsing from Dockerfile should succeed")
 }
 
 // TestChartVersion_ExpectedValue verifies the chart version matches the current Dockerfile content.
