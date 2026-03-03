@@ -1,0 +1,534 @@
+---
+title: Architecture
+description: Understanding KSail's internal architecture and design principles
+---
+
+This guide explains KSail's internal architecture, design decisions, and how the various components work together. This is essential reading for contributors and helpful for advanced users who want to understand the tool's inner workings.
+
+## Design Principles
+
+KSail is built on several core principles:
+
+1. **Single Binary Distribution** — All Kubernetes tools are embedded as Go libraries, eliminating external dependencies except Docker
+2. **No Vendor Lock-In** — Uses native distribution configs (kind.yaml, k3d.yaml, Talos patches, vcluster.yaml)
+3. **Declarative Configuration** — Everything as code in version-controlled files
+4. **Provider/Provisioner Separation** — Infrastructure management separated from distribution configuration
+5. **Composability** — Modular architecture with clear boundaries between components
+
+## High-Level Architecture
+
+````mermaid
+graph TB
+    CLI[CLI Layer<br/>pkg/cli]
+    APIs[API Types<br/>pkg/apis]
+    Services[Services<br/>pkg/svc]
+    Clients[Tool Clients<br/>pkg/client]
+    
+    CLI --> Services
+    CLI --> APIs
+    Services --> APIs
+    Services --> Clients
+    
+    subgraph "Infrastructure"
+        Provider[Providers<br/>Docker, Hetzner, Omni]
+    end
+    
+    subgraph "Distributions"
+        Provisioner[Provisioners<br/>Vanilla (Kind), K3s (K3d), Talos, VCluster]
+    end
+    
+    subgraph "Components"
+        Installer[Installers<br/>CNI, CSI, Metrics, etc.]
+    end
+    
+    Services --> Provider
+    Services --> Provisioner
+    Services --> Installer
+````
+
+## Package Structure
+
+KSail uses a flat package structure in `pkg/` to improve maintainability and reduce import complexity:
+
+### Core Packages
+
+#### `pkg/apis/`
+API types, schemas, and enums that define KSail's configuration model.
+
+- **`cluster/v1alpha1/`** — ClusterSpec and ClusterConfig types
+- **Top-level `schemas/` directory** — Generated JSON schema for `ksail.yaml` (via `go generate ./schemas/...`) used for validation and editor autocomplete
+
+#### `pkg/cli/`
+CLI wiring, commands, and terminal UI components.
+
+- **`cmd/`** — Cobra command implementations
+- **`ui/`** — Terminal UI components (chat TUI, ASCII art, confirmations)
+- **`lifecycle/`** — Cluster lifecycle orchestration
+- **`setup/`** — Component setup (CNI, mirror registries, etc.)
+- **`annotations/`** — Command annotation constants
+- **`flags/`** — CLI flag handling utilities
+- **`dockerutil/`** — Docker client lifecycle management
+- **`editor/`** — Editor configuration resolution
+- **`kubeconfig/`** — Kubeconfig file path helpers
+
+#### `pkg/client/`
+Embedded tool clients that wrap Kubernetes tools as Go libraries.
+
+- **`kubectl/`** — Kubernetes API client operations
+- **`helm/`** — Helm chart operations
+- **`flux/`** — Flux GitOps reconciliation
+- **`argocd/`** — ArgoCD GitOps reconciliation
+- **`docker/`** — Docker daemon operations
+- **`k9s/`** — K9s terminal UI integration
+- **`kubeconform/`** — Kubernetes manifest validation
+- **`kustomize/`** — Kustomize rendering
+- **`oci/`** — OCI registry operations
+- **`netretry/`** — Network retry utilities
+- **`reconciler/`** — Common base for GitOps clients
+
+**Note:** Distribution tools like Kind, K3d, and VCluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`.
+
+#### `pkg/svc/`
+Services implementing core business logic.
+
+##### Infrastructure Management
+
+- **`provider/`** — Infrastructure providers
+  - **`docker/`** — Docker-based clusters (Vanilla, K3s, Talos, VCluster)
+  - **`hetzner/`** — Hetzner Cloud for Talos
+  - **`omni/`** — Sidero Omni for Talos
+
+##### Distribution Provisioning
+
+- **`provisioner/cluster/`** — Distribution provisioners
+  - **`kind/`** — Vanilla (standard Kubernetes via Kind SDK)
+  - **`k3d/`** — K3s (lightweight K3s via K3d Cobra/SDK)
+  - **`talos/`** — Talos (immutable Talos Linux via Talos SDK)
+  - **`vcluster/`** — VCluster (virtual clusters via vCluster Go SDK with Vind Docker driver)
+- **`provisioner/registry/`** — Registry provisioner for mirror registries
+
+##### Component Installation
+
+- **`installer/`** — Component installers
+  - **`calico/`** — Calico CNI
+  - **`cilium/`** — Cilium CNI
+  - **`certmanager/`** — Cert-manager for TLS
+  - **`cloudproviderkind/`** — Cloud Provider KIND for LoadBalancer support (Vanilla)
+  - **`gatekeeper/`** — Gatekeeper policy engine
+  - **`hcloudccm/`** — Hetzner Cloud Controller Manager
+  - **`hetznercsi/`** — Hetzner CSI driver
+  - **`kyverno/`** — Kyverno policy engine
+  - **`localpathcsi/`** — Local path CSI
+  - **`longhorncsi/`** — Longhorn CSI
+  - **`metallb/`** — MetalLB LoadBalancer (Talos)
+  - **`metricsserver/`** — Metrics Server
+  - **`internal/hetzner/`** — Shared utilities for Hetzner installers
+
+##### Other Services
+
+- **`chat/`** — AI chat integration using GitHub Copilot SDK
+- **`detector/`** — Detects installed components by querying Helm and Kubernetes API
+- **`diff/`** — Computes ClusterSpec diffs and classifies update impact
+- **`image/`** — Container image export/import services
+- **`mcp/`** — Model Context Protocol server for AI assistants
+- **`registryresolver/`** — OCI registry detection and resolution
+- **`state/`** — Cluster state persistence for distributions without introspection
+
+#### Utility Packages
+
+- **`pkg/di/`** — Dependency injection container
+- **`pkg/envvar/`** — Environment variable utilities
+- **`pkg/fsutil/`** — Filesystem utilities (includes configmanager)
+- **`pkg/k8s/`** — Kubernetes helpers and templates
+- **`pkg/notify/`** — CLI notifications and progress display
+- **`pkg/runner/`** — Cobra command execution helpers
+- **`pkg/timer/`** — Command timing and performance tracking
+- **`pkg/toolgen/`** — AI tool generation for assistants
+
+### Internal Packages
+
+- **`internal/buildmeta/`** — Build-time version metadata (Version, Commit, Date) injected via ldflags
+
+## Provider vs Provisioner Architecture
+
+KSail separates **infrastructure management** (providers) from **distribution configuration** (provisioners). This separation allows the same distribution (e.g., Talos) to run on different infrastructure (Docker, Hetzner, Omni).
+
+### Providers
+
+Providers manage the underlying infrastructure where Kubernetes nodes run:
+
+| Provider | Description | Supported Distributions |
+|----------|-------------|------------------------|
+| **Docker** | Runs nodes as Docker containers | Vanilla, K3s, Talos, VCluster |
+| **Hetzner** | Runs nodes on Hetzner Cloud servers | Talos |
+| **Omni** | Manages Talos clusters via Sidero Omni API | Talos |
+
+**Responsibilities:**
+- Create/delete infrastructure resources (containers or cloud servers)
+- Configure networking
+- Start/stop nodes
+- Provide node access for provisioners
+
+**Location:** `pkg/svc/provider/`
+
+### Provisioners
+
+Provisioners configure and manage Kubernetes distributions on top of provider infrastructure:
+
+| Distribution | Tool | Provisioner | Description |
+|--------------|------|------------|-------------|
+| **Vanilla** | Kind | `KindClusterProvisioner` | Standard upstream Kubernetes via Kind SDK |
+| **K3s** | K3d | `K3dClusterProvisioner` | Lightweight K3s via K3d Cobra/SDK |
+| **Talos** | Talos | `TalosProvisioner` | Immutable Talos Linux via Talos SDK |
+| **VCluster** | Vind | `VClusterProvisioner` | Virtual clusters via vCluster Go SDK (Vind driver) |
+
+**Responsibilities:**
+- Generate distribution-specific configs (kind.yaml, k3d.yaml, Talos patches, vcluster.yaml)
+- Bootstrap Kubernetes control plane
+- Configure cluster components
+- Manage cluster lifecycle
+- Support cluster updates and upgrades
+
+**Location:** `pkg/svc/provisioner/cluster/`
+
+### Interaction Flow
+
+````mermaid
+sequenceDiagram
+    participant User
+    participant CLI
+    participant Provisioner
+    participant Provider
+    
+    User->>CLI: ksail cluster create
+    CLI->>Provisioner: Create cluster
+    Provisioner->>Provider: Create infrastructure
+    Provider-->>Provisioner: Nodes ready
+    Provisioner->>Provisioner: Bootstrap Kubernetes
+    Provisioner-->>CLI: Cluster ready
+    CLI-->>User: Success
+````
+
+### Example: Talos Distribution
+
+Talos demonstrates the provider/provisioner separation:
+
+1. **Talos Provisioner** (`pkg/svc/provisioner/cluster/talos/`)
+   - Generates Talos machine configs and patches
+   - Bootstraps Talos Kubernetes
+   - Manages cluster lifecycle
+
+2. **Docker Provider** (`pkg/svc/provider/docker/`)
+   - Runs Talos nodes as Docker containers
+   - Used for local development
+
+3. **Hetzner Provider** (`pkg/svc/provider/hetzner/`)
+   - Runs Talos nodes on Hetzner Cloud servers
+   - Installs Hetzner CCM and CSI drivers
+
+4. **Omni Provider** (`pkg/svc/provider/omni/`)
+   - Manages Talos clusters via Sidero Omni API
+   - Provides UI and API management
+
+The **same Talos provisioner** works with all three providers, enabling consistent Talos experience across environments.
+
+## Component Lifecycle
+
+KSail manages cluster components (CNI, CSI, metrics-server, cert-manager, policy engines, GitOps engines) through a structured lifecycle:
+
+### Installation Phases
+
+Components are installed in two phases to ensure dependencies are met:
+
+#### Phase 1: Infrastructure Components
+Installed immediately after CNI becomes ready:
+- **CSI** — Storage drivers (local-path, Longhorn, Hetzner CSI)
+- **Metrics Server** — Resource metrics API
+- **LoadBalancer** — Cloud Provider KIND (Vanilla) or MetalLB (Talos)
+- **Cert Manager** — TLS certificate management
+- **Policy Engine** — Kyverno or Gatekeeper
+
+#### Phase 2: GitOps Engines
+Installed after Phase 1 completes and API server is stable:
+- **Flux** — GitOps continuous delivery
+- **ArgoCD** — GitOps continuous delivery
+
+Between phases, KSail performs an **API Server Stability Check** (`waitForAPIServerStability`) that requires 3 consecutive successful health checks within a 2-minute timeout. This prevents GitOps engines from crashing with `dial tcp 10.96.0.1:443: i/o timeout` errors caused by infrastructure components temporarily destabilizing API server connectivity while registering webhooks and CRDs.
+
+### Detection and Updates
+
+The `detector` service (`pkg/svc/detector/`) identifies installed components by:
+- Querying Helm release history for Helm-based components
+- Querying Kubernetes API for components installed via kubectl
+
+This detection enables:
+- **Accurate baselines** — Know what's currently installed before updates
+- **Intelligent updates** — Only modify what changed
+- **Verification** — Confirm components are running as expected
+
+The `diff` service (`pkg/svc/diff/`) computes configuration differences and classifies update impact:
+- **In-place** — Can update without disruption (e.g., CNI config changes)
+- **Reboot-required** — Requires node reboot (e.g., Talos kernel changes)
+- **Recreate-required** — Must destroy and recreate cluster (e.g., distribution change)
+
+## Embedded Tools Approach
+
+KSail embeds Kubernetes tools as Go libraries instead of shelling out to CLI tools:
+
+### Benefits
+
+1. **Single Binary** — No external dependencies except Docker
+2. **Version Control** — Tool versions locked in go.mod
+3. **API Access** — Direct access to tool APIs, not just CLI output parsing
+4. **Performance** — No process spawning overhead
+5. **Error Handling** — Structured errors from Go APIs vs parsing stderr
+
+### Embedded Tools
+
+| Tool | Purpose | Location |
+|------|---------|----------|
+| **kubectl** | Kubernetes API operations | `pkg/client/kubectl/` |
+| **helm** | Chart operations | `pkg/client/helm/` |
+| **kind** | Vanilla provisioner | `pkg/svc/provisioner/cluster/kind/` (uses Kind SDK directly) |
+| **k3d** | K3s provisioner | `pkg/svc/provisioner/cluster/k3d/` (uses K3d Cobra/SDK directly) |
+| **vcluster** | VCluster provisioner | `pkg/svc/provisioner/cluster/vcluster/` (uses vCluster Go SDK directly) |
+| **flux** | Flux GitOps | `pkg/client/flux/` |
+| **argocd** | ArgoCD GitOps | `pkg/client/argocd/` |
+| **k9s** | Terminal UI | `pkg/client/k9s/` |
+| **kubeconform** | Validation | `pkg/client/kubeconform/` |
+| **kustomize** | Rendering | `pkg/client/kustomize/` |
+
+### External Dependencies
+
+Only Docker is required as an external dependency:
+- **Docker** — Container runtime for local clusters (Docker provider)
+
+Cloud providers (Hetzner, Omni) require credentials:
+- **Hetzner** — `HCLOUD_TOKEN` environment variable
+- **Omni** — Service account key (default: `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.cluster.omni.serviceAccountKeyEnvVar`)
+
+## State Persistence
+
+Different distributions handle state differently:
+
+### Introspectable Distributions
+
+**Talos** and **VCluster** can introspect running configuration:
+- Talos can query machine configs via API
+- VCluster stores config in Kubernetes resources
+
+KSail can detect current configuration without local state files.
+
+### Non-Introspectable Distributions
+
+**Vanilla (Kind)** and **K3s (K3d)** cannot introspect running configuration:
+- Kind and K3d don't expose cluster config via API
+- Cannot reliably detect what was used to create cluster
+
+KSail persists cluster specs to `~/.ksail/clusters/<name>/spec.json` for these distributions.
+
+**State Service** (`pkg/svc/state/`):
+- **Save** — Write ClusterSpec to JSON after cluster creation
+- **Load** — Read ClusterSpec for update operations
+- **Delete** — Clean up state file on cluster deletion
+
+This enables the `ksail cluster update` command to compare desired vs current state.
+
+## AI Integration
+
+KSail provides two AI interfaces:
+
+### Chat Assistant
+
+**Command:** `ksail chat`
+
+**Implementation:** `pkg/svc/chat/`
+
+Uses GitHub Copilot SDK to provide interactive cluster configuration and troubleshooting:
+
+- **Three modes:**
+  - **Agent Mode** (`</>`) — Full tool execution with permission prompts
+  - **Plan Mode** (`≡`) — No execution; AI describes steps
+  - **Ask Mode** (`?`) — Read-only investigation; write tools blocked
+
+- **Features:**
+  - Tab to cycle between modes
+  - `^O` for model picker (lazy-loaded)
+  - `^E` for reasoning effort (low, medium, high)
+  - `^H` for session history
+  - Auto model selection with 10% discount
+  - Quota tracking for premium requests
+  - Infinite sessions with background compaction
+
+- **Authentication:**
+  - Supports `KSAIL_COPILOT_TOKEN` and `COPILOT_TOKEN`
+  - Filters `GITHUB_TOKEN`/`GH_TOKEN` to avoid scope issues
+
+### MCP Server
+
+**Command:** `ksail mcp`
+
+**Implementation:** `pkg/svc/mcp/`
+
+Exposes KSail as a Model Context Protocol server for Claude and other AI assistants:
+
+- Tools for cluster management (create, update, delete, info)
+- Workload deployment (apply, reconcile)
+- Configuration helpers
+- Runs as background server that AI assistants connect to
+
+## Testing Strategy
+
+KSail uses multiple testing approaches:
+
+### Unit Tests
+
+- **Coverage target:** Individual package coverage varies; overall project aim is high coverage
+- **Mocking:** Uses testify/mock for interfaces
+- **Export pattern:** `export_test.go` files expose unexported symbols for testing without leaking to production
+- **Parallel execution:** Tests use `t.Parallel()` when safe
+- **Static error sentinels:** Tests use static errors (e.g., `errFake`) for predictable mocking
+
+**Example:** `pkg/client/helm/operations_test.go` tests Helm operations with mocked interfaces.
+
+### Integration Tests
+
+Test real cluster operations with actual tools:
+- Create real Kind/K3d/VCluster clusters
+- Deploy real workloads
+- Verify end-to-end workflows
+
+### System Tests (CI)
+
+Comprehensive CI tests cover:
+- All distribution × provider combinations
+- All component combinations (CNI, CSI, GitOps, etc.)
+- Multi-platform testing (Linux, macOS)
+- Multi-architecture testing (amd64, arm64)
+
+**CI workflow:** `.github/workflows/ci.yaml`
+
+### Benchmark Tests
+
+Performance benchmarks track:
+- Cluster creation time
+- Component installation time
+- Update operation performance
+- Memory usage patterns
+
+**Run with:** `go test -bench=. -benchmem ./...`
+
+### Agentic Workflows
+
+Automated workflows for continuous improvement:
+- **Daily Test Improver** — Adds unit tests to increase coverage
+- **Daily Perf Improver** — Adds benchmarks and performance improvements
+- **Daily Refactor** — Refactors code for maintainability
+- **Daily Progress** — Implements roadmap features
+- **Daily Backlog Burner** — Tackles backlog issues
+
+**Location:** `.github/workflows/*.md` (agentic workflow definitions)
+
+## Configuration Management
+
+KSail uses a declarative configuration model:
+
+### Configuration Files
+
+1. **`ksail.yaml`** — Main cluster configuration
+   - Cluster metadata (name, distribution, provider)
+   - Component selection (CNI, CSI, metrics-server, etc.)
+   - GitOps configuration
+   - Mirror registries
+   - Custom settings per distribution
+
+2. **Distribution Configs** — Native tool configurations
+   - `kind.yaml` (Vanilla/Kind)
+   - `k3d.yaml` (K3s/K3d)
+   - `talos/` directory (Talos machine configs and patches)
+   - `vcluster.yaml` (VCluster)
+
+3. **`k8s/` Directory** — Kubernetes manifests
+   - Application deployments
+   - Services
+   - ConfigMaps/Secrets
+   - Kustomize overlays
+
+### Schema Validation
+
+JSON schemas provide editor autocomplete and validation:
+
+**Generate schemas:** `go generate ./schemas/...`
+
+**Location:** `schemas/ksail-config.schema.json`
+
+**VSCode integration:** Automatic via `.vscode/settings.json`
+
+### Configuration Loading
+
+The `configmanager` (`pkg/fsutil/configmanager/`) handles configuration loading:
+
+1. Load `ksail.yaml` and validate against schema
+2. Load distribution config (kind.yaml, k3d.yaml, etc.)
+3. Merge configs with defaults
+4. Validate combined configuration
+5. Return strongly-typed ClusterSpec
+
+## Build System
+
+### Building
+
+````bash
+# Development build
+go build -o ksail
+
+# Optimized build (strips debug symbols)
+go build -ldflags="-s -w" -o ksail
+
+# Build with version info (CI)
+go build -ldflags="-s -w -X github.com/devantler-tech/ksail/v5/internal/buildmeta.Version=v5.x.x" -o ksail
+````
+
+### Release Process
+
+1. **Push to `main`** triggers the release workflow (`.github/workflows/release.yaml`); it can also be started manually via **workflow_dispatch**.
+2. The release workflow delegates to a **reusable workflow** that builds binaries for all supported platforms/architectures:
+   - Linux (amd64, arm64)
+   - macOS (arm64)
+   - Windows (amd64, arm64)
+3. **Artifacts are uploaded** to GitHub Releases by the workflow
+4. **Checksums are generated** for verification
+5. **VSCode extension** is packaged and published to the marketplace as part of the release workflow
+
+**Config:** `.github/workflows/release.yaml`
+
+### Documentation
+
+Documentation is built with Astro and Starlight:
+
+````bash
+cd docs/
+npm ci
+npm run build  # Generates static site in dist/
+npm run dev    # Local development server
+````
+
+**Deployed to:** GitHub Pages ([ksail.devantler.tech](https://ksail.devantler.tech))
+
+**Workflow:** `.github/workflows/publish-pages.yaml`
+
+## Contributing
+
+See [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md) for:
+- Development setup
+- Coding standards
+- Pull request process
+- Testing requirements
+- Documentation guidelines
+
+## Further Reading
+
+- [Concepts](/concepts/) — High-level concepts and mental models
+- [Configuration](/configuration/) — Detailed configuration reference
+- [CLI Flags](/cli-flags/) — Complete CLI reference
+- [GitHub Repository](https://github.com/devantler-tech/ksail) — Source code and issues
