@@ -15,7 +15,12 @@ func TestChartVersion(t *testing.T) {
 	version := vcluster.ChartVersion()
 
 	require.NotEmpty(t, version, "ChartVersion should return a non-empty version")
-	assert.Regexp(t, `^\d+\.\d+\.\d+`, version, "ChartVersion should return a valid semantic version")
+	assert.Regexp(
+		t,
+		`^\d+\.\d+\.\d+`,
+		version,
+		"ChartVersion should return a valid semantic version",
+	)
 }
 
 // TestChartVersion_MatchesDockerfileFormat verifies the chart version matches expected format from Dockerfile.
@@ -41,7 +46,12 @@ func TestDefaultKubernetesVersion(t *testing.T) {
 	version := vcluster.DefaultKubernetesVersion
 
 	require.NotEmpty(t, version, "DefaultKubernetesVersion should be non-empty")
-	assert.Regexp(t, `^v\d+\.\d+\.\d+`, version, "DefaultKubernetesVersion should start with 'v' followed by semver")
+	assert.Regexp(
+		t,
+		`^v\d+\.\d+\.\d+`,
+		version,
+		"DefaultKubernetesVersion should start with 'v' followed by semver",
+	)
 }
 
 // TestDefaultKubernetesVersion_MatchesDockerfileFormat verifies the K8s version matches expected Dockerfile format.
@@ -53,7 +63,8 @@ func TestDefaultKubernetesVersion_MatchesDockerfileFormat(t *testing.T) {
 	// The Kubernetes version is extracted from the Dockerfile line:
 	// FROM ghcr.io/loft-sh/kubernetes:v1.32.3
 	// Expected format: v-prefixed semver with optional suffix
-	assert.Regexp(t,
+	assert.Regexp(
+		t,
 		`^v\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$`,
 		version,
 		"DefaultKubernetesVersion should match Dockerfile format (v-prefixed semver with optional suffix)",
@@ -81,7 +92,12 @@ func TestChartVersion_Stability(t *testing.T) {
 	version1 := vcluster.ChartVersion()
 	version2 := vcluster.ChartVersion()
 
-	assert.Equal(t, version1, version2, "ChartVersion should return the same value across multiple calls")
+	assert.Equal(
+		t,
+		version1,
+		version2,
+		"ChartVersion should return the same value across multiple calls",
+	)
 }
 
 // TestDefaultKubernetesVersion_Stability verifies the K8s version remains stable across multiple reads.
@@ -91,7 +107,12 @@ func TestDefaultKubernetesVersion_Stability(t *testing.T) {
 	version1 := vcluster.DefaultKubernetesVersion
 	version2 := vcluster.DefaultKubernetesVersion
 
-	assert.Equal(t, version1, version2, "DefaultKubernetesVersion should be stable across multiple reads")
+	assert.Equal(
+		t,
+		version1,
+		version2,
+		"DefaultKubernetesVersion should be stable across multiple reads",
+	)
 }
 
 // TestChartVersion_NotEmpty ensures the embedded Dockerfile parsing succeeds.
@@ -123,8 +144,12 @@ func TestChartVersion_ExpectedValue(t *testing.T) {
 	// This test documents the current Dockerfile content.
 	// The exact version may change with Dependabot updates.
 	// FROM ghcr.io/loft-sh/vcluster-pro:0.32.0-alpha.2
-	assert.Equal(t, "0.32.0-alpha.2", version,
-		"ChartVersion should match current Dockerfile (update this test when Dependabot updates the version)")
+	assert.Equal(
+		t,
+		"0.32.0-alpha.2",
+		version,
+		"ChartVersion should match current Dockerfile (update this test when Dependabot updates the version)",
+	)
 }
 
 // TestDefaultKubernetesVersion_ExpectedValue verifies the K8s version matches the current Dockerfile content.
@@ -136,6 +161,10 @@ func TestDefaultKubernetesVersion_ExpectedValue(t *testing.T) {
 	// This test documents the current Dockerfile content.
 	// The exact version may change with Dependabot updates.
 	// FROM ghcr.io/loft-sh/kubernetes:v1.32.3
-	assert.Equal(t, "v1.32.3", version,
-		"DefaultKubernetesVersion should match current Dockerfile (update this test when Dependabot updates the version)")
+	assert.Equal(
+		t,
+		"v1.32.3",
+		version,
+		"DefaultKubernetesVersion should match current Dockerfile (update this test when Dependabot updates the version)",
+	)
 }
