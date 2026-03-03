@@ -363,9 +363,9 @@ func findCopilotInSDKCache() (string, bool) {
 
 // isCopilotBinaryName returns true for names that match the Copilot CLI binary pattern:
 // "copilot", "copilot.exe", or "copilot-<segment>[<segment>...][.exe]"
-// (e.g., "copilot-linux-amd64"). Segments must be non-empty, so leading dashes
-// ("copilot--x"), trailing dashes ("copilot-x-"), and double dashes ("copilot-a--b")
-// are rejected.
+// (e.g., "copilot-linux-amd64"). Segments must be non-empty: double dashes
+// ("copilot-a--b"), a leading dash after the prefix ("copilot--x"), and trailing
+// dashes ("copilot-x-") are all rejected.
 func isCopilotBinaryName(name string) bool {
 	if name == "copilot" || name == "copilot.exe" {
 		return true
