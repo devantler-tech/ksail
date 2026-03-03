@@ -315,7 +315,12 @@ func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
 	m.chatMode = prompt.chatMode
 	m.dropNextPendingPrompt()
 
-	// Prepare new turn state
+	// Prepare new turn state.
+	// NOTE: prepareForNewTurn calls drainEventChannel, which is safe even though
+	// cleanup() (called by tryFinalizeResponse and switchModel/switchReasoningEffort)
+	// already drained the channel. drainEventChannel is idempotent — draining an
+	// empty channel is a no-op. The subsequent waitForEvent() call starts a fresh
+	// listener on the same channel, so no events needed by the new session are lost.
 	m.prepareForNewTurn()
 
 	// Add to prompt history for Up/Down arrow recall

@@ -302,12 +302,17 @@ func attemptInlineLogin(
 }
 
 // resolveCopilotCLIPath finds the Copilot CLI binary, checking:
-//  1. COPILOT_CLI_PATH environment variable
+//  1. COPILOT_CLI_PATH environment variable (validated for existence)
 //  2. SDK cache directory (bundled CLI)
 //  3. System PATH
 func resolveCopilotCLIPath() (string, error) {
-	if p := os.Getenv("COPILOT_CLI_PATH"); p != "" {
-		return p, nil
+	if envPath := os.Getenv("COPILOT_CLI_PATH"); envPath != "" {
+		_, err := os.Stat(envPath)
+		if err != nil {
+			return "", fmt.Errorf("COPILOT_CLI_PATH %q is not accessible: %w", envPath, err)
+		}
+
+		return envPath, nil
 	}
 
 	if p, found := findCopilotInSDKCache(); found {
@@ -362,8 +367,11 @@ func findCopilotInSDKCache() (string, bool) {
 }
 
 // isCopilotBinaryName returns true for names that match the Copilot CLI binary pattern:
-// "copilot", "copilot.exe", or "copilot-<segment>[<segment>...][.exe]"
-// (e.g., "copilot-linux-amd64").
+// "copilot", "copilot.exe", or "copilot-<segment>[-<segment>...][.exe]"
+// (e.g., "copilot-linux-amd64", "copilot-linux-amd64.exe").
+// Rejects empty segments (trailing dash "copilot-linux-", leading dash "copilot--amd64",
+// double dashes "copilot-linux--amd64"), non-binary extensions (.json, .yaml, etc.),
+// and bare prefix ("copilot-" with no segments).
 func isCopilotBinaryName(name string) bool {
 	if name == "copilot" || name == "copilot.exe" {
 		return true
