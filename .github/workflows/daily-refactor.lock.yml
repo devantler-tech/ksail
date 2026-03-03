@@ -41,7 +41,7 @@ name: "Daily Refactor"
   # skip-bots: # Skip-bots processed as bot check in pre-activation job
   # - dependabot[bot] # Skip-bots processed as bot check in pre-activation job
   # - renovate[bot] # Skip-bots processed as bot check in pre-activation job
-  # skip-if-match: is:pr is:open in:title "${{ github.workflow }}" # Skip-if-match processed as search check in pre-activation job
+  # skip-if-match: ${{ format('is:pr is:open in:title "{0}"', github.workflow) }} # Skip-if-match processed as search check in pre-activation job
   workflow_dispatch:
 
 permissions: {}
@@ -1115,7 +1115,7 @@ jobs:
         id: check_skip_if_match
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          GH_AW_SKIP_QUERY: 'is:pr is:open in:title "${{ github.workflow }}"'
+          GH_AW_SKIP_QUERY: ${{ format('is:pr is:open in:title "{0}"', github.workflow) }}
           GH_AW_WORKFLOW_NAME: "Daily Refactor"
           GH_AW_SKIP_MAX_MATCHES: "1"
         with:

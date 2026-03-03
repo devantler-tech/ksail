@@ -12,7 +12,7 @@ on:
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     - cron: "0 2 * * *"
-  skip-if-match: is:pr is:open in:title "${{ github.workflow }}"
+  skip-if-match: ${{ format('is:pr is:open in:title "{0}"', github.workflow) }}
   workflow_dispatch:
 
 timeout-minutes: 30
