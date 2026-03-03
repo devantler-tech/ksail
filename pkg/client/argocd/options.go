@@ -22,7 +22,7 @@ type EnsureOptions struct {
 	Username string
 
 	// Password for OCI registry authentication (optional, for external registries).
-	Password string //nolint:gosec // registry auth config field
+	Password string
 
 	// Insecure allows HTTP connections (for local registries). Default is false.
 	Insecure bool
