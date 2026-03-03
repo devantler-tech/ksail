@@ -112,7 +112,7 @@ func ensureRepositoryConfig(settings *helmv4cli.EnvSettings) (string, error) {
 
 	repoDir := filepath.Dir(repoFile)
 
-	mkdirErr := os.MkdirAll(repoDir, repoDirMode)
+	mkdirErr := os.MkdirAll(repoDir, repoDirMode) //nolint:gosec // path from Helm config
 	if mkdirErr != nil {
 		return "", fmt.Errorf("create repository directory: %w", mkdirErr)
 	}
@@ -154,7 +154,7 @@ func ensureRepositoryCache(settings *helmv4cli.EnvSettings) (string, error) {
 		return "", errRepositoryCacheUnset
 	}
 
-	mkdirCacheErr := os.MkdirAll(repoCache, repoDirMode)
+	mkdirCacheErr := os.MkdirAll(repoCache, repoDirMode) //nolint:gosec // Helm cache path
 	if mkdirCacheErr != nil {
 		return "", fmt.Errorf("create repository cache directory: %w", mkdirCacheErr)
 	}
