@@ -102,5 +102,6 @@ type RegistryConfig struct {
 	NetworkName string
 	VolumeName  string
 	Username    string // Optional: username for upstream registry authentication (supports ${ENV_VAR} placeholders)
-	Password    string // Optional: password for upstream registry authentication (supports ${ENV_VAR} placeholders)
+	// Optional: password for upstream registry authentication (supports ${ENV_VAR} placeholders)
+	Password string
 }

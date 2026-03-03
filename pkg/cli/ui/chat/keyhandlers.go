@@ -21,6 +21,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleHelpOverlayKey(msg)
 	}
 
+	// Handle exit confirmation (before other overlays)
+	if m.confirmExit {
+		return m.handleExitConfirmKey(msg)
+	}
+
 	// Handle overlays first (highest priority)
 	if m.pendingPermission != nil {
 		return m.handlePermissionKey(msg)
@@ -67,6 +72,10 @@ func (m *Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textarea.InsertString("\n")
 
 		return m, nil
+	case "ctrl+q":
+		return m.handleQueuePrompt()
+	case "ctrl+x":
+		return m.handleDeletePendingPrompt()
 	}
 
 	return m.handleChatShortcutKey(msg)
@@ -175,7 +184,23 @@ func (m *Model) handleEscape() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	return m.handleQuit(true)
+	m.confirmExit = true
+
+	return m, nil
+}
+
+// handleExitConfirmKey handles keyboard input on the exit confirmation modal.
+func (m *Model) handleExitConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		return m.handleQuit(true)
+	case "n", "N", keyEscape:
+		m.confirmExit = false
+
+		return m, nil
+	}
+
+	return m, nil
 }
 
 // handleOpenModelPicker opens the model selection picker.
@@ -207,6 +232,7 @@ func (m *Model) handleOpenModelPicker() (tea.Model, tea.Cmd) {
 	}
 
 	m.showModelPicker = true
+	m.confirmExit = false
 	m.filteredModels = m.availableModels // Start with all models
 	m.modelFilterText = ""               // Reset filter
 	m.modelFilterActive = false          // Start in navigation mode
@@ -241,6 +267,7 @@ func (m *Model) handleOpenReasoningPicker() (tea.Model, tea.Cmd) {
 	}
 
 	m.showReasoningPicker = true
+	m.confirmExit = false
 	m.updateDimensions()
 	m.reasoningPickerIndex = m.findCurrentReasoningIndex()
 
@@ -260,6 +287,7 @@ func (m *Model) handleOpenSessionPicker() (tea.Model, tea.Cmd) {
 	m.sessionFilterActive = false // Start in navigation mode
 	m.showSessionPicker = true
 	m.confirmDeleteSession = false
+	m.confirmExit = false
 	m.updateDimensions()
 	m.sessionPickerIndex = m.findCurrentSessionIndex()
 
@@ -297,7 +325,7 @@ func (m *Model) handleNewChat() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleToggleMode cycles through chat modes: Agent -> Plan -> Ask -> Agent.
+// handleToggleMode cycles through chat modes: Agent -> Plan -> Agent.
 func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 	// Prevent mode toggling while streaming to avoid mode mismatch between
 	// message submission and tool execution time
@@ -305,12 +333,19 @@ func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.chatMode = m.chatMode.Next()
-	// Update the shared reference so tool handlers see the change
-	if m.chatModeRef != nil {
-		m.chatModeRef.SetMode(m.chatMode)
+	newMode := m.chatMode.Next()
+
+	err := m.applyMode(newMode)
+	if err != nil {
+		m.err = err
+
+		return m, nil
 	}
 
+	// Only update local chatMode after applyMode succeeds, matching the
+	// pattern in processNextPendingPrompt where m.chatMode is set after
+	// all operations succeed.
+	m.chatMode = newMode
 	m.updateViewportContent()
 
 	return m, nil
@@ -406,10 +441,14 @@ func (m *Model) handleHistoryDown() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleEnter sends the current message.
+// handleEnter sends the current message, or steers if streaming.
 func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
-	if m.isStreaming || strings.TrimSpace(m.textarea.Value()) == "" {
+	if strings.TrimSpace(m.textarea.Value()) == "" {
 		return m, nil
+	}
+
+	if m.isStreaming {
+		return m.handleSteerPrompt()
 	}
 
 	content := m.textarea.Value()
@@ -461,6 +500,57 @@ func (m *Model) handleCopyOutput() (tea.Model, tea.Cmd) {
 			})
 		}
 	}
+
+	return m, nil
+}
+
+// handleQueuePrompt adds the current textarea content as a queued prompt.
+// Queued prompts are processed in FIFO order after the current prompt completes.
+// Only available while streaming.
+func (m *Model) handleQueuePrompt() (tea.Model, tea.Cmd) {
+	if !m.isStreaming {
+		return m, nil
+	}
+
+	content := strings.TrimSpace(m.textarea.Value())
+	if content == "" {
+		return m, nil
+	}
+
+	m.addQueuedPrompt(content)
+	m.textarea.Reset()
+	m.updateViewportContent()
+
+	return m, nil
+}
+
+// handleSteerPrompt adds the current textarea content as a steering prompt.
+// Steering prompts are injected as soon as the session becomes idle,
+// allowing the user to provide guidance while a task is running.
+func (m *Model) handleSteerPrompt() (tea.Model, tea.Cmd) {
+	content := strings.TrimSpace(m.textarea.Value())
+	if content == "" {
+		return m, nil
+	}
+
+	m.addSteeringPrompt(content)
+	m.textarea.Reset()
+	m.updateViewportContent()
+
+	return m, nil
+}
+
+// handleDeletePendingPrompt removes the most recently added pending prompt
+// (by sequence number), regardless of whether it is a queued or steering prompt.
+// When both queued and steering prompts exist, the one with the highest sequence
+// number is removed first.
+func (m *Model) handleDeletePendingPrompt() (tea.Model, tea.Cmd) {
+	if !m.hasPendingPrompts() {
+		return m, nil
+	}
+
+	m.deleteLastPendingPrompt()
+	m.updateViewportContent()
 
 	return m, nil
 }
