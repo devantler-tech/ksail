@@ -173,6 +173,10 @@ go run main.go --help
 ├── docs/                   # Astro documentation source
 │   ├── dist/               # Generated site (after npm run build)
 │   └── package.json        # Node.js dependencies for documentation
+├── schemas/                # JSON schema for ksail-config
+│   ├── doc.go              # contains //go:generate go run gen_schema.go for schema generation
+│   ├── gen_schema.go       # schema generator code invoked by go:generate; produces ksail-config.schema.json
+│   └── ksail-config.schema.json  # JSON Schema for ksail.yaml — consumable by YAML language servers and editors (including VS Code YAML tooling)
 ├── vsce/                   # VSCode extension source
 │   ├── src/                # Extension TypeScript source
 │   └── package.json        # Extension manifest and dependencies
