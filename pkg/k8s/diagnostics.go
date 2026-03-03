@@ -46,7 +46,7 @@ func DiagnosePodFailures(
 
 // collectPodFailures returns a line per unhealthy pod describing the problem.
 func collectPodFailures(pods []corev1.Pod) []string {
-	var failures []string
+	failures := make([]string, 0, len(pods))
 
 	for i := range pods {
 		pod := &pods[i]

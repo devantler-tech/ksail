@@ -1,0 +1,286 @@
+package chat_test
+
+import (
+	"strings"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
+	copilot "github.com/github/copilot-sdk/go"
+)
+
+// newTestParams returns minimal Params for testing queue behavior.
+// Uses a zero-value copilot.Session pointer; this is safe because the tests
+// only exercise view/queue logic and never invoke session RPC methods.
+func newTestParams() chat.Params {
+	return chat.Params{
+		Session:       &copilot.Session{},
+		SessionConfig: &copilot.SessionConfig{Model: "test-model"},
+		CurrentModel:  "test-model",
+		Theme:         chat.DefaultThemeConfig(),
+		ToolDisplay:   chat.DefaultToolDisplayConfig(),
+		EventChan:     make(chan tea.Msg, 100),
+	}
+}
+
+// typeText sends each rune in text as a KeyRunes message.
+func typeText(m tea.Model, text string) tea.Model {
+	for _, char := range text {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{char}})
+	}
+
+	return m
+}
+
+// reassertStreaming casts the tea.Model to *chat.Model and re-enables streaming.
+// Fails the test if the type assertion fails.
+func reassertStreaming(t *testing.T, model tea.Model) {
+	t.Helper()
+
+	chatModel, assertionOK := model.(*chat.Model)
+	if !assertionOK {
+		t.Fatal("expected model to be *chat.Model")
+	}
+
+	chat.ExportSetStreaming(chatModel, true)
+}
+
+// ctrlQKey returns a KeyMsg for Ctrl+Q (queue keybind).
+func ctrlQKey() tea.KeyMsg {
+	return tea.KeyMsg{Type: tea.KeyCtrlQ}
+}
+
+func TestQueuePrompt_VisibleInView(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	updatedModel := typeText(model, "hello world")
+
+	// Press Ctrl+Q to queue (only works during streaming)
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	output := updatedModel.View()
+
+	if !strings.Contains(output, "Pending Prompts") {
+		t.Error("expected 'Pending Prompts' section in view after queueing")
+	}
+
+	if !strings.Contains(output, "QUEUED") {
+		t.Error("expected 'QUEUED' label in view after queueing")
+	}
+}
+
+func TestSteerPrompt_VisibleInView(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	updatedModel := typeText(model, "steer this")
+
+	// Re-assert streaming state before steering. typeText may alter model state,
+	// and steering only activates while streaming.
+	reassertStreaming(t, updatedModel)
+
+	// Press Enter to steer (Enter steers during streaming)
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	output := updatedModel.View()
+
+	if !strings.Contains(output, "Pending Prompts") {
+		t.Error("expected 'Pending Prompts' section in view after steering")
+	}
+
+	if !strings.Contains(output, "STEERING") {
+		t.Error("expected 'STEERING' label in view after steering")
+	}
+}
+
+func TestDeletePendingPrompt_RemovesFromView(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	updatedModel := typeText(model, "test prompt")
+
+	// Queue a prompt (requires streaming)
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	// Delete it
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+
+	output := updatedModel.View()
+
+	if strings.Contains(output, "Pending Prompts") {
+		t.Error("expected no 'Pending Prompts' section after deleting all pending prompts")
+	}
+}
+
+func TestDeletePendingPrompt_RemovesLastAdded_SteeringBeforeQueued(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	// Queue a prompt first
+	updatedModel := typeText(model, "queued task")
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	// Re-assert streaming state
+	reassertStreaming(t, updatedModel)
+
+	// Then steer (added after queued, so has higher seq)
+	updatedModel = typeText(updatedModel, "steering guidance")
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// Delete should remove the steering prompt (highest seq) first
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+
+	output := updatedModel.View()
+
+	// Queued prompt should still be present
+	if !strings.Contains(output, "QUEUED") {
+		t.Error("expected queued prompt to remain after deleting last added (steering)")
+	}
+
+	if strings.Contains(output, "STEERING") {
+		t.Error("expected steering prompt to be deleted (it was added last)")
+	}
+}
+
+func TestDeletePendingPrompt_SequenceOrdering_QueuedAfterSteering(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	// Steer first
+	updatedModel := typeText(model, "steering first")
+
+	reassertStreaming(t, updatedModel)
+
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// Re-assert streaming state
+	reassertStreaming(t, updatedModel)
+
+	// Then queue (added after steering, so has higher seq)
+	updatedModel = typeText(updatedModel, "queued second")
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	// Delete should remove the queued prompt (highest seq) first
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+
+	output := updatedModel.View()
+
+	// Steering prompt should still be present
+	if !strings.Contains(output, "STEERING") {
+		t.Error("expected steering prompt to remain after deleting last added (queued)")
+	}
+
+	if strings.Contains(output, "QUEUED") {
+		t.Error("expected queued prompt to be deleted (it was added last)")
+	}
+}
+
+func TestQueuePrompt_IgnoredWhenNotStreaming(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+
+	updatedModel := typeText(model, "hello")
+
+	// Press Ctrl+Q when NOT streaming — should be ignored
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	output := updatedModel.View()
+
+	if strings.Contains(output, "Pending Prompts") {
+		t.Error("queueing should be ignored when not streaming")
+	}
+}
+
+func TestEmptyInput_IgnoredByQueue(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	var updatedModel tea.Model = model
+
+	// Press Ctrl+Q with empty textarea
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	output := updatedModel.View()
+
+	if strings.Contains(output, "Pending Prompts") {
+		t.Error("empty input should not create a pending prompt")
+	}
+}
+
+func TestEmptyInput_IgnoredBySteer(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	var updatedModel tea.Model = model
+
+	// Press Enter with empty textarea during streaming
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	output := updatedModel.View()
+
+	if strings.Contains(output, "Pending Prompts") {
+		t.Error("empty input should not create a steering prompt")
+	}
+}
+
+func TestMultipleQueuedPrompts_ShowNumbered(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	updatedModel := typeText(model, "first task")
+
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	// Re-assert streaming state before queuing next prompt; typeText may
+	// alter internal model state through the full update path.
+	reassertStreaming(t, updatedModel)
+
+	updatedModel = typeText(updatedModel, "second task")
+
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	output := updatedModel.View()
+
+	if !strings.Contains(output, "QUEUED #1") {
+		t.Error("expected 'QUEUED #1' in view")
+	}
+
+	if !strings.Contains(output, "QUEUED #2") {
+		t.Error("expected 'QUEUED #2' in view")
+	}
+}
+
+func TestFooterShowsPendingCount(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	updatedModel := typeText(model, "test")
+
+	updatedModel, _ = updatedModel.Update(ctrlQKey())
+
+	output := updatedModel.View()
+
+	if !strings.Contains(output, "1 pending") {
+		t.Error("expected '1 pending' in footer after queueing a prompt")
+	}
+}

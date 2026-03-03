@@ -140,7 +140,7 @@ ksail cipher import AGE-SECRET-KEY-1...
 
 ## Cluster Backup & Restore
 
-Export cluster resources to a compressed archive and restore to any cluster. Backups capture YAML in dependency order (CRDs → namespaces → storage → workloads), strip server metadata, and include metadata JSON with version, timestamp, and resource inventory. Restored resources receive `ksail.io/backup-name` and `ksail.io/restore-name` labels for traceability.
+Export cluster resources to a compressed archive and restore to any cluster. Backups capture YAML in dependency order (CRDs → namespaces → storage → workloads), strip server metadata, and include a `backup-metadata.json` file with metadata version, cluster identity (name, distribution, provider, KSail version), timestamp, and resource inventory (count and types). Restored resources receive `ksail.io/backup-name` and `ksail.io/restore-name` labels for traceability.
 
 ```bash
 ksail cluster backup --output ./backup.tar.gz
@@ -187,7 +187,15 @@ spec:
 
 ## AI Chat Assistant
 
-Interactive help with cluster configuration and troubleshooting powered by AI. Three modes: **Agent** (`</>`) executes with approval, **Plan** (`≡`) guides without execution, **Ask** (`?`) investigates read-only. Press **Tab** to cycle modes. Requires [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) to be installed and authenticated.
+Get interactive help with cluster configuration and troubleshooting using an AI-powered chat session.
+
+Two modes are available:
+
+- **Agent** (`</>`) for full execution with approval
+- **Plan** (`≡`) for step-by-step guidance without execution
+
+Press **Tab** to cycle between modes.
+Requires an active GitHub Copilot subscription; KSail will prompt you to sign in on first use.
 
 ```bash
 ksail chat

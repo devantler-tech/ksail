@@ -267,7 +267,7 @@ func BenchmarkEncrypt(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			b.ResetTimer()
 
-			for range b.N {
+			for b.Loop() {
 				b.StopTimer()
 				filePath := writeTempSecret(b, scenario.content)
 				b.StartTimer()
@@ -310,7 +310,7 @@ func BenchmarkDecrypt(b *testing.B) {
 
 			b.ResetTimer()
 
-			for range b.N {
+			for b.Loop() {
 				opts, err := newDecryptOpts(filePath, scenario.extract)
 				if err != nil {
 					b.Fatal(err)
@@ -334,7 +334,7 @@ func BenchmarkRoundtrip_Minimal(b *testing.B) {
 
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		b.StopTimer()
 		filePath := writeTempSecret(b, content)
 		b.StartTimer()

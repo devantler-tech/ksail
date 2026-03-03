@@ -14,7 +14,7 @@ func BenchmarkChartSpec(b *testing.B) {
 	b.Run("Basic", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_ = &helm.ChartSpec{
 				ReleaseName: "test-release",
 				ChartName:   "test-chart",
@@ -26,7 +26,7 @@ func BenchmarkChartSpec(b *testing.B) {
 	b.Run("WithAllFields", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_ = &helm.ChartSpec{
 				ReleaseName:     "my-release",
 				ChartName:       "my-chart",
@@ -61,7 +61,7 @@ func BenchmarkRepositoryEntry(b *testing.B) {
 	b.Run("Basic", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_ = &helm.RepositoryEntry{
 				Name: "test-repo",
 				URL:  "https://charts.example.com",
@@ -72,7 +72,7 @@ func BenchmarkRepositoryEntry(b *testing.B) {
 	b.Run("WithAuth", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_ = &helm.RepositoryEntry{
 				Name:                  "secure-repo",
 				URL:                   "https://charts.secure.com",
@@ -93,7 +93,7 @@ func BenchmarkReleaseInfo(b *testing.B) {
 
 	b.ReportAllocs()
 
-	for range b.N {
+	for b.Loop() {
 		_ = &helm.ReleaseInfo{
 			Name:       "my-release",
 			Namespace:  "default",
@@ -127,7 +127,7 @@ func BenchmarkMockClient(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_ = client.AddRepository(ctx, entry, time.Minute)
 		}
 	})
@@ -156,7 +156,7 @@ func BenchmarkMockClient(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_, _ = client.InstallOrUpgradeChart(ctx, spec)
 		}
 	})
@@ -171,7 +171,7 @@ func BenchmarkMockClient(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_, _ = client.ReleaseExists(ctx, "test-release", "default")
 		}
 	})
@@ -186,7 +186,7 @@ func BenchmarkMockClient(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_ = client.UninstallRelease(ctx, "test-release", "default")
 		}
 	})
@@ -216,7 +216,7 @@ spec:
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_, _ = client.TemplateChart(ctx, spec)
 		}
 	})
@@ -245,7 +245,7 @@ spec:
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_, _ = client.InstallChart(ctx, spec)
 		}
 	})
@@ -324,7 +324,7 @@ persistence:
 
 	b.ReportAllocs()
 
-	for range b.N {
+	for b.Loop() {
 		_ = &helm.ChartSpec{
 			ReleaseName:     "large-release",
 			ChartName:       "bitnami/nginx",

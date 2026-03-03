@@ -100,3 +100,6 @@ bin/
 # actionlint binary
 actionlint
 /ksail
+
+# Copilot CLI bundler artifacts (generated at build time)
+zcopilot_*
