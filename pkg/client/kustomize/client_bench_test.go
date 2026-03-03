@@ -335,7 +335,7 @@ data:
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		_, err := client.Build(ctx, tmpDir)
 		if err != nil {
 			b.Fatalf("build failed: %v", err)
@@ -354,7 +354,7 @@ func BenchmarkBuild_MediumKustomization(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		_, err := client.Build(ctx, tmpDir)
 		if err != nil {
 			b.Fatalf("build failed: %v", err)
@@ -373,7 +373,7 @@ func BenchmarkBuild_WithLabels(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		_, err := client.Build(ctx, tmpDir)
 		if err != nil {
 			b.Fatalf("build failed: %v", err)
@@ -391,7 +391,7 @@ func BenchmarkBuild_LargeKustomization(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		_, err := client.Build(ctx, tmpDir)
 		if err != nil {
 			b.Fatalf("build failed: %v", err)
@@ -452,7 +452,7 @@ resources:
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		_, err := client.Build(ctx, tmpDir)
 		if err != nil {
 			b.Fatalf("build failed: %v", err)

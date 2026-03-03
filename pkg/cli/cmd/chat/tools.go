@@ -384,10 +384,11 @@ func executeWrappedTool(
 	toolMetadata map[string]toolgen.ToolDefinition,
 ) (copilot.ToolResult, error) {
 	// Check chat mode for tool blocking
-	if result, handled, err := executeModeCheck(
+	modeResult, handled, modeErr := executeModeCheck(
 		chatModeRef, toolName, invocation, originalHandler, toolMetadata,
-	); handled {
-		return result, err
+	)
+	if handled {
+		return modeResult, modeErr
 	}
 
 	// Agent mode: check if tool requires permission from metadata.

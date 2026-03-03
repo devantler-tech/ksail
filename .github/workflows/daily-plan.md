@@ -11,7 +11,8 @@ on:
     - "github-merge-queue[bot]"
 
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
-  schedule: daily
+  schedule:
+    - cron: "0 10 * * *"
   workflow_dispatch:
   stop-after: +1mo # workflow will no longer trigger after 1 month. Remove this and recompile to run indefinitely
 
