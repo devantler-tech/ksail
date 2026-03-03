@@ -281,7 +281,7 @@ func attemptInlineLogin(
 
 	loginErr := runCopilotAuthLogin(ctx, cliPath)
 	if loginErr != nil {
-		return nil, fmt.Errorf("%w: login failed: %w", errNotAuthenticated, loginErr)
+		return nil, fmt.Errorf("%w: login failed: %v", errNotAuthenticated, loginErr)
 	}
 
 	authStatus, err := client.GetAuthStatus(ctx)
@@ -363,7 +363,9 @@ func findCopilotInSDKCache() (string, bool) {
 
 // isCopilotBinaryName returns true for names that match the Copilot CLI binary pattern:
 // "copilot", "copilot.exe", or "copilot-<segment>[<segment>...][.exe]"
-// (e.g., "copilot-linux-amd64").
+// (e.g., "copilot-linux-amd64"). Segments must be non-empty, so leading dashes
+// ("copilot--x"), trailing dashes ("copilot-x-"), and double dashes ("copilot-a--b")
+// are rejected.
 func isCopilotBinaryName(name string) bool {
 	if name == "copilot" || name == "copilot.exe" {
 		return true
