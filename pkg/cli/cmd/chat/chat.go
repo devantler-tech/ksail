@@ -281,7 +281,7 @@ func attemptInlineLogin(
 
 	loginErr := runCopilotAuthLogin(ctx, cliPath)
 	if loginErr != nil {
-		return nil, fmt.Errorf("%w: login failed: %v", errNotAuthenticated, loginErr)
+		return nil, fmt.Errorf("%w: login failed: %w", errNotAuthenticated, loginErr)
 	}
 
 	authStatus, err := client.GetAuthStatus(ctx)
