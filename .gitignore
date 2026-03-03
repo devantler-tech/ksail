@@ -64,6 +64,7 @@ __MACOSX/
 
 # Go test coverage reports
 coverage*.txt
+*-coverage.txt
 coverage*.out
 coverage*.html
 
