@@ -261,7 +261,11 @@ jobs:
                   echo "Applied ${patch_name} with rejects."
                   rej_files=$(find . -name '*.rej' 2>/dev/null || true)
                   if [ -n "$rej_files" ]; then
-                    echo "::warning::Reject files found: ${rej_files}"
+                    echo "::error::Reject files found after applying ${patch_name}:"
+                    echo "${rej_files}"
+                    git status --short || true
+                    echo "Failing job to avoid committing partially-applied patches." >&2
+                    exit 1
                   fi
                 else
                   echo "::error::Failed to apply patch ${patch_name}. See diagnostics above." >&2
