@@ -128,15 +128,24 @@ func (m *Model) applyModelFilter() {
 
 // selectModel handles model selection from the picker.
 func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
-	if m.modelPickerIndex == 0 {
-		// "auto" option selected — switch only if not already in auto mode
-		if !m.isAutoMode() {
-			return m.switchModel("")
-		}
-	} else if m.modelPickerIndex > 0 && m.modelPickerIndex < totalItems {
+	if m.modelPickerIndex == 0 && !m.isAutoMode() {
+		// switchModel returns error (not tea.Cmd) because it only performs synchronous
+		// session recreation. The error is stored in m.err internally.
+		// The picker is dismissed in both success and error paths within switchModel.
+		_ = m.switchModel("")
+
+		return m, nil
+	}
+
+	if m.modelPickerIndex > 0 && m.modelPickerIndex < totalItems {
 		selectedModel := m.filteredModels[m.modelPickerIndex-1]
 		if selectedModel.ID != m.currentModel {
-			return m.switchModel(selectedModel.ID)
+			// switchModel returns error (not tea.Cmd) because it only performs synchronous
+			// session recreation. The error is stored in m.err internally.
+			// The picker is dismissed in both success and error paths within switchModel.
+			_ = m.switchModel(selectedModel.ID)
+
+			return m, nil
 		}
 	}
 
@@ -149,7 +158,7 @@ func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 }
 
 // switchModel changes to a new model by recreating the session.
-func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
+func (m *Model) switchModel(newModelID string) error {
 	m.cleanup()
 
 	if m.session != nil {
@@ -165,7 +174,7 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 		m.showModelPicker = false
 		m.updateDimensions()
 
-		return m, nil
+		return m.err
 	}
 
 	m.session = session
@@ -177,7 +186,7 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 	m.updateDimensions()
 	m.updateViewportContent()
 
-	return m, nil
+	return nil
 }
 
 // renderModelPickerModal renders the model picker as an inline modal section.
