@@ -102,7 +102,7 @@ func BenchmarkWaitForMultipleResources_Sequential(b *testing.B) {
 
 			b.ResetTimer()
 
-			for range b.N {
+			for b.Loop() {
 				err := readiness.WaitForMultipleResources(ctx, client, resources, timeout)
 				if err != nil {
 					b.Fatalf("unexpected error: %v", err)
@@ -150,7 +150,7 @@ func BenchmarkWaitForMultipleResources_MixedTypes(b *testing.B) {
 
 			b.ResetTimer()
 
-			for range b.N {
+			for b.Loop() {
 				err := readiness.WaitForMultipleResources(ctx, client, resources, timeout)
 				if err != nil {
 					b.Fatalf("unexpected error: %v", err)
@@ -220,7 +220,7 @@ func BenchmarkWaitForMultipleResources_RealWorldCNI(b *testing.B) {
 
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		err := readiness.WaitForMultipleResources(ctx, client, resources, timeout)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
@@ -246,7 +246,7 @@ func BenchmarkPollForReadiness_SingleCheck(b *testing.B) {
 
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		err := readiness.PollForReadiness(ctx, deadline, pollFunc)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)

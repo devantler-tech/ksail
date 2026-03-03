@@ -493,14 +493,14 @@ KSail uses several CI workflows:
 - Validates documentation builds
 - Runs on docs changes
 
-#### `.github/workflows/deploy-pages.yaml`
+#### `.github/workflows/publish-pages.yaml`
 - Deploys documentation to GitHub Pages
 - Runs on main branch
 
 #### `.github/workflows/release.yaml`
-- Builds release binaries with GoReleaser
+- Builds release binaries via a reusable workflow
 - Publishes to GitHub Releases
-- Triggered by version tags (vX.Y.Z)
+- Triggered by push to `main` or manually via `workflow_dispatch`
 
 ### Agentic Workflows
 
@@ -517,24 +517,29 @@ These run on schedules and can be triggered manually via `gh aw` commands.
 
 ## Release Process
 
-Releases are automated via `.goreleaser.yaml`:
+Releases are automated via `.goreleaser.yaml` and `.github/workflows/release.yaml`:
 
-1. **Create a release tag:**
-````bash
-git tag v5.x.x
-git push origin v5.x.x
-````
+1. **Prepare a release PR targeting `main`:**
+   - Bump the version in code/docs as needed (e.g. `v5.x.x`)
+   - Update changelog / release notes in the repository
+   - Open a pull request against `main` and get it reviewed/merged
 
-2. **CI automatically:**
+2. **When the PR is merged and changes land on `main`, the release workflow runs:**
+   - Triggered by the push to `main` (or manually via `workflow_dispatch` by maintainers)
    - Builds binaries for all platforms/architectures
    - Generates checksums
-   - Creates GitHub Release with artifacts
-   - Publishes VSCode extension to marketplace
+   - Creates a GitHub Release with artifacts
+   - Publishes the VSCode extension to the marketplace
 
-3. **Manual steps:**
-   - Update release notes on GitHub
-   - Announce on social media/blog
-   - Update downstream dependencies if needed
+3. **Optional tagging (for maintainers):**
+   - Create and push an annotated tag matching the release version, for example:
+     ````bash
+     git tag v5.x.x
+     git push origin v5.x.x
+     ````
+
+4. **Manual steps:**
+   - Update release notes on GitHub if needed
 
 ## Getting Help
 
