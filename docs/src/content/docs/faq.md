@@ -15,11 +15,7 @@ KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, fl
 
 ### Am I locked into KSail?
 
-No. KSail generates native distribution configuration files that work directly with underlying tools. Use the generated kind.yaml, k3d.yaml, Talos patches, or vcluster.yaml with their respective CLI tools at any time. You can migrate away or use both KSail and native tools interchangeably.
-
-### Can I use KSail configs with native tools?
-
-Yes! After running `ksail cluster init`, you can use the generated configuration files directly with native tools:
+No. KSail generates native configuration files you can use directly with their respective tools at any time:
 
 ```bash
 kind create cluster --config kind.yaml          # Vanilla
@@ -30,9 +26,7 @@ vcluster create my-cluster --values vcluster.yaml  # VCluster
 
 ### Is KSail production-ready?
 
-KSail is designed for **local development, CI/CD, and learning environments**. For production Kubernetes clusters, we recommend using distribution-specific tools or managed Kubernetes services (EKS, GKE, AKS) with proper HA, backup, and security configurations.
-
-The Hetzner provider for Talos is suitable for personal homelabs and development environments, but should be evaluated carefully for production use.
+KSail targets **local development, CI/CD, and learning environments**. For production, use managed services (EKS, GKE, AKS) with proper HA and security. The Hetzner provider suits personal homelabs but should be evaluated carefully for production use.
 
 ## Installation & Setup
 
@@ -126,27 +120,21 @@ Previews all detected configuration changes without applying them, including cha
 
 ### What happens when I run `ksail cluster update` with no changes?
 
-The command compares the current cluster state against your `ksail.yaml` configuration. If no differences are detected, it prints `No changes detected` and exits without applying any changes, so no cluster modifications are made. This makes `ksail cluster update` safe to run frequently or in CI/CD pipelines; it is a no-op when the cluster is already in the desired state.
+It compares the current cluster state against `ksail.yaml` and exits with `No changes detected` if nothing has changed—making it safe to run frequently in CI/CD pipelines.
 
 ## Workload Management
 
 ### What's the difference between `ksail workload apply` and `ksail workload reconcile`?
 
-- **`ksail workload apply`** - Direct kubectl-style deployment (no GitOps)
-- **`ksail workload reconcile`** - GitOps workflow (requires Flux or ArgoCD)
-
-Use `apply` for quick iteration, `reconcile` for Git-driven deployments.
+`apply` deploys directly (kubectl-style, no GitOps); `reconcile` syncs via Flux or ArgoCD for Git-driven deployments.
 
 ### Can I use Helm charts with KSail?
 
-Yes! KSail includes Helm v4 with kstatus:
+Yes! KSail includes Helm v4:
 
 ```bash
-# Install a Helm chart
-ksail workload install <chart> --namespace <ns>
-
-# Generate HelmRelease for GitOps
-ksail workload gen helmrelease <name> --source=oci://registry/chart
+ksail workload install <chart> --namespace <ns>             # Install chart
+ksail workload gen helmrelease <name> --source=oci://registry/chart  # Generate HelmRelease for GitOps
 ```
 
 ### How do I debug failing pods?
@@ -154,27 +142,16 @@ ksail workload gen helmrelease <name> --source=oci://registry/chart
 KSail wraps kubectl debugging commands:
 
 ```bash
-# View logs
-ksail workload logs deployment/my-app
-
-# Describe resource
-ksail workload describe pod/my-pod
-
-# Execute in container
-ksail workload exec deployment/my-app -- /bin/sh
+ksail workload logs deployment/my-app            # View logs
+ksail workload describe pod/my-pod               # Describe resource
+ksail workload exec deployment/my-app -- /bin/sh # Execute in container
 ```
 
 ## GitOps
 
 ### Which GitOps tools does KSail support?
 
-KSail supports both **Flux** and **ArgoCD**. Choose during initialization:
-
-```bash
-ksail cluster init --gitops-engine Flux
-# or
-ksail cluster init --gitops-engine ArgoCD
-```
+KSail supports both **Flux** and **ArgoCD**, chosen with `--gitops-engine Flux` or `--gitops-engine ArgoCD` during `ksail cluster init`.
 
 ### Do I need a Git repository for GitOps?
 
@@ -203,50 +180,17 @@ CLI flags provide quick overrides and scripting support, while ksail.yaml offers
 
 ### Can I version control my cluster configuration?
 
-Yes! The `ksail.yaml` file is designed for Git:
-
-```bash
-# Initialize project
-ksail cluster init --distribution Vanilla --cni Cilium
-
-# Commit configuration
-git add ksail.yaml kind.yaml k8s/
-git commit -m "chore: initial cluster configuration"
-```
-
-Team members can recreate the same cluster from `ksail.yaml`.
+Yes! Commit `ksail.yaml` (and generated distribution configs like kind.yaml) to Git—team members can recreate the same cluster from it.
 
 ### How do I share configurations between environments?
 
-Use environment-specific `ksail.yaml` files:
-
-```
-myproject/
-├── ksail-dev.yaml
-├── ksail-staging.yaml
-└── ksail-prod.yaml
-```
-
-Or use environment variables with placeholders in `ksail.yaml`.
+Use environment-specific files (`ksail-dev.yaml`, `ksail-staging.yaml`, `ksail-prod.yaml`) or environment variable placeholders in a shared `ksail.yaml`.
 
 ## Security & Secrets
 
 ### How do I manage secrets with KSail?
 
-KSail includes **SOPS** for secret encryption:
-
-```bash
-# Encrypt a file
-ksail cipher encrypt secret.yaml
-
-# Decrypt a file
-ksail cipher decrypt secret.enc.yaml
-
-# Edit encrypted file
-ksail cipher edit secret.enc.yaml
-```
-
-Supports age, PGP, and cloud KMS providers. See [Secret Management](/features/#secret-management).
+KSail includes **SOPS** for secret encryption via `ksail cipher encrypt|decrypt|edit <file>`. Supports age, PGP, and cloud KMS providers. See [Secret Management](/features/#secret-management).
 
 ### Are my credentials stored securely?
 
@@ -266,13 +210,8 @@ See the [Troubleshooting Guide](/troubleshooting/#cluster-creation-hangs) for co
 ### How do I clean up resources?
 
 ```bash
-# Delete a cluster (removes containers/VMs and resources)
-ksail cluster delete
-
-# Clean up Docker resources
-docker system prune
-
-# For Hetzner, deletion removes cloud resources automatically
+ksail cluster delete  # Removes containers/VMs and Kubernetes resources
+docker system prune   # Clean up dangling Docker resources
 ```
 
 ### Where can I get help?
