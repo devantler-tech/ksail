@@ -54,9 +54,7 @@ func (m *Model) calculateWrapWidth() uint {
 	// wrapWidth is guaranteed non-negative by max with minWrapWidth (20).
 	wrapWidth := max(m.viewport.Width-wrapPadding, minWrapWidth)
 
-	return uint(
-		wrapWidth,
-	)
+	return uint(wrapWidth) //nolint:gosec // G115: non-negative guaranteed by max with minWrapWidth
 }
 
 // renderMessage renders a single message to the builder.
