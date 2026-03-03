@@ -15,7 +15,7 @@ KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, fl
 
 ### Am I locked into KSail?
 
-No. KSail generates native configuration files you can use directly with their respective tools at any time:
+No. KSail generates native configuration files you can use directly with their respective tools at any time—you can migrate away from KSail or use it alongside native tools interchangeably:
 
 ```bash
 kind create cluster --config kind.yaml          # Vanilla
@@ -26,7 +26,7 @@ vcluster create my-cluster --values vcluster.yaml  # VCluster
 
 ### Is KSail production-ready?
 
-KSail targets **local development, CI/CD, and learning environments**. For production, use managed services (EKS, GKE, AKS) with proper HA and security. The Hetzner provider suits personal homelabs but should be evaluated carefully for production use.
+KSail targets **local development, CI/CD, and learning environments**. For production, use managed services (EKS, GKE, AKS) with proper HA and security. The Talos Hetzner provider suits personal homelabs but should be evaluated carefully for production use.
 
 ## Installation & Setup
 
@@ -190,7 +190,7 @@ Use environment-specific files (`ksail-dev.yaml`, `ksail-staging.yaml`, `ksail-p
 
 ### How do I manage secrets with KSail?
 
-KSail includes **SOPS** for secret encryption via `ksail cipher encrypt|decrypt|edit <file>`. Supports age, PGP, and cloud KMS providers. See [Secret Management](/features/#secret-management).
+KSail includes **SOPS** for secret encryption via `ksail cipher <file>`. Supports age, PGP, and cloud KMS providers. See [Secret Management](/features/#secret-management).
 
 ### Are my credentials stored securely?
 
