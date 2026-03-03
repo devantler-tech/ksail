@@ -173,6 +173,10 @@ go run main.go --help
 ├── docs/                   # Astro documentation source
 │   ├── dist/               # Generated site (after npm run build)
 │   └── package.json        # Node.js dependencies for documentation
+├── schemas/                # JSON schema for ksail-config
+│   ├── doc.go              # contains //go:generate go run gen_schema.go for schema generation
+│   ├── gen_schema.go       # schema generator code invoked by go:generate; produces ksail-config.schema.json
+│   └── ksail-config.schema.json  # JSON Schema for ksail.yaml — consumable by YAML language servers and editors (including VS Code YAML tooling)
 ├── vsce/                   # VSCode extension source
 │   ├── src/                # Extension TypeScript source
 │   └── package.json        # Extension manifest and dependencies
@@ -368,3 +372,4 @@ npm run dev                            # Test locally (if needed)
 - **Backup/Restore Metadata and Labeling**: Extended `BackupMetadata` struct in `pkg/cli/cmd/cluster/backup.go` with `Distribution`, `Provider`, `KSailVersion`, `ResourceCount`, and `ResourceTypes` fields written to `backup-metadata.json`; restore in `pkg/cli/cmd/cluster/restore.go` now applies `ksail.io/backup-name` and `ksail.io/restore-name` labels to restored resources for provenance tracking (PR #2613)
 - **MCP Command Tests**: Added unit tests for `pkg/cli/cmd/mcp/` covering `NewMCPCmd` command structure, annotations, integration with root command, output buffer management, and nil safety (0% → 11.1% coverage); uses parallel execution; `runMCPServer` remains untested as it requires MCP server mocking (PR #2625)
 - **Unbloat Docs Workflow**: Added `unbloat-docs` agentic workflow (`.github/workflows/unbloat-docs.md`) that reviews and simplifies documentation by reducing verbosity while preserving clarity; triggered daily, via `/unbloat` slash command on pull request comments, or manually. In the generated/locked workflow (`.github/workflows/unbloat-docs.lock.yml`), the `compute_text.cjs` step (which processes issue comment text for slash commands) is guarded with `if: github.event_name == 'issue_comment'` to prevent 404 failures when bot actors (e.g. `github-merge-queue[bot]`) trigger scheduled runs (PR #2658)
+- **MetalLB Installer Tests**: Added unit tests for `pkg/svc/installer/metallb/` that exercise CRD waiting and document IPAddressPool/L2Advertisement Server-Side Apply behavior (6.6% → 23.0% coverage); follows the `export_test.go` pattern (exports `ExportWaitForCRDsWithOptions`, `ExportEnsureIPAddressPool`, `ExportEnsureL2Advertisement`); uses `fake.NewSimpleDynamicClientWithCustomListKinds()` for CRD/resource assertions, `helm.NewMockInterface(t)` for Helm install/uninstall, `t.Parallel()`, and `require.NoError/Error`; SSA-based pool/advertisement tests are currently skipped due to fake dynamic client limitations, while CRD waiting is fully exercised (PR #2673)
