@@ -71,7 +71,7 @@ func BenchmarkClient_CreateCreateCommand(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		cmd := fluxClient.CreateCreateCommand(kubeconfigPath)
 		if cmd == nil {
 			b.Fatal("CreateCreateCommand returned nil")
@@ -148,7 +148,7 @@ func BenchmarkGitRepository_Creation(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				repo := scenario.repo.DeepCopy()
 				if repo == nil {
 					b.Fatal("DeepCopy failed")
@@ -204,7 +204,7 @@ func BenchmarkHelmRepository_Creation(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				repo := scenario.repo.DeepCopy()
 				if repo == nil {
 					b.Fatal("DeepCopy failed")
@@ -281,7 +281,7 @@ func BenchmarkOCIRepository_Creation(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				repo := scenario.repo.DeepCopy()
 				if repo == nil {
 					b.Fatal("DeepCopy failed")
@@ -347,7 +347,7 @@ func BenchmarkKustomization_Creation(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				k := scenario.kustomization.DeepCopy()
 				if k == nil {
 					b.Fatal("DeepCopy failed")
@@ -424,7 +424,7 @@ func BenchmarkHelmRelease_Creation(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				release := scenario.release.DeepCopy()
 				if release == nil {
 					b.Fatal("DeepCopy failed")
@@ -520,7 +520,7 @@ func BenchmarkCopySpec(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				src := scenario.newSrc()
 				dst := scenario.newDst()
 

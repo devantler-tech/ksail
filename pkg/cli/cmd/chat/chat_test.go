@@ -1082,7 +1082,6 @@ func assertResolveReasoningEffort(
 	t.Helper()
 
 	result, err := chat.GetResolveReasoningEffort()(flagValue, configValue)
-
 	if expectErr && err == nil {
 		t.Errorf("Expected error, got nil")
 	}

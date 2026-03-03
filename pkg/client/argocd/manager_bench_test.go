@@ -82,7 +82,7 @@ func BenchmarkEnsureOptions(b *testing.B) {
 	b.Run("Minimal", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			benchEnsureOptionsSink = argocd.EnsureOptions{
 				RepositoryURL:  "oci://local-registry:5000/demo",
 				TargetRevision: "v1",
@@ -93,7 +93,7 @@ func BenchmarkEnsureOptions(b *testing.B) {
 	b.Run("WithApplicationName", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			benchEnsureOptionsSink = argocd.EnsureOptions{
 				RepositoryURL:   "oci://local-registry:5000/demo",
 				ApplicationName: "my-app",
@@ -105,7 +105,7 @@ func BenchmarkEnsureOptions(b *testing.B) {
 	b.Run("WithAuth", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			benchEnsureOptionsSink = argocd.EnsureOptions{
 				RepositoryURL:   "oci://local-registry:5000/demo",
 				ApplicationName: "my-app",
@@ -119,7 +119,7 @@ func BenchmarkEnsureOptions(b *testing.B) {
 	b.Run("Production", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			benchEnsureOptionsSink = argocd.EnsureOptions{
 				RepositoryURL:   "oci://ghcr.io/devantler-tech/ksail",
 				ApplicationName: "production-app",
@@ -138,7 +138,7 @@ func BenchmarkUpdateTargetRevisionOptions(b *testing.B) {
 	b.Run("MinimalUpdate", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			benchUpdateTargetRevisionOptionsSink = argocd.UpdateTargetRevisionOptions{
 				TargetRevision: "v2",
 			}
@@ -148,7 +148,7 @@ func BenchmarkUpdateTargetRevisionOptions(b *testing.B) {
 	b.Run("WithHardRefresh", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			benchUpdateTargetRevisionOptionsSink = argocd.UpdateTargetRevisionOptions{
 				ApplicationName: "my-app",
 				TargetRevision:  "v2.1.0",
@@ -174,7 +174,7 @@ func BenchmarkManagerEnsure(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			b.StopTimer()
 			// Reset state by creating fresh manager
 			mgr := setupBenchmarkManager(b)
@@ -194,7 +194,7 @@ func BenchmarkManagerEnsure(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			b.StopTimer()
 			// Create initial state
 			mgr := setupBenchmarkManager(b)
@@ -236,7 +236,7 @@ func BenchmarkManagerEnsure(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			b.StopTimer()
 			mgr := setupBenchmarkManager(b)
 
@@ -265,7 +265,7 @@ func BenchmarkManagerEnsure(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			b.StopTimer()
 			mgr := setupBenchmarkManager(b)
 
@@ -294,7 +294,7 @@ func BenchmarkManagerUpdateTargetRevision(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			b.StopTimer()
 			mgr := setupBenchmarkManagerWithApp(b, "benchmark-app")
 
@@ -319,7 +319,7 @@ func BenchmarkManagerUpdateTargetRevision(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			b.StopTimer()
 			mgr := setupBenchmarkManagerWithApp(b, "benchmark-app")
 
@@ -343,7 +343,7 @@ func BenchmarkManagerUpdateTargetRevision(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			b.StopTimer()
 			mgr := setupBenchmarkManagerWithApp(b, "benchmark-app")
 
@@ -374,7 +374,7 @@ func BenchmarkNewManager(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for range b.N {
+	for b.Loop() {
 		benchManagerSink = argocd.NewManager(clientset, dyn)
 	}
 }
