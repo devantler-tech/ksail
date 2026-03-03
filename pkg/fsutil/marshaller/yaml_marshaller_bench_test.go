@@ -17,7 +17,7 @@ func BenchmarkYAMLMarshaller_Marshal_Simple(b *testing.B) {
 
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		_, err := yamlMarshaller.Marshal(model)
 		if err != nil {
 			b.Fatal(err)
@@ -77,7 +77,7 @@ func BenchmarkYAMLMarshaller_Marshal_Nested(b *testing.B) {
 
 			b.ResetTimer()
 
-			for range b.N {
+			for b.Loop() {
 				_, err := yamlMarshaller.Marshal(testCase.model)
 				if err != nil {
 					b.Fatal(err)
@@ -96,7 +96,7 @@ func BenchmarkYAMLMarshaller_Unmarshal_Simple(b *testing.B) {
 
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		var model TestModel
 
 		err := yamlMarshaller.Unmarshal(data, &model)
@@ -141,7 +141,7 @@ func BenchmarkYAMLMarshaller_Unmarshal_Nested(b *testing.B) {
 
 			b.ResetTimer()
 
-			for range b.N {
+			for b.Loop() {
 				var model NestedModel
 
 				err := yamlMarshaller.Unmarshal(testCase.data, &model)
@@ -181,7 +181,7 @@ func BenchmarkYAMLMarshaller_UnmarshalString(b *testing.B) {
 
 			b.ResetTimer()
 
-			for range b.N {
+			for b.Loop() {
 				var model TestModel
 
 				err := yamlMarshaller.UnmarshalString(testCase.data, &model)
@@ -221,7 +221,7 @@ func BenchmarkYAMLMarshaller_RoundTrip(b *testing.B) {
 
 			b.ResetTimer()
 
-			for range b.N {
+			for b.Loop() {
 				yamlStr, err := yamlMarshaller.Marshal(testCase.model)
 				if err != nil {
 					b.Fatal(err)
@@ -257,7 +257,7 @@ func BenchmarkYAMLMarshaller_RoundTrip_Nested(b *testing.B) {
 
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		yamlStr, err := yamlMarshaller.Marshal(model)
 		if err != nil {
 			b.Fatal(err)

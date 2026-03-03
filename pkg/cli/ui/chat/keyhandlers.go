@@ -333,13 +333,19 @@ func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.chatMode = m.chatMode.Next()
+	newMode := m.chatMode.Next()
 
-	err := m.applyMode(m.chatMode)
+	err := m.applyMode(newMode)
 	if err != nil {
 		m.err = err
+
+		return m, nil
 	}
 
+	// Only update local chatMode after applyMode succeeds, matching the
+	// pattern in processNextPendingPrompt where m.chatMode is set after
+	// all operations succeed.
+	m.chatMode = newMode
 	m.updateViewportContent()
 
 	return m, nil
