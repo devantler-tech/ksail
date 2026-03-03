@@ -157,15 +157,25 @@ func (m *Installer) configureMetalLB(ctx context.Context) error {
 // Only CRD-not-yet-registered errors (404 Not Found) are retried; other
 // errors (RBAC, network, auth) cause an immediate failure.
 func (m *Installer) waitForCRDs(ctx context.Context, client dynamic.Interface) error {
+	return m.waitForCRDsWithOptions(ctx, client, crdPollInterval, crdPollTimeout)
+}
+
+// waitForCRDsWithOptions is the injectable version of waitForCRDs that accepts
+// custom poll interval and timeout for testing.
+func (m *Installer) waitForCRDsWithOptions(
+	ctx context.Context,
+	client dynamic.Interface,
+	pollInterval, pollTimeout time.Duration,
+) error {
 	ipAddressPoolGVR := schema.GroupVersionResource{
 		Group:    "metallb.io",
 		Version:  "v1beta1",
 		Resource: "ipaddresspools",
 	}
 
-	deadline := time.After(crdPollTimeout)
+	deadline := time.After(pollTimeout)
 
-	ticker := time.NewTicker(crdPollInterval)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	var lastErr error
@@ -177,7 +187,7 @@ func (m *Installer) waitForCRDs(ctx context.Context, client dynamic.Interface) e
 		case <-deadline:
 			return fmt.Errorf(
 				"timed out waiting for metallb CRDs after %s: %w",
-				crdPollTimeout, lastErr,
+				pollTimeout, lastErr,
 			)
 		case <-ticker.C:
 			_, err := client.Resource(ipAddressPoolGVR).Namespace(metallbNamespace).
