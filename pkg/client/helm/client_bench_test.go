@@ -122,8 +122,7 @@ func BenchmarkMockClient(b *testing.B) {
 
 		client.EXPECT().
 			AddRepository(ctx, entry, time.Minute).
-			Return(nil).
-			Times(b.N)
+			Return(nil)
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -152,8 +151,7 @@ func BenchmarkMockClient(b *testing.B) {
 
 		client.EXPECT().
 			InstallOrUpgradeChart(ctx, spec).
-			Return(expectedRelease, nil).
-			Times(b.N)
+			Return(expectedRelease, nil)
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -168,8 +166,7 @@ func BenchmarkMockClient(b *testing.B) {
 
 		client.EXPECT().
 			ReleaseExists(ctx, "test-release", "default").
-			Return(true, nil).
-			Times(b.N)
+			Return(true, nil)
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -184,8 +181,7 @@ func BenchmarkMockClient(b *testing.B) {
 
 		client.EXPECT().
 			UninstallRelease(ctx, "test-release", "default").
-			Return(nil).
-			Times(b.N)
+			Return(nil)
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -215,8 +211,7 @@ spec:
 
 		client.EXPECT().
 			TemplateChart(ctx, spec).
-			Return(expectedOutput, nil).
-			Times(b.N)
+			Return(expectedOutput, nil)
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -245,8 +240,7 @@ spec:
 
 		client.EXPECT().
 			InstallChart(ctx, spec).
-			Return(expectedRelease, nil).
-			Times(b.N)
+			Return(expectedRelease, nil)
 
 		b.ResetTimer()
 		b.ReportAllocs()
