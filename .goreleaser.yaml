@@ -22,7 +22,7 @@ builds:
       - -s -w
     hooks:
       pre:
-        - go tool bundler --platform {{ .Os }}/{{ .Arch }}
+        - go tool bundler --platform $GOOS/$GOARCH
 
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
