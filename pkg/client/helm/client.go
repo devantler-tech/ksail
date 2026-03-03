@@ -391,8 +391,8 @@ func (c *Client) installRelease(
 	if upgrade {
 		histClient := helmv4action.NewHistory(c.actionConfig)
 		histClient.Max = 1
-		releases, histErr := histClient.Run(spec.ReleaseName)
 
+		releases, histErr := histClient.Run(spec.ReleaseName)
 		if histErr == nil && len(releases) > 0 {
 			// Release exists, perform upgrade
 			rel, err = c.upgradeRelease(ctx, spec)
