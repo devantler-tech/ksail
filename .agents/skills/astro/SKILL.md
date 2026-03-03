@@ -27,7 +27,7 @@ CLI looks for `astro.config.js`, `astro.config.mjs`, `astro.config.cjs`, and `as
 - `npx astro build` - Build your project and write it to disk.
 - `npx astro check` - Check your project for errors.
 - `npx astro add` - Add an integration.
-- `npmx astro sync` - Generate TypeScript types for all Astro modules.
+- `npx astro sync` - Generate TypeScript types for all Astro modules.
 
 **Re-run after adding/changing plugins.**
 
