@@ -174,7 +174,8 @@ go run main.go --help
 │   ├── dist/               # Generated site (after npm run build)
 │   └── package.json        # Node.js dependencies for documentation
 ├── schemas/                # JSON schema for ksail-config
-│   ├── gen_schema.go       # go:generate entrypoint that produces ksail-config.schema.json
+│   ├── doc.go              # contains //go:generate go run gen_schema.go for schema generation
+│   ├── gen_schema.go       # schema generator code invoked by go:generate; produces ksail-config.schema.json
 │   └── ksail-config.schema.json  # JSON Schema for ksail.yaml — used by VSCode extension and editors
 ├── vsce/                   # VSCode extension source
 │   ├── src/                # Extension TypeScript source
