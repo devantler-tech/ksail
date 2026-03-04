@@ -280,7 +280,6 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 		}
 
 		if header.Typeflag == tar.TypeDir {
-
 			err = os.MkdirAll(
 				targetPath,
 				dirPerm,
