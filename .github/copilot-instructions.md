@@ -189,7 +189,7 @@ go run main.go --help
 - **go.mod**: Go module dependencies (includes embedded kubectl, helm, kind, k3d, vcluster, flux, argocd)
 - **package.json**: Node.js dependencies for Astro documentation
 - **.github/workflows/\*.yaml**: CI/CD pipelines
-- **.github/workflows/\*.md**: Agentic workflows (daily-code-quality, daily-docs, daily-builder, daily-workflow-maintenance, daily-plan, etc.); each runs on a schedule or dispatch, and many operate in multiple phases
+- **.github/workflows/\*.md**: Agentic workflows (daily-code-quality, daily-docs, daily-builder, daily-workflow-maintenance, daily-plan, weekly-research, weekly-promote-ksail, ci-doctor, pr-fix, maintainer, etc.); each runs on a schedule or dispatch, and many operate in multiple phases
 
 ### CLI Commands Reference
 
