@@ -93,6 +93,11 @@ var ExportNewQuotaSnapshot = func(
 	}
 }
 
+// ExportBuildStatusText calls Model.buildStatusText for testing.
+var ExportBuildStatusText = func(m *Model) string {
+	return m.buildStatusText()
+}
+
 // ExportBuildQuotaStatusText calls Model.buildQuotaStatusText for testing.
 var ExportBuildQuotaStatusText = func(m *Model) string {
 	return m.buildQuotaStatusText()

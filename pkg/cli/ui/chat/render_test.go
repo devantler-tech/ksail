@@ -29,31 +29,44 @@ func TestStatusBar_ModeDisplay(t *testing.T) {
 			model := chat.NewModel(newTestParams())
 			chat.ExportSetChatMode(model, testCase.mode)
 
-			output := model.View()
+			// Test buildStatusText directly to avoid false passes from footer help text
+			// which also renders the mode label via the Tab keybinding description.
+			statusText := chat.ExportBuildStatusText(model)
 
-			if !strings.Contains(output, testCase.expected) {
-				t.Errorf("expected %q in status bar, not found in output", testCase.expected)
+			if !strings.Contains(statusText, testCase.expected) {
+				t.Errorf("expected %q in status text, got: %q", testCase.expected, statusText)
 			}
 		})
 	}
 }
 
-// TestStatusBar_YoloMode tests that YOLO mode appears in the status bar.
+// TestStatusBar_YoloMode tests that YOLO mode changes the status bar indicator.
 func TestStatusBar_YoloMode(t *testing.T) {
 	t.Parallel()
 
-	model := chat.NewModel(newTestParams())
-	chat.ExportSetYoloMode(model, true)
+	// Render with YOLO mode enabled — status text must contain "auto-approve".
+	yoloModel := chat.NewModel(newTestParams())
+	chat.ExportSetYoloMode(yoloModel, true)
+	yoloStatus := chat.ExportBuildStatusText(yoloModel)
 
-	output := model.View()
+	if !strings.Contains(yoloStatus, "auto-approve") {
+		t.Errorf("expected 'auto-approve' in status text when YOLO is enabled, got: %q", yoloStatus)
+	}
 
-	if !strings.Contains(output, "auto-approve") {
-		t.Error("expected 'auto-approve' in status bar when YOLO mode is enabled")
+	// Render with YOLO mode disabled — status text must NOT contain "auto-approve".
+	nonYoloModel := chat.NewModel(newTestParams())
+	chat.ExportSetYoloMode(nonYoloModel, false)
+	nonYoloStatus := chat.ExportBuildStatusText(nonYoloModel)
+
+	if strings.Contains(nonYoloStatus, "auto-approve") {
+		t.Errorf(
+			"expected no 'auto-approve' in status text when YOLO is disabled, got: %q",
+			nonYoloStatus,
+		)
 	}
 }
 
-// TestStatusBar_NoYoloMode tests that YOLO mode indicator style is not bold when disabled.
-// Note: "auto-approve" text appears in help section regardless of YOLO state.
+// TestStatusBar_NoYoloMode tests that the YOLO indicator is absent from the status bar when disabled.
 func TestStatusBar_NoYoloMode(t *testing.T) {
 	t.Parallel()
 

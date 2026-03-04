@@ -60,10 +60,14 @@ func TestPermissionKey_AllowWithY(t *testing.T) {
 
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 
-	// Read the response
-	approved := <-responseChan
-	if !approved {
-		t.Error("expected permission to be approved after pressing 'y'")
+	// Read the response with timeout to avoid hanging on regression
+	select {
+	case approved := <-responseChan:
+		if !approved {
+			t.Error("expected permission to be approved after pressing 'y'")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for permission response after pressing 'y'")
 	}
 
 	// Permission should be cleared
@@ -101,9 +105,13 @@ func TestPermissionKey_AllowWithUpperY(t *testing.T) {
 
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Y'}})
 
-	approved := <-responseChan
-	if !approved {
-		t.Error("expected permission to be approved after pressing 'Y'")
+	select {
+	case approved := <-responseChan:
+		if !approved {
+			t.Error("expected permission to be approved after pressing 'Y'")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for permission response after pressing 'Y'")
 	}
 
 	// Verify type assertion succeeds (no further checks needed — AllowWithY covers history)
@@ -125,9 +133,13 @@ func TestPermissionKey_DenyWithN(t *testing.T) {
 
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 
-	denied := <-responseChan
-	if denied {
-		t.Error("expected permission to be denied after pressing 'n'")
+	select {
+	case denied := <-responseChan:
+		if denied {
+			t.Error("expected permission to be denied after pressing 'n'")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for permission response after pressing 'n'")
 	}
 
 	// Permission history should record the denial
@@ -153,9 +165,13 @@ func TestPermissionKey_DenyWithEsc(t *testing.T) {
 
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
-	denied := <-responseChan
-	if denied {
-		t.Error("expected permission to be denied after pressing escape")
+	select {
+	case denied := <-responseChan:
+		if denied {
+			t.Error("expected permission to be denied after pressing escape")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for permission response after pressing escape")
 	}
 
 	chatModel, ok := updatedModel.(*chat.Model)
