@@ -30,7 +30,7 @@ timeout-minutes: 30
 
 steps:
   - name: Checkout repository
-    uses: actions/checkout@v4
+    uses: actions/checkout@v6.0.2
     with:
       persist-credentials: false
 
@@ -78,28 +78,35 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
    - Re-run `gh aw compile --validate` to verify the fixes work
    - Iterate until all workflows compile successfully or you've exhausted reasonable fix attempts
 
-5. **Reset lock files**:
-   - **CRITICAL**: After successful compilation, reset ALL `.lock.yml` file changes:
+5. **Save workflow source diffs**:
+   - **Before resetting**, capture diffs of any modified `.github/workflows/*.md` files so they can be included in the PR description:
 
      ```bash
-     git checkout -- .github/workflows/*.lock.yml
+     git diff .github/workflows/*.md .github/workflows/shared/*.md 2>/dev/null | tee /tmp/workflow-md-diffs.patch || true
      ```
 
-   - Verify only source `.md` files remain changed:
+6. **Reset workflow files**:
+   - **CRITICAL**: After capturing diffs, reset ALL file changes under `.github/workflows/`:
+
+     ```bash
+     git checkout -- .github/workflows/
+     ```
+
+   - The `GITHUB_TOKEN` does not have the `workflows` permission needed to push ANY file to `.github/workflows/` (this applies to `.lock.yml`, `.md`, and all other files in that directory). They will be recompiled/reapplied after the PR is merged.
+
+   - Verify only non-workflow files remain changed:
 
      ```bash
      git status
      ```
 
-   - Lock files must be excluded because the `GITHUB_TOKEN` does not have the `workflows` permission needed to push files to `.github/workflows/*.lock.yml`. They will be recompiled after the PR is merged.
-
-6. **Create appropriate outputs**:
+7. **Create appropriate outputs**:
    - **If all workflows compile successfully**: Create a pull request with the title "Upgrade workflows to latest gh-aw version" containing:
-     - All updated workflow source files (`.md` files with codemod changes from `gh aw fix`)
+     - Any updated files outside `.github/workflows/` (all workflow files must be reset)
      - A detailed description of what changed, referencing the gh-aw changelog
+     - The saved diffs from `/tmp/workflow-md-diffs.patch` so they can be applied manually
      - A summary of any automatic fixes applied by codemods
      - A summary of any manual fixes that were needed
-     - A note that workflow `.lock.yml` files are excluded and will need to be recompiled after merge
 
    - **If there are compilation errors you cannot fix**: Create an issue with the title "Failed to upgrade workflows to latest gh-aw version" containing:
      - The specific compilation errors you encountered
@@ -112,5 +119,5 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
 - The gh-aw CLI extension has already been installed and is available for use
 - Always check the gh-aw changelog first to understand breaking changes
 - Test each fix by running `gh aw compile --validate` before moving to the next error
-- **Never include `.lock.yml` files in the PR** — always reset them before creating the PR
+- **Never include any `.github/workflows/` files in the PR** — the token lacks `workflows` permission. Always reset the entire directory before creating the PR, and include `.md` diffs in the PR description.
 - Include context and reasoning in your PR or issue descriptions
