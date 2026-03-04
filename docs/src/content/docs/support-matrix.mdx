@@ -18,7 +18,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 - Docker provider requires Docker Desktop or Docker Engine installed locally
 - Hetzner provider requires `HCLOUD_TOKEN` environment variable and Talos ISO in your account
-- Omni provider requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.cluster.omni.endpoint` in your KSail configuration
+- Omni provider requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.cluster.omni.endpoint` in your KSail configuration — see [Omni Provider](/providers/omni/) for setup details
 - VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
 
 ## Component × Distribution Matrix
@@ -55,7 +55,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 - "Built-in" means the distribution includes this component by default
 - K3s includes local-path-provisioner, metrics-server, and ServiceLB (load balancer) out of the box
 - Talos CSI support is provider-dependent: Local Path Provisioner for Docker, Hetzner CSI Driver for Hetzner Cloud
-- **LoadBalancer support by distribution**:
+- **LoadBalancer support by distribution** — see [LoadBalancer Configuration](/configuration/loadbalancer/) for full details:
   - **Vanilla (Kind) on Docker**: Uses cloud-provider-kind (runs as external Docker container)
   - **K3s on Docker**: Uses built-in ServiceLB (Klipper-LB)
   - **Talos on Docker**: Uses MetalLB with default IP pool (172.18.255.200-172.18.255.250)
