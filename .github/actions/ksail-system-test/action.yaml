@@ -136,6 +136,8 @@ runs:
         kind: Cluster
         spec:
           cluster:
+            distribution: Talos
+            provider: Omni
             omni:
               endpoint: "${OMNI_ENDPOINT}"
         EOF
