@@ -296,7 +296,7 @@ KSail uses multiple testing approaches:
 
 - **Unit tests** — `go test ./...`; uses testify/mock, `export_test.go` for unexported symbols, `t.Parallel()`, and static error sentinels
 - **Integration tests** — Test real cluster operations (Kind/K3d/VCluster clusters with real workloads)
-- **System tests (CI)** — All distribution × provider combinations across Linux/macOS (amd64/arm64); see `.github/workflows/ci.yaml`
+- **System tests (CI)** — System tests run on Linux (`ubuntu-latest`, amd64) via `.github/workflows/ci.yaml`
 - **Benchmarks** — `go test -bench=. -benchmem ./...` for performance regression tracking
 
 ### Agentic Workflows
