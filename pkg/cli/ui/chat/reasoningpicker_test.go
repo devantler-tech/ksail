@@ -253,16 +253,9 @@ func TestReasoningPickerSupportsReasoning(t *testing.T) {
 			chat.ExportSetCurrentModel(model, tc.modelID)
 			chat.ExportSetSessionConfigModel(model, tc.configModel)
 
-			// We test the behavior indirectly: if reasoning is not supported and
-			// we try to open the reasoning picker via Ctrl+E, it should not open.
-			// But since the check is in keyhandlers we test via the View.
-			// For now, let's verify the picker opens and shows levels regardless.
-			chat.ExportSetShowReasoningPicker(model, true)
-
-			output := model.View()
-
-			if !strings.Contains(output, "Reasoning Effort") {
-				t.Error("expected reasoning picker to render regardless of support")
+			got := chat.ExportCurrentModelSupportsReasoning(model)
+			if got != tc.expectSupports {
+				t.Errorf("currentModelSupportsReasoning() = %v, want %v", got, tc.expectSupports)
 			}
 		})
 	}

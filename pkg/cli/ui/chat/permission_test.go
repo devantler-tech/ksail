@@ -169,7 +169,8 @@ func TestPermissionHandler_YoloAutoApproves(t *testing.T) {
 	}
 }
 
-// TestPermissionHandler_NonYoloSendsToChannel tests that non-YOLO mode sends to event channel.
+// TestPermissionHandler_NonYoloSendsToChannel tests that non-YOLO mode sends to event channel
+// and correctly returns the result when the TUI approves the request.
 func TestPermissionHandler_NonYoloSendsToChannel(t *testing.T) {
 	t.Parallel()
 
@@ -195,18 +196,32 @@ func TestPermissionHandler_NonYoloSendsToChannel(t *testing.T) {
 
 	// Read the permission request from the event channel
 	msg := <-eventChan
-
-	// Verify it's a permission request message
 	if msg == nil {
 		t.Fatal("expected a permission request message on event channel")
 	}
 
-	// The message should be a permissionRequestMsg (unexported), but we can verify
-	// the channel sent something. We need to approve to unblock the handler.
-	// Since permissionRequestMsg is unexported, we test via the TUI integration approach.
+	// Feed the message through a TUI model, then press 'y' to approve
+	model := chat.NewModel(newTestParams())
+
+	var updatedModel tea.Model = model
+	updatedModel, _ = updatedModel.Update(msg)
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+	// Verify the handler goroutine returns "approved"
+	result := <-resultChan
+	if result.Kind != "approved" {
+		t.Errorf("expected 'approved', got %q", result.Kind)
+	}
+
+	// Verify the model cleared the pending permission
+	chatModel := updatedModel.(*chat.Model)
+	if chat.ExportHasPendingPermission(chatModel) {
+		t.Error("expected pending permission to be cleared after approval")
+	}
 }
 
-// TestPermissionHandler_NilYoloRef tests that nil yoloModeRef doesn't auto-approve.
+// TestPermissionHandler_NilYoloRef tests that nil yoloModeRef sends to event channel
+// and correctly returns "denied-interactively-by-user" when the TUI denies the request.
 func TestPermissionHandler_NilYoloRef(t *testing.T) {
 	t.Parallel()
 
@@ -214,21 +229,43 @@ func TestPermissionHandler_NilYoloRef(t *testing.T) {
 
 	handler := chat.CreateTUIPermissionHandler(eventChan, nil)
 
-	// Run in goroutine since it blocks
+	// Run handler in goroutine since it blocks waiting for response
+	resultChan := make(chan copilot.PermissionRequestResult, 1)
+
 	go func() {
-		_, _ = handler(
+		result, _ := handler(
 			copilot.PermissionRequest{
 				Kind:  "shell",
 				Extra: map[string]any{"command": "ls"},
 			},
 			copilot.PermissionInvocation{},
 		)
+		resultChan <- result
 	}()
 
-	// Verify a message was sent to the channel (not auto-approved)
+	// Read the permission request from the event channel (not auto-approved)
 	msg := <-eventChan
 	if msg == nil {
-		t.Error("expected permission request to be sent to event channel with nil yoloRef")
+		t.Fatal("expected permission request to be sent to event channel with nil yoloRef")
+	}
+
+	// Feed the message through a TUI model, then press 'esc' to deny
+	model := chat.NewModel(newTestParams())
+
+	var updatedModel tea.Model = model
+	updatedModel, _ = updatedModel.Update(msg)
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
+
+	// Verify the handler goroutine returns "denied-interactively-by-user"
+	result := <-resultChan
+	if result.Kind != "denied-interactively-by-user" {
+		t.Errorf("expected 'denied-interactively-by-user', got %q", result.Kind)
+	}
+
+	// Verify the model cleared the pending permission
+	chatModel := updatedModel.(*chat.Model)
+	if chat.ExportHasPendingPermission(chatModel) {
+		t.Error("expected pending permission to be cleared after denial")
 	}
 }
 

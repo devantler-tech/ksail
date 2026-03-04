@@ -207,3 +207,10 @@ var ExportGetEventChannel = func(m *Model) chan tea.Msg {
 //
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 var ExportExtractCommandFromArgs = extractCommandFromArgs
+
+// ExportCurrentModelSupportsReasoning exposes currentModelSupportsReasoning for testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+var ExportCurrentModelSupportsReasoning = func(m *Model) bool {
+	return m.currentModelSupportsReasoning()
+}
