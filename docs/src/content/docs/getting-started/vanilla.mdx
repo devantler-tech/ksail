@@ -181,6 +181,12 @@ KSail injects containerd registry configuration into all Kind nodes.
 
 ### Cluster Components
 
+- **Control plane node(s):** Runs the Kubernetes API server, scheduler, and controller manager.
+- **Worker node(s):** Run your workloads (Deployments, Pods, DaemonSets, etc.).
+- **CNI plugin:** Provides pod networking (installed by KSail during setup).
+- **CSI/storage:** Local-path storage for persistent volumes on the host.
+- **LoadBalancer integration:** Optional Cloud Provider KIND controller for LoadBalancer Services.
+- **Registry mirrors:** Preconfigured mirrors for common registries to avoid rate limits.
 ### How It Works
 
 1. **Node Creation:** Kind creates Docker containers running systemd
