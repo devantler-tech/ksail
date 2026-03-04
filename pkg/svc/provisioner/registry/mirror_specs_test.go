@@ -462,14 +462,12 @@ func TestParseMirrorSpecs_AtSignInURL(t *testing.T) {
 			specs: []string{
 				"myuser:mypass@docker.io=https://user:pass@registry-1.docker.io",
 			},
-			expected: []registry.MirrorSpec{
-				{
-					Host:     "docker.io",
-					Remote:   "https://user:pass@registry-1.docker.io",
-					Username: "myuser",
-					Password: "mypass",
-				},
-			},
+			expected: []registry.MirrorSpec{{
+				Host:     "docker.io",
+				Remote:   "https://user:pass@registry-1.docker.io",
+				Username: "myuser",
+				Password: "mypass",
+			}},
 		},
 	}
 

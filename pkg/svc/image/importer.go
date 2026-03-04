@@ -91,7 +91,7 @@ func (i *Importer) Import(
 	close(errChan)
 
 	// Collect all errors
-	var errs []error
+	errs := make([]error, 0, len(k8sNodes))
 	for importErr := range errChan {
 		errs = append(errs, importErr)
 	}

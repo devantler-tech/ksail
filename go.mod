@@ -18,7 +18,7 @@ require (
 	github.com/fluxcd/kustomize-controller/api v1.8.0
 	github.com/fluxcd/pkg/apis/meta v1.25.0
 	github.com/fluxcd/source-controller/api v1.8.0
-	github.com/getsops/sops/v3 v3.12.0
+	github.com/getsops/sops/v3 v3.12.1
 	github.com/gkampitakis/go-snaps v0.5.19
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/google/go-containerregistry v0.21.0
@@ -58,7 +58,7 @@ require (
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/cosi-project/runtime v1.14.0
-	github.com/github/copilot-sdk/go v0.1.23
+	github.com/github/copilot-sdk/go v0.1.29
 	github.com/hetznercloud/hcloud-go/v2 v2.36.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
@@ -811,6 +811,7 @@ replace (
 )
 
 tool (
+	github.com/github/copilot-sdk/go/cmd/bundler
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	golang.org/x/tools/cmd/deadcode
 )

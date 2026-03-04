@@ -1,0 +1,590 @@
+---
+title: Development Guide
+description: Guide for setting up KSail development environment and contributing code
+---
+
+This guide covers setting up your development environment, understanding the codebase, and making contributions to KSail.
+
+## Prerequisites
+
+### Required Tools
+
+1. **Go 1.26.0+** — KSail is written in Go
+   - Install from [go.dev/dl](https://go.dev/dl/)
+   - Verify: `go version` should show 1.26.0 or higher
+
+2. **Docker** — Required for local cluster testing
+   - Install Docker Desktop or Docker Engine
+   - Verify: `docker ps` should run without errors
+
+3. **Git** — Version control
+   - Install from your package manager or [git-scm.com](https://git-scm.com/)
+
+### Optional Tools
+
+- **Node.js 22** — For documentation development
+- **golangci-lint v2.8.0** — For linting (installed via go install)
+- **VSCode** — Recommended editor with Go extension
+
+## Development Setup
+
+### 1. Clone the Repository
+
+````bash
+git clone https://github.com/devantler-tech/ksail.git
+cd ksail
+````
+
+### 2. Install Dependencies
+
+````bash
+# Go dependencies (automatically downloaded on first build)
+go mod download
+
+# Development tools (optional)
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8.0
+
+# Documentation dependencies (if working on docs)
+cd docs/
+npm ci
+cd ..
+````
+
+### 3. Build KSail
+
+````bash
+# Development build
+go build -o ksail
+
+# Verify the build
+./ksail --version
+````
+
+### 4. Run Tests
+
+````bash
+# Unit tests
+go test ./...
+
+# Specific package
+go test ./pkg/svc/provisioner/cluster/kind
+
+# With coverage
+go test -cover ./...
+
+# Benchmarks
+go test -bench=. -benchmem ./pkg/client/helm
+````
+
+### 5. Run Linters
+
+````bash
+# Run all linters
+golangci-lint run
+
+# Run specific linter
+golangci-lint run --enable-only=gofmt
+
+# Auto-fix issues (import order, etc.)
+golangci-lint run --fix
+````
+
+## Project Structure
+
+### Key Directories
+
+````
+ksail/
+├── .github/              # CI/CD workflows and agentic workflows
+│   ├── workflows/        # GitHub Actions workflows (.yaml + .md)
+│   └── instructions/     # Copilot coding instructions
+├── docs/                 # Documentation (Astro/Starlight)
+│   ├── src/content/docs/ # Markdown documentation files
+│   └── public/           # Static assets
+├── internal/             # Internal (private) packages
+│   └── buildmeta/        # Build metadata (version, commit, date)
+├── pkg/                  # Public packages
+│   ├── apis/             # API types and schemas
+│   ├── cli/              # CLI commands and UI
+│   ├── client/           # Embedded tool clients
+│   ├── svc/              # Core services
+│   │   ├── provider/     # Infrastructure providers
+│   │   ├── provisioner/  # Distribution provisioners
+│   │   └── installer/    # Component installers
+│   └── [utilities]       # di, envvar, fsutil, k8s, notify, etc.
+├── schemas/              # JSON schemas for validation
+├── vsce/                 # VSCode extension
+├── main.go               # Application entry point
+├── go.mod                # Go module definition
+└── .golangci.yml         # Linter configuration
+````
+
+### Import Restrictions
+
+- **`internal/`** packages can only be imported within `ksail` module
+- **`pkg/`** packages are public and can be imported by other projects
+- No circular dependencies between packages
+
+## Development Workflow
+
+### 1. Create a Feature Branch
+
+````bash
+git checkout -b feature/my-feature
+````
+
+### 2. Make Changes
+
+Follow these guidelines:
+- Keep changes focused and atomic
+- Write tests for new functionality
+- Update documentation if needed
+- Follow existing code patterns
+
+### 3. Test Your Changes
+
+````bash
+# Run unit tests
+go test ./...
+
+# Run linters
+golangci-lint run
+
+# Build and manually test
+go build -o ksail
+./ksail cluster init --distribution Vanilla
+./ksail cluster create
+````
+
+### 4. Commit Changes
+
+````bash
+git add .
+git commit -m "feat: add new feature"
+
+# Commit message format: <type>: <description>
+# Types: feat, fix, docs, refactor, test, chore, perf
+````
+
+### 5. Push and Create Pull Request
+
+````bash
+git push origin feature/my-feature
+
+# Create PR on GitHub
+# - Provide clear description
+# - Reference related issues
+# - Ensure CI passes
+````
+
+## Coding Standards
+
+### Go Style
+
+- Follow [Effective Go](https://go.dev/doc/effective_go)
+- Use `gofmt` for formatting
+- Use `goimports` for import organization
+- Maximum line length: 100 characters (golines)
+
+### Naming Conventions
+
+- **Packages:** Lowercase, singular (e.g., `provider`, `installer`)
+- **Types:** PascalCase (e.g., `KindClusterProvisioner`)
+- **Interfaces:** PascalCase, often ending in `-er` (e.g., `Provider`, `Installer`)
+- **Functions/Methods:** PascalCase for exported, camelCase for unexported
+- **Variables:** camelCase (e.g., `clusterName`)
+- **Constants:** PascalCase for exported, camelCase for unexported
+
+### Error Handling
+
+- Return errors explicitly (no panic in library code)
+- Wrap errors with context using `fmt.Errorf("context: %w", err)`
+- Use custom error types for specific error conditions
+- Check all errors (golangci-lint enforces this)
+
+### Testing Patterns
+
+#### Unit Tests
+
+````go
+func TestProvisionerCreate(t *testing.T) {
+    t.Parallel() // Run tests in parallel when safe
+    
+    tests := []struct {
+        name    string
+        setup   func(*testing.T) *Provisioner
+        wantErr bool
+    }{
+        {
+            name: "successful creation",
+            setup: func(t *testing.T) *Provisioner {
+                return &Provisioner{/* ... */}
+            },
+            wantErr: false,
+        },
+        {
+            name: "creation fails",
+            setup: func(t *testing.T) *Provisioner {
+                return &Provisioner{/* ... */}
+            },
+            wantErr: true,
+        },
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            t.Parallel()
+            p := tt.setup(t)
+            err := p.Create(context.Background())
+            if (err != nil) != tt.wantErr {
+                t.Errorf("Create() error = %v, wantErr %v", err, tt.wantErr)
+            }
+        })
+    }
+}
+````
+
+#### Export Pattern for Testing Unexported Functions
+
+Use `export_test.go` to expose unexported symbols for testing:
+
+````go
+// pkg/svc/provisioner/export_test.go
+package provisioner
+
+// Export unexported functions for testing
+var (
+    ExportValidateConfig = validateConfig
+    ExportGenerateManifests = generateManifests
+)
+````
+
+Then test from `_test` package:
+
+````go
+// pkg/svc/provisioner/provisioner_test.go
+package provisioner_test
+
+import (
+    "testing"
+    "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner"
+)
+
+func TestValidateConfig(t *testing.T) {
+    err := provisioner.ExportValidateConfig(config)
+    // ...
+}
+````
+
+**Benefits:**
+- Black-box testing without exposing internal APIs
+- No `//nolint:gochecknoglobals` needed (test-only compilation)
+- Clean separation between public and internal APIs
+
+#### Mocking with Testify
+
+````go
+// Generate mocks (mockery.yml config)
+//go:generate go run github.com/vektra/mockery/v2
+
+type MockProvider struct {
+    mock.Mock
+}
+
+func (m *MockProvider) Create(ctx context.Context) error {
+    args := m.Called(ctx)
+    return args.Error(0)
+}
+
+func TestWithMock(t *testing.T) {
+    mockProv := new(MockProvider)
+    mockProv.On("Create", mock.Anything).Return(nil)
+    
+    // Use mockProv...
+    
+    mockProv.AssertExpectations(t)
+}
+````
+
+**Important:** Never use `.Times(b.N)` with `for b.Loop()` in benchmarks. The `b.N` value is 1 when evaluated before the loop, causing testify failures. Omit `.Times()` for unlimited calls.
+
+#### Benchmarks
+
+````go
+func BenchmarkProvisionerCreate(b *testing.B) {
+    p := setupProvisioner()
+    ctx := context.Background()
+    
+    for b.Loop() {  // Go 1.26+ style
+        if err := p.Create(ctx); err != nil {
+            b.Fatal(err)
+        }
+    }
+}
+````
+
+### Documentation
+
+#### Code Comments
+
+- Document all exported types, functions, and constants
+- Use complete sentences with punctuation
+- Start with the name being documented
+
+````go
+// Provider defines the interface for infrastructure providers.
+// Providers manage the underlying infrastructure where Kubernetes
+// nodes run (Docker containers, cloud VMs, etc.).
+type Provider interface {
+    // Create provisions the infrastructure and starts nodes.
+    Create(ctx context.Context) error
+    
+    // Delete tears down the infrastructure and removes nodes.
+    Delete(ctx context.Context) error
+}
+````
+
+#### Documentation Files
+
+When adding features or making significant changes:
+1. Update relevant `.mdx` files in `docs/src/content/docs/`
+2. Update `README.md` if needed
+3. Add examples to documentation
+4. Update CLI help text if adding commands
+
+## Common Development Tasks
+
+### Adding a New Provider
+
+1. Create package: `pkg/svc/provider/newprovider/`
+2. Implement `Provider` interface
+3. Register in factory: `pkg/svc/provider/factory.go`
+4. Add tests: `pkg/svc/provider/newprovider/provider_test.go`
+5. Update documentation: `docs/src/content/docs/`
+
+### Adding a New Provisioner
+
+1. Create package: `pkg/svc/provisioner/cluster/newdist/`
+2. Implement `Provisioner` interface
+3. Register in factory: `pkg/svc/provisioner/cluster/factory.go`
+4. Add tests
+5. Add getting-started guide: `docs/src/content/docs/getting-started/newdist.mdx`
+
+### Adding a New Installer
+
+1. Create package: `pkg/svc/installer/newcomponent/`
+2. Implement `Installer` interface
+3. Add to component setup: `pkg/cli/setup/`
+4. Add configuration to ClusterSpec: `pkg/apis/cluster/v1alpha1/`
+5. Add tests
+6. Update configuration documentation
+
+### Updating Dependencies
+
+````bash
+# Update all dependencies
+go get -u ./...
+
+# Update specific dependency
+go get -u github.com/some/package@latest
+
+# Tidy and verify
+go mod tidy
+go mod verify
+
+# Test after update
+go test ./...
+````
+
+### Working on Documentation
+
+````bash
+cd docs/
+
+# Install dependencies
+npm ci
+
+# Start development server
+npm run dev
+# Visit http://localhost:4321
+
+# Build production site
+npm run build
+# Output: docs/dist/
+
+# Preview production build
+npm run preview
+````
+
+#### Documentation Guidelines
+
+- Use clear, concise language
+- Provide code examples
+- Include prerequisites
+- Add verification steps
+- Use GitHub Flavored Markdown
+- Follow existing structure and style
+
+## Debugging
+
+### Enable Debug Logging
+
+KSail doesn't have built-in debug logging yet, but you can:
+
+1. Add temporary log statements:
+````go
+import "fmt"
+
+fmt.Printf("DEBUG: value = %+v\n", value)
+````
+
+2. Use Go debugger (Delve):
+````bash
+# Install delve
+go install github.com/go-delve/delve/cmd/dlv@latest
+
+# Debug a test
+dlv test -- -test.run TestName
+
+# Debug the binary
+dlv exec ./ksail -- cluster create
+````
+
+3. VSCode debugging:
+   - Set breakpoints in code
+   - Press F5 to start debugging
+   - Use `.vscode/launch.json` configurations
+
+### Common Issues
+
+#### "Docker not available"
+- Verify Docker is running: `docker ps`
+- Check Docker Desktop is started (macOS/Windows)
+- Verify Docker socket permissions (Linux)
+
+#### "Go version mismatch"
+- Check: `go version` should be 1.26.0+
+- Update Go from [go.dev/dl](https://go.dev/dl/)
+
+#### "Import cycle not allowed"
+- Review package dependencies
+- Move shared types to `pkg/apis/` or create utility package
+- Avoid circular imports between packages
+
+#### "Linter failures"
+- Run: `golangci-lint run --fix` to auto-fix
+- Check `.golangci.yml` for enabled linters
+- Some issues require manual fixes
+
+## CI/CD
+
+### GitHub Actions Workflows
+
+KSail uses several CI workflows:
+
+#### `.github/workflows/ci.yaml`
+- Runs on every PR and main push
+- Builds on Linux and macOS
+- Runs unit tests
+- Runs system tests with multiple distribution/provider combinations
+- Uploads coverage to Codecov
+
+#### `.github/workflows/test-pages.yaml`
+- Validates documentation builds
+- Runs on docs changes
+
+#### `.github/workflows/publish-pages.yaml`
+- Deploys documentation to GitHub Pages
+- Runs on main branch
+
+#### `.github/workflows/release.yaml`
+- Builds release binaries via a reusable workflow
+- Publishes to GitHub Releases
+- Triggered by push to `main` or manually via `workflow_dispatch`
+
+### Agentic Workflows
+
+KSail uses AI-powered workflows for continuous improvement:
+
+- **`daily-test-improver.md`** — Adds unit tests
+- **`daily-perf-improver.md`** — Adds benchmarks
+- **`daily-refactor.md`** — Refactors code
+- **`daily-progress.md`** — Implements roadmap features
+- **`daily-backlog-burner.md`** — Tackles backlog issues
+- **`daily-workflow-optimizer.md`** — Optimizes CI workflows
+
+These run on schedules and can be triggered manually via `gh aw` commands.
+
+## Release Process
+
+Releases are automated via `.goreleaser.yaml` and `.github/workflows/release.yaml`:
+
+1. **Prepare a release PR targeting `main`:**
+   - Bump the version in code/docs as needed (e.g. `v5.x.x`)
+   - Update changelog / release notes in the repository
+   - Open a pull request against `main` and get it reviewed/merged
+
+2. **When the PR is merged and changes land on `main`, the release workflow runs:**
+   - Triggered by the push to `main` (or manually via `workflow_dispatch` by maintainers)
+   - Builds binaries for all platforms/architectures
+   - Generates checksums
+   - Creates a GitHub Release with artifacts
+   - Publishes the VSCode extension to the marketplace
+
+3. **Optional tagging (for maintainers):**
+   - Create and push an annotated tag matching the release version, for example:
+     ````bash
+     git tag v5.x.x
+     git push origin v5.x.x
+     ````
+
+4. **Manual steps:**
+   - Update release notes on GitHub if needed
+
+## Getting Help
+
+- **Discussions:** [github.com/devantler-tech/ksail/discussions](https://github.com/devantler-tech/ksail/discussions)
+- **Issues:** [github.com/devantler-tech/ksail/issues](https://github.com/devantler-tech/ksail/issues)
+- **Documentation:** [ksail.devantler.tech](https://ksail.devantler.tech)
+- **Contributing Guide:** [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md)
+
+## Code Review Guidelines
+
+When reviewing or submitting PRs:
+
+### For Authors
+
+- Keep PRs focused on a single concern
+- Write clear commit messages
+- Add tests for new functionality
+- Update documentation
+- Respond to review comments promptly
+- Squash commits before merge (or allow maintainer to)
+
+### For Reviewers
+
+- Be respectful and constructive
+- Focus on code, not person
+- Explain reasoning for suggestions
+- Approve when changes look good
+- Request changes if issues exist
+- Ask questions if unclear
+
+### Review Checklist
+
+- [ ] Code follows style guidelines
+- [ ] Tests added and passing
+- [ ] Documentation updated
+- [ ] No unnecessary changes (formatting, whitespace)
+- [ ] Commit messages are clear
+- [ ] CI checks pass
+- [ ] No security issues
+- [ ] Performance considerations addressed
+
+## Additional Resources
+
+- [Architecture Guide](/architecture/) — Understand KSail's design
+- [Concepts](/concepts/) — High-level concepts
+- [Configuration](/configuration/) — Configuration reference
+- [Go Documentation](https://go.dev/doc/) — Go language reference
+- [Effective Go](https://go.dev/doc/effective_go) — Go best practices

@@ -64,6 +64,7 @@ __MACOSX/
 
 # Go test coverage reports
 coverage*.txt
+*-coverage.txt
 coverage*.out
 coverage*.html
 
@@ -99,3 +100,6 @@ bin/
 # actionlint binary
 actionlint
 /ksail
+
+# Copilot CLI bundler artifacts (generated at build time)
+zcopilot_*

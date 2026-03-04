@@ -262,7 +262,89 @@ func (m *Model) tryFinalizeResponse() (tea.Model, tea.Cmd) {
 	// Auto-save session after each completed turn
 	_ = m.saveCurrentSession()
 
+	// Check for pending prompts and process them automatically
+	if m.hasPendingPrompts() {
+		return m.processNextPendingPrompt()
+	}
+
 	return m, nil
+}
+
+// processNextPendingPrompt processes the next pending prompt in the queue.
+// Steering prompts are processed first, followed by queued prompts in FIFO order.
+// The prompt is only removed from the queue after successful setup to avoid data loss.
+func (m *Model) processNextPendingPrompt() (tea.Model, tea.Cmd) {
+	prompt := m.peekNextPendingPrompt()
+	if prompt == nil {
+		return m, nil
+	}
+
+	err := m.applyMode(prompt.chatMode)
+	if err != nil {
+		m.err = err
+
+		return m, nil
+	}
+
+	// Switch model with session recreation if needed.
+	// Compare against user-selected model (sessionConfig.Model), not server-resolved.
+	// NOTE: switchModel updates m.session internally; streamResponseCmd below
+	// relies on m.session being the newly created session after a switch.
+	selectedModel := m.getSelectedModel()
+	if prompt.model != selectedModel {
+		switchErr := m.switchModel(prompt.model)
+		if switchErr != nil {
+			// Model switch failed - leave prompt in queue for retry
+			return m, nil
+		}
+	}
+
+	// Restore reasoning effort with session recreation if needed.
+	// Reasoning effort changes only take effect after recreating the session.
+	// NOTE: switchReasoningEffort also updates m.session internally.
+	currentEffort := m.getReasoningEffort()
+	if prompt.reasoningEffort != currentEffort && m.sessionConfig != nil {
+		switchErr := m.switchReasoningEffort(prompt.reasoningEffort)
+		if switchErr != nil {
+			// Reasoning effort switch failed - leave prompt in queue for retry
+			return m, nil
+		}
+	}
+
+	// Setup succeeded - now commit all state changes and remove the prompt from the queue
+	m.chatMode = prompt.chatMode
+	m.dropNextPendingPrompt()
+
+	// Prepare new turn state.
+	// NOTE: prepareForNewTurn calls drainEventChannel, which is safe even though
+	// cleanup() (called by tryFinalizeResponse and switchModel/switchReasoningEffort)
+	// already drained the channel. drainEventChannel is idempotent — draining an
+	// empty channel is a no-op. The subsequent waitForEvent() call starts a fresh
+	// listener on the same channel, so no events needed by the new session are lost.
+	m.prepareForNewTurn()
+
+	// Add to prompt history for Up/Down arrow recall
+	m.addToPromptHistory(prompt.content)
+
+	// Add user message to history
+	m.messages = append(m.messages, message{
+		role:     roleUser,
+		content:  prompt.content,
+		chatMode: prompt.chatMode,
+	})
+
+	// Add empty assistant message for streaming
+	m.messages = append(m.messages, message{
+		role:        roleAssistant,
+		content:     "",
+		isStreaming: true,
+	})
+
+	// Update viewport to show the new messages
+	m.updateViewportContent()
+
+	// Send the prompt and start listening for events
+	return m, tea.Batch(m.spinner.Tick, m.streamResponseCmd(prompt.content), m.waitForEvent())
 }
 
 // handleTurnEnd handles assistant turn end events (AssistantTurnEnd).
@@ -314,6 +396,8 @@ func (m *Model) handleAbort() (tea.Model, tea.Cmd) {
 
 	m.updateViewportContent()
 
+	// Don't auto-process pending prompts after abort.
+	// Pending prompts, if any, remain queued and require explicit user action to process.
 	return m, nil
 }
 
@@ -348,7 +432,8 @@ func (m *Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
 
 	m.updateViewportContent()
 
-	// Don't wait for more events - response is complete (with error)
+	// Don't wait for more events - response is complete (with error).
+	// Pending prompts, if any, remain queued and require explicit user action to process.
 	return m, nil
 }
 

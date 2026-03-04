@@ -83,7 +83,7 @@ func BenchmarkCluster_MarshalYAML(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				_, err := scenario.cluster.MarshalYAML()
 				if err != nil {
 					b.Fatalf("MarshalYAML failed: %v", err)
@@ -129,7 +129,7 @@ func BenchmarkCluster_MarshalJSON(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				_, err := scenario.cluster.MarshalJSON()
 				if err != nil {
 					b.Fatalf("MarshalJSON failed: %v", err)
@@ -173,7 +173,7 @@ func BenchmarkYAMLEncode(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				_, err := yaml.Marshal(&scenario.cluster)
 				if err != nil {
 					b.Fatalf("yaml.Marshal failed: %v", err)
@@ -201,7 +201,7 @@ func BenchmarkJSONEncode(b *testing.B) {
 
 	b.ReportAllocs()
 
-	for range b.N {
+	for b.Loop() {
 		_, err := json.Marshal(&cluster)
 		if err != nil {
 			b.Fatalf("json.Marshal failed: %v", err)
@@ -278,7 +278,7 @@ func BenchmarkPruneClusterDefaults(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				_ = v1alpha1.PruneClusterDefaultsForTest(scenario.cluster)
 			}
 		})

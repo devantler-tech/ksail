@@ -131,6 +131,38 @@ func (m *Model) renderInputOrModal() string {
 	return m.styles.input.Width(max(m.width-modalPadding, 1)).Render(m.textarea.View())
 }
 
+// renderExitConfirmModal renders the exit confirmation modal.
+func (m *Model) renderExitConfirmModal() string {
+	modalWidth := max(m.width/exitModalWidthDivisor, 1)
+	mStyles := newModalContentStyles(modalWidth)
+
+	var content strings.Builder
+
+	content.WriteString(
+		mStyles.clipStyle.Render(mStyles.warningStyle.Render("Exit KSail chat?")) + "\n\n",
+	)
+
+	if count := m.pendingPromptCount(); count > 0 {
+		content.WriteString(mStyles.clipStyle.Render(
+			fmt.Sprintf("You have %d pending prompt(s) that will be lost.", count),
+		) + "\n\n")
+	} else {
+		content.WriteString(mStyles.clipStyle.Render("Unsent input will be lost.") + "\n\n")
+	}
+
+	content.WriteString(mStyles.clipStyle.Render("Y to exit, N to cancel"))
+
+	modalStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.ANSIColor(ansiYellow)).
+		PaddingLeft(1).
+		PaddingRight(1).
+		Width(modalWidth).
+		Height(exitConfirmLines)
+
+	return modalStyle.Render(content.String())
+}
+
 // renderFooter renders the help text (left) and quota snapshot (right) on a single line.
 // Help text is always prioritised — quota is placed in remaining space and clipped if needed.
 func (m *Model) renderFooter() string {
