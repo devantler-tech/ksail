@@ -234,21 +234,19 @@ To decide which deep-mode phase to perform:
 
 3. Exit this entire workflow.
 
-### Deep Phase 2 - Build Steps and Optimization Guides
+### Deep Phase 2 - Build Steps
 
 1. Check for open PR titled "${{ github.workflow }} - Updates to complete configuration". If exists, comment and exit.
 
 2. Create `.github/actions/daily-workflow-maintenance/build-steps/action.yml` with validation commands.
 
-3. Create 1-3 CI/CD optimization guides in `.github/instructions/`.
+3. Create PR with title "${{ github.workflow }} - Updates to complete configuration".
 
-4. Create PR with title "${{ github.workflow }} - Updates to complete configuration". Exit workflow.
+4. Test build steps manually. If fixes needed, update the PR branch.
 
-5. Test build steps manually. If fixes needed, update the PR branch.
+5. Add brief comment to the discussion stating progress.
 
-6. Add brief comment to the discussion stating progress.
-
-7. Exit this entire workflow.
+6. Exit this entire workflow.
 
 ### Deep Phase 3 - Optimization Implementation
 
@@ -259,7 +257,7 @@ To decide which deep-mode phase to perform:
    c. Check for existing optimization PRs (especially yours with "${{ github.workflow }}" prefix). Avoid duplicate work.
    d. If plan needs updating, comment on discussion with revised plan.
    e. Select a CI/CD optimization goal. Prefer small, incremental changes.
-   f. Read appropriate optimization guide(s) in `.github/instructions/`.
+   f. Review `.github/copilot-instructions.md` for guidance on CI/CD optimization strategies.
 
 2. **Work towards your selected goal**.
 
@@ -301,7 +299,7 @@ To decide which deep-mode phase to perform:
    - **Validation:** Workflow syntax is valid, no functional changes
    - **Future work:** Additional optimization opportunities identified
 
-   b. If failed or lessons learned, update relevant optimization guide in `.github/instructions/`.
+   b. If failed or lessons learned, add a comment to the planning discussion with your insights.
 
 5. **Final update**: Add brief comment to the discussion stating goal worked on, PR links, and progress made.
 

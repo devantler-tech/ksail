@@ -755,7 +755,7 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		m.unsubscribe = unsubscribe
 		m.unsubscribeMu.Unlock()
 
-		// In plan or ask mode, prefix the prompt with mode-specific instructions
+		// In plan mode, prefix the prompt with mode-specific instructions
 		prompt := userMessage
 
 		switch chatMode {
