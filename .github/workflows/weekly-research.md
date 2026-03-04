@@ -1,10 +1,10 @@
 ---
 description: |
-  This workflow performs research that provides industry insights and competitive analysis.
-  Reviews recent code, issues, PRs, industry news, and trends to create comprehensive
-  research reports. Covers related products, research papers, market opportunities,
-  business analysis, and new ideas. Creates GitHub discussions with findings to inform
-  strategic decision-making.
+  This workflow performs thorough market research and competitive analysis for KSail.
+  Deeply understands KSail's current capabilities, then researches competitors, industry
+  trends, and emerging opportunities. Maintains a single living roadmap discussion with
+  a "Now / Next / Later" structure that enhances KSail's existing strengths rather than
+  proposing radical changes.
 
 on:
   bots:
@@ -12,7 +12,6 @@ on:
 
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
-    # Every week, Monday (fuzzy scheduling to distribute load)
     - cron: "weekly on monday"
   workflow_dispatch:
 
@@ -25,39 +24,131 @@ safe-outputs:
   create-discussion:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
+    close-older-discussions: true
+    max: 1
 
 tools:
   github:
     toolsets: [all]
   web-fetch:
+  bash: true
 
-timeout-minutes: 15
-source: githubnext/agentics/workflows/weekly-research.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
+timeout-minutes: 30
 ---
 
 # Weekly Research
 
 ## Job Description
 
-Do a deep research investigation in ${{ github.repository }} repository, and the related industry in general.
+You are a strategic research analyst for `${{ github.repository }}`. Your mission: thoroughly research the local Kubernetes development tool market and produce an actionable feature roadmap that enhances KSail's current capabilities.
 
-- Read selections of the latest code, issues and PRs for this repo.
-- Read latest trends and news from the software industry news source on the Web.
+**Critical constraint:** The roadmap must enhance and extend KSail's existing feature set — never propose radical pivots or fundamental architecture changes. Prioritize improvements that align with what KSail already does well.
 
-Create a new GitHub discussion with title starting with "${{ github.workflow }}" containing a markdown report with
+## Step 1 — Understand KSail
 
-- Interesting news about the area related to this software project.
-- Related products and competitive analysis
-- Related research papers
-- New ideas
-- Market opportunities
-- Business analysis
-- Enjoyable anecdotes
+Before any external research, deeply understand KSail's current state:
 
-Only a new discussion should be created, no existing discussions should be adjusted.
+1. Read `README.md`, `.github/copilot-instructions.md`, and key documentation in `docs/` to understand:
+   - What KSail does today (supported distributions, providers, features)
+   - Its architecture (provider/provisioner model, embedded tools, GitOps support)
+   - Its target audience and value proposition
 
-At the end of the report list write a collapsed section with the following:
+2. Read all open issues to understand:
+   - Known gaps and feature requests from users
+   - Bugs and pain points
+   - What's already planned or in progress
 
-- All search queries (web, issues, pulls, content) you used
-- All bash commands you executed
-- All MCP tools you used
+3. Read recent merged PRs (last 2 weeks) to understand:
+   - Current development momentum and direction
+   - Recently completed features
+
+4. Summarize KSail's current strengths, weaknesses, and active development areas. This summary anchors all subsequent research.
+
+## Step 2 — Market & Competitor Analysis
+
+Research the local Kubernetes development tool landscape:
+
+1. Search the web for tools that compete with or complement KSail. Look for:
+   - Local Kubernetes development tools (e.g. Tilt, Skaffold, DevSpace, Telepresence, Garden, Gefyra, ctlptl)
+   - GitOps development tools
+   - Kubernetes cluster management CLIs
+   - Developer experience platforms for Kubernetes
+
+2. For each relevant tool discovered, analyze:
+   - **Feature comparison**: What does it do that KSail doesn't? What does KSail do that it doesn't?
+   - **Differentiators**: What makes each tool unique?
+   - **Community signals**: GitHub stars, recent commit activity, adoption trends
+   - **Pricing/licensing model**: Open source, freemium, commercial?
+
+3. Focus on features that would **complement KSail's existing strengths** — not features that would require KSail to become a different product.
+
+## Step 3 — Industry Trends & Opportunities
+
+Research trends relevant to KSail's domain:
+
+1. Search for recent news and developments in:
+   - Kubernetes developer experience and local development
+   - CNCF landscape changes and new projects
+   - GitOps tooling evolution (Flux, ArgoCD ecosystem)
+   - Container runtime and networking innovations
+   - AI-assisted Kubernetes operations and development
+   - WebAssembly (Wasm) on Kubernetes
+   - eBPF-based tooling for observability and networking
+
+2. Evaluate each trend for relevance to KSail:
+   - Does it enhance something KSail already does?
+   - Would KSail users benefit from it?
+   - Is it mature enough to adopt or still experimental?
+
+## Step 4 — Actionable Roadmap
+
+Synthesize findings into a structured roadmap using the **Now / Next / Later** format:
+
+### Now (enhance current features, align with open issues)
+Items that directly improve what KSail already does. These should:
+- Address existing open issues or known pain points
+- Improve existing distributions, providers, or workflows
+- Have clear implementation paths within the current architecture
+- Deliver immediate value to current users
+
+### Next (natural extensions of current capabilities)
+Items that extend KSail into adjacent areas. These should:
+- Build on existing architecture without major rework
+- Add capabilities users would naturally expect
+- Have proven demand (competitor features, community requests)
+
+### Later (exploratory, worth watching)
+Items that are interesting but speculative. These should:
+- Be tracked for future consideration
+- Require significant research or ecosystem maturity before adoption
+- Represent emerging trends that may become relevant
+
+**For each roadmap item include:**
+- A clear, specific description of the feature or improvement
+- Rationale tied to market analysis, competitor gaps, or user demand
+- Relevant open issues (if any) that align with this item
+- Estimated complexity (small / medium / large)
+
+## Discussion Format
+
+Create a discussion with title "${{ github.workflow }} - Roadmap" containing:
+
+1. **Executive Summary** — Key findings in 3-5 bullet points
+2. **KSail Current State** — Brief summary from Step 1
+3. **Competitor Landscape** — Comparison table and analysis from Step 2
+4. **Industry Trends** — Relevant trends from Step 3
+5. **Roadmap: Now / Next / Later** — The actionable roadmap from Step 4
+
+If a previous "${{ github.workflow }}" discussion exists, archive its content in a collapsed "Previous Research" section at the bottom of the new discussion.
+
+**Include a "How to Control this Workflow" section:**
+
+    gh aw disable weekly-research --repo ${{ github.repository }}
+    gh aw enable weekly-research --repo ${{ github.repository }}
+    gh aw run weekly-research --repo ${{ github.repository }}
+    gh aw logs weekly-research --repo ${{ github.repository }}
+
+At the end, write a collapsed "Research Methodology" section listing:
+- All search queries (web, issues, pulls, content) used
+- All bash commands executed
+- All tools used

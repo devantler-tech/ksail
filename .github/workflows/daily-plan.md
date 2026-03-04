@@ -1,10 +1,11 @@
 ---
 description: |
-  This workflow performs strategic project planning by maintaining and updating the project roadmap.
-  Analyzes repository state including open issues, PRs, and completed work to formulate
-  a comprehensive project plan. Creates or updates a planning discussion with prioritized
-  tasks, dependencies, and suggested new issues (via gh commands but doesn't create them).
-  Incorporates maintainer feedback from comments on the plan.
+  This workflow triages new issues and creates/maintains backlog issues based on the
+  weekly research roadmap. It first triages any untriaged issues (labeling, spam detection,
+  analysis) without altering their original intent, then reads the roadmap discussion,
+  analyzes open issues and recent PRs, identifies gaps, and creates actionable backlog
+  issues using devantler-tech issue templates. Strictly deduplicates to never create
+  duplicate work.
 
 on:
   bots:
@@ -14,7 +15,6 @@ on:
   schedule:
     - cron: "0 10 * * *"
   workflow_dispatch:
-  stop-after: +1mo # workflow will no longer trigger after 1 month. Remove this and recompile to run indefinitely
 
 permissions: read-all
 
@@ -22,14 +22,14 @@ network: defaults
 
 safe-outputs:
   noop: false
-  create-discussion: # needed to create the project plan discussion
-    title-prefix: "${{ github.workflow }}"
-    category: "agentic-workflows"
-    close-older-discussions: true
-    max: 3
+  create-issue:
+    labels: [backlog, ai-generated]
+    max: 5
+  add-labels:
+    max: 5
   add-comment:
-    target: "*" # can add a comment to any issue or PR
-    max: 3
+    target: "*"
+    max: 10
 
 tools:
   github:
@@ -37,30 +37,178 @@ tools:
   web-fetch:
   bash: true
 
-timeout-minutes: 15
-source: githubnext/agentics/workflows/daily-plan.md@212e871f0e4527153d3643a8216dc64043eb89dd
+timeout-minutes: 20
 ---
 
 # Daily Plan
 
 ## Job Description
 
-Your job is to act as a planner for the GitHub repository ${{ github.repository }}.
+You are a project planner and issue triage assistant for `${{ github.repository }}`. Your mission has two parts:
 
-1. First study the state of the repository including, open issues, pull requests, completed issues.
+1. **Triage**: Enrich any newly created or reopened issues with labels and analysis — without ever altering their original title, body, or intent.
+2. **Plan**: Translate the weekly research roadmap into actionable backlog issues, ensuring the issue tracker accurately reflects the project's priorities. Never create duplicate work.
 
-   1a. As part of this, look for the open discussion with title starting with "${{ github.workflow }}", which is the existing project plan. Read the plan, and any comments on the plan. If no such discussion exists, ignore this step.
+## Step 1 — Gather Context
 
-   1b. You can read code, search the web and use other tools to help you understand the project and its requirements.
+1. **Read the roadmap**: Search for the most recent open discussion with title starting with "Weekly Research" using `list_discussions`. Read it carefully — this is your primary source of what features and improvements to plan for.
 
-2. Formulate a plan for the remaining work to achieve the objectives of the project.
+2. **Read all open issues**: List and read all open issues. Understand:
+   - What work is already tracked
+   - Current labels, priorities, and assignees
+   - Which roadmap items already have corresponding issues
 
-   2a. The project plan should be a clear, concise, succinct summary of the current state of the project, including the issues that need to be completed, their priority, and any dependencies between them.
+3. **Read recent activity**: Check the last 48 hours of merged PRs and closed issues to understand what was just completed and what's actively being worked on.
 
-   2b. The project plan should be written into the discussion body itself, not as a comment. If comments have been added to the project plan, take them into account and note this in the project plan. Never add comments to the project plan discussion.
+4. **Read `.github/copilot-instructions.md`** for project conventions and architecture context.
 
-   2c. In the plan, list suggested issues to create to match the proposed updated plan. Don't create any issues, just list the suggestions. Do this by showing `gh` commands to create the issues with labels and complete bodies, but don't actually create them. Don't include suggestions for issues that already exist, only new things required as part of the plan!
+## Step 2 — Triage New Issues
 
-3. Create a new planning discussion with the project plan in its body.
+Process any issues opened or reopened since the last run that have NOT yet been triaged. An issue is untriaged if it has no comment starting with "🎯 Agentic Issue Triage".
 
-   3a. Create a discussion with an appropriate title starting with "${{ github.workflow }}" and the current date (e.g., "Daily Plan - 2025-10-10"), using the project plan as the body.
+For each untriaged issue:
+
+1. **Spam check**: If the issue is obviously spam, generated by a bot, or not an actual issue, add a one-sentence comment explaining why and skip further triage.
+
+2. **Fetch available labels**: Run `gh label list` to get the repository's label set.
+
+3. **Analyze the issue content**, considering:
+   - The issue title and description
+   - The type of issue (bug report, feature request, chore, question, etc.)
+   - Technical areas mentioned
+   - Severity or priority indicators
+   - User impact and components affected
+
+4. **Search for similar issues**: Use `search_issues` to find related open or closed issues. If the issue is a duplicate of another OPEN issue, consider applying a "duplicate" label.
+
+5. **Apply labels**: Use `update_issue` to apply appropriate labels from the available set. Select priority labels (high-priority, med-priority, low-priority) when urgency can be determined. Only use labels that exist in the repository. It is fine to apply no labels if none clearly fit.
+
+6. **Add a triage analysis comment** starting with "🎯 Agentic Issue Triage":
+   - Brief summary of the issue
+   - Relevant context that helps the team understand it quickly
+   - Debugging strategies or reproduction steps if applicable
+   - Links to relevant resources, docs, or code areas
+   - Sub-task breakdown as a checklist if the issue is complex
+   - Use collapsed-by-default `<details>` sections to keep the comment tidy — only the short summary at the top should be visible by default
+
+**Critical rule**: NEVER modify the issue's title or body. NEVER suggest changing the scope or intent of a manually-created issue. You are only adding labels and an analysis comment to enrich it.
+
+## Step 3 — Identify Gaps
+
+Compare the roadmap against the existing open issues (including any just-triaged manual issues):
+
+1. For each "Now" roadmap item: Does an open issue already cover this? If yes, skip it. If partially covered, note what's missing.
+
+2. For each "Next" roadmap item: Is there an issue tracking this? If not, it may be worth creating one, but prioritize "Now" items first.
+
+3. For "Later" items: Generally do NOT create issues for these — they're exploratory. Only create an issue if a "Later" item has become urgent due to new information.
+
+4. Check for manually-created issues that don't appear in the roadmap — these represent user-reported bugs or requests. Acknowledge them as tracked work and factor them into prioritization, but never alter their intent.
+
+## Step 4 — Deduplicate
+
+**This step is mandatory.** Before creating ANY issue:
+
+1. Search open issues for similar titles, keywords, and topics.
+2. Search closed issues to avoid re-opening previously resolved or rejected work.
+3. If an existing issue partially covers the same area, prefer adding a comment to that issue over creating a new one.
+
+**Never create an issue if:**
+- An open issue already covers the same work (even with a different title)
+- A closed issue was recently resolved for the same topic
+- The work is already in progress (tracked via a PR or assigned issue)
+
+## Step 5 — Create Issues
+
+For each identified gap that passes deduplication, create an issue matching the appropriate devantler-tech issue template:
+
+### Feature issues
+
+**Title format:** `[feature]: <clear imperative description>`
+
+**Body format:**
+```markdown
+## User Story
+
+**As a** [role],
+**I want** [an action or feature],
+**So that** [a reason or benefit].
+
+## Context
+
+[Why this matters — link to the roadmap discussion and any relevant competitor analysis or trend]
+
+## Approach
+
+[Suggested implementation strategy — files to modify, packages involved, patterns to follow]
+
+## Acceptance Criteria
+
+- [ ] [Specific, verifiable criterion]
+- [ ] [Tests pass, no regressions]
+```
+
+### Bug issues
+
+**Title format:** `[bug]: <clear description of the problem>`
+
+**Body format:**
+```markdown
+## Expected Behavior
+
+[Describe what should happen]
+
+## Actual Behavior
+
+[Describe what actually happens]
+
+## Steps to Replicate
+
+1. Step 1
+2. Step 2
+3. Step 3
+
+## Context
+
+[Link to the roadmap discussion or user report that surfaced this]
+```
+
+### Chore issues
+
+**Title format:** `[chore]: <clear imperative description>`
+
+**Body format:**
+```markdown
+## User Story
+
+**As a** [role],
+**I want** [an action or a task],
+**So that** [a reason or benefit].
+
+## Context
+
+[Why this matters — link to relevant roadmap or maintenance need]
+
+## Acceptance Criteria
+
+- [ ] [Specific, verifiable criterion]
+- [ ] [Tests pass, no regressions]
+```
+
+### Prioritization
+
+- Create "Now" items first (up to 3 issues)
+- Then "Next" items if capacity remains (up to 2 issues)
+- Never create more than 5 issues total per run
+
+## Step 6 — Update Existing Issues
+
+If the roadmap provides new context for existing open issues:
+
+1. Add a brief comment linking the relevant roadmap insight (e.g., "The latest weekly research identified this as a 'Now' priority because competitor X recently shipped a similar feature").
+
+2. When commenting on manually-created issues, only add roadmap context and priority information. Never suggest changing the issue's scope, intent, or original description.
+
+3. Only comment if you have genuinely new information — do not add noise.
+
+4. Maximum 5 comments per run to avoid spamming the issue tracker.
