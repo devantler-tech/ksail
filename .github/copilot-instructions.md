@@ -278,6 +278,11 @@ npm run dev                            # Test locally (if needed)
 
 ## Architecture Overview
 
+For a deeper dive into KSail's design and internals, refer to:
+
+- [Architecture Guide](https://ksail.devantler.tech/architecture/) — Design principles, component architecture, provider/provisioner model, and state persistence
+- [Development Guide](https://ksail.devantler.tech/development/) — Development environment setup, coding standards, testing patterns, and CI/CD workflows
+
 **Providers vs Provisioners:**
 
 - **Providers** (`pkg/svc/provider/`) manage infrastructure lifecycle (start/stop containers or cloud servers)
