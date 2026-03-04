@@ -348,10 +348,9 @@ For a deeper dive into KSail's design and internals, refer to:
 - **Distribution Naming**: Changed user-facing names from `Kind`/`K3d` to `Vanilla`/`K3s` to focus on the Kubernetes distribution rather than the underlying tool
 - **VSCode Extension**: Added VSCode extension for managing KSail clusters from the editor with interactive wizards and MCP server support
 - **AI Chat Integration**: Added `ksail chat` command powered by GitHub Copilot SDK for interactive cluster configuration and troubleshooting (`pkg/svc/chat/`)
-  - **Chat Modes**: Three distinct modes - Agent (`</>`), Plan (`≡`), and Ask (`?`)
+  - **Chat Modes**: Two modes - Agent (`</>`) and Plan (`≡`)
     - **Agent Mode**: Full tool execution with permission prompts for write operations
     - **Plan Mode**: No execution; AI describes steps without making changes
-    - **Ask Mode**: Read-only investigation; write tools are blocked
   - **Mode Switching**: Press Tab to cycle between modes during chat sessions
   - **TUI Implementation**: Terminal UI in `pkg/cli/ui/chat/` with keyboard shortcuts and session management
   - **Reasoning Effort**: `--reasoning-effort` flag (low, medium, high) for supported models; `^E` keybind in TUI to change effort level
