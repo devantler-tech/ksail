@@ -41,29 +41,27 @@ func newTestLogger() loftlog.Logger {
 
 // --- isTransientCreateError tests ---
 
-var transientCreateErrorTests = []struct {
-	name string
-	err  error
-	want bool
-}{
-	{"exit_status_22_is_transient", errTransient, true},
-	{"permission_denied_is_not_transient", errNonTransient, false},
-	{"dbus_error_is_not_transient", errDBus, false},
-	{"exit_status_22_in_wrapped_error", errWrapped22, true},
-	{"exit_status_1_is_not_transient", errExitStatus1, false},
-	{"registry_denied_is_transient", errRegistryDenied, true},
-	{"io_timeout_is_transient", errIOTimeout, true},
-	{"connection_reset_is_transient", errConnReset, true},
-	{"tls_handshake_timeout_is_transient", errTLSTimeout, true},
-	{"no_such_host_is_transient", errNoSuchHost, true},
-	{"dns_temporary_failure_is_transient", errDNSTransient, true},
-	{"empty_error_is_not_transient", errEmpty, false},
-}
-
 func TestIsTransientCreateError(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range transientCreateErrorTests {
+	for _, tt := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"exit_status_22_is_transient", errTransient, true},
+		{"permission_denied_is_not_transient", errNonTransient, false},
+		{"dbus_error_is_not_transient", errDBus, false},
+		{"exit_status_22_in_wrapped_error", errWrapped22, true},
+		{"exit_status_1_is_not_transient", errExitStatus1, false},
+		{"registry_denied_is_transient", errRegistryDenied, true},
+		{"io_timeout_is_transient", errIOTimeout, true},
+		{"connection_reset_is_transient", errConnReset, true},
+		{"tls_handshake_timeout_is_transient", errTLSTimeout, true},
+		{"no_such_host_is_transient", errNoSuchHost, true},
+		{"dns_temporary_failure_is_transient", errDNSTransient, true},
+		{"empty_error_is_not_transient", errEmpty, false},
+	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
