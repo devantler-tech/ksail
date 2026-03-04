@@ -158,7 +158,7 @@ This is needed to secure API endpoints before implementing user-specific feature
 
 ## Instructions
 
-Review instructions in `.github/instructions/*.instructions.md` if you need guidance.
+Review `.github/copilot-instructions.md` if you need guidance.
 
 ## Begin Planning
 

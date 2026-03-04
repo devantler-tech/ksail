@@ -124,9 +124,7 @@ To decide which phase to perform:
 
 4. Create `.github/actions/daily-code-health/coverage-steps/action.yml` with steps to build, run tests with coverage, and produce a combined coverage report uploaded as an artifact called "coverage". Each step should append its output to `coverage-steps.log` in repo root.
 
-5. Create 1-3 engineering guides in `.github/instructions/` covering both performance optimization and test coverage strategies.
-
-6. Create PR with title "${{ github.workflow }} - Updates to complete configuration" containing files from steps 3-5. Request maintainer review.
+5. Create PR with title "${{ github.workflow }} - Updates to complete configuration" containing files from steps 3-4. Request maintainer review.
 
    **Include a "What Happens Next" section in the PR description that explains:**
    - Once this PR is merged, Phase 3 will alternate between performance and test coverage improvements
@@ -135,11 +133,11 @@ To decide which phase to perform:
 
    Exit workflow.
 
-7. Test build steps and coverage steps manually. If fixes needed then update the PR branch. If unable to resolve then create issue and exit.
+6. Test build steps and coverage steps manually. If fixes needed then update the PR branch. If unable to resolve then create issue and exit.
 
-8. Add brief comment (1 or 2 sentences) to the discussion identified at the start of the workflow stating progress made and giving links to the PR created.
+7. Add brief comment (1 or 2 sentences) to the discussion identified at the start of the workflow stating progress made and giving links to the PR created.
 
-9. Exit this entire workflow, do not proceed to Phase 3 on this run.
+8. Exit this entire workflow, do not proceed to Phase 3 on this run.
 
 ## Phase 3 - Goal Selection, Work, and Results
 
@@ -159,7 +157,7 @@ To decide which phase to perform:
 
    e. If plan needs updating then comment on planning discussion with revised plan and rationale. Consider maintainer feedback.
 
-   f. Select and read the appropriate engineering guide(s) in `.github/instructions/` to help you with your work.
+   f. Review `.github/copilot-instructions.md` for guidance on performance optimization and test coverage strategies used in this codebase.
 
 2. **Work towards your selected goal**.
 
@@ -225,4 +223,4 @@ To decide which phase to perform:
 
 5. **Final update**: Add brief comment (1 or 2 sentences) to the discussion identified at the start of the workflow stating goal worked on, PR links, progress made, and any coverage/performance numbers achieved.
 
-   If failed or lessons learned, update relevant engineering guide in `.github/instructions/` with insights.
+   If failed or lessons learned, add a comment to the planning discussion with your insights.
