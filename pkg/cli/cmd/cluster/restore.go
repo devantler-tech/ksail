@@ -280,7 +280,10 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 		}
 
 		if header.Typeflag == tar.TypeDir {
-			err = os.MkdirAll(targetPath, dirPerm)
+			err = os.MkdirAll(
+				targetPath,
+				dirPerm,
+			)
 			if err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
@@ -288,7 +291,10 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 			continue
 		}
 
-		err = os.MkdirAll(filepath.Dir(targetPath), dirPerm)
+		err = os.MkdirAll(
+			filepath.Dir(targetPath),
+			dirPerm,
+		)
 		if err != nil {
 			return fmt.Errorf(
 				"failed to create parent directory: %w", err,

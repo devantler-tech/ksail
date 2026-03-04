@@ -652,7 +652,9 @@ func addFileToTar(
 		return nil
 	}
 
-	file, err := os.Open(path)
+	file, err := os.Open(
+		path,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}

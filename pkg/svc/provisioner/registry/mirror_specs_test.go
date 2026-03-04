@@ -283,7 +283,9 @@ func TestMirrorSpec_ResolveCredentials_Basic(t *testing.T) {
 	}
 }
 
-func TestMirrorSpec_ResolveCredentials_EnvVars(t *testing.T) {
+func TestMirrorSpec_ResolveCredentials_EnvVars(
+	t *testing.T,
+) {
 	// Set test environment variables
 	// Note: Cannot use t.Parallel() with t.Setenv() as it would create race conditions
 	t.Setenv("TEST_USER", "github-user")
@@ -435,7 +437,9 @@ func TestParseMirrorSpecs_MixedSpecs(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
-func TestParseMirrorSpecs_AtSignInURL(t *testing.T) {
+func TestParseMirrorSpecs_AtSignInURL(
+	t *testing.T,
+) {
 	t.Parallel()
 
 	testCases := []struct {
