@@ -56,11 +56,11 @@ go build -o ksail
 # Or: compile all packages (no binary output)
 go build ./...
 
-# For optimized builds (uses the same -ldflags as release builds):
+# For optimized builds (strips debug symbols):
 go build -ldflags="-s -w" -o ksail-optimized
 ```
 
-> **Note:** Release builds use `-ldflags="-s -w"` to strip debug symbols, which can significantly reduce binary size (in some cases by ~25–35%; see [#2095](https://github.com/devantler-tech/ksail/pull/2095) for an example benchmark where Darwin/AMD64 binaries went from 302MB → 217MB, ~28%). Actual size varies by OS/arch, Go version, and dependencies. Development builds include debug symbols for a better debugging experience.
+> **Note:** Release builds use `-ldflags="-s -w -X github.com/devantler-tech/ksail/v5/internal/buildmeta.Version=... -X .../buildmeta.Commit=... -X .../buildmeta.Date=..."` to strip debug symbols and inject version metadata, which can significantly reduce binary size (in some cases by ~25–35%; see [#2095](https://github.com/devantler-tech/ksail/pull/2095) for an example benchmark where Darwin/AMD64 binaries went from 302MB → 217MB, ~28%). Actual size varies by OS/arch, Go version, and dependencies. Development builds include debug symbols for a better debugging experience.
 
 ### Test
 
