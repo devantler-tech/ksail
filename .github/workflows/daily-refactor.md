@@ -134,11 +134,11 @@ To decide which phase to perform:
 
    Exit workflow.
 
-6. Test build steps manually. If fixes needed then update the PR branch. If unable to resolve then create issue and exit.
+5. Test build steps manually. If fixes needed then update the PR branch. If unable to resolve then create issue and exit.
 
-7. Add brief comment (1 or 2 sentences) to the discussion identified at the start of the workflow stating progress made and giving links to the PR created.
+6. Add brief comment (1 or 2 sentences) to the discussion identified at the start of the workflow stating progress made and giving links to the PR created.
 
-8. Exit this entire workflow, do not proceed to Phase 3 on this run. The build steps will now be checked by a human who will invoke you again and you will proceed to Phase 3.
+7. Exit this entire workflow, do not proceed to Phase 3 on this run. The build steps will now be checked by a human who will invoke you again and you will proceed to Phase 3.
 
 ## Phase 3 - Goal Selection, Work, and Results
 
