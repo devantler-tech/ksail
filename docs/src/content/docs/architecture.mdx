@@ -170,7 +170,7 @@ sequenceDiagram
 
 ### Example: Talos Distribution
 
-Talos demonstrates the provider/provisioner separation. The same `TalosProvisioner` (`pkg/svc/provisioner/cluster/talos/`) generates machine configs and bootstraps Kubernetes regardless of which provider is used: Docker (local containers), Hetzner (cloud servers with CCM and CSI), or Omni (Sidero API). This enables a consistent Talos experience across all environments.
+Talos demonstrates the provider/provisioner separation. The same Talos provisioner (`pkg/svc/provisioner/cluster/talos/`) generates machine configs and bootstraps Kubernetes regardless of which provider is used: Docker (local containers), Hetzner (cloud servers with CCM and CSI), or Omni (Sidero API). This enables a consistent Talos experience across all environments.
 
 ## Component Lifecycle
 
@@ -280,13 +280,13 @@ KSail provides two AI interfaces:
 
 ### Chat Assistant
 
-**Command:** `ksail chat` | **Implementation:** `pkg/svc/chat/`
+**Command:** `ksail chat` — **Implementation:** `pkg/svc/chat/`
 
 Uses GitHub Copilot SDK for interactive cluster configuration and troubleshooting. Supports three modes: **Agent** (`</>`) with full tool execution, **Plan** (`≡`) for describing steps without executing, and **Ask** (`?`) for read-only investigation. Authenticated via `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN`. See [AI Chat](/ai-chat/) for full documentation.
 
 ### MCP Server
 
-**Command:** `ksail mcp` | **Implementation:** `pkg/svc/mcp/`
+**Command:** `ksail mcp` — **Implementation:** `pkg/svc/mcp/`
 
 Exposes KSail as a Model Context Protocol server for Claude and other AI assistants. Provides tools for cluster management, workload deployment, and configuration. See [MCP](/mcp/) for setup instructions.
 
@@ -301,7 +301,7 @@ KSail uses multiple testing approaches:
 
 ### Agentic Workflows
 
-Automated AI-powered workflows run on schedules for continuous improvement: `daily-refactor`, `daily-code-health`, `daily-plan`, `daily-builder`, `daily-workflow-maintenance`, and `daily-docs`. Defined in `.github/workflows/*.md`.
+Automated AI-powered workflows run on schedules for continuous improvement: `daily-refactor`, `daily-code-health`, `daily-plan`, `daily-builder`, `daily-workflow-maintenance`, and `daily-docs`. These are Markdown-based agentic workflow definitions (not GitHub Actions YAML workflows) stored in `.github/workflows/*.md`.
 
 ## Configuration Management
 
