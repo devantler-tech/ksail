@@ -23,24 +23,24 @@ graph TB
     APIs[API Types<br/>pkg/apis]
     Services[Services<br/>pkg/svc]
     Clients[Tool Clients<br/>pkg/client]
-    
+
     CLI --> Services
     CLI --> APIs
     Services --> APIs
     Services --> Clients
-    
+
     subgraph "Infrastructure"
         Provider[Providers<br/>Docker, Hetzner, Omni]
     end
-    
+
     subgraph "Distributions"
         Provisioner["Provisioners<br/>Vanilla (Kind), K3s (K3d), Talos, VCluster"]
     end
-    
+
     subgraph "Components"
         Installer[Installers<br/>CNI, CSI, Metrics, etc.]
     end
-    
+
     Services --> Provider
     Services --> Provisioner
     Services --> Installer
@@ -158,7 +158,7 @@ sequenceDiagram
     participant CLI
     participant Provisioner
     participant Provider
-    
+
     User->>CLI: ksail cluster create
     CLI->>Provisioner: Create cluster
     Provisioner->>Provider: Create infrastructure
@@ -301,7 +301,7 @@ KSail uses multiple testing approaches:
 
 ### Agentic Workflows
 
-Automated AI-powered workflows run on schedules for continuous improvement: `daily-refactor`, `daily-code-health`, `daily-plan`, `daily-builder`, `daily-workflow-maintenance`, and `daily-docs`. These are Markdown-based agentic workflow definitions (not GitHub Actions YAML workflows) stored in `.github/workflows/*.md`.
+Automated AI-powered workflows run on schedules for continuous improvement: `daily-code-quality`, `daily-plan`, `daily-builder`, `daily-workflow-maintenance`, and `daily-docs`. These are Markdown-based agentic workflow definitions (not GitHub Actions YAML workflows) stored in `.github/workflows/*.md`.
 
 ## Configuration Management
 
