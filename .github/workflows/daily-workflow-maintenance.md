@@ -29,6 +29,9 @@ network:
 strict: false
 
 safe-outputs:
+  github-app:
+    app-id: ${{ vars.APP_ID }}
+    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   noop:
   create-discussion:
     title-prefix: "${{ github.workflow }}"
@@ -44,7 +47,7 @@ safe-outputs:
 
 steps:
   - name: Checkout repository
-    uses: actions/checkout@v4
+    uses: actions/checkout@v6.0.2
     with:
       persist-credentials: false
 
@@ -66,6 +69,9 @@ steps:
 
 tools:
   github:
+    github-app:
+      app-id: ${{ vars.APP_ID }}
+      private-key: ${{ secrets.APP_PRIVATE_KEY }}
     toolsets: [all]
   web-fetch:
   bash:
@@ -148,32 +154,42 @@ If there are compilation errors:
 
 If you **cannot fix** compilation errors, skip to "Fallback: Create Issue" below.
 
-### Phase 3: Reset Lock Files and Create Output
+### Phase 3: Reset Workflow Files and Create Output
 
-#### 3.1. Reset lock files
+#### 3.1. Save workflow source diffs for PR description
 
-**CRITICAL**: After successful compilation, reset ALL `.lock.yml` file changes. The `GITHUB_TOKEN` does not have the `workflows` permission.
+**Before resetting**, capture diffs of any modified `.github/workflows/*.md` or `.github/workflows/shared/*.md` files. These diffs will be included in the PR description so a maintainer can apply them manually after merge:
 
 ```bash
-git checkout -- .github/workflows/*.lock.yml
+git diff .github/workflows/*.md .github/workflows/shared/*.md 2>/dev/null | tee /tmp/workflow-md-diffs.patch || true
 ```
 
-#### 3.2. Check remaining changes
+#### 3.2. Reset all files under `.github/workflows/`
+
+**CRITICAL**: After capturing diffs, reset ALL file changes under `.github/workflows/`. The `GITHUB_TOKEN` does not have the `workflows` permission, which is required to push ANY file (`.lock.yml`, `.md`, or otherwise) to `.github/workflows/`. This applies to both lock files and workflow source files.
+
+```bash
+git checkout -- .github/workflows/
+```
+
+#### 3.3. Check remaining changes
 
 ```bash
 git status
 ```
 
-Only source files should remain: `.github/aw/actions-lock.json` and `.github/workflows/*.md`.
+Only non-workflow files should remain (e.g., `.github/aw/actions-lock.json`, `.github/agents/*.md`).
 
-#### 3.3. Decide what to do
+#### 3.4. Decide what to do
 
 - **If changes exist**: Create a pull request (see below) and exit the workflow
 - **If no changes remain**: Call the `noop` safe output, then proceed to **Deep Mode** below
 
-#### 3.4. Create pull request
+#### 3.5. Create pull request
 
 Use the `create-pull-request` safe-output with title `Update workflows - [date]` and include details of action version updates and gh-aw changes.
+
+If any `.github/workflows/*.md` files were modified but had to be reset, include their diffs in the PR description under a "Workflow File Updates" section so they can be applied manually.
 
 After creating the PR, **exit the workflow** — do not proceed to Deep mode.
 
@@ -305,8 +321,8 @@ To decide which deep-mode phase to perform:
 
 ## Important Guidelines
 
-- **Never include `.lock.yml` files in PRs** — always reset them
+- **Never include any `.github/workflows/` files in PRs** — the `GITHUB_TOKEN` lacks `workflows` permission, so always reset ALL changes under `.github/workflows/` (both `.lock.yml` and `.md` files) before creating a PR. Include `.md` file diffs in the PR description instead.
 - The gh-aw CLI extension has already been installed and is available
 - Always check the gh-aw changelog before making manual fixes
 - **You MUST always produce a safe output** — either `noop`, `create_pull_request`, or `create_issue`
-- If only `.lock.yml` files changed (no source changes), reset them and call `noop`
+- If only `.github/workflows/` files changed (no files outside that directory), reset them and call `noop`

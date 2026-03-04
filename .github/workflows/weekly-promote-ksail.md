@@ -1,10 +1,9 @@
 ---
 description: |
-  This workflow promotes KSail on various channels to increase project visibility
-  and adoption. It researches relevant content, identifies promotion opportunities,
-  and creates promotional content for social media, developer communities, and
-  content platforms. Creates GitHub discussions with promotional strategies and
-  ready-to-use content.
+  This workflow produces ONE finished, ready-to-share piece of promotional content
+  for KSail each week. The AI picks the best medium (Reddit, LinkedIn, or blog post)
+  based on what's genuinely interesting that week, writes a complete post, and delivers
+  it as a GitHub Discussion for human review before sharing.
 
 on:
   bots:
@@ -12,7 +11,6 @@ on:
 
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
-    # Weekly promotion, every Wednesday (fuzzy scheduling)
     - cron: "weekly on wednesday"
   workflow_dispatch:
 
@@ -21,13 +19,21 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  github-app:
+    app-id: ${{ vars.APP_ID }}
+    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   noop: false
   create-discussion:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
+    close-older-discussions: true
+    max: 1
 
 tools:
   github:
+    github-app:
+      app-id: ${{ vars.APP_ID }}
+      private-key: ${{ secrets.APP_PRIVATE_KEY }}
     toolsets: [default, discussions, search]
   web-fetch:
 
@@ -36,156 +42,91 @@ timeout-minutes: 15
 
 # Weekly Promote KSail
 
-## Job Description
+You produce **one finished piece of content** per week for KSail, a Kubernetes SDK for local GitOps development. The content must be ready to copy-paste and share without modifications.
 
-You are a developer advocate and marketing strategist for KSail, a Kubernetes SDK for local GitOps development. Your goal is to increase awareness and adoption of KSail in the cloud-native and Kubernetes communities.
+## Step 1 — Research context
 
-## Research Tasks
+Gather what's genuinely interesting about KSail right now:
 
-1. **Analyze Current Project State**:
-   - Review recent releases, features, and improvements in the repository
-   - Check README.md, documentation, and key feature highlights
-   - Identify what makes KSail unique (embedded tooling, GitOps native, simple clusters, AI assistant, VSCode extension)
-   - Review existing blog posts and presentations about KSail
+1. Read the repository README.md for current feature highlights.
+2. Check recent releases and merged PRs for new or improved features.
+3. Read the most recent Weekly Research discussion (category: `agentic-workflows`, title prefix: `Weekly Research`) for roadmap context and competitive insights.
+4. Read the previous Weekly Promote KSail discussions to see which mediums were used recently.
+5. Identify the single most compelling thing to write about this week — a new feature, a solved problem, a use case, a comparison, or a lesson learned.
 
-2. **Identify Target Audiences**:
-   - Kubernetes developers and platform engineers
-   - DevOps practitioners and SREs
-   - Cloud-native enthusiasts and early adopters
-   - Teams looking for local development solutions
-   - GitOps practitioners (Flux and ArgoCD users)
+## Step 2 — Pick the medium
 
-3. **Research Promotion Channels**:
-   - **Social Media**: X/Twitter, Mastodon, LinkedIn (cloud-native hashtags, communities)
-   - **Developer Communities**: Reddit (r/kubernetes, r/devops, r/selfhosted), Hacker News
-   - **Content Platforms**: Dev.to, Medium, Hashnode (Kubernetes tutorials, how-tos)
-   - **Community Platforms**: Kubernetes Slack, CNCF Slack, Cloud Native Computing Foundation
-   - **Video Platforms**: YouTube tutorials, conference talks
-   - **GitHub**: Awesome lists, trending repositories, topics/tags
+Choose **one** platform. Rotate naturally — avoid picking the same platform two weeks in a row (check previous discussions from Step 1).
 
-4. **Search for Opportunities**:
-   - Find recent discussions about local Kubernetes development challenges
-   - Identify posts asking about alternatives to minikube, kind, k3d
-   - Look for GitOps adoption questions and tooling discussions
-   - Find threads about Kubernetes complexity and developer experience
-   - Search for "Kubernetes local development", "GitOps tools", "Talos Linux", "K3s development"
+| Medium | Best for | Tone |
+|--------|----------|------|
+| **Reddit** (r/kubernetes, r/devops, r/selfhosted) | Sharing a practical tip, asking for feedback, announcing a milestone | Community-first, never promotional. Lead with the problem solved, not the tool name. |
+| **LinkedIn** | Professional milestones, architecture insights, lessons learned | Conversational but polished. Tell a story or share an insight. No listicle format. |
+| **Blog post** (devantler.tech) | Feature deep-dives, tutorials, comparisons | 800–1500 words. Include actual code snippets and real examples. |
 
-5. **Competitive Analysis**:
-   - Research similar tools (minikube, kind, k3d, k0s, etc.)
-   - Identify KSail's unique value propositions vs competitors
-   - Find gaps in the market that KSail addresses
+## Step 3 — Write the content
 
-## Content Creation
+Write the complete, final post. Follow these rules strictly:
 
-Create a comprehensive promotional strategy with:
+### Voice rules
 
-1. **Weekly Promotional Content** (ready-to-post):
-   - 3-5 social media posts for X/Twitter/Mastodon (280 chars, engaging, with hashtags)
-   - 2-3 LinkedIn posts (professional tone, value-focused, with relevant hashtags)
-   - 1-2 Reddit post ideas with suggested subreddits (authentic, community-focused)
-   - 1 Hacker News submission idea (if there's newsworthy content like a major release)
+- Sound like a real developer sharing their work, not a marketing department.
+- Use first person ("I", "we") naturally.
+- Include specific technical details, not generic claims.
+- No buzzword-stuffing or hype language.
+- No emoji spam (1–2 max, only where natural).
+- Never use phrases like "game-changer", "revolutionary", "excited to announce", "I'm thrilled", "incredibly powerful", "seamless", or "unlock".
+- The post must stand completely on its own — **no placeholders** like "[insert X here]" or "[add link]".
 
-2. **Content Marketing Ideas**:
-   - Blog post topics that showcase KSail features
-   - Tutorial ideas for Dev.to or Medium
-   - Comparison articles (KSail vs other tools)
-   - Use case demonstrations
+### Platform-specific rules
 
-3. **Community Engagement**:
-   - Relevant discussions to participate in (with value-add comments)
-   - Questions on forums where KSail could be a helpful answer
-   - GitHub repositories or projects that might benefit from KSail
+- **Reddit**: Match subreddit culture. Be genuinely helpful. Lead with the problem solved, not the tool. Write as a community member sharing something useful, not as a project maintainer promoting their work.
+- **LinkedIn**: Tell a story or share a concrete insight. Avoid generic motivational or listicle format. No "5 reasons why..." posts.
+- **Blog post**: Use the Starlight blog frontmatter format below. Replace every placeholder with real values — use today's date, a real title, actual tags, and a genuine excerpt. No placeholder text may remain in the final output.
 
-4. **Strategic Recommendations**:
-   - Best times and channels to share content
-   - Hashtags and keywords for maximum reach
-   - Collaboration opportunities (other CNCF projects, influencers)
-   - Conference and meetup opportunities
+  ```yaml
+  ---
+  title: "Your Title Here"
+  date: YYYY-MM-DD
+  authors:
+    - devantler
+  tags:
+    - relevant-tag
+  excerpt: "One-sentence summary."
+  ---
+  ```
 
-## Output Format
+  Write the full Markdown body after the frontmatter. Include code blocks, CLI examples, or architecture diagrams where they add value.
 
-Create a new GitHub discussion with title starting with "${{ github.workflow }}" containing:
+## Step 4 — Self-review
 
-### 📅 Week of [Date]
+Re-read everything you wrote and honestly ask:
 
-#### 🎯 Key Highlights This Week
+1. Would a real developer post this? Does it sound genuine?
+2. Is it providing value to the reader, or just advertising?
+3. Would I scroll past this in my feed? If yes, rewrite.
+4. Does it match the platform's culture and norms?
+5. Are there any placeholder phrases or generic filler?
 
-- Recent releases, features, or achievements to promote
-- Unique value propositions to emphasize
+If any answer is wrong, rewrite before outputting.
 
-#### 📱 Social Media Posts
+## Output format
 
-**X/Twitter/Mastodon** (copy-paste ready):
+Create a GitHub discussion with this structure. Replace all guidance below with concrete values — no bracketed placeholders may appear in the final discussion body.
 
-```
-[Post 1 with hashtags #Kubernetes #CloudNative #DevOps #GitOps]
-[Post 2...]
-[Post 3...]
-```
+### Platform
 
-**LinkedIn** (copy-paste ready):
+**Medium name** — One sentence explaining why this medium was chosen this week.
 
-```
-[Professional post 1 with hashtags]
-[Professional post 2...]
-```
+### The Post
 
-#### 💬 Community Engagement
+````
+The complete, copy-paste-ready content goes here inside a fenced code block so it can be copied without cleanup. For blog posts, include the full frontmatter + Markdown body.
+````
 
-**Reddit Opportunities**:
+### Posting notes
 
-- r/[subreddit]: [Post idea or discussion to engage with]
-- r/[subreddit]: [Another opportunity]
-
-**Other Communities**:
-
-- [Platform]: [Opportunity description]
-
-#### ✍️ Content Ideas
-
-- Blog post: [Title and brief outline]
-- Tutorial: [Title and key topics]
-- Comparison: [Topic]
-
-#### 🔍 Trending Topics & Opportunities
-
-- [Relevant discussions, questions, or trends found this week]
-- [Links to specific opportunities with suggested responses]
-
-#### 📊 Competitive Insights
-
-- [Notable competitor activities or market changes]
-
-#### 🎬 Video/Presentation Ideas
-
-- [Tutorial or demo ideas for YouTube/conferences]
-
-#### 🤝 Collaboration Opportunities
-
-- [Projects, influencers, or communities to engage with]
-
----
-
-### 📋 Research Methodology
-
-<details>
-<summary>Expand to see research details</summary>
-
-- **Search queries used**: [List all web searches, GitHub searches]
-- **Channels analyzed**: [Social media, communities, forums]
-- **Tools used**: [MCP tools, bash commands, web-fetch calls]
-- **Date range analyzed**: [Time period covered]
-
-</details>
-
-## Guidelines
-
-- **Be authentic**: Promote genuinely, not spammy
-- **Provide value**: Focus on solving problems, not just advertising
-- **Be community-minded**: Engage in conversations, don't just broadcast
-- **Respect community rules**: Different platforms have different norms
-- **Time-sensitive content**: Prioritize recent releases or newsworthy items
-- **Diversity**: Mix promotional posts with educational and community engagement
-- **Metrics awareness**: Suggest content that could be tracked (if possible)
-
-Only create a new discussion; do not modify existing discussions.
+- Where exactly to post (subreddit name, LinkedIn as article vs post, blog file path)
+- Best time to post if relevant
+- Any relevant hashtags for LinkedIn
+- Which subreddit flair to use if applicable

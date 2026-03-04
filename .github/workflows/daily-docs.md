@@ -32,6 +32,9 @@ network:
     - playwright
 
 safe-outputs:
+  github-app:
+    app-id: ${{ vars.APP_ID }}
+    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   noop: false
   create-pull-request:
     title-prefix: "[docs] "
@@ -44,6 +47,9 @@ safe-outputs:
 tools:
   cache-memory: true
   github:
+    github-app:
+      app-id: ${{ vars.APP_ID }}
+      private-key: ${{ secrets.APP_PRIVATE_KEY }}
     toolsets: [all]
   web-fetch:
   web-search:
