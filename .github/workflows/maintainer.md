@@ -78,8 +78,15 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
    - Re-run `gh aw compile --validate` to verify the fixes work
    - Iterate until all workflows compile successfully or you've exhausted reasonable fix attempts
 
-5. **Reset workflow files**:
-   - **CRITICAL**: After successful compilation, reset ALL file changes under `.github/workflows/`:
+5. **Save workflow source diffs**:
+   - **Before resetting**, capture diffs of any modified `.github/workflows/*.md` files so they can be included in the PR description:
+
+     ```bash
+     git diff .github/workflows/*.md .github/workflows/shared/*.md 2>/dev/null | tee /tmp/workflow-md-diffs.patch || true
+     ```
+
+6. **Reset workflow files**:
+   - **CRITICAL**: After capturing diffs, reset ALL file changes under `.github/workflows/`:
 
      ```bash
      git checkout -- .github/workflows/
@@ -93,11 +100,11 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
      git status
      ```
 
-6. **Create appropriate outputs**:
+7. **Create appropriate outputs**:
    - **If all workflows compile successfully**: Create a pull request with the title "Upgrade workflows to latest gh-aw version" containing:
      - Any updated files outside `.github/workflows/` (all workflow files must be reset)
      - A detailed description of what changed, referencing the gh-aw changelog
-     - The diffs of any `.github/workflows/*.md` changes that were reset, so they can be applied manually
+     - The saved diffs from `/tmp/workflow-md-diffs.patch` so they can be applied manually
      - A summary of any automatic fixes applied by codemods
      - A summary of any manual fixes that were needed
 

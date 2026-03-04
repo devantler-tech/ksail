@@ -150,29 +150,29 @@ If you **cannot fix** compilation errors, skip to "Fallback: Create Issue" below
 
 ### Phase 3: Reset Workflow Files and Create Output
 
-#### 3.1. Reset all files under `.github/workflows/`
+#### 3.1. Save workflow source diffs for PR description
 
-**CRITICAL**: After successful compilation, reset ALL file changes under `.github/workflows/`. The `GITHUB_TOKEN` does not have the `workflows` permission, which is required to push ANY file (`.lock.yml`, `.md`, or otherwise) to `.github/workflows/`. This applies to both lock files and workflow source files.
+**Before resetting**, capture diffs of any modified `.github/workflows/*.md` or `.github/workflows/shared/*.md` files. These diffs will be included in the PR description so a maintainer can apply them manually after merge:
+
+```bash
+git diff .github/workflows/*.md .github/workflows/shared/*.md 2>/dev/null | tee /tmp/workflow-md-diffs.patch || true
+```
+
+#### 3.2. Reset all files under `.github/workflows/`
+
+**CRITICAL**: After capturing diffs, reset ALL file changes under `.github/workflows/`. The `GITHUB_TOKEN` does not have the `workflows` permission, which is required to push ANY file (`.lock.yml`, `.md`, or otherwise) to `.github/workflows/`. This applies to both lock files and workflow source files.
 
 ```bash
 git checkout -- .github/workflows/
 ```
 
-#### 3.2. Check remaining changes
+#### 3.3. Check remaining changes
 
 ```bash
 git status
 ```
 
 Only non-workflow files should remain (e.g., `.github/aw/actions-lock.json`, `.github/agents/*.md`).
-
-#### 3.3. Save workflow source diffs for PR description
-
-Before resetting, if any `.github/workflows/*.md` or `.github/workflows/shared/*.md` files were modified, capture their diffs to include in the PR description so a maintainer can apply them manually after merge:
-
-```bash
-git diff .github/workflows/*.md .github/workflows/shared/*.md 2>/dev/null || true
-```
 
 #### 3.4. Decide what to do
 
