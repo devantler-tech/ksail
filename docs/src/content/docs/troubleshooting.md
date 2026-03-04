@@ -182,7 +182,9 @@ If pods are stuck in `ContainerCreating` with CNI errors, check CNI pods are run
 
 If `ksail cluster create` fails with `exit status 22` (EINVAL) or D-Bus errors, KSail retries automatically (3 attempts, 5s delay). Messages like `Retrying vCluster create (attempt 2/3)...` are expected — no action required.
 
-If all retries fail, check Docker resource limits and D-Bus availability. See the [VCluster Getting Started guide](/getting-started/vcluster/#troubleshooting).
+KSail automatically retries transient VCluster startup failures (such as `exit status 22`) with up to 5 attempts and a 5-second delay between attempts, cleaning up partial state and verifying Docker network removal between retries. D-Bus errors are handled via in-place recovery (the container is already running) rather than the delete-and-retry path. If you see log messages like `Retrying vCluster create (attempt 2/5)...`, this is expected behavior — no action is required.
+
+If all retries and in-place recovery still fail, check Docker resource limits and D-Bus availability on the runner. See the [VCluster Getting Started guide](/getting-started/vcluster/#troubleshooting) for detailed steps.
 
 ### kubectl Commands Fail After VCluster Creation
 

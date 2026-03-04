@@ -27,8 +27,9 @@ const defaultVClusterName = "vcluster-default"
 
 // createMaxAttempts is the number of times to retry CreateDocker for transient
 // startup failures. Exit status 22 (EINVAL) and similar infrastructure errors
-// are often transient on CI runners (GitHub Actions).
-const createMaxAttempts = 3
+// are often transient on CI runners (GitHub Actions). Five attempts handles
+// persistent-but-transient runner states where 3 attempts are insufficient.
+const createMaxAttempts = 5
 
 // createRetryDelay is the delay between CreateDocker retry attempts, giving
 // Docker and the runner time to recover from transient issues.
@@ -39,6 +40,14 @@ const createRetryDelay = 5 * time.Second
 // which is too short for CI runners. Retrying gives an effective timeout of
 // ~9 minutes (3 attempts x 3 minutes).
 const connectMaxAttempts = 3
+
+// networkRemovalTimeout is how long to wait for Docker network cleanup between
+// retry attempts. On CI runners, the network may have lingering active endpoints
+// that prevent immediate removal.
+const networkRemovalTimeout = 30 * time.Second
+
+// networkRemovalInterval is the polling interval for Docker network removal checks.
+const networkRemovalInterval = 2 * time.Second
 
 // controlPlaneContainerPrefix is the Docker container name prefix used by the
 // vCluster SDK for control plane containers.
@@ -95,6 +104,13 @@ type dbusRecoverFn func(
 	clusterName string,
 	logger loftlog.Logger,
 ) error
+
+// networkExistsFn checks whether a Docker network with the given name exists.
+type networkExistsFn func(ctx context.Context, networkName string) bool
+
+// removeNetworkFn attempts to remove a Docker network. Errors are logged
+// but not returned because network removal is best-effort during cleanup.
+type removeNetworkFn func(ctx context.Context, networkName string, logger loftlog.Logger)
 
 // errDBusTimeout is returned when D-Bus does not become available
 // within the configured timeout.
@@ -294,9 +310,11 @@ func isTransientCreateError(err error) bool {
 }
 
 // cleanupFailedCreate attempts to delete a partially-created vCluster so that
-// the next CreateDocker call starts from a clean state. Errors are logged but
-// not propagated because the subsequent retry is expected to handle any
-// remaining state.
+// the next CreateDocker call starts from a clean state. After deletion, it
+// verifies the Docker network is fully removed — lingering networks with active
+// endpoints can cause subsequent attempts to inherit broken state. Errors are
+// logged but not propagated because the subsequent retry is expected to handle
+// any remaining state.
 func cleanupFailedCreate(
 	ctx context.Context,
 	globalFlags *flags.GlobalFlags,
@@ -312,6 +330,104 @@ func cleanupFailedCreate(
 	err := cli.DeleteDocker(ctx, nil, deleteOpts, globalFlags, clusterName, logger)
 	if err != nil {
 		logger.Warnf("cleanup of failed vCluster %q before retry: %v", clusterName, err)
+	}
+
+	waitForNetworkRemoval(
+		ctx, clusterName, logger,
+		dockerNetworkExists, removeDockerNetwork,
+		networkRemovalInterval,
+	)
+}
+
+// waitForNetworkRemoval waits for the Docker network associated with the
+// vCluster to be fully removed. The vCluster SDK creates a network named
+// "vcluster.<name>" which may linger with active endpoints even after
+// DeleteDocker returns success (a known condition on CI runners).
+//
+// A timeout-scoped context bounds all Docker CLI calls so that a hanging
+// Docker daemon cannot block the cleanup step indefinitely. The pollInterval
+// controls the delay between removal attempts (use networkRemovalInterval in
+// production; tests can pass a smaller value to avoid slow test suites).
+func waitForNetworkRemoval(
+	ctx context.Context,
+	clusterName string,
+	logger loftlog.Logger,
+	networkExists networkExistsFn,
+	removeNetwork removeNetworkFn,
+	pollInterval time.Duration,
+) {
+	networkName := vclusterNetworkPrefix + clusterName
+
+	// Derive a timeout-scoped context so Docker CLI calls are strictly bounded.
+	timeoutCtx, cancel := context.WithTimeout(ctx, networkRemovalTimeout)
+	defer cancel()
+
+	if !networkExists(timeoutCtx, networkName) {
+		return
+	}
+
+	if pollInterval <= 0 {
+		pollInterval = networkRemovalInterval
+	}
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		logger.Infof("Docker network %q still exists, attempting removal...", networkName)
+		removeNetwork(timeoutCtx, networkName, logger)
+
+		// Check immediately after removal to avoid unnecessary ticker delay.
+		if !networkExists(timeoutCtx, networkName) {
+			return
+		}
+
+		select {
+		case <-timeoutCtx.Done():
+			logger.Warnf(
+				"Docker network %q still exists after %v; proceeding with retry",
+				networkName, networkRemovalTimeout,
+			)
+
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// dockerNetworkExists checks whether a Docker network with the given name
+// exists. Returns false if the network is not found or if Docker is unavailable.
+func dockerNetworkExists(ctx context.Context, networkName string) bool {
+	cmd := exec.CommandContext(ctx, "docker", "network", "inspect", networkName)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	return cmd.Run() == nil
+}
+
+// removeDockerNetwork attempts to remove a Docker network. Errors are logged
+// including the Docker CLI stderr output (e.g. "has active endpoints") so
+// operators can diagnose why the network couldn't be removed.
+func removeDockerNetwork(
+	ctx context.Context,
+	networkName string,
+	logger loftlog.Logger,
+) {
+	cmd := exec.CommandContext(ctx, "docker", "network", "rm", networkName)
+	cmd.Stdout = nil
+
+	var stderr strings.Builder
+
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		stderrMsg := strings.TrimSpace(stderr.String())
+		if stderrMsg != "" {
+			logger.Warnf("failed to remove Docker network %q: %v (%s)", networkName, err, stderrMsg)
+		} else {
+			logger.Warnf("failed to remove Docker network %q: %v", networkName, err)
+		}
 	}
 }
 
@@ -480,15 +596,8 @@ func waitForDBus(ctx context.Context, containerName string) error {
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled while waiting for D-Bus: %w", ctx.Err())
 		case <-ticker.C:
-			cmd := exec.CommandContext(
-				ctx,
-				"docker",
-				"exec",
-				containerName,
-				"test",
-				"-e",
-				"/run/dbus/system_bus_socket",
-			)
+			cmd := exec.CommandContext(ctx, "docker", "exec", containerName,
+				"test", "-e", "/run/dbus/system_bus_socket")
 
 			if cmd.Run() == nil {
 				return nil
