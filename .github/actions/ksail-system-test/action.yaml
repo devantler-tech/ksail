@@ -140,9 +140,9 @@ runs:
               endpoint: "${OMNI_ENDPOINT}"
         EOF
         else
-          # Patch existing config from init flow by updating the Omni endpoint in-place.
-          # Use yq to avoid creating duplicate top-level keys that would overwrite the
-          # existing spec (distribution, provider, etc.).
+          # Patch existing config from init flow using yq (pre-installed on
+          # ubuntu-latest runners) to set the Omni endpoint in-place without
+          # overwriting other spec fields (distribution, provider, etc.).
           echo "🔧 Patching existing Omni endpoint in ${CONFIG_FILE} with yq..."
           yq e '.spec.cluster.omni.endpoint = env(OMNI_ENDPOINT)' -i "$CONFIG_FILE"
         fi
