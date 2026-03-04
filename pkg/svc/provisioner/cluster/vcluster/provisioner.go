@@ -398,7 +398,6 @@ func waitForNetworkRemoval(
 // dockerNetworkExists checks whether a Docker network with the given name
 // exists. Returns false if the network is not found or if Docker is unavailable.
 func dockerNetworkExists(ctx context.Context, networkName string) bool {
-	//nolint:gosec // args are internally controlled.
 	cmd := exec.CommandContext(ctx, "docker", "network", "inspect", networkName)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
@@ -414,7 +413,6 @@ func removeDockerNetwork(
 	networkName string,
 	logger loftlog.Logger,
 ) {
-	//nolint:gosec // args are internally controlled.
 	cmd := exec.CommandContext(ctx, "docker", "network", "rm", networkName)
 	cmd.Stdout = nil
 
@@ -598,7 +596,7 @@ func waitForDBus(ctx context.Context, containerName string) error {
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled while waiting for D-Bus: %w", ctx.Err())
 		case <-ticker.C:
-			//nolint:gosec // args are internally controlled constants.
+
 			cmd := exec.CommandContext(ctx, "docker", "exec", containerName,
 				"test", "-e", "/run/dbus/system_bus_socket")
 

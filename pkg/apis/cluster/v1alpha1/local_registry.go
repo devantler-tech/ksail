@@ -14,7 +14,7 @@ type ParsedRegistry struct {
 	Path     string
 	Tag      string
 	Username string
-	Password string //nolint:gosec // registry auth config field
+	Password string
 }
 
 // Enabled returns true if the registry is configured (non-empty Registry string).

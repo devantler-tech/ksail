@@ -22,7 +22,7 @@ type Info struct {
 	Repository string
 	Tag        string
 	Username   string
-	Password   string //nolint:gosec // registry auth config field
+	Password   string
 	// IsExternal is true if the registry is external (e.g., ghcr.io) vs local Docker registry
 	IsExternal bool
 	// Source describes where the registry info was detected from

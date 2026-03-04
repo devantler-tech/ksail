@@ -307,7 +307,7 @@ func attemptInlineLogin(
 //  3. System PATH
 func resolveCopilotCLIPath() (string, error) {
 	if envPath := os.Getenv("COPILOT_CLI_PATH"); envPath != "" {
-		_, err := os.Stat(envPath) //nolint:gosec // G703: path from user env var COPILOT_CLI_PATH
+		_, err := os.Stat(envPath)
 		if err != nil {
 			return "", fmt.Errorf("COPILOT_CLI_PATH %q is not accessible: %w", envPath, err)
 		}

@@ -19,7 +19,7 @@ type Info struct {
 	Port     int
 	Volume   string
 	Username string // Optional: username for registry authentication (supports ${ENV_VAR} placeholders)
-	Password string //nolint:gosec // registry auth config field; supports ${ENV_VAR} placeholders
+	Password string
 }
 
 // Registry Lifecycle Management
