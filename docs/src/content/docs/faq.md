@@ -32,13 +32,7 @@ KSail targets **local development, CI/CD, and learning environments**. For produ
 
 ### Which operating systems does KSail support?
 
-KSail works on:
-
-- **Linux** (amd64, arm64)
-- **macOS** (arm64 - Apple Silicon)
-- **Windows** (WSL2 recommended, native support untested)
-
-See the [Installation Guide](/installation/) for details.
+KSail supports Linux (amd64, arm64), macOS (arm64/Apple Silicon), and Windows (WSL2 recommended). See the [Installation Guide](/installation/) for details.
 
 ### Do I need to install Docker, kubectl, helm, etc.?
 
@@ -74,29 +68,11 @@ See the [Support Matrix](/support-matrix/) for provider compatibility.
 
 ### Can I create multiple clusters?
 
-Yes! Use the `--name` flag to create multiple clusters:
-
-```bash
-ksail cluster init --name dev-cluster
-ksail cluster create
-
-ksail cluster init --name staging-cluster
-ksail cluster create
-```
-
-List all clusters with `ksail cluster list`.
+Yes. Use `ksail cluster init --name <name>` then `ksail cluster create` for each cluster. List all with `ksail cluster list`.
 
 ### How do I switch between clusters?
 
-KSail automatically configures your kubeconfig with the appropriate context. Use standard kubectl context switching:
-
-```bash
-# List contexts
-kubectl config get-contexts
-
-# Switch context
-kubectl config use-context <cluster-name>
-```
+KSail automatically configures your kubeconfig. Switch with `kubectl config use-context <cluster-name>` and list contexts with `kubectl config get-contexts`.
 
 ### Can I use my own container registry?
 
@@ -130,22 +106,11 @@ It compares the current cluster state against `ksail.yaml` and exits with `No ch
 
 ### Can I use Helm charts with KSail?
 
-Yes! KSail includes Helm v4:
-
-```bash
-ksail workload install <chart> --namespace <ns>             # Install chart
-ksail workload gen helmrelease <name> --source=oci://registry/chart  # Generate HelmRelease for GitOps
-```
+Yes. KSail includes Helm v4. Use `ksail workload install <chart> --namespace <ns>` to install a chart, or `ksail workload gen helmrelease <name> --source=oci://registry/chart` to generate a HelmRelease for GitOps.
 
 ### How do I debug failing pods?
 
-KSail wraps kubectl debugging commands:
-
-```bash
-ksail workload logs deployment/my-app            # View logs
-ksail workload describe pod/my-pod               # Describe resource
-ksail workload exec deployment/my-app -- /bin/sh # Execute in container
-```
+Use `ksail workload logs <resource>` to view logs, `ksail workload describe <resource>` to inspect resources, and `ksail workload exec <resource> -- /bin/sh` to shell into a container.
 
 ## GitOps
 
@@ -155,7 +120,7 @@ KSail supports both **Flux** and **ArgoCD**, chosen with `--gitops-engine Flux` 
 
 ### Do I need a Git repository for GitOps?
 
-Not necessarily! KSail can package manifests as OCI artifacts and push to a local registry, enabling GitOps workflows without Git (useful for local development):
+Not necessarily. KSail packages manifests as OCI artifacts and pushes to a local registry, enabling GitOps without Git (useful for local development):
 
 ```bash
 ksail cluster init --gitops-engine Flux --local-registry localhost:5050
@@ -164,9 +129,7 @@ ksail workload push      # Package and push
 ksail workload reconcile # Sync to cluster
 ```
 
-### Can I use my own Git repository?
-
-Yes! After initialization, configure your GitOps engine to point to your Git repository. KSail scaffolds the initial CRs, but you customize them to use your repository.
+To use your own Git repository, configure the GitOps engine after initialization—KSail scaffolds the initial CRs.
 
 ### Why does Flux operator installation take so long?
 
@@ -194,12 +157,7 @@ KSail includes **SOPS** for secret encryption via `ksail cipher <file>`. Support
 
 ### Are my credentials stored securely?
 
-KSail uses environment variables for sensitive data (`${VAR}` syntax in configuration). Values are expanded at runtime and never stored in config files:
-
-```bash
-export REGISTRY_TOKEN="my-secret-token"
-ksail cluster init --local-registry 'user:${REGISTRY_TOKEN}@registry.example.com'
-```
+KSail expands `${VAR}` syntax at runtime; credentials are never stored in config files. Example: `ksail cluster init --local-registry 'user:${REGISTRY_TOKEN}@registry.example.com'` (set `REGISTRY_TOKEN` before running).
 
 ## Troubleshooting
 
@@ -209,14 +167,8 @@ See the [Troubleshooting Guide](/troubleshooting/#cluster-creation-hangs) for co
 
 ### How do I clean up resources?
 
-```bash
-ksail cluster delete  # Removes containers/VMs and Kubernetes resources
-docker system prune   # Clean up dangling Docker resources
-```
+Run `ksail cluster delete` to remove containers/VMs and Kubernetes resources, then `docker system prune` for dangling Docker resources.
 
 ### Where can I get help?
 
-- **Documentation:** [ksail.devantler.tech](https://ksail.devantler.tech)
-- **Troubleshooting:** [Troubleshooting Guide](/troubleshooting/)
-- **Discussions:** [GitHub Discussions](https://github.com/devantler-tech/ksail/discussions)
-- **Issues:** [GitHub Issues](https://github.com/devantler-tech/ksail/issues)
+Visit [ksail.devantler.tech](https://ksail.devantler.tech), the [Troubleshooting Guide](/troubleshooting/), [GitHub Discussions](https://github.com/devantler-tech/ksail/discussions), or [GitHub Issues](https://github.com/devantler-tech/ksail/issues).
