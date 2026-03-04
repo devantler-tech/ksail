@@ -171,7 +171,11 @@ func executeCommand(
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext(execCtx, command, args...)
+	//nolint:gosec // G204: command comes from validated tool definitions
+	cmd := exec.CommandContext(
+		execCtx,
+		command,
+		args...)
 	cmd.Dir = opts.WorkingDirectory
 
 	// Log command execution for debugging
