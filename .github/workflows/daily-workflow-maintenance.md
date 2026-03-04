@@ -234,13 +234,13 @@ To decide which deep-mode phase to perform:
 
 3. Exit this entire workflow.
 
-### Deep Phase 2 - Build Steps and Optimization Guides
+### Deep Phase 2 - Build Steps
 
 1. Check for open PR titled "${{ github.workflow }} - Updates to complete configuration". If exists, comment and exit.
 
 2. Create `.github/actions/daily-workflow-maintenance/build-steps/action.yml` with validation commands.
 
-3. Create PR with title "${{ github.workflow }} - Updates to complete configuration". Exit workflow.
+3. Create PR with title "${{ github.workflow }} - Updates to complete configuration".
 
 4. Test build steps manually. If fixes needed, update the PR branch.
 
