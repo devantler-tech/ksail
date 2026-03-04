@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 const testKubeconfigTwoContexts = `apiVersion: v1
@@ -66,11 +67,14 @@ func TestSwitchCmd_HappyPath(t *testing.T) {
 
 	assert.Contains(t, buf.String(), "Switched to cluster 'kind-staging'")
 
-	// Verify the kubeconfig was actually updated
+	// Verify the kubeconfig was actually updated by parsing it
 	updatedBytes, err := os.ReadFile(kubeconfigPath)
 	require.NoError(t, err)
 
-	assert.Contains(t, string(updatedBytes), "current-context: kind-staging")
+	config, err := clientcmd.Load(updatedBytes)
+	require.NoError(t, err)
+
+	assert.Equal(t, "kind-staging", config.CurrentContext)
 }
 
 func TestSwitchCmd_ContextNotFound(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
@@ -145,6 +146,8 @@ func listContextNames() []string {
 	for name := range config.Contexts {
 		names = append(names, name)
 	}
+
+	sort.Strings(names)
 
 	return names
 }
