@@ -25,6 +25,7 @@ Setting up and operating Kubernetes clusters often requires juggling multiple CL
 - 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.
 - ⚙️ **Customizable Stack** — Select your CNI, CSI, policy engine, cert-manager, and mirror registries.
 - 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
+- 💾 **Backup & Restore** — Export cluster resources to a compressed archive and restore to any cluster with provenance labels.
 - 🤖 **AI Assistant** — Interactive chat powered by GitHub Copilot for configuration and troubleshooting.
 - 💻 **VSCode Extension** — Manage clusters from VSCode with wizards, sidebar views, and command palette.
 
