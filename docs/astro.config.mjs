@@ -62,6 +62,12 @@ export default defineConfig({
           ],
         },
         {
+          label: "Providers",
+          items: [
+            { label: "Omni (Sidero)", link: "/providers/omni/" },
+          ],
+        },
+        {
           label: "AI & Automation",
           items: [
             { label: "AI Chat Assistant", link: "/ai-chat/" },
