@@ -92,8 +92,8 @@ Research trends relevant to KSail's domain:
    - GitOps tooling evolution (Flux, ArgoCD ecosystem)
    - Container runtime and networking innovations
    - AI-assisted Kubernetes operations and development
-   - WebAssembly (Wasm) on Kubernetes
-   - eBPF-based tooling for observability and networking
+   - Provider/provisioner innovations for local Kubernetes clusters (kind, k3d, Talos, vcluster, Docker, Hetzner, Omni)
+   - GitOps-centric local development workflows and inner-loop tooling that can run on KSail-managed clusters
 
 2. Evaluate each trend for relevance to KSail:
    - Does it enhance something KSail already does?

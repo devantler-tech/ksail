@@ -29,7 +29,7 @@ safe-outputs:
     max: 5
   add-comment:
     target: "*"
-    max: 10
+    max: 5
 
 tools:
   github:
@@ -64,7 +64,8 @@ You are a project planner and issue triage assistant for `${{ github.repository 
 
 ## Step 2 — Triage New Issues
 
-Process any issues opened or reopened since the last run that have NOT yet been triaged. An issue is untriaged if it has no comment starting with "🎯 Agentic Issue Triage".
+Identify candidate issues by listing issues that were opened or reopened in the last 24 hours (relative to the current run time) using the GitHub tools; do not rely on a triggering event payload.
+Treat an issue as **untriaged** only if, after fetching its comments, it has no comment whose body starts with "🎯 Agentic Issue Triage". Skip any issue that already has such a comment, even if it falls within the last 24 hours.
 
 For each untriaged issue:
 
