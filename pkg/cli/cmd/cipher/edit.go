@@ -460,7 +460,7 @@ func createEditorCommand(path string) (*exec.Cmd, error) {
 
 	parts = append(parts, path)
 
-	//nolint:noctx,gosec // Interactive editor; G204,G702: editor command from user config
+	//nolint:noctx,gosec // G204: editor command comes from user-configured environment; required for interactive editing
 	return exec.Command(
 		parts[0],
 		parts[1:]...), nil
