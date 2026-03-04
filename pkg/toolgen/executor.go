@@ -171,7 +171,7 @@ func executeCommand(
 		defer cancel()
 	}
 
-	//nolint:gosec // G204: command comes from validated tool definitions
+	//nolint:gosec // G204: command is derived from Cobra CommandPath(), not user input
 	cmd := exec.CommandContext(
 		execCtx,
 		command,
