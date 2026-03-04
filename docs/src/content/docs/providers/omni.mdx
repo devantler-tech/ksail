@@ -3,8 +3,6 @@ title: Omni Provider
 description: Set up and manage Talos Linux clusters through Sidero Omni with KSail for enterprise-grade immutable infrastructure.
 ---
 
-import { Tabs, TabItem } from "@astrojs/starlight/components";
-
 The Omni provider manages Talos Linux clusters through the [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) SaaS platform. Omni handles machine lifecycle, cluster orchestration, and configuration distribution — KSail connects to the Omni API to create, manage, and tear down clusters using machines you've already registered in Omni.
 
 ## When to Use the Omni Provider
@@ -185,10 +183,10 @@ graph TB
 ### List Clusters
 
 ```bash
-ksail cluster list --all
+ksail cluster list
 ```
 
-Lists all clusters visible to your Omni account, including clusters created outside KSail.
+Lists all clusters visible to your Omni account, including clusters created outside KSail, when both `OMNI_SERVICE_ACCOUNT_KEY` and `OMNI_ENDPOINT` are set in your environment. The list command does not read `spec.cluster.omni.endpoint` from `ksail.yaml`, so `OMNI_ENDPOINT` must be configured explicitly for listing.
 
 ### Cluster Info
 
@@ -196,7 +194,7 @@ Lists all clusters visible to your Omni account, including clusters created outs
 ksail cluster info
 ```
 
-Shows node roles (control-plane / worker) and machine stages reported by Omni.
+Displays Kubernetes control-plane and core service endpoints for the current context (thin wrapper around `kubectl cluster-info`). For Omni-specific machine stages and node roles, use the Omni web UI or Omni CLI.
 
 ### Update Cluster
 
