@@ -124,6 +124,11 @@ func watchLoop(ctx context.Context, cmd *cobra.Command, dir string) error {
 }
 
 // eventLoop processes fsnotify events with debouncing.
+//
+// Applies are serialized through a single worker goroutine fed by a
+// capacity-1 channel (applyCh). Rapid file events are coalesced: if a
+// pending apply is already queued the stale entry is replaced with the
+// latest changed file before the worker consumes it.
 func eventLoop(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -136,6 +141,26 @@ func eventLoop(
 		lastFile      string
 		generation    uint64
 	)
+
+	// applyCh serializes applies.  Capacity 1 ensures at most one apply is
+	// pending at any time; coalescing replaces a queued entry with the latest.
+	applyCh := make(chan string, 1)
+
+	// Single worker: runs applies one at a time, stops when ctx is cancelled.
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case file, ok := <-applyCh:
+				if !ok {
+					return
+				}
+
+				applyAndReport(ctx, cmd, dir, file)
+			}
+		}
+	}()
 
 	defer func() {
 		mu.Lock()
@@ -191,7 +216,18 @@ func eventLoop(
 				file := lastFile
 				mu.Unlock()
 
-				applyAndReport(ctx, cmd, dir, file)
+				// Coalesce: drain any stale pending apply, then enqueue latest.
+				// NOTE: safe because the generation guard above ensures only one
+				// timer callback is active at any time (single sender).
+				select {
+				case <-applyCh:
+				default:
+				}
+
+				select {
+				case applyCh <- file:
+				default:
+				}
 			})
 			mu.Unlock()
 
@@ -220,7 +256,7 @@ func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile st
 
 	cmd.PrintErrf("[%s] change detected: %s\n", timestamp, relFile)
 
-	applyErr := runKubectlApply(cmd, dir)
+	applyErr := runKubectlApply(ctx, cmd, dir)
 
 	timestamp = time.Now().Format("15:04:05")
 
@@ -232,7 +268,9 @@ func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile st
 }
 
 // runKubectlApply executes kubectl apply -k against the watched directory.
-func runKubectlApply(cmd *cobra.Command, dir string) error {
+// The provided context is forwarded to the cobra command so that Ctrl+C
+// (which cancels ctx) also terminates an in-flight apply promptly.
+func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error {
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
 	client := kubectl.NewClient(genericiooptions.IOStreams{
 		In:     os.Stdin,
@@ -245,7 +283,7 @@ func runKubectlApply(cmd *cobra.Command, dir string) error {
 	applyCmd.SetOut(cmd.OutOrStdout())
 	applyCmd.SetErr(cmd.ErrOrStderr())
 
-	return applyCmd.Execute()
+	return applyCmd.ExecuteContext(ctx)
 }
 
 // isRelevantEvent returns true for write, create, remove, and rename events.
