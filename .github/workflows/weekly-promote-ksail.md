@@ -24,7 +24,7 @@ safe-outputs:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
     close-older-discussions: true
-    max: 4
+    max: 1
 
 tools:
   github:
@@ -76,7 +76,7 @@ Write the complete, final post. Follow these rules strictly:
 
 - **Reddit**: Match subreddit culture. Be genuinely helpful. Lead with the problem solved, not the tool. Write as a community member sharing something useful, not as a project maintainer promoting their work.
 - **LinkedIn**: Tell a story or share a concrete insight. Avoid generic motivational or listicle format. No "5 reasons why..." posts.
-- **Blog post**: Use the Starlight blog frontmatter format:
+- **Blog post**: Use the Starlight blog frontmatter format below. Replace every placeholder with real values — use today's date, a real title, actual tags, and a genuine excerpt. No placeholder text may remain in the final output.
 
   ```yaml
   ---
@@ -106,19 +106,21 @@ If any answer is wrong, rewrite before outputting.
 
 ## Output format
 
-Create a GitHub discussion with this structure:
+Create a GitHub discussion with this structure. Replace all guidance below with concrete values — no bracketed placeholders may appear in the final discussion body.
 
 ### Platform
 
-**[Medium name]** — [One sentence explaining why this medium was chosen this week.]
+**Medium name** — One sentence explaining why this medium was chosen this week.
 
 ### The Post
 
-> [The complete, copy-paste-ready content goes here in a blockquote. For blog posts, include the full frontmatter + Markdown body.]
+````
+The complete, copy-paste-ready content goes here inside a fenced code block so it can be copied without cleanup. For blog posts, include the full frontmatter + Markdown body.
+````
 
 ### Posting notes
 
-- [Where exactly to post (subreddit name, LinkedIn as article vs post, blog file path)]
-- [Best time to post if relevant]
-- [Any relevant hashtags for LinkedIn]
-- [Which subreddit flair to use if applicable]
+- Where exactly to post (subreddit name, LinkedIn as article vs post, blog file path)
+- Best time to post if relevant
+- Any relevant hashtags for LinkedIn
+- Which subreddit flair to use if applicable
