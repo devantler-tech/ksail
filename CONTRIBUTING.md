@@ -8,6 +8,11 @@ To get started with contributing to KSail, you'll need to set up your developmen
 
 To understand the codebase it is recommended to read the [.github/copilot-instructions.md](.github/copilot-instructions.md) file, which provides an overview of the project structure and key components. You can also use GitHub Copilot to assist you in navigating the codebase and understanding its functionality.
 
+For a deeper dive into KSail's design and internals, refer to:
+
+- [Architecture Guide](https://ksail.devantler.tech/architecture/) — Design principles, component architecture, provider/provisioner model, and state persistence
+- [Development Guide](https://ksail.devantler.tech/development/) — Development environment setup, coding standards, testing patterns, and CI/CD workflows
+
 ### Code Documentation
 
 For detailed package and API documentation, refer to the Go documentation at [pkg.go.dev/github.com/devantler-tech/ksail/v5](https://pkg.go.dev/github.com/devantler-tech/ksail/v5). This provides comprehensive documentation for all exported packages, types, functions, and methods.
