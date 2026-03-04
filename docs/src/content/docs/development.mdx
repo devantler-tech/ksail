@@ -198,7 +198,7 @@ func setupProvisioner(t *testing.T, wantErr bool) *mocks.MockProvisioner {
 
 func TestProvisionerCreate(t *testing.T) {
     t.Parallel()
-    
+
     tests := []struct {
         name    string
         wantErr bool
@@ -206,7 +206,7 @@ func TestProvisionerCreate(t *testing.T) {
         {name: "successful creation", wantErr: false},
         {name: "creation fails", wantErr: true},
     }
-    
+
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             t.Parallel()
@@ -275,7 +275,7 @@ func TestWithMock(t *testing.T) {
 func BenchmarkProvisionerCreate(b *testing.B) {
     p := setupProvisioner()
     ctx := context.Background()
-    
+
     for b.Loop() {  // Go 1.26+ style
         if err := p.Create(ctx); err != nil {
             b.Fatal(err)
@@ -299,7 +299,7 @@ func BenchmarkProvisionerCreate(b *testing.B) {
 type Provider interface {
     // Create provisions the infrastructure and starts nodes.
     Create(ctx context.Context) error
-    
+
     // Delete tears down the infrastructure and removes nodes.
     Delete(ctx context.Context) error
 }
@@ -411,10 +411,9 @@ KSail uses several CI workflows:
 
 ### Agentic Workflows
 
-KSail uses six AI-powered daily workflows for continuous improvement (schedules spread at 4-hour gaps, 02–22 UTC):
+KSail uses five AI-powered daily workflows for continuous improvement (schedules spread across 02–22 UTC):
 
-- **`daily-refactor.md`** — Refactors code and simplifies code complexity
-- **`daily-code-health.md`** — Improves test coverage and performance
+- **`daily-code-quality.md`** — Refactoring, performance optimization, and test coverage improvements
 - **`daily-plan.md`** — Plans upcoming work and roadmap items
 - **`daily-builder.md`** — Implements roadmap features and tackles backlog issues
 - **`daily-workflow-maintenance.md`** — Updates and optimizes CI workflows
