@@ -44,7 +44,7 @@ func newTestLogger() loftlog.Logger {
 func TestIsTransientCreateError(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range []struct {
+	for _, testCase := range []struct {
 		name string
 		err  error
 		want bool
@@ -62,11 +62,11 @@ func TestIsTransientCreateError(t *testing.T) {
 		{"dns_temporary_failure_is_transient", errDNSTransient, true},
 		{"empty_error_is_not_transient", errEmpty, false},
 	} {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := vclusterprovisioner.IsTransientCreateErrorForTest(tt.err)
-			assert.Equal(t, tt.want, got)
+			got := vclusterprovisioner.IsTransientCreateErrorForTest(testCase.err)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
