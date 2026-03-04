@@ -185,6 +185,17 @@ Commit types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`. Open a
 #### Unit Tests
 
 ````go
+func setupProvisioner(t *testing.T, wantErr bool) *mocks.MockProvisioner {
+    t.Helper()
+    m := mocks.NewMockProvisioner(t)
+    if wantErr {
+        m.On("Create", mock.Anything).Return(errors.New("create failed"))
+    } else {
+        m.On("Create", mock.Anything).Return(nil)
+    }
+    return m
+}
+
 func TestProvisionerCreate(t *testing.T) {
     t.Parallel()
     
@@ -199,7 +210,7 @@ func TestProvisionerCreate(t *testing.T) {
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             t.Parallel()
-            p := setupProvisioner(tt.wantErr)
+            p := setupProvisioner(t, tt.wantErr)
             err := p.Create(context.Background())
             if (err != nil) != tt.wantErr {
                 t.Errorf("Create() error = %v, wantErr %v", err, tt.wantErr)
@@ -393,7 +404,7 @@ VSCode users can set breakpoints and press F5 with a `.vscode/launch.json` confi
 
 KSail uses several CI workflows:
 
-- **`ci.yaml`** — Runs on every PR and push to main; builds on Linux and macOS, runs unit and system tests, uploads coverage to Codecov
+- **`ci.yaml`** — Runs on every PR and push to main; builds KSail, runs unit and system tests, uploads coverage to Codecov
 - **`test-pages.yaml`** — Validates documentation builds on docs changes
 - **`publish-pages.yaml`** — Deploys documentation to GitHub Pages on main branch pushes
 - **`release.yaml`** — Builds release binaries and publishes to GitHub Releases; triggered by push to `main` or `workflow_dispatch`
