@@ -131,8 +131,6 @@ To decide which phase to perform:
    - If running in "repeat" mode, the workflow will automatically run again to proceed to Phase 3
    - Humans can review and merge this configuration before continuing
 
-   Exit workflow.
-
 6. Test build steps and coverage steps manually. If fixes needed then update the PR branch. If unable to resolve then create issue and exit.
 
 7. Add brief comment (1 or 2 sentences) to the discussion identified at the start of the workflow stating progress made and giving links to the PR created.
