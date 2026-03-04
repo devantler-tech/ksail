@@ -180,7 +180,7 @@ If pods are stuck in `ContainerCreating` with CNI errors, check CNI pods are run
 
 ### Transient Startup Failures
 
-KSail automatically retries transient VCluster startup failures (such as `exit status 22` / EINVAL or D-Bus errors) with up to 5 attempts and a 5-second delay between attempts, cleaning up partial state and verifying Docker network removal between retries. D-Bus errors are handled via in-place recovery (the container is already running) rather than the delete-and-retry path. If you see log messages like `Retrying vCluster create (attempt 2/5)...`, this is expected behavior — no action is required.
+KSail automatically retries transient VCluster startup failures with up to 5 attempts and a 5-second delay between attempts, cleaning up partial state and verifying Docker network removal between retries. Retried errors include infrastructure failures (`exit status 22` / EINVAL), D-Bus errors (recovered in-place without a delete-and-retry), GHCR blob fetch denials, and network-level transients such as i/o timeouts, connection resets, TLS handshake timeouts, DNS lookup failures, and temporary name resolution failures. If you see log messages like `Retrying vCluster create (attempt 2/5)...`, this is expected behavior — no action is required.
 
 If all retries and in-place recovery still fail, check Docker resource limits and D-Bus availability on the runner. See the [VCluster Getting Started guide](/getting-started/vcluster/#troubleshooting) for detailed steps.
 
