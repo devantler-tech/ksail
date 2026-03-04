@@ -149,7 +149,20 @@ func eventLoop(
 		debounceTimer *time.Timer
 		mu            sync.Mutex
 		lastFile      string
+		generation    uint64
 	)
+
+	defer func() {
+		mu.Lock()
+		defer mu.Unlock()
+
+		// Increment generation so any pending timer callback becomes a no-op.
+		generation++
+
+		if debounceTimer != nil {
+			debounceTimer.Stop()
+		}
+	}()
 
 	for {
 		select {
@@ -169,11 +182,14 @@ func eventLoop(
 
 			// If a new directory was created, watch it too.
 			if event.Has(fsnotify.Create) {
-				tryAddDirectory(watcher, event.Name)
+				tryAddDirectory(watcher, event.Name, cmd)
 			}
 
 			mu.Lock()
 			lastFile = event.Name
+			generation++
+
+			currentGen := generation
 
 			if debounceTimer != nil {
 				debounceTimer.Stop()
@@ -181,10 +197,16 @@ func eventLoop(
 
 			debounceTimer = time.AfterFunc(debounceInterval, func() {
 				mu.Lock()
+				if currentGen != generation {
+					mu.Unlock()
+
+					return
+				}
+
 				file := lastFile
 				mu.Unlock()
 
-				applyAndReport(cmd, dir, file)
+				applyAndReport(ctx, cmd, dir, file)
 			})
 			mu.Unlock()
 
@@ -199,7 +221,11 @@ func eventLoop(
 }
 
 // applyAndReport runs kubectl apply and prints a timestamped status line.
-func applyAndReport(cmd *cobra.Command, dir, changedFile string) {
+func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile string) {
+	if ctx.Err() != nil {
+		return
+	}
+
 	timestamp := time.Now().Format("15:04:05")
 
 	relFile, err := filepath.Rel(dir, changedFile)
@@ -263,13 +289,15 @@ func addRecursive(watcher *fsnotify.Watcher, root string) error {
 }
 
 // tryAddDirectory attempts to add a path to the watcher if it is a directory.
-func tryAddDirectory(watcher *fsnotify.Watcher, path string) {
+func tryAddDirectory(watcher *fsnotify.Watcher, path string, cmd *cobra.Command) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return
 	}
 
 	if info.IsDir() {
-		_ = addRecursive(watcher, path)
+		if addErr := addRecursive(watcher, path); addErr != nil {
+			cmd.PrintErrf("⚠️  failed to watch new directory %s: %v\n", path, addErr)
+		}
 	}
 }
