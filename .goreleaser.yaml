@@ -19,7 +19,7 @@ builds:
     env:
       - CGO_ENABLED=0
     ldflags:
-      - -s -w
+      - -s -w -X github.com/devantler-tech/ksail/v5/internal/buildmeta.Version={{.Version}} -X github.com/devantler-tech/ksail/v5/internal/buildmeta.Commit={{.Commit}} -X github.com/devantler-tech/ksail/v5/internal/buildmeta.Date={{.Date}}
     hooks:
       pre:
         - go tool bundler --platform $GOOS/$GOARCH

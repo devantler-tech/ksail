@@ -12,8 +12,7 @@ on:
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   push:
     branches: [main]
-  schedule:
-    - cron: "0 22 * * *"
+  schedule: daily
   slash_command:
     name: unbloat
     events: [pull_request_comment]
@@ -32,9 +31,6 @@ network:
     - playwright
 
 safe-outputs:
-  github-app:
-    app-id: ${{ vars.APP_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   noop: false
   create-pull-request:
     title-prefix: "[docs] "
@@ -47,12 +43,8 @@ safe-outputs:
 tools:
   cache-memory: true
   github:
-    github-app:
-      app-id: ${{ vars.APP_ID }}
-      private-key: ${{ secrets.APP_PRIVATE_KEY }}
     toolsets: [all]
   web-fetch:
-  web-search:
   edit:
   playwright:
     args: ["--viewport-size", "1920x1080"]

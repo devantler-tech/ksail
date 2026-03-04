@@ -13,8 +13,7 @@ on:
     - "github-merge-queue[bot]"
 
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
-  schedule:
-    - cron: "0 10 * * *"
+  schedule: daily
   workflow_dispatch:
 
 permissions: read-all
@@ -22,9 +21,6 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
-  github-app:
-    app-id: ${{ vars.APP_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   noop: false
   create-issue:
     labels: [backlog, ai-generated]
@@ -37,9 +33,6 @@ safe-outputs:
 
 tools:
   github:
-    github-app:
-      app-id: ${{ vars.APP_ID }}
-      private-key: ${{ secrets.APP_PRIVATE_KEY }}
     toolsets: [all]
   web-fetch:
   bash: true

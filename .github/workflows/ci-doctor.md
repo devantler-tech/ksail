@@ -47,9 +47,6 @@ network:
 strict: false
 
 safe-outputs:
-  github-app:
-    app-id: ${{ vars.APP_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   noop:
     report-as-issue: false
   create-issue:
@@ -59,9 +56,6 @@ safe-outputs:
 
 tools:
   github:
-    github-app:
-      app-id: ${{ vars.APP_ID }}
-      private-key: ${{ secrets.APP_PRIVATE_KEY }}
     toolsets: [all]
   cache-memory: true
   web-fetch:

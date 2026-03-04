@@ -10,8 +10,7 @@ on:
     - "github-merge-queue[bot]"
 
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
-  schedule:
-    - cron: "0 14 * * *"
+  schedule: daily
   workflow_dispatch:
 
 timeout-minutes: 30
@@ -21,9 +20,6 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
-  github-app:
-    app-id: ${{ vars.APP_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   noop: false
   create-discussion:
     title-prefix: "${{ github.workflow }}"
@@ -38,9 +34,6 @@ safe-outputs:
 
 tools:
   github:
-    github-app:
-      app-id: ${{ vars.APP_ID }}
-      private-key: ${{ secrets.APP_PRIVATE_KEY }}
     toolsets: [all]
   web-fetch:
   bash: true

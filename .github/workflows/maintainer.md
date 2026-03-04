@@ -16,18 +16,12 @@ permissions: read-all
 network: defaults
 engine: copilot
 safe-outputs:
-  github-app:
-    app-id: ${{ vars.APP_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   noop: false
   create-pull-request:
   create-issue:
 
 tools:
   github:
-    github-app:
-      app-id: ${{ vars.APP_ID }}
-      private-key: ${{ secrets.APP_PRIVATE_KEY }}
     toolsets: [repos, issues, pull_requests]
   bash:
     - "*"
