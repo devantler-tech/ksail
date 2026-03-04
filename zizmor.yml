@@ -7,7 +7,6 @@ rules:
       - daily-progress.lock.yml
       - daily-qa.lock.yml
       - daily-test-improver.lock.yml
-      - issue-triage.lock.yml
       - portfolio-analyst.lock.yml
       - pr-fix.lock.yml
       - update-docs.lock.yml
@@ -20,7 +19,6 @@ rules:
       - daily-progress.lock.yml
       - daily-qa.lock.yml
       - daily-test-improver.lock.yml
-      - issue-triage.lock.yml
       - portfolio-analyst.lock.yml
       - pr-fix.lock.yml
       - update-docs.lock.yml
@@ -33,7 +31,6 @@ rules:
       - daily-progress.lock.yml
       - daily-qa.lock.yml
       - daily-test-improver.lock.yml
-      - issue-triage.lock.yml
       - portfolio-analyst.lock.yml
       - pr-fix.lock.yml
       - update-docs.lock.yml
@@ -46,7 +43,6 @@ rules:
       - daily-progress.lock.yml
       - daily-qa.lock.yml
       - daily-test-improver.lock.yml
-      - issue-triage.lock.yml
       - portfolio-analyst.lock.yml
       - pr-fix.lock.yml
       - update-docs.lock.yml
@@ -59,7 +55,6 @@ rules:
       - daily-progress.lock.yml
       - daily-qa.lock.yml
       - daily-test-improver.lock.yml
-      - issue-triage.lock.yml
       - portfolio-analyst.lock.yml
       - pr-fix.lock.yml
       - update-docs.lock.yml
@@ -73,7 +68,6 @@ rules:
       - daily-progress.lock.yml
       - daily-qa.lock.yml
       - daily-test-improver.lock.yml
-      - issue-triage.lock.yml
       - portfolio-analyst.lock.yml
       - pr-fix.lock.yml
       - update-docs.lock.yml

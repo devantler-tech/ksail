@@ -15,11 +15,7 @@ KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, fl
 
 ### Am I locked into KSail?
 
-No. KSail generates native distribution configuration files that work directly with underlying tools. Use the generated kind.yaml, k3d.yaml, Talos patches, or vcluster.yaml with their respective CLI tools at any time. You can migrate away or use both KSail and native tools interchangeably.
-
-### Can I use KSail configs with native tools?
-
-Yes! After running `ksail cluster init`, you can use the generated configuration files directly with native tools:
+No. KSail generates native configuration files you can use directly with their respective tools at any time—you can migrate away from KSail or use it alongside native tools interchangeably:
 
 ```bash
 kind create cluster --config kind.yaml          # Vanilla
@@ -30,21 +26,13 @@ vcluster create my-cluster --values vcluster.yaml  # VCluster
 
 ### Is KSail production-ready?
 
-KSail is designed for **local development, CI/CD, and learning environments**. For production Kubernetes clusters, we recommend using distribution-specific tools or managed Kubernetes services (EKS, GKE, AKS) with proper HA, backup, and security configurations.
-
-The Hetzner provider for Talos is suitable for personal homelabs and development environments, but should be evaluated carefully for production use.
+KSail targets **local development, CI/CD, and learning environments**. For production, use managed services (EKS, GKE, AKS) with proper HA and security. The Talos Hetzner provider suits personal homelabs but should be evaluated carefully for production use.
 
 ## Installation & Setup
 
 ### Which operating systems does KSail support?
 
-KSail works on:
-
-- **Linux** (amd64, arm64)
-- **macOS** (arm64 - Apple Silicon)
-- **Windows** (WSL2 recommended, native support untested)
-
-See the [Installation Guide](/installation/) for details.
+KSail supports Linux (amd64, arm64), macOS (arm64/Apple Silicon), and Windows (WSL2 recommended). See the [Installation Guide](/installation/) for details.
 
 ### Do I need to install Docker, kubectl, helm, etc.?
 
@@ -80,29 +68,11 @@ See the [Support Matrix](/support-matrix/) for provider compatibility.
 
 ### Can I create multiple clusters?
 
-Yes! Use the `--name` flag to create multiple clusters:
-
-```bash
-ksail cluster init --name dev-cluster
-ksail cluster create
-
-ksail cluster init --name staging-cluster
-ksail cluster create
-```
-
-List all clusters with `ksail cluster list`.
+Yes. Use `ksail cluster init --name <name>` then `ksail cluster create` for each cluster. List all with `ksail cluster list`.
 
 ### How do I switch between clusters?
 
-KSail automatically configures your kubeconfig with the appropriate context. Use standard kubectl context switching:
-
-```bash
-# List contexts
-kubectl config get-contexts
-
-# Switch context
-kubectl config use-context <cluster-name>
-```
+KSail automatically configures your kubeconfig. Switch with `kubectl config use-context <cluster-name>` and list contexts with `kubectl config get-contexts`.
 
 ### Can I use my own container registry?
 
@@ -126,59 +96,31 @@ Previews all detected configuration changes without applying them, including cha
 
 ### What happens when I run `ksail cluster update` with no changes?
 
-The command compares the current cluster state against your `ksail.yaml` configuration. If no differences are detected, it prints `No changes detected` and exits without applying any changes, so no cluster modifications are made. This makes `ksail cluster update` safe to run frequently or in CI/CD pipelines; it is a no-op when the cluster is already in the desired state.
+It compares the current cluster state against `ksail.yaml` and exits with `No changes detected` if nothing has changed—making it safe to run frequently in CI/CD pipelines.
 
 ## Workload Management
 
 ### What's the difference between `ksail workload apply` and `ksail workload reconcile`?
 
-- **`ksail workload apply`** - Direct kubectl-style deployment (no GitOps)
-- **`ksail workload reconcile`** - GitOps workflow (requires Flux or ArgoCD)
-
-Use `apply` for quick iteration, `reconcile` for Git-driven deployments.
+`apply` deploys directly (kubectl-style, no GitOps); `reconcile` syncs via Flux or ArgoCD for Git-driven deployments.
 
 ### Can I use Helm charts with KSail?
 
-Yes! KSail includes Helm v4 with kstatus:
-
-```bash
-# Install a Helm chart
-ksail workload install <chart> --namespace <ns>
-
-# Generate HelmRelease for GitOps
-ksail workload gen helmrelease <name> --source=oci://registry/chart
-```
+Yes. KSail includes Helm v4. Use `ksail workload install <chart> --namespace <ns>` to install a chart, or `ksail workload gen helmrelease <name> --source=oci://registry/chart` to generate a HelmRelease for GitOps.
 
 ### How do I debug failing pods?
 
-KSail wraps kubectl debugging commands:
-
-```bash
-# View logs
-ksail workload logs deployment/my-app
-
-# Describe resource
-ksail workload describe pod/my-pod
-
-# Execute in container
-ksail workload exec deployment/my-app -- /bin/sh
-```
+Use `ksail workload logs <resource>` to view logs, `ksail workload describe <resource>` to inspect resources, and `ksail workload exec <resource> -- /bin/sh` to shell into a container.
 
 ## GitOps
 
 ### Which GitOps tools does KSail support?
 
-KSail supports both **Flux** and **ArgoCD**. Choose during initialization:
-
-```bash
-ksail cluster init --gitops-engine Flux
-# or
-ksail cluster init --gitops-engine ArgoCD
-```
+KSail supports both **Flux** and **ArgoCD**, chosen with `--gitops-engine Flux` or `--gitops-engine ArgoCD` during `ksail cluster init`.
 
 ### Do I need a Git repository for GitOps?
 
-Not necessarily! KSail can package manifests as OCI artifacts and push to a local registry, enabling GitOps workflows without Git (useful for local development):
+Not necessarily. KSail packages manifests as OCI artifacts and pushes to a local registry, enabling GitOps without Git (useful for local development):
 
 ```bash
 ksail cluster init --gitops-engine Flux --local-registry localhost:5050
@@ -187,9 +129,7 @@ ksail workload push      # Package and push
 ksail workload reconcile # Sync to cluster
 ```
 
-### Can I use my own Git repository?
-
-Yes! After initialization, configure your GitOps engine to point to your Git repository. KSail scaffolds the initial CRs, but you customize them to use your repository.
+To use your own Git repository, configure the GitOps engine after initialization—KSail scaffolds the initial CRs.
 
 ### Why does Flux operator installation take so long?
 
@@ -203,59 +143,21 @@ CLI flags provide quick overrides and scripting support, while ksail.yaml offers
 
 ### Can I version control my cluster configuration?
 
-Yes! The `ksail.yaml` file is designed for Git:
-
-```bash
-# Initialize project
-ksail cluster init --distribution Vanilla --cni Cilium
-
-# Commit configuration
-git add ksail.yaml kind.yaml k8s/
-git commit -m "chore: initial cluster configuration"
-```
-
-Team members can recreate the same cluster from `ksail.yaml`.
+Yes! Commit `ksail.yaml` (and generated distribution configs like kind.yaml) to Git—team members can recreate the same cluster from it.
 
 ### How do I share configurations between environments?
 
-Use environment-specific `ksail.yaml` files:
-
-```
-myproject/
-├── ksail-dev.yaml
-├── ksail-staging.yaml
-└── ksail-prod.yaml
-```
-
-Or use environment variables with placeholders in `ksail.yaml`.
+Use environment-specific files (`ksail-dev.yaml`, `ksail-staging.yaml`, `ksail-prod.yaml`) or environment variable placeholders in a shared `ksail.yaml`.
 
 ## Security & Secrets
 
 ### How do I manage secrets with KSail?
 
-KSail includes **SOPS** for secret encryption:
-
-```bash
-# Encrypt a file
-ksail cipher encrypt secret.yaml
-
-# Decrypt a file
-ksail cipher decrypt secret.enc.yaml
-
-# Edit encrypted file
-ksail cipher edit secret.enc.yaml
-```
-
-Supports age, PGP, and cloud KMS providers. See [Secret Management](/features/#secret-management).
+KSail includes **SOPS** for secret encryption via `ksail cipher <file>`. Supports age, PGP, and cloud KMS providers. See [Secret Management](/features/#secret-management).
 
 ### Are my credentials stored securely?
 
-KSail uses environment variables for sensitive data (`${VAR}` syntax in configuration). Values are expanded at runtime and never stored in config files:
-
-```bash
-export REGISTRY_TOKEN="my-secret-token"
-ksail cluster init --local-registry 'user:${REGISTRY_TOKEN}@registry.example.com'
-```
+KSail expands `${VAR}` syntax at runtime; credentials are never stored in config files. Example: `ksail cluster init --local-registry 'user:${REGISTRY_TOKEN}@registry.example.com'` (set `REGISTRY_TOKEN` before running).
 
 ## Troubleshooting
 
@@ -265,19 +167,8 @@ See the [Troubleshooting Guide](/troubleshooting/#cluster-creation-hangs) for co
 
 ### How do I clean up resources?
 
-```bash
-# Delete a cluster (removes containers/VMs and resources)
-ksail cluster delete
-
-# Clean up Docker resources
-docker system prune
-
-# For Hetzner, deletion removes cloud resources automatically
-```
+Run `ksail cluster delete` to remove containers/VMs and Kubernetes resources, then `docker system prune` for dangling Docker resources.
 
 ### Where can I get help?
 
-- **Documentation:** [ksail.devantler.tech](https://ksail.devantler.tech)
-- **Troubleshooting:** [Troubleshooting Guide](/troubleshooting/)
-- **Discussions:** [GitHub Discussions](https://github.com/devantler-tech/ksail/discussions)
-- **Issues:** [GitHub Issues](https://github.com/devantler-tech/ksail/issues)
+Visit [ksail.devantler.tech](https://ksail.devantler.tech), the [Troubleshooting Guide](/troubleshooting/), [GitHub Discussions](https://github.com/devantler-tech/ksail/discussions), or [GitHub Issues](https://github.com/devantler-tech/ksail/issues).

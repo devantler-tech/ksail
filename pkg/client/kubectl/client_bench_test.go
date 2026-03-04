@@ -63,7 +63,7 @@ func BenchmarkCreateClient(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		benchClientSink = kubectl.NewClient(streams)
 	}
 }
@@ -76,7 +76,7 @@ func BenchmarkCreateApplyCommand(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		benchCommandSink = client.CreateApplyCommand(kubeconfig)
 	}
 }
@@ -89,7 +89,7 @@ func BenchmarkCreateGetCommand(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		benchCommandSink = client.CreateGetCommand(kubeconfig)
 	}
 }
@@ -102,7 +102,7 @@ func BenchmarkCreateDeleteCommand(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		benchCommandSink = client.CreateDeleteCommand(kubeconfig)
 	}
 }
@@ -115,7 +115,7 @@ func BenchmarkCreateDescribeCommand(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		benchCommandSink = client.CreateDescribeCommand(kubeconfig)
 	}
 }
@@ -128,7 +128,7 @@ func BenchmarkCreateLogsCommand(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		benchCommandSink = client.CreateLogsCommand(kubeconfig)
 	}
 }
@@ -141,7 +141,7 @@ func BenchmarkCreateWaitCommand(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		benchCommandSink = client.CreateWaitCommand(kubeconfig)
 	}
 }
@@ -153,7 +153,7 @@ func BenchmarkCreateNamespaceCmd(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		cmd, err := client.CreateNamespaceCmd()
 		if err != nil {
 			b.Fatalf("CreateNamespaceCmd failed: %v", err)
@@ -170,7 +170,7 @@ func BenchmarkCreateDeploymentCmd(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		cmd, err := client.CreateDeploymentCmd()
 		if err != nil {
 			b.Fatalf("CreateDeploymentCmd failed: %v", err)
@@ -187,7 +187,7 @@ func BenchmarkCreateServiceCmd(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		cmd, err := client.CreateServiceCmd()
 		if err != nil {
 			b.Fatalf("CreateServiceCmd failed: %v", err)

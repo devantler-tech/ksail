@@ -14,7 +14,7 @@ func BenchmarkChartSpec(b *testing.B) {
 	b.Run("Basic", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_ = &helm.ChartSpec{
 				ReleaseName: "test-release",
 				ChartName:   "test-chart",
@@ -26,7 +26,7 @@ func BenchmarkChartSpec(b *testing.B) {
 	b.Run("WithAllFields", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_ = &helm.ChartSpec{
 				ReleaseName:     "my-release",
 				ChartName:       "my-chart",
@@ -61,7 +61,7 @@ func BenchmarkRepositoryEntry(b *testing.B) {
 	b.Run("Basic", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_ = &helm.RepositoryEntry{
 				Name: "test-repo",
 				URL:  "https://charts.example.com",
@@ -72,7 +72,7 @@ func BenchmarkRepositoryEntry(b *testing.B) {
 	b.Run("WithAuth", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_ = &helm.RepositoryEntry{
 				Name:                  "secure-repo",
 				URL:                   "https://charts.secure.com",
@@ -93,7 +93,7 @@ func BenchmarkReleaseInfo(b *testing.B) {
 
 	b.ReportAllocs()
 
-	for range b.N {
+	for b.Loop() {
 		_ = &helm.ReleaseInfo{
 			Name:       "my-release",
 			Namespace:  "default",
@@ -122,13 +122,12 @@ func BenchmarkMockClient(b *testing.B) {
 
 		client.EXPECT().
 			AddRepository(ctx, entry, time.Minute).
-			Return(nil).
-			Times(b.N)
+			Return(nil)
 
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_ = client.AddRepository(ctx, entry, time.Minute)
 		}
 	})
@@ -152,13 +151,12 @@ func BenchmarkMockClient(b *testing.B) {
 
 		client.EXPECT().
 			InstallOrUpgradeChart(ctx, spec).
-			Return(expectedRelease, nil).
-			Times(b.N)
+			Return(expectedRelease, nil)
 
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_, _ = client.InstallOrUpgradeChart(ctx, spec)
 		}
 	})
@@ -168,13 +166,12 @@ func BenchmarkMockClient(b *testing.B) {
 
 		client.EXPECT().
 			ReleaseExists(ctx, "test-release", "default").
-			Return(true, nil).
-			Times(b.N)
+			Return(true, nil)
 
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_, _ = client.ReleaseExists(ctx, "test-release", "default")
 		}
 	})
@@ -184,13 +181,12 @@ func BenchmarkMockClient(b *testing.B) {
 
 		client.EXPECT().
 			UninstallRelease(ctx, "test-release", "default").
-			Return(nil).
-			Times(b.N)
+			Return(nil)
 
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_ = client.UninstallRelease(ctx, "test-release", "default")
 		}
 	})
@@ -215,13 +211,12 @@ spec:
 
 		client.EXPECT().
 			TemplateChart(ctx, spec).
-			Return(expectedOutput, nil).
-			Times(b.N)
+			Return(expectedOutput, nil)
 
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_, _ = client.TemplateChart(ctx, spec)
 		}
 	})
@@ -245,13 +240,12 @@ spec:
 
 		client.EXPECT().
 			InstallChart(ctx, spec).
-			Return(expectedRelease, nil).
-			Times(b.N)
+			Return(expectedRelease, nil)
 
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for range b.N {
+		for b.Loop() {
 			_, _ = client.InstallChart(ctx, spec)
 		}
 	})
@@ -330,7 +324,7 @@ persistence:
 
 	b.ReportAllocs()
 
-	for range b.N {
+	for b.Loop() {
 		_ = &helm.ChartSpec{
 			ReleaseName:     "large-release",
 			ChartName:       "bitnami/nginx",

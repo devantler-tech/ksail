@@ -22,7 +22,7 @@ func BenchmarkGetDockerClient(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		benchAPIClientSink, errBench = docker.GetDockerClient()
 		if errBench != nil {
 			b.Fatalf("GetDockerClient failed: %v", errBench)
@@ -36,7 +36,7 @@ func BenchmarkGetConcreteDockerClient(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		benchConcreteClientSink, errBench = docker.GetConcreteDockerClient()
 		if errBench != nil {
 			b.Fatalf("GetConcreteDockerClient failed: %v", errBench)

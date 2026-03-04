@@ -28,6 +28,7 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      source: ${{ steps.filter.outputs.source }}
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
       vsce: ${{ steps.filter.outputs.vsce }}
@@ -46,6 +47,12 @@ jobs:
           filters: |
             code:
               - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/actions/**'
+            source:
+              - '**/*.go'
+              - '!**/*_test.go'
               - 'go.mod'
               - 'go.sum'
               - '.github/actions/**'
@@ -84,7 +91,7 @@ jobs:
 
       - name: ⚙️ Setup Go
         id: setup-go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
 
@@ -101,23 +108,15 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
     permissions:
-      contents: write
+      contents: read
     steps:
-      - name: 🔑 Generate GitHub App Token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
-        id: generate-token
-        with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          persist-credentials: true
-          token: ${{ steps.generate-token.outputs.token }}
+          persist-credentials: false
 
       - name: ⚙️ Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
 
@@ -127,14 +126,21 @@ jobs:
           go mod tidy
           echo "✅ Module dependencies synced"
 
-      - name: 📤 Commit and push module changes
-        if: github.event_name != 'merge_group'
-        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+      - name: 📤 Upload patch
+        run: |
+          git add -N .
+          git diff > /tmp/sync-modules.patch
+          if [ -s /tmp/sync-modules.patch ]; then
+            echo "Changes detected"
+          else
+            echo "No changes"
+          fi
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
-          commit_message: "chore: sync Go module dependencies"
-          commit_user_name: module-sync-bot
-          commit_user_email: module-sync-bot@users.noreply.github.com
-          file_pattern: "go.mod go.sum"
+          name: sync-modules-patch
+          path: /tmp/sync-modules.patch
+          if-no-files-found: ignore
+          retention-days: 1
 
   generate-schema:
     name: 📝 Generate JSON Schema
@@ -142,36 +148,36 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.schema == 'true'
     permissions:
-      contents: write
+      contents: read
     steps:
-      - name: 🔑 Generate GitHub App Token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
-        id: generate-token
-        with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          persist-credentials: true
-          token: ${{ steps.generate-token.outputs.token }}
+          persist-credentials: false
 
       - name: ⚙️ Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
 
       - name: 📝 Generate JSON schema
         run: go generate ./schemas/...
 
-      - name: 📤 Commit and push schema changes
-        if: github.event_name != 'merge_group'
-        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+      - name: 📤 Upload patch
+        run: |
+          git add -N .
+          git diff > /tmp/generate-schema.patch
+          if [ -s /tmp/generate-schema.patch ]; then
+            echo "Changes detected"
+          else
+            echo "No changes"
+          fi
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
-          commit_message: "chore: update generated JSON schema"
-          commit_user_name: generator-bot
-          commit_user_email: generator-bot@users.noreply.github.com
+          name: generate-schema-patch
+          path: /tmp/generate-schema.patch
+          if-no-files-found: ignore
+          retention-days: 1
 
   generate-docs:
     name: 📚 Generate Reference Docs
@@ -179,10 +185,52 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.cli == 'true'
     permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+
+      - name: 📚 Generate reference documentation
+        run: go generate ./docs/...
+
+      - name: 📤 Upload patch
+        run: |
+          git add -N .
+          git diff > /tmp/generate-docs.patch
+          if [ -s /tmp/generate-docs.patch ]; then
+            echo "Changes detected"
+          else
+            echo "No changes"
+          fi
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: generate-docs-patch
+          path: /tmp/generate-docs.patch
+          if-no-files-found: ignore
+          retention-days: 1
+
+  auto-commit:
+    name: 📤 Auto-Commit Generated Changes
+    runs-on: ubuntu-latest
+    needs: [changes, sync-modules, generate-schema, generate-docs]
+    if: >-
+      always()
+      && github.event_name != 'merge_group'
+      && (needs.sync-modules.result == 'success'
+        || needs.generate-schema.result == 'success'
+        || needs.generate-docs.result == 'success')
+    permissions:
       contents: write
     steps:
       - name: 🔑 Generate GitHub App Token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        uses: actions/create-github-app-token@bf559f85448f9380bcfa2899dbdc01eb5b37be3a # v3.0.0-beta.2
         id: generate-token
         with:
           app-id: ${{ vars.APP_ID }}
@@ -194,19 +242,53 @@ jobs:
           persist-credentials: true
           token: ${{ steps.generate-token.outputs.token }}
 
-      - name: ⚙️ Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+      - name: 📥 Download patches
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
-          go-version-file: go.mod
+          pattern: "*-patch"
+          merge-multiple: true
+          path: /tmp/patches
 
-      - name: 📚 Generate reference documentation
-        run: go generate ./docs/...
+      - name: 📋 Apply patches
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
 
-      - name: 📤 Commit and push generated docs
-        if: github.event_name != 'merge_group'
+          for patch in /tmp/patches/*.patch; do
+            if [ -s "$patch" ]; then
+              patch_name="$(basename "$patch")"
+              echo "Applying ${patch_name}..."
+
+              if git apply --3way "$patch"; then
+                echo "Applied ${patch_name} with 3-way merge."
+              else
+                echo "3-way apply failed for ${patch_name}; falling back to direct apply with rejects..." >&2
+
+                if git apply --reject "$patch"; then
+                  echo "Applied ${patch_name} with rejects."
+                  rej_files=$(find . -name '*.rej' 2>/dev/null || true)
+                  if [ -n "$rej_files" ]; then
+                    echo "::error::Reject files found after applying ${patch_name}:"
+                    echo "${rej_files}"
+                    git status --short || true
+                    echo "Failing job to avoid committing partially-applied patches." >&2
+                    exit 1
+                  fi
+                else
+                  echo "::error::Failed to apply patch ${patch_name}. See diagnostics above." >&2
+                  git status --short || true
+                  exit 1
+                fi
+              fi
+            else
+              echo "Skipping empty patch $(basename "$patch")"
+            fi
+          done
+
+      - name: 📤 Commit and push generated changes
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
         with:
-          commit_message: "chore: update generated reference docs"
+          commit_message: "chore: sync modules and update generated files"
           commit_user_name: generator-bot
           commit_user_email: generator-bot@users.noreply.github.com
 
@@ -228,7 +310,7 @@ jobs:
           persist-credentials: false
 
       - name: ⚙️ Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
 
@@ -324,7 +406,7 @@ jobs:
 
       - name: 📤 Upload VSIX artifact
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # 6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: ksail-vsix
           path: ksail.vsix
@@ -334,7 +416,7 @@ jobs:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: github.event_name == 'merge_group' && needs.changes.outputs.code == 'true'
+    if: github.event_name == 'merge_group' && needs.changes.outputs.source == 'true'
     permissions:
       contents: read
     outputs:
@@ -347,7 +429,7 @@ jobs:
 
       - name: ⚙️ Setup Go
         id: setup-go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
 
@@ -357,6 +439,7 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
+          save: "false"
 
       - name: 🔥 Warm Helm chart cache
         id: warm
@@ -366,7 +449,7 @@ jobs:
     name: 🔥 Warm Mirror Cache
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: github.event_name == 'merge_group' && needs.changes.outputs.code == 'true'
+    if: github.event_name == 'merge_group' && needs.changes.outputs.source == 'true'
     permissions:
       contents: read
     outputs:
@@ -379,7 +462,7 @@ jobs:
 
       - name: ⚙️ Setup Go
         id: setup-go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
 
@@ -389,6 +472,7 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
+          save: "false"
 
       - name: 🔥 Warm mirror cache
         id: warm
@@ -399,7 +483,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
-    if: github.event_name == 'merge_group' && needs.changes.outputs.code == 'true'
+    if: github.event_name == 'merge_group' && needs.changes.outputs.source == 'true'
     permissions:
       contents: read
       packages: write
@@ -451,9 +535,10 @@ jobs:
 
       - name: ⚙️ Setup Go
         id: setup-go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: 📦 Cache KSail Binary
         uses: ./.github/actions/cache-ksail-binary
@@ -461,6 +546,7 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
+          save: "false"
 
       - name: 🧪 Run KSail System Test
         uses: ./.github/actions/ksail-system-test
@@ -497,7 +583,7 @@ jobs:
   rate-limit-check:
     name: 📊 Rate Limit Status
     runs-on: ubuntu-latest
-    if: always()
+    if: github.event_name == 'merge_group'
     permissions:
       contents: read
     steps:
@@ -535,6 +621,7 @@ jobs:
         sync-modules,
         generate-schema,
         generate-docs,
+        auto-commit,
         coverage,
         warm-helm-cache,
         system-test,
@@ -557,6 +644,7 @@ jobs:
             ${{ needs.sync-modules.result }}
             ${{ needs.generate-schema.result }}
             ${{ needs.generate-docs.result }}
+            ${{ needs.auto-commit.result }}
             ${{ needs.coverage.result }}
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.system-test.result }}

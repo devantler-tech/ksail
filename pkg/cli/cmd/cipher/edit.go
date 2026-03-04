@@ -460,8 +460,10 @@ func createEditorCommand(path string) (*exec.Cmd, error) {
 
 	parts = append(parts, path)
 
-	//nolint:noctx // Interactive editor session doesn't benefit from context
-	return exec.Command(parts[0], parts[1:]...), nil // #nosec G204
+	//nolint:noctx,gosec // G204: editor command comes from user-configured environment; required for interactive editing
+	return exec.Command(
+		parts[0],
+		parts[1:]...), nil
 }
 
 // parseEditorCommand parses the editor command string.

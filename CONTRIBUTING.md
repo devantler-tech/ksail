@@ -8,6 +8,11 @@ To get started with contributing to KSail, you'll need to set up your developmen
 
 To understand the codebase it is recommended to read the [.github/copilot-instructions.md](.github/copilot-instructions.md) file, which provides an overview of the project structure and key components. You can also use GitHub Copilot to assist you in navigating the codebase and understanding its functionality.
 
+For a deeper dive into KSail's design and internals, refer to:
+
+- [Architecture Guide](https://ksail.devantler.tech/architecture/) — Design principles, component architecture, provider/provisioner model, and state persistence
+- [Development Guide](https://ksail.devantler.tech/development/) — Development environment setup, coding standards, testing patterns, and CI/CD workflows
+
 ### Code Documentation
 
 For detailed package and API documentation, refer to the Go documentation at [pkg.go.dev/github.com/devantler-tech/ksail/v5](https://pkg.go.dev/github.com/devantler-tech/ksail/v5). This provides comprehensive documentation for all exported packages, types, functions, and methods.
@@ -253,26 +258,18 @@ To test the Omni provider locally, you need:
 
 KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a schedule or on dispatch:
 
-| Workflow                   | Schedule              | Purpose                                                        |
-|----------------------------|-----------------------|----------------------------------------------------------------|
-| `daily-refactor`           | Daily                 | Incremental code refactoring for maintainability               |
-| `daily-perf-improver`      | Daily                 | Performance optimization                                       |
-| `daily-test-improver`      | Daily                 | Test coverage improvements                                     |
-| `daily-workflow-optimizer` | Daily                 | CI/CD workflow optimization (both `.yaml` and `.md` workflows) |
-| `daily-code-simplifier`    | Daily                 | Code simplification and readability                            |
-| `daily-backlog-burner`     | Daily                 | Backlog issue resolution                                       |
-| `daily-plan`               | Daily                 | Strategic project planning and roadmap maintenance             |
-| `daily-progress`           | Daily                 | Feature delivery from the project plan                         |
-| `daily-workflow-updater`   | Daily                 | GitHub Actions version updates and workflow source upgrades    |
-| `weekly-research`          | Weekly                | Industry insights and competitive analysis                     |
-| `weekly-promote-ksail`     | Weekly                | Project promotion and visibility                               |
-| `ci-doctor`                | On CI failure         | CI failure investigation and diagnostics                       |
-| `issue-triage`             | On issue open/reopen  | Issue labeling, spam detection, and analysis                   |
-| `pr-fix`                   | On `/pr-fix` command  | On-demand PR failure fixes                                     |
-| `plan`                     | On `/plan` command    | Project plan and task breakdown generation                     |
-| `update-docs`              | On push to `main`     | Documentation synchronization with code changes                |
-| `unbloat-docs`             | Daily / On `/unbloat` | Documentation simplification and verbosity reduction           |
-| `maintainer`               | Every 3 days          | Repository maintenance and housekeeping                        |
+| Workflow                     | Schedule                                    | Purpose                                                               |
+|------------------------------|---------------------------------------------|-----------------------------------------------------------------------|
+| `daily-code-quality`         | Daily (02:00 UTC)                           | Refactoring, performance optimization, and test coverage improvements |
+| `daily-plan`                 | Daily (10:00 UTC)                           | Issue triage, backlog issue creation, and prioritization from the roadmap     |
+| `daily-builder`              | Daily (14:00 UTC)                           | Backlog issue resolution and feature delivery from the project plan   |
+| `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, and dependency upgrades         |
+| `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes and bloat reduction              |
+| `weekly-research`            | Weekly                                      | Market research and actionable feature roadmap                        |
+| `weekly-promote-ksail`       | Weekly                                      | Project promotion and visibility                                      |
+| `ci-doctor`                  | On CI failure                               | CI failure investigation and diagnostics                              |
+| `pr-fix`                     | On `/pr-fix` command                        | On-demand PR failure fixes                                            |
+| `maintainer`                 | Every 3 days                                | Repository maintenance and housekeeping                               |
 
 Each agentic workflow creates a GitHub Discussion to coordinate its work and, depending on its purpose, may open draft PRs or create issues with incremental improvements. You can control them using the [`gh aw`](https://github.com/github/gh-aw) CLI extension:
 
@@ -281,10 +278,10 @@ Each agentic workflow creates a GitHub Discussion to coordinate its work and, de
 gh ext install github/gh-aw
 
 # Manage a specific workflow
-gh aw disable daily-workflow-optimizer --repo devantler-tech/ksail
-gh aw enable daily-workflow-optimizer --repo devantler-tech/ksail
-gh aw run daily-workflow-optimizer --repo devantler-tech/ksail
-gh aw logs daily-workflow-optimizer --repo devantler-tech/ksail
+gh aw disable daily-workflow-maintenance --repo devantler-tech/ksail
+gh aw enable daily-workflow-maintenance --repo devantler-tech/ksail
+gh aw run daily-workflow-maintenance --repo devantler-tech/ksail
+gh aw logs daily-workflow-maintenance --repo devantler-tech/ksail
 ```
 
 ## CD

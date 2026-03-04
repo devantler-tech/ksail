@@ -28,6 +28,11 @@ var (
 	errRegistryDenied = errors.New(
 		"reading blob sha256:abc: fetching blob: denied: denied",
 	)
+	errIOTimeout    = errors.New("dial tcp 1.2.3.4:443: i/o timeout")
+	errConnReset    = errors.New("read tcp 10.0.0.1:54321->1.2.3.4:443: connection reset by peer")
+	errTLSTimeout   = errors.New("net/http: TLS handshake timeout")
+	errNoSuchHost   = errors.New("dial tcp: lookup ghcr.io: no such host")
+	errDNSTransient = errors.New("dial tcp: lookup ghcr.io: temporary failure in name resolution")
 )
 
 func newTestLogger() loftlog.Logger {
@@ -39,54 +44,29 @@ func newTestLogger() loftlog.Logger {
 func TestIsTransientCreateError(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	for _, testCase := range []struct {
 		name string
 		err  error
 		want bool
 	}{
-		{
-			name: "exit_status_22_is_transient",
-			err:  errTransient,
-			want: true,
-		},
-		{
-			name: "permission_denied_is_not_transient",
-			err:  errNonTransient,
-			want: false,
-		},
-		{
-			name: "dbus_error_is_not_transient",
-			err:  errDBus,
-			want: false,
-		},
-		{
-			name: "exit_status_22_in_wrapped_error",
-			err:  errWrapped22,
-			want: true,
-		},
-		{
-			name: "exit_status_1_is_not_transient",
-			err:  errExitStatus1,
-			want: false,
-		},
-		{
-			name: "registry_denied_is_transient",
-			err:  errRegistryDenied,
-			want: true,
-		},
-		{
-			name: "empty_error_is_not_transient",
-			err:  errEmpty,
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		{"exit_status_22_is_transient", errTransient, true},
+		{"permission_denied_is_not_transient", errNonTransient, false},
+		{"dbus_error_is_not_transient", errDBus, false},
+		{"exit_status_22_in_wrapped_error", errWrapped22, true},
+		{"exit_status_1_is_not_transient", errExitStatus1, false},
+		{"registry_denied_is_transient", errRegistryDenied, true},
+		{"io_timeout_is_transient", errIOTimeout, true},
+		{"connection_reset_is_transient", errConnReset, true},
+		{"tls_handshake_timeout_is_transient", errTLSTimeout, true},
+		{"no_such_host_is_transient", errNoSuchHost, true},
+		{"dns_temporary_failure_is_transient", errDNSTransient, true},
+		{"empty_error_is_not_transient", errEmpty, false},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := vclusterprovisioner.IsTransientCreateErrorForTest(tt.err)
-			assert.Equal(t, tt.want, got)
+			got := vclusterprovisioner.IsTransientCreateErrorForTest(testCase.err)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
@@ -196,10 +176,10 @@ func TestCreateWithRetry_TransientErrorExhaustsAttempts(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to create vCluster after 3 attempts")
+	require.ErrorContains(t, err, "failed to create vCluster after 5 attempts")
 	require.ErrorIs(t, err, errTransient)
-	assert.Equal(t, 3, createCalls, "create should be called maxAttempts times")
-	assert.Equal(t, 2, cleanupCalls, "cleanup should be called before retries 2 and 3")
+	assert.Equal(t, 5, createCalls, "create should be called maxAttempts times")
+	assert.Equal(t, 4, cleanupCalls, "cleanup should be called before retries 2 through 5")
 }
 
 func TestCreateWithRetry_NonTransientErrorFailsImmediately(t *testing.T) {
@@ -372,4 +352,120 @@ func TestCreateWithRetry_CleanupErrorDoesNotPropagate(t *testing.T) {
 
 	require.NoError(t, err, "cleanup errors should not prevent successful retry")
 	assert.Equal(t, 2, createCalls)
+}
+
+// --- waitForNetworkRemoval tests ---
+
+func TestWaitForNetworkRemoval_NetworkAlreadyGone(t *testing.T) {
+	t.Parallel()
+
+	existsCalls := 0
+	networkExists := func(_ context.Context, _ string) bool {
+		existsCalls++
+
+		return false
+	}
+
+	removeNetwork := func(_ context.Context, _ string, _ loftlog.Logger) {
+		t.Error("removeNetwork should not be called when network does not exist")
+	}
+
+	vclusterprovisioner.WaitForNetworkRemovalForTest(
+		context.Background(),
+		"test-cluster",
+		newTestLogger(),
+		networkExists,
+		removeNetwork,
+		vclusterprovisioner.TestPollInterval,
+	)
+
+	assert.Equal(t, 1, existsCalls, "should check existence once and return immediately")
+}
+
+func TestWaitForNetworkRemoval_RemovedImmediately(t *testing.T) {
+	t.Parallel()
+
+	existsCalls := 0
+	networkExists := func(_ context.Context, _ string) bool {
+		existsCalls++
+
+		// First call: network exists; second call (after rm): gone.
+		return existsCalls <= 1
+	}
+
+	removeCalls := 0
+	removeNetwork := func(_ context.Context, _ string, _ loftlog.Logger) {
+		removeCalls++
+	}
+
+	vclusterprovisioner.WaitForNetworkRemovalForTest(
+		context.Background(),
+		"test-cluster",
+		newTestLogger(),
+		networkExists,
+		removeNetwork,
+		vclusterprovisioner.TestPollInterval,
+	)
+
+	assert.Equal(t, 2, existsCalls, "should check before and after removal")
+	assert.Equal(t, 1, removeCalls, "should attempt removal once")
+}
+
+func TestWaitForNetworkRemoval_LingeringNetworkDisappearsAfterRetries(t *testing.T) {
+	t.Parallel()
+
+	existsCalls := 0
+	networkExists := func(_ context.Context, _ string) bool {
+		existsCalls++
+
+		// Disappears on the 4th existence check (initial + 2 post-remove retries + final).
+		return existsCalls <= 3
+	}
+
+	removeCalls := 0
+	removeNetwork := func(_ context.Context, _ string, _ loftlog.Logger) {
+		removeCalls++
+	}
+
+	vclusterprovisioner.WaitForNetworkRemovalForTest(
+		context.Background(),
+		"test-cluster",
+		newTestLogger(),
+		networkExists,
+		removeNetwork,
+		vclusterprovisioner.TestPollInterval,
+	)
+
+	assert.Equal(t, 4, existsCalls, "should check until network disappears")
+	assert.Equal(t, 3, removeCalls, "should attempt removal once per loop iteration")
+}
+
+func TestWaitForNetworkRemoval_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	existsCalls := 0
+	networkExists := func(_ context.Context, _ string) bool {
+		existsCalls++
+		if existsCalls == 2 {
+			cancel()
+		}
+
+		return true // always exists
+	}
+
+	removeNetwork := func(_ context.Context, _ string, _ loftlog.Logger) {}
+
+	vclusterprovisioner.WaitForNetworkRemovalForTest(
+		ctx,
+		"test-cluster",
+		newTestLogger(),
+		networkExists,
+		removeNetwork,
+		vclusterprovisioner.TestPollInterval,
+	)
+
+	// Should exit due to context cancellation, not loop forever.
+	assert.GreaterOrEqual(t, existsCalls, 2, "should have checked existence before cancellation")
 }

@@ -45,6 +45,7 @@ export default defineConfig({
           ],
         },
         { label: "Concepts", link: "/concepts/" },
+        { label: "Architecture", link: "/architecture/" },
         { label: "Use Cases", link: "/use-cases/" },
         { label: "Support Matrix", link: "/support-matrix/" },
         {
@@ -70,6 +71,7 @@ export default defineConfig({
         {
           label: "Help",
           items: [
+            { label: "Development Guide", link: "/development/" },
             { label: "FAQ", link: "/faq/" },
             { label: "Troubleshooting", link: "/troubleshooting/" },
           ],

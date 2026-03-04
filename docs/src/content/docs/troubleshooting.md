@@ -3,8 +3,6 @@ title: Troubleshooting
 description: Common issues and solutions when using KSail
 ---
 
-This guide covers common issues you might encounter when using KSail and how to resolve them.
-
 ## Cluster Creation Issues
 
 ### Docker Connection Failed
@@ -35,80 +33,54 @@ lsof -ti:5000 | xargs kill -9
 ```
 
 ```powershell
-# Windows: find the PID, then kill it
+# Windows (PowerShell)
 netstat -ano | findstr :5000
 taskkill /PID <process-id> /F
 ```
 
 ## GitOps Workflow Issues
 
-### Registry Access Verification Failed
+### Registry Access and Image Push Failures
 
-During `ksail cluster create` and `ksail cluster update`, KSail verifies access to the configured external registry before proceeding. Transient network errors (including timeouts, HTTP 429, and 5xx responses) are automatically retried with exponential backoff (up to 3 attempts with 2s then 4s delays between attempts, each attempt using a 30s timeout).
-
-If verification consistently fails, check credentials and connectivity:
+KSail verifies registry access during `ksail cluster create`/`update` and retries transient errors (HTTP 429, 5xx, timeouts) automatically. If verification fails, or if `ksail workload push` returns authentication errors, verify the registry is reachable and credentials are configured:
 
 ```bash
-# Test registry connectivity
+# External registry: verify connectivity
 curl -I https://registry.example.com/v2/
 
-# (Optional) Manually verify credentials; KSail does not use Docker's credential store
-docker login registry.example.com
+# If using the KSail-managed local registry, verify the registry container is running
+docker ps | grep registry
 
-# Configure KSail with registry credentials via env vars (recommended to avoid leaking tokens)
-# Example:
-#   export REG_USER='your-username'
-#   export REG_TOKEN='your-access-token'
+# Example: configure KSail to use an external registry with credentials
 ksail cluster init --local-registry '${REG_USER}:${REG_TOKEN}@registry.example.com/my-org/my-repo'
 ```
 
-Common errors and causes:
+Common errors:
 
 - **"registry requires authentication"** — missing or incorrect credentials in `--local-registry`
-- **"registry access denied"** — credentials lack write permission to the repository
-- **"registry is unreachable"** — DNS resolution failure, firewall block, or registry is down
-
-### Image Push Failed
-
-If `ksail workload push` fails with authentication errors, verify the local registry is running with `docker ps | grep registry`.
-
-KSail automatically reads credentials from `~/.docker/config.json`. Authenticate once with `docker login registry.example.com` or set environment variables:
-
-```bash
-export REGISTRY_USER="myuser"
-export REGISTRY_TOKEN="mytoken"
-ksail cluster init --local-registry '${REGISTRY_USER}:${REGISTRY_TOKEN}@registry.example.com'
-```
+- **"registry access denied"** — credentials lack write permission
+- **"registry is unreachable"** — DNS resolution failure, firewall, or registry down
 
 ### Flux Operator Installation Timeout
 
 On resource-constrained systems, Flux operator CRDs can take 7-10 minutes to become established. KSail uses a 12-minute timeout to handle this automatically. If timeouts persist, check system resources with `docker stats` and ensure 4GB+ RAM is available.
 
 ```bash
-# Check Flux operator pod status
 ksail workload get pods -n flux-system
-
-# Verify CRDs are established (should show "True")
 kubectl get crd <crd-name> -o jsonpath='{.status.conditions[?(@.type=="Established")].status}'
 ```
 
 ### Flux/ArgoCD CrashLoopBackOff After Component Installation
 
-**Symptom:** After installing infrastructure components (MetalLB, Kyverno, cert-manager, etc.), Flux or ArgoCD enters `CrashLoopBackOff` with API timeout errors such as `dial tcp 10.96.0.1:443: i/o timeout`.
+Infrastructure components (MetalLB, Kyverno, cert-manager, etc.) temporarily destabilize API server connectivity while registering webhooks and CRDs, causing Flux or ArgoCD to enter `CrashLoopBackOff` with `dial tcp 10.96.0.1:443: i/o timeout` errors.
 
-**Cause:** Infrastructure components register webhooks and CRDs that can temporarily destabilize API server connectivity. If GitOps engines start installing before the API server has fully recovered, they can fail to reach the Kubernetes API.
-
-**Resolution:** KSail automatically waits for the API server to stabilize between Phase 1 (infrastructure components) and Phase 2 (GitOps engines). It requires 3 consecutive successful API server health checks within a 2-minute timeout before proceeding. No manual action is required in most cases.
-
-If the 2-minute wait expires and you see `API server not stable after infrastructure installation`, your cluster may be under excessive load. Try:
+KSail automatically waits for 3 consecutive successful health checks (2-minute timeout) before installing GitOps engines. If you see `API server not stable after infrastructure installation`:
 
 ```bash
-# Check node and pod resource pressure
 ksail workload get nodes
 ksail workload get pods -A | grep -v Running
 
-# Disable non-essential components in ksail.yaml (GitOps engine, policy engine, cert-manager, etc.),
-# then recreate the cluster with the updated configuration
+# Disable non-essential components in ksail.yaml, then recreate
 ksail cluster delete
 ksail cluster create
 ```
@@ -118,38 +90,26 @@ ksail cluster create
 If changes don't appear after `ksail workload reconcile`, check controller status and logs:
 
 ```bash
-# Check status
 ksail workload get pods -n flux-system  # Flux
 ksail workload get pods -n argocd       # ArgoCD
-
-# Check logs
 ksail workload logs -n flux-system deployment/source-controller
-
-# Force reconciliation
 ksail workload reconcile --timeout=5m
 ```
 
 ## Component Installation Issues
 
-### Transient Installation Failures (Rate Limits)
+### Transient Installation Failures
 
-Helm chart registries may return 429, 500, or 503 errors during high load. KSail automatically retries installations with exponential backoff (5 attempts, 3-30s delays). Most transient failures resolve automatically.
-
-If all retries fail, recreate the cluster or check network connectivity to registries. KSail caches Helm repository indexes in CI environments to improve reliability.
+Helm registries occasionally return 429 or 5xx errors. KSail retries automatically (5 attempts, exponential backoff). For persistent failures:
 
 ```bash
-# For persistent failures
 ksail cluster delete && ksail cluster create
-
-# Check connectivity
-docker ps && curl -I https://registry.example.com
+curl -I https://registry.example.com
 ```
 
 ### Component Installation Timeout
 
-Component installation timeouts typically result from insufficient resources, network latency, or large chart artifacts. Monitor resources with `docker stats` and test connectivity to registries with `curl -I https://ghcr.io`.
-
-For resource-constrained systems, increase Docker resource limits, skip optional components, or use the K3s distribution (lighter than Vanilla).
+Timeouts typically result from insufficient resources, network latency, or large chart artifacts. Monitor with `docker stats` and `curl -I https://ghcr.io`. On resource-constrained systems, increase Docker limits, skip optional components, or use K3s.
 
 ## Configuration Issues
 
@@ -180,7 +140,6 @@ If disabled, re-initialize: `ksail cluster init --name my-cluster --load-balance
 If connection fails despite having an external IP, verify pods are running (`kubectl get pods -l app=my-app`), check service endpoints (`kubectl get endpoints my-app`), and ensure the application listens on `0.0.0.0`, not `127.0.0.1`.
 
 ```bash
-# Check logs and port configuration
 kubectl logs -l app=my-app
 kubectl describe svc my-app
 kubectl exec -it <pod-name> -- netstat -tlnp
@@ -221,17 +180,13 @@ If pods are stuck in `ContainerCreating` with CNI errors, check CNI pods are run
 
 ### Transient Startup Failures
 
-**Symptom:** `ksail cluster create` fails with `exit status 22` (EINVAL) or similar D-Bus errors on CI runners.
+KSail automatically retries transient VCluster startup failures with up to 5 attempts and a 5-second delay between attempts, cleaning up partial state and verifying Docker network removal between retries. Retried errors include infrastructure failures (`exit status 22` / EINVAL), D-Bus errors (recovered in-place without a delete-and-retry), GHCR blob fetch denials, and network-level transients such as i/o timeouts, connection resets, TLS handshake timeouts, DNS lookup failures, and temporary name resolution failures. If you see log messages like `Retrying vCluster create (attempt 2/5)...`, this is expected behavior — no action is required.
 
-KSail automatically retries transient VCluster startup failures with up to 3 attempts and a 5-second delay between attempts, cleaning up partial state between retries. If you see log messages like `Retrying vCluster create (attempt 2/3)...`, this is expected behavior — no action is required.
-
-If all retries fail, check Docker resource limits and D-Bus availability on the runner. See the [VCluster Getting Started guide](/getting-started/vcluster/#troubleshooting) for detailed steps.
+If all retries and in-place recovery still fail, check Docker resource limits and D-Bus availability on the runner. See the [VCluster Getting Started guide](/getting-started/vcluster/#troubleshooting) for detailed steps.
 
 ### kubectl Commands Fail After VCluster Creation
 
-**Symptom:** `kubectl get nodes` returns connection errors immediately after creating a VCluster.
-
-VCluster control planes can take a moment to become fully ready. Wait a few seconds and retry, or check that the kubeconfig context is set correctly:
+If `kubectl get nodes` returns connection errors immediately after creating a VCluster, wait a few seconds and retry. VCluster control planes take a moment to become fully ready. Verify the kubeconfig context is correct:
 
 ```bash
 kubectl config current-context

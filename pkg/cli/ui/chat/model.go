@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	copilot "github.com/github/copilot-sdk/go"
+	"github.com/github/copilot-sdk/go/rpc"
 )
 
 const (
@@ -40,12 +41,6 @@ const (
 
 
 `
-	askModePrefix = `[ASK MODE] You are in read-only investigation mode. ` +
-		`Use available read-only tools to research and gather information, then provide a thorough answer. ` +
-		`Do NOT execute any tools that create, modify, or delete resources:
-
-
-`
 )
 
 // ChatMode represents the chat interaction mode.
@@ -56,8 +51,6 @@ const (
 	AgentMode ChatMode = iota
 	// PlanMode blocks all tool execution; the model describes what it would do.
 	PlanMode
-	// AskMode allows read-only tool execution; write tools are blocked.
-	AskMode
 )
 
 // String returns a human-readable label for the chat mode.
@@ -67,8 +60,6 @@ func (m ChatMode) String() string {
 		return "agent"
 	case PlanMode:
 		return "plan"
-	case AskMode:
-		return "ask"
 	default:
 		return "agent"
 	}
@@ -81,8 +72,6 @@ func (m ChatMode) Icon() string {
 		return "</>"
 	case PlanMode:
 		return "\u2261" // ≡
-	case AskMode:
-		return "?"
 	default:
 		return "</>"
 	}
@@ -93,17 +82,27 @@ func (m ChatMode) Label() string {
 	return m.Icon() + " " + m.String()
 }
 
-// Next cycles to the next chat mode: Agent -> Plan -> Ask -> Agent.
+// Next cycles to the next chat mode: Agent -> Plan -> Agent.
 func (m ChatMode) Next() ChatMode {
 	switch m {
 	case AgentMode:
 		return PlanMode
 	case PlanMode:
-		return AskMode
-	case AskMode:
 		return AgentMode
 	default:
 		return AgentMode
+	}
+}
+
+// ToSDKMode maps the KSail chat mode to the corresponding Copilot SDK RPC mode.
+func (m ChatMode) ToSDKMode() rpc.Mode {
+	switch m {
+	case PlanMode:
+		return rpc.Plan
+	case AgentMode:
+		return rpc.Interactive
+	default:
+		return rpc.Interactive
 	}
 }
 
@@ -197,6 +196,17 @@ type permissionResponse struct {
 	allowed  bool
 }
 
+// pendingPrompt represents a prompt that has been queued but not yet sent.
+// It captures the full state at the time of queuing so that mode changes
+// after queuing don't affect the prompt's execution.
+type pendingPrompt struct {
+	content         string   // the prompt text
+	chatMode        ChatMode // agent/plan mode when queued
+	model           string   // model ID when queued
+	reasoningEffort string   // reasoning effort when queued (if applicable)
+	seq             uint64   // insertion sequence number for global ordering
+}
+
 // Model is the Bubbletea model for the chat TUI.
 type Model struct {
 	// Components
@@ -215,6 +225,7 @@ type Model struct {
 	userScrolled                 bool   // true when user has scrolled away from bottom (pause auto-scroll)
 	err                          error
 	quitting                     bool
+	confirmExit                  bool
 	ready                        bool
 
 	// Configuration
@@ -306,6 +317,11 @@ type Model struct {
 	yoloMode    bool         // true = auto-approve, false = prompt for confirmation
 	yoloModeRef *YoloModeRef // shared reference for tool handlers to check YOLO state
 
+	// Prompt queuing and steering
+	queuedPrompts   []pendingPrompt // FIFO queue for prompts to process after current turn
+	steeringPrompts []pendingPrompt // steering prompts to inject when session becomes idle
+	promptSeq       uint64          // monotonic counter for pending prompt insertion order
+
 	// Channel for async streaming events from Copilot
 	eventChan chan tea.Msg
 }
@@ -376,6 +392,8 @@ func NewModel(params Params) *Model {
 		chatMode:         AgentMode,          // Default to agent mode
 		chatModeRef:      params.ChatModeRef, // Store reference for tool handlers
 		yoloModeRef:      params.YoloModeRef, // Store reference for YOLO mode
+		queuedPrompts:    nil,
+		steeringPrompts:  nil,
 	}
 }
 
@@ -501,6 +519,12 @@ func (m *Model) View() string {
 		goodbye := m.styles.status.Render("  " + m.theme.GoodbyeMessage + "\n")
 
 		return m.styles.logo.Render(m.theme.Logo()) + "\n\n" + goodbye
+	}
+
+	if m.confirmExit {
+		modal := m.renderExitConfirmModal()
+
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
 	}
 
 	sections := make([]string, 0, viewSectionCount)
@@ -731,14 +755,12 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		m.unsubscribe = unsubscribe
 		m.unsubscribeMu.Unlock()
 
-		// In plan or ask mode, prefix the prompt with mode-specific instructions
+		// In plan mode, prefix the prompt with mode-specific instructions
 		prompt := userMessage
 
 		switch chatMode {
 		case PlanMode:
 			prompt = planModePrefix + userMessage
-		case AskMode:
-			prompt = askModePrefix + userMessage
 		case AgentMode:
 			// No prefix needed
 		}
@@ -805,4 +827,145 @@ func (m *Model) hasRunningTools() bool {
 	}
 
 	return false
+}
+
+// addQueuedPrompt adds a new queued prompt with current state captured.
+func (m *Model) addQueuedPrompt(content string) {
+	m.promptSeq++
+	m.queuedPrompts = append(m.queuedPrompts, pendingPrompt{
+		content:         content,
+		chatMode:        m.chatMode,
+		model:           m.getSelectedModel(),
+		reasoningEffort: m.getReasoningEffort(),
+		seq:             m.promptSeq,
+	})
+}
+
+// addSteeringPrompt adds a new steering prompt with current state captured.
+func (m *Model) addSteeringPrompt(content string) {
+	m.promptSeq++
+	m.steeringPrompts = append(m.steeringPrompts, pendingPrompt{
+		content:         content,
+		chatMode:        m.chatMode,
+		model:           m.getSelectedModel(),
+		reasoningEffort: m.getReasoningEffort(),
+		seq:             m.promptSeq,
+	})
+}
+
+// getSelectedModel returns the user-selected model (from sessionConfig), not the
+// server-resolved model. This preserves the user's intent (including "auto" mode)
+// even when the server has resolved auto to a specific model.
+func (m *Model) getSelectedModel() string {
+	if m.sessionConfig != nil {
+		return m.sessionConfig.Model
+	}
+
+	return m.currentModel
+}
+
+// getReasoningEffort returns the current reasoning effort setting.
+func (m *Model) getReasoningEffort() string {
+	if m.sessionConfig == nil || m.sessionConfig.ReasoningEffort == "" {
+		return ""
+	}
+
+	return m.sessionConfig.ReasoningEffort
+}
+
+// hasPendingPrompts returns true if there are any queued or steering prompts.
+func (m *Model) hasPendingPrompts() bool {
+	return len(m.queuedPrompts) > 0 || len(m.steeringPrompts) > 0
+}
+
+// pendingPromptCount returns the total number of pending prompts.
+func (m *Model) pendingPromptCount() int {
+	return len(m.queuedPrompts) + len(m.steeringPrompts)
+}
+
+// deleteLastPendingPrompt removes the most recently added pending prompt
+// across both queued and steering lists, using insertion sequence numbers
+// to determine which was added last. Returns true if a prompt was deleted.
+func (m *Model) deleteLastPendingPrompt() bool {
+	hasQueued := len(m.queuedPrompts) > 0
+	hasSteering := len(m.steeringPrompts) > 0
+
+	if !hasQueued && !hasSteering {
+		return false
+	}
+
+	// Compare sequence numbers to find the most recently added prompt
+	if hasQueued && hasSteering {
+		lastQueued := m.queuedPrompts[len(m.queuedPrompts)-1].seq
+		lastSteering := m.steeringPrompts[len(m.steeringPrompts)-1].seq
+
+		if lastSteering > lastQueued {
+			m.steeringPrompts = m.steeringPrompts[:len(m.steeringPrompts)-1]
+		} else {
+			m.queuedPrompts = m.queuedPrompts[:len(m.queuedPrompts)-1]
+		}
+
+		return true
+	}
+
+	if hasQueued {
+		m.queuedPrompts = m.queuedPrompts[:len(m.queuedPrompts)-1]
+
+		return true
+	}
+
+	m.steeringPrompts = m.steeringPrompts[:len(m.steeringPrompts)-1]
+
+	return true
+}
+
+// peekNextPendingPrompt returns the next pending prompt without removing it.
+// Steering prompts are checked first, followed by queued prompts.
+// Returns nil if no prompts are pending.
+func (m *Model) peekNextPendingPrompt() *pendingPrompt {
+	if len(m.steeringPrompts) > 0 {
+		return &m.steeringPrompts[0]
+	}
+
+	if len(m.queuedPrompts) > 0 {
+		return &m.queuedPrompts[0]
+	}
+
+	return nil
+}
+
+// dropNextPendingPrompt removes the next pending prompt from the queue.
+// Steering prompts are checked first, followed by queued prompts.
+func (m *Model) dropNextPendingPrompt() {
+	if len(m.steeringPrompts) > 0 {
+		m.steeringPrompts = m.steeringPrompts[1:]
+
+		return
+	}
+
+	if len(m.queuedPrompts) > 0 {
+		m.queuedPrompts = m.queuedPrompts[1:]
+	}
+}
+
+// applyMode updates the shared chat mode reference and notifies the Copilot CLI
+// server of the mode change so it can enforce mode-specific behavior
+// (e.g., blocking tools in plan mode).
+func (m *Model) applyMode(mode ChatMode) error {
+	if m.session != nil {
+		_, err := m.session.RPC.Mode.Set(m.ctx, &rpc.SessionModeSetParams{
+			Mode: mode.ToSDKMode(),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to set mode: %w", err)
+		}
+	}
+
+	// Only update shared reference after server-side change succeeds
+	// to keep chatModeRef in sync with the actual server state.
+	if m.chatModeRef != nil {
+		m.chatModeRef.SetMode(mode)
+	}
+
+	return nil
 }

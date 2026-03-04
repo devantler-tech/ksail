@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -187,7 +190,7 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 
 	for _, envVar := range tokenEnvVars {
 		if token := os.Getenv(envVar); token != "" {
-			opts.GithubToken = token
+			opts.GitHubToken = token
 
 			break
 		}
@@ -200,10 +203,7 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 		return nil, fmt.Errorf(
 			"failed to start Copilot client: %w\n\n"+
 				"To fix:\n"+
-				"  1. Install GitHub Copilot CLI: npm install -g @githubnext/github-copilot-cli\n"+
-				"  2. Or set COPILOT_CLI_PATH to your installation\n"+
-				"  3. Or authenticate: copilot auth login\n"+
-				"  4. Or set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication",
+				"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication",
 			err,
 		)
 	}
@@ -236,7 +236,8 @@ func filterEnvVars(env []string, remove []string) []string {
 	return filtered
 }
 
-// validateCopilotAuth checks authentication and returns the login name.
+// validateCopilotAuth checks authentication. If not authenticated, it attempts
+// an inline `copilot auth login` device flow before returning an error.
 func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, error) {
 	authStatus, err := client.GetAuthStatus(ctx)
 	if err != nil {
@@ -244,14 +245,10 @@ func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, e
 	}
 
 	if !authStatus.IsAuthenticated {
-		return "", fmt.Errorf(
-			"%w\n\n"+
-				"To fix:\n"+
-				"  1. Run: copilot auth login\n"+
-				"  2. Or set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
-				"  3. Ensure you have an active GitHub Copilot subscription",
-			errNotAuthenticated,
-		)
+		authStatus, err = attemptInlineLogin(ctx, client)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	loginName := "unknown"
@@ -260,6 +257,182 @@ func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, e
 	}
 
 	return loginName, nil
+}
+
+// attemptInlineLogin runs an interactive `copilot auth login` device flow
+// and returns the updated auth status on success.
+func attemptInlineLogin(
+	ctx context.Context,
+	client *copilot.Client,
+) (*copilot.GetAuthStatusResponse, error) {
+	cliPath, pathErr := resolveCopilotCLIPath()
+	if pathErr != nil {
+		return nil, fmt.Errorf(
+			"%w\n\n"+
+				"could not find the Copilot CLI to start login flow: %v\n\n"+
+				"To fix:\n"+
+				"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
+				"  - Ensure you have an active GitHub Copilot subscription",
+			errNotAuthenticated, pathErr,
+		)
+	}
+
+	fmt.Fprintln(os.Stderr, "\nNot authenticated with GitHub Copilot. Starting login...")
+
+	loginErr := runCopilotAuthLogin(ctx, cliPath)
+	if loginErr != nil {
+		return nil, fmt.Errorf("%w: login failed: %w", errNotAuthenticated, loginErr)
+	}
+
+	authStatus, err := client.GetAuthStatus(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify authentication after login: %w", err)
+	}
+
+	if !authStatus.IsAuthenticated {
+		msg := "login completed but authentication check still fails"
+		if authStatus.StatusMessage != nil {
+			msg += ": " + *authStatus.StatusMessage
+		}
+
+		return nil, fmt.Errorf("%w: %s", errNotAuthenticated, msg)
+	}
+
+	return authStatus, nil
+}
+
+// resolveCopilotCLIPath finds the Copilot CLI binary, checking:
+//  1. COPILOT_CLI_PATH environment variable (validated for existence)
+//  2. SDK cache directory (bundled CLI)
+//  3. System PATH
+func resolveCopilotCLIPath() (string, error) {
+	if envPath := os.Getenv("COPILOT_CLI_PATH"); envPath != "" {
+		cleanPath := filepath.Clean(envPath)
+
+		_, err := os.Stat(cleanPath)
+		if err != nil {
+			return "", fmt.Errorf("COPILOT_CLI_PATH %q is not accessible: %w", cleanPath, err)
+		}
+
+		return cleanPath, nil
+	}
+
+	if p, found := findCopilotInSDKCache(); found {
+		return p, nil
+	}
+
+	p, lookErr := exec.LookPath("copilot")
+	if lookErr != nil {
+		return "", fmt.Errorf("copilot CLI not found in PATH: %w", lookErr)
+	}
+
+	return p, nil
+}
+
+// findCopilotInSDKCache looks for the copilot executable in the SDK cache directory.
+// Only matches files named exactly "copilot" or "copilot-<platform>" (e.g., "copilot-linux-amd64").
+// Files like "copilot-config" or "copilot-backup" are excluded.
+func findCopilotInSDKCache() (string, bool) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", false
+	}
+
+	sdkDir := filepath.Join(cacheDir, "copilot-sdk")
+
+	entries, err := os.ReadDir(sdkDir)
+	if err != nil {
+		return "", false
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() ||
+			!isCopilotBinaryName(name) {
+			continue
+		}
+
+		info, statErr := entry.Info()
+		if statErr != nil {
+			continue
+		}
+
+		// Require at least one executable bit to be set.
+		if info.Mode()&0o111 == 0 {
+			continue
+		}
+
+		return filepath.Join(sdkDir, name), true
+	}
+
+	return "", false
+}
+
+// isCopilotBinaryName returns true for names that match the Copilot CLI binary pattern:
+// "copilot", "copilot.exe", or "copilot-<segment>[-<segment>...][.exe]"
+// (e.g., "copilot-linux-amd64", "copilot-linux-amd64.exe").
+// Rejects empty segments (trailing dash "copilot-linux-", leading dash "copilot--amd64",
+// double dashes "copilot-linux--amd64"), non-binary extensions (.json, .yaml, etc.),
+// and bare prefix ("copilot-" with no segments).
+func isCopilotBinaryName(name string) bool {
+	if name == "copilot" || name == "copilot.exe" {
+		return true
+	}
+
+	// Strip optional .exe suffix for platform-specific binaries
+	// (e.g., "copilot-windows-amd64.exe").
+	base := strings.TrimSuffix(name, ".exe")
+
+	// Require a "copilot-" prefix for platform-specific binaries.
+	if !strings.HasPrefix(base, "copilot-") {
+		return false
+	}
+
+	// Reject known non-binary suffixes for names that otherwise
+	// look like Copilot binaries.
+	if hasNonBinarySuffix(name) {
+		return false
+	}
+
+	rest := strings.TrimPrefix(base, "copilot-")
+	if rest == "" {
+		return false
+	}
+
+	// Allow one or more non-empty segments separated by dashes
+	// (e.g., "linux-amd64", "linux").
+	return !strings.Contains(rest, "--") &&
+		!strings.HasPrefix(rest, "-") &&
+		!strings.HasSuffix(rest, "-")
+}
+
+// hasNonBinarySuffix returns true if the filename has a known non-binary extension.
+func hasNonBinarySuffix(name string) bool {
+	nonBinarySuffixes := []string{".lock", ".license", ".json", ".yaml", ".yml", ".txt", ".log"}
+
+	for _, suffix := range nonBinarySuffixes {
+		if strings.HasSuffix(name, suffix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// runCopilotAuthLogin spawns `copilot auth login` as an interactive subprocess.
+// cliPath is trusted user input from COPILOT_CLI_PATH or the Copilot SDK directory.
+func runCopilotAuthLogin(ctx context.Context, cliPath string) error {
+	cmd := exec.CommandContext(ctx, cliPath, "auth", "login")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("copilot auth login failed: %w", err)
+	}
+
+	return nil
 }
 
 // buildSessionConfig creates the Copilot session configuration.
@@ -310,8 +483,7 @@ The assistant understands KSail's CLI, configuration schemas, and can help with:
   - Running KSail commands with your approval
 
 Prerequisites:
-  - GitHub Copilot CLI must be installed and authenticated
-  - Set COPILOT_CLI_PATH if the CLI is not in your PATH
+  - An active GitHub Copilot subscription
 
 Write operations require explicit confirmation before execution.`,
 		SilenceUsage: true,
