@@ -28,6 +28,7 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      source: ${{ steps.filter.outputs.source }}
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
       vsce: ${{ steps.filter.outputs.vsce }}
@@ -46,6 +47,12 @@ jobs:
           filters: |
             code:
               - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/actions/**'
+            source:
+              - '**/*.go'
+              - '!**/*_test.go'
               - 'go.mod'
               - 'go.sum'
               - '.github/actions/**'
@@ -409,7 +416,7 @@ jobs:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: github.event_name == 'merge_group' && needs.changes.outputs.code == 'true'
+    if: github.event_name == 'merge_group' && needs.changes.outputs.source == 'true'
     permissions:
       contents: read
     outputs:
@@ -442,7 +449,7 @@ jobs:
     name: 🔥 Warm Mirror Cache
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: github.event_name == 'merge_group' && needs.changes.outputs.code == 'true'
+    if: github.event_name == 'merge_group' && needs.changes.outputs.source == 'true'
     permissions:
       contents: read
     outputs:
@@ -476,7 +483,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
-    if: github.event_name == 'merge_group' && needs.changes.outputs.code == 'true'
+    if: github.event_name == 'merge_group' && needs.changes.outputs.source == 'true'
     permissions:
       contents: read
       packages: write
