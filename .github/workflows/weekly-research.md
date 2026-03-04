@@ -105,25 +105,32 @@ Research trends relevant to KSail's domain:
 Synthesize findings into a structured roadmap using the **Now / Next / Later** format:
 
 ### Now (enhance current features, align with open issues)
+
 Items that directly improve what KSail already does. These should:
+
 - Address existing open issues or known pain points
 - Improve existing distributions, providers, or workflows
 - Have clear implementation paths within the current architecture
 - Deliver immediate value to current users
 
 ### Next (natural extensions of current capabilities)
+
 Items that extend KSail into adjacent areas. These should:
+
 - Build on existing architecture without major rework
 - Add capabilities users would naturally expect
 - Have proven demand (competitor features, community requests)
 
 ### Later (exploratory, worth watching)
+
 Items that are interesting but speculative. These should:
+
 - Be tracked for future consideration
 - Require significant research or ecosystem maturity before adoption
 - Represent emerging trends that may become relevant
 
 **For each roadmap item include:**
+
 - A clear, specific description of the feature or improvement
 - Rationale tied to market analysis, competitor gaps, or user demand
 - Relevant open issues (if any) that align with this item
@@ -149,6 +156,7 @@ If a previous "${{ github.workflow }}" discussion exists, archive its content in
     gh aw logs weekly-research --repo ${{ github.repository }}
 
 At the end, write a collapsed "Research Methodology" section listing:
+
 - All search queries (web, issues, pulls, content) used
 - All bash commands executed
 - All tools used

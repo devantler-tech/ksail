@@ -114,6 +114,7 @@ Compare the roadmap against the existing open issues (including any just-triaged
 3. If an existing issue partially covers the same area, prefer adding a comment to that issue over creating a new one.
 
 **Never create an issue if:**
+
 - An open issue already covers the same work (even with a different title)
 - A closed issue was recently resolved for the same topic
 - The work is already in progress (tracked via a PR or assigned issue)
@@ -127,6 +128,7 @@ For each identified gap that passes deduplication, create an issue matching the 
 **Title format:** `[feature]: <clear imperative description>`
 
 **Body format:**
+
 ```markdown
 ## User Story
 
@@ -153,6 +155,7 @@ For each identified gap that passes deduplication, create an issue matching the 
 **Title format:** `[bug]: <clear description of the problem>`
 
 **Body format:**
+
 ```markdown
 ## Expected Behavior
 
@@ -178,6 +181,7 @@ For each identified gap that passes deduplication, create an issue matching the 
 **Title format:** `[chore]: <clear imperative description>`
 
 **Body format:**
+
 ```markdown
 ## User Story
 
