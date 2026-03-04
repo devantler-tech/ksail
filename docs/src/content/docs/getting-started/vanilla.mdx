@@ -26,16 +26,6 @@ Vanilla (Kind) is ideal for:
 - **Multi-node testing:** Simulate production topologies (control plane + workers)
 - **Kubernetes contributors:** Test upstream features and changes
 
-### When NOT to Use Vanilla
-
-Consider alternatives if you need:
-
-- **Minimal resource usage:** K3s is lighter (single-binary, fewer components)
-- **Built-in LoadBalancer:** K3s has ServiceLB; Vanilla requires Cloud Provider KIND
-- **Virtual clusters:** VCluster provides isolation without separate nodes
-- **Production deployments:** Talos offers immutable infrastructure and enhanced security
-- **Embedded storage:** K3s includes local-path-provisioner; Vanilla requires explicit CSI
-
 ## Quick Start
 
 Create your first Vanilla cluster in under 60 seconds.
@@ -64,24 +54,6 @@ This creates:
 ````bash
 ksail cluster create
 ````
-
-KSail will:
-1. Generate Kind configuration from `ksail.yaml`
-2. Create Docker containers as Kubernetes nodes
-3. Install Kubernetes components
-4. Configure kubectl context
-5. Install CNI (Cilium by default)
-
-**Expected output:**
-```
-✓ Creating Vanilla cluster with Kind...
-✓ Installing Cilium CNI...
-✓ Cluster ready!
-
-Cluster:  my-cluster
-Nodes:    3 (1 control plane, 2 workers)
-Provider: Docker
-```
 
 ### Step 3: Verify Cluster
 
@@ -205,124 +177,9 @@ ksail cluster init --name my-cluster --distribution Vanilla \
 
 KSail injects containerd registry configuration into all Kind nodes.
 
-## Common Use Cases
-
-### 1. Local Application Development
-
-**Scenario:** Develop a microservices application with hot-reload workflows.
-
-````bash
-# Initialize development cluster
-ksail cluster init --name dev --distribution Vanilla --workers 1
-
-# Create cluster
-ksail cluster create
-
-# Deploy application
-kubectl apply -f k8s/
-
-# Watch for changes and redeploy
-kubectl rollout restart deployment/my-app
-````
-
-**Why Vanilla:** Fast cluster creation, standard K8s API, compatible with production manifests.
-
-### 2. CI/CD Integration Testing
-
-**Scenario:** Run integration tests in ephemeral Kubernetes clusters.
-
-````bash
-# CI pipeline script
-ksail cluster init --name ci-test --distribution Vanilla
-ksail cluster create
-
-# Run tests
-kubectl apply -f test-manifests/
-./run-integration-tests.sh
-
-# Cleanup
-ksail cluster delete
-````
-
-**Why Vanilla:** Predictable environment, fast creation/deletion, standard Kubernetes.
-
-### 3. GitOps Testing (Flux/ArgoCD)
-
-**Scenario:** Test GitOps configurations locally before production deployment.
-
-````bash
-# Initialize with GitOps
-ksail cluster init \
-  --name gitops-test \
-  --distribution Vanilla \
-  --gitops-engine Flux
-
-# Create and bootstrap Flux
-ksail cluster create
-ksail workload apply
-
-# Test manifests reconciliation
-kubectl get kustomizations -A
-````
-
-**Why Vanilla:** Full compatibility with production GitOps workflows, standard K8s APIs.
-
-### 4. Multi-Node Topology Testing
-
-**Scenario:** Test pod scheduling, node affinity, and multi-node features.
-
-````bash
-# Create 3-node cluster
-ksail cluster init \
-  --name topology-test \
-  --distribution Vanilla \
-  --control-planes 1 \
-  --workers 3
-
-ksail cluster create
-
-# Test node affinity
-kubectl label nodes topology-test-worker zone=us-east-1a
-kubectl label nodes topology-test-worker2 zone=us-east-1b
-
-# Deploy with affinity rules
-kubectl apply -f deployment-with-affinity.yaml
-````
-
-**Why Vanilla:** Simulates multi-node production environments, supports node labels and taints.
-
 ## Architecture
 
 ### Cluster Components
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                     Docker Host                         │
-│                                                         │
-│  ┌───────────────────────────────────────────────────┐ │
-│  │  Control Plane Node (Docker Container)           │ │
-│  │  • kube-apiserver                                 │ │
-│  │  • kube-controller-manager                        │ │
-│  │  • kube-scheduler                                 │ │
-│  │  • etcd                                           │ │
-│  │  • kubelet                                        │ │
-│  │  • containerd (container runtime)                │ │
-│  └───────────────────────────────────────────────────┘ │
-│                                                         │
-│  ┌──────────────────┐  ┌──────────────────┐           │
-│  │ Worker Node 1    │  │ Worker Node 2    │           │
-│  │ • kubelet        │  │ • kubelet        │           │
-│  │ • containerd     │  │ • containerd     │           │
-│  │ • kube-proxy     │  │ • kube-proxy     │           │
-│  │ • CNI (Cilium)   │  │ • CNI (Cilium)   │           │
-│  └──────────────────┘  └──────────────────┘           │
-│                                                         │
-│  ┌───────────────────────────────────────────────────┐ │
-│  │  Optional: Cloud Provider KIND (cpk- containers)  │ │
-│  │  • LoadBalancer proxy containers                  │ │
-│  └───────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────┘
-```
 
 ### How It Works
 
@@ -460,15 +317,6 @@ docker system prune -a --volumes
 ### Multi-Node Clusters
 
 Create production-like topologies:
-
-````yaml
-# ksail.yaml
-apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    distribution: Vanilla
-````
 
 ````bash
 ksail cluster init \
