@@ -10,9 +10,9 @@ func ExportIsRelevantEvent(event fsnotify.Event) bool {
 	return isRelevantEvent(event)
 }
 
-// ExportResolveWatchDir exposes resolveWatchDir for testing.
-func ExportResolveWatchDir(cfg *v1alpha1.Cluster, pathFlag string) string {
-	return resolveWatchDir(cfg, pathFlag)
+// ExportResolveSourceDir exposes resolveSourceDir for testing.
+func ExportResolveSourceDir(cfg *v1alpha1.Cluster, pathFlag string) string {
+	return resolveSourceDir(cfg, pathFlag)
 }
 
 // ExportAddRecursive exposes addRecursive for testing.

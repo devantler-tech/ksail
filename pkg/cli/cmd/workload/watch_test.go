@@ -111,7 +111,7 @@ func TestIsRelevantEvent(t *testing.T) {
 	}
 }
 
-func TestResolveWatchDir(t *testing.T) {
+func TestResolveSourceDir(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -153,7 +153,7 @@ func TestResolveWatchDir(t *testing.T) {
 			cfg := &v1alpha1.Cluster{}
 			cfg.Spec.Workload.SourceDirectory = testCase.srcDir
 
-			got := workload.ExportResolveWatchDir(cfg, testCase.pathFlag)
+			got := workload.ExportResolveSourceDir(cfg, testCase.pathFlag)
 			require.Equal(t, testCase.expected, got)
 		})
 	}

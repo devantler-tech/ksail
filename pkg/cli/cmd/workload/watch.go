@@ -6,12 +6,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
@@ -73,7 +71,7 @@ func runWatch(cmd *cobra.Command, pathFlag string) error {
 		return err
 	}
 
-	watchDir := resolveWatchDir(cmdCtx.ClusterCfg, pathFlag)
+	watchDir := resolveSourceDir(cmdCtx.ClusterCfg, pathFlag)
 
 	// Verify the directory exists.
 	info, err := os.Stat(watchDir)
@@ -102,19 +100,6 @@ func runWatch(cmd *cobra.Command, pathFlag string) error {
 	cmd.PrintErrf("  press Ctrl+C to stop\n\n")
 
 	return watchLoop(cmd.Context(), cmd, absDir)
-}
-
-// resolveWatchDir determines the directory to watch from flag, config, or default.
-func resolveWatchDir(cfg *v1alpha1.Cluster, pathFlag string) string {
-	if dir := strings.TrimSpace(pathFlag); dir != "" {
-		return dir
-	}
-
-	if dir := strings.TrimSpace(cfg.Spec.Workload.SourceDirectory); dir != "" {
-		return dir
-	}
-
-	return v1alpha1.DefaultSourceDirectory
 }
 
 // watchLoop sets up the fsnotify watcher and runs the debounced apply loop.
