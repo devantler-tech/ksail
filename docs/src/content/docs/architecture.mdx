@@ -55,7 +55,7 @@ KSail uses a flat package structure in `pkg/` to improve maintainability and red
 #### `pkg/apis/`
 API types, schemas, and enums that define KSail's configuration model.
 
-- **`cluster/v1alpha1/`** — ClusterSpec and ClusterConfig types
+- **`cluster/v1alpha1/`** — ClusterSpec and ClusterConfig types; each enum type lives in its own domain-specific file (e.g., `distribution.go`, `cni.go`, `csi.go`, `loadbalancer.go`, `gitopsengine.go`); the `EnumValuer` interface is in `enum.go`
 - **Top-level `schemas/` directory** — Generated JSON schema for `ksail.yaml` (via `go generate ./schemas/...`) used for validation and editor autocomplete
 
 #### `pkg/cli/`
