@@ -141,41 +141,19 @@ Follow these guidelines:
 - Update documentation if needed
 - Follow existing code patterns
 
-### 3. Test Your Changes
+### 3. Test, Commit, and Push
 
 ````bash
-# Run unit tests
-go test ./...
+go test ./...                   # Run unit tests
+golangci-lint run               # Run linters
+go build -o ksail               # Build
+./ksail cluster init            # Smoke test
 
-# Run linters
-golangci-lint run
-
-# Build and manually test
-go build -o ksail
-./ksail cluster init --distribution Vanilla
-./ksail cluster create
-````
-
-### 4. Commit Changes
-
-````bash
-git add .
-git commit -m "feat: add new feature"
-
-# Commit message format: <type>: <description>
-# Types: feat, fix, docs, refactor, test, chore, perf
-````
-
-### 5. Push and Create Pull Request
-
-````bash
+git add . && git commit -m "feat: add new feature"
 git push origin feature/my-feature
-
-# Create PR on GitHub
-# - Provide clear description
-# - Reference related issues
-# - Ensure CI passes
 ````
+
+Commit types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`. Open a PR with a clear description and ensure CI passes.
 
 ## Coding Standards
 
@@ -207,34 +185,32 @@ git push origin feature/my-feature
 #### Unit Tests
 
 ````go
+func setupProvisioner(t *testing.T, wantErr bool) *mocks.MockProvisioner {
+    t.Helper()
+    m := mocks.NewMockProvisioner(t)
+    if wantErr {
+        m.On("Create", mock.Anything).Return(errors.New("create failed"))
+    } else {
+        m.On("Create", mock.Anything).Return(nil)
+    }
+    return m
+}
+
 func TestProvisionerCreate(t *testing.T) {
-    t.Parallel() // Run tests in parallel when safe
+    t.Parallel()
     
     tests := []struct {
         name    string
-        setup   func(*testing.T) *Provisioner
         wantErr bool
     }{
-        {
-            name: "successful creation",
-            setup: func(t *testing.T) *Provisioner {
-                return &Provisioner{/* ... */}
-            },
-            wantErr: false,
-        },
-        {
-            name: "creation fails",
-            setup: func(t *testing.T) *Provisioner {
-                return &Provisioner{/* ... */}
-            },
-            wantErr: true,
-        },
+        {name: "successful creation", wantErr: false},
+        {name: "creation fails", wantErr: true},
     }
     
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             t.Parallel()
-            p := tt.setup(t)
+            p := setupProvisioner(t, tt.wantErr)
             err := p.Create(context.Background())
             if (err != nil) != tt.wantErr {
                 t.Errorf("Create() error = %v, wantErr %v", err, tt.wantErr)
@@ -276,37 +252,22 @@ func TestValidateConfig(t *testing.T) {
 }
 ````
 
-**Benefits:**
-- Black-box testing without exposing internal APIs
-- No `//nolint:gochecknoglobals` needed (test-only compilation)
-- Clean separation between public and internal APIs
+**Benefits:** Black-box testing without exposing internal APIs; no `//nolint:gochecknoglobals` needed; clean separation between public and internal APIs.
 
 #### Mocking with Testify
 
+KSail uses [mockery](https://vektra.github.io/mockery/) for generating mocks via `//go:generate go run github.com/vektra/mockery/v2`. Use generated mocks in tests:
+
 ````go
-// Generate mocks (mockery.yml config)
-//go:generate go run github.com/vektra/mockery/v2
-
-type MockProvider struct {
-    mock.Mock
-}
-
-func (m *MockProvider) Create(ctx context.Context) error {
-    args := m.Called(ctx)
-    return args.Error(0)
-}
-
 func TestWithMock(t *testing.T) {
     mockProv := new(MockProvider)
     mockProv.On("Create", mock.Anything).Return(nil)
-    
     // Use mockProv...
-    
     mockProv.AssertExpectations(t)
 }
 ````
 
-**Important:** Never use `.Times(b.N)` with `for b.Loop()` in benchmarks. The `b.N` value is 1 when evaluated before the loop, causing testify failures. Omit `.Times()` for unlimited calls.
+**Important:** Never use `.Times(b.N)` with `for b.Loop()` in benchmarks — `b.N` is 1 when evaluated before the loop. Omit `.Times()` for unlimited calls.
 
 #### Benchmarks
 
@@ -346,38 +307,19 @@ type Provider interface {
 
 #### Documentation Files
 
-When adding features or making significant changes:
-1. Update relevant `.mdx` files in `docs/src/content/docs/`
-2. Update `README.md` if needed
-3. Add examples to documentation
-4. Update CLI help text if adding commands
+When adding features or making significant changes, update the relevant `.mdx` files in `docs/src/content/docs/`, `README.md` if needed, and CLI help text if adding commands.
 
 ## Common Development Tasks
 
-### Adding a New Provider
+All new components follow the same pattern: create a package under the relevant `pkg/svc/` subdirectory, implement the corresponding interface, register in the factory, add tests, and update documentation.
 
-1. Create package: `pkg/svc/provider/newprovider/`
-2. Implement `Provider` interface
-3. Register in factory: `pkg/svc/provider/factory.go`
-4. Add tests: `pkg/svc/provider/newprovider/provider_test.go`
-5. Update documentation: `docs/src/content/docs/`
+| Task | Package path | Interface | Factory |
+|------|-------------|-----------|---------|
+| New Provider | `pkg/svc/provider/newprovider/` | `Provider` | `pkg/svc/provider/factory.go` |
+| New Provisioner | `pkg/svc/provisioner/cluster/newdist/` | `Provisioner` | `pkg/svc/provisioner/cluster/factory.go` |
+| New Installer | `pkg/svc/installer/newcomponent/` | `Installer` | `pkg/cli/setup/` |
 
-### Adding a New Provisioner
-
-1. Create package: `pkg/svc/provisioner/cluster/newdist/`
-2. Implement `Provisioner` interface
-3. Register in factory: `pkg/svc/provisioner/cluster/factory.go`
-4. Add tests
-5. Add getting-started guide: `docs/src/content/docs/getting-started/newdist.mdx`
-
-### Adding a New Installer
-
-1. Create package: `pkg/svc/installer/newcomponent/`
-2. Implement `Installer` interface
-3. Add to component setup: `pkg/cli/setup/`
-4. Add configuration to ClusterSpec: `pkg/apis/cluster/v1alpha1/`
-5. Add tests
-6. Update configuration documentation
+For a new Provisioner, also add a getting-started guide in `docs/src/content/docs/getting-started/`. For a new Installer, also add configuration to `pkg/apis/cluster/v1alpha1/`.
 
 ### Updating Dependencies
 
@@ -418,42 +360,22 @@ npm run preview
 
 #### Documentation Guidelines
 
-- Use clear, concise language
-- Provide code examples
-- Include prerequisites
-- Add verification steps
-- Use GitHub Flavored Markdown
-- Follow existing structure and style
+- Use clear, concise language with code examples and verification steps
+- Follow existing structure, style, and GitHub Flavored Markdown
 
 ## Debugging
 
 ### Enable Debug Logging
 
-KSail doesn't have built-in debug logging yet, but you can:
+KSail doesn't have built-in debug logging yet. Use temporary `fmt.Printf("DEBUG: value = %+v\n", value)` statements or the [Delve debugger](https://github.com/go-delve/delve):
 
-1. Add temporary log statements:
-````go
-import "fmt"
-
-fmt.Printf("DEBUG: value = %+v\n", value)
-````
-
-2. Use Go debugger (Delve):
 ````bash
-# Install delve
 go install github.com/go-delve/delve/cmd/dlv@latest
-
-# Debug a test
-dlv test -- -test.run TestName
-
-# Debug the binary
-dlv exec ./ksail -- cluster create
+dlv test -- -test.run TestName    # debug a test
+dlv exec ./ksail -- cluster create # debug the binary
 ````
 
-3. VSCode debugging:
-   - Set breakpoints in code
-   - Press F5 to start debugging
-   - Use `.vscode/launch.json` configurations
+VSCode users can set breakpoints and press F5 with a `.vscode/launch.json` configuration.
 
 ### Common Issues
 
@@ -482,36 +404,21 @@ dlv exec ./ksail -- cluster create
 
 KSail uses several CI workflows:
 
-#### `.github/workflows/ci.yaml`
-- Runs on every PR and main push
-- Builds on Linux and macOS
-- Runs unit tests
-- Runs system tests with multiple distribution/provider combinations
-- Uploads coverage to Codecov
-
-#### `.github/workflows/test-pages.yaml`
-- Validates documentation builds
-- Runs on docs changes
-
-#### `.github/workflows/publish-pages.yaml`
-- Deploys documentation to GitHub Pages
-- Runs on main branch
-
-#### `.github/workflows/release.yaml`
-- Builds release binaries via a reusable workflow
-- Publishes to GitHub Releases
-- Triggered by push to `main` or manually via `workflow_dispatch`
+- **`ci.yaml`** — Runs on every PR and push to main; builds KSail, runs unit and system tests, uploads coverage to Codecov
+- **`test-pages.yaml`** — Validates documentation builds on docs changes
+- **`publish-pages.yaml`** — Deploys documentation to GitHub Pages on main branch pushes
+- **`release.yaml`** — Builds release binaries and publishes to GitHub Releases; triggered by push to `main` or `workflow_dispatch`
 
 ### Agentic Workflows
 
-KSail uses AI-powered workflows for continuous improvement:
+KSail uses six AI-powered daily workflows for continuous improvement (schedules spread at 4-hour gaps, 02–22 UTC):
 
-- **`daily-test-improver.md`** — Adds unit tests
-- **`daily-perf-improver.md`** — Adds benchmarks
-- **`daily-refactor.md`** — Refactors code
-- **`daily-progress.md`** — Implements roadmap features
-- **`daily-backlog-burner.md`** — Tackles backlog issues
-- **`daily-workflow-optimizer.md`** — Optimizes CI workflows
+- **`daily-refactor.md`** — Refactors code and simplifies code complexity
+- **`daily-code-health.md`** — Improves test coverage and performance
+- **`daily-plan.md`** — Plans upcoming work and roadmap items
+- **`daily-builder.md`** — Implements roadmap features and tackles backlog issues
+- **`daily-workflow-maintenance.md`** — Updates and optimizes CI workflows
+- **`daily-docs.md`** — Keeps documentation in sync and reduces bloat
 
 These run on schedules and can be triggered manually via `gh aw` commands.
 
@@ -550,36 +457,18 @@ Releases are automated via `.goreleaser.yaml` and `.github/workflows/release.yam
 
 ## Code Review Guidelines
 
-When reviewing or submitting PRs:
+PRs should be focused on a single concern with clear commit messages, tests for new functionality, and updated documentation. Squash commits before merge (or allow maintainer to).
 
-### For Authors
-
-- Keep PRs focused on a single concern
-- Write clear commit messages
-- Add tests for new functionality
-- Update documentation
-- Respond to review comments promptly
-- Squash commits before merge (or allow maintainer to)
-
-### For Reviewers
-
-- Be respectful and constructive
-- Focus on code, not person
-- Explain reasoning for suggestions
-- Approve when changes look good
-- Request changes if issues exist
-- Ask questions if unclear
+Reviewers: be respectful and constructive, focus on code not person, explain reasoning, and ask questions if unclear.
 
 ### Review Checklist
 
 - [ ] Code follows style guidelines
 - [ ] Tests added and passing
 - [ ] Documentation updated
-- [ ] No unnecessary changes (formatting, whitespace)
 - [ ] Commit messages are clear
 - [ ] CI checks pass
 - [ ] No security issues
-- [ ] Performance considerations addressed
 
 ## Additional Resources
 
