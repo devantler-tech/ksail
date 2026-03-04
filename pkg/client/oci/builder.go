@@ -51,7 +51,6 @@ type BuildOptions struct {
 	// When provided with Password, enables basic authentication for the registry push.
 	Username string
 	// Password is the optional password for registry authentication.
-	// When provided with Username, enables basic authentication for the registry push.
 	Password string
 }
 
