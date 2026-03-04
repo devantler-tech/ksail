@@ -17,6 +17,8 @@ This is a **dispatcher agent** that routes your request to the appropriate speci
 - **Upgrading workflows**: Routes to `upgrade-agentic-workflows` prompt
 - **Creating report-generating workflows**: Routes to `report` prompt — consult this whenever the workflow posts status updates, audits, analyses, or any structured output as issues, discussions, or comments
 - **Creating shared components**: Routes to `create-shared-agentic-workflow` prompt
+- **Generating reports**: Routes to `report` prompt
+- **Analyzing test coverage**: Routes to `test-coverage` prompt
 - **Fixing Dependabot PRs**: Routes to `dependabot` prompt — use this when Dependabot opens PRs that modify generated manifest files (`.github/workflows/package.json`, `.github/workflows/requirements.txt`, `.github/workflows/go.mod`). Never merge those PRs directly; instead update the source `.md` files and rerun `gh aw compile --dependabot` to bundle all fixes
 - **Analyzing test coverage**: Routes to `test-coverage` prompt — consult this whenever the workflow reads, analyzes, or reports on test coverage data from PRs or CI runs
 
@@ -108,6 +110,26 @@ When you interact with this agent, it will:
 - "Create a shared component for Notion integration"
 - "Wrap the Slack MCP server as a reusable component"
 - "Design a shared workflow for database queries"
+
+### Report Generation
+**Load when**: User wants to create a workflow that generates reports — recurring status updates, audits, analysis summaries, or structured output posted as issues, discussions, or comments
+
+**Prompt file**: https://github.com/github/gh-aw/blob/v0.52.1/.github/aw/report.md
+
+**Use cases**:
+- "Create a weekly status report workflow"
+- "Add a report that summarizes test results"
+- "Design a recurring audit workflow"
+
+### Test Coverage
+**Load when**: User wants to create or update a workflow that analyzes test coverage
+
+**Prompt file**: https://github.com/github/gh-aw/blob/v0.52.1/.github/aw/test-coverage.md
+
+**Use cases**:
+- "Create a workflow to report test coverage on PRs"
+- "Add coverage analysis to the CI pipeline"
+- "Design a coverage trend report"
 
 ### Fix Dependabot PRs
 **Load when**: User needs to close or fix open Dependabot PRs that update dependencies in generated manifest files (`.github/workflows/package.json`, `.github/workflows/requirements.txt`, `.github/workflows/go.mod`)
