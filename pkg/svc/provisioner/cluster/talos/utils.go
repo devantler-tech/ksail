@@ -30,18 +30,9 @@ func nthIPInNetwork(prefix netip.Prefix, offset int) (netip.Addr, error) {
 
 		return netip.AddrFrom4([4]byte{
 			byte(ipValue >> byte0Shift),
-			//nolint:gosec // G115: uint32-to-byte truncation is intentional for IP octets
-			byte(
-				ipValue >> byte1Shift,
-			),
-			//nolint:gosec // G115: uint32-to-byte truncation is intentional for IP octets
-			byte(
-				ipValue >> byte2Shift,
-			),
-			//nolint:gosec // G115: uint32-to-byte truncation is intentional for IP octets
-			byte(
-				ipValue,
-			),
+			byte(ipValue >> byte1Shift), //nolint:gosec // G115
+			byte(ipValue >> byte2Shift), //nolint:gosec // G115
+			byte(ipValue),               //nolint:gosec // G115
 		}), nil
 	}
 
