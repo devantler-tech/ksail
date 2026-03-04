@@ -39,16 +39,10 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: 'Optional maintenance operation to run'
+        description: 'Optional maintenance operation to run (disable, enable, update, upgrade)'
         required: false
-        type: choice
+        type: string
         default: ''
-        options:
-          - ''
-          - 'disable'
-          - 'enable'
-          - 'update'
-          - 'upgrade'
 
 permissions: {}
 
