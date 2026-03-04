@@ -171,7 +171,6 @@ func executeCommand(
 		defer cancel()
 	}
 
-	//nolint:gosec // G204: command derived from Cobra CommandPath()
 	cmd := exec.CommandContext(
 		execCtx,
 		command,

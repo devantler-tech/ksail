@@ -652,7 +652,6 @@ func addFileToTar(
 		return nil
 	}
 
-	//nolint:gosec // G304: path comes from filepath.Walk within backup dir
 	file, err := os.Open(
 		path,
 	)

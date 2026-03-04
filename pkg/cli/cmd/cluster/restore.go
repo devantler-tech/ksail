@@ -280,7 +280,7 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 		}
 
 		if header.Typeflag == tar.TypeDir {
-			//nolint:gosec // G703: path validated by Clean above
+
 			err = os.MkdirAll(
 				targetPath,
 				dirPerm,
@@ -292,7 +292,6 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 			continue
 		}
 
-		//nolint:gosec // G703: path validated by Clean above
 		err = os.MkdirAll(
 			filepath.Dir(targetPath),
 			dirPerm,
@@ -586,7 +585,7 @@ func injectRestoreLabels(
 
 	_, err = tmpFile.WriteString(builder.String())
 	if err != nil {
-		_ = os.Remove(tmpFile.Name()) //nolint:gosec // G703: removing our own temp file
+		_ = os.Remove(tmpFile.Name())
 
 		return "", fmt.Errorf("failed to write labeled file: %w", err)
 	}
