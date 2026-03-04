@@ -1,11 +1,12 @@
 ---
 description: |
   This workflow triages new issues and creates/maintains backlog issues based on the
-  weekly research roadmap. It first triages any untriaged issues (labeling, spam detection,
-  analysis) without altering their original intent, then reads the roadmap discussion,
-  analyzes open issues and recent PRs, identifies gaps, and creates actionable backlog
-  issues using devantler-tech issue templates. Strictly deduplicates to never create
-  duplicate work.
+  weekly research roadmap. It runs daily (not on issue events), so new issues may wait
+  up to 24 hours for triage. It first triages any untriaged issues (labeling, spam
+  detection, analysis) without altering their original intent, then reads the roadmap
+  discussion, analyzes open issues and recent PRs, identifies gaps, and creates
+  actionable backlog issues using devantler-tech issue templates. Strictly deduplicates
+  to never create duplicate work.
 
 on:
   bots:

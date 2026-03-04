@@ -33,7 +33,7 @@ tools:
   web-fetch:
   bash: true
 
-timeout-minutes: 30
+timeout-minutes: 15
 ---
 
 # Weekly Research
@@ -146,7 +146,7 @@ Create a discussion with title "${{ github.workflow }} - Roadmap" containing:
 4. **Industry Trends** — Relevant trends from Step 3
 5. **Roadmap: Now / Next / Later** — The actionable roadmap from Step 4
 
-If a previous "${{ github.workflow }}" discussion exists, archive its content in a collapsed "Previous Research" section at the bottom of the new discussion.
+Before creating the new discussion, locate and read the most recent previous "${{ github.workflow }}" discussion (if any) and preserve any content that should be kept; then create the new discussion (which will automatically close the older one due to `close-older-discussions: true`) and add a collapsed "Previous Research" section at the bottom of the new discussion that archives the preserved content from the prior discussion.
 
 **Include a "How to Control this Workflow" section:**
 
