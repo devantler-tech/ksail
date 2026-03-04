@@ -30,20 +30,25 @@ func TestFormatPermissionKind_AllKinds(t *testing.T) {
 		{name: "custom kind", kind: "custom_action", expected: "Custom Action"},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := chat.ExportFormatPermissionKind(tc.kind)
-			if result != tc.expected {
-				t.Errorf("formatPermissionKind(%q) = %q, want %q", tc.kind, result, tc.expected)
+			result := chat.ExportFormatPermissionKind(testCase.kind)
+			if result != testCase.expected {
+				t.Errorf(
+					"formatPermissionKind(%q) = %q, want %q",
+					testCase.kind,
+					result,
+					testCase.expected,
+				)
 			}
 		})
 	}
 }
 
-// TestExtractPermissionDetails tests permission detail extraction from SDK requests.
-func TestExtractPermissionDetails(t *testing.T) {
+// TestExtractPermissionDetails_CommandFields tests permission detail extraction for command fields.
+func TestExtractPermissionDetails_CommandFields(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -71,6 +76,45 @@ func TestExtractPermissionDetails(t *testing.T) {
 			wantCommand: "echo hello",
 		},
 		{
+			name: "command as array",
+			request: copilot.PermissionRequest{
+				Kind: "shell",
+				Extra: map[string]any{
+					"command": []any{"npm", "install"},
+				},
+			},
+			wantTool:    "Shell Command",
+			wantCommand: "npm install",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			toolName, command := chat.ExportExtractPermissionDetails(testCase.request)
+			if toolName != testCase.wantTool {
+				t.Errorf("toolName = %q, want %q", toolName, testCase.wantTool)
+			}
+
+			if command != testCase.wantCommand {
+				t.Errorf("command = %q, want %q", command, testCase.wantCommand)
+			}
+		})
+	}
+}
+
+// TestExtractPermissionDetails_PathAndFallback tests permission detail extraction for path and fallback fields.
+func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		request     copilot.PermissionRequest
+		wantTool    string
+		wantCommand string
+	}{
+		{
 			name: "path field",
 			request: copilot.PermissionRequest{
 				Kind:  "file_edit",
@@ -82,12 +126,8 @@ func TestExtractPermissionDetails(t *testing.T) {
 		{
 			name: "nested execution",
 			request: copilot.PermissionRequest{
-				Kind: "shell",
-				Extra: map[string]any{
-					"execution": map[string]any{
-						"command": "docker ps",
-					},
-				},
+				Kind:  "shell",
+				Extra: map[string]any{"execution": map[string]any{"command": "docker ps"}},
 			},
 			wantTool:    "Shell Command",
 			wantCommand: "docker ps",
@@ -102,38 +142,24 @@ func TestExtractPermissionDetails(t *testing.T) {
 			wantCommand: "running tests",
 		},
 		{
-			name: "empty extra falls back to kind",
-			request: copilot.PermissionRequest{
-				Kind:  "browser",
-				Extra: map[string]any{},
-			},
+			name:        "empty extra falls back to kind",
+			request:     copilot.PermissionRequest{Kind: "browser", Extra: map[string]any{}},
 			wantTool:    "Browser",
 			wantCommand: "browser",
 		},
-		{
-			name: "command as array",
-			request: copilot.PermissionRequest{
-				Kind: "shell",
-				Extra: map[string]any{
-					"command": []any{"npm", "install"},
-				},
-			},
-			wantTool:    "Shell Command",
-			wantCommand: "npm install",
-		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			toolName, command := chat.ExportExtractPermissionDetails(tc.request)
-			if toolName != tc.wantTool {
-				t.Errorf("toolName = %q, want %q", toolName, tc.wantTool)
+			toolName, command := chat.ExportExtractPermissionDetails(testCase.request)
+			if toolName != testCase.wantTool {
+				t.Errorf("toolName = %q, want %q", toolName, testCase.wantTool)
 			}
 
-			if command != tc.wantCommand {
-				t.Errorf("command = %q, want %q", command, tc.wantCommand)
+			if command != testCase.wantCommand {
+				t.Errorf("command = %q, want %q", command, testCase.wantCommand)
 			}
 		})
 	}
@@ -162,13 +188,18 @@ func TestExtractStringValue(t *testing.T) {
 		{name: "bool value", val: true, expected: ""},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := chat.ExportExtractStringValue(tc.val)
-			if result != tc.expected {
-				t.Errorf("extractStringValue(%v) = %q, want %q", tc.val, result, tc.expected)
+			result := chat.ExportExtractStringValue(testCase.val)
+			if result != testCase.expected {
+				t.Errorf(
+					"extractStringValue(%v) = %q, want %q",
+					testCase.val,
+					result,
+					testCase.expected,
+				)
 			}
 		})
 	}
@@ -195,13 +226,18 @@ func TestHumanizeToolName(t *testing.T) {
 		{name: "empty name", toolName: "", expected: ""},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := chat.ExportHumanizeToolName(tc.toolName, mappings)
-			if result != tc.expected {
-				t.Errorf("humanizeToolName(%q) = %q, want %q", tc.toolName, result, tc.expected)
+			result := chat.ExportHumanizeToolName(testCase.toolName, mappings)
+			if result != testCase.expected {
+				t.Errorf(
+					"humanizeToolName(%q) = %q, want %q",
+					testCase.toolName,
+					result,
+					testCase.expected,
+				)
 			}
 		})
 	}
@@ -226,14 +262,24 @@ func TestCalculatePickerScrollOffset(t *testing.T) {
 		{name: "single item", selectedIndex: 0, totalItems: 1, maxVisible: 5, expected: 0},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := chat.ExportCalculatePickerScrollOffset(tc.selectedIndex, tc.totalItems, tc.maxVisible)
-			if result != tc.expected {
-				t.Errorf("calculatePickerScrollOffset(%d, %d, %d) = %d, want %d",
-					tc.selectedIndex, tc.totalItems, tc.maxVisible, result, tc.expected)
+			result := chat.ExportCalculatePickerScrollOffset(
+				testCase.selectedIndex,
+				testCase.totalItems,
+				testCase.maxVisible,
+			)
+			if result != testCase.expected {
+				t.Errorf(
+					"calculatePickerScrollOffset(%d, %d, %d) = %d, want %d",
+					testCase.selectedIndex,
+					testCase.totalItems,
+					testCase.maxVisible,
+					result,
+					testCase.expected,
+				)
 			}
 		})
 	}
@@ -283,14 +329,14 @@ func TestExtractCommandFromArgs(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := chat.ExportExtractCommandFromArgs(tc.toolName, tc.args, builders)
-			if result != tc.expected {
+			result := chat.ExportExtractCommandFromArgs(testCase.toolName, testCase.args, builders)
+			if result != testCase.expected {
 				t.Errorf("extractCommandFromArgs(%q, %v) = %q, want %q",
-					tc.toolName, tc.args, result, tc.expected)
+					testCase.toolName, testCase.args, result, testCase.expected)
 			}
 		})
 	}

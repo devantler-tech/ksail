@@ -152,7 +152,7 @@ func TestBuildSystemContext_WithWorkingDir(t *testing.T) {
 
 	result, err := chat.BuildSystemContext(chat.SystemContextConfig{
 		IncludeWorkingDirContext: true,
-		ConfigFileName:          "nonexistent-config-for-test.yaml",
+		ConfigFileName:           "nonexistent-config-for-test.yaml",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -254,13 +254,13 @@ func TestCommandBuilder_ClusterList(t *testing.T) {
 		{name: "all false", args: map[string]any{"all": false}, expected: "ksail cluster list"},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := builder(tc.args)
-			if result != tc.expected {
-				t.Errorf("got %q, want %q", result, tc.expected)
+			result := builder(testCase.args)
+			if result != testCase.expected {
+				t.Errorf("got %q, want %q", result, testCase.expected)
 			}
 		})
 	}
@@ -283,17 +283,26 @@ func TestCommandBuilder_ClusterInfo(t *testing.T) {
 		expected string
 	}{
 		{name: "no args", args: map[string]any{}, expected: "ksail cluster info"},
-		{name: "with name", args: map[string]any{"name": "my-cluster"}, expected: "ksail cluster info --name my-cluster"},
+		{
+			name:     "with name",
+			args:     map[string]any{"name": "my-cluster"},
+			expected: "ksail cluster info --name my-cluster",
+		},
 		{name: "empty name", args: map[string]any{"name": ""}, expected: "ksail cluster info"},
+		{
+			name:     "with name and output",
+			args:     map[string]any{"name": "prod", "output": "yaml"},
+			expected: "ksail cluster info --name prod",
+		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := builder(tc.args)
-			if result != tc.expected {
-				t.Errorf("got %q, want %q", result, tc.expected)
+			result := builder(testCase.args)
+			if result != testCase.expected {
+				t.Errorf("got %q, want %q", result, testCase.expected)
 			}
 		})
 	}
@@ -317,10 +326,13 @@ func TestCommandBuilder_WorkloadGet(t *testing.T) {
 	}{
 		{name: "no resource", args: map[string]any{}, expected: ""},
 		{name: "empty resource", args: map[string]any{"resource": ""}, expected: ""},
-		{name: "resource only", args: map[string]any{"resource": "pods"}, expected: "ksail workload get pods"},
 		{
-			name:     "resource with name",
-			args:     map[string]any{"resource": "pods", "name": "nginx"},
+			name:     "resource only",
+			args:     map[string]any{"resource": "pods"},
+			expected: "ksail workload get pods",
+		},
+		{
+			name: "resource with name", args: map[string]any{"resource": "pods", "name": "nginx"},
 			expected: "ksail workload get pods nginx",
 		},
 		{
@@ -341,22 +353,19 @@ func TestCommandBuilder_WorkloadGet(t *testing.T) {
 		{
 			name: "all options",
 			args: map[string]any{
-				"resource":  "deployments",
-				"name":      "nginx",
-				"namespace": "prod",
-				"output":    "json",
+				"resource": "deployments", "name": "nginx", "namespace": "prod", "output": "json",
 			},
 			expected: "ksail workload get deployments nginx -n prod -o json",
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := builder(tc.args)
-			if result != tc.expected {
-				t.Errorf("got %q, want %q", result, tc.expected)
+			result := builder(testCase.args)
+			if result != testCase.expected {
+				t.Errorf("got %q, want %q", result, testCase.expected)
 			}
 		})
 	}
@@ -380,16 +389,30 @@ func TestCommandBuilder_ReadFile(t *testing.T) {
 	}{
 		{name: "no path", args: map[string]any{}, expected: ""},
 		{name: "empty path", args: map[string]any{"path": ""}, expected: ""},
-		{name: "with path", args: map[string]any{"path": "/etc/config"}, expected: "cat /etc/config"},
+		{
+			name:     "with path",
+			args:     map[string]any{"path": "/etc/config"},
+			expected: "cat /etc/config",
+		},
+		{
+			name:     "path with spaces",
+			args:     map[string]any{"path": "/tmp/my file.txt"},
+			expected: "cat /tmp/my file.txt",
+		},
+		{
+			name:     "ignores extra keys",
+			args:     map[string]any{"path": "/a", "other": "b"},
+			expected: "cat /a",
+		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := builder(tc.args)
-			if result != tc.expected {
-				t.Errorf("got %q, want %q", result, tc.expected)
+			result := builder(testCase.args)
+			if result != testCase.expected {
+				t.Errorf("got %q, want %q", result, testCase.expected)
 			}
 		})
 	}
@@ -418,13 +441,13 @@ func TestCommandBuilder_ListDirectory(t *testing.T) {
 			{name: "with path", args: map[string]any{"path": "/home"}, expected: "ls /home"},
 		}
 
-		for _, tc := range tests {
-			t.Run(toolName+"/"+tc.name, func(t *testing.T) {
+		for _, testCase := range tests {
+			t.Run(toolName+"/"+testCase.name, func(t *testing.T) {
 				t.Parallel()
 
-				result := builder(tc.args)
-				if result != tc.expected {
-					t.Errorf("got %q, want %q", result, tc.expected)
+				result := builder(testCase.args)
+				if result != testCase.expected {
+					t.Errorf("got %q, want %q", result, testCase.expected)
 				}
 			})
 		}

@@ -3,6 +3,7 @@ package chat_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
@@ -56,6 +57,7 @@ func TestPermissionKey_AllowWithY(t *testing.T) {
 	chat.ExportSetPendingPermission(model, "Shell Command", "ls", "", responseChan)
 
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 
 	// Read the response
@@ -65,14 +67,21 @@ func TestPermissionKey_AllowWithY(t *testing.T) {
 	}
 
 	// Permission should be cleared
-	chatModel := updatedModel.(*chat.Model)
+	chatModel, ok := updatedModel.(*chat.Model)
+	if !ok {
+		t.Fatal("expected *chat.Model type assertion to succeed")
+	}
+
 	if chat.ExportHasPendingPermission(chatModel) {
 		t.Error("expected pending permission to be cleared after approval")
 	}
 
 	// Permission history should record the approval
 	if chat.ExportGetPermissionHistoryLen(chatModel) != 1 {
-		t.Errorf("expected 1 permission history entry, got %d", chat.ExportGetPermissionHistoryLen(chatModel))
+		t.Errorf(
+			"expected 1 permission history entry, got %d",
+			chat.ExportGetPermissionHistoryLen(chatModel),
+		)
 	}
 
 	if !chat.ExportGetPermissionHistoryLastAllowed(chatModel) {
@@ -89,11 +98,18 @@ func TestPermissionKey_AllowWithUpperY(t *testing.T) {
 	chat.ExportSetPendingPermission(model, "Shell Command", "ls", "", responseChan)
 
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Y'}})
 
 	approved := <-responseChan
 	if !approved {
 		t.Error("expected permission to be approved after pressing 'Y'")
+	}
+
+	// Verify type assertion succeeds (no further checks needed — AllowWithY covers history)
+	_, ok := updatedModel.(*chat.Model)
+	if !ok {
+		t.Fatal("expected *chat.Model type assertion to succeed")
 	}
 }
 
@@ -106,6 +122,7 @@ func TestPermissionKey_DenyWithN(t *testing.T) {
 	chat.ExportSetPendingPermission(model, "Shell Command", "rm -rf /", "", responseChan)
 
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 
 	denied := <-responseChan
@@ -114,7 +131,10 @@ func TestPermissionKey_DenyWithN(t *testing.T) {
 	}
 
 	// Permission history should record the denial
-	chatModel := updatedModel.(*chat.Model)
+	chatModel, ok := updatedModel.(*chat.Model)
+	if !ok {
+		t.Fatal("expected *chat.Model type assertion to succeed")
+	}
 
 	if chat.ExportGetPermissionHistoryLastAllowed(chatModel) {
 		t.Error("expected last permission to be denied")
@@ -130,6 +150,7 @@ func TestPermissionKey_DenyWithEsc(t *testing.T) {
 	chat.ExportSetPendingPermission(model, "Shell Command", "ls", "", responseChan)
 
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
 	denied := <-responseChan
@@ -137,7 +158,11 @@ func TestPermissionKey_DenyWithEsc(t *testing.T) {
 		t.Error("expected permission to be denied after pressing escape")
 	}
 
-	chatModel := updatedModel.(*chat.Model)
+	chatModel, ok := updatedModel.(*chat.Model)
+	if !ok {
+		t.Fatal("expected *chat.Model type assertion to succeed")
+	}
+
 	if chat.ExportHasPendingPermission(chatModel) {
 		t.Error("expected pending permission to be cleared after denial")
 	}
@@ -159,7 +184,6 @@ func TestPermissionHandler_YoloAutoApproves(t *testing.T) {
 		},
 		copilot.PermissionInvocation{},
 	)
-
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -194,8 +218,15 @@ func TestPermissionHandler_NonYoloSendsToChannel(t *testing.T) {
 		resultChan <- result
 	}()
 
-	// Read the permission request from the event channel
-	msg := <-eventChan
+	// Read the permission request from the event channel with timeout
+	var msg tea.Msg
+
+	select {
+	case msg = <-eventChan:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for permission request on event channel")
+	}
+
 	if msg == nil {
 		t.Fatal("expected a permission request message on event channel")
 	}
@@ -204,17 +235,26 @@ func TestPermissionHandler_NonYoloSendsToChannel(t *testing.T) {
 	model := chat.NewModel(newTestParams())
 
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(msg)
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 
 	// Verify the handler goroutine returns "approved"
-	result := <-resultChan
-	if result.Kind != "approved" {
-		t.Errorf("expected 'approved', got %q", result.Kind)
+	select {
+	case result := <-resultChan:
+		if result.Kind != "approved" {
+			t.Errorf("expected 'approved', got %q", result.Kind)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for permission handler result")
 	}
 
 	// Verify the model cleared the pending permission
-	chatModel := updatedModel.(*chat.Model)
+	chatModel, ok := updatedModel.(*chat.Model)
+	if !ok {
+		t.Fatal("expected *chat.Model type assertion to succeed")
+	}
+
 	if chat.ExportHasPendingPermission(chatModel) {
 		t.Error("expected pending permission to be cleared after approval")
 	}
@@ -244,7 +284,14 @@ func TestPermissionHandler_NilYoloRef(t *testing.T) {
 	}()
 
 	// Read the permission request from the event channel (not auto-approved)
-	msg := <-eventChan
+	var msg tea.Msg
+
+	select {
+	case msg = <-eventChan:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for permission request on event channel")
+	}
+
 	if msg == nil {
 		t.Fatal("expected permission request to be sent to event channel with nil yoloRef")
 	}
@@ -253,67 +300,28 @@ func TestPermissionHandler_NilYoloRef(t *testing.T) {
 	model := chat.NewModel(newTestParams())
 
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(msg)
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
 	// Verify the handler goroutine returns "denied-interactively-by-user"
-	result := <-resultChan
-	if result.Kind != "denied-interactively-by-user" {
-		t.Errorf("expected 'denied-interactively-by-user', got %q", result.Kind)
+	select {
+	case result := <-resultChan:
+		if result.Kind != "denied-interactively-by-user" {
+			t.Errorf("expected 'denied-interactively-by-user', got %q", result.Kind)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for permission handler result")
 	}
 
 	// Verify the model cleared the pending permission
-	chatModel := updatedModel.(*chat.Model)
+	chatModel, ok := updatedModel.(*chat.Model)
+	if !ok {
+		t.Fatal("expected *chat.Model type assertion to succeed")
+	}
+
 	if chat.ExportHasPendingPermission(chatModel) {
 		t.Error("expected pending permission to be cleared after denial")
-	}
-}
-
-// TestFormatPermissionKind tests the formatting of permission kinds.
-func TestFormatPermissionKind(t *testing.T) {
-	t.Parallel()
-
-	// We test this indirectly through the permission modal display since
-	// formatPermissionKind is unexported. Instead, test through CreateTUIPermissionHandler
-	// and verify the resulting tool names.
-	tests := []struct {
-		name     string
-		kind     string
-		toolName string
-		command  string
-	}{
-		{
-			name:     "shell command shows in modal",
-			kind:     "shell",
-			toolName: "Shell Command",
-			command:  "echo test",
-		},
-		{
-			name:     "file edit shows in modal",
-			kind:     "file_edit",
-			toolName: "File Edit",
-			command:  "/tmp/test.go",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			model := chat.NewModel(newTestParams())
-			responseChan := make(chan bool, 1)
-			chat.ExportSetPendingPermission(model, tc.toolName, tc.command, "", responseChan)
-
-			output := model.View()
-
-			if !strings.Contains(output, tc.toolName) {
-				t.Errorf("expected tool name %q in permission modal", tc.toolName)
-			}
-
-			if !strings.Contains(output, tc.command) {
-				t.Errorf("expected command %q in permission modal", tc.command)
-			}
-		})
 	}
 }
 

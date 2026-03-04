@@ -136,7 +136,11 @@ func TestChatMode_ToSDKMode(t *testing.T) {
 	}{
 		{name: "agent maps to interactive", mode: chat.AgentMode, expected: rpc.Interactive},
 		{name: "plan maps to plan", mode: chat.PlanMode, expected: rpc.Plan},
-		{name: "unknown defaults to interactive", mode: chat.ChatMode(99), expected: rpc.Interactive},
+		{
+			name:     "unknown defaults to interactive",
+			mode:     chat.ChatMode(99),
+			expected: rpc.Interactive,
+		},
 	}
 
 	for _, tc := range tests {

@@ -32,6 +32,7 @@ func TestReasoningPickerShowsAllLevels(t *testing.T) {
 
 	// Increase height so all 4 reasoning levels are visible in the picker
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
 
 	output := updatedModel.View()
@@ -72,6 +73,7 @@ func TestReasoningPickerClose_Escape(t *testing.T) {
 	chat.ExportSetShowReasoningPicker(model, true)
 
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
 	output := updatedModel.View()
@@ -89,6 +91,7 @@ func TestReasoningPickerClose_CtrlE(t *testing.T) {
 	chat.ExportSetShowReasoningPicker(model, true)
 
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
 
 	output := updatedModel.View()
@@ -103,10 +106,10 @@ func TestReasoningPickerCurrentEffortCheckmark(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
-		effort       string
-		expected     string
-		pickerIndex  int
+		name        string
+		effort      string
+		expected    string
+		pickerIndex int
 	}{
 		{name: "off shows checkmark", effort: "", expected: "off", pickerIndex: 0},
 		{name: "low shows checkmark", effort: "low", expected: "low", pickerIndex: 1},
@@ -114,29 +117,33 @@ func TestReasoningPickerCurrentEffortCheckmark(t *testing.T) {
 		{name: "high shows checkmark", effort: "high", expected: "high", pickerIndex: 3},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			model := chat.NewModel(newTestParams())
-			chat.ExportSetSessionConfigReasoningEffort(model, tc.effort)
+			chat.ExportSetSessionConfigReasoningEffort(model, testCase.effort)
 			chat.ExportSetShowReasoningPicker(model, true)
 			// Set picker index to match the effort level so it's visible in the scroll window
-			chat.ExportSetReasoningPickerIndex(model, tc.pickerIndex)
+			chat.ExportSetReasoningPickerIndex(model, testCase.pickerIndex)
 
 			// Increase height so all 4 reasoning levels are visible
 			var updatedModel tea.Model = model
+
 			updatedModel, _ = updatedModel.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
 
 			output := updatedModel.View()
 
 			// The current effort level should be present with a checkmark
-			if !strings.Contains(output, tc.expected) {
-				t.Errorf("expected '%s' effort level in reasoning picker view", tc.expected)
+			if !strings.Contains(output, testCase.expected) {
+				t.Errorf("expected '%s' effort level in reasoning picker view", testCase.expected)
 			}
 
 			if !strings.Contains(output, "✓") {
-				t.Errorf("expected checkmark in reasoning picker for current effort '%s'", tc.expected)
+				t.Errorf(
+					"expected checkmark in reasoning picker for current effort '%s'",
+					testCase.expected,
+				)
 			}
 		})
 	}
@@ -153,6 +160,7 @@ func TestReasoningPickerSelectSameEffort(t *testing.T) {
 	chat.ExportSetReasoningPickerIndex(model, 0) // "off"
 
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	output := updatedModel.View()
@@ -177,86 +185,62 @@ func TestReasoningEffortInStatusBar(t *testing.T) {
 		{name: "high effort in status", effort: "high", expected: "high effort"},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			model := chat.NewModel(newTestParams())
-			chat.ExportSetSessionConfigReasoningEffort(model, tc.effort)
+			chat.ExportSetSessionConfigReasoningEffort(model, testCase.effort)
 
 			output := model.View()
 
-			if tc.expected == "" {
+			if testCase.expected == "" {
 				if strings.Contains(output, "effort") {
 					t.Error("expected no effort indicator in status bar when effort is empty")
 				}
 			} else {
-				if !strings.Contains(output, tc.expected) {
-					t.Errorf("expected '%s' in status bar", tc.expected)
+				if !strings.Contains(output, testCase.expected) {
+					t.Errorf("expected '%s' in status bar", testCase.expected)
 				}
 			}
 		})
 	}
 }
 
-// TestReasoningPickerSupportsReasoning tests that reasoning support depends on model capabilities.
-func TestReasoningPickerSupportsReasoning(t *testing.T) {
+// TestReasoningPickerSupportsReasoning_Enabled tests reasoning-capable models.
+func TestReasoningPickerSupportsReasoning_Enabled(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name           string
-		modelID        string
-		models         []copilot.ModelInfo
-		configModel    string
-		expectSupports bool
-	}{
-		{
-			name:    "model supports reasoning",
-			modelID: "o1-preview",
-			models: []copilot.ModelInfo{
-				{
-					ID: "o1-preview",
-					Capabilities: copilot.ModelCapabilities{
-						Supports: copilot.ModelSupports{
-							ReasoningEffort: true,
-						},
-					},
-				},
-			},
-			configModel:    "o1-preview",
-			expectSupports: true,
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetAvailableModels(model, []copilot.ModelInfo{{
+		ID: "o1-preview",
+		Capabilities: copilot.ModelCapabilities{
+			Supports: copilot.ModelSupports{ReasoningEffort: true},
 		},
-		{
-			name:    "model does not support reasoning",
-			modelID: "gpt-4o",
-			models: []copilot.ModelInfo{
-				{
-					ID: "gpt-4o",
-					Capabilities: copilot.ModelCapabilities{
-						Supports: copilot.ModelSupports{
-							ReasoningEffort: false,
-						},
-					},
-				},
-			},
-			configModel:    "gpt-4o",
-			expectSupports: false,
-		},
+	}})
+	chat.ExportSetCurrentModel(model, "o1-preview")
+	chat.ExportSetSessionConfigModel(model, "o1-preview")
+
+	if !chat.ExportCurrentModelSupportsReasoning(model) {
+		t.Error("expected currentModelSupportsReasoning() = true for reasoning-capable model")
 	}
+}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+// TestReasoningPickerSupportsReasoning_Disabled tests non-reasoning models.
+func TestReasoningPickerSupportsReasoning_Disabled(t *testing.T) {
+	t.Parallel()
 
-			model := chat.NewModel(newTestParams())
-			chat.ExportSetAvailableModels(model, tc.models)
-			chat.ExportSetCurrentModel(model, tc.modelID)
-			chat.ExportSetSessionConfigModel(model, tc.configModel)
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetAvailableModels(model, []copilot.ModelInfo{{
+		ID: "gpt-4o",
+		Capabilities: copilot.ModelCapabilities{
+			Supports: copilot.ModelSupports{ReasoningEffort: false},
+		},
+	}})
+	chat.ExportSetCurrentModel(model, "gpt-4o")
+	chat.ExportSetSessionConfigModel(model, "gpt-4o")
 
-			got := chat.ExportCurrentModelSupportsReasoning(model)
-			if got != tc.expectSupports {
-				t.Errorf("currentModelSupportsReasoning() = %v, want %v", got, tc.expectSupports)
-			}
-		})
+	if chat.ExportCurrentModelSupportsReasoning(model) {
+		t.Error("expected currentModelSupportsReasoning() = false for non-reasoning model")
 	}
 }

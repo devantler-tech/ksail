@@ -57,13 +57,17 @@ func TestFilterEnabledModels(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := chat.FilterEnabledModels(tc.models)
-			if len(result) != tc.expected {
-				t.Errorf("FilterEnabledModels() returned %d models, want %d", len(result), tc.expected)
+			result := chat.FilterEnabledModels(testCase.models)
+			if len(result) != testCase.expected {
+				t.Errorf(
+					"FilterEnabledModels() returned %d models, want %d",
+					len(result),
+					testCase.expected,
+				)
 			}
 		})
 	}
@@ -106,6 +110,7 @@ func TestModelPickerNavigation(t *testing.T) {
 
 	// Navigate down
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyDown})
 
 	output := updatedModel.View()
@@ -124,6 +129,7 @@ func TestModelPickerClose_EscapeKey(t *testing.T) {
 	chat.ExportSetShowModelPicker(model, true)
 
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
 	output := updatedModel.View()
@@ -141,6 +147,7 @@ func TestModelPickerClose_CtrlO(t *testing.T) {
 	chat.ExportSetShowModelPicker(model, true)
 
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
 
 	output := updatedModel.View()
@@ -224,6 +231,7 @@ func TestModelPickerSelectCurrentModel(t *testing.T) {
 
 	// Press Enter to select (same model = just close picker)
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	output := updatedModel.View()

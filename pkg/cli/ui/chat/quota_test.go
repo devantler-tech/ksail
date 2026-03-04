@@ -128,6 +128,7 @@ func TestQuotaDisplay_InFooter(t *testing.T) {
 
 	// Widen the terminal so there is enough room for help text + quota
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
 
 	output := updatedModel.View()

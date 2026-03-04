@@ -22,17 +22,17 @@ func TestStatusBar_ModeDisplay(t *testing.T) {
 		{name: "plan mode in status", mode: chat.PlanMode, expected: "\u2261 plan"},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			model := chat.NewModel(newTestParams())
-			chat.ExportSetChatMode(model, tc.mode)
+			chat.ExportSetChatMode(model, testCase.mode)
 
 			output := model.View()
 
-			if !strings.Contains(output, tc.expected) {
-				t.Errorf("expected %q in status bar, not found in output", tc.expected)
+			if !strings.Contains(output, testCase.expected) {
+				t.Errorf("expected %q in status bar, not found in output", testCase.expected)
 			}
 		})
 	}
@@ -130,6 +130,7 @@ func TestView_Quitting(t *testing.T) {
 
 	// Trigger quit by pressing Ctrl+C without permission/picker modals
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 
 	output := updatedModel.View()
@@ -229,6 +230,7 @@ func TestModelPickerCheckmark_CurrentModel(t *testing.T) {
 
 	// Increase height for better visibility
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
 
 	output := updatedModel.View()
@@ -267,6 +269,7 @@ func TestHelpOverlay_VisibleInView(t *testing.T) {
 
 	// Increase height for overlay
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.WindowSizeMsg{Width: 120, Height: 50})
 
 	output := updatedModel.View()
@@ -377,19 +380,30 @@ func TestWindowResize_SmallTerminal(t *testing.T) {
 	}
 }
 
-// TestUpdate_CopyFeedbackClear tests that copy feedback is cleared by its message.
+// TestUpdate_CopyFeedbackClear tests that copyFeedbackClearMsg transitions showCopyFeedback from true to false.
 func TestUpdate_CopyFeedbackClear(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
+	chat.ExportSetShowCopyFeedback(model, true)
 
-	// Send the clear message (publicly available type not needed — just test Update doesn't panic)
+	if !chat.ExportGetShowCopyFeedback(model) {
+		t.Fatal("expected showCopyFeedback to be true before clear message")
+	}
+
+	// Send the clear message
+	clearMsg := chat.ExportNewCopyFeedbackClearMsg()
+
 	var updatedModel tea.Model = model
-	updatedModel, _ = updatedModel.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 
-	output := updatedModel.View()
+	updatedModel, _ = updatedModel.Update(clearMsg)
 
-	if output == "" {
-		t.Error("expected non-empty view")
+	chatModel, ok := updatedModel.(*chat.Model)
+	if !ok {
+		t.Fatal("expected *chat.Model type assertion to succeed")
+	}
+
+	if chat.ExportGetShowCopyFeedback(chatModel) {
+		t.Error("expected showCopyFeedback to be false after clear message")
 	}
 }
