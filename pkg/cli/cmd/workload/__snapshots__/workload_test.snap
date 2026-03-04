@@ -1,6 +1,6 @@
 
 [TestNewWorkloadCmdRunETriggersHelp - 1]
-Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, export, expose, gen, get, import, install, logs, push, rollout, scale, validate, or wait for workloads.
+Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, export, expose, gen, get, import, install, logs, push, rollout, scale, validate, wait, or watch for workloads.
 
 Usage:
   workload [flags]
@@ -30,6 +30,7 @@ Available Commands:
   scale       Scale resources
   validate    Validate Kubernetes manifests and kustomizations
   wait        Wait for a specific condition on one or many resources
+  watch       Watch for file changes and auto-apply workloads
 
 Flags:
   -h, --help   help for workload
@@ -847,7 +848,7 @@ Global Flags:
 ---
 
 [TestWorkloadHelpSnapshots/namespace - 1]
-Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, export, expose, gen, get, import, install, logs, push, rollout, scale, validate, or wait for workloads.
+Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, export, expose, gen, get, import, install, logs, push, rollout, scale, validate, wait, or watch for workloads.
 
 Usage:
   ksail workload [flags]
@@ -875,6 +876,7 @@ Available Commands:
   scale       Scale resources
   validate    Validate Kubernetes manifests and kustomizations
   wait        Wait for a specific condition on one or many resources
+  watch       Watch for file changes and auto-apply workloads
 
 Flags:
   -h, --help   help for workload
@@ -1109,6 +1111,35 @@ Flags:
       --show-managed-fields           If true, keep the managedFields when printing objects in JSON or YAML format.
       --template string               Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
       --timeout duration              The length of time to wait before giving up. Zero means check once and don't wait, negative means wait for a week. (default 30s)
+
+Global Flags:
+      --benchmark   Show per-activity benchmark output
+
+---
+
+[TestWorkloadHelpSnapshots/watch - 1]
+Watch a directory for file changes and automatically apply workloads.
+
+When files in the watched directory are created, modified, or deleted,
+the command debounces changes (~500ms) then runs the equivalent of
+'ksail workload apply -k <path>' to reconcile the cluster.
+
+Each reconcile prints a timestamped status line showing the changed file
+and the outcome (success or failure). Press Ctrl+C to stop the watcher.
+
+Examples:
+  # Watch the default k8s/ directory
+  ksail workload watch
+
+  # Watch a custom directory
+  ksail workload watch --path=./manifests
+
+Usage:
+  ksail workload watch [flags]
+
+Flags:
+  -h, --help          help for watch
+      --path string   Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
 
 Global Flags:
       --benchmark   Show per-activity benchmark output
