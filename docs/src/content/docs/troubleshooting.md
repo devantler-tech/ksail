@@ -30,6 +30,9 @@ If you encounter `Error: Port 5000 is already allocated`, either configure a dif
 ```bash
 # macOS/Linux
 lsof -ti:5000 | xargs kill -9
+```
+
+```powershell
 # Windows (PowerShell)
 netstat -ano | findstr :5000
 taskkill /PID <process-id> /F
@@ -42,8 +45,13 @@ taskkill /PID <process-id> /F
 KSail verifies registry access during `ksail cluster create`/`update` and retries transient errors (HTTP 429, 5xx, timeouts) automatically. If verification fails, or if `ksail workload push` returns authentication errors, verify the registry is reachable and credentials are configured:
 
 ```bash
-curl -I https://registry.example.com/v2/   # test connectivity
-docker ps | grep registry                  # verify local registry is running
+# External registry: verify connectivity
+curl -I https://registry.example.com/v2/
+
+# If using the KSail-managed local registry, verify the registry container is running
+docker ps | grep registry
+
+# Example: configure KSail to use an external registry with credentials
 ksail cluster init --local-registry '${REG_USER}:${REG_TOKEN}@registry.example.com/my-org/my-repo'
 ```
 
