@@ -172,11 +172,11 @@ runs:
         # Pre-pull VCluster base images to avoid transient GHCR pull failures
         # during cluster creation (see issue #2749, #2646).
         # Source of truth: pkg/fsutil/configmanager/vcluster/Dockerfile
-        IMAGES=$(grep '^FROM ' pkg/fsutil/configmanager/vcluster/Dockerfile | sed 's/^FROM //')
+        IMAGES=$(sed -n 's/^FROM \([^ ]*\).*/\1/p' pkg/fsutil/configmanager/vcluster/Dockerfile)
         for image in $IMAGES; do
           pulled=false
           for attempt in 1 2 3; do
-            if docker pull "$image"; then
+            if docker pull --quiet "$image"; then
               echo "✅ $image pulled successfully"
               pulled=true
               break
