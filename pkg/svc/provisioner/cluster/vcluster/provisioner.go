@@ -72,10 +72,17 @@ const dbusErrorSubstring = "Failed to connect to bus"
 // daemon or container runtime hits a temporary invalid-argument condition.
 // "fetching blob: denied: denied" has been observed when GHCR transiently
 // rejects blob downloads mid-pull for the VCluster Kubernetes base image.
+// Network-level errors (i/o timeout, connection reset, TLS failures, DNS
+// failures) cover transient infrastructure conditions on CI runners.
 func transientCreateErrors() []string {
 	return []string{
 		"exit status 22",
 		"fetching blob: denied: denied",
+		"i/o timeout",
+		"connection reset by peer",
+		"TLS handshake timeout",
+		"no such host",
+		"temporary failure in name resolution",
 	}
 }
 
