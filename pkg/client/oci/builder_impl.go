@@ -332,7 +332,6 @@ func addFileToArchive(
 		return fmt.Errorf("get relative path for %s: %w", path, err)
 	}
 
-	//nolint:gosec // G304: path is from filepath.WalkDir within user-specified root
 	content, err := os.ReadFile(
 		path,
 	)

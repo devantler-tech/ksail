@@ -172,7 +172,7 @@ func (k *Provisioner) Create(ctx context.Context, name string) error {
 
 	defer func() { _ = tmpFile.Close() }()
 	defer func() {
-		_ = os.Remove(tmpFile.Name()) //nolint:gosec // G703: tmpFile is created by os.CreateTemp
+		_ = os.Remove(tmpFile.Name())
 	}()
 
 	marshaller := marshaller.NewYAMLMarshaller[*v1alpha4.Cluster]()
@@ -184,7 +184,6 @@ func (k *Provisioner) Create(ctx context.Context, name string) error {
 
 	const configFilePerms = 0o600
 
-	//nolint:gosec // G703: tmpFile is created by os.CreateTemp
 	err = os.WriteFile(
 		tmpFile.Name(),
 		[]byte(configYAML),

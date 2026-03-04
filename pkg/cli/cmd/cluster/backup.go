@@ -652,7 +652,6 @@ func addFileToTar(
 		return nil
 	}
 
-	//nolint:gosec // G304: path is from filepath.WalkDir within user-specified directory
 	file, err := os.Open(
 		path,
 	)
