@@ -51,10 +51,11 @@ func (m *Model) updateViewportContent() {
 
 // calculateWrapWidth calculates the content width for text wrapping.
 func (m *Model) calculateWrapWidth() uint {
-	// wrapWidth is guaranteed non-negative by max with minWrapWidth (20).
-	wrapWidth := max(m.viewport.Width-wrapPadding, minWrapWidth)
+	// wrapWidth is guaranteed non-negative by max with minWrapWidth (20),
+	// but we normalize defensively so static analysis tools recognize the guard.
+	wrapWidth := max(m.viewport.Width-wrapPadding, minWrapWidth, 0)
 
-	return uint(wrapWidth)
+	return uint(wrapWidth) //nolint:gosec,nolintlint // G115: guarded by max with 0
 }
 
 // renderMessage renders a single message to the builder.
