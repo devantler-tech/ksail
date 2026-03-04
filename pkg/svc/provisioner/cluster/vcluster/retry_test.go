@@ -28,6 +28,11 @@ var (
 	errRegistryDenied = errors.New(
 		"reading blob sha256:abc: fetching blob: denied: denied",
 	)
+	errIOTimeout    = errors.New("dial tcp 1.2.3.4:443: i/o timeout")
+	errConnReset    = errors.New("read tcp 10.0.0.1:54321->1.2.3.4:443: connection reset by peer")
+	errTLSTimeout   = errors.New("net/http: TLS handshake timeout")
+	errNoSuchHost   = errors.New("dial tcp: lookup ghcr.io: no such host")
+	errDNSTransient = errors.New("dial tcp: lookup ghcr.io: temporary failure in name resolution")
 )
 
 func newTestLogger() loftlog.Logger {
@@ -72,6 +77,31 @@ func TestIsTransientCreateError(t *testing.T) {
 		{
 			name: "registry_denied_is_transient",
 			err:  errRegistryDenied,
+			want: true,
+		},
+		{
+			name: "io_timeout_is_transient",
+			err:  errIOTimeout,
+			want: true,
+		},
+		{
+			name: "connection_reset_is_transient",
+			err:  errConnReset,
+			want: true,
+		},
+		{
+			name: "tls_handshake_timeout_is_transient",
+			err:  errTLSTimeout,
+			want: true,
+		},
+		{
+			name: "no_such_host_is_transient",
+			err:  errNoSuchHost,
+			want: true,
+		},
+		{
+			name: "dns_temporary_failure_is_transient",
+			err:  errDNSTransient,
 			want: true,
 		},
 		{
