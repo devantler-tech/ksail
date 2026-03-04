@@ -19,9 +19,6 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
-  github-app:
-    app-id: ${{ vars.APP_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   noop: false
   create-discussion:
     title-prefix: "${{ github.workflow }}"
@@ -31,10 +28,7 @@ safe-outputs:
 
 tools:
   github:
-    github-app:
-      app-id: ${{ vars.APP_ID }}
-      private-key: ${{ secrets.APP_PRIVATE_KEY }}
-    toolsets: [default, discussions, search]
+    toolsets: [all]
   web-fetch:
 
 timeout-minutes: 15
