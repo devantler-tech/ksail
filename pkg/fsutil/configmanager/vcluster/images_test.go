@@ -123,10 +123,10 @@ func TestChartVersion_ExpectedValue(t *testing.T) {
 
 	// This test documents the current Dockerfile content.
 	// The exact version may change with Dependabot updates.
-	// FROM ghcr.io/loft-sh/vcluster-pro:0.32.0-alpha.2
+	// FROM ghcr.io/loft-sh/vcluster-pro:0.32.1
 	assert.Equal(
 		t,
-		"0.32.0-alpha.2",
+		"0.32.1",
 		version,
 		"ChartVersion should match current Dockerfile (update this test when Dependabot updates the version)",
 	)
