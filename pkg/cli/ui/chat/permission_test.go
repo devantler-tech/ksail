@@ -115,11 +115,9 @@ func TestPermissionKey_DenyWithN(t *testing.T) {
 
 	// Permission history should record the denial
 	chatModel := updatedModel.(*chat.Model)
-	if !chat.ExportGetPermissionHistoryLastAllowed(chatModel) == true {
-		// Verify it was denied
-		if chat.ExportGetPermissionHistoryLastAllowed(chatModel) {
-			t.Error("expected last permission to be denied")
-		}
+
+	if chat.ExportGetPermissionHistoryLastAllowed(chatModel) {
+		t.Error("expected last permission to be denied")
 	}
 }
 

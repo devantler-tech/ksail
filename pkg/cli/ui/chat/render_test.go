@@ -19,7 +19,7 @@ func TestStatusBar_ModeDisplay(t *testing.T) {
 		expected string
 	}{
 		{name: "agent mode in status", mode: chat.AgentMode, expected: "</> agent"},
-		{name: "plan mode in status", mode: chat.PlanMode, expected: "plan"},
+		{name: "plan mode in status", mode: chat.PlanMode, expected: "\u2261 plan"},
 	}
 
 	for _, tc := range tests {
