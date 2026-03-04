@@ -21,12 +21,17 @@ func TestChatMode_String(t *testing.T) {
 		{name: "unknown mode defaults to agent", mode: chat.ChatMode(99), expected: "agent"},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := tc.mode.String(); got != tc.expected {
-				t.Errorf("ChatMode(%d).String() = %q, want %q", tc.mode, got, tc.expected)
+			if got := testCase.mode.String(); got != testCase.expected {
+				t.Errorf(
+					"ChatMode(%d).String() = %q, want %q",
+					testCase.mode,
+					got,
+					testCase.expected,
+				)
 			}
 		})
 	}
@@ -46,12 +51,12 @@ func TestChatMode_Icon(t *testing.T) {
 		{name: "unknown mode defaults to agent icon", mode: chat.ChatMode(99), expected: "</>"},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := tc.mode.Icon(); got != tc.expected {
-				t.Errorf("ChatMode(%d).Icon() = %q, want %q", tc.mode, got, tc.expected)
+			if got := testCase.mode.Icon(); got != testCase.expected {
+				t.Errorf("ChatMode(%d).Icon() = %q, want %q", testCase.mode, got, testCase.expected)
 			}
 		})
 	}
@@ -70,12 +75,17 @@ func TestChatMode_Label(t *testing.T) {
 		{name: "plan mode label", mode: chat.PlanMode, expected: "\u2261 plan"},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := tc.mode.Label(); got != tc.expected {
-				t.Errorf("ChatMode(%d).Label() = %q, want %q", tc.mode, got, tc.expected)
+			if got := testCase.mode.Label(); got != testCase.expected {
+				t.Errorf(
+					"ChatMode(%d).Label() = %q, want %q",
+					testCase.mode,
+					got,
+					testCase.expected,
+				)
 			}
 		})
 	}
@@ -95,12 +105,12 @@ func TestChatMode_Next(t *testing.T) {
 		{name: "unknown defaults to agent", mode: chat.ChatMode(99), expected: chat.AgentMode},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := tc.mode.Next(); got != tc.expected {
-				t.Errorf("ChatMode(%d).Next() = %v, want %v", tc.mode, got, tc.expected)
+			if got := testCase.mode.Next(); got != testCase.expected {
+				t.Errorf("ChatMode(%d).Next() = %v, want %v", testCase.mode, got, testCase.expected)
 			}
 		})
 	}
@@ -143,12 +153,17 @@ func TestChatMode_ToSDKMode(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := tc.mode.ToSDKMode(); got != tc.expected {
-				t.Errorf("ChatMode(%d).ToSDKMode() = %v, want %v", tc.mode, got, tc.expected)
+			if got := testCase.mode.ToSDKMode(); got != testCase.expected {
+				t.Errorf(
+					"ChatMode(%d).ToSDKMode() = %v, want %v",
+					testCase.mode,
+					got,
+					testCase.expected,
+				)
 			}
 		})
 	}
