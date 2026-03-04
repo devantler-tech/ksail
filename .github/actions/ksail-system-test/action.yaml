@@ -123,7 +123,7 @@ runs:
         ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
 
     - name: 🔧 Configure Omni endpoint
-      if: inputs.provider == 'Omni' && inputs.omni-endpoint != ''
+      if: ${{ inputs.provider == 'Omni' && inputs.omni-endpoint != '' }}
       shell: bash
       env:
         OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
