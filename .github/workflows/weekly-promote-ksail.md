@@ -52,11 +52,11 @@ Gather what's genuinely interesting about KSail right now:
 
 Choose **one** platform. Rotate naturally — avoid picking the same platform two weeks in a row (check previous discussions from Step 1).
 
-| Medium | Best for | Tone |
-|--------|----------|------|
+| Medium                                            | Best for                                                             | Tone                                                                                 |
+|---------------------------------------------------|----------------------------------------------------------------------|--------------------------------------------------------------------------------------|
 | **Reddit** (r/kubernetes, r/devops, r/selfhosted) | Sharing a practical tip, asking for feedback, announcing a milestone | Community-first, never promotional. Lead with the problem solved, not the tool name. |
-| **LinkedIn** | Professional milestones, architecture insights, lessons learned | Conversational but polished. Tell a story or share an insight. No listicle format. |
-| **Blog post** (devantler.tech) | Feature deep-dives, tutorials, comparisons | 800–1500 words. Include actual code snippets and real examples. |
+| **LinkedIn**                                      | Professional milestones, architecture insights, lessons learned      | Conversational but polished. Tell a story or share an insight. No listicle format.   |
+| **Blog post** (devantler.tech)                    | Feature deep-dives, tutorials, comparisons                           | 800–1500 words. Include actual code snippets and real examples.                      |
 
 ## Step 3 — Write the content
 
