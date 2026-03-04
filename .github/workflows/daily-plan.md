@@ -30,7 +30,7 @@ safe-outputs:
     max: 5
   add-comment:
     target: "*"
-    max: 5
+    max: 10
 
 tools:
   github:
