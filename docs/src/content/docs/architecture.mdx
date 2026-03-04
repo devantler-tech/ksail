@@ -59,17 +59,7 @@ API types, schemas, and enums that define KSail's configuration model.
 - **Top-level `schemas/` directory** — Generated JSON schema for `ksail.yaml` (via `go generate ./schemas/...`) used for validation and editor autocomplete
 
 #### `pkg/cli/`
-CLI wiring, commands, and terminal UI components.
-
-- **`cmd/`** — Cobra command implementations
-- **`ui/`** — Terminal UI components (chat TUI, ASCII art, confirmations)
-- **`lifecycle/`** — Cluster lifecycle orchestration
-- **`setup/`** — Component setup (CNI, mirror registries, etc.)
-- **`annotations/`** — Command annotation constants
-- **`flags/`** — CLI flag handling utilities
-- **`dockerutil/`** — Docker client lifecycle management
-- **`editor/`** — Editor configuration resolution
-- **`kubeconfig/`** — Kubeconfig file path helpers
+CLI wiring, commands, and terminal UI components (`cmd/` for Cobra commands, `ui/` for TUI, `lifecycle/` for cluster orchestration, `setup/` for component installation).
 
 #### `pkg/client/`
 Embedded tool clients that wrap Kubernetes tools as Go libraries.
@@ -91,41 +81,10 @@ Embedded tool clients that wrap Kubernetes tools as Go libraries.
 #### `pkg/svc/`
 Services implementing core business logic.
 
-##### Infrastructure Management
-
-- **`provider/`** — Infrastructure providers
-  - **`docker/`** — Docker-based clusters (Vanilla, K3s, Talos, VCluster)
-  - **`hetzner/`** — Hetzner Cloud for Talos
-  - **`omni/`** — Sidero Omni for Talos
-
-##### Distribution Provisioning
-
-- **`provisioner/cluster/`** — Distribution provisioners
-  - **`kind/`** — Vanilla (standard Kubernetes via Kind SDK)
-  - **`k3d/`** — K3s (lightweight K3s via K3d Cobra/SDK)
-  - **`talos/`** — Talos (immutable Talos Linux via Talos SDK)
-  - **`vcluster/`** — VCluster (virtual clusters via vCluster Go SDK with Vind Docker driver)
+- **`provider/`** — Infrastructure providers (Docker, Hetzner, Omni)
+- **`provisioner/cluster/`** — Distribution provisioners (Vanilla (Kind), K3s (K3d), Talos, VCluster)
 - **`provisioner/registry/`** — Registry provisioner for mirror registries
-
-##### Component Installation
-
-- **`installer/`** — Component installers
-  - **`calico/`** — Calico CNI
-  - **`cilium/`** — Cilium CNI
-  - **`certmanager/`** — Cert-manager for TLS
-  - **`cloudproviderkind/`** — Cloud Provider KIND for LoadBalancer support (Vanilla)
-  - **`gatekeeper/`** — Gatekeeper policy engine
-  - **`hcloudccm/`** — Hetzner Cloud Controller Manager
-  - **`hetznercsi/`** — Hetzner CSI driver
-  - **`kyverno/`** — Kyverno policy engine
-  - **`localpathcsi/`** — Local path CSI
-  - **`longhorncsi/`** — Longhorn CSI
-  - **`metallb/`** — MetalLB LoadBalancer (Talos)
-  - **`metricsserver/`** — Metrics Server
-  - **`internal/hetzner/`** — Shared utilities for Hetzner installers
-
-##### Other Services
-
+- **`installer/`** — Component installers (CNI, CSI, LoadBalancer, policy engines, cert-manager, metrics-server)
 - **`chat/`** — AI chat integration using GitHub Copilot SDK
 - **`detector/`** — Detects installed components by querying Helm and Kubernetes API
 - **`diff/`** — Computes ClusterSpec diffs and classifies update impact
@@ -211,26 +170,7 @@ sequenceDiagram
 
 ### Example: Talos Distribution
 
-Talos demonstrates the provider/provisioner separation:
-
-1. **Talos Provisioner** (`pkg/svc/provisioner/cluster/talos/`)
-   - Generates Talos machine configs and patches
-   - Bootstraps Talos Kubernetes
-   - Manages cluster lifecycle
-
-2. **Docker Provider** (`pkg/svc/provider/docker/`)
-   - Runs Talos nodes as Docker containers
-   - Used for local development
-
-3. **Hetzner Provider** (`pkg/svc/provider/hetzner/`)
-   - Runs Talos nodes on Hetzner Cloud servers
-   - Installs Hetzner CCM and CSI drivers
-
-4. **Omni Provider** (`pkg/svc/provider/omni/`)
-   - Manages Talos clusters via Sidero Omni API
-   - Provides UI and API management
-
-The **same Talos provisioner** works with all three providers, enabling consistent Talos experience across environments.
+Talos demonstrates the provider/provisioner separation. The same Talos provisioner (`pkg/svc/provisioner/cluster/talos/`) generates machine configs and bootstraps Kubernetes regardless of which provider is used: Docker (local containers), Hetzner (cloud servers with CCM and CSI), or Omni (Sidero API). This enables a consistent Talos experience across all environments.
 
 ## Component Lifecycle
 
@@ -340,93 +280,28 @@ KSail provides two AI interfaces:
 
 ### Chat Assistant
 
-**Command:** `ksail chat`
+**Command:** `ksail chat` — **Implementation:** `pkg/svc/chat/`
 
-**Implementation:** `pkg/svc/chat/`
-
-Uses GitHub Copilot SDK to provide interactive cluster configuration and troubleshooting:
-
-- **Two modes:**
-  - **Agent Mode** (`</>`) — Full tool execution with permission prompts
-  - **Plan Mode** (`≡`) — No execution; AI describes steps
-
-- **Features:**
-  - Tab to cycle between modes
-  - `^O` for model picker (lazy-loaded)
-  - `^E` for reasoning effort (low, medium, high)
-  - `^H` for session history
-  - Auto model selection with 10% discount
-  - Quota tracking for premium requests
-  - Infinite sessions with background compaction
-
-- **Authentication:**
-  - Supports `KSAIL_COPILOT_TOKEN` and `COPILOT_TOKEN`
-  - Filters `GITHUB_TOKEN`/`GH_TOKEN` to avoid scope issues
+Uses GitHub Copilot SDK for interactive cluster configuration and troubleshooting. Supports two modes: **Agent** (`</>`) with full tool execution and **Plan** (`≡`) for describing steps without executing. Authenticated via `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN`. See [AI Chat](/ai-chat/) for full documentation.
 
 ### MCP Server
 
-**Command:** `ksail mcp`
+**Command:** `ksail mcp` — **Implementation:** `pkg/svc/mcp/`
 
-**Implementation:** `pkg/svc/mcp/`
-
-Exposes KSail as a Model Context Protocol server for Claude and other AI assistants:
-
-- Tools for cluster management (create, update, delete, info)
-- Workload deployment (apply, reconcile)
-- Configuration helpers
-- Runs as background server that AI assistants connect to
+Exposes KSail as a Model Context Protocol server for Claude and other AI assistants. Provides tools for cluster management, workload deployment, and configuration. See [MCP](/mcp/) for setup instructions.
 
 ## Testing Strategy
 
 KSail uses multiple testing approaches:
 
-### Unit Tests
-
-- **Coverage target:** Individual package coverage varies; overall project aim is high coverage
-- **Mocking:** Uses testify/mock for interfaces
-- **Export pattern:** `export_test.go` files expose unexported symbols for testing without leaking to production
-- **Parallel execution:** Tests use `t.Parallel()` when safe
-- **Static error sentinels:** Tests use static errors (e.g., `errFake`) for predictable mocking
-
-**Example:** `pkg/client/helm/operations_test.go` tests Helm operations with mocked interfaces.
-
-### Integration Tests
-
-Test real cluster operations with actual tools:
-- Create real Kind/K3d/VCluster clusters
-- Deploy real workloads
-- Verify end-to-end workflows
-
-### System Tests (CI)
-
-Comprehensive CI tests cover:
-- All distribution × provider combinations
-- All component combinations (CNI, CSI, GitOps, etc.)
-- Multi-platform testing (Linux, macOS)
-- Multi-architecture testing (amd64, arm64)
-
-**CI workflow:** `.github/workflows/ci.yaml`
-
-### Benchmark Tests
-
-Performance benchmarks track:
-- Cluster creation time
-- Component installation time
-- Update operation performance
-- Memory usage patterns
-
-**Run with:** `go test -bench=. -benchmem ./...`
+- **Unit tests** — `go test ./...`; uses testify/mock, `export_test.go` for unexported symbols, `t.Parallel()`, and static error sentinels
+- **Integration tests** — Test real cluster operations (Kind/K3d/VCluster clusters with real workloads)
+- **System tests (CI)** — System tests run on Linux (`ubuntu-latest`, amd64) via `.github/workflows/ci.yaml`
+- **Benchmarks** — `go test -bench=. -benchmem ./...` for performance regression tracking
 
 ### Agentic Workflows
 
-Automated workflows for continuous improvement:
-- **Daily Test Improver** — Adds unit tests to increase coverage
-- **Daily Perf Improver** — Adds benchmarks and performance improvements
-- **Daily Refactor** — Refactors code for maintainability
-- **Daily Progress** — Implements roadmap features
-- **Daily Backlog Burner** — Tackles backlog issues
-
-**Location:** `.github/workflows/*.md` (agentic workflow definitions)
+Automated AI-powered workflows run on schedules for continuous improvement: `daily-refactor`, `daily-code-health`, `daily-plan`, `daily-builder`, `daily-workflow-maintenance`, and `daily-docs`. These are Markdown-based agentic workflow definitions (not GitHub Actions YAML workflows) stored in `.github/workflows/*.md`.
 
 ## Configuration Management
 
