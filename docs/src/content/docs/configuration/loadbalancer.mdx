@@ -17,24 +17,25 @@ LoadBalancer support varies by Kubernetes distribution and infrastructure provid
 | Talos           | Hetzner  | hcloud-cloud-controller-manager   | Enabled          | No                     |
 | VCluster (Vind) | Docker   | Delegated to host cluster         | N/A              | N/A                    |
 
-**Key Points:**
-
-- **K3s** and **Talos × Hetzner** include LoadBalancer support by default—no configuration needed
-- **Vanilla** and **Talos × Docker** require explicit enablement during cluster initialization
-- LoadBalancer type is configured via `--load-balancer` flag or `ksail.yaml`
-- **VCluster** delegates LoadBalancer to the host cluster. The `spec.cluster.loadBalancer` setting has no effect on VCluster clusters—KSail does not install or uninstall any LoadBalancer controller. Changing this setting will not trigger a cluster update.
-
-## Configuration Options
-
-LoadBalancer support is controlled by the `--load-balancer` flag or `spec.cluster.loadBalancer` in `ksail.yaml`:
-
-| Value      | Behavior                                                                                      |
-| ---------- | --------------------------------------------------------------------------------------------- |
-| `Default`  | Use distribution × provider default (enabled for K3s and Talos × Hetzner, disabled otherwise) |
-| `Enabled`  | Force LoadBalancer support on (installs controller if not provided by default)                |
-| `Disabled` | Force LoadBalancer support off (prevents LoadBalancer services from getting external IPs)     |
+K3s and Talos × Hetzner enable LoadBalancer by default; Vanilla and Talos × Docker require explicit enablement. VCluster delegates LoadBalancer to the host cluster—`spec.cluster.loadBalancer` has no effect and never triggers a cluster update. Use the `--load-balancer` flag or `spec.cluster.loadBalancer` in `ksail.yaml` with values `Default`, `Enabled`, or `Disabled`.
 
 ## Platform-Specific Configuration
+
+All platforms accept the same LoadBalancer service manifest:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-app
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8080
+  selector:
+    app: my-app
+```
 
 ### Vanilla (Kind) on Docker
 
@@ -66,39 +67,14 @@ spec:
 
 #### How It Works
 
-1. KSail starts the Cloud Provider KIND controller as a Docker container named `ksail-cloud-provider-kind` (Cloud Provider KIND then creates per-service LoadBalancer containers with a `cpk-` prefix)
-2. The controller watches for LoadBalancer services in the cluster
-3. When a LoadBalancer service is created, the controller allocates an IP from the Docker network
-4. The service becomes accessible on that IP from your host machine
+Cloud Provider KIND runs as an external Docker container (`ksail-cloud-provider-kind`) with per-service containers prefixed `cpk-`. It watches for LoadBalancer services and allocates IPs from the Docker bridge network, accessible from your host.
 
-#### Example Service
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-app
-spec:
-  type: LoadBalancer
-  ports:
-    - port: 80
-      targetPort: 8080
-  selector:
-    app: my-app
-```
-
-After applying this service, check the external IP:
+#### Example
 
 ```bash
 kubectl get svc my-app
 # NAME     TYPE           CLUSTER-IP    EXTERNAL-IP    PORT(S)        AGE
 # my-app   LoadBalancer   10.96.1.10    172.18.0.100   80:30123/TCP   10s
-```
-
-Access your application:
-
-```bash
-curl http://172.18.0.100
 ```
 
 ### K3s on Docker
@@ -118,27 +94,9 @@ ksail cluster create
 
 #### How It Works
 
-1. When a LoadBalancer service is created, K3s automatically assigns an external IP
-2. The IP is typically the IP of one of the cluster nodes
-3. Traffic is forwarded to the service using `iptables` rules
+ServiceLB assigns the cluster node's IP as the external IP and forwards traffic via `iptables` rules.
 
-#### Example Service
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-app
-spec:
-  type: LoadBalancer
-  ports:
-    - port: 80
-      targetPort: 8080
-  selector:
-    app: my-app
-```
-
-Check the service:
+#### Example
 
 ```bash
 kubectl get svc my-app
@@ -209,39 +167,14 @@ This range is chosen to avoid conflicts with typical Docker network allocations.
 
 #### How It Works
 
-1. KSail installs MetalLB via Helm during cluster creation
-2. An `IPAddressPool` and `L2Advertisement` are created automatically
-3. When a LoadBalancer service is created, MetalLB assigns an IP from the pool
-4. MetalLB announces the IP on the Docker network using ARP
+KSail installs MetalLB via Helm, configures an `IPAddressPool` and `L2Advertisement` automatically, and MetalLB assigns IPs from the pool via ARP on the Docker network.
 
-#### Example Service
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-app
-spec:
-  type: LoadBalancer
-  ports:
-    - port: 80
-      targetPort: 8080
-  selector:
-    app: my-app
-```
-
-Check the service:
+#### Example
 
 ```bash
 kubectl get svc my-app
 # NAME     TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)        AGE
 # my-app   LoadBalancer   10.96.123.200   172.18.255.200   80:31234/TCP   8s
-```
-
-Access your application:
-
-```bash
-curl http://172.18.255.200
 ```
 
 #### Custom IP Pool
@@ -307,36 +240,13 @@ spec:
 
 #### How It Works
 
-1. The Hetzner CCM runs automatically in the cluster
-2. When a LoadBalancer service is created, the CCM provisions a real Hetzner Cloud Load Balancer
-3. The load balancer gets a public IP and forwards traffic to your cluster nodes
-4. You are billed for the Hetzner Load Balancer resource
+The Hetzner CCM provisions a real cloud load balancer with a public IP when you create a LoadBalancer service. Provisioning takes 30–60 seconds, and you are billed for the Hetzner Load Balancer resource.
 
-#### Example Service
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-app
-spec:
-  type: LoadBalancer
-  ports:
-    - port: 80
-      targetPort: 8080
-  selector:
-    app: my-app
-```
-
-Check the service (may take 30-60 seconds to provision):
+#### Example
 
 ```bash
-kubectl get svc my-app
-# NAME     TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)        AGE
-# my-app   LoadBalancer   10.32.45.100    <pending>        80:32100/TCP   5s
-
-# Wait for provisioning...
-kubectl get svc my-app
+# Watch for EXTERNAL-IP assignment (takes 30–60 seconds)
+kubectl get svc my-app -w
 # NAME     TYPE           CLUSTER-IP      EXTERNAL-IP       PORT(S)        AGE
 # my-app   LoadBalancer   10.32.45.100    135.181.10.50     80:32100/TCP   45s
 ```
@@ -369,7 +279,7 @@ See the [Hetzner CCM documentation](https://github.com/hetznercloud/hcloud-cloud
 
 ## Migration from NodePort
 
-If you have existing services using `type: NodePort`, migrating to LoadBalancer is straightforward:
+Migrating from `type: NodePort` to `type: LoadBalancer` is straightforward: change the service type, remove `nodePort` fields, and apply. Then enable LoadBalancer support if not already enabled (see platform-specific sections), wait for the external IP (`kubectl get svc my-app -w`), and update clients or DNS records.
 
 **Before (NodePort):**
 
@@ -390,100 +300,52 @@ spec:
 
 Access via: `http://<node-ip>:30080`
 
-**After (LoadBalancer):**
+**After (LoadBalancer):** use the shared manifest above, accessible via `http://<external-ip>:80`.
+
+## Testing LoadBalancer Services
+
+Deploy nginx to verify LoadBalancer functionality:
 
 ```yaml
+# nginx.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-test
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25
+          ports:
+            - containerPort: 80
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: my-app
+  name: nginx-lb
 spec:
   type: LoadBalancer
   ports:
     - port: 80
-      targetPort: 8080
+      targetPort: 80
   selector:
-    app: my-app
+    app: nginx
 ```
 
-Access via: `http://<external-ip>:80`
-
-**Migration Steps:**
-
-1. Enable LoadBalancer support if not already enabled (see platform-specific sections)
-2. Update your service manifests to change `type: NodePort` to `type: LoadBalancer`
-3. Remove `nodePort` specifications (they're unnecessary with LoadBalancer)
-4. Apply the updated manifests: `kubectl apply -f service.yaml`
-5. Wait for the external IP to be assigned: `kubectl get svc my-app -w`
-6. Update any clients or DNS records to use the new external IP
-
-## Testing LoadBalancer Services
-
-Here's a complete example to test LoadBalancer functionality:
-
-1. **Create a test deployment:**
-
-   ```yaml
-   # nginx-deployment.yaml
-   apiVersion: apps/v1
-   kind: Deployment
-   metadata:
-     name: nginx-test
-   spec:
-     replicas: 2
-     selector:
-       matchLabels:
-         app: nginx
-     template:
-       metadata:
-         labels:
-           app: nginx
-       spec:
-         containers:
-           - name: nginx
-             image: nginx:1.25
-             ports:
-               - containerPort: 80
-   ```
-
-2. **Create a LoadBalancer service:**
-
-   ```yaml
-   # nginx-service.yaml
-   apiVersion: v1
-   kind: Service
-   metadata:
-     name: nginx-lb
-   spec:
-     type: LoadBalancer
-     ports:
-       - port: 80
-         targetPort: 80
-     selector:
-       app: nginx
-   ```
-
-3. **Apply the manifests:**
-
-   ```bash
-   kubectl apply -f nginx-deployment.yaml
-   kubectl apply -f nginx-service.yaml
-   ```
-
-4. **Check the service:**
-
-   ```bash
-   kubectl get svc nginx-lb -w
-   # Wait for EXTERNAL-IP to be assigned
-   ```
-
-5. **Test connectivity:**
-
-   ```bash
-   EXTERNAL_IP=$(kubectl get svc nginx-lb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-   curl http://$EXTERNAL_IP
-   # Should show nginx welcome page
-   ```
+```bash
+kubectl apply -f nginx.yaml
+EXTERNAL_IP=$(kubectl get svc nginx-lb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+curl http://$EXTERNAL_IP
+```
 
 ## Troubleshooting
 
@@ -623,7 +485,7 @@ kubectl get ipaddresspool -n metallb-system default-pool -o yaml
 
 **Fix:**
 
-Expand the IP range by creating a new pool with additional addresses:
+Expand the pool range or create an additional `IPAddressPool` in `metallb-system`:
 
 ```yaml
 apiVersion: metallb.io/v1beta1
@@ -634,19 +496,6 @@ metadata:
 spec:
   addresses:
     - 172.18.255.200-172.18.255.254 # Expanded from .250 to .254
-```
-
-Or create multiple pools:
-
-```yaml
-apiVersion: metallb.io/v1beta1
-kind: IPAddressPool
-metadata:
-  name: additional-pool
-  namespace: metallb-system
-spec:
-  addresses:
-    - 172.18.254.200-172.18.254.254
 ```
 
 ## Next Steps
