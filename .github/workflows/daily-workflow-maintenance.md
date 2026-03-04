@@ -29,6 +29,9 @@ network:
 strict: false
 
 safe-outputs:
+  github-app:
+    app-id: ${{ vars.APP_ID }}
+    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   noop:
   create-discussion:
     title-prefix: "${{ github.workflow }}"
@@ -66,6 +69,9 @@ steps:
 
 tools:
   github:
+    github-app:
+      app-id: ${{ vars.APP_ID }}
+      private-key: ${{ secrets.APP_PRIVATE_KEY }}
     toolsets: [all]
   web-fetch:
   bash:
