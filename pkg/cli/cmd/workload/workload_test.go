@@ -97,6 +97,7 @@ func TestWorkloadHelpSnapshots(t *testing.T) {
 		{name: "rollout", args: []string{"workload", "rollout", "--help"}},
 		{name: "scale", args: []string{"workload", "scale", "--help"}},
 		{name: "wait", args: []string{"workload", "wait", "--help"}},
+		{name: "watch", args: []string{"workload", "watch", "--help"}},
 	}
 
 	for _, testCase := range testCases {
