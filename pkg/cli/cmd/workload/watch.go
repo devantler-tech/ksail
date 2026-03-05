@@ -2,6 +2,7 @@ package workload
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -22,6 +23,8 @@ import (
 // debounceInterval is the time to wait after the last file event before
 // triggering an apply. This prevents redundant reconciles during batch saves.
 const debounceInterval = 500 * time.Millisecond
+
+var errNotDirectory = errors.New("watch path is not a directory")
 
 // NewWatchCmd creates the workload watch command.
 func NewWatchCmd() *cobra.Command {
@@ -80,7 +83,7 @@ func runWatch(cmd *cobra.Command, pathFlag string) error {
 	}
 
 	if !info.IsDir() {
-		return fmt.Errorf("watch path %q is not a directory", watchDir)
+		return fmt.Errorf("%q: %w", watchDir, errNotDirectory)
 	}
 
 	absDir, err := filepath.Abs(watchDir)
@@ -109,10 +112,11 @@ func watchLoop(ctx context.Context, cmd *cobra.Command, dir string) error {
 		return fmt.Errorf("create file watcher: %w", err)
 	}
 
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	// Add all directories recursively.
-	if err := addRecursive(watcher, dir); err != nil {
+	err = addRecursive(watcher, dir)
+	if err != nil {
 		return err
 	}
 
@@ -121,6 +125,15 @@ func watchLoop(ctx context.Context, cmd *cobra.Command, dir string) error {
 	defer stop()
 
 	return eventLoop(sigCtx, cmd, watcher, dir)
+}
+
+// debounceState holds the mutable state shared between the event loop and
+// debounce timer callbacks.
+type debounceState struct {
+	timer      *time.Timer
+	mutex      sync.Mutex
+	lastFile   string
+	generation uint64
 }
 
 // eventLoop processes fsnotify events with debouncing.
@@ -135,45 +148,58 @@ func eventLoop(
 	watcher *fsnotify.Watcher,
 	dir string,
 ) error {
-	var (
-		debounceTimer *time.Timer
-		mu            sync.Mutex
-		lastFile      string
-		generation    uint64
-	)
+	state := &debounceState{}
 
 	// applyCh serializes applies.  Capacity 1 ensures at most one apply is
 	// pending at any time; coalescing replaces a queued entry with the latest.
 	applyCh := make(chan string, 1)
 
 	// Single worker: runs applies one at a time, stops when ctx is cancelled.
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
+	go applyWorker(ctx, cmd, dir, applyCh)
+
+	defer cancelPendingDebounce(state)
+
+	return dispatchEvents(ctx, cmd, watcher, state, applyCh)
+}
+
+// applyWorker runs applies one at a time, stopping when ctx is cancelled.
+func applyWorker(ctx context.Context, cmd *cobra.Command, dir string, applyCh <-chan string) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case file, ok := <-applyCh:
+			if !ok {
 				return
-			case file, ok := <-applyCh:
-				if !ok {
-					return
-				}
-
-				applyAndReport(ctx, cmd, dir, file)
 			}
+
+			applyAndReport(ctx, cmd, dir, file)
 		}
-	}()
+	}
+}
 
-	defer func() {
-		mu.Lock()
-		defer mu.Unlock()
+// cancelPendingDebounce increments the generation counter to invalidate any
+// pending timer callback and stops the timer if active.
+func cancelPendingDebounce(state *debounceState) {
+	state.mutex.Lock()
+	defer state.mutex.Unlock()
 
-		// Increment generation so any pending timer callback becomes a no-op.
-		generation++
+	state.generation++
 
-		if debounceTimer != nil {
-			debounceTimer.Stop()
-		}
-	}()
+	if state.timer != nil {
+		state.timer.Stop()
+	}
+}
 
+// dispatchEvents reads fsnotify events and errors, debouncing file changes
+// before enqueuing them on applyCh.
+func dispatchEvents(
+	ctx context.Context,
+	cmd *cobra.Command,
+	watcher *fsnotify.Watcher,
+	state *debounceState,
+	applyCh chan string,
+) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -186,58 +212,82 @@ func eventLoop(
 				return nil
 			}
 
-			if !isRelevantEvent(event) {
-				continue
-			}
-
-			// If a new directory was created, watch it too.
-			if event.Has(fsnotify.Create) {
-				tryAddDirectory(watcher, event.Name, cmd)
-			}
-
-			mu.Lock()
-			lastFile = event.Name
-			generation++
-
-			currentGen := generation
-
-			if debounceTimer != nil {
-				debounceTimer.Stop()
-			}
-
-			debounceTimer = time.AfterFunc(debounceInterval, func() {
-				mu.Lock()
-				if currentGen != generation {
-					mu.Unlock()
-
-					return
-				}
-
-				file := lastFile
-				mu.Unlock()
-
-				// Coalesce: drain any stale pending apply, then enqueue latest.
-				// NOTE: safe because the generation guard above ensures only one
-				// timer callback is active at any time (single sender).
-				select {
-				case <-applyCh:
-				default:
-				}
-
-				select {
-				case applyCh <- file:
-				default:
-				}
-			})
-			mu.Unlock()
+			handleFileEvent(event, watcher, cmd, state, applyCh)
 
 		case watchErr, ok := <-watcher.Errors:
 			if !ok {
 				return nil
 			}
 
-			cmd.PrintErrf("⚠️  watcher error: %v\n", watchErr)
+			return fmt.Errorf("file watcher: %w", watchErr)
 		}
+	}
+}
+
+// handleFileEvent processes a single fsnotify event: filters irrelevant ops,
+// registers new directories, and schedules a debounced apply.
+func handleFileEvent(
+	event fsnotify.Event,
+	watcher *fsnotify.Watcher,
+	cmd *cobra.Command,
+	state *debounceState,
+	applyCh chan string,
+) {
+	if !isRelevantEvent(event) {
+		return
+	}
+
+	// If a new directory was created, watch it too.
+	if event.Has(fsnotify.Create) {
+		tryAddDirectory(watcher, event.Name, cmd)
+	}
+
+	scheduleApply(state, event.Name, applyCh)
+}
+
+// scheduleApply updates the debounce state and (re)starts the timer.
+func scheduleApply(state *debounceState, file string, applyCh chan string) {
+	state.mutex.Lock()
+	defer state.mutex.Unlock()
+
+	state.lastFile = file
+	state.generation++
+
+	currentGen := state.generation
+
+	if state.timer != nil {
+		state.timer.Stop()
+	}
+
+	state.timer = time.AfterFunc(debounceInterval, func() {
+		enqueueIfCurrent(state, currentGen, applyCh)
+	})
+}
+
+// enqueueIfCurrent checks whether the generation is still current and, if so,
+// coalesces any stale pending apply and enqueues the latest file.
+func enqueueIfCurrent(state *debounceState, expectedGen uint64, applyCh chan string) {
+	state.mutex.Lock()
+	if expectedGen != state.generation {
+		state.mutex.Unlock()
+
+		return
+	}
+
+	file := state.lastFile
+	state.mutex.Unlock()
+
+	// Coalesce: drain any stale pending apply, then enqueue latest.
+	// NOTE: safe because the generation guard above ensures only one
+	// timer callback is active at any time (single sender).
+	select {
+	case <-applyCh:
+	default:
+	}
+
+	select {
+	case applyCh <- file:
+	default:
 	}
 }
 
@@ -283,7 +333,12 @@ func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error 
 	applyCmd.SetOut(cmd.OutOrStdout())
 	applyCmd.SetErr(cmd.ErrOrStderr())
 
-	return applyCmd.ExecuteContext(ctx)
+	err := applyCmd.ExecuteContext(ctx)
+	if err != nil {
+		return fmt.Errorf("kubectl apply: %w", err)
+	}
+
+	return nil
 }
 
 // isRelevantEvent returns true for write, create, remove, and rename events.
@@ -296,19 +351,25 @@ func isRelevantEvent(event fsnotify.Event) bool {
 
 // addRecursive walks the directory tree and adds all directories to the watcher.
 func addRecursive(watcher *fsnotify.Watcher, root string) error {
-	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
 
 		if d.IsDir() {
-			if watchErr := watcher.Add(path); watchErr != nil {
+			watchErr := watcher.Add(path)
+			if watchErr != nil {
 				return fmt.Errorf("watch %q: %w", path, watchErr)
 			}
 		}
 
 		return nil
 	})
+	if err != nil {
+		return fmt.Errorf("walk directory %q: %w", root, err)
+	}
+
+	return nil
 }
 
 // tryAddDirectory attempts to add a path to the watcher if it is a directory.
@@ -319,7 +380,8 @@ func tryAddDirectory(watcher *fsnotify.Watcher, path string, cmd *cobra.Command)
 	}
 
 	if info.IsDir() {
-		if addErr := addRecursive(watcher, path); addErr != nil {
+		addErr := addRecursive(watcher, path)
+		if addErr != nil {
 			cmd.PrintErrf("⚠️  failed to watch new directory %s: %v\n", path, addErr)
 		}
 	}

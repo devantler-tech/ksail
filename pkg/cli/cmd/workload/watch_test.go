@@ -27,7 +27,7 @@ func TestNewWatchCmdHasCorrectDefaults(t *testing.T) {
 
 	pathFlag := cmd.Flags().Lookup("path")
 	require.NotNil(t, pathFlag, "expected --path flag to exist")
-	require.Equal(t, "", pathFlag.DefValue)
+	require.Empty(t, pathFlag.DefValue)
 }
 
 func TestWatchCmdShowsHelp(t *testing.T) {
@@ -177,7 +177,7 @@ func TestAddRecursiveWatchesSubdirectories(t *testing.T) {
 	watcher, err := fsnotify.NewWatcher()
 	require.NoError(t, err)
 
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	err = workload.ExportAddRecursive(watcher, tmpDir)
 	require.NoError(t, err)
@@ -195,7 +195,7 @@ func TestAddRecursiveFailsOnMissingDir(t *testing.T) {
 	watcher, err := fsnotify.NewWatcher()
 	require.NoError(t, err)
 
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	err = workload.ExportAddRecursive(watcher, "/nonexistent/path")
 	require.Error(t, err)
