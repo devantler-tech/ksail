@@ -427,9 +427,26 @@ func (rm *RegistryManager) buildContainerConfig(
 		ExposedPorts: nat.PortSet{
 			RegistryContainerPort: struct{}{},
 		},
-		Labels: labels,
-		Env:    env,
+		Labels:      labels,
+		Env:         env,
+		Healthcheck: buildHealthcheck(),
 	}, nil
+}
+
+// buildHealthcheck returns a Docker-native health check configuration for registry containers.
+// Docker periodically runs this check and marks the container as unhealthy after consecutive
+// failures, providing visibility into registry mirror issues via `docker ps` and `docker inspect`.
+func buildHealthcheck() *container.HealthConfig {
+	return &container.HealthConfig{
+		Test: []string{
+			"CMD-SHELL",
+			"wget -q --spider http://localhost:5000/v2/ || exit 1",
+		},
+		Interval:    registryHealthcheckInterval,
+		Timeout:     registryHealthcheckTimeout,
+		StartPeriod: registryHealthcheckStartPeriod,
+		Retries:     registryHealthcheckRetries,
+	}
 }
 
 // buildHostConfig builds the host configuration including port bindings and mounts.

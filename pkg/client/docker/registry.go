@@ -64,7 +64,21 @@ const (
 	imagePullRetryBaseWait = 2 * time.Second
 	imagePullRetryMaxWait  = 15 * time.Second
 
-	// Registry health check configuration.
+	// Docker-native health check configuration for registry containers.
+	// These configure Docker's HEALTHCHECK, which continuously monitors registry health
+	// and marks the container as unhealthy after consecutive failures.
+	// This helps detect and debug registry mirror issues (e.g., transient 500 errors).
+
+	// registryHealthcheckInterval is the time between Docker health checks.
+	registryHealthcheckInterval = 10 * time.Second
+	// registryHealthcheckTimeout is the timeout for each Docker health check.
+	registryHealthcheckTimeout = 3 * time.Second
+	// registryHealthcheckStartPeriod is the initialization time before health checks begin.
+	registryHealthcheckStartPeriod = 5 * time.Second
+	// registryHealthcheckRetries is the number of consecutive failures before unhealthy.
+	registryHealthcheckRetries = 3
+
+	// Registry health check configuration (KSail-side polling).
 
 	// RegistryReadyTimeout is the maximum time to wait for a registry to become ready.
 	RegistryReadyTimeout = 30 * time.Second
