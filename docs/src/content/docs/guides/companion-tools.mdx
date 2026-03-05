@@ -1,0 +1,208 @@
+---
+title: Companion Tools
+description: How to use KSail alongside Tilt, Skaffold, and mirrord for inner-loop Kubernetes development.
+---
+
+KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tools like Tilt, Skaffold, and mirrord handle the **build-watch-deploy** cycle or live traffic mirroring. They are complementary—not competing—layers that work together seamlessly.
+
+| Layer | Responsibility | Tool |
+|-------|---------------|------|
+| Cluster lifecycle | Create, configure, and delete clusters | **KSail** |
+| GitOps bootstrap | Install Flux/ArgoCD, push manifests | **KSail** |
+| Build & deploy loop | Watch files, rebuild images, hot-reload | **Tilt** or **Skaffold** |
+| Live traffic mirroring | Mirror pod traffic to a local process | **mirrord** |
+
+## KSail + Tilt
+
+[Tilt](https://tilt.dev/) watches your source files, rebuilds container images, and applies updated manifests to a running cluster. KSail creates and configures that cluster.
+
+### Workflow
+
+1. **Create the cluster with KSail**
+
+   ```bash
+   ksail cluster init --name dev --distribution K3s --cni Cilium
+   ksail cluster create
+   ```
+
+2. **Write a `Tiltfile`** that targets the KSail-managed kubeconfig context.
+
+   KSail sets the kubeconfig context automatically after `ksail cluster create`. The context name depends on the distribution:
+
+   | Distribution | Context name |
+   |-------------|-------------|
+   | Vanilla (Kind) | `kind-<name>` |
+   | K3s (K3d) | `k3d-<name>` |
+   | Talos | `admin@<name>` |
+   | VCluster | `vcluster-docker_<name>` |
+
+   ```python
+   # Tiltfile
+   allow_k8s_contexts("k3d-dev")
+
+   docker_build("my-app", ".")
+
+   k8s_yaml("k8s/deployment.yaml")
+   k8s_resource("my-app", port_forwards="8080:80")
+   ```
+
+3. **Start Tilt**
+
+   ```bash
+   tilt up
+   ```
+
+   Tilt connects to the KSail-managed cluster, rebuilds the image on every file save, and applies the updated manifest.
+
+4. **Tear down**
+
+   ```bash
+   tilt down
+   ksail cluster delete
+   ```
+
+### Tips
+
+- Run `ksail cluster info` to confirm the cluster is healthy before starting Tilt.
+- If you use a local registry (`--local-registry localhost:5050`), configure Tilt to push there:
+
+  ```python
+  # Tiltfile
+  default_registry("localhost:5050")
+  ```
+
+## KSail + Skaffold
+
+[Skaffold](https://skaffold.dev/) automates the build-tag-deploy pipeline. KSail provides the cluster; Skaffold handles the rest.
+
+### Workflow
+
+1. **Create the cluster with KSail**
+
+   ```bash
+   ksail cluster init --name dev --distribution Vanilla --cni Cilium
+   ksail cluster create
+   ```
+
+2. **Create `skaffold.yaml`** pointing at the KSail cluster context.
+
+   ```yaml
+   # skaffold.yaml
+   apiVersion: skaffold/v4beta11
+   kind: Config
+   metadata:
+     name: my-app
+   build:
+     artifacts:
+       - image: my-app
+   manifests:
+     rawYaml:
+       - k8s/deployment.yaml
+   deploy:
+     kubeContext: kind-dev
+     kubectl: {}
+   ```
+
+3. **Run Skaffold in dev mode**
+
+   ```bash
+   skaffold dev
+   ```
+
+   Skaffold watches for file changes, rebuilds the image, and redeploys to the KSail-managed cluster.
+
+4. **Tear down**
+
+   ```bash
+   # Ctrl+C to stop Skaffold (it cleans up deployed resources)
+   ksail cluster delete
+   ```
+
+### Tips
+
+- Use `skaffold dev --port-forward` for automatic port forwarding.
+- If you enabled a local registry in KSail, point Skaffold at it:
+
+  ```yaml
+  # skaffold.yaml (build section)
+  build:
+    local:
+      push: true
+    artifacts:
+      - image: localhost:5050/my-app
+  ```
+
+## KSail + mirrord
+
+[mirrord](https://mirrord.dev/) lets you run a local process as if it were inside the cluster by mirroring or stealing traffic from a remote pod. KSail sets up the cluster; mirrord connects your local process to it.
+
+### Workflow
+
+1. **Create a cluster and deploy your application**
+
+   ```bash
+   ksail cluster init --name dev --distribution K3s --cni Cilium
+   ksail cluster create
+
+   # Deploy your workload
+   kubectl create deployment my-app --image=my-app:latest
+   kubectl expose deployment my-app --port=80
+   ```
+
+2. **Create a mirrord config** (optional—mirrord works without one).
+
+   ```json
+   {
+     "target": {
+       "path": "deployment/my-app",
+       "namespace": "default"
+     },
+     "feature": {
+       "network": {
+         "incoming": "mirror"
+       },
+       "fs": "read"
+     }
+   }
+   ```
+
+   Save this as `.mirrord/mirrord.json` in your project root.
+
+3. **Run your process through mirrord**
+
+   ```bash
+   mirrord exec --config .mirrord/mirrord.json -- ./my-app
+   ```
+
+   Your local process receives traffic destined for `deployment/my-app` inside the KSail-managed cluster, while reading remote files and environment variables from the pod.
+
+4. **Tear down**
+
+   ```bash
+   # Stop the mirrord session (Ctrl+C)
+   ksail cluster delete
+   ```
+
+### Tips
+
+- mirrord also integrates as a VS Code and JetBrains plugin—no CLI needed.
+- Use `"incoming": "steal"` instead of `"mirror"` to redirect all traffic to your local process rather than duplicating it.
+
+## Combining Multiple Tools
+
+You can layer these tools together. For example, use Tilt for the build-deploy loop and mirrord for a specific service you want to debug locally:
+
+```bash
+# Terminal 1 — cluster + Tilt
+ksail cluster create
+tilt up
+
+# Terminal 2 — mirrord for live debugging
+mirrord exec --target deployment/my-app -- dlv debug ./cmd/server
+```
+
+## Next Steps
+
+- **[Use Cases](/use-cases/)** — Workflows for learning, development, and CI/CD
+- **[Features](/features/)** — KSail capabilities including GitOps, secrets, and AI chat
+- **[Configuration](/configuration/)** — Complete configuration reference

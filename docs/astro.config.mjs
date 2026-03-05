@@ -49,6 +49,12 @@ export default defineConfig({
         { label: "Use Cases", link: "/use-cases/" },
         { label: "Support Matrix", link: "/support-matrix/" },
         {
+          label: "Guides",
+          items: [
+            { label: "Companion Tools", link: "/guides/companion-tools/" },
+          ],
+        },
+        {
           label: "Configuration",
           items: [
             { label: "Overview", link: "/configuration/" },
