@@ -8,8 +8,12 @@ description: "Switch active cluster context"
 ```text
 Switch the active kubeconfig context to the named cluster.
 
-This sets current-context in the kubeconfig file so that subsequent
-kubectl and KSail commands target the specified cluster.
+This command accepts a cluster name and automatically resolves it to the
+correct kubeconfig context by checking all supported distribution prefixes
+(kind-, k3d-, admin@, vcluster-docker_).
+
+If multiple distributions have contexts for the same cluster name, the
+command returns an error listing the matching contexts.
 
 The kubeconfig is resolved in the following priority order:
   1. From KUBECONFIG environment variable
@@ -17,14 +21,14 @@ The kubeconfig is resolved in the following priority order:
   3. Defaults to ~/.kube/config
 
 Examples:
-  # Switch to a cluster named "dev"
+  # Switch to a Vanilla (Kind) cluster named "dev"
   ksail cluster switch dev
 
   # Switch to a cluster named "staging"
   ksail cluster switch staging
 
 Usage:
-  ksail cluster switch <name> [flags]
+  ksail cluster switch <cluster-name> [flags]
 
 Global Flags:
       --benchmark   Show per-activity benchmark output

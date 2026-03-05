@@ -5,25 +5,35 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
-// ErrContextNotFound is returned when the specified context does not exist in the kubeconfig.
-var ErrContextNotFound = errors.New("context not found in kubeconfig")
+// ErrContextNotFound is returned when the specified cluster does not have a matching context in the kubeconfig.
+var ErrContextNotFound = errors.New("no matching context found for cluster")
+
+// ErrAmbiguousCluster is returned when multiple distribution contexts match the cluster name.
+var ErrAmbiguousCluster = errors.New("ambiguous cluster name")
 
 // switchKubeconfigFileMode is the file mode for kubeconfig files.
 const switchKubeconfigFileMode = 0o600
 
 const switchLongDesc = `Switch the active kubeconfig context to the named cluster.
 
-This sets current-context in the kubeconfig file so that subsequent
-kubectl and KSail commands target the specified cluster.
+This command accepts a cluster name and automatically resolves it to the
+correct kubeconfig context by checking all supported distribution prefixes
+(kind-, k3d-, admin@, vcluster-docker_).
+
+If multiple distributions have contexts for the same cluster name, the
+command returns an error listing the matching contexts.
 
 The kubeconfig is resolved in the following priority order:
   1. From KUBECONFIG environment variable
@@ -31,7 +41,7 @@ The kubeconfig is resolved in the following priority order:
   3. Defaults to ~/.kube/config
 
 Examples:
-  # Switch to a cluster named "dev"
+  # Switch to a Vanilla (Kind) cluster named "dev"
   ksail cluster switch dev
 
   # Switch to a cluster named "staging"
@@ -40,7 +50,7 @@ Examples:
 // NewSwitchCmd creates the switch command for clusters.
 func NewSwitchCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "switch <name>",
+		Use:   "switch <cluster-name>",
 		Short: "Switch active cluster context",
 		Long:  switchLongDesc,
 		Args:  cobra.ExactArgs(1),
@@ -49,7 +59,7 @@ func NewSwitchCmd(_ *di.Runtime) *cobra.Command {
 			_ []string,
 			_ string,
 		) ([]string, cobra.ShellCompDirective) {
-			return listContextNames(), cobra.ShellCompDirectiveNoFileComp
+			return listClusterNames(), cobra.ShellCompDirectiveNoFileComp
 		},
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -71,7 +81,7 @@ type SwitchDeps struct {
 // Exported for testing purposes.
 func HandleSwitchRunE(
 	cmd *cobra.Command,
-	contextName string,
+	clusterName string,
 	deps SwitchDeps,
 ) error {
 	kubeconfigPath := deps.KubeconfigPath
@@ -84,51 +94,103 @@ func HandleSwitchRunE(
 		}
 	}
 
-	err := switchContext(kubeconfigPath, contextName)
+	contextName, err := switchContext(kubeconfigPath, clusterName)
 	if err != nil {
 		return err
 	}
 
-	notify.Successf(cmd.OutOrStdout(), "Switched to cluster '%s'", contextName)
+	notify.Successf(
+		cmd.OutOrStdout(),
+		"Switched to cluster '%s' (context: %s)",
+		clusterName,
+		contextName,
+	)
 
 	return nil
 }
 
-// switchContext loads the kubeconfig, validates the context exists, and sets current-context.
+// resolveContextName finds the matching kubeconfig context for a cluster name
+// by checking all known distribution context-name prefixes.
+func resolveContextName(
+	config *clientcmdapi.Config,
+	clusterName string,
+) (string, error) {
+	var matches []string
+
+	for _, dist := range v1alpha1.ValidDistributions() {
+		candidate := dist.ContextName(clusterName)
+
+		if _, exists := config.Contexts[candidate]; exists {
+			matches = append(matches, candidate)
+		}
+	}
+
+	switch len(matches) {
+	case 0:
+		available := make([]string, 0, len(config.Contexts))
+		for name := range config.Contexts {
+			available = append(available, name)
+		}
+
+		sort.Strings(available)
+
+		return "", fmt.Errorf(
+			"%w: %s (available contexts: %s)",
+			ErrContextNotFound,
+			clusterName,
+			strings.Join(available, ", "),
+		)
+	case 1:
+		return matches[0], nil
+	default:
+		sort.Strings(matches)
+
+		return "", fmt.Errorf(
+			"%w: '%s' matches multiple contexts: %s",
+			ErrAmbiguousCluster,
+			clusterName,
+			strings.Join(matches, ", "),
+		)
+	}
+}
+
+// switchContext loads the kubeconfig, resolves the cluster name to a context, and sets current-context.
 //
 //nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default
-func switchContext(kubeconfigPath, contextName string) error {
+func switchContext(kubeconfigPath, clusterName string) (string, error) {
 	configBytes, err := os.ReadFile(kubeconfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to read kubeconfig: %w", err)
+		return "", fmt.Errorf("failed to read kubeconfig: %w", err)
 	}
 
 	config, err := clientcmd.Load(configBytes)
 	if err != nil {
-		return fmt.Errorf("failed to parse kubeconfig: %w", err)
+		return "", fmt.Errorf("failed to parse kubeconfig: %w", err)
 	}
 
-	if _, exists := config.Contexts[contextName]; !exists {
-		return fmt.Errorf("%w: %s", ErrContextNotFound, contextName)
+	contextName, err := resolveContextName(config, clusterName)
+	if err != nil {
+		return "", err
 	}
 
 	config.CurrentContext = contextName
 
 	result, err := clientcmd.Write(*config)
 	if err != nil {
-		return fmt.Errorf("failed to serialize kubeconfig: %w", err)
+		return "", fmt.Errorf("failed to serialize kubeconfig: %w", err)
 	}
 
 	err = os.WriteFile(kubeconfigPath, result, switchKubeconfigFileMode)
 	if err != nil {
-		return fmt.Errorf("failed to write kubeconfig: %w", err)
+		return "", fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
 
-	return nil
+	return contextName, nil
 }
 
-// listContextNames returns all context names from the kubeconfig for shell completion.
-func listContextNames() []string {
+// listClusterNames returns deduplicated cluster names from the kubeconfig for shell completion.
+// It strips known distribution prefixes from context names to produce cluster names.
+func listClusterNames() []string {
 	kubeconfigPath, err := resolveKubeconfigForSwitch()
 	if err != nil {
 		return nil
@@ -145,14 +207,36 @@ func listContextNames() []string {
 		return nil
 	}
 
-	names := make([]string, 0, len(config.Contexts))
-	for name := range config.Contexts {
+	seen := make(map[string]struct{})
+
+	for contextName := range config.Contexts {
+		if name := stripDistributionPrefix(contextName); name != "" {
+			seen[name] = struct{}{}
+		}
+	}
+
+	names := make([]string, 0, len(seen))
+	for name := range seen {
 		names = append(names, name)
 	}
 
 	sort.Strings(names)
 
 	return names
+}
+
+// stripDistributionPrefix removes the distribution-specific prefix from a context name,
+// returning the underlying cluster name. Returns empty string if the context name
+// does not match any known distribution prefix.
+func stripDistributionPrefix(contextName string) string {
+	prefixes := []string{"kind-", "k3d-", "admin@", "vcluster-docker_"}
+	for _, prefix := range prefixes {
+		if after, found := strings.CutPrefix(contextName, prefix); found {
+			return after
+		}
+	}
+
+	return ""
 }
 
 // resolveKubeconfigForSwitch resolves the kubeconfig path using the same priority
