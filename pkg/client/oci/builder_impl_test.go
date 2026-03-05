@@ -20,15 +20,12 @@ import (
 // Test sentinel errors for push retry behavior tests.
 var (
 	errRedirectLimit = errors.New(
-		`Get "https://ghcr.io/v2/token": stopped after 10 redirects`,
+		`get "https://ghcr.io/v2/token": stopped after 10 redirects`,
 	)
-	errPushBadGateway    = errors.New("502 Bad Gateway")
-	errPushUnauthorized  = errors.New("unauthorized access")
-	errPushNonRetryable  = errors.New("invalid reference format")
-	errPushIOTimeout     = errors.New("dial tcp 1.2.3.4:443: i/o timeout")
-	errPushConnReset     = errors.New("connection reset by peer")
-	errPushTooManyReqs   = errors.New("Too Many Requests")
-	errPushContextCancel = errors.New("context canceled")
+	errPushBadGateway   = errors.New("502 Bad Gateway")
+	errPushNonRetryable = errors.New("invalid reference format")
+	errPushIOTimeout    = errors.New("dial tcp 1.2.3.4:443: i/o timeout")
+	errPushConnReset    = errors.New("connection reset by peer")
 )
 
 func TestNewWorkloadArtifactBuilder(t *testing.T) {

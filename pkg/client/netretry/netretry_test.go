@@ -52,7 +52,7 @@ var (
 		"context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
 	)
 	errRedirectLimit = errors.New(
-		"Get \"https://ghcr.io/v2/token\": stopped after 10 redirects",
+		`get "https://ghcr.io/v2/token": stopped after 10 redirects`,
 	)
 )
 
