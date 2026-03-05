@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -161,19 +160,25 @@ func listContextNames() []string {
 // When KUBECONFIG contains multiple paths separated by the OS path list separator,
 // only the first path is used.
 func resolveKubeconfigForSwitch() (string, error) {
-	// 1. Check KUBECONFIG environment variable (use first path if multiple are specified)
-	if envPath := os.Getenv("KUBECONFIG"); envPath != "" {
-		paths := strings.Split(envPath, string(os.PathListSeparator))
-		if len(paths) > 0 && paths[0] != "" {
-			expanded, err := fsutil.ExpandHomePath(paths[0])
-			if err != nil {
-				return "", fmt.Errorf("expand kubeconfig path from env: %w", err)
-			}
-
-			return expanded, nil
+	// 1. Check KUBECONFIG environment variable
+	if os.Getenv("KUBECONFIG") != "" {
+		// ResolveKubeconfigPath("") checks KUBECONFIG env, splits on path separator,
+		// expands ~, and returns the first path.
+		resolved, err := clusterdetector.ResolveKubeconfigPath("")
+		if err != nil {
+			return "", fmt.Errorf("resolve kubeconfig from KUBECONFIG env: %w", err)
 		}
+
+		return resolved, nil
 	}
 
 	// 2. Try ksail.yaml config file, falls back to default (~/.kube/config)
-	return kubeconfig.GetKubeconfigPathSilently(), nil
+	path := kubeconfig.GetKubeconfigPathSilently()
+
+	resolved, err := clusterdetector.ResolveKubeconfigPath(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
+
+	return resolved, nil
 }
