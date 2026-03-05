@@ -46,9 +46,9 @@ docker ps | grep registry
 ksail cluster init --local-registry '${REG_USER}:${REG_TOKEN}@registry.example.com/my-org/my-repo'
 ```
 
-- `authentication` — missing or incorrect `--local-registry` credentials
-- `access denied` — credentials lack write permission
-- `unreachable` — DNS failure, firewall, or registry down
+- `registry requires authentication` — missing or incorrect `--local-registry` credentials
+- `registry access denied` — credentials lack write permission
+- `registry is unreachable` — DNS failure, firewall, or registry down
 
 ### Flux Operator Installation Timeout
 
