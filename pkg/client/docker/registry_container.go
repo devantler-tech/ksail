@@ -443,7 +443,7 @@ func buildHealthcheck() *container.HealthConfig {
 		Test: []string{
 			"CMD-SHELL",
 			fmt.Sprintf(
-				"wget -q --spider http://localhost:%d/v2/ || exit 1",
+				"wget -q --spider http://localhost:%d/v2/",
 				DefaultRegistryPort,
 			),
 		},

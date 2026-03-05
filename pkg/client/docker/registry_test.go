@@ -1249,7 +1249,7 @@ func TestBuildContainerConfig_IncludesHealthcheck(t *testing.T) {
 
 	config := docker.RegistryConfig{
 		Name:        "docker.io",
-		Port:        5000,
+		Port:        docker.DefaultRegistryPort,
 		UpstreamURL: "https://registry-1.docker.io",
 	}
 

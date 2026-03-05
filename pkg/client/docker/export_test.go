@@ -73,4 +73,6 @@ func (rm *RegistryManager) ExportBuildProxyCredentialsEnv(
 }
 
 // ExportBuildHealthcheck exports buildHealthcheck for testing.
-var ExportBuildHealthcheck = buildHealthcheck
+func ExportBuildHealthcheck() *dockertypes.HealthConfig {
+	return buildHealthcheck()
+}
