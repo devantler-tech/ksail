@@ -61,7 +61,42 @@ For VSCode users, install the [KSail extension](https://marketplace.visualstudio
 
 ## Usage
 
-![ksail-mental-model](./docs/src/assets//mental-model.svg)
+```mermaid
+flowchart TD
+    Dev["🧑‍💻 Developer"]
+
+    Dev -->|"edits"| Project
+    Dev -->|"runs"| KSail
+
+    subgraph Project ["📁 Project Repository"]
+        Config["ksail.yaml"] ~~~ DistConfig["kind.yaml · k3d.yaml<br/>vcluster.yaml"] ~~~ Manifests["k8s/ manifests"]
+    end
+
+    KSail -->|"scaffolds & reads"| Project
+    KSail -->|"provisions & operates"| Cluster
+
+    subgraph KSail ["🛥️ KSail — One Binary"]
+        CLI["CLI Commands"] ~~~ Tools["Kind · K3d · Talos · vCluster<br/>Flux · ArgoCD · SOPS<br/>Helm · Kustomize"]
+    end
+
+    subgraph Cluster ["☸️ Kubernetes Cluster"]
+        Infra["CNI · CSI · Metrics<br/>Cert-Manager · Policy Engine"] ~~~ Workloads["Your Workloads ✅"]
+    end
+
+    Manifests -.->|"GitOps sync"| Workloads
+
+    style Dev fill:#f59e0b,stroke:#d97706,color:#000
+    style Project fill:#7c3aed22,stroke:#7c3aed
+    style KSail fill:#10b98122,stroke:#10b981
+    style Cluster fill:#3b82f622,stroke:#3b82f6
+    style CLI fill:#10b981,stroke:#059669,color:#000
+    style Tools fill:#065f46,stroke:#10b981,color:#fff
+    style Infra fill:#1e40af,stroke:#3b82f6,color:#fff
+    style Workloads fill:#166534,stroke:#22c55e,color:#fff
+    style Config fill:#5b21b6,stroke:#7c3aed,color:#fff
+    style DistConfig fill:#5b21b6,stroke:#7c3aed,color:#fff
+    style Manifests fill:#5b21b6,stroke:#7c3aed,color:#fff
+```
 
 ```bash
 # 1. Initialize a new project with your preferred stack
@@ -99,7 +134,7 @@ KSail generates standard distribution configuration files that you can use direc
 ```bash
 # After ksail cluster init, you'll find native configs:
 # - kind.yaml       (for Vanilla/Kind clusters)
-# - k3d.yaml        (for K3s clusters)  
+# - k3d.yaml        (for K3s clusters)
 # - talos/          (for Talos clusters)
 # - vcluster.yaml   (for VCluster clusters)
 
