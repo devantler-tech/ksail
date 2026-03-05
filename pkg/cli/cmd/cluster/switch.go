@@ -158,8 +158,10 @@ func listContextNames() []string {
 
 // resolveKubeconfigForSwitch resolves the kubeconfig path using the same priority
 // order as other cluster commands: KUBECONFIG env > ksail.yaml > default (~/.kube/config).
+// When KUBECONFIG contains multiple paths separated by the OS path list separator,
+// only the first path is used.
 func resolveKubeconfigForSwitch() (string, error) {
-	// 1. Check KUBECONFIG environment variable
+	// 1. Check KUBECONFIG environment variable (use first path if multiple are specified)
 	if envPath := os.Getenv("KUBECONFIG"); envPath != "" {
 		paths := strings.Split(envPath, string(os.PathListSeparator))
 		if len(paths) > 0 && paths[0] != "" {
