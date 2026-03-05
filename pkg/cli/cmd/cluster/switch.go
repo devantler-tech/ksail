@@ -229,8 +229,11 @@ func listClusterNames() []string {
 // returning the underlying cluster name. Returns empty string if the context name
 // does not match any known distribution prefix.
 func stripDistributionPrefix(contextName string) string {
-	prefixes := []string{"kind-", "k3d-", "admin@", "vcluster-docker_"}
-	for _, prefix := range prefixes {
+	const sentinel = "\x00"
+
+	for _, dist := range v1alpha1.ValidDistributions() {
+		prefix := strings.TrimSuffix(dist.ContextName(sentinel), sentinel)
+
 		if after, found := strings.CutPrefix(contextName, prefix); found {
 			return after
 		}

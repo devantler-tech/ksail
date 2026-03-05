@@ -144,6 +144,15 @@ users:
 
 	assert.Contains(t, buf.String(),
 		"context: k3d-prod")
+
+	//nolint:gosec // G304: test-controlled path from t.TempDir()
+	updatedBytes, err := os.ReadFile(kubeconfigPath)
+	require.NoError(t, err)
+
+	config, err := clientcmd.Load(updatedBytes)
+	require.NoError(t, err)
+
+	assert.Equal(t, "k3d-prod", config.CurrentContext)
 }
 
 func TestSwitchCmd_TalosDistribution(t *testing.T) {
@@ -181,6 +190,15 @@ users:
 
 	assert.Contains(t, buf.String(),
 		"context: admin@talos-cluster")
+
+	//nolint:gosec // G304: test-controlled path from t.TempDir()
+	updatedBytes, err := os.ReadFile(kubeconfigPath)
+	require.NoError(t, err)
+
+	config, err := clientcmd.Load(updatedBytes)
+	require.NoError(t, err)
+
+	assert.Equal(t, "admin@talos-cluster", config.CurrentContext)
 }
 
 func TestSwitchCmd_ContextNotFound(t *testing.T) {
