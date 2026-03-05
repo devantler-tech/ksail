@@ -652,7 +652,7 @@ func addFileToTar(
 		return nil
 	}
 
-	file, err := os.Open(
+	file, err := os.Open( //nolint:gosec // G304: path comes from filepath.WalkDir within a validated base directory
 		path,
 	)
 	if err != nil {

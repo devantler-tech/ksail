@@ -87,6 +87,7 @@ linters:
             - github.com/cosi-project
             - github.com/docker
             - github.com/fatih/color
+            - github.com/fsnotify/fsnotify
             - github.com/fluxcd
             - github.com/gkampitakis/go-snaps
             - github.com/jinzhu/copier
