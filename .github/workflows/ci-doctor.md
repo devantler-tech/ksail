@@ -8,6 +8,7 @@ description: |
 on:
   bots:
     - "github-merge-queue[bot]"
+    - "github-actions[bot]"
 
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   workflow_run:
