@@ -436,11 +436,16 @@ func (rm *RegistryManager) buildContainerConfig(
 // buildHealthcheck returns a Docker-native health check configuration for registry containers.
 // Docker periodically runs this check and marks the container as unhealthy after consecutive
 // failures, providing visibility into registry mirror issues via `docker ps` and `docker inspect`.
+// Uses wget (available in the Alpine-based registry image via BusyBox) to check the /v2/ endpoint,
+// which is the standard Docker Distribution health check endpoint.
 func buildHealthcheck() *container.HealthConfig {
 	return &container.HealthConfig{
 		Test: []string{
 			"CMD-SHELL",
-			"wget -q --spider http://localhost:5000/v2/ || exit 1",
+			fmt.Sprintf(
+				"wget -q --spider http://localhost:%d/v2/ || exit 1",
+				DefaultRegistryPort,
+			),
 		},
 		Interval:    registryHealthcheckInterval,
 		Timeout:     registryHealthcheckTimeout,

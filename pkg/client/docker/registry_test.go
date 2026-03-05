@@ -3,6 +3,7 @@ package docker_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -1258,7 +1259,9 @@ func TestBuildContainerConfig_IncludesHealthcheck(t *testing.T) {
 	require.NotNil(t, cfg.Healthcheck)
 	assert.Len(t, cfg.Healthcheck.Test, 2)
 	assert.Equal(t, "CMD-SHELL", cfg.Healthcheck.Test[0])
-	assert.Contains(t, cfg.Healthcheck.Test[1], "localhost:5000")
+
+	expectedPort := fmt.Sprintf("localhost:%d", docker.DefaultRegistryPort)
+	assert.Contains(t, cfg.Healthcheck.Test[1], expectedPort)
 }
 
 func TestCreateRegistry_ContainerConfigIncludesHealthcheck(t *testing.T) {
