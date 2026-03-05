@@ -50,6 +50,16 @@ ksail cluster init --local-registry '${REG_USER}:${REG_TOKEN}@registry.example.c
 - `registry access denied` — credentials lack write permission
 - `registry is unreachable` — DNS failure, firewall, or registry down
 
+KSail registry containers (local and mirror) have a Docker-native health check that polls `/v2/` every 10 seconds and marks the container `unhealthy` after 3 consecutive failures. Use this to diagnose registry mirror 500 errors:
+
+```bash
+# Check health status — look for (healthy) or (unhealthy) in the STATUS column
+docker ps --filter name=registry --format 'table {{.Names}}\t{{.Status}}'
+
+# Inspect detailed health check history for a specific container
+docker inspect --format '{{json .State.Health}}' <container-name> | jq .
+```
+
 ### Flux Operator Installation Timeout
 
 Flux CRDs can take 7–10 minutes on resource-constrained systems; KSail allows up to 12 minutes. If timeouts persist, check resources (`docker stats`) and ensure 4 GB+ RAM.
