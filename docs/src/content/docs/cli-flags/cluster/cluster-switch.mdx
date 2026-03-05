@@ -11,8 +11,10 @@ Switch the active kubeconfig context to the named cluster.
 This sets current-context in the kubeconfig file so that subsequent
 kubectl and KSail commands target the specified cluster.
 
-The kubeconfig path is resolved from the ksail.yaml config file if present,
-or falls back to the default (~/.kube/config).
+The kubeconfig is resolved in the following priority order:
+  1. From KUBECONFIG environment variable
+  2. From ksail.yaml config file (if present)
+  3. Defaults to ~/.kube/config
 
 Examples:
   # Switch to a cluster named "dev"
