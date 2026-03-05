@@ -18,10 +18,10 @@ KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, fl
 No. KSail generates native configuration files usable directly with their respective tools:
 
 ```bash
-kind create cluster --config kind.yaml          # Vanilla
-k3d cluster create --config k3d.yaml            # K3s
-talosctl cluster create --config-patch @talos/cluster/patches.yaml  # Talos
-vcluster create my-cluster --values vcluster.yaml  # VCluster
+kind create cluster --config kind.yaml
+k3d cluster create --config k3d.yaml
+talosctl cluster create --config-patch @talos/cluster/patches.yaml
+vcluster create my-cluster --values vcluster.yaml
 ```
 
 ### Is KSail production-ready?
@@ -72,7 +72,13 @@ Changing the distribution (e.g., Vanilla to Talos) or provider (e.g., Docker to 
 
 ### Which distributions support LoadBalancer services?
 
-All distributions provide LoadBalancer support. Vanilla (Kind) uses cloud-provider-kind, K3s uses built-in ServiceLB, Talos on Docker uses MetalLB (IP pool 172.18.255.200-172.18.255.250), Talos on Hetzner uses Hetzner Cloud Load Balancer, and VCluster delegates LoadBalancer to the host cluster. The `spec.cluster.loadBalancer` setting has no effect on VCluster clusters—KSail does not install or uninstall any LoadBalancer controller for VCluster.
+All distributions provide LoadBalancer support:
+
+- **Vanilla**: cloud-provider-kind
+- **K3s**: built-in ServiceLB
+- **Talos/Docker**: MetalLB (pool 172.18.255.200-172.18.255.250)
+- **Talos/Hetzner**: Hetzner Cloud Load Balancer
+- **VCluster**: delegates to host cluster (`spec.cluster.loadBalancer` has no effect)
 
 ### Can I add nodes to an existing cluster?
 
@@ -113,8 +119,8 @@ Not necessarily. KSail packages manifests as OCI artifacts and pushes to a local
 ```bash
 ksail cluster init --gitops-engine Flux --local-registry localhost:5050
 ksail cluster create
-ksail workload push      # Package and push
-ksail workload reconcile # Sync to cluster
+ksail workload push
+ksail workload reconcile
 ```
 
 To use your own Git repository, configure the GitOps engine after initialization—KSail scaffolds the initial CRs.
