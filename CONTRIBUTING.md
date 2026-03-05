@@ -56,11 +56,11 @@ go build -o ksail
 # Or: compile all packages (no binary output)
 go build ./...
 
-# For optimized builds (uses the same -ldflags as release builds):
+# For optimized builds (strips debug symbols):
 go build -ldflags="-s -w" -o ksail-optimized
 ```
 
-> **Note:** Release builds use `-ldflags="-s -w"` to strip debug symbols, which can significantly reduce binary size (in some cases by ~25–35%; see [#2095](https://github.com/devantler-tech/ksail/pull/2095) for an example benchmark where Darwin/AMD64 binaries went from 302MB → 217MB, ~28%). Actual size varies by OS/arch, Go version, and dependencies. Development builds include debug symbols for a better debugging experience.
+> **Note:** Release builds use `-ldflags="-s -w -X github.com/devantler-tech/ksail/v5/internal/buildmeta.Version=... -X .../buildmeta.Commit=... -X .../buildmeta.Date=..."`, where `-s -w` strips debug symbols and the `-X` flags inject version metadata. The `-s -w` options can significantly reduce binary size (in some cases by ~25–35%; see [#2095](https://github.com/devantler-tech/ksail/pull/2095) for an example benchmark where Darwin/AMD64 binaries went from 302MB → 217MB, ~28%), while the metadata flags themselves may slightly increase size compared to a build that only uses `-s -w`. Actual size varies by OS/arch, Go version, and dependencies. Development builds include debug symbols for a better debugging experience.
 
 ### Test
 
@@ -258,17 +258,17 @@ To test the Omni provider locally, you need:
 
 KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a schedule or on dispatch:
 
-| Workflow                     | Schedule                                    | Purpose                                                               |
-|------------------------------|---------------------------------------------|-----------------------------------------------------------------------|
-| `daily-code-quality`         | Daily (02:00 UTC)                           | Refactoring, performance optimization, and test coverage improvements |
-| `daily-plan`                 | Daily (10:00 UTC)                           | Issue triage, backlog issue creation, and prioritization from the roadmap     |
-| `daily-builder`              | Daily (14:00 UTC)                           | Backlog issue resolution and feature delivery from the project plan   |
-| `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, and dependency upgrades         |
-| `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes and bloat reduction              |
-| `weekly-research`            | Weekly                                      | Market research and actionable feature roadmap                        |
-| `weekly-promote-ksail`       | Weekly                                      | Project promotion and visibility                                      |
-| `ci-doctor`                  | On CI failure                               | CI failure investigation and diagnostics                              |
-| `maintainer`                 | Every 3 days                                | Repository maintenance and housekeeping                               |
+| Workflow                     | Schedule                                    | Purpose                                                                   |
+|------------------------------|---------------------------------------------|---------------------------------------------------------------------------|
+| `daily-code-quality`         | Daily (02:00 UTC)                           | Refactoring, performance optimization, and test coverage improvements     |
+| `daily-plan`                 | Daily (10:00 UTC)                           | Issue triage, backlog issue creation, and prioritization from the roadmap |
+| `daily-builder`              | Daily (14:00 UTC)                           | Backlog issue resolution and feature delivery from the project plan       |
+| `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, and dependency upgrades             |
+| `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes and bloat reduction                  |
+| `weekly-research`            | Weekly                                      | Market research and actionable feature roadmap                            |
+| `weekly-promote-ksail`       | Weekly                                      | Project promotion and visibility                                          |
+| `ci-doctor`                  | On CI failure                               | CI failure investigation and diagnostics                                  |
+| `maintainer`                 | Every 3 days                                | Repository maintenance and housekeeping                                   |
 
 Each agentic workflow creates a GitHub Discussion to coordinate its work and, depending on its purpose, may open draft PRs or create issues with incremental improvements. You can control them using the [`gh aw`](https://github.com/github/gh-aw) CLI extension:
 
