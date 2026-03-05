@@ -11,17 +11,17 @@ KSail is a CLI tool that bundles common Kubernetes tooling into a single binary.
 
 ### Why use KSail instead of kubectl/helm/kind/k3d directly?
 
-KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, flux, and argocd into one binary with a consistent workflow across distributions. It works with standard native configuration files (kind.yaml, k3d.yaml, vcluster.yaml) and provides declarative configuration with built-in best practices. GitOps integration is included without manual setup—all without vendor lock-in.
+KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, flux, and argocd into one binary with a consistent workflow across distributions. It uses standard native config files (kind.yaml, k3d.yaml, vcluster.yaml), adds declarative configuration with built-in best practices, and includes GitOps integration—all without vendor lock-in.
 
 ### Am I locked into KSail?
 
 No. KSail generates native configuration files you can use directly with their respective tools at any time—you can migrate away from KSail or use it alongside native tools interchangeably:
 
 ```bash
-kind create cluster --config kind.yaml          # Vanilla
-k3d cluster create --config k3d.yaml            # K3s
-talosctl cluster create --config-patch @talos/cluster/patches.yaml  # Talos
-vcluster create my-cluster --values vcluster.yaml  # VCluster
+kind create cluster --config kind.yaml
+k3d cluster create --config k3d.yaml
+talosctl cluster create --config-patch @talos/cluster/patches.yaml
+vcluster create my-cluster --values vcluster.yaml
 ```
 
 ### Is KSail production-ready?
@@ -84,7 +84,13 @@ Changing the distribution (e.g., Vanilla to Talos) or provider (e.g., Docker to 
 
 ### Which distributions support LoadBalancer services?
 
-All distributions provide LoadBalancer support. Vanilla (Kind) uses cloud-provider-kind, K3s uses built-in ServiceLB, Talos on Docker uses MetalLB (IP pool 172.18.255.200-172.18.255.250), Talos on Hetzner uses Hetzner Cloud Load Balancer, and VCluster delegates LoadBalancer to the host cluster. The `spec.cluster.loadBalancer` setting has no effect on VCluster clusters—KSail does not install or uninstall any LoadBalancer controller for VCluster.
+All distributions provide LoadBalancer support:
+
+- **Vanilla**: cloud-provider-kind
+- **K3s**: built-in ServiceLB
+- **Talos/Docker**: MetalLB (pool 172.18.255.200-172.18.255.250)
+- **Talos/Hetzner**: Hetzner Cloud Load Balancer
+- **VCluster**: delegates to host cluster (`spec.cluster.loadBalancer` has no effect)
 
 ### Can I add nodes to an existing cluster?
 
@@ -125,15 +131,15 @@ Not necessarily. KSail packages manifests as OCI artifacts and pushes to a local
 ```bash
 ksail cluster init --gitops-engine Flux --local-registry localhost:5050
 ksail cluster create
-ksail workload push      # Package and push
-ksail workload reconcile # Sync to cluster
+ksail workload push
+ksail workload reconcile
 ```
 
 To use your own Git repository, configure the GitOps engine after initialization—KSail scaffolds the initial CRs.
 
 ### Why does Flux operator installation take so long?
 
-Flux operator installation can take 7-12 minutes on resource-constrained systems due to CRD establishment delays. KSail handles this automatically with a 12-minute timeout. Monitor progress with `ksail workload get pods -n flux-system` or `kubectl get crds | grep fluxcd.io`. For faster installations, ensure 4GB+ RAM is available. See [Troubleshooting - Flux Operator Installation Timeout](/troubleshooting/#flux-operator-installation-timeout) for details.
+Flux CRD establishment can take 7–12 minutes on resource-constrained systems; KSail uses a 12-minute timeout automatically. Ensure 4GB+ RAM is available. See [Flux Operator Installation Timeout](/troubleshooting/#flux-operator-installation-timeout) for monitoring tips and solutions.
 
 ## Configuration
 
