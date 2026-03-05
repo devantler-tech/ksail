@@ -2,13 +2,33 @@ package oci_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
+	"github.com/google/go-containerregistry/pkg/name"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+// Test sentinel errors for push retry behavior tests.
+var (
+	errRedirectLimit = errors.New(
+		`Get "https://ghcr.io/v2/token": stopped after 10 redirects`,
+	)
+	errPushBadGateway    = errors.New("502 Bad Gateway")
+	errPushUnauthorized  = errors.New("unauthorized access")
+	errPushNonRetryable  = errors.New("invalid reference format")
+	errPushIOTimeout     = errors.New("dial tcp 1.2.3.4:443: i/o timeout")
+	errPushConnReset     = errors.New("connection reset by peer")
+	errPushTooManyReqs   = errors.New("Too Many Requests")
+	errPushContextCancel = errors.New("context canceled")
 )
 
 func TestNewWorkloadArtifactBuilder(t *testing.T) {
@@ -97,4 +117,135 @@ func TestBuild(t *testing.T) {
 
 	// Note: We cannot test successful builds without a running registry.
 	// Integration tests should cover the full push workflow.
+}
+
+// mockPushFn creates a mock push function that returns errors from the given
+// list per attempt, tracking call count via the atomic counter.
+func mockPushFn(
+	callCount *atomic.Int32,
+	errs []error,
+) oci.PushFn {
+	return func(_ name.Reference, _ v1.Image, _ ...remote.Option) error {
+		idx := int(callCount.Add(1)) - 1
+		if idx < len(errs) {
+			return errs[idx]
+		}
+
+		return errs[len(errs)-1]
+	}
+}
+
+func TestPushWithRetry_SucceedsOnFirstAttempt(t *testing.T) {
+	t.Parallel()
+
+	var callCount atomic.Int32
+
+	push := mockPushFn(&callCount, []error{nil})
+
+	ref, err := name.ParseReference("localhost:5000/test:v1", name.Insecure)
+	require.NoError(t, err)
+
+	err = oci.PushWithRetry(
+		context.Background(), ref, nil, nil, push,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), callCount.Load())
+}
+
+func TestPushWithRetry_RetriesRedirectLimitError(t *testing.T) {
+	t.Parallel()
+
+	var callCount atomic.Int32
+
+	push := mockPushFn(&callCount, []error{
+		errRedirectLimit, errRedirectLimit, nil,
+	})
+
+	ref, err := name.ParseReference("localhost:5000/test:v1", name.Insecure)
+	require.NoError(t, err)
+
+	err = oci.PushWithRetry(
+		context.Background(), ref, nil, nil, push,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(3), callCount.Load())
+}
+
+func TestPushWithRetry_RetriesTransientErrors(t *testing.T) {
+	t.Parallel()
+
+	var callCount atomic.Int32
+
+	push := mockPushFn(&callCount, []error{
+		errPushBadGateway, nil,
+	})
+
+	ref, err := name.ParseReference("localhost:5000/test:v1", name.Insecure)
+	require.NoError(t, err)
+
+	err = oci.PushWithRetry(
+		context.Background(), ref, nil, nil, push,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), callCount.Load())
+}
+
+func TestPushWithRetry_NonRetryableStopsImmediately(t *testing.T) {
+	t.Parallel()
+
+	var callCount atomic.Int32
+
+	push := mockPushFn(&callCount, []error{errPushNonRetryable})
+
+	ref, err := name.ParseReference("localhost:5000/test:v1", name.Insecure)
+	require.NoError(t, err)
+
+	err = oci.PushWithRetry(
+		context.Background(), ref, nil, nil, push,
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid reference format")
+	assert.Equal(t, int32(1), callCount.Load())
+}
+
+func TestPushWithRetry_AllAttemptsExhausted(t *testing.T) {
+	t.Parallel()
+
+	var callCount atomic.Int32
+
+	push := mockPushFn(&callCount, []error{errPushIOTimeout})
+
+	ref, err := name.ParseReference("localhost:5000/test:v1", name.Insecure)
+	require.NoError(t, err)
+
+	err = oci.PushWithRetry(
+		context.Background(), ref, nil, nil, push,
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "i/o timeout")
+	assert.Equal(t, int32(3), callCount.Load())
+}
+
+func TestPushWithRetry_CancelledContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var callCount atomic.Int32
+
+	push := mockPushFn(&callCount, []error{errPushConnReset})
+
+	ref, err := name.ParseReference("localhost:5000/test:v1", name.Insecure)
+	require.NoError(t, err)
+
+	err = oci.PushWithRetry(ctx, ref, nil, nil, push)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "push cancelled")
 }

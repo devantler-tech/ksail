@@ -15,6 +15,7 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/client/netretry"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -36,6 +37,16 @@ var manifestExtensions = map[string]struct{}{
 }
 
 // Registry push operations.
+
+// Push retry constants.
+const (
+	pushMaxAttempts   = 3
+	pushRetryBaseWait = 2 * time.Second
+	pushRetryMaxWait  = 10 * time.Second
+)
+
+// pushFn is the function signature for pushing an OCI image to a registry.
+type pushFn func(ref name.Reference, img v1.Image, options ...remote.Option) error
 
 // Builder implementation.
 
@@ -64,6 +75,7 @@ func parseOCIReference(endpoint, repository, version string) (name.Reference, er
 }
 
 // pushImage pushes an OCI image to the registry with optional authentication.
+// Retries transient errors (redirect loops, network timeouts, 5xx) with exponential backoff.
 func pushImage(
 	ctx context.Context,
 	ref name.Reference,
@@ -80,8 +92,47 @@ func pushImage(
 		remoteOpts = append(remoteOpts, remote.WithAuth(auth))
 	}
 
+	return pushWithRetry(ctx, ref, img, remoteOpts, remote.Write)
+}
+
+// pushWithRetry retries the push operation on transient errors with exponential backoff.
+func pushWithRetry(
+	ctx context.Context,
+	ref name.Reference,
+	img v1.Image,
+	remoteOpts []remote.Option,
+	push pushFn,
+) error {
+	var lastErr error
+
+	for attempt := 1; attempt <= pushMaxAttempts; attempt++ {
+		err := push(ref, img, remoteOpts...)
+		if err == nil {
+			return nil
+		}
+
+		lastErr = err
+
+		if !netretry.IsRetryable(lastErr) || attempt == pushMaxAttempts {
+			break
+		}
+
+		delay := netretry.ExponentialDelay(attempt, pushRetryBaseWait, pushRetryMaxWait)
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+
+			return fmt.Errorf("push cancelled: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+
 	//nolint:wrapcheck // Error is wrapped by caller with more context
-	return remote.Write(ref, img, remoteOpts...)
+	return lastErr
 }
 
 // Build collects manifests from the source path, packages them into an OCI artifact, and pushes it to the registry.

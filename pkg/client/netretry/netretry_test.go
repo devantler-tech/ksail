@@ -51,6 +51,9 @@ var (
 	errContextDeadline = errors.New(
 		"context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
 	)
+	errRedirectLimit = errors.New(
+		"Get \"https://ghcr.io/v2/token\": stopped after 10 redirects",
+	)
 )
 
 func TestIsRetryable(t *testing.T) {
@@ -90,6 +93,8 @@ func TestIsRetryable(t *testing.T) {
 		{name: "429 text", err: errTooManyRequests, expected: true},
 		// Context deadline exceeded.
 		{name: "context deadline exceeded", err: errContextDeadline, expected: true},
+		// HTTP redirect limit errors.
+		{name: "stopped after redirects", err: errRedirectLimit, expected: true},
 	}
 
 	for _, tt := range tests {
