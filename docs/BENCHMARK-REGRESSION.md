@@ -17,9 +17,9 @@ The PR comment groups results into three sections:
 
 | Symbol | Label       | Meaning                                       |
 |--------|-------------|-----------------------------------------------|
-| 🔴     | Regression  | Statistically significant increase (p < 0.05) |
-| 🟢     | Improvement | Statistically significant decrease (p < 0.05) |
-| ⚪ ~    | Unchanged   | No significant change (p ≥ 0.05)              |
+| 🔴     | Regression  | Statistically significant increase (p < 0.10) |
+| 🟢     | Improvement | Statistically significant decrease (p < 0.10) |
+| ⚪ ~    | Unchanged   | No significant change (p ≥ 0.10)              |
 
 Each row in the tables shows:
 
@@ -28,7 +28,7 @@ Each row in the tables shows:
 | **Benchmark** | Name of the benchmark function (without `Benchmark` prefix)    | —                  |
 | **Metric**    | `sec/op`, `B/op`, or `allocs/op`                               | Lower is better    |
 | **Change**    | Delta percentage vs `main`                                     | Negative is better |
-| **p-value**   | Statistical confidence; < 0.05 means the change is significant | —                  |
+| **p-value**   | Statistical confidence; < 0.10 means the change is significant | —                  |
 
 The comment also includes a collapsed **Unchanged** section and a **Raw benchstat output** block for deeper inspection.
 
