@@ -11,11 +11,11 @@ KSail is a CLI tool that bundles common Kubernetes tooling into a single binary.
 
 ### Why use KSail instead of kubectl/helm/kind/k3d directly?
 
-KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, flux, and argocd into one binary with a consistent workflow across distributions. It works with standard native configuration files (kind.yaml, k3d.yaml, vcluster.yaml) and provides declarative configuration with built-in best practices. GitOps integration is included without manual setup—all without vendor lock-in.
+KSail eliminates tool sprawl by embedding kubectl, helm, kind, k3d, vcluster, flux, and argocd into one binary with a consistent workflow across distributions. It uses standard native config files (kind.yaml, k3d.yaml, vcluster.yaml), provides declarative configuration with built-in best practices, and includes GitOps integration—without vendor lock-in.
 
 ### Am I locked into KSail?
 
-No. KSail generates native configuration files you can use directly with their respective tools at any time—you can migrate away from KSail or use it alongside native tools interchangeably:
+No. KSail generates native configuration files usable directly with their respective tools:
 
 ```bash
 kind create cluster --config kind.yaml          # Vanilla
@@ -43,28 +43,16 @@ Docker is required for local cluster creation. KSail embeds kubectl, helm, kind,
 The update method depends on how you installed it:
 
 ```bash
-# Homebrew
-brew upgrade devantler-tech/tap/ksail
-
-# Go install
-go install github.com/devantler-tech/ksail/v5@latest
-
-# Binary download
-# Download latest from https://github.com/devantler-tech/ksail/releases
+brew upgrade devantler-tech/tap/ksail                  # Homebrew
+go install github.com/devantler-tech/ksail/v5@latest   # Go install
+# Binary: https://github.com/devantler-tech/ksail/releases
 ```
 
 ## Cluster Management
 
 ### Which Kubernetes distributions does KSail support?
 
-KSail supports four distributions:
-
-- **Vanilla** (via Kind) - Upstream Kubernetes
-- **K3s** (via K3d) - Lightweight Kubernetes
-- **Talos** - Immutable Kubernetes OS
-- **VCluster** (via Vind) - Virtual clusters in Docker
-
-See the [Support Matrix](/support-matrix/) for provider compatibility.
+KSail supports four distributions: **Vanilla** (Kind), **K3s** (K3d), **Talos**, and **VCluster** (Vind). See the [Support Matrix](/support-matrix/) for provider compatibility.
 
 ### Can I create multiple clusters?
 
@@ -133,7 +121,7 @@ To use your own Git repository, configure the GitOps engine after initialization
 
 ### Why does Flux operator installation take so long?
 
-Flux operator installation can take 7-12 minutes on resource-constrained systems due to CRD establishment delays. KSail handles this automatically with a 12-minute timeout. Monitor progress with `ksail workload get pods -n flux-system` or `kubectl get crds | grep fluxcd.io`. For faster installations, ensure 4GB+ RAM is available. See [Troubleshooting - Flux Operator Installation Timeout](/troubleshooting/#flux-operator-installation-timeout) for details.
+Flux operator CRDs can take 7-12 minutes to become established on resource-constrained systems; KSail handles this automatically with a 12-minute timeout. Ensure 4GB+ RAM is available. See [Troubleshooting - Flux Operator Installation Timeout](/troubleshooting/#flux-operator-installation-timeout) for details.
 
 ## Configuration
 
@@ -153,7 +141,7 @@ Use environment-specific files (`ksail-dev.yaml`, `ksail-staging.yaml`, `ksail-p
 
 ### How do I manage secrets with KSail?
 
-KSail includes **SOPS** for secret encryption via `ksail cipher <file>`. Supports age, PGP, and cloud KMS providers. See [Secret Management](/features/#secret-management).
+KSail includes **SOPS** for secret encryption via `ksail cipher <file>` (age, PGP, cloud KMS). See [Secret Management](/features/#secret-management).
 
 ### Are my credentials stored securely?
 
@@ -161,14 +149,4 @@ KSail expands `${VAR}` syntax at runtime; credentials are never stored in config
 
 ## Troubleshooting
 
-### My cluster creation hangs - what should I do?
-
-See the [Troubleshooting Guide](/troubleshooting/#cluster-creation-hangs) for common solutions.
-
-### How do I clean up resources?
-
-Run `ksail cluster delete` to remove containers/VMs and Kubernetes resources, then `docker system prune` for dangling Docker resources.
-
-### Where can I get help?
-
-Visit [ksail.devantler.tech](https://ksail.devantler.tech), the [Troubleshooting Guide](/troubleshooting/), [GitHub Discussions](https://github.com/devantler-tech/ksail/discussions), or [GitHub Issues](https://github.com/devantler-tech/ksail/issues).
+For common solutions, see the [Troubleshooting Guide](/troubleshooting/). To clean up all cluster and Docker resources, run `ksail cluster delete && docker system prune`. For help, visit [GitHub Discussions](https://github.com/devantler-tech/ksail/discussions) or [GitHub Issues](https://github.com/devantler-tech/ksail/issues).
