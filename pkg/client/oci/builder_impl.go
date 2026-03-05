@@ -131,8 +131,11 @@ func pushWithRetry(
 		}
 	}
 
-	//nolint:wrapcheck // Error is wrapped by caller with more context
-	return lastErr
+	if !netretry.IsRetryable(lastErr) {
+		return fmt.Errorf("push failed (non-retryable): %w", lastErr)
+	}
+
+	return fmt.Errorf("push failed after %d attempts: %w", pushMaxAttempts, lastErr)
 }
 
 // Build collects manifests from the source path, packages them into an OCI artifact, and pushes it to the registry.

@@ -12,6 +12,10 @@ import (
 // to avoid false positives on port numbers like ":5000".
 var httpStatusCodePattern = regexp.MustCompile(`\b(429|50[0-4])\b`)
 
+// redirectLimitPattern matches Go's HTTP client redirect limit errors
+// (e.g., "stopped after 10 redirects").
+var redirectLimitPattern = regexp.MustCompile(`stopped after \d+ redirects`)
+
 // IsRetryable returns true if the error indicates a transient network error
 // that should be retried. This covers HTTP 5xx status codes and TCP-level errors
 // such as connection resets, timeouts, and unexpected EOF.
@@ -31,7 +35,6 @@ func IsRetryable(err error) bool {
 		"i/o timeout", "TLS handshake timeout",
 		"unexpected EOF", "no such host",
 		"context deadline exceeded",
-		"stopped after",
 	}
 
 	for _, pattern := range textPatterns {
@@ -42,7 +45,12 @@ func IsRetryable(err error) bool {
 
 	// Match HTTP 429/5xx numeric codes at word boundaries to avoid false positives
 	// on port numbers like ":5000". Uses regexp for precise matching.
-	return httpStatusCodePattern.MatchString(errMsg)
+	if httpStatusCodePattern.MatchString(errMsg) {
+		return true
+	}
+
+	// Match redirect limit errors (e.g., "stopped after 10 redirects").
+	return redirectLimitPattern.MatchString(errMsg)
 }
 
 // ExponentialDelay returns the delay for the given retry attempt

@@ -126,6 +126,10 @@ func mockPushFn(
 	errs []error,
 ) oci.PushFn {
 	return func(_ name.Reference, _ v1.Image, _ ...remote.Option) error {
+		if len(errs) == 0 {
+			return nil
+		}
+
 		idx := int(callCount.Add(1)) - 1
 		if idx < len(errs) {
 			return errs[idx]
@@ -208,6 +212,7 @@ func TestPushWithRetry_NonRetryableStopsImmediately(t *testing.T) {
 	)
 
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "push failed (non-retryable)")
 	assert.Contains(t, err.Error(), "invalid reference format")
 	assert.Equal(t, int32(1), callCount.Load())
 }
@@ -227,6 +232,7 @@ func TestPushWithRetry_AllAttemptsExhausted(t *testing.T) {
 	)
 
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "push failed after 3 attempts")
 	assert.Contains(t, err.Error(), "i/o timeout")
 	assert.Equal(t, int32(3), callCount.Load())
 }
