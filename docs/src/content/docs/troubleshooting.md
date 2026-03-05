@@ -54,7 +54,7 @@ KSail registry containers (local and mirror) have a Docker-native health check t
 
 ```bash
 # Check health status — look for (healthy) or (unhealthy) in the STATUS column
-docker ps --filter name=registry --format 'table {{.Names}}\t{{.Status}}'
+docker ps --filter label=io.ksail.registry --format 'table {{.Names}}\t{{.Status}}'
 
 # Inspect detailed health check history for a specific container (raw JSON)
 docker inspect --format '{{json .State.Health}}' <container-name>
