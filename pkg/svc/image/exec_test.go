@@ -3,6 +3,7 @@ package image_test
 import (
 	"bufio"
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net"
@@ -55,10 +56,8 @@ func mockDockerStreamResponse(stdout, stderr string) dockertypes.HijackedRespons
 		header := make([]byte, 8)
 		header[0] = 1 // stdout
 		payload := []byte(stdout)
-		header[4] = byte(len(payload) >> 24)
-		header[5] = byte(len(payload) >> 16)
-		header[6] = byte(len(payload) >> 8)
-		header[7] = byte(len(payload))
+		//nolint:gosec // G115: test payloads are small, no overflow risk
+		binary.BigEndian.PutUint32(header[4:8], uint32(len(payload)))
 		data = append(data, header...)
 		data = append(data, payload...)
 	}
@@ -67,10 +66,8 @@ func mockDockerStreamResponse(stdout, stderr string) dockertypes.HijackedRespons
 		header := make([]byte, 8)
 		header[0] = 2 // stderr
 		payload := []byte(stderr)
-		header[4] = byte(len(payload) >> 24)
-		header[5] = byte(len(payload) >> 16)
-		header[6] = byte(len(payload) >> 8)
-		header[7] = byte(len(payload))
+		//nolint:gosec // G115: test payloads are small, no overflow risk
+		binary.BigEndian.PutUint32(header[4:8], uint32(len(payload)))
 		data = append(data, header...)
 		data = append(data, payload...)
 	}
