@@ -68,6 +68,7 @@ func TestSwitchCmd_HappyPath(t *testing.T) {
 	assert.Contains(t, buf.String(), "Switched to cluster 'kind-staging'")
 
 	// Verify the kubeconfig was actually updated by parsing it
+	//nolint:gosec // G304: test-controlled path from t.TempDir()
 	updatedBytes, err := os.ReadFile(kubeconfigPath)
 	require.NoError(t, err)
 

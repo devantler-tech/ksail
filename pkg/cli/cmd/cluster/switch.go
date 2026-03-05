@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
-	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -24,8 +26,10 @@ const switchLongDesc = `Switch the active kubeconfig context to the named cluste
 This sets current-context in the kubeconfig file so that subsequent
 kubectl and KSail commands target the specified cluster.
 
-The kubeconfig path is resolved from the ksail.yaml config file if present,
-or falls back to the default (~/.kube/config).
+The kubeconfig is resolved in the following priority order:
+  1. From KUBECONFIG environment variable
+  2. From ksail.yaml config file (if present)
+  3. Defaults to ~/.kube/config
 
 Examples:
   # Switch to a cluster named "dev"
@@ -75,7 +79,7 @@ func HandleSwitchRunE(
 	if kubeconfigPath == "" {
 		var err error
 
-		kubeconfigPath, err = clusterdetector.ResolveKubeconfigPath("")
+		kubeconfigPath, err = resolveKubeconfigForSwitch()
 		if err != nil {
 			return fmt.Errorf("resolve kubeconfig path: %w", err)
 		}
@@ -126,7 +130,7 @@ func switchContext(kubeconfigPath, contextName string) error {
 
 // listContextNames returns all context names from the kubeconfig for shell completion.
 func listContextNames() []string {
-	kubeconfigPath, err := clusterdetector.ResolveKubeconfigPath("")
+	kubeconfigPath, err := resolveKubeconfigForSwitch()
 	if err != nil {
 		return nil
 	}
@@ -150,4 +154,24 @@ func listContextNames() []string {
 	sort.Strings(names)
 
 	return names
+}
+
+// resolveKubeconfigForSwitch resolves the kubeconfig path using the same priority
+// order as other cluster commands: KUBECONFIG env > ksail.yaml > default (~/.kube/config).
+func resolveKubeconfigForSwitch() (string, error) {
+	// 1. Check KUBECONFIG environment variable
+	if envPath := os.Getenv("KUBECONFIG"); envPath != "" {
+		paths := strings.Split(envPath, string(os.PathListSeparator))
+		if len(paths) > 0 && paths[0] != "" {
+			expanded, err := fsutil.ExpandHomePath(paths[0])
+			if err != nil {
+				return "", fmt.Errorf("expand kubeconfig path from env: %w", err)
+			}
+
+			return expanded, nil
+		}
+	}
+
+	// 2. Try ksail.yaml config file, falls back to default (~/.kube/config)
+	return kubeconfig.GetKubeconfigPathSilently(), nil
 }
