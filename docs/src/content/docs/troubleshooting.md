@@ -56,8 +56,11 @@ KSail registry containers (local and mirror) have a Docker-native health check t
 # Check health status — look for (healthy) or (unhealthy) in the STATUS column
 docker ps --filter name=registry --format 'table {{.Names}}\t{{.Status}}'
 
-# Inspect detailed health check history for a specific container
-docker inspect --format '{{json .State.Health}}' <container-name> | jq .
+# Inspect detailed health check history for a specific container (raw JSON)
+docker inspect --format '{{json .State.Health}}' <container-name>
+
+# Optional: pretty-print the JSON if jq is installed
+# docker inspect --format '{{json .State.Health}}' <container-name> | jq .
 ```
 
 ### Flux Operator Installation Timeout
