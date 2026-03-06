@@ -202,7 +202,7 @@ func TestProvisionerCreate(t *testing.T) {
 
 #### Export Pattern for Testing Unexported Functions
 
-Use `export_test.go` to expose unexported symbols to `_test` packages without leaking them into production binaries. The file uses the regular package name, so Go only compiles it for test builds:
+Use `export_test.go` to expose unexported symbols to `_test` packages without leaking them into production binaries. This file is compiled only during `go test` because its name ends with `_test.go`. It uses the regular package name (for example, `package provisioner`) so the exported aliases are built along with the package-under-test and can then be accessed from an external `package provisioner_test`:
 
 ````go
 // pkg/svc/provisioner/export_test.go
@@ -365,7 +365,7 @@ Releases are automated via `.goreleaser.yaml` and `.github/workflows/release.yam
    - Creates a GitHub Release with artifacts
    - Publishes the VSCode extension to the marketplace
 
-3. **Optional tagging (for maintainers):** Create and push an annotated tag (`git tag v5.x.x && git push origin v5.x.x`) and update release notes on GitHub if needed.
+3. **Optional tagging (for maintainers):** Create and push an annotated tag (`git tag -a v5.x.x -m "v5.x.x" && git push origin v5.x.x`) and update release notes on GitHub if needed.
 
 ## Getting Help
 
