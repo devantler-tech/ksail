@@ -282,7 +282,7 @@ func TestCreateWithRetry_ContextCancellation(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() { cancel() })
+	defer cancel()
 
 	createCalls := 0
 	create := func(_ context.Context, _ *cli.CreateOptions, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
@@ -445,7 +445,7 @@ func TestWaitForNetworkRemoval_ContextCancellation(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() { cancel() })
+	defer cancel()
 
 	existsCalls := 0
 	networkExists := func(_ context.Context, _ string) bool {
