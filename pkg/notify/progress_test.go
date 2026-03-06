@@ -227,6 +227,7 @@ func TestProgressGroup_ContextCancellation(t *testing.T) {
 	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	tasks := []notify.ProgressTask{
 		{
