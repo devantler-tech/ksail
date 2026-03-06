@@ -214,7 +214,7 @@ var (
 )
 ````
 
-Test from `package provisioner_test` for clean black-box testing—no `//nolint:gochecknoglobals` annotation needed.
+Test from `package provisioner_test` for clean black-box testing. Add a `//nolint:gochecknoglobals` annotation above these exported variables when required to satisfy `golangci-lint`, unless a path-specific exclusion for test exports is configured.
 
 #### Mocking with Testify
 
