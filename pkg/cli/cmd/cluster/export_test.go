@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
+	"github.com/spf13/pflag"
 )
 
 // ExportShouldPushOCIArtifact exports ShouldPushOCIArtifact for testing.
@@ -88,4 +89,9 @@ func ExportSplitYAMLDocuments(content string) []string {
 // ExportInjectRestoreLabels exports injectRestoreLabels for testing.
 func ExportInjectRestoreLabels(filePath, backupName, restoreName string) (string, error) {
 	return injectRestoreLabels(filePath, backupName, restoreName)
+}
+
+// ExportResolveForce exports resolveForce for testing.
+func ExportResolveForce(viperForce bool, yesFlag *pflag.Flag) bool {
+	return resolveForce(viperForce, yesFlag)
 }
