@@ -55,6 +55,41 @@ func TestNewUpdateCmd(t *testing.T) {
 	}
 }
 
+func TestResolveForce(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		forceValue bool
+		setYes     bool
+		expected   bool
+	}{
+		{name: "--force resolves to true", forceValue: true, setYes: false, expected: true},
+		{name: "--yes resolves to true", forceValue: false, setYes: true, expected: true},
+		{name: "both flags resolve to true", forceValue: true, setYes: true, expected: true},
+		{name: "neither flag resolves to false", forceValue: false, setYes: false, expected: false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			runtimeContainer := &di.Runtime{}
+			cmd := clusterpkg.NewUpdateCmd(runtimeContainer)
+
+			if testCase.setYes {
+				_ = cmd.Flags().Set("yes", "true")
+			}
+
+			result := clusterpkg.ExportResolveForce(testCase.forceValue, cmd.Flags().Lookup("yes"))
+			if result != testCase.expected {
+				t.Errorf("expected resolveForce(%v, yesChanged=%v) = %v, got %v",
+					testCase.forceValue, testCase.setYes, testCase.expected, result)
+			}
+		})
+	}
+}
+
 //nolint:paralleltest // subtests override global stdin reader
 func TestUpdateConfirmation_UsesConfirmPackage(t *testing.T) {
 	tests := []struct {

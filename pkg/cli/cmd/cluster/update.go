@@ -24,6 +24,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // NewUpdateCmd creates the cluster update command.
@@ -69,7 +70,6 @@ Use --dry-run to preview changes without applying them.`,
 
 	cmd.Flags().BoolP("yes", "y", false,
 		"Skip confirmation prompt (alias for --force)")
-	_ = cfgManager.Viper.BindPFlag("yes", cmd.Flags().Lookup("yes"))
 
 	cmd.Flags().Bool("dry-run", false,
 		"Preview changes without applying them")
@@ -98,7 +98,7 @@ func handleUpdateRunE(
 		return err
 	}
 
-	force := cfgManager.Viper.GetBool("force") || cfgManager.Viper.GetBool("yes")
+	force := resolveForce(cfgManager.Viper.GetBool("force"), cmd.Flags().Lookup("yes"))
 
 	// Create provisioner and verify cluster exists
 	provisioner, err := createAndVerifyProvisioner(cmd, ctx, clusterName)
@@ -317,7 +317,7 @@ func applyOrReportChanges(
 	outputTimer timer.Timer,
 ) error {
 	dryRun := cfgManager.Viper.GetBool("dry-run")
-	force := cfgManager.Viper.GetBool("force") || cfgManager.Viper.GetBool("yes")
+	force := resolveForce(cfgManager.Viper.GetBool("force"), cmd.Flags().Lookup("yes"))
 
 	if dryRun {
 		return reportDryRun(cmd, diff)
@@ -366,8 +366,14 @@ func applyOrReportChanges(
 	)
 }
 
-// reportDryRun prints a message confirming no changes were applied and returns nil.
-func reportDryRun(cmd *cobra.Command, _ *clusterupdate.UpdateResult) error {
+// reportDryRun prints a summary for dry-run mode and confirms no changes were applied.
+func reportDryRun(cmd *cobra.Command, diff *clusterupdate.UpdateResult) error {
+	if diff != nil && diff.TotalChanges() == 0 {
+		notify.Infof(cmd.OutOrStdout(), "No changes detected")
+
+		return nil
+	}
+
 	notify.Infof(cmd.OutOrStdout(), "Dry run complete. No changes applied.")
 
 	return nil
@@ -574,4 +580,11 @@ func executeRecreateFlow(
 
 	// Execute create using shared workflow
 	return runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
+}
+
+// resolveForce returns true if the viper-resolved force flag is set,
+// or if the --yes flag was explicitly passed on the command line.
+// This consolidates the --force/--yes alias logic into one place.
+func resolveForce(viperForce bool, yesFlag *pflag.Flag) bool {
+	return viperForce || (yesFlag != nil && yesFlag.Changed)
 }
