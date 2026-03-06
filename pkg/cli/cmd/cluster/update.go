@@ -67,6 +67,10 @@ Use --dry-run to preview changes without applying them.`,
 		"Skip confirmation prompt and proceed with cluster recreation")
 	_ = cfgManager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
 
+	cmd.Flags().BoolP("yes", "y", false,
+		"Skip confirmation prompt (alias for --force)")
+	_ = cfgManager.Viper.BindPFlag("yes", cmd.Flags().Lookup("yes"))
+
 	cmd.Flags().Bool("dry-run", false,
 		"Preview changes without applying them")
 	_ = cfgManager.Viper.BindPFlag("dry-run", cmd.Flags().Lookup("dry-run"))
@@ -94,7 +98,7 @@ func handleUpdateRunE(
 		return err
 	}
 
-	force := cfgManager.Viper.GetBool("force")
+	force := cfgManager.Viper.GetBool("force") || cfgManager.Viper.GetBool("yes")
 
 	// Create provisioner and verify cluster exists
 	provisioner, err := createAndVerifyProvisioner(cmd, ctx, clusterName)
@@ -313,7 +317,7 @@ func applyOrReportChanges(
 	outputTimer timer.Timer,
 ) error {
 	dryRun := cfgManager.Viper.GetBool("dry-run")
-	force := cfgManager.Viper.GetBool("force")
+	force := cfgManager.Viper.GetBool("force") || cfgManager.Viper.GetBool("yes")
 
 	if dryRun {
 		return reportDryRun(cmd, diff)
@@ -362,20 +366,9 @@ func applyOrReportChanges(
 	)
 }
 
-// reportDryRun prints a summary of what would be applied and returns nil.
-func reportDryRun(cmd *cobra.Command, diff *clusterupdate.UpdateResult) error {
-	var summary strings.Builder
-
-	fmt.Fprintf(&summary,
-		"Would apply %d in-place, %d reboot-required, %d recreate-required changes.\n",
-		len(diff.InPlaceChanges),
-		len(diff.RebootRequired),
-		len(diff.RecreateRequired),
-	)
-
-	summary.WriteString("Dry run complete. No changes applied.")
-
-	notify.Infof(cmd.OutOrStdout(), summary.String())
+// reportDryRun prints a message confirming no changes were applied and returns nil.
+func reportDryRun(cmd *cobra.Command, _ *clusterupdate.UpdateResult) error {
+	notify.Infof(cmd.OutOrStdout(), "Dry run complete. No changes applied.")
 
 	return nil
 }
@@ -466,7 +459,7 @@ func applyInPlaceChanges(
 }
 
 // displayChangesSummary outputs a human-readable summary of configuration changes
-// as a single grouped block to avoid per-line symbol prefixes.
+// as a single grouped block showing before → after values for each field.
 func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	totalChanges := len(diff.InPlaceChanges) + len(diff.RebootRequired) + len(diff.RecreateRequired)
 
@@ -481,15 +474,15 @@ func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult)
 	fmt.Fprintf(&block, "Detected %d configuration changes:", totalChanges)
 
 	for _, change := range diff.InPlaceChanges {
-		fmt.Fprintf(&block, "\n  ✓ %s (in-place)", change.Field)
+		fmt.Fprintf(&block, "\n  🟢 %s: %s → %s", change.Field, change.OldValue, change.NewValue)
 	}
 
 	for _, change := range diff.RebootRequired {
-		fmt.Fprintf(&block, "\n  ⚡ %s (reboot required)", change.Field)
+		fmt.Fprintf(&block, "\n  🟡 %s: %s → %s", change.Field, change.OldValue, change.NewValue)
 	}
 
 	for _, change := range diff.RecreateRequired {
-		fmt.Fprintf(&block, "\n  ✗ %s (recreate required)", change.Field)
+		fmt.Fprintf(&block, "\n  🔴 %s: %s → %s", change.Field, change.OldValue, change.NewValue)
 	}
 
 	notify.Infof(cmd.OutOrStdout(), block.String())

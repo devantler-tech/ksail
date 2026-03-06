@@ -48,6 +48,11 @@ func TestNewUpdateCmd(t *testing.T) {
 	if dryRunFlag == nil {
 		t.Error("expected --dry-run flag to exist")
 	}
+
+	yesFlag := cmd.Flags().Lookup("yes")
+	if yesFlag == nil {
+		t.Error("expected --yes flag to exist")
+	}
 }
 
 //nolint:paralleltest // subtests override global stdin reader
