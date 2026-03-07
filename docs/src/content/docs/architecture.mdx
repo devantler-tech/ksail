@@ -211,6 +211,8 @@ The `diff` service (`pkg/svc/diff/`) computes configuration differences and clas
 - **Reboot-required** — Requires node reboot (e.g., Talos kernel changes)
 - **Recreate-required** — Must destroy and recreate cluster (e.g., distribution change)
 
+After computing the diff, `ksail cluster update` displays a formatted **Change Summary** table with four columns (Component, Before, After, Impact). Rows are ordered by severity — 🔴 recreate-required → 🟡 reboot-required → 🟢 in-place — and only changed components are shown. Column widths adjust dynamically to the longest value in each column.
+
 ## Embedded Tools Approach
 
 KSail embeds Kubernetes tools as Go libraries instead of shelling out to CLI tools:
