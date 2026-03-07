@@ -57,6 +57,7 @@ type VerifyOptions struct {
 	// Username is the optional username for authentication.
 	Username string
 	// Password is the optional password/token for authentication.
+	//nolint:gosec // G117: configuration field, not a hardcoded credential
 	Password string
 	// Insecure allows HTTP connections (for local registries).
 	Insecure bool
@@ -73,6 +74,7 @@ type ArtifactExistsOptions struct {
 	// Username is the optional username for authentication.
 	Username string
 	// Password is the optional password/token for authentication.
+	//nolint:gosec // G117: configuration field, not a hardcoded credential
 	Password string
 	// Insecure allows HTTP connections (for local registries).
 	Insecure bool

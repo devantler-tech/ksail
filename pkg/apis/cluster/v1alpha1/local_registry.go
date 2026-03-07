@@ -14,6 +14,7 @@ type ParsedRegistry struct {
 	Path     string
 	Tag      string
 	Username string
+	//nolint:gosec // G117: configuration field, not a hardcoded credential
 	Password string
 }
 

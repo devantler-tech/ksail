@@ -17,6 +17,7 @@ type MirrorSpec struct {
 	Host     string
 	Remote   string
 	Username string // Optional: username for registry authentication (supports ${ENV_VAR} placeholders)
+	//nolint:gosec // G117: configuration field, not a hardcoded credential
 	Password string
 }
 

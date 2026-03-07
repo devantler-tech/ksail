@@ -86,6 +86,7 @@ func (l *Installer) Images(ctx context.Context) ([]string, error) {
 	// Use a client with timeout to avoid hanging indefinitely
 	client := &http.Client{Timeout: l.timeout}
 
+	//nolint:gosec // G704: URL is a compile-time constant (localPathProvisionerManifestURL)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch manifest: %w", err)

@@ -172,6 +172,7 @@ func (k *Provisioner) Create(ctx context.Context, name string) error {
 
 	defer func() { _ = tmpFile.Close() }()
 	defer func() {
+		//nolint:gosec // G703: tmpFile is created by os.CreateTemp in this function
 		_ = os.Remove(tmpFile.Name())
 	}()
 
@@ -184,6 +185,7 @@ func (k *Provisioner) Create(ctx context.Context, name string) error {
 
 	const configFilePerms = 0o600
 
+	//nolint:gosec // G703: tmpFile is created by os.CreateTemp in this function
 	err = os.WriteFile(
 		tmpFile.Name(),
 		[]byte(configYAML),
