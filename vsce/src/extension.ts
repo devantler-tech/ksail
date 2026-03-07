@@ -93,8 +93,10 @@ export async function activate(
   statusProvider.setTreeView(statusTreeView);
   context.subscriptions.push(statusTreeView);
 
-  // Start polling for cluster status (every 10 seconds)
-  statusProvider.startPolling(10_000);
+  // Start polling for cluster status
+  const config = vscode.workspace.getConfiguration("ksail");
+  const pollingInterval = config.get<number>("statusPollingInterval", 10) * 1000;
+  statusProvider.startPolling(pollingInterval);
 
   // Create status bar
   statusBar = new ClusterStatusBar(statusProvider);

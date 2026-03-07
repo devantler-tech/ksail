@@ -132,6 +132,13 @@
           "type": "string",
           "default": "ksail",
           "description": "Path to the KSail binary"
+        },
+        "ksail.statusPollingInterval": {
+          "type": "number",
+          "default": 10,
+          "minimum": 5,
+          "maximum": 300,
+          "description": "Cluster status polling interval in seconds"
         }
       }
     },

@@ -87,8 +87,8 @@ function runCommand(
       resolve({ stdout, stderr, exitCode: code ?? 1 });
     });
 
-    proc.on("error", () => {
-      resolve({ stdout, stderr, exitCode: 1 });
+    proc.on("error", (error) => {
+      resolve({ stdout, stderr: stderr || error.message, exitCode: 1 });
     });
   });
 }

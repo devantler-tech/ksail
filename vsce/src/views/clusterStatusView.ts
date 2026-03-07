@@ -368,10 +368,15 @@ export class ClusterStatusTreeDataProvider
         (totalFailed > 0 ? `, ${totalFailed} failed` : "") +
         ")";
 
+      const podsByNamespace = new Map<string, PodInfo[]>();
+      for (const pod of this.snapshot.pods) {
+        const list = podsByNamespace.get(pod.namespace) ?? [];
+        list.push(pod);
+        podsByNamespace.set(pod.namespace, list);
+      }
+
       const namespaceItems = this.snapshot.podSummaries.map((summary) => {
-        const namespacePods = this.snapshot!.pods.filter(
-          (p) => p.namespace === summary.namespace
-        );
+        const namespacePods = podsByNamespace.get(summary.namespace) ?? [];
         return new NamespaceItem(summary, namespacePods);
       });
 
