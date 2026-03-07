@@ -69,7 +69,7 @@ ksail cluster init \
   --local-registry localhost:5050
 ```
 
-K3s starts faster with lower resource usage, Cilium provides network policies and observability, LocalPathProvisioner enables persistent volumes for stateful apps, Flux mirrors production GitOps patterns, and a local registry avoids pushing images to a remote registry during iteration.
+K3s starts faster with lower resource usage, Cilium provides network policies and observability, Local Path Provisioner enables persistent volumes for stateful apps, Flux mirrors production GitOps patterns, and a local registry avoids pushing images to a remote registry during iteration.
 
 ### Workflow
 
@@ -192,7 +192,7 @@ jobs:
 |------------------|------------------|------------------|------------------|
 | Distribution     | Vanilla          | K3s              | K3s              |
 | CNI              | Cilium           | Cilium           | Cilium           |
-| CSI              | None             | LocalPathProvisioner | None        |
+| CSI              | None             | Local Path Provisioner | None        |
 | GitOps           | None             | Flux             | Flux             |
 | Local Registry   | Optional         | Yes              | Yes              |
 | Declarative Config | Optional       | Recommended      | Required         |
