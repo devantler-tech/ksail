@@ -39,10 +39,10 @@ func BenchmarkComputeDiff_AllInPlaceChanges(b *testing.B) {
 	newSpec := clone(oldSpec)
 
 	newSpec.CNI = v1alpha1.CNICilium
-	newSpec.CSI = "Enabled"
-	newSpec.MetricsServer = "Enabled"
-	newSpec.LoadBalancer = "Enabled"
-	newSpec.CertManager = "Enabled"
+	newSpec.CSI = testValueEnabled
+	newSpec.MetricsServer = testValueEnabled
+	newSpec.LoadBalancer = testValueEnabled
+	newSpec.CertManager = testValueEnabled
 	newSpec.PolicyEngine = "Kyverno"
 	newSpec.GitOpsEngine = "Flux"
 

@@ -12,8 +12,8 @@ import (
 //nolint:gochecknoglobals // Benchmark sink variable is required to prevent compiler optimization.
 var benchFormatDiffTableSink string
 
-// newInPlaceDiff builds an UpdateResult with n in-place changes.
-func newInPlaceDiff(n int) *clusterupdate.UpdateResult {
+// newInPlaceDiff builds an UpdateResult with count in-place changes.
+func newInPlaceDiff(count int) *clusterupdate.UpdateResult {
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	fields := []struct{ field, old, new string }{
@@ -29,7 +29,7 @@ func newInPlaceDiff(n int) *clusterupdate.UpdateResult {
 		{"cluster.hetzner.sshKeyName", "old-key", "new-key"},
 	}
 
-	for i := range n {
+	for i := range count {
 		idx := i % len(fields)
 		result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
 			Field:    fields[idx].field,
@@ -48,20 +48,45 @@ func newMixedDiff() *clusterupdate.UpdateResult {
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	result.RecreateRequired = []clusterupdate.Change{
-		{Field: "cluster.distribution", OldValue: "Vanilla", NewValue: "K3s",
-			Category: clusterupdate.ChangeCategoryRecreateRequired, Reason: "changing distribution requires recreation"},
-		{Field: "cluster.localRegistry.registry", OldValue: "localhost:5050", NewValue: "localhost:6060",
-			Category: clusterupdate.ChangeCategoryRecreateRequired, Reason: "Kind requires recreate for registry changes"},
+		{
+			Field:    "cluster.distribution",
+			OldValue: "Vanilla",
+			NewValue: "K3s",
+			Category: clusterupdate.ChangeCategoryRecreateRequired,
+			Reason:   "changing distribution requires recreation",
+		},
+		{
+			Field:    "cluster.localRegistry.registry",
+			OldValue: "localhost:5050",
+			NewValue: "localhost:6060",
+			Category: clusterupdate.ChangeCategoryRecreateRequired,
+			Reason:   "Kind requires recreate for registry changes",
+		},
 	}
 	result.RebootRequired = []clusterupdate.Change{
-		{Field: "cluster.talos.iso", OldValue: "122630", NewValue: "999999",
-			Category: clusterupdate.ChangeCategoryRebootRequired, Reason: "ISO change affects provisioned nodes"},
+		{
+			Field:    "cluster.talos.iso",
+			OldValue: "122630",
+			NewValue: "999999",
+			Category: clusterupdate.ChangeCategoryRebootRequired,
+			Reason:   "ISO change affects provisioned nodes",
+		},
 	}
 	result.InPlaceChanges = []clusterupdate.Change{
-		{Field: "cluster.cni", OldValue: "Default", NewValue: "Cilium",
-			Category: clusterupdate.ChangeCategoryInPlace, Reason: "CNI can be switched via Helm"},
-		{Field: "cluster.policyEngine", OldValue: "None", NewValue: "Kyverno",
-			Category: clusterupdate.ChangeCategoryInPlace, Reason: "policy engine can be switched via Helm"},
+		{
+			Field:    "cluster.cni",
+			OldValue: "Default",
+			NewValue: "Cilium",
+			Category: clusterupdate.ChangeCategoryInPlace,
+			Reason:   "CNI can be switched via Helm",
+		},
+		{
+			Field:    "cluster.policyEngine",
+			OldValue: "None",
+			NewValue: "Kyverno",
+			Category: clusterupdate.ChangeCategoryInPlace,
+			Reason:   "policy engine can be switched via Helm",
+		},
 	}
 
 	return result
