@@ -186,12 +186,12 @@ var ErrInvalidAppDirForTest = errInvalidAppDir
 type MessageForTest = message
 
 // ExportNewUserMessage creates a user message for testing GenerateSessionName.
-var ExportNewUserMessage = func(content string) message {
+var ExportNewUserMessage = func(content string) MessageForTest {
 	return message{role: roleUser, content: content}
 }
 
 // ExportNewAssistantMessage creates an assistant message for testing GenerateSessionName.
-var ExportNewAssistantMessage = func(content string) message {
+var ExportNewAssistantMessage = func(content string) MessageForTest {
 	return message{role: roleAssistant, content: content}
 }
 
