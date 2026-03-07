@@ -424,10 +424,10 @@ func TestDistribution_ProvidesCSIByDefault(t *testing.T) {
 			expected:     true,
 		},
 		{
-			name:         "vanilla_docker_no_csi",
+			name:         "vanilla_docker_provides_csi",
 			distribution: v1alpha1.DistributionVanilla,
 			provider:     v1alpha1.ProviderDocker,
-			expected:     false,
+			expected:     true,
 		},
 		{
 			name:         "talos_docker_no_csi",
@@ -748,11 +748,11 @@ func TestCSI_EffectiveValue(t *testing.T) {
 		expected     v1alpha1.CSI
 	}{
 		{
-			name:         "vanilla_docker_default_resolves_to_disabled",
+			name:         "vanilla_docker_default_resolves_to_enabled",
 			csi:          v1alpha1.CSIDefault,
 			distribution: v1alpha1.DistributionVanilla,
 			provider:     v1alpha1.ProviderDocker,
-			expected:     v1alpha1.CSIDisabled,
+			expected:     v1alpha1.CSIEnabled,
 		},
 		{
 			name:         "k3s_docker_default_resolves_to_enabled",

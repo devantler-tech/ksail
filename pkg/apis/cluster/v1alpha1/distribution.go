@@ -49,19 +49,23 @@ func (d *Distribution) ProvidesStorageByDefault() bool {
 }
 
 // ProvidesCSIByDefault returns true if the distribution × provider combination includes CSI by default.
+// - Vanilla (Kind) bundles local-path-provisioner in the local-path-storage namespace
 // - K3s includes local-path-provisioner by default (regardless of provider)
 // - Talos × Hetzner uses Hetzner CSI driver by default
-// - Vanilla, VCluster (Vind with Distro: k8s), and Talos × Docker do not have a default CSI.
+// - VCluster (Vind with Distro: k8s) and Talos × Docker do not have a default CSI.
 func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
 	switch *d {
+	case DistributionVanilla:
+		// Kind bundles local-path-provisioner (in local-path-storage namespace)
+		return true
 	case DistributionK3s:
 		// K3s always includes local-path-provisioner
 		return true
 	case DistributionTalos:
 		// Talos × Hetzner provides Hetzner CSI by default
 		return provider == ProviderHetzner
-	case DistributionVanilla, DistributionVCluster:
-		// Vanilla (Kind) and VCluster (Vind with Distro: k8s) do not provide CSI by default
+	case DistributionVCluster:
+		// VCluster (Vind with Distro: k8s) does not provide CSI by default
 		return false
 	default:
 		return false

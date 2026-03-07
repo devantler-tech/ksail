@@ -148,10 +148,10 @@ func TestEngine_ComponentChanges(t *testing.T) {
 		},
 		{
 			name:     "CSI change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.CSI = v1alpha1.CSIEnabled },
+			mutate:   func(s *v1alpha1.ClusterSpec) { s.CSI = v1alpha1.CSIDisabled },
 			field:    "cluster.csi",
-			oldValue: "Disabled",
-			newValue: testValueEnabled,
+			oldValue: "Enabled",
+			newValue: "Disabled",
 		},
 		{
 			name:     "MetricsServer change",
@@ -279,6 +279,25 @@ func TestEngine_LocalRegistryChange_K3s(t *testing.T) {
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.localRegistry.registry",
 		"localhost:5050", testRegistryAlt, clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_LocalRegistryChange_OldEmpty_Skipped(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.LocalRegistry.Registry = ""
+
+	newer := clone(old)
+	newer.LocalRegistry.Registry = "ghcr.io/org/repo"
+
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer)
+
+	for _, change := range result.AllChanges() {
+		if change.Field == "cluster.localRegistry.registry" {
+			t.Fatal("should not report local registry diff when old is empty (undetectable)")
+		}
+	}
 }
 
 func TestEngine_VanillaOptionsChange(t *testing.T) {
@@ -522,7 +541,7 @@ func TestEngine_MultipleChanges(t *testing.T) {
 	old := newBaseSpec()
 	newer := clone(old)
 	newer.CNI = v1alpha1.CNICilium
-	newer.CSI = v1alpha1.CSIEnabled
+	newer.CSI = v1alpha1.CSIDisabled
 	newer.Vanilla.MirrorsDir = "changed"
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
@@ -557,15 +576,20 @@ func TestEngine_DefaultVsDisabled_NoFalsePositive_Vanilla(t *testing.T) {
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
-	if result.TotalChanges() != 0 {
+	// Vanilla (Kind) bundles CSI by default, so Default (→Enabled) ≠ Disabled
+	// produces one real change. MetricsServer and LoadBalancer remain
+	// Default==Disabled on Vanilla.
+	expectedChanges := 1
+	if result.TotalChanges() != expectedChanges {
 		t.Errorf(
-			"Default vs Disabled should produce 0 changes on Vanilla/Docker, got %d",
+			"Default vs Disabled should produce %d changes on Vanilla/Docker, got %d",
+			expectedChanges,
 			result.TotalChanges(),
 		)
 
 		for _, change := range result.AllChanges() {
 			t.Logf(
-				"  unexpected change: %s %q -> %q",
+				"  change: %s %q -> %q",
 				change.Field, change.OldValue, change.NewValue,
 			)
 		}

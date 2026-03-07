@@ -162,10 +162,20 @@ func (e *Engine) applyFieldRules(
 }
 
 // checkLocalRegistryChange checks if local registry config has changed.
+//
+// When the old registry is empty, the comparison is skipped because the
+// detector cannot introspect the running cluster's local registry
+// configuration. An empty old value means "unknown", not "none".
+// State persistence (when implemented) will populate the old value
+// correctly, enabling proper change detection.
 func (e *Engine) checkLocalRegistryChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *clusterupdate.UpdateResult,
 ) {
+	if oldSpec.LocalRegistry.Registry == "" {
+		return
+	}
+
 	if oldSpec.LocalRegistry.Registry != newSpec.LocalRegistry.Registry {
 		// For Kind, registry changes require recreate (containerd config is baked in)
 		// For Talos/K3d, registry mirrors can be updated in-place
