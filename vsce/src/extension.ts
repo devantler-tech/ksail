@@ -23,6 +23,7 @@ import { ClustersTreeDataProvider } from "./views/clustersView.js";
 import {
   ClusterStatusBar,
   ClusterStatusTreeDataProvider,
+  disposePodLogChannels,
   showPodLogs,
 } from "./views/index.js";
 
@@ -84,7 +85,7 @@ export async function activate(
   registerCommands(context, outputChannel, clustersProvider);
 
   // Create cluster status tree data provider
-  statusProvider = new ClusterStatusTreeDataProvider(outputChannel);
+  statusProvider = new ClusterStatusTreeDataProvider();
 
   const statusTreeView = vscode.window.createTreeView("ksailClusterStatus", {
     treeDataProvider: statusProvider,
@@ -150,6 +151,7 @@ export async function activate(
 export function deactivate(): void {
   outputChannel?.appendLine("KSail extension deactivating...");
   statusProvider?.stopPolling();
+  disposePodLogChannels();
 }
 
 /**

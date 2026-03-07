@@ -224,8 +224,6 @@ export class ClusterStatusTreeDataProvider
   private treeView: vscode.TreeView<StatusTreeItem> | undefined;
   private isPolling = false;
 
-  constructor(private outputChannel: vscode.OutputChannel) {}
-
   /**
    * Set the tree view instance for programmatic access
    */
@@ -272,18 +270,6 @@ export class ClusterStatusTreeDataProvider
 
     try {
       this.snapshot = await fetchClusterStatus();
-    } catch (error) {
-      this.outputChannel.appendLine(
-        `Failed to fetch cluster status: ${error instanceof Error ? error.message : String(error)}`
-      );
-      this.snapshot = {
-        health: "Unknown",
-        podSummaries: [],
-        pods: [],
-        gitopsStatuses: [],
-        gitopsEngine: undefined,
-        error: "Failed to connect to cluster",
-      };
     } finally {
       this.isPolling = false;
       this._onDidChangeTreeData.fire();
@@ -411,18 +397,39 @@ export class ClusterStatusTreeDataProvider
 }
 
 /**
- * Show pod logs in an output channel
+ * Cached output channels for pod logs, keyed by "namespace/podName"
+ */
+const podLogChannels = new Map<string, vscode.OutputChannel>();
+
+/**
+ * Show pod logs in an output channel, reusing existing channels per pod
  */
 export async function showPodLogs(
   namespace: string,
   podName: string
 ): Promise<void> {
-  const logChannel = vscode.window.createOutputChannel(
-    `KSail: ${namespace}/${podName}`
-  );
+  const key = `${namespace}/${podName}`;
+  let logChannel = podLogChannels.get(key);
+
+  if (!logChannel) {
+    logChannel = vscode.window.createOutputChannel(`KSail: ${key}`);
+    podLogChannels.set(key, logChannel);
+  }
+
+  logChannel.clear();
   logChannel.show();
-  logChannel.appendLine(`Fetching logs for ${namespace}/${podName}...`);
+  logChannel.appendLine(`Fetching logs for ${key}...`);
 
   const logs = await getPodLogs(namespace, podName);
   logChannel.appendLine(logs);
+}
+
+/**
+ * Dispose all cached pod log channels
+ */
+export function disposePodLogChannels(): void {
+  for (const channel of podLogChannels.values()) {
+    channel.dispose();
+  }
+  podLogChannels.clear();
 }

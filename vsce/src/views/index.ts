@@ -11,6 +11,7 @@ export {
 
 export {
   ClusterStatusTreeDataProvider,
+  disposePodLogChannels,
   GitOpsItem,
   HealthItem,
   InfoItem,

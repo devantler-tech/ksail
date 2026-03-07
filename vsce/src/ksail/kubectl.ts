@@ -63,17 +63,30 @@ export interface ClusterStatusSnapshot {
 }
 
 /**
- * Run a command and capture output
+ * Default timeout for kubectl commands (30 seconds)
+ */
+const COMMAND_TIMEOUT_MS = 30_000;
+
+/**
+ * Run a command and capture output with a timeout
  */
 function runCommand(
   command: string,
-  args: string[]
+  args: string[],
+  timeoutMs = COMMAND_TIMEOUT_MS
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
     const proc = spawn(command, args);
 
     let stdout = "";
     let stderr = "";
+    let killed = false;
+
+    const timer = setTimeout(() => {
+      killed = true;
+      proc.kill();
+      resolve({ stdout, stderr: "Command timed out", exitCode: 1 });
+    }, timeoutMs);
 
     proc.stdout.on("data", (data: Buffer) => {
       stdout += data.toString();
@@ -84,11 +97,17 @@ function runCommand(
     });
 
     proc.on("close", (code) => {
-      resolve({ stdout, stderr, exitCode: code ?? 1 });
+      clearTimeout(timer);
+      if (!killed) {
+        resolve({ stdout, stderr, exitCode: code ?? 1 });
+      }
     });
 
     proc.on("error", (error) => {
-      resolve({ stdout, stderr: stderr || error.message, exitCode: 1 });
+      clearTimeout(timer);
+      if (!killed) {
+        resolve({ stdout, stderr: stderr || error.message, exitCode: 1 });
+      }
     });
   });
 }
@@ -103,7 +122,9 @@ export async function getAllPods(): Promise<PodInfo[]> {
   ]);
 
   if (result.exitCode !== 0) {
-    return [];
+    throw new Error(
+      `kubectl get pods failed with exit code ${result.exitCode}: ${result.stderr || "unknown error"}`
+    );
   }
 
   const pods: PodInfo[] = [];
@@ -219,7 +240,7 @@ async function getFluxStatuses(): Promise<GitOpsStatus[]> {
 }
 
 /**
- * Get ArgoCD application statuses
+ * Get ArgoCD application statuses (normalized to True/False ready)
  */
 async function getArgoCDStatuses(): Promise<GitOpsStatus[]> {
   const result = await runCommand("kubectl", [
@@ -232,7 +253,11 @@ async function getArgoCDStatuses(): Promise<GitOpsStatus[]> {
     return [];
   }
 
-  return parseGitOpsOutput(result.stdout, "Application");
+  return parseGitOpsOutput(result.stdout, "Application").map((s) => ({
+    ...s,
+    ready: s.ready === "Healthy" ? "True" : "False",
+    status: `${s.ready} / ${s.status}`,
+  }));
 }
 
 /**
@@ -281,7 +306,7 @@ export function determineClusterHealth(
 
   if (gitopsEngine) {
     const failedReconciliations = gitopsStatuses.filter(
-      (s) => s.ready === "False" || s.ready === "Degraded"
+      (s) => s.ready === "False"
     );
     if (failedReconciliations.length > 0) {
       return "Degraded";
