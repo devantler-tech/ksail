@@ -517,6 +517,8 @@ func formatDiffTable(
 
 	var block strings.Builder
 
+	// Pre-allocate: each row needs ~colW+colB+colA+colI bytes for data,
+	// plus ~16 bytes overhead per row for spacing (6), emoji (4), newlines, padding.
 	block.Grow((totalChanges + 4) * (colW + colB + colA + colI + 16))
 
 	writeSummaryLine(&block, totalChanges)
@@ -591,12 +593,17 @@ func writeSummaryLine(block *strings.Builder, totalChanges int) {
 	fmt.Fprintf(block, "Detected %d configuration changes:\n\n", totalChanges)
 }
 
+// headerIndent is the number of leading spaces in the header and separator rows.
+// This visually aligns with the emoji+space prefix in data rows:
+// emoji renders as 2 terminal columns + 1 trailing space = 3 visual columns.
+const headerIndent = "   "
+
 func writeHeaderRow(
 	block *strings.Builder,
 	colW, colB, colA int,
 ) {
-	// 3 leading spaces visually align with emoji+space prefix in data rows.
-	fmt.Fprintf(block, "   %-*s  %-*s  %-*s  %s\n",
+	fmt.Fprintf(block, "%s%-*s  %-*s  %-*s  %s\n",
+		headerIndent,
 		colW, "Component", colB, "Before", colA, "After", "Impact")
 }
 
@@ -604,7 +611,8 @@ func writeSeparatorRow(
 	block *strings.Builder,
 	colW, colB, colA, colI int,
 ) {
-	fmt.Fprintf(block, "   %s  %s  %s  %s\n",
+	fmt.Fprintf(block, "%s%s  %s  %s  %s\n",
+		headerIndent,
 		strings.Repeat("─", colW),
 		strings.Repeat("─", colB),
 		strings.Repeat("─", colA),
