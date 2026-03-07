@@ -1,12 +1,15 @@
 package cluster_test
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
 	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/spf13/cobra"
 )
 
 func TestNewUpdateCmd(t *testing.T) {
@@ -168,5 +171,127 @@ func TestUpdateConfirmation_ShouldSkipPrompt(t *testing.T) {
 					testCase.force, testCase.expected, result)
 			}
 		})
+	}
+}
+
+func TestDisplayChangesSummary_NoChanges(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	clusterpkg.ExportDisplayChangesSummary(cmd, diff)
+
+	if buf.Len() != 0 {
+		t.Errorf("expected no output for empty diff, got %q", buf.String())
+	}
+}
+
+func TestDisplayChangesSummary_TableFormat(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field:    "cluster.cni",
+		OldValue: "Default",
+		NewValue: "Cilium",
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   "CNI can be switched via Helm",
+	})
+	diff.RecreateRequired = append(diff.RecreateRequired, clusterupdate.Change{
+		Field:    "cluster.distribution",
+		OldValue: "Vanilla",
+		NewValue: "Talos",
+		Category: clusterupdate.ChangeCategoryRecreateRequired,
+		Reason:   "distribution change requires recreation",
+	})
+
+	clusterpkg.ExportDisplayChangesSummary(cmd, diff)
+
+	output := buf.String()
+
+	expected := []struct {
+		label string
+		text  string
+	}{
+		{"Component header", "Component"},
+		{"Before header", "Before"},
+		{"After header", "After"},
+		{"Impact header", "Impact"},
+		{"in-place icon", "🟢"},
+		{"recreate-required icon", "🔴"},
+		{"in-place label", "in-place"},
+		{"recreate-required label", "recreate-required"},
+		{"cluster.cni field", "cluster.cni"},
+		{"cluster.distribution field", "cluster.distribution"},
+		{"Cilium value", "Cilium"},
+		{"Talos value", "Talos"},
+		{"change count summary", "Detected 2 configuration changes"},
+		{"separator line", "─"},
+	}
+
+	for _, entry := range expected {
+		if !strings.Contains(output, entry.text) {
+			t.Errorf("expected output to contain %s (%q)", entry.label, entry.text)
+		}
+	}
+}
+
+func TestDisplayChangesSummary_SeverityOrder(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field:    "cluster.cni",
+		OldValue: "Default",
+		NewValue: "Cilium",
+		Category: clusterupdate.ChangeCategoryInPlace,
+	})
+	diff.RebootRequired = append(diff.RebootRequired, clusterupdate.Change{
+		Field:    "talos.kernel_args",
+		OldValue: "",
+		NewValue: "console=ttyS0",
+		Category: clusterupdate.ChangeCategoryRebootRequired,
+	})
+	diff.RecreateRequired = append(diff.RecreateRequired, clusterupdate.Change{
+		Field:    "cluster.distribution",
+		OldValue: "Vanilla",
+		NewValue: "Talos",
+		Category: clusterupdate.ChangeCategoryRecreateRequired,
+	})
+
+	clusterpkg.ExportDisplayChangesSummary(cmd, diff)
+
+	output := buf.String()
+
+	// Recreate-required (🔴) should appear before reboot-required (🟡)
+	// and reboot-required should appear before in-place (🟢)
+	idxRecreate := strings.Index(output, "🔴")
+	idxReboot := strings.Index(output, "🟡")
+	idxInPlace := strings.Index(output, "🟢")
+
+	if idxRecreate < 0 || idxReboot < 0 || idxInPlace < 0 {
+		t.Fatal("expected all three icons to be present")
+	}
+
+	if idxRecreate > idxReboot {
+		t.Error("recreate-required should appear before reboot-required")
+	}
+
+	if idxReboot > idxInPlace {
+		t.Error("reboot-required should appear before in-place")
 	}
 }

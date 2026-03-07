@@ -6,7 +6,9 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
@@ -94,4 +96,9 @@ func ExportInjectRestoreLabels(filePath, backupName, restoreName string) (string
 // ExportResolveForce exports resolveForce for testing.
 func ExportResolveForce(viperForce bool, yesFlag *pflag.Flag) bool {
 	return resolveForce(viperForce, yesFlag)
+}
+
+// ExportDisplayChangesSummary exports displayChangesSummary for testing.
+func ExportDisplayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
+	displayChangesSummary(cmd, diff)
 }
