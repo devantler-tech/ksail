@@ -40,27 +40,34 @@ export class ClusterStatusBar {
     const health = this.statusProvider.getHealth();
     const snapshot = this.statusProvider.getSnapshot();
 
-    switch (health) {
-      case "Healthy":
-        this.statusBarItem.text = "$(pass) KSail: Healthy";
-        this.statusBarItem.backgroundColor = undefined;
-        break;
-      case "Degraded":
-        this.statusBarItem.text = "$(warning) KSail: Degraded";
-        this.statusBarItem.backgroundColor = new vscode.ThemeColor(
-          "statusBarItem.warningBackground"
-        );
-        break;
-      case "Error":
-        this.statusBarItem.text = "$(error) KSail: Error";
-        this.statusBarItem.backgroundColor = new vscode.ThemeColor(
-          "statusBarItem.errorBackground"
-        );
-        break;
-      default:
-        this.statusBarItem.text = "$(question) KSail: No Cluster";
-        this.statusBarItem.backgroundColor = undefined;
-        break;
+    if (!snapshot || snapshot.error) {
+      // No connected cluster or an error retrieving the snapshot
+      this.statusBarItem.text = "$(question) KSail: No Cluster";
+      this.statusBarItem.backgroundColor = undefined;
+    } else {
+      switch (health) {
+        case "Healthy":
+          this.statusBarItem.text = "$(pass) KSail: Healthy";
+          this.statusBarItem.backgroundColor = undefined;
+          break;
+        case "Degraded":
+          this.statusBarItem.text = "$(warning) KSail: Degraded";
+          this.statusBarItem.backgroundColor = new vscode.ThemeColor(
+            "statusBarItem.warningBackground"
+          );
+          break;
+        case "Error":
+          this.statusBarItem.text = "$(error) KSail: Error";
+          this.statusBarItem.backgroundColor = new vscode.ThemeColor(
+            "statusBarItem.errorBackground"
+          );
+          break;
+        case "Unknown":
+        default:
+          this.statusBarItem.text = "$(question) KSail: Unknown";
+          this.statusBarItem.backgroundColor = undefined;
+          break;
+      }
     }
 
     // Build tooltip
