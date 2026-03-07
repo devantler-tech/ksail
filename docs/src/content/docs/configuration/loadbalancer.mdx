@@ -402,7 +402,7 @@ curl http://172.18.255.200
 1. `kubectl get pods -l app=my-app` — verify pods are running
 2. `kubectl get endpoints my-app` — check endpoints have pod IPs
 3. `kubectl logs -l app=my-app` — review pod logs
-4. `kubectl run test --rm -it --image=curlimages/curl -- sh -c 'curl http://my-app.default.svc.cluster.local'` — test from within cluster
+4. `kubectl run test --rm --image=curlimages/curl -- sh -c 'curl http://my-app.default.svc.cluster.local'` — test from within cluster
 
 **Common Fixes:**
 
