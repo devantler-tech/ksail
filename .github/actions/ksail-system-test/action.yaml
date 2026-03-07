@@ -270,7 +270,15 @@ runs:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
         # shellcheck disable=SC2086
-        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS | tee /tmp/update-dry-run-output.txt
+        # Fail early if the dry run detects unexpected changes.
+        # The cluster was just created with the same config, so zero changes are expected.
+        if ! grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" /tmp/update-dry-run-output.txt; then
+          echo "❌ ERROR: Unexpected changes detected in dry run after cluster creation"
+          echo "This indicates a regression — the cluster was just created with the same configuration."
+          exit 1
+        fi
+        echo "✅ No unexpected changes detected (dry run)"
 
     - name: 🧪 ksail cluster update
       id: cluster-update
@@ -282,7 +290,15 @@ runs:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
         # shellcheck disable=SC2086
-        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS | tee /tmp/update-output.txt
+        # Fail early if the update detects unexpected changes.
+        # The cluster was just created with the same config, so zero changes are expected.
+        if ! grep -q "No changes detected" /tmp/update-output.txt; then
+          echo "❌ ERROR: Unexpected changes detected during update after cluster creation"
+          echo "This indicates a regression — the cluster was just created with the same configuration."
+          exit 1
+        fi
+        echo "✅ No unexpected changes detected"
 
     - name: 🐞 Debug Kubernetes failure
       if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
