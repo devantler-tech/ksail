@@ -35,17 +35,17 @@ Search for "KSail" in the VSCode Extensions Marketplace.
 
 All cluster operations are available via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
 
-| Command                              | Description                               | Shortcut        |
-|--------------------------------------|-------------------------------------------|-----------------|
-| `KSail: Init Cluster`                | Initialize a new ksail.yaml configuration | `Cmd+Shift+K I` |
-| `KSail: Create Cluster`              | Create and start a cluster                | `Cmd+Shift+K C` |
-| `KSail: Delete Cluster`              | Delete the cluster                        | `Cmd+Shift+K D` |
-| `KSail: Start Cluster`              | Start an existing cluster                 | -               |
-| `KSail: Stop Cluster`               | Stop a running cluster                    | -               |
-| `KSail: Connect to Cluster (K9s)`   | Open K9s terminal UI (embedded in KSail)  | -               |
-| `KSail: Refresh Clusters`           | Refresh the clusters tree view            | -               |
-| `KSail: Refresh Cluster Status`     | Manually refresh the cluster status view  | -               |
-| `KSail: Show Output`                | Open the KSail output channel             | -               |
+| Command                           | Description                               | Shortcut        |
+|-----------------------------------|-------------------------------------------|-----------------|
+| `KSail: Init Cluster`             | Initialize a new ksail.yaml configuration | `Cmd+Shift+K I` |
+| `KSail: Create Cluster`           | Create and start a cluster                | `Cmd+Shift+K C` |
+| `KSail: Delete Cluster`           | Delete the cluster                        | `Cmd+Shift+K D` |
+| `KSail: Start Cluster`            | Start an existing cluster                 | -               |
+| `KSail: Stop Cluster`             | Stop a running cluster                    | -               |
+| `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI (embedded in KSail)  | -               |
+| `KSail: Refresh Clusters`         | Refresh the clusters tree view            | -               |
+| `KSail: Refresh Cluster Status`   | Manually refresh the cluster status view  | -               |
+| `KSail: Show Output`              | Open the KSail output channel             | -               |
 
 ### Interactive Wizards
 
@@ -84,21 +84,21 @@ When no cluster is connected, the panel shows a prompt to create or start one.
 
 A compact cluster health item appears in the bottom status bar:
 
-| State         | Display                    |
-|---------------|----------------------------|
-| Healthy       | `✔ KSail: Healthy`         |
-| Degraded      | `⚠ KSail: Degraded` (amber) |
-| Error         | `✖ KSail: Error` (red)    |
-| No cluster    | `? KSail: No Cluster`      |
+| State      | Display                     |
+|------------|-----------------------------|
+| Healthy    | `✔ KSail: Healthy`          |
+| Degraded   | `⚠ KSail: Degraded` (amber) |
+| Error      | `✖ KSail: Error` (red)      |
+| No cluster | `? KSail: No Cluster`       |
 
 Click the status bar item to manually refresh the cluster status.
 
 ## Extension Settings
 
-| Setting                        | Description                                        | Default |
-|--------------------------------|----------------------------------------------------|---------|
-| `ksail.binaryPath`             | Path to ksail binary                              | `ksail` |
-| `ksail.statusPollingInterval`  | Cluster status polling interval in seconds (5–300) | `10`    |
+| Setting                       | Description                                        | Default |
+|-------------------------------|----------------------------------------------------|---------|
+| `ksail.binaryPath`            | Path to ksail binary                               | `ksail` |
+| `ksail.statusPollingInterval` | Cluster status polling interval in seconds (5–300) | `10`    |
 
 ## Development
 
