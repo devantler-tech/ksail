@@ -384,7 +384,7 @@ func TestFormatRelativeTime_OldTimestampFormatsAsDate(t *testing.T) {
 // These tests modify the HOME environment variable and must NOT be run in parallel
 // (t.Setenv panics if called after t.Parallel).
 
-func TestSaveAndLoadSession(t *testing.T) {
+func TestSaveAndLoadSession(t *testing.T) { //nolint:paralleltest
 	t.Setenv("HOME", t.TempDir())
 
 	session := &chat.SessionMetadata{
@@ -405,7 +405,7 @@ func TestSaveAndLoadSession(t *testing.T) {
 	assert.Equal(t, "Test Session", loaded.Name)
 }
 
-func TestSaveSession_SetsDefaultNameWhenEmpty(t *testing.T) {
+func TestSaveSession_SetsDefaultNameWhenEmpty(t *testing.T) { //nolint:paralleltest
 	t.Setenv("HOME", t.TempDir())
 
 	session := &chat.SessionMetadata{ID: "test-default-name"}
@@ -416,7 +416,7 @@ func TestSaveSession_SetsDefaultNameWhenEmpty(t *testing.T) {
 	assert.Equal(t, "New Chat", session.Name)
 }
 
-func TestSaveSession_PreservesCreatedAt(t *testing.T) {
+func TestSaveSession_PreservesCreatedAt(t *testing.T) { //nolint:paralleltest
 	t.Setenv("HOME", t.TempDir())
 
 	createdAt := time.Now().Add(-1 * time.Hour)
@@ -454,7 +454,7 @@ func TestSaveSession_InvalidAppDirReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, chat.ErrInvalidAppDirForTest)
 }
 
-func TestLoadSession_NonExistentReturnsError(t *testing.T) {
+func TestLoadSession_NonExistentReturnsError(t *testing.T) { //nolint:paralleltest
 	t.Setenv("HOME", t.TempDir())
 
 	_, err := chat.LoadSession("nonexistent-id", ".ksail-test")
@@ -471,7 +471,7 @@ func TestLoadSession_InvalidIDReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, chat.ErrInvalidSessionIDForTest)
 }
 
-func TestDeleteLocalSession_DeletesExistingSession(t *testing.T) {
+func TestDeleteLocalSession_DeletesExistingSession(t *testing.T) { //nolint:paralleltest
 	t.Setenv("HOME", t.TempDir())
 
 	session := &chat.SessionMetadata{ID: "deletable-session", Name: "To Delete"}
@@ -486,7 +486,7 @@ func TestDeleteLocalSession_DeletesExistingSession(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestDeleteLocalSession_NonExistentIsNoop(t *testing.T) {
+func TestDeleteLocalSession_NonExistentIsNoop(t *testing.T) { //nolint:paralleltest
 	t.Setenv("HOME", t.TempDir())
 
 	err := chat.ExportDeleteLocalSession("does-not-exist", ".ksail-test")
@@ -505,7 +505,7 @@ func TestDeleteLocalSession_InvalidIDReturnsError(t *testing.T) {
 
 // --- deleteOrphanedLocalSessions ---
 
-func TestDeleteOrphanedLocalSessions_RemovesOrphaned(t *testing.T) {
+func TestDeleteOrphanedLocalSessions_RemovesOrphaned(t *testing.T) { //nolint:paralleltest
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -542,12 +542,13 @@ func TestDeleteOrphanedLocalSessions_RemovesOrphaned(t *testing.T) {
 func TestDeleteOrphanedLocalSessions_NonExistentDirIsNoop(t *testing.T) {
 	t.Parallel()
 
-	err := chat.ExportDeleteOrphanedLocalSessions("/nonexistent/path/that/does/not/exist", nil)
+	nonexistentDir := filepath.Join(t.TempDir(), "missing")
+	err := chat.ExportDeleteOrphanedLocalSessions(nonexistentDir, nil)
 
 	require.NoError(t, err)
 }
 
-func TestDeleteOrphanedLocalSessions_EmptyValidIDsDeletesAll(t *testing.T) {
+func TestDeleteOrphanedLocalSessions_EmptyValidIDsDeletesAll(t *testing.T) { //nolint:paralleltest
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
