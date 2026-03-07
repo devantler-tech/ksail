@@ -15,7 +15,7 @@ type ParsedRegistry struct {
 	Tag      string
 	Username string
 
-	Password string
+	Password string //nolint:gosec // G117: configuration field, not a hardcoded credential
 }
 
 // Enabled returns true if the registry is configured (non-empty Registry string).

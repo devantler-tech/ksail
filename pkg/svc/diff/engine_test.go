@@ -148,10 +148,10 @@ func TestEngine_ComponentChanges(t *testing.T) {
 		},
 		{
 			name:     "CSI change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.CSI = v1alpha1.CSIDisabled },
+			mutate:   func(s *v1alpha1.ClusterSpec) { s.CSI = v1alpha1.CSIEnabled },
 			field:    "cluster.csi",
-			oldValue: "Enabled",
-			newValue: "Disabled",
+			oldValue: "Disabled",
+			newValue: testValueEnabled,
 		},
 		{
 			name:     "MetricsServer change",
@@ -541,7 +541,7 @@ func TestEngine_MultipleChanges(t *testing.T) {
 	old := newBaseSpec()
 	newer := clone(old)
 	newer.CNI = v1alpha1.CNICilium
-	newer.CSI = v1alpha1.CSIDisabled
+	newer.CSI = v1alpha1.CSIEnabled
 	newer.Vanilla.MirrorsDir = "changed"
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
@@ -576,20 +576,17 @@ func TestEngine_DefaultVsDisabled_NoFalsePositive_Vanilla(t *testing.T) {
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
-	// Vanilla (Kind) bundles CSI by default, so Default (→Enabled) ≠ Disabled
-	// produces one real change. MetricsServer and LoadBalancer remain
-	// Default==Disabled on Vanilla.
-	expectedChanges := 1
-	if result.TotalChanges() != expectedChanges {
+	// Default and Disabled are semantically equivalent on Vanilla/Docker (no CSI by default,
+	// MetricsServer disabled, LoadBalancer disabled), so no changes should be detected.
+	if result.TotalChanges() != 0 {
 		t.Errorf(
-			"Default vs Disabled should produce %d changes on Vanilla/Docker, got %d",
-			expectedChanges,
+			"Default vs Disabled should produce 0 changes on Vanilla/Docker, got %d",
 			result.TotalChanges(),
 		)
 
 		for _, change := range result.AllChanges() {
 			t.Logf(
-				"  change: %s %q -> %q",
+				"  unexpected change: %s %q -> %q",
 				change.Field, change.OldValue, change.NewValue,
 			)
 		}

@@ -259,8 +259,8 @@ type pushParams struct {
 	GitOpsEngine v1alpha1.GitOpsEngine
 	Username     string
 
-	Password   string
-	IsExternal bool // True if this is an external registry (no auto-detection needed)
+	Password   string //nolint:gosec // G117: configuration field, not a hardcoded credential
+	IsExternal bool   // True if this is an external registry (no auto-detection needed)
 }
 
 // resolvePushParams resolves all push parameters using priority-based detection.

@@ -309,7 +309,7 @@ func resolveCopilotCLIPath() (string, error) {
 	if envPath := os.Getenv("COPILOT_CLI_PATH"); envPath != "" {
 		cleanPath := filepath.Clean(envPath)
 
-		_, err := os.Stat(cleanPath)
+		_, err := os.Stat(cleanPath) //nolint:gosec // G703: cleanPath sanitized via filepath.Clean
 		if err != nil {
 			return "", fmt.Errorf("COPILOT_CLI_PATH %q is not accessible: %w", cleanPath, err)
 		}
