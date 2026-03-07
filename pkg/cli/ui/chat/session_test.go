@@ -18,56 +18,56 @@ func TestGetDisplayName_LocalNameTakesPrecedence(t *testing.T) {
 	t.Parallel()
 
 	summary := "SDK summary"
-	s := chat.SessionMetadata{
+	session := chat.SessionMetadata{
 		Name: "My Custom Name",
 		SDKMetadata: &copilot.SessionMetadata{
 			Summary: &summary,
 		},
 	}
 
-	assert.Equal(t, "My Custom Name", s.GetDisplayName())
+	assert.Equal(t, "My Custom Name", session.GetDisplayName())
 }
 
 func TestGetDisplayName_FallsBackToSDKSummary(t *testing.T) {
 	t.Parallel()
 
 	summary := "Generated summary"
-	s := chat.SessionMetadata{
+	session := chat.SessionMetadata{
 		SDKMetadata: &copilot.SessionMetadata{
 			Summary: &summary,
 		},
 	}
 
-	assert.Equal(t, "Generated summary", s.GetDisplayName())
+	assert.Equal(t, "Generated summary", session.GetDisplayName())
 }
 
 func TestGetDisplayName_ReturnsUnnamedWhenNoNameOrSummary(t *testing.T) {
 	t.Parallel()
 
-	s := chat.SessionMetadata{}
+	session := chat.SessionMetadata{}
 
-	assert.Equal(t, "Unnamed", s.GetDisplayName())
+	assert.Equal(t, "Unnamed", session.GetDisplayName())
 }
 
 func TestGetDisplayName_ReturnsUnnamedWhenSDKSummaryEmpty(t *testing.T) {
 	t.Parallel()
 
 	empty := ""
-	s := chat.SessionMetadata{
+	session := chat.SessionMetadata{
 		SDKMetadata: &copilot.SessionMetadata{
 			Summary: &empty,
 		},
 	}
 
-	assert.Equal(t, "Unnamed", s.GetDisplayName())
+	assert.Equal(t, "Unnamed", session.GetDisplayName())
 }
 
 func TestGetDisplayName_ReturnsUnnamedWhenSDKMetadataNil(t *testing.T) {
 	t.Parallel()
 
-	s := chat.SessionMetadata{SDKMetadata: nil}
+	session := chat.SessionMetadata{SDKMetadata: nil}
 
-	assert.Equal(t, "Unnamed", s.GetDisplayName())
+	assert.Equal(t, "Unnamed", session.GetDisplayName())
 }
 
 // --- validateSessionID ---
