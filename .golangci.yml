@@ -27,6 +27,10 @@ linters:
       - linters:
           - paralleltest
         path: pkg/cli/cmd/cipher/import_test.go
+      # Session tests that modify HOME env var cannot run in parallel
+      - linters:
+          - paralleltest
+        path: pkg/cli/ui/chat/session_test.go
       # Bubbletea requires context in the Model struct
       - linters:
           - containedctx

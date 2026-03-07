@@ -161,6 +161,40 @@ var ExportGetEventChannel = func(m *Model) chan tea.Msg {
 // ExportExtractCommandFromArgs exposes extractCommandFromArgs for testing.
 var ExportExtractCommandFromArgs = extractCommandFromArgs
 
+// ExportValidateSessionID exposes validateSessionID for testing.
+var ExportValidateSessionID = validateSessionID
+
+// ExportIsValidSessionIDChar exposes isValidSessionIDChar for testing.
+var ExportIsValidSessionIDChar = isValidSessionIDChar
+
+// ExportDeleteLocalSession exposes deleteLocalSession for testing.
+var ExportDeleteLocalSession = deleteLocalSession
+
+// ExportDeleteOrphanedLocalSessions exposes deleteOrphanedLocalSessions for testing.
+var ExportDeleteOrphanedLocalSessions = deleteOrphanedLocalSessions
+
+// ErrSessionIDEmptyForTest exposes errSessionIDEmpty for testing.
+var ErrSessionIDEmptyForTest = errSessionIDEmpty
+
+// ErrInvalidSessionIDForTest exposes errInvalidSessionID for testing.
+var ErrInvalidSessionIDForTest = errInvalidSessionID
+
+// ErrInvalidAppDirForTest exposes errInvalidAppDir for testing.
+var ErrInvalidAppDirForTest = errInvalidAppDir
+
+// MessageForTest is an exported alias for the unexported message type, available only in test builds.
+type MessageForTest = message
+
+// ExportNewUserMessage creates a user message for testing GenerateSessionName.
+var ExportNewUserMessage = func(content string) message {
+	return message{role: roleUser, content: content}
+}
+
+// ExportNewAssistantMessage creates an assistant message for testing GenerateSessionName.
+var ExportNewAssistantMessage = func(content string) message {
+	return message{role: roleAssistant, content: content}
+}
+
 // ExportCurrentModelSupportsReasoning exposes currentModelSupportsReasoning for testing.
 var ExportCurrentModelSupportsReasoning = func(m *Model) bool {
 	return m.currentModelSupportsReasoning()
