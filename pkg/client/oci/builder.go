@@ -52,7 +52,7 @@ type BuildOptions struct {
 	Username string
 	// Password is the optional password for registry authentication.
 
-	Password string //nolint:gosec // G117: configuration field, not a hardcoded credential
+	Password string
 }
 
 // ValidatedBuildOptions represents sanitized inputs ready for use by the builder implementation.
@@ -75,7 +75,7 @@ type ValidatedBuildOptions struct {
 	Username string
 	// Password is the optional password for registry authentication.
 
-	Password string //nolint:gosec // G117: configuration field, not a hardcoded credential
+	Password string
 }
 
 // BuildResult describes the outcome of a successful artifact build.
@@ -104,7 +104,7 @@ type EmptyBuildOptions struct {
 	Username string
 	// Password is the optional password for registry authentication.
 
-	Password string //nolint:gosec // G117: configuration field, not a hardcoded credential
+	Password string
 }
 
 // ValidatedEmptyBuildOptions represents sanitized inputs ready for building an empty artifact.
@@ -125,5 +125,5 @@ type ValidatedEmptyBuildOptions struct {
 	Username string
 	// Password is the optional password for registry authentication.
 
-	Password string //nolint:gosec // G117: configuration field, not a hardcoded credential
+	Password string
 }
