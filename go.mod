@@ -19,7 +19,7 @@ require (
 	github.com/fluxcd/pkg/apis/meta v1.25.0
 	github.com/fluxcd/source-controller/api v1.8.0
 	github.com/getsops/sops/v3 v3.12.1
-	github.com/gkampitakis/go-snaps v0.5.19
+	github.com/gkampitakis/go-snaps v0.5.20
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/google/go-containerregistry v0.21.1
 	github.com/jinzhu/copier v0.4.0
@@ -28,7 +28,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/samber/do/v2 v2.0.0
 	github.com/siderolabs/talos v1.13.0-alpha.2
-	github.com/siderolabs/talos/pkg/machinery v1.13.0-alpha.2
+	github.com/siderolabs/talos/pkg/machinery v1.13.0-alpha.2.0.20260226180725-cc636f1dd1f1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -66,7 +66,7 @@ require (
 	github.com/loft-sh/vcluster v0.32.1
 	github.com/modelcontextprotocol/go-sdk v1.3.1
 	github.com/siderolabs/go-retry v0.3.3
-	github.com/siderolabs/omni/client v1.5.7
+	github.com/siderolabs/omni/client v1.5.8
 	golang.org/x/text v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -736,7 +736,7 @@ require (
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
 	golang.org/x/exp/typeparams v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/mod v0.33.0 // indirect
-	golang.org/x/net v0.50.0 // indirect
+	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260209163413-e7419c687ee4 // indirect
@@ -748,7 +748,7 @@ require (
 	google.golang.org/api v0.266.0 // indirect
 	google.golang.org/genproto v0.0.0-20260128011058-8636f8732409 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260217215200-42d3e9bedb6d // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260217215200-42d3e9bedb6d // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 	google.golang.org/grpc v1.79.1 // indirect
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
