@@ -81,17 +81,12 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "CSI can be switched via Helm install/uninstall",
 			getVal: func(spec *v1alpha1.ClusterSpec) string {
-				// On Vanilla (Kind), Kind bundles local-path-provisioner by
-				// default. Both Default and Enabled result in CSI being
-				// present. The detector cannot distinguish Kind's bundled
-				// CSI from KSail-installed CSI, so normalize both to
-				// Enabled to prevent false-positive diffs.
+				// Vanilla (Kind) always bundles local-path-provisioner regardless
+				// of KSail's CSI setting. The detector cannot distinguish Kind's
+				// bundled CSI from KSail-installed CSI, so skip CSI comparison
+				// entirely by returning a constant for both sides.
 				if e.distribution == v1alpha1.DistributionVanilla {
-					if spec.CSI == v1alpha1.CSIDisabled {
-						return string(v1alpha1.CSIDisabled)
-					}
-
-					return string(v1alpha1.CSIEnabled)
+					return string(v1alpha1.CSIDefault)
 				}
 
 				return string(spec.CSI.EffectiveValue(e.distribution, e.provider))
