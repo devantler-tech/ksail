@@ -280,7 +280,6 @@ func extractTarEntries(tarReader *tar.Reader, destDir string) error {
 		}
 
 		if header.Typeflag == tar.TypeDir {
-
 			err = os.MkdirAll(
 				targetPath,
 				dirPerm,
@@ -585,7 +584,6 @@ func injectRestoreLabels(
 
 	_, err = tmpFile.WriteString(builder.String())
 	if err != nil {
-
 		_ = os.Remove(tmpFile.Name())
 
 		return "", fmt.Errorf("failed to write labeled file: %w", err)
