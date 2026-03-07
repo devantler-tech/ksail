@@ -465,9 +465,11 @@ func applyInPlaceChanges(
 }
 
 // displayChangesSummary outputs a human-readable summary of configuration changes
-// as a single grouped block showing before → after values for each field.
+// as a before/after table grouped by component with impact icons.
+// Changes are ordered by severity: recreate-required → reboot-required → in-place.
+// Components with no change are omitted.
 func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
-	totalChanges := len(diff.InPlaceChanges) + len(diff.RebootRequired) + len(diff.RecreateRequired)
+	totalChanges := diff.TotalChanges()
 
 	if totalChanges == 0 {
 		return
@@ -475,23 +477,152 @@ func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult)
 
 	notify.Titlef(cmd.OutOrStdout(), "🔍", "Change summary")
 
+	notify.Infof(
+		cmd.OutOrStdout(),
+		formatDiffTable(diff, totalChanges),
+	)
+}
+
+// diffRow holds a single row of the diff table.
+type diffRow struct {
+	icon   string
+	field  string
+	oldVal string
+	newVal string
+	impact string
+}
+
+// formatDiffTable builds the formatted diff table string.
+// The table has four columns: Component, Before, After, Impact.
+// Rows are ordered by severity: 🔴 recreate → 🟡 reboot → 🟢 in-place.
+//
+//nolint:funlen // Table construction with header, separator, and data rows.
+func formatDiffTable(
+	diff *clusterupdate.UpdateResult,
+	totalChanges int,
+) string {
+	rows := collectDiffRows(diff, totalChanges)
+
+	// Column headers
+	const (
+		hdrComponent = "Component"
+		hdrBefore    = "Before"
+		hdrAfter     = "After"
+		hdrImpact    = "Impact"
+	)
+
+	colW, colB, colA, colI := computeColumnWidths(
+		rows, hdrComponent, hdrBefore, hdrAfter, hdrImpact,
+	)
+
 	var block strings.Builder
 
-	fmt.Fprintf(&block, "Detected %d configuration changes:", totalChanges)
+	block.Grow((totalChanges + 4) * (colW + colB + colA + colI + 16))
 
-	for _, change := range diff.InPlaceChanges {
-		fmt.Fprintf(&block, "\n  🟢 %s: %s → %s", change.Field, change.OldValue, change.NewValue)
+	writeSummaryLine(&block, totalChanges)
+	writeHeaderRow(&block, colW, colB, colA)
+	writeSeparatorRow(&block, colW, colB, colA, colI)
+	writeDataRows(&block, rows, colW, colB, colA)
+
+	return strings.TrimRight(block.String(), "\n")
+}
+
+// collectDiffRows builds an ordered list of diff rows.
+// Order: 🔴 recreate-required → 🟡 reboot-required → 🟢 in-place.
+func collectDiffRows(
+	diff *clusterupdate.UpdateResult,
+	totalChanges int,
+) []diffRow {
+	rows := make([]diffRow, 0, totalChanges)
+
+	for _, c := range diff.RecreateRequired {
+		rows = append(rows, diffRow{
+			"🔴", c.Field, c.OldValue, c.NewValue, "recreate-required",
+		})
 	}
 
-	for _, change := range diff.RebootRequired {
-		fmt.Fprintf(&block, "\n  🟡 %s: %s → %s", change.Field, change.OldValue, change.NewValue)
+	for _, c := range diff.RebootRequired {
+		rows = append(rows, diffRow{
+			"🟡", c.Field, c.OldValue, c.NewValue, "reboot-required",
+		})
 	}
 
-	for _, change := range diff.RecreateRequired {
-		fmt.Fprintf(&block, "\n  🔴 %s: %s → %s", change.Field, change.OldValue, change.NewValue)
+	for _, c := range diff.InPlaceChanges {
+		rows = append(rows, diffRow{
+			"🟢", c.Field, c.OldValue, c.NewValue, "in-place",
+		})
 	}
 
-	notify.Infof(cmd.OutOrStdout(), block.String())
+	return rows
+}
+
+// computeColumnWidths returns the max width for each table column.
+func computeColumnWidths(
+	rows []diffRow,
+	hdrComp, hdrBefore, hdrAfter, hdrImpact string,
+) (colW, colB, colA, colI int) {
+	colW = len(hdrComp)
+	colB = len(hdrBefore)
+	colA = len(hdrAfter)
+	colI = len(hdrImpact)
+
+	for _, r := range rows {
+		if l := len(r.field); l > colW {
+			colW = l
+		}
+
+		if l := len(r.oldVal); l > colB {
+			colB = l
+		}
+
+		if l := len(r.newVal); l > colA {
+			colA = l
+		}
+
+		if l := len(r.impact); l > colI {
+			colI = l
+		}
+	}
+
+	return colW, colB, colA, colI
+}
+
+func writeSummaryLine(block *strings.Builder, totalChanges int) {
+	fmt.Fprintf(block, "Detected %d configuration changes:\n\n", totalChanges)
+}
+
+func writeHeaderRow(
+	block *strings.Builder,
+	colW, colB, colA int,
+) {
+	// 3 leading spaces visually align with emoji+space prefix in data rows.
+	fmt.Fprintf(block, "   %-*s  %-*s  %-*s  %s\n",
+		colW, "Component", colB, "Before", colA, "After", "Impact")
+}
+
+func writeSeparatorRow(
+	block *strings.Builder,
+	colW, colB, colA, colI int,
+) {
+	fmt.Fprintf(block, "   %s  %s  %s  %s\n",
+		strings.Repeat("─", colW),
+		strings.Repeat("─", colB),
+		strings.Repeat("─", colA),
+		strings.Repeat("─", colI))
+}
+
+func writeDataRows(
+	block *strings.Builder,
+	rows []diffRow,
+	colW, colB, colA int,
+) {
+	for _, r := range rows {
+		fmt.Fprintf(block, "%s %-*s  %-*s  %-*s  %s\n",
+			r.icon, colW, r.field,
+			colB, r.oldVal,
+			colA, r.newVal,
+			r.impact)
+	}
 }
 
 // confirmRecreate prompts the user to confirm cluster recreation unless --force is set.
