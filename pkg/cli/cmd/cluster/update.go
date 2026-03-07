@@ -583,8 +583,8 @@ func executeRecreateFlow(
 }
 
 // resolveForce returns true if the viper-resolved force flag is set,
-// or if the --yes flag was explicitly passed on the command line.
+// or if the --yes flag was explicitly set to true on the command line.
 // This consolidates the --force/--yes alias logic into one place.
 func resolveForce(viperForce bool, yesFlag *pflag.Flag) bool {
-	return viperForce || (yesFlag != nil && yesFlag.Changed)
+	return viperForce || (yesFlag != nil && yesFlag.Changed && yesFlag.Value.String() == "true")
 }
