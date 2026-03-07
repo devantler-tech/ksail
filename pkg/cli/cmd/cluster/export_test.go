@@ -102,3 +102,8 @@ func ExportResolveForce(viperForce bool, yesFlag *pflag.Flag) bool {
 func ExportDisplayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	displayChangesSummary(cmd, diff)
 }
+
+// ExportFormatDiffTable exports formatDiffTable for benchmarking.
+func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, totalChanges int) string {
+	return formatDiffTable(diff, totalChanges)
+}

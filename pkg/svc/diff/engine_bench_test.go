@@ -1,0 +1,144 @@
+package diff_test
+
+import (
+	"testing"
+
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/diff"
+)
+
+// BenchmarkComputeDiff_NoChanges measures ComputeDiff overhead when old and new
+// specs are identical. This is the common steady-state case: re-running
+// "ksail cluster update" after the cluster already matches the desired config.
+func BenchmarkComputeDiff_NoChanges(b *testing.B) {
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	oldSpec := newBaseSpec()
+	newSpec := clone(oldSpec)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for b.Loop() {
+		_ = engine.ComputeDiff(oldSpec, newSpec)
+	}
+}
+
+// BenchmarkComputeDiff_AllInPlaceChanges measures ComputeDiff when every
+// component field (CNI, CSI, metrics-server, load-balancer, cert-manager,
+// policy engine, GitOps engine) changes to a non-default value. All are
+// in-place (no reboot or recreate needed).
+func BenchmarkComputeDiff_AllInPlaceChanges(b *testing.B) {
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	oldSpec := newBaseSpec()
+	newSpec := clone(oldSpec)
+
+	newSpec.CNI = v1alpha1.CNICilium
+	newSpec.CSI = "Enabled"
+	newSpec.MetricsServer = "Enabled"
+	newSpec.LoadBalancer = "Enabled"
+	newSpec.CertManager = "Enabled"
+	newSpec.PolicyEngine = "Kyverno"
+	newSpec.GitOpsEngine = "Flux"
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for b.Loop() {
+		_ = engine.ComputeDiff(oldSpec, newSpec)
+	}
+}
+
+// BenchmarkComputeDiff_RecreateRequired measures ComputeDiff when a change
+// triggers cluster recreation. Distribution and provider changes are the
+// most common triggers in practice.
+func BenchmarkComputeDiff_RecreateRequired(b *testing.B) {
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	oldSpec := newBaseSpec()
+	newSpec := clone(oldSpec)
+
+	newSpec.Distribution = v1alpha1.DistributionK3s
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for b.Loop() {
+		_ = engine.ComputeDiff(oldSpec, newSpec)
+	}
+}
+
+// BenchmarkComputeDiff_MixedCategories measures ComputeDiff with a realistic
+// mix of changes across all three categories (in-place, reboot-required,
+// recreate-required). This simulates a major config migration.
+func BenchmarkComputeDiff_MixedCategories(b *testing.B) {
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	oldSpec := newBaseSpec()
+	newSpec := clone(oldSpec)
+
+	// in-place
+	newSpec.CNI = v1alpha1.CNICilium
+	newSpec.CertManager = "Enabled"
+	// recreate-required
+	newSpec.Distribution = v1alpha1.DistributionK3s
+	newSpec.LocalRegistry.Registry = "localhost:6060"
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for b.Loop() {
+		_ = engine.ComputeDiff(oldSpec, newSpec)
+	}
+}
+
+// BenchmarkComputeDiff_TalosOptions measures ComputeDiff for a Talos
+// distribution with Talos-specific field changes (control planes, workers, ISO).
+func BenchmarkComputeDiff_TalosOptions(b *testing.B) {
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	oldSpec := newBaseSpec()
+	oldSpec.Distribution = v1alpha1.DistributionTalos
+	newSpec := clone(oldSpec)
+
+	newSpec.Talos.ControlPlanes = 3
+	newSpec.Talos.Workers = 2
+	newSpec.Talos.ISO = 999999
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for b.Loop() {
+		_ = engine.ComputeDiff(oldSpec, newSpec)
+	}
+}
+
+// BenchmarkComputeDiff_HetznerOptions measures ComputeDiff for a Hetzner
+// provider with Hetzner-specific field changes (server types, location, network).
+func BenchmarkComputeDiff_HetznerOptions(b *testing.B) {
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	oldSpec := newBaseSpec()
+	oldSpec.Distribution = v1alpha1.DistributionTalos
+	oldSpec.Provider = v1alpha1.ProviderHetzner
+	newSpec := clone(oldSpec)
+
+	newSpec.Hetzner.WorkerServerType = "cx43"
+	newSpec.Hetzner.SSHKeyName = "new-key"
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for b.Loop() {
+		_ = engine.ComputeDiff(oldSpec, newSpec)
+	}
+}
+
+// BenchmarkComputeDiff_NilSpec measures the fast-path when one spec is nil.
+// Provisioners that cannot introspect state return nil; this path should be cheap.
+func BenchmarkComputeDiff_NilSpec(b *testing.B) {
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	newSpec := newBaseSpec()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for b.Loop() {
+		_ = engine.ComputeDiff(nil, newSpec)
+	}
+}
