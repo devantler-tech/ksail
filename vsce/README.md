@@ -6,7 +6,7 @@ A VSCode extension for managing local Kubernetes clusters with KSail.
 
 - **Clusters View**: View and manage Kubernetes clusters in the sidebar with provider info
 - **Cluster Status View**: Real-time sidebar view showing cluster health, pod summaries by namespace, and GitOps reconciliation state — updated every 10 seconds
-- **Status Bar**: Compact cluster health indicator in the status bar with color-coded states (Healthy/Degraded/Error)
+- **Status Bar**: Compact cluster health indicator in the status bar with color-coded states (Healthy/Degraded/Error/Unknown/No Cluster)
 - **Interactive Wizards**: Step-by-step configuration for init and create operations
 - **Command Palette**: Full access to cluster lifecycle operations
 - **Keyboard Shortcuts**: Quick access to common operations
