@@ -5,6 +5,8 @@ A VSCode extension for managing local Kubernetes clusters with KSail.
 ## Features
 
 - **Clusters View**: View and manage Kubernetes clusters in the sidebar with provider info
+- **Cluster Status View**: Real-time sidebar view showing cluster health, pod summaries by namespace, and GitOps reconciliation state — updated every 10 seconds
+- **Status Bar**: Compact cluster health indicator in the status bar with color-coded states (Healthy/Degraded/Error/Unknown/No Cluster)
 - **Interactive Wizards**: Step-by-step configuration for init and create operations
 - **Command Palette**: Full access to cluster lifecycle operations
 - **Keyboard Shortcuts**: Quick access to common operations
@@ -42,6 +44,7 @@ All cluster operations are available via the Command Palette (`Cmd+Shift+P` / `C
 | `KSail: Stop Cluster`             | Stop a running cluster                    | -               |
 | `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI (embedded in KSail)  | -               |
 | `KSail: Refresh Clusters`         | Refresh the clusters tree view            | -               |
+| `KSail: Refresh Cluster Status`   | Manually refresh the cluster status view  | -               |
 | `KSail: Show Output`              | Open the KSail output channel             | -               |
 
 ### Interactive Wizards
@@ -67,11 +70,36 @@ The KSail sidebar shows:
   - Stopped clusters: Start, Delete, Connect
 - **Pending Clusters**: Spinner icon during cluster creation
 
+### Cluster Status View
+
+The **Cluster Status** panel in the sidebar shows real-time health information for the active cluster, polling every 10 seconds (configurable):
+
+- **Health Indicator**: Overall cluster health (Healthy / Degraded / Error / Unknown)
+- **Pod Summary**: Pods grouped by namespace with running/pending/failed counts; click a failed or pending pod to open its logs
+- **GitOps Reconciliation**: Flux or ArgoCD resource readiness (e.g., `Flux (3/3 ready)`)
+
+When no cluster is connected, the panel shows a prompt to create or start one.
+
+### Status Bar
+
+A compact cluster health item appears in the bottom status bar:
+
+| State      | Display                                  |
+|------------|------------------------------------------|
+| Healthy    | `✔ KSail: Healthy`                       |
+| Degraded   | `⚠ KSail: Degraded` (warning background) |
+| Error      | `✖ KSail: Error` (error background)      |
+| Unknown    | `? KSail: Unknown`                       |
+| No cluster | `? KSail: No Cluster`                    |
+
+Click the status bar item to manually refresh the cluster status.
+
 ## Extension Settings
 
-| Setting            | Description          | Default |
-|--------------------|----------------------|---------|
-| `ksail.binaryPath` | Path to ksail binary | `ksail` |
+| Setting                       | Description                                        | Default |
+|-------------------------------|----------------------------------------------------|---------|
+| `ksail.binaryPath`            | Path to ksail binary                               | `ksail` |
+| `ksail.statusPollingInterval` | Cluster status polling interval in seconds (5–300) | `10`    |
 
 ## Development
 
@@ -107,14 +135,17 @@ vsce/
 │   ├── ksail/
 │   │   ├── clusters.ts       # KSail CLI wrapper functions
 │   │   ├── binary.ts         # KSail binary discovery and execution
+│   │   ├── kubectl.ts        # kubectl wrapper for cluster status queries
 │   │   └── index.ts          # Module exports
 │   ├── mcp/
 │   │   ├── serverProvider.ts # MCP server definition provider
 │   │   ├── schemaClient.ts   # MCP schema client for KSail
 │   │   └── index.ts          # Module exports
 │   └── views/
-│       ├── clustersView.ts   # Tree view provider
-│       └── index.ts          # Module exports
+│       ├── clustersView.ts       # Clusters tree view provider
+│       ├── clusterStatusView.ts  # Real-time cluster status tree view
+│       ├── statusBar.ts          # Status bar health indicator
+│       └── index.ts              # Module exports
 ├── dist/                     # Compiled output
 └── package.json              # Extension manifest
 ```
