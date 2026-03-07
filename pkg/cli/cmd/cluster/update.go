@@ -509,8 +509,6 @@ func categoryIcon(cat clusterupdate.ChangeCategory) string {
 // formatDiffTable builds the formatted diff table string.
 // The table has four columns: Component, Before, After, Impact.
 // Rows are ordered by severity: 🔴 recreate → 🟡 reboot → 🟢 in-place.
-//
-//nolint:funlen // Table construction with header, separator, and data rows.
 func formatDiffTable(
 	diff *clusterupdate.UpdateResult,
 	totalChanges int,
@@ -533,7 +531,11 @@ func formatDiffTable(
 
 	// Pre-allocate: each row needs ~colW+colB+colA+colI bytes for data,
 	// plus ~16 bytes overhead per row for spacing (6), emoji (4), newlines, padding.
-	block.Grow((totalChanges + 4) * (colW + colB + colA + colI + 16))
+	const tableOverheadRows = 4 // summary, header, separator, trailing
+
+	const perRowPadding = 16 // spacing + emoji + newline
+
+	block.Grow((totalChanges + tableOverheadRows) * (colW + colB + colA + colI + perRowPadding))
 
 	writeSummaryLine(&block, totalChanges)
 	writeHeaderRow(&block, colW, colB, colA, hdrComponent, hdrBefore, hdrAfter, hdrImpact)
@@ -576,31 +578,31 @@ func collectDiffRows(
 func computeColumnWidths(
 	rows []diffRow,
 	hdrComp, hdrBefore, hdrAfter, hdrImpact string,
-) (colW, colB, colA, colI int) {
-	colW = len(hdrComp)
-	colB = len(hdrBefore)
-	colA = len(hdrAfter)
-	colI = len(hdrImpact)
+) (int, int, int, int) {
+	widthComp := len(hdrComp)
+	widthBefore := len(hdrBefore)
+	widthAfter := len(hdrAfter)
+	widthImpact := len(hdrImpact)
 
-	for _, r := range rows {
-		if l := len(r.field); l > colW {
-			colW = l
+	for _, row := range rows {
+		if length := len(row.field); length > widthComp {
+			widthComp = length
 		}
 
-		if l := len(r.oldVal); l > colB {
-			colB = l
+		if length := len(row.oldVal); length > widthBefore {
+			widthBefore = length
 		}
 
-		if l := len(r.newVal); l > colA {
-			colA = l
+		if length := len(row.newVal); length > widthAfter {
+			widthAfter = length
 		}
 
-		if l := len(r.impact); l > colI {
-			colI = l
+		if length := len(row.impact); length > widthImpact {
+			widthImpact = length
 		}
 	}
 
-	return colW, colB, colA, colI
+	return widthComp, widthBefore, widthAfter, widthImpact
 }
 
 func writeSummaryLine(block *strings.Builder, totalChanges int) {

@@ -218,66 +218,30 @@ func TestDisplayChangesSummary_TableFormat(t *testing.T) {
 
 	output := buf.String()
 
-	// Should contain table headers
-	if !strings.Contains(output, "Component") {
-		t.Error("expected output to contain 'Component' header")
+	expected := []struct {
+		label string
+		text  string
+	}{
+		{"Component header", "Component"},
+		{"Before header", "Before"},
+		{"After header", "After"},
+		{"Impact header", "Impact"},
+		{"in-place icon", "🟢"},
+		{"recreate-required icon", "🔴"},
+		{"in-place label", "in-place"},
+		{"recreate-required label", "recreate-required"},
+		{"cluster.cni field", "cluster.cni"},
+		{"cluster.distribution field", "cluster.distribution"},
+		{"Cilium value", "Cilium"},
+		{"Talos value", "Talos"},
+		{"change count summary", "Detected 2 configuration changes"},
+		{"separator line", "─"},
 	}
 
-	if !strings.Contains(output, "Before") {
-		t.Error("expected output to contain 'Before' header")
-	}
-
-	if !strings.Contains(output, "After") {
-		t.Error("expected output to contain 'After' header")
-	}
-
-	if !strings.Contains(output, "Impact") {
-		t.Error("expected output to contain 'Impact' header")
-	}
-
-	// Should contain impact icons and labels
-	if !strings.Contains(output, "🟢") {
-		t.Error("expected output to contain in-place icon 🟢")
-	}
-
-	if !strings.Contains(output, "🔴") {
-		t.Error("expected output to contain recreate-required icon 🔴")
-	}
-
-	if !strings.Contains(output, "in-place") {
-		t.Error("expected output to contain 'in-place' impact label")
-	}
-
-	if !strings.Contains(output, "recreate-required") {
-		t.Error("expected output to contain 'recreate-required' label")
-	}
-
-	// Should contain field values
-	if !strings.Contains(output, "cluster.cni") {
-		t.Error("expected output to contain 'cluster.cni'")
-	}
-
-	if !strings.Contains(output, "cluster.distribution") {
-		t.Error("expected output to contain 'cluster.distribution'")
-	}
-
-	// Should contain before/after values
-	if !strings.Contains(output, "Cilium") {
-		t.Error("expected output to contain 'Cilium'")
-	}
-
-	if !strings.Contains(output, "Talos") {
-		t.Error("expected output to contain 'Talos'")
-	}
-
-	// Should contain summary line
-	if !strings.Contains(output, "Detected 2 configuration changes") {
-		t.Error("expected output to contain change count summary")
-	}
-
-	// Should contain separator
-	if !strings.Contains(output, "─") {
-		t.Error("expected output to contain separator line")
+	for _, entry := range expected {
+		if !strings.Contains(output, entry.text) {
+			t.Errorf("expected output to contain %s (%q)", entry.label, entry.text)
+		}
 	}
 }
 
