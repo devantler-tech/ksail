@@ -5,7 +5,13 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/diff"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 )
+
+// Package-level sink prevents the compiler from optimizing away benchmark calls.
+//
+//nolint:gochecknoglobals // Benchmark sink variable is required to prevent compiler optimization.
+var benchComputeDiffSink *clusterupdate.UpdateResult
 
 // BenchmarkComputeDiff_NoChanges measures ComputeDiff overhead when old and new
 // specs are identical. This is the common steady-state case: re-running
@@ -19,7 +25,7 @@ func BenchmarkComputeDiff_NoChanges(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = engine.ComputeDiff(oldSpec, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec)
 	}
 }
 
@@ -44,7 +50,7 @@ func BenchmarkComputeDiff_AllInPlaceChanges(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = engine.ComputeDiff(oldSpec, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec)
 	}
 }
 
@@ -62,13 +68,14 @@ func BenchmarkComputeDiff_RecreateRequired(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = engine.ComputeDiff(oldSpec, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec)
 	}
 }
 
 // BenchmarkComputeDiff_MixedCategories measures ComputeDiff with a realistic
-// mix of changes across all three categories (in-place, reboot-required,
-// recreate-required). This simulates a major config migration.
+// mix of changes across two categories (in-place, recreate-required). This
+// simulates a major config migration where a component change accompanies a
+// distribution or registry change.
 func BenchmarkComputeDiff_MixedCategories(b *testing.B) {
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	oldSpec := newBaseSpec()
@@ -85,7 +92,7 @@ func BenchmarkComputeDiff_MixedCategories(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = engine.ComputeDiff(oldSpec, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec)
 	}
 }
 
@@ -105,7 +112,7 @@ func BenchmarkComputeDiff_TalosOptions(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = engine.ComputeDiff(oldSpec, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec)
 	}
 }
 
@@ -125,7 +132,7 @@ func BenchmarkComputeDiff_HetznerOptions(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = engine.ComputeDiff(oldSpec, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec)
 	}
 }
 
@@ -139,6 +146,6 @@ func BenchmarkComputeDiff_NilSpec(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = engine.ComputeDiff(nil, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(nil, newSpec)
 	}
 }
