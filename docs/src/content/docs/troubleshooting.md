@@ -23,9 +23,17 @@ docker system prune -f
 
 If you see `Error: Port 5000 is already allocated`, use a different port (e.g., `--local-registry localhost:5050`) or kill the conflicting process:
 
+**macOS/Linux:**
+
 ```bash
-lsof -ti:5000 | xargs kill -9  # macOS/Linux
-# Windows (PowerShell): netstat -ano | findstr :5000, then taskkill /PID <id> /F
+lsof -ti:5000 | xargs kill -9
+```
+
+**Windows (PowerShell):**
+
+```powershell
+netstat -ano | findstr :5000
+taskkill /PID <id> /F
 ```
 
 ## GitOps Workflow Issues
@@ -44,7 +52,7 @@ ksail cluster init --local-registry '${REG_USER}:${REG_TOKEN}@registry.example.c
 - `registry access denied` — credentials lack write permission
 - `registry is unreachable` — DNS failure, firewall, or registry down
 
-Registry containers have a built-in health check (polls `/v2/` every 10 s, marks `unhealthy` after 3 failures). To diagnose mirror errors:
+Registry containers have a built-in health check (polls `/v2/` every 10 s, marks `unhealthy` after 3 consecutive failures). To diagnose mirror errors:
 
 ```bash
 docker ps --filter label=io.ksail.registry --format 'table {{.Names}}\t{{.Status}}'
