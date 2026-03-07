@@ -104,6 +104,7 @@ Documentation-as-Code, transparency, single source of truth, continuous improvem
 
    - **.github/copilot-instructions.md**: Check if copilot-instructions.md is aligned with the codebase
      - Ensure architecture overview, build commands, and project structure are accurate
+     - **Do NOT add, maintain, or re-create a "Recent Changes" section** — this section has been intentionally removed
 
 3. **Documentation Assessment**
    - Review existing documentation structure
