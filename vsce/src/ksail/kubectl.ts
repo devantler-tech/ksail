@@ -80,12 +80,14 @@ function runCommand(
 
     let stdout = "";
     let stderr = "";
-    let killed = false;
+    let settled = false;
 
     const timer = setTimeout(() => {
-      killed = true;
-      proc.kill();
-      resolve({ stdout, stderr: "Command timed out", exitCode: 1 });
+      if (!settled) {
+        settled = true;
+        proc.kill();
+        resolve({ stdout, stderr: "Command timed out", exitCode: 1 });
+      }
     }, timeoutMs);
 
     proc.stdout.on("data", (data: Buffer) => {
@@ -97,15 +99,17 @@ function runCommand(
     });
 
     proc.on("close", (code) => {
-      clearTimeout(timer);
-      if (!killed) {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
         resolve({ stdout, stderr, exitCode: code ?? 1 });
       }
     });
 
     proc.on("error", (error) => {
-      clearTimeout(timer);
-      if (!killed) {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
         resolve({ stdout, stderr: stderr || error.message, exitCode: 1 });
       }
     });
@@ -253,11 +257,14 @@ async function getArgoCDStatuses(): Promise<GitOpsStatus[]> {
     return [];
   }
 
-  return parseGitOpsOutput(result.stdout, "Application").map((s) => ({
-    ...s,
-    ready: s.ready === "Healthy" ? "True" : "False",
-    status: `${s.ready} / ${s.status}`,
-  }));
+  return parseGitOpsOutput(result.stdout, "Application").map((s) => {
+    const healthStatus = s.ready;
+    return {
+      ...s,
+      ready: healthStatus === "Healthy" ? "True" : "False",
+      status: `${healthStatus} / ${s.status}`,
+    };
+  });
 }
 
 /**
