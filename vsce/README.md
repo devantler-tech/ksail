@@ -5,6 +5,8 @@ A VSCode extension for managing local Kubernetes clusters with KSail.
 ## Features
 
 - **Clusters View**: View and manage Kubernetes clusters in the sidebar with provider info
+- **Cluster Status View**: Real-time cluster health, pod summaries, and GitOps reconciliation state
+- **Status Bar**: Compact cluster health indicator in the VSCode status bar
 - **Interactive Wizards**: Step-by-step configuration for init and create operations
 - **Command Palette**: Full access to cluster lifecycle operations
 - **Keyboard Shortcuts**: Quick access to common operations
@@ -42,6 +44,8 @@ All cluster operations are available via the Command Palette (`Cmd+Shift+P` / `C
 | `KSail: Stop Cluster`             | Stop a running cluster                    | -               |
 | `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI (embedded in KSail)  | -               |
 | `KSail: Refresh Clusters`         | Refresh the clusters tree view            | -               |
+| `KSail: Refresh Cluster Status`   | Manually refresh the cluster status view  | -               |
+| `KSail: Show Pod Logs`            | Open pod logs in a VSCode output channel  | -               |
 | `KSail: Show Output`              | Open the KSail output channel             | -               |
 
 ### Interactive Wizards
@@ -52,6 +56,17 @@ The **Init** and **Create** commands feature multi-step wizards with:
 - Provider selection (Docker/Hetzner/Omni)
 - Component configuration (CNI, CSI, GitOps engine, etc.)
 - Output path selection for generated files
+
+### Cluster Status View
+
+The **Cluster Status** panel in the KSail sidebar refreshes every 10 seconds (configurable) and shows:
+
+- **Health indicator** — ✅ Healthy / ⚠️ Degraded / ❌ Error based on pod states
+- **Pods section** — Running/pending/failed counts grouped by namespace; click a failed pod to open its logs
+- **GitOps section** — Reconciliation state for Flux or ArgoCD when a GitOps engine is active
+- **Status bar** — Compact cluster health badge at the bottom of the VSCode window
+
+When no cluster is running the view shows an informational "No cluster running" message.
 
 ### Tree View
 
@@ -69,9 +84,10 @@ The KSail sidebar shows:
 
 ## Extension Settings
 
-| Setting            | Description          | Default |
-|--------------------|----------------------|---------|
-| `ksail.binaryPath` | Path to ksail binary | `ksail` |
+| Setting                        | Description                              | Default |
+|--------------------------------|------------------------------------------|---------|
+| `ksail.binaryPath`             | Path to ksail binary                     | `ksail` |
+| `ksail.statusPollingInterval`  | Cluster status polling interval (seconds)| `10`    |
 
 ## Development
 
@@ -107,14 +123,17 @@ vsce/
 │   ├── ksail/
 │   │   ├── clusters.ts       # KSail CLI wrapper functions
 │   │   ├── binary.ts         # KSail binary discovery and execution
+│   │   ├── kubectl.ts        # kubectl helpers (pod listing, GitOps state)
 │   │   └── index.ts          # Module exports
 │   ├── mcp/
 │   │   ├── serverProvider.ts # MCP server definition provider
 │   │   ├── schemaClient.ts   # MCP schema client for KSail
 │   │   └── index.ts          # Module exports
 │   └── views/
-│       ├── clustersView.ts   # Tree view provider
-│       └── index.ts          # Module exports
+│       ├── clustersView.ts       # Clusters tree view provider
+│       ├── clusterStatusView.ts  # Cluster status tree view (health, pods, GitOps)
+│       ├── statusBar.ts          # Status bar health indicator
+│       └── index.ts              # Module exports
 ├── dist/                     # Compiled output
 └── package.json              # Extension manifest
 ```
