@@ -26,15 +26,6 @@ K3s (K3d) is ideal for:
 - **Edge and IoT prototyping:** K3s targets resource-constrained deployments by design
 - **Multi-node testing:** Simulate production topologies with workers
 
-### When NOT to Use K3s
-
-Consider alternatives if you need:
-
-- **100% upstream compatibility:** K3s omits some alpha/beta APIs; Vanilla (Kind) uses unmodified Kubernetes
-- **Production immutability:** Talos offers immutable infrastructure and enhanced security
-- **Virtual cluster isolation:** VCluster provides tenant isolation without separate nodes
-- **Cloud deployments:** Talos supports Hetzner Cloud; K3s currently only supports Docker locally
-
 ## Quick Start
 
 Create your first K3s cluster in under 30 seconds.
@@ -70,17 +61,6 @@ KSail will:
 3. Install K3s inside the containers
 4. Configure kubectl context
 5. Apply additional components (cert-manager, policy engine, etc.) if configured
-
-**Expected output:**
-
-```
-✓ Creating K3s cluster with K3d...
-✓ Cluster ready!
-
-Cluster:  my-cluster
-Nodes:    3 (1 control plane, 2 workers)
-Provider: Docker
-```
 
 ### Step 3: Verify Cluster
 
@@ -184,90 +164,6 @@ ksail cluster init --name my-cluster --distribution K3s \
 
 K3d injects registry configuration so all nodes use your mirrors automatically.
 
-## Common Use Cases
-
-### 1. Fast Local Development
-
-**Scenario:** Develop a microservices application with rapid restart cycles.
-
-```bash
-# Single-node cluster (fastest startup)
-ksail cluster init --name dev --distribution K3s --workers 0
-ksail cluster create
-
-# Deploy application
-kubectl apply -f k8s/
-
-# Hot reload: rebuild image and restart
-docker build -t my-app:dev .
-kubectl rollout restart deployment/my-app
-```
-
-**Why K3s:** Sub-30-second cluster startup, low memory footprint, built-in LoadBalancer.
-
-### 2. CI/CD Integration Testing
-
-**Scenario:** Run integration tests in ephemeral clusters on shared GitHub Actions runners.
-
-```bash
-# CI pipeline script
-ksail cluster init --name ci-test --distribution K3s
-ksail cluster create
-
-# Run tests against the cluster
-kubectl apply -f test-manifests/
-./run-integration-tests.sh
-
-# Cleanup
-ksail cluster delete
-```
-
-**Why K3s:** Fast creation, low resource usage ideal for constrained CI runners.
-
-### 3. GitOps Testing (Flux/ArgoCD)
-
-**Scenario:** Test GitOps configurations locally before production deployment.
-
-```bash
-# Initialize with GitOps and a local registry
-ksail cluster init \
-  --name gitops-test \
-  --distribution K3s \
-  --gitops-engine Flux \
-  --local-registry
-
-# Create, push manifests, and reconcile
-ksail cluster create
-ksail workload push
-ksail workload reconcile
-
-# Verify reconciliation
-kubectl get kustomizations -A
-```
-
-**Why K3s:** Built-in storage and load balancer means fewer extra components to install.
-
-### 4. Multi-Node Topology Testing
-
-**Scenario:** Test pod scheduling, node affinity, and high-availability patterns.
-
-```bash
-# 3-node cluster (1 control plane + 2 workers)
-ksail cluster init \
-  --name topology-test \
-  --distribution K3s \
-  --control-planes 1 \
-  --workers 2
-
-ksail cluster create
-
-# Label nodes and test affinity
-kubectl label nodes k3d-topology-test-agent-0 zone=us-east-1a
-kubectl label nodes k3d-topology-test-agent-1 zone=us-east-1b
-```
-
-**Why K3s:** Worker nodes can be added/removed in-place with `ksail cluster update`.
-
 ## Architecture
 
 ### Cluster Components
@@ -298,21 +194,6 @@ kubectl label nodes k3d-topology-test-agent-1 zone=us-east-1b
 │  └──────────────────┘  └──────────────────┘           │
 └─────────────────────────────────────────────────────────┘
 ```
-
-### How It Works
-
-1. **K3d Load Balancer:** A dedicated container routes kubectl and API traffic to control-plane nodes
-2. **Single Binary:** K3s bundles all Kubernetes control-plane components into one process
-3. **Embedded etcd:** No separate etcd cluster needed for single-node or HA setups
-4. **ServiceLB:** Klipper-LB allocates node ports to back LoadBalancer services
-5. **Storage:** local-path-provisioner uses host-path volumes on the node
-
-### KSail Integration
-
-- **Provisioner:** `pkg/svc/provisioner/cluster/k3d/` wraps the K3d SDK
-- **Infrastructure:** Docker provider manages container lifecycle (start/stop)
-- **Configuration:** Generates `k3d.yaml` from `ksail.yaml` declaratively
-- **Installers:** CNI (Cilium/Calico replaces default Flannel), cert-manager, policy engines
 
 ## Distribution Comparison
 
@@ -500,38 +381,9 @@ ports:
   - port: 30080:30080@agent:0     # NodePort on first worker
 ```
 
-### Cluster Lifecycle Management
-
-```bash
-# Stop cluster (preserves state)
-ksail cluster stop
-
-# Start stopped cluster
-ksail cluster start
-
-# Scale workers in-place
-ksail cluster update  # Apply changed worker count from ksail.yaml
-
-# List all K3s clusters
-ksail cluster list
-
-# Get cluster details
-ksail cluster info
-```
-
 ### Integration with Native K3d
 
-KSail generates standard `k3d.yaml` files:
-
-```bash
-# Use K3d CLI directly
-k3d cluster create --config k3d.yaml
-
-# List K3d clusters
-k3d cluster list
-```
-
-No vendor lock-in — configurations are portable and KSail can interact with any K3d cluster accessible via your kubeconfig.
+KSail generates standard `k3d.yaml` files—use K3d CLI directly (`k3d cluster create --config k3d.yaml`) if needed. No vendor lock-in: configurations are portable and KSail can interact with any K3d cluster accessible via your kubeconfig.
 
 ## Next Steps
 
@@ -541,6 +393,7 @@ No vendor lock-in — configurations are portable and KSail can interact with an
 - [**Secret Management**](/features/#secret-management): Encrypt secrets with SOPS
 - [**AI Chat**](/ai-chat/): Interactive cluster management with GitHub Copilot
 - [**VSCode Extension**](/features/#vscode-extension): Manage clusters from your editor
+- [**Use Cases**](/use-cases/): Workflows for learning, development, and CI/CD
 
 ### Try Other Distributions
 
