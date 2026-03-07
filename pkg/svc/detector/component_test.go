@@ -205,7 +205,7 @@ func TestDetectCSI_Vanilla_Default_WithDeployment(t *testing.T) {
 	csi, err := d.ExportDetectCSI(ctx, v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 
 	require.NoError(t, err)
-	assert.Equal(t, v1alpha1.CSIDefault, csi)
+	assert.Equal(t, v1alpha1.CSIEnabled, csi)
 }
 
 func TestDetectCSI_Vanilla_Disabled_NoDeployment(t *testing.T) {

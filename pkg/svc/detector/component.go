@@ -158,11 +158,13 @@ func (d *ComponentDetector) detectCSI(
 		return v1alpha1.CSIDisabled, nil
 	}
 
-	// Vanilla (Kind): bundles local-path-provisioner. When present, it is the
-	// default state (analogous to K3s). When absent, CSI was explicitly disabled.
+	// Vanilla (Kind): bundles local-path-provisioner by default. Since the
+	// detector cannot distinguish Kind's bundled CSI from KSail-installed CSI,
+	// return CSIEnabled when the deployment is present (CSI is effectively
+	// enabled) and CSIDisabled when absent.
 	if distribution == v1alpha1.DistributionVanilla {
 		if d.deploymentExists(ctx, DeploymentLocalPathProvisioner, NamespaceLocalPathStorage) {
-			return v1alpha1.CSIDefault, nil
+			return v1alpha1.CSIEnabled, nil
 		}
 
 		return v1alpha1.CSIDisabled, nil

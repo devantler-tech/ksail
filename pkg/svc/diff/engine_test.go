@@ -148,10 +148,10 @@ func TestEngine_ComponentChanges(t *testing.T) {
 		},
 		{
 			name:     "CSI change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.CSI = v1alpha1.CSIEnabled },
+			mutate:   func(s *v1alpha1.ClusterSpec) { s.CSI = v1alpha1.CSIDisabled },
 			field:    "cluster.csi",
-			oldValue: "Disabled",
-			newValue: testValueEnabled,
+			oldValue: testValueEnabled,
+			newValue: "Disabled",
 		},
 		{
 			name:     "MetricsServer change",
@@ -541,7 +541,7 @@ func TestEngine_MultipleChanges(t *testing.T) {
 	old := newBaseSpec()
 	newer := clone(old)
 	newer.CNI = v1alpha1.CNICilium
-	newer.CSI = v1alpha1.CSIEnabled
+	newer.CSI = v1alpha1.CSIDisabled
 	newer.Vanilla.MirrorsDir = "changed"
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
@@ -576,20 +576,27 @@ func TestEngine_DefaultVsDisabled_NoFalsePositive_Vanilla(t *testing.T) {
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
-	// Default and Disabled are semantically equivalent on Vanilla/Docker (no CSI by default,
-	// MetricsServer disabled, LoadBalancer disabled), so no changes should be detected.
-	if result.TotalChanges() != 0 {
+	// MetricsServer and LoadBalancer: Default and Disabled are semantically
+	// equivalent on Vanilla/Docker, so no changes should be detected.
+	// CSI: Default normalizes to Enabled on Vanilla (Kind bundles it), so
+	// changing to Disabled IS a real change (1 in-place change).
+	if result.TotalChanges() != 1 {
 		t.Errorf(
-			"Default vs Disabled should produce 0 changes on Vanilla/Docker, got %d",
+			"Default vs Disabled on Vanilla/Docker should produce 1 CSI change, got %d",
 			result.TotalChanges(),
 		)
 
 		for _, change := range result.AllChanges() {
 			t.Logf(
-				"  unexpected change: %s %q -> %q",
+				"  change: %s %q -> %q",
 				change.Field, change.OldValue, change.NewValue,
 			)
 		}
+	}
+
+	// Verify the single change is the CSI field
+	if len(result.InPlaceChanges) != 1 || result.InPlaceChanges[0].Field != "cluster.csi" {
+		t.Errorf("expected single CSI in-place change, got %v", result.InPlaceChanges)
 	}
 }
 
