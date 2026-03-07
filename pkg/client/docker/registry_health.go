@@ -280,7 +280,7 @@ func (rm *RegistryManager) checkRegistryHealth(
 		return false, fmt.Errorf("failed to create health check request: %w", reqErr)
 	}
 
-	resp, respErr := httpClient.Do( //nolint:gosec // G704: URL is a compile-time constant
+	resp, respErr := httpClient.Do(
 		req,
 	)
 	if respErr != nil {
