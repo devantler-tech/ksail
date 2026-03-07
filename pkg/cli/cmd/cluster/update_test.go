@@ -48,6 +48,52 @@ func TestNewUpdateCmd(t *testing.T) {
 	if dryRunFlag == nil {
 		t.Error("expected --dry-run flag to exist")
 	}
+
+	yesFlag := cmd.Flags().Lookup("yes")
+	if yesFlag == nil {
+		t.Error("expected --yes flag to exist")
+	}
+}
+
+func TestResolveForce(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		forceValue bool
+		yesValue   string
+		expected   bool
+	}{
+		{name: "--force resolves to true", forceValue: true, yesValue: "", expected: true},
+		{name: "--yes resolves to true", forceValue: false, yesValue: "true", expected: true},
+		{
+			name:       "--yes=false resolves to false",
+			forceValue: false,
+			yesValue:   "false",
+			expected:   false,
+		},
+		{name: "both flags resolve to true", forceValue: true, yesValue: "true", expected: true},
+		{name: "neither flag resolves to false", forceValue: false, yesValue: "", expected: false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			runtimeContainer := &di.Runtime{}
+			cmd := clusterpkg.NewUpdateCmd(runtimeContainer)
+
+			if testCase.yesValue != "" {
+				_ = cmd.Flags().Set("yes", testCase.yesValue)
+			}
+
+			result := clusterpkg.ExportResolveForce(testCase.forceValue, cmd.Flags().Lookup("yes"))
+			if result != testCase.expected {
+				t.Errorf("expected resolveForce(%v, yes=%q) = %v, got %v",
+					testCase.forceValue, testCase.yesValue, testCase.expected, result)
+			}
+		})
+	}
 }
 
 //nolint:paralleltest // subtests override global stdin reader
