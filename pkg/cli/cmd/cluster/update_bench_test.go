@@ -7,6 +7,11 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
+// Package-level sink prevents the compiler from optimizing away benchmark calls.
+//
+//nolint:gochecknoglobals // Benchmark sink variable is required to prevent compiler optimization.
+var benchFormatDiffTableSink string
+
 // newInPlaceDiff builds an UpdateResult with n in-place changes.
 func newInPlaceDiff(n int) *clusterupdate.UpdateResult {
 	result := clusterupdate.NewEmptyUpdateResult()
@@ -72,7 +77,7 @@ func BenchmarkFormatDiffTable_SingleChange(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = clusterpkg.ExportFormatDiffTable(diff, total)
+		benchFormatDiffTableSink = clusterpkg.ExportFormatDiffTable(diff, total)
 	}
 }
 
@@ -86,7 +91,7 @@ func BenchmarkFormatDiffTable_SmallDiff(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = clusterpkg.ExportFormatDiffTable(diff, total)
+		benchFormatDiffTableSink = clusterpkg.ExportFormatDiffTable(diff, total)
 	}
 }
 
@@ -100,7 +105,7 @@ func BenchmarkFormatDiffTable_MixedCategories(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = clusterpkg.ExportFormatDiffTable(diff, total)
+		benchFormatDiffTableSink = clusterpkg.ExportFormatDiffTable(diff, total)
 	}
 }
 
@@ -115,7 +120,7 @@ func BenchmarkFormatDiffTable_LargeDiff(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = clusterpkg.ExportFormatDiffTable(diff, total)
+		benchFormatDiffTableSink = clusterpkg.ExportFormatDiffTable(diff, total)
 	}
 }
 
@@ -147,6 +152,6 @@ func BenchmarkFormatDiffTable_WideValues(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = clusterpkg.ExportFormatDiffTable(result, total)
+		benchFormatDiffTableSink = clusterpkg.ExportFormatDiffTable(result, total)
 	}
 }
