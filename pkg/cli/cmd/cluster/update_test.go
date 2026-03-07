@@ -66,7 +66,12 @@ func TestResolveForce(t *testing.T) {
 	}{
 		{name: "--force resolves to true", forceValue: true, yesValue: "", expected: true},
 		{name: "--yes resolves to true", forceValue: false, yesValue: "true", expected: true},
-		{name: "--yes=false resolves to false", forceValue: false, yesValue: "false", expected: false},
+		{
+			name:       "--yes=false resolves to false",
+			forceValue: false,
+			yesValue:   "false",
+			expected:   false,
+		},
 		{name: "both flags resolve to true", forceValue: true, yesValue: "true", expected: true},
 		{name: "neither flag resolves to false", forceValue: false, yesValue: "", expected: false},
 	}
