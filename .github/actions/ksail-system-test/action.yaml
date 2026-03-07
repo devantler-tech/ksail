@@ -269,6 +269,7 @@ runs:
         ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
+        set -o pipefail
         # shellcheck disable=SC2086
         ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS | tee /tmp/update-dry-run-output.txt
         # Fail early if the dry run detects unexpected changes.
@@ -289,6 +290,7 @@ runs:
         ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
+        set -o pipefail
         # shellcheck disable=SC2086
         ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS | tee /tmp/update-output.txt
         # Fail early if the update detects unexpected changes.
