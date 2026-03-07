@@ -86,7 +86,13 @@ Node scaling support depends on the distribution: Talos supports both control-pl
 
 ### What does `ksail cluster update --dry-run` show?
 
-Previews all detected configuration changes without applying them, including change classifications (in-place, reboot-required, or recreate-required) and a summary of impacts.
+Previews all detected configuration changes without applying them. Each change is listed with an emoji classification and `old → new` values:
+
+- 🟢 **In-place** — applied without disruption
+- 🟡 **Reboot-required** — applied but requires node reboots
+- 🔴 **Recreate-required** — requires full cluster recreation
+
+Outputs `No changes detected` when configuration is already in sync.
 
 ### What happens when I run `ksail cluster update` with no changes?
 
