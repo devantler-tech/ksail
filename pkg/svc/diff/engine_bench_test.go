@@ -54,9 +54,10 @@ func BenchmarkComputeDiff_AllInPlaceChanges(b *testing.B) {
 	}
 }
 
-// BenchmarkComputeDiff_RecreateRequired measures ComputeDiff when a change
-// triggers cluster recreation. Distribution and provider changes are the
-// most common triggers in practice.
+// BenchmarkComputeDiff_RecreateRequired measures ComputeDiff when changes
+// imply that a cluster recreation will be needed (for example, a distribution
+// or provider change). This does not exercise any early-exit optimization;
+// ComputeDiff always evaluates all change categories.
 func BenchmarkComputeDiff_RecreateRequired(b *testing.B) {
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	oldSpec := newBaseSpec()
