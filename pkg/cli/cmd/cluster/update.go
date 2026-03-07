@@ -465,9 +465,9 @@ func applyInPlaceChanges(
 }
 
 // displayChangesSummary outputs a human-readable summary of configuration changes
-// as a before/after table grouped by component with impact icons.
-// Changes are ordered by severity: recreate-required → reboot-required → in-place.
-// Components with no change are omitted.
+// as a before/after table with one row per changed field and impact icons.
+// Rows are ordered by severity: recreate-required → reboot-required → in-place.
+// Fields with no change are omitted.
 func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	totalChanges := diff.TotalChanges()
 
@@ -490,6 +490,20 @@ type diffRow struct {
 	oldVal string
 	newVal string
 	impact string
+}
+
+// categoryIcon returns the severity icon for a change category.
+func categoryIcon(cat clusterupdate.ChangeCategory) string {
+	switch cat {
+	case clusterupdate.ChangeCategoryRecreateRequired:
+		return "🔴"
+	case clusterupdate.ChangeCategoryRebootRequired:
+		return "🟡"
+	case clusterupdate.ChangeCategoryInPlace:
+		return "🟢"
+	default:
+		return "⚪"
+	}
 }
 
 // formatDiffTable builds the formatted diff table string.
@@ -522,7 +536,7 @@ func formatDiffTable(
 	block.Grow((totalChanges + 4) * (colW + colB + colA + colI + 16))
 
 	writeSummaryLine(&block, totalChanges)
-	writeHeaderRow(&block, colW, colB, colA)
+	writeHeaderRow(&block, colW, colB, colA, hdrComponent, hdrBefore, hdrAfter, hdrImpact)
 	writeSeparatorRow(&block, colW, colB, colA, colI)
 	writeDataRows(&block, rows, colW, colB, colA)
 
@@ -539,19 +553,19 @@ func collectDiffRows(
 
 	for _, c := range diff.RecreateRequired {
 		rows = append(rows, diffRow{
-			"🔴", c.Field, c.OldValue, c.NewValue, "recreate-required",
+			categoryIcon(c.Category), c.Field, c.OldValue, c.NewValue, c.Category.String(),
 		})
 	}
 
 	for _, c := range diff.RebootRequired {
 		rows = append(rows, diffRow{
-			"🟡", c.Field, c.OldValue, c.NewValue, "reboot-required",
+			categoryIcon(c.Category), c.Field, c.OldValue, c.NewValue, c.Category.String(),
 		})
 	}
 
 	for _, c := range diff.InPlaceChanges {
 		rows = append(rows, diffRow{
-			"🟢", c.Field, c.OldValue, c.NewValue, "in-place",
+			categoryIcon(c.Category), c.Field, c.OldValue, c.NewValue, c.Category.String(),
 		})
 	}
 
@@ -601,10 +615,11 @@ const headerIndent = "   "
 func writeHeaderRow(
 	block *strings.Builder,
 	colW, colB, colA int,
+	hdrComp, hdrBefore, hdrAfter, hdrImpact string,
 ) {
 	fmt.Fprintf(block, "%s%-*s  %-*s  %-*s  %s\n",
 		headerIndent,
-		colW, "Component", colB, "Before", colA, "After", "Impact")
+		colW, hdrComp, colB, hdrBefore, colA, hdrAfter, hdrImpact)
 }
 
 func writeSeparatorRow(
