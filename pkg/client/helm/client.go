@@ -119,7 +119,7 @@ type ChartSpec struct {
 
 	RepoURL  string
 	Username string
-	//nolint:gosec // G117: configuration field, not a hardcoded credential
+
 	Password              string
 	CertFile              string
 	KeyFile               string
@@ -133,7 +133,7 @@ type RepositoryEntry struct {
 	Name     string
 	URL      string
 	Username string
-	//nolint:gosec // G117: configuration field, not a hardcoded credential
+
 	Password              string
 	CertFile              string
 	KeyFile               string

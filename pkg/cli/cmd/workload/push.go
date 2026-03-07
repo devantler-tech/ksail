@@ -258,7 +258,7 @@ type pushParams struct {
 	SourceDir    string
 	GitOpsEngine v1alpha1.GitOpsEngine
 	Username     string
-	//nolint:gosec // G117: configuration field, not a hardcoded credential
+
 	Password   string
 	IsExternal bool // True if this is an external registry (no auto-detection needed)
 }
