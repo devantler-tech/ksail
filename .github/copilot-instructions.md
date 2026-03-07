@@ -337,5 +337,3 @@ For a deeper dive into KSail's design and internals, refer to:
 - Embedded Kubernetes tools (kubectl, helm, kind, k3d, vcluster, flux, argocd) as Go libraries
 - Docker as the only external dependency
 - Astro with Starlight for documentation (Node.js-based)
-
-
