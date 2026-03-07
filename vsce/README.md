@@ -84,12 +84,13 @@ When no cluster is connected, the panel shows a prompt to create or start one.
 
 A compact cluster health item appears in the bottom status bar:
 
-| State      | Display                     |
-|------------|-----------------------------|
-| Healthy    | `✔ KSail: Healthy`          |
-| Degraded   | `⚠ KSail: Degraded` (amber) |
-| Error      | `✖ KSail: Error` (red)      |
-| No cluster | `? KSail: No Cluster`       |
+| State      | Display                                            |
+|------------|----------------------------------------------------|
+| Healthy    | `✔ KSail: Healthy`                                 |
+| Degraded   | `⚠ KSail: Degraded` (warning background)           |
+| Error      | `✖ KSail: Error` (error background)                |
+| Unknown    | `? KSail: Unknown`                                 |
+| No cluster | `? KSail: No Cluster`                              |
 
 Click the status bar item to manually refresh the cluster status.
 
