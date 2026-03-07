@@ -3,8 +3,6 @@ title: Use Cases
 description: KSail supports three primary use cases with workflows tailored to each scenario.
 ---
 
-KSail supports three primary use cases with workflows tailored to each scenario: learning Kubernetes, iterating on applications, and testing in CI/CD.
-
 ## Learning Kubernetes
 
 For developers new to Kubernetes who want to explore concepts and experiment with different configurations.
@@ -19,11 +17,7 @@ ksail cluster init \
   --gitops-engine None
 ```
 
-**Why this configuration:**
-
-- **Vanilla distribution** – Standard upstream Kubernetes behavior
-- **Cilium CNI** – Modern networking with observability features
-- **No GitOps** – Direct kubectl/apply workflow for immediate feedback
+Vanilla provides standard upstream Kubernetes, Cilium adds modern networking with observability, and skipping GitOps enables a direct apply workflow for immediate feedback.
 
 ### Workflow
 
@@ -75,13 +69,7 @@ ksail cluster init \
   --local-registry localhost:5050
 ```
 
-**Why this configuration:**
-
-- **K3s distribution** – Fast startup and low resource usage
-- **Cilium CNI** – Network policies and observability
-- **LocalPathProvisioner CSI** – Persistent volumes for stateful apps
-- **Flux GitOps** – Declarative deployments matching production patterns
-- **Local registry** – Fast image iteration without pushing to remote registry
+K3s starts faster with lower resource usage, Cilium provides network policies and observability, LocalPathProvisioner enables persistent volumes for stateful apps, Flux mirrors production GitOps patterns, and a local registry avoids pushing images to a remote registry during iteration.
 
 ### Workflow
 
@@ -109,15 +97,6 @@ ksail cluster init \
 
    ```bash
    ksail workload push
-   ksail workload reconcile
-   ```
-
-5. **Iterate**
-
-   ```bash
-   # Make code changes
-   docker build -t localhost:5050/my-app:dev .
-   docker push localhost:5050/my-app:dev
    ksail workload reconcile
    ```
 
@@ -149,12 +128,7 @@ spec:
     sourceDirectory: k8s
 ```
 
-**Why this configuration:**
-
-- **K3s distribution** – Fastest startup time for CI
-- **Cilium CNI** – Required for network policies
-- **Flux GitOps** – Test actual deployment workflow
-- **Declarative config** – Reproducible across CI runs
+K3s starts fastest in CI, Cilium enforces network policies, Flux tests the actual deployment workflow, and declarative config ensures reproducibility across runs.
 
 ### CI Pipeline Example
 
