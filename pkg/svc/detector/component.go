@@ -158,7 +158,19 @@ func (d *ComponentDetector) detectCSI(
 		return v1alpha1.CSIDisabled, nil
 	}
 
-	// Vanilla/Talos-Docker: check for local-path-provisioner Deployment
+	// Vanilla (Kind): bundles local-path-provisioner by default. Return
+	// CSIDefault when present (indicating the distribution's default state)
+	// and CSIDisabled when absent. The diff engine skips CSI comparison for
+	// Vanilla entirely since detection is unreliable.
+	if distribution == v1alpha1.DistributionVanilla {
+		if d.deploymentExists(ctx, DeploymentLocalPathProvisioner, NamespaceLocalPathStorage) {
+			return v1alpha1.CSIDefault, nil
+		}
+
+		return v1alpha1.CSIDisabled, nil
+	}
+
+	// Talos-Docker: check for user-installed local-path-provisioner Deployment
 	if d.deploymentExists(ctx, DeploymentLocalPathProvisioner, NamespaceLocalPathStorage) {
 		return v1alpha1.CSIEnabled, nil
 	}

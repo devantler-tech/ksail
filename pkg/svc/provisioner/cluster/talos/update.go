@@ -528,8 +528,6 @@ func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSp
 		}
 	}
 
-	clusterupdate.ApplyGitOpsLocalRegistryDefault(spec)
-
 	return spec, nil
 }
 

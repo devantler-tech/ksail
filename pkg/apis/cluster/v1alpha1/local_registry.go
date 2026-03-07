@@ -14,6 +14,7 @@ type ParsedRegistry struct {
 	Path     string
 	Tag      string
 	Username string
+
 	Password string
 }
 
