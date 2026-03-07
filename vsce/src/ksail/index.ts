@@ -11,3 +11,9 @@ export {
   type Distribution, type InitClusterOptions
 } from "./clusters.js";
 
+export {
+  fetchClusterStatus, getAllPods, getPodLogs, summarizePodsByNamespace,
+  type ClusterHealth, type ClusterStatusSnapshot, type GitOpsStatus,
+  type NamespacePodSummary, type PodInfo, type PodPhase
+} from "./kubectl.js";
+

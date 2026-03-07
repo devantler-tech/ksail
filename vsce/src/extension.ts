@@ -20,10 +20,17 @@ import {
   KSailMcpServerDefinitionProvider,
 } from "./mcp/index.js";
 import { ClustersTreeDataProvider } from "./views/clustersView.js";
+import {
+  ClusterStatusBar,
+  ClusterStatusTreeDataProvider,
+  showPodLogs,
+} from "./views/index.js";
 
 // Global extension state
 let outputChannel: vscode.OutputChannel;
 let clustersProvider: ClustersTreeDataProvider;
+let statusProvider: ClusterStatusTreeDataProvider;
+let statusBar: ClusterStatusBar;
 
 /**
  * Extension activation
@@ -76,6 +83,39 @@ export async function activate(
   // Register commands
   registerCommands(context, outputChannel, clustersProvider);
 
+  // Create cluster status tree data provider
+  statusProvider = new ClusterStatusTreeDataProvider(outputChannel);
+
+  const statusTreeView = vscode.window.createTreeView("ksailClusterStatus", {
+    treeDataProvider: statusProvider,
+    showCollapseAll: true,
+  });
+  statusProvider.setTreeView(statusTreeView);
+  context.subscriptions.push(statusTreeView);
+
+  // Start polling for cluster status (every 10 seconds)
+  statusProvider.startPolling(10_000);
+
+  // Create status bar
+  statusBar = new ClusterStatusBar(statusProvider);
+  context.subscriptions.push(statusBar);
+
+  // Register status commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand("ksail.status.refresh", () => {
+      statusProvider.refresh();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "ksail.status.showPodLogs",
+      async (namespace: string, podName: string) => {
+        await showPodLogs(namespace, podName);
+      }
+    )
+  );
+
   // Set context for when clause (based on ksail.yaml presence in workspace)
   const ksailYaml = await vscode.workspace.findFiles("ksail.yaml", null, 1);
   const hasKsailYaml = ksailYaml.length > 0;
@@ -107,6 +147,7 @@ export async function activate(
  */
 export function deactivate(): void {
   outputChannel?.appendLine("KSail extension deactivating...");
+  statusProvider?.stopPolling();
 }
 
 /**

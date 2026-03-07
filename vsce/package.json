@@ -94,6 +94,18 @@
         "title": "Show Output",
         "category": "KSail",
         "icon": "$(output)"
+      },
+      {
+        "command": "ksail.status.refresh",
+        "title": "Refresh Cluster Status",
+        "category": "KSail",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ksail.status.showPodLogs",
+        "title": "Show Pod Logs",
+        "category": "KSail",
+        "icon": "$(output)"
       }
     ],
     "keybindings": [
@@ -129,6 +141,11 @@
           "id": "ksailClusters",
           "name": "Clusters",
           "icon": "$(server)"
+        },
+        {
+          "id": "ksailClusterStatus",
+          "name": "Cluster Status",
+          "icon": "$(pulse)"
         }
       ]
     },
@@ -158,6 +175,14 @@
         {
           "command": "ksail.refresh",
           "when": "false"
+        },
+        {
+          "command": "ksail.status.refresh",
+          "when": "false"
+        },
+        {
+          "command": "ksail.status.showPodLogs",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -175,6 +200,11 @@
           "command": "ksail.refresh",
           "when": "view == ksailClusters",
           "group": "navigation@3"
+        },
+        {
+          "command": "ksail.status.refresh",
+          "when": "view == ksailClusterStatus",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
