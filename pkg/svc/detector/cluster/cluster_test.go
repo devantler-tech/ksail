@@ -15,8 +15,6 @@ import (
 //
 //nolint:funlen // Test function with comprehensive test cases
 func TestDetectDistributionFromContext(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name             string
 		contextName      string
@@ -87,8 +85,6 @@ func TestDetectDistributionFromContext(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
 			dist, clusterName, err := cluster.DetectDistributionFromContext(testCase.contextName)
 
 			if testCase.wantError {
@@ -105,8 +101,6 @@ func TestDetectDistributionFromContext(t *testing.T) {
 
 // TestDetectInfo_LocalKind tests detection from a kubeconfig with a Kind cluster.
 func TestDetectInfo_LocalKind(t *testing.T) {
-	t.Parallel()
-
 	kubeconfigContent := `apiVersion: v1
 kind: Config
 current-context: kind-test-cluster
@@ -140,8 +134,6 @@ users:
 
 // TestDetectInfo_LocalTalos tests detection from a kubeconfig with a local Talos cluster.
 func TestDetectInfo_LocalTalos(t *testing.T) {
-	t.Parallel()
-
 	kubeconfigContent := `apiVersion: v1
 kind: Config
 current-context: admin@local-talos
@@ -174,8 +166,6 @@ users:
 
 // TestDetectInfo_ExplicitContext tests detection with an explicit context specified.
 func TestDetectInfo_ExplicitContext(t *testing.T) {
-	t.Parallel()
-
 	kubeconfigContent := `apiVersion: v1
 kind: Config
 current-context: kind-default
@@ -214,8 +204,6 @@ users:
 
 // TestDetectInfo_ContextNotFound tests error when context doesn't exist.
 func TestDetectInfo_ContextNotFound(t *testing.T) {
-	t.Parallel()
-
 	kubeconfigContent := `apiVersion: v1
 kind: Config
 current-context: kind-exists
@@ -244,8 +232,6 @@ users:
 
 // TestDetectInfo_NoCurrentContext tests error when no current context is set.
 func TestDetectInfo_NoCurrentContext(t *testing.T) {
-	t.Parallel()
-
 	kubeconfigContent := `apiVersion: v1
 kind: Config
 clusters:
@@ -273,8 +259,6 @@ users:
 
 // TestExtractHostFromURL tests host extraction from server URLs.
 func TestExtractHostFromURL(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name      string
 		url       string
@@ -305,8 +289,6 @@ func TestExtractHostFromURL(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
 			host, err := cluster.ExtractHostFromURL(testCase.url)
 
 			if testCase.wantError {
@@ -321,8 +303,6 @@ func TestExtractHostFromURL(t *testing.T) {
 
 // TestIsLocalhost tests the localhost detection logic.
 func TestIsLocalhost(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name string
 		host string
@@ -339,8 +319,6 @@ func TestIsLocalhost(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
 			got := cluster.IsLocalhost(testCase.host)
 			assert.Equal(t, testCase.want, got)
 		})
@@ -349,7 +327,6 @@ func TestIsLocalhost(t *testing.T) {
 
 // TestDetectCloudProvider_NoCredentials tests cloud provider detection when no credentials are set.
 func TestDetectCloudProvider_NoCredentials(t *testing.T) {
-	// Cannot use t.Parallel() with t.Setenv
 	t.Setenv("HCLOUD_TOKEN", "")
 
 	_, err := cluster.DetectCloudProvider("1.2.3.4", "my-cluster")
@@ -407,7 +384,6 @@ func TestDetectProviderFromEndpoint(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Cannot use t.Parallel() with t.Setenv
 			t.Setenv("HCLOUD_TOKEN", "")
 
 			provider, err := cluster.DetectProviderFromEndpoint(
@@ -431,8 +407,6 @@ func TestDetectProviderFromEndpoint(t *testing.T) {
 
 // TestDetectInfo_VCluster tests detection from a kubeconfig with a VCluster cluster.
 func TestDetectInfo_VCluster(t *testing.T) {
-	t.Parallel()
-
 	kubeconfigContent := `apiVersion: v1
 kind: Config
 current-context: vcluster-docker_my-vcluster
@@ -465,7 +439,6 @@ users:
 
 // TestDetectInfo_TalosPublicIPNoCredentials tests error when Talos cluster has public IP but no credentials.
 func TestDetectInfo_TalosPublicIPNoCredentials(t *testing.T) {
-	// Cannot use t.Parallel() with t.Setenv
 	t.Setenv("HCLOUD_TOKEN", "")
 
 	kubeconfigContent := `apiVersion: v1
@@ -499,8 +472,6 @@ users:
 // TestResolveKubeconfigPath tests kubeconfig path resolution.
 func TestResolveKubeconfigPath(t *testing.T) {
 	t.Run("explicit_path_returned_as_is", func(t *testing.T) {
-		// Cannot use t.Parallel() with t.Setenv in sibling subtests
-
 		tmpDir := t.TempDir()
 		explicitPath := filepath.Join(tmpDir, "my-kubeconfig")
 		err := os.WriteFile(explicitPath, []byte(""), 0o600)
@@ -513,7 +484,6 @@ func TestResolveKubeconfigPath(t *testing.T) {
 	})
 
 	t.Run("kubeconfig_env_var_used_when_empty_path", func(t *testing.T) {
-		// Cannot use t.Parallel() with t.Setenv
 		tmpDir := t.TempDir()
 		envPath := filepath.Join(tmpDir, "env-kubeconfig")
 		err := os.WriteFile(envPath, []byte(""), 0o600)
@@ -528,7 +498,6 @@ func TestResolveKubeconfigPath(t *testing.T) {
 	})
 
 	t.Run("kubeconfig_env_multiple_paths_uses_first", func(t *testing.T) {
-		// Cannot use t.Parallel() with t.Setenv
 		tmpDir := t.TempDir()
 		firstPath := filepath.Join(tmpDir, "first-kubeconfig")
 		secondPath := filepath.Join(tmpDir, "second-kubeconfig")
@@ -542,7 +511,6 @@ func TestResolveKubeconfigPath(t *testing.T) {
 	})
 
 	t.Run("defaults_to_recommended_home_file", func(t *testing.T) {
-		// Cannot use t.Parallel() with t.Setenv
 		t.Setenv("KUBECONFIG", "")
 
 		resolved, err := cluster.ResolveKubeconfigPath("")
