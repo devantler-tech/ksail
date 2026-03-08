@@ -369,7 +369,7 @@ func TestDetectProviderFromEndpoint(t *testing.T) {
 		clusterName  string
 		wantProvider v1alpha1.Provider
 		wantError    bool
-		hcloudToken  string
+		wantErrorIs  error
 	}{
 		{
 			name:         "vanilla_always_docker",
@@ -401,17 +401,14 @@ func TestDetectProviderFromEndpoint(t *testing.T) {
 			serverURL:    "https://1.2.3.4:6443",
 			clusterName:  "prod",
 			wantError:    true,
+			wantErrorIs:  cluster.ErrNoCloudCredentials,
 		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Cannot use t.Parallel() with t.Setenv
-			if testCase.hcloudToken == "" {
-				t.Setenv("HCLOUD_TOKEN", "")
-			} else {
-				t.Setenv("HCLOUD_TOKEN", testCase.hcloudToken)
-			}
+			t.Setenv("HCLOUD_TOKEN", "")
 
 			provider, err := cluster.DetectProviderFromEndpoint(
 				testCase.distribution,
@@ -421,6 +418,9 @@ func TestDetectProviderFromEndpoint(t *testing.T) {
 
 			if testCase.wantError {
 				require.Error(t, err)
+				if testCase.wantErrorIs != nil {
+					assert.ErrorIs(t, err, testCase.wantErrorIs)
+				}
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, testCase.wantProvider, provider)
