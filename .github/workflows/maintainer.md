@@ -67,6 +67,7 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
 
 3. **Attempt to recompile the workflows**:
    - First validate all workflow files, tracking failures:
+
      ```bash
      VALIDATION_FAILED=0
      for file in .github/workflows/*.md; do
@@ -75,13 +76,16 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
      done
      echo "Validation result: $VALIDATION_FAILED (0=passed, 1=failed)"
      ```
+
    - **Only if validation passes** (`VALIDATION_FAILED=0`), recompile in write mode to update `.lock.yml` files:
+
      ```bash
      for file in .github/workflows/*.md; do
        echo "Compiling $file..."
        gh aw compile "$file" 2>&1
      done
      ```
+
    - Note any compilation errors or warnings — do not proceed to write mode if validation failed
 
 4. **Fix compilation errors if they occur**:
