@@ -43,13 +43,13 @@ benchstat baseline.txt new.txt
 
 Approximate baseline on a typical CI runner — `ns/op` (time/op) varies by hardware and load, while `B/op` and `allocs/op` primarily vary with Go version, architecture, and code changes:
 
-| Benchmark                          | ns/op | B/op | allocs/op |
-|------------------------------------|------:|-----:|----------:|
-| FormatDiffTable_SingleChange       |  1359 |  800 |        16 |
-| FormatDiffTable_SmallDiff          |  2555 | 1504 |        22 |
-| FormatDiffTable_MixedCategories    |  3775 | 2048 |        28 |
-| FormatDiffTable_LargeDiff          |  5502 | 3312 |        40 |
-| FormatDiffTable_WideValues         |  2092 | 1120 |        18 |
+| Benchmark                       | ns/op | B/op | allocs/op |
+|---------------------------------|------:|-----:|----------:|
+| FormatDiffTable_SingleChange    |  1359 |  800 |        16 |
+| FormatDiffTable_SmallDiff       |  2555 | 1504 |        22 |
+| FormatDiffTable_MixedCategories |  3775 | 2048 |        28 |
+| FormatDiffTable_LargeDiff       |  5502 | 3312 |        40 |
+| FormatDiffTable_WideValues      |  2092 | 1120 |        18 |
 
 ## Performance Notes
 
