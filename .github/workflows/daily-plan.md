@@ -244,12 +244,12 @@ After triage and planning, analyze open issues for parent-child relationships to
 
 **Constraints:**
 
-- Maximum 5 parent issues created per run
+- Parent issues **share the global cap of 5 created issues per run** (including roadmap/backlog and parent issues) — never exceed the remaining issue-creation budget when creating parents
 - Maximum 20 sub-issue links per run
 - Only link if you are absolutely confident of the relationship
 - Never re-process issues that already have a parent
 - Parent issue should always be broader in scope than its sub-issues
-- When the parent issue creation limit is reached, stop and defer remaining clusters to the next run
+- When the parent issue creation limit or global issue-creation budget is reached, stop and defer remaining clusters to the next run
 
 ## Step 8 — Close Completed Parent Issues
 

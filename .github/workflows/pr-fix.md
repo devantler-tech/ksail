@@ -11,6 +11,7 @@ description: |
 on:
   slash_command:
     name: pr-fix
+    events: [pull_request_comment]
   reaction: "eyes"
 
 permissions: read-all
