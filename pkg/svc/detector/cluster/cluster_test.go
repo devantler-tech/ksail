@@ -394,6 +394,7 @@ func TestDetectProviderFromEndpoint(t *testing.T) {
 
 			if testCase.wantError {
 				require.Error(t, err)
+
 				if testCase.wantErrorIs != nil {
 					require.ErrorIs(t, err, testCase.wantErrorIs)
 				}
