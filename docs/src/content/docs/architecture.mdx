@@ -228,7 +228,7 @@ Exposes KSail as a Model Context Protocol server for Claude and other AI assista
 
 KSail uses unit tests (`go test ./...`, testify/mock, `export_test.go` for unexported symbols, `t.Parallel()`, static error sentinels), integration tests against real clusters, system tests on Linux via `.github/workflows/ci.yaml`, and benchmarks (`go test -bench=. -benchmem ./...`).
 
-Automated AI-powered agentic workflows (`daily-code-quality`, `daily-plan`, `daily-builder`, `daily-workflow-maintenance`, `daily-docs`) run on schedules for continuous improvement. These Markdown-based definitions live in `.github/workflows/*.md`.
+Automated AI-powered agentic workflows (`daily-code-quality`, `daily-plan`, `daily-builder`, `daily-workflow-maintenance`, `daily-docs`) run on schedules for continuous improvement. These Markdown-based definitions live in `.github/workflows/**/*.md`.
 
 ## Configuration Management
 
