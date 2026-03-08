@@ -105,7 +105,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
 
    | Page | Owns | Does NOT cover |
    |------|------|----------------|
-   | ... | ... | ... |
+   | ...  | ...  | ...            |
    EOF
    ```
 
