@@ -168,7 +168,6 @@ func NewProgressGroup(
 	// Detect if we're outputting to a TTY
 	isTTY := false
 	if file, ok := writer.(*os.File); ok {
-		//nolint:gosec // G115: file descriptor fits in int on all supported platforms
 		isTTY = term.IsTerminal(int(file.Fd()))
 	}
 

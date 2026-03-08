@@ -82,13 +82,15 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			reason:   "CSI can be switched via Helm install/uninstall",
 			getVal: func(spec *v1alpha1.ClusterSpec) string {
 				// Vanilla (Kind) and VCluster (Vind with k8s distro) always bundle
-				// local-path-provisioner regardless of KSail's CSI setting. The
-				// detector cannot distinguish the bundled CSI from KSail-installed
-				// CSI, so skip CSI comparison entirely by returning a constant for
-				// both sides.
+				// local-path-provisioner regardless of KSail's --csi setting. The
+				// detector reports CSIEnabled when the deployment exists, but it
+				// cannot distinguish the distribution-bundled CSI from one installed
+				// by KSail. To prevent false-positive diffs (e.g. config says
+				// CSIDisabled while the bundled deployment is still present), skip
+				// CSI comparison entirely by returning a constant for both sides.
 				if e.distribution == v1alpha1.DistributionVanilla ||
 					e.distribution == v1alpha1.DistributionVCluster {
-					return string(v1alpha1.CSIDefault)
+					return string(v1alpha1.CSIEnabled)
 				}
 
 				return string(spec.CSI.EffectiveValue(e.distribution, e.provider))
@@ -176,8 +178,11 @@ func (e *Engine) applyFieldRules(
 // When the old registry is empty, the comparison is skipped because the
 // detector cannot introspect the running cluster's local registry
 // configuration. An empty old value means "unknown", not "none".
-// State persistence (when implemented) will populate the old value
-// correctly, enabling proper change detection.
+//
+// Limitation: this means a genuine change from no-registry to a configured
+// registry (or vice versa) will be silently ignored until state persistence
+// is implemented. State persistence will populate the old value correctly,
+// enabling proper change detection for all transitions.
 func (e *Engine) checkLocalRegistryChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *clusterupdate.UpdateResult,

@@ -127,8 +127,8 @@ func (d *ComponentDetector) detectCNI(ctx context.Context) (v1alpha1.CNI, error)
 }
 
 // detectBundledCSI checks for a bundled local-path-provisioner deployment and
-// returns CSIDefault when present (distribution's default state) or CSIDisabled
-// when absent.
+// returns CSIDefault when present (distribution's default state, appropriate for
+// distributions where ProvidesCSIByDefault returns true) or CSIDisabled when absent.
 func (d *ComponentDetector) detectBundledCSI(
 	ctx context.Context,
 	deployment, namespace string,
@@ -168,14 +168,17 @@ func (d *ComponentDetector) detectCSI(
 		return v1alpha1.CSIDisabled, nil
 	}
 
-	// Vanilla (Kind) and VCluster (Vind with k8s distro): both bundle
-	// local-path-provisioner by default. Return CSIDefault when present
-	// (indicating the distribution's default state) and CSIDisabled when
-	// absent. The diff engine skips CSI comparison for these distributions
-	// entirely since detection cannot distinguish bundled from KSail-installed.
+	// Vanilla (Kind) and VCluster (Vind with k8s distro): both typically run
+	// local-path-provisioner. Since Distribution.ProvidesCSIByDefault() returns
+	// false for these distributions, treat the presence of the deployment as
+	// CSIEnabled and its absence as CSIDisabled to keep semantics consistent.
 	if distribution == v1alpha1.DistributionVanilla ||
 		distribution == v1alpha1.DistributionVCluster {
-		return d.detectBundledCSI(ctx, DeploymentLocalPathProvisioner, NamespaceLocalPathStorage)
+		if d.deploymentExists(ctx, DeploymentLocalPathProvisioner, NamespaceLocalPathStorage) {
+			return v1alpha1.CSIEnabled, nil
+		}
+
+		return v1alpha1.CSIDisabled, nil
 	}
 
 	// Talos-Docker: check for user-installed local-path-provisioner Deployment
