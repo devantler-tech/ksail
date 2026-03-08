@@ -111,13 +111,13 @@ Each documentation page has a defined scope. **Never duplicate content that belo
    Before making any changes, read ALL existing documentation to understand what content exists and where. This prevents duplication and ensures coherence.
 
    ```bash
-   # List all documentation files with sizes
-   find docs/src/content/docs -type f \( -name '*.md' -o -name '*.mdx' \) | sort
+   # List all documentation files (excluding CLI flags detail pages)
+   find docs/src/content/docs -type f \( -name '*.md' -o -name '*.mdx' \) ! -path '*/cli-flags/*/*' | sort
    ```
 
-   - Read every non-CLI-flags documentation file (`docs/src/content/docs/*.{md,mdx}`, `docs/src/content/docs/configuration/`, `docs/src/content/docs/getting-started/`, `docs/src/content/docs/guides/`, `docs/src/content/docs/providers/`)
+   - Read every listed file to understand what content exists and where
    - Read `README.md`, `CONTRIBUTING.md`, `vsce/README.md`, and `.github/copilot-instructions.md`
-   - For CLI flags files (`docs/src/content/docs/cli-flags/`), read only the index and skim a few examples to understand the pattern
+   - For CLI flags detail pages (`docs/src/content/docs/cli-flags/*/`), skim only the index and a few examples to understand the pattern — these are reference pages that rarely need content changes
    - Build a mental map of: which topics live on which pages, where cross-references exist, and where content boundaries lie
 
 2. **Analyze Repository Changes**
