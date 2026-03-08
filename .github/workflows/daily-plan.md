@@ -243,6 +243,7 @@ After triage and planning, analyze open issues for parent-child relationships to
 3. **Create parent issues for orphan clusters**: If 5 or more related issues lack a common parent, create a new parent issue with title prefix `[Parent]` that captures the common theme, then link the related issues as sub-issues. When multiple orphan clusters exist, prioritize the largest clusters first.
 
 **Constraints:**
+
 - Maximum 5 parent issues created per run
 - Maximum 20 sub-issue links per run
 - Only link if you are absolutely confident of the relationship
@@ -262,6 +263,7 @@ Check for parent issues where all sub-issues are complete and close them automat
 4. **Recurse up the tree**: If closing a parent reveals its own parent is now complete, close that parent too (process bottom-up).
 
 **Constraints:**
+
 - Maximum 5 issues closed per run
 - Only close when 100% of sub-issues are done — skip on any doubt
 - Skip issues that don't have sub-issues

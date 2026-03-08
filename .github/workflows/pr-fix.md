@@ -92,26 +92,33 @@ go mod download
 ## Step 5 — Validate Fixes
 
 1. **Format code**:
+
    ```bash
    golangci-lint fmt
    ```
 
 2. **Run linter**:
+
    ```bash
    golangci-lint run --timeout 5m --fix
    ```
+
    Fix any remaining linting errors that `--fix` couldn't resolve automatically.
 
 3. **Build the project**:
+
    ```bash
    go build ./...
    ```
 
 4. **Run tests** (targeted first, full suite if time permits):
+
    ```bash
    go test ./path/to/changed/package/...
    ```
+
    If targeted tests pass and time permits:
+
    ```bash
    go test ./...
    ```
