@@ -126,6 +126,20 @@ func (d *ComponentDetector) detectCNI(ctx context.Context) (v1alpha1.CNI, error)
 	}, v1alpha1.CNIDefault)
 }
 
+// detectBundledCSI checks for a bundled local-path-provisioner deployment and
+// returns CSIDefault when present (distribution's default state) or CSIDisabled
+// when absent.
+func (d *ComponentDetector) detectBundledCSI(
+	ctx context.Context,
+	deployment, namespace string,
+) (v1alpha1.CSI, error) {
+	if d.deploymentExists(ctx, deployment, namespace) {
+		return v1alpha1.CSIDefault, nil
+	}
+
+	return v1alpha1.CSIDisabled, nil
+}
+
 // detectCSI determines the CSI setting based on distribution, provider, and
 // whether a KSail-managed CSI component is installed.
 func (d *ComponentDetector) detectCSI(
@@ -137,11 +151,7 @@ func (d *ComponentDetector) detectCSI(
 	// CSI (--csi Disabled), K3s is started with --disable=local-storage and the
 	// deployment won't exist. Probe the cluster to distinguish Default from Disabled.
 	if distribution == v1alpha1.DistributionK3s {
-		if d.deploymentExists(ctx, DeploymentLocalPathProvisionerK3s, NamespaceKubeSystem) {
-			return v1alpha1.CSIDefault, nil
-		}
-
-		return v1alpha1.CSIDisabled, nil
+		return d.detectBundledCSI(ctx, DeploymentLocalPathProvisionerK3s, NamespaceKubeSystem)
 	}
 
 	// Talos+Hetzner: check for hcloud-csi
@@ -165,11 +175,7 @@ func (d *ComponentDetector) detectCSI(
 	// entirely since detection cannot distinguish bundled from KSail-installed.
 	if distribution == v1alpha1.DistributionVanilla ||
 		distribution == v1alpha1.DistributionVCluster {
-		if d.deploymentExists(ctx, DeploymentLocalPathProvisioner, NamespaceLocalPathStorage) {
-			return v1alpha1.CSIDefault, nil
-		}
-
-		return v1alpha1.CSIDisabled, nil
+		return d.detectBundledCSI(ctx, DeploymentLocalPathProvisioner, NamespaceLocalPathStorage)
 	}
 
 	// Talos-Docker: check for user-installed local-path-provisioner Deployment
