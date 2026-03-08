@@ -59,7 +59,7 @@ API types, schemas, and enums for KSail's configuration model. `cluster/v1alpha1
 CLI wiring, commands, and terminal UI components (`cmd/` for Cobra commands, `ui/` for TUI, `lifecycle/` for cluster orchestration, `setup/` for component installation).
 
 #### `pkg/client/`
-Embedded tool clients: `kubectl`, `helm`, `flux`, `argocd`, `docker`, `k9s`, `kubeconform`, `kustomize`, `oci`, and `netretry`. A `reconciler` package provides a shared base for GitOps reconciliation (Flux and ArgoCD). Distribution tools (Kind, K3d, VCluster) are used directly via their SDKs in provisioners, not wrapped here.
+Embedded tool clients: `kubectl`, `helm`, `flux`, `argocd`, `docker`, `k9s`, `kubeconform`, and `kustomize`. A `reconciler` package provides a shared base for GitOps reconciliation (Flux and ArgoCD). Distribution tools (Kind, K3d, VCluster) are used directly via their SDKs in provisioners, not wrapped here.
 
 #### `pkg/svc/`
 Core services: `provider/` (infrastructure backends), `provisioner/cluster/` (distribution provisioners), `provisioner/registry/` (mirror registries), `installer/` (CNI, CSI, LoadBalancer, cert-manager, etc.), `chat/` (AI chat), `detector/` (installed component detection), `diff/` (config diff and impact classification), `image/` (container image I/O), `mcp/` (MCP server), `registryresolver/` (OCI registry resolution), and `state/` (cluster state persistence).
