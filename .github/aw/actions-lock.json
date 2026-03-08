@@ -20,9 +20,9 @@
       "version": "v3.0.0-beta.2",
       "sha": "bf559f85448f9380bcfa2899dbdc01eb5b37be3a"
     },
-    "actions/download-artifact@v8.0.0": {
+    "actions/download-artifact@v8": {
       "repo": "actions/download-artifact",
-      "version": "v8.0.0",
+      "version": "v8",
       "sha": "70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3"
     },
     "actions/github-script@v8": {
@@ -40,9 +40,9 @@
       "version": "v6.3.0",
       "sha": "53b83947a5a98c8d113130e565377fae1a50d02f"
     },
-    "actions/upload-artifact@v7.0.0": {
+    "actions/upload-artifact@v7": {
       "repo": "actions/upload-artifact",
-      "version": "v7.0.0",
+      "version": "v7",
       "sha": "bbbca2ddaa5d8feaa63e36b76fdaad77386f024f"
     },
     "anchore/sbom-action@v0.23.0": {
@@ -50,35 +50,35 @@
       "version": "v0.23.0",
       "sha": "17ae1740179002c89186b61233e0f892c3118b11"
     },
-    "docker/build-push-action@v7.0.0": {
+    "docker/build-push-action@v7": {
       "repo": "docker/build-push-action",
-      "version": "v7.0.0",
+      "version": "v7",
       "sha": "d08e5c354a6adb9ed34480a06d141179aa583294"
     },
-    "docker/login-action@v4.0.0": {
+    "docker/login-action@v4": {
       "repo": "docker/login-action",
-      "version": "v4.0.0",
+      "version": "v4",
       "sha": "b45d80f862d83dbcd57f89517bcf500b2ab88fb2"
     },
-    "docker/metadata-action@v6.0.0": {
+    "docker/metadata-action@v6": {
       "repo": "docker/metadata-action",
-      "version": "v6.0.0",
+      "version": "v6",
       "sha": "030e881283bb7a6894de51c315a6bfe6a94e05cf"
     },
-    "docker/setup-buildx-action@v4.0.0": {
+    "docker/setup-buildx-action@v4": {
       "repo": "docker/setup-buildx-action",
-      "version": "v4.0.0",
+      "version": "v4",
       "sha": "4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd"
     },
-    "github/gh-aw/actions/setup@v0.54.0": {
+    "github/gh-aw/actions/setup@v0.55.0": {
       "repo": "github/gh-aw/actions/setup",
-      "version": "v0.54.0",
-      "sha": "76997754f38d02042a7762e991415fdacc2fa146"
+      "version": "v0.55.0",
+      "sha": "e211c855a20aa6cf9297b411466e1c382a8686db"
     },
-    "githubnext/gh-aw/actions/setup@v0.54.0": {
+    "githubnext/gh-aw/actions/setup@v0.55.0": {
       "repo": "githubnext/gh-aw/actions/setup",
-      "version": "v0.54.0",
-      "sha": "76997754f38d02042a7762e991415fdacc2fa146"
+      "version": "v0.55.0",
+      "sha": "e211c855a20aa6cf9297b411466e1c382a8686db"
     }
   }
 }
