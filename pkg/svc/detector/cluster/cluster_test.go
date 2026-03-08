@@ -419,7 +419,7 @@ func TestDetectProviderFromEndpoint(t *testing.T) {
 			if testCase.wantError {
 				require.Error(t, err)
 				if testCase.wantErrorIs != nil {
-					assert.ErrorIs(t, err, testCase.wantErrorIs)
+					require.ErrorIs(t, err, testCase.wantErrorIs)
 				}
 			} else {
 				require.NoError(t, err)
@@ -499,7 +499,7 @@ users:
 // TestResolveKubeconfigPath tests kubeconfig path resolution.
 func TestResolveKubeconfigPath(t *testing.T) {
 	t.Run("explicit_path_returned_as_is", func(t *testing.T) {
-		t.Parallel()
+		// Cannot use t.Parallel() with t.Setenv in sibling subtests
 
 		tmpDir := t.TempDir()
 		explicitPath := filepath.Join(tmpDir, "my-kubeconfig")
