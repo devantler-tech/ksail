@@ -88,13 +88,13 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
    # Load cached map from a previous run (if available)
    cat /tmp/gh-aw/cache-memory/page-ownership-map.md 2>/dev/null || echo "No cached map found"
 
-   # List all documentation files (excluding CLI flags detail pages)
-   find docs/src/content/docs -type f \( -name '*.md' -o -name '*.mdx' \) ! -path '*/cli-flags/*/*' | sort
+   # List all documentation files (excluding CLI flags per-command detail pages, but keeping index pages)
+   find docs/src/content/docs -type f \( -name '*.md' -o -name '*.mdx' \) ! \( -path '*/cli-flags/*/*' -a ! -name 'index.md' -a ! -name 'index.mdx' \) | sort
    ```
 
    - Read every listed file, plus `README.md`, `CONTRIBUTING.md`, `vsce/README.md`, and `.github/copilot-instructions.md`
-   - For CLI flags detail pages (`docs/src/content/docs/cli-flags/*/`), skim only the index and a few examples to understand the pattern
-   - For each page, determine: what topics it covers, what it should not cover, and where content boundaries lie
+   - CLI flags per-command detail pages under `docs/src/content/docs/cli-flags/*/` are excluded from this listing; consult them separately only if you need to understand overall CLI flag documentation patterns
+   - For each page you do read, determine: what topics it covers, what it should not cover, and where content boundaries lie
    - Build a page ownership map as a table with columns: `Page`, `Owns`, `Does NOT cover`
    - Save the map to cache memory for future runs:
 
@@ -139,7 +139,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
 
    Before writing or modifying any content, consult your **page ownership map** and documentation inventory.
 
-   - **Deduplication rule**: If the content already exists on another page, link to that page instead of repeating it. Use the format `[topic](./page.mdx)` or `[topic](./section/page.mdx)` for cross-references.
+   - **Deduplication rule**: If the content already exists on another page, link to that page instead of repeating it. Use site-root links like `[topic](/configuration/)` or `[topic](/cli-flags/cluster/cluster-init/)` for cross-references; do not use relative file paths with extensions (for example, `./page.mdx`).
    - **Single owner rule**: Every topic has exactly one canonical page. New content goes on the page that owns that topic per your map.
    - **Scope check**: If a page is growing to cover topics outside its defined scope, move that content to the correct page and replace it with a cross-reference link.
    - Use Markdown (.md) format wherever possible; fall back to MDX only when interactive components are indispensable
@@ -200,8 +200,8 @@ Load the cached page ownership map or build one by reading all documentation fil
 # Load cached map from a previous run (if available)
 cat /tmp/gh-aw/cache-memory/page-ownership-map.md 2>/dev/null || echo "No cached map found"
 
-# List all documentation files (excluding CLI flags detail pages)
-find docs/src/content/docs -type f \( -name '*.md' -o -name '*.mdx' \) ! -path '*/cli-flags/*/*' | sort
+# List all documentation files (excluding CLI flags per-command detail pages, but keeping index pages)
+find docs/src/content/docs -type f \( -name '*.md' -o -name '*.mdx' \) ! \( -path '*/cli-flags/*/*' -a ! -name 'index.md' -a ! -name 'index.mdx' \) | sort
 ```
 
 - If the cached map exists and is recent, use it — but still read all files to verify accuracy
