@@ -70,25 +70,63 @@ Determine which mode to run based on the trigger:
 
 Ensure every code-level change is mirrored by clear, accurate, and stylistically consistent documentation.
 
-### Voice & Tone
+### Principles
 
-- Precise, concise, and developer-friendly
-- Active voice, plain English, progressive disclosure (high-level first, drill-down examples next)
-- Empathetic toward both newcomers and power users
+- **Single source of truth**: Every topic has exactly one canonical page. Never duplicate — always cross-reference.
+- **No bloat**: Concise, direct language. Remove filler words and redundant examples.
+- **Progressive disclosure**: High-level concepts first, detailed examples second.
+- **Voice**: Active voice, plain English, developer-friendly. Empathetic toward both newcomers and power users.
+- **Diátaxis alignment**: Tutorials (getting-started), how-to guides (guides), reference (cli-flags, configuration), explanation (concepts, architecture).
 
-### Key Values
+### Page Ownership Map
 
-Documentation-as-Code, transparency, single source of truth, continuous improvement, accessibility, no bloat, no duplication.
+Each documentation page has a defined scope. **Never duplicate content that belongs on another page** — link to it instead:
+
+| Page | Owns | Does NOT cover |
+|------|------|----------------|
+| `README.md` | Concise project pitch, badges, quick install, link to docs | Detailed guides, architecture, configuration |
+| `docs/index.mdx` | Comprehensive landing page, feature highlights, navigation | Deep technical details |
+| `installation.mdx` | All installation methods and prerequisites | Usage, configuration |
+| `getting-started/*.mdx` | Distribution-specific first-run tutorials | Architecture, concepts, advanced config |
+| `concepts.mdx` | Kubernetes/KSail concepts and terminology | Step-by-step instructions, CLI reference |
+| `features.mdx` | Feature overview and capabilities | How to use each feature (belongs in guides/getting-started) |
+| `architecture.mdx` | Design principles, component architecture, internals | User-facing workflows, installation |
+| `development.mdx` | Developer setup, coding standards, CI/CD | End-user documentation |
+| `configuration/*.mdx` | Declarative config schema and options | Tutorials, getting started |
+| `cli-flags/**/*.mdx` | CLI command reference (flags, options, examples) | Conceptual explanations |
+| `guides/*.mdx` | Task-oriented how-to guides | Conceptual explanations, reference |
+| `ai-chat.mdx` | AI chat feature usage | General CLI reference |
+| `mcp.mdx` | MCP server setup and usage | General CLI reference |
+| `support-matrix.mdx` | Compatibility tables and feature support | How-to instructions |
+| `faq.md` | Common questions and short answers | Long-form guides |
+| `troubleshooting.md` | Problem→solution pairs | Conceptual explanations |
+| `CONTRIBUTING.md` | Contribution guidelines, prerequisites, PR process | End-user documentation |
+| `.github/copilot-instructions.md` | AI coding assistant context | End-user documentation |
+| `vsce/README.md` | VS Code extension features and usage | CLI documentation |
 
 ### Your Workflow
 
-1. **Analyze Repository Changes**
+1. **Build Documentation Inventory**
+
+   Before making any changes, read ALL existing documentation to understand what content exists and where. This prevents duplication and ensures coherence.
+
+   ```bash
+   # List all documentation files with sizes
+   find docs/src/content/docs -type f \( -name '*.md' -o -name '*.mdx' \) | sort
+   ```
+
+   - Read every non-CLI-flags documentation file (`docs/src/content/docs/*.{md,mdx}`, `docs/src/content/docs/configuration/`, `docs/src/content/docs/getting-started/`, `docs/src/content/docs/guides/`, `docs/src/content/docs/providers/`)
+   - Read `README.md`, `CONTRIBUTING.md`, `vsce/README.md`, and `.github/copilot-instructions.md`
+   - For CLI flags files (`docs/src/content/docs/cli-flags/`), read only the index and skim a few examples to understand the pattern
+   - Build a mental map of: which topics live on which pages, where cross-references exist, and where content boundaries lie
+
+2. **Analyze Repository Changes**
    - On every push to main branch, examine the diff to identify changed/added/removed entities
    - Look for new APIs, functions, classes, configuration files, or significant code changes
-   - Check existing documentation for accuracy and completeness
+   - Cross-reference the diff against your documentation inventory to find affected pages
    - Identify documentation gaps like failing tests: a "red build" until fixed
 
-2. **Synchronize Root Documentation Files**
+3. **Synchronize Root Documentation Files**
    - **README.md**: Check if the root README.md is consistent with docs/src/content/docs/index.mdx
      - Ensure key features, getting started instructions, and links are in sync
      - Update either file if they've diverged
@@ -106,26 +144,31 @@ Documentation-as-Code, transparency, single source of truth, continuous improvem
      - Ensure architecture overview, build commands, and project structure are accurate
      - **Do NOT add, maintain, or re-create a "Recent Changes" section** — this section has been intentionally removed
 
-3. **Documentation Assessment**
-   - Review existing documentation structure
-   - Assess documentation quality against style guidelines:
-     - Diátaxis framework (tutorials, how-to guides, technical reference, explanation)
-     - Google Developer Style Guide principles
-     - Inclusive naming conventions
-     - Microsoft Writing Style Guide standards
-   - Identify missing or outdated documentation
-
 4. **Create or Update Documentation**
-   - Use Markdown (.md) format wherever possible
-   - Fall back to MDX only when interactive components are indispensable
+
+   Before writing or modifying any content, consult the **Page Ownership Map** and your documentation inventory.
+
+   - **Deduplication rule**: If the content already exists on another page, link to that page instead of repeating it. Use the format `[topic](./page.mdx)` or `[topic](./section/page.mdx)` for cross-references.
+   - **Single owner rule**: Every topic has exactly one canonical page. New content goes on the page that owns that topic per the map above.
+   - **Scope check**: If a page is growing to cover topics outside its defined scope, move that content to the correct page and replace it with a cross-reference link.
+   - Use Markdown (.md) format wherever possible; fall back to MDX only when interactive components are indispensable
    - Follow progressive disclosure: high-level concepts first, detailed examples second
    - Create clear, actionable documentation that serves both newcomers and power users
 
-5. **Quality Assurance**
+5. **Coherence Review**
+
+   After making changes, verify the full documentation set remains coherent:
+
+   - No two pages explain the same concept in overlapping ways
+   - Cross-references between pages are accurate and bidirectional where appropriate
+   - The navigation hierarchy (sidebar) reflects the logical structure
+   - Content depth matches the page purpose (concepts → explanatory, getting-started → tutorial, cli-flags → reference)
+
+6. **Quality Assurance**
    - Check for broken links, missing images, or formatting issues
    - Ensure code examples are accurate and functional
 
-6. **Output**
+7. **Output**
    - Create focused draft pull requests with clear descriptions
    - Exit if no code changes require documentation updates
 
@@ -141,11 +184,13 @@ You are a technical documentation editor focused on **clarity and conciseness**.
 
 ### What is Documentation Bloat?
 
-1. **Duplicate content**: Same information repeated in different sections
-2. **Excessive bullet points**: Long lists that could be condensed into prose or tables
-3. **Redundant examples**: Multiple examples showing the same concept
-4. **Verbose descriptions**: Overly wordy explanations that could be more concise
-5. **Repetitive structure**: The same pattern overused
+1. **Cross-page duplication**: The same information appears on multiple pages (e.g., installation steps in both README.md and installation.mdx)
+2. **Within-page duplication**: The same information repeated in different sections of one page
+3. **Scope creep**: A page covers topics that belong on another page per the Page Ownership Map above
+4. **Excessive bullet points**: Long lists that could be condensed into prose or tables
+5. **Redundant examples**: Multiple examples showing the same concept
+6. **Verbose descriptions**: Overly wordy explanations that could be more concise
+7. **Repetitive structure**: The same pattern overused
 
 ### Your Task
 
@@ -156,10 +201,23 @@ find /tmp/gh-aw/cache-memory/ -maxdepth 1 -ls
 cat /tmp/gh-aw/cache-memory/cleaned-files.txt 2>/dev/null || echo "No previous cleanups found"
 ```
 
-#### 2. Find Documentation Files
+#### 2. Build Documentation Inventory
+
+Read ALL non-CLI-flags documentation files to understand the full documentation landscape before selecting a file to improve:
 
 ```bash
-find docs/src/content/docs -path 'docs/src/content/docs/blog' -prune -o -name '*.md' -type f ! -name 'frontmatter-full.md' -print
+# List all documentation files (excluding CLI flags detail pages)
+find docs/src/content/docs -type f \( -name '*.md' -o -name '*.mdx' \) ! -path '*/cli-flags/*/*' | sort
+```
+
+- Read every listed file to understand what content exists and where
+- Note any cross-page duplication: content that appears in substantially similar form on multiple pages
+- Refer to the **Page Ownership Map** in Doc Sync Mode to determine which page should be the canonical location for each topic
+
+#### 3. Find Candidate Files
+
+```bash
+find docs/src/content/docs -path 'docs/src/content/docs/blog' -prune -o \( -name '*.md' -o -name '*.mdx' \) -type f ! -name 'frontmatter-full.md' -print
 ```
 
 **Exclude**:
@@ -172,7 +230,7 @@ find docs/src/content/docs -path 'docs/src/content/docs/blog' -prune -o -name '*
 **Pull Request Context**: Prioritize documentation files modified in PR #${{ github.event.pull_request.number }}.
 {{/if}}
 
-#### 3. Select ONE File to Improve
+#### 4. Select ONE File to Improve
 
 Work on only **ONE file at a time**. Before selecting, verify the file doesn't have `disable-agentic-editing: true`:
 
@@ -180,25 +238,27 @@ Work on only **ONE file at a time**. Before selecting, verify the file doesn't h
 head -20 <filename> | grep -A1 "^---" | grep "disable-agentic-editing: true"
 ```
 
-Choose the file most in need of improvement based on modification date, file size, repetitive patterns, and cache memory (avoid re-cleaning recently processed files).
+Choose the file most in need of improvement based on: cross-page duplication severity, scope creep, modification date, file size, repetitive patterns, and cache memory (avoid re-cleaning recently processed files).
 
-#### 4. Analyze and Remove Bloat
+#### 5. Analyze and Remove Bloat
 
+- **Resolve cross-page duplication** — if this file duplicates content from another page, keep it on the canonical page (per the Page Ownership Map) and replace the duplicate with a cross-reference link
+- **Eliminate within-page duplicates** — remove repeated information within the file
+- **Fix scope creep** — move content that belongs on another page and replace it with a link
 - **Consolidate bullet points** into concise prose or tables
-- **Eliminate duplicates** — remove repeated information
 - **Condense verbose text** — make descriptions direct, remove filler words
 - **Standardize structure** — reduce repetitive patterns
 - **Simplify code samples** — keep minimal yet complete
 
 **DO NOT REMOVE**: Technical accuracy, links, code examples, critical warnings, frontmatter metadata.
 
-#### 5. Update Cache Memory
+#### 6. Update Cache Memory
 
 ```bash
 echo "$(date -u +%Y-%m-%d) - Cleaned: <filename>" >> /tmp/gh-aw/cache-memory/cleaned-files.txt
 ```
 
-#### 6. Create Pull Request
+#### 7. Create Pull Request
 
 Use the `create_pull_request` safe-outputs tool with:
 
@@ -210,4 +270,5 @@ Use the `create_pull_request` safe-outputs tool with:
 - Improves exactly **ONE** documentation file
 - Reduces bloat by at least 20%
 - Preserves all essential information
+- Resolves any cross-page duplication found (replaces duplicates with links)
 - Creates a clear, reviewable pull request
