@@ -166,7 +166,7 @@ var (
 )
 ````
 
-Test from `package provisioner_test`. Add `//nolint:gochecknoglobals` on exported vars if required by `golangci-lint`.
+Test these exports from the corresponding `<pkg>_test` package (for example, `package provisioner_test`). Add `//nolint:gochecknoglobals` on exported vars if required by `golangci-lint`.
 
 #### Mocking with Testify
 
