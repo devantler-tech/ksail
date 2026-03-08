@@ -27,7 +27,6 @@ on:
       - "Daily Docs"
       - "Daily Plan"
       - "Daily Workflow Maintenance"
-      - "Maintainer"
       - "PR Fix"
       - "Weekly Promote KSail"
       - "Weekly Research"

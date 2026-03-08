@@ -1,9 +1,10 @@
 ---
 description: |
-  This workflow maintains GitHub Actions workflows by updating dependencies and optimizing
-  CI/CD structure. Runs in two modes: first checks for dependency updates (action versions,
-  gh-aw sources) and creates a PR if changes found; if no updates available, proceeds to
-  structural optimization of both non-agentic and agentic workflows.
+  This workflow maintains GitHub Actions workflows by upgrading gh-aw, updating dependencies,
+  and optimizing CI/CD structure. Runs in two modes: first checks for gh-aw upgrades and
+  dependency updates (action versions, codemods, changelog review) and creates a PR if
+  changes found; if no updates available, proceeds to structural optimization of both
+  non-agentic and agentic workflows. Subsumes the former Maintainer workflow.
 
 on:
   bots:

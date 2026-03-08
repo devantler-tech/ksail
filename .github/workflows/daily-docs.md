@@ -123,6 +123,7 @@ Documentation-as-Code, transparency, single source of truth, continuous improvem
 
 5. **Quality Assurance**
    - Check for broken links, missing images, or formatting issues
+   - **Link verification**: Scan documentation files for HTTP(S) links and test them. For broken links, search for replacement URLs (try common variations like www, http vs https, archived pages). Fix broken links in-place. Use `cache-memory` to avoid re-checking links that were previously verified or confirmed unfixable.
    - Ensure code examples are accurate and functional
 
 6. **Output**

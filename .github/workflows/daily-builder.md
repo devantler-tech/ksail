@@ -78,6 +78,11 @@ To decide which phase to perform:
    - Look for duplicates or closely related issues that can be consolidated or linked
    - Identify stale issues that can be closed as out-of-date
 
+   **Discussion task mining:**
+   - Scan recent GitHub Discussions (last 7 days) in the `agentic-workflows` category for actionable improvement opportunities
+   - Look for concrete, well-scoped tasks buried in discussion reports, quality audits, or analysis summaries created by other agentic workflows (e.g., Weekly Research, Daily Code Quality, CI Doctor investigations)
+   - Extract high-value action items and include them in the prioritized plan alongside backlog issues
+
 2. Use this research to create a discussion with title "${{ github.workflow }} - Research, Roadmap and Plan"
 
    The discussion should organize items into these priority groups:
