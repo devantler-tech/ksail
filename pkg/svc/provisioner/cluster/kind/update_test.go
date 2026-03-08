@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/stretchr/testify/assert"
@@ -148,7 +149,10 @@ func TestProvisioner_DiffConfig_MirrorsDirChange(t *testing.T) {
 	assert.Equal(t, "vanilla.mirrorsDir", result.RecreateRequired[0].Field)
 	assert.Equal(t, "/etc/containerd/certs.d", result.RecreateRequired[0].OldValue)
 	assert.Equal(t, "/custom/mirrors", result.RecreateRequired[0].NewValue)
-	assert.Equal(t, clusterupdate.ChangeCategoryRecreateRequired, result.RecreateRequired[0].Category)
+	assert.Equal(t,
+		clusterupdate.ChangeCategoryRecreateRequired,
+		result.RecreateRequired[0].Category,
+	)
 }
 
 func TestProvisioner_DiffConfig_MirrorsDirFromEmpty(t *testing.T) {
@@ -261,17 +265,15 @@ func TestCreateProvisioner_WithConfig(t *testing.T) {
 		Name: "test-cluster",
 	}
 
-	// CreateProvisioner creates a real Docker client internally; in CI without Docker
-	// it should still return an error that is distinguishable from a nil provisioner.
-	provisioner, err := kindprovisioner.CreateProvisioner(cfg, "/tmp/test-kubeconfig")
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(
+		cfg,
+		"/tmp/test-kubeconfig",
+		infraProvider,
+	)
 
-	// Either the provisioner was created (Docker available) or an error was returned
-	// (Docker unavailable in CI). The important part is we don't panic.
-	if err != nil {
-		assert.Contains(t, err.Error(), "Docker")
-	} else {
-		assert.NotNil(t, provisioner)
-	}
+	require.NoError(t, err)
+	assert.NotNil(t, provisioner)
 }
 
 func TestCreateProvisioner_DefaultKubeconfig(t *testing.T) {
@@ -285,12 +287,10 @@ func TestCreateProvisioner_DefaultKubeconfig(t *testing.T) {
 		Name: "test-cluster",
 	}
 
-	// Empty kubeconfig should default to ~/.kube/config
-	provisioner, err := kindprovisioner.CreateProvisioner(cfg, "")
+	infraProvider := provider.NewMockProvider()
+	provisioner, err := kindprovisioner.CreateProvisionerWithProvider(cfg, "", infraProvider)
 
-	if err != nil {
-		assert.Contains(t, err.Error(), "Docker")
-	} else {
-		assert.NotNil(t, provisioner)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.Equal(t, "~/.kube/config", provisioner.KubeConfigForTest())
 }
