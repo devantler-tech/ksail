@@ -70,6 +70,19 @@ func TestDetectDistributionFromContext(t *testing.T) {
 			wantError:     true,
 			errorContains: "empty cluster name",
 		},
+		{
+			name:             "vcluster_cluster",
+			contextName:      "vcluster-docker_my-vcluster",
+			wantDistribution: v1alpha1.DistributionVCluster,
+			wantClusterName:  "my-vcluster",
+			wantError:        false,
+		},
+		{
+			name:          "empty_vcluster_name",
+			contextName:   "vcluster-docker_",
+			wantError:     true,
+			errorContains: "empty cluster name",
+		},
 	}
 
 	for _, testCase := range tests {
@@ -256,4 +269,285 @@ users:
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no current context")
+}
+
+// TestExtractHostFromURL tests host extraction from server URLs.
+func TestExtractHostFromURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		url       string
+		wantHost  string
+		wantError bool
+	}{
+		{
+			name:     "https_ip_with_port",
+			url:      "https://127.0.0.1:6443",
+			wantHost: "127.0.0.1",
+		},
+		{
+			name:     "https_hostname",
+			url:      "https://localhost:6443",
+			wantHost: "localhost",
+		},
+		{
+			name:     "https_public_ip",
+			url:      "https://1.2.3.4:6443",
+			wantHost: "1.2.3.4",
+		},
+		{
+			name:      "url_with_no_host",
+			url:       "https://",
+			wantError: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			host, err := cluster.ExtractHostFromURL(testCase.url)
+
+			if testCase.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.wantHost, host)
+			}
+		})
+	}
+}
+
+// TestIsLocalhost tests the localhost detection logic.
+func TestIsLocalhost(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		host string
+		want bool
+	}{
+		{name: "localhost_name", host: "localhost", want: true},
+		{name: "ipv4_loopback", host: "127.0.0.1", want: true},
+		{name: "ipv6_loopback_short", host: "::1", want: true},
+		{name: "ipv4_loopback_other", host: "127.0.0.2", want: true},
+		{name: "public_ip", host: "1.2.3.4", want: false},
+		{name: "private_ip", host: "192.168.1.1", want: false},
+		{name: "hostname", host: "my-cluster.example.com", want: false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := cluster.IsLocalhost(testCase.host)
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
+
+// TestDetectCloudProvider_NoCredentials tests cloud provider detection when no credentials are set.
+func TestDetectCloudProvider_NoCredentials(t *testing.T) {
+	// Cannot use t.Parallel() with t.Setenv
+	t.Setenv("HCLOUD_TOKEN", "")
+
+	_, err := cluster.DetectCloudProvider("1.2.3.4", "my-cluster")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, cluster.ErrNoCloudCredentials)
+}
+
+// TestDetectProviderFromEndpoint tests provider detection for all distribution+endpoint combinations.
+//
+//nolint:funlen // Test function with comprehensive test cases
+func TestDetectProviderFromEndpoint(t *testing.T) {
+	tests := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		serverURL    string
+		clusterName  string
+		wantProvider v1alpha1.Provider
+		wantError    bool
+		hcloudToken  string
+	}{
+		{
+			name:         "vanilla_always_docker",
+			distribution: v1alpha1.DistributionVanilla,
+			serverURL:    "https://1.2.3.4:6443",
+			wantProvider: v1alpha1.ProviderDocker,
+		},
+		{
+			name:         "k3s_always_docker",
+			distribution: v1alpha1.DistributionK3s,
+			serverURL:    "https://1.2.3.4:6443",
+			wantProvider: v1alpha1.ProviderDocker,
+		},
+		{
+			name:         "vcluster_always_docker",
+			distribution: v1alpha1.DistributionVCluster,
+			serverURL:    "https://1.2.3.4:6443",
+			wantProvider: v1alpha1.ProviderDocker,
+		},
+		{
+			name:         "talos_localhost_is_docker",
+			distribution: v1alpha1.DistributionTalos,
+			serverURL:    "https://127.0.0.1:6443",
+			wantProvider: v1alpha1.ProviderDocker,
+		},
+		{
+			name:         "talos_public_ip_no_credentials",
+			distribution: v1alpha1.DistributionTalos,
+			serverURL:    "https://1.2.3.4:6443",
+			clusterName:  "prod",
+			wantError:    true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Cannot use t.Parallel() with t.Setenv
+			if testCase.hcloudToken == "" {
+				t.Setenv("HCLOUD_TOKEN", "")
+			} else {
+				t.Setenv("HCLOUD_TOKEN", testCase.hcloudToken)
+			}
+
+			provider, err := cluster.DetectProviderFromEndpoint(
+				testCase.distribution,
+				testCase.serverURL,
+				testCase.clusterName,
+			)
+
+			if testCase.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.wantProvider, provider)
+			}
+		})
+	}
+}
+
+// TestDetectInfo_VCluster tests detection from a kubeconfig with a VCluster cluster.
+func TestDetectInfo_VCluster(t *testing.T) {
+	t.Parallel()
+
+	kubeconfigContent := `apiVersion: v1
+kind: Config
+current-context: vcluster-docker_my-vcluster
+clusters:
+- cluster:
+    server: https://127.0.0.1:8443
+  name: vcluster-docker_my-vcluster
+contexts:
+- context:
+    cluster: vcluster-docker_my-vcluster
+    user: vcluster-docker_my-vcluster
+  name: vcluster-docker_my-vcluster
+users:
+- name: vcluster-docker_my-vcluster
+  user:
+    client-certificate-data: ""
+`
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
+	require.NoError(t, err)
+
+	info, err := cluster.DetectInfo(kubeconfigPath, "")
+
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.DistributionVCluster, info.Distribution)
+	assert.Equal(t, v1alpha1.ProviderDocker, info.Provider)
+	assert.Equal(t, "my-vcluster", info.ClusterName)
+}
+
+// TestDetectInfo_TalosPublicIPNoCredentials tests error when Talos cluster has public IP but no credentials.
+func TestDetectInfo_TalosPublicIPNoCredentials(t *testing.T) {
+	// Cannot use t.Parallel() with t.Setenv
+	t.Setenv("HCLOUD_TOKEN", "")
+
+	kubeconfigContent := `apiVersion: v1
+kind: Config
+current-context: admin@prod-cluster
+clusters:
+- cluster:
+    server: https://1.2.3.4:6443
+  name: prod-cluster
+contexts:
+- context:
+    cluster: prod-cluster
+    user: admin@prod-cluster
+  name: admin@prod-cluster
+users:
+- name: admin@prod-cluster
+  user:
+    client-certificate-data: ""
+`
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
+	require.NoError(t, err)
+
+	_, err = cluster.DetectInfo(kubeconfigPath, "")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, cluster.ErrNoCloudCredentials)
+}
+
+// TestResolveKubeconfigPath tests kubeconfig path resolution.
+func TestResolveKubeconfigPath(t *testing.T) {
+	t.Run("explicit_path_returned_as_is", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		explicitPath := filepath.Join(tmpDir, "my-kubeconfig")
+		err := os.WriteFile(explicitPath, []byte(""), 0o600)
+		require.NoError(t, err)
+
+		resolved, err := cluster.ResolveKubeconfigPath(explicitPath)
+
+		require.NoError(t, err)
+		assert.Equal(t, explicitPath, resolved)
+	})
+
+	t.Run("kubeconfig_env_var_used_when_empty_path", func(t *testing.T) {
+		// Cannot use t.Parallel() with t.Setenv
+		tmpDir := t.TempDir()
+		envPath := filepath.Join(tmpDir, "env-kubeconfig")
+		err := os.WriteFile(envPath, []byte(""), 0o600)
+		require.NoError(t, err)
+
+		t.Setenv("KUBECONFIG", envPath)
+
+		resolved, err := cluster.ResolveKubeconfigPath("")
+
+		require.NoError(t, err)
+		assert.Equal(t, envPath, resolved)
+	})
+
+	t.Run("kubeconfig_env_multiple_paths_uses_first", func(t *testing.T) {
+		// Cannot use t.Parallel() with t.Setenv
+		tmpDir := t.TempDir()
+		firstPath := filepath.Join(tmpDir, "first-kubeconfig")
+		secondPath := filepath.Join(tmpDir, "second-kubeconfig")
+
+		t.Setenv("KUBECONFIG", firstPath+string(os.PathListSeparator)+secondPath)
+
+		resolved, err := cluster.ResolveKubeconfigPath("")
+
+		require.NoError(t, err)
+		assert.Equal(t, firstPath, resolved)
+	})
+
+	t.Run("defaults_to_recommended_home_file", func(t *testing.T) {
+		// Cannot use t.Parallel() with t.Setenv
+		t.Setenv("KUBECONFIG", "")
+
+		resolved, err := cluster.ResolveKubeconfigPath("")
+
+		require.NoError(t, err)
+		assert.NotEmpty(t, resolved)
+	})
 }
