@@ -7,22 +7,9 @@ This guide covers setting up your development environment, understanding the cod
 
 ## Prerequisites
 
-### Required Tools
+**Required:** [Go 1.26.0+](https://go.dev/dl/) (`go version` ≥ 1.26.0), [Docker](https://docs.docker.com/get-started/) (`docker ps` without errors), [Git](https://git-scm.com/).
 
-1. **Go 1.26.0+** — KSail is written in Go
-   - Install from [go.dev/dl](https://go.dev/dl/)
-   - Verify: `go version` should show 1.26.0 or higher
-
-2. **Docker** — Required for local cluster testing
-   - Install Docker Desktop or Docker Engine
-   - Verify: `docker ps` should run without errors
-
-3. **Git** — Version control
-   - Install from your package manager or [git-scm.com](https://git-scm.com/)
-
-### Optional Tools
-
-**Node.js 22** (docs), **golangci-lint v2.8.0** (linting via `go install`), and **VSCode** with the Go extension are useful but not required.
+**Optional:** Node.js 22 (docs), golangci-lint v2.8.0, VSCode with Go extension.
 
 ## Development Setup
 
@@ -36,55 +23,31 @@ cd ksail
 ### 2. Install Dependencies
 
 ````bash
-# Go dependencies (automatically downloaded on first build)
 go mod download
-
-# Development tools (optional)
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8.0
-
-# Documentation dependencies (if working on docs)
-cd docs/
-npm ci
-cd ..
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8.0  # optional
+cd docs/ && npm ci && cd ..  # docs only
 ````
 
 ### 3. Build KSail
 
 ````bash
-# Development build
-go build -o ksail
-
-# Verify the build
-./ksail --version
+go build -o ksail && ./ksail --version
 ````
 
 ### 4. Run Tests
 
 ````bash
-# Unit tests
-go test ./...
-
-# Specific package
-go test ./pkg/svc/provisioner/cluster/kind
-
-# With coverage
-go test -cover ./...
-
-# Benchmarks
-go test -bench=. -benchmem ./pkg/client/helm
+go test ./...                                       # all tests
+go test ./pkg/svc/provisioner/cluster/kind          # specific package
+go test -cover ./...                                # with coverage
+go test -bench=. -benchmem ./pkg/client/helm        # benchmarks
 ````
 
 ### 5. Run Linters
 
 ````bash
-# Run all linters
-golangci-lint run
-
-# Run specific linter
-golangci-lint run --enable-only=gofmt
-
-# Auto-fix issues (import order, etc.)
-golangci-lint run --fix
+golangci-lint run        # all linters
+golangci-lint run --fix  # auto-fix (import order, etc.)
 ````
 
 ## Project Structure
@@ -171,30 +134,19 @@ Return errors explicitly (no panic in library code). Wrap errors with `fmt.Error
 Use table-driven tests with `t.Parallel()`:
 
 ````go
-func TestProvisionerCreate(t *testing.T) {
+func TestMyFunction(t *testing.T) {
     t.Parallel()
-
     tests := []struct {
         name    string
         wantErr bool
     }{
-        {name: "successful creation", wantErr: false},
-        {name: "creation fails", wantErr: true},
+        {name: "valid", wantErr: false},
+        {name: "invalid", wantErr: true},
     }
-
-    for _, testCase := range tests {
-        t.Run(testCase.name, func(t *testing.T) {
+    for _, tc := range tests {
+        t.Run(tc.name, func(t *testing.T) {
             t.Parallel()
-            m := mocks.NewMockProvisioner(t)
-            if testCase.wantErr {
-                m.On("Create", mock.Anything).Return(errors.New("create failed"))
-            } else {
-                m.On("Create", mock.Anything).Return(nil)
-            }
-            err := m.Create(context.Background())
-            if (err != nil) != testCase.wantErr {
-                t.Errorf("Create() error = %v, wantErr %v", err, testCase.wantErr)
-            }
+            // test body
         })
     }
 }
@@ -202,7 +154,7 @@ func TestProvisionerCreate(t *testing.T) {
 
 #### Export Pattern for Testing Unexported Functions
 
-Use `export_test.go` to expose unexported symbols to `_test` packages without leaking them into production binaries. This file is compiled only during `go test` because its name ends with `_test.go`. It uses the regular package name (for example, `package provisioner`) so the exported aliases are built along with the package-under-test and can then be accessed from an external `package provisioner_test`:
+Use `export_test.go` to expose unexported symbols for testing without leaking into production binaries:
 
 ````go
 // pkg/svc/provisioner/export_test.go
@@ -214,7 +166,7 @@ var (
 )
 ````
 
-Test from `package provisioner_test` for clean black-box testing. Add a `//nolint:gochecknoglobals` annotation above these exported variables when required to satisfy `golangci-lint`, unless a path-specific exclusion for test exports is configured.
+Test from `package provisioner_test`. Add `//nolint:gochecknoglobals` on exported vars if required by `golangci-lint`.
 
 #### Mocking with Testify
 
@@ -265,43 +217,21 @@ For a new Provisioner, also add a getting-started guide in `docs/src/content/doc
 ### Updating Dependencies
 
 ````bash
-# Update all dependencies
-go get -u ./...
-
-# Update specific dependency
-go get -u github.com/some/package@latest
-
-# Tidy and verify
-go mod tidy
-go mod verify
-
-# Test after update
-go test ./...
+go get -u ./...                          # update all
+go get -u github.com/some/package@latest # update specific
+go mod tidy && go mod verify             # tidy and verify
+go test ./...                            # verify
 ````
 
 ### Working on Documentation
 
 ````bash
 cd docs/
-
-# Install dependencies
-npm ci
-
-# Start development server
-npm run dev
-# Visit http://localhost:4321
-
-# Build production site
-npm run build
-# Output: docs/dist/
-
-# Preview production build
-npm run preview
+npm ci           # install dependencies
+npm run dev      # serve at http://localhost:4321
+npm run build    # build to docs/dist/
+npm run preview  # preview production build
 ````
-
-#### Documentation Guidelines
-
-Use clear, concise language with code examples. Follow existing structure and GitHub Flavored Markdown.
 
 ## Debugging
 
@@ -353,19 +283,9 @@ These run on schedules and can be triggered manually via `gh aw` commands.
 
 Releases are automated via `.goreleaser.yaml` and `.github/workflows/release.yaml`:
 
-1. **Prepare a release PR targeting `main`:**
-   - Bump the version in code/docs as needed (e.g. `v5.x.x`)
-   - Update changelog / release notes in the repository
-   - Open a pull request against `main` and get it reviewed/merged
-
-2. **When the PR is merged and changes land on `main`, the release workflow runs:**
-   - Triggered by the push to `main` (or manually via `workflow_dispatch` by maintainers)
-   - Builds binaries for all platforms/architectures
-   - Generates checksums
-   - Creates a GitHub Release with artifacts
-   - Publishes the VSCode extension to the marketplace
-
-3. **Optional tagging (for maintainers):** Create and push an annotated tag (`git tag -a v5.x.x -m "v5.x.x" && git push origin v5.x.x`) and update release notes on GitHub if needed.
+1. **Prepare:** Bump the version, update changelog, and open a PR targeting `main`.
+2. **Merge triggers release:** Push to `main` builds binaries for all platforms, generates checksums, creates a GitHub Release, and publishes the VSCode extension to the marketplace. Can also be triggered via `workflow_dispatch`.
+3. **Optional tagging:** Create an annotated tag (`git tag -a v5.x.x -m "v5.x.x" && git push origin v5.x.x`) for explicit versioning.
 
 ## Getting Help
 
