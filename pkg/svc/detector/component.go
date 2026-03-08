@@ -128,7 +128,8 @@ func (d *ComponentDetector) detectCNI(ctx context.Context) (v1alpha1.CNI, error)
 
 // detectBundledCSI checks for a bundled local-path-provisioner deployment and
 // returns CSIDefault when present (distribution's default state, appropriate for
-// distributions where ProvidesCSIByDefault returns true) or CSIDisabled when absent.
+// distributions where ProvidesCSIByDefault returns true, such as K3s) or
+// CSIDisabled when absent.
 func (d *ComponentDetector) detectBundledCSI(
 	ctx context.Context,
 	deployment, namespace string,

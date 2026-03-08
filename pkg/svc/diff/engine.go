@@ -82,7 +82,7 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			reason:   "CSI can be switched via Helm install/uninstall",
 			getVal: func(spec *v1alpha1.ClusterSpec) string {
 				// Vanilla (Kind) and VCluster (Vind with k8s distro) always bundle
-				// local-path-provisioner regardless of KSail's --csi setting. The
+				// local-path-provisioner regardless of KSail's CSI configuration. The
 				// detector reports CSIEnabled when the deployment exists, but it
 				// cannot distinguish the distribution-bundled CSI from one installed
 				// by KSail. To prevent false-positive diffs (e.g. config says
