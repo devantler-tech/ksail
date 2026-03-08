@@ -4,7 +4,9 @@ description: |
   Analyzes failing CI checks, identifies root causes from error logs, implements fixes,
   runs Go linters and formatters, and pushes corrections to the PR branch. Provides
   detailed comments explaining changes made. Helps rapidly resolve PR blockers including
-  Copilot Review feedback and linting issues without manual intervention.
+  Copilot Review feedback and linting issues without manual intervention. Supports
+  optional instructions (e.g., /pr-fix Please add more tests) or defaults to fixing
+  CI failures when invoked without arguments.
 
 on:
   slash_command:

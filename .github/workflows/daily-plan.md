@@ -240,7 +240,7 @@ After triage and planning, analyze open issues for parent-child relationships to
 
 2. **Link sub-issues**: For each clear parent-child relationship found, use `link_sub_issue` to create the link. Only link when the relationship is clear and unambiguous — precision over recall.
 
-3. **Create parent issues for orphan clusters**: If 5 or more related issues lack a common parent, create a new parent issue with title prefix `[Parent]` that captures the common theme, then link the related issues as sub-issues.
+3. **Create parent issues for orphan clusters**: If 5 or more related issues lack a common parent, create a new parent issue with title prefix `[Parent]` that captures the common theme, then link the related issues as sub-issues. When multiple orphan clusters exist, prioritize the largest clusters first.
 
 **Constraints:**
 - Maximum 5 parent issues created per run
@@ -248,6 +248,7 @@ After triage and planning, analyze open issues for parent-child relationships to
 - Only link if you are absolutely confident of the relationship
 - Never re-process issues that already have a parent
 - Parent issue should always be broader in scope than its sub-issues
+- When the parent issue creation limit is reached, stop and defer remaining clusters to the next run
 
 ## Step 8 — Close Completed Parent Issues
 
