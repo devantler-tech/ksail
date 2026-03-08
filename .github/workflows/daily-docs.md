@@ -204,7 +204,7 @@ cat /tmp/gh-aw/cache-memory/page-ownership-map.md 2>/dev/null || echo "No cached
 find docs/src/content/docs -type f \( -name '*.md' -o -name '*.mdx' \) ! \( -path '*/cli-flags/*/*' -a ! -name 'index.md' -a ! -name 'index.mdx' \) | sort
 ```
 
-- If the cached map exists and is recent, use it — but still read all files to verify accuracy
+- If the cached map exists and is recent, use it — but still read all files in the listing to verify accuracy
 - If no cached map exists, read every listed file and build one (see Doc Sync Mode step 1 for format)
 - Note any cross-page duplication: content that appears in substantially similar form on multiple pages
 - Use the map to determine which page should be the canonical location for each topic
