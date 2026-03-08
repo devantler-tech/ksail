@@ -158,11 +158,13 @@ func (d *ComponentDetector) detectCSI(
 		return v1alpha1.CSIDisabled, nil
 	}
 
-	// Vanilla (Kind): bundles local-path-provisioner by default. Return
-	// CSIDefault when present (indicating the distribution's default state)
-	// and CSIDisabled when absent. The diff engine skips CSI comparison for
-	// Vanilla entirely since detection is unreliable.
-	if distribution == v1alpha1.DistributionVanilla {
+	// Vanilla (Kind) and VCluster (Vind with k8s distro): both bundle
+	// local-path-provisioner by default. Return CSIDefault when present
+	// (indicating the distribution's default state) and CSIDisabled when
+	// absent. The diff engine skips CSI comparison for these distributions
+	// entirely since detection cannot distinguish bundled from KSail-installed.
+	if distribution == v1alpha1.DistributionVanilla ||
+		distribution == v1alpha1.DistributionVCluster {
 		if d.deploymentExists(ctx, DeploymentLocalPathProvisioner, NamespaceLocalPathStorage) {
 			return v1alpha1.CSIDefault, nil
 		}
