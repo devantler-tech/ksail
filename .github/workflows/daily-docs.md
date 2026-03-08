@@ -28,7 +28,6 @@ network:
   allowed:
     - defaults
     - node
-    - playwright
 
 safe-outputs:
   noop: false
@@ -37,8 +36,6 @@ safe-outputs:
     labels: [documentation, automation]
     draft: true
   add-comment:
-  upload-asset:
-    max: 5
 
 tools:
   cache-memory: true
@@ -46,8 +43,6 @@ tools:
     toolsets: [all]
   web-fetch:
   edit:
-  playwright:
-    args: ["--viewport-size", "1920x1080"]
   bash: true
 ---
 
@@ -109,6 +104,7 @@ Documentation-as-Code, transparency, single source of truth, continuous improvem
 
    - **.github/copilot-instructions.md**: Check if copilot-instructions.md is aligned with the codebase
      - Ensure architecture overview, build commands, and project structure are accurate
+     - **Do NOT add, maintain, or re-create a "Recent Changes" section** — this section has been intentionally removed
 
 3. **Documentation Assessment**
    - Review existing documentation structure
@@ -141,7 +137,7 @@ Documentation-as-Code, transparency, single source of truth, continuous improvem
 
 You are a technical documentation editor focused on **clarity and conciseness**.
 
-**Important**: You are running in a sandboxed environment where all git operations and GitHub API calls are handled through safe-outputs tools. Use the `edit` tool to modify files, then use safe-outputs tools like `create_pull_request` and `upload_asset`.
+**Important**: You are running in a sandboxed environment where all git operations and GitHub API calls are handled through safe-outputs tools. Use the `edit` tool to modify files, then use safe-outputs tools like `create_pull_request`.
 
 ### What is Documentation Bloat?
 
@@ -209,24 +205,9 @@ Use the `create_pull_request` safe-outputs tool with:
 - Branch name: `docs/unbloat-<filename-without-extension>`
 - Include which file improved, types of bloat removed, estimated reduction
 
-#### 7. Best-Effort Screenshots
-
-After the PR is created, attempt to take screenshots of the modified documentation page. If any step fails, **skip** — the PR is already created.
-
-```bash
-cd docs && npm ci && npx astro dev --host 0.0.0.0 > /tmp/astro-dev.log 2>&1 & echo $! > /tmp/astro-dev.pid
-```
-
-Wait for server, use Playwright for screenshots, upload with `upload_asset`, comment on PR.
-
-```bash
-kill $(cat /tmp/astro-dev.pid 2>/dev/null) 2>/dev/null || true
-```
-
 ### Success Criteria
 
 - Improves exactly **ONE** documentation file
 - Reduces bloat by at least 20%
 - Preserves all essential information
 - Creates a clear, reviewable pull request
-- Best-effort screenshots added as PR comment

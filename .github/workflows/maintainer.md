@@ -66,9 +66,23 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
    - Review the output to see what changes were made
 
 3. **Attempt to recompile the workflows**:
-   - Clean up any existing `.lock.yml` files: `find workflows -name "*.lock.yml" -type f -delete`
-   - Run `gh aw compile --validate` on each workflow file in the `workflows/` directory
-   - Note any compilation errors or warnings
+   - First validate all workflow files, tracking failures:
+     ```bash
+     VALIDATION_FAILED=0
+     for file in .github/workflows/*.md; do
+       echo "Compiling $file..."
+       gh aw compile --validate "$file" 2>&1 || VALIDATION_FAILED=1
+     done
+     echo "Validation result: $VALIDATION_FAILED (0=passed, 1=failed)"
+     ```
+   - **Only if validation passes** (`VALIDATION_FAILED=0`), recompile in write mode to update `.lock.yml` files:
+     ```bash
+     for file in .github/workflows/*.md; do
+       echo "Compiling $file..."
+       gh aw compile "$file" 2>&1
+     done
+     ```
+   - Note any compilation errors or warnings — do not proceed to write mode if validation failed
 
 4. **Fix compilation errors if they occur**:
    - If there are compilation errors, analyze them carefully
@@ -85,16 +99,15 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
      git diff .github/workflows/*.md .github/workflows/shared/*.md 2>/dev/null | tee /tmp/workflow-md-diffs.patch || true
      ```
 
-6. **Reset workflow files**:
-   - **CRITICAL**: After capturing diffs, reset ALL file changes under `.github/workflows/`:
+6. **Reset workflow source files**:
+   - Reset only the `.md` source files. The compiled `.lock.yml` files should be kept and included in the PR, as they reflect the updated action versions.
 
      ```bash
-     git checkout -- .github/workflows/
+     git checkout -- .github/workflows/*.md
+     git checkout -- .github/workflows/shared/*.md 2>/dev/null || true
      ```
 
-   - The `GITHUB_TOKEN` does not have the `workflows` permission needed to push ANY file to `.github/workflows/` (this applies to `.lock.yml`, `.md`, and all other files in that directory). They will be recompiled/reapplied after the PR is merged.
-
-   - Verify only non-workflow files remain changed:
+   - Verify the remaining changes include `.lock.yml` files and any non-source files:
 
      ```bash
      git status
@@ -102,7 +115,7 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
 
 7. **Create appropriate outputs**:
    - **If all workflows compile successfully**: Create a pull request with the title "Upgrade workflows to latest gh-aw version" containing:
-     - Any updated files outside `.github/workflows/` (all workflow files must be reset)
+     - Any updated `.lock.yml` files and other files outside `.github/workflows/*.md`
      - A detailed description of what changed, referencing the gh-aw changelog
      - The saved diffs from `/tmp/workflow-md-diffs.patch` so they can be applied manually
      - A summary of any automatic fixes applied by codemods
@@ -119,5 +132,5 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
 - The gh-aw CLI extension has already been installed and is available for use
 - Always check the gh-aw changelog first to understand breaking changes
 - Test each fix by running `gh aw compile --validate` before moving to the next error
-- **Never include any `.github/workflows/` files in the PR** — the token lacks `workflows` permission. Always reset the entire directory before creating the PR, and include `.md` diffs in the PR description.
+- **Include `.lock.yml` files in the PR, but reset `.md` source files** — compiled `.lock.yml` files should be committed when they change (e.g., after action version updates or codemods). Reset only `.md` source files under `.github/workflows/` and include their diffs in the PR description so they can be applied manually.
 - Include context and reasoning in your PR or issue descriptions

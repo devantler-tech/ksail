@@ -9,3 +9,18 @@ export {
   PendingClusterItem
 } from "./clustersView.js";
 
+export {
+  ClusterStatusTreeDataProvider,
+  disposePodLogChannels,
+  GitOpsItem,
+  HealthItem,
+  InfoItem,
+  NamespaceItem,
+  PodItem,
+  SectionItem,
+  showPodLogs,
+  type StatusTreeItem,
+} from "./clusterStatusView.js";
+
+export { ClusterStatusBar } from "./statusBar.js";
+

@@ -84,7 +84,7 @@ Always start with Quick mode. Only proceed to Deep mode if Quick mode produces n
 
 ## Quick Mode: Dependency Updates
 
-Both tasks have already had their CLI commands run as pre-steps. Your job is to review the results, compile workflows, reset lock files, and create a single PR if any changes were detected.
+Both tasks have already had their CLI commands run as pre-steps. Your job is to review the results, compile workflows, regenerate `.lock.yml` files, reset only `.md` source files, and create a single PR if any changes were detected.
 
 ### Phase 1: Review Action Version Updates
 
@@ -130,11 +130,27 @@ Use the GitHub tools to fetch the CHANGELOG.md or release notes from the `github
 
 #### 2.3. Compile all workflows
 
-Run `gh aw compile --validate` on each workflow `.md` file:
+First validate all workflow `.md` files:
 
 ```bash
-for file in .github/workflows/*.md; do echo "Compiling $file..."; gh aw compile --validate "$file" 2>&1; done
+VALIDATION_FAILED=0
+for file in .github/workflows/*.md; do
+  echo "Compiling $file..."
+  gh aw compile --validate "$file" 2>&1 || VALIDATION_FAILED=1
+done
+echo "Validation result: $VALIDATION_FAILED (0=passed, 1=failed)"
 ```
+
+If validation passes (`VALIDATION_FAILED=0`), recompile in write mode to update `.lock.yml` files:
+
+```bash
+for file in .github/workflows/*.md; do
+  echo "Compiling $file..."
+  gh aw compile "$file" 2>&1
+done
+```
+
+**Do not run write-mode compilation if validation failed** — fix errors first (see Section 2.4).
 
 #### 2.4. Fix compilation errors
 
@@ -147,7 +163,7 @@ If there are compilation errors:
 
 If you **cannot fix** compilation errors, skip to "Fallback: Create Issue" below.
 
-### Phase 3: Reset Workflow Files and Create Output
+### Phase 3: Reset Workflow Source Files and Create Output
 
 #### 3.1. Save workflow source diffs for PR description
 
@@ -157,12 +173,13 @@ If you **cannot fix** compilation errors, skip to "Fallback: Create Issue" below
 git diff .github/workflows/*.md .github/workflows/shared/*.md 2>/dev/null | tee /tmp/workflow-md-diffs.patch || true
 ```
 
-#### 3.2. Reset all files under `.github/workflows/`
+#### 3.2. Reset only `.md` source files under `.github/workflows/`
 
-**CRITICAL**: After capturing diffs, reset ALL file changes under `.github/workflows/`. The `GITHUB_TOKEN` does not have the `workflows` permission, which is required to push ANY file (`.lock.yml`, `.md`, or otherwise) to `.github/workflows/`. This applies to both lock files and workflow source files.
+Reset only the `.md` workflow source files. The compiled `.lock.yml` files should be kept and included in the PR, as they reflect the updated action versions.
 
 ```bash
-git checkout -- .github/workflows/
+git checkout -- .github/workflows/*.md
+git checkout -- .github/workflows/shared/*.md 2>/dev/null || true
 ```
 
 #### 3.3. Check remaining changes
@@ -171,7 +188,7 @@ git checkout -- .github/workflows/
 git status
 ```
 
-Only non-workflow files should remain (e.g., `.github/aw/actions-lock.json`, `.github/agents/*.md`).
+Changes should include `.github/aw/actions-lock.json`, any updated `.lock.yml` files, and other non-source files (e.g., `.github/agents/*.md`).
 
 #### 3.4. Decide what to do
 
@@ -314,8 +331,8 @@ To decide which deep-mode phase to perform:
 
 ## Important Guidelines
 
-- **Never include any `.github/workflows/` files in PRs** — the `GITHUB_TOKEN` lacks `workflows` permission, so always reset ALL changes under `.github/workflows/` (both `.lock.yml` and `.md` files) before creating a PR. Include `.md` file diffs in the PR description instead.
+- **Include `.lock.yml` files in PRs, but reset `.md` source files** — `.lock.yml` compiled files should be committed when they change (e.g., after action version updates). Reset only `.md` source files under `.github/workflows/` and include their diffs in the PR description so they can be applied manually.
 - The gh-aw CLI extension has already been installed and is available
 - Always check the gh-aw changelog before making manual fixes
 - **You MUST always produce a safe output** — either `noop`, `create_pull_request`, or `create_issue`
-- If only `.github/workflows/` files changed (no files outside that directory), reset them and call `noop`
+- If only `.md` source files changed (no `.lock.yml` or other files outside `.github/workflows/*.md`), reset them and call `noop`

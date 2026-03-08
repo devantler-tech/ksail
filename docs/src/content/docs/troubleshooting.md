@@ -23,22 +23,24 @@ docker system prune -f
 
 If you see `Error: Port 5000 is already allocated`, use a different port (e.g., `--local-registry localhost:5050`) or kill the conflicting process:
 
+**macOS/Linux:**
+
 ```bash
-# macOS/Linux
 lsof -ti:5000 | xargs kill -9
 ```
 
+**Windows (PowerShell):**
+
 ```powershell
-# Windows (PowerShell)
 netstat -ano | findstr :5000
-taskkill /PID <process-id> /F
+taskkill /PID <id> /F
 ```
 
 ## GitOps Workflow Issues
 
 ### Registry Access and Image Push Failures
 
-KSail retries transient registry errors (HTTP 429, 5xx, timeouts) during `cluster create`/`update` automatically. If `ksail workload push` returns authentication errors, verify connectivity and credentials:
+KSail automatically retries transient registry errors (HTTP 429, 5xx, timeouts) during cluster create/update and `ksail workload push`. For authentication errors, verify connectivity and credentials:
 
 ```bash
 curl -I https://registry.example.com/v2/
@@ -50,17 +52,11 @@ ksail cluster init --local-registry '${REG_USER}:${REG_TOKEN}@registry.example.c
 - `registry access denied` — credentials lack write permission
 - `registry is unreachable` — DNS failure, firewall, or registry down
 
-KSail registry containers (local and mirror) have a Docker-native health check that polls `/v2/` every 10 seconds and marks the container `unhealthy` after 3 consecutive failures. Use this to diagnose registry mirror 500 errors:
+Registry containers have a built-in health check (polls `/v2/` every 10 s, marks `unhealthy` after 3 consecutive failures). To diagnose mirror errors:
 
 ```bash
-# Check health status — look for (healthy) or (unhealthy) in the STATUS column
 docker ps --filter label=io.ksail.registry --format 'table {{.Names}}\t{{.Status}}'
-
-# Inspect detailed health check history for a specific container (raw JSON)
 docker inspect --format '{{json .State.Health}}' <container-name>
-
-# Optional: pretty-print the JSON if jq is installed
-# docker inspect --format '{{json .State.Health}}' <container-name> | jq .
 ```
 
 ### Flux Operator Installation Timeout
@@ -74,12 +70,11 @@ kubectl get crd <crd-name> -o jsonpath='{.status.conditions[?(@.type=="Establish
 
 ### Flux/ArgoCD CrashLoopBackOff After Component Installation
 
-Infrastructure components (MetalLB, Kyverno, cert-manager) can temporarily disrupt API server connectivity while registering webhooks and CRDs, causing `CrashLoopBackOff` with `dial tcp 10.96.0.1:443: i/o timeout` errors. KSail waits for 3 consecutive successful health checks (2-minute timeout) before installing GitOps engines. If you see `API server not stable after infrastructure installation`:
+Infrastructure components (MetalLB, Kyverno, cert-manager) can temporarily disrupt API server connectivity while registering webhooks/CRDs, causing `CrashLoopBackOff` with `dial tcp 10.96.0.1:443: i/o timeout` errors. KSail waits for API server stability before installing GitOps engines. If you see `API server not stable after infrastructure installation`, check resources and optionally recreate with fewer components:
 
 ```bash
 ksail workload get nodes
 ksail workload get pods -A | grep -v Running
-# If needed, disable non-essential components in ksail.yaml and recreate:
 ksail cluster delete && ksail cluster create
 ```
 
@@ -98,13 +93,7 @@ ksail workload reconcile --timeout=5m
 
 ### Installation Failures and Timeouts
 
-KSail retries transient Helm registry errors automatically (5 attempts, exponential backoff). For persistent failures or timeouts, check resources with `docker stats` and `curl -I https://ghcr.io`, then recreate the cluster:
-
-```bash
-ksail cluster delete && ksail cluster create
-```
-
-On resource-constrained systems, increase Docker limits, skip optional components, or use K3s.
+KSail retries transient Helm registry errors automatically (5 attempts, exponential backoff). For persistent failures, check resources with `docker stats` and `curl -I https://ghcr.io`, then recreate: `ksail cluster delete && ksail cluster create`. On resource-constrained systems, increase Docker limits, skip optional components, or use K3s.
 
 ## Configuration Issues
 
@@ -120,23 +109,15 @@ Ensure environment variables are set before running KSail. Verify with `echo $MY
 
 ### LoadBalancer Service Stuck in Pending
 
-If `kubectl get svc` shows `<pending>` for `EXTERNAL-IP`, verify LoadBalancer is enabled in `ksail.yaml` and check the controller for your distribution:
+If `kubectl get svc` shows `<pending>` for `EXTERNAL-IP`, verify LoadBalancer is enabled in `ksail.yaml` (reinitialize with `--load-balancer Enabled` if not) and check the controller for your distribution:
 
 - **Vanilla**: `docker ps | grep ksail-cloud-provider-kind`
 - **Talos**: `kubectl get pods -n metallb-system`
 - **Hetzner**: `kubectl get pods -n kube-system | grep hcloud`
 
-If disabled, reinitialize with `--load-balancer Enabled`.
-
 ### Cannot Access LoadBalancer IP
 
-If connection fails despite an external IP, ensure the application listens on `0.0.0.0` (not `127.0.0.1`) and check:
-
-```bash
-kubectl logs -l app=my-app
-kubectl describe svc my-app
-kubectl exec -it <pod-name> -- netstat -tlnp
-```
+If connection fails despite an external IP, ensure the application listens on `0.0.0.0` (not `127.0.0.1`). Debug with `kubectl logs -l app=my-app`, `kubectl describe svc my-app`, and `kubectl exec -it <pod-name> -- netstat -tlnp` to check listening ports.
 
 ### MetalLB IP Pool Exhausted
 
@@ -152,28 +133,18 @@ If pods are stuck in `ContainerCreating` with CNI errors, check CNI pods with `k
 
 ### Transient Startup Failures
 
-KSail retries transient VCluster startup failures (up to 5 attempts, 5-second delay), cleaning up partial state and verifying Docker network removal between retries. Retried errors include `exit status 22`/EINVAL, D-Bus errors (recovered in-place), GHCR pull failures, and network transients (timeouts, resets, DNS). Log messages like `Retrying vCluster create (attempt 2/5)...` are expected — no action required.
+KSail automatically retries transient VCluster startup failures (up to 5 attempts, 5-second delay), including exit status 22/EINVAL, D-Bus errors, network transients, and GHCR pull failures. `Retrying vCluster create (attempt 2/5)...` messages are expected — no action required.
 
 If all retries fail, check Docker resource limits and D-Bus availability. See the [VCluster Getting Started guide](/getting-started/vcluster/#troubleshooting) for details.
 
 ### kubectl Commands Fail After VCluster Creation
 
-If `kubectl get nodes` returns connection errors immediately after VCluster creation, wait a few seconds — VCluster control planes take a moment to become fully ready. Verify the kubeconfig context:
-
-```bash
-kubectl config current-context
-ksail workload get nodes
-```
+Wait a few seconds if `kubectl get nodes` returns connection errors immediately after creation — VCluster control planes need time to start. Verify the active context with `kubectl config current-context` and `ksail workload get nodes`.
 
 ## Hetzner Cloud Issues
 
-### HCLOUD_TOKEN Not Working
-
-Verify your token has read/write permissions (Hetzner Cloud Console → Security → API Tokens). Test with `hcloud server list` if installed.
-
-### Talos ISO Not Found
-
-The default ISO ID may be outdated. Find the correct ID in [Hetzner Cloud Console](https://console.hetzner.com/) under Images → ISOs.
+- **HCLOUD_TOKEN not working**: Verify read/write permissions (Hetzner Cloud Console → Security → API Tokens). Test with `hcloud server list` if installed.
+- **Talos ISO not found**: The default ISO ID may be outdated. Find the correct ID in [Hetzner Cloud Console](https://console.hetzner.com/) under Images → ISOs.
 
 ## Getting More Help
 
