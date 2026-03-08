@@ -48,11 +48,11 @@ benchstat baseline.txt new.txt
 
 ### Edge Cases
 
-- **ComputeDiff_NilSpec**: Fast nil-spec path — provisioners that cannot introspect running state return nil; this path skips all comparisons. (~202 ns/op)
+- **ComputeDiff_NilSpec**: Fast nil-spec path — taken when either the old or new spec is `nil`; this path skips all comparisons. This is a defensive guard path; current provisioners return non-nil specs with defaults or detected values. (~202 ns/op)
 
 ## Baseline Results
 
-Approximate baseline on a typical CI runner (values vary by hardware):
+Approximate baseline on a typical CI runner — `ns/op` (time/op) varies by hardware and load, while `B/op` and `allocs/op` primarily vary with Go version, architecture, and code changes:
 
 | Benchmark                        | ns/op | B/op | allocs/op |
 |----------------------------------|------:|-----:|----------:|
@@ -66,6 +66,6 @@ Approximate baseline on a typical CI runner (values vary by hardware):
 
 ## Performance Notes
 
-- The nil-spec fast path is ~5× faster than the no-changes path — used by Kind and K3d provisioners that cannot introspect running state.
-- Each classified change allocates a `Change` struct; the allocation count scales linearly with the number of changed fields.
+- The nil-spec fast path is ~5× faster than the no-changes path — it is taken only when either the old or new spec is `nil` (e.g., defensive guard paths); current provisioners typically pass non-nil specs with defaults/detected values.
+- `Change` values are appended to a slice by value; allocations primarily come from slice growth and any string formatting/conversions rather than from per-change struct allocations.
 - The `strings.Builder` pre-allocation in the display pipeline (see `pkg/cli/cmd/cluster/BENCHMARKS.md`) is a separate concern from `ComputeDiff` itself.
