@@ -51,6 +51,7 @@ type BuildOptions struct {
 	// When provided with Password, enables basic authentication for the registry push.
 	Username string
 	// Password is the optional password for registry authentication.
+
 	Password string
 }
 
@@ -73,6 +74,7 @@ type ValidatedBuildOptions struct {
 	// Username is the optional username for registry authentication.
 	Username string
 	// Password is the optional password for registry authentication.
+
 	Password string
 }
 
@@ -101,6 +103,7 @@ type EmptyBuildOptions struct {
 	// Username is the optional username for registry authentication.
 	Username string
 	// Password is the optional password for registry authentication.
+
 	Password string
 }
 
@@ -121,5 +124,6 @@ type ValidatedEmptyBuildOptions struct {
 	// Username is the optional username for registry authentication.
 	Username string
 	// Password is the optional password for registry authentication.
+
 	Password string
 }

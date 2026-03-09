@@ -122,6 +122,22 @@ func TestGetInstallTimeoutDistributions(t *testing.T) {
 			t, v1alpha1.DistributionK3s, 0, installer.DefaultInstallTimeout,
 		)
 	})
+
+	t.Run("vcluster_default", func(t *testing.T) {
+		t.Parallel()
+
+		assertTimeoutEqualsWithDistribution(
+			t, v1alpha1.DistributionVCluster, 0, installer.VClusterInstallTimeout,
+		)
+	})
+
+	t.Run("vcluster_explicit_overrides_default", func(t *testing.T) {
+		t.Parallel()
+
+		assertTimeoutEqualsWithDistribution(
+			t, v1alpha1.DistributionVCluster, 15*time.Minute, 15*time.Minute,
+		)
+	})
 }
 
 func TestTimeoutConstants(t *testing.T) {
@@ -145,5 +161,15 @@ func TestTimeoutConstants(t *testing.T) {
 	t.Run("kyverno_install_timeout", func(t *testing.T) {
 		t.Parallel()
 		assert.Equal(t, 10*time.Minute, installer.KyvernoInstallTimeout)
+	})
+
+	t.Run("argocd_install_timeout", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, 20*time.Minute, installer.ArgoCDInstallTimeout)
+	})
+
+	t.Run("vcluster_install_timeout", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, 8*time.Minute, installer.VClusterInstallTimeout)
 	})
 }

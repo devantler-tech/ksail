@@ -20,41 +20,9 @@ VCluster creates lightweight, isolated virtual Kubernetes clusters that run as D
 
 ## When to Use VCluster
 
-VCluster excels in these scenarios:
+VCluster excels at **CI/CD pipelines** (ephemeral per-PR clusters, parallel test execution on shared runners), **local multi-environment development** (isolated environments per feature branch or team member), and **learning** (safe, disposable Kubernetes sandboxes).
 
-### ✅ Use VCluster For
-
-**CI/CD Pipelines**
-- Ephemeral test clusters per PR or test suite
-- Fast creation/deletion without infrastructure overhead
-- Complete isolation between test runs
-- Parallel test execution on shared runners
-
-**Development Workflows**
-- Quick feature branch testing
-- Local integration testing
-- Microservices development with isolated environments
-- Rapid cluster recreation during development
-
-**Multi-Tenancy**
-- Multiple isolated environments on one machine
-- Team collaboration without cluster conflicts
-- Demo environments for each customer or project
-- Sandbox environments for experimentation
-
-**Learning and Experimentation**
-- Safe environment for Kubernetes learning
-- Test manifests without affecting other projects
-- Experiment with cluster configurations
-- Quick reset to clean state
-
-### ❌ Consider Other Distributions For
-
-- **Production workloads** → Use Talos (security-focused) or K3s (resource-efficient)
-- **Bare metal or cloud deployment** → Use Talos with Hetzner provider
-- **Upstream Kubernetes testing** → Use Vanilla (Kind) for standard Kubernetes
-- **Low-resource devices** → Use K3s for minimal memory footprint
-- **Advanced networking features** → Use Vanilla or Talos with full CNI control
+Consider other distributions for production workloads (Talos), cloud deployment (Talos with Hetzner Cloud or Omni), standard upstream Kubernetes testing (Vanilla), low-resource devices (K3s), or advanced CNI control (Vanilla or Talos).
 
 ## Quick Start
 
@@ -185,91 +153,7 @@ See the [vCluster configuration documentation](https://www.vcluster.com/docs/vcl
 
 ## Common Use Cases
 
-### Use Case 1: CI/CD Test Clusters
-
-Create isolated clusters for each test run:
-
-````bash
-# In CI pipeline
-BRANCH=$(git rev-parse --short HEAD)
-ksail cluster init --name "test-${BRANCH}" --distribution VCluster
-ksail cluster create
-
-# Run tests
-kubectl apply -f test-manifests/
-pytest integration/
-
-# Cleanup
-ksail cluster delete
-````
-
-**Benefits:**
-- Each test run gets a fresh, isolated cluster
-- No cross-contamination between runs
-- Fast creation/deletion (seconds vs minutes)
-- Parallel test execution on same runner
-
-### Use Case 2: Multi-Environment Development
-
-Maintain separate environments on one machine:
-
-````bash
-# Create dev environment
-ksail cluster init --name dev --distribution VCluster
-ksail cluster create
-
-# Create staging environment
-ksail cluster init --name staging --distribution VCluster
-ksail cluster create
-
-# Create production-like environment
-ksail cluster init --name prod-sim --distribution VCluster
-ksail cluster create
-
-# Switch between environments
-kubectl config use-context dev
-kubectl config use-context staging
-kubectl config use-context prod-sim
-````
-
-### Use Case 3: Microservices Development
-
-Each team member can have isolated services:
-
-````bash
-# Developer 1
-ksail cluster init --name alice-services --distribution VCluster
-ksail cluster create
-kubectl apply -f alice-manifests/
-
-# Developer 2
-ksail cluster init --name bob-services --distribution VCluster
-ksail cluster create
-kubectl apply -f bob-manifests/
-
-# No conflicts - completely isolated!
-````
-
-### Use Case 4: Feature Branch Testing
-
-Test features in isolation before merging:
-
-````bash
-# Create cluster per feature branch
-git checkout feature/new-api
-ksail cluster init --name feature-new-api --distribution VCluster
-ksail cluster create
-kubectl apply -f manifests/
-
-# Test the feature
-curl http://localhost:8080/api/v2
-
-# When done, delete and switch branches
-ksail cluster delete
-git checkout feature/ui-updates
-ksail cluster init --name feature-ui --distribution VCluster
-ksail cluster create
-````
+For real-world VCluster workflow examples — CI/CD pipelines, multi-environment development, feature branch testing, and microservices isolation — see [Use Cases](/use-cases/).
 
 ## Architecture
 
@@ -306,124 +190,54 @@ ksail cluster create
 
 ### Components
 
-1. **Virtual Control Plane**: Runs in a Docker container with Kubernetes API server, scheduler, controller manager, and etcd
-2. **Networking**: Uses Docker networking for pod-to-pod communication
-3. **Storage**: Volumes are managed within the virtual cluster
-4. **Syncing**: Selected resources (pods, services, configmaps) are synced to host cluster if needed
+The VCluster control plane runs in a Docker container and includes a Kubernetes API server, scheduler, controller manager, and etcd. Pods are scheduled to worker node containers (optional) or directly within the control plane container. When VCluster is used in a host-cluster deployment mode (outside KSail's Docker/Vind setup), selected resources can be synced between the virtual cluster and its host cluster.
 
 ## Comparison with Other Distributions
 
-| Feature                  | VCluster | Vanilla (Kind) | K3s    | Talos  |
-| ------------------------ | -------- | -------------- | ------ | ------ |
-| **Startup Time**         | ~10s     | ~30s           | ~20s   | ~60s   |
-| **Resource Usage**       | Low      | Medium         | Low    | Medium |
-| **Multi-Tenancy**        | ✅       | ❌             | ❌     | ❌     |
-| **Production Ready**     | No       | No             | Yes    | Yes    |
-| **Security Isolation**   | High     | Medium         | Medium | High   |
-| **Worker Nodes**         | Optional | Required       | Req'd  | Req'd  |
-| **GitOps Support**       | ✅       | ✅             | ✅     | ✅     |
-| **Best For**             | CI/CD    | Testing        | Prod   | Prod   |
-| **Upstream Kubernetes**  | No (K3s) | Yes            | No     | Yes    |
+For a full comparison across all distributions and supported components, see the [Support Matrix](/support-matrix/).
 
 ## Troubleshooting
 
 ### Cluster Won't Start
 
-**Symptom:** `ksail cluster create` hangs or fails
+**Symptom:** `ksail cluster create` hangs or fails.
 
-**Automatic retry (create phase):** KSail automatically retries transient startup failures up to 5 times (with 5-second delays between attempts), cleaning up partial state and verifying Docker network removal between retries. D-Bus errors are handled via in-place recovery. If you see log messages like `Retrying vCluster create (attempt 2/5)...`, this is expected — KSail is recovering from a transient Docker error without any action needed from you.
+KSail automatically retries transient VCluster startup failures: up to 5 attempts (5-second delays) during create, and up to 3 attempts (3-minute timeout each) during the readiness check. Log messages like `Retrying vCluster create (attempt 2/5)...` are expected — wait for completion before investigating.
 
-**Automatic retry (connect phase):** After the cluster is created, KSail also retries the readiness check up to 3 times. Each attempt allows up to 3 minutes for the cluster to become ready, giving an effective timeout of ~9 minutes. If you see log messages like `Retrying vCluster connect (attempt 2/3)...`, this is expected behavior on slower machines or CI runners — KSail will keep waiting without any action needed from you.
+**Persistent failures — common causes:**
 
-**Common causes for persistent failures:**
-1. **Docker not running**
-   ````bash
-   docker ps  # Should list containers
-   ````
-   
-2. **Port conflicts**
-   ````bash
-   # Check if port 6443 is in use
-   lsof -i :6443
-   ````
-
-3. **Insufficient resources**
-   ````bash
-   # Ensure Docker has enough memory (2GB+ recommended)
-   docker info | grep -i memory
-   ````
-
-**Fix (if all retry attempts fail):**
 ````bash
-# Delete and recreate
-ksail cluster delete
-ksail cluster create
+docker ps          # Docker must be running
+lsof -i :6443      # Check for port 6443 conflicts
+docker info | grep -i memory  # Ensure 2GB+ RAM allocated to Docker
 ````
 
-### Transient Startup Failures on CI Runners
-
-**Symptom:** `ksail cluster create` fails with `exit status 22` (EINVAL) on CI runners.
-
-KSail automatically retries transient VCluster startup failures with up to 5 attempts and a 5-second delay between attempts, cleaning up partial state and verifying Docker network removal between retries. D-Bus errors are handled via in-place recovery. If the issue persists after automatic retries, check Docker resource limits and D-Bus availability on the runner.
+If all retries fail, run `ksail cluster delete && ksail cluster create`.
 
 ### kubectl Commands Fail
 
-**Symptom:** `kubectl get nodes` returns connection errors
+**Symptom:** `kubectl get nodes` returns connection errors.
 
-**Fix:**
 ````bash
-# Verify kubeconfig context
-kubectl config current-context
-
-# Should show your VCluster name
-# If not, switch contexts:
-kubectl config use-context dev-cluster
-
-# Or regenerate kubeconfig
-ksail cluster delete
-ksail cluster create
+kubectl config current-context    # Should show your VCluster name
+kubectl config use-context dev-cluster  # Switch if needed
 ````
+
+If the context is missing, delete and recreate the cluster.
 
 ### Pod Scheduling Issues
 
-**Symptom:** Pods remain in `Pending` state
+**Symptom:** Pods remain in `Pending` state.
 
-**Diagnosis:**
 ````bash
-kubectl describe pod <pod-name>
-# Look for scheduling errors
+kubectl describe pod <pod-name>  # Check scheduling errors
+kubectl top nodes                # Check resource availability
+kubectl get nodes                # All nodes should show Ready
 ````
-
-**Common fixes:**
-1. **Check resources**
-   ````bash
-   kubectl top nodes
-   ````
-
-2. **Verify node readiness**
-   ````bash
-   kubectl get nodes
-   # All nodes should show Ready
-   ````
 
 ### Slow Performance
 
-**Symptom:** Operations are slower than expected
-
-**Possible causes:**
-- Docker resource limits too low
-- Too many clusters running simultaneously
-- System under heavy load
-
-**Optimization:**
-````bash
-# Increase Docker resources in Docker Desktop settings
-# Recommended: 4GB RAM, 2 CPUs minimum
-
-# Delete unused clusters
-ksail cluster list
-ksail cluster delete unused-cluster
-````
+Increase Docker resources (4 GB RAM, 2 CPUs minimum) in Docker Desktop settings, and delete unused clusters with `ksail cluster list` / `ksail cluster delete`.
 
 ## Advanced Topics
 

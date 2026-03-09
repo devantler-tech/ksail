@@ -100,7 +100,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 | Distribution             | Recreate       | Recreate  | Recreate | Recreate        |
 | Provider                 | Recreate       | Recreate  | Recreate | Recreate        |
 | CNI                      | In-place       | In-place  | In-place | N/A             |
-| CSI                      | In-place       | In-place  | In-place | N/A             |
+| CSI                      | N/A⁵           | In-place  | In-place | N/A             |
 | Metrics Server           | In-place       | In-place  | In-place | N/A             |
 | Load Balancer            | In-place       | In-place  | N/A¹     | N/A             |
 | cert-manager             | In-place       | In-place  | In-place | In-place        |
@@ -124,6 +124,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 - Kind does not support any structural node changes after creation
 - VCluster (Vind) runs control-plane and optional worker nodes as Docker containers — CNI, CSI, and metrics-server are managed by the vCluster Helm chart and are N/A for update operations; LoadBalancer services are provided by the host cluster, and `spec.cluster.loadBalancer` is ignored for VCluster and will not trigger a cluster update
 - **¹ Load Balancer for Talos**: For Talos, the provider determines which LoadBalancer implementation is used (MetalLB on Docker, Hetzner Cloud Controller Manager on Hetzner). The `spec.cluster.loadBalancer` setting controls whether KSail installs LoadBalancer support. See [FAQ](/faq/#which-distributions-support-loadbalancer-services) for details.
+- **⁵ CSI for Vanilla (Kind)**: Kind bundles local-path-provisioner by default. KSail's detector reports it as `CSIEnabled` but cannot distinguish Kind's bundled CSI from a KSail-installed CSI driver, so CSI comparison is skipped entirely during `ksail cluster update`. To change CSI settings on a Vanilla cluster, recreate it with `ksail cluster delete && ksail cluster create`.
 
 ## Platform Requirements
 

@@ -491,7 +491,7 @@ func TestBuildRegistryInfosFromSpecs_WithCredentials(t *testing.T) {
 	t.Parallel()
 
 	specs := []registry.MirrorSpec{
-		{ //nolint:gosec // G101: test fixture with env var placeholders, not real credentials
+		{ //nolint:gosec // G101: test fixture, not real credentials
 			Host:     "ghcr.io",
 			Remote:   "https://ghcr.io",
 			Username: "${GITHUB_USER}",
