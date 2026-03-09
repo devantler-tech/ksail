@@ -23,8 +23,8 @@ https://githubnext.github.io/gh-aw/_llms-txt/agentic-workflows.txt
 # Intermittent Network Errors (codecov badge returns 502 occasionally)
 https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg
 
-# Intermittent Network Errors
-https://docs.astro.build/en/guides/integrations-guide/cloudflare/
+# Intermittent Network Errors (docs.astro.build returns network errors in CI; glob matches root and any subpaths)
+https://docs.astro.build/
 http://host.docker.internal:8765/
 http://localhost:8765/
 https://docs.tigera.io/calico/latest/about/
