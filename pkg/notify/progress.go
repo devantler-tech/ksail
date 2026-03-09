@@ -282,48 +282,29 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 
 	for _, task := range tasks {
 		group.Go(func() error {
-			// Print start message and record start time
+			pg.setTaskState(task.Name, taskRunning)
+
 			pg.mu.Lock()
-			pg.taskStatus[task.Name] = taskRunning
-			pg.taskStartTime[task.Name] = time.Now()
 			_, _ = fmt.Fprintf(pg.writer, "► %s %s\n", task.Name, pg.labels.Running)
 			pg.mu.Unlock()
 
 			taskErr := task.Fn(groupCtx)
 
-			pg.mu.Lock()
-
 			if taskErr != nil {
-				pg.taskStatus[task.Name] = taskFailed
+				pg.setTaskState(task.Name, taskFailed)
+
+				pg.mu.Lock()
 				_, _ = fcolor.New(fcolor.FgRed).Fprintf(pg.writer, "✗ %s failed\n", task.Name)
-			} else {
-				pg.taskStatus[task.Name] = taskComplete
+				pg.mu.Unlock()
 
-				if startTime, ok := pg.taskStartTime[task.Name]; ok {
-					pg.taskDuration[task.Name] = time.Since(startTime)
-				}
-
-				if pg.timer != nil {
-					if d, ok := pg.taskDuration[task.Name]; ok {
-						_, _ = fcolor.New(fcolor.FgGreen).
-							Fprintf(pg.writer, "✔ %s %s [%s]\n",
-								task.Name, pg.labels.Completed, d)
-					} else {
-						_, _ = fcolor.New(fcolor.FgGreen).
-							Fprintf(pg.writer, "✔ %s %s\n",
-								task.Name, pg.labels.Completed)
-					}
-				} else {
-					_, _ = fcolor.New(fcolor.FgGreen).
-						Fprintf(pg.writer, "✔ %s %s\n", task.Name, pg.labels.Completed)
-				}
-			}
-
-			pg.mu.Unlock()
-
-			if taskErr != nil {
 				return fmt.Errorf("%s: %w", task.Name, taskErr)
 			}
+
+			pg.setTaskState(task.Name, taskComplete)
+
+			pg.mu.Lock()
+			_, _ = fmt.Fprintln(pg.writer, pg.formatTaskLine(task.Name, taskComplete))
+			pg.mu.Unlock()
 
 			return nil
 		})
