@@ -25,6 +25,7 @@ https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg
 
 # Intermittent Network Errors
 https://docs.astro.build/en/guides/integrations-guide/cloudflare/
+https://docs.astro.build/en/reference/configuration-reference/
 http://host.docker.internal:8765/
 http://localhost:8765/
 https://docs.tigera.io/calico/latest/about/
