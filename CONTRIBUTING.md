@@ -263,6 +263,7 @@ KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.githu
 | `daily-code-quality`         | Daily (02:00 UTC)                           | Refactoring, performance optimization, and test coverage improvements     |
 | `daily-plan`                 | Daily (10:00 UTC)                           | Issue triage, backlog issue creation, and prioritization from the roadmap |
 | `daily-builder`              | Daily (14:00 UTC)                           | Backlog issue resolution and feature delivery from the project plan       |
+| `daily-skills`               | Daily                                       | Npx skills upgrade and maintenance                                        |
 | `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, and dependency upgrades             |
 | `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes and bloat reduction                  |
 | `weekly-research`            | Weekly                                      | Market research and actionable feature roadmap                            |
