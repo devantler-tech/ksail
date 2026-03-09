@@ -289,7 +289,7 @@ func (c *Client) performInstall(ctx context.Context, spec *ChartSpec) (*v1.Relea
 		return client.RunWithContext(ctx, chart, vals)
 	}
 
-	return executeAndExtractRelease(runFn, spec.Silent)
+	return executeAndExtractRelease(runFn)
 }
 
 func (c *Client) upgradeRelease(ctx context.Context, spec *ChartSpec) (*v1.Release, error) {
@@ -310,5 +310,5 @@ func (c *Client) upgradeRelease(ctx context.Context, spec *ChartSpec) (*v1.Relea
 		return client.RunWithContext(ctx, spec.ReleaseName, chart, vals)
 	}
 
-	return executeAndExtractRelease(runFn, spec.Silent)
+	return executeAndExtractRelease(runFn)
 }
