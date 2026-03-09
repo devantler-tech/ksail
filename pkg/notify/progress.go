@@ -97,6 +97,7 @@ type ProgressGroup struct {
 	labels ProgressLabels
 	writer io.Writer
 	timer  timer.Timer
+	clock  Clock
 	isTTY  bool // Whether output is a TTY (interactive terminal)
 
 	mu             sync.Mutex
@@ -132,6 +133,18 @@ func getSpinnerFrames() []string {
 	return []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 }
 
+// Clock provides the current time for per-task duration tracking.
+// This enables deterministic testing by injecting a fake clock.
+type Clock interface {
+	Now() time.Time
+	Since(t time.Time) time.Duration
+}
+
+type realClock struct{}
+
+func (realClock) Now() time.Time                  { return time.Now() }
+func (realClock) Since(t time.Time) time.Duration { return time.Since(t) }
+
 // ProgressOption is a functional option for configuring a ProgressGroup.
 type ProgressOption func(*ProgressGroup)
 
@@ -146,6 +159,14 @@ func WithLabels(labels ProgressLabels) ProgressOption {
 func WithTimer(tmr timer.Timer) ProgressOption {
 	return func(pg *ProgressGroup) {
 		pg.timer = tmr
+	}
+}
+
+// WithClock sets the clock used for per-task duration tracking.
+// If not set, the real system clock is used.
+func WithClock(c Clock) ProgressOption {
+	return func(pg *ProgressGroup) {
+		pg.clock = c
 	}
 }
 
@@ -178,6 +199,7 @@ func NewProgressGroup(
 		emoji:          emoji,
 		labels:         DefaultLabels(),
 		writer:         writer,
+		clock:          realClock{},
 		isTTY:          isTTY,
 		taskStatus:     make(map[string]taskState),
 		taskOrder:      make([]string, 0),
@@ -339,13 +361,13 @@ func (pg *ProgressGroup) setTaskState(name string, state taskState) {
 	// Track when tasks start running (for display order and timing)
 	if state == taskRunning && pg.taskStatus[name] == taskPending {
 		pg.taskStartOrder = append(pg.taskStartOrder, name)
-		pg.taskStartTime[name] = time.Now()
+		pg.taskStartTime[name] = pg.clock.Now()
 	}
 
 	// Record duration when task completes
 	if state == taskComplete {
 		if startTime, ok := pg.taskStartTime[name]; ok {
-			pg.taskDuration[name] = time.Since(startTime)
+			pg.taskDuration[name] = pg.clock.Since(startTime)
 		}
 	}
 

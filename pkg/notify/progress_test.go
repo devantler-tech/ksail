@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,6 +32,37 @@ var (
 	errTestInstallationFailed = errors.New("installation failed")
 	errTestTaskFailed         = errors.New("failed")
 )
+
+// fakeClock is a deterministic clock for testing per-task duration tracking.
+type fakeClock struct {
+	mu      sync.Mutex
+	current time.Time
+}
+
+func newFakeClock(start time.Time) *fakeClock {
+	return &fakeClock{current: start}
+}
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.current
+}
+
+func (c *fakeClock) Since(t time.Time) time.Duration {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.current.Sub(t)
+}
+
+func (c *fakeClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.current = c.current.Add(d)
+}
 
 func TestProgressGroup_EmptyTasks(t *testing.T) {
 	t.Parallel()
@@ -373,6 +405,7 @@ func TestProgressGroup_WithTimer_PerTaskDuration(t *testing.T) {
 	var buf bytes.Buffer
 
 	tmr := &fixedTimer{total: 3 * time.Second, stage: 500 * time.Millisecond}
+	clk := newFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 
 	progressGroup := notify.NewProgressGroup(
 		"Installing",
@@ -380,13 +413,14 @@ func TestProgressGroup_WithTimer_PerTaskDuration(t *testing.T) {
 		&buf,
 		notify.WithLabels(notify.InstallingLabels()),
 		notify.WithTimer(tmr),
+		notify.WithClock(clk),
 	)
 
 	tasks := []notify.ProgressTask{
 		{
 			Name: "fast-component",
 			Fn: func(_ context.Context) error {
-				time.Sleep(10 * time.Millisecond)
+				clk.Advance(2 * time.Second)
 
 				return nil
 			},
@@ -394,7 +428,7 @@ func TestProgressGroup_WithTimer_PerTaskDuration(t *testing.T) {
 		{
 			Name: "slow-component",
 			Fn: func(_ context.Context) error {
-				time.Sleep(20 * time.Millisecond)
+				clk.Advance(5 * time.Second)
 
 				return nil
 			},
@@ -409,11 +443,11 @@ func TestProgressGroup_WithTimer_PerTaskDuration(t *testing.T) {
 	output := buf.String()
 
 	// Per-task durations should be shown when timer is set
-	if !strings.Contains(output, "fast-component installed [") {
+	if !strings.Contains(output, "fast-component installed [2s]") {
 		t.Errorf("expected per-task duration for fast-component, got: %q", output)
 	}
 
-	if !strings.Contains(output, "slow-component installed [") {
+	if !strings.Contains(output, "slow-component installed [5s]") {
 		t.Errorf("expected per-task duration for slow-component, got: %q", output)
 	}
 
@@ -428,18 +462,21 @@ func TestProgressGroup_WithoutTimer_NoDuration(t *testing.T) {
 
 	var buf bytes.Buffer
 
+	clk := newFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+
 	progressGroup := notify.NewProgressGroup(
 		"Installing",
 		"📦",
 		&buf,
 		notify.WithLabels(notify.InstallingLabels()),
+		notify.WithClock(clk),
 	)
 
 	tasks := []notify.ProgressTask{
 		{
 			Name: "component",
 			Fn: func(_ context.Context) error {
-				time.Sleep(10 * time.Millisecond)
+				clk.Advance(time.Second)
 
 				return nil
 			},

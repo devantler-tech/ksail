@@ -48,13 +48,15 @@ grep -E '✔.*installed \[' install-baseline.log
 
 ## Distribution × Component Matrix
 
-Install durations vary by distribution and provider. The following matrix documents which components are installed for each distribution:
+Install durations vary by distribution and provider. The following matrix documents which components KSail installs as separate Helm charts when explicitly enabled in `ksail.yaml`. Components marked `—` are either bundled by the distribution (e.g., K3s bundles metrics-server and local-path CSI), managed by the host cluster (VCluster delegates CNI/networking to the host), or not applicable for that distribution.
+
+> **Note:** This table reflects explicit `ksail.yaml` configuration with all optional components enabled. Default configurations may install fewer components depending on the distribution's built-in capabilities.
 
 | Component      | Vanilla (Kind) | K3s (K3d) | Talos (Docker) | VCluster (Vind) |
 |----------------|:--------------:|:---------:|:--------------:|:---------------:|
 | CNI (Cilium)   |       ✔        |     ✔     |       ✔        |        —        |
 | CNI (Calico)   |       ✔        |     ✔     |       ✔        |        —        |
-| CSI            |       ✔        |     —     |       ✔        |        ✔        |
+| CSI            |       ✔        |     —     |       ✔        |        —        |
 | metrics-server |       ✔        |     —     |       ✔        |        ✔        |
 | load-balancer  |       —        |     —     |       ✔        |        —        |
 | cert-manager   |       ✔        |     ✔     |       ✔        |        ✔        |
@@ -62,7 +64,8 @@ Install durations vary by distribution and provider. The following matrix docume
 | Flux           |       ✔        |     ✔     |       ✔        |        ✔        |
 | ArgoCD         |       ✔        |     ✔     |       ✔        |        ✔        |
 
-Cells marked `—` indicate the distribution provides the component by default or does not require it.
+- **K3s (K3d)**: Bundles metrics-server and local-path-provisioner CSI by default; KSail does not install these separately.
+- **VCluster (Vind)**: CNI and networking are managed by the host cluster; CSI is managed by the vCluster chart. KSail installs metrics-server with `--kubelet-insecure-tls` for VCluster compatibility.
 
 ## Benchmark Format
 
