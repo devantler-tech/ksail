@@ -2,6 +2,7 @@ package toolgen
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -334,6 +335,8 @@ func addPositionalArgsProperty(properties map[string]any, subcommands map[string
 	if len(acceptingSubcommands) == 0 {
 		return
 	}
+
+	slices.Sort(acceptingSubcommands)
 
 	description := "Positional arguments for the command"
 	if len(acceptingSubcommands) < len(subcommands) {
