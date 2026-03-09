@@ -263,7 +263,7 @@ VSCode users can set breakpoints and press F5 with a `.vscode/launch.json` confi
 KSail uses several CI workflows:
 
 - **`ci.yaml`** — Runs on every PR and push to main; builds KSail, runs unit and system tests, uploads coverage to Codecov
-- **`daily-skills.yaml`** — Upgrades npx skills daily and opens a PR when updates are available
+- **`update-skills.yaml`** — Upgrades npx skills daily and opens a PR when updates are available
 - **`test-pages.yaml`** — Validates documentation builds on docs changes
 - **`publish-pages.yaml`** — Deploys documentation to GitHub Pages on main branch pushes
 - **`release.yaml`** — Builds release binaries and publishes to GitHub Releases; triggered by push to `main` or `workflow_dispatch`

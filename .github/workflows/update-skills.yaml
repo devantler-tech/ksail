@@ -1,4 +1,4 @@
-name: Daily Skills
+name: Update Skills
 on:
   workflow_dispatch:
   schedule:
