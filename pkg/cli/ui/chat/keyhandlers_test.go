@@ -442,8 +442,8 @@ func TestExitConfirmModal_ShowsPendingCount(t *testing.T) {
 		t.Fatal("expected *chat.Model type assertion to succeed")
 	}
 
-	chat.ExportSetConfirmExitFlag(chatModel, true)
-	chat.ExportSetIsStreaming(chatModel, false)
+	chat.ExportSetConfirmExit(chatModel, true)
+	chat.ExportSetStreaming(chatModel, false)
 
 	output := chatModel.View()
 

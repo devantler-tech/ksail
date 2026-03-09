@@ -220,11 +220,6 @@ var ExportNewModelUnavailableClearMsg = func() tea.Msg {
 	return modelUnavailableClearMsg{}
 }
 
-// ExportSetIsStreaming sets Model.isStreaming for testing.
-var ExportSetIsStreaming = func(m *Model, streaming bool) {
-	m.isStreaming = streaming
-}
-
 // ExportSetHistory sets Model.history for testing.
 var ExportSetHistory = func(m *Model, history []string) {
 	m.history = history
@@ -255,6 +250,45 @@ var ExportNewAssistantMessageWithRole = func(content string) MessageForTest {
 var ExportNewToolExecution = func(name string, status int, expanded bool) *ToolExecutionForTest {
 	return &toolExecution{name: name, status: toolStatus(status), expanded: expanded}
 }
+
+// ExportNewToolExecutionFull creates a tool execution with output and command for testing.
+var ExportNewToolExecutionFull = func(
+	name string,
+	status int,
+	expanded bool,
+	command string,
+	output string,
+) *ToolExecutionForTest {
+	return &toolExecution{
+		name:     name,
+		status:   toolStatus(status),
+		expanded: expanded,
+		command:  command,
+		output:   output,
+	}
+}
+
+// ExportNewToolExecutionWithPosition creates a tool execution with text position for testing.
+var ExportNewToolExecutionWithPosition = func(
+	name string,
+	status int,
+	expanded bool,
+	command string,
+	output string,
+	textPosition int,
+) *ToolExecutionForTest {
+	return &toolExecution{
+		name:         name,
+		status:       toolStatus(status),
+		expanded:     expanded,
+		command:      command,
+		output:       output,
+		textPosition: textPosition,
+	}
+}
+
+// ToolStatusFailed exposes the toolFailed constant for testing.
+const ToolStatusFailed = int(toolFailed)
 
 // ToolExecutionForTest is an exported alias for toolExecution, available only in test builds.
 type ToolExecutionForTest = toolExecution
@@ -309,11 +343,6 @@ var ExportFindCurrentReasoningIndex = func(m *Model) int {
 // ExportIsCurrentReasoningEffort exposes isCurrentReasoningEffort for testing.
 var ExportIsCurrentReasoningEffort = func(m *Model, level string) bool {
 	return m.isCurrentReasoningEffort(level)
-}
-
-// ExportSetConfirmExitFlag sets Model.confirmExit for testing.
-var ExportSetConfirmExitFlag = func(m *Model, confirm bool) {
-	m.confirmExit = confirm
 }
 
 // ExportGetConfirmExit returns Model.confirmExit for testing.
@@ -433,3 +462,40 @@ var ExportSetAvailableSessions = func(m *Model, sessions []SessionMetadata) {
 var ExportSetJustCompleted = func(m *Model, completed bool) {
 	m.justCompleted = completed
 }
+
+// ExportNewAssistantMessageWithTools creates an assistant message with tools for testing.
+var ExportNewAssistantMessageWithTools = func(
+	content string,
+	tools []*toolExecution,
+) MessageForTest {
+	return message{
+		role:    roleAssistant,
+		content: content,
+		tools:   tools,
+	}
+}
+
+// ExportNewStreamingAssistantMessage creates a streaming assistant message for testing.
+var ExportNewStreamingAssistantMessage = func(content string) MessageForTest {
+	return message{
+		role:        roleAssistant,
+		content:     content,
+		isStreaming:  true,
+	}
+}
+
+// ExportNewToolOutputMessage creates a legacy tool-output message for testing.
+var ExportNewToolOutputMessage = func(content string) MessageForTest {
+	return message{
+		role:    "tool-output",
+		content: content,
+	}
+}
+
+// ExportCommitToolsToLastAssistantMessage exposes commitToolsToLastAssistantMessage for testing.
+var ExportCommitToolsToLastAssistantMessage = func(m *Model) {
+	m.commitToolsToLastAssistantMessage()
+}
+
+// ExportQuotaSnapshot is an exported alias for quotaSnapshot for testing.
+type ExportQuotaSnapshot = quotaSnapshot
