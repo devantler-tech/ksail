@@ -567,6 +567,60 @@ func TestEngine_HetznerOptionsChange_SkippedForDocker(t *testing.T) {
 	}
 }
 
+func TestEngine_HetznerOptionsChange_EmptyNewValueUsesDefault(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(spec *v1alpha1.ClusterSpec)
+		field  string
+	}{
+		{
+			name:   "empty networkCidr treated as default",
+			mutate: func(s *v1alpha1.ClusterSpec) { s.Hetzner.NetworkCIDR = "" },
+			field:  "cluster.hetzner.networkCidr",
+		},
+		{
+			name:   "empty controlPlaneServerType treated as default",
+			mutate: func(s *v1alpha1.ClusterSpec) { s.Hetzner.ControlPlaneServerType = "" },
+			field:  "cluster.hetzner.controlPlaneServerType",
+		},
+		{
+			name:   "empty workerServerType treated as default",
+			mutate: func(s *v1alpha1.ClusterSpec) { s.Hetzner.WorkerServerType = "" },
+			field:  "cluster.hetzner.workerServerType",
+		},
+		{
+			name:   "empty location treated as default",
+			mutate: func(s *v1alpha1.ClusterSpec) { s.Hetzner.Location = "" },
+			field:  "cluster.hetzner.location",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			old := newBaseSpec()
+			newer := clone(old)
+			testCase.mutate(newer)
+
+			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+			result := engine.ComputeDiff(old, newer)
+
+			for _, change := range result.AllChanges() {
+				if change.Field == testCase.field {
+					t.Fatalf(
+						"empty new value for %s should be treated as default (no change), "+
+							"but got diff: %q -> %q",
+						testCase.field, change.OldValue, change.NewValue,
+					)
+				}
+			}
+		})
+	}
+}
+
 func TestEngine_MultipleChanges(t *testing.T) {
 	t.Parallel()
 

@@ -48,6 +48,10 @@ type fieldRule struct {
 	reason   string
 	// getVal extracts the string representation of this field from a ClusterSpec.
 	getVal func(*v1alpha1.ClusterSpec) string
+	// defaultVal, when non-empty, is substituted for any zero/empty value returned
+	// by getVal. This prevents false-positive diffs when a config field is unset
+	// (zero value) but the cluster state contains the applied default.
+	defaultVal string
 }
 
 // scalarFieldRules returns the table of simple scalar field diff rules.
@@ -149,6 +153,16 @@ func (e *Engine) applyFieldRules(
 	for _, rule := range rules {
 		oldVal := rule.getVal(oldSpec)
 		newVal := rule.getVal(newSpec)
+
+		if rule.defaultVal != "" {
+			if oldVal == "" {
+				oldVal = rule.defaultVal
+			}
+
+			if newVal == "" {
+				newVal = rule.defaultVal
+			}
+		}
 
 		if oldVal == newVal {
 			continue
@@ -296,26 +310,36 @@ func (e *Engine) checkHetznerOptionsChange(
 	e.applyFieldRules(oldSpec, newSpec, result, hetznerFieldRules())
 }
 
+// Hetzner default values — kept in sync with OptionsHetzner struct tags.
+const (
+	defaultHetznerServerType  = "cx23"
+	defaultHetznerLocation    = "fsn1"
+	defaultHetznerNetworkCIDR = "10.0.0.0/16"
+)
+
 // hetznerFieldRules returns the Hetzner-specific scalar field diff rules.
 func hetznerFieldRules() []fieldRule {
 	return []fieldRule{
 		{
-			field:    "cluster.hetzner.controlPlaneServerType",
-			category: clusterupdate.ChangeCategoryRecreateRequired,
-			reason:   "existing control-plane servers cannot change VM type",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.ControlPlaneServerType },
+			field:      "cluster.hetzner.controlPlaneServerType",
+			category:   clusterupdate.ChangeCategoryRecreateRequired,
+			reason:     "existing control-plane servers cannot change VM type",
+			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.ControlPlaneServerType },
+			defaultVal: defaultHetznerServerType,
 		},
 		{
-			field:    "cluster.hetzner.workerServerType",
-			category: clusterupdate.ChangeCategoryInPlace,
-			reason:   "new worker servers will use the new type; existing workers unchanged",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.WorkerServerType },
+			field:      "cluster.hetzner.workerServerType",
+			category:   clusterupdate.ChangeCategoryInPlace,
+			reason:     "new worker servers will use the new type; existing workers unchanged",
+			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.WorkerServerType },
+			defaultVal: defaultHetznerServerType,
 		},
 		{
-			field:    "cluster.hetzner.location",
-			category: clusterupdate.ChangeCategoryRecreateRequired,
-			reason:   "datacenter location cannot be changed for existing servers",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.Location },
+			field:      "cluster.hetzner.location",
+			category:   clusterupdate.ChangeCategoryRecreateRequired,
+			reason:     "datacenter location cannot be changed for existing servers",
+			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.Location },
+			defaultVal: defaultHetznerLocation,
 		},
 		{
 			field:    "cluster.hetzner.networkName",
@@ -324,10 +348,11 @@ func hetznerFieldRules() []fieldRule {
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkName },
 		},
 		{
-			field:    "cluster.hetzner.networkCidr",
-			category: clusterupdate.ChangeCategoryRecreateRequired,
-			reason:   "network CIDR change requires PKI regeneration",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkCIDR },
+			field:      "cluster.hetzner.networkCidr",
+			category:   clusterupdate.ChangeCategoryRecreateRequired,
+			reason:     "network CIDR change requires PKI regeneration",
+			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkCIDR },
+			defaultVal: defaultHetznerNetworkCIDR,
 		},
 		{
 			field:    "cluster.hetzner.sshKeyName",
