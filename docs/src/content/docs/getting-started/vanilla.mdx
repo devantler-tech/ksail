@@ -127,7 +127,7 @@ KSail injects containerd registry configuration into all Kind nodes.
 ````bash
 docker ps      # Verify Docker is running
 df -h          # Check disk space
-docker system prune
+docker system prune -f
 ksail cluster create
 ````
 
@@ -166,6 +166,7 @@ kind delete cluster --name <conflicting-cluster>
 
 ````bash
 ksail cluster init --name my-cluster --distribution Vanilla --control-planes 1 --workers 0
+# WARNING: removes ALL unused images and volumes — can affect other Docker projects
 docker system prune -a --volumes
 ````
 
@@ -236,9 +237,10 @@ ksail cluster init --name my-cluster --distribution Vanilla --csi Enabled
 
 ### Integration with Native Kind
 
-KSail generates standard `kind.yaml` files—use the Kind CLI directly if needed. No vendor lock-in: configurations are portable and KSail can interact with any Kind cluster accessible via your kubeconfig.
+KSail generates a standard `kind.yaml` in your project directory (created by `ksail cluster init`). You can use the Kind CLI directly with that file—configurations are portable and there is no vendor lock-in. KSail can also interact with any Kind cluster accessible via your kubeconfig.
 
 ````bash
+# Run from the directory containing the generated kind.yaml
 kind create cluster --config kind.yaml
 kind export kubeconfig --name my-cluster
 ````
