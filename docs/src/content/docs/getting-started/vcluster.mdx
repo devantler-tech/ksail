@@ -22,7 +22,7 @@ VCluster creates lightweight, isolated virtual Kubernetes clusters that run as D
 
 VCluster excels at **CI/CD pipelines** (ephemeral per-PR clusters, parallel test execution on shared runners), **local multi-environment development** (isolated environments per feature branch or team member), and **learning** (safe, disposable Kubernetes sandboxes).
 
-Consider other distributions for production workloads (Talos), cloud/bare metal deployment (Talos + Hetzner), standard upstream Kubernetes testing (Vanilla), low-resource devices (K3s), or advanced CNI control (Vanilla or Talos).
+Consider other distributions for production workloads (Talos), cloud deployment (Talos with Hetzner Cloud or Omni), standard upstream Kubernetes testing (Vanilla), low-resource devices (K3s), or advanced CNI control (Vanilla or Talos).
 
 ## Quick Start
 
@@ -190,7 +190,7 @@ For real-world VCluster workflow examples — CI/CD pipelines, multi-environment
 
 ### Components
 
-The VCluster control plane runs in a Docker container and includes a Kubernetes API server, scheduler, controller manager, and etcd. Pods are scheduled to worker node containers (optional) or directly within the control plane container. Selected resources can be synced to a host cluster if needed.
+The VCluster control plane runs in a Docker container and includes a Kubernetes API server, scheduler, controller manager, and etcd. Pods are scheduled to worker node containers (optional) or directly within the control plane container. When VCluster is used in a host-cluster deployment mode (outside KSail's Docker/Vind setup), selected resources can be synced between the virtual cluster and its host cluster.
 
 ## Comparison with Other Distributions
 
