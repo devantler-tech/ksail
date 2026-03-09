@@ -101,8 +101,8 @@ type ProgressGroup struct {
 
 	mu             sync.Mutex
 	taskStatus     map[string]taskState
-	taskOrder      []string // Original task order
-	taskStartOrder []string // Order tasks started running (for display)
+	taskOrder      []string                 // Original task order
+	taskStartOrder []string                 // Order tasks started running (for display)
 	taskStartTime  map[string]time.Time     // Per-task start times
 	taskDuration   map[string]time.Duration // Per-task elapsed durations
 	spinnerIdx     int
@@ -289,7 +289,6 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 			pg.mu.Unlock()
 
 			taskErr := task.Fn(groupCtx)
-
 			if taskErr != nil {
 				pg.setTaskState(task.Name, taskFailed)
 
