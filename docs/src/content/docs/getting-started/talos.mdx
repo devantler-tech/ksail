@@ -7,19 +7,7 @@ import { Tabs, TabItem } from "@astrojs/starlight/components";
 
 [Talos Linux](https://www.talos.dev/) is a minimal, immutable operating system designed specifically for running Kubernetes. It provides enhanced security through API-driven configuration with no shell access, automatic updates, and a reduced attack surface. This guide shows you how to use Talos with KSail for local development (Docker provider), cloud deployments (Hetzner Cloud provider), or managed clusters through [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) (Omni provider).
 
-## What is Talos?
-
-Talos Linux is fundamentally different from traditional Linux distributions:
-
-- **Immutable:** No package manager, no shell, no SSH—the OS cannot be modified at runtime
-- **API-driven:** All configuration happens via the Talos API using machine config patches
-- **Secure by default:** Minimal attack surface with only essential services running
-- **Kubernetes-native:** Designed specifically for Kubernetes, not general-purpose computing
-- **Declarative:** Configuration is defined as code and applied atomically
-
-### When to Use Talos
-
-Talos is ideal for security-focused production workloads, GitOps workflows, and multi-cloud deployments requiring immutable infrastructure. However, it's not suitable for quick prototyping (use Vanilla or K3s instead), scenarios requiring shell access or traditional Linux tools, or environments that require Windows/macOS nodes or a general-purpose Linux OS with shell and package management.
+Talos is ideal for security-focused production workloads, GitOps workflows, and multi-cloud deployments requiring immutable infrastructure. It's not suitable for quick prototyping or scenarios requiring shell access—use [Vanilla](/getting-started/vanilla/) or [K3s](/getting-started/k3s/) instead.
 
 ## Quick Start
 
@@ -55,55 +43,19 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
     ksail cluster create
     ```
 
-    KSail will:
-    1. Download the Talos Docker image
-    2. Create Docker containers as control plane and worker nodes
-    3. Bootstrap the Kubernetes cluster
-    4. Configure kubectl context
-    5. Install CNI (Cilium by default)
-
-    **Expected output:**
-    ```
-    ✓ Creating Talos cluster...
-    ✓ Bootstrapping Kubernetes...
-    ✓ Installing Cilium CNI...
-    ✓ Cluster ready!
-
-    Cluster:  talos-dev
-    Nodes:    3 (1 control plane, 2 workers)
-    Provider: Docker
-    ```
+    KSail downloads the Talos Docker image, creates containers as nodes, bootstraps Kubernetes, configures kubectl context, and installs the configured CNI (Flannel by default; Cilium or Calico can be enabled via `ksail.yaml`).
 
     #### Step 3: Verify Cluster
 
     ```bash
-    # Check cluster info
     ksail cluster info
-
-    # View nodes
     kubectl get nodes
-
-    # View all pods
     kubectl get pods -A
     ```
 
-    #### Step 4: Deploy an Application
+    #### Step 4: Cleanup
 
     ```bash
-    # Create a test deployment
-    kubectl create deployment nginx --image=nginx
-
-    # Expose it
-    kubectl expose deployment nginx --port=80 --type=NodePort
-
-    # Check the service
-    kubectl get svc nginx
-    ```
-
-    #### Step 5: Cleanup
-
-    ```bash
-    # Delete the cluster and all resources
     ksail cluster delete
     ```
 
@@ -140,71 +92,35 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
       --workers 2
     ```
 
-    This creates:
-    - `ksail.yaml` — KSail configuration
-    - `talos/` directory — Talos configuration patches
-
     #### Step 3: Create Cluster
 
     ```bash
     ksail cluster create
     ```
 
-    KSail will:
-    1. Create Hetzner Cloud servers (control plane + workers)
-    2. Upload Talos ISO to servers
-    3. Boot servers with Talos
-    4. Bootstrap the Kubernetes cluster
-    5. Configure kubectl context
-    6. Install CNI and CSI drivers
-    7. Configure Hetzner Cloud Controller Manager for LoadBalancer support
-
-    **Expected output:**
-    ```
-    ✓ Creating Hetzner Cloud servers...
-    ✓ Uploading Talos ISO...
-    ✓ Bootstrapping Kubernetes...
-    ✓ Installing Cilium CNI...
-    ✓ Installing Hetzner CSI...
-    ✓ Cluster ready!
-
-    Cluster:  talos-prod
-    Nodes:    3 (1 control plane, 2 workers)
-    Provider: Hetzner (fsn1-dc14)
-    ```
+    KSail creates Hetzner Cloud servers, boots them with Talos, bootstraps Kubernetes, configures kubectl context, and installs CNI, CSI drivers, and the Hetzner Cloud Controller Manager for LoadBalancer support.
 
     #### Step 4: Verify Cluster
 
     ```bash
-    # Check cluster info
     ksail cluster info
-
-    # View nodes with external IPs
     kubectl get nodes -o wide
-
-    # Verify CSI driver
     kubectl get pods -n kube-system | grep hcloud-csi
     ```
 
     #### Step 5: Deploy with LoadBalancer
 
     ```bash
-    # Create a sample application
     kubectl create deployment web --image=nginx --replicas=3
-
-    # Expose with a Hetzner Cloud Load Balancer
     kubectl expose deployment web --port=80 --type=LoadBalancer
-
-    # Wait for external IP (takes ~1-2 minutes)
     kubectl get svc web --watch
     ```
 
-    The LoadBalancer service will provision a real Hetzner Cloud Load Balancer with a public IP.
+    The LoadBalancer service provisions a real Hetzner Cloud Load Balancer with a public IP.
 
     #### Step 6: Cleanup
 
     ```bash
-    # Delete the cluster and all Hetzner resources
     ksail cluster delete
     ```
 
@@ -245,10 +161,6 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
       --workers 2
     ```
 
-    This creates:
-    - `ksail.yaml` — KSail configuration
-    - `talos/` directory — Talos configuration patches
-
     #### Step 3: Add the Omni Endpoint
 
     The scaffolder does not generate the `omni:` block automatically. Open `ksail.yaml` and add `spec.cluster.omni.endpoint` manually:
@@ -269,44 +181,19 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
     ksail cluster create
     ```
 
-    KSail will:
-    1. Connect to your Omni instance using the service account key
-    2. Allocate registered machines to the cluster
-    3. Apply Talos configuration patches via the Omni API
-    4. Bootstrap the Kubernetes cluster
-    5. Configure kubectl context
-
-    **Expected output:**
-
-    ```
-    ✓ Connecting to Omni...
-    ✓ Allocating machines...
-    ✓ Bootstrapping Kubernetes...
-    ✓ Installing Cilium CNI...
-    ✓ Cluster ready!
-
-    Cluster:  talos-omni
-    Nodes:    3 (1 control plane, 2 workers)
-    Provider: Omni
-    ```
+    KSail connects to your Omni instance, allocates registered machines, applies Talos configuration patches via the Omni API, bootstraps Kubernetes, and configures kubectl context.
 
     #### Step 5: Verify Cluster
 
     ```bash
-    # Check cluster info
     ksail cluster info
-
-    # View nodes
     kubectl get nodes
-
-    # View all pods
     kubectl get pods -A
     ```
 
     #### Step 6: Cleanup
 
     ```bash
-    # Delete the cluster (deallocates machines in Omni, does not wipe them)
     ksail cluster delete
     ```
 
@@ -318,11 +205,9 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
 
 ## Use Cases
 
-Talos excels at **immutable infrastructure** where all changes happen via declarative configuration patches stored in version control—making configuration drift impossible. It's particularly valuable for **security-focused production** deployments where no SSH access, API-driven operations, and a minimal attack surface are requirements (ideal for compliance-regulated workloads with GitOps tooling like Flux or ArgoCD).
+Talos excels at immutable infrastructure, security-focused production deployments, and multi-environment consistency—the same distribution works from local Docker development through Hetzner Cloud production without "works on my machine" issues. See [Use Cases](/use-cases/) for practical workflow examples.
 
-For **multi-environment consistency**, use the same Talos distribution from local Docker development through production Hetzner Cloud deployments—configuration patches are portable and behavior is identical across providers, eliminating "works on my machine" issues.
-
-**Common operations via Talos API:**
+**Common Talos API operations:**
 
 ```bash
 talosctl -n <node-ip> get machineconfig   # View configuration
@@ -338,124 +223,15 @@ talosctl -n <node-ip> upgrade --image ghcr.io/siderolabs/installer:v1.6.0
 
 ### Talos on Docker
 
-````mermaid
-graph TB
-    subgraph "Docker Host"
-        subgraph "Control Plane Container"
-            ETCD[etcd]
-            API[kube-apiserver]
-            SCHED[kube-scheduler]
-            CM[kube-controller-manager]
-            KUBELET_CP[kubelet]
-        end
-        
-        subgraph "Worker Container 1"
-            KUBELET_W1[kubelet]
-            POD1[Pods]
-        end
-        
-        subgraph "Worker Container 2"
-            KUBELET_W2[kubelet]
-            POD2[Pods]
-        end
-        
-        NETWORK[Docker Bridge Network]
-        
-        API -.->|manages| KUBELET_W1
-        API -.->|manages| KUBELET_W2
-        
-        KUBELET_CP -->|runs| POD1
-        KUBELET_W1 -->|runs| POD1
-        KUBELET_W2 -->|runs| POD2
-        
-        NETWORK -.->|connectivity| API
-        NETWORK -.->|connectivity| KUBELET_W1
-        NETWORK -.->|connectivity| KUBELET_W2
-    end
-````
-
-**Key characteristics:**
-- Each node is a Docker container running Talos Linux
-- Containers communicate via Docker network
-- No VM overhead—direct container-to-container communication
-- MetalLB provides LoadBalancer services (optional, via `--load-balancer Enabled`)
+Each node is a Docker container running Talos Linux communicating via a Docker bridge network. No VM overhead. MetalLB provides LoadBalancer services (optional, via `--load-balancer Enabled`).
 
 ### Talos on Hetzner
 
-````mermaid
-graph TB
-    subgraph "Hetzner Cloud"
-        subgraph "Control Plane Server"
-            ETCD[etcd]
-            API[kube-apiserver]
-            SCHED[kube-scheduler]
-            CM[kube-controller-manager]
-            KUBELET_CP[kubelet]
-        end
-        
-        subgraph "Worker Server 1"
-            KUBELET_W1[kubelet]
-            POD1[Pods]
-        end
-        
-        subgraph "Worker Server 2"
-            KUBELET_W2[kubelet]
-            POD2[Pods]
-        end
-        
-        LB[Hetzner Cloud Load Balancer]
-        CSI[Hetzner CSI Driver]
-        CCM[Hetzner Cloud Controller Manager]
-        
-        API -.->|manages| KUBELET_W1
-        API -.->|manages| KUBELET_W2
-        
-        CCM -.->|provisions| LB
-        CSI -.->|provisions volumes| KUBELET_W1
-        CSI -.->|provisions volumes| KUBELET_W2
-        
-        LB -->|routes traffic| POD1
-        LB -->|routes traffic| POD2
-    end
-    
-    USER[Internet Users]
-    USER -->|https://| LB
-````
-
-**Key characteristics:**
-- Each node is a Hetzner Cloud server running Talos Linux
-- Hetzner Cloud Controller Manager provides LoadBalancer support
-- Hetzner CSI Driver provides persistent volumes
-- Public IPs for external access
+Each node is a Hetzner Cloud server running Talos Linux. The Hetzner Cloud Controller Manager provisions load balancers, the Hetzner CSI Driver provisions persistent volumes, and servers have public IPs for external access.
 
 ## Distribution Comparison
 
-| Feature                  | Vanilla (Kind) | K3s (K3d)  | **Talos**        | VCluster     |
-| ------------------------ | -------------- | ---------- | ---------------- | ------------ |
-| **Maturity**             | Production     | Production | Production       | Production   |
-| **Setup Time**           | ~2 min         | ~1 min     | ~3 min (Docker)  | ~1 min       |
-| **Node Weight**          | Heavy          | Light      | Medium           | Very Light   |
-| **Multi-node**           | ✅             | ✅         | ✅               | ✅           |
-| **Shell Access**         | ✅             | ✅         | ❌ (API-only)    | ✅           |
-| **Immutable OS**         | ❌             | ❌         | ✅               | N/A          |
-| **Production Ready**     | ❌ (local)     | ⚠️ (edge)  | ✅               | ✅ (nested)  |
-| **LoadBalancer Support** | Optional       | Built-in   | Optional/Cloud   | Synced       |
-| **Cloud Providers**      | ❌             | ❌         | ✅ (Hetzner)     | ❌           |
-| **Security Posture**     | Standard       | Standard   | ✅ Enhanced      | Standard     |
-| **Configuration Style**  | YAML           | YAML       | Patches (YAML)   | Helm Values  |
-| **Learning Curve**       | Low            | Low        | Medium           | Medium       |
-
-**Choose Talos when:**
-- Security and compliance are priorities
-- You want immutable infrastructure
-- You're deploying to production (Hetzner or other clouds in future)
-- You embrace API-driven operations
-
-**Choose others when:**
-- You need shell access for debugging (Vanilla, K3s, VCluster)
-- You want the fastest setup (K3s, VCluster)
-- You're running CI/CD tests (VCluster for isolation)
-- You want upstream Kubernetes (Vanilla)
+See the [Support Matrix](/support-matrix/) for a full breakdown of feature and component compatibility across all distributions.
 
 ## Troubleshooting
 
@@ -539,13 +315,3 @@ Enable Flux or ArgoCD for declarative workload management—see [GitOps Workflow
 - [**LoadBalancer Configuration**](/configuration/loadbalancer/): LoadBalancer options for Talos
 - [**Support Matrix**](/support-matrix/): Detailed Talos × component compatibility
 - [**Contributing**](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md): Contribute to KSail development
-
-## Resources
-
-- **Talos Linux:** [https://www.talos.dev/](https://www.talos.dev/)
-- **Talos GitHub:** [https://github.com/siderolabs/talos](https://github.com/siderolabs/talos)
-- **Hetzner Cloud:** [https://www.hetzner.com/cloud](https://www.hetzner.com/cloud)
-- **Sidero Omni:** [https://www.siderolabs.com/platform/saas-for-kubernetes/](https://www.siderolabs.com/platform/saas-for-kubernetes/)
-- **Omni Documentation:** [https://omni.siderolabs.com/docs/](https://omni.siderolabs.com/docs/)
-- **MetalLB:** [https://metallb.universe.tf/](https://metallb.universe.tf/)
-- **Talos Configuration Reference:** [https://www.talos.dev/latest/reference/configuration/](https://www.talos.dev/latest/reference/configuration/)
