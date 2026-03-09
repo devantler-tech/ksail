@@ -214,3 +214,222 @@ var ExportGetShowCopyFeedback = func(m *Model) bool {
 var ExportNewCopyFeedbackClearMsg = func() tea.Msg {
 	return copyFeedbackClearMsg{}
 }
+
+// ExportNewModelUnavailableClearMsg creates a modelUnavailableClearMsg for testing.
+var ExportNewModelUnavailableClearMsg = func() tea.Msg {
+	return modelUnavailableClearMsg{}
+}
+
+// ExportSetIsStreaming sets Model.isStreaming for testing.
+var ExportSetIsStreaming = func(m *Model, streaming bool) {
+	m.isStreaming = streaming
+}
+
+// ExportSetHistory sets Model.history for testing.
+var ExportSetHistory = func(m *Model, history []string) {
+	m.history = history
+	m.historyIndex = -1
+}
+
+// ExportGetHistoryIndex returns Model.historyIndex for testing.
+var ExportGetHistoryIndex = func(m *Model) int {
+	return m.historyIndex
+}
+
+// ExportSetMessages sets Model.messages for testing.
+var ExportSetMessages = func(m *Model, msgs []MessageForTest) {
+	m.messages = msgs
+}
+
+// ExportGetMessages returns Model.messages for testing.
+var ExportGetMessages = func(m *Model) []MessageForTest {
+	return m.messages
+}
+
+// ExportNewAssistantMessageWithRole creates an assistant message for testing.
+var ExportNewAssistantMessageWithRole = func(content string) MessageForTest {
+	return message{role: roleAssistant, content: content}
+}
+
+// ExportNewToolExecution creates a tool execution for testing.
+var ExportNewToolExecution = func(name string, status int, expanded bool) *ToolExecutionForTest {
+	return &toolExecution{name: name, status: toolStatus(status), expanded: expanded}
+}
+
+// ToolExecutionForTest is an exported alias for toolExecution, available only in test builds.
+type ToolExecutionForTest = toolExecution
+
+// ExportSetTools sets Model.tools and toolOrder for testing.
+var ExportSetTools = func(m *Model, tools map[string]*ToolExecutionForTest, order []string) {
+	m.tools = tools
+	m.toolOrder = order
+}
+
+// ToolStatusRunning exposes the toolRunning constant for testing.
+const ToolStatusRunning = int(toolRunning)
+
+// ToolStatusComplete exposes the toolSuccess constant for testing.
+const ToolStatusComplete = int(toolSuccess)
+
+// ExportSetYoloModeRef sets Model.yoloModeRef for testing.
+var ExportSetYoloModeRef = func(m *Model, ref *YoloModeRef) {
+	m.yoloModeRef = ref
+}
+
+// ExportGetYoloMode returns Model.yoloMode for testing.
+var ExportGetYoloMode = func(m *Model) bool {
+	return m.yoloMode
+}
+
+// ExportResolvedAutoModel exposes resolvedAutoModel for testing.
+var ExportResolvedAutoModel = func(m *Model) string {
+	return m.resolvedAutoModel()
+}
+
+// ExportFindModelMultiplier exposes findModelMultiplier for testing.
+var ExportFindModelMultiplier = func(m *Model, modelID string) float64 {
+	return m.findModelMultiplier(modelID)
+}
+
+// ExportIsAutoMode exposes isAutoMode for testing.
+var ExportIsAutoMode = func(m *Model) bool {
+	return m.isAutoMode()
+}
+
+// ExportFindCurrentModelIndex exposes findCurrentModelIndex for testing.
+var ExportFindCurrentModelIndex = func(m *Model) int {
+	return m.findCurrentModelIndex()
+}
+
+// ExportFindCurrentReasoningIndex exposes findCurrentReasoningIndex for testing.
+var ExportFindCurrentReasoningIndex = func(m *Model) int {
+	return m.findCurrentReasoningIndex()
+}
+
+// ExportIsCurrentReasoningEffort exposes isCurrentReasoningEffort for testing.
+var ExportIsCurrentReasoningEffort = func(m *Model, level string) bool {
+	return m.isCurrentReasoningEffort(level)
+}
+
+// ExportSetConfirmExitFlag sets Model.confirmExit for testing.
+var ExportSetConfirmExitFlag = func(m *Model, confirm bool) {
+	m.confirmExit = confirm
+}
+
+// ExportGetConfirmExit returns Model.confirmExit for testing.
+var ExportGetConfirmExit = func(m *Model) bool {
+	return m.confirmExit
+}
+
+// ExportGetQuitting returns Model.quitting for testing.
+var ExportGetQuitting = func(m *Model) bool {
+	return m.quitting
+}
+
+// ExportSetShowModelUnavailableFeedback sets Model.showModelUnavailableFeedback for testing.
+var ExportSetShowModelUnavailableFeedback = func(m *Model, show bool) {
+	m.showModelUnavailableFeedback = show
+}
+
+// ExportSetModelUnavailableReason sets Model.modelUnavailableReason for testing.
+var ExportSetModelUnavailableReason = func(m *Model, reason string) {
+	m.modelUnavailableReason = reason
+}
+
+// ExportBuildModelStatusText exposes buildModelStatusText for testing.
+var ExportBuildModelStatusText = func(m *Model) string {
+	return m.buildModelStatusText()
+}
+
+// ExportGetTextareaValue returns the current textarea value for testing.
+var ExportGetTextareaValue = func(m *Model) string {
+	return m.textarea.Value()
+}
+
+// ExportSetShowSessionPicker sets Model.showSessionPicker for testing.
+var ExportSetShowSessionPicker = func(m *Model, show bool) {
+	m.showSessionPicker = show
+}
+
+// ExportGetShowSessionPicker returns Model.showSessionPicker for testing.
+var ExportGetShowSessionPicker = func(m *Model) bool {
+	return m.showSessionPicker
+}
+
+// ExportTruncateString exposes truncateString for testing.
+var ExportTruncateString = truncateString
+
+// ExportAddToPromptHistory exposes addToPromptHistory for testing.
+var ExportAddToPromptHistory = func(m *Model, prompt string) {
+	m.addToPromptHistory(prompt)
+}
+
+// ExportGetHistory returns Model.history for testing.
+var ExportGetHistory = func(m *Model) []string {
+	return m.history
+}
+
+// ExportHasRunningTools exposes hasRunningTools for testing.
+var ExportHasRunningTools = func(m *Model) bool {
+	return m.hasRunningTools()
+}
+
+// ExportPeekNextPendingPrompt exposes peekNextPendingPrompt for testing.
+var ExportPeekNextPendingPrompt = func(m *Model) bool {
+	return m.peekNextPendingPrompt() != nil
+}
+
+// ExportDropNextPendingPrompt exposes dropNextPendingPrompt for testing.
+var ExportDropNextPendingPrompt = func(m *Model) {
+	m.dropNextPendingPrompt()
+}
+
+// ExportSetFilteredSessions sets Model.filteredSessions for testing.
+var ExportSetFilteredSessions = func(m *Model, sessions []SessionMetadata) {
+	m.filteredSessions = sessions
+}
+
+// ExportSetSessionPickerIndex sets Model.sessionPickerIndex for testing.
+var ExportSetSessionPickerIndex = func(m *Model, index int) {
+	m.sessionPickerIndex = index
+}
+
+// ExportIsValidSessionIndex exposes isValidSessionIndex for testing.
+var ExportIsValidSessionIndex = func(m *Model) bool {
+	return m.isValidSessionIndex()
+}
+
+// ExportIsInvalidSessionIndex exposes isInvalidSessionIndex for testing.
+var ExportIsInvalidSessionIndex = func(m *Model) bool {
+	return m.isInvalidSessionIndex()
+}
+
+// ExportClampSessionIndex exposes clampSessionIndex for testing.
+var ExportClampSessionIndex = func(m *Model) {
+	m.clampSessionIndex()
+}
+
+// ExportGetSessionPickerIndex returns Model.sessionPickerIndex for testing.
+var ExportGetSessionPickerIndex = func(m *Model) int {
+	return m.sessionPickerIndex
+}
+
+// ExportFindCurrentSessionIndex exposes findCurrentSessionIndex for testing.
+var ExportFindCurrentSessionIndex = func(m *Model) int {
+	return m.findCurrentSessionIndex()
+}
+
+// ExportSetCurrentSessionID sets Model.currentSessionID for testing.
+var ExportSetCurrentSessionID = func(m *Model, id string) {
+	m.currentSessionID = id
+}
+
+// ExportSetAvailableSessions sets Model.availableSessions for testing.
+var ExportSetAvailableSessions = func(m *Model, sessions []SessionMetadata) {
+	m.availableSessions = sessions
+}
+
+// ExportSetJustCompleted sets Model.justCompleted for testing.
+var ExportSetJustCompleted = func(m *Model, completed bool) {
+	m.justCompleted = completed
+}
