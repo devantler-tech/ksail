@@ -77,6 +77,7 @@ To decide which phase to perform:
    - Package organization and dependency graph (look for circular dependencies, god packages, or packages with too many responsibilities)
    - Code duplication across packages (run `jscpd --config .jscpd.json` to detect clones)
    - Function and file sizes (look for god functions, files exceeding ~300 lines)
+   - **Oversized file diet**: Scan for non-test source files exceeding 500 lines using `find . -name '*.go' ! -name '*_test.go' -not -path './vendor/*' | xargs wc -l | sort -rn | head -20`. Files over 500 lines are prime refactoring candidates — propose concrete split strategies with specific file names and responsibilities.
    - Naming conventions and consistency
    - Error handling patterns
    - Interface usage and design (look for interfaces that are too large or defined far from usage)
