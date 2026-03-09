@@ -37,7 +37,7 @@ const (
 	// extra time for multiple components to become ready (server, repo-server,
 	// application-controller, applicationset-controller, and Redis).
 	// In VCluster environments with layered stacks (e.g., Calico + Gatekeeper + ArgoCD),
-	// ArgoCD can take significantly longer to stabilise because each component runs
+	// ArgoCD can take significantly longer to stabilize because each component runs
 	// inside the virtual cluster and inherits both the VCluster networking overhead and
 	// the latency imposed by active admission-webhook policies. 20 minutes provides
 	// sufficient headroom while keeping feedback reasonable for actual failures.
