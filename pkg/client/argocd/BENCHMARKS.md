@@ -145,7 +145,7 @@ Scenarios tested:
 
 Run on AMD EPYC 7763 64-Core Processor, Linux amd64, Go 1.26.0:
 
-````
+````text
 BenchmarkEnsureOptions/Minimal-4                                550357982          2.182 ns/op        0 B/op        0 allocs/op
 BenchmarkEnsureOptions/WithApplicationName-4                    550528371          2.180 ns/op        0 B/op        0 allocs/op
 BenchmarkEnsureOptions/WithAuth-4                               549878227          2.182 ns/op        0 B/op        0 allocs/op

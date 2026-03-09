@@ -251,7 +251,7 @@ To decide which deep-mode phase to perform:
 
    **Include "How to Control this Workflow" and "What Happens Next" sections** with commands:
 
-   ```
+   ```bash
    gh aw disable daily-workflow-maintenance --repo ${{ github.repository }}
    gh aw enable daily-workflow-maintenance --repo ${{ github.repository }}
    gh aw run daily-workflow-maintenance --repo ${{ github.repository }} --repeat <number-of-repeats>
