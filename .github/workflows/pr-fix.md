@@ -23,6 +23,7 @@ strict: false
 
 safe-outputs:
   push-to-pull-request-branch:
+    max: 1
   create-issue:
     title-prefix: "${{ github.workflow }}"
     labels: [automation, pr-fix]
@@ -130,7 +131,7 @@ go mod download
 
 If you've made progress (even partial fixes are valuable):
 
-1. **Push changes** to the PR branch using the `push-to-pull-request-branch` safe output.
+1. **Push changes** to the PR branch using the `push_to_pull_request_branch` tool. You **must** supply the `branch` field with the PR branch name (the branch you checked out in Step 3) and a descriptive `message` for the commit.
 
 2. **Add a comment** to the PR summarizing:
    - What issues were identified

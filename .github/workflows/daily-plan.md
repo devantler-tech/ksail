@@ -258,8 +258,8 @@ Check for parent issues where all sub-issues are complete and close them automat
 1. **Find open parent issues** that have sub-issues (tracked issues).
 2. **Check completion** for each: verify whether ALL sub-issues are in a closed state.
 3. **Close completed parents**: For each parent where 100% of sub-issues are closed:
-   - Close the issue using `update_issue` with `state: "closed"` and `state_reason: "completed"`
-   - Add a comment: "🎉 **Automatically closed by Daily Plan**\n\nAll sub-issues have been completed.\n\n**Sub-issues status:** X/X closed (100%)"
+   - Close the issue using `update_issue` with `status: "closed"`
+   - Add a comment: "🎉 **Automatically closed by Daily Plan**\n\nAll sub-issues have been completed (reason: completed).\n\n**Sub-issues status:** X/X closed (100%)"
 4. **Recurse up the tree**: If closing a parent reveals its own parent is now complete, close that parent too (process bottom-up).
 
 **Constraints:**
