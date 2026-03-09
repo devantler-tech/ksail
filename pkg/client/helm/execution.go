@@ -106,4 +106,3 @@ func runWithSilencedStderr(
 
 	return releaseResult, runErr
 }
-
