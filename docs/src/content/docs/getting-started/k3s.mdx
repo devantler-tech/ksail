@@ -159,7 +159,7 @@ See the [Support Matrix](/support-matrix/) for a full feature and component comp
 ```bash
 docker ps          # Check Docker is running
 df -h              # Check available disk space
-docker system prune
+docker system prune -f   # WARNING: removes unused containers, networks, images, and build cache
 ksail cluster create
 ```
 
@@ -292,6 +292,7 @@ KSail generates standard `k3d.yaml` files—use K3d CLI directly (`k3d cluster c
 - [**Talos**](/getting-started/talos/): Immutable infrastructure for production
 - [**VCluster**](/getting-started/vcluster/): Virtual clusters for multi-tenancy
 - [**Installation Guide**](/installation/): Install KSail on your system
+- [**Contributing**](/contributing/): How to contribute to KSail
 - [**CLI Flags**](/cli-flags/): Comprehensive command documentation
 - [**Configuration Reference**](/configuration/): Detailed YAML options
 - [**LoadBalancer Configuration**](/configuration/loadbalancer/): LoadBalancer options for K3s
