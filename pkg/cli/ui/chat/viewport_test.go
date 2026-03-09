@@ -284,6 +284,11 @@ func TestCommitToolsToLastAssistantMessage(t *testing.T) {
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(msgs))
 	}
+
+	toolCount := chat.ExportGetMessageToolCount(model, 0)
+	if toolCount != 1 {
+		t.Errorf("expected 1 tool committed to message, got %d", toolCount)
+	}
 }
 
 // TestViewport_SuccessToolCollapsedShowsSummary tests collapsed tool shows summary.

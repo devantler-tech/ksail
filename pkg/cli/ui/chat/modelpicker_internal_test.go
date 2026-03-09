@@ -357,7 +357,11 @@ func TestBuildModelStatusText(t *testing.T) {
 			result := chat.ExportBuildModelStatusText(model)
 
 			if !strings.Contains(result, testCase.expected) {
-				t.Errorf("buildModelStatusText() = %q, want to contain %q", result, testCase.expected)
+				t.Errorf(
+					"buildModelStatusText() = %q, want to contain %q",
+					result,
+					testCase.expected,
+				)
 			}
 		})
 	}

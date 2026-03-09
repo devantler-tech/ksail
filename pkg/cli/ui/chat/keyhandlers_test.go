@@ -125,8 +125,8 @@ func TestToggleYolo_FlipsMode(t *testing.T) {
 	// Toggle on
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlY})
 
-	chatModel, ok := updatedModel.(*chat.Model)
-	if !ok {
+	chatModel, assertionOK := updatedModel.(*chat.Model)
+	if !assertionOK {
 		t.Fatal("expected *chat.Model type assertion to succeed")
 	}
 
@@ -141,8 +141,8 @@ func TestToggleYolo_FlipsMode(t *testing.T) {
 	// Toggle off
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlY})
 
-	chatModel, ok = updatedModel.(*chat.Model)
-	if !ok {
+	chatModel, assertionOK = updatedModel.(*chat.Model)
+	if !assertionOK {
 		t.Fatal("expected *chat.Model type assertion to succeed")
 	}
 
@@ -185,8 +185,8 @@ func TestHistoryUp_NavigatesHistory(t *testing.T) {
 	// Press up to go to last history entry
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyUp})
 
-	chatModel, ok := updatedModel.(*chat.Model)
-	if !ok {
+	chatModel, assertionOK := updatedModel.(*chat.Model)
+	if !assertionOK {
 		t.Fatal("expected *chat.Model type assertion to succeed")
 	}
 
@@ -198,8 +198,8 @@ func TestHistoryUp_NavigatesHistory(t *testing.T) {
 	// Press up again to go to first history entry
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyUp})
 
-	chatModel, ok = updatedModel.(*chat.Model)
-	if !ok {
+	chatModel, assertionOK = updatedModel.(*chat.Model)
+	if !assertionOK {
 		t.Fatal("expected *chat.Model type assertion to succeed")
 	}
 

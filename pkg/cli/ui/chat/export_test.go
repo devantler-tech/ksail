@@ -480,7 +480,7 @@ var ExportNewStreamingAssistantMessage = func(content string) MessageForTest {
 	return message{
 		role:        roleAssistant,
 		content:     content,
-		isStreaming:  true,
+		isStreaming: true,
 	}
 }
 
@@ -497,5 +497,11 @@ var ExportCommitToolsToLastAssistantMessage = func(m *Model) {
 	m.commitToolsToLastAssistantMessage()
 }
 
-// ExportQuotaSnapshot is an exported alias for quotaSnapshot for testing.
-type ExportQuotaSnapshot = quotaSnapshot
+// ExportGetMessageToolCount returns the number of tools in a message for testing.
+var ExportGetMessageToolCount = func(m *Model, msgIndex int) int {
+	if msgIndex < 0 || msgIndex >= len(m.messages) {
+		return -1
+	}
+
+	return len(m.messages[msgIndex].tools)
+}

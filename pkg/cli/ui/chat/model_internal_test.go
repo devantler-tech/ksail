@@ -135,7 +135,10 @@ func TestTruncateString(t *testing.T) {
 		{name: "short string", input: "hello", maxLen: 10, expected: "hello"},
 		{name: "exact length", input: "hello", maxLen: 5, expected: "hello"},
 		{name: "needs truncation", input: "hello world", maxLen: 8, expected: "hello..."},
-		{name: "unicode string", input: "こんにちは世界", maxLen: 5, expected: "こん..."},
+		{
+			name: "unicode string", input: "\u00e9\u00e0\u00fc\u00f1\u00f8",
+			maxLen: 4, expected: "\u00e9...",
+		},
 	}
 
 	for _, testCase := range tests {
