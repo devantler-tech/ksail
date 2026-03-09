@@ -42,6 +42,9 @@ const (
 	defaultValueEmptyArray = "[]"
 )
 
+// Parameter key for positional arguments.
+const argsKey = "args"
+
 // Permission annotation value.
 const permissionWrite = "write"
 
@@ -55,4 +58,7 @@ var (
 
 	// ErrArgsNotArray indicates the args parameter is not an array.
 	ErrArgsNotArray = errors.New("args parameter must be an array")
+
+	// ErrArgsNotAccepted indicates args were provided for a subcommand that rejects them.
+	ErrArgsNotAccepted = errors.New("positional args not accepted by subcommand")
 )

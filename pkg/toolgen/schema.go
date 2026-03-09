@@ -33,10 +33,9 @@ func buildParameterSchema(cmd *cobra.Command) map[string]any {
 	})
 
 	// Check for positional arguments
-	if cmd.Args != nil {
+	if acceptsPositionalArgs(cmd) {
 		// Add positional args parameter for commands that expect them
-		// We'll use a generic "args" parameter
-		properties["args"] = map[string]any{
+		properties[argsKey] = map[string]any{
 			"type":        "array",
 			"items":       map[string]any{"type": "string"},
 			"description": "Positional arguments for the command",
@@ -346,7 +345,7 @@ func addPositionalArgsProperty(properties map[string]any, subcommands map[string
 		)
 	}
 
-	properties["args"] = map[string]any{
+	properties[argsKey] = map[string]any{
 		"type":        jsonSchemaTypeArray,
 		"items":       map[string]any{"type": jsonSchemaTypeString},
 		"description": description,

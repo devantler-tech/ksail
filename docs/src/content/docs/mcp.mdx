@@ -302,7 +302,7 @@ async def provision_dev_cluster():
         # Deploy workloads
         await session.call_tool("workload_write", {
             "workload_command": "apply",
-            "args": ["./k8s"]
+            "kustomize": "./k8s"
         })
         
         # Encrypt a secret

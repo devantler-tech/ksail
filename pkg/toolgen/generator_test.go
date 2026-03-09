@@ -220,10 +220,10 @@ func TestConsolidatedToolGeneration(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Test functions are inherently verbose with test data setup
 func TestConsolidatedToolGenerationWithPositionalArgs(t *testing.T) {
 	t.Parallel()
 
-	// Create a parent command with consolidation annotation
 	parentCmd := &cobra.Command{
 		Use:   "cipher",
 		Short: "Manage encrypted files",
@@ -232,27 +232,30 @@ func TestConsolidatedToolGenerationWithPositionalArgs(t *testing.T) {
 		},
 	}
 
-	// Subcommand that accepts positional args (like cipher encrypt)
 	encryptCmd := &cobra.Command{
 		Use:   "encrypt <file>",
 		Short: "Encrypt a file",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return nil
-		},
+		RunE:  func(_ *cobra.Command, _ []string) error { return nil },
 	}
 
-	// Subcommand without positional args
+	// Subcommand that explicitly rejects positional args
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List keys",
+		Args:  cobra.NoArgs,
+		RunE:  func(_ *cobra.Command, _ []string) error { return nil },
+	}
+
+	// Subcommand with nil Args (default — accepts arbitrary args)
 	importCmd := &cobra.Command{
 		Use:   "import",
 		Short: "Import a key",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return nil
-		},
+		RunE:  func(_ *cobra.Command, _ []string) error { return nil },
 	}
 	importCmd.Flags().String("key", "", "Key to import")
 
-	parentCmd.AddCommand(encryptCmd, importCmd)
+	parentCmd.AddCommand(encryptCmd, listCmd, importCmd)
 
 	tools := toolgen.GenerateTools(parentCmd, toolgen.DefaultOptions())
 	if len(tools) != 1 {
@@ -260,33 +263,33 @@ func TestConsolidatedToolGenerationWithPositionalArgs(t *testing.T) {
 	}
 
 	tool := tools[0]
-	properties, ok := tool.Parameters["properties"].(map[string]any)
-	if !ok {
+
+	props, validProps := tool.Parameters["properties"].(map[string]any)
+	if !validProps {
 		t.Fatal("Properties should be a map")
 	}
 
-	// Verify args parameter is present (since encrypt accepts positional args)
-	argsProp, exists := properties["args"]
+	// args parameter should be present (encrypt and import accept positional args)
+	argsMap, exists := props["args"].(map[string]any)
 	if !exists {
-		t.Fatal("Expected 'args' parameter in schema for consolidated tool with positional args")
-	}
-
-	argsMap, ok := argsProp.(map[string]any)
-	if !ok {
-		t.Fatal("args property should be a map")
+		t.Fatal("Expected 'args' parameter in schema")
 	}
 
 	if argsMap["type"] != "array" {
 		t.Errorf("Expected args type 'array', got %v", argsMap["type"])
 	}
 
-	// Verify AcceptsArgs is tracked on the subcommand
+	// Verify AcceptsArgs tracking
 	if !tool.Subcommands["encrypt"].AcceptsArgs {
-		t.Error("encrypt subcommand should have AcceptsArgs=true")
+		t.Error("encrypt should have AcceptsArgs=true")
 	}
 
-	if tool.Subcommands["import"].AcceptsArgs {
-		t.Error("import subcommand should have AcceptsArgs=false")
+	if tool.Subcommands["list"].AcceptsArgs {
+		t.Error("list (cobra.NoArgs) should have AcceptsArgs=false")
+	}
+
+	if !tool.Subcommands["import"].AcceptsArgs {
+		t.Error("import (nil Args) should have AcceptsArgs=true")
 	}
 }
 

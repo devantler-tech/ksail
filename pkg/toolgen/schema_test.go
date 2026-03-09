@@ -372,14 +372,28 @@ func TestBuildParameterSchema_PositionalArgs(t *testing.T) {
 		)
 	})
 
-	t.Run("command without args validator", func(t *testing.T) {
+	t.Run("command with nil Args accepts args", func(t *testing.T) {
 		t.Parallel()
 
-		cmd := newTestCmd()
+		cmd := newTestCmd() // Args == nil (default: accepts arbitrary args)
 		properties := generateToolProperties(t, cmd)
 
 		_, hasArgs := properties["args"]
-		assert.False(t, hasArgs, "unexpected 'args' property found")
+		assert.True(t, hasArgs, "nil Args should produce 'args' property")
+	})
+
+	t.Run("command with NoArgs excludes args", func(t *testing.T) {
+		t.Parallel()
+
+		cmd := &cobra.Command{
+			Use:  "test",
+			Args: cobra.NoArgs,
+			RunE: func(_ *cobra.Command, _ []string) error { return nil },
+		}
+		properties := generateToolProperties(t, cmd)
+
+		_, hasArgs := properties["args"]
+		assert.False(t, hasArgs, "NoArgs should not produce 'args' property")
 	})
 }
 
