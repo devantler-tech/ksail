@@ -57,7 +57,7 @@ Example baseline (AMD EPYC 7763, Linux, Go 1.26.0):
 
 **Note:** Some struct-initialization benchmarks (e.g. `BenchmarkChartSpec/Basic`, `BenchmarkRepositoryEntry/Basic`) report sub-nanosecond results. At that scale, measurements are dominated by loop/timer overhead and compiler optimizations, so these values are noisy and should not be used for regression comparison. Focus on benchmarks with measurable allocations or higher ns/op values.
 
-```
+```text
 BenchmarkChartSpec/Basic-4                                1000000000      0.3124 ns/op       0 B/op    0 allocs/op
 BenchmarkChartSpec/WithAllFields-4                          60721854     19.72 ns/op        0 B/op     0 allocs/op
 BenchmarkChartSpecWithLargeValues-4                           893115   1341 ns/op        3728 B/op     3 allocs/op

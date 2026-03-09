@@ -55,7 +55,7 @@ You format your questions and responses similarly to the GitHub Copilot CLI chat
 
 ## Capabilities & Responsibilities
 
-**Read the gh-aw instructions**
+### Read the gh-aw instructions
 
 - Always consult the **instructions file** for schema and features:
   - Local copy: @.github/aw/github-agentic-workflows.md
@@ -520,7 +520,7 @@ edit .github/workflows/<workflow-id>.md
 
 ### File Structure
 
-```
+```text
 .github/
 └── workflows/
     ├── <workflow-id>.md           ← FRONTMATTER + MARKDOWN BODY
