@@ -147,13 +147,6 @@ func TestEngine_ComponentChanges(t *testing.T) {
 			newValue: "Cilium",
 		},
 		{
-			name:     "CSI change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.CSI = v1alpha1.CSIEnabled },
-			field:    "cluster.csi",
-			oldValue: "Disabled",
-			newValue: testValueEnabled,
-		},
-		{
 			name:     "MetricsServer change",
 			mutate:   func(s *v1alpha1.ClusterSpec) { s.MetricsServer = testValueEnabled },
 			field:    "cluster.metricsServer",
@@ -213,6 +206,45 @@ func TestEngine_ComponentChanges(t *testing.T) {
 				testCase.oldValue, testCase.newValue, clusterupdate.ChangeCategoryInPlace)
 		})
 	}
+}
+
+func TestEngine_CSIChange_SkippedForVanilla(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.CSI = v1alpha1.CSIDisabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer)
+
+	for _, change := range result.AllChanges() {
+		if change.Field == "cluster.csi" {
+			t.Fatal(
+				"CSI changes should be skipped for Vanilla" +
+					" (Kind always bundles local-path-provisioner)",
+			)
+		}
+	}
+}
+
+func TestEngine_CSIChange_DetectedForTalos(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	newer := clone(old)
+	newer.CSI = v1alpha1.CSIEnabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("CSI change should be detected for Talos")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.csi",
+		"Disabled", testValueEnabled, clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_LocalRegistryChange_Vanilla(t *testing.T) {
@@ -279,6 +311,25 @@ func TestEngine_LocalRegistryChange_K3s(t *testing.T) {
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.localRegistry.registry",
 		"localhost:5050", testRegistryAlt, clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_LocalRegistryChange_OldEmpty_Skipped(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.LocalRegistry.Registry = ""
+
+	newer := clone(old)
+	newer.LocalRegistry.Registry = "ghcr.io/org/repo"
+
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer)
+
+	for _, change := range result.AllChanges() {
+		if change.Field == "cluster.localRegistry.registry" {
+			t.Fatal("should not report local registry diff when old is empty (undetectable)")
+		}
+	}
 }
 
 func TestEngine_VanillaOptionsChange(t *testing.T) {
@@ -522,22 +573,26 @@ func TestEngine_MultipleChanges(t *testing.T) {
 	old := newBaseSpec()
 	newer := clone(old)
 	newer.CNI = v1alpha1.CNICilium
-	newer.CSI = v1alpha1.CSIEnabled
+	newer.CSI = v1alpha1.CSIDisabled
 	newer.Vanilla.MirrorsDir = "changed"
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
-	if len(result.InPlaceChanges) != 2 {
-		t.Errorf("expected 2 in-place changes, got %d", len(result.InPlaceChanges))
+	// CSI change is skipped for Vanilla, so only CNI counts as in-place
+	if len(result.InPlaceChanges) != 1 {
+		t.Errorf(
+			"expected 1 in-place change (CNI only, CSI skipped for Vanilla), got %d",
+			len(result.InPlaceChanges),
+		)
 	}
 
 	if len(result.RecreateRequired) != 1 {
 		t.Errorf("expected 1 recreate-required change, got %d", len(result.RecreateRequired))
 	}
 
-	if result.TotalChanges() != 3 {
-		t.Errorf("expected 3 total changes, got %d", result.TotalChanges())
+	if result.TotalChanges() != 2 {
+		t.Errorf("expected 2 total changes, got %d", result.TotalChanges())
 	}
 
 	if !result.NeedsUserConfirmation() {
@@ -557,15 +612,20 @@ func TestEngine_DefaultVsDisabled_NoFalsePositive_Vanilla(t *testing.T) {
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
+	// MetricsServer and LoadBalancer: Default and Disabled are semantically
+	// equivalent on Vanilla/Docker, so no changes should be detected.
+	// CSI: skipped entirely for Vanilla because Kind always bundles
+	// local-path-provisioner and the detector can't distinguish bundled
+	// from KSail-installed CSI.
 	if result.TotalChanges() != 0 {
 		t.Errorf(
-			"Default vs Disabled should produce 0 changes on Vanilla/Docker, got %d",
+			"Default vs Disabled on Vanilla/Docker should produce 0 changes, got %d",
 			result.TotalChanges(),
 		)
 
 		for _, change := range result.AllChanges() {
 			t.Logf(
-				"  unexpected change: %s %q -> %q",
+				"  change: %s %q -> %q",
 				change.Field, change.OldValue, change.NewValue,
 			)
 		}

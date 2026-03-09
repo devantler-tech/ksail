@@ -280,7 +280,9 @@ func (rm *RegistryManager) checkRegistryHealth(
 		return false, fmt.Errorf("failed to create health check request: %w", reqErr)
 	}
 
-	resp, respErr := httpClient.Do(req)
+	resp, respErr := httpClient.Do(
+		req,
+	)
 	if respErr != nil {
 		return false, fmt.Errorf("health check request failed: %w", respErr)
 	}

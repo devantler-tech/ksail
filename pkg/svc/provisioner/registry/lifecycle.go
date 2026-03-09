@@ -19,6 +19,7 @@ type Info struct {
 	Port     int
 	Volume   string
 	Username string // Optional: username for registry authentication (supports ${ENV_VAR} placeholders)
+
 	Password string
 }
 
