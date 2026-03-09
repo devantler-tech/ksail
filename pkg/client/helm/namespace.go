@@ -45,7 +45,7 @@ func (c *Client) restoreNamespace(namespace string) error {
 		os.Getenv("HELM_DRIVER"),
 	)
 	if err != nil {
-		return fmt.Errorf("init action config for namespace %s: %w", namespace, err)
+		return fmt.Errorf("init action config for namespace %q: %w", namespace, err)
 	}
 
 	return nil
