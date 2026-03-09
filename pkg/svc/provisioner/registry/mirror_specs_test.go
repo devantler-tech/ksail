@@ -299,7 +299,7 @@ func TestMirrorSpec_ResolveCredentials_EnvVars(
 	}{
 		{
 			name: "env_var_credentials",
-			spec: registry.MirrorSpec{ //nolint:gosec // G101: test fixture with env var placeholders, not real credentials
+			spec: registry.MirrorSpec{
 				Host:     "ghcr.io",
 				Remote:   "https://ghcr.io",
 				Username: "${TEST_USER}",
@@ -310,7 +310,7 @@ func TestMirrorSpec_ResolveCredentials_EnvVars(
 		},
 		{
 			name: "mixed_credentials",
-			spec: registry.MirrorSpec{ //nolint:gosec // G101: test fixture with env var placeholders, not real credentials
+			spec: registry.MirrorSpec{
 				Host:     "quay.io",
 				Remote:   "https://quay.io",
 				Username: "literal-user",
@@ -453,7 +453,7 @@ func TestParseMirrorSpecs_AtSignInURL(
 				"docker.io=https://user:pass@registry-1.docker.io",
 			},
 			expected: []registry.MirrorSpec{
-				{ //nolint:gosec // G101: test fixture with dummy URL credentials, not real
+				{
 					Host:     "docker.io",
 					Remote:   "https://user:pass@registry-1.docker.io",
 					Username: "",
@@ -467,7 +467,7 @@ func TestParseMirrorSpecs_AtSignInURL(
 				"myuser:mypass@docker.io=https://user:pass@registry-1.docker.io",
 			},
 			expected: []registry.MirrorSpec{
-				{ //nolint:gosec // G101: test fixture with dummy URL credentials, not real
+				{
 					Host:     "docker.io",
 					Remote:   "https://user:pass@registry-1.docker.io",
 					Username: "myuser",
@@ -491,7 +491,7 @@ func TestBuildRegistryInfosFromSpecs_WithCredentials(t *testing.T) {
 	t.Parallel()
 
 	specs := []registry.MirrorSpec{
-		{ //nolint:gosec // G101: test fixture, not real credentials
+		{
 			Host:     "ghcr.io",
 			Remote:   "https://ghcr.io",
 			Username: "${GITHUB_USER}",
