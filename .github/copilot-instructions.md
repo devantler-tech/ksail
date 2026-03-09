@@ -163,6 +163,8 @@ go run main.go --help
 │   └── svc/                # Services (installers, managers, etc.)
 │       ├── chat/           # AI chat integration (GitHub Copilot SDK)
 │       ├── detector/       # Detects installed Kubernetes components (Helm releases, K8s API)
+│       │   ├── cluster/    # Detects distribution, provider, cluster name from kubeconfig context
+│       │   └── gitops/     # Detects existing GitOps CRs (FluxInstance, ArgoCD Application) in source dir
 │       ├── diff/           # Computes ClusterSpec config diffs and classifies update impact
 │       ├── image/          # Container image export/import services
 │       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
@@ -313,6 +315,8 @@ For a deeper dive into KSail's design and internals, refer to:
 - `pkg/svc/`: Services including installers, providers, and provisioners
   - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation
   - `pkg/svc/detector/`: Detects installed Kubernetes components by querying Helm release history and the Kubernetes API; used by the update command to build accurate baseline state
+    - `pkg/svc/detector/cluster/`: Detects Kubernetes distribution, provider, and cluster name by analyzing kubeconfig context names and server endpoints; exposes `DetectInfo`, `DetectDistributionFromContext`, and `ResolveKubeconfigPath`
+    - `pkg/svc/detector/gitops/`: Detects existing GitOps Custom Resources (FluxInstance, ArgoCD Application) managed by KSail in the source directory
   - `pkg/svc/diff/`: Computes configuration differences between old and new ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
   - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
   - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.); `internal/hetzner/` holds shared utilities for the Hetzner installers—`hcloudccm.Installer` and `hetznercsi.Installer` are type aliases for `hetzner.Installer` and share a single `EnsureSecret` implementation
