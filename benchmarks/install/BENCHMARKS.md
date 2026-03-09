@@ -50,17 +50,17 @@ grep -E '✔.*installed \[' install-baseline.log
 
 Install durations vary by distribution and provider. The following matrix documents which components are installed for each distribution:
 
-| Component        | Vanilla (Kind) | K3s (K3d) | Talos (Docker) | VCluster (Vind) |
-|------------------|:--------------:|:---------:|:--------------:|:---------------:|
-| CNI (Cilium)     |       ✔        |     ✔     |       ✔        |        —        |
-| CNI (Calico)     |       ✔        |     ✔     |       ✔        |        —        |
-| CSI              |       ✔        |     —     |       ✔        |        ✔        |
-| metrics-server   |       ✔        |     —     |       ✔        |        ✔        |
-| load-balancer    |       —        |     —     |       ✔        |        —        |
-| cert-manager     |       ✔        |     ✔     |       ✔        |        ✔        |
-| policy-engine    |       ✔        |     ✔     |       ✔        |        ✔        |
-| Flux             |       ✔        |     ✔     |       ✔        |        ✔        |
-| ArgoCD           |       ✔        |     ✔     |       ✔        |        ✔        |
+| Component      | Vanilla (Kind) | K3s (K3d) | Talos (Docker) | VCluster (Vind) |
+|----------------|:--------------:|:---------:|:--------------:|:---------------:|
+| CNI (Cilium)   |       ✔        |     ✔     |       ✔        |        —        |
+| CNI (Calico)   |       ✔        |     ✔     |       ✔        |        —        |
+| CSI            |       ✔        |     —     |       ✔        |        ✔        |
+| metrics-server |       ✔        |     —     |       ✔        |        ✔        |
+| load-balancer  |       —        |     —     |       ✔        |        —        |
+| cert-manager   |       ✔        |     ✔     |       ✔        |        ✔        |
+| policy-engine  |       ✔        |     ✔     |       ✔        |        ✔        |
+| Flux           |       ✔        |     ✔     |       ✔        |        ✔        |
+| ArgoCD         |       ✔        |     ✔     |       ✔        |        ✔        |
 
 Cells marked `—` indicate the distribution provides the component by default or does not require it.
 
