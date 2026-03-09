@@ -254,6 +254,14 @@ To test the Omni provider locally, you need:
 
 **Note:** Omni system tests are not part of the default CI workflows. This section only applies to running Omni provider tests locally: those tests are not triggered unless both the `OMNI_SERVICE_ACCOUNT_KEY` and Omni endpoint are configured.
 
+#### Scheduled Workflows
+
+| Workflow       | Schedule            | Purpose                   |
+|----------------|---------------------|---------------------------|
+| `daily-skills` | Daily (06:00 UTC)   | Npx skills upgrades       |
+| `maintenance`  | Monthly (1st, 00:00 UTC) | Old workflow run and image cleanup |
+| `sync-labels`  | Weekly (Monday, 07:00 UTC) | Label synchronization |
+
 #### Agentic Workflows
 
 KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a schedule or on dispatch:
@@ -263,7 +271,6 @@ KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.githu
 | `daily-code-quality`         | Daily (02:00 UTC)                           | Refactoring, performance optimization, and test coverage improvements     |
 | `daily-plan`                 | Daily (10:00 UTC)                           | Issue triage, backlog issue creation, and prioritization from the roadmap |
 | `daily-builder`              | Daily (14:00 UTC)                           | Backlog issue resolution and feature delivery from the project plan       |
-| `daily-skills`               | Daily                                       | Npx skills upgrade and maintenance                                        |
 | `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, and dependency upgrades             |
 | `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes and bloat reduction                  |
 | `weekly-research`            | Weekly                                      | Market research and actionable feature roadmap                            |
