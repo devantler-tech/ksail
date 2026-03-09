@@ -64,7 +64,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
 	github.com/loft-sh/vcluster v0.32.1
-	github.com/modelcontextprotocol/go-sdk v1.3.1
+	github.com/modelcontextprotocol/go-sdk v1.4.0
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/omni/client v1.5.8
 	golang.org/x/text v0.34.0
