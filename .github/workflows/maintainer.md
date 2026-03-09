@@ -70,7 +70,7 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
 
      ```bash
      VALIDATION_FAILED=0
-     for file in .github/workflows/*.md; do
+     for file in $(find .github/workflows -name '*.md'); do
        echo "Compiling $file..."
        gh aw compile --validate "$file" 2>&1 || VALIDATION_FAILED=1
      done
@@ -80,7 +80,7 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
    - **Only if validation passes** (`VALIDATION_FAILED=0`), recompile in write mode to update `.lock.yml` files:
 
      ```bash
-     for file in .github/workflows/*.md; do
+     for file in $(find .github/workflows -name '*.md'); do
        echo "Compiling $file..."
        gh aw compile "$file" 2>&1
      done
@@ -100,15 +100,14 @@ Your name is "${{ github.workflow }}". Your job is to upgrade the workflows in t
    - **Before resetting**, capture diffs of any modified `.github/workflows/*.md` files so they can be included in the PR description:
 
      ```bash
-     git diff .github/workflows/*.md .github/workflows/shared/*.md 2>/dev/null | tee /tmp/workflow-md-diffs.patch || true
+     git diff -- $(find .github/workflows -name '*.md') 2>/dev/null | tee /tmp/workflow-md-diffs.patch || true
      ```
 
 6. **Reset workflow source files**:
    - Reset only the `.md` source files. The compiled `.lock.yml` files should be kept and included in the PR, as they reflect the updated action versions.
 
      ```bash
-     git checkout -- .github/workflows/*.md
-     git checkout -- .github/workflows/shared/*.md 2>/dev/null || true
+     git checkout -- $(find .github/workflows -name '*.md')
      ```
 
    - Verify the remaining changes include `.lock.yml` files and any non-source files:
