@@ -103,6 +103,8 @@ type ProgressGroup struct {
 	taskStatus     map[string]taskState
 	taskOrder      []string // Original task order
 	taskStartOrder []string // Order tasks started running (for display)
+	taskStartTime  map[string]time.Time     // Per-task start times
+	taskDuration   map[string]time.Duration // Per-task elapsed durations
 	spinnerIdx     int
 	stopSpinner    chan struct{}
 	spinnerDone    chan struct{}
@@ -180,6 +182,8 @@ func NewProgressGroup(
 		taskStatus:     make(map[string]taskState),
 		taskOrder:      make([]string, 0),
 		taskStartOrder: make([]string, 0),
+		taskStartTime:  make(map[string]time.Time),
+		taskDuration:   make(map[string]time.Duration),
 		stopSpinner:    make(chan struct{}),
 		spinnerDone:    make(chan struct{}),
 	}
@@ -278,9 +282,10 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 
 	for _, task := range tasks {
 		group.Go(func() error {
-			// Print start message
+			// Print start message and record start time
 			pg.mu.Lock()
 			pg.taskStatus[task.Name] = taskRunning
+			pg.taskStartTime[task.Name] = time.Now()
 			_, _ = fmt.Fprintf(pg.writer, "► %s %s\n", task.Name, pg.labels.Running)
 			pg.mu.Unlock()
 
@@ -293,8 +298,25 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 				_, _ = fcolor.New(fcolor.FgRed).Fprintf(pg.writer, "✗ %s failed\n", task.Name)
 			} else {
 				pg.taskStatus[task.Name] = taskComplete
-				_, _ = fcolor.New(fcolor.FgGreen).
-					Fprintf(pg.writer, "✔ %s %s\n", task.Name, pg.labels.Completed)
+
+				if startTime, ok := pg.taskStartTime[task.Name]; ok {
+					pg.taskDuration[task.Name] = time.Since(startTime)
+				}
+
+				if pg.timer != nil {
+					if d, ok := pg.taskDuration[task.Name]; ok {
+						_, _ = fcolor.New(fcolor.FgGreen).
+							Fprintf(pg.writer, "✔ %s %s [%s]\n",
+								task.Name, pg.labels.Completed, d)
+					} else {
+						_, _ = fcolor.New(fcolor.FgGreen).
+							Fprintf(pg.writer, "✔ %s %s\n",
+								task.Name, pg.labels.Completed)
+					}
+				} else {
+					_, _ = fcolor.New(fcolor.FgGreen).
+						Fprintf(pg.writer, "✔ %s %s\n", task.Name, pg.labels.Completed)
+				}
 			}
 
 			pg.mu.Unlock()
@@ -329,14 +351,22 @@ func (pg *ProgressGroup) printTiming() {
 	_, _ = successColor.Fprintf(pg.writer, "  total:  %s\n", total.String())
 }
 
-// setTaskState safely updates a task's state and tracks start order.
+// setTaskState safely updates a task's state and tracks start order and timing.
 func (pg *ProgressGroup) setTaskState(name string, state taskState) {
 	pg.mu.Lock()
 	defer pg.mu.Unlock()
 
-	// Track when tasks start running (for display order)
+	// Track when tasks start running (for display order and timing)
 	if state == taskRunning && pg.taskStatus[name] == taskPending {
 		pg.taskStartOrder = append(pg.taskStartOrder, name)
+		pg.taskStartTime[name] = time.Now()
+	}
+
+	// Record duration when task completes
+	if state == taskComplete {
+		if startTime, ok := pg.taskStartTime[name]; ok {
+			pg.taskDuration[name] = time.Since(startTime)
+		}
 	}
 
 	pg.taskStatus[name] = state
@@ -439,6 +469,13 @@ func (pg *ProgressGroup) formatTaskLine(name string, state taskState) string {
 
 		return fcolor.New(fcolor.FgCyan).Sprintf("%s %s %s", spinner, name, pg.labels.Running)
 	case taskComplete:
+		if pg.timer != nil {
+			if d, ok := pg.taskDuration[name]; ok {
+				return fcolor.New(fcolor.FgGreen).
+					Sprintf("✔ %s %s [%s]", name, pg.labels.Completed, d)
+			}
+		}
+
 		return fcolor.New(fcolor.FgGreen).Sprintf("✔ %s %s", name, pg.labels.Completed)
 	case taskFailed:
 		return fcolor.New(fcolor.FgRed).Sprintf("✗ %s failed", name)

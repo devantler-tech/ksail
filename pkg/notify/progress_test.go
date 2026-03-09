@@ -367,6 +367,98 @@ func TestProgressGroup_WithTimer_Success(t *testing.T) {
 	}
 }
 
+func TestProgressGroup_WithTimer_PerTaskDuration(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	tmr := &fixedTimer{total: 3 * time.Second, stage: 500 * time.Millisecond}
+
+	progressGroup := notify.NewProgressGroup(
+		"Installing",
+		"📦",
+		&buf,
+		notify.WithLabels(notify.InstallingLabels()),
+		notify.WithTimer(tmr),
+	)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "fast-component",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
+				return nil
+			},
+		},
+		{
+			Name: "slow-component",
+			Fn: func(_ context.Context) error {
+				time.Sleep(20 * time.Millisecond)
+
+				return nil
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+
+	// Per-task durations should be shown when timer is set
+	if !strings.Contains(output, "fast-component installed [") {
+		t.Errorf("expected per-task duration for fast-component, got: %q", output)
+	}
+
+	if !strings.Contains(output, "slow-component installed [") {
+		t.Errorf("expected per-task duration for slow-component, got: %q", output)
+	}
+
+	// Group timing should still be shown
+	if !strings.Contains(output, "⏲ current:") {
+		t.Errorf("expected group timing info in output, got: %q", output)
+	}
+}
+
+func TestProgressGroup_WithoutTimer_NoDuration(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	progressGroup := notify.NewProgressGroup(
+		"Installing",
+		"📦",
+		&buf,
+		notify.WithLabels(notify.InstallingLabels()),
+	)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "component",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
+				return nil
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+
+	// Without timer, completion line should NOT contain duration brackets
+	if strings.Contains(output, "installed [") {
+		t.Errorf("expected no per-task duration without timer, got: %q", output)
+	}
+}
+
 func TestProgressGroup_WithTimer_Failure_NoTiming(t *testing.T) {
 	t.Parallel()
 
