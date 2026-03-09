@@ -291,10 +291,6 @@ func computeSpecOnlyDiff(
 		}
 	}
 
-	// Apply GitOps local registry default AFTER detection so the detected
-	// GitOps engine value is used to infer the default local registry address.
-	clusterupdate.ApplyGitOpsLocalRegistryDefault(currentSpec)
-
 	diffEngine := specdiff.NewEngine(
 		ctx.ClusterCfg.Spec.Cluster.Distribution,
 		ctx.ClusterCfg.Spec.Cluster.Provider,

@@ -171,8 +171,7 @@ func executeCommand(
 		defer cancel()
 	}
 
-	//nolint:gosec // G204: command and args from tool definitions, not arbitrary user input
-	cmd := exec.CommandContext(
+	cmd := exec.CommandContext( //nolint:gosec // G204: command and args from tool definitions, not arbitrary user input
 		execCtx,
 		command,
 		args...)
