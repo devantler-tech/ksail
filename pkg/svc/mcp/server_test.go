@@ -2,7 +2,9 @@ package mcp_test
 
 import (
 	"context"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/mcp"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -10,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const testTimeout = 10 * time.Second
 
 func TestDefaultConfig(t *testing.T) {
 	t.Parallel()
@@ -97,6 +101,8 @@ func TestServerConfig_Fields(t *testing.T) {
 // commands "hello" and "world". Because the root command is "echo", the
 // tool executor will run `echo hello` / `echo world` — real shell commands
 // that succeed without the ksail binary.
+// NOTE: echo is a standalone binary on Unix systems; on Windows it is a
+// shell builtin, so tests using this helper are skipped on Windows.
 func newTestCobraTree() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "echo",
@@ -118,13 +124,13 @@ func newTestCobraTree() *cobra.Command {
 }
 
 // connectClientServer creates an MCP server from cfg, connects it to a new
-// MCP client over in-memory transports, and returns both sessions.
-// The caller must defer-close both sessions.
+// MCP client over in-memory transports, and registers t.Cleanup handlers to
+// close both sessions automatically (avoiding leaks on partial setup failures).
 func connectClientServer(
 	ctx context.Context,
 	t *testing.T,
 	cfg mcp.ServerConfig,
-) (*mcpsdk.ServerSession, *mcpsdk.ClientSession) {
+) *mcpsdk.ClientSession {
 	t.Helper()
 
 	server, err := mcp.NewServer(cfg)
@@ -140,16 +146,25 @@ func connectClientServer(
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
 
+	t.Cleanup(func() { _ = serverSession.Close() })
+
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
 	require.NoError(t, err)
 
-	return serverSession, clientSession
+	t.Cleanup(func() { _ = clientSession.Close() })
+
+	return clientSession
 }
 
 func TestNewServer_ListTools(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	if runtime.GOOS == "windows" {
+		t.Skip("echo is a shell builtin on Windows, not an executable")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
 
 	cfg := mcp.ServerConfig{
 		Name:    "test-server",
@@ -157,9 +172,7 @@ func TestNewServer_ListTools(t *testing.T) {
 		RootCmd: newTestCobraTree(),
 	}
 
-	serverSession, clientSession := connectClientServer(ctx, t, cfg)
-	defer serverSession.Close()
-	defer clientSession.Close()
+	clientSession := connectClientServer(ctx, t, cfg)
 
 	result, err := clientSession.ListTools(ctx, nil)
 	require.NoError(t, err)
@@ -169,6 +182,7 @@ func TestNewServer_ListTools(t *testing.T) {
 	for _, tool := range result.Tools {
 		toolNames = append(toolNames, tool.Name)
 	}
+
 	assert.Contains(t, toolNames, "hello")
 	assert.Contains(t, toolNames, "world")
 	assert.Len(t, result.Tools, 2)
@@ -177,7 +191,12 @@ func TestNewServer_ListTools(t *testing.T) {
 func TestNewServer_CallTool(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	if runtime.GOOS == "windows" {
+		t.Skip("echo is a shell builtin on Windows, not an executable")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
 
 	cfg := mcp.ServerConfig{
 		Name:    "test-server",
@@ -185,9 +204,7 @@ func TestNewServer_CallTool(t *testing.T) {
 		RootCmd: newTestCobraTree(),
 	}
 
-	serverSession, clientSession := connectClientServer(ctx, t, cfg)
-	defer serverSession.Close()
-	defer clientSession.Close()
+	clientSession := connectClientServer(ctx, t, cfg)
 
 	result, err := clientSession.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "hello",
