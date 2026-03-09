@@ -405,7 +405,7 @@ func waitForNetworkRemoval(
 // dockerNetworkExists checks whether a Docker network with the given name
 // exists. Returns false if the network is not found or if Docker is unavailable.
 func dockerNetworkExists(ctx context.Context, networkName string) bool {
-	cmd := exec.CommandContext( //nolint:gosec // G204: fixed "docker network inspect" command with cluster-derived name
+	cmd := exec.CommandContext( //nolint:gosec // G204: fixed args, only networkName varies
 		ctx,
 		"docker",
 		"network",
@@ -426,7 +426,7 @@ func removeDockerNetwork(
 	networkName string,
 	logger loftlog.Logger,
 ) {
-	cmd := exec.CommandContext( //nolint:gosec // G204: fixed "docker network rm" command with cluster-derived name
+	cmd := exec.CommandContext( //nolint:gosec // G204: fixed args, only networkName varies
 		ctx,
 		"docker",
 		"network",
