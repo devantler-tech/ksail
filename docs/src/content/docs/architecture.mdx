@@ -154,7 +154,7 @@ Between phases, KSail performs an **API Server Stability Check** (`waitForAPISer
 The `detector` service (`pkg/svc/detector/`) identifies installed components by querying Helm release history and the Kubernetes API, enabling accurate baselines, intelligent updates (only modify what changed), and post-update verification. It has two sub-packages:
 
 - **`detector/cluster/`** — Detects the Kubernetes distribution, provider, and cluster name by analyzing kubeconfig context names and server endpoints. Exposes `DetectInfo`, `DetectDistributionFromContext`, and `ResolveKubeconfigPath`.
-- **`detector/gitops/`** — Detects existing GitOps Custom Resources (FluxInstance, ArgoCD Application) managed by KSail in the source directory.
+- **`detector/gitops/`** — Detects existing GitOps Custom Resources (FluxInstance, ArgoCD Application) in the source directory that are either labeled as managed by KSail or use KSail's default resource names (for example, `flux` / `ksail`).
 
 The `diff` service (`pkg/svc/diff/`) classifies update impact as:
 - **In-place** — No disruption (e.g., CNI config changes)
