@@ -652,7 +652,7 @@ func addFileToTar(
 		return nil
 	}
 
-	file, err := os.Open(
+	file, err := os.Open( //nolint:gosec // G304: path from archive walk
 		path,
 	)
 	if err != nil {

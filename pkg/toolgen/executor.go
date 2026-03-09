@@ -171,7 +171,7 @@ func executeCommand(
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext(
+	cmd := exec.CommandContext( //nolint:gosec // G204: command from trusted config
 		execCtx,
 		command,
 		args...)
