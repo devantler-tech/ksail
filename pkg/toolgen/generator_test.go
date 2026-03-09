@@ -220,6 +220,76 @@ func TestConsolidatedToolGeneration(t *testing.T) {
 	}
 }
 
+func TestConsolidatedToolGenerationWithPositionalArgs(t *testing.T) {
+	t.Parallel()
+
+	// Create a parent command with consolidation annotation
+	parentCmd := &cobra.Command{
+		Use:   "cipher",
+		Short: "Manage encrypted files",
+		Annotations: map[string]string{
+			"ai.toolgen.consolidate": "cipher_operation",
+		},
+	}
+
+	// Subcommand that accepts positional args (like cipher encrypt)
+	encryptCmd := &cobra.Command{
+		Use:   "encrypt <file>",
+		Short: "Encrypt a file",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return nil
+		},
+	}
+
+	// Subcommand without positional args
+	importCmd := &cobra.Command{
+		Use:   "import",
+		Short: "Import a key",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return nil
+		},
+	}
+	importCmd.Flags().String("key", "", "Key to import")
+
+	parentCmd.AddCommand(encryptCmd, importCmd)
+
+	tools := toolgen.GenerateTools(parentCmd, toolgen.DefaultOptions())
+	if len(tools) != 1 {
+		t.Fatalf("Expected 1 consolidated tool, got %d", len(tools))
+	}
+
+	tool := tools[0]
+	properties, ok := tool.Parameters["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("Properties should be a map")
+	}
+
+	// Verify args parameter is present (since encrypt accepts positional args)
+	argsProp, exists := properties["args"]
+	if !exists {
+		t.Fatal("Expected 'args' parameter in schema for consolidated tool with positional args")
+	}
+
+	argsMap, ok := argsProp.(map[string]any)
+	if !ok {
+		t.Fatal("args property should be a map")
+	}
+
+	if argsMap["type"] != "array" {
+		t.Errorf("Expected args type 'array', got %v", argsMap["type"])
+	}
+
+	// Verify AcceptsArgs is tracked on the subcommand
+	if !tool.Subcommands["encrypt"].AcceptsArgs {
+		t.Error("encrypt subcommand should have AcceptsArgs=true")
+	}
+
+	if tool.Subcommands["import"].AcceptsArgs {
+		t.Error("import subcommand should have AcceptsArgs=false")
+	}
+}
+
 //nolint:funlen // Test functions are inherently verbose with test data setup
 func TestConsolidatedToolSchema(t *testing.T) {
 	t.Parallel()

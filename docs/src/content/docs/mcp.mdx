@@ -43,18 +43,75 @@ The server will:
 
 ## Available Tools
 
-The MCP server automatically exposes all KSail commands except:
+The MCP server automatically generates tools from all KSail commands except:
 
 - `ksail chat` — Interactive chat (use MCP client's native chat instead)
 - `ksail mcp` — The MCP server itself
 - `ksail completion` — Shell completion (not relevant for MCP)
 - `ksail help` — Built-in help (use MCP tool discovery)
 
-Available tool categories:
+Commands are consolidated by permission into **6 tools**:
 
-- **Cluster Management**: `cluster init`, `cluster create`, `cluster delete`, `cluster start`, `cluster stop`, `cluster update`, `cluster info`, `cluster list`, `cluster connect`, `cluster switch`, `cluster backup`, `cluster restore`
-- **Workload Operations**: `workload apply`, `workload create`, `workload delete`, `workload gen`, and more
-- **Secret Management**: `cipher encrypt`, `cipher decrypt`, `cipher edit`
+| Tool | Description | Subcommand Parameter |
+|------|-------------|----------------------|
+| `cluster_read` | Read-only cluster operations | `command` |
+| `cluster_write` | Cluster lifecycle mutations | `command` |
+| `workload_read` | Read-only workload operations | `workload_command` |
+| `workload_write` | Workload mutations | `workload_command` |
+| `cipher_read` | Read-only secret operations | `cipher_operation` |
+| `cipher_write` | Secret mutations | `cipher_operation` |
+
+Each tool accepts a **subcommand parameter** (e.g., `command`, `workload_command`, `cipher_operation`) that selects the specific operation. Flags that apply only to certain subcommands are annotated in their descriptions.
+
+### Cluster Operations (`cluster_read` / `cluster_write`)
+
+**Read operations** (`cluster_read` with `command`):
+- `info` — Display cluster information
+- `list` — List clusters
+- `connect` — Connect to cluster with k9s
+- `switch` — Switch active cluster context
+
+**Write operations** (`cluster_write` with `command`):
+- `init` — Initialize a new project
+- `create` — Create a cluster
+- `update` — Update a cluster configuration (returns diff output showing before/after changes)
+- `delete` — Destroy a cluster
+- `start` — Start a stopped cluster
+- `stop` — Stop a running cluster
+- `backup` — Backup cluster resources
+- `restore` — Restore cluster resources from backup
+
+### Workload Operations (`workload_read` / `workload_write`)
+
+**Read operations** (`workload_read` with `workload_command`):
+- `get` — Get resources
+- `describe` — Describe resources
+- `logs` — Print container logs
+- `explain` — Get documentation for a resource
+- `validate` — Validate Kubernetes manifests
+- `gen_deployment`, `gen_service_clusterip`, etc. — Generate resource manifests
+
+**Write operations** (`workload_write` with `workload_command`):
+- `apply` — Apply manifests
+- `create` — Create resources
+- `delete` — Delete resources
+- `edit` — Edit a resource
+- `scale` — Scale resources
+- `reconcile` — Trigger reconciliation for GitOps workloads
+- `push` — Package and push an OCI artifact
+- `install` — Install Helm charts
+- `watch` — Watch for file changes and auto-apply
+- `rollout_restart`, `rollout_status`, etc. — Manage rollouts
+
+### Secret Management (`cipher_read` / `cipher_write`)
+
+**Read operations** (`cipher_read` with `cipher_operation`):
+- `decrypt` — Decrypt a SOPS-encrypted file (pass file path via `args`)
+
+**Write operations** (`cipher_write` with `cipher_operation`):
+- `encrypt` — Encrypt a file with SOPS (pass file path via `args`)
+- `edit` — Edit an encrypted file in-place (pass file path via `args`)
+- `import` — Import an age key
 
 MCP clients can discover available tools dynamically and toggle them on/off as needed.
 
@@ -85,7 +142,7 @@ After restarting Claude Desktop, the KSail tools will be available. Try:
 
 > "Create a Vanilla Kubernetes cluster with Cilium CNI"
 
-Claude will use the `ksail cluster init` and `ksail cluster create` tools to fulfill your request.
+Claude will use the `cluster_write` tool (with `command: "init"` and `command: "create"`) to fulfill your request.
 
 ### VSCode Extension
 
@@ -128,15 +185,15 @@ async with stdio_client(
         tools = await session.list_tools()
         print(f"Available tools: {[t.name for t in tools.tools]}")
         
-        # Call a tool
+        # Call a tool — use consolidated tool name with subcommand parameter
         result = await session.call_tool(
-            "cluster_info",
-            arguments={}
+            "cluster_read",
+            arguments={"command": "info"}
         )
         print(result.content)
 ````
 
-**Note:** Tool names use underscores (e.g., `cluster_info` for `ksail cluster info`). Check the MCP SDK documentation for your language.
+**Note:** Tools are consolidated into read/write pairs (e.g., `cluster_read`, `cluster_write`). Use the subcommand parameter to select the specific operation. Check the MCP SDK documentation for your language.
 
 ## Tool Discovery
 
@@ -148,9 +205,9 @@ mcp list-tools --server "ksail mcp"
 ````
 
 Each tool includes:
-- **Name**: Command path with underscores (e.g., `workload_apply`)
-- **Description**: Help text from the Cobra command
-- **Parameters**: JSON schema for command flags and arguments
+- **Name**: Consolidated tool name (e.g., `cluster_write`, `cipher_read`)
+- **Description**: Help text describing the tool category
+- **Parameters**: JSON schema with subcommand selector enum and merged flags
 
 ## Configuration
 
@@ -230,18 +287,28 @@ Combine MCP with automation frameworks:
 async def provision_dev_cluster():
     async with mcp_session() as session:
         # Initialize cluster configuration
-        await session.call_tool("cluster_init", {
+        await session.call_tool("cluster_write", {
+            "command": "init",
             "name": "dev",
             "distribution": "K3s",
             "cni": "Cilium"
         })
         
         # Create the cluster
-        await session.call_tool("cluster_create", {})
+        await session.call_tool("cluster_write", {
+            "command": "create"
+        })
         
         # Deploy workloads
-        await session.call_tool("workload_apply", {
-            "kustomize": "./k8s"
+        await session.call_tool("workload_write", {
+            "workload_command": "apply",
+            "args": ["./k8s"]
+        })
+        
+        # Encrypt a secret
+        await session.call_tool("cipher_write", {
+            "cipher_operation": "encrypt",
+            "args": ["secrets.yaml"]
         })
 ````
 

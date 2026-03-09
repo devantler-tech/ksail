@@ -116,6 +116,12 @@ func handleConsolidatedTool(
 		if key == tool.SubcommandParam {
 			continue
 		}
+		// Pass through positional args without filtering
+		if key == "args" {
+			filteredParams[key] = val
+
+			continue
+		}
 		// Only include flags that exist in the selected subcommand's flag definitions
 		if _, appliesToSubcommand := subcommandDef.Flags[key]; appliesToSubcommand {
 			filteredParams[key] = val

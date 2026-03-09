@@ -176,6 +176,39 @@ func TestBuildCommandArgs_EmptyParams(t *testing.T) {
 	assert.Contains(t, args, "list")
 }
 
+func TestConsolidatedToolExecution_WithPositionalArgs(t *testing.T) {
+	t.Parallel()
+
+	// Simulate a cipher-like consolidated tool where subcommands accept positional args
+	tool := toolgen.ToolDefinition{
+		Name:            "cipher_write",
+		Description:     "Manage encrypted files with SOPS",
+		CommandPath:     "ksail cipher",
+		CommandParts:    []string{"ksail", "cipher"},
+		IsConsolidated:  true,
+		SubcommandParam: "cipher_operation",
+		Subcommands: map[string]*toolgen.SubcommandDef{
+			"encrypt": {
+				Name:         "encrypt",
+				Description:  "Encrypt a file with SOPS",
+				CommandParts: []string{"ksail", "cipher", "encrypt"},
+				Flags:        map[string]*toolgen.FlagDef{},
+				AcceptsArgs:  true,
+			},
+		},
+	}
+
+	args, err := toolgen.BuildCommandArgs(tool, map[string]any{
+		"cipher_operation": "encrypt",
+		"args":             []any{"secrets.yaml"},
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, args, "cipher")
+	assert.Contains(t, args, "encrypt")
+	assert.Contains(t, args, "secrets.yaml")
+}
+
 //nolint:funlen // Test functions are inherently verbose with test data setup
 func TestConsolidatedToolExecution(t *testing.T) {
 	t.Parallel()

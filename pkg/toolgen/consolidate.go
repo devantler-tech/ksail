@@ -124,6 +124,7 @@ func collectAllSubcommandsWithPrefix(
 					Description:  subCmd.Short,
 					CommandParts: subCmdParts,
 					Flags:        flags,
+					AcceptsArgs:  subCmd.Args != nil,
 				}
 			}
 			// Recursively collect nested subcommands with updated prefix
@@ -135,6 +136,7 @@ func collectAllSubcommandsWithPrefix(
 				Description:  subCmd.Short,
 				CommandParts: subCmdParts,
 				Flags:        flags,
+				AcceptsArgs:  subCmd.Args != nil,
 			}
 		}
 	}
@@ -211,6 +213,7 @@ func buildSubcommandDef(cmd *cobra.Command, relativeKey string) *SubcommandDef {
 		Description:  cmd.Short,
 		CommandParts: strings.Fields(cmd.CommandPath()),
 		Flags:        extractFlags(cmd),
+		AcceptsArgs:  cmd.Args != nil,
 	}
 }
 
