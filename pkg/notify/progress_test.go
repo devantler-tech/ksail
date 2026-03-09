@@ -402,58 +402,59 @@ func TestProgressGroup_WithTimer_Success(t *testing.T) {
 func TestProgressGroup_WithTimer_PerTaskDuration(t *testing.T) {
 	t.Parallel()
 
-	var buf bytes.Buffer
-
-	tmr := &fixedTimer{total: 3 * time.Second, stage: 500 * time.Millisecond}
-	clk := newFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
-
-	progressGroup := notify.NewProgressGroup(
-		"Installing",
-		"📦",
-		&buf,
-		notify.WithLabels(notify.InstallingLabels()),
-		notify.WithTimer(tmr),
-		notify.WithClock(clk),
-	)
-
-	tasks := []notify.ProgressTask{
-		{
-			Name: "fast-component",
-			Fn: func(_ context.Context) error {
-				clk.Advance(2 * time.Second)
-
-				return nil
-			},
-		},
-		{
-			Name: "slow-component",
-			Fn: func(_ context.Context) error {
-				clk.Advance(5 * time.Second)
-
-				return nil
-			},
-		},
+	tests := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{"fast-component", 2 * time.Second, "fast-component installed [2s]"},
+		{"slow-component", 5 * time.Second, "slow-component installed [5s]"},
 	}
 
-	err := progressGroup.Run(context.Background(), tasks...)
-	if err != nil {
-		t.Errorf("expected no error, got: %v", err)
-	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 
-	output := buf.String()
+			var buf bytes.Buffer
 
-	// Per-task durations should be shown when timer is set
-	if !strings.Contains(output, "fast-component installed [2s]") {
-		t.Errorf("expected per-task duration for fast-component, got: %q", output)
-	}
+			tmr := &fixedTimer{total: 3 * time.Second, stage: 500 * time.Millisecond}
+			clk := newFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 
-	if !strings.Contains(output, "slow-component installed [5s]") {
-		t.Errorf("expected per-task duration for slow-component, got: %q", output)
-	}
+			progressGroup := notify.NewProgressGroup(
+				"Installing",
+				"📦",
+				&buf,
+				notify.WithLabels(notify.InstallingLabels()),
+				notify.WithTimer(tmr),
+				notify.WithClock(clk),
+			)
 
-	// Group timing should still be shown
-	if !strings.Contains(output, "⏲ current:") {
-		t.Errorf("expected group timing info in output, got: %q", output)
+			tasks := []notify.ProgressTask{
+				{
+					Name: test.name,
+					Fn: func(_ context.Context) error {
+						clk.Advance(test.duration)
+
+						return nil
+					},
+				},
+			}
+
+			err := progressGroup.Run(context.Background(), tasks...)
+			if err != nil {
+				t.Errorf("expected no error, got: %v", err)
+			}
+
+			output := buf.String()
+
+			if !strings.Contains(output, test.expected) {
+				t.Errorf("expected per-task duration %q, got: %q", test.expected, output)
+			}
+
+			if !strings.Contains(output, "⏲ current:") {
+				t.Errorf("expected group timing info in output, got: %q", output)
+			}
+		})
 	}
 }
 

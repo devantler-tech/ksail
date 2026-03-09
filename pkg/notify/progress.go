@@ -163,10 +163,14 @@ func WithTimer(tmr timer.Timer) ProgressOption {
 }
 
 // WithClock sets the clock used for per-task duration tracking.
-// If not set, the real system clock is used.
-func WithClock(c Clock) ProgressOption {
+// If not set, the real system clock is used. A nil clock is ignored.
+func WithClock(clock Clock) ProgressOption {
 	return func(pg *ProgressGroup) {
-		pg.clock = c
+		if clock == nil {
+			return
+		}
+
+		pg.clock = clock
 	}
 }
 
