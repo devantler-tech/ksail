@@ -43,7 +43,7 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
     ksail cluster create
     ```
 
-    KSail downloads the Talos Docker image, creates containers as nodes, bootstraps Kubernetes, configures kubectl context, and installs CNI (Cilium by default).
+    KSail downloads the Talos Docker image, creates containers as nodes, bootstraps Kubernetes, configures kubectl context, and installs the configured CNI (Flannel by default; Cilium or Calico can be enabled via `ksail.yaml`).
 
     #### Step 3: Verify Cluster
 

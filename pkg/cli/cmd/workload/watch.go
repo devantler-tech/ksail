@@ -268,6 +268,7 @@ func scheduleApply(state *debounceState, file string, applyCh chan string) {
 // coalesces any stale pending apply and enqueues the latest file.
 func enqueueIfCurrent(state *debounceState, expectedGen uint64, applyCh chan string) {
 	state.mutex.Lock()
+
 	if expectedGen != state.generation {
 		state.mutex.Unlock()
 
