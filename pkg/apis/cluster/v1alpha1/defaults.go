@@ -17,6 +17,29 @@ const (
 	DefaultLocalRegistryPort int32 = 5050
 )
 
+// Hetzner default values — canonical source for OptionsHetzner struct tag defaults.
+const (
+	// DefaultHetznerServerType is the default Hetzner server type for both
+	// control-plane and worker nodes (matches `default:"cx23"` struct tag).
+	DefaultHetznerServerType = "cx23"
+	// DefaultHetznerLocation is the default Hetzner datacenter location
+	// (matches `default:"fsn1"` struct tag).
+	DefaultHetznerLocation = "fsn1"
+	// DefaultHetznerNetworkCIDR is the default CIDR block for the Hetzner
+	// private network (matches `default:"10.0.0.0/16"` struct tag).
+	DefaultHetznerNetworkCIDR = "10.0.0.0/16"
+	// DefaultHetznerTokenEnvVar is the default environment variable name
+	// for the Hetzner API token (matches `default:"HCLOUD_TOKEN"` struct tag).
+	DefaultHetznerTokenEnvVar = "HCLOUD_TOKEN"
+)
+
+// Talos default values — canonical source for OptionsTalos struct tag defaults.
+const (
+	// DefaultTalosISO is the default Hetzner ISO/image ID for booting Talos
+	// Linux (matches `default:"122630"` struct tag). Use 122629 for ARM.
+	DefaultTalosISO int64 = 122630
+)
+
 // ExpectedDistributionConfigName returns the default config filename for a distribution.
 func ExpectedDistributionConfigName(distribution Distribution) string {
 	switch distribution {

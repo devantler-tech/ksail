@@ -310,13 +310,6 @@ func (e *Engine) checkHetznerOptionsChange(
 	e.applyFieldRules(oldSpec, newSpec, result, hetznerFieldRules())
 }
 
-// Hetzner default values — kept in sync with OptionsHetzner struct tags.
-const (
-	defaultHetznerServerType  = "cx23"
-	defaultHetznerLocation    = "fsn1"
-	defaultHetznerNetworkCIDR = "10.0.0.0/16"
-)
-
 // hetznerFieldRules returns the Hetzner-specific scalar field diff rules.
 func hetznerFieldRules() []fieldRule {
 	return []fieldRule{
@@ -325,21 +318,21 @@ func hetznerFieldRules() []fieldRule {
 			category:   clusterupdate.ChangeCategoryRecreateRequired,
 			reason:     "existing control-plane servers cannot change VM type",
 			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.ControlPlaneServerType },
-			defaultVal: defaultHetznerServerType,
+			defaultVal: v1alpha1.DefaultHetznerServerType,
 		},
 		{
 			field:      "cluster.hetzner.workerServerType",
 			category:   clusterupdate.ChangeCategoryInPlace,
 			reason:     "new worker servers will use the new type; existing workers unchanged",
 			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.WorkerServerType },
-			defaultVal: defaultHetznerServerType,
+			defaultVal: v1alpha1.DefaultHetznerServerType,
 		},
 		{
 			field:      "cluster.hetzner.location",
 			category:   clusterupdate.ChangeCategoryRecreateRequired,
 			reason:     "datacenter location cannot be changed for existing servers",
 			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.Location },
-			defaultVal: defaultHetznerLocation,
+			defaultVal: v1alpha1.DefaultHetznerLocation,
 		},
 		{
 			field:    "cluster.hetzner.networkName",
@@ -352,7 +345,7 @@ func hetznerFieldRules() []fieldRule {
 			category:   clusterupdate.ChangeCategoryRecreateRequired,
 			reason:     "network CIDR change requires PKI regeneration",
 			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkCIDR },
-			defaultVal: defaultHetznerNetworkCIDR,
+			defaultVal: v1alpha1.DefaultHetznerNetworkCIDR,
 		},
 		{
 			field:    "cluster.hetzner.sshKeyName",
