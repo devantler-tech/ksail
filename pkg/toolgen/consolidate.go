@@ -1,10 +1,26 @@
 package toolgen
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+// acceptsPositionalArgs returns true if the command accepts positional arguments.
+// A command accepts args if:
+//   - cmd.Args is nil (Cobra default: no validation, accepts arbitrary args)
+//   - cmd.Args is set to a validator other than cobra.NoArgs
+//
+// It returns false only when cmd.Args is cobra.NoArgs (explicitly rejects all args).
+func acceptsPositionalArgs(cmd *cobra.Command) bool {
+	if cmd.Args == nil {
+		return true
+	}
+
+	return reflect.ValueOf(cmd.Args).Pointer() !=
+		reflect.ValueOf(cobra.NoArgs).Pointer()
+}
 
 // shouldConsolidate checks if a command should consolidate its subcommands.
 func shouldConsolidate(cmd *cobra.Command) bool {
@@ -124,6 +140,7 @@ func collectAllSubcommandsWithPrefix(
 					Description:  subCmd.Short,
 					CommandParts: subCmdParts,
 					Flags:        flags,
+					AcceptsArgs:  acceptsPositionalArgs(subCmd),
 				}
 			}
 			// Recursively collect nested subcommands with updated prefix
@@ -135,6 +152,7 @@ func collectAllSubcommandsWithPrefix(
 				Description:  subCmd.Short,
 				CommandParts: subCmdParts,
 				Flags:        flags,
+				AcceptsArgs:  acceptsPositionalArgs(subCmd),
 			}
 		}
 	}
@@ -211,6 +229,7 @@ func buildSubcommandDef(cmd *cobra.Command, relativeKey string) *SubcommandDef {
 		Description:  cmd.Short,
 		CommandParts: strings.Fields(cmd.CommandPath()),
 		Flags:        extractFlags(cmd),
+		AcceptsArgs:  acceptsPositionalArgs(cmd),
 	}
 }
 

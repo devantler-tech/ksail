@@ -2,6 +2,7 @@ package toolgen
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -32,10 +33,9 @@ func buildParameterSchema(cmd *cobra.Command) map[string]any {
 	})
 
 	// Check for positional arguments
-	if cmd.Args != nil {
+	if acceptsPositionalArgs(cmd) {
 		// Add positional args parameter for commands that expect them
-		// We'll use a generic "args" parameter
-		properties["args"] = map[string]any{
+		properties[argsKey] = map[string]any{
 			"type":        "array",
 			"items":       map[string]any{"type": "string"},
 			"description": "Positional arguments for the command",
@@ -219,6 +219,9 @@ func buildConsolidatedParameterSchema(
 	allFlags := mergeSubcommandFlags(subcommands)
 	addFlagProperties(properties, allFlags, len(subcommands))
 
+	// Add positional args parameter if any subcommand accepts them
+	addPositionalArgsProperty(properties, subcommands)
+
 	return map[string]any{
 		"type":       "object",
 		"properties": properties,
@@ -314,6 +317,38 @@ func addFlagProperties(
 		}
 
 		properties[flagName] = prop
+	}
+}
+
+// addPositionalArgsProperty adds an "args" property to the schema if any subcommand accepts positional arguments.
+// The description lists which subcommands accept args so MCP clients know when to provide them.
+func addPositionalArgsProperty(properties map[string]any, subcommands map[string]*SubcommandDef) {
+	var acceptingSubcommands []string
+
+	for name, def := range subcommands {
+		if def.AcceptsArgs {
+			acceptingSubcommands = append(acceptingSubcommands, name)
+		}
+	}
+
+	if len(acceptingSubcommands) == 0 {
+		return
+	}
+
+	slices.Sort(acceptingSubcommands)
+
+	description := "Positional arguments for the command"
+	if len(acceptingSubcommands) < len(subcommands) {
+		description = fmt.Sprintf(
+			"Positional arguments for the command (applies to: %s)",
+			strings.Join(acceptingSubcommands, ", "),
+		)
+	}
+
+	properties[argsKey] = map[string]any{
+		"type":        jsonSchemaTypeArray,
+		"items":       map[string]any{"type": jsonSchemaTypeString},
+		"description": description,
 	}
 }
 

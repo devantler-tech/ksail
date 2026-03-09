@@ -221,6 +221,79 @@ func TestConsolidatedToolGeneration(t *testing.T) {
 }
 
 //nolint:funlen // Test functions are inherently verbose with test data setup
+func TestConsolidatedToolGenerationWithPositionalArgs(t *testing.T) {
+	t.Parallel()
+
+	parentCmd := &cobra.Command{
+		Use:   "cipher",
+		Short: "Manage encrypted files",
+		Annotations: map[string]string{
+			"ai.toolgen.consolidate": "cipher_operation",
+		},
+	}
+
+	encryptCmd := &cobra.Command{
+		Use:   "encrypt <file>",
+		Short: "Encrypt a file",
+		Args:  cobra.ExactArgs(1),
+		RunE:  func(_ *cobra.Command, _ []string) error { return nil },
+	}
+
+	// Subcommand that explicitly rejects positional args
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List keys",
+		Args:  cobra.NoArgs,
+		RunE:  func(_ *cobra.Command, _ []string) error { return nil },
+	}
+
+	// Subcommand with nil Args (default — accepts arbitrary args)
+	importCmd := &cobra.Command{
+		Use:   "import",
+		Short: "Import a key",
+		RunE:  func(_ *cobra.Command, _ []string) error { return nil },
+	}
+	importCmd.Flags().String("key", "", "Key to import")
+
+	parentCmd.AddCommand(encryptCmd, listCmd, importCmd)
+
+	tools := toolgen.GenerateTools(parentCmd, toolgen.DefaultOptions())
+	if len(tools) != 1 {
+		t.Fatalf("Expected 1 consolidated tool, got %d", len(tools))
+	}
+
+	tool := tools[0]
+
+	props, validProps := tool.Parameters["properties"].(map[string]any)
+	if !validProps {
+		t.Fatal("Properties should be a map")
+	}
+
+	// args parameter should be present (encrypt and import accept positional args)
+	argsMap, exists := props["args"].(map[string]any)
+	if !exists {
+		t.Fatal("Expected 'args' parameter in schema")
+	}
+
+	if argsMap["type"] != "array" {
+		t.Errorf("Expected args type 'array', got %v", argsMap["type"])
+	}
+
+	// Verify AcceptsArgs tracking
+	if !tool.Subcommands["encrypt"].AcceptsArgs {
+		t.Error("encrypt should have AcceptsArgs=true")
+	}
+
+	if tool.Subcommands["list"].AcceptsArgs {
+		t.Error("list (cobra.NoArgs) should have AcceptsArgs=false")
+	}
+
+	if !tool.Subcommands["import"].AcceptsArgs {
+		t.Error("import (nil Args) should have AcceptsArgs=true")
+	}
+}
+
+//nolint:funlen // Test functions are inherently verbose with test data setup
 func TestConsolidatedToolSchema(t *testing.T) {
 	t.Parallel()
 
