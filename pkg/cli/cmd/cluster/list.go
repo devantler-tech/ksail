@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
@@ -14,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	omniclient "github.com/siderolabs/omni/client/pkg/client"
@@ -47,6 +49,7 @@ func allProviders() []v1alpha1.Provider {
 type listResult struct {
 	Provider    v1alpha1.Provider
 	ClusterName string
+	TTL         *state.TTLInfo // nil if no TTL has been set for this cluster
 }
 
 const listLongDesc = `List all Kubernetes clusters managed by KSail.
@@ -151,9 +154,11 @@ func HandleListRunE(
 		}
 
 		for _, cluster := range clusters {
+			ttlInfo, _ := state.LoadClusterTTL(cluster)
 			allResults = append(allResults, listResult{
 				Provider:    prov,
 				ClusterName: cluster,
+				TTL:         ttlInfo,
 			})
 		}
 	}
@@ -355,6 +360,8 @@ func createEmptyDistributionConfig(
 // to parse the cluster names for subsequent commands.
 // Format: "<provider>: cluster1, cluster2" to clearly identify cluster names.
 // If no clusters exist, displays "No clusters found.".
+// Clusters with a TTL set show the remaining time in square brackets, e.g.
+// "cluster1 [TTL: 1h 23m]". Expired clusters show "[TTL: EXPIRED]".
 func displayListResults(
 	writer io.Writer,
 	providers []v1alpha1.Provider,
@@ -366,25 +373,71 @@ func displayListResults(
 		return
 	}
 
-	// Group clusters by provider
-	providerClusters := make(map[v1alpha1.Provider][]string)
-	for _, r := range results {
-		providerClusters[r.Provider] = append(providerClusters[r.Provider], r.ClusterName)
+	// Group clusters by provider, preserving TTL info for formatting.
+	type clusterEntry struct {
+		name string
+		ttl  *state.TTLInfo
 	}
 
-	// Output in provider order for consistent output
-	// Format explicitly labels cluster names for AI parsing
+	providerClusters := make(map[v1alpha1.Provider][]clusterEntry)
+	for _, r := range results {
+		providerClusters[r.Provider] = append(providerClusters[r.Provider], clusterEntry{
+			name: r.ClusterName,
+			ttl:  r.TTL,
+		})
+	}
+
+	// Output in provider order for consistent output.
+	// Format explicitly labels cluster names for AI parsing.
 	for _, prov := range providers {
-		clusters, exists := providerClusters[prov]
-		if !exists || len(clusters) == 0 {
+		entries, exists := providerClusters[prov]
+		if !exists || len(entries) == 0 {
 			continue
+		}
+
+		clusterNames := make([]string, 0, len(entries))
+		for _, e := range entries {
+			clusterNames = append(clusterNames, formatClusterWithTTL(e.name, e.ttl))
 		}
 
 		_, _ = fmt.Fprintf(
 			writer,
 			"%s: %s\n",
 			strings.ToLower(string(prov)),
-			strings.Join(clusters, ", "),
+			strings.Join(clusterNames, ", "),
 		)
+	}
+}
+
+// formatClusterWithTTL formats a cluster name with optional TTL information.
+// Returns "name [TTL: Xh Ym]" or "name [TTL: EXPIRED]" when TTL is set,
+// or just "name" when no TTL is configured.
+func formatClusterWithTTL(name string, ttl *state.TTLInfo) string {
+	if ttl == nil {
+		return name
+	}
+
+	if ttl.IsExpired() {
+		return name + " [TTL: EXPIRED]"
+	}
+
+	return name + " [TTL: " + formatRemainingDuration(ttl.Remaining()) + "]"
+}
+
+// formatRemainingDuration formats a positive duration as a human-readable string.
+// Durations are expressed in hours and minutes, e.g. "1h 23m" or "45m".
+func formatRemainingDuration(d time.Duration) string {
+	d = d.Round(time.Minute)
+
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+
+	switch {
+	case hours > 0 && minutes > 0:
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	case hours > 0:
+		return fmt.Sprintf("%dh", hours)
+	default:
+		return fmt.Sprintf("%dm", minutes)
 	}
 }

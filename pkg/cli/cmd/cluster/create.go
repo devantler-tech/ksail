@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
@@ -22,6 +23,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -73,6 +75,9 @@ func NewCreateCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	registerMirrorRegistryFlag(cmd)
 	registerNameFlag(cmd, cfgManager)
 
+	cmd.Flags().String("ttl", "",
+		"Auto-destroy cluster after duration (e.g. 1h, 30m, 2h30m). If not set, cluster persists indefinitely.")
+
 	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleCreateRunE)
 
 	return cmd
@@ -88,12 +93,18 @@ func handleCreateRunE(
 ) error {
 	deps.Timer.Start()
 
-	ctx, _, err := loadAndValidateClusterConfig(cfgManager, deps)
+	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps)
 	if err != nil {
 		return err
 	}
 
-	return runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
+	if err = runClusterCreationWorkflow(cmd, cfgManager, ctx, deps); err != nil {
+		return err
+	}
+
+	maybeSetClusterTTL(cmd, clusterName)
+
+	return nil
 }
 
 // newProvisionerFactory returns the cluster provisioner factory, using any test override if set.
@@ -554,5 +565,31 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 		}
 
 		return "ksail"
+	}
+}
+
+// maybeSetClusterTTL parses the --ttl flag and saves TTL state if a valid duration was provided.
+// If the flag is empty or invalid, a warning is emitted and the cluster is created without a TTL.
+func maybeSetClusterTTL(cmd *cobra.Command, clusterName string) {
+	ttlStr, _ := cmd.Flags().GetString("ttl")
+	if ttlStr == "" {
+		return
+	}
+
+	ttl, err := time.ParseDuration(ttlStr)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStdout(),
+			"invalid --ttl value %q: %v (cluster created without TTL)", ttlStr, err)
+
+		return
+	}
+
+	if ttl <= 0 {
+		return
+	}
+
+	if saveErr := state.SaveClusterTTL(clusterName, ttl); saveErr != nil {
+		notify.Warningf(cmd.OutOrStdout(),
+			"failed to save cluster TTL: %v", saveErr)
 	}
 }
