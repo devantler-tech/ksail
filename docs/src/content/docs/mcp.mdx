@@ -168,6 +168,7 @@ async with stdio_client(StdioServerParameters(command="ksail", args=["mcp"])) as
     async with ClientSession(read, write) as session:
         await session.initialize()
         tools = await session.list_tools()
+        print([t.name for t in tools.tools])
         result = await session.call_tool("cluster_read", arguments={"command": "info"})
         print(result.content)
 ````
