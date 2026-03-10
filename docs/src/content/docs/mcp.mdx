@@ -69,7 +69,7 @@ Each tool accepts a **subcommand parameter** (e.g., `command`, `workload_command
 - `info` — Display cluster information
 - `list` — List clusters
 - `connect` — Connect to cluster with k9s
-- `switch` — Switch active cluster context (pass cluster name via `args`)
+- `switch` — Switch active cluster context (pass cluster name via `args`; **note:** mutates local kubeconfig by updating current-context)
 
 **Write operations** (`cluster_write` with `command`):
 - `init` — Initialize a new project
@@ -88,7 +88,7 @@ Each tool accepts a **subcommand parameter** (e.g., `command`, `workload_command
 - `describe` — Describe resources
 - `logs` — Print container logs
 - `explain` — Get documentation for a resource
-- `wait` — Wait for a condition on resources
+- `wait` — Wait for a condition on resources (pass target resource(s) via `args`, e.g., `["pod/foo"]`)
 - `images` — List container images required by cluster components
 - `export` — Export container images to a tar archive (pass optional output path via `args`)
 - `validate` — Validate Kubernetes manifests (pass optional path via `args`)
@@ -100,8 +100,8 @@ Each tool accepts a **subcommand parameter** (e.g., `command`, `workload_command
 - `create` — Create resources
 - `delete` — Delete resources
 - `edit` — Edit a resource
-- `exec` — Execute a command in a container
-- `expose` — Expose a resource as a service
+- `exec` — Execute a command in a container (pass pod and command via `args`, e.g., `["pod/foo", "--", "sh"]`)
+- `expose` — Expose a resource as a service (pass resource type and name via `args`, e.g., `["deployment", "my-app"]`)
 - `scale` — Scale resources
 - `reconcile` — Trigger reconciliation for GitOps workloads
 - `push` — Package and push an OCI artifact (pass optional OCI URI via `args`)
