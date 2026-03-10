@@ -70,7 +70,7 @@ Core services: `provider/` (infrastructure backends), `provisioner/cluster/` (di
 - **`pkg/envvar/`** — Environment variable utilities
 - **`pkg/fsutil/`** — Filesystem utilities (includes configmanager)
 - **`pkg/k8s/`** — Kubernetes helpers and templates
-- **`pkg/notify/`** — CLI notifications and progress display
+- **`pkg/notify/`** — CLI notifications and progress display; `ProgressGroup` manages parallel task execution with live spinner output and per-task duration tracking (injectable `Clock` via `WithClock`; `WithTimer` integrates with `pkg/timer/` for stage totals)
 - **`pkg/runner/`** — Cobra command execution helpers
 - **`pkg/timer/`** — Command timing and performance tracking
 - **`pkg/toolgen/`** — AI tool generation for assistants
