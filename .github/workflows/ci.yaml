@@ -28,7 +28,6 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
-      source: ${{ steps.filter.outputs.source }}
       system-test: ${{ steps.filter.outputs.system-test }}
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
@@ -48,12 +47,6 @@ jobs:
           filters: |
             code:
               - '**/*.go'
-              - 'go.mod'
-              - 'go.sum'
-              - '.github/actions/**'
-            source:
-              - '**/*.go'
-              - '!**/*_test.go'
               - 'go.mod'
               - 'go.sum'
               - '.github/actions/**'
