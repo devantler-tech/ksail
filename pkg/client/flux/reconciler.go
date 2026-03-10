@@ -46,7 +46,7 @@ const (
 	rootKustomizationName     = "flux-system"
 	rootOCIRepositoryName     = "flux-system"
 	ociRepositoryReadyTimeout = 2 * time.Minute
-	pollInterval              = 2 * time.Second
+	pollInterval              = 500 * time.Millisecond
 	reconcileAnnotationKey    = "reconcile.fluxcd.io/requestedAt"
 
 	// Condition type and status constants.
@@ -58,7 +58,7 @@ const (
 	// API availability timeout for reconciliation operations - should be long enough
 	// for the Flux controllers to become ready in slow CI environments.
 	apiAvailabilityTimeout      = 2 * time.Minute
-	apiAvailabilityPollInterval = 2 * time.Second
+	apiAvailabilityPollInterval = 500 * time.Millisecond
 )
 
 // Reconciler handles Flux reconciliation operations.
@@ -131,6 +131,17 @@ func (r *Reconciler) WaitForOCIRepositoryReady(ctx context.Context) error {
 	ociRepoClient := r.ociRepositoryClient()
 
 	for {
+		ready, err := r.checkOCIRepositoryStatus(timeoutCtx, ociRepoClient)
+		if err != nil {
+			if isPermanentOCIError(err) {
+				return err
+			}
+
+			lastErr = err
+		} else if ready {
+			return nil
+		}
+
 		select {
 		case <-timeoutCtx.Done():
 			if lastErr != nil {
@@ -139,20 +150,6 @@ func (r *Reconciler) WaitForOCIRepositoryReady(ctx context.Context) error {
 
 			return ErrOCIRepositoryNotReady
 		case <-ticker.C:
-			ready, err := r.checkOCIRepositoryStatus(timeoutCtx, ociRepoClient)
-			if err != nil {
-				if isPermanentOCIError(err) {
-					return err
-				}
-
-				lastErr = err
-
-				continue
-			}
-
-			if ready {
-				return nil
-			}
 		}
 	}
 }
@@ -182,6 +179,26 @@ func (r *Reconciler) WaitForKustomizationReady(ctx context.Context, timeout time
 	var lastStatus string
 
 	for {
+		kustomization, err := kustomizationClient.Get(
+			timeoutCtx,
+			rootKustomizationName,
+			metav1.GetOptions{},
+		)
+		if err != nil {
+			return fmt.Errorf("get flux kustomization status: %w", err)
+		}
+
+		ready, status, err := checkKustomizationStatus(kustomization)
+		if err != nil {
+			return err
+		}
+
+		lastStatus = status
+
+		if ready {
+			return nil
+		}
+
 		select {
 		case <-timeoutCtx.Done():
 			if lastStatus != "" {
@@ -190,25 +207,6 @@ func (r *Reconciler) WaitForKustomizationReady(ctx context.Context, timeout time
 
 			return ErrReconcileTimeout
 		case <-ticker.C:
-			kustomization, err := kustomizationClient.Get(
-				timeoutCtx,
-				rootKustomizationName,
-				metav1.GetOptions{},
-			)
-			if err != nil {
-				return fmt.Errorf("get flux kustomization status: %w", err)
-			}
-
-			ready, status, err := checkKustomizationStatus(kustomization)
-			if err != nil {
-				return err
-			}
-
-			lastStatus = status
-
-			if ready {
-				return nil
-			}
 		}
 	}
 }
