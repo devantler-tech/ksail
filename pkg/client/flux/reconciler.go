@@ -131,24 +131,18 @@ func (r *Reconciler) WaitForOCIRepositoryReady(ctx context.Context) error {
 	ociRepoClient := r.ociRepositoryClient()
 
 	for {
-		ready, err := r.checkOCIRepositoryStatus(timeoutCtx, ociRepoClient)
+		ready, err := r.pollOCIRepositoryStatus(timeoutCtx, ociRepoClient, &lastErr)
 		if err != nil {
-			if isPermanentOCIError(err) {
-				return err
-			}
+			return err
+		}
 
-			lastErr = err
-		} else if ready {
+		if ready {
 			return nil
 		}
 
 		select {
 		case <-timeoutCtx.Done():
-			if lastErr != nil {
-				return lastErr
-			}
-
-			return ErrOCIRepositoryNotReady
+			return ociTimeoutError(lastErr)
 		case <-ticker.C:
 		}
 	}
@@ -179,21 +173,10 @@ func (r *Reconciler) WaitForKustomizationReady(ctx context.Context, timeout time
 	var lastStatus string
 
 	for {
-		kustomization, err := kustomizationClient.Get(
-			timeoutCtx,
-			rootKustomizationName,
-			metav1.GetOptions{},
-		)
-		if err != nil {
-			return fmt.Errorf("get flux kustomization status: %w", err)
-		}
-
-		ready, status, err := checkKustomizationStatus(kustomization)
+		ready, err := r.pollKustomizationStatus(timeoutCtx, kustomizationClient, &lastStatus)
 		if err != nil {
 			return err
 		}
-
-		lastStatus = status
 
 		if ready {
 			return nil
@@ -201,14 +184,95 @@ func (r *Reconciler) WaitForKustomizationReady(ctx context.Context, timeout time
 
 		select {
 		case <-timeoutCtx.Done():
-			if lastStatus != "" {
-				return fmt.Errorf("%w: last status: %s", ErrReconcileTimeout, lastStatus)
-			}
-
-			return ErrReconcileTimeout
+			return kustomizationTimeoutError(lastStatus)
 		case <-ticker.C:
 		}
 	}
+}
+
+// pollOCIRepositoryStatus checks OCI repository status with timeout guard.
+// It returns (ready, nil) on success, (false, nil) for transient errors (stored in lastErr),
+// or (false, err) for permanent/timeout errors.
+func (r *Reconciler) pollOCIRepositoryStatus(
+	ctx context.Context,
+	client dynamic.ResourceInterface,
+	lastErr *error,
+) (bool, error) {
+	err := ctx.Err()
+	if err != nil {
+		return false, ociTimeoutError(*lastErr)
+	}
+
+	ready, err := r.checkOCIRepositoryStatus(ctx, client)
+	if err != nil {
+		if isPermanentOCIError(err) {
+			return false, err
+		}
+
+		if isContextError(err) {
+			return false, ociTimeoutError(*lastErr)
+		}
+
+		*lastErr = err
+
+		return false, nil
+	}
+
+	return ready, nil
+}
+
+// ociTimeoutError returns lastErr if available, otherwise ErrOCIRepositoryNotReady.
+func ociTimeoutError(lastErr error) error {
+	if lastErr != nil {
+		return lastErr
+	}
+
+	return ErrOCIRepositoryNotReady
+}
+
+// pollKustomizationStatus checks kustomization status with timeout guard.
+// It returns (ready, nil) on success, (false, nil) when not yet ready (status stored in lastStatus),
+// or (false, err) for permanent/timeout errors.
+func (r *Reconciler) pollKustomizationStatus(
+	ctx context.Context,
+	client dynamic.ResourceInterface,
+	lastStatus *string,
+) (bool, error) {
+	err := ctx.Err()
+	if err != nil {
+		return false, kustomizationTimeoutError(*lastStatus)
+	}
+
+	kustomization, err := client.Get(
+		ctx,
+		rootKustomizationName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		if isContextError(err) {
+			return false, kustomizationTimeoutError(*lastStatus)
+		}
+
+		return false, fmt.Errorf("get flux kustomization status: %w", err)
+	}
+
+	ready, status, err := checkKustomizationStatus(kustomization)
+	if err != nil {
+		return false, err
+	}
+
+	*lastStatus = status
+
+	return ready, nil
+}
+
+// kustomizationTimeoutError returns ErrReconcileTimeout, optionally with last status.
+func kustomizationTimeoutError(lastStatus string) error {
+	if lastStatus != "" {
+		return fmt.Errorf("%w: last status: %s", ErrReconcileTimeout, lastStatus)
+	}
+
+	return ErrReconcileTimeout
 }
 
 // reconcileOCIRepository triggers and waits for OCIRepository reconciliation.
@@ -343,6 +407,11 @@ func isConnectionError(errMsg string) bool {
 		strings.Contains(errMsg, "connection reset") ||
 		strings.Contains(errMsg, "i/o timeout") ||
 		strings.Contains(errMsg, "EOF")
+}
+
+// isContextError checks if the error is caused by a context deadline or cancellation.
+func isContextError(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
 // isTransientAPIError checks if the error is a transient API error that should be retried.

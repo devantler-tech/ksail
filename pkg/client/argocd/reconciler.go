@@ -130,7 +130,7 @@ func (r *Reconciler) WaitForApplicationReady(ctx context.Context, timeout time.D
 	appClient := r.applicationClient()
 
 	for {
-		ready, err := r.checkApplicationStatus(timeoutCtx, appClient)
+		ready, err := r.pollApplicationStatus(timeoutCtx, appClient)
 		if err != nil {
 			return err
 		}
@@ -145,6 +145,30 @@ func (r *Reconciler) WaitForApplicationReady(ctx context.Context, timeout time.D
 		case <-ticker.C:
 		}
 	}
+}
+
+// pollApplicationStatus checks application status with timeout guard.
+// It returns (ready, nil) on success, (false, nil) when not yet ready,
+// or (false, err) for permanent/timeout errors.
+func (r *Reconciler) pollApplicationStatus(
+	ctx context.Context,
+	client dynamic.ResourceInterface,
+) (bool, error) {
+	err := ctx.Err()
+	if err != nil {
+		return false, ErrReconcileTimeout
+	}
+
+	ready, err := r.checkApplicationStatus(ctx, client)
+	if err != nil {
+		if isContextError(err) {
+			return false, ErrReconcileTimeout
+		}
+
+		return false, err
+	}
+
+	return ready, nil
 }
 
 // applicationClient returns a dynamic client for ArgoCD Applications.
@@ -231,6 +255,11 @@ func (r *Reconciler) checkConditions(app *unstructured.Unstructured) error {
 	}
 
 	return nil
+}
+
+// isContextError checks if the error is caused by a context deadline or cancellation.
+func isContextError(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
 // isSourceRelatedError checks if the error message indicates a source availability issue.
