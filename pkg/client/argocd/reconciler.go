@@ -32,7 +32,7 @@ const (
 	// DefaultNamespace is the default namespace for ArgoCD resources.
 	DefaultNamespace       = "argocd"
 	rootApplicationName    = "ksail"
-	reconcilerPollInterval = 2 * time.Second
+	reconcilerPollInterval = 500 * time.Millisecond
 )
 
 // Reconciler handles ArgoCD reconciliation operations.
@@ -130,20 +130,45 @@ func (r *Reconciler) WaitForApplicationReady(ctx context.Context, timeout time.D
 	appClient := r.applicationClient()
 
 	for {
+		ready, err := r.pollApplicationStatus(timeoutCtx, appClient)
+		if err != nil {
+			return err
+		}
+
+		if ready {
+			return nil
+		}
+
 		select {
 		case <-timeoutCtx.Done():
 			return ErrReconcileTimeout
 		case <-ticker.C:
-			ready, err := r.checkApplicationStatus(timeoutCtx, appClient)
-			if err != nil {
-				return err
-			}
-
-			if ready {
-				return nil
-			}
 		}
 	}
+}
+
+// pollApplicationStatus checks application status with timeout guard.
+// It returns (ready, nil) on success, (false, nil) when not yet ready,
+// or (false, err) for permanent/timeout errors.
+func (r *Reconciler) pollApplicationStatus(
+	ctx context.Context,
+	client dynamic.ResourceInterface,
+) (bool, error) {
+	err := ctx.Err()
+	if err != nil {
+		return false, ErrReconcileTimeout
+	}
+
+	ready, err := r.checkApplicationStatus(ctx, client)
+	if err != nil {
+		if reconciler.IsContextError(err) {
+			return false, ErrReconcileTimeout
+		}
+
+		return false, err
+	}
+
+	return ready, nil
 }
 
 // applicationClient returns a dynamic client for ArgoCD Applications.

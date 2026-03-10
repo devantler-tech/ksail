@@ -46,7 +46,7 @@ const (
 	rootKustomizationName     = "flux-system"
 	rootOCIRepositoryName     = "flux-system"
 	ociRepositoryReadyTimeout = 2 * time.Minute
-	pollInterval              = 2 * time.Second
+	pollInterval              = 500 * time.Millisecond
 	reconcileAnnotationKey    = "reconcile.fluxcd.io/requestedAt"
 
 	// Condition type and status constants.
@@ -58,7 +58,7 @@ const (
 	// API availability timeout for reconciliation operations - should be long enough
 	// for the Flux controllers to become ready in slow CI environments.
 	apiAvailabilityTimeout      = 2 * time.Minute
-	apiAvailabilityPollInterval = 2 * time.Second
+	apiAvailabilityPollInterval = 500 * time.Millisecond
 )
 
 // Reconciler handles Flux reconciliation operations.
@@ -131,28 +131,19 @@ func (r *Reconciler) WaitForOCIRepositoryReady(ctx context.Context) error {
 	ociRepoClient := r.ociRepositoryClient()
 
 	for {
+		ready, err := r.pollOCIRepositoryStatus(timeoutCtx, ociRepoClient, &lastErr)
+		if err != nil {
+			return err
+		}
+
+		if ready {
+			return nil
+		}
+
 		select {
 		case <-timeoutCtx.Done():
-			if lastErr != nil {
-				return lastErr
-			}
-
-			return ErrOCIRepositoryNotReady
+			return ociTimeoutError(lastErr)
 		case <-ticker.C:
-			ready, err := r.checkOCIRepositoryStatus(timeoutCtx, ociRepoClient)
-			if err != nil {
-				if isPermanentOCIError(err) {
-					return err
-				}
-
-				lastErr = err
-
-				continue
-			}
-
-			if ready {
-				return nil
-			}
 		}
 	}
 }
@@ -182,35 +173,106 @@ func (r *Reconciler) WaitForKustomizationReady(ctx context.Context, timeout time
 	var lastStatus string
 
 	for {
+		ready, err := r.pollKustomizationStatus(timeoutCtx, kustomizationClient, &lastStatus)
+		if err != nil {
+			return err
+		}
+
+		if ready {
+			return nil
+		}
+
 		select {
 		case <-timeoutCtx.Done():
-			if lastStatus != "" {
-				return fmt.Errorf("%w: last status: %s", ErrReconcileTimeout, lastStatus)
-			}
-
-			return ErrReconcileTimeout
+			return kustomizationTimeoutError(lastStatus)
 		case <-ticker.C:
-			kustomization, err := kustomizationClient.Get(
-				timeoutCtx,
-				rootKustomizationName,
-				metav1.GetOptions{},
-			)
-			if err != nil {
-				return fmt.Errorf("get flux kustomization status: %w", err)
-			}
-
-			ready, status, err := checkKustomizationStatus(kustomization)
-			if err != nil {
-				return err
-			}
-
-			lastStatus = status
-
-			if ready {
-				return nil
-			}
 		}
 	}
+}
+
+// pollOCIRepositoryStatus checks OCI repository status with timeout guard.
+// It returns (ready, nil) on success, (false, nil) for transient errors (stored in lastErr),
+// or (false, err) for permanent/timeout errors.
+func (r *Reconciler) pollOCIRepositoryStatus(
+	ctx context.Context,
+	client dynamic.ResourceInterface,
+	lastErr *error,
+) (bool, error) {
+	err := ctx.Err()
+	if err != nil {
+		return false, ociTimeoutError(*lastErr)
+	}
+
+	ready, err := r.checkOCIRepositoryStatus(ctx, client)
+	if err != nil {
+		if isPermanentOCIError(err) {
+			return false, err
+		}
+
+		if reconciler.IsContextError(err) {
+			return false, ociTimeoutError(*lastErr)
+		}
+
+		*lastErr = err
+
+		return false, nil
+	}
+
+	return ready, nil
+}
+
+// ociTimeoutError returns lastErr if available, otherwise ErrOCIRepositoryNotReady.
+func ociTimeoutError(lastErr error) error {
+	if lastErr != nil {
+		return lastErr
+	}
+
+	return ErrOCIRepositoryNotReady
+}
+
+// pollKustomizationStatus checks kustomization status with timeout guard.
+// It returns (ready, nil) on success, (false, nil) when not yet ready (status stored in lastStatus),
+// or (false, err) for permanent/timeout errors.
+func (r *Reconciler) pollKustomizationStatus(
+	ctx context.Context,
+	client dynamic.ResourceInterface,
+	lastStatus *string,
+) (bool, error) {
+	err := ctx.Err()
+	if err != nil {
+		return false, kustomizationTimeoutError(*lastStatus)
+	}
+
+	kustomization, err := client.Get(
+		ctx,
+		rootKustomizationName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		if reconciler.IsContextError(err) {
+			return false, kustomizationTimeoutError(*lastStatus)
+		}
+
+		return false, fmt.Errorf("get flux kustomization status: %w", err)
+	}
+
+	ready, status, err := checkKustomizationStatus(kustomization)
+	if err != nil {
+		return false, err
+	}
+
+	*lastStatus = status
+
+	return ready, nil
+}
+
+// kustomizationTimeoutError returns ErrReconcileTimeout, optionally with last status.
+func kustomizationTimeoutError(lastStatus string) error {
+	if lastStatus != "" {
+		return fmt.Errorf("%w: last status: %s", ErrReconcileTimeout, lastStatus)
+	}
+
+	return ErrReconcileTimeout
 }
 
 // reconcileOCIRepository triggers and waits for OCIRepository reconciliation.
