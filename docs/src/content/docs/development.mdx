@@ -198,6 +198,10 @@ func BenchmarkProvisionerCreate(b *testing.B) {
 }
 ````
 
+PRs that modify Go code are automatically benchmarked against `main` and a comparison comment is posted on the PR. See [BENCHMARK-REGRESSION.md](https://github.com/devantler-tech/ksail/blob/main/docs/BENCHMARK-REGRESSION.md) for details on interpreting results.
+
+For install duration benchmarks (per-component timing via `--benchmark`), see [benchmarks/install/BENCHMARKS.md](https://github.com/devantler-tech/ksail/blob/main/benchmarks/install/BENCHMARKS.md).
+
 ### Documentation
 
 Document all exported types, functions, and constants with complete sentences starting with the name being documented (e.g., `// Provider defines the interface for infrastructure providers.`). When adding features, update the relevant `.mdx` files in `docs/src/content/docs/`, `README.md` if needed, and CLI help text if adding commands.
