@@ -161,7 +161,7 @@ func (r *Reconciler) pollApplicationStatus(
 
 	ready, err := r.checkApplicationStatus(ctx, client)
 	if err != nil {
-		if isContextError(err) {
+		if reconciler.IsContextError(err) {
 			return false, ErrReconcileTimeout
 		}
 
@@ -255,11 +255,6 @@ func (r *Reconciler) checkConditions(app *unstructured.Unstructured) error {
 	}
 
 	return nil
-}
-
-// isContextError checks if the error is caused by a context deadline or cancellation.
-func isContextError(err error) bool {
-	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
 // isSourceRelatedError checks if the error message indicates a source availability issue.

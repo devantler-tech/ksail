@@ -209,7 +209,7 @@ func (r *Reconciler) pollOCIRepositoryStatus(
 			return false, err
 		}
 
-		if isContextError(err) {
+		if reconciler.IsContextError(err) {
 			return false, ociTimeoutError(*lastErr)
 		}
 
@@ -249,7 +249,7 @@ func (r *Reconciler) pollKustomizationStatus(
 		metav1.GetOptions{},
 	)
 	if err != nil {
-		if isContextError(err) {
+		if reconciler.IsContextError(err) {
 			return false, kustomizationTimeoutError(*lastStatus)
 		}
 
@@ -407,11 +407,6 @@ func isConnectionError(errMsg string) bool {
 		strings.Contains(errMsg, "connection reset") ||
 		strings.Contains(errMsg, "i/o timeout") ||
 		strings.Contains(errMsg, "EOF")
-}
-
-// isContextError checks if the error is caused by a context deadline or cancellation.
-func isContextError(err error) bool {
-	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
 // isTransientAPIError checks if the error is a transient API error that should be retried.
