@@ -7,7 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 )
 
-// smallManifest is a minimal single-Pod manifest with 2 containers.
+// smallManifest is a minimal single-Pod manifest with 1 init container and 2 containers (3 images).
 const smallManifest = `apiVersion: v1
 kind: Pod
 metadata:
@@ -62,8 +62,38 @@ data:
   key: value
 `
 
-// largeManifest simulates a realistic Helm-rendered output with many resources and images.
-var largeManifest = strings.Repeat(`apiVersion: apps/v1
+// BenchmarkExtractImagesFromManifest measures extraction across manifest sizes.
+// The pre-compiled package-level imagePattern eliminates per-call regex compilation
+// (~7500 ns + 93 allocs), making extraction dominated by I/O scanning and normalization.
+func BenchmarkExtractImagesFromManifest(b *testing.B) {
+	b.Run("Small/3images", func(b *testing.B) {
+		b.ReportAllocs()
+
+		for b.Loop() {
+			imgs, err := image.ExtractImagesFromManifest(smallManifest)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			_ = imgs
+		}
+	})
+
+	b.Run("Medium/5images", func(b *testing.B) {
+		b.ReportAllocs()
+
+		for b.Loop() {
+			imgs, err := image.ExtractImagesFromManifest(mediumManifest)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			_ = imgs
+		}
+	})
+
+	b.Run("Large/40images", func(b *testing.B) {
+		largeManifest := strings.Repeat(`apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: agent
@@ -82,31 +112,16 @@ spec:
 ---
 `, 20)
 
-// BenchmarkExtractImagesFromManifest measures extraction across manifest sizes.
-// The pre-compiled package-level imagePattern eliminates per-call regex compilation
-// (~7500 ns + 93 allocs), making extraction dominated by I/O scanning and normalization.
-func BenchmarkExtractImagesFromManifest(b *testing.B) {
-	b.Run("Small/3images", func(b *testing.B) {
 		b.ReportAllocs()
+		b.ResetTimer()
 
 		for b.Loop() {
-			_, _ = image.ExtractImagesFromManifest(smallManifest)
-		}
-	})
+			imgs, err := image.ExtractImagesFromManifest(largeManifest)
+			if err != nil {
+				b.Fatal(err)
+			}
 
-	b.Run("Medium/5images", func(b *testing.B) {
-		b.ReportAllocs()
-
-		for b.Loop() {
-			_, _ = image.ExtractImagesFromManifest(mediumManifest)
-		}
-	})
-
-	b.Run("Large/40images", func(b *testing.B) {
-		b.ReportAllocs()
-
-		for b.Loop() {
-			_, _ = image.ExtractImagesFromManifest(largeManifest)
+			_ = imgs
 		}
 	})
 }
@@ -117,7 +132,12 @@ func BenchmarkExtractImagesFromMultipleManifests(b *testing.B) {
 		b.ReportAllocs()
 
 		for b.Loop() {
-			_, _ = image.ExtractImagesFromMultipleManifests(smallManifest, mediumManifest)
+			imgs, err := image.ExtractImagesFromMultipleManifests(smallManifest, mediumManifest)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			_ = imgs
 		}
 	})
 
@@ -131,7 +151,12 @@ func BenchmarkExtractImagesFromMultipleManifests(b *testing.B) {
 		b.ReportAllocs()
 
 		for b.Loop() {
-			_, _ = image.ExtractImagesFromMultipleManifests(manifests...)
+			imgs, err := image.ExtractImagesFromMultipleManifests(manifests...)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			_ = imgs
 		}
 	})
 }
