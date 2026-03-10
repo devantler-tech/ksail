@@ -58,6 +58,9 @@ type SubcommandDef struct {
 
 	// Flags contains metadata about flags specific to or modified by this subcommand.
 	Flags map[string]*FlagDef
+
+	// AcceptsArgs indicates whether this subcommand accepts positional arguments.
+	AcceptsArgs bool
 }
 
 // FlagDef contains metadata about a flag in a consolidated tool.
