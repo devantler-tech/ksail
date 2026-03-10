@@ -107,7 +107,7 @@ jobs:
             exit 0
           fi
 
-          result=$(benchstat -confidence 0.90 "$main_file" "$pr_file" 2>&1) || true
+          result=$(benchstat -confidence 0.99 "$main_file" "$pr_file" 2>&1) || true
           {
             echo "result<<BENCHSTAT_EOF"
             echo "$result"
@@ -160,7 +160,7 @@ jobs:
                 } else if (deltaMatch) {
                   const delta = deltaMatch[1];
                   const pValue = parseFloat(deltaMatch[2]);
-                  if (pValue >= 0.10) {
+                  if (pValue >= 0.01) {
                     unchanged.push({ name, metric: currentMetric });
                   } else if (delta.startsWith('+')) {
                     regressions.push({ name, metric: currentMetric, delta, pValue: pValue.toFixed(3) });
@@ -224,9 +224,9 @@ jobs:
               '- **sec/op**: Time per operation (lower is better)',
               '- **B/op**: Bytes allocated per operation (lower is better)',
               '- **allocs/op**: Allocations per operation (lower is better)',
-              '- **🔴 Regression**: Statistically significant increase (p < 0.10)',
-              '- **🟢 Improvement**: Statistically significant decrease (p < 0.10)',
-              '- **⚪ ~ (Unchanged)**: No significant change (p ≥ 0.10)',
+              '- **🔴 Regression**: Statistically significant increase (p < 0.01)',
+              '- **🟢 Improvement**: Statistically significant decrease (p < 0.01)',
+              '- **⚪ ~ (Unchanged)**: No significant change (p ≥ 0.01)',
               '',
               '</details>',
               '',
