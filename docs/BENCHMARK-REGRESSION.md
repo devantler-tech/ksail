@@ -71,6 +71,12 @@ This table may not be exhaustive; additional benchmarks may exist in other packa
 
 See each package's `BENCHMARKS.md` for detailed baseline results and optimization opportunities.
 
+## Install Duration Benchmarks
+
+In addition to Go micro-benchmarks, KSail tracks real-world per-component install durations during `ksail cluster create` and `ksail cluster update` via the `--benchmark` flag. These cover Helm chart downloads, image pulls, and pod scheduling — workloads not suited to `go test -bench`.
+
+See [`benchmarks/install/BENCHMARKS.md`](../benchmarks/install/BENCHMARKS.md) for usage, example output, and a distribution × component matrix.
+
 ## Writing Effective Benchmarks
 
 Follow the conventions established in the existing benchmark files:
