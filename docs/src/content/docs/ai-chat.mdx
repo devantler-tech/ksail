@@ -76,6 +76,10 @@ Use `--model auto` for automatic model selection with 10% discount (when availab
 
 The TUI displays your premium request usage (e.g., `300/300 reqs · 0% · resets Jan 2`) or `∞ reqs` for unlimited entitlements.
 
+### Prompt Queue
+
+Queue multiple prompts to run sequentially without waiting for each response. While a response is actively streaming, press **Ctrl+Q** to add the current input to the queue — queued prompts are processed in FIFO order after the current turn finishes, with any steering prompts for that turn applied first. Press **Ctrl+X** to remove the most recently added pending prompt.
+
 ### Infinite Sessions
 
 Chat sessions support unlimited conversation length through automatic background compaction using a background compaction threshold of 80% (0.80) and a buffer exhaustion threshold of 95% (0.95) of the context window.
@@ -96,6 +100,10 @@ Chat sessions support unlimited conversation length through automatic background
 - **Ctrl+E** — Change reasoning effort level
 - **Ctrl+H** — View session history
 - **Ctrl+N** — Start new chat session
+
+### Prompt Queue
+- **Ctrl+Q** — Queue current input as a pending prompt (processed after the active response completes)
+- **Ctrl+X** — Delete the most recently added pending prompt (including steering prompts added by pressing Enter while a response is streaming)
 
 ### Output
 - **Ctrl+R** — Copy latest assistant response to clipboard
