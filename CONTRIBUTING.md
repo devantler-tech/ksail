@@ -101,6 +101,8 @@ PRs that modify Go code are automatically benchmarked against `main` and the com
 
 See package-specific BENCHMARKS.md files (e.g., `pkg/k8s/readiness/BENCHMARKS.md`, `pkg/client/docker/BENCHMARKS.md`, `pkg/client/flux/BENCHMARKS.md`, `pkg/client/helm/BENCHMARKS.md`, `pkg/client/kustomize/BENCHMARKS.md`, `pkg/fsutil/marshaller/BENCHMARKS.md`, `pkg/svc/diff/BENCHMARKS.md`, `pkg/cli/cmd/cluster/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
 
+For install duration benchmarks (per-component timing via `--benchmark`), see [`benchmarks/install/BENCHMARKS.md`](benchmarks/install/BENCHMARKS.md).
+
 ### Documentation
 
 The project documentation is built using [Astro](https://astro.build/) with the [Starlight](https://starlight.astro.build/) theme and is located in the `docs/` directory.
