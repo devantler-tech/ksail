@@ -26,6 +26,6 @@ ACTION_ACTIONLINT_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
 FILTER_REGEX_EXCLUDE: megalinter-reports/.*
 JSON_V8R_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
 MARKDOWN_MARKDOWN_TABLE_FORMATTER_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)
-MARKDOWN_MARKDOWNLINT_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)
+MARKDOWN_MARKDOWNLINT_FILTER_REGEX_EXCLUDE: (.github/(agents|prompts)|\.agents/skills|\.github/workflows/.*\.lock\.yml)
 SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (.github/copilot-instructions\.md|.*\.mdx|docs/src/.*\.md|\.github/workflows/.*\.md)
 YAML_V8R_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml

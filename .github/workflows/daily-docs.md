@@ -35,6 +35,7 @@ safe-outputs:
     title-prefix: "[docs] "
     labels: [documentation, automation]
     draft: true
+    protected-files: fallback-to-issue
   add-comment:
 
 tools:
