@@ -65,6 +65,7 @@ jobs:
               - 'go.sum'
               - '.github/actions/**'
               - '.github/fixtures/**'
+              - '.github/workflows/ci.yaml'
             schema:
               - 'pkg/apis/**/*.go'
               - 'go.mod'
