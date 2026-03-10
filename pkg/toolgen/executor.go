@@ -51,7 +51,7 @@ func BuildCommandArgs(tool ToolDefinition, params map[string]any) ([]string, err
 	// Process parameters
 	for name, value := range params {
 		// Handle positional args separately
-		if name == "args" {
+		if name == argsKey {
 			positionalArgs, ok := value.([]any)
 			if !ok {
 				return nil, ErrArgsNotArray
@@ -116,6 +116,22 @@ func handleConsolidatedTool(
 		if key == tool.SubcommandParam {
 			continue
 		}
+
+		// Only forward positional args if the subcommand accepts them
+		if key == argsKey {
+			if !subcommandDef.AcceptsArgs {
+				return nil, nil, fmt.Errorf(
+					"%w: %s does not accept positional arguments",
+					ErrArgsNotAccepted,
+					subcommandName,
+				)
+			}
+
+			filteredParams[key] = val
+
+			continue
+		}
+
 		// Only include flags that exist in the selected subcommand's flag definitions
 		if _, appliesToSubcommand := subcommandDef.Flags[key]; appliesToSubcommand {
 			filteredParams[key] = val

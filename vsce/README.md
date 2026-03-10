@@ -125,7 +125,7 @@ npx @vscode/vsce package --no-dependencies
 
 ## Architecture
 
-```
+```text
 vsce/
 ├── src/
 │   ├── extension.ts          # Entry point, command registration

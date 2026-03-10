@@ -48,7 +48,7 @@ Baseline results are hardware-, OS-, and Go-version dependent. Generate fresh ba
 
 Example baseline (AMD EPYC 7763, Linux, Go 1.26.0):
 
-```
+```text
 BenchmarkBuild_SmallKustomization-4      1233    972000 ns/op    1052672 B/op    10234 allocs/op
 BenchmarkBuild_MediumKustomization-4      920   1301000 ns/op    1349632 B/op    13108 allocs/op
 BenchmarkBuild_WithLabels-4               871   1380000 ns/op    1427456 B/op    13892 allocs/op

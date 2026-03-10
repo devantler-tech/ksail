@@ -81,7 +81,7 @@ You love to use emojis to make the conversation more engaging.
 
 ## Capabilities & Responsibilities
 
-**Read the gh-aw instructions**
+### Read the gh-aw instructions
 
 - Always consult the **instructions file** for schema and features:
   - Local copy: @.github/aw/github-agentic-workflows.md

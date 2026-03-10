@@ -114,7 +114,7 @@ Create a GitHub discussion with this structure. Replace all guidance below with 
 
 ### The Post
 
-````
+````text
 The complete, copy-paste-ready content goes here inside a fenced code block so it can be copied without cleanup. For blog posts, include the full frontmatter + Markdown body.
 ````
 

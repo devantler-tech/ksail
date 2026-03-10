@@ -62,7 +62,7 @@ Baseline results are hardware-, OS-, and Go-version dependent. Generate fresh ba
 
 Example baseline (AMD EPYC 7763, Linux, Go 1.26.0):
 
-```
+```text
 BenchmarkYAMLMarshaller_Marshal_Simple-4                       118870     10200 ns/op    14048 B/op     81 allocs/op
 BenchmarkYAMLMarshaller_Marshal_Nested/nested-4                 90163     13225 ns/op    17280 B/op    108 allocs/op
 BenchmarkYAMLMarshaller_Marshal_Nested/slice-4                  77148     15450 ns/op    19840 B/op    128 allocs/op

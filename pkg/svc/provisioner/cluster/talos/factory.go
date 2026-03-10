@@ -147,7 +147,7 @@ func createHetznerProvider(opts v1alpha1.OptionsHetzner) (*hetzner.Provider, err
 	// Determine the token environment variable name
 	tokenEnvVar := opts.TokenEnvVar
 	if tokenEnvVar == "" {
-		tokenEnvVar = "HCLOUD_TOKEN"
+		tokenEnvVar = v1alpha1.DefaultHetznerTokenEnvVar
 	}
 
 	// Get the token from the environment
@@ -166,23 +166,10 @@ func createHetznerProvider(opts v1alpha1.OptionsHetzner) (*hetzner.Provider, err
 	return hetzner.NewProvider(client), nil
 }
 
-// Hetzner default values - keep in sync with OptionsHetzner struct tags.
-const (
-	defaultHetznerServerType  = "cx23"
-	defaultHetznerLocation    = "fsn1"
-	defaultHetznerNetworkCIDR = "10.0.0.0/16"
-	defaultHetznerTokenEnvVar = "HCLOUD_TOKEN"
-)
-
-// Talos default values - keep in sync with OptionsTalos struct tags.
-const (
-	defaultTalosISO = 122630 // Talos Linux 1.11.2 x86 (use 122629 for ARM)
-)
-
 // applyTalosDefaults applies default values to Talos options.
 func applyTalosDefaults(opts v1alpha1.OptionsTalos) v1alpha1.OptionsTalos {
 	if opts.ISO == 0 {
-		opts.ISO = defaultTalosISO
+		opts.ISO = v1alpha1.DefaultTalosISO
 	}
 
 	return opts
@@ -191,23 +178,23 @@ func applyTalosDefaults(opts v1alpha1.OptionsTalos) v1alpha1.OptionsTalos {
 // applyHetznerDefaults applies default values to Hetzner options.
 func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner {
 	if opts.ControlPlaneServerType == "" {
-		opts.ControlPlaneServerType = defaultHetznerServerType
+		opts.ControlPlaneServerType = v1alpha1.DefaultHetznerServerType
 	}
 
 	if opts.WorkerServerType == "" {
-		opts.WorkerServerType = defaultHetznerServerType
+		opts.WorkerServerType = v1alpha1.DefaultHetznerServerType
 	}
 
 	if opts.Location == "" {
-		opts.Location = defaultHetznerLocation
+		opts.Location = v1alpha1.DefaultHetznerLocation
 	}
 
 	if opts.NetworkCIDR == "" {
-		opts.NetworkCIDR = defaultHetznerNetworkCIDR
+		opts.NetworkCIDR = v1alpha1.DefaultHetznerNetworkCIDR
 	}
 
 	if opts.TokenEnvVar == "" {
-		opts.TokenEnvVar = defaultHetznerTokenEnvVar
+		opts.TokenEnvVar = v1alpha1.DefaultHetznerTokenEnvVar
 	}
 
 	return opts

@@ -1,0 +1,46 @@
+name: Update Skills
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *" # Daily at 06:00 UTC
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  update-skills:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: true
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: "22"
+
+      - name: 🔄 Update skills
+        run: npx skills update
+
+      - name: 📦 Create pull request
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
+        with:
+          commit-message: "chore(deps): update npx skills"
+          title: "chore(deps): update npx skills"
+          body: |
+            Automated update of npx skills to their latest versions.
+
+            Updated files:
+            - `skills-lock.json`
+            - `.agents/skills/`
+          branch: deps/skills-update
+          labels: dependencies,automation
+          delete-branch: true

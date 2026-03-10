@@ -28,7 +28,7 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
-      source: ${{ steps.filter.outputs.source }}
+      system-test: ${{ steps.filter.outputs.system-test }}
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
       vsce: ${{ steps.filter.outputs.vsce }}
@@ -50,12 +50,22 @@ jobs:
               - 'go.mod'
               - 'go.sum'
               - '.github/actions/**'
-            source:
+            system-test:
               - '**/*.go'
               - '!**/*_test.go'
+              - '!pkg/cli/cmd/chat/**'
+              - '!pkg/cli/ui/chat/**'
+              - '!pkg/svc/chat/**'
+              - '!pkg/svc/mcp/**'
+              - '!pkg/toolgen/**'
+              - '!pkg/cli/cmd/cipher/**'
+              - '!docs/*.go'
+              - '!schemas/**/*.go'
               - 'go.mod'
               - 'go.sum'
               - '.github/actions/**'
+              - '.github/fixtures/**'
+              - '.github/workflows/ci.yaml'
             schema:
               - 'pkg/apis/**/*.go'
               - 'go.mod'
@@ -416,7 +426,7 @@ jobs:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: github.event_name == 'merge_group' && needs.changes.outputs.source == 'true'
+    if: github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true'
     permissions:
       contents: read
     outputs:
@@ -449,7 +459,7 @@ jobs:
     name: 🔥 Warm Mirror Cache
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: github.event_name == 'merge_group' && needs.changes.outputs.source == 'true'
+    if: github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true'
     permissions:
       contents: read
     outputs:
@@ -483,7 +493,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
-    if: github.event_name == 'merge_group' && needs.changes.outputs.source == 'true'
+    if: github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true'
     permissions:
       contents: read
       packages: write

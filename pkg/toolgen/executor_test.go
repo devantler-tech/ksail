@@ -176,6 +176,60 @@ func TestBuildCommandArgs_EmptyParams(t *testing.T) {
 	assert.Contains(t, args, "list")
 }
 
+func TestConsolidatedToolExecution_WithPositionalArgs(t *testing.T) {
+	t.Parallel()
+
+	tool := toolgen.ToolDefinition{
+		Name:            "cipher_write",
+		Description:     "Manage encrypted files with SOPS",
+		CommandPath:     "ksail cipher",
+		CommandParts:    []string{"ksail", "cipher"},
+		IsConsolidated:  true,
+		SubcommandParam: "cipher_operation",
+		Subcommands: map[string]*toolgen.SubcommandDef{
+			"encrypt": {
+				Name:         "encrypt",
+				Description:  "Encrypt a file with SOPS",
+				CommandParts: []string{"ksail", "cipher", "encrypt"},
+				Flags:        map[string]*toolgen.FlagDef{},
+				AcceptsArgs:  true,
+			},
+			"list": {
+				Name:         "list",
+				Description:  "List keys",
+				CommandParts: []string{"ksail", "cipher", "list"},
+				Flags:        map[string]*toolgen.FlagDef{},
+				AcceptsArgs:  false,
+			},
+		},
+	}
+
+	t.Run("args forwarded when subcommand accepts them", func(t *testing.T) {
+		t.Parallel()
+
+		args, err := toolgen.BuildCommandArgs(tool, map[string]any{
+			"cipher_operation": "encrypt",
+			"args":             []any{"secrets.yaml"},
+		})
+
+		require.NoError(t, err)
+		assert.Contains(t, args, "cipher")
+		assert.Contains(t, args, "encrypt")
+		assert.Contains(t, args, "secrets.yaml")
+	})
+
+	t.Run("args rejected when subcommand does not accept them", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := toolgen.BuildCommandArgs(tool, map[string]any{
+			"cipher_operation": "list",
+			"args":             []any{"extra-arg"},
+		})
+
+		require.ErrorIs(t, err, toolgen.ErrArgsNotAccepted)
+	})
+}
+
 //nolint:funlen // Test functions are inherently verbose with test data setup
 func TestConsolidatedToolExecution(t *testing.T) {
 	t.Parallel()

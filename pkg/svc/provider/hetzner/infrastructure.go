@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
@@ -49,7 +50,7 @@ func (p *Provider) EnsureNetwork(
 
 	// Add a subnet for the servers
 	subnetCIDR := "10.0.1.0/24"
-	if cidr != "10.0.0.0/16" {
+	if cidr != v1alpha1.DefaultHetznerNetworkCIDR {
 		// Use first /24 of the provided range
 		subnetCIDR = cidr
 	}

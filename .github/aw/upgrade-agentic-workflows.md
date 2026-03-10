@@ -10,14 +10,14 @@ Read the ENTIRE content of this file carefully before proceeding. Follow the ins
 
 ## Capabilities & Responsibilities
 
-**Prerequisites**
+### Prerequisites
 
 - The `gh aw` CLI may be available in this environment.
 - Always consult the **instructions file** for schema and features:
   - Local copy: @.github/aw/github-agentic-workflows.md
   - Canonical upstream: <https://raw.githubusercontent.com/github/gh-aw/main/.github/aw/github-agentic-workflows.md>
 
-**Key Commands Available**
+### Key Commands Available
 
 - `upgrade` → upgrade repository to latest version (combines all steps below)
 - `fix` → apply automatic codemods to fix deprecated fields
@@ -246,7 +246,7 @@ Create an **issue** with:
 
 **Description:**
 
-```markdown
+````markdown
 ## Summary
 
 Attempted to upgrade workflows to gh-aw version [VERSION] but encountered compilation errors that could not be automatically resolved.
@@ -258,7 +258,7 @@ Attempted to upgrade workflows to gh-aw version [VERSION] but encountered compil
 ## Compilation Errors
 
 ### Error 1: [Error Type]
-```
+```text
 
 [Full error message]
 
@@ -291,7 +291,7 @@ Attempted to upgrade workflows to gh-aw version [VERSION] but encountered compil
 ## Additional Context
 - Changelog review: [Link to CHANGELOG.md]
 - Migration guide: [Link if available]
-```
+````
 
 ## Best Practices
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,6 +32,37 @@ var (
 	errTestInstallationFailed = errors.New("installation failed")
 	errTestTaskFailed         = errors.New("failed")
 )
+
+// fakeClock is a deterministic clock for testing per-task duration tracking.
+type fakeClock struct {
+	mu      sync.Mutex
+	current time.Time
+}
+
+func newFakeClock(start time.Time) *fakeClock {
+	return &fakeClock{current: start}
+}
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.current
+}
+
+func (c *fakeClock) Since(t time.Time) time.Duration {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.current.Sub(t)
+}
+
+func (c *fakeClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.current = c.current.Add(d)
+}
 
 func TestProgressGroup_EmptyTasks(t *testing.T) {
 	t.Parallel()
@@ -364,6 +396,104 @@ func TestProgressGroup_WithTimer_Success(t *testing.T) {
 
 	if !strings.Contains(output, "total:") {
 		t.Errorf("expected total timing in output, got: %q", output)
+	}
+}
+
+func TestProgressGroup_WithTimer_PerTaskDuration(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{"fast-component", 2 * time.Second, "fast-component installed [2s]"},
+		{"slow-component", 5 * time.Second, "slow-component installed [5s]"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			tmr := &fixedTimer{total: 3 * time.Second, stage: 500 * time.Millisecond}
+			clk := newFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+
+			progressGroup := notify.NewProgressGroup(
+				"Installing",
+				"📦",
+				&buf,
+				notify.WithLabels(notify.InstallingLabels()),
+				notify.WithTimer(tmr),
+				notify.WithClock(clk),
+			)
+
+			tasks := []notify.ProgressTask{
+				{
+					Name: test.name,
+					Fn: func(_ context.Context) error {
+						clk.Advance(test.duration)
+
+						return nil
+					},
+				},
+			}
+
+			err := progressGroup.Run(context.Background(), tasks...)
+			if err != nil {
+				t.Errorf("expected no error, got: %v", err)
+			}
+
+			output := buf.String()
+
+			if !strings.Contains(output, test.expected) {
+				t.Errorf("expected per-task duration %q, got: %q", test.expected, output)
+			}
+
+			if !strings.Contains(output, "⏲ current:") {
+				t.Errorf("expected group timing info in output, got: %q", output)
+			}
+		})
+	}
+}
+
+func TestProgressGroup_WithoutTimer_NoDuration(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	clk := newFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	progressGroup := notify.NewProgressGroup(
+		"Installing",
+		"📦",
+		&buf,
+		notify.WithLabels(notify.InstallingLabels()),
+		notify.WithClock(clk),
+	)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "component",
+			Fn: func(_ context.Context) error {
+				clk.Advance(time.Second)
+
+				return nil
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+
+	// Without timer, completion line should NOT contain duration brackets
+	if strings.Contains(output, "installed [") {
+		t.Errorf("expected no per-task duration without timer, got: %q", output)
 	}
 }
 

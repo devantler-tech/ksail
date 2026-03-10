@@ -115,7 +115,7 @@ Load cache → Analyze new/changed files → Save results → Avoid redundant wo
 
 ### Pattern 1: Find All Function Usages
 
-```
+```text
 1. Use find_symbol to locate function definition
 2. Use find_referencing_code_snippets to find call sites
 3. Analyze patterns
@@ -123,7 +123,7 @@ Load cache → Analyze new/changed files → Save results → Avoid redundant wo
 
 ### Pattern 2: Code Quality Analysis
 
-```
+```text
 1. Use get_symbols_overview on multiple files
 2. Use find_symbol for similar function names
 3. Use search_for_pattern for duplicate logic
@@ -132,7 +132,7 @@ Load cache → Analyze new/changed files → Save results → Avoid redundant wo
 
 ### Pattern 3: Daily Code Analysis
 
-```
+```text
 1. Load previous state from cache-memory
 2. Select files using round-robin or priority
 3. Use Serena for semantic analysis
@@ -171,7 +171,7 @@ See `.serena/project.yml` for complete list (25+ languages).
 
 ## Decision Tree
 
-```
+```text
 Task requires code semantics/structure?
 ├─ NO → Use bash/edit/view
 └─ YES
