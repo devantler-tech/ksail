@@ -102,9 +102,7 @@ func handleCreateRunE(
 		return err
 	}
 
-	maybeSetClusterTTL(cmd, clusterName)
-
-	return nil
+	return maybeWaitForTTL(cmd, clusterName, ctx.ClusterCfg)
 }
 
 // newProvisionerFactory returns the cluster provisioner factory, using any test override if set.
@@ -568,12 +566,18 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 	}
 }
 
-// maybeSetClusterTTL parses the --ttl flag and saves TTL state if a valid duration was provided.
-// If the flag is empty or invalid, a warning is emitted and the cluster is created without a TTL.
-func maybeSetClusterTTL(cmd *cobra.Command, clusterName string) {
+// maybeWaitForTTL parses the --ttl flag and, if set, blocks to auto-destroy the cluster
+// after the TTL duration expires. A goroutine waits for the timer while the main process
+// blocks, handling SIGINT/SIGTERM gracefully. TTL state is also persisted for display
+// in ksail cluster list and ksail cluster info.
+func maybeWaitForTTL(
+	cmd *cobra.Command,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+) error {
 	ttlStr, _ := cmd.Flags().GetString("ttl")
 	if ttlStr == "" {
-		return
+		return nil
 	}
 
 	ttl, err := time.ParseDuration(ttlStr)
@@ -581,15 +585,19 @@ func maybeSetClusterTTL(cmd *cobra.Command, clusterName string) {
 		notify.Warningf(cmd.OutOrStdout(),
 			"invalid --ttl value %q: %v (cluster created without TTL)", ttlStr, err)
 
-		return
+		return nil
 	}
 
 	if ttl <= 0 {
-		return
+		return nil
 	}
 
+	// Persist TTL for informational display (ksail cluster list / info).
 	if saveErr := state.SaveClusterTTL(clusterName, ttl); saveErr != nil {
 		notify.Warningf(cmd.OutOrStdout(),
 			"failed to save cluster TTL: %v", saveErr)
 	}
+
+	// Block and wait for TTL, then auto-destroy.
+	return waitForTTLAndDelete(cmd, clusterName, clusterCfg, ttl)
 }
