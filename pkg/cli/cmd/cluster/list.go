@@ -444,11 +444,12 @@ func formatTTLLabel(ttl *state.TTLInfo) string {
 		return ""
 	}
 
-	if ttl.IsExpired() {
+	remaining := ttl.Remaining()
+	if remaining <= 0 {
 		return "[TTL: EXPIRED]"
 	}
 
-	return "[TTL: " + formatRemainingDuration(ttl.Remaining()) + "]"
+	return "[TTL: " + formatRemainingDuration(remaining) + "]"
 }
 
 // minutesPerHour is the number of minutes in one hour.
