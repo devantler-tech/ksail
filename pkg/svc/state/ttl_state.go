@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -105,16 +104,10 @@ func LoadClusterTTL(clusterName string) (*TTLInfo, error) {
 
 // clusterTTLPath returns the path to the TTL file for a given cluster name.
 func clusterTTLPath(clusterName string) (string, error) {
-	if strings.Contains(clusterName, "/") ||
-		strings.Contains(clusterName, "\\") ||
-		strings.Contains(clusterName, "..") {
-		return "", ErrInvalidClusterName
-	}
-
-	home, err := os.UserHomeDir()
+	dir, err := clusterStateDir(clusterName)
 	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err)
+		return "", err
 	}
 
-	return filepath.Join(home, stateDir, clustersSubDir, clusterName, ttlFileName), nil
+	return filepath.Join(dir, ttlFileName), nil
 }
