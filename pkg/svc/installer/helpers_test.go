@@ -168,8 +168,80 @@ func TestTimeoutConstants(t *testing.T) {
 		assert.Equal(t, 20*time.Minute, installer.ArgoCDInstallTimeout)
 	})
 
+	t.Run("argocd_vcluster_install_timeout", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, 25*time.Minute, installer.ArgoCDVClusterInstallTimeout)
+	})
+
 	t.Run("vcluster_install_timeout", func(t *testing.T) {
 		t.Parallel()
 		assert.Equal(t, 8*time.Minute, installer.VClusterInstallTimeout)
+	})
+}
+
+func TestGetArgoCDInstallTimeout(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil_cluster_returns_base_timeout", func(t *testing.T) {
+		t.Parallel()
+
+		timeout := installer.GetArgoCDInstallTimeout(nil)
+		assert.Equal(t, installer.ArgoCDInstallTimeout, timeout)
+	})
+
+	t.Run("vanilla_returns_base_timeout", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution: v1alpha1.DistributionVanilla,
+				},
+			},
+		}
+		timeout := installer.GetArgoCDInstallTimeout(cluster)
+		assert.Equal(t, installer.ArgoCDInstallTimeout, timeout)
+	})
+
+	t.Run("k3s_returns_base_timeout", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution: v1alpha1.DistributionK3s,
+				},
+			},
+		}
+		timeout := installer.GetArgoCDInstallTimeout(cluster)
+		assert.Equal(t, installer.ArgoCDInstallTimeout, timeout)
+	})
+
+	t.Run("vcluster_returns_elevated_timeout", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution: v1alpha1.DistributionVCluster,
+				},
+			},
+		}
+		timeout := installer.GetArgoCDInstallTimeout(cluster)
+		assert.Equal(t, installer.ArgoCDVClusterInstallTimeout, timeout)
+	})
+
+	t.Run("talos_returns_base_timeout", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution: v1alpha1.DistributionTalos,
+				},
+			},
+		}
+		timeout := installer.GetArgoCDInstallTimeout(cluster)
+		assert.Equal(t, installer.ArgoCDInstallTimeout, timeout)
 	})
 }

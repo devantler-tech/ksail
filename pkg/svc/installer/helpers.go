@@ -36,13 +36,18 @@ const (
 	// ArgoCDInstallTimeout is the timeout for ArgoCD installs, which need
 	// extra time for multiple components to become ready (server, repo-server,
 	// application-controller, applicationset-controller, and Redis).
-	// In VCluster environments with layered stacks (e.g., Calico + Gatekeeper + ArgoCD),
-	// ArgoCD can take significantly longer to stabilize because each component runs
-	// inside the virtual cluster and inherits both the VCluster networking overhead and
-	// the latency imposed by active admission-webhook policies. 20 minutes provides
-	// sufficient headroom while keeping feedback reasonable for actual failures.
 	// See: https://github.com/devantler-tech/ksail/issues/2899
 	ArgoCDInstallTimeout = 20 * time.Minute
+	// ArgoCDVClusterInstallTimeout is the elevated timeout for ArgoCD installs
+	// inside VCluster distributions. VCluster adds significant overhead because
+	// each ArgoCD component runs inside the virtual cluster and inherits both the
+	// VCluster networking overhead (syncer hop) and the latency imposed by active
+	// admission-webhook policies (e.g., Gatekeeper). CI investigations confirmed
+	// that the VCluster + Calico + Gatekeeper + ArgoCD combination regularly takes
+	// ~15 minutes, exceeding the base ArgoCD timeout.
+	// See: https://github.com/devantler-tech/ksail/issues/2899
+	// See: https://github.com/devantler-tech/ksail/issues/2904
+	ArgoCDVClusterInstallTimeout = 25 * time.Minute
 	// VClusterInstallTimeout is the base timeout for component installs inside a VCluster
 	// distribution. VCluster adds ~20-30% overhead relative to a native-node cluster
 	// because every API call is forwarded through an extra hop (syncer) and admission
@@ -83,4 +88,16 @@ func GetInstallTimeout(clusterCfg *v1alpha1.Cluster) time.Duration {
 	}
 
 	return DefaultInstallTimeout
+}
+
+// GetArgoCDInstallTimeout returns the minimum timeout for ArgoCD installation,
+// accounting for VCluster overhead. VCluster stacks receive a higher timeout
+// because the syncer hop and admission-webhook latency (e.g., Gatekeeper)
+// significantly delay ArgoCD component readiness.
+func GetArgoCDInstallTimeout(clusterCfg *v1alpha1.Cluster) time.Duration {
+	if clusterCfg != nil && clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionVCluster {
+		return ArgoCDVClusterInstallTimeout
+	}
+
+	return ArgoCDInstallTimeout
 }

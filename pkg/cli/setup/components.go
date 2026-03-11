@@ -175,6 +175,26 @@ func helmInstallerFactory(
 	}
 }
 
+// argoCDInstallerFactory creates a factory for the ArgoCD installer with
+// distribution-aware timeout. VCluster stacks receive a higher timeout to
+// account for syncer overhead and admission-webhook latency.
+func argoCDInstallerFactory(
+	factories *InstallerFactories,
+) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		helmClient, _, err := factories.HelmClientFactory(clusterCfg)
+		if err != nil {
+			return nil, err
+		}
+
+		minTimeout := installer.GetArgoCDInstallTimeout(clusterCfg)
+		timeout := installer.GetInstallTimeout(clusterCfg)
+		timeout = max(timeout, minTimeout)
+
+		return argocdinstaller.NewInstaller(helmClient, timeout), nil
+	}
+}
+
 // DefaultInstallerFactories returns the default installer factories.
 func DefaultInstallerFactories() *InstallerFactories {
 	factories := &InstallerFactories{}
@@ -193,13 +213,7 @@ func DefaultInstallerFactories() *InstallerFactories {
 		},
 		installer.CertManagerInstallTimeout,
 	)
-	factories.ArgoCD = helmInstallerFactory(
-		factories,
-		func(c helm.Interface, t time.Duration) installer.Installer {
-			return argocdinstaller.NewInstaller(c, t)
-		},
-		installer.ArgoCDInstallTimeout,
-	)
+	factories.ArgoCD = argoCDInstallerFactory(factories)
 	factories.KubeletCSRApprover = helmInstallerFactory(
 		factories,
 		func(c helm.Interface, t time.Duration) installer.Installer {
