@@ -50,3 +50,52 @@ func WaitForDaemonSetReady(
 		return ready, nil
 	})
 }
+
+// WaitForNamespaceDaemonSetsReady waits for all DaemonSets in a namespace to be ready.
+//
+// This is particularly useful after infrastructure component installations to ensure
+// that CNI DaemonSets (e.g., Cilium) have fully re-converged. Cilium marks its pods
+// as Ready only after the BPF datapath is operational, so waiting for all kube-system
+// DaemonSets ensures that pod-to-service routing is functional before starting
+// workloads that depend on in-cluster API server connectivity.
+//
+// Returns nil if the namespace has no DaemonSets.
+// Returns an error if any DaemonSet is not ready within the deadline.
+func WaitForNamespaceDaemonSetsReady(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	namespace string,
+	deadline time.Duration,
+) error {
+	return PollForReadiness(ctx, deadline, func(ctx context.Context) (bool, error) {
+		daemonSets, err := clientset.AppsV1().
+			DaemonSets(namespace).
+			List(ctx, metav1.ListOptions{})
+		if err != nil {
+			// Continue polling on transient errors
+			return false, nil //nolint:nilerr // returning nil to continue polling
+		}
+
+		if len(daemonSets.Items) == 0 {
+			return true, nil
+		}
+
+		for i := range daemonSets.Items {
+			ds := &daemonSets.Items[i]
+
+			if ds.Status.DesiredNumberScheduled == 0 {
+				return false, nil
+			}
+
+			if ds.Status.NumberUnavailable > 0 {
+				return false, nil
+			}
+
+			if ds.Status.UpdatedNumberScheduled != ds.Status.DesiredNumberScheduled {
+				return false, nil
+			}
+		}
+
+		return true, nil
+	})
+}

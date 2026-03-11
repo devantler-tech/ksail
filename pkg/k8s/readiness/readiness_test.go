@@ -127,6 +127,90 @@ func testWaitForDaemonSetReadyTimeout(t *testing.T) {
 	)
 }
 
+func TestWaitForNamespaceDaemonSetsReady(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ReadyWhenAllDaemonSetsReady", testNamespaceDSReadyAllReady)
+	t.Run("ReadyWhenNoDaemonSets", testNamespaceDSReadyEmpty)
+	t.Run("TimesOutWhenOneDaemonSetNotReady", testNamespaceDSReadyTimeout)
+}
+
+func testNamespaceDSReadyAllReady(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	const namespace = "kube-system"
+
+	client := fake.NewClientset(
+		&appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "cilium", Namespace: namespace},
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: 2,
+				NumberUnavailable:      0,
+				UpdatedNumberScheduled: 2,
+			},
+		},
+		&appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "kube-proxy", Namespace: namespace},
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: 2,
+				NumberUnavailable:      0,
+				UpdatedNumberScheduled: 2,
+			},
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err := readiness.WaitForNamespaceDaemonSetsReady(ctx, client, namespace, 200*time.Millisecond)
+
+	expectNoError(t, err, "namespace daemonsets all ready")
+}
+
+func testNamespaceDSReadyEmpty(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	client := fake.NewClientset()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err := readiness.WaitForNamespaceDaemonSetsReady(
+		ctx, client, "empty-ns", 200*time.Millisecond,
+	)
+
+	expectNoError(t, err, "namespace daemonsets empty")
+}
+
+func testNamespaceDSReadyTimeout(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	const namespace = "kube-system"
+
+	client := fake.NewClientset(
+		&appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "cilium", Namespace: namespace},
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: 3,
+				NumberUnavailable:      1,
+				UpdatedNumberScheduled: 2,
+			},
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	err := readiness.WaitForNamespaceDaemonSetsReady(ctx, client, namespace, 150*time.Millisecond)
+
+	expectErrorContains(
+		t, err, "failed to poll for readiness", "namespace daemonsets timeout",
+	)
+}
+
 func TestWaitForDeploymentReady(t *testing.T) {
 	t.Parallel()
 
