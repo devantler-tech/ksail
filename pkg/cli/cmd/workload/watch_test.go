@@ -285,13 +285,12 @@ func TestScheduleApply(t *testing.T) {
 		applyCh := make(chan string, 1)
 
 		workload.ExportScheduleApply(state, "apply.yaml", applyCh)
-		time.Sleep(workload.ExportDebounceInterval + 50*time.Millisecond)
 
 		select {
 		case got := <-applyCh:
 			require.Equal(t, "apply.yaml", got)
-		default:
-			t.Fatal("expected apply.yaml in channel after debounce interval")
+		case <-time.After(workload.ExportDebounceInterval + 500*time.Millisecond):
+			t.Fatal("expected apply.yaml in channel within debounce interval")
 		}
 	})
 }
@@ -304,6 +303,7 @@ func TestEnqueueIfCurrent(t *testing.T) {
 
 		state := workload.ExportNewDebounceState()
 		workload.ExportSetDebounceState(state, 5, "test.yaml")
+
 		applyCh := make(chan string, 1)
 
 		workload.ExportEnqueueIfCurrent(state, 4, applyCh)
@@ -321,6 +321,7 @@ func TestEnqueueIfCurrent(t *testing.T) {
 
 		state := workload.ExportNewDebounceState()
 		workload.ExportSetDebounceState(state, 5, "test.yaml")
+
 		applyCh := make(chan string, 1)
 
 		workload.ExportEnqueueIfCurrent(state, 5, applyCh)
@@ -338,6 +339,7 @@ func TestEnqueueIfCurrent(t *testing.T) {
 
 		state := workload.ExportNewDebounceState()
 		workload.ExportSetDebounceState(state, 5, "latest.yaml")
+
 		applyCh := make(chan string, 1)
 
 		// Pre-fill channel with a stale entry.
