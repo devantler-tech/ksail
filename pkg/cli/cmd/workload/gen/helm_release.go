@@ -285,7 +285,7 @@ func outputHelmRelease(cmd *cobra.Command, yaml string, tmr timer.Timer) error {
 		Type:    notify.SuccessType,
 		Content: "generated HelmRelease",
 		Timer:   outputTimer,
-		Writer:  cmd.OutOrStdout(),
+		Writer:  cmd.ErrOrStderr(),
 	})
 
 	return nil

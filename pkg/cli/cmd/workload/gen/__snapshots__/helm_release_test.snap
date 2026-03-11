@@ -16,7 +16,6 @@ spec:
   interval: 1m0s
   timeout: 5m0s
 status: {}
-✔ generated HelmRelease
 
 ---
 
@@ -47,7 +46,6 @@ spec:
   upgrade:
     crds: CreateReplace
 status: {}
-✔ generated HelmRelease
 
 ---
 
@@ -65,7 +63,6 @@ spec:
   interval: 1m0s
   timeout: 5m0s
 status: {}
-✔ generated HelmRelease
 
 ---
 
@@ -90,7 +87,6 @@ spec:
   interval: 1m0s
   timeout: 5m0s
 status: {}
-✔ generated HelmRelease
 
 ---
 
@@ -115,7 +111,6 @@ spec:
       tag: v2.0.0
     replicaCount: 3
 status: {}
-✔ generated HelmRelease
 
 ---
 
@@ -141,7 +136,6 @@ spec:
   - kind: ConfigMap
     name: common-config
 status: {}
-✔ generated HelmRelease
 
 ---
 
@@ -163,6 +157,5 @@ spec:
   interval: 1m0s
   timeout: 5m0s
 status: {}
-✔ generated HelmRelease
 
 ---
