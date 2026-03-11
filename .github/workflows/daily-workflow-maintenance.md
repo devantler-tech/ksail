@@ -40,6 +40,7 @@ safe-outputs:
     expires: 1d
     labels: [dependencies, automation]
     draft: false
+    protected-files: fallback-to-issue
   create-issue:
 
 steps:
