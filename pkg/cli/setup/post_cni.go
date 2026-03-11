@@ -43,6 +43,12 @@ const (
 	// datapath is operational; waiting ensures pod-to-service routing (e.g. to
 	// the API server ClusterIP) is functional before GitOps operators start.
 	daemonSetStabilityTimeout = 3 * time.Minute
+
+	// inClusterConnectivityTimeout is the maximum time to wait for a test pod
+	// to successfully reach the API server ClusterIP from within the cluster.
+	// This catches eBPF dataplane race conditions where Cilium DaemonSet pods
+	// report Ready but pod-to-service routing is not yet fully programmed.
+	inClusterConnectivityTimeout = 2 * time.Minute
 )
 
 // ShouldPushOCIArtifact determines if OCI artifact push should happen for GitOps engines.
@@ -395,6 +401,19 @@ func waitForClusterStability(
 	)
 	if err != nil {
 		return fmt.Errorf("wait for kube-system DaemonSets to be ready: %w", err)
+	}
+
+	// Pre-flight in-cluster connectivity check: verify that the API server
+	// ClusterIP is actually reachable from a pod. Even when Cilium DaemonSet
+	// pods report Ready, the eBPF dataplane may not have fully programmed
+	// pod-to-service routing paths. This check prevents GitOps operators
+	// (e.g. Flux) from entering CrashLoopBackOff with "i/o timeout" when
+	// connecting to kubernetes.default.svc:443.
+	err = readiness.WaitForInClusterAPIConnectivity(
+		ctx, clientset, inClusterConnectivityTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("in-cluster API connectivity pre-flight check: %w", err)
 	}
 
 	return nil
