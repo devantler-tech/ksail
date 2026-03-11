@@ -36,7 +36,7 @@ benchstat baseline.txt new.txt
 
 - **Small/3images**: Minimal Pod manifest with 1 init container and 2 containers — 3 unique images, ~20 YAML lines.
 - **Medium/5images**: Deployment + Service + ConfigMap bundle with 2 init containers and 3 containers — 5 unique images across multiple documents.
-- **Large/40images**: 20 repetitions of a DaemonSet manifest with 2 containers each — 60 image occurrences deduplicated to 3 unique images; exercises the deduplication map and scanner buffer scaling.
+- **Large/40images**: 20 repetitions of a DaemonSet manifest, each with 1 initContainer and 2 containers (3 image lines per repetition) — 60 image occurrences deduplicated to 3 unique images; exercises the deduplication map and scanner buffer scaling.
 
 ### Multi-Manifest Extraction
 
@@ -56,6 +56,6 @@ benchstat baseline.txt new.txt
 ## Performance Notes
 
 - The pre-compiled `imagePattern` package-level var eliminated ~7500 ns/op and 93 allocs/op of per-call `regexp.MustCompile` overhead. The remaining cost is scanner I/O, line-by-line regex matching, and string normalization.
-- For the Large/40images scenario, most image references are duplicates — the `seen` map short-circuits normalization for repeated entries, keeping allocations low relative to document size.
-- `NormalizeImageRef` for registried images (GHCR, RegistryK8s) is faster than bare names because the registry-detection fast path skips namespace prefixing.
-- The scanner buffer is pre-allocated to 1 MiB to handle long lines in Helm-rendered CRDs (e.g., Calico/Tigera); this allocation is shared across all lines in a single `ExtractImagesFromManifest` call.
+- For the Large/40images scenario, most image references are duplicates — the `seen` map prevents repeated slice appends / retained results for duplicates, keeping allocations low relative to document size even though normalization still runs for each occurrence.
+- `NormalizeImageRef` for registry-qualified images (GHCR, RegistryK8s) is faster than bare names because the registry-detection fast path skips namespace prefixing.
+- The scanner max token size is increased to 1 MiB to handle long lines in Helm-rendered CRDs (e.g., Calico/Tigera); this higher limit is shared across all lines in a single `ExtractImagesFromManifest` call.
