@@ -83,8 +83,11 @@ func WaitForNamespaceDaemonSetsReady(
 		for i := range daemonSets.Items {
 			ds := &daemonSets.Items[i]
 
+			// Skip DaemonSets with no desired pods (e.g., node selectors
+			// that don't match any nodes). These are not relevant to
+			// cluster readiness.
 			if ds.Status.DesiredNumberScheduled == 0 {
-				return false, nil
+				continue
 			}
 
 			if ds.Status.NumberUnavailable > 0 {

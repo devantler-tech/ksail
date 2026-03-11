@@ -132,6 +132,7 @@ func TestWaitForNamespaceDaemonSetsReady(t *testing.T) {
 
 	t.Run("ReadyWhenAllDaemonSetsReady", testNamespaceDSReadyAllReady)
 	t.Run("ReadyWhenNoDaemonSets", testNamespaceDSReadyEmpty)
+	t.Run("SkipsZeroDesiredDaemonSets", testNamespaceDSSkipsZeroDesired)
 	t.Run("TimesOutWhenOneDaemonSetNotReady", testNamespaceDSReadyTimeout)
 }
 
@@ -182,6 +183,40 @@ func testNamespaceDSReadyEmpty(t *testing.T) {
 	)
 
 	expectNoError(t, err, "namespace daemonsets empty")
+}
+
+func testNamespaceDSSkipsZeroDesired(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	const namespace = "kube-system"
+
+	client := fake.NewClientset(
+		&appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "cilium", Namespace: namespace},
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: 2,
+				NumberUnavailable:      0,
+				UpdatedNumberScheduled: 2,
+			},
+		},
+		// DaemonSet with node selector that matches no nodes
+		&appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "special-agent", Namespace: namespace},
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: 0,
+				NumberUnavailable:      0,
+				UpdatedNumberScheduled: 0,
+			},
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err := readiness.WaitForNamespaceDaemonSetsReady(ctx, client, namespace, 200*time.Millisecond)
+
+	expectNoError(t, err, "namespace daemonsets skips zero-desired")
 }
 
 func testNamespaceDSReadyTimeout(t *testing.T) {
