@@ -5,20 +5,7 @@ description: Expose KSail as an MCP server for AI assistants and automation tool
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
 
-The KSail MCP (Model Context Protocol) server exposes all KSail commands as tools that can be used by MCP-compatible AI assistants and automation systems. This enables AI assistants like Claude Desktop to manage Kubernetes clusters directly.
-
-## What is MCP?
-
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io/) is an open protocol that standardizes how AI applications communicate with data sources and tools. It provides a universal interface for AI assistants to access external capabilities while maintaining security and user control.
-
-## Why Use the KSail MCP Server?
-
-The MCP server enables:
-
-- **AI-Driven Cluster Management**: AI assistants can create, configure, and manage clusters
-- **Automated Workflows**: Scripts and automation tools can orchestrate complex cluster operations
-- **Interactive Exploration**: Ask natural language questions and have the AI execute the appropriate commands
-- **Unified Interface**: One protocol for all AI assistants that support MCP
+The KSail MCP ([Model Context Protocol](https://modelcontextprotocol.io/)) server exposes all KSail commands as tools for MCP-compatible AI assistants and automation systems. This enables AI assistants like Claude Desktop to create, configure, and manage Kubernetes clusters, and lets automation scripts orchestrate complex cluster operations through a universal interface.
 
 ## Prerequisites
 
@@ -120,7 +107,7 @@ Each tool accepts a **subcommand parameter** (e.g., `command`, `workload_command
 - `edit` — Edit an encrypted file in-place (pass file path via `args`)
 - `import` — Import an age key (pass the age private key via `args`)
 
-MCP clients can discover available tools dynamically and toggle them on/off as needed.
+MCP clients can discover available tools dynamically and toggle them on/off as needed. Each tool includes its name (e.g., `cluster_write`), a description, and a JSON schema with the subcommand selector enum and merged flags.
 
 ## Integration Examples
 
@@ -174,64 +161,23 @@ Once installed:
 If you're building your own MCP client:
 
 ````python
-# Example using the Python MCP SDK
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-async with stdio_client(
-    StdioServerParameters(
-        command="ksail",
-        args=["mcp"]
-    )
-) as (read, write):
+async with stdio_client(StdioServerParameters(command="ksail", args=["mcp"])) as (read, write):
     async with ClientSession(read, write) as session:
-        # Initialize and discover tools
         await session.initialize()
-        
-        # List available tools
         tools = await session.list_tools()
-        print(f"Available tools: {[t.name for t in tools.tools]}")
-        
-        # Call a tool — use consolidated tool name with subcommand parameter
-        result = await session.call_tool(
-            "cluster_read",
-            arguments={"command": "info"}
-        )
+        print([t.name for t in tools.tools])
+        result = await session.call_tool("cluster_read", arguments={"command": "info"})
         print(result.content)
 ````
 
 **Note:** Tools are consolidated into read/write pairs (e.g., `cluster_read`, `cluster_write`). Use the subcommand parameter to select the specific operation. Check the MCP SDK documentation for your language.
 
-## Tool Discovery
-
-MCP clients can discover available tools dynamically:
-
-````bash
-# Example using mcp-cli (if available)
-mcp list-tools --server "ksail mcp"
-````
-
-Each tool includes:
-- **Name**: Consolidated tool name (e.g., `cluster_write`, `cipher_read`)
-- **Description**: Help text describing the tool category
-- **Parameters**: JSON schema with subcommand selector enum and merged flags
-
 ## Configuration
 
-### Server Behavior
-
-The server:
-- Uses **stdio** for communication (compatible with all MCP clients)
-- Runs commands in the **current working directory** (set by the client)
-- Keeps the connection alive for **30 seconds** after the last request
-- Returns results in **pages of 100 items** for large lists
-
-### Command Execution
-
-Tools execute KSail commands with:
-- The same permissions as the user running the server
-- Access to Docker (required for cluster operations)
-- Ability to read/write files in the working directory
+The server uses **stdio** for communication (compatible with all MCP clients), runs commands in the **current working directory** (set by the client), keeps the connection alive for **30 seconds** after the last request, and returns results in **pages of 100 items** for large lists. Tools execute with the same permissions as the user running the server.
 
 **Security Note:** The MCP server executes commands with your full permissions. Only run it with trusted MCP clients.
 
@@ -287,37 +233,7 @@ You can use both simultaneously — the chat command is excluded from MCP tools 
 
 ### Automation Scripts
 
-Combine MCP with automation frameworks:
-
-````python
-# Example: Automated cluster provisioning with MCP
-async def provision_dev_cluster():
-    async with mcp_session() as session:
-        # Initialize cluster configuration
-        await session.call_tool("cluster_write", {
-            "command": "init",
-            "name": "dev",
-            "distribution": "K3s",
-            "cni": "Cilium"
-        })
-        
-        # Create the cluster
-        await session.call_tool("cluster_write", {
-            "command": "create"
-        })
-        
-        # Deploy workloads
-        await session.call_tool("workload_write", {
-            "workload_command": "apply",
-            "kustomize": "./k8s"
-        })
-        
-        # Encrypt a secret
-        await session.call_tool("cipher_write", {
-            "cipher_operation": "encrypt",
-            "args": ["secrets.yaml"]
-        })
-````
+Use MCP tool calls in automation frameworks to orchestrate sequences of KSail operations — for example, `cluster_write` (init → create) → `workload_write` (apply) → `cipher_write` (encrypt). Use the same connection pattern shown in [Custom MCP Client](#custom-mcp-client).
 
 ## See Also
 
