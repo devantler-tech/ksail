@@ -3,6 +3,7 @@ package readiness
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -49,18 +50,24 @@ func WaitForInClusterAPIConnectivity(
 
 	apiServerIP := svc.Spec.ClusterIP
 
+	// Validate that the ClusterIP is a valid IP address to prevent injection
+	// into the shell command executed inside the test pod.
+	if ip := net.ParseIP(apiServerIP); ip == nil {
+		return fmt.Errorf("invalid kubernetes service ClusterIP: %q", apiServerIP)
+	}
+
 	// Ensure no leftover test pod from a previous run.
 	deleteConnectivityPod(ctx, clientset)
 
 	// Always clean up the test pod when done.
-	defer deleteConnectivityPod(context.WithoutCancel(ctx), clientset)
+	defer deleteConnectivityPod(context.Background(), clientset)
 
 	pollErr := PollForReadiness(ctx, deadline, func(pollCtx context.Context) (bool, error) {
 		return runConnectivityTestPod(pollCtx, clientset, apiServerIP)
 	})
 	if pollErr != nil {
 		return fmt.Errorf(
-			"in-cluster API connectivity check failed — "+
+			"in-cluster API connectivity check failed: "+
 				"API server ClusterIP %s:443 not reachable from pods: %w",
 			apiServerIP, pollErr,
 		)

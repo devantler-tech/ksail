@@ -14,6 +14,20 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
+const testClusterIP = "10.96.0.1"
+
+func newKubernetesService() *corev1.Service {
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "kubernetes",
+			Namespace: "default",
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: testClusterIP,
+		},
+	}
+}
+
 func TestWaitForInClusterAPIConnectivity_NoService(t *testing.T) {
 	t.Parallel()
 
@@ -31,16 +45,7 @@ func TestWaitForInClusterAPIConnectivity_NoService(t *testing.T) {
 func TestWaitForInClusterAPIConnectivity_PodSucceeds(t *testing.T) {
 	t.Parallel()
 
-	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "kubernetes",
-			Namespace: "default",
-		},
-		Spec: corev1.ServiceSpec{
-			ClusterIP: "10.96.0.1",
-		},
-	}
-	clientset := fake.NewClientset(svc)
+	clientset := fake.NewClientset(newKubernetesService())
 
 	// Intercept pod creation to set the pod status to Succeeded immediately.
 	clientset.PrependReactor("create", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
@@ -70,16 +75,7 @@ func TestWaitForInClusterAPIConnectivity_PodSucceeds(t *testing.T) {
 func TestWaitForInClusterAPIConnectivity_Timeout(t *testing.T) {
 	t.Parallel()
 
-	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "kubernetes",
-			Namespace: "default",
-		},
-		Spec: corev1.ServiceSpec{
-			ClusterIP: "10.96.0.1",
-		},
-	}
-	clientset := fake.NewClientset(svc)
+	clientset := fake.NewClientset(newKubernetesService())
 
 	// Intercept pod creation to set the pod status to Failed (simulating
 	// connectivity failure). The pod remains in Failed state, causing the
@@ -112,16 +108,7 @@ func TestWaitForInClusterAPIConnectivity_Timeout(t *testing.T) {
 func TestConnectivityCheckPodSpec(t *testing.T) {
 	t.Parallel()
 
-	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "kubernetes",
-			Namespace: "default",
-		},
-		Spec: corev1.ServiceSpec{
-			ClusterIP: "10.96.0.1",
-		},
-	}
-	clientset := fake.NewClientset(svc)
+	clientset := fake.NewClientset(newKubernetesService())
 
 	// Make the function create a pod and immediately succeed so we can
 	// inspect what was created.
@@ -142,7 +129,7 @@ func TestConnectivityCheckPodSpec(t *testing.T) {
 		require.Equal(t, corev1.RestartPolicyNever, pod.Spec.RestartPolicy)
 		require.Len(t, pod.Spec.Containers, 1)
 		require.Equal(t, "busybox:stable", pod.Spec.Containers[0].Image)
-		require.Contains(t, pod.Spec.Containers[0].Command[2], "nc -w 5 10.96.0.1 443")
+		require.Contains(t, pod.Spec.Containers[0].Command[2], "nc -w 5 "+testClusterIP+" 443")
 		require.Len(t, pod.Spec.Tolerations, 1)
 		require.Equal(t, corev1.TolerationOpExists, pod.Spec.Tolerations[0].Operator)
 
