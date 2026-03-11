@@ -28,21 +28,24 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 
 	// Wrap RunE to append TTL info after kubectl cluster-info output.
 	originalRunE := cmd.RunE
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := originalRunE(cmd, args); err != nil {
-			return err
+	if originalRunE != nil {
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			err := originalRunE(cmd, args)
+			if err != nil {
+				return err
+			}
+
+			displayTTLInfo(cmd, kubeconfigPath)
+
+			return nil
 		}
-
-		displayTTLInfo(kubeconfigPath)
-
-		return nil
 	}
 
 	return cmd
 }
 
 // displayTTLInfo detects the current cluster from kubeconfig and prints TTL status if set.
-func displayTTLInfo(kubeconfigPath string) {
+func displayTTLInfo(cmd *cobra.Command, kubeconfigPath string) {
 	info, err := clusterdetector.DetectInfo(kubeconfigPath, "")
 	if err != nil || info == nil {
 		return
@@ -53,15 +56,17 @@ func displayTTLInfo(kubeconfigPath string) {
 		return
 	}
 
+	writer := cmd.OutOrStdout()
+
 	// Print blank line to separate from kubectl output.
-	fmt.Fprintln(os.Stdout)
+	_, _ = fmt.Fprintln(writer)
 
 	if ttlInfo.IsExpired() {
-		notify.Warningf(os.Stdout,
+		notify.Warningf(writer,
 			"cluster TTL has EXPIRED (was set to %s)", ttlInfo.Duration)
 	} else {
 		remaining := formatRemainingDuration(ttlInfo.Remaining())
-		notify.Infof(os.Stdout,
+		notify.Infof(writer,
 			"cluster TTL: %s remaining (set to %s)", remaining, ttlInfo.Duration)
 	}
 }

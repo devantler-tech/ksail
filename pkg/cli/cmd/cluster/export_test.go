@@ -110,9 +110,9 @@ func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, totalChanges int) s
 	return formatDiffTable(diff, totalChanges)
 }
 
-// ExportFormatClusterWithTTL exports formatClusterWithTTL for testing.
-func ExportFormatClusterWithTTL(name string, ttl *state.TTLInfo) string {
-	return formatClusterWithTTL(name, ttl)
+// ExportFormatTTLLabel exports formatTTLLabel for testing.
+func ExportFormatTTLLabel(ttl *state.TTLInfo) string {
+	return formatTTLLabel(ttl)
 }
 
 // ExportFormatRemainingDuration exports formatRemainingDuration for testing.
@@ -121,6 +121,10 @@ func ExportFormatRemainingDuration(d time.Duration) string {
 }
 
 // ExportMaybeWaitForTTL exports maybeWaitForTTL for testing.
-func ExportMaybeWaitForTTL(cmd *cobra.Command, clusterName string, clusterCfg *v1alpha1.Cluster) error {
+func ExportMaybeWaitForTTL(
+	cmd *cobra.Command,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+) error {
 	return maybeWaitForTTL(cmd, clusterName, clusterCfg)
 }

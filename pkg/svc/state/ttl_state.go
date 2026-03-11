@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,11 +12,17 @@ import (
 
 const ttlFileName = "ttl.json"
 
+// ErrNonPositiveTTL is returned when a non-positive TTL duration is provided.
+var ErrNonPositiveTTL = errors.New("TTL duration must be positive")
+
+// ErrTTLNotSet is returned when no TTL has been set for a cluster.
+var ErrTTLNotSet = errors.New("cluster TTL not set")
+
 // TTLInfo holds time-to-live information for a cluster.
 type TTLInfo struct {
 	// ExpiresAt is the UTC time when the cluster should be destroyed.
-	ExpiresAt time.Time `json:"expires_at"`
-	// Duration is the original TTL string provided by the user (e.g. "2h").
+	ExpiresAt time.Time `json:"expiresAt"`
+	// Duration is the normalized string representation of the TTL (e.g. "2h0m0s").
 	Duration string `json:"duration"`
 }
 
@@ -31,8 +38,13 @@ func (t *TTLInfo) IsExpired() bool {
 }
 
 // SaveClusterTTL persists TTL information for a cluster.
-// ttl must be a positive duration. The expiry time is calculated as now + ttl.
+// ttl must be a positive duration. Returns ErrNonPositiveTTL otherwise.
+// The expiry time is calculated as now + ttl.
 func SaveClusterTTL(clusterName string, ttl time.Duration) error {
+	if ttl <= 0 {
+		return ErrNonPositiveTTL
+	}
+
 	ttlPath, err := clusterTTLPath(clusterName)
 	if err != nil {
 		return err
@@ -64,7 +76,7 @@ func SaveClusterTTL(clusterName string, ttl time.Duration) error {
 }
 
 // LoadClusterTTL loads TTL information for a cluster.
-// Returns nil, nil if no TTL has been set for the cluster.
+// Returns ErrTTLNotSet if no TTL has been set for the cluster.
 func LoadClusterTTL(clusterName string) (*TTLInfo, error) {
 	ttlPath, err := clusterTTLPath(clusterName)
 	if err != nil {
@@ -75,7 +87,7 @@ func LoadClusterTTL(clusterName string) (*TTLInfo, error) {
 	data, err := os.ReadFile(ttlPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, ErrTTLNotSet
 		}
 
 		return nil, fmt.Errorf("failed to read ttl state: %w", err)
