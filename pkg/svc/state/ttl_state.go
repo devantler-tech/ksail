@@ -82,7 +82,8 @@ func LoadClusterTTL(clusterName string) (*TTLInfo, error) {
 		return nil, err
 	}
 
-	//nolint:gosec // path is constructed from user home + constant subpath, not user input
+	//nolint:gosec // ttlPath is derived via clusterStateDir(clusterName), which validates clusterName
+	// and constrains the path under the cluster state root
 	data, err := os.ReadFile(ttlPath)
 	if err != nil {
 		if os.IsNotExist(err) {

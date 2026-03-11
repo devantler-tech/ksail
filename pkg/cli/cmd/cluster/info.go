@@ -61,12 +61,16 @@ func displayTTLInfo(cmd *cobra.Command, kubeconfigPath string) {
 	// Print blank line to separate from kubectl output.
 	_, _ = fmt.Fprintln(writer)
 
-	if ttlInfo.IsExpired() {
+	remaining := ttlInfo.Remaining()
+	if remaining <= 0 {
 		notify.Warningf(writer,
 			"cluster TTL has EXPIRED (was set to %s)", ttlInfo.Duration)
 	} else {
-		remaining := formatRemainingDuration(ttlInfo.Remaining())
-		notify.Infof(writer,
-			"cluster TTL: %s remaining (set to %s)", remaining, ttlInfo.Duration)
+		notify.Infof(
+			writer,
+			"cluster TTL: %s remaining (set to %s)",
+			formatRemainingDuration(remaining),
+			ttlInfo.Duration,
+		)
 	}
 }
