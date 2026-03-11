@@ -179,11 +179,21 @@ jobs:
         run: ksail cluster delete
 ```
 
+Alternatively, use `--ttl` so the cluster auto-destroys when the TTL expires — useful when a cleanup step might be skipped on runner cancellation:
+
+```yaml
+      - name: Create cluster (auto-destroys after 30m)
+        run: ksail cluster create --ttl 30m &
+```
+
+> The `&` backgrounds the create command so subsequent steps can run. The cluster is destroyed once the 30-minute TTL elapses, even if earlier steps fail.
+
 ### Tips
 
 - Use `--timeout` flags to handle slow CI runners
 - Cache Docker layers for faster builds
 - Use matrix builds to test across multiple Kubernetes versions/distributions
+- Use `--ttl` to guarantee cleanup on ephemeral runners without relying on a cleanup step
 - Consider using `ksail cluster start` and `ksail cluster stop` if tests can share a cluster
 
 ## Configuration Comparison
@@ -196,7 +206,7 @@ jobs:
 | GitOps           | None             | Flux             | Flux             |
 | Local Registry   | Optional         | Yes              | Yes              |
 | Declarative Config | Optional       | Recommended      | Required         |
-| Cluster Lifetime | Session          | Days/Weeks       | Minutes          |
+| Cluster Lifetime | Session          | Days/Weeks       | Minutes (or `--ttl`) |
 
 ## Next Steps
 
