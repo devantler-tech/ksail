@@ -13,11 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFormatClusterWithTTL_NoTTL(t *testing.T) {
+func TestFormatTTLLabel_NoTTL(t *testing.T) {
 	t.Parallel()
 
-	result := clusterpkg.ExportFormatClusterWithTTL("my-cluster", nil)
-	assert.Equal(t, "my-cluster", result)
+	result := clusterpkg.ExportFormatTTLLabel(nil)
+	assert.Empty(t, result)
 }
 
 func TestFormatRemainingDuration_HoursAndMinutes(t *testing.T) {
@@ -39,6 +39,23 @@ func TestFormatRemainingDuration_MinutesOnly(t *testing.T) {
 
 	result := clusterpkg.ExportFormatRemainingDuration(45 * time.Minute)
 	assert.Equal(t, "45m", result)
+}
+
+func TestFormatRemainingDuration_SubMinute(t *testing.T) {
+	t.Parallel()
+
+	result := clusterpkg.ExportFormatRemainingDuration(59 * time.Second)
+	assert.Equal(t, "<1m", result)
+}
+
+func TestFormatRemainingDuration_TruncatesDown(t *testing.T) {
+	t.Parallel()
+
+	// 1h 23m 59s should truncate to 1h 23m, never round up to 1h 24m.
+	result := clusterpkg.ExportFormatRemainingDuration(
+		1*time.Hour + 23*time.Minute + 59*time.Second,
+	)
+	assert.Equal(t, "1h 23m", result)
 }
 
 func TestMaybeWaitForTTL_EmptyFlag(t *testing.T) {

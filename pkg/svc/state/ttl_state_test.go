@@ -39,7 +39,7 @@ func TestLoadClusterTTL_NotSet(t *testing.T) {
 	})
 
 	ttl, err := state.LoadClusterTTL(clusterName)
-	require.NoError(t, err)
+	require.ErrorIs(t, err, state.ErrTTLNotSet)
 	assert.Nil(t, ttl)
 }
 
@@ -112,6 +112,16 @@ func TestTTLInfo_Remaining_Negative(t *testing.T) {
 	remaining := ttl.Remaining()
 
 	assert.Negative(t, remaining)
+}
+
+func TestSaveClusterTTL_NonPositiveDuration(t *testing.T) {
+	t.Parallel()
+
+	err := state.SaveClusterTTL("test-zero-ttl", 0)
+	require.ErrorIs(t, err, state.ErrNonPositiveTTL)
+
+	err = state.SaveClusterTTL("test-neg-ttl", -1*time.Hour)
+	require.ErrorIs(t, err, state.ErrNonPositiveTTL)
 }
 
 func TestSaveClusterTTL_InvalidClusterName(t *testing.T) {

@@ -14,6 +14,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// deleteTimeout is the maximum duration for the auto-delete operation.
+const deleteTimeout = 10 * time.Minute
+
 // waitForTTLAndDelete blocks until the TTL duration elapses and then auto-deletes the cluster.
 // The wait can be cancelled with SIGINT/SIGTERM, in which case the cluster is left running.
 // This implements the ephemeral cluster pattern: after creation, the process stays alive
@@ -27,9 +30,8 @@ func waitForTTLAndDelete(
 	notify.Infof(cmd.OutOrStdout(),
 		"cluster will auto-destroy in %s (press Ctrl+C to cancel)", ttl)
 
-	// Create a context that is cancelled on SIGINT/SIGTERM.
-	// Using context.Background() as parent so signals are the only cancellation source.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	// Create a context that is cancelled on SIGINT/SIGTERM and also respects cmd.Context().
+	ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	timer := time.NewTimer(ttl)
@@ -68,14 +70,18 @@ func autoDeleteCluster(
 		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
 	}
 
-	err = provisioner.Delete(context.Background(), clusterName)
+	deleteCtx, cancel := context.WithTimeout(cmd.Context(), deleteTimeout)
+	defer cancel()
+
+	err = provisioner.Delete(deleteCtx, clusterName)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete failed: %w", err)
 	}
 
 	// Clean up persisted state (spec + TTL).
 	// Best-effort: warn on failure rather than blocking success.
-	if stateErr := state.DeleteClusterState(clusterName); stateErr != nil {
+	stateErr := state.DeleteClusterState(clusterName)
+	if stateErr != nil {
 		notify.Warningf(cmd.OutOrStdout(),
 			"failed to clean up cluster state: %v", stateErr)
 	}

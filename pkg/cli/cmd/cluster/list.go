@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -51,6 +53,9 @@ type listResult struct {
 	ClusterName string
 	TTL         *state.TTLInfo // nil if no TTL has been set for this cluster
 }
+
+// ttlIndent is the indentation prefix for TTL annotation lines in list output.
+const ttlIndent = "  "
 
 const listLongDesc = `List all Kubernetes clusters managed by KSail.
 
@@ -154,11 +159,25 @@ func HandleListRunE(
 		}
 
 		for _, cluster := range clusters {
-			ttlInfo, _ := state.LoadClusterTTL(cluster)
+			ttlInfo, ttlErr := state.LoadClusterTTL(cluster)
+			if ttlErr != nil && !errors.Is(ttlErr, state.ErrTTLNotSet) {
+				notify.Warningf(
+					cmd.ErrOrStderr(),
+					"failed to load TTL for cluster %q: %v",
+					cluster,
+					ttlErr,
+				)
+			}
+
+			var ttl *state.TTLInfo
+			if ttlErr == nil {
+				ttl = ttlInfo
+			}
+
 			allResults = append(allResults, listResult{
 				Provider:    prov,
 				ClusterName: cluster,
-				TTL:         ttlInfo,
+				TTL:         ttl,
 			})
 		}
 	}
@@ -360,8 +379,8 @@ func createEmptyDistributionConfig(
 // to parse the cluster names for subsequent commands.
 // Format: "<provider>: cluster1, cluster2" to clearly identify cluster names.
 // If no clusters exist, displays "No clusters found.".
-// Clusters with a TTL set show the remaining time in square brackets, e.g.
-// "cluster1 [TTL: 1h 23m]". Expired clusters show "[TTL: EXPIRED]".
+// Clusters with a TTL set show remaining time on a separate indented line
+// to keep printed cluster identifiers directly copy/paste-able.
 func displayListResults(
 	writer io.Writer,
 	providers []v1alpha1.Provider,
@@ -397,7 +416,7 @@ func displayListResults(
 
 		clusterNames := make([]string, 0, len(entries))
 		for _, e := range entries {
-			clusterNames = append(clusterNames, formatClusterWithTTL(e.name, e.ttl))
+			clusterNames = append(clusterNames, e.name)
 		}
 
 		_, _ = fmt.Fprintf(
@@ -406,38 +425,52 @@ func displayListResults(
 			strings.ToLower(string(prov)),
 			strings.Join(clusterNames, ", "),
 		)
+
+		// Print TTL annotations on separate indented lines.
+		for _, e := range entries {
+			ttlLabel := formatTTLLabel(e.ttl)
+			if ttlLabel != "" {
+				_, _ = fmt.Fprintf(writer, "%s%s %s\n", ttlIndent, e.name, ttlLabel)
+			}
+		}
 	}
 }
 
-// formatClusterWithTTL formats a cluster name with optional TTL information.
-// Returns "name [TTL: Xh Ym]" or "name [TTL: EXPIRED]" when TTL is set,
-// or just "name" when no TTL is configured.
-func formatClusterWithTTL(name string, ttl *state.TTLInfo) string {
+// formatTTLLabel returns a TTL annotation string for a cluster entry.
+// Returns "" when no TTL is set, "[TTL: EXPIRED]" when expired,
+// or "[TTL: Xh Ym]" with remaining time.
+func formatTTLLabel(ttl *state.TTLInfo) string {
 	if ttl == nil {
-		return name
+		return ""
 	}
 
 	if ttl.IsExpired() {
-		return name + " [TTL: EXPIRED]"
+		return "[TTL: EXPIRED]"
 	}
 
-	return name + " [TTL: " + formatRemainingDuration(ttl.Remaining()) + "]"
+	return "[TTL: " + formatRemainingDuration(ttl.Remaining()) + "]"
 }
 
+// minutesPerHour is the number of minutes in one hour.
+const minutesPerHour = 60
+
 // formatRemainingDuration formats a positive duration as a human-readable string.
-// Durations are expressed in hours and minutes, e.g. "1h 23m" or "45m".
+// Durations are truncated (floored) to whole minutes so the display never overstates
+// remaining time. Values under one minute display as "<1m".
 func formatRemainingDuration(d time.Duration) string {
-	d = d.Round(time.Minute)
+	d = d.Truncate(time.Minute)
 
 	hours := int(d.Hours())
-	minutes := int(d.Minutes()) % 60
+	minutes := int(d.Minutes()) % minutesPerHour
 
 	switch {
 	case hours > 0 && minutes > 0:
 		return fmt.Sprintf("%dh %dm", hours, minutes)
 	case hours > 0:
 		return fmt.Sprintf("%dh", hours)
-	default:
+	case minutes > 0:
 		return fmt.Sprintf("%dm", minutes)
+	default:
+		return "<1m"
 	}
 }

@@ -438,7 +438,8 @@ func executeDelete(
 
 	// Clean up persisted state (spec + TTL) for the deleted cluster.
 	// Best-effort: log a warning on failure rather than blocking success.
-	if stateErr := state.DeleteClusterState(resolved.ClusterName); stateErr != nil {
+	stateErr := state.DeleteClusterState(resolved.ClusterName)
+	if stateErr != nil {
 		notify.Warningf(cmd.OutOrStdout(), "failed to clean up cluster state: %v", stateErr)
 	}
 
