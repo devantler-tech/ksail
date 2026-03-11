@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -52,6 +53,9 @@ type listResult struct {
 	ClusterName string
 	TTL         *state.TTLInfo // nil if no TTL has been set for this cluster
 }
+
+// ttlIndent is the indentation prefix for TTL annotation lines in list output.
+const ttlIndent = "  "
 
 const listLongDesc = `List all Kubernetes clusters managed by KSail.
 
@@ -157,9 +161,9 @@ func HandleListRunE(
 		for _, cluster := range clusters {
 			ttlInfo, ttlErr := state.LoadClusterTTL(cluster)
 			if ttlErr != nil && !errors.Is(ttlErr, state.ErrTTLNotSet) {
-				_, _ = fmt.Fprintf(
+				notify.Warningf(
 					cmd.ErrOrStderr(),
-					"Warning: failed to load TTL for cluster %q: %v\n",
+					"failed to load TTL for cluster %q: %v",
 					cluster,
 					ttlErr,
 				)
@@ -426,7 +430,7 @@ func displayListResults(
 		for _, e := range entries {
 			ttlLabel := formatTTLLabel(e.ttl)
 			if ttlLabel != "" {
-				_, _ = fmt.Fprintf(writer, "  %s %s\n", e.name, ttlLabel)
+				_, _ = fmt.Fprintf(writer, "%s%s %s\n", ttlIndent, e.name, ttlLabel)
 			}
 		}
 	}
