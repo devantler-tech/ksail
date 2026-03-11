@@ -70,7 +70,7 @@ kubectl get crd <crd-name> -o jsonpath='{.status.conditions[?(@.type=="Establish
 
 ### Flux/ArgoCD CrashLoopBackOff After Component Installation
 
-Infrastructure components (MetalLB, Kyverno, cert-manager) can temporarily disrupt API server connectivity while registering webhooks/CRDs, causing `CrashLoopBackOff` with `dial tcp 10.96.0.1:443: i/o timeout` errors. KSail waits for API server stability before installing GitOps engines. If you see `API server not stable after infrastructure installation`, check resources and optionally recreate with fewer components:
+Infrastructure components (MetalLB, Kyverno, cert-manager) can temporarily disrupt API server connectivity while registering webhooks/CRDs, causing `CrashLoopBackOff` with `dial tcp 10.96.0.1:443: i/o timeout` errors. CNI components (e.g. Cilium) can also cause this if their BPF datapath hasn't finished programming when GitOps engines start. KSail performs a cluster stability check before installing GitOps engines: it requires 5 consecutive successful API server health checks and verifies all kube-system DaemonSets are ready. If you see `cluster not stable after infrastructure installation`, check resources and optionally recreate with fewer components:
 
 ```bash
 ksail workload get nodes
