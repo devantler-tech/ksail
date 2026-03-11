@@ -5,7 +5,7 @@ description: KSail provides a unified CLI for Kubernetes development with built-
 
 ## Cluster Provisioning
 
-Create and manage local Kubernetes clusters with a single command. KSail supports [Vanilla, K3s, Talos, and VCluster](/concepts/#distributions) distributions, generates native configuration files (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`) that work directly with upstream tools, and automatically configures [CNI](/concepts/#container-network-interface-cni), [CSI](/concepts/#container-storage-interface-csi), [metrics-server](/concepts/#metrics-server), [cert-manager](/concepts/#cert-manager), and [policy engines](/concepts/#policy-engines). Component installations use automatic retry with exponential backoff; the `--benchmark` flag shows per-component install durations during `create` and `update`.
+Create and manage local Kubernetes clusters with a single command. KSail supports [Vanilla, K3s, Talos, and VCluster](/concepts/#distributions) distributions, generates native configuration files (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`) that work directly with upstream tools, and automatically configures [CNI](/concepts/#container-network-interface-cni), [CSI](/concepts/#container-storage-interface-csi), [metrics-server](/concepts/#metrics-server), [cert-manager](/concepts/#cert-manager), and [policy engines](/concepts/#policy-engines). Component installations use automatic retry with exponential backoff; the `--benchmark` flag shows per-component install durations during `cluster create` and `cluster update`.
 
 ```bash
 ksail cluster init --name my-cluster --distribution Vanilla --cni Cilium
@@ -35,7 +35,7 @@ ksail cluster create
 
 ## Workload Management
 
-Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; create, edit, delete, and inspect resources; debug with logs, exec, describe, and explain; expose services; export and import container images; validate manifests against schemas; and generate resources (Deployments, Services, Secrets, HelmReleases, Flux sources).
+Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; create, edit, delete, and inspect resources; debug with logs, exec, describe, and explain; expose services; export and import container images; validate manifests against schemas; and generate resources (see [`ksail workload gen` reference](/cli-flags/workload/workload-gen/) for the full list of supported resource types).
 
 ```bash
 ksail workload apply -k k8s/
@@ -93,6 +93,8 @@ docker push localhost:5050/my-app
 ksail cluster init --mirror-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io=https://ghcr.io'
 ```
 
+> `${GITHUB_USER}` and `${GITHUB_TOKEN}` are placeholders resolved by KSail (replace with your GitHub username and a personal access token). They are not expanded by the shell — the single quotes ensure the shell passes the value verbatim so KSail can interpolate it.
+
 ## Secret Management
 
 Encrypt and decrypt secrets using [SOPS](/concepts/#sops) with support for age, PGP, and cloud KMS providers.
@@ -146,7 +148,7 @@ spec:
 
 ## AI Chat Assistant
 
-Get interactive help with cluster configuration and troubleshooting. Two modes: **Agent** (`</>`) for execution with approval and **Plan** (`≡`) for step-by-step guidance. Press **Tab** to cycle. Requires GitHub Copilot; KSail will prompt you to sign in on first use.
+Get interactive help with cluster configuration and troubleshooting. Two modes: **Agent** (`</>`) for execution with approval and **Plan** (`≡`) for step-by-step guidance. Press **Tab** to cycle. Requires an active GitHub Copilot subscription; KSail will prompt you to sign in with GitHub on first use.
 
 ```bash
 ksail chat
