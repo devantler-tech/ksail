@@ -2,11 +2,13 @@ package cluster
 
 import (
 	"archive/tar"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -106,4 +108,19 @@ func ExportDisplayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateR
 // ExportFormatDiffTable exports formatDiffTable for benchmarking.
 func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, totalChanges int) string {
 	return formatDiffTable(diff, totalChanges)
+}
+
+// ExportFormatClusterWithTTL exports formatClusterWithTTL for testing.
+func ExportFormatClusterWithTTL(name string, ttl *state.TTLInfo) string {
+	return formatClusterWithTTL(name, ttl)
+}
+
+// ExportFormatRemainingDuration exports formatRemainingDuration for testing.
+func ExportFormatRemainingDuration(d time.Duration) string {
+	return formatRemainingDuration(d)
+}
+
+// ExportMaybeWaitForTTL exports maybeWaitForTTL for testing.
+func ExportMaybeWaitForTTL(cmd *cobra.Command, clusterName string, clusterCfg *v1alpha1.Cluster) error {
+	return maybeWaitForTTL(cmd, clusterName, clusterCfg)
 }
