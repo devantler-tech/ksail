@@ -74,7 +74,11 @@ func autoDeleteCluster(
 	}
 
 	// Clean up persisted state (spec + TTL).
-	_ = state.DeleteClusterState(clusterName)
+	// Best-effort: warn on failure rather than blocking success.
+	if stateErr := state.DeleteClusterState(clusterName); stateErr != nil {
+		notify.Warningf(cmd.OutOrStdout(),
+			"failed to clean up cluster state: %v", stateErr)
+	}
 
 	notify.Successf(cmd.OutOrStdout(),
 		"cluster %q auto-destroyed after TTL expiry", clusterName)

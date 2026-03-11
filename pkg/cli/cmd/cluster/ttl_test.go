@@ -69,6 +69,7 @@ func TestMaybeWaitForTTL_InvalidDuration(t *testing.T) {
 
 	clusterCfg := &v1alpha1.Cluster{}
 
+	// Invalid duration should not block or attempt deletion; returns nil.
 	err := clusterpkg.ExportMaybeWaitForTTL(cmd, "test-cluster", clusterCfg)
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "invalid --ttl value")
@@ -81,11 +82,15 @@ func TestMaybeWaitForTTL_NonPositiveDuration(t *testing.T) {
 	cmd.Flags().String("ttl", "", "")
 	_ = cmd.Flags().Set("ttl", "-1h")
 
-	cmd.SetOut(&bytes.Buffer{})
+	var buf bytes.Buffer
+
+	cmd.SetOut(&buf)
 	cmd.SetContext(context.Background())
 
 	clusterCfg := &v1alpha1.Cluster{}
 
+	// Non-positive duration should return immediately without blocking or TTL setup.
 	err := clusterpkg.ExportMaybeWaitForTTL(cmd, "test-cluster", clusterCfg)
 	require.NoError(t, err)
+	assert.Empty(t, buf.String(), "non-positive TTL should produce no output")
 }
