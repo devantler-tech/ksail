@@ -127,6 +127,154 @@ func testWaitForDaemonSetReadyTimeout(t *testing.T) {
 	)
 }
 
+func TestWaitForNamespaceDaemonSetsReady(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ReadyWhenAllDaemonSetsReady", testNamespaceDSReadyAllReady)
+	t.Run("ReadyWhenNoDaemonSets", testNamespaceDSReadyEmpty)
+	t.Run("SkipsZeroDesiredDaemonSets", testNamespaceDSSkipsZeroDesired)
+	t.Run("TimesOutWithBlockingDaemonSetInfo", testNamespaceDSReadyTimeout)
+	t.Run("PropagatesNonTransientAPIError", testNamespaceDSNonTransientError)
+}
+
+func testNamespaceDSReadyAllReady(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	const namespace = "kube-system"
+
+	client := fake.NewClientset(
+		&appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "cilium", Namespace: namespace},
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: 2,
+				NumberUnavailable:      0,
+				UpdatedNumberScheduled: 2,
+			},
+		},
+		&appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "kube-proxy", Namespace: namespace},
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: 2,
+				NumberUnavailable:      0,
+				UpdatedNumberScheduled: 2,
+			},
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err := readiness.WaitForNamespaceDaemonSetsReady(ctx, client, namespace, 200*time.Millisecond)
+
+	expectNoError(t, err, "namespace daemonsets all ready")
+}
+
+func testNamespaceDSReadyEmpty(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	client := fake.NewClientset()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err := readiness.WaitForNamespaceDaemonSetsReady(
+		ctx, client, "empty-ns", 200*time.Millisecond,
+	)
+
+	expectNoError(t, err, "namespace daemonsets empty")
+}
+
+func testNamespaceDSSkipsZeroDesired(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	const namespace = "kube-system"
+
+	client := fake.NewClientset(
+		&appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "cilium", Namespace: namespace},
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: 2,
+				NumberUnavailable:      0,
+				UpdatedNumberScheduled: 2,
+			},
+		},
+		// DaemonSet with node selector that matches no nodes
+		&appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "special-agent", Namespace: namespace},
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: 0,
+				NumberUnavailable:      0,
+				UpdatedNumberScheduled: 0,
+			},
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err := readiness.WaitForNamespaceDaemonSetsReady(ctx, client, namespace, 200*time.Millisecond)
+
+	expectNoError(t, err, "namespace daemonsets skips zero-desired")
+}
+
+func testNamespaceDSReadyTimeout(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	const namespace = "kube-system"
+
+	client := fake.NewClientset(
+		&appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "cilium", Namespace: namespace},
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: 3,
+				NumberUnavailable:      1,
+				UpdatedNumberScheduled: 2,
+			},
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	err := readiness.WaitForNamespaceDaemonSetsReady(ctx, client, namespace, 150*time.Millisecond)
+
+	expectErrorContains(
+		t, err, "blocked by daemonset kube-system/cilium", "namespace daemonsets timeout",
+	)
+}
+
+func testNamespaceDSNonTransientError(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	const namespace = "kube-system"
+
+	client := fake.NewClientset()
+	client.PrependReactor(
+		"list",
+		"daemonsets",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errDaemonSetBoom
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err := readiness.WaitForNamespaceDaemonSetsReady(ctx, client, namespace, 200*time.Millisecond)
+
+	expectErrorContains(
+		t,
+		err,
+		"failed to list daemonsets in namespace kube-system: boom",
+		"namespace daemonsets non-transient error",
+	)
+}
+
 func TestWaitForDeploymentReady(t *testing.T) {
 	t.Parallel()
 
