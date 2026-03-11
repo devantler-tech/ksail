@@ -44,7 +44,7 @@ ksail cluster create
 
 ## Workload Management
 
-Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; create, edit, delete, and inspect resources; debug with logs, exec, describe, and explain; expose services; export and import container images; and validate manifests against schemas.
+Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; create, edit, delete, and inspect resources; debug with logs, exec, describe, and explain; expose services; export and import container images; validate manifests against schemas; and watch directories for automatic live reconciliation.
 
 ```bash
 ksail workload apply -k k8s/
@@ -75,6 +75,7 @@ ksail workload logs deployment/my-app
 | `ksail workload rollout`   | Manage rollouts                          |
 | `ksail workload wait`      | Wait for conditions                      |
 | `ksail workload images`    | List required container images           |
+| `ksail workload watch`     | Watch directory and auto-apply on change |
 
 ## GitOps Workflows
 
