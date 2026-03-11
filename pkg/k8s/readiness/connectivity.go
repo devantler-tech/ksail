@@ -2,11 +2,13 @@ package readiness
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -19,7 +21,14 @@ const (
 	// connectivityPodTimeout is the maximum time to wait for a single
 	// connectivity test pod to complete before retrying.
 	connectivityPodTimeout = 30 * time.Second
+
+	// cleanupTimeout bounds how long the deferred pod cleanup may block.
+	cleanupTimeout = 10 * time.Second
 )
+
+// errInvalidClusterIP is returned when the kubernetes service ClusterIP
+// is not a valid IP address.
+var errInvalidClusterIP = errors.New("invalid kubernetes service ClusterIP")
 
 // WaitForInClusterAPIConnectivity verifies that pods can reach the Kubernetes
 // API server ClusterIP from within the cluster. This catches race conditions
@@ -53,14 +62,21 @@ func WaitForInClusterAPIConnectivity(
 	// Validate that the ClusterIP is a valid IP address to prevent injection
 	// into the shell command executed inside the test pod.
 	if ip := net.ParseIP(apiServerIP); ip == nil {
-		return fmt.Errorf("invalid kubernetes service ClusterIP: %q", apiServerIP)
+		return fmt.Errorf("%w: %q", errInvalidClusterIP, apiServerIP)
 	}
 
 	// Ensure no leftover test pod from a previous run.
 	deleteConnectivityPod(ctx, clientset)
 
-	// Always clean up the test pod when done.
-	defer deleteConnectivityPod(context.Background(), clientset)
+	// Always clean up the test pod when done, bounded by a short timeout
+	// so cleanup is best-effort and never blocks the caller indefinitely.
+	//nolint:contextcheck // intentionally uses a fresh context for best-effort cleanup
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
+		defer cancel()
+
+		deleteConnectivityPod(cleanupCtx, clientset)
+	}()
 
 	pollErr := PollForReadiness(ctx, deadline, func(pollCtx context.Context) (bool, error) {
 		return runConnectivityTestPod(pollCtx, clientset, apiServerIP)
@@ -93,8 +109,11 @@ func runConnectivityTestPod(
 		ctx, pod, metav1.CreateOptions{},
 	)
 	if err != nil {
-		// Pod from previous attempt may still be terminating.
-		return false, nil //nolint:nilerr // transient; retry on next poll
+		if isTransientPodError(err) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("create connectivity check pod: %w", err)
 	}
 
 	return waitForConnectivityPodCompletion(ctx, clientset)
@@ -117,22 +136,42 @@ func waitForConnectivityPodCompletion(
 		case <-podCtx.Done():
 			return false, nil // per-attempt timeout; retry on next poll
 		case <-ticker.C:
-			p, err := clientset.CoreV1().Pods(connectivityPodNS).Get(
+			pod, getErr := clientset.CoreV1().Pods(connectivityPodNS).Get(
 				podCtx, connectivityPodName, metav1.GetOptions{},
 			)
-			if err != nil {
-				return false, nil //nolint:nilerr // transient; retry
+			if getErr != nil {
+				if isTransientPodError(getErr) {
+					return false, nil
+				}
+
+				return false, fmt.Errorf("get connectivity check pod: %w", getErr)
 			}
 
-			switch p.Status.Phase {
+			switch pod.Status.Phase {
 			case corev1.PodSucceeded:
 				return true, nil
 			case corev1.PodFailed:
 				return false, nil
+			case corev1.PodPending, corev1.PodRunning, corev1.PodUnknown:
+				// Still Pending, Running, or Unknown — keep waiting.
 			}
-			// Still Pending or Running — keep waiting.
 		}
 	}
+}
+
+// isTransientPodError returns true for Kubernetes API errors that are expected
+// to be transient and should be retried (e.g. AlreadyExists from a previous
+// pod still terminating, server timeouts, rate limiting). Permanent errors
+// like Forbidden or Invalid are surfaced immediately so the caller gets
+// actionable failure output.
+func isTransientPodError(err error) bool {
+	return apierrors.IsAlreadyExists(err) ||
+		apierrors.IsConflict(err) ||
+		apierrors.IsTimeout(err) ||
+		apierrors.IsServerTimeout(err) ||
+		apierrors.IsTooManyRequests(err) ||
+		apierrors.IsServiceUnavailable(err) ||
+		apierrors.IsNotFound(err)
 }
 
 // connectivityCheckPod builds the spec for the short-lived connectivity test pod.
