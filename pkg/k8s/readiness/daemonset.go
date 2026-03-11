@@ -69,7 +69,7 @@ func WaitForNamespaceDaemonSetsReady(
 	namespace string,
 	deadline time.Duration,
 ) error {
-	var lastBlockingDS string
+	var lastBlockingDaemonSet string
 
 	pollErr := PollForReadiness(ctx, deadline, func(ctx context.Context) (bool, error) {
 		daemonSets, err := clientset.AppsV1().
@@ -85,14 +85,14 @@ func WaitForNamespaceDaemonSetsReady(
 
 		ready, blocking := checkAllDaemonSetsReady(namespace, daemonSets.Items)
 		if blocking != "" {
-			lastBlockingDS = blocking
+			lastBlockingDaemonSet = blocking
 		}
 
 		return ready, nil
 	})
 
-	if pollErr != nil && lastBlockingDS != "" {
-		return fmt.Errorf("%w: blocked by daemonset %s", pollErr, lastBlockingDS)
+	if pollErr != nil && lastBlockingDaemonSet != "" {
+		return fmt.Errorf("%w: blocked by daemonset %s", pollErr, lastBlockingDaemonSet)
 	}
 
 	return pollErr
@@ -112,8 +112,9 @@ func handleDaemonSetListError(err error, namespace string) (bool, error) {
 }
 
 // checkAllDaemonSetsReady checks whether every DaemonSet in the slice is ready.
-// It returns true if all are ready, and a description of the first non-ready
-// DaemonSet it encounters (empty string when all are ready).
+// It returns true if all are ready, and a formatted status string for the first
+// non-ready DaemonSet (namespace/name with unavailable, updated, and desired
+// counts). Returns an empty string when all DaemonSets are ready.
 func checkAllDaemonSetsReady(
 	namespace string,
 	items []appsv1.DaemonSet,
