@@ -213,7 +213,7 @@ ksail cluster backup                   # Backup cluster resources to .tar.gz
 ksail cluster restore                  # Restore cluster resources from .tar.gz
 ksail workload apply                   # Apply workloads
 ksail workload gen <resource>          # Generate resources
-ksail workload watch                   # Watch directory and auto-apply on change
+ksail workload watch [--path <dir>]    # Watch a directory provided via --path and auto-apply on change
 ksail cipher <command>                 # Manage secrets with SOPS
 ksail chat                             # AI chat powered by GitHub Copilot
 ksail mcp                              # Start MCP server for AI assistants
