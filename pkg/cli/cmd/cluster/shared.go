@@ -47,6 +47,21 @@ func registerNameFlag(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigM
 	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
 }
 
+// setupMutationCmdFlags creates the shared config manager and registers the
+// common flags (--mirror-registry and --name) used by cluster mutation commands.
+// Returns the config manager for further flag bindings.
+func setupMutationCmdFlags(cmd *cobra.Command) *ksailconfigmanager.ConfigManager {
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		defaultClusterMutationFieldSelectors(),
+	)
+
+	registerMirrorRegistryFlag(cmd)
+	registerNameFlag(cmd, cfgManager)
+
+	return cfgManager
+}
+
 // loadAndValidateClusterConfig loads configuration, applies name override, and validates
 // the distribution x provider combination. This shared sequence is used by both
 // create and update commands.

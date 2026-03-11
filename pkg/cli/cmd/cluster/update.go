@@ -56,13 +56,7 @@ Use --dry-run to preview changes without applying them.`,
 		},
 	}
 
-	cfgManager := ksailconfigmanager.NewCommandConfigManager(
-		cmd,
-		defaultClusterMutationFieldSelectors(),
-	)
-
-	registerMirrorRegistryFlag(cmd)
-	registerNameFlag(cmd, cfgManager)
+	cfgManager := setupMutationCmdFlags(cmd)
 
 	cmd.Flags().Bool("force", false,
 		"Skip confirmation prompt and proceed with cluster recreation")
