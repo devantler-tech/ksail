@@ -3,25 +3,16 @@ title: Features
 description: KSail provides a unified CLI for Kubernetes development with built-in support for cluster provisioning, workload management, GitOps workflows, and secret encryption.
 ---
 
-KSail provides a unified CLI for Kubernetes development with built-in support for cluster provisioning (local Docker-based clusters for all distributions, plus Hetzner Cloud for Talos), workload management, GitOps workflows, and secret encryption.
-
 ## Cluster Provisioning
 
-Create and manage local Kubernetes clusters with a single command. KSail supports [Vanilla, K3s, Talos, and VCluster](/concepts/#distributions) distributions, generates native configuration files (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`) that work directly with upstream tools, and automatically configures [CNI](/concepts/#container-network-interface-cni), [CSI](/concepts/#container-storage-interface-csi), [metrics-server](/concepts/#metrics-server), [cert-manager](/concepts/#cert-manager), and [policy engines](/concepts/#policy-engines). Component installations use automatic retry with exponential backoff for transient failures. Use the global `--benchmark` flag anywhere in the command chain (for example, `ksail --benchmark cluster create` or `ksail --benchmark cluster update`); during `cluster create` and `cluster update` it displays per-component install durations (e.g., `✔ flux installed [5.2s]`) for performance comparison across runs.
+Create and manage local Kubernetes clusters with a single command. KSail supports [Vanilla, K3s, Talos, and VCluster](/concepts/#distributions) distributions, generates native configuration files (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`) that work directly with upstream tools, and automatically configures [CNI](/concepts/#container-network-interface-cni), [CSI](/concepts/#container-storage-interface-csi), [metrics-server](/concepts/#metrics-server), [cert-manager](/concepts/#cert-manager), and [policy engines](/concepts/#policy-engines). Component installations use automatic retry with exponential backoff; the `--benchmark` flag shows per-component install durations during `create` and `update`.
 
 ```bash
 ksail cluster init --name my-cluster --distribution Vanilla --cni Cilium
 ksail cluster create
 ```
 
-> [!TIP]
-> After `ksail cluster init`, you can use the generated configuration files directly:
-> - **Vanilla**: `kind create cluster --config kind.yaml`
-> - **K3s**: `k3d cluster create --config k3d.yaml`
-> - **Talos**: `talosctl cluster create` with generated patches
-> - **VCluster**: `vcluster create my-cluster --values vcluster.yaml`
->
-> KSail is a superset — you're never locked in.
+> The generated config files work directly with `kind`, `k3d`, `talosctl`, and `vcluster` — KSail is a superset.
 
 **Commands:** [`ksail cluster`](/cli-flags/cluster/cluster-root/)
 
@@ -44,12 +35,13 @@ ksail cluster create
 
 ## Workload Management
 
-Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; create, edit, delete, and inspect resources; debug with logs, exec, describe, and explain; expose services; export and import container images; and validate manifests against schemas.
+Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; create, edit, delete, and inspect resources; debug with logs, exec, describe, and explain; expose services; export and import container images; validate manifests against schemas; and generate resources (Deployments, Services, Secrets, HelmReleases, Flux sources).
 
 ```bash
 ksail workload apply -k k8s/
 ksail workload get pods
 ksail workload logs deployment/my-app
+ksail workload gen deployment my-app --image=nginx --port=80
 ```
 
 **Commands:** [`ksail workload`](/cli-flags/workload/workload-root/)
@@ -59,22 +51,14 @@ ksail workload logs deployment/my-app
 | `ksail workload apply`     | Apply manifests to cluster               |
 | `ksail workload create`    | Create resources imperatively            |
 | `ksail workload get`       | Get resources                            |
-| `ksail workload describe`  | Describe resources                       |
 | `ksail workload delete`    | Delete Kubernetes resources              |
-| `ksail workload edit`      | Edit a resource in-place                 |
-| `ksail workload explain`   | Get documentation for a resource type    |
 | `ksail workload logs`      | View container logs                      |
 | `ksail workload exec`      | Execute command in container             |
-| `ksail workload expose`    | Expose a resource as a service           |
-| `ksail workload export`    | Export container images to tar archive   |
-| `ksail workload import`    | Import container images from tar archive |
 | `ksail workload gen`       | Generate Kubernetes manifests            |
 | `ksail workload validate`  | Validate manifests against schemas       |
 | `ksail workload install`   | Install Helm charts                      |
 | `ksail workload scale`     | Scale deployments                        |
 | `ksail workload rollout`   | Manage rollouts                          |
-| `ksail workload wait`      | Wait for conditions                      |
-| `ksail workload images`    | List required container images           |
 
 ## GitOps Workflows
 
@@ -96,24 +80,16 @@ ksail workload reconcile
 
 ## Registry Management
 
-Run local [OCI registries](/concepts/#oci-registries) for faster image pulls and GitOps integration. External registries use format `[user:pass@]host[:port][/path]` with `${ENV_VAR}` credential placeholders.
+Run local [OCI registries](/concepts/#oci-registries) for faster image pulls and GitOps integration. Docker-based clusters (Vanilla, K3s, Talos-on-Docker, VCluster) enable `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default; Talos on Hetzner requires explicit mirror configuration.
 
-### Local Registry
 ```bash
+# Local registry
 ksail cluster init --local-registry localhost:5050
 ksail cluster create
 docker build -t localhost:5050/my-app .
 docker push localhost:5050/my-app
-```
 
-### Mirror Registries
-
-Docker-based clusters (Vanilla, K3s, Talos-on-Docker, VCluster) enable `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default. These run as local pull-through cache containers with `${ENV_VAR}` credential support. Talos on Hetzner requires explicit mirror configuration via flags or `ksail.yaml`.
-
-```bash
-ksail cluster init  # Default mirrors enabled
-
-# Authenticated mirrors: [user:pass@]host[=endpoint]
+# Authenticated mirror: [user:pass@]host[=endpoint]
 ksail cluster init --mirror-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io=https://ghcr.io'
 ```
 
@@ -130,18 +106,11 @@ ksail cipher import AGE-SECRET-KEY-1...
 
 **Commands:** [`ksail cipher`](/cli-flags/cipher/cipher-root/)
 
-| Command                | Description                   |
-| ---------------------- | ----------------------------- |
-| `ksail cipher encrypt` | Encrypt a file with SOPS      |
-| `ksail cipher decrypt` | Decrypt a SOPS-encrypted file |
-| `ksail cipher edit`    | Edit encrypted file in-place  |
-| `ksail cipher import`  | Import age private key        |
-
 **Supported KMS:** See [Key Management Systems](/concepts/#key-management-systems) for supported providers and documentation links.
 
 ## Cluster Backup & Restore
 
-Export cluster resources to a compressed archive and restore to any cluster. Backups capture YAML in dependency order (CRDs → namespaces → storage → workloads), strip server metadata, and include a `backup-metadata.json` file with metadata version, cluster identity (name, distribution, provider, KSail version), timestamp, and resource inventory (count and types). Restored resources receive `ksail.io/backup-name` and `ksail.io/restore-name` labels for traceability.
+Export cluster resources to a compressed archive and restore to any cluster. Backups capture YAML in dependency order, strip server metadata, and include a manifest inventory.
 
 ```bash
 ksail cluster backup --output ./backup.tar.gz
@@ -153,17 +122,6 @@ ksail cluster restore -i ./backup.tar.gz --existing-resource-policy update --dry
 
 > [!NOTE]
 > This feature backs up resource manifests (YAML) only. Persistent volume data is not included.
-
-## Code Generation
-
-Generate Kubernetes resources (Deployment, Service, ConfigMap, Secret, Ingress), Helm releases (HelmRelease CRs), and sources (OCIRepository, GitRepository, HelmRepository).
-
-```bash
-ksail workload gen deployment my-app --image=nginx --port=80
-ksail workload gen helmrelease my-chart --source=oci://registry/chart
-```
-
-**Commands:** [`ksail workload gen`](/cli-flags/workload/gen/workload-gen-root/)
 
 ## Declarative Configuration
 
@@ -188,15 +146,7 @@ spec:
 
 ## AI Chat Assistant
 
-Get interactive help with cluster configuration and troubleshooting using an AI-powered chat session.
-
-Two modes are available:
-
-- **Agent** (`</>`) for full execution with approval
-- **Plan** (`≡`) for step-by-step guidance without execution
-
-Press **Tab** to cycle between modes.
-Requires an active GitHub Copilot subscription; KSail will prompt you to sign in on first use.
+Get interactive help with cluster configuration and troubleshooting. Two modes: **Agent** (`</>`) for execution with approval and **Plan** (`≡`) for step-by-step guidance. Press **Tab** to cycle. Requires GitHub Copilot; KSail will prompt you to sign in on first use.
 
 ```bash
 ksail chat
