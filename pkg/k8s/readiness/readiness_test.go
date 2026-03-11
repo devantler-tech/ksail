@@ -133,7 +133,8 @@ func TestWaitForNamespaceDaemonSetsReady(t *testing.T) {
 	t.Run("ReadyWhenAllDaemonSetsReady", testNamespaceDSReadyAllReady)
 	t.Run("ReadyWhenNoDaemonSets", testNamespaceDSReadyEmpty)
 	t.Run("SkipsZeroDesiredDaemonSets", testNamespaceDSSkipsZeroDesired)
-	t.Run("TimesOutWhenOneDaemonSetNotReady", testNamespaceDSReadyTimeout)
+	t.Run("TimesOutWithBlockingDaemonSetInfo", testNamespaceDSReadyTimeout)
+	t.Run("PropagatesNonTransientAPIError", testNamespaceDSNonTransientError)
 }
 
 func testNamespaceDSReadyAllReady(t *testing.T) {
@@ -242,7 +243,35 @@ func testNamespaceDSReadyTimeout(t *testing.T) {
 	err := readiness.WaitForNamespaceDaemonSetsReady(ctx, client, namespace, 150*time.Millisecond)
 
 	expectErrorContains(
-		t, err, "failed to poll for readiness", "namespace daemonsets timeout",
+		t, err, "blocked by daemonset kube-system/cilium", "namespace daemonsets timeout",
+	)
+}
+
+func testNamespaceDSNonTransientError(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	const namespace = "kube-system"
+
+	client := fake.NewClientset()
+	client.PrependReactor(
+		"list",
+		"daemonsets",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errDaemonSetBoom
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err := readiness.WaitForNamespaceDaemonSetsReady(ctx, client, namespace, 200*time.Millisecond)
+
+	expectErrorContains(
+		t,
+		err,
+		"failed to list daemonsets in namespace kube-system: boom",
+		"namespace daemonsets non-transient error",
 	)
 }
 

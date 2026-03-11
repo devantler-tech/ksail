@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -60,45 +61,84 @@ func WaitForDaemonSetReady(
 // workloads that depend on in-cluster API server connectivity.
 //
 // Returns nil if the namespace has no DaemonSets.
-// Returns an error if any DaemonSet is not ready within the deadline.
+// Returns an error if any DaemonSet is not ready within the deadline. The error
+// includes the name and status of the DaemonSet that was blocking readiness.
 func WaitForNamespaceDaemonSetsReady(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	namespace string,
 	deadline time.Duration,
 ) error {
-	return PollForReadiness(ctx, deadline, func(ctx context.Context) (bool, error) {
+	var lastBlockingDS string
+
+	pollErr := PollForReadiness(ctx, deadline, func(ctx context.Context) (bool, error) {
 		daemonSets, err := clientset.AppsV1().
 			DaemonSets(namespace).
 			List(ctx, metav1.ListOptions{})
 		if err != nil {
-			// Continue polling on transient errors
-			return false, nil //nolint:nilerr // returning nil to continue polling
+			return handleDaemonSetListError(err, namespace)
 		}
 
 		if len(daemonSets.Items) == 0 {
 			return true, nil
 		}
 
-		for i := range daemonSets.Items {
-			ds := &daemonSets.Items[i]
-
-			// Skip DaemonSets with no desired pods (e.g., node selectors
-			// that don't match any nodes). These are not relevant to
-			// cluster readiness.
-			if ds.Status.DesiredNumberScheduled == 0 {
-				continue
-			}
-
-			if ds.Status.NumberUnavailable > 0 {
-				return false, nil
-			}
-
-			if ds.Status.UpdatedNumberScheduled != ds.Status.DesiredNumberScheduled {
-				return false, nil
-			}
+		ready, blocking := checkAllDaemonSetsReady(namespace, daemonSets.Items)
+		if blocking != "" {
+			lastBlockingDS = blocking
 		}
 
-		return true, nil
+		return ready, nil
 	})
+
+	if pollErr != nil && lastBlockingDS != "" {
+		return fmt.Errorf("%w: blocked by daemonset %s", pollErr, lastBlockingDS)
+	}
+
+	return pollErr
+}
+
+// handleDaemonSetListError determines whether a List error is transient
+// (and should continue polling) or permanent (and should fail immediately).
+func handleDaemonSetListError(err error, namespace string) (bool, error) {
+	if apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) ||
+		apierrors.IsTooManyRequests(err) {
+		return false, nil
+	}
+
+	return false, fmt.Errorf(
+		"failed to list daemonsets in namespace %s: %w", namespace, err,
+	)
+}
+
+// checkAllDaemonSetsReady checks whether every DaemonSet in the slice is ready.
+// It returns true if all are ready, and a description of the first non-ready
+// DaemonSet it encounters (empty string when all are ready).
+func checkAllDaemonSetsReady(
+	namespace string,
+	items []appsv1.DaemonSet,
+) (bool, string) {
+	for i := range items {
+		daemonSet := &items[i]
+
+		// Skip DaemonSets with no desired pods (e.g., node selectors
+		// that don't match any nodes). These are not relevant to
+		// cluster readiness.
+		if daemonSet.Status.DesiredNumberScheduled == 0 {
+			continue
+		}
+
+		if daemonSet.Status.NumberUnavailable > 0 ||
+			daemonSet.Status.UpdatedNumberScheduled != daemonSet.Status.DesiredNumberScheduled {
+			return false, fmt.Sprintf(
+				"%s/%s (unavailable=%d, updated=%d, desired=%d)",
+				namespace, daemonSet.Name,
+				daemonSet.Status.NumberUnavailable,
+				daemonSet.Status.UpdatedNumberScheduled,
+				daemonSet.Status.DesiredNumberScheduled,
+			)
+		}
+	}
+
+	return true, ""
 }

@@ -41,8 +41,7 @@ const (
 	// DaemonSets (including the CNI, e.g. Cilium) to be fully ready after
 	// infrastructure installations. Cilium marks pods Ready only after the BPF
 	// datapath is operational; waiting ensures pod-to-service routing (e.g. to
-	// the API server ClusterIP 10.96.0.1:443) is functional before GitOps
-	// operators start.
+	// the API server ClusterIP) is functional before GitOps operators start.
 	daemonSetStabilityTimeout = 3 * time.Minute
 )
 
@@ -257,10 +256,10 @@ func installComponentsInPhases(
 		// temporarily destabilize API server connectivity, causing GitOps
 		// operators to enter CrashLoopBackOff with API timeout errors.
 		if len(infraTasks) > 0 {
-			stabilityErr := waitForAPIServerStability(ctx, clusterCfg)
+			stabilityErr := waitForClusterStability(ctx, clusterCfg)
 			if stabilityErr != nil {
 				return fmt.Errorf(
-					"API server not stable after infrastructure installation: %w",
+					"cluster not stable after infrastructure installation: %w",
 					stabilityErr,
 				)
 			}
@@ -355,13 +354,13 @@ func buildGitOpsTasks(
 	return tasks
 }
 
-// waitForAPIServerStability waits for the Kubernetes API server to respond
+// waitForClusterStability waits for the Kubernetes API server to respond
 // consistently and for kube-system DaemonSets (including the CNI) to be fully
 // ready before starting GitOps engine installations. This prevents operators
 // like Flux from entering CrashLoopBackOff due to transient API server
 // connectivity issues or incomplete CNI dataplane programming after
 // infrastructure components are installed.
-func waitForAPIServerStability(
+func waitForClusterStability(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
@@ -390,7 +389,7 @@ func waitForAPIServerStability(
 	// (e.g. to the API server ClusterIP) is functional. Without this check,
 	// GitOps operator pods can start before Cilium has programmed the eBPF
 	// rules for service routing, causing CrashLoopBackOff with i/o timeout
-	// errors when connecting to 10.96.0.1:443.
+	// errors when connecting to kubernetes.default.svc:443.
 	err = readiness.WaitForNamespaceDaemonSetsReady(
 		ctx, clientset, "kube-system", daemonSetStabilityTimeout,
 	)
