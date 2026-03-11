@@ -18,7 +18,7 @@ ksail cluster update --benchmark
 
 Example output (CI mode):
 
-```
+```text
 📦 Installing infrastructure components...
 ► metrics-server installing
 ► csi installing
@@ -71,7 +71,7 @@ Install durations vary by distribution and provider. The following matrix docume
 
 Per-component durations are displayed as `[duration]` suffixes on completion lines (e.g., `✔ metrics-server installed [2.1s]`). Group-level timing shows stage and total elapsed:
 
-```
+```text
 ⏲ current: {stage_duration}
   total:  {total_duration}
 ```
