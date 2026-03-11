@@ -32,8 +32,9 @@ var ErrInvalidClusterName = errors.New(
 	"invalid cluster name: must not contain path separators or '..'",
 )
 
-// clusterStatePath returns the path to the state file for a given cluster name.
-func clusterStatePath(clusterName string) (string, error) {
+// clusterStateDir returns the per-cluster state directory path for a given cluster name.
+// It validates the cluster name to prevent path traversal attacks.
+func clusterStateDir(clusterName string) (string, error) {
 	if strings.Contains(clusterName, "/") ||
 		strings.Contains(clusterName, "\\") ||
 		strings.Contains(clusterName, "..") {
@@ -45,7 +46,17 @@ func clusterStatePath(clusterName string) (string, error) {
 		return "", fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
-	return filepath.Join(home, stateDir, clustersSubDir, clusterName, specFileName), nil
+	return filepath.Join(home, stateDir, clustersSubDir, clusterName), nil
+}
+
+// clusterStatePath returns the path to the state file for a given cluster name.
+func clusterStatePath(clusterName string) (string, error) {
+	dir, err := clusterStateDir(clusterName)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(dir, specFileName), nil
 }
 
 // SaveClusterSpec persists the ClusterSpec used during cluster creation.
@@ -109,12 +120,10 @@ func LoadClusterSpec(clusterName string) (*v1alpha1.ClusterSpec, error) {
 // This should be called during cluster deletion to clean up.
 // Returns nil if the state does not exist (idempotent).
 func DeleteClusterState(clusterName string) error {
-	statePath, err := clusterStatePath(clusterName)
+	dir, err := clusterStateDir(clusterName)
 	if err != nil {
 		return err
 	}
-
-	dir := filepath.Dir(statePath)
 
 	err = os.RemoveAll(dir)
 	if err != nil {

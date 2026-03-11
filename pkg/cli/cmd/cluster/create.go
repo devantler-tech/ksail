@@ -67,13 +67,7 @@ func NewCreateCmd(runtimeContainer *di.Runtime) *cobra.Command {
 		},
 	}
 
-	cfgManager := ksailconfigmanager.NewCommandConfigManager(
-		cmd,
-		defaultClusterMutationFieldSelectors(),
-	)
-
-	registerMirrorRegistryFlag(cmd)
-	registerNameFlag(cmd, cfgManager)
+	cfgManager := setupMutationCmdFlags(cmd)
 
 	cmd.Flags().String("ttl", "",
 		"Auto-destroy cluster after duration (e.g. 1h, 30m, 2h30m). If not set, cluster persists indefinitely.")
