@@ -5,7 +5,7 @@
 # with fluxDistributionVersion "2.x". They are not part of the Flux operator Helm
 # chart itself, but are needed for mirror cache warming and pre-pulling.
 #
-# Image mappings:
+# Image mappings (versions vary across controllers due to independent release cycles):
 # - ghcr.io/fluxcd/source-controller → deployed by FluxInstance
 # - ghcr.io/fluxcd/kustomize-controller → deployed by FluxInstance
 # - ghcr.io/fluxcd/helm-controller → deployed by FluxInstance
