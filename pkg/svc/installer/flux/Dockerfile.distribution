@@ -1,0 +1,17 @@
+# This file is the source of truth for Flux distribution controller images.
+# Dependabot updates this file, and Go code reads from it via go:embed.
+#
+# These controllers are deployed by the Flux operator when creating a FluxInstance
+# with fluxDistributionVersion "2.x". They are not part of the Flux operator Helm
+# chart itself, but are needed for mirror cache warming and pre-pulling.
+#
+# Image mappings:
+# - ghcr.io/fluxcd/source-controller → deployed by FluxInstance
+# - ghcr.io/fluxcd/kustomize-controller → deployed by FluxInstance
+# - ghcr.io/fluxcd/helm-controller → deployed by FluxInstance
+# - ghcr.io/fluxcd/notification-controller → deployed by FluxInstance
+
+FROM ghcr.io/fluxcd/source-controller:v1.8.1
+FROM ghcr.io/fluxcd/kustomize-controller:v1.8.1
+FROM ghcr.io/fluxcd/helm-controller:v1.5.1
+FROM ghcr.io/fluxcd/notification-controller:v1.8.1
