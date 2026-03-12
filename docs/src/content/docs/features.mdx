@@ -12,6 +12,17 @@ ksail cluster init --name my-cluster --distribution Vanilla --cni Cilium
 ksail cluster create
 ```
 
+Use `--ttl` to create an **ephemeral cluster** that auto-destroys after a set duration. The process blocks until the TTL expires, then deletes the cluster automatically. Press Ctrl+C to cancel the wait and keep the cluster running.
+
+```bash
+# Create a cluster that auto-destroys after 1 hour
+ksail cluster create --ttl 1h
+
+# TTL annotations appear in ksail cluster list output:
+# docker: my-cluster
+#   my-cluster [TTL: 59m]
+```
+
 > The generated config files work directly with `kind`, `k3d`, `talosctl`, and `vcluster` — KSail is a superset.
 
 **Commands:** [`ksail cluster`](/cli-flags/cluster/cluster-root/)
