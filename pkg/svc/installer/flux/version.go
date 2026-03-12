@@ -25,5 +25,10 @@ func chartVersion() string {
 // embedded Dockerfile.distribution. These are the images that the Flux operator
 // deploys when creating a FluxInstance.
 func distributionImages() []string {
-	return parser.ParseAllImagesFromDockerfile(distributionDockerfile)
+	images := parser.ParseAllImagesFromDockerfile(distributionDockerfile)
+	if len(images) == 0 {
+		panic("fluxinstaller: no distribution images parsed from embedded Dockerfile.distribution")
+	}
+
+	return images
 }

@@ -133,3 +133,20 @@ func TestParseAllImagesFromDockerfile_NoFromDirectives(t *testing.T) {
 		t.Errorf("Expected 0 images, got %d", len(result))
 	}
 }
+
+func TestParseAllImagesFromDockerfile_WithPlatformFlag(t *testing.T) {
+	t.Parallel()
+
+	dockerfile := "FROM --platform=linux/amd64 ghcr.io/fluxcd/source-controller:v1.8.1"
+
+	result := parser.ParseAllImagesFromDockerfile(dockerfile)
+
+	if len(result) != 1 {
+		t.Fatalf("Expected 1 image, got %d", len(result))
+	}
+
+	expected := "ghcr.io/fluxcd/source-controller:v1.8.1"
+	if result[0] != expected {
+		t.Errorf("Expected %s, got %s", expected, result[0])
+	}
+}
