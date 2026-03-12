@@ -147,7 +147,13 @@ Installed after Phase 1 completes and API server is stable:
 - **Flux** — GitOps continuous delivery
 - **ArgoCD** — GitOps continuous delivery
 
-Between phases, KSail performs a **Cluster Stability Check** (`waitForClusterStability`) that requires 5 consecutive successful API server health checks within a 2-minute timeout and verifies all kube-system DaemonSets are ready within a 3-minute timeout. This prevents GitOps engines from crashing with API server i/o timeout errors caused by infrastructure components temporarily destabilizing API server connectivity while registering webhooks and CRDs, or by incomplete CNI dataplane programming.
+Between phases, KSail performs a **Cluster Stability Check** (`waitForClusterStability`) with three sequential steps:
+
+1. **API server stability** — requires 5 consecutive successful health checks within a 2-minute timeout
+2. **DaemonSet readiness** — verifies all kube-system DaemonSets are ready within a 3-minute timeout
+3. **In-cluster API connectivity** — creates a short-lived busybox pod that tests TCP connectivity to the API server ClusterIP (port 443) from within the cluster, with a 2-minute timeout
+
+This prevents GitOps engines from crashing with API server i/o timeout errors caused by infrastructure components temporarily destabilizing API server connectivity while registering webhooks and CRDs, or by incomplete CNI dataplane programming (e.g., Cilium's eBPF dataplane not yet fully programmed even after DaemonSet pods report Ready).
 
 ### Detection and Updates
 
