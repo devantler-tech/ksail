@@ -32,3 +32,5 @@ jobs:
           install-only: true
       - name: 🔧 Install mockery
         run: go install github.com/vektra/mockery/v3@v3.5.4
+      - name: 🔧 Install jscpd
+        run: npm install -g jscpd
