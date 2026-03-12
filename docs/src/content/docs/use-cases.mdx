@@ -179,21 +179,24 @@ jobs:
         run: ksail cluster delete
 ```
 
-Alternatively, use `--ttl` so the cluster auto-destroys when the TTL expires — useful when a cleanup step might be skipped on runner cancellation:
+You can add `--ttl` as a best-effort safety net. When backgrounding the create step, include an explicit readiness wait so subsequent steps don't start before the cluster is ready:
 
 ```yaml
       - name: Create cluster (auto-destroys after 30m)
         run: ksail cluster create --ttl 30m &
+
+      - name: Wait for cluster readiness
+        run: kubectl wait --for=condition=Ready node --all --timeout=120s
 ```
 
-> The `&` backgrounds the create command so subsequent steps can run. The cluster is destroyed once the 30-minute TTL elapses, even if earlier steps fail.
+> **Note:** TTL deletion only runs while the `ksail cluster create` process is alive. If the CI runner is cancelled or the job terminates, the background process is killed and the cluster won't be deleted by TTL. Keep the `if: always()` cleanup step as the primary safeguard.
 
 ### Tips
 
 - Use `--timeout` flags to handle slow CI runners
 - Cache Docker layers for faster builds
 - Use matrix builds to test across multiple Kubernetes versions/distributions
-- Use `--ttl` to guarantee cleanup on ephemeral runners without relying on a cleanup step
+- Use `--ttl` as a best-effort supplement on ephemeral runners — the cluster auto-destroys when the TTL elapses provided the `ksail cluster create` process stays alive
 - Consider using `ksail cluster start` and `ksail cluster stop` if tests can share a cluster
 
 ## Configuration Comparison

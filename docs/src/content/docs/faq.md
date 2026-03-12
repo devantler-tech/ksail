@@ -69,7 +69,7 @@ ksail cluster create --ttl 1h
 # Supported duration formats: 30m, 1h, 2h30m
 ```
 
-TTL annotations are shown in `ksail cluster list` output (e.g. `[TTL: 59m 42s]` or `[TTL: EXPIRED]`). See [`ksail cluster create` flags](/cli-flags/cluster/cluster-create/) for details.
+TTL annotations are shown on a separate indented line in `ksail cluster list` output (e.g. `[TTL: 59m]` or `[TTL: EXPIRED]`). See [`ksail cluster create` flags](/cli-flags/cluster/cluster-create/) for details.
 
 ### How do I switch between clusters?
 
