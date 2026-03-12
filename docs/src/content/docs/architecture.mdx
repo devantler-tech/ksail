@@ -157,15 +157,9 @@ This prevents GitOps engines from crashing with API server i/o timeout errors ca
 
 ### Detection and Updates
 
-The `detector` service (`pkg/svc/detector/`) identifies installed components by querying Helm release history and the Kubernetes API, enabling accurate baselines, intelligent updates (only modify what changed), and post-update verification. It has two sub-packages:
+The `detector` service (`pkg/svc/detector/`) identifies installed components primarily by querying Helm release history and the Kubernetes API, with additional checks against the Docker daemon where needed (e.g., local provider container inspection). `detector/cluster/` detects distribution, provider, and cluster name from kubeconfig context; `detector/gitops/` discovers KSail-managed GitOps CRs (FluxInstance, ArgoCD Application) in the source directory by matching KSail's default names or the `app.kubernetes.io/managed-by=ksail` label, and intentionally ignores unrelated GitOps resources.
 
-- **`detector/cluster/`** — Detects the Kubernetes distribution, provider, and cluster name by analyzing kubeconfig context names and server endpoints. Exposes `DetectInfo`, `DetectDistributionFromContext`, and `ResolveKubeconfigPath`.
-- **`detector/gitops/`** — Detects existing GitOps Custom Resources (FluxInstance, ArgoCD Application) in the source directory that are either labeled as managed by KSail or use KSail's default resource names (for example, `flux` / `ksail`).
-
-The `diff` service (`pkg/svc/diff/`) classifies update impact as:
-- **In-place** — No disruption (e.g., CNI config changes)
-- **Reboot-required** — Node reboot needed (e.g., Talos kernel changes)
-- **Recreate-required** — Full cluster recreation required (e.g., distribution change)
+The `diff` service (`pkg/svc/diff/`) classifies update impact as **in-place** (no disruption), **reboot-required** (node reboot), or **recreate-required** (full cluster recreation).
 
 ## Embedded Tools Approach
 
@@ -192,30 +186,9 @@ Only Docker is required externally (as the container runtime for local clusters)
 
 ## State Persistence
 
-Different distributions handle state differently:
+Talos and VCluster can introspect running configuration (Talos via API, VCluster via Kubernetes resources), so KSail needs no local state for them.
 
-### Introspectable Distributions
-
-**Talos** and **VCluster** can introspect running configuration:
-- Talos can query machine configs via API
-- VCluster stores config in Kubernetes resources
-
-KSail can detect current configuration without local state files.
-
-### Non-Introspectable Distributions
-
-**Vanilla (Kind)** and **K3s (K3d)** cannot introspect running configuration:
-- Kind and K3d don't expose cluster config via API
-- Cannot reliably detect what was used to create cluster
-
-KSail persists cluster specs to `~/.ksail/clusters/<name>/spec.json` for these distributions.
-
-**State Service** (`pkg/svc/state/`):
-- **Save** — Write ClusterSpec to JSON after cluster creation
-- **Load** — Read ClusterSpec for update operations
-- **Delete** — Clean up state file on cluster deletion
-
-This enables the `ksail cluster update` command to compare desired vs current state.
+Vanilla (Kind) and K3s (K3d) don't expose cluster config via API, so KSail persists their ClusterSpecs to `~/.ksail/clusters/<name>/spec.json` via the **State Service** (`pkg/svc/state/`). This enables `ksail cluster update` to compare desired vs current state.
 
 ## AI Integration
 
@@ -235,9 +208,7 @@ Exposes KSail as a Model Context Protocol server for Claude and other AI assista
 
 ## Testing Strategy
 
-KSail uses unit tests (`go test ./...`, testify/mock, `export_test.go` for unexported symbols, `t.Parallel()`, static error sentinels), integration tests against real clusters, system tests on Linux via `.github/workflows/ci.yaml`, and benchmarks (`go test -bench=. -benchmem ./...`).
-
-Automated AI-powered agentic workflows (`daily-code-quality`, `daily-plan`, `daily-builder`, `daily-workflow-maintenance`, `daily-docs`) run on schedules for continuous improvement. These Markdown-based definitions live in `.github/workflows/**/*.md`.
+KSail uses unit tests (`go test ./...`, testify/mock, `export_test.go`, `t.Parallel()`), integration tests against real clusters, system tests on Linux via CI, and benchmarks (`go test -bench=. -benchmem ./...`). See [Development Guide](/development/#testing-patterns) for patterns and examples.
 
 ## Configuration Management
 
@@ -261,58 +232,12 @@ JSON schemas provide editor autocomplete and validation:
 
 ### Configuration Loading
 
-The `configmanager` (`pkg/fsutil/configmanager/`) handles configuration loading:
-
-1. Load `ksail.yaml` and validate against schema
-2. Load distribution config (kind.yaml, k3d.yaml, etc.)
-3. Merge configs with defaults
-4. Validate combined configuration
-5. Return strongly-typed ClusterSpec
-
-## Build System
-
-### Building
-
-````bash
-# Development build
-go build -o ksail
-
-# Optimized build (strips debug symbols)
-go build -ldflags="-s -w" -o ksail
-
-# Build with version info (CI)
-go build -ldflags="-s -w -X github.com/devantler-tech/ksail/v5/internal/buildmeta.Version=v5.x.x" -o ksail
-````
-
-### Release Process
-
-1. **Push to `main`** triggers the release workflow (`.github/workflows/release.yaml`); it can also be started manually via **workflow_dispatch**.
-2. The release workflow builds binaries for all supported platforms (Linux amd64/arm64, macOS arm64, Windows amd64/arm64), uploads artifacts to GitHub Releases, and generates checksums.
-3. **VSCode extension** is packaged and published to the marketplace as part of the release workflow.
-
-**Config:** `.github/workflows/release.yaml`
-
-### Documentation
-
-Documentation is built with Astro and Starlight:
-
-````bash
-cd docs/
-npm ci
-npm run build  # Generates static site in dist/
-npm run dev    # Local development server
-````
-
-**Deployed to:** GitHub Pages ([ksail.devantler.tech](https://ksail.devantler.tech))
-
-**Workflow:** `.github/workflows/publish-pages.yaml`
-
-## Contributing
-
-See [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md) for development setup, coding standards, pull request process, testing requirements, and documentation guidelines.
+The `configmanager` (`pkg/fsutil/configmanager/`) loads `ksail.yaml`, merges it with distribution-specific configuration and defaults according to a defined precedence (defaults &lt; config files &lt; environment variables &lt; CLI flags), validates the combined result, and returns a strongly-typed `*v1alpha1.Cluster` (which contains the `Spec`).
 
 ## Further Reading
 
+- [Development Guide](/development/) — Build commands, release process, coding standards, testing, and CI/CD
+- [Contributing](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md) — Dev setup, coding standards, and PR process
 - [Concepts](/concepts/) — High-level concepts and mental models
 - [Configuration](/configuration/) — Detailed configuration reference
 - [CLI Flags](/cli-flags/) — Complete CLI reference
