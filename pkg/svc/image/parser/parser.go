@@ -27,3 +27,23 @@ func ParseImageFromDockerfile(dockerfileContent, pattern, imageName string) stri
 
 	return matches[1]
 }
+
+// ParseAllImagesFromDockerfile extracts all container image references from FROM
+// directives in a Dockerfile. Returns a slice of image references exactly as they
+// appear in the FROM directives (which may be qualified or unqualified). This is
+// useful for Dockerfiles that track multiple related images (e.g., Flux distribution
+// controller images).
+func ParseAllImagesFromDockerfile(dockerfileContent string) []string {
+	re := regexp.MustCompile(`(?m)^FROM\s+(?:--\S+\s+)*([^\s]+)`)
+	matches := re.FindAllStringSubmatch(dockerfileContent, -1)
+
+	images := make([]string, 0, len(matches))
+
+	for _, m := range matches {
+		if len(m) >= minMatchCount {
+			images = append(images, m[1])
+		}
+	}
+
+	return images
+}

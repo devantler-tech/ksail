@@ -94,6 +94,12 @@ runs:
         # Source of truth: pkg/fsutil/configmanager/vcluster/Dockerfile
         grep '^FROM ' pkg/fsutil/configmanager/vcluster/Dockerfile | sed 's/^FROM //' >> "$IMAGES_FILE"
 
+        # Append Flux distribution controller images that the Flux operator deploys
+        # when creating a FluxInstance. These are not part of the operator Helm chart
+        # but are critical for avoiding image pull timeouts (see issue #3012).
+        # Source of truth: pkg/svc/installer/flux/Dockerfile.distribution
+        grep '^FROM ' pkg/svc/installer/flux/Dockerfile.distribution | sed 's/^FROM //' >> "$IMAGES_FILE"
+
         # Deduplicate and sort
         sort -u "$IMAGES_FILE" > /tmp/unique-images.txt
         mv /tmp/unique-images.txt "$IMAGES_FILE"
