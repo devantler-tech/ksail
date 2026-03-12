@@ -167,7 +167,7 @@ go run main.go --help
 │       │   └── gitops/     # Detects existing GitOps CRs (FluxInstance, ArgoCD Application) in source dir
 │       ├── diff/           # Computes ClusterSpec config diffs and classifies update impact
 │       ├── image/          # Container image export/import services
-│       │   └── parser/     # Parses image references from Dockerfiles and manifests
+│       │   └── parser/     # Parses image references from Dockerfiles
 │       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
 │       ├── mcp/            # Model Context Protocol server
 │       ├── provider/       # Infrastructure providers (docker, hetzner, omni)
