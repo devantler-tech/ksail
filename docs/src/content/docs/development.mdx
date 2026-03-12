@@ -225,7 +225,7 @@ func BenchmarkProvisionerCreate(b *testing.B) {
 
 PRs that modify Go code are automatically benchmarked against `main` and a comparison comment is posted on the PR. See [BENCHMARK-REGRESSION.md](https://github.com/devantler-tech/ksail/blob/main/docs/BENCHMARK-REGRESSION.md) for details on interpreting results.
 
-For install duration benchmarks (per-component timing via `--benchmark`), see [benchmarks/install/BENCHMARKS.md](https://github.com/devantler-tech/ksail/blob/main/benchmarks/install/BENCHMARKS.md).
+Use `ksail cluster create --benchmark` or `ksail cluster update --benchmark` to capture per-component install durations inline.
 
 See package-specific BENCHMARKS.md files, including:
 
