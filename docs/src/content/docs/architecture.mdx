@@ -157,7 +157,7 @@ This prevents GitOps engines from crashing with API server i/o timeout errors ca
 
 ### Detection and Updates
 
-The `detector` service (`pkg/svc/detector/`) identifies installed components by querying Helm release history and the Kubernetes API. `detector/cluster/` detects distribution, provider, and cluster name from kubeconfig context; `detector/gitops/` discovers GitOps CRs (FluxInstance, ArgoCD Application) in the source directory.
+The `detector` service (`pkg/svc/detector/`) identifies installed components primarily by querying Helm release history and the Kubernetes API, with additional checks against the Docker daemon where needed (e.g., local provider container inspection). `detector/cluster/` detects distribution, provider, and cluster name from kubeconfig context; `detector/gitops/` discovers KSail-managed GitOps CRs (FluxInstance, ArgoCD Application) in the source directory by matching KSail's default names or the `app.kubernetes.io/managed-by=ksail` label, and intentionally ignores unrelated GitOps resources.
 
 The `diff` service (`pkg/svc/diff/`) classifies update impact as **in-place** (no disruption), **reboot-required** (node reboot), or **recreate-required** (full cluster recreation).
 
@@ -232,7 +232,7 @@ JSON schemas provide editor autocomplete and validation:
 
 ### Configuration Loading
 
-The `configmanager` (`pkg/fsutil/configmanager/`) loads `ksail.yaml`, merges it with the distribution config and defaults, validates the combined result, and returns a strongly-typed ClusterSpec.
+The `configmanager` (`pkg/fsutil/configmanager/`) loads `ksail.yaml`, merges it with distribution-specific configuration and defaults according to a defined precedence (defaults &lt; config files &lt; environment variables &lt; CLI flags), validates the combined result, and returns a strongly-typed `*v1alpha1.Cluster` (which contains the `Spec`).
 
 ## Further Reading
 
