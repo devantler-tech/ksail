@@ -167,6 +167,7 @@ go run main.go --help
 │       │   └── gitops/     # Detects existing GitOps CRs (FluxInstance, ArgoCD Application) in source dir
 │       ├── diff/           # Computes ClusterSpec config diffs and classifies update impact
 │       ├── image/          # Container image export/import services
+│       │   └── parser/     # Parses image references from Dockerfiles and manifests
 │       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
 │       ├── mcp/            # Model Context Protocol server
 │       ├── provider/       # Infrastructure providers (docker, hetzner, omni)
@@ -319,8 +320,8 @@ For a deeper dive into KSail's design and internals, refer to:
     - `pkg/svc/detector/cluster/`: Detects Kubernetes distribution, provider, and cluster name by analyzing kubeconfig context names and server endpoints; exposes `DetectInfo`, `DetectDistributionFromContext`, and `ResolveKubeconfigPath`
     - `pkg/svc/detector/gitops/`: Detects existing GitOps Custom Resources (FluxInstance, ArgoCD Application) managed by KSail in the source directory
   - `pkg/svc/diff/`: Computes configuration differences between old and new ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
-  - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
-  - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.); `internal/hetzner/` holds shared utilities for the Hetzner installers—`hcloudccm.Installer` and `hetznercsi.Installer` are type aliases for `hetzner.Installer` and share a single `EnsureSecret` implementation
+  - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions; `parser/` sub-package provides `ParseAllImagesFromDockerfile` for extracting all `FROM` directives from multi-stage Dockerfiles (used by Flux installer to include distribution controller images in mirror cache warming)
+  - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.); `internal/hetzner/` holds shared utilities for the Hetzner installers—`hcloudccm.Installer` and `hetznercsi.Installer` are type aliases for `hetzner.Installer` and share a single `EnsureSecret` implementation; `flux/Dockerfile.distribution` tracks Flux distribution controller images (updated by Dependabot) that are deployed by the Flux operator when creating a FluxInstance but are not part of the Helm chart — included in `Images()` output for mirror cache warming
   - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner, omni)
   - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster)
