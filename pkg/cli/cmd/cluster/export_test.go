@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"archive/tar"
+	"context"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -127,4 +128,82 @@ func ExportMaybeWaitForTTL(
 	clusterCfg *v1alpha1.Cluster,
 ) error {
 	return maybeWaitForTTL(cmd, clusterName, clusterCfg)
+}
+
+// ExportErrMetricsServerDisableUnsupported exports the sentinel error for testing.
+var ExportErrMetricsServerDisableUnsupported = errMetricsServerDisableUnsupported
+
+// ExportHandlerForField reports whether a registered handler exists for the given field name.
+var ExportHandlerForField = func(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, field string) bool {
+	r := newComponentReconciler(cmd, clusterCfg)
+	_, ok := r.handlerForField(field)
+
+	return ok
+}
+
+// ExportReconcileMetricsServer exposes reconcileMetricsServer for unit testing.
+var ExportReconcileMetricsServer = func(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	change clusterupdate.Change,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg)
+
+	return r.reconcileMetricsServer(context.Background(), change)
+}
+
+// ExportReconcileCSI exposes reconcileCSI for unit testing.
+var ExportReconcileCSI = func(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	change clusterupdate.Change,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg)
+
+	return r.reconcileCSI(context.Background(), change)
+}
+
+// ExportReconcileCertManager exposes reconcileCertManager for unit testing.
+var ExportReconcileCertManager = func(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	change clusterupdate.Change,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg)
+
+	return r.reconcileCertManager(context.Background(), change)
+}
+
+// ExportReconcilePolicyEngine exposes reconcilePolicyEngine for unit testing.
+var ExportReconcilePolicyEngine = func(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	change clusterupdate.Change,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg)
+
+	return r.reconcilePolicyEngine(context.Background(), change)
+}
+
+// ExportReconcileGitOpsEngine exposes reconcileGitOpsEngine for unit testing.
+var ExportReconcileGitOpsEngine = func(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	change clusterupdate.Change,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg)
+
+	return r.reconcileGitOpsEngine(context.Background(), change)
+}
+
+// ExportReconcileComponents exposes reconcileComponents for unit testing.
+var ExportReconcileComponents = func(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	diff *clusterupdate.UpdateResult,
+	result *clusterupdate.UpdateResult,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg)
+
+	return r.reconcileComponents(context.Background(), diff, result)
 }
