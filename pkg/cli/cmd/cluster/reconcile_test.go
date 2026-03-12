@@ -3,8 +3,8 @@ package cluster_test
 import (
 	"testing"
 
-	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
@@ -92,14 +92,14 @@ func TestReconcileMetricsServer_DisabledReturnsError(t *testing.T) {
 	err := clusterpkg.ExportReconcileMetricsServer(cmd, clusterCfg, change)
 
 	require.Error(t, err)
-	require.ErrorIs(t, err, clusterpkg.ExportErrMetricsServerDisableUnsupported)
+	require.ErrorIs(t, err, clusterpkg.ErrMetricsServerDisableUnsupported)
 }
 
 // TestReconcileCSI_NilFactory verifies that reconcileCSI returns an error when the CSI
 // installer factory has not been configured.
+//
+//nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcileCSI_NilFactory(t *testing.T) {
-	t.Parallel()
-
 	restore := clusterpkg.SetCSIInstallerFactoryForTests(nil)
 	t.Cleanup(restore)
 
@@ -117,12 +117,13 @@ func TestReconcileCSI_NilFactory(t *testing.T) {
 	assert.ErrorIs(t, err, setup.ErrCSIInstallerFactoryNil)
 }
 
-// TestReconcileCSI_DisabledToDisabled_Noop verifies that transitioning from disabled to
-// disabled is a no-op regardless of the factory state.
-func TestReconcileCSI_DisabledToDisabled_Noop(t *testing.T) {
-	t.Parallel()
-
-	// nil CSI factory — but the no-op path returns before the nil check
+// TestReconcileCSI_NilFactory_DisabledToDisabled documents that the nil-factory guard fires
+// before the disabled-to-disabled no-op check, so a nil factory returns an error even for
+// disabled→disabled transitions.
+//
+//nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
+func TestReconcileCSI_NilFactory_DisabledToDisabled(t *testing.T) {
+	// nil CSI factory — the nil-factory guard fires before the disabled no-op check
 	restore := clusterpkg.SetCSIInstallerFactoryForTests(nil)
 	t.Cleanup(restore)
 
@@ -134,7 +135,7 @@ func TestReconcileCSI_DisabledToDisabled_Noop(t *testing.T) {
 		NewValue: string(v1alpha1.CSIDisabled),
 	}
 
-	// The nil-check guard fires before the no-op check, so this returns an error.
+	// The nil-factory guard fires before the no-op check, so this returns an error.
 	// Document this known behaviour to prevent regressions.
 	err := clusterpkg.ExportReconcileCSI(cmd, clusterCfg, change)
 	require.Error(t, err, "nil factory is checked before the disabled no-op path")
@@ -144,15 +145,14 @@ func TestReconcileCSI_DisabledToDisabled_Noop(t *testing.T) {
 // TestReconcileCertManager_DisabledFromDisabled_Noop verifies that disabling cert-manager
 // when it was already disabled/empty is a no-op. A non-nil (but never-called) factory is
 // required because the nil guard fires before the disabled no-op check.
+//
+//nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcileCertManager_DisabledFromDisabled_Noop(t *testing.T) {
-	t.Parallel()
-
 	// Factory must be non-nil to pass the nil guard; it will never actually be called.
 	restore := clusterpkg.SetCertManagerInstallerFactoryForTests(
 		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
-			t.Fatal("factory should not be called for disabled→disabled transition")
-
-			return nil, nil
+			t.Fatal("factory should not be called for disabled→disabled transition") //nolint:revive
+			panic("unreachable")
 		},
 	)
 	t.Cleanup(restore)
@@ -172,9 +172,9 @@ func TestReconcileCertManager_DisabledFromDisabled_Noop(t *testing.T) {
 
 // TestReconcileCertManager_DisabledFromEnabled_NilFactory verifies that attempting to
 // uninstall cert-manager with a nil factory returns the factory-nil error.
+//
+//nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcileCertManager_DisabledFromEnabled_NilFactory(t *testing.T) {
-	t.Parallel()
-
 	restore := clusterpkg.SetCertManagerInstallerFactoryForTests(nil)
 	t.Cleanup(restore)
 
@@ -194,9 +194,9 @@ func TestReconcileCertManager_DisabledFromEnabled_NilFactory(t *testing.T) {
 
 // TestReconcilePolicyEngine_NoneToNone_Noop verifies that transitioning from no policy
 // engine to no policy engine is a no-op.
+//
+//nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcilePolicyEngine_NoneToNone_Noop(t *testing.T) {
-	t.Parallel()
-
 	restore := clusterpkg.SetPolicyEngineInstallerFactoryForTests(nil)
 	t.Cleanup(restore)
 
@@ -215,9 +215,9 @@ func TestReconcilePolicyEngine_NoneToNone_Noop(t *testing.T) {
 
 // TestReconcilePolicyEngine_NoneFromEnabled_NilFactory verifies that attempting to
 // uninstall a policy engine with a nil factory returns the factory-nil error.
+//
+//nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcilePolicyEngine_NoneFromEnabled_NilFactory(t *testing.T) {
-	t.Parallel()
-
 	restore := clusterpkg.SetPolicyEngineInstallerFactoryForTests(nil)
 	t.Cleanup(restore)
 
@@ -310,10 +310,10 @@ func TestReconcileComponents_UnknownField_Skipped(t *testing.T) {
 }
 
 // TestReconcileComponents_RecordsFailedChange verifies that a component error is captured
-// in result.FailedChanges and the reconciler continues processing remaining changes.
+// in result.FailedChanges while processing of remaining changes continues.
+//
+//nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcileComponents_RecordsFailedChange(t *testing.T) {
-	t.Parallel()
-
 	// Null CSI factory so the reconcileCSI call will fail immediately.
 	restore := clusterpkg.SetCSIInstallerFactoryForTests(nil)
 	t.Cleanup(restore)
@@ -322,10 +322,17 @@ func TestReconcileComponents_RecordsFailedChange(t *testing.T) {
 	clusterCfg := newReconcileTestClusterCfg()
 	diff := &clusterupdate.UpdateResult{
 		InPlaceChanges: []clusterupdate.Change{
+			// This change will fail: nil CSI factory.
 			{
 				Field:    "cluster.csi",
 				OldValue: string(v1alpha1.CSIDisabled),
 				NewValue: "hetznercsi",
+			},
+			// This change will succeed: GitOps None→None is a no-op, no factory needed.
+			{
+				Field:    "cluster.gitOpsEngine",
+				OldValue: string(v1alpha1.GitOpsEngineNone),
+				NewValue: string(v1alpha1.GitOpsEngineNone),
 			},
 		},
 	}
@@ -336,19 +343,22 @@ func TestReconcileComponents_RecordsFailedChange(t *testing.T) {
 	require.Error(t, err, "expected error from nil CSI factory")
 	require.Len(t, result.FailedChanges, 1)
 	assert.Equal(t, "cluster.csi", result.FailedChanges[0].Field)
-	assert.Empty(t, result.AppliedChanges)
+	// The GitOps no-op change is applied after the failure, confirming processing continues.
+	require.Len(t, result.AppliedChanges, 1)
+	assert.Equal(t, "cluster.gitOpsEngine", result.AppliedChanges[0].Field)
 }
 
 // TestReconcileComponents_MixedKnownAndUnknown verifies that known fields are processed
 // and unknown fields are silently skipped in the same diff.
+//
+//nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcileComponents_MixedKnownAndUnknown(t *testing.T) {
-	t.Parallel()
-
 	// Provide a working cert-manager factory that returns an installer that succeeds.
 	restore := clusterpkg.SetCertManagerInstallerFactoryForTests(
 		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
 			// Never called in this test because we test a disabled→disabled no-op.
-			return nil, nil
+			t.Fatal("factory should not be called for disabled→disabled transition") //nolint:revive
+			panic("unreachable")
 		},
 	)
 	t.Cleanup(restore)
