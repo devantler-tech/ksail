@@ -2,10 +2,10 @@
 set -euo pipefail
 
 echo "Running golangci-lint with --fix..."
-golangci-lint run --fix || true
+golangci-lint run --fix --timeout 5m || true
 
 echo "Running golangci-lint fmt..."
 golangci-lint fmt || true
 
 echo "Running jscpd..."
-jscpd . || true
+jscpd --config .jscpd.json . || true
