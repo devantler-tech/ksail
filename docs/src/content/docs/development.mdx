@@ -168,6 +168,21 @@ var (
 
 Test these exports from the corresponding `<pkg>_test` package (for example, `package provisioner_test`). Add `//nolint:gochecknoglobals` on exported vars if required by `golangci-lint`.
 
+#### DI Override Pattern for Command Tests
+
+Cluster command tests that depend on `setup.InstallerFactories` use a thread-safe override pattern defined in `pkg/cli/cmd/cluster/testing.go`. Each helper applies a factory override and returns a restore function:
+
+````go
+restore := cluster.SetPolicyEngineInstallerFactoryForTests(
+    func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+        return mockInstaller, nil
+    },
+)
+defer restore()
+````
+
+Available helpers: `SetCSIInstallerFactoryForTests`, `SetCertManagerInstallerFactoryForTests`, `SetArgoCDInstallerFactoryForTests`, `SetPolicyEngineInstallerFactoryForTests`, `SetFluxInstallerFactoryForTests`, `SetProvisionerFactoryForTests`, and others. Use `defer restore()` to reset the override after each test.
+
 #### Mocking with Testify
 
 KSail uses [mockery](https://vektra.github.io/mockery/) for generating mocks via `//go:generate go run github.com/vektra/mockery/v2`. Use generated mocks in tests:
