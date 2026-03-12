@@ -130,11 +130,11 @@ func ExportMaybeWaitForTTL(
 	return maybeWaitForTTL(cmd, clusterName, clusterCfg)
 }
 
-// ExportErrMetricsServerDisableUnsupported exports the sentinel error for testing.
-var ExportErrMetricsServerDisableUnsupported = errMetricsServerDisableUnsupported
+// ErrMetricsServerDisableUnsupported exports the sentinel error for testing.
+var ErrMetricsServerDisableUnsupported = errMetricsServerDisableUnsupported
 
 // ExportHandlerForField reports whether a registered handler exists for the given field name.
-var ExportHandlerForField = func(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, field string) bool {
+func ExportHandlerForField(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, field string) bool {
 	r := newComponentReconciler(cmd, clusterCfg)
 	_, ok := r.handlerForField(field)
 
@@ -142,7 +142,7 @@ var ExportHandlerForField = func(cmd *cobra.Command, clusterCfg *v1alpha1.Cluste
 }
 
 // ExportReconcileMetricsServer exposes reconcileMetricsServer for unit testing.
-var ExportReconcileMetricsServer = func(
+func ExportReconcileMetricsServer(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	change clusterupdate.Change,
@@ -153,7 +153,7 @@ var ExportReconcileMetricsServer = func(
 }
 
 // ExportReconcileCSI exposes reconcileCSI for unit testing.
-var ExportReconcileCSI = func(
+func ExportReconcileCSI(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	change clusterupdate.Change,
@@ -164,7 +164,7 @@ var ExportReconcileCSI = func(
 }
 
 // ExportReconcileCertManager exposes reconcileCertManager for unit testing.
-var ExportReconcileCertManager = func(
+func ExportReconcileCertManager(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	change clusterupdate.Change,
@@ -175,7 +175,7 @@ var ExportReconcileCertManager = func(
 }
 
 // ExportReconcilePolicyEngine exposes reconcilePolicyEngine for unit testing.
-var ExportReconcilePolicyEngine = func(
+func ExportReconcilePolicyEngine(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	change clusterupdate.Change,
@@ -186,7 +186,7 @@ var ExportReconcilePolicyEngine = func(
 }
 
 // ExportReconcileGitOpsEngine exposes reconcileGitOpsEngine for unit testing.
-var ExportReconcileGitOpsEngine = func(
+func ExportReconcileGitOpsEngine(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	change clusterupdate.Change,
@@ -197,7 +197,7 @@ var ExportReconcileGitOpsEngine = func(
 }
 
 // ExportReconcileComponents exposes reconcileComponents for unit testing.
-var ExportReconcileComponents = func(
+func ExportReconcileComponents(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	diff *clusterupdate.UpdateResult,
