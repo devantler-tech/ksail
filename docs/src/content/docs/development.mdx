@@ -170,18 +170,28 @@ Test these exports from the corresponding `<pkg>_test` package (for example, `pa
 
 #### DI Override Pattern for Command Tests
 
-Cluster command tests that depend on `setup.InstallerFactories` use a thread-safe override pattern defined in `pkg/cli/cmd/cluster/testing.go`. Each helper applies a factory override and returns a restore function:
+Cluster command tests that depend on `setup.InstallerFactories` use an override pattern defined in [`pkg/cli/cmd/cluster/testing.go`](https://github.com/devantler-tech/ksail/blob/main/pkg/cli/cmd/cluster/testing.go). Each helper applies a factory override against shared global state and returns a restore function.
+
+> **Note:** These helpers mutate shared global state, so tests that use them **must not** run in parallel (annotate with `//nolint:paralleltest` and do not call `t.Parallel()`).
+
+Register the restore function with `t.Cleanup(restore)` inside each test or subtest so the override is always reset at the end of that test case, including in table-driven tests:
 
 ````go
-restore := cluster.SetPolicyEngineInstallerFactoryForTests(
-    func(_ *v1alpha1.Cluster) (installer.Installer, error) {
-        return mockInstaller, nil
-    },
-)
-defer restore()
+func TestPolicyEngineInstaller(t *testing.T) {
+    t.Run("happy path", func(t *testing.T) {
+        restore := cluster.SetPolicyEngineInstallerFactoryForTests(
+            func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+                return mockInstaller, nil
+            },
+        )
+        t.Cleanup(restore)
+
+        // test logic using the overridden factory...
+    })
+}
 ````
 
-Available helpers: `SetCSIInstallerFactoryForTests`, `SetCertManagerInstallerFactoryForTests`, `SetArgoCDInstallerFactoryForTests`, `SetPolicyEngineInstallerFactoryForTests`, `SetFluxInstallerFactoryForTests`, `SetProvisionerFactoryForTests`, and others. Use `defer restore()` to reset the override after each test.
+Available helpers: `SetCSIInstallerFactoryForTests`, `SetCertManagerInstallerFactoryForTests`, `SetArgoCDInstallerFactoryForTests`, `SetPolicyEngineInstallerFactoryForTests`, `SetFluxInstallerFactoryForTests`, `SetProvisionerFactoryForTests`, and others.
 
 #### Mocking with Testify
 
