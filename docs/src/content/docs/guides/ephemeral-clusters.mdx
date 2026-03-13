@@ -1,0 +1,155 @@
+---
+title: Ephemeral Clusters with --ttl
+description: How to use KSail's --ttl flag for time-limited clusters that auto-destroy — ideal for debugging, demos, and temporary access.
+---
+
+KSail's `--ttl` flag creates **ephemeral clusters** that auto-destroy after a specified duration. This is useful when you want to give yourself or others temporary access to a cluster — for debugging, demos, pair programming, or on-call investigation — without worrying about cleaning it up afterwards.
+
+> [!NOTE]
+> Automated CI tests don't need `--ttl` — create the cluster, run tests, and delete it explicitly. See [Testing in CI/CD](/use-cases/#testing-in-cicd) for that pattern. However, `--ttl` can be added as a safety net in CI to auto-destroy clusters if the cleanup step is skipped (e.g. runner crash).
+
+## How `--ttl` Works
+
+When you pass `--ttl` to `ksail cluster create`, KSail:
+
+1. Creates the cluster normally.
+2. Blocks the process, waiting for the TTL to elapse.
+3. Auto-deletes the cluster when the timer expires.
+
+```bash
+# Create a cluster that auto-destroys after 2 hours
+ksail cluster create --ttl 2h
+```
+
+Pressing `Ctrl+C` (or sending `SIGINT`/`SIGTERM`) cancels the TTL wait and leaves the cluster running. This lets you extend a session — just delete the cluster manually when you're done.
+
+> [!IMPORTANT]
+> TTL deletion only runs while the `ksail cluster create` process is alive. If you close the terminal or kill the process, the cluster is **not** auto-deleted. Use `ksail cluster delete` to clean up manually.
+
+## When to Use `--ttl`
+
+| Scenario | Example | Suggested TTL |
+|----------|---------|---------------|
+| **Debugging a failing deployment** | Spin up a cluster, deploy the broken app, inspect logs and state | `--ttl 1h` |
+| **Demo or walkthrough** | Show a feature to a colleague or stakeholder | `--ttl 30m` |
+| **Pair programming** | Share a cluster with a teammate for a focused session | `--ttl 2h` |
+| **On-call investigation** | Reproduce a production issue in a local cluster | `--ttl 1h` |
+| **Learning / experimentation** | Try out a new Helm chart or CRD | `--ttl 1h` |
+| **PR review** | Spin up a cluster to manually verify a pull request | `--ttl 30m` |
+
+## Basic Usage
+
+### Create a Time-Limited Cluster
+
+```bash
+ksail cluster create --ttl 1h
+```
+
+The process blocks and prints a message:
+
+```
+ℹ cluster will auto-destroy in 1h0m0s (press Ctrl+C to cancel)
+```
+
+When the timer expires, KSail automatically deletes the cluster and exits.
+
+### Check Remaining Time
+
+While the cluster is running, you can check the TTL status from another terminal:
+
+```bash
+ksail cluster info
+```
+
+This appends TTL information to the standard cluster info output, showing the remaining time. You can also see TTL status in the cluster list:
+
+```bash
+ksail cluster list
+```
+
+### Cancel the TTL
+
+Press `Ctrl+C` in the terminal running `ksail cluster create --ttl ...`. The cluster stays running and you can continue using it. Delete it manually when you're done:
+
+```bash
+ksail cluster delete
+```
+
+## Running in the Background
+
+If you want to keep using your terminal while the TTL timer runs, background the process:
+
+```bash
+ksail cluster create --ttl 2h &
+```
+
+The cluster creates normally and the TTL countdown runs in the background. When the timer expires, the cluster is auto-deleted.
+
+> [!NOTE]
+> If you close the terminal session, the background process may be killed (depending on your shell configuration). To keep it alive, use `nohup`:
+> ```bash
+> nohup ksail cluster create --ttl 2h &
+> ```
+
+## Kubeconfig Context
+
+KSail writes the kubeconfig context to the configured kubeconfig path (defaults to `~/.kube/config`, configurable via `spec.cluster.connection.kubeconfig`) during cluster creation. You can use `kubectl`, `k9s`, or any other Kubernetes tool immediately.
+
+The context name depends on the distribution:
+
+| Distribution | Context name |
+|-------------|-------------|
+| Vanilla (Kind) | `kind-<name>` |
+| K3s (K3d) | `k3d-<name>` |
+| Talos | `admin@<name>` |
+| VCluster | `vcluster-docker_<name>` |
+
+To connect with K9s for interactive debugging:
+
+```bash
+ksail cluster connect
+```
+
+## Sharing a Cluster
+
+To share a running ephemeral cluster with a colleague on the same network, they need:
+
+1. A minimal kubeconfig for the specific cluster context
+2. Network access to the cluster's API server
+
+Export only the relevant context to avoid leaking unrelated clusters or credentials:
+
+```bash
+kubectl config view --minify --flatten --context k3d-ksail > /tmp/ksail-kubeconfig.yaml
+```
+
+For local Docker-based clusters, this typically means running on the same machine. For Talos clusters on Hetzner or Omni, the API server is network-accessible and the kubeconfig can be shared directly.
+
+> [!CAUTION]
+> Kubeconfig files contain cluster credentials (client certificates or tokens). Always share a minimal, context-specific kubeconfig rather than your full `~/.kube/config`, use secure channels, and only share with trusted individuals. Note that your kubeconfig path may differ if you configured `spec.cluster.connection.kubeconfig`.
+
+## TTL Sizing Guide
+
+Choose a TTL based on how long you expect to need the cluster, plus some buffer:
+
+| Session type | Recommended TTL |
+|--------------|-----------------|
+| Quick check (< 15 min) | `--ttl 30m` |
+| Debugging session | `--ttl 1h` |
+| Extended investigation | `--ttl 2h` |
+| Workshop or demo | `--ttl 4h` |
+
+Set the TTL to **roughly 2× your expected session length** — long enough that you won't be interrupted, short enough that forgotten clusters don't waste resources.
+
+## Distribution Tips
+
+- **K3s** starts fastest and uses the fewest resources — good for quick debugging sessions.
+- **Vanilla** (Kind) provides standard upstream Kubernetes — useful when you need exact API compatibility.
+- **Talos** is immutable and secure — ideal for reproducing production-like environments.
+- **VCluster** uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane directly in Docker containers — no pre-existing host cluster required, useful for lightweight isolated environments.
+
+## Next Steps
+
+- **[Use Cases](/use-cases/)** — Workflows for learning, development, and CI/CD
+- **[Companion Tools](/guides/companion-tools/)** — Pair KSail with Tilt, Skaffold, or mirrord
+- **[Configuration](/configuration/)** — Complete configuration reference

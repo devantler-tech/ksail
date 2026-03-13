@@ -51,6 +51,7 @@ export default defineConfig({
         {
           label: "Guides",
           items: [
+            { label: "Ephemeral Clusters (--ttl)", link: "/guides/ephemeral-clusters/" },
             { label: "Companion Tools", link: "/guides/companion-tools/" },
           ],
         },
