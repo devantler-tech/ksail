@@ -1,9 +1,12 @@
 ---
-title: CI/CD Ephemeral Clusters
-description: How to use KSail with --ttl for ephemeral PR-level smoke testing in GitHub Actions.
+title: Ephemeral Clusters with --ttl
+description: How to use KSail's --ttl flag for time-limited clusters that auto-destroy — ideal for debugging, demos, and temporary access.
 ---
 
-KSail's `--ttl` flag creates **ephemeral clusters** that auto-destroy after a specified duration. This pattern is ideal for CI/CD pipelines where clusters should be short-lived and cleaned up automatically.
+KSail's `--ttl` flag creates **ephemeral clusters** that auto-destroy after a specified duration. This is useful when you want to give yourself or others temporary access to a cluster — for debugging, demos, pair programming, or on-call investigation — without worrying about cleaning it up afterwards.
+
+> [!NOTE]
+> Automated CI tests don't need `--ttl`. For CI pipelines, create the cluster, run tests, and delete it explicitly — see [Testing in CI/CD](/use-cases/#testing-in-cicd). The `--ttl` flag is designed for situations where a human needs temporary cluster access with a guaranteed cleanup.
 
 ## How `--ttl` Works
 
@@ -13,89 +16,84 @@ When you pass `--ttl` to `ksail cluster create`, KSail:
 2. Blocks the process, waiting for the TTL to elapse.
 3. Auto-deletes the cluster when the timer expires.
 
-Pressing `Ctrl+C` (or sending `SIGINT`/`SIGTERM`) cancels the TTL wait and leaves the cluster running.
-
-> [!IMPORTANT]
-> TTL deletion only runs while the `ksail cluster create` process is alive. If the CI runner is cancelled or the job terminates, the background process is killed and the cluster is **not** deleted by TTL. Always include an explicit cleanup step as the primary safeguard.
-
-## Minimal End-to-End Workflow
-
-Below is a complete GitHub Actions workflow that creates an ephemeral K3s cluster, runs smoke tests, and guarantees cleanup on both success and failure.
-
-```yaml
-# .github/workflows/pr-smoke-test.yaml
-name: PR Smoke Test
-
-on:
-  pull_request:
-    branches: [main]
-
-env:
-  KSAIL_VERSION: "v5.55.0" # Pin to a specific version for reproducibility
-
-jobs:
-  smoke-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install KSail
-        run: |
-          curl -sSL "https://github.com/devantler-tech/ksail/releases/download/${KSAIL_VERSION}/ksail_linux_amd64" -o ksail
-          chmod +x ksail
-          sudo mv ksail /usr/local/bin/
-          ksail --version
-
-      # Background the create so subsequent steps can run.
-      # --ttl acts as a best-effort safety net if cleanup is skipped.
-      - name: Create ephemeral cluster
-        run: |
-          ksail cluster create --ttl 1h &
-          KSAIL_PID=$!
-          # Wait for kubeconfig and API server to become available.
-          for i in $(seq 1 60); do
-            if kubectl cluster-info 2>/dev/null; then
-              echo "Cluster API is reachable"
-              break
-            fi
-            echo "Waiting for cluster API... (attempt $i/60)"
-            sleep 5
-          done
-          # Verify the background process is still running (catches creation failures).
-          if ! kill -0 "$KSAIL_PID" 2>/dev/null; then
-            echo "ksail cluster create exited unexpectedly"
-            wait "$KSAIL_PID"
-            exit $?
-          fi
-          # Wait for all nodes to be ready.
-          kubectl wait --for=condition=Ready node --all --timeout=120s
-
-      - name: Run smoke tests
-        run: |
-          # Replace with your actual test commands
-          kubectl get nodes
-          kubectl get pods -A
-
-      # Primary cleanup — runs on success, failure, and cancellation.
-      - name: Cleanup
-        if: always()
-        run: ksail cluster delete
+```bash
+# Create a cluster that auto-destroys after 2 hours
+ksail cluster create --ttl 2h
 ```
 
-### Key Points
+Pressing `Ctrl+C` (or sending `SIGINT`/`SIGTERM`) cancels the TTL wait and leaves the cluster running. This lets you extend a session — just delete the cluster manually when you're done.
 
-| Aspect | Detail |
-|--------|--------|
-| **Version pinning** | Pin `KSAIL_VERSION` in an `env` block for reproducible builds. Update it when you upgrade. |
-| **Backgrounding** | `ksail cluster create --ttl 1h &` runs in the background so subsequent commands can run in the same step. |
-| **Readiness gate** | A retry loop waits for `kubectl cluster-info` before proceeding, then `kubectl wait` ensures all nodes are ready. |
-| **Failure detection** | `kill -0` checks the background PID — if `ksail cluster create` crashed, the step fails immediately with the real exit code. |
-| **TTL safety net** | If the `if: always()` cleanup step is somehow skipped (e.g. runner crash), the TTL auto-destroys the cluster — provided the background process is still alive. |
-| **Primary cleanup** | The `if: always()` step is the reliable cleanup mechanism. Never rely on TTL alone in CI. |
+> [!IMPORTANT]
+> TTL deletion only runs while the `ksail cluster create` process is alive. If you close the terminal or kill the process, the cluster is **not** auto-deleted. Use `ksail cluster delete` to clean up manually.
 
-## Kubeconfig Forwarding
+## When to Use `--ttl`
 
-KSail writes the kubeconfig context to the default location (`~/.kube/config`) during cluster creation. All subsequent steps in the same job inherit the kubeconfig automatically — no extra forwarding is needed.
+| Scenario | Example | Suggested TTL |
+|----------|---------|---------------|
+| **Debugging a failing deployment** | Spin up a cluster, deploy the broken app, inspect logs and state | `--ttl 1h` |
+| **Demo or walkthrough** | Show a feature to a colleague or stakeholder | `--ttl 30m` |
+| **Pair programming** | Share a cluster with a teammate for a focused session | `--ttl 2h` |
+| **On-call investigation** | Reproduce a production issue in a local cluster | `--ttl 1h` |
+| **Learning / experimentation** | Try out a new Helm chart or CRD | `--ttl 1h` |
+| **PR review** | Spin up a cluster to manually verify a pull request | `--ttl 30m` |
+
+## Basic Usage
+
+### Create a Time-Limited Cluster
+
+```bash
+ksail cluster create --ttl 1h
+```
+
+The process blocks and prints a message:
+
+```
+ℹ cluster will auto-destroy in 1h0m0s (press Ctrl+C to cancel)
+```
+
+When the timer expires, KSail automatically deletes the cluster and exits.
+
+### Check Remaining Time
+
+While the cluster is running, you can check the TTL status from another terminal:
+
+```bash
+ksail cluster info
+```
+
+This appends TTL information to the standard cluster info output, showing the remaining time. You can also see TTL status in the cluster list:
+
+```bash
+ksail cluster list
+```
+
+### Cancel the TTL
+
+Press `Ctrl+C` in the terminal running `ksail cluster create --ttl ...`. The cluster stays running and you can continue using it. Delete it manually when you're done:
+
+```bash
+ksail cluster delete
+```
+
+## Running in the Background
+
+If you want to keep using your terminal while the TTL timer runs, background the process:
+
+```bash
+ksail cluster create --ttl 2h &
+```
+
+The cluster creates normally and the TTL countdown runs in the background. When the timer expires, the cluster is auto-deleted.
+
+> [!NOTE]
+> If you close the terminal session, the background process may be killed (depending on your shell configuration). To keep it alive, use `nohup`:
+> ```bash
+> nohup ksail cluster create --ttl 2h &
+> ```
+
+## Kubeconfig Context
+
+KSail writes the kubeconfig context to `~/.kube/config` during cluster creation. You can use `kubectl`, `k9s`, or any other Kubernetes tool immediately.
 
 The context name depends on the distribution:
 
@@ -106,155 +104,43 @@ The context name depends on the distribution:
 | Talos | `admin@<name>` |
 | VCluster | `vcluster-docker_<name>` |
 
-If a downstream step needs to target the cluster explicitly:
-
-```yaml
-      - name: Deploy application
-        run: kubectl --context k3d-ksail apply -f k8s/
-```
-
-### Cross-Job Kubeconfig Sharing
-
-If multiple jobs need cluster access (uncommon — prefer single-job workflows), upload the kubeconfig as an artifact:
-
-> [!CAUTION]
-> Kubeconfig files contain cluster credentials (client certificates or tokens). Uploading them as workflow artifacts exposes these secrets to anyone with access to the workflow run. Only use this pattern in **private repositories** with trusted contributors. Set a short `retention-days` value and avoid this entirely on `pull_request` workflows from forks.
-
-```yaml
-      - name: Upload kubeconfig
-        uses: actions/upload-artifact@v4
-        with:
-          name: kubeconfig
-          path: ~/.kube/config
-          retention-days: 1
-```
-
-Then download it in a subsequent job:
-
-```yaml
-      - name: Download kubeconfig
-        uses: actions/download-artifact@v4
-        with:
-          name: kubeconfig
-          path: ~/.kube/
-
-      - name: Use cluster
-        run: kubectl --context k3d-ksail get pods
-```
-
-## Cleanup on Workflow Failure
-
-The TTL handles the success path automatically — the background process stays alive and tears down the cluster when time is up. For the failure path, use a combination of strategies:
-
-### 1. `if: always()` Step (Primary)
-
-The `if: always()` step in the workflow above runs regardless of whether previous steps succeed or fail. This is the most reliable cleanup mechanism.
-
-```yaml
-      - name: Cleanup
-        if: always()
-        run: ksail cluster delete
-```
-
-### 2. TTL Safety Net (Secondary)
-
-The `--ttl` flag acts as a secondary safeguard. Choose a duration that's longer than your expected workflow runtime but short enough to avoid resource waste:
-
-| Workflow duration | Recommended TTL |
-|-------------------|-----------------|
-| < 5 min           | `--ttl 15m`     |
-| 5–15 min          | `--ttl 30m`     |
-| 15–30 min         | `--ttl 1h`      |
-
-### 3. Runner Crash (Edge Case)
-
-If the runner itself crashes, both the `if: always()` step and the TTL background process are lost. On self-hosted runners, consider a cron job that prunes orphaned clusters:
+To connect with K9s for interactive debugging:
 
 ```bash
-# Cron job on self-hosted runner (every hour)
-docker ps --filter "label=io.x-k8s.kind.cluster" --format '{{.Label "io.x-k8s.kind.cluster"}}' | sort -u | xargs -r -I {} kind delete cluster --name {}
+ksail cluster connect
 ```
 
-On GitHub-hosted runners, the runner VM is destroyed after each job, so orphaned clusters are cleaned up automatically.
+## Sharing a Cluster
 
-## Full Example with Build and Deploy
+To share a running ephemeral cluster with a colleague on the same network, they need:
 
-A more realistic workflow that builds a container image, deploys it via GitOps, and runs integration tests:
+1. A copy of the kubeconfig (`~/.kube/config`)
+2. Network access to the cluster's API server
 
-```yaml
-# .github/workflows/pr-integration.yaml
-name: PR Integration Test
+For local Docker-based clusters, this typically means running on the same machine. For Talos clusters on Hetzner or Omni, the API server is network-accessible and the kubeconfig can be shared directly.
 
-on:
-  pull_request:
-    branches: [main]
+> [!CAUTION]
+> Kubeconfig files contain cluster credentials (client certificates or tokens). Only share them over secure channels and with trusted individuals.
 
-env:
-  KSAIL_VERSION: "v5.55.0"
+## TTL Sizing Guide
 
-jobs:
-  integration:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+Choose a TTL based on how long you expect to need the cluster, plus some buffer:
 
-      - name: Install KSail
-        run: |
-          curl -sSL "https://github.com/devantler-tech/ksail/releases/download/${KSAIL_VERSION}/ksail_linux_amd64" -o ksail
-          chmod +x ksail
-          sudo mv ksail /usr/local/bin/
-          ksail --version
+| Session type | Recommended TTL |
+|--------------|-----------------|
+| Quick check (< 15 min) | `--ttl 30m` |
+| Debugging session | `--ttl 1h` |
+| Extended investigation | `--ttl 2h` |
+| Workshop or demo | `--ttl 4h` |
 
-      - name: Create ephemeral cluster
-        run: |
-          ksail cluster create --ttl 30m &
-          KSAIL_PID=$!
-          for i in $(seq 1 60); do
-            if kubectl cluster-info 2>/dev/null; then break; fi
-            echo "Waiting for cluster API... (attempt $i/60)"
-            sleep 5
-          done
-          if ! kill -0 "$KSAIL_PID" 2>/dev/null; then
-            wait "$KSAIL_PID"; exit $?
-          fi
-          kubectl wait --for=condition=Ready node --all --timeout=120s
+Set the TTL to **roughly 2× your expected session length** — long enough that you won't be interrupted, short enough that forgotten clusters don't waste resources.
 
-      - name: Build and push image
-        run: |
-          docker build -t localhost:5050/my-app:${{ github.sha }} .
-          docker push localhost:5050/my-app:${{ github.sha }}
+## Distribution Tips
 
-      - name: Deploy
-        run: |
-          sed -i "s|image:.*|image: localhost:5050/my-app:${{ github.sha }}|" k8s/deployment.yaml
-          ksail workload push
-          ksail workload reconcile
-
-      - name: Run integration tests
-        run: |
-          ksail workload wait deployment/my-app --for=condition=available
-          npm run test:integration
-
-      - name: Cleanup
-        if: always()
-        run: ksail cluster delete
-```
-
-## Tips
-
-- Set `--ttl` to **2–3× your expected workflow duration** to allow for slow runners without wasting resources.
-- Use K3s for CI — it starts faster and uses fewer resources than Vanilla.
-- Use `--local-registry localhost:5050` in your `ksail.yaml` to avoid pushing images to an external registry during tests.
-- Use matrix builds to test across multiple distributions:
-
-  ```yaml
-  strategy:
-    matrix:
-      distribution: [Vanilla, K3s]
-  steps:
-    - run: ksail cluster init --distribution ${{ matrix.distribution }}
-    - run: ksail cluster create --ttl 30m &
-  ```
+- **K3s** starts fastest and uses the fewest resources — good for quick debugging sessions.
+- **Vanilla** (Kind) provides standard upstream Kubernetes — useful when you need exact API compatibility.
+- **Talos** is immutable and secure — ideal for reproducing production-like environments.
+- **VCluster** creates virtual clusters inside an existing cluster — useful for multi-tenant scenarios.
 
 ## Next Steps
 
