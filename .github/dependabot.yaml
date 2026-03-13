@@ -74,14 +74,18 @@ updates:
     schedule:
       interval: daily
 
-  # Not working as-is because ghcr.io multi-arch image hits dependabot/dependabot-core#13383
-  - package-ecosystem: docker
-    registries: [ghcr]
-    directory: /pkg/fsutil/configmanager/talos # Talos image (embedded in Go via go:embed)
-    cooldown:
-      default-days: 7
-    schedule:
-      interval: daily
+  # Talos image (ghcr.io/siderolabs/talos) — disabled due to upstream bug:
+  # https://github.com/dependabot/dependabot-core/issues/13383
+  # Dependabot fails on multi-arch ghcr.io images (404 from /blobs/ instead of /manifests/).
+  # Re-add the following entry when the upstream bug is fixed:
+  #
+  # - package-ecosystem: docker
+  #   registries: [ghcr]
+  #   directory: /pkg/fsutil/configmanager/talos
+  #   cooldown:
+  #     default-days: 7
+  #   schedule:
+  #     interval: daily
 
   - package-ecosystem: docker
     registries: [dockerhub, ghcr]
@@ -99,14 +103,18 @@ updates:
     schedule:
       interval: daily
 
-  # Not working as-is because ghcr.io multi-arch image hits dependabot/dependabot-core#13383
-  - package-ecosystem: docker
-    registries: [ghcr]
-    directory: /pkg/fsutil/configmanager/vcluster # vCluster images (embedded in Go via go:embed)
-    cooldown:
-      default-days: 7
-    schedule:
-      interval: daily
+  # vCluster images (ghcr.io/loft-sh/*) — disabled due to upstream bug:
+  # https://github.com/dependabot/dependabot-core/issues/13383
+  # Dependabot fails on multi-arch ghcr.io images (404 from /blobs/ instead of /manifests/).
+  # Re-add the following entry when the upstream bug is fixed:
+  #
+  # - package-ecosystem: docker
+  #   registries: [ghcr]
+  #   directory: /pkg/fsutil/configmanager/vcluster
+  #   cooldown:
+  #     default-days: 7
+  #   schedule:
+  #     interval: daily
 
   # Helm chart version pins (embedded in Go via go:embed)
   - package-ecosystem: docker
