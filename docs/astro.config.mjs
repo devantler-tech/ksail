@@ -51,6 +51,7 @@ export default defineConfig({
         {
           label: "Guides",
           items: [
+            { label: "CI/CD Ephemeral Clusters", link: "/guides/ci-cd-ephemeral-clusters/" },
             { label: "Companion Tools", link: "/guides/companion-tools/" },
           ],
         },
