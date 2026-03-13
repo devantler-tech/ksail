@@ -28,6 +28,7 @@ network:
   allowed:
     - defaults
     - node
+    - go
 
 safe-outputs:
   noop: false

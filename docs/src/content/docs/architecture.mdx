@@ -204,7 +204,9 @@ Uses GitHub Copilot SDK for interactive cluster configuration and troubleshootin
 
 **Command:** `ksail mcp` — **Implementation:** `pkg/svc/mcp/`
 
-Exposes KSail as a Model Context Protocol server for Claude and other AI assistants. Provides tools for cluster management, workload deployment, and configuration. See [MCP](/mcp/) for setup instructions.
+Exposes KSail as a Model Context Protocol server for Claude and other AI assistants. Tools are **auto-generated** from the Cobra command tree by `pkg/toolgen/` — the same mechanism used for the chat assistant. All runnable CLI commands are automatically exposed except excluded meta commands (`chat`, `mcp`, `completion`, `help`, root — see `toolgen.DefaultOptions()` and the `ai.toolgen.exclude` annotation); no manual tool registration is needed.
+
+Parent commands annotated with `ai.toolgen.consolidate` group their subcommands into a single tool, then `ai.toolgen.permission` splits them into read/write pairs — producing 6 tools: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `cipher_read`, and `cipher_write`. Adding a new CLI command under a consolidated parent automatically makes it available as an MCP tool. See [MCP](/mcp/) for setup instructions.
 
 ## Testing Strategy
 
