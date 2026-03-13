@@ -213,6 +213,7 @@ ksail cluster switch <cluster-name>    # Switch active kubeconfig context
 ksail cluster backup                   # Backup cluster resources to .tar.gz
 ksail cluster restore                  # Restore cluster resources from .tar.gz
 ksail workload apply                   # Apply workloads
+ksail workload reconcile               # Trigger reconciliation for GitOps workloads
 ksail workload gen <resource>          # Generate resources
 ksail workload watch [--path <dir>]    # Watch a directory (defaults to k8s/ or spec.workload.sourceDirectory) and auto-apply on change
 ksail cipher <command>                 # Manage secrets with SOPS
