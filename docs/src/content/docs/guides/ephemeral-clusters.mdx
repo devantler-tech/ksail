@@ -6,7 +6,7 @@ description: How to use KSail's --ttl flag for time-limited clusters that auto-d
 KSail's `--ttl` flag creates **ephemeral clusters** that auto-destroy after a specified duration. This is useful when you want to give yourself or others temporary access to a cluster — for debugging, demos, pair programming, or on-call investigation — without worrying about cleaning it up afterwards.
 
 > [!NOTE]
-> Automated CI tests don't need `--ttl`. For CI pipelines, create the cluster, run tests, and delete it explicitly — see [Testing in CI/CD](/use-cases/#testing-in-cicd). The `--ttl` flag is designed for situations where a human needs temporary cluster access with a guaranteed cleanup.
+> Automated CI tests don't need `--ttl` — create the cluster, run tests, and delete it explicitly. See [Testing in CI/CD](/use-cases/#testing-in-cicd) for that pattern. However, `--ttl` can be added as a safety net in CI to auto-destroy clusters if the cleanup step is skipped (e.g. runner crash).
 
 ## How `--ttl` Works
 
@@ -93,7 +93,7 @@ The cluster creates normally and the TTL countdown runs in the background. When 
 
 ## Kubeconfig Context
 
-KSail writes the kubeconfig context to `~/.kube/config` during cluster creation. You can use `kubectl`, `k9s`, or any other Kubernetes tool immediately.
+KSail writes the kubeconfig context to the configured kubeconfig path (defaults to `~/.kube/config`, configurable via `spec.cluster.connection.kubeconfig`) during cluster creation. You can use `kubectl`, `k9s`, or any other Kubernetes tool immediately.
 
 The context name depends on the distribution:
 
@@ -114,13 +114,19 @@ ksail cluster connect
 
 To share a running ephemeral cluster with a colleague on the same network, they need:
 
-1. A copy of the kubeconfig (`~/.kube/config`)
+1. A minimal kubeconfig for the specific cluster context
 2. Network access to the cluster's API server
+
+Export only the relevant context to avoid leaking unrelated clusters or credentials:
+
+```bash
+kubectl config view --minify --flatten --context k3d-ksail > /tmp/ksail-kubeconfig.yaml
+```
 
 For local Docker-based clusters, this typically means running on the same machine. For Talos clusters on Hetzner or Omni, the API server is network-accessible and the kubeconfig can be shared directly.
 
 > [!CAUTION]
-> Kubeconfig files contain cluster credentials (client certificates or tokens). Only share them over secure channels and with trusted individuals.
+> Kubeconfig files contain cluster credentials (client certificates or tokens). Always share a minimal, context-specific kubeconfig rather than your full `~/.kube/config`, use secure channels, and only share with trusted individuals. Note that your kubeconfig path may differ if you configured `spec.cluster.connection.kubeconfig`.
 
 ## TTL Sizing Guide
 
@@ -140,7 +146,7 @@ Set the TTL to **roughly 2× your expected session length** — long enough that
 - **K3s** starts fastest and uses the fewest resources — good for quick debugging sessions.
 - **Vanilla** (Kind) provides standard upstream Kubernetes — useful when you need exact API compatibility.
 - **Talos** is immutable and secure — ideal for reproducing production-like environments.
-- **VCluster** creates virtual clusters inside an existing cluster — useful for multi-tenant scenarios.
+- **VCluster** uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane directly in Docker containers — no pre-existing host cluster required, useful for lightweight isolated environments.
 
 ## Next Steps
 
