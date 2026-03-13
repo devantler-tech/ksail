@@ -146,7 +146,7 @@ If the runner itself crashes, both the `if: always()` step and the TTL backgroun
 
 ```bash
 # Cron job on self-hosted runner (every hour)
-docker ps --filter "label=io.x-k8s.kind.cluster" --format "{{.Names}}" | xargs -r kind delete cluster --name
+docker ps --filter "label=io.x-k8s.kind.cluster" --format '{{.Label "io.x-k8s.kind.cluster"}}' | sort -u | xargs -r -I {} kind delete cluster --name {}
 ```
 
 On GitHub-hosted runners, the runner VM is destroyed after each job, so orphaned clusters are cleaned up automatically.
