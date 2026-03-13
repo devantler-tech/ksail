@@ -413,3 +413,146 @@ func TestTryAddDirectory(t *testing.T) {
 		require.Contains(t, watcher.WatchList(), tmpDir)
 	})
 }
+
+func TestFindKustomizationDirReturnsSubtree(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	subDir := filepath.Join(root, "apps", "frontend")
+	require.NoError(t, os.MkdirAll(subDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(subDir, "kustomization.yaml"), []byte("resources: []"), 0o600,
+	))
+
+	changedFile := filepath.Join(subDir, "deployment.yaml")
+	require.NoError(t, os.WriteFile(changedFile, []byte("kind: Deployment"), 0o600))
+
+	got := workload.ExportFindKustomizationDir(changedFile, root)
+	require.Equal(t, subDir, got)
+}
+
+func TestFindKustomizationDirReturnsRootWhenKustomizationAtRoot(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(root, "kustomization.yaml"), []byte("resources: []"), 0o600,
+	))
+
+	changedFile := filepath.Join(root, "deployment.yaml")
+	require.NoError(t, os.WriteFile(changedFile, []byte("kind: Deployment"), 0o600))
+
+	got := workload.ExportFindKustomizationDir(changedFile, root)
+	require.Equal(t, root, got)
+}
+
+func TestFindKustomizationDirReturnsRootWhenNoKustomizationFound(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	subDir := filepath.Join(root, "misc")
+	require.NoError(t, os.MkdirAll(subDir, 0o750))
+
+	changedFile := filepath.Join(subDir, "notes.yaml")
+	require.NoError(t, os.WriteFile(changedFile, []byte("note: true"), 0o600))
+
+	got := workload.ExportFindKustomizationDir(changedFile, root)
+	require.Equal(t, root, got)
+}
+
+func TestFindKustomizationDirWalksUpToNearest(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	// Create nested structure: root/apps/kustomization.yaml and root/apps/frontend/deep/file.yaml
+	appsDir := filepath.Join(root, "apps")
+	require.NoError(t, os.MkdirAll(appsDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(appsDir, "kustomization.yaml"), []byte("resources: []"), 0o600,
+	))
+
+	deepDir := filepath.Join(appsDir, "frontend", "deep")
+	require.NoError(t, os.MkdirAll(deepDir, 0o750))
+
+	changedFile := filepath.Join(deepDir, "service.yaml")
+	require.NoError(t, os.WriteFile(changedFile, []byte("kind: Service"), 0o600))
+
+	got := workload.ExportFindKustomizationDir(changedFile, root)
+	require.Equal(t, appsDir, got)
+}
+
+func TestFindKustomizationDirPrefersNearestOverParent(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	// Root has kustomization.yaml
+	require.NoError(t, os.WriteFile(
+		filepath.Join(root, "kustomization.yaml"), []byte("resources: []"), 0o600,
+	))
+
+	// apps/frontend also has kustomization.yaml (closer to the changed file)
+	frontendDir := filepath.Join(root, "apps", "frontend")
+	require.NoError(t, os.MkdirAll(frontendDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(frontendDir, "kustomization.yaml"), []byte("resources: []"), 0o600,
+	))
+
+	changedFile := filepath.Join(frontendDir, "deployment.yaml")
+	require.NoError(t, os.WriteFile(changedFile, []byte("kind: Deployment"), 0o600))
+
+	got := workload.ExportFindKustomizationDir(changedFile, root)
+	require.Equal(t, frontendDir, got)
+}
+
+func TestFindKustomizationDirSelfEditReturnsOwnDir(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	subDir := filepath.Join(root, "infra")
+	require.NoError(t, os.MkdirAll(subDir, 0o750))
+
+	kustomizationFile := filepath.Join(subDir, "kustomization.yaml")
+	require.NoError(t, os.WriteFile(kustomizationFile, []byte("resources: []"), 0o600))
+
+	got := workload.ExportFindKustomizationDir(kustomizationFile, root)
+	require.Equal(t, subDir, got)
+}
+
+func TestFindKustomizationDirDirectoryEventStartsAtDir(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	subDir := filepath.Join(root, "apps")
+	require.NoError(t, os.MkdirAll(subDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(subDir, "kustomization.yaml"), []byte("resources: []"), 0o600,
+	))
+
+	// Pass the directory path itself (as fsnotify does for some create/rename events).
+	got := workload.ExportFindKustomizationDir(subDir, root)
+	require.Equal(t, subDir, got)
+}
+
+func TestFindKustomizationDirDeletedFileFallsBack(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	subDir := filepath.Join(root, "apps")
+	require.NoError(t, os.MkdirAll(subDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(subDir, "kustomization.yaml"), []byte("resources: []"), 0o600,
+	))
+
+	// Simulate a deleted file event — the file no longer exists on disk.
+	deletedFile := filepath.Join(subDir, "removed.yaml")
+
+	got := workload.ExportFindKustomizationDir(deletedFile, root)
+	require.Equal(t, subDir, got)
+}
