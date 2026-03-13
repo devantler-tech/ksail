@@ -293,6 +293,9 @@ func enqueueIfCurrent(state *debounceState, expectedGen uint64, applyCh chan str
 }
 
 // applyAndReport runs kubectl apply and prints a timestamped status line.
+// It scopes the apply to the nearest Kustomization subtree containing the
+// changed file, falling back to a full reconcile when the change is at the
+// root level or no kustomization.yaml boundary is found.
 func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile string) {
 	if ctx.Err() != nil {
 		return
@@ -307,7 +310,18 @@ func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile st
 
 	cmd.PrintErrf("[%s] change detected: %s\n", timestamp, relFile)
 
-	applyErr := runKubectlApply(ctx, cmd, dir)
+	applyDir := findKustomizationDir(changedFile, dir)
+
+	if applyDir != dir {
+		relDir, relErr := filepath.Rel(dir, applyDir)
+		if relErr != nil {
+			relDir = applyDir
+		}
+
+		cmd.PrintErrf("[%s] → reconciling subtree: %s\n", timestamp, relDir)
+	}
+
+	applyErr := runKubectlApply(ctx, cmd, applyDir)
 
 	timestamp = time.Now().Format("15:04:05")
 
@@ -315,6 +329,35 @@ func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile st
 		cmd.PrintErrf("[%s] ✗ apply failed: %v\n", timestamp, applyErr)
 	} else {
 		cmd.PrintErrf("[%s] ✓ apply succeeded\n", timestamp)
+	}
+}
+
+// findKustomizationDir walks up from the changed file's directory to find the
+// nearest directory containing a kustomization.yaml. If the nearest match is
+// the root watch directory or no match is found, rootDir is returned
+// (triggering a full reconcile).
+func findKustomizationDir(changedFile, rootDir string) string {
+	dir := filepath.Dir(changedFile)
+
+	for {
+		kustomizationPath := filepath.Join(dir, kustomizationFileName)
+		if _, err := os.Stat(kustomizationPath); err == nil {
+			return dir
+		}
+
+		// Reached the root watch directory without finding a nested kustomization.
+		if dir == rootDir {
+			return rootDir
+		}
+
+		parent := filepath.Dir(dir)
+
+		// Reached the filesystem root without finding anything.
+		if parent == dir {
+			return rootDir
+		}
+
+		dir = parent
 	}
 }
 

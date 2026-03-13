@@ -79,3 +79,8 @@ func ExportEnqueueIfCurrent(state *debounceState, expectedGen uint64, applyCh ch
 func ExportTryAddDirectory(watcher *fsnotify.Watcher, path string, cmd *cobra.Command) {
 	tryAddDirectory(watcher, path, cmd)
 }
+
+// ExportFindKustomizationDir exposes findKustomizationDir for testing.
+func ExportFindKustomizationDir(changedFile, rootDir string) string {
+	return findKustomizationDir(changedFile, rootDir)
+}
