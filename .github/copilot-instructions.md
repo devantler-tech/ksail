@@ -311,7 +311,7 @@ For a deeper dive into KSail's design and internals, refer to:
 
 **Key Packages:**
 
-- `pkg/toolgen/`: AI tool generation utilities for integrating with AI assistants
+- `pkg/toolgen/`: AI tool generation — auto-generates tools from the Cobra command tree for both the MCP server and the Copilot chat assistant. All CLI commands (including write operations like `cluster update`, `workload apply`, `cipher encrypt`) are automatically exposed as tools; do NOT manually register individual tool handlers. Commands are consolidated by permission annotation into read/write pairs (e.g., `cluster_read`, `cluster_write`). Adding a new CLI command automatically makes it available as an MCP tool and a chat tool — no separate tool registration is needed
 - `pkg/apis/`: API types, schemas, and enums; each enum type lives in its own file under `pkg/apis/cluster/v1alpha1/` (e.g., `distribution.go`, `cni.go`, `csi.go`, `loadbalancer.go`, `gitopsengine.go`, etc.); the `EnumValuer` interface is in `enum.go`
 - `pkg/client/`: Embedded tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kustomize, oci, netretry); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`.
 - `pkg/svc/`: Services including installers, providers, and provisioners
@@ -322,7 +322,7 @@ For a deeper dive into KSail's design and internals, refer to:
   - `pkg/svc/diff/`: Computes configuration differences between old and new ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
   - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions; `parser/` sub-package provides `ParseAllImagesFromDockerfile` for extracting all `FROM` directives from multi-stage Dockerfiles (used by Flux installer to include distribution controller images in mirror cache warming)
   - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.); `internal/hetzner/` holds shared utilities for the Hetzner installers—`hcloudccm.Installer` and `hetznercsi.Installer` are type aliases for `hetzner.Installer` and share a single `EnsureSecret` implementation; `flux/Dockerfile.distribution` tracks Flux distribution controller images (updated by Dependabot) that are deployed by the Flux operator when creating a FluxInstance but are not part of the Helm chart — included in `Images()` output for mirror cache warming
-  - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants
+  - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants; tools are auto-generated from root Cobra commands via `pkg/toolgen/` (not manually registered) — all read AND write operations are already included as 6 consolidated tools: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `cipher_read`, `cipher_write`
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner, omni)
   - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster)
   - `pkg/svc/registryresolver/`: OCI registry detection, resolution, and artifact push utilities
