@@ -332,36 +332,55 @@ func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile st
 	}
 }
 
-// findKustomizationDir walks up from the changed file's directory to find the
-// nearest directory containing a kustomization.yaml. If the nearest match is
-// the root watch directory or no match is found, rootDir is returned
-// (triggering a full reconcile).
+// findKustomizationDir walks up from the changed path to find the nearest
+// directory containing a kustomization.yaml. Both changedFile and rootDir are
+// normalized to absolute paths before comparison so that mixed relative /
+// absolute inputs are handled correctly. If the nearest match is the root
+// watch directory or no match is found, rootDir is returned (triggering a full
+// reconcile). When changedFile is itself a directory the search starts there
+// instead of at its parent.
 func findKustomizationDir(changedFile, rootDir string) string {
-	dir := filepath.Dir(changedFile)
+	absRoot, err := filepath.Abs(rootDir)
+	if err != nil {
+		return rootDir
+	}
+
+	absChanged, err := filepath.Abs(changedFile)
+	if err != nil {
+		return absRoot
+	}
+
+	// When the changed path is a directory, start the search there;
+	// otherwise start at its parent directory.
+	dir := absChanged
+	if info, statErr := os.Stat(absChanged); statErr != nil || !info.IsDir() {
+		dir = filepath.Dir(absChanged)
+	}
 
 	for {
 		kustomizationPath := filepath.Join(dir, kustomizationFileName)
-		if _, err := os.Stat(kustomizationPath); err == nil {
+		if _, statErr := os.Stat(kustomizationPath); statErr == nil {
 			return dir
 		}
 
 		// Reached the root watch directory without finding a nested kustomization.
-		if dir == rootDir {
-			return rootDir
+		if dir == absRoot {
+			return absRoot
 		}
 
 		parent := filepath.Dir(dir)
 
 		// Reached the filesystem root without finding anything.
 		if parent == dir {
-			return rootDir
+			return absRoot
 		}
 
 		dir = parent
 	}
 }
 
-// runKubectlApply executes kubectl apply -k against the watched directory.
+// runKubectlApply executes kubectl apply -k against the provided directory,
+// which may be the root watch directory or a scoped Kustomization subtree.
 // The provided context is forwarded to the cobra command so that Ctrl+C
 // (which cancels ctx) also terminates an in-flight apply promptly.
 func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error {

@@ -525,4 +525,20 @@ func TestFindKustomizationDir(t *testing.T) {
 		got := workload.ExportFindKustomizationDir(kustomizationFile, root)
 		require.Equal(t, subDir, got)
 	})
+
+	t.Run("directory_event_starts_search_at_directory_itself", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+
+		subDir := filepath.Join(root, "apps")
+		require.NoError(t, os.MkdirAll(subDir, 0o750))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(subDir, "kustomization.yaml"), []byte("resources: []"), 0o600,
+		))
+
+		// Pass the directory path itself (as fsnotify does for some create/rename events).
+		got := workload.ExportFindKustomizationDir(subDir, root)
+		require.Equal(t, subDir, got)
+	})
 }
