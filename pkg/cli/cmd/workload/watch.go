@@ -353,13 +353,17 @@ func findKustomizationDir(changedFile, rootDir string) string {
 	// When the changed path is a directory, start the search there;
 	// otherwise start at its parent directory.
 	dir := absChanged
-	if info, statErr := os.Stat(absChanged); statErr != nil || !info.IsDir() {
+
+	info, statErr := os.Stat(absChanged)
+	if statErr != nil || !info.IsDir() {
 		dir = filepath.Dir(absChanged)
 	}
 
 	for {
 		kustomizationPath := filepath.Join(dir, kustomizationFileName)
-		if _, statErr := os.Stat(kustomizationPath); statErr == nil {
+
+		_, statErr = os.Stat(kustomizationPath)
+		if statErr == nil {
 			return dir
 		}
 
