@@ -24,23 +24,12 @@ const configIntroProse = `KSail uses declarative YAML configuration files for re
 
 ## What is ksail.yaml?
 
-Each KSail project includes a ` + bt + `ksail.yaml` + bt + ` file describing the cluster and workload configuration. Run ` + bt + `ksail cluster init` + bt + ` to generate this file, which can be committed to version control and shared with your team.
-
-The configuration file uses the ` + bt + `ksail.io/v1alpha1` + bt + ` API version and follows the ` + bt + `Cluster` + bt + ` kind schema. It defines:
-
-- **Cluster settings**: distribution, networking, components
-- **Connection details**: kubeconfig path, context, timeouts
-- **Workload configuration**: manifest directory, validation preferences
-- **Editor preferences**: for interactive workflows`
+Each KSail project includes a ` + bt + `ksail.yaml` + bt + ` file describing cluster distribution, networking, components, and workload configuration. Run ` + bt + `ksail cluster init` + bt + ` to generate it — commit to version control to share with your team.`
 
 // configEnvVarProse documents environment variable expansion.
 const configEnvVarProse = `## Environment Variable Expansion
 
-KSail supports environment variable expansion in all string configuration values using the ` + bt + `${VAR_NAME}` + bt + ` syntax. This enables:
-
-- **Secure credential management**: Keep sensitive values out of version control
-- **Environment-specific configuration**: Use different values per environment (dev/staging/prod)
-- **Dynamic path resolution**: Reference user-specific or system-specific paths
+KSail supports environment variable expansion in all string configuration values using the ` + bt + `${VAR_NAME}` + bt + ` syntax for secure credentials, environment-specific paths, and dynamic values.
 
 ### Syntax
 
@@ -80,13 +69,7 @@ spec:
 
 ### Scope
 
-Environment variables are expanded in:
-
-1. **ksail.yaml** — All supported string fields (see below)
-2. **Distribution configs** — ` + bt + `kind.yaml` + bt + `, ` + bt + `k3d.yaml` + bt + ` file contents
-3. **Talos patches** — All YAML patch files in ` + bt + `talos/cluster/` + bt + `, ` + bt + `talos/control-planes/` + bt + `, ` + bt + `talos/workers/` + bt + `
-
-This means you can use ` + bt + `${VAR}` + bt + ` syntax inside your Kind, K3d, or Talos configuration files too:
+Environment variables are expanded in all string fields of ` + bt + `ksail.yaml` + bt + `, distribution configs (` + bt + `kind.yaml` + bt + `, ` + bt + `k3d.yaml` + bt + `), and Talos patch files (` + bt + `talos/cluster/` + bt + `, ` + bt + `talos/control-planes/` + bt + `, ` + bt + `talos/workers/` + bt + `):
 
 ` + cbt + `yaml
 # kind.yaml - Environment variables are expanded before parsing
@@ -107,31 +90,6 @@ machine:
         endpoints:
           - http://${REGISTRY:-localhost:5000}
 ` + cbt + `
-
-### Supported Fields
-
-Environment variable expansion works in these string fields:
-
-**General:**
-
-- ` + bt + `spec.editor` + bt + ` - Editor command
-- ` + bt + `spec.cluster.connection.kubeconfig` + bt + ` - Kubeconfig path
-- ` + bt + `spec.cluster.connection.context` + bt + ` - Kubernetes context name
-- ` + bt + `spec.cluster.distributionConfig` + bt + ` - Distribution config path
-- ` + bt + `spec.cluster.localRegistry.registry` + bt + ` - Registry specification (including credentials)
-- ` + bt + `spec.workload.sourceDirectory` + bt + ` - Workload manifest directory
-- ` + bt + `spec.chat.model` + bt + ` - Chat model name
-
-**Distribution-specific:**
-
-- ` + bt + `spec.cluster.vanilla.mirrorsDir` + bt + ` - Mirror configuration directory
-- ` + bt + `spec.cluster.talos.config` + bt + ` - Talos configuration path
-
-**Provider-specific:**
-
-- ` + bt + `spec.cluster.hetzner.sshKeyName` + bt + ` - SSH key name
-- ` + bt + `spec.cluster.hetzner.networkName` + bt + ` - Network name
-- ` + bt + `spec.cluster.hetzner.placementGroup` + bt + ` - Placement group name
 
 ### Example: Credentials
 
@@ -168,35 +126,6 @@ ksail cluster create
 export ENV="prod"
 export CLUSTER_NAME="prod-cluster"
 ksail cluster create
-` + cbt + `
-
-### Example: Distribution Config with Variables
-
-Environment variables also work inside distribution configuration files:
-
-` + cbt + `yaml
-# kind.yaml
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-  - role: control-plane
-    extraPortMappings:
-      - containerPort: ${INGRESS_PORT:-80}
-        hostPort: ${HOST_PORT:-8080}
-containerdConfigPatches:
-  - |-
-    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."${MIRROR_REGISTRY:-docker.io}"]
-      endpoint = ["http://${REGISTRY:-localhost:5000}"]
-` + cbt + `
-
-` + cbt + `yaml
-# talos/cluster/registry.yaml
-machine:
-  registries:
-    mirrors:
-      docker.io:
-        endpoints:
-          - http://${REGISTRY:-localhost:5000}
 ` + cbt + ``
 
 // configMinimalExampleProse has the minimal ksail.yaml example.
@@ -244,20 +173,22 @@ spec:
 ` + cbt + ``
 
 // distributionDetails provides prose after the distribution enum list.
-const distributionDetails = `See [Distributions](/concepts/#distributions) for detailed information about each distribution.
+const distributionDetails = `See [Distributions](/concepts/#distributions) for detailed information.
 
-- ` + bt + `Vanilla` + bt + ` – Standard upstream Kubernetes (implemented with [Kind](https://kind.sigs.k8s.io/))
-- ` + bt + `K3s` + bt + ` – Lightweight Kubernetes (implemented with [K3d](https://k3d.io/))
-- ` + bt + `Talos` + bt + ` – [Talos Linux](https://www.talos.dev/) in Docker containers or Hetzner Cloud servers`
+- ` + bt + `Vanilla` + bt + ` (default) – Standard upstream Kubernetes via [Kind](https://kind.sigs.k8s.io/)
+- ` + bt + `K3s` + bt + ` – Lightweight Kubernetes via [K3d](https://k3d.io/)
+- ` + bt + `Talos` + bt + ` – [Talos Linux](https://www.talos.dev/) in Docker containers or Hetzner Cloud servers
+- ` + bt + `VCluster` + bt + ` – Virtual clusters via [vCluster](https://www.vcluster.com/)`
 
 // providerDetails provides prose after the provider enum list.
 const providerDetails = `See [Providers](/concepts/#providers) for more details.
 
-- ` + bt + `Docker` + bt + ` – Run nodes as Docker containers (local development)
+- ` + bt + `Docker` + bt + ` (default) – Run nodes as Docker containers (local development)
 - ` + bt + `Hetzner` + bt + ` – Run nodes on Hetzner Cloud servers (requires ` + bt + `HCLOUD_TOKEN` + bt + `)
+- ` + bt + `Omni` + bt + ` – Manage Talos cluster nodes through [Sidero Omni](https://omni.siderolabs.com/)
 
 > [!NOTE]
-> Hetzner provider is only supported with the ` + bt + `Talos` + bt + ` distribution.`
+> Hetzner and Omni providers are only supported with the ` + bt + `Talos` + bt + ` distribution.`
 
 // configDistributionProse describes the distributionConfig field.
 const configDistributionProse = `#### distributionConfig
@@ -292,14 +223,14 @@ const configConnectionProse = `#### connection (Connection)
 // cniDetails provides prose after the CNI enum list.
 const cniDetails = `See [CNI](/concepts/#container-network-interface-cni) for more details.
 
-- ` + bt + `Default` + bt + ` – Uses the distribution's built-in CNI (` + bt + `kindnetd` + bt + ` for Vanilla, ` + bt + `flannel` + bt + ` for K3s)
+- ` + bt + `Default` + bt + ` (default) – Uses the distribution's built-in CNI (` + bt + `kindnetd` + bt + ` for Vanilla, ` + bt + `flannel` + bt + ` for K3s)
 - ` + bt + `Cilium` + bt + ` – Installs [Cilium](https://cilium.io/) for advanced networking and observability
 - ` + bt + `Calico` + bt + ` – Installs [Calico](https://www.tigera.io/project-calico/) for network policies`
 
 // csiDetails provides prose after the CSI enum list.
 const csiDetails = `See [CSI](/concepts/#container-storage-interface-csi) for more details.
 
-- ` + bt + `Default` + bt + ` – Uses the distribution × provider's default behavior:
+- ` + bt + `Default` + bt + ` (default) – Uses the distribution × provider's default behavior:
   - K3s: includes local-path-provisioner
   - Vanilla/Talos × Docker: no CSI
   - Talos × Hetzner: includes Hetzner CSI driver
@@ -309,7 +240,7 @@ const csiDetails = `See [CSI](/concepts/#container-storage-interface-csi) for mo
 // metricsServerDetails provides prose after the MetricsServer enum list.
 const metricsServerDetails = `Whether to install [metrics-server](/concepts/#metrics-server) for resource metrics.
 
-- ` + bt + `Default` + bt + ` – Uses distribution's default behavior (K3s includes metrics-server; Vanilla and Talos do not)
+- ` + bt + `Default` + bt + ` (default) – Uses distribution's default behavior (K3s includes metrics-server; Vanilla and Talos do not)
 - ` + bt + `Enabled` + bt + ` – Install metrics-server
 - ` + bt + `Disabled` + bt + ` – Skip installation
 
@@ -317,16 +248,20 @@ When metrics-server is enabled on Vanilla or Talos, KSail automatically:
 
 1. Configures kubelet certificate rotation (` + bt + `serverTLSBootstrap: true` + bt + `)
 2. Installs [kubelet-csr-approver](/concepts/#kubelet-csr-approver) to approve certificate requests
-3. Deploys metrics-server with secure TLS communication
-
-> [!NOTE]
-> K3s includes metrics-server by default, so this setting has no effect on K3s.`
+3. Deploys metrics-server with secure TLS communication`
 
 // certManagerDetails provides prose after the CertManager enum list.
-const certManagerDetails = `Whether to install [cert-manager](/concepts/#cert-manager) for TLS certificate management.`
+const certManagerDetails = `Whether to install [cert-manager](/concepts/#cert-manager) for TLS certificate management.
+
+- ` + bt + `Enabled` + bt + ` – Install cert-manager
+- ` + bt + `Disabled` + bt + ` (default) – Skip installation`
 
 // policyEngineDetails provides prose after the PolicyEngine enum list.
-const policyEngineDetails = `Policy engine to install for enforcing security, compliance, and best practices. See [Policy Engines](/concepts/#policy-engines) for more details about Kyverno and Gatekeeper.`
+const policyEngineDetails = `Policy engine to install for enforcing security, compliance, and best practices. See [Policy Engines](/concepts/#policy-engines) for details.
+
+- ` + bt + `None` + bt + ` (default) – No policy engine
+- ` + bt + `Kyverno` + bt + ` – Install [Kyverno](https://kyverno.io/)
+- ` + bt + `Gatekeeper` + bt + ` – Install [OPA Gatekeeper](https://open-policy-agent.github.io/gatekeeper/)`
 
 // configLocalRegistryProse describes the localRegistry sub-object.
 const configLocalRegistryProse = `#### localRegistry
@@ -345,9 +280,9 @@ Registry configuration for GitOps workflows. Supports local Docker registries or
 > Credentials support ` + bt + `${ENV_VAR}` + bt + ` placeholders for secure handling.`
 
 // gitOpsEngineDetails provides prose after the GitOpsEngine enum list.
-const gitOpsEngineDetails = `GitOps engine to install for continuous deployment workflows. See [GitOps](/concepts/#gitops) for more details about Flux and ArgoCD. When set to ` + bt + `Flux` + bt + ` or ` + bt + `ArgoCD` + bt + `, KSail scaffolds a GitOps CR (FluxInstance or ArgoCD Application) into your source directory.
+const gitOpsEngineDetails = `GitOps engine for continuous deployment. See [GitOps](/concepts/#gitops). When set to ` + bt + `Flux` + bt + ` or ` + bt + `ArgoCD` + bt + `, KSail scaffolds a GitOps CR into your source directory.
 
-- ` + bt + `None` + bt + ` – No GitOps engine
+- ` + bt + `None` + bt + ` (default) – No GitOps engine
 - ` + bt + `Flux` + bt + ` – Install [Flux CD](https://fluxcd.io/) and scaffold FluxInstance CR
 - ` + bt + `ArgoCD` + bt + ` – Install [Argo CD](https://argo-cd.readthedocs.io/) and scaffold Application CR`
 
@@ -386,14 +321,7 @@ KSail references distribution-specific configuration files to customize cluster 
 
 **Default:** ` + bt + `kind.yaml` + bt + `
 
-The Vanilla distribution is configured via a YAML file following the Kind configuration schema. This allows you to customize:
-
-- Node images and versions
-- Extra port mappings
-- Extra mounts
-- Networking settings
-
-**Documentation:** [Kind Configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
+See [Kind Configuration](https://kind.sigs.k8s.io/docs/user/configuration/) for the full schema.
 
 **Example:**
 
@@ -412,14 +340,7 @@ nodes:
 
 **Default:** ` + bt + `k3d.yaml` + bt + `
 
-The K3s distribution is configured via a YAML file following the K3d configuration schema. This allows you to customize:
-
-- Server and agent counts
-- Port mappings
-- Volume mounts
-- Registry configurations
-
-**Documentation:** [K3d Configuration](https://k3d.io/stable/usage/configfile/)
+See [K3d Configuration](https://k3d.io/stable/usage/configfile/) for the full schema.
 
 **Example:**
 
@@ -439,36 +360,17 @@ ports:
 
 **Default:** ` + bt + `talos/` + bt + ` directory
 
-Talos uses a directory structure for [Talos machine configuration patches](https://www.talos.dev/latest/reference/configuration/). Each directory contains YAML patch files that modify the Talos machine configuration.
-
-**Documentation:** [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/)
-
-**Directory structure and examples:**
+Talos uses a directory structure for [Talos machine configuration patches](https://www.talos.dev/latest/reference/configuration/). Place YAML patch files in ` + bt + `talos/cluster/` + bt + ` (all nodes), ` + bt + `talos/control-planes/` + bt + `, or ` + bt + `talos/workers/` + bt + `:
 
 ` + cbt + `yaml
-# talos/cluster/kubelet.yaml
+# talos/cluster/kubelet.yaml  (applies to all nodes)
 machine:
   kubelet:
     extraArgs:
       max-pods: "250"
 ` + cbt + `
 
-` + cbt + `yaml
-# talos/control-planes/api.yaml
-machine:
-  kubelet:
-    extraArgs:
-      feature-gates: "EphemeralContainers=true"
-` + cbt + `
-
-` + cbt + `yaml
-# talos/workers/custom.yaml
-machine:
-  sysctls:
-    net.core.somaxconn: "65535"
-` + cbt + `
-
-Use ` + bt + `spec.cluster.talos` + bt + ` to configure node counts:
+See [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/) for patch syntax. Use ` + bt + `spec.cluster.talos` + bt + ` to configure node counts:
 
 ` + cbt + `yaml
 spec:
@@ -493,9 +395,4 @@ spec:
   # ...
 ` + cbt + `
 
-IDEs with YAML language support (like VS Code with the Red Hat YAML extension) will provide:
-
-- Field autocompletion
-- Inline documentation
-- Validation errors for invalid values
-- Enum suggestions for fields like ` + bt + `distribution` + bt + `, ` + bt + `cni` + bt + `, etc.`
+IDEs with YAML language support (e.g., VS Code + [Red Hat YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml)) provide field autocompletion, inline docs, validation, and enum suggestions.`

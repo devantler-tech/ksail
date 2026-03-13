@@ -287,11 +287,8 @@ func generateConfigReferenceTables(b *strings.Builder) {
 
 	// spec.editor description.
 	b.WriteString("### spec.editor\n\n")
-	b.WriteString("Editor command used by KSail for interactive workflows like " +
-		"`ksail cipher edit` or `ksail workload edit`.\n\n")
-	b.WriteString("**Examples:** `code --wait`, `vim`, `nano`\n\n")
-	b.WriteString("If not specified, KSail falls back to standard editor environment variables " +
-		"(`SOPS_EDITOR`, `KUBE_EDITOR`, `EDITOR`, `VISUAL`) or system defaults (`vim`, `nano`, `vi`).\n\n")
+	b.WriteString("Editor command for interactive workflows (e.g., `code --wait`, `vim`). " +
+		"Falls back to `SOPS_EDITOR`, `KUBE_EDITOR`, `EDITOR`, `VISUAL`, or system defaults.\n\n")
 
 	// spec.cluster (ClusterSpec).
 	b.WriteString("### spec.cluster (ClusterSpec)\n\n")
@@ -447,10 +444,18 @@ func extractDescription(field reflect.StructField) string {
 
 // generateEnumSection writes a #### section documenting an enum field
 // with its valid values extracted from the EnumValuer interface.
+// When details prose is provided, the auto-generated bare values list is
+// skipped — the details constant is expected to list values with descriptions.
 func generateEnumSection(b *strings.Builder, fieldName string, t reflect.Type, details string) {
 	b.WriteString(fmt.Sprintf("#### %s\n\n", fieldName))
 
-	// Get valid values via EnumValuer.
+	if details != "" {
+		b.WriteString(details)
+		b.WriteString("\n\n")
+		return
+	}
+
+	// No prose provided — auto-generate a bare valid-values list.
 	enumValuerType := reflect.TypeFor[v1alpha1.EnumValuer]()
 	ptrType := reflect.PointerTo(t)
 
@@ -473,11 +478,6 @@ func generateEnumSection(b *strings.Builder, fieldName string, t reflect.Type, d
 
 			b.WriteString("\n")
 		}
-	}
-
-	if details != "" {
-		b.WriteString("\n")
-		b.WriteString(details)
 	}
 
 	b.WriteString("\n\n")
