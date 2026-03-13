@@ -30,6 +30,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  KSAIL_VERSION: "v5.55.0" # Pin to a specific version for reproducibility
+
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
@@ -38,17 +41,34 @@ jobs:
 
       - name: Install KSail
         run: |
-          curl -sSL https://github.com/devantler-tech/ksail/releases/latest/download/ksail_linux_amd64 -o ksail
+          curl -sSL "https://github.com/devantler-tech/ksail/releases/download/${KSAIL_VERSION}/ksail_linux_amd64" -o ksail
           chmod +x ksail
           sudo mv ksail /usr/local/bin/
+          ksail --version
 
       # Background the create so subsequent steps can run.
       # --ttl acts as a best-effort safety net if cleanup is skipped.
       - name: Create ephemeral cluster
-        run: ksail cluster create --ttl 1h &
-
-      - name: Wait for cluster readiness
-        run: kubectl wait --for=condition=Ready node --all --timeout=120s
+        run: |
+          ksail cluster create --ttl 1h &
+          KSAIL_PID=$!
+          # Wait for kubeconfig and API server to become available.
+          for i in $(seq 1 60); do
+            if kubectl cluster-info 2>/dev/null; then
+              echo "Cluster API is reachable"
+              break
+            fi
+            echo "Waiting for cluster API... (attempt $i/60)"
+            sleep 5
+          done
+          # Verify the background process is still running (catches creation failures).
+          if ! kill -0 "$KSAIL_PID" 2>/dev/null; then
+            echo "ksail cluster create exited unexpectedly"
+            wait "$KSAIL_PID"
+            exit $?
+          fi
+          # Wait for all nodes to be ready.
+          kubectl wait --for=condition=Ready node --all --timeout=120s
 
       - name: Run smoke tests
         run: |
@@ -66,8 +86,10 @@ jobs:
 
 | Aspect | Detail |
 |--------|--------|
-| **Backgrounding** | `ksail cluster create --ttl 1h &` runs in the background so the workflow continues to subsequent steps. |
-| **Readiness gate** | `kubectl wait` blocks until nodes are ready, preventing tests from starting on a partially-created cluster. |
+| **Version pinning** | Pin `KSAIL_VERSION` in an `env` block for reproducible builds. Update it when you upgrade. |
+| **Backgrounding** | `ksail cluster create --ttl 1h &` runs in the background so subsequent commands can run in the same step. |
+| **Readiness gate** | A retry loop waits for `kubectl cluster-info` before proceeding, then `kubectl wait` ensures all nodes are ready. |
+| **Failure detection** | `kill -0` checks the background PID — if `ksail cluster create` crashed, the step fails immediately with the real exit code. |
 | **TTL safety net** | If the `if: always()` cleanup step is somehow skipped (e.g. runner crash), the TTL auto-destroys the cluster — provided the background process is still alive. |
 | **Primary cleanup** | The `if: always()` step is the reliable cleanup mechanism. Never rely on TTL alone in CI. |
 
@@ -95,12 +117,16 @@ If a downstream step needs to target the cluster explicitly:
 
 If multiple jobs need cluster access (uncommon — prefer single-job workflows), upload the kubeconfig as an artifact:
 
+> [!CAUTION]
+> Kubeconfig files contain cluster credentials (client certificates or tokens). Uploading them as workflow artifacts exposes these secrets to anyone with access to the workflow run. Only use this pattern in **private repositories** with trusted contributors. Set a short `retention-days` value and avoid this entirely on `pull_request` workflows from forks.
+
 ```yaml
       - name: Upload kubeconfig
         uses: actions/upload-artifact@v4
         with:
           name: kubeconfig
           path: ~/.kube/config
+          retention-days: 1
 ```
 
 Then download it in a subsequent job:
@@ -163,6 +189,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  KSAIL_VERSION: "v5.55.0"
+
 jobs:
   integration:
     runs-on: ubuntu-latest
@@ -171,15 +200,24 @@ jobs:
 
       - name: Install KSail
         run: |
-          curl -sSL https://github.com/devantler-tech/ksail/releases/latest/download/ksail_linux_amd64 -o ksail
+          curl -sSL "https://github.com/devantler-tech/ksail/releases/download/${KSAIL_VERSION}/ksail_linux_amd64" -o ksail
           chmod +x ksail
           sudo mv ksail /usr/local/bin/
+          ksail --version
 
       - name: Create ephemeral cluster
-        run: ksail cluster create --ttl 30m &
-
-      - name: Wait for cluster readiness
-        run: kubectl wait --for=condition=Ready node --all --timeout=120s
+        run: |
+          ksail cluster create --ttl 30m &
+          KSAIL_PID=$!
+          for i in $(seq 1 60); do
+            if kubectl cluster-info 2>/dev/null; then break; fi
+            echo "Waiting for cluster API... (attempt $i/60)"
+            sleep 5
+          done
+          if ! kill -0 "$KSAIL_PID" 2>/dev/null; then
+            wait "$KSAIL_PID"; exit $?
+          fi
+          kubectl wait --for=condition=Ready node --all --timeout=120s
 
       - name: Build and push image
         run: |
