@@ -67,7 +67,7 @@ spec:
 
 #### How It Works
 
-Cloud Provider KIND runs as a single Docker container named `ksail-cloud-provider-kind` on the `kind` network, mounting the Docker socket to watch for `type: LoadBalancer` services. For each service it creates a dedicated `cpk-<namespace>-<name>` container that routes traffic from an IP on the `172.18.0.0/16` bridge subnet to the service's pods. `ksail cluster delete` removes the controller and all `cpk-*` containers.
+Cloud Provider KIND runs as a single Docker container named `ksail-cloud-provider-kind` on the `kind` network, mounting the Docker socket to watch for `type: LoadBalancer` services. For each service it creates a dedicated `cpk-<namespace>-<name>` container that routes traffic from an IP on the `kind` network bridge subnet (typically `172.18.0.0/16`) to the service's pods. `ksail cluster delete` removes the controller and all `cpk-*` containers.
 
 #### Verification
 
@@ -299,7 +299,7 @@ kubectl get pods -l app=my-app          # verify pods are Running
 kubectl get endpoints my-app            # check endpoint IPs are populated
 kubectl logs -l app=my-app              # review pod logs
 # Test from within the cluster:
-kubectl run test --rm -it --image=curlimages/curl -- curl http://my-app.default.svc.cluster.local
+kubectl run test --rm -it --restart=Never --image=curlimages/curl -- curl http://my-app.default.svc.cluster.local
 ```
 
 **Common fixes:** Wrong `targetPort` → match the container port. Network policy blocking traffic → inspect `NetworkPolicy` resources. Application not listening on `0.0.0.0` → fix app bind address.
