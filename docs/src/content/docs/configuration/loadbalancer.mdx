@@ -65,47 +65,9 @@ spec:
     loadBalancer: Enabled
 ```
 
-#### Architecture
-
-````mermaid
-graph TB
-    subgraph "Docker Host"
-        CPK["ksail-cloud-provider-kind container"]
-        SOCK["/var/run/docker.sock"]
-        NET["kind Docker network"]
-
-        subgraph "Kind Cluster"
-            CP["Control Plane"]
-            W1["Worker 1"]
-        end
-
-        subgraph "Per-Service Containers"
-            SVC1["cpk-default-my-app"]
-            SVC2["cpk-default-nginx-lb"]
-        end
-
-        CPK -->|"watches LoadBalancer services"| CP
-        CPK -->|"creates/removes"| SVC1
-        CPK -->|"creates/removes"| SVC2
-        CPK -.->|"mounts"| SOCK
-        SVC1 -.->|"routes traffic"| W1
-        SVC2 -.->|"routes traffic"| W1
-        NET -.->|"IP allocation"| SVC1
-        NET -.->|"IP allocation"| SVC2
-    end
-
-    USER["Host / curl"]
-    USER -->|"http://172.18.0.x"| SVC1
-````
-
 #### How It Works
 
-Cloud Provider KIND runs as an external Docker container named `ksail-cloud-provider-kind` on the `kind` Docker network. It mounts the Docker socket (`/var/run/docker.sock`) to manage container lifecycles:
-
-1. **Controller container** — KSail creates a single `ksail-cloud-provider-kind` container with restart policy `unless-stopped`. This container watches all Kind clusters for `type: LoadBalancer` services.
-2. **Per-service containers** — For each LoadBalancer service, Cloud Provider KIND creates a dedicated container prefixed `cpk-` (e.g., `cpk-default-my-app`). These containers handle traffic routing from an external IP to the service's pods.
-3. **IP allocation** — External IPs are allocated from the `kind` Docker bridge network subnet (typically `172.18.0.0/16`), making them accessible from your host machine.
-4. **Cleanup** — When you run `ksail cluster delete`, KSail stops and removes the `ksail-cloud-provider-kind` container and all `cpk-*` containers.
+Cloud Provider KIND runs as a single Docker container named `ksail-cloud-provider-kind` on the `kind` network, mounting the Docker socket to watch for `type: LoadBalancer` services. For each service it creates a dedicated `cpk-<namespace>-<name>` container that routes traffic from an IP on the `kind` network bridge subnet (typically `172.18.0.0/16`) to the service's pods. `ksail cluster delete` removes the controller and all `cpk-*` containers.
 
 #### Verification
 
@@ -299,141 +261,54 @@ See the [Hetzner CCM documentation](https://github.com/hetznercloud/hcloud-cloud
 
 ## Migration from NodePort
 
-Change `type: NodePort` to `type: LoadBalancer`, remove `nodePort` fields, enable LoadBalancer if needed (see above), then wait for an external IP: `kubectl get svc my-app -w`.
-
-**Before (NodePort):**
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-app
-spec:
-  type: NodePort
-  ports:
-    - port: 80
-      targetPort: 8080
-      nodePort: 30080 # Static node port
-  selector:
-    app: my-app
-```
-
-**After (LoadBalancer):** Use the shared manifest above, accessible via `http://<external-ip>:80`.
-
-## Testing LoadBalancer Services
-
-Deploy nginx to verify LoadBalancer functionality:
-
-```bash
-kubectl create deployment nginx-test --image=nginx:1.25 --replicas=2
-```
-
-```yaml
-# nginx-lb.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: nginx-lb
-spec:
-  type: LoadBalancer
-  ports:
-    - port: 80
-      targetPort: 80
-  selector:
-    app: nginx-test
-```
-
-```bash
-kubectl apply -f nginx-lb.yaml
-EXTERNAL_IP=$(kubectl get svc nginx-lb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-curl http://$EXTERNAL_IP
-```
+Change `type: NodePort` to `type: LoadBalancer`, remove the `nodePort` field, enable LoadBalancer if needed (see above), then wait for an external IP: `kubectl get svc my-app -w`.
 
 ## Troubleshooting
 
 ### LoadBalancer Service Stuck in Pending
 
-**Symptom:** Service shows `<pending>` for `EXTERNAL-IP`:
-
-```bash
-kubectl get svc
-# NAME     TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
-# my-app   LoadBalancer   10.96.1.50     <pending>     80:30123/TCP   5m
-```
+**Symptom:** `EXTERNAL-IP` shows `<pending>`.
 
 **Diagnosis:**
 
-1. **Check if LoadBalancer is enabled:**
+```bash
+# 1. Check LoadBalancer is enabled in ksail.yaml
+grep -A 5 loadBalancer ksail.yaml
 
-   ```bash
-   cat ksail.yaml | grep -A 5 "loadBalancer"
-   ```
+# 2. Verify the controller is running:
+#    Vanilla:  docker ps | grep ksail-cloud-provider-kind
+#    Talos:    kubectl get pods -n metallb-system
+#    Hetzner:  kubectl get pods -n kube-system | grep hcloud
 
-2. **Verify the controller is running:**
+# 3. Check controller logs:
+#    Vanilla:  docker logs ksail-cloud-provider-kind
+#    Talos:    kubectl logs -n metallb-system -l app.kubernetes.io/component=controller
+#    Hetzner:  kubectl logs -n kube-system -l app=hcloud-cloud-controller-manager
+```
 
-   - Vanilla: `docker ps | grep ksail-cloud-provider-kind`
-   - Talos: `kubectl get pods -n metallb-system`
-   - Hetzner: `kubectl get pods -n kube-system | grep hcloud`
-
-3. **Check controller logs:**
-
-   - Vanilla: `docker logs ksail-cloud-provider-kind`
-   - Talos: `kubectl logs -n metallb-system -l app.kubernetes.io/component=controller`
-   - Hetzner: `kubectl logs -n kube-system -l app=hcloud-cloud-controller-manager`
-
-**Common Fixes:**
-
-- **LoadBalancer disabled:** Re-initialize cluster with `--load-balancer Enabled`
-- **Cloud Provider KIND not running:** Delete and recreate cluster
-- **MetalLB IP pool exhausted:** Check available IPs in the pool (default: 51 IPs)
-- **Hetzner token missing:** Ensure `HCLOUD_TOKEN` is set during cluster creation
+**Common fixes:** LoadBalancer disabled → re-init with `--load-balancer Enabled`. Cloud Provider KIND not running → delete and recreate cluster. MetalLB IP pool exhausted → expand the pool (see below). Hetzner → ensure `HCLOUD_TOKEN` is set during cluster creation.
 
 ### Cannot Access LoadBalancer IP
 
-**Symptom:** Service has external IP but connection fails:
-
-```bash
-curl http://172.18.255.200
-# curl: (7) Failed to connect to 172.18.255.200 port 80: Connection refused
-```
+**Symptom:** Service has an external IP but connections fail.
 
 **Diagnosis:**
 
-1. `kubectl get pods -l app=my-app` — verify pods are running
-2. `kubectl get endpoints my-app` — check endpoints have pod IPs
-3. `kubectl logs -l app=my-app` — review pod logs
-4. `kubectl run test --rm --image=curlimages/curl -- sh -c 'curl http://my-app.default.svc.cluster.local'` — test from within cluster
+```bash
+kubectl get pods -l app=my-app          # verify pods are Running
+kubectl get endpoints my-app            # check endpoint IPs are populated
+kubectl logs -l app=my-app              # review pod logs
+# Test from within the cluster:
+kubectl run test --rm -it --restart=Never --image=curlimages/curl -- curl http://my-app.default.svc.cluster.local
+```
 
-**Common Fixes:**
-
-- **Pods not ready:** Wait for pods to reach Running state
-- **Wrong target port:** Verify `targetPort` matches container port
-- **Network policy blocking traffic:** Check for restrictive NetworkPolicies
-- **Application not listening:** Verify app listens on correct port and `0.0.0.0`
+**Common fixes:** Wrong `targetPort` → match the container port. Network policy blocking traffic → inspect `NetworkPolicy` resources. Application not listening on `0.0.0.0` → fix app bind address.
 
 ### MetalLB IP Pool Exhausted
 
-**Symptom:** New LoadBalancer services remain pending after several successful allocations:
+**Symptom:** New LoadBalancer services remain `<pending>` after many allocations (default pool has 51 IPs: `172.18.255.200–172.18.255.250`).
 
-```bash
-kubectl get svc
-# NAME      TYPE           EXTERNAL-IP      PORT(S)
-# app-1     LoadBalancer   172.18.255.200   80:30001/TCP
-# ...
-# app-52    LoadBalancer   <pending>        80:30052/TCP
-```
-
-**Diagnosis:**
-
-Check IPAddressPool status:
-
-```bash
-kubectl get ipaddresspool -n metallb-system default-pool -o yaml
-```
-
-**Fix:**
-
-Expand the pool range or create an additional `IPAddressPool` in `metallb-system`:
+**Fix:** Create an additional `IPAddressPool` in `metallb-system`:
 
 ```yaml
 apiVersion: metallb.io/v1beta1
