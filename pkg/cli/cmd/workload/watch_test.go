@@ -541,4 +541,22 @@ func TestFindKustomizationDir(t *testing.T) {
 		got := workload.ExportFindKustomizationDir(subDir, root)
 		require.Equal(t, subDir, got)
 	})
+
+	t.Run("deleted_file_falls_back_to_parent_kustomization", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+
+		subDir := filepath.Join(root, "apps")
+		require.NoError(t, os.MkdirAll(subDir, 0o750))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(subDir, "kustomization.yaml"), []byte("resources: []"), 0o600,
+		))
+
+		// Simulate a deleted file event — the file no longer exists on disk.
+		deletedFile := filepath.Join(subDir, "removed.yaml")
+
+		got := workload.ExportFindKustomizationDir(deletedFile, root)
+		require.Equal(t, subDir, got)
+	})
 }
