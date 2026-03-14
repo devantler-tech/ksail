@@ -1,0 +1,21 @@
+name: Test - KSail Cluster Workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      distribution:
+        description: "KSail distribution to provision"
+        type: choice
+        options:
+          - Vanilla
+          - K3s
+        default: "Vanilla"
+
+permissions: {}
+
+jobs:
+  test-reusable-workflow:
+    uses: ./.github/workflows/ksail-cluster.yml
+    with:
+      distribution: ${{ inputs.distribution }}
+      ttl: "30m"
