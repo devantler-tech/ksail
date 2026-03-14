@@ -31,6 +31,10 @@ linters:
       - linters:
           - paralleltest
         path: pkg/svc/detector/cluster/cluster_test.go
+      # White-box benchmarks need internal package access for unexported functions
+      - linters:
+          - testpackage
+        path: pkg/svc/registryresolver/registry_bench_test.go
       # Bubbletea requires context in the Model struct
       - linters:
           - containedctx

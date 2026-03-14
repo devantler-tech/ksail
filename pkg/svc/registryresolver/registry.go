@@ -348,9 +348,13 @@ func parseRegistryFlag(registryFlag string) *Info {
 // IPv6 addresses are wrapped in brackets per RFC 3986 (e.g., [::1]:5000).
 func FormatRegistryURL(host string, port int32, repository string) string {
 	if port > 0 {
+		const decimalBase = 10
+
 		// Pre-allocate: "oci://" (6) + optional brackets (2) + host + ":" (1) + port (≤5) + "/" (1) + repo
 		buf := make([]byte, 0, 6+2+len(host)+1+5+1+len(repository))
+
 		buf = append(buf, "oci://"...)
+
 		if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
 			// IPv6 address — wrap in brackets per RFC 3986
 			buf = append(buf, '[')
@@ -359,8 +363,9 @@ func FormatRegistryURL(host string, port int32, repository string) string {
 		} else {
 			buf = append(buf, host...)
 		}
+
 		buf = append(buf, ':')
-		buf = strconv.AppendInt(buf, int64(port), 10)
+		buf = strconv.AppendInt(buf, int64(port), decimalBase)
 		buf = append(buf, '/')
 		buf = append(buf, repository...)
 
