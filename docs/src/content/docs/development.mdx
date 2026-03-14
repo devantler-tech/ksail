@@ -89,7 +89,7 @@ Create a feature branch, make focused atomic changes, write tests, and update do
 ````bash
 go test ./... && golangci-lint run && go build -o ksail
 ./ksail cluster init                                       # Smoke test
-git add . && git commit -m "feat: my-feature" && git push origin feature/my-feature
+git add . && git commit -m "feat: add widget to cluster create" && git push origin feature/my-feature
 ````
 
 Commit types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`. Open a PR with a clear description and ensure CI passes.
@@ -166,7 +166,7 @@ Available helpers: `SetCSIInstallerFactoryForTests`, `SetCertManagerInstallerFac
 
 #### Mocking with Testify
 
-KSail uses [mockery](https://vektra.github.io/mockery/) for generating mocks via `//go:generate go run github.com/vektra/mockery/v2`. Call `mockProv.AssertExpectations(t)` at the end of each test.
+KSail uses [mockery v3.5+](https://vektra.github.io/mockery/v3.5/) for generating mocks via `//go:generate mockery`. Call `mockProv.AssertExpectations(t)` at the end of each test.
 
 > **Note:** Never use `.Times(b.N)` with `for b.Loop()` in benchmarks — `b.N` is 1 when evaluated before the loop. Omit `.Times()` for unlimited calls.
 
@@ -180,7 +180,7 @@ func BenchmarkX(b *testing.B) {
 }
 ````
 
-PRs are auto-benchmarked against `main`; see [BENCHMARK-REGRESSION.md](https://github.com/devantler-tech/ksail/blob/main/docs/BENCHMARK-REGRESSION.md). Use `ksail cluster create --benchmark` for per-component timings. Package-specific `BENCHMARKS.md` files in each package directory document baseline results and optimization opportunities.
+PRs are auto-benchmarked against `main`; see [BENCHMARK-REGRESSION.md](https://github.com/devantler-tech/ksail/blob/main/docs/BENCHMARK-REGRESSION.md). Use `ksail cluster create --benchmark` for per-component timings. Package-specific `BENCHMARKS.md` files in some package directories (e.g., [`pkg/client/helm/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/client/helm/BENCHMARKS.md)) document baseline results and optimization opportunities.
 
 ### Documentation
 
@@ -252,7 +252,7 @@ VSCode users can set breakpoints and press F5 with a `.vscode/launch.json` confi
 
 ### Agentic Workflows
 
-Five AI-powered daily workflows run on schedules (triggerable via `gh aw`): **`daily-code-quality`** (refactoring/performance), **`daily-plan`** (issue triage), **`daily-builder`** (feature implementation), **`daily-workflow-maintenance`** (CI updates), and **`daily-docs`** (documentation sync).
+Five AI-powered daily workflows run on schedules (triggerable via `gh aw`): [**`daily-code-quality`**](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/daily-code-quality.lock.yml) (refactoring/performance), [**`daily-plan`**](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/daily-plan.lock.yml) (issue triage), [**`daily-builder`**](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/daily-builder.lock.yml) (feature implementation), [**`daily-workflow-maintenance`**](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/daily-workflow-maintenance.lock.yml) (CI updates), and [**`daily-docs`**](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/daily-docs.lock.yml) (documentation sync).
 
 ## Release Process
 
