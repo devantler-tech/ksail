@@ -1,0 +1,56 @@
+name: "KSail Cluster"
+description: "Provision a KSail Kubernetes cluster for CI testing"
+
+inputs:
+  distribution:
+    description: "KSail distribution to provision (Vanilla, K3s, Talos, VCluster)"
+    default: "Vanilla"
+  ksail-version:
+    description: "KSail version to install (e.g. '5.55.0') or 'latest'"
+    default: "latest"
+
+outputs:
+  kubeconfig:
+    description: "Path to the kubeconfig file for the provisioned cluster"
+    value: ${{ steps.create.outputs.kubeconfig }}
+
+runs:
+  using: composite
+  steps:
+    - name: 📥 Install KSail
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        KSAIL_VERSION: ${{ inputs.ksail-version }}
+      run: |
+        set -euo pipefail
+        tmpdir="$(mktemp -d)"
+        if [ "$KSAIL_VERSION" = "latest" ]; then
+          gh release download --repo devantler-tech/ksail \
+            --pattern 'ksail_*_linux_amd64.tar.gz' \
+            --dir "$tmpdir"
+        else
+          gh release download "v${KSAIL_VERSION}" \
+            --repo devantler-tech/ksail \
+            --pattern 'ksail_*_linux_amd64.tar.gz' \
+            --dir "$tmpdir"
+        fi
+        tar -xzf "$tmpdir"/ksail_*_linux_amd64.tar.gz -C "$tmpdir"
+        sudo install "$tmpdir/ksail" /usr/local/bin/ksail
+        rm -rf "$tmpdir"
+        ksail --version
+
+    - name: 🏗️ Initialize Project
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+      run: ksail cluster init --distribution "$DISTRIBUTION"
+
+    - name: 🚀 Create Cluster
+      id: create
+      shell: bash
+      run: |
+        set -euo pipefail
+        ksail cluster create
+        KUBECONFIG_PATH="${HOME}/.kube/config"
+        echo "kubeconfig=$KUBECONFIG_PATH" >> "$GITHUB_OUTPUT"

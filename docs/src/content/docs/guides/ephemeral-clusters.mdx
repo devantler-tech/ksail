@@ -148,33 +148,49 @@ Set the TTL to **roughly 2× your expected session length** — long enough that
 - **Talos** is immutable and secure — ideal for reproducing production-like environments.
 - **VCluster** uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane directly in Docker containers — no pre-existing host cluster required, useful for lightweight isolated environments.
 
-## CI/CD with the Reusable Workflow
+## CI/CD with the GitHub Action
 
-KSail publishes a reusable GitHub Actions workflow that provisions a cluster in CI with a single `uses:` line. This is the fastest way to add ephemeral cluster smoke tests to any repository.
+KSail publishes a composite GitHub Action that provisions a cluster in CI. Add it as a step in any job to get a ready-to-use cluster for smoke tests, integration tests, or demos.
 
-### Calling the Workflow
+### Usage
 
 ```yaml
 # .github/workflows/smoke-test.yaml
 name: Smoke Test
 on: [push]
+permissions:
+  contents: read
 jobs:
-  cluster:
-    uses: devantler-tech/ksail/.github/workflows/ksail-cluster.yml@main
-    with:
-      distribution: K3s     # Vanilla (default), K3s, Talos, or VCluster
-      ttl: "30m"             # cluster TTL (default: 1h)
-      ksail-version: latest  # KSail release version (default: latest)
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provision cluster
+        id: cluster
+        uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
+        with:
+          distribution: K3s     # Vanilla (default), K3s, Talos, or VCluster
+          ksail-version: latest  # KSail release version (default: latest)
+
+      - name: Run tests
+        run: |
+          # The cluster is ready — kubectl, helm, etc. work immediately
+          ksail cluster info
+          # ... run your tests here ...
+
+      - name: Cleanup
+        if: always()
+        run: ksail cluster delete
 ```
 
-The workflow provisions a cluster and exports the kubeconfig path as the `kubeconfig` output.
+The action runs within your job, so subsequent steps have full access to the cluster.
 
 ### Inputs
 
 | Input | Type | Default | Description |
 |-------|------|---------|-------------|
 | `distribution` | string | `Vanilla` | KSail distribution to provision |
-| `ttl` | string | `1h` | Cluster TTL; passed to `--ttl` |
 | `ksail-version` | string | `latest` | KSail version to install (e.g. `5.55.0`) |
 
 ### Outputs
@@ -184,7 +200,7 @@ The workflow provisions a cluster and exports the kubeconfig path as the `kubeco
 | `kubeconfig` | Path to the kubeconfig file for the provisioned cluster |
 
 > [!NOTE]
-> The workflow runs on `ubuntu-latest` with Docker pre-installed. The KSail binary is downloaded from [GitHub Releases](https://github.com/devantler-tech/ksail/releases). The cluster runs inside Docker containers on the runner and is cleaned up automatically when the runner is recycled.
+> The action requires `ubuntu-latest` (or compatible) runners with Docker pre-installed and `contents: read` permission for downloading KSail from [GitHub Releases](https://github.com/devantler-tech/ksail/releases). The cluster runs inside Docker containers on the runner and is cleaned up when the runner is recycled (or explicitly via `ksail cluster delete`).
 
 ## Next Steps
 
