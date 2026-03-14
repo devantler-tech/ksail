@@ -29,6 +29,9 @@ network:
 strict: false
 
 safe-outputs:
+  github-app:
+    app-id: ${{ vars.GH_AW_APP_ID }}
+    private-key: ${{ secrets.GH_AW_APP_PRIVATE_KEY }}
   noop:
   create-discussion:
     title-prefix: "${{ github.workflow }}"
@@ -40,7 +43,7 @@ safe-outputs:
     expires: 1d
     labels: [dependencies, automation]
     draft: false
-    protected-files: fallback-to-issue
+    protected-files: github-app
   create-issue:
 
 steps:
