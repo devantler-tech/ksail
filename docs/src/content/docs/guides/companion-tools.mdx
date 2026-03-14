@@ -140,8 +140,7 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
 
 ### Tips
 
-- Use `devspace dev --kube-context <context>` to target the KSail-managed cluster explicitly.
-- DevSpace file sync is ideal for interpreted languages. For compiled languages, use `devspace.yaml` build pipelines or pair with Tilt.
+- DevSpace file sync is ideal for interpreted languages that don't require compilation. For compiled languages (Go, Rust, Java), source file changes require rebuilding binaries — use `devspace.yaml` build pipelines or pair with Tilt for automatic rebuilds.
 - Run `ksail cluster info` to verify the cluster is healthy before starting DevSpace.
 
 ## KSail + Telepresence
