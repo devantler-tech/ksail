@@ -3,8 +3,6 @@ title: Development Guide
 description: Guide for setting up KSail development environment and contributing code
 ---
 
-This guide covers setting up your development environment, understanding the codebase, and making contributions to KSail.
-
 ## Prerequisites
 
 **Required:** [Go 1.26.0+](https://go.dev/dl/) (`go version` ≥ 1.26.0), [Docker](https://docs.docker.com/get-started/) (`docker ps` without errors), [Git](https://git-scm.com/).
@@ -86,24 +84,12 @@ ksail/
 
 ## Development Workflow
 
-### 1. Create a Feature Branch
+Create a feature branch, make focused atomic changes, write tests, and update docs:
 
 ````bash
-git checkout -b feature/my-feature
-````
-
-### 2. Make Changes and Push
-
-Keep changes focused and atomic. Write tests, update documentation, and follow existing code patterns:
-
-````bash
-go test ./...                   # Run unit tests
-golangci-lint run               # Run linters
-go build -o ksail               # Build
-./ksail cluster init            # Smoke test
-
-git add . && git commit -m "feat: add new feature"
-git push origin feature/my-feature
+go test ./... && golangci-lint run && go build -o ksail
+./ksail cluster init                                       # Smoke test
+git add . && git commit -m "feat: my-feature" && git push origin feature/my-feature
 ````
 
 Commit types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`. Open a PR with a clear description and ensure CI passes.
@@ -136,37 +122,25 @@ Use table-driven tests with `t.Parallel()`:
 ````go
 func TestMyFunction(t *testing.T) {
     t.Parallel()
-    tests := []struct {
-        name    string
-        wantErr bool
-    }{
-        {name: "valid", wantErr: false},
-        {name: "invalid", wantErr: true},
+    tests := []struct{ name string; wantErr bool }{
+        {"valid", false}, {"invalid", true},
     }
     for _, tc := range tests {
-        t.Run(tc.name, func(t *testing.T) {
-            t.Parallel()
-            // test body
-        })
+        t.Run(tc.name, func(t *testing.T) { t.Parallel(); /* test body */ })
     }
 }
 ````
 
 #### Export Pattern for Testing Unexported Functions
 
-Use `export_test.go` to expose unexported symbols for testing without leaking into production binaries:
+Use `export_test.go` to expose unexported symbols without leaking into production binaries. Test from `<pkg>_test` package; add `//nolint:gochecknoglobals` on exported vars if required by `golangci-lint`.
 
 ````go
 // pkg/svc/provisioner/export_test.go
 package provisioner
 
-var (
-    ExportValidateConfig    = validateConfig
-    ExportGenerateManifests = generateManifests
-)
+var ExportValidateConfig = validateConfig
 ````
-
-Test these exports from the corresponding `<pkg>_test` package (for example, `package provisioner_test`). Add `//nolint:gochecknoglobals` on exported vars if required by `golangci-lint`.
 
 #### DI Override Pattern for Command Tests
 
@@ -180,13 +154,10 @@ Register the restore function with `t.Cleanup(restore)` inside each test or subt
 func TestPolicyEngineInstaller(t *testing.T) {
     t.Run("happy path", func(t *testing.T) {
         restore := cluster.SetPolicyEngineInstallerFactoryForTests(
-            func(_ *v1alpha1.Cluster) (installer.Installer, error) {
-                return mockInstaller, nil
-            },
+            func(_ *v1alpha1.Cluster) (installer.Installer, error) { return mockInstaller, nil },
         )
         t.Cleanup(restore)
-
-        // test logic using the overridden factory...
+        // test logic...
     })
 }
 ````
@@ -195,55 +166,21 @@ Available helpers: `SetCSIInstallerFactoryForTests`, `SetCertManagerInstallerFac
 
 #### Mocking with Testify
 
-KSail uses [mockery](https://vektra.github.io/mockery/) for generating mocks via `//go:generate go run github.com/vektra/mockery/v2`. Use generated mocks in tests:
+KSail uses [mockery](https://vektra.github.io/mockery/) for generating mocks via `//go:generate go run github.com/vektra/mockery/v2`. Call `mockProv.AssertExpectations(t)` at the end of each test.
 
-````go
-func TestWithMock(t *testing.T) {
-    mockProv := new(MockProvider)
-    mockProv.On("Create", mock.Anything).Return(nil)
-    // Use mockProv...
-    mockProv.AssertExpectations(t)
-}
-````
-
-**Important:** Never use `.Times(b.N)` with `for b.Loop()` in benchmarks — `b.N` is 1 when evaluated before the loop. Omit `.Times()` for unlimited calls.
+> **Note:** Never use `.Times(b.N)` with `for b.Loop()` in benchmarks — `b.N` is 1 when evaluated before the loop. Omit `.Times()` for unlimited calls.
 
 #### Benchmarks
 
 ````go
-func BenchmarkProvisionerCreate(b *testing.B) {
-    p := setupProvisioner()
-    ctx := context.Background()
-
-    for b.Loop() {  // Go 1.26+ style
-        if err := p.Create(ctx); err != nil {
-            b.Fatal(err)
-        }
+func BenchmarkX(b *testing.B) {
+    for b.Loop() { // Go 1.26+ style
+        // operation
     }
 }
 ````
 
-PRs that modify Go code are automatically benchmarked against `main` and a comparison comment is posted on the PR. See [BENCHMARK-REGRESSION.md](https://github.com/devantler-tech/ksail/blob/main/docs/BENCHMARK-REGRESSION.md) for details on interpreting results.
-
-Use `ksail cluster create --benchmark` or `ksail cluster update --benchmark` to capture per-component install durations inline.
-
-See package-specific BENCHMARKS.md files, including:
-
-- [`pkg/apis/cluster/v1alpha1/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/apis/cluster/v1alpha1/BENCHMARKS.md)
-- [`pkg/cli/cmd/cipher/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/cli/cmd/cipher/BENCHMARKS.md)
-- [`pkg/cli/cmd/cluster/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/cli/cmd/cluster/BENCHMARKS.md)
-- [`pkg/client/argocd/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/client/argocd/BENCHMARKS.md)
-- [`pkg/client/docker/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/client/docker/BENCHMARKS.md)
-- [`pkg/client/flux/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/client/flux/BENCHMARKS.md)
-- [`pkg/client/helm/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/client/helm/BENCHMARKS.md)
-- [`pkg/client/kubectl/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/client/kubectl/BENCHMARKS.md)
-- [`pkg/client/kustomize/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/client/kustomize/BENCHMARKS.md)
-- [`pkg/fsutil/marshaller/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/fsutil/marshaller/BENCHMARKS.md)
-- [`pkg/k8s/readiness/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/k8s/readiness/BENCHMARKS.md)
-- [`pkg/svc/diff/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/svc/diff/BENCHMARKS.md)
-- [`pkg/svc/image/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/svc/image/BENCHMARKS.md)
-
-These provide detailed benchmark documentation, baseline results, and performance optimization opportunities.
+PRs are auto-benchmarked against `main`; see [BENCHMARK-REGRESSION.md](https://github.com/devantler-tech/ksail/blob/main/docs/BENCHMARK-REGRESSION.md). Use `ksail cluster create --benchmark` for per-component timings. Package-specific `BENCHMARKS.md` files in each package directory document baseline results and optimization opportunities.
 
 ### Documentation
 
@@ -307,25 +244,15 @@ VSCode users can set breakpoints and press F5 with a `.vscode/launch.json` confi
 
 ### GitHub Actions Workflows
 
-KSail uses several CI workflows:
-
-- **`ci.yaml`** — Runs on every PR and push to main; builds KSail, runs unit and system tests, uploads coverage to Codecov
-- **`update-skills.yaml`** — Upgrades npx skills daily and opens a PR when updates are available
+- **`ci.yaml`** — Builds, runs unit and system tests, uploads coverage (runs on every PR and push to main)
+- **`update-skills.yaml`** — Upgrades npx skills daily; opens a PR when updates are available
 - **`test-pages.yaml`** — Validates documentation builds on docs changes
 - **`publish-pages.yaml`** — Deploys documentation to GitHub Pages on main branch pushes
-- **`release.yaml`** — Builds release binaries and publishes to GitHub Releases; triggered by push to `main` or `workflow_dispatch`
+- **`release.yaml`** — Builds release binaries and publishes to GitHub Releases
 
 ### Agentic Workflows
 
-KSail uses five AI-powered daily workflows for continuous improvement:
-
-- **`daily-code-quality.md`** — Refactoring, performance optimization, and test coverage improvements
-- **`daily-plan.md`** — Triages new issues and creates/prioritizes backlog issues from the roadmap
-- **`daily-builder.md`** — Implements roadmap features and tackles backlog issues
-- **`daily-workflow-maintenance.md`** — Updates and optimizes CI workflows
-- **`daily-docs.md`** — Keeps documentation in sync and reduces bloat
-
-These run on schedules and can be triggered manually via `gh aw` commands.
+Five AI-powered daily workflows run on schedules (triggerable via `gh aw`): **`daily-code-quality`** (refactoring/performance), **`daily-plan`** (issue triage), **`daily-builder`** (feature implementation), **`daily-workflow-maintenance`** (CI updates), and **`daily-docs`** (documentation sync).
 
 ## Release Process
 
