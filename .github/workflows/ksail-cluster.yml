@@ -63,9 +63,15 @@ jobs:
           KSAIL_PID=$!
           disown "$KSAIL_PID"
 
-          # Poll until the kubeconfig is written and the API server responds
+          # Poll until the kubeconfig is written and the API server responds.
+          # 60 iterations × 10s sleep = 10 minute timeout.
           KUBECONFIG_PATH="${HOME}/.kube/config"
           for i in $(seq 1 60); do
+            # Fail fast if the background provisioning process exited (error)
+            if ! kill -0 "$KSAIL_PID" 2>/dev/null; then
+              echo "❌ ksail cluster create exited unexpectedly"
+              exit 1
+            fi
             if [ -f "$KUBECONFIG_PATH" ] && kubectl cluster-info >/dev/null 2>&1; then
               echo "kubeconfig=$KUBECONFIG_PATH" >> "$GITHUB_OUTPUT"
               echo "✅ Cluster is ready (PID $KSAIL_PID managing TTL in background)"
