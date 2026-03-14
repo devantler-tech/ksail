@@ -1439,7 +1439,7 @@ jobs:
           # Re-authenticate git with GitHub token
           SERVER_URL_STRIPPED="${SERVER_URL#https://}"
           git remote set-url origin "https://x-access-token:${GIT_TOKEN}@${SERVER_URL_STRIPPED}/${REPO_NAME}.git"
-          echo "Git configured with GitHub App token identity"
+          echo "Git configured for push operations"
       - name: Process Safe Outputs
         id: process_safe_outputs
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
