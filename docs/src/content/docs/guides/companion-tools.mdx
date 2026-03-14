@@ -91,7 +91,7 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
    devspace init
    ```
 
-   This creates a `devspace.yaml`. Configure it to use the KSail-managed kubeconfig context:
+   This creates a `devspace.yaml`. You pass the KSail-managed kubeconfig context via `--kube-context` when starting DevSpace (see step 3). The context name depends on the distribution:
 
    | Distribution | Context name |
    |-------------|-------------|
@@ -155,8 +155,8 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
    ksail cluster init --name dev --distribution K3s --cni Cilium
    ksail cluster create
 
-   # Deploy your workload
-   kubectl create deployment my-app --image=my-app:latest
+   # Deploy a sample workload
+   kubectl create deployment my-app --image=nginx:latest
    kubectl expose deployment my-app --port=80
    ```
 
@@ -314,7 +314,7 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
 
 ## When to Use Which Tool
 
-`ksail workload watch` handles manifest-level iteration — it watches your `k8s/` directory and auto-applies changes via `kubectl apply`. Companion tools cover different layers:
+`ksail workload watch` handles manifest-level iteration — it watches your configured workload source directory (defaults to `k8s/` or `spec.workload.sourceDirectory` from `ksail.yaml`, overridable with `--path`) and auto-applies changes via `kubectl apply`. Companion tools cover different layers:
 
 | Scenario | Recommended tool |
 |----------|-----------------|

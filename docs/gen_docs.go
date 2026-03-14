@@ -194,15 +194,15 @@ func writeCLIPage(path, title, description string, c *cobra.Command) error {
 	b.WriteString(sanitizeHelpText(helpText))
 	b.WriteString("\n```\n")
 
-	if footer, ok := commandSeeAlso[title]; ok {
+	if footer, ok := commandSeeAlso[c.CommandPath()]; ok {
 		b.WriteString(footer)
 	}
 
 	return os.WriteFile(path, []byte(b.String()), filePermissions)
 }
 
-// commandSeeAlso maps command titles to "See also" footers appended after
-// the auto-generated help text block.
+// commandSeeAlso maps Cobra command paths (from c.CommandPath()) to "See also"
+// footers appended after the auto-generated help text block.
 var commandSeeAlso = map[string]string{
 	"ksail workload watch": "\n> For image rebuild automation and local↔remote traffic bridging, see the [Companion Tools](/guides/companion-tools/) guide.\n",
 }
