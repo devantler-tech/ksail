@@ -36,8 +36,12 @@ func NewWatchCmd() *cobra.Command {
 		Long: `Watch a directory for file changes and automatically apply workloads.
 
 When files in the watched directory are created, modified, or deleted,
-the command debounces changes (~500ms) then runs the equivalent of
-'ksail workload apply -k <path>' to reconcile the cluster.
+the command debounces changes (~500ms) then scopes the apply to the
+nearest directory containing a kustomization.yaml file, walking up from
+the changed file to the watch root. If no kustomization.yaml boundary is
+found, or the boundary is the watch root, it applies the full root
+directory. This scoping ensures only the affected Kustomize layer is
+re-applied, making iteration faster in monorepo-style layouts.
 
 Each reconcile prints a timestamped status line showing the changed file
 and the outcome (success or failure). Press Ctrl+C to stop the watcher.
