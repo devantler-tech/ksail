@@ -9,6 +9,8 @@ on:
         options:
           - Vanilla
           - K3s
+          - Talos
+          - VCluster
         default: "Vanilla"
 
 permissions:
@@ -30,3 +32,7 @@ jobs:
 
       - name: ✅ Verify Cluster
         run: ksail cluster info
+
+      - name: 🧹 Cleanup
+        if: always()
+        run: ksail cluster delete || true

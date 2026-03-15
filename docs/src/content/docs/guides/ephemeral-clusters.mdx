@@ -196,6 +196,7 @@ The action runs within your job, so subsequent steps have full access to the clu
 | `args` | string | | Additional CLI arguments for init (and create when init is skipped) |
 | `init` | string | `true` | Whether to run `ksail cluster init` before create |
 | `install` | string | `true` | Whether to install KSail from releases (set `false` if already in PATH) |
+| `free-disk-space` | string | `true` | Free up runner disk space before provisioning (removes unused SDKs, prunes Docker) |
 | `hcloud-token` | string | | Hetzner Cloud API token (required when provider is `Hetzner`) |
 
 ### Outputs

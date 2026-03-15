@@ -20,6 +20,9 @@ inputs:
   install:
     description: "Whether to install KSail from releases (set to 'false' if already in PATH)"
     default: "true"
+  free-disk-space:
+    description: "Free up runner disk space before provisioning (removes unused SDKs, prunes Docker)"
+    default: "true"
   hcloud-token:
     description: "Hetzner Cloud API token (required when provider is Hetzner)"
     default: ""
@@ -32,6 +35,17 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: 🧹 Free disk space
+      if: inputs.free-disk-space == 'true'
+      shell: bash
+      run: |
+        echo "Disk space before cleanup:"
+        df -h /
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        docker system prune -af --volumes || true
+        echo "Disk space after cleanup:"
+        df -h /
+
     - name: 📥 Install KSail
       if: inputs.install == 'true'
       shell: bash
@@ -55,6 +69,25 @@ runs:
         sudo install "$tmpdir/ksail" /usr/local/bin/ksail
         rm -rf "$tmpdir"
         ksail --version
+
+    - name: 📥 Pre-pull registry image
+      if: inputs.provider == 'Docker'
+      shell: bash
+      run: |
+        pulled=false
+        for attempt in 1 2 3; do
+          if docker pull registry:3; then
+            echo "✅ registry:3 image pulled successfully"
+            pulled=true
+            break
+          fi
+          echo "⚠️ registry:3 pull attempt $attempt failed, retrying in 5s…"
+          sleep 5
+        done
+        if [ "$pulled" = false ]; then
+          echo "❌ Failed to pull registry:3 after 3 attempts"
+          exit 1
+        fi
 
     - name: 🏗️ Initialize Project
       if: inputs.init == 'true'
