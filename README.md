@@ -39,8 +39,6 @@ KSail works on all major operating systems and CPU architectures:
 |  macOS                                       | arm64        |
 | ⊞ Windows (native untested; WSL2 recommended) | amd64, arm64 |
 
-**Docker is required** for local clusters. Install Docker Desktop/Engine and ensure `docker ps` works.
-
 Supported distributions run on different infrastructure providers:
 
 | Provider | Vanilla  | K3s     | Talos | VCluster |
@@ -52,10 +50,6 @@ Supported distributions run on different infrastructure providers:
 ### Installation
 
 See the [Installation Guide](https://ksail.devantler.tech/installation/) for detailed installation instructions.
-
-#### VSCode Extension
-
-For VSCode users, install the [KSail extension](https://marketplace.visualstudio.com/items?itemName=devantler.ksail) to manage clusters directly from your editor. See the [extension documentation](vsce/README.md) for features and usage.
 
 ## Usage
 
