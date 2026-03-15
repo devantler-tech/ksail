@@ -141,6 +141,18 @@ ksail cluster restore -i ./backup.tar.gz --existing-resource-policy update --dry
 > [!NOTE]
 > This feature backs up resource manifests (YAML) only. Persistent volume data is not included.
 
+## CI/CD Integration
+
+Provision KSail clusters in GitHub Actions with the official `ksail-cluster` composite action. It handles installation, Helm chart caching, mirror registry caching, and image pre-pulling automatically.
+
+```yaml
+- uses: devantler-tech/ksail/.github/actions/ksail-cluster@v5.59.0
+  with:
+    distribution: K3s
+```
+
+**Full Guide:** [Testing in CI/CD](/use-cases/#testing-in-cicd)
+
 ## Declarative Configuration
 
 Define cluster configuration in `ksail.yaml` for team consistency, reproducible environments, and Git-tracked configuration.
