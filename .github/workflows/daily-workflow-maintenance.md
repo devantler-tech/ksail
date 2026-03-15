@@ -43,7 +43,11 @@ safe-outputs:
     expires: 1d
     labels: [dependencies, automation]
     draft: false
-    protected-files: github-app
+    protected-files: allowed
+    allowed-files:
+      - ".github/aw/actions-lock.json"
+      - ".github/workflows/*.lock.yml"
+      - ".github/agents/*.agent.md"
   create-issue:
 
 steps:
