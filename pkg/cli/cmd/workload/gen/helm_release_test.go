@@ -1,40 +1,19 @@
 package gen_test
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload/gen"
-	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
 )
 
-// execHelmRelease runs the helmrelease subcommand with the provided args,
-// returning stdout output, stderr output, and any execution error. The success
-// message goes to stderr so callers receive clean YAML-only stdout.
-func execHelmRelease(t *testing.T, args []string) (string, string, error) {
-	t.Helper()
-
-	rt := di.NewRuntime()
-	cmd := gen.NewHelmReleaseCmd(rt)
-
-	var outBuf, errBuf bytes.Buffer
-	cmd.SetOut(&outBuf)
-	cmd.SetErr(&errBuf)
-	cmd.SetArgs(args)
-
-	err := cmd.Execute()
-
-	return outBuf.String(), errBuf.String(), err
-}
-
 func TestGenHelmReleaseSimple(t *testing.T) {
 	t.Parallel()
 
-	output, errOutput, err := execHelmRelease(t, []string{
+	output, errOutput, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"podinfo",
 		"--source=HelmRepository/podinfo",
 		"--chart=podinfo",
@@ -49,7 +28,7 @@ func TestGenHelmReleaseSimple(t *testing.T) {
 func TestGenHelmReleaseWithAllFlags(t *testing.T) {
 	t.Parallel()
 
-	output, errOutput, err := execHelmRelease(t, []string{
+	output, errOutput, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--namespace=production",
 		"--source=HelmRepository/charts.flux-system",
@@ -74,7 +53,7 @@ func TestGenHelmReleaseWithAllFlags(t *testing.T) {
 func TestGenHelmReleaseWithChartRef(t *testing.T) {
 	t.Parallel()
 
-	output, errOutput, err := execHelmRelease(t, []string{
+	output, errOutput, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--chart-ref=OCIRepository/webapp.flux-system",
 		"--export",
@@ -88,7 +67,7 @@ func TestGenHelmReleaseWithChartRef(t *testing.T) {
 func TestGenHelmReleaseWithDependencies(t *testing.T) {
 	t.Parallel()
 
-	output, errOutput, err := execHelmRelease(t, []string{
+	output, errOutput, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts",
 		"--chart=webapp",
@@ -111,7 +90,7 @@ func TestGenHelmReleaseWithValuesFile(t *testing.T) {
 	err := os.WriteFile(valuesFile, []byte("image:\n  tag: v2.0.0\nreplicaCount: 3\n"), 0o600)
 	require.NoError(t, err)
 
-	output, errOutput, err := execHelmRelease(t, []string{
+	output, errOutput, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts",
 		"--chart=webapp",
@@ -127,7 +106,7 @@ func TestGenHelmReleaseWithValuesFile(t *testing.T) {
 func TestGenHelmReleaseWithValuesFrom(t *testing.T) {
 	t.Parallel()
 
-	output, errOutput, err := execHelmRelease(t, []string{
+	output, errOutput, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts",
 		"--chart=webapp",
@@ -144,7 +123,7 @@ func TestGenHelmReleaseWithValuesFrom(t *testing.T) {
 func TestGenHelmReleaseWithVersion(t *testing.T) {
 	t.Parallel()
 
-	output, errOutput, err := execHelmRelease(t, []string{
+	output, errOutput, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--namespace=production",
 		"--source=HelmRepository/charts",
@@ -161,7 +140,7 @@ func TestGenHelmReleaseWithVersion(t *testing.T) {
 func TestGenHelmReleaseMissingSourceAndRef(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := execHelmRelease(t, []string{
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--export",
 	})
@@ -174,7 +153,7 @@ func TestGenHelmReleaseMissingSourceAndRef(t *testing.T) {
 func TestGenHelmReleaseMissingChart(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := execHelmRelease(t, []string{
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts",
 		"--export",
@@ -188,7 +167,7 @@ func TestGenHelmReleaseMissingChart(t *testing.T) {
 func TestGenHelmReleaseConflictingSourceAndChartRef(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := execHelmRelease(t, []string{
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts",
 		"--chart=webapp",
@@ -203,7 +182,7 @@ func TestGenHelmReleaseConflictingSourceAndChartRef(t *testing.T) {
 func TestGenHelmReleaseInvalidSourceKind(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := execHelmRelease(t, []string{
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=InvalidKind/charts",
 		"--chart=webapp",
@@ -217,7 +196,7 @@ func TestGenHelmReleaseInvalidSourceKind(t *testing.T) {
 func TestGenHelmReleaseInvalidChartRefKind(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := execHelmRelease(t, []string{
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--chart-ref=InvalidKind/webapp",
 		"--export",
@@ -230,7 +209,7 @@ func TestGenHelmReleaseInvalidChartRefKind(t *testing.T) {
 func TestGenHelmReleaseInvalidCRDsPolicy(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := execHelmRelease(t, []string{
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts",
 		"--chart=webapp",
@@ -245,7 +224,7 @@ func TestGenHelmReleaseInvalidCRDsPolicy(t *testing.T) {
 func TestGenHelmReleaseWithoutExport(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := execHelmRelease(t, []string{
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts",
 		"--chart=webapp",
@@ -258,7 +237,7 @@ func TestGenHelmReleaseWithoutExport(t *testing.T) {
 func TestGenHelmReleaseInvalidSourceFormat(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := execHelmRelease(t, []string{
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepositoryMissingSlash",
 		"--chart=webapp",
@@ -272,7 +251,7 @@ func TestGenHelmReleaseInvalidSourceFormat(t *testing.T) {
 func TestGenHelmReleaseInvalidDependencyFormat(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := execHelmRelease(t, []string{
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts",
 		"--chart=webapp",
@@ -287,7 +266,7 @@ func TestGenHelmReleaseInvalidDependencyFormat(t *testing.T) {
 func TestGenHelmReleaseNonExistentValuesFile(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := execHelmRelease(t, []string{
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts",
 		"--chart=webapp",
@@ -301,7 +280,7 @@ func TestGenHelmReleaseNonExistentValuesFile(t *testing.T) {
 func TestGenHelmReleaseWithGitRepositorySource(t *testing.T) {
 	t.Parallel()
 
-	output, _, err := execHelmRelease(t, []string{
+	output, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=GitRepository/my-repo",
 		"--chart=./charts/webapp",
@@ -315,7 +294,7 @@ func TestGenHelmReleaseWithGitRepositorySource(t *testing.T) {
 func TestGenHelmReleaseWithBucketSource(t *testing.T) {
 	t.Parallel()
 
-	output, _, err := execHelmRelease(t, []string{
+	output, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=Bucket/my-bucket",
 		"--chart=webapp",
@@ -329,7 +308,7 @@ func TestGenHelmReleaseWithBucketSource(t *testing.T) {
 func TestGenHelmReleaseWithHelmChartRef(t *testing.T) {
 	t.Parallel()
 
-	output, _, err := execHelmRelease(t, []string{
+	output, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--chart-ref=HelmChart/webapp.flux-system",
 		"--export",
@@ -342,7 +321,7 @@ func TestGenHelmReleaseWithHelmChartRef(t *testing.T) {
 func TestGenHelmReleaseWithKubeconfigSecretRef(t *testing.T) {
 	t.Parallel()
 
-	output, _, err := execHelmRelease(t, []string{
+	output, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts",
 		"--chart=webapp",
@@ -358,7 +337,7 @@ func TestGenHelmReleaseWithCaseSensitiveValuesFrom(t *testing.T) {
 	t.Parallel()
 
 	// validateKindCaseInsensitive should normalize "secret" to "Secret"
-	output, _, err := execHelmRelease(t, []string{
+	output, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts",
 		"--chart=webapp",
@@ -373,7 +352,7 @@ func TestGenHelmReleaseWithCaseSensitiveValuesFrom(t *testing.T) {
 func TestGenHelmReleaseInvalidValuesFromKind(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := execHelmRelease(t, []string{
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts",
 		"--chart=webapp",
@@ -389,7 +368,7 @@ func TestGenHelmReleaseSrcNamespaceFromDot(t *testing.T) {
 	t.Parallel()
 
 	// HelmRepository/charts.custom-ns should split into name=charts, namespace=custom-ns
-	output, _, err := execHelmRelease(t, []string{
+	output, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"webapp",
 		"--source=HelmRepository/charts.custom-ns",
 		"--chart=webapp",
@@ -405,7 +384,7 @@ func TestGenHelmReleaseSrcNamespaceFromDot(t *testing.T) {
 func TestGenHelmReleaseRequiresName(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := execHelmRelease(t, []string{
+	_, _, err := execGen(t, gen.NewHelmReleaseCmd, []string{
 		"--source=HelmRepository/charts",
 		"--chart=webapp",
 		"--export",
