@@ -100,7 +100,7 @@ flowchart TD
 # 1. Initialize a new project with your preferred stack
 ksail cluster init \
   --name <cluster-name> \
-  --profile <Default> \
+  --profile Default \
   --distribution <Vanilla|K3s|Talos|VCluster> \
   --cni <Default|Cilium|Calico> \
   --csi <Default|Enabled|Disabled> \
