@@ -28,6 +28,7 @@ func getFormatRegistryURLTestCases() []formatRegistryURLTestCase {
 		},
 		{"IPv4 with port", "192.168.1.100", 5000, "images", "oci://192.168.1.100:5000/images"},
 		{"IPv6 with port", "::1", 5000, "project", "oci://[::1]:5000/project"},
+		{"already-bracketed IPv6 with port", "[::1]", 5000, "project", "oci://[::1]:5000/project"},
 		{"external registry without port", "ghcr.io", 0, "org/repo", "oci://ghcr.io/org/repo"},
 		{
 			"docker hub without port",

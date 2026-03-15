@@ -276,7 +276,7 @@ KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.githu
 | `weekly-research`            | Weekly                                      | Market research and actionable feature roadmap                            |
 | `weekly-promote-ksail`       | Weekly                                      | Project promotion and visibility                                          |
 | `ci-doctor`                  | On CI failure                               | CI failure investigation and diagnostics                                  |
-| `maintainer`                 | Every 3 days                                | Repository maintenance and housekeeping                                   |
+| `pr-fix`                     | On `/pr-fix` slash command                  | Fixes PR CI failures, linting issues, and Copilot Review feedback         |
 
 Each agentic workflow creates a GitHub Discussion to coordinate its work and, depending on its purpose, may open draft PRs or create issues with incremental improvements. You can control them using the [`gh aw`](https://github.com/github/gh-aw) CLI extension:
 
