@@ -20,8 +20,8 @@ inputs:
   install:
     description: "Whether to install KSail from releases (set to 'false' if already in PATH)"
     default: "true"
-  free-disk-space:
-    description: "Free up runner disk space before provisioning (removes unused SDKs, prunes Docker)"
+  cache:
+    description: "Enable caching of Helm charts and mirror registry volumes between CI runs"
     default: "true"
   hcloud-token:
     description: "Hetzner Cloud API token (required when provider is Hetzner)"
@@ -35,17 +35,6 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: 🧹 Free disk space
-      if: inputs.free-disk-space == 'true'
-      shell: bash
-      run: |
-        echo "Disk space before cleanup:"
-        df -h /
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-        docker system prune -af --volumes || true
-        echo "Disk space after cleanup:"
-        df -h /
-
     - name: 📥 Install KSail
       if: inputs.install == 'true'
       shell: bash
@@ -70,6 +59,68 @@ runs:
         rm -rf "$tmpdir"
         ksail --version
 
+    - name: 📋 Compute cache keys
+      if: inputs.cache == 'true'
+      id: cache-keys
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ inputs.args }}
+      run: |
+        KSAIL_VER=$(ksail --version 2>/dev/null | head -1 | tr -d '\n' || echo "unknown")
+        echo "ksail-version=$KSAIL_VER" >> "$GITHUB_OUTPUT"
+
+        if [ "$PROVIDER" = "Docker" ]; then
+          # shellcheck disable=SC2086
+          IMAGES=$(ksail workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
+          if [ -n "$IMAGES" ]; then
+            IMAGES_HASH=$(echo "$IMAGES" | sort -u | sha256sum | cut -c1-12)
+          else
+            IMAGES_HASH="none"
+          fi
+          echo "images-hash=$IMAGES_HASH" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: 📥 Restore Helm chart cache
+      if: inputs.cache == 'true'
+      uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: |
+          ~/.cache/helm/content
+          ~/.cache/helm/repository
+          ~/.config/helm/repositories.yaml
+        key: ksail-helm-${{ steps.cache-keys.outputs.ksail-version }}-${{ runner.os }}-${{ runner.arch }}
+        restore-keys: |
+          ksail-helm-
+
+    - name: 📥 Restore mirror cache
+      if: inputs.cache == 'true' && inputs.provider == 'Docker'
+      id: restore-mirror
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/ksail-mirror-cache
+        key: ksail-mirror-${{ steps.cache-keys.outputs.images-hash }}-${{ runner.os }}-${{ runner.arch }}
+        restore-keys: |
+          ksail-mirror-
+
+    - name: 📦 Import mirror volumes
+      if: inputs.cache == 'true' && inputs.provider == 'Docker' && steps.restore-mirror.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        echo "📦 Importing mirror registry volumes..."
+        for registry in docker.io ghcr.io quay.io registry.k8s.io; do
+          if [ -f "/tmp/ksail-mirror-cache/${registry}.tar" ]; then
+            docker volume create "$registry" 2>/dev/null || true
+            docker run --rm \
+              -v "${registry}":/volume \
+              -v /tmp/ksail-mirror-cache:/backup:ro \
+              busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+              sh -c "cd /volume && tar -xf /backup/${registry}.tar" || echo "⚠️ Failed to import $registry mirror"
+            echo "  ✅ Restored $registry mirror cache"
+          fi
+        done
+
     - name: 📥 Pre-pull registry image
       if: inputs.provider == 'Docker'
       shell: bash
@@ -88,6 +139,38 @@ runs:
           echo "❌ Failed to pull registry:3 after 3 attempts"
           exit 1
         fi
+
+    - name: 📥 Pre-pull distribution images
+      if: inputs.provider == 'Docker'
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        ARGS: ${{ inputs.args }}
+      run: |
+        # Use ksail workload images to list images for this distribution (no source code needed)
+        # shellcheck disable=SC2086
+        IMAGES=$(ksail workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
+        if [ -z "$IMAGES" ]; then
+          echo "ℹ️ No images to pre-pull for distribution $DISTRIBUTION"
+          exit 0
+        fi
+        echo "📦 Pre-pulling $(echo "$IMAGES" | wc -l) images for $DISTRIBUTION..."
+        while IFS= read -r image; do
+          [ -z "$image" ] && continue
+          pulled=false
+          for attempt in 1 2 3; do
+            if docker pull --quiet "$image"; then
+              echo "  ✅ $image"
+              pulled=true
+              break
+            fi
+            echo "  ⚠️ $image attempt $attempt failed, retrying in 5s…"
+            sleep 5
+          done
+          if [ "$pulled" = false ]; then
+            echo "  ⚠️ Failed to pull $image after 3 attempts (will retry during cluster creation)"
+          fi
+        done <<< "$IMAGES"
 
     - name: 🏗️ Initialize Project
       if: inputs.init == 'true'
@@ -120,3 +203,28 @@ runs:
         fi
         KUBECONFIG_PATH="${HOME}/.kube/config"
         echo "kubeconfig=$KUBECONFIG_PATH" >> "$GITHUB_OUTPUT"
+
+    - name: 📦 Export mirror volumes
+      if: inputs.cache == 'true' && inputs.provider == 'Docker'
+      shell: bash
+      run: |
+        echo "📦 Exporting mirror registry volumes for caching..."
+        mkdir -p /tmp/ksail-mirror-cache
+        for registry in docker.io ghcr.io quay.io registry.k8s.io; do
+          if docker volume inspect "$registry" > /dev/null 2>&1; then
+            docker run --rm \
+              -v "${registry}":/volume:ro \
+              -v /tmp/ksail-mirror-cache:/backup \
+              busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+              sh -c "cd /volume && tar -cf /backup/${registry}.tar ." || echo "⚠️ Failed to export $registry"
+            echo "  ✅ Exported $registry"
+          fi
+        done
+
+    - name: 💾 Save mirror cache
+      if: inputs.cache == 'true' && inputs.provider == 'Docker'
+      uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/ksail-mirror-cache
+        key: ksail-mirror-${{ steps.cache-keys.outputs.images-hash }}-${{ runner.os }}-${{ runner.arch }}
+      continue-on-error: true

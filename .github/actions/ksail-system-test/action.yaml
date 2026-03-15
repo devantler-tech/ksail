@@ -167,7 +167,7 @@ runs:
         args: ${{ steps.resolve-args.outputs.args }}
         init: ${{ inputs.init }}
         install: "false"
-        free-disk-space: "false"
+        cache: "false"
         hcloud-token: ${{ inputs.hcloud-token }}
 
     - name: 🧪 ksail cluster list
