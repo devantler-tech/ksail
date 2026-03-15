@@ -12,7 +12,7 @@ ksail cluster init --name my-cluster --distribution Vanilla --cni Cilium
 ksail cluster create
 ```
 
-Use `--profile` to start from a **pre-built cluster template** that bundles opinionated CNI, CSI, policy engine, GitOps, and other settings. Individual flags still override profile defaults. See [Cluster Profiles](/guides/cluster-profiles/) for available profiles.
+Use `--profile` to select a named **cluster profile template**. `Default` is currently the only available profile and preserves the standard `ksail cluster init` defaults (a no-op). Individual flags still override profile defaults. See [Cluster Profiles](/guides/cluster-profiles/) for available profiles.
 
 ```bash
 ksail cluster init --profile Default
