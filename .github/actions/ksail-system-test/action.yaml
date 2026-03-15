@@ -101,110 +101,17 @@ runs:
         fi
         echo "args=$RESOLVED_ARGS" >> "$GITHUB_OUTPUT"
 
-    - name: 🧪 ksail cluster init
-      if: inputs.init == 'true'
-      shell: bash
-      env:
-        DISTRIBUTION: ${{ inputs.distribution }}
-        PROVIDER: ${{ inputs.provider }}
-        ARGS: ${{ steps.resolve-args.outputs.args }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-      run: |
-        # shellcheck disable=SC2086
-        ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
-
-    - name: 📥 Restore mirror cache
-      id: restore-mirror-cache
-      if: inputs.provider == 'Docker'
-      uses: ./.github/actions/restore-mirror-cache
-
-    - name: 🔍 Verify mirror volumes restored
-      if: inputs.provider == 'Docker' && steps.restore-mirror-cache.outputs.cache-hit == 'true'
-      shell: bash
-      run: |
-        echo "📦 Verifying mirror cache volumes (see issue #2075)..."
-        REQUIRED_VOLUMES=("docker.io" "ghcr.io" "quay.io" "registry.k8s.io")
-        MISSING_VOLUMES=()
-
-        for vol in "${REQUIRED_VOLUMES[@]}"; do
-          if docker volume inspect "$vol" > /dev/null 2>&1; then
-            SIZE=$(docker run --rm -v "$vol":/vol busybox du -sh /vol 2>/dev/null | cut -f1 || echo "unknown")
-            echo "  ✅ $vol (size: $SIZE)"
-          else
-            echo "  ❌ $vol - MISSING"
-            MISSING_VOLUMES+=("$vol")
-          fi
-        done
-
-        if [ ${#MISSING_VOLUMES[@]} -gt 0 ]; then
-          echo "⚠️ Warning: ${#MISSING_VOLUMES[@]} mirror volumes missing: ${MISSING_VOLUMES[*]}"
-          echo "   Images from these registries may need to be pulled directly."
-        else
-          echo "✅ All 4 mirror cache volumes present"
-        fi
-
-    - name: 📥 Restore Helm chart cache
-      uses: ./.github/actions/restore-helm-cache
-
-    - name: 📥 Pre-pull registry image
-      if: inputs.provider == 'Docker'
-      shell: bash
-      run: |
-        pulled=false
-        for attempt in 1 2 3; do
-          if docker pull registry:3; then
-            echo "✅ registry:3 image pulled successfully"
-            pulled=true
-            break
-          fi
-          echo "⚠️ registry:3 pull attempt $attempt failed, retrying in 5s…"
-          sleep 5
-        done
-        if [ "$pulled" = false ]; then
-          echo "❌ Failed to pull registry:3 after 3 attempts"
-          exit 1
-        fi
-
-    - name: 📥 Pre-pull VCluster base images
-      if: inputs.provider == 'Docker' && inputs.distribution == 'VCluster'
-      shell: bash
-      run: |
-        # Pre-pull VCluster base images to avoid transient GHCR pull failures
-        # during cluster creation (fixes #2749, see also #2646).
-        # Source of truth: pkg/fsutil/configmanager/vcluster/Dockerfile
-        IMAGES=$(sed -n 's/^FROM \([^ ]*\).*/\1/p' pkg/fsutil/configmanager/vcluster/Dockerfile)
-        for image in $IMAGES; do
-          pulled=false
-          for attempt in 1 2 3; do
-            if docker pull --quiet "$image"; then
-              echo "✅ $image pulled successfully"
-              pulled=true
-              break
-            fi
-            echo "⚠️ $image pull attempt $attempt failed, retrying in 5s…"
-            sleep 5
-          done
-          if [ "$pulled" = false ]; then
-            echo "⚠️ Failed to pull $image after 3 attempts (will retry during cluster creation)"
-          fi
-        done
-
     - name: 🧪 ksail cluster create
       id: cluster-create
-      shell: bash
-      env:
-        INIT: ${{ inputs.init }}
-        DISTRIBUTION: ${{ inputs.distribution }}
-        PROVIDER: ${{ inputs.provider }}
-        ARGS: ${{ steps.resolve-args.outputs.args }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-      run: |
-        if [ "$INIT" = "true" ]; then
-          ksail cluster create
-        else
-          # shellcheck disable=SC2086
-          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
-        fi
+      uses: ./.github/actions/ksail-cluster
+      with:
+        distribution: ${{ inputs.distribution }}
+        provider: ${{ inputs.provider }}
+        args: ${{ steps.resolve-args.outputs.args }}
+        init: ${{ inputs.init }}
+        install: "false"
+        cache: "true"
+        hcloud-token: ${{ inputs.hcloud-token }}
 
     - name: 🧪 ksail cluster list
       shell: bash
