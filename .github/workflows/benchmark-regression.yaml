@@ -20,6 +20,7 @@ jobs:
   benchmark:
     name: 📊 Benchmark (${{ matrix.branch }})
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     permissions:
       contents: read
     strategy:
@@ -79,6 +80,7 @@ jobs:
     name: 📊 Compare & Report
     needs: benchmark
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: write
