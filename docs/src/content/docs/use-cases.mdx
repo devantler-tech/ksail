@@ -151,7 +151,7 @@ jobs:
 
       - name: Provision KSail cluster
         id: cluster
-        uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
+        uses: devantler-tech/ksail/.github/actions/ksail-cluster@v5.59.0
         with:
           distribution: K3s   # Vanilla, K3s, Talos, VCluster
 
@@ -195,8 +195,9 @@ jobs:
 For non-GitHub CI (GitLab CI, CircleCI, etc.), install KSail directly and run lifecycle commands:
 
 ```bash
-# Install
-curl -sSL https://github.com/devantler-tech/ksail/releases/latest/download/ksail_linux_amd64.tar.gz | tar -xz
+# Install (see https://github.com/devantler-tech/ksail/releases for available versions)
+VERSION=5.59.0
+curl -sSL "https://github.com/devantler-tech/ksail/releases/download/v${VERSION}/ksail_${VERSION}_linux_amd64.tar.gz" | tar -xz
 sudo mv ksail /usr/local/bin/
 
 # Provision cluster (using declarative ksail.yaml)
