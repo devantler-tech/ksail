@@ -1,9 +1,10 @@
-package registryresolver
+package registryresolver_test
 
 import (
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver"
 	"github.com/spf13/viper"
 )
 
@@ -11,7 +12,7 @@ import (
 //
 //nolint:gochecknoglobals // Benchmark sink variables are required to prevent compiler optimization.
 var (
-	benchInfoSink   *Info
+	benchInfoSink   *registryresolver.Info
 	benchStringSink string
 	errBenchSink    error
 )
@@ -23,7 +24,12 @@ func BenchmarkParseOCIURL_LocalhostWithPort(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, errBenchSink = parseOCIURL("oci://localhost:5050/myproject")
+		result, err := registryresolver.ParseOCIURL("oci://localhost:5050/myproject")
+		if err != nil {
+			b.Fatalf("unexpected error: %v", err)
+		}
+
+		benchInfoSink = result
 	}
 }
 
@@ -34,7 +40,12 @@ func BenchmarkParseOCIURL_ExternalRegistry(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, errBenchSink = parseOCIURL("oci://ghcr.io/devantler-tech/ksail/config")
+		result, err := registryresolver.ParseOCIURL("oci://ghcr.io/devantler-tech/ksail/config")
+		if err != nil {
+			b.Fatalf("unexpected error: %v", err)
+		}
+
+		benchInfoSink = result
 	}
 }
 
@@ -44,7 +55,12 @@ func BenchmarkParseOCIURL_Empty(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, errBenchSink = parseOCIURL("")
+		_, err := registryresolver.ParseOCIURL("")
+		if err == nil {
+			b.Fatal("expected error for empty URL")
+		}
+
+		errBenchSink = err
 	}
 }
 
@@ -55,8 +71,10 @@ func BenchmarkParseHostPort_WithPort(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		result := parseHostPort("localhost:5050")
-		benchStringSink = result.host
+		benchStringSink = registryresolver.ParseHostPortHost("localhost:5050")
+		if benchStringSink == "" {
+			b.Fatal("expected non-empty host")
+		}
 	}
 }
 
@@ -67,8 +85,10 @@ func BenchmarkParseHostPort_ExternalNoPort(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		result := parseHostPort("ghcr.io")
-		benchStringSink = result.host
+		benchStringSink = registryresolver.ParseHostPortHost("ghcr.io")
+		if benchStringSink == "" {
+			b.Fatal("expected non-empty host")
+		}
 	}
 }
 
@@ -78,7 +98,10 @@ func BenchmarkParseRegistryFlag_Simple(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink = parseRegistryFlag("localhost:5050/myproject")
+		benchInfoSink = registryresolver.ParseRegistryFlag("localhost:5050/myproject")
+		if benchInfoSink == nil {
+			b.Fatal("expected non-nil result")
+		}
 	}
 }
 
@@ -89,7 +112,10 @@ func BenchmarkParseRegistryFlag_WithCredentials(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink = parseRegistryFlag("user:secret@ghcr.io/devantler-tech/ksail")
+		benchInfoSink = registryresolver.ParseRegistryFlag("user:secret@ghcr.io/devantler-tech/ksail")
+		if benchInfoSink == nil {
+			b.Fatal("expected non-nil result")
+		}
 	}
 }
 
@@ -100,7 +126,10 @@ func BenchmarkFormatRegistryURL_WithPort(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchStringSink = FormatRegistryURL("localhost", 5050, "myproject")
+		benchStringSink = registryresolver.FormatRegistryURL("localhost", 5050, "myproject")
+		if benchStringSink == "" {
+			b.Fatal("expected non-empty result")
+		}
 	}
 }
 
@@ -111,7 +140,10 @@ func BenchmarkFormatRegistryURL_WithoutPort(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchStringSink = FormatRegistryURL("ghcr.io", 0, "devantler-tech/ksail/config")
+		benchStringSink = registryresolver.FormatRegistryURL("ghcr.io", 0, "devantler-tech/ksail/config")
+		if benchStringSink == "" {
+			b.Fatal("expected non-empty result")
+		}
 	}
 }
 
@@ -119,13 +151,18 @@ func BenchmarkFormatRegistryURL_WithoutPort(b *testing.B) {
 // is already configured via the --registry flag or KSAIL_REGISTRY env var.
 func BenchmarkDetectRegistryFromViper_Set(b *testing.B) {
 	viperCfg := viper.New()
-	viperCfg.Set(ViperRegistryKey, "localhost:5050/myproject")
+	viperCfg.Set(registryresolver.ViperRegistryKey, "localhost:5050/myproject")
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, errBenchSink = DetectRegistryFromViper(viperCfg)
+		result, err := registryresolver.DetectRegistryFromViper(viperCfg)
+		if err != nil {
+			b.Fatalf("unexpected error: %v", err)
+		}
+
+		benchInfoSink = result
 	}
 }
 
@@ -139,7 +176,12 @@ func BenchmarkDetectRegistryFromViper_Empty(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, errBenchSink = DetectRegistryFromViper(viperCfg)
+		_, err := registryresolver.DetectRegistryFromViper(viperCfg)
+		if err == nil {
+			b.Fatal("expected error when registry not set")
+		}
+
+		errBenchSink = err
 	}
 }
 
@@ -161,7 +203,12 @@ func BenchmarkDetectRegistryFromConfig_LocalRegistry(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, errBenchSink = DetectRegistryFromConfig(cfg)
+		result, err := registryresolver.DetectRegistryFromConfig(cfg)
+		if err != nil {
+			b.Fatalf("unexpected error: %v", err)
+		}
+
+		benchInfoSink = result
 	}
 }
 
@@ -183,6 +230,11 @@ func BenchmarkDetectRegistryFromConfig_ExternalRegistry(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, errBenchSink = DetectRegistryFromConfig(cfg)
+		result, err := registryresolver.DetectRegistryFromConfig(cfg)
+		if err != nil {
+			b.Fatalf("unexpected error: %v", err)
+		}
+
+		benchInfoSink = result
 	}
 }
