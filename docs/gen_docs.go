@@ -312,6 +312,7 @@ func generateConfigReferenceTables(b *strings.Builder) {
 		distributionDetails,
 	)
 	generateEnumSection(b, "provider", reflect.TypeOf(v1alpha1.Provider("")), providerDetails)
+	generateEnumSection(b, "profile", reflect.TypeOf(v1alpha1.Profile("")), profileDetails)
 
 	b.WriteString(configDistributionProse)
 	b.WriteString("\n\n")

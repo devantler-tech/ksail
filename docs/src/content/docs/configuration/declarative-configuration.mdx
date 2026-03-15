@@ -185,6 +185,7 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | ----- | ---- | ------- | ----------- |
 | `distributionConfig` | string | – |  |
 | `connection` | Connection | – |  |
+| `profile` | enum | – | Pre-built cluster profile template (Default: current behaviour) |
 | `distribution` | enum | – |  |
 | `provider` | enum | – |  |
 | `cni` | enum | – |  |
@@ -220,6 +221,12 @@ See [Providers](/concepts/#providers) for more details.
 
 > [!NOTE]
 > Hetzner and Omni providers are only supported with the `Talos` distribution.
+
+#### profile
+
+Pre-built cluster profile template. Profiles bundle opinionated combinations of CNI, CSI, policy engine, and GitOps settings into named starting points. Individual flags (`--cni`, `--csi`, etc.) still override profile defaults when explicitly provided.
+
+- `Default` (default) – Standard defaults (current behaviour, no-op)
 
 #### distributionConfig
 

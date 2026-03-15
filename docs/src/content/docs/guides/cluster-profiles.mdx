@@ -1,0 +1,53 @@
+---
+title: Cluster Profiles
+description: How to use KSail's --profile flag to bootstrap purpose-configured clusters from pre-built templates.
+---
+
+KSail's `--profile` flag provides **pre-built cluster profile templates** that bundle opinionated combinations of CNI, CSI, policy engine, GitOps, and other settings into named starting points. This reduces time-to-first-cluster by eliminating manual assembly of configuration after cluster creation.
+
+## How `--profile` Works
+
+When you pass `--profile` to `ksail cluster init`, KSail applies the profile's defaults to the generated `ksail.yaml`. Individual flags (`--cni`, `--csi`, `--gitops-engine`, etc.) still override profile defaults when explicitly provided.
+
+```bash
+# Initialize with the default profile (same as omitting --profile)
+ksail cluster init --profile Default
+```
+
+## Available Profiles
+
+### Default
+
+The `Default` profile preserves the current `ksail cluster init` behaviour — it is a no-op that uses the standard defaults for all fields:
+
+- **Distribution:** Vanilla (Kind)
+- **CNI:** Default (distribution-provided)
+- **CSI:** Default (distribution-provided)
+- **GitOps Engine:** None
+- **Policy Engine:** None
+
+```bash
+ksail cluster init --profile Default
+# Equivalent to: ksail cluster init
+```
+
+## Overriding Profile Defaults
+
+Profiles set defaults — any explicitly provided flag takes precedence:
+
+```bash
+# Start from Default profile but switch to Cilium CNI
+ksail cluster init --profile Default --cni Cilium
+
+# Start from Default profile with K3s distribution
+ksail cluster init --profile Default --distribution K3s
+```
+
+## Compatibility
+
+The `--profile` flag is compatible with all four distributions (Vanilla, K3s, Talos, VCluster). Unsupported combinations will produce a clear error during initialization.
+
+## Related
+
+- [Declarative Configuration](/configuration/declarative-configuration/) — Full reference for `ksail.yaml`
+- [CLI Flags: cluster init](/cli-flags/cluster/cluster-init/) — All available init flags

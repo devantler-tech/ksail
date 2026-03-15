@@ -333,6 +333,7 @@ func TestGenerateFlagName(t *testing.T) {
 			&manager.Config.Spec.Cluster.LocalRegistry.Registry,
 			"local-registry",
 		},
+		{"Profile field", &manager.Config.Spec.Cluster.Profile, "profile"},
 	}
 
 	runFlagNameGenerationTests(t, manager, tests)

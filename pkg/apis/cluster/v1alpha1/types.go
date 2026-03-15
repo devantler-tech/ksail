@@ -35,6 +35,7 @@ type Spec struct {
 type ClusterSpec struct {
 	DistributionConfig string        `json:"distributionConfig,omitzero"`
 	Connection         Connection    `json:"connection,omitzero"`
+	Profile            Profile       `json:"profile,omitzero"            jsonschema:"description=Pre-built cluster profile template (Default: current behaviour)"` //nolint:lll
 	Distribution       Distribution  `json:"distribution,omitzero"`
 	Provider           Provider      `json:"provider,omitzero"`
 	CNI                CNI           `json:"cni,omitzero"`

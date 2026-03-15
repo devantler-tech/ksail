@@ -263,6 +263,85 @@ func TestGitOpsEngine_ValidValues(t *testing.T) {
 	assert.Len(t, values, 3)
 }
 
+// Profile tests.
+
+func TestProfile_Default(t *testing.T) {
+	t.Parallel()
+
+	var profile v1alpha1.Profile
+	assert.Equal(t, v1alpha1.ProfileDefault, profile.Default())
+}
+
+func TestProfile_ValidValues(t *testing.T) {
+	t.Parallel()
+
+	var profile v1alpha1.Profile
+
+	values := profile.ValidValues()
+	assert.Contains(t, values, "Default")
+	assert.Len(t, values, 1)
+}
+
+func TestProfile_StringAndType(t *testing.T) {
+	t.Parallel()
+
+	profile := v1alpha1.ProfileDefault
+	assert.Equal(t, "Default", profile.String())
+	assert.Equal(t, "Profile", profile.Type())
+}
+
+func TestProfile_Set(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		input     string
+		expected  v1alpha1.Profile
+		wantError bool
+	}{
+		{
+			name:      "default_lowercase",
+			input:     "default",
+			expected:  v1alpha1.ProfileDefault,
+			wantError: false,
+		},
+		{
+			name:      "default_uppercase",
+			input:     "DEFAULT",
+			expected:  v1alpha1.ProfileDefault,
+			wantError: false,
+		},
+		{
+			name:      "default_mixed_case",
+			input:     "Default",
+			expected:  v1alpha1.ProfileDefault,
+			wantError: false,
+		},
+		{
+			name:      "invalid_profile",
+			input:     "invalid",
+			wantError: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var profile v1alpha1.Profile
+
+			err := profile.Set(testCase.input)
+			if testCase.wantError {
+				require.Error(t, err)
+				require.ErrorIs(t, err, v1alpha1.ErrInvalidProfile)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.expected, profile)
+			}
+		})
+	}
+}
+
 // Provider tests.
 
 //nolint:funlen // Table-driven test with multiple provider cases is clearer as single function

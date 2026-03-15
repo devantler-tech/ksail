@@ -166,6 +166,16 @@ func TestStandardFieldSelectors(t *testing.T) {
 			},
 		},
 		{
+			name:            "profile",
+			factory:         configmanager.DefaultProfileFieldSelector,
+			expectedDesc:    "Pre-built cluster profile template (Default: current behaviour)",
+			expectedDefault: v1alpha1.ProfileDefault,
+			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
+				t.Helper()
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Profile)
+			},
+		},
+		{
 			name:            "kubeconfig",
 			factory:         configmanager.DefaultKubeconfigFieldSelector,
 			expectedDesc:    "Path to kubeconfig file",
