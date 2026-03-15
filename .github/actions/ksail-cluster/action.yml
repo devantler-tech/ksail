@@ -41,20 +41,27 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         KSAIL_VERSION: ${{ inputs.ksail-version }}
+        RUNNER_ARCH: ${{ runner.arch }}
       run: |
         set -euo pipefail
+        # Map runner.arch to Go arch naming
+        case "$RUNNER_ARCH" in
+          X64)   GOARCH="amd64" ;;
+          ARM64) GOARCH="arm64" ;;
+          *)     echo "❌ Unsupported runner architecture: $RUNNER_ARCH"; exit 1 ;;
+        esac
         tmpdir="$(mktemp -d)"
         if [ "$KSAIL_VERSION" = "latest" ]; then
           gh release download --repo devantler-tech/ksail \
-            --pattern 'ksail_*_linux_amd64.tar.gz' \
+            --pattern "ksail_*_linux_${GOARCH}.tar.gz" \
             --dir "$tmpdir"
         else
           gh release download "v${KSAIL_VERSION}" \
             --repo devantler-tech/ksail \
-            --pattern 'ksail_*_linux_amd64.tar.gz' \
+            --pattern "ksail_*_linux_${GOARCH}.tar.gz" \
             --dir "$tmpdir"
         fi
-        tar -xzf "$tmpdir"/ksail_*_linux_amd64.tar.gz -C "$tmpdir"
+        tar -xzf "$tmpdir"/ksail_*_linux_${GOARCH}.tar.gz -C "$tmpdir"
         sudo install "$tmpdir/ksail" /usr/local/bin/ksail
         rm -rf "$tmpdir"
         ksail --version
@@ -67,9 +74,9 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
+        KSAIL_VERSION: ${{ inputs.ksail-version }}
       run: |
-        KSAIL_VER=$(ksail --version 2>/dev/null | head -1 | tr -d '\n' || echo "unknown")
-        echo "ksail-version=$KSAIL_VER" >> "$GITHUB_OUTPUT"
+        echo "ksail-version=$KSAIL_VERSION" >> "$GITHUB_OUTPUT"
 
         if [ "$PROVIDER" = "Docker" ]; then
           # shellcheck disable=SC2086
@@ -112,12 +119,15 @@ runs:
         for registry in docker.io ghcr.io quay.io registry.k8s.io; do
           if [ -f "/tmp/ksail-mirror-cache/${registry}.tar" ]; then
             docker volume create "$registry" 2>/dev/null || true
-            docker run --rm \
+            if docker run --rm \
               -v "${registry}":/volume \
               -v /tmp/ksail-mirror-cache:/backup:ro \
               busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
-              sh -c "cd /volume && tar -xf /backup/${registry}.tar" || echo "⚠️ Failed to import $registry mirror"
-            echo "  ✅ Restored $registry mirror cache"
+              sh -c "cd /volume && tar -xf /backup/${registry}.tar"; then
+              echo "  ✅ Restored $registry mirror cache"
+            else
+              echo "  ⚠️ Failed to import $registry mirror"
+            fi
           fi
         done
 
@@ -201,7 +211,25 @@ runs:
           # shellcheck disable=SC2086
           ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
         fi
+        # Determine kubeconfig path: parse --kubeconfig from args, fall back to default
         KUBECONFIG_PATH="${HOME}/.kube/config"
+        # shellcheck disable=SC2086
+        set -- $ARGS
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --kubeconfig)
+              if [ $# -gt 1 ]; then
+                KUBECONFIG_PATH="$2"
+              fi
+              break
+              ;;
+            --kubeconfig=*)
+              KUBECONFIG_PATH="${1#--kubeconfig=}"
+              break
+              ;;
+          esac
+          shift
+        done
         echo "kubeconfig=$KUBECONFIG_PATH" >> "$GITHUB_OUTPUT"
 
     - name: 📦 Export mirror volumes
@@ -212,12 +240,15 @@ runs:
         mkdir -p /tmp/ksail-mirror-cache
         for registry in docker.io ghcr.io quay.io registry.k8s.io; do
           if docker volume inspect "$registry" > /dev/null 2>&1; then
-            docker run --rm \
+            if docker run --rm \
               -v "${registry}":/volume:ro \
               -v /tmp/ksail-mirror-cache:/backup \
               busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
-              sh -c "cd /volume && tar -cf /backup/${registry}.tar ." || echo "⚠️ Failed to export $registry"
-            echo "  ✅ Exported $registry"
+              sh -c "cd /volume && tar -cf /backup/${registry}.tar ."; then
+              echo "  ✅ Exported $registry"
+            else
+              echo "  ⚠️ Failed to export $registry"
+            fi
           fi
         done
 
