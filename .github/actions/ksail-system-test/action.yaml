@@ -101,18 +101,6 @@ runs:
         fi
         echo "args=$RESOLVED_ARGS" >> "$GITHUB_OUTPUT"
 
-    - name: 🧪 ksail cluster init
-      if: inputs.init == 'true'
-      shell: bash
-      env:
-        DISTRIBUTION: ${{ inputs.distribution }}
-        PROVIDER: ${{ inputs.provider }}
-        ARGS: ${{ steps.resolve-args.outputs.args }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-      run: |
-        # shellcheck disable=SC2086
-        ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
-
     - name: 📥 Restore mirror cache
       id: restore-mirror-cache
       if: inputs.provider == 'Docker'
@@ -191,20 +179,14 @@ runs:
 
     - name: 🧪 ksail cluster create
       id: cluster-create
-      shell: bash
-      env:
-        INIT: ${{ inputs.init }}
-        DISTRIBUTION: ${{ inputs.distribution }}
-        PROVIDER: ${{ inputs.provider }}
-        ARGS: ${{ steps.resolve-args.outputs.args }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-      run: |
-        if [ "$INIT" = "true" ]; then
-          ksail cluster create
-        else
-          # shellcheck disable=SC2086
-          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
-        fi
+      uses: ./.github/actions/ksail-cluster
+      with:
+        distribution: ${{ inputs.distribution }}
+        provider: ${{ inputs.provider }}
+        args: ${{ steps.resolve-args.outputs.args }}
+        init: ${{ inputs.init }}
+        install: "false"
+        hcloud-token: ${{ inputs.hcloud-token }}
 
     - name: 🧪 ksail cluster list
       shell: bash

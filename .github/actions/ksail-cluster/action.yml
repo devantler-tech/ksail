@@ -5,9 +5,24 @@ inputs:
   distribution:
     description: "KSail distribution to provision (Vanilla, K3s, Talos, VCluster)"
     default: "Vanilla"
+  provider:
+    description: "Infrastructure provider (Docker, Hetzner)"
+    default: "Docker"
+  args:
+    description: "Additional CLI arguments passed to cluster init (and create when init is skipped)"
+    default: ""
+  init:
+    description: "Whether to run ksail cluster init before create"
+    default: "true"
   ksail-version:
     description: "KSail version to install (e.g. '5.55.0') or 'latest'"
     default: "latest"
+  install:
+    description: "Whether to install KSail from releases (set to 'false' if already in PATH)"
+    default: "true"
+  hcloud-token:
+    description: "Hetzner Cloud API token (required when provider is Hetzner)"
+    default: ""
 
 outputs:
   kubeconfig:
@@ -18,6 +33,7 @@ runs:
   using: composite
   steps:
     - name: 📥 Install KSail
+      if: inputs.install == 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
@@ -41,16 +57,33 @@ runs:
         ksail --version
 
     - name: 🏗️ Initialize Project
+      if: inputs.init == 'true'
       shell: bash
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
-      run: ksail cluster init --distribution "$DISTRIBUTION"
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ inputs.args }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+      run: |
+        # shellcheck disable=SC2086
+        ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
 
     - name: 🚀 Create Cluster
       id: create
       shell: bash
+      env:
+        INIT: ${{ inputs.init }}
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ inputs.args }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
         set -euo pipefail
-        ksail cluster create
+        if [ "$INIT" = "true" ]; then
+          ksail cluster create
+        else
+          # shellcheck disable=SC2086
+          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+        fi
         KUBECONFIG_PATH="${HOME}/.kube/config"
         echo "kubeconfig=$KUBECONFIG_PATH" >> "$GITHUB_OUTPUT"

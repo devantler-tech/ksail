@@ -192,6 +192,11 @@ The action runs within your job, so subsequent steps have full access to the clu
 |-------|------|---------|-------------|
 | `distribution` | string | `Vanilla` | KSail distribution to provision |
 | `ksail-version` | string | `latest` | KSail version to install (e.g. `5.55.0`) |
+| `provider` | string | `Docker` | Infrastructure provider (`Docker`, `Hetzner`) |
+| `args` | string | | Additional CLI arguments for init (and create when init is skipped) |
+| `init` | string | `true` | Whether to run `ksail cluster init` before create |
+| `install` | string | `true` | Whether to install KSail from releases (set `false` if already in PATH) |
+| `hcloud-token` | string | | Hetzner Cloud API token (required when provider is `Hetzner`) |
 
 ### Outputs
 
