@@ -1,6 +1,3 @@
-// Package registryresolver contains benchmarks for the registry resolution hot paths.
-// These are white-box benchmarks using the internal package to access unexported types
-// and functions that cannot be reached from the external test package.
 package registryresolver
 
 import (
@@ -16,7 +13,7 @@ import (
 var (
 	benchInfoSink   *Info
 	benchStringSink string
-	benchErrSink    error
+	errBenchSink    error
 )
 
 // BenchmarkParseOCIURL_LocalhostWithPort measures parsing a local registry OCI URL,
@@ -26,7 +23,7 @@ func BenchmarkParseOCIURL_LocalhostWithPort(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, benchErrSink = parseOCIURL("oci://localhost:5050/myproject")
+		benchInfoSink, errBenchSink = parseOCIURL("oci://localhost:5050/myproject")
 	}
 }
 
@@ -37,7 +34,7 @@ func BenchmarkParseOCIURL_ExternalRegistry(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, benchErrSink = parseOCIURL("oci://ghcr.io/devantler-tech/ksail/config")
+		benchInfoSink, errBenchSink = parseOCIURL("oci://ghcr.io/devantler-tech/ksail/config")
 	}
 }
 
@@ -47,7 +44,7 @@ func BenchmarkParseOCIURL_Empty(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, benchErrSink = parseOCIURL("")
+		benchInfoSink, errBenchSink = parseOCIURL("")
 	}
 }
 
@@ -121,28 +118,28 @@ func BenchmarkFormatRegistryURL_WithoutPort(b *testing.B) {
 // BenchmarkDetectRegistryFromViper_Set measures the hot path where a registry value
 // is already configured via the --registry flag or KSAIL_REGISTRY env var.
 func BenchmarkDetectRegistryFromViper_Set(b *testing.B) {
-	v := viper.New()
-	v.Set(ViperRegistryKey, "localhost:5050/myproject")
+	viperCfg := viper.New()
+	viperCfg.Set(ViperRegistryKey, "localhost:5050/myproject")
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, benchErrSink = DetectRegistryFromViper(v)
+		benchInfoSink, errBenchSink = DetectRegistryFromViper(viperCfg)
 	}
 }
 
 // BenchmarkDetectRegistryFromViper_Empty measures the error path when registry is not
 // set — Viper returns an empty string and the function returns ErrRegistryNotSet.
 func BenchmarkDetectRegistryFromViper_Empty(b *testing.B) {
-	v := viper.New()
+	viperCfg := viper.New()
 	// No registry value set — exercises the early-exit error branch.
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, benchErrSink = DetectRegistryFromViper(v)
+		benchInfoSink, errBenchSink = DetectRegistryFromViper(viperCfg)
 	}
 }
 
@@ -164,7 +161,7 @@ func BenchmarkDetectRegistryFromConfig_LocalRegistry(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, benchErrSink = DetectRegistryFromConfig(cfg)
+		benchInfoSink, errBenchSink = DetectRegistryFromConfig(cfg)
 	}
 }
 
@@ -186,6 +183,6 @@ func BenchmarkDetectRegistryFromConfig_ExternalRegistry(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink, benchErrSink = DetectRegistryFromConfig(cfg)
+		benchInfoSink, errBenchSink = DetectRegistryFromConfig(cfg)
 	}
 }
