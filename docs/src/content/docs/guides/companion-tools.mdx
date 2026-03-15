@@ -90,7 +90,7 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
 2. **Start DevSpace dev mode**
 
    ```bash
-   devspace dev --kube-context k3d-dev
+   devspace dev --kube-context <your-context>
    ```
 
 3. **Tear down**
@@ -111,14 +111,14 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
 1. **Deploy your application**
 
    ```bash
-   kubectl create deployment my-app --image=nginx:latest
-   kubectl expose deployment my-app --port=80
+   kubectl --context <your-context> create deployment my-app --image=nginx:latest
+   kubectl --context <your-context> expose deployment my-app --port=80
    ```
 
 2. **Connect Telepresence to the cluster**
 
    ```bash
-   telepresence connect --context k3d-dev
+   telepresence connect --context <your-context>
    ```
 
    Telepresence installs a traffic manager in the cluster and creates a network tunnel from your local machine.
@@ -129,7 +129,7 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
    telepresence intercept my-app --port 8080:80
    ```
 
-   All traffic destined for `my-app` is now routed to `localhost:8080`. Run your local process on that port:
+   All traffic destined for the `my-app` service is now routed to `localhost:8080`. Run your local process on that port:
 
    ```bash
    # Run your service locally — it receives cluster traffic
@@ -154,7 +154,7 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
 
 [Skaffold](https://skaffold.dev/) automates the build-tag-deploy pipeline. KSail provides the cluster; Skaffold handles the rest.
 
-1. **Create `skaffold.yaml`** pointing at the KSail cluster context.
+1. **Create `skaffold.yaml`** pointing at the KSail cluster context (replace `<your-context>` with the value from the table above).
 
    ```yaml
    # skaffold.yaml
@@ -169,7 +169,7 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
      rawYaml:
        - k8s/deployment.yaml
    deploy:
-     kubeContext: kind-dev
+     kubeContext: <your-context>
      kubectl: {}
    ```
 
@@ -206,11 +206,11 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
 1. **Deploy your application**
 
    ```bash
-   kubectl create deployment my-app --image=my-app:latest
-   kubectl expose deployment my-app --port=80
+   kubectl --context <your-context> create deployment my-app --image=my-app:latest
+   kubectl --context <your-context> expose deployment my-app --port=80
    ```
 
-2. **Create `.mirrord/mirrord.json`** (optional—mirrord works without one).
+2. **Create `.mirrord/mirrord.json`** to configure the target and traffic mirroring.
 
    ```json
    {
@@ -259,7 +259,7 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
 | Debugging a service locally with live cluster traffic | **Telepresence** |
 | Mirroring pod traffic to a local process | **mirrord** |
 
-You can combine `ksail workload watch` with any companion tool—they operate at different layers and do not conflict. You can also layer companion tools together. For example, use Tilt for the build-deploy loop and mirrord to debug a specific service locally:
+You can combine `ksail workload watch` with any companion tool — they operate at different layers and do not conflict. You can also layer companion tools together. For example, use Tilt for the build-deploy loop and mirrord to debug a specific service locally:
 
 ```bash
 # Terminal 1 — cluster + Tilt
