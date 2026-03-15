@@ -131,7 +131,9 @@ spec:
 
 K3s starts fastest in CI, Cilium enforces network policies, Flux tests the actual deployment workflow, and declarative config ensures reproducibility across runs.
 
-### CI Pipeline Example
+### GitHub Actions (Recommended)
+
+Use the official `ksail-cluster` composite action to provision a cluster in one step. It handles installation, Helm chart caching, mirror registry caching, and image pre-pulling automatically.
 
 ```yaml
 # .github/workflows/test.yaml
@@ -147,32 +149,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install KSail
-        run: |
-          curl -sSL https://github.com/devantler-tech/ksail/releases/latest/download/ksail_linux_amd64 -o ksail
-          chmod +x ksail
-          sudo mv ksail /usr/local/bin/
-
-      - name: Create cluster
-        run: ksail cluster create
+      - name: Provision KSail cluster
+        id: cluster
+        uses: devantler-tech/ksail/.github/actions/ksail-cluster@v5.59.0
+        with:
+          distribution: K3s   # Vanilla, K3s, Talos, VCluster
 
       - name: Build and push
         run: |
           docker build -t localhost:5050/my-app:${{ github.sha }} .
           docker push localhost:5050/my-app:${{ github.sha }}
 
-      - name: Deploy
+      - name: Deploy and test
+        env:
+          KUBECONFIG: ${{ steps.cluster.outputs.kubeconfig }}
         run: |
           sed -i "s|image:.*|image: localhost:5050/my-app:${{ github.sha }}|" k8s/deployment.yaml
           ksail workload push
           ksail workload reconcile
-
-      - name: Run tests
-        run: |
-          # Wait for deployment
           ksail workload wait deployment/my-app --for=condition=available
-
-          # Run integration tests
           npm run test:integration
 
       - name: Cleanup
@@ -180,24 +175,46 @@ jobs:
         run: ksail cluster delete
 ```
 
-You can add `--ttl` as a best-effort safety net. When backgrounding the create step, include an explicit readiness wait so subsequent steps don't start before the cluster is ready:
+**Action inputs:**
 
-```yaml
-      - name: Create cluster (auto-destroys after 30m)
-        run: ksail cluster create --ttl 30m &
+| Input | Default | Description |
+|-------|---------|-------------|
+| `distribution` | `Vanilla` | Distribution to provision (Vanilla, K3s, Talos, VCluster) |
+| `provider` | `Docker` | Infrastructure provider (Docker, Hetzner) |
+| `args` | `""` | Additional args passed to `cluster init` / `cluster create` |
+| `init` | `true` | Run `ksail cluster init` before create |
+| `ksail-version` | `latest` | KSail version to install (e.g. `5.55.0`) or `latest` |
+| `install` | `true` | Install KSail from GitHub releases |
+| `cache` | `true` | Cache Helm charts and mirror registry volumes between runs |
+| `hcloud-token` | `""` | Hetzner Cloud API token (required when provider is Hetzner) |
 
-      - name: Wait for cluster readiness
-        run: kubectl wait --for=condition=Ready node --all --timeout=120s
+**Action outputs:** `kubeconfig` — path to the kubeconfig file for the provisioned cluster.
+
+### Other CI Systems
+
+For non-GitHub CI (GitLab CI, CircleCI, etc.), install KSail directly and run lifecycle commands:
+
+```bash
+# Install (see https://github.com/devantler-tech/ksail/releases for available versions)
+VERSION=5.59.0
+curl -sSL "https://github.com/devantler-tech/ksail/releases/download/v${VERSION}/ksail_${VERSION}_linux_amd64.tar.gz" | tar -xz
+sudo mv ksail /usr/local/bin/
+
+# Provision cluster (using declarative ksail.yaml)
+ksail cluster create
+
+# ... run tests ...
+
+# Cleanup
+ksail cluster delete
 ```
-
-> **Note:** TTL deletion only runs while the `ksail cluster create` process is alive. If the CI runner is cancelled or the job terminates, the background process is killed and the cluster won't be deleted by TTL. Keep the `if: always()` cleanup step as the primary safeguard.
 
 ### Tips
 
 - Use `--timeout` flags to handle slow CI runners
 - Cache Docker layers for faster builds
 - Use matrix builds to test across multiple Kubernetes versions/distributions
-- Use `--ttl` as a best-effort supplement on ephemeral runners — the cluster auto-destroys when the TTL elapses provided the `ksail cluster create` process stays alive
+- Use `--ttl` as a best-effort safety net — the cluster auto-destroys when the TTL elapses provided the `ksail cluster create` process stays alive
 - Consider using `ksail cluster start` and `ksail cluster stop` if tests can share a cluster
 
 ## Configuration Comparison
