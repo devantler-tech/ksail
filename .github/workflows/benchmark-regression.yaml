@@ -115,7 +115,7 @@ jobs:
           script: |
             const fs = require('fs');
             const resultFile = process.env.RUNNER_TEMP + '/benchstat-result.txt';
-            const raw = fs.existsSync(resultFile) ? fs.readFileSync(resultFile, 'utf8').trim() : '';
+            const raw = fs.existsSync(resultFile) ? fs.readFileSync(resultFile, 'utf8').trimEnd() : '';
 
             // Parse benchstat v2 output into regressions, improvements, unchanged
             const regressions = [];
