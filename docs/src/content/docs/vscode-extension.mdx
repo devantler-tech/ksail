@@ -23,15 +23,16 @@ The KSail sidebar panel lists your clusters with provider info and status indica
 
 | Icon | Meaning |
 |------|---------|
-| ✅ Green checkmark | Cluster is running |
-| 🚫 Red slash | Cluster is stopped |
-| 📦 Server icon | Status unknown |
-| ⏳ Spinner | Cluster is being created |
+| Green pass icon (`pass`) | Cluster is running |
+| Red slash icon (`circle-slash`) | Cluster is stopped |
+| Server icon (`server`) | Status unknown |
+| Spinning loader (`loading~spin`) | Cluster is being created |
 
 Right-click a cluster for context-sensitive actions:
 
-- **Running clusters:** Stop, Delete, Connect
-- **Stopped clusters:** Start, Delete
+- **All clusters:** Connect to Cluster (K9s), Delete
+- **Stopped / Unknown clusters:** + Start
+- **Running clusters:** + Stop
 
 ### Cluster Status View
 
@@ -59,10 +60,10 @@ Click the status bar item to manually refresh cluster status.
 
 ### Interactive Wizards
 
-The **Init** and **Create** commands launch multi-step wizards:
+The **Init** and **Create** commands launch multi-step wizards. Option lists are fetched at runtime from the KSail MCP schema, so they automatically stay in sync with the installed CLI version. If the MCP server is unreachable, a built-in fallback set is used:
 
-- Distribution selection (Vanilla / K3s / Talos / VCluster)
-- Provider selection (Docker / Hetzner / Omni)
+- Distribution: Vanilla, K3s, Talos *(VCluster available when MCP schema is reachable)*
+- Provider: Docker, Hetzner *(Omni available when MCP schema is reachable)*
 - Component configuration (CNI, CSI, GitOps engine, etc.)
 - Output path selection for generated files
 
