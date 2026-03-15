@@ -234,6 +234,9 @@ ksail cluster init --help
 # --distribution K3s       # Lightweight K3s via K3d
 # --distribution Talos     # Immutable Talos Linux
 # --distribution VCluster  # Virtual clusters via Vind
+
+# Supported profiles:
+# --profile Default        # Default profile (current behaviour, no-op)
 ```
 
 ### Troubleshooting Build Issues
