@@ -75,11 +75,16 @@ export default defineConfig({
           ],
         },
         {
+          label: "Integrations",
+          items: [
+            { label: "VSCode Extension", link: "/vscode-extension/" },
+          ],
+        },
+        {
           label: "AI & Automation",
           items: [
             { label: "AI Chat Assistant", link: "/ai-chat/" },
             { label: "MCP Server", link: "/mcp/" },
-            { label: "VSCode Extension", link: "/vscode-extension/" },
           ],
         },
         {
