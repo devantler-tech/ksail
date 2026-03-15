@@ -1,35 +1,17 @@
 package gen_test
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload/gen"
-	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
 )
 
-func execService(t *testing.T, args []string) (string, string, error) {
-	t.Helper()
-
-	rt := di.NewRuntime()
-	cmd := gen.NewServiceCmd(rt)
-
-	var outBuf, errBuf bytes.Buffer
-	cmd.SetOut(&outBuf)
-	cmd.SetErr(&errBuf)
-	cmd.SetArgs(args)
-
-	err := cmd.Execute()
-
-	return outBuf.String(), errBuf.String(), err
-}
-
 func TestGenServiceClusterIP(t *testing.T) {
 	t.Parallel()
 
-	output, _, err := execService(t, []string{
+	output, _, err := execGen(t, gen.NewServiceCmd, []string{
 		"clusterip", "test-svc",
 		"--tcp=80:8080",
 	})
@@ -41,7 +23,7 @@ func TestGenServiceClusterIP(t *testing.T) {
 func TestGenServiceNodePort(t *testing.T) {
 	t.Parallel()
 
-	output, _, err := execService(t, []string{
+	output, _, err := execGen(t, gen.NewServiceCmd, []string{
 		"nodeport", "test-svc",
 		"--tcp=80:8080",
 	})
@@ -53,7 +35,7 @@ func TestGenServiceNodePort(t *testing.T) {
 func TestGenServiceLoadBalancer(t *testing.T) {
 	t.Parallel()
 
-	output, _, err := execService(t, []string{
+	output, _, err := execGen(t, gen.NewServiceCmd, []string{
 		"loadbalancer", "test-svc",
 		"--tcp=80:8080",
 	})
@@ -65,7 +47,7 @@ func TestGenServiceLoadBalancer(t *testing.T) {
 func TestGenServiceExternalName(t *testing.T) {
 	t.Parallel()
 
-	output, _, err := execService(t, []string{
+	output, _, err := execGen(t, gen.NewServiceCmd, []string{
 		"externalname", "test-svc",
 		"--external-name=example.com",
 	})
