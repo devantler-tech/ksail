@@ -112,7 +112,9 @@ func BenchmarkParseRegistryFlag_WithCredentials(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchInfoSink = registryresolver.ParseRegistryFlag("user:secret@ghcr.io/devantler-tech/ksail")
+		benchInfoSink = registryresolver.ParseRegistryFlag(
+			"user:secret@ghcr.io/devantler-tech/ksail",
+		)
 		if benchInfoSink == nil {
 			b.Fatal("expected non-nil result")
 		}
@@ -140,7 +142,11 @@ func BenchmarkFormatRegistryURL_WithoutPort(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchStringSink = registryresolver.FormatRegistryURL("ghcr.io", 0, "devantler-tech/ksail/config")
+		benchStringSink = registryresolver.FormatRegistryURL(
+			"ghcr.io",
+			0,
+			"devantler-tech/ksail/config",
+		)
 		if benchStringSink == "" {
 			b.Fatal("expected non-empty result")
 		}
