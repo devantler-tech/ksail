@@ -12,6 +12,12 @@ ksail cluster init --name my-cluster --distribution Vanilla --cni Cilium
 ksail cluster create
 ```
 
+Use `--profile` to start from a **pre-built cluster template** that bundles opinionated CNI, CSI, policy engine, GitOps, and other settings. Individual flags still override profile defaults. See [Cluster Profiles](/guides/cluster-profiles/) for available profiles.
+
+```bash
+ksail cluster init --profile Default
+```
+
 Use `--ttl` to create an **ephemeral cluster** that auto-destroys after a set duration. The process blocks until the TTL expires, then deletes the cluster automatically. Press Ctrl+C to cancel the wait and keep the cluster running. See [Ephemeral Clusters](/guides/ephemeral-clusters/) for usage patterns and tips.
 
 ```bash
