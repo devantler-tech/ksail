@@ -10,7 +10,11 @@ import (
 
 // execGen runs the command returned by cmdFactory with the provided args,
 // returning stdout, stderr, and any execution error.
-func execGen(t *testing.T, cmdFactory func(*di.Runtime) *cobra.Command, args []string) (string, string, error) {
+func execGen(
+	t *testing.T,
+	cmdFactory func(*di.Runtime) *cobra.Command,
+	args []string,
+) (string, string, error) {
 	t.Helper()
 
 	rt := di.NewRuntime()

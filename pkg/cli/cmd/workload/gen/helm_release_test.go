@@ -392,4 +392,3 @@ func TestGenHelmReleaseRequiresName(t *testing.T) {
 
 	require.Error(t, err)
 }
-
