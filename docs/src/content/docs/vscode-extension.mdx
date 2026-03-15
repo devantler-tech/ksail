@@ -1,0 +1,126 @@
+---
+title: VSCode Extension
+description: Manage Kubernetes clusters directly from Visual Studio Code with the KSail extension
+---
+
+The KSail VSCode extension brings cluster management into your editor. It provides a sidebar with live cluster status, interactive wizards for cluster operations, a command palette, keyboard shortcuts, and a built-in MCP server for AI assistants.
+
+## Installation
+
+See the [Installation Guide — VSCode Extension](/installation/#vscode-extension) for Marketplace and VSIX installation steps.
+
+**Prerequisites:**
+
+- [KSail CLI](/installation/) installed and available in PATH
+- Docker running (for local cluster operations)
+- K9s (optional — for `Connect to Cluster` command)
+
+## Features
+
+### Clusters View
+
+The KSail sidebar panel lists your clusters with provider info and status indicators:
+
+| Icon | Meaning |
+|------|---------|
+| Green pass icon (`pass`) | Cluster is running |
+| Red slash icon (`circle-slash`) | Cluster is stopped |
+| Server icon (`server`) | Status unknown |
+| Spinning loader (`loading~spin`) | Cluster is being created |
+
+Right-click a cluster for context-sensitive actions:
+
+- **All clusters:** Connect to Cluster (K9s), Delete
+- **Stopped / Unknown clusters:** + Start
+- **Running clusters:** + Stop
+
+### Cluster Status View
+
+The **Cluster Status** panel polls the active cluster every 10 seconds (configurable) and shows:
+
+- **Health indicator:** Healthy / Degraded / Error / Unknown
+- **Pod summary:** Pods grouped by namespace with running/pending/failed counts; click a failed or pending pod to view its logs
+- **GitOps reconciliation:** Flux or ArgoCD resource readiness (e.g., `Flux (3/3 ready)`)
+
+When no cluster is connected, the panel prompts you to create or start one.
+
+### Status Bar
+
+A compact health indicator appears in the bottom status bar:
+
+| State | Display |
+|-------|---------|
+| Healthy | `✔ KSail: Healthy` |
+| Degraded | `⚠ KSail: Degraded` (warning background) |
+| Error | `✖ KSail: Error` (error background) |
+| Unknown | `? KSail: Unknown` |
+| No cluster | `? KSail: No Cluster` |
+
+Click the status bar item to manually refresh cluster status.
+
+### Interactive Wizards
+
+The **Init** and **Create** commands launch multi-step wizards. Option lists are fetched at runtime from the KSail MCP schema, so they automatically stay in sync with the installed CLI version. If the MCP server is unreachable, a built-in fallback set is used:
+
+- Distribution: Vanilla, K3s, Talos *(VCluster available when MCP schema is reachable)*
+- Provider: Docker, Hetzner *(Omni available when MCP schema is reachable)*
+- Component configuration (CNI, CSI, GitOps engine, etc.)
+- Output path selection for generated files
+
+### MCP Server
+
+The extension exposes KSail as an MCP server for AI assistants in VSCode (e.g., GitHub Copilot). No separate configuration is needed — the extension handles server lifecycle automatically. See [MCP Server](/mcp/) for details on available tools.
+
+## Commands
+
+Access all commands via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
+
+| Command | Description | Shortcut |
+|---------|-------------|---------|
+| `KSail: Init Cluster` | Initialize a new `ksail.yaml` configuration | `Cmd+Shift+K I` |
+| `KSail: Create Cluster` | Create and start a cluster | `Cmd+Shift+K C` |
+| `KSail: Delete Cluster` | Delete the cluster | `Cmd+Shift+K D` |
+| `KSail: Start Cluster` | Start an existing cluster | — |
+| `KSail: Stop Cluster` | Stop a running cluster | — |
+| `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI | — |
+| `KSail: Refresh Clusters` | Refresh the clusters tree view | — |
+| `KSail: Refresh Cluster Status` | Manually refresh cluster status | — |
+| `KSail: Show Output` | Open the KSail output channel | — |
+
+## Settings
+
+Configure in VSCode settings (`Cmd+,` / `Ctrl+,`) or `settings.json`:
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `ksail.binaryPath` | Path to the KSail binary | `ksail` |
+| `ksail.statusPollingInterval` | Cluster status polling interval in seconds (5–300) | `10` |
+
+## Development
+
+### Building
+
+```bash
+cd vsce
+npm ci
+npm run compile
+```
+
+### Packaging
+
+```bash
+npx @vscode/vsce package --no-dependencies
+```
+
+### Testing locally
+
+1. Open the `vsce` folder in VSCode
+2. Press `F5` to launch the Extension Development Host
+3. Test commands from the Command Palette
+
+## Further Reading
+
+- [Features — VSCode Extension](/features/#vscode-extension) — Feature overview
+- [MCP Server](/mcp/) — MCP server setup and tool reference
+- [AI Chat Assistant](/ai-chat/) — Terminal-based AI chat
+- [Installation Guide](/installation/#vscode-extension) — Installation steps

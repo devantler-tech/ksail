@@ -3,8 +3,6 @@ package registryresolver
 import (
 	"context"
 	"errors"
-	"fmt"
-	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -345,13 +343,34 @@ func parseRegistryFlag(registryFlag string) *Info {
 	return info
 }
 
-// FormatRegistryURL formats a registry URL using net.JoinHostPort for proper host:port handling.
+// FormatRegistryURL formats a registry URL using a pre-allocated byte buffer to
+// avoid the intermediate allocations from net.JoinHostPort + strconv.Itoa + fmt.Sprintf.
+// IPv6 addresses are wrapped in brackets per RFC 3986 (e.g., [::1]:5000).
 func FormatRegistryURL(host string, port int32, repository string) string {
 	if port > 0 {
-		hostPort := net.JoinHostPort(host, strconv.Itoa(int(port)))
+		const decimalBase = 10
 
-		return fmt.Sprintf("oci://%s/%s", hostPort, repository)
+		// Pre-allocate: "oci://" (6) + optional brackets (2) + host + ":" (1) + port (≤5) + "/" (1) + repo
+		buf := make([]byte, 0, 6+2+len(host)+1+5+1+len(repository))
+
+		buf = append(buf, "oci://"...)
+
+		if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
+			// IPv6 address — wrap in brackets per RFC 3986
+			buf = append(buf, '[')
+			buf = append(buf, host...)
+			buf = append(buf, ']')
+		} else {
+			buf = append(buf, host...)
+		}
+
+		buf = append(buf, ':')
+		buf = strconv.AppendInt(buf, int64(port), decimalBase)
+		buf = append(buf, '/')
+		buf = append(buf, repository...)
+
+		return string(buf)
 	}
 
-	return fmt.Sprintf("oci://%s/%s", host, repository)
+	return "oci://" + host + "/" + repository
 }
