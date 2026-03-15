@@ -227,8 +227,10 @@ runs:
               KUBECONFIG_PATH="${1#--kubeconfig=}"
               break
               ;;
+            *)
+              shift
+              ;;
           esac
-          shift
         done
         echo "kubeconfig=$KUBECONFIG_PATH" >> "$GITHUB_OUTPUT"
 
