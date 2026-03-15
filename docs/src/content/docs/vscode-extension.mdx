@@ -1,0 +1,112 @@
+---
+title: VSCode Extension
+description: Manage local Kubernetes clusters directly from Visual Studio Code with the KSail extension
+---
+
+The KSail VSCode extension brings cluster lifecycle management into your editor. It provides a sidebar for browsing and controlling clusters, real-time health monitoring, interactive setup wizards, and automatic MCP server integration for GitHub Copilot agent workflows.
+
+## Prerequisites
+
+- [KSail CLI](/installation/) installed and available in PATH
+- Docker running (for cluster operations)
+- K9s optional — required only for the **Connect to Cluster** command
+
+## Installation
+
+Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=devantler.ksail) or download a `.vsix` file from [GitHub Releases](https://github.com/devantler-tech/ksail/releases) and run `Extensions: Install from VSIX...` in VSCode.
+
+## Commands
+
+All commands are accessible via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
+
+| Command | Description | Shortcut |
+|---|---|---|
+| `KSail: Init Cluster` | Initialize a new `ksail.yaml` configuration | `Cmd+Shift+K I` |
+| `KSail: Create Cluster` | Create and start a cluster | `Cmd+Shift+K C` |
+| `KSail: Delete Cluster` | Delete the cluster | `Cmd+Shift+K D` |
+| `KSail: Start Cluster` | Start an existing cluster | — |
+| `KSail: Stop Cluster` | Stop a running cluster | — |
+| `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI | — |
+| `KSail: Refresh Clusters` | Refresh the clusters tree view | — |
+| `KSail: Refresh Cluster Status` | Manually refresh the status view | — |
+| `KSail: Show Output` | Open the KSail output channel | — |
+
+## Interactive Wizards
+
+The **Init** and **Create** commands launch multi-step wizards for:
+
+- Distribution selection (Vanilla / K3s / Talos / VCluster)
+- Provider selection (Docker / Hetzner / Omni)
+- Component configuration (CNI, CSI, GitOps engine, etc.)
+- Output path selection for generated files
+
+## Clusters View
+
+The KSail sidebar shows all clusters with name and provider (e.g., `my-cluster - Docker`). Status icons indicate cluster state:
+
+- ✅ Green checkmark — Running
+- 🚫 Red slash — Stopped
+- 📦 Server icon — Unknown status
+- Spinner — Pending (during creation)
+
+Right-click a cluster for context-sensitive actions based on its state.
+
+## Cluster Status View
+
+The **Cluster Status** panel polls the active cluster every 10 seconds (configurable) and displays:
+
+- **Health indicator** — Healthy / Degraded / Error / Unknown
+- **Pod summary** — Pods grouped by namespace with running/pending/failed counts; click a failed or pending pod to open its logs
+- **GitOps reconciliation** — Flux or ArgoCD readiness (e.g., `Flux (3/3 ready)`)
+
+When no cluster is connected, the panel prompts you to create or start one.
+
+## Status Bar
+
+A compact health item appears in the bottom status bar. Click it to manually refresh.
+
+| State | Display |
+|---|---|
+| Healthy | `✔ KSail: Healthy` |
+| Degraded | `⚠ KSail: Degraded` (warning background) |
+| Error | `✖ KSail: Error` (error background) |
+| Unknown | `? KSail: Unknown` |
+| No cluster | `? KSail: No Cluster` |
+
+## Extension Settings
+
+| Setting | Description | Default |
+|---|---|---|
+| `ksail.binaryPath` | Path to `ksail` binary | `ksail` |
+| `ksail.statusPollingInterval` | Cluster status polling interval in seconds (5–300) | `10` |
+
+## MCP Server Integration
+
+The extension automatically registers KSail as an MCP server with VSCode's native MCP infrastructure — no manual configuration needed. Once installed:
+
+1. Open a workspace with a `ksail.yaml` file (or run `KSail: Init Cluster`)
+2. Use GitHub Copilot in agent mode
+3. Copilot can now execute KSail commands directly
+
+For manual MCP configuration or other clients, see [MCP Server](/mcp/).
+
+## Development
+
+```bash
+cd vsce
+npm ci
+npm run compile
+```
+
+To test locally, open the `vsce` folder in VSCode and press `F5` to launch the Extension Development Host. To package:
+
+```bash
+npx @vscode/vsce package --no-dependencies
+```
+
+## See Also
+
+- [Installation](/installation/) — CLI installation methods
+- [MCP Server](/mcp/) — MCP server setup and tool reference
+- [AI Chat Assistant](/ai-chat/) — Interactive chat powered by GitHub Copilot
+- [Features](/features/) — Full feature overview
