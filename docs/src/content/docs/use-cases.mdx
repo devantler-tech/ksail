@@ -106,7 +106,7 @@ K3s starts faster with lower resource usage, Cilium provides network policies an
 - Use `ksail workload logs -f deployment/my-app` for live log streaming
 - Use `ksail workload exec deployment/my-app -- /bin/sh` for debugging
 - Keep terminal running with `ksail cluster info` to monitor cluster health
-- Pair KSail with **[Tilt, Skaffold, or mirrord](/guides/companion-tools/)** to automate the build-deploy loop or mirror live traffic to your local process
+- Pair KSail with **[Tilt, Skaffold, DevSpace, Telepresence, or mirrord](/guides/companion-tools/)** to automate the build-deploy loop, hot-reload interpreted code, or bridge local↔remote traffic
 
 ## Testing in CI/CD
 
@@ -215,7 +215,7 @@ You can add `--ttl` as a best-effort safety net. When backgrounding the create s
 ## Next Steps
 
 - **[Ephemeral Clusters](/guides/ephemeral-clusters/)** – Use `--ttl` for time-limited clusters for debugging, demos, and temporary access
-- **[Companion Tools](/guides/companion-tools/)** – Use KSail with Tilt, Skaffold, or mirrord for inner-loop development
+- **[Companion Tools](/guides/companion-tools/)** – Use KSail with Tilt, Skaffold, DevSpace, Telepresence, or mirrord for inner-loop development
 - **[Features](/features/)** – Deep dive into KSail capabilities
 - **[Concepts](/concepts/)** – Understand the underlying technologies
 - **[Configuration](/configuration/)** – Complete configuration reference
