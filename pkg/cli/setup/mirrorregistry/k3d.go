@@ -266,8 +266,7 @@ func cleanupK3dMirrorRegistries(
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
 ) error {
-	// K3d uses "k3d-{clusterName}" as the network name
-	networkName := "k3d-" + clusterName
+	networkName := k3dconfigmanager.ResolveNetworkName(clusterName)
 
 	// Use cached distribution config from ConfigManager
 	k3dConfig := cfgManager.DistributionConfig.K3d

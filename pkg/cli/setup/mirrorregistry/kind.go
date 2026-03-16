@@ -185,8 +185,7 @@ func cleanupKindMirrorRegistries(
 		return err
 	}
 
-	// Kind uses "kind" as the network name
-	networkName := "kind"
+	networkName := kindconfigmanager.DefaultNetworkName
 
 	return cleanupRegistriesOrFallback(
 		cmd,
