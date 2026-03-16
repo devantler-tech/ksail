@@ -24,6 +24,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // NewUpdateCmd creates the cluster update command.
@@ -55,17 +56,14 @@ Use --dry-run to preview changes without applying them.`,
 		},
 	}
 
-	cfgManager := ksailconfigmanager.NewCommandConfigManager(
-		cmd,
-		defaultClusterMutationFieldSelectors(),
-	)
-
-	registerMirrorRegistryFlag(cmd)
-	registerNameFlag(cmd, cfgManager)
+	cfgManager := setupMutationCmdFlags(cmd)
 
 	cmd.Flags().Bool("force", false,
 		"Skip confirmation prompt and proceed with cluster recreation")
 	_ = cfgManager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
+
+	cmd.Flags().BoolP("yes", "y", false,
+		"Skip confirmation prompt (alias for --force)")
 
 	cmd.Flags().Bool("dry-run", false,
 		"Preview changes without applying them")
@@ -94,7 +92,7 @@ func handleUpdateRunE(
 		return err
 	}
 
-	force := cfgManager.Viper.GetBool("force")
+	force := resolveForce(cfgManager.Viper.GetBool("force"), cmd.Flags().Lookup("yes"))
 
 	// Create provisioner and verify cluster exists
 	provisioner, err := createAndVerifyProvisioner(cmd, ctx, clusterName)
@@ -287,10 +285,6 @@ func computeSpecOnlyDiff(
 		}
 	}
 
-	// Apply GitOps local registry default AFTER detection so the detected
-	// GitOps engine value is used to infer the default local registry address.
-	clusterupdate.ApplyGitOpsLocalRegistryDefault(currentSpec)
-
 	diffEngine := specdiff.NewEngine(
 		ctx.ClusterCfg.Spec.Cluster.Distribution,
 		ctx.ClusterCfg.Spec.Cluster.Provider,
@@ -313,7 +307,7 @@ func applyOrReportChanges(
 	outputTimer timer.Timer,
 ) error {
 	dryRun := cfgManager.Viper.GetBool("dry-run")
-	force := cfgManager.Viper.GetBool("force")
+	force := resolveForce(cfgManager.Viper.GetBool("force"), cmd.Flags().Lookup("yes"))
 
 	if dryRun {
 		return reportDryRun(cmd, diff)
@@ -362,20 +356,15 @@ func applyOrReportChanges(
 	)
 }
 
-// reportDryRun prints a summary of what would be applied and returns nil.
+// reportDryRun prints a summary for dry-run mode and confirms no changes were applied.
 func reportDryRun(cmd *cobra.Command, diff *clusterupdate.UpdateResult) error {
-	var summary strings.Builder
+	if diff != nil && diff.TotalChanges() == 0 {
+		notify.Infof(cmd.OutOrStdout(), "No changes detected")
 
-	fmt.Fprintf(&summary,
-		"Would apply %d in-place, %d reboot-required, %d recreate-required changes.\n",
-		len(diff.InPlaceChanges),
-		len(diff.RebootRequired),
-		len(diff.RecreateRequired),
-	)
+		return nil
+	}
 
-	summary.WriteString("Dry run complete. No changes applied.")
-
-	notify.Infof(cmd.OutOrStdout(), summary.String())
+	notify.Infof(cmd.OutOrStdout(), "Dry run complete. No changes applied.")
 
 	return nil
 }
@@ -466,9 +455,11 @@ func applyInPlaceChanges(
 }
 
 // displayChangesSummary outputs a human-readable summary of configuration changes
-// as a single grouped block to avoid per-line symbol prefixes.
+// as a before/after table with one row per changed field and impact icons.
+// Rows are ordered by severity: recreate-required → reboot-required → in-place.
+// Fields with no change are omitted.
 func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
-	totalChanges := len(diff.InPlaceChanges) + len(diff.RebootRequired) + len(diff.RecreateRequired)
+	totalChanges := diff.TotalChanges()
 
 	if totalChanges == 0 {
 		return
@@ -476,23 +467,177 @@ func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult)
 
 	notify.Titlef(cmd.OutOrStdout(), "🔍", "Change summary")
 
+	notify.Infof(
+		cmd.OutOrStdout(),
+		formatDiffTable(diff, totalChanges),
+	)
+}
+
+// diffRow holds a single row of the diff table.
+type diffRow struct {
+	icon   string
+	field  string
+	oldVal string
+	newVal string
+	impact string
+}
+
+// categoryIcon returns the severity icon for a change category.
+func categoryIcon(cat clusterupdate.ChangeCategory) string {
+	switch cat {
+	case clusterupdate.ChangeCategoryRecreateRequired:
+		return "🔴"
+	case clusterupdate.ChangeCategoryRebootRequired:
+		return "🟡"
+	case clusterupdate.ChangeCategoryInPlace:
+		return "🟢"
+	default:
+		return "⚪"
+	}
+}
+
+// formatDiffTable builds the formatted diff table string.
+// The table has four columns: Component, Before, After, Impact.
+// Rows are ordered by severity: 🔴 recreate → 🟡 reboot → 🟢 in-place.
+func formatDiffTable(
+	diff *clusterupdate.UpdateResult,
+	totalChanges int,
+) string {
+	rows := collectDiffRows(diff, totalChanges)
+
+	// Column headers
+	const (
+		hdrComponent = "Component"
+		hdrBefore    = "Before"
+		hdrAfter     = "After"
+		hdrImpact    = "Impact"
+	)
+
+	colW, colB, colA, colI := computeColumnWidths(
+		rows, hdrComponent, hdrBefore, hdrAfter, hdrImpact,
+	)
+
 	var block strings.Builder
 
-	fmt.Fprintf(&block, "Detected %d configuration changes:", totalChanges)
+	// Pre-allocate: each row needs ~colW+colB+colA+colI bytes for data,
+	// plus ~16 bytes overhead per row for spacing (6), emoji (4), newlines, padding.
+	const tableOverheadRows = 4 // summary, header, separator, trailing
 
-	for _, change := range diff.InPlaceChanges {
-		fmt.Fprintf(&block, "\n  ✓ %s (in-place)", change.Field)
+	const perRowPadding = 16 // spacing + emoji + newline
+
+	block.Grow((totalChanges + tableOverheadRows) * (colW + colB + colA + colI + perRowPadding))
+
+	writeSummaryLine(&block, totalChanges)
+	writeHeaderRow(&block, colW, colB, colA, hdrComponent, hdrBefore, hdrAfter, hdrImpact)
+	writeSeparatorRow(&block, colW, colB, colA, colI)
+	writeDataRows(&block, rows, colW, colB, colA)
+
+	return strings.TrimRight(block.String(), "\n")
+}
+
+// collectDiffRows builds an ordered list of diff rows.
+// Order: 🔴 recreate-required → 🟡 reboot-required → 🟢 in-place.
+func collectDiffRows(
+	diff *clusterupdate.UpdateResult,
+	totalChanges int,
+) []diffRow {
+	rows := make([]diffRow, 0, totalChanges)
+
+	for _, c := range diff.RecreateRequired {
+		rows = append(rows, diffRow{
+			categoryIcon(c.Category), c.Field, c.OldValue, c.NewValue, c.Category.String(),
+		})
 	}
 
-	for _, change := range diff.RebootRequired {
-		fmt.Fprintf(&block, "\n  ⚡ %s (reboot required)", change.Field)
+	for _, c := range diff.RebootRequired {
+		rows = append(rows, diffRow{
+			categoryIcon(c.Category), c.Field, c.OldValue, c.NewValue, c.Category.String(),
+		})
 	}
 
-	for _, change := range diff.RecreateRequired {
-		fmt.Fprintf(&block, "\n  ✗ %s (recreate required)", change.Field)
+	for _, c := range diff.InPlaceChanges {
+		rows = append(rows, diffRow{
+			categoryIcon(c.Category), c.Field, c.OldValue, c.NewValue, c.Category.String(),
+		})
 	}
 
-	notify.Infof(cmd.OutOrStdout(), block.String())
+	return rows
+}
+
+// computeColumnWidths returns the max width for each table column.
+func computeColumnWidths(
+	rows []diffRow,
+	hdrComp, hdrBefore, hdrAfter, hdrImpact string,
+) (int, int, int, int) {
+	widthComp := len(hdrComp)
+	widthBefore := len(hdrBefore)
+	widthAfter := len(hdrAfter)
+	widthImpact := len(hdrImpact)
+
+	for _, row := range rows {
+		if length := len(row.field); length > widthComp {
+			widthComp = length
+		}
+
+		if length := len(row.oldVal); length > widthBefore {
+			widthBefore = length
+		}
+
+		if length := len(row.newVal); length > widthAfter {
+			widthAfter = length
+		}
+
+		if length := len(row.impact); length > widthImpact {
+			widthImpact = length
+		}
+	}
+
+	return widthComp, widthBefore, widthAfter, widthImpact
+}
+
+func writeSummaryLine(block *strings.Builder, totalChanges int) {
+	fmt.Fprintf(block, "Detected %d configuration changes:\n\n", totalChanges)
+}
+
+// headerIndent is the number of leading spaces in the header and separator rows.
+// This visually aligns with the emoji+space prefix in data rows:
+// emoji renders as 2 terminal columns + 1 trailing space = 3 visual columns.
+const headerIndent = "   "
+
+func writeHeaderRow(
+	block *strings.Builder,
+	colW, colB, colA int,
+	hdrComp, hdrBefore, hdrAfter, hdrImpact string,
+) {
+	fmt.Fprintf(block, "%s%-*s  %-*s  %-*s  %s\n",
+		headerIndent,
+		colW, hdrComp, colB, hdrBefore, colA, hdrAfter, hdrImpact)
+}
+
+func writeSeparatorRow(
+	block *strings.Builder,
+	colW, colB, colA, colI int,
+) {
+	fmt.Fprintf(block, "%s%s  %s  %s  %s\n",
+		headerIndent,
+		strings.Repeat("─", colW),
+		strings.Repeat("─", colB),
+		strings.Repeat("─", colA),
+		strings.Repeat("─", colI))
+}
+
+func writeDataRows(
+	block *strings.Builder,
+	rows []diffRow,
+	colW, colB, colA int,
+) {
+	for _, r := range rows {
+		fmt.Fprintf(block, "%s %-*s  %-*s  %-*s  %s\n",
+			r.icon, colW, r.field,
+			colB, r.oldVal,
+			colA, r.newVal,
+			r.impact)
+	}
 }
 
 // confirmRecreate prompts the user to confirm cluster recreation unless --force is set.
@@ -581,4 +726,11 @@ func executeRecreateFlow(
 
 	// Execute create using shared workflow
 	return runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
+}
+
+// resolveForce returns true if the viper-resolved force flag is set,
+// or if the --yes flag was explicitly set to true on the command line.
+// This consolidates the --force/--yes alias logic into one place.
+func resolveForce(viperForce bool, yesFlag *pflag.Flag) bool {
+	return viperForce || (yesFlag != nil && yesFlag.Changed && yesFlag.Value.String() == "true")
 }

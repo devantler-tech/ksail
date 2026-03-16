@@ -13,20 +13,24 @@ The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workf
 
 ## Interpreting Results
 
-`benchstat` output contains three key columns per benchmark:
+The PR comment groups results into three sections:
 
-| Column        | Meaning                        | Goal            |
-|---------------|--------------------------------|-----------------|
-| **sec/op**    | Time per operation             | Lower is better |
-| **B/op**      | Bytes allocated per operation  | Lower is better |
-| **allocs/op** | Heap allocations per operation | Lower is better |
+| Symbol | Label       | Meaning                                       |
+|--------|-------------|-----------------------------------------------|
+| 🔴     | Regression  | Statistically significant increase (p < 0.01) |
+| 🟢     | Improvement | Statistically significant decrease (p < 0.01) |
+| ⚪ ~    | Unchanged   | No significant change (p ≥ 0.01)              |
 
-Each row shows `old` (main) vs `new` (PR) with a delta percentage and a p-value:
+Each row in the tables shows:
 
-- **p < 0.05** — statistically significant change (highlighted by `benchstat`)
-- **~ (p ≥ 0.05)** — no significant change; difference is within measurement noise
+| Column        | Meaning                                                        | Goal               |
+|---------------|----------------------------------------------------------------|--------------------|
+| **Benchmark** | Name of the benchmark function (without `Benchmark` prefix)    | —                  |
+| **Metric**    | `sec/op`, `B/op`, or `allocs/op`                               | Lower is better    |
+| **Change**    | Delta percentage vs `main`                                     | Negative is better |
+| **p-value**   | Statistical confidence; < 0.01 means the change is significant | —                  |
 
-A positive delta in sec/op or B/op indicates a regression; a negative delta indicates an improvement.
+The comment also includes a collapsed **Unchanged** section and a **Raw benchstat output** block for deeper inspection.
 
 ## Running Benchmarks Locally
 
@@ -66,6 +70,12 @@ go install golang.org/x/perf/cmd/benchstat@latest
 This table may not be exhaustive; additional benchmarks may exist in other packages.
 
 See each package's `BENCHMARKS.md` for detailed baseline results and optimization opportunities.
+
+## Install Duration Benchmarks
+
+In addition to Go micro-benchmarks, KSail tracks real-world per-component install durations during `ksail cluster create` and `ksail cluster update` via the `--benchmark` flag. These cover Helm chart downloads, image pulls, and pod scheduling — workloads not suited to `go test -bench`.
+
+Use `ksail cluster create --benchmark` or `ksail cluster update --benchmark` to capture install durations. Output is printed inline per component during the run.
 
 ## Writing Effective Benchmarks
 

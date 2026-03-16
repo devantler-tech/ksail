@@ -3,6 +3,7 @@ package docker_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -1121,6 +1122,7 @@ func TestCreateRegistry_WithCredentials(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "ghp_test123")
 
 	mockClient, manager, _ := setupTestRegistryManager(t)
+	//nolint:gosec // G101: test env var placeholders, not real credentials
 	config := docker.RegistryConfig{
 		Name:        "ghcr.io",
 		Port:        5000,
@@ -1211,6 +1213,79 @@ func TestBuildContainerConfig_WithoutCredentials(t *testing.T) {
 			mock.Anything,
 			mock.Anything,
 			"docker.io",
+		).
+		Return(container.CreateResponse{ID: "test-id"}, nil).
+		Once()
+
+	mockClient.EXPECT().
+		ContainerStart(ctx, "test-id", mock.Anything).
+		Return(nil).
+		Once()
+
+	err := manager.CreateRegistry(ctx, config)
+
+	require.NoError(t, err)
+}
+
+// Docker healthcheck tests.
+
+func TestBuildHealthcheck_ReturnsValidConfig(t *testing.T) {
+	t.Parallel()
+
+	healthcheck := docker.ExportBuildHealthcheck()
+
+	require.NotNil(t, healthcheck)
+	require.Len(t, healthcheck.Test, 2)
+	assert.Equal(t, "CMD-SHELL", healthcheck.Test[0])
+	assert.Contains(t, healthcheck.Test[1], "/v2/")
+	assert.Greater(t, healthcheck.Interval, healthcheck.Timeout)
+	assert.Equal(t, 3, healthcheck.Retries)
+	assert.NotZero(t, healthcheck.StartPeriod)
+}
+
+func TestBuildContainerConfig_IncludesHealthcheck(t *testing.T) {
+	t.Parallel()
+
+	_, manager, _ := setupTestRegistryManager(t)
+
+	config := docker.RegistryConfig{
+		Name:        "docker.io",
+		Port:        docker.DefaultRegistryPort,
+		UpstreamURL: "https://registry-1.docker.io",
+	}
+
+	cfg, err := manager.ExportBuildContainerConfig(config)
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Healthcheck)
+	assert.Len(t, cfg.Healthcheck.Test, 2)
+	assert.Equal(t, "CMD-SHELL", cfg.Healthcheck.Test[0])
+
+	expectedPort := fmt.Sprintf("localhost:%d", docker.DefaultRegistryPort)
+	assert.Contains(t, cfg.Healthcheck.Test[1], expectedPort)
+}
+
+func TestCreateRegistry_ContainerConfigIncludesHealthcheck(t *testing.T) {
+	t.Parallel()
+
+	mockClient, manager, ctx, config := setupRegistryCreationTest(t)
+
+	mockImagePullSequence(ctx, mockClient)
+	mockVolumeCreateSequence(ctx, mockClient, config.Name)
+
+	mockClient.EXPECT().
+		ContainerCreate(
+			ctx,
+			mock.MatchedBy(func(cfg *container.Config) bool {
+				return cfg != nil &&
+					cfg.Healthcheck != nil &&
+					len(cfg.Healthcheck.Test) == 2 &&
+					cfg.Healthcheck.Test[0] == "CMD-SHELL"
+			}),
+			mock.Anything,
+			mock.Anything,
+			mock.Anything,
+			config.Name,
 		).
 		Return(container.CreateResponse{ID: "test-id"}, nil).
 		Once()

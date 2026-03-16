@@ -56,11 +56,11 @@ go build -o ksail
 # Or: compile all packages (no binary output)
 go build ./...
 
-# For optimized builds (uses the same -ldflags as release builds):
+# For optimized builds (strips debug symbols):
 go build -ldflags="-s -w" -o ksail-optimized
 ```
 
-> **Note:** Release builds use `-ldflags="-s -w"` to strip debug symbols, which can significantly reduce binary size (in some cases by ~25–35%; see [#2095](https://github.com/devantler-tech/ksail/pull/2095) for an example benchmark where Darwin/AMD64 binaries went from 302MB → 217MB, ~28%). Actual size varies by OS/arch, Go version, and dependencies. Development builds include debug symbols for a better debugging experience.
+> **Note:** Release builds use `-ldflags="-s -w -X github.com/devantler-tech/ksail/v5/internal/buildmeta.Version=... -X .../buildmeta.Commit=... -X .../buildmeta.Date=..."`, where `-s -w` strips debug symbols and the `-X` flags inject version metadata. The `-s -w` options can significantly reduce binary size (in some cases by ~25–35%; see [#2095](https://github.com/devantler-tech/ksail/pull/2095) for an example benchmark where Darwin/AMD64 binaries went from 302MB → 217MB, ~28%), while the metadata flags themselves may slightly increase size compared to a build that only uses `-s -w`. Actual size varies by OS/arch, Go version, and dependencies. Development builds include debug symbols for a better debugging experience.
 
 ### Test
 
@@ -99,7 +99,7 @@ benchstat before.txt after.txt
 
 PRs that modify Go code are automatically benchmarked against `main` and the comparison is posted as a PR comment. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details on interpreting results.
 
-See package-specific BENCHMARKS.md files (e.g., `pkg/k8s/readiness/BENCHMARKS.md`, `pkg/client/docker/BENCHMARKS.md`, `pkg/client/flux/BENCHMARKS.md`, `pkg/client/helm/BENCHMARKS.md`, `pkg/client/kustomize/BENCHMARKS.md`, `pkg/fsutil/marshaller/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
+See package-specific BENCHMARKS.md files (e.g., `pkg/apis/cluster/v1alpha1/BENCHMARKS.md`, `pkg/cli/cmd/cipher/BENCHMARKS.md`, `pkg/cli/cmd/cluster/BENCHMARKS.md`, `pkg/client/argocd/BENCHMARKS.md`, `pkg/client/docker/BENCHMARKS.md`, `pkg/client/flux/BENCHMARKS.md`, `pkg/client/helm/BENCHMARKS.md`, `pkg/client/kubectl/BENCHMARKS.md`, `pkg/client/kustomize/BENCHMARKS.md`, `pkg/fsutil/marshaller/BENCHMARKS.md`, `pkg/k8s/readiness/BENCHMARKS.md`, `pkg/svc/diff/BENCHMARKS.md`, `pkg/svc/image/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
 
 ### Documentation
 
@@ -254,21 +254,29 @@ To test the Omni provider locally, you need:
 
 **Note:** Omni system tests are not part of the default CI workflows. This section only applies to running Omni provider tests locally: those tests are not triggered unless both the `OMNI_SERVICE_ACCOUNT_KEY` and Omni endpoint are configured.
 
+#### Scheduled Workflows
+
+| Workflow        | Schedule                   | Purpose                            |
+|-----------------|----------------------------|------------------------------------|
+| `update-skills` | Daily (06:00 UTC)          | Npx skills upgrades                |
+| `maintenance`   | Monthly (1st, 00:00 UTC)   | Old workflow run and image cleanup |
+| `sync-labels`   | Weekly (Monday, 07:00 UTC) | Label synchronization              |
+
 #### Agentic Workflows
 
 KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a schedule or on dispatch:
 
-| Workflow                     | Schedule                                    | Purpose                                                               |
-|------------------------------|---------------------------------------------|-----------------------------------------------------------------------|
-| `daily-code-quality`         | Daily (02:00 UTC)                           | Refactoring, performance optimization, and test coverage improvements |
-| `daily-plan`                 | Daily (10:00 UTC)                           | Issue triage, backlog issue creation, and prioritization from the roadmap     |
-| `daily-builder`              | Daily (14:00 UTC)                           | Backlog issue resolution and feature delivery from the project plan   |
-| `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, and dependency upgrades         |
-| `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes and bloat reduction              |
-| `weekly-research`            | Weekly                                      | Market research and actionable feature roadmap                        |
-| `weekly-promote-ksail`       | Weekly                                      | Project promotion and visibility                                      |
-| `ci-doctor`                  | On CI failure                               | CI failure investigation and diagnostics                              |
-| `maintainer`                 | Every 3 days                                | Repository maintenance and housekeeping                               |
+| Workflow                     | Schedule                                    | Purpose                                                                   |
+|------------------------------|---------------------------------------------|---------------------------------------------------------------------------|
+| `daily-code-quality`         | Daily (02:00 UTC)                           | Refactoring, performance optimization, and test coverage improvements     |
+| `daily-plan`                 | Daily (10:00 UTC)                           | Issue triage, backlog issue creation, and prioritization from the roadmap |
+| `daily-builder`              | Daily (14:00 UTC)                           | Backlog issue resolution and feature delivery from the project plan       |
+| `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, and dependency upgrades             |
+| `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes and bloat reduction                  |
+| `weekly-roadmap`             | Weekly                                      | Market research and actionable feature roadmap                            |
+| `weekly-promote-ksail`       | Weekly                                      | Project promotion and visibility                                          |
+| `ci-doctor`                  | On CI failure                               | CI failure investigation and diagnostics                                  |
+| `pr-fix`                     | On `/pr-fix` slash command                  | Fixes PR CI failures, linting issues, and Copilot Review feedback         |
 
 Each agentic workflow creates a GitHub Discussion to coordinate its work and, depending on its purpose, may open draft PRs or create issues with incremental improvements. You can control them using the [`gh aw`](https://github.com/github/gh-aw) CLI extension:
 

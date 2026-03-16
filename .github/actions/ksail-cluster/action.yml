@@ -1,0 +1,263 @@
+name: "KSail Cluster"
+description: "Provision a KSail Kubernetes cluster for CI testing"
+
+inputs:
+  distribution:
+    description: "KSail distribution to provision (Vanilla, K3s, Talos, VCluster)"
+    default: "Vanilla"
+  provider:
+    description: "Infrastructure provider (Docker, Hetzner)"
+    default: "Docker"
+  args:
+    description: "Additional CLI arguments passed to cluster init (and create when init is skipped)"
+    default: ""
+  init:
+    description: "Whether to run ksail cluster init before create"
+    default: "true"
+  ksail-version:
+    description: "KSail version to install (e.g. '5.55.0') or 'latest'"
+    default: "latest"
+  install:
+    description: "Whether to install KSail from releases (set to 'false' if already in PATH)"
+    default: "true"
+  cache:
+    description: "Enable caching of Helm charts and mirror registry volumes between CI runs"
+    default: "true"
+  hcloud-token:
+    description: "Hetzner Cloud API token (required when provider is Hetzner)"
+    default: ""
+
+outputs:
+  kubeconfig:
+    description: "Path to the kubeconfig file for the provisioned cluster"
+    value: ${{ steps.create.outputs.kubeconfig }}
+
+runs:
+  using: composite
+  steps:
+    - name: 📥 Install KSail
+      if: inputs.install == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        KSAIL_VERSION: ${{ inputs.ksail-version }}
+        RUNNER_ARCH: ${{ runner.arch }}
+      run: |
+        set -euo pipefail
+        # Map runner.arch to Go arch naming
+        case "$RUNNER_ARCH" in
+          X64)   GOARCH="amd64" ;;
+          ARM64) GOARCH="arm64" ;;
+          *)     echo "❌ Unsupported runner architecture: $RUNNER_ARCH"; exit 1 ;;
+        esac
+        tmpdir="$(mktemp -d)"
+        if [ "$KSAIL_VERSION" = "latest" ]; then
+          gh release download --repo devantler-tech/ksail \
+            --pattern "ksail_*_linux_${GOARCH}.tar.gz" \
+            --dir "$tmpdir"
+        else
+          gh release download "v${KSAIL_VERSION}" \
+            --repo devantler-tech/ksail \
+            --pattern "ksail_*_linux_${GOARCH}.tar.gz" \
+            --dir "$tmpdir"
+        fi
+        tar -xzf "$tmpdir"/ksail_*_linux_${GOARCH}.tar.gz -C "$tmpdir"
+        sudo install "$tmpdir/ksail" /usr/local/bin/ksail
+        rm -rf "$tmpdir"
+        ksail --version
+
+    - name: 📋 Compute cache keys
+      if: inputs.cache == 'true'
+      id: cache-keys
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ inputs.args }}
+        KSAIL_VERSION: ${{ inputs.ksail-version }}
+      run: |
+        echo "ksail-version=$KSAIL_VERSION" >> "$GITHUB_OUTPUT"
+
+        if [ "$PROVIDER" = "Docker" ]; then
+          # shellcheck disable=SC2086
+          IMAGES=$(ksail workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
+          if [ -n "$IMAGES" ]; then
+            IMAGES_HASH=$(echo "$IMAGES" | sort -u | sha256sum | cut -c1-12)
+          else
+            IMAGES_HASH="none"
+          fi
+          echo "images-hash=$IMAGES_HASH" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: 📥 Restore Helm chart cache
+      if: inputs.cache == 'true'
+      uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: |
+          ~/.cache/helm/content
+          ~/.cache/helm/repository
+          ~/.config/helm/repositories.yaml
+        key: ksail-helm-${{ steps.cache-keys.outputs.ksail-version }}-${{ runner.os }}-${{ runner.arch }}
+        restore-keys: |
+          ksail-helm-
+
+    - name: 📥 Restore mirror cache
+      if: inputs.cache == 'true' && inputs.provider == 'Docker'
+      id: restore-mirror
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/ksail-mirror-cache
+        key: ksail-mirror-${{ steps.cache-keys.outputs.images-hash }}-${{ runner.os }}-${{ runner.arch }}
+        restore-keys: |
+          ksail-mirror-
+
+    - name: 📦 Import mirror volumes
+      if: inputs.cache == 'true' && inputs.provider == 'Docker' && steps.restore-mirror.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        echo "📦 Importing mirror registry volumes..."
+        for registry in docker.io ghcr.io quay.io registry.k8s.io; do
+          if [ -f "/tmp/ksail-mirror-cache/${registry}.tar" ]; then
+            docker volume create "$registry" 2>/dev/null || true
+            if docker run --rm \
+              -v "${registry}":/volume \
+              -v /tmp/ksail-mirror-cache:/backup:ro \
+              busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+              sh -c "cd /volume && tar -xf /backup/${registry}.tar"; then
+              echo "  ✅ Restored $registry mirror cache"
+            else
+              echo "  ⚠️ Failed to import $registry mirror"
+            fi
+          fi
+        done
+
+    - name: 📥 Pre-pull registry image
+      if: inputs.provider == 'Docker'
+      shell: bash
+      run: |
+        pulled=false
+        for attempt in 1 2 3; do
+          if docker pull registry:3; then
+            echo "✅ registry:3 image pulled successfully"
+            pulled=true
+            break
+          fi
+          echo "⚠️ registry:3 pull attempt $attempt failed, retrying in 5s…"
+          sleep 5
+        done
+        if [ "$pulled" = false ]; then
+          echo "❌ Failed to pull registry:3 after 3 attempts"
+          exit 1
+        fi
+
+    - name: 📥 Pre-pull distribution images
+      if: inputs.provider == 'Docker'
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        ARGS: ${{ inputs.args }}
+      run: |
+        # Use ksail workload images to list images for this distribution (no source code needed)
+        # shellcheck disable=SC2086
+        IMAGES=$(ksail workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
+        if [ -z "$IMAGES" ]; then
+          echo "ℹ️ No images to pre-pull for distribution $DISTRIBUTION"
+          exit 0
+        fi
+        echo "📦 Pre-pulling $(echo "$IMAGES" | wc -l) images for $DISTRIBUTION..."
+        while IFS= read -r image; do
+          [ -z "$image" ] && continue
+          pulled=false
+          for attempt in 1 2 3; do
+            if docker pull --quiet "$image"; then
+              echo "  ✅ $image"
+              pulled=true
+              break
+            fi
+            echo "  ⚠️ $image attempt $attempt failed, retrying in 5s…"
+            sleep 5
+          done
+          if [ "$pulled" = false ]; then
+            echo "  ⚠️ Failed to pull $image after 3 attempts (will retry during cluster creation)"
+          fi
+        done <<< "$IMAGES"
+
+    - name: 🏗️ Initialize Project
+      if: inputs.init == 'true'
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ inputs.args }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+      run: |
+        # shellcheck disable=SC2086
+        ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
+
+    - name: 🚀 Create Cluster
+      id: create
+      shell: bash
+      env:
+        INIT: ${{ inputs.init }}
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ inputs.args }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+      run: |
+        set -euo pipefail
+        if [ "$INIT" = "true" ]; then
+          ksail cluster create
+        else
+          # shellcheck disable=SC2086
+          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+        fi
+        # Determine kubeconfig path: parse --kubeconfig from args, fall back to default
+        KUBECONFIG_PATH="${HOME}/.kube/config"
+        # shellcheck disable=SC2086
+        set -- $ARGS
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --kubeconfig)
+              if [ $# -gt 1 ]; then
+                KUBECONFIG_PATH="$2"
+              fi
+              break
+              ;;
+            --kubeconfig=*)
+              KUBECONFIG_PATH="${1#--kubeconfig=}"
+              break
+              ;;
+            *)
+              shift
+              ;;
+          esac
+        done
+        echo "kubeconfig=$KUBECONFIG_PATH" >> "$GITHUB_OUTPUT"
+
+    - name: 📦 Export mirror volumes
+      if: inputs.cache == 'true' && inputs.provider == 'Docker'
+      shell: bash
+      run: |
+        echo "📦 Exporting mirror registry volumes for caching..."
+        mkdir -p /tmp/ksail-mirror-cache
+        for registry in docker.io ghcr.io quay.io registry.k8s.io; do
+          if docker volume inspect "$registry" > /dev/null 2>&1; then
+            if docker run --rm \
+              -v "${registry}":/volume:ro \
+              -v /tmp/ksail-mirror-cache:/backup \
+              busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+              sh -c "cd /volume && tar -cf /backup/${registry}.tar ."; then
+              echo "  ✅ Exported $registry"
+            else
+              echo "  ⚠️ Failed to export $registry"
+            fi
+          fi
+        done
+
+    - name: 💾 Save mirror cache
+      if: inputs.cache == 'true' && inputs.provider == 'Docker'
+      uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/ksail-mirror-cache
+        key: ksail-mirror-${{ steps.cache-keys.outputs.images-hash }}-${{ runner.os }}-${{ runner.arch }}
+      continue-on-error: true

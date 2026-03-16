@@ -1,0 +1,277 @@
+---
+title: Companion Tools
+description: How to use KSail alongside DevSpace, Telepresence, Tilt, Skaffold, and mirrord for inner-loop Kubernetes development.
+---
+
+KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tools handle the **build-watch-deploy** cycle, hot-reload, or local↔remote traffic bridging. They are complementary—not competing—layers that work together seamlessly.
+
+| Layer | Responsibility | Tool |
+|-------|---------------|------|
+| Cluster lifecycle | Create, configure, and delete clusters | **KSail** |
+| GitOps bootstrap | Install Flux/ArgoCD, push manifests | **KSail** |
+| Manifest watch & apply | Watch files, auto-apply Kustomize layers | **KSail** (`ksail workload watch`) |
+| Build & deploy loop | Watch files, rebuild images, hot-reload | **Tilt**, **Skaffold**, or **DevSpace** |
+| Local↔remote bridging | Bridge local processes to in-cluster pods | **Telepresence** or **mirrord** |
+
+> [!NOTE]
+> KSail sets the kubeconfig context after `ksail cluster create`. The context name depends on the distribution:
+>
+> | Distribution | Context name |
+> |-------------|-------------|
+> | Vanilla (Kind) | `kind-<name>` |
+> | K3s (K3d) | `k3d-<name>` |
+> | Talos | `admin@<name>` |
+> | VCluster | `vcluster-docker_<name>` |
+
+## KSail + Tilt
+
+[Tilt](https://tilt.dev/) watches your source files, rebuilds container images, and applies updated manifests to a running cluster. KSail creates and configures that cluster.
+
+1. **Write a `Tiltfile`** that targets the KSail-managed kubeconfig context.
+
+   ```python
+   # Tiltfile
+   allow_k8s_contexts("k3d-dev")
+
+   docker_build("my-app", ".")
+
+   k8s_yaml("k8s/deployment.yaml")
+   k8s_resource("my-app", port_forwards="8080:80")
+   ```
+
+2. **Start Tilt**
+
+   ```bash
+   tilt up
+   ```
+
+3. **Tear down**
+
+   ```bash
+   tilt down
+   ksail cluster delete
+   ```
+
+**Tips**
+
+- Run `ksail cluster info` to confirm the cluster is healthy before starting Tilt.
+- If you use a local registry (`--local-registry localhost:5050`), configure Tilt to push there:
+
+  ```python
+  default_registry("localhost:5050")
+  ```
+
+## KSail + DevSpace
+
+[DevSpace](https://devspace.sh/) provides hot-reload for interpreted languages (Python, Node.js, Ruby) by syncing file changes directly into running containers without image rebuilds.
+
+1. **Initialize DevSpace** in your project directory.
+
+   ```bash
+   devspace init
+   ```
+
+   This creates a `devspace.yaml`. Pass the KSail context via `--kube-context` (see the context name table above).
+
+   ```yaml
+   # devspace.yaml
+   version: v2beta1
+   name: my-app
+   dev:
+     my-app:
+       imageSelector: my-app
+       sync:
+         - path: ./src:/app/src
+       terminal: {}
+       ports:
+         - port: "8080:80"
+   ```
+
+2. **Start DevSpace dev mode**
+
+   ```bash
+   devspace dev --kube-context <your-context>
+   ```
+
+3. **Tear down**
+
+   ```bash
+   devspace purge
+   ksail cluster delete
+   ```
+
+**Tips**
+
+- DevSpace file sync is ideal for interpreted languages that don't require compilation. For compiled languages (Go, Rust, Java), use `devspace.yaml` build pipelines or pair with Tilt for automatic rebuilds.
+
+## KSail + Telepresence
+
+[Telepresence](https://www.telepresence.io/) bridges your local machine to the cluster network, letting you run a service locally while it receives traffic from in-cluster pods. This is useful for debugging services without image rebuilds.
+
+1. **Deploy your application**
+
+   ```bash
+   kubectl --context <your-context> create deployment my-app --image=nginx:latest
+   kubectl --context <your-context> expose deployment my-app --port=80
+   ```
+
+2. **Connect Telepresence to the cluster**
+
+   ```bash
+   telepresence connect --context <your-context>
+   ```
+
+   Telepresence installs a traffic manager in the cluster and creates a network tunnel from your local machine.
+
+3. **Intercept traffic for your service**
+
+   ```bash
+   telepresence intercept my-app --port 8080:80
+   ```
+
+   All traffic destined for the `my-app` service is now routed to `localhost:8080`. Run your local process on that port:
+
+   ```bash
+   # Run your service locally — it receives cluster traffic
+   go run ./cmd/server --port 8080
+   ```
+
+4. **Tear down**
+
+   ```bash
+   telepresence leave my-app
+   telepresence quit
+   ksail cluster delete
+   ```
+
+**Tips**
+
+- Telepresence intercepts work with any KSail distribution (Vanilla, K3s, Talos, VCluster).
+- Use `telepresence list` to see available services for interception.
+- For selective routing, use `--http-header` to intercept only requests matching specific headers (useful in shared clusters).
+
+## KSail + Skaffold
+
+[Skaffold](https://skaffold.dev/) automates the build-tag-deploy pipeline. KSail provides the cluster; Skaffold handles the rest.
+
+1. **Create `skaffold.yaml`** pointing at the KSail cluster context (replace `<your-context>` with the value from the table above).
+
+   ```yaml
+   # skaffold.yaml
+   apiVersion: skaffold/v4beta11
+   kind: Config
+   metadata:
+     name: my-app
+   build:
+     artifacts:
+       - image: my-app
+   manifests:
+     rawYaml:
+       - k8s/deployment.yaml
+   deploy:
+     kubeContext: <your-context>
+     kubectl: {}
+   ```
+
+2. **Run Skaffold in dev mode**
+
+   ```bash
+   skaffold dev
+   ```
+
+3. **Tear down**
+
+   ```bash
+   # Ctrl+C to stop Skaffold (it cleans up deployed resources)
+   ksail cluster delete
+   ```
+
+**Tips**
+
+- Use `skaffold dev --port-forward` for automatic port forwarding.
+- If you enabled a local registry in KSail, point Skaffold at it:
+
+  ```yaml
+  build:
+    local:
+      push: true
+    artifacts:
+      - image: localhost:5050/my-app
+  ```
+
+## KSail + mirrord
+
+[mirrord](https://mirrord.dev/) lets you run a local process as if it were inside the cluster by mirroring or stealing traffic from a remote pod. KSail sets up the cluster; mirrord connects your local process to it.
+
+1. **Deploy your application**
+
+   ```bash
+   kubectl --context <your-context> create deployment my-app --image=my-app:latest
+   kubectl --context <your-context> expose deployment my-app --port=80
+   ```
+
+2. **Create `.mirrord/mirrord.json`** to configure the target and traffic mirroring.
+
+   ```json
+   {
+     "target": {
+       "path": "deployment/my-app",
+       "namespace": "default"
+     },
+     "feature": {
+       "network": {
+         "incoming": "mirror"
+       },
+       "fs": "read"
+     }
+   }
+   ```
+
+3. **Run your process through mirrord**
+
+   ```bash
+   mirrord exec --config .mirrord/mirrord.json -- ./my-app
+   ```
+
+   Your local process receives traffic destined for `deployment/my-app`, while reading remote files and environment variables from the pod.
+
+4. **Tear down**
+
+   ```bash
+   # Stop the mirrord session (Ctrl+C)
+   ksail cluster delete
+   ```
+
+**Tips**
+
+- mirrord also integrates as a VS Code and JetBrains plugin—no CLI needed.
+- Use `"incoming": "steal"` instead of `"mirror"` to redirect all traffic to your local process rather than duplicating it.
+
+## When to Use Which Tool
+
+`ksail workload watch` handles manifest-level iteration — it watches your configured workload source directory (defaults to `k8s/` or `spec.workload.sourceDirectory` from `ksail.yaml`, overridable with `--path`) and auto-applies changes via `kubectl apply`. Companion tools cover different layers:
+
+| Scenario | Recommended tool |
+|----------|-----------------|
+| Editing Kubernetes manifests (YAML/Kustomize) | `ksail workload watch` |
+| Hot-reloading interpreted code (Python, Node.js) without image rebuilds | **DevSpace** |
+| Rebuilding container images on file save | **Tilt** or **Skaffold** |
+| Debugging a service locally with live cluster traffic | **Telepresence** |
+| Mirroring pod traffic to a local process | **mirrord** |
+
+You can combine `ksail workload watch` with any companion tool — they operate at different layers and do not conflict. You can also layer companion tools together. For example, use Tilt for the build-deploy loop and mirrord to debug a specific service locally:
+
+```bash
+# Terminal 1 — cluster + Tilt
+ksail cluster create
+tilt up
+
+# Terminal 2 — mirrord for live debugging
+mirrord exec --target deployment/my-app -- dlv debug ./cmd/server
+```
+
+## Next Steps
+
+- **[Use Cases](/use-cases/)** — Workflows for learning, development, and CI/CD
+- **[Features](/features/)** — KSail capabilities including GitOps, secrets, and AI chat
+- **[Configuration](/configuration/)** — Complete configuration reference

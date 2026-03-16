@@ -2,11 +2,17 @@ package cluster
 
 import (
 	"archive/tar"
+	"context"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // ExportShouldPushOCIArtifact exports ShouldPushOCIArtifact for testing.
@@ -88,4 +94,116 @@ func ExportSplitYAMLDocuments(content string) []string {
 // ExportInjectRestoreLabels exports injectRestoreLabels for testing.
 func ExportInjectRestoreLabels(filePath, backupName, restoreName string) (string, error) {
 	return injectRestoreLabels(filePath, backupName, restoreName)
+}
+
+// ExportResolveForce exports resolveForce for testing.
+func ExportResolveForce(viperForce bool, yesFlag *pflag.Flag) bool {
+	return resolveForce(viperForce, yesFlag)
+}
+
+// ExportDisplayChangesSummary exports displayChangesSummary for testing.
+func ExportDisplayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
+	displayChangesSummary(cmd, diff)
+}
+
+// ExportFormatDiffTable exports formatDiffTable for benchmarking.
+func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, totalChanges int) string {
+	return formatDiffTable(diff, totalChanges)
+}
+
+// ExportFormatTTLLabel exports formatTTLLabel for testing.
+func ExportFormatTTLLabel(ttl *state.TTLInfo) string {
+	return formatTTLLabel(ttl)
+}
+
+// ExportFormatRemainingDuration exports formatRemainingDuration for testing.
+func ExportFormatRemainingDuration(d time.Duration) string {
+	return formatRemainingDuration(d)
+}
+
+// ExportMaybeWaitForTTL exports maybeWaitForTTL for testing.
+func ExportMaybeWaitForTTL(
+	cmd *cobra.Command,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	return maybeWaitForTTL(cmd, clusterName, clusterCfg)
+}
+
+// ErrMetricsServerDisableUnsupported exports the sentinel error for testing.
+var ErrMetricsServerDisableUnsupported = errMetricsServerDisableUnsupported
+
+// ExportHandlerForField reports whether a registered handler exists for the given field name.
+func ExportHandlerForField(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, field string) bool {
+	r := newComponentReconciler(cmd, clusterCfg)
+	_, ok := r.handlerForField(field)
+
+	return ok
+}
+
+// ExportReconcileMetricsServer exposes reconcileMetricsServer for unit testing.
+func ExportReconcileMetricsServer(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	change clusterupdate.Change,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg)
+
+	return r.reconcileMetricsServer(context.Background(), change)
+}
+
+// ExportReconcileCSI exposes reconcileCSI for unit testing.
+func ExportReconcileCSI(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	change clusterupdate.Change,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg)
+
+	return r.reconcileCSI(context.Background(), change)
+}
+
+// ExportReconcileCertManager exposes reconcileCertManager for unit testing.
+func ExportReconcileCertManager(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	change clusterupdate.Change,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg)
+
+	return r.reconcileCertManager(context.Background(), change)
+}
+
+// ExportReconcilePolicyEngine exposes reconcilePolicyEngine for unit testing.
+func ExportReconcilePolicyEngine(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	change clusterupdate.Change,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg)
+
+	return r.reconcilePolicyEngine(context.Background(), change)
+}
+
+// ExportReconcileGitOpsEngine exposes reconcileGitOpsEngine for unit testing.
+func ExportReconcileGitOpsEngine(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	change clusterupdate.Change,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg)
+
+	return r.reconcileGitOpsEngine(context.Background(), change)
+}
+
+// ExportReconcileComponents exposes reconcileComponents for unit testing.
+func ExportReconcileComponents(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	diff *clusterupdate.UpdateResult,
+	result *clusterupdate.UpdateResult,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg)
+
+	return r.reconcileComponents(context.Background(), diff, result)
 }

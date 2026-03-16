@@ -13,8 +13,6 @@ KSail is a tool that bundles common Kubernetes tooling into a single binary. It 
 
 Setting up and operating Kubernetes clusters often requires juggling multiple CLI tools, writing bespoke scripts, and dealing with inconsistent workflows. KSail removes the tooling overhead so you can focus on your workloads.
 
-**No Vendor Lock-In:** KSail works with native distribution configurations (Kind's `kind.yaml`, K3d's config, Talos patches, vCluster's `vcluster.yaml`) — you can run the same cluster outside KSail using the underlying tools directly. KSail is a superset that provides a unified workflow while preserving full compatibility with Kind, K3d, Talos, and vCluster.
-
 ## Key Features
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
@@ -41,8 +39,6 @@ KSail works on all major operating systems and CPU architectures:
 |  macOS                                       | arm64        |
 | ⊞ Windows (native untested; WSL2 recommended) | amd64, arm64 |
 
-**Docker is required** for local clusters. Install Docker Desktop/Engine and ensure `docker ps` works.
-
 Supported distributions run on different infrastructure providers:
 
 | Provider | Vanilla  | K3s     | Talos | VCluster |
@@ -55,18 +51,50 @@ Supported distributions run on different infrastructure providers:
 
 See the [Installation Guide](https://ksail.devantler.tech/installation/) for detailed installation instructions.
 
-#### VSCode Extension
-
-For VSCode users, install the [KSail extension](https://marketplace.visualstudio.com/items?itemName=devantler.ksail) to manage clusters directly from your editor. See the [extension documentation](vsce/README.md) for features and usage.
-
 ## Usage
 
-![ksail-mental-model](./docs/src/assets//mental-model.svg)
+```mermaid
+flowchart TD
+    Dev["🧑‍💻 Developer"]
+
+    Dev -->|"edits"| Project
+    Dev -->|"runs"| KSail
+
+    subgraph Project ["📁 Project Repository"]
+        Config["ksail.yaml"] ~~~ DistConfig["kind.yaml · k3d.yaml<br/>vcluster.yaml"] ~~~ Manifests["k8s/ manifests"]
+    end
+
+    KSail -->|"scaffolds & reads"| Project
+    KSail -->|"provisions & operates"| Cluster
+
+    subgraph KSail ["🛥️ KSail — One Binary"]
+        CLI["CLI Commands"] ~~~ Tools["Kind · K3d · Talos · vCluster<br/>Flux · ArgoCD · SOPS<br/>Helm · Kustomize"]
+    end
+
+    subgraph Cluster ["☸️ Kubernetes Cluster"]
+        Infra["CNI · CSI · Metrics<br/>Cert-Manager · Policy Engine"] ~~~ Workloads["Your Workloads ✅"]
+    end
+
+    Manifests -.->|"GitOps sync"| Workloads
+
+    style Dev fill:#f59e0b,stroke:#d97706,color:#000
+    style Project fill:#7c3aed22,stroke:#7c3aed
+    style KSail fill:#10b98122,stroke:#10b981
+    style Cluster fill:#3b82f622,stroke:#3b82f6
+    style CLI fill:#10b981,stroke:#059669,color:#000
+    style Tools fill:#065f46,stroke:#10b981,color:#fff
+    style Infra fill:#1e40af,stroke:#3b82f6,color:#fff
+    style Workloads fill:#166534,stroke:#22c55e,color:#fff
+    style Config fill:#5b21b6,stroke:#7c3aed,color:#fff
+    style DistConfig fill:#5b21b6,stroke:#7c3aed,color:#fff
+    style Manifests fill:#5b21b6,stroke:#7c3aed,color:#fff
+```
 
 ```bash
 # 1. Initialize a new project with your preferred stack
 ksail cluster init \
   --name <cluster-name> \
+  --profile Default \
   --distribution <Vanilla|K3s|Talos|VCluster> \
   --cni <Default|Cilium|Calico> \
   --csi <Default|Enabled|Disabled> \
@@ -99,7 +127,7 @@ KSail generates standard distribution configuration files that you can use direc
 ```bash
 # After ksail cluster init, you'll find native configs:
 # - kind.yaml       (for Vanilla/Kind clusters)
-# - k3d.yaml        (for K3s clusters)  
+# - k3d.yaml        (for K3s clusters)
 # - talos/          (for Talos clusters)
 # - vcluster.yaml   (for VCluster clusters)
 
@@ -112,8 +140,6 @@ vcluster create my-cluster --values vcluster.yaml
 # Or let KSail manage the lifecycle:
 ksail cluster create
 ```
-
-This means you're never locked into KSail — you can migrate away at any time or use both KSail and native tools interchangeably.
 
 ## Documentation
 

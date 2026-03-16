@@ -8,6 +8,7 @@ description: |
 on:
   bots:
     - "github-merge-queue[bot]"
+    - "github-actions[bot]"
 
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   workflow_run:
@@ -26,10 +27,9 @@ on:
       - "Daily Docs"
       - "Daily Plan"
       - "Daily Workflow Maintenance"
-      - "Maintainer"
       - "PR Fix"
       - "Weekly Promote KSail"
-      - "Weekly Research"
+      - "Weekly Roadmap"
     types:
       - completed
     branches:

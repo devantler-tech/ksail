@@ -109,140 +109,17 @@ runs:
         fi
         echo "args=$RESOLVED_ARGS" >> "$GITHUB_OUTPUT"
 
-    - name: 🧪 ksail cluster init
-      if: inputs.init == 'true'
-      shell: bash
-      env:
-        DISTRIBUTION: ${{ inputs.distribution }}
-        PROVIDER: ${{ inputs.provider }}
-        ARGS: ${{ steps.resolve-args.outputs.args }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-      run: |
-        # shellcheck disable=SC2086
-        ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
-
-    - name: 🔧 Configure Omni endpoint
-      if: ${{ inputs.provider == 'Omni' && inputs.omni-endpoint != '' }}
-      shell: bash
-      env:
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
-      run: |
-        CONFIG_FILE="ksail.yaml"
-        if [ ! -f "$CONFIG_FILE" ]; then
-          # Create minimal config for non-init flow with endpoint set directly
-          cat > "$CONFIG_FILE" <<EOF
-        apiVersion: ksail.io/v1alpha1
-        kind: Cluster
-        spec:
-          cluster:
-            distribution: Talos
-            provider: Omni
-            omni:
-              endpoint: "${OMNI_ENDPOINT}"
-        EOF
-        else
-          # Patch existing config from init flow using yq (pre-installed on
-          # ubuntu-latest runners) to set the Omni endpoint in-place without
-          # overwriting other spec fields (distribution, provider, etc.).
-          echo "🔧 Patching existing Omni endpoint in ${CONFIG_FILE} with yq..."
-          yq e '.spec.cluster.omni.endpoint = env(OMNI_ENDPOINT)' -i "$CONFIG_FILE"
-        fi
-        echo "✅ Omni endpoint configured in $CONFIG_FILE"
-
-    - name: 📥 Restore mirror cache
-      id: restore-mirror-cache
-      if: inputs.provider == 'Docker'
-      uses: ./.github/actions/restore-mirror-cache
-
-    - name: 🔍 Verify mirror volumes restored
-      if: inputs.provider == 'Docker' && steps.restore-mirror-cache.outputs.cache-hit == 'true'
-      shell: bash
-      run: |
-        echo "📦 Verifying mirror cache volumes (see issue #2075)..."
-        REQUIRED_VOLUMES=("docker.io" "ghcr.io" "quay.io" "registry.k8s.io")
-        MISSING_VOLUMES=()
-
-        for vol in "${REQUIRED_VOLUMES[@]}"; do
-          if docker volume inspect "$vol" > /dev/null 2>&1; then
-            SIZE=$(docker run --rm -v "$vol":/vol busybox du -sh /vol 2>/dev/null | cut -f1 || echo "unknown")
-            echo "  ✅ $vol (size: $SIZE)"
-          else
-            echo "  ❌ $vol - MISSING"
-            MISSING_VOLUMES+=("$vol")
-          fi
-        done
-
-        if [ ${#MISSING_VOLUMES[@]} -gt 0 ]; then
-          echo "⚠️ Warning: ${#MISSING_VOLUMES[@]} mirror volumes missing: ${MISSING_VOLUMES[*]}"
-          echo "   Images from these registries may need to be pulled directly."
-        else
-          echo "✅ All 4 mirror cache volumes present"
-        fi
-
-    - name: 📥 Restore Helm chart cache
-      uses: ./.github/actions/restore-helm-cache
-
-    - name: 📥 Pre-pull registry image
-      if: inputs.provider == 'Docker'
-      shell: bash
-      run: |
-        pulled=false
-        for attempt in 1 2 3; do
-          if docker pull registry:3; then
-            echo "✅ registry:3 image pulled successfully"
-            pulled=true
-            break
-          fi
-          echo "⚠️ registry:3 pull attempt $attempt failed, retrying in 5s…"
-          sleep 5
-        done
-        if [ "$pulled" = false ]; then
-          echo "❌ Failed to pull registry:3 after 3 attempts"
-          exit 1
-        fi
-
-    - name: 📥 Pre-pull VCluster base images
-      if: inputs.provider == 'Docker' && inputs.distribution == 'VCluster'
-      shell: bash
-      run: |
-        # Pre-pull VCluster base images to avoid transient GHCR pull failures
-        # during cluster creation (fixes #2749, see also #2646).
-        # Source of truth: pkg/fsutil/configmanager/vcluster/Dockerfile
-        IMAGES=$(sed -n 's/^FROM \([^ ]*\).*/\1/p' pkg/fsutil/configmanager/vcluster/Dockerfile)
-        for image in $IMAGES; do
-          pulled=false
-          for attempt in 1 2 3; do
-            if docker pull --quiet "$image"; then
-              echo "✅ $image pulled successfully"
-              pulled=true
-              break
-            fi
-            echo "⚠️ $image pull attempt $attempt failed, retrying in 5s…"
-            sleep 5
-          done
-          if [ "$pulled" = false ]; then
-            echo "⚠️ Failed to pull $image after 3 attempts (will retry during cluster creation)"
-          fi
-        done
-
     - name: 🧪 ksail cluster create
       id: cluster-create
-      shell: bash
-      env:
-        INIT: ${{ inputs.init }}
-        DISTRIBUTION: ${{ inputs.distribution }}
-        PROVIDER: ${{ inputs.provider }}
-        ARGS: ${{ steps.resolve-args.outputs.args }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-      run: |
-        if [ "$INIT" = "true" ]; then
-          ksail cluster create
-        else
-          # shellcheck disable=SC2086
-          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
-        fi
+      uses: ./.github/actions/ksail-cluster
+      with:
+        distribution: ${{ inputs.distribution }}
+        provider: ${{ inputs.provider }}
+        args: ${{ steps.resolve-args.outputs.args }}
+        init: ${{ inputs.init }}
+        install: "false"
+        cache: "true"
+        hcloud-token: ${{ inputs.hcloud-token }}
 
     - name: 🧪 ksail cluster list
       shell: bash
@@ -313,8 +190,17 @@ runs:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
       run: |
+        set -o pipefail
         # shellcheck disable=SC2086
-        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS | tee /tmp/update-dry-run-output.txt
+        # Fail early if the dry run detects unexpected changes.
+        # The cluster was just created with the same config, so zero changes are expected.
+        if ! grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" /tmp/update-dry-run-output.txt; then
+          echo "❌ ERROR: Unexpected changes detected in dry run after cluster creation"
+          echo "This indicates a regression — the cluster was just created with the same configuration."
+          exit 1
+        fi
+        echo "✅ No unexpected changes detected (dry run)"
 
     - name: 🧪 ksail cluster update
       id: cluster-update
@@ -326,8 +212,17 @@ runs:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
       run: |
+        set -o pipefail
         # shellcheck disable=SC2086
-        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS | tee /tmp/update-output.txt
+        # Fail early if the update detects unexpected changes.
+        # The cluster was just created with the same config, so zero changes are expected.
+        if ! grep -q "No changes detected" /tmp/update-output.txt; then
+          echo "❌ ERROR: Unexpected changes detected during update after cluster creation"
+          echo "This indicates a regression — the cluster was just created with the same configuration."
+          exit 1
+        fi
+        echo "✅ No unexpected changes detected"
 
     - name: 🐞 Debug Kubernetes failure
       if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')

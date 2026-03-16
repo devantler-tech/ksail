@@ -28,7 +28,7 @@ safe-outputs:
 
 tools:
   github:
-    toolsets: [default, discussions, search]
+    toolsets: [all]
   web-fetch:
 
 timeout-minutes: 15
@@ -44,7 +44,7 @@ Gather what's genuinely interesting about KSail right now:
 
 1. Read the repository README.md for current feature highlights.
 2. Check recent releases and merged PRs for new or improved features.
-3. Read the most recent Weekly Research discussion (category: `agentic-workflows`, title prefix: `Weekly Research`) for roadmap context and competitive insights.
+3. Read the most recent Weekly Roadmap discussion (category: `agentic-workflows`, title prefix: `Weekly Roadmap`) for roadmap context and competitive insights.
 4. Read the previous Weekly Promote KSail discussions to see which mediums were used recently.
 5. Identify the single most compelling thing to write about this week — a new feature, a solved problem, a use case, a comparison, or a lesson learned.
 
@@ -52,11 +52,11 @@ Gather what's genuinely interesting about KSail right now:
 
 Choose **one** platform. Rotate naturally — avoid picking the same platform two weeks in a row (check previous discussions from Step 1).
 
-| Medium | Best for | Tone |
-|--------|----------|------|
+| Medium                                            | Best for                                                             | Tone                                                                                 |
+|---------------------------------------------------|----------------------------------------------------------------------|--------------------------------------------------------------------------------------|
 | **Reddit** (r/kubernetes, r/devops, r/selfhosted) | Sharing a practical tip, asking for feedback, announcing a milestone | Community-first, never promotional. Lead with the problem solved, not the tool name. |
-| **LinkedIn** | Professional milestones, architecture insights, lessons learned | Conversational but polished. Tell a story or share an insight. No listicle format. |
-| **Blog post** (devantler.tech) | Feature deep-dives, tutorials, comparisons | 800–1500 words. Include actual code snippets and real examples. |
+| **LinkedIn**                                      | Professional milestones, architecture insights, lessons learned      | Conversational but polished. Tell a story or share an insight. No listicle format.   |
+| **Blog post** (devantler.tech)                    | Feature deep-dives, tutorials, comparisons                           | 800–1500 words. Include actual code snippets and real examples.                      |
 
 ## Step 3 — Write the content
 
@@ -114,7 +114,7 @@ Create a GitHub discussion with this structure. Replace all guidance below with 
 
 ### The Post
 
-````
+````text
 The complete, copy-paste-ready content goes here inside a fenced code block so it can be copied without cleanup. For blog posts, include the full frontmatter + Markdown body.
 ````
 

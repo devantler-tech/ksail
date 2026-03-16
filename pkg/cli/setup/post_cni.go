@@ -35,7 +35,20 @@ const (
 
 	// apiServerStabilitySuccesses is the number of consecutive successful
 	// API server health checks required before declaring stability.
-	apiServerStabilitySuccesses = 3
+	apiServerStabilitySuccesses = 5
+
+	// daemonSetStabilityTimeout is the maximum time to wait for kube-system
+	// DaemonSets (including the CNI, e.g. Cilium) to be fully ready after
+	// infrastructure installations. Cilium marks pods Ready only after the BPF
+	// datapath is operational; waiting ensures pod-to-service routing (e.g. to
+	// the API server ClusterIP) is functional before GitOps operators start.
+	daemonSetStabilityTimeout = 3 * time.Minute
+
+	// inClusterConnectivityTimeout is the maximum time to wait for a test pod
+	// to successfully reach the API server ClusterIP from within the cluster.
+	// This catches eBPF dataplane race conditions where Cilium DaemonSet pods
+	// report Ready but pod-to-service routing is not yet fully programmed.
+	inClusterConnectivityTimeout = 2 * time.Minute
 )
 
 // ShouldPushOCIArtifact determines if OCI artifact push should happen for GitOps engines.
@@ -249,10 +262,10 @@ func installComponentsInPhases(
 		// temporarily destabilize API server connectivity, causing GitOps
 		// operators to enter CrashLoopBackOff with API timeout errors.
 		if len(infraTasks) > 0 {
-			stabilityErr := waitForAPIServerStability(ctx, clusterCfg)
+			stabilityErr := waitForClusterStability(ctx, clusterCfg)
 			if stabilityErr != nil {
 				return fmt.Errorf(
-					"API server not stable after infrastructure installation: %w",
+					"cluster not stable after infrastructure installation: %w",
 					stabilityErr,
 				)
 			}
@@ -347,11 +360,13 @@ func buildGitOpsTasks(
 	return tasks
 }
 
-// waitForAPIServerStability waits for the Kubernetes API server to respond
-// consistently before starting GitOps engine installations. This prevents
-// operators like Flux from entering CrashLoopBackOff due to transient API
-// server connectivity issues after infrastructure components are installed.
-func waitForAPIServerStability(
+// waitForClusterStability waits for the Kubernetes API server to respond
+// consistently and for kube-system DaemonSets (including the CNI) to be fully
+// ready before starting GitOps engine installations. This prevents operators
+// like Flux from entering CrashLoopBackOff due to transient API server
+// connectivity issues or incomplete CNI dataplane programming after
+// infrastructure components are installed.
+func waitForClusterStability(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
@@ -372,6 +387,33 @@ func waitForAPIServerStability(
 	)
 	if err != nil {
 		return fmt.Errorf("wait for API server stability: %w", err)
+	}
+
+	// Wait for all kube-system DaemonSets (including the CNI, e.g. Cilium)
+	// to be fully ready. This ensures the CNI dataplane has re-converged
+	// after infrastructure installations and that pod-to-service routing
+	// (e.g. to the API server ClusterIP) is functional. Without this check,
+	// GitOps operator pods can start before Cilium has programmed the eBPF
+	// rules for service routing, causing CrashLoopBackOff with i/o timeout
+	// errors when connecting to kubernetes.default.svc:443.
+	err = readiness.WaitForNamespaceDaemonSetsReady(
+		ctx, clientset, "kube-system", daemonSetStabilityTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("wait for kube-system DaemonSets to be ready: %w", err)
+	}
+
+	// Pre-flight in-cluster connectivity check: verify that the API server
+	// ClusterIP is actually reachable from a pod. Even when Cilium DaemonSet
+	// pods report Ready, the eBPF dataplane may not have fully programmed
+	// pod-to-service routing paths. This check prevents GitOps operators
+	// (e.g. Flux) from entering CrashLoopBackOff with "i/o timeout" when
+	// connecting to kubernetes.default.svc:443.
+	err = readiness.WaitForInClusterAPIConnectivity(
+		ctx, clientset, inClusterConnectivityTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("in-cluster API connectivity pre-flight check: %w", err)
 	}
 
 	return nil

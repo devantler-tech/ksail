@@ -17,7 +17,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 **Notes:**
 
 - Docker provider requires Docker Desktop or Docker Engine installed locally
-- Hetzner provider requires `HCLOUD_TOKEN` environment variable and Talos ISO in your account
+- Hetzner provider requires `HCLOUD_TOKEN` environment variable and a Talos ISO uploaded to your Hetzner account (x86: `122630`, ARM: `122629` — see [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options))
 - Omni provider requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.cluster.omni.endpoint` in your KSail configuration — see [Omni Provider](/providers/omni/) for setup details
 - VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
 
@@ -100,7 +100,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 | Distribution             | Recreate       | Recreate  | Recreate | Recreate        |
 | Provider                 | Recreate       | Recreate  | Recreate | Recreate        |
 | CNI                      | In-place       | In-place  | In-place | N/A             |
-| CSI                      | In-place       | In-place  | In-place | N/A             |
+| CSI                      | N/A⁵           | In-place  | In-place | N/A             |
 | Metrics Server           | In-place       | In-place  | In-place | N/A             |
 | Load Balancer            | In-place       | In-place  | N/A¹     | N/A             |
 | cert-manager             | In-place       | In-place  | In-place | In-place        |
@@ -117,13 +117,14 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 **Notes:**
 
 - "In-place" changes are applied without cluster downtime via Helm or provider APIs
-- "Recreate" changes require `ksail cluster delete && ksail cluster create` or `ksail cluster update --force`
+- "Recreate" changes trigger a cluster recreation. `ksail cluster update` will prompt before proceeding; use `--force` (or `-y` / `--yes`) to skip the prompt for non-interactive runs, or run `ksail cluster delete && ksail cluster create` manually.
 - If no changes are detected, `ksail cluster update` exits immediately with no modifications (idempotent no-op)
 - Use `ksail cluster update --dry-run` to preview changes before applying
 - Talos supports the broadest set of in-place updates, including node scaling for both control-plane and worker nodes
 - Kind does not support any structural node changes after creation
 - VCluster (Vind) runs control-plane and optional worker nodes as Docker containers — CNI, CSI, and metrics-server are managed by the vCluster Helm chart and are N/A for update operations; LoadBalancer services are provided by the host cluster, and `spec.cluster.loadBalancer` is ignored for VCluster and will not trigger a cluster update
 - **¹ Load Balancer for Talos**: For Talos, the provider determines which LoadBalancer implementation is used (MetalLB on Docker, Hetzner Cloud Controller Manager on Hetzner). The `spec.cluster.loadBalancer` setting controls whether KSail installs LoadBalancer support. See [FAQ](/faq/#which-distributions-support-loadbalancer-services) for details.
+- **⁵ CSI for Vanilla (Kind)**: Kind bundles local-path-provisioner by default. KSail's detector reports it as `CSIEnabled` but cannot distinguish Kind's bundled CSI from a KSail-installed CSI driver, so CSI comparison is skipped entirely during `ksail cluster update`. To change CSI settings on a Vanilla cluster, recreate it with `ksail cluster delete && ksail cluster create`.
 
 ## Platform Requirements
 

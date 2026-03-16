@@ -49,6 +49,14 @@ export default defineConfig({
         { label: "Use Cases", link: "/use-cases/" },
         { label: "Support Matrix", link: "/support-matrix/" },
         {
+          label: "Guides",
+          items: [
+            { label: "Cluster Profiles (--profile)", link: "/guides/cluster-profiles/" },
+            { label: "Ephemeral Clusters (--ttl)", link: "/guides/ephemeral-clusters/" },
+            { label: "Companion Tools", link: "/guides/companion-tools/" },
+          ],
+        },
+        {
           label: "Configuration",
           items: [
             { label: "Overview", link: "/configuration/" },
@@ -65,6 +73,12 @@ export default defineConfig({
           label: "Providers",
           items: [
             { label: "Omni (Sidero)", link: "/providers/omni/" },
+          ],
+        },
+        {
+          label: "Integrations",
+          items: [
+            { label: "VSCode Extension", link: "/vscode-extension/" },
           ],
         },
         {

@@ -90,7 +90,7 @@ All benchmarks use [age](https://github.com/FiloSottile/age) key groups for encr
 
 ### Encryption Performance
 
-```
+```text
 BenchmarkEncrypt/Minimal-2      [results pending]
 BenchmarkEncrypt/Small-2        [results pending]
 BenchmarkEncrypt/Medium-2       [results pending]
@@ -108,7 +108,7 @@ BenchmarkEncrypt/Nested-2       [results pending]
 
 ### Decryption Performance
 
-```
+```text
 BenchmarkDecrypt/Minimal-2      [results pending]
 BenchmarkDecrypt/Small-2        [results pending]
 BenchmarkDecrypt/Medium-2       [results pending]
@@ -169,7 +169,7 @@ benchstat before.txt after.txt
 
 ### Example benchstat Output
 
-```
+```text
 name                  old time/op    new time/op    delta
 Encrypt/Minimal-2       4.50ms ± 2%    3.80ms ± 1%  -15.56%  (p=0.000)
 Decrypt/Medium-2       12.30ms ± 3%   10.50ms ± 2%  -14.63%  (p=0.000)

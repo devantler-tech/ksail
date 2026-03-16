@@ -5,20 +5,7 @@ description: Expose KSail as an MCP server for AI assistants and automation tool
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
 
-The KSail MCP (Model Context Protocol) server exposes all KSail commands as tools that can be used by MCP-compatible AI assistants and automation systems. This enables AI assistants like Claude Desktop to manage Kubernetes clusters directly.
-
-## What is MCP?
-
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io/) is an open protocol that standardizes how AI applications communicate with data sources and tools. It provides a universal interface for AI assistants to access external capabilities while maintaining security and user control.
-
-## Why Use the KSail MCP Server?
-
-The MCP server enables:
-
-- **AI-Driven Cluster Management**: AI assistants can create, configure, and manage clusters
-- **Automated Workflows**: Scripts and automation tools can orchestrate complex cluster operations
-- **Interactive Exploration**: Ask natural language questions and have the AI execute the appropriate commands
-- **Unified Interface**: One protocol for all AI assistants that support MCP
+The KSail MCP ([Model Context Protocol](https://modelcontextprotocol.io/)) server exposes all KSail commands as tools for MCP-compatible AI assistants and automation systems. This enables AI assistants like Claude Desktop to create, configure, and manage Kubernetes clusters, and lets automation scripts orchestrate complex cluster operations through a universal interface.
 
 ## Prerequisites
 
@@ -43,20 +30,84 @@ The server will:
 
 ## Available Tools
 
-The MCP server automatically exposes all KSail commands except:
+The MCP server automatically generates tools from all KSail commands except:
 
 - `ksail chat` — Interactive chat (use MCP client's native chat instead)
 - `ksail mcp` — The MCP server itself
 - `ksail completion` — Shell completion (not relevant for MCP)
 - `ksail help` — Built-in help (use MCP tool discovery)
 
-Available tool categories:
+Commands are consolidated by permission into **6 tools**:
 
-- **Cluster Management**: `cluster init`, `cluster create`, `cluster delete`, `cluster start`, `cluster stop`, `cluster update`, `cluster info`, `cluster list`, `cluster connect`
-- **Workload Operations**: `workload apply`, `workload create`, `workload delete`, `workload gen`, and more
-- **Secret Management**: `cipher encrypt`, `cipher decrypt`, `cipher edit`
+| Tool | Description | Subcommand Parameter |
+|------|-------------|----------------------|
+| `cluster_read` | Read-only cluster operations | `command` |
+| `cluster_write` | Cluster lifecycle mutations | `command` |
+| `workload_read` | Read-only workload operations | `workload_command` |
+| `workload_write` | Workload mutations | `workload_command` |
+| `cipher_read` | Read-only secret operations | `cipher_operation` |
+| `cipher_write` | Secret mutations | `cipher_operation` |
 
-MCP clients can discover available tools dynamically and toggle them on/off as needed.
+Each tool accepts a **subcommand parameter** (e.g., `command`, `workload_command`, `cipher_operation`) that selects the specific operation. Flags that apply only to certain subcommands are annotated in their descriptions.
+
+### Cluster Operations (`cluster_read` / `cluster_write`)
+
+**Read operations** (`cluster_read` with `command`):
+- `info` — Display cluster information
+- `list` — List clusters
+- `connect` — Connect to cluster with k9s
+- `switch` — Switch active cluster context (pass cluster name via `args`; **note:** mutates local kubeconfig by updating current-context)
+
+**Write operations** (`cluster_write` with `command`):
+- `init` — Initialize a new project
+- `create` — Create a cluster
+- `update` — Update a cluster configuration (returns diff output showing before/after changes)
+- `delete` — Destroy a cluster
+- `start` — Start a stopped cluster
+- `stop` — Stop a running cluster
+- `backup` — Backup cluster resources
+- `restore` — Restore cluster resources from backup
+
+### Workload Operations (`workload_read` / `workload_write`)
+
+**Read operations** (`workload_read` with `workload_command`):
+- `get` — Get resources
+- `describe` — Describe resources
+- `logs` — Print container logs
+- `explain` — Get documentation for a resource
+- `wait` — Wait for a condition on resources (pass target resource(s) via `args`, e.g., `["pod/foo"]`)
+- `images` — List container images required by cluster components
+- `export` — Export container images to a tar archive (pass optional output path via `args`)
+- `validate` — Validate Kubernetes manifests (pass optional path via `args`)
+- `gen_deployment`, `gen_service_clusterip`, `gen_namespace`, etc. — Generate resource manifests
+- `gen_helmrelease` — Generate a HelmRelease resource (pass release name via `args`)
+
+**Write operations** (`workload_write` with `workload_command`):
+- `apply` — Apply manifests
+- `create` — Create resources
+- `delete` — Delete resources
+- `edit` — Edit a resource
+- `exec` — Execute a command in a container (pass pod and command via `args`, e.g., `["pod/foo", "--", "sh"]`)
+- `expose` — Expose a resource as a service (pass resource type and name via `args`, e.g., `["deployment", "my-app"]`)
+- `scale` — Scale resources
+- `reconcile` — Trigger reconciliation for GitOps workloads
+- `push` — Package and push an OCI artifact (pass optional OCI URI via `args`)
+- `install` — Install Helm charts (pass release name and chart via `args`, e.g., `["my-release", "stable/nginx"]`)
+- `import` — Import container images to the cluster (pass optional tar archive path via `args`)
+- `watch` — Watch for file changes and auto-apply
+- `rollout_restart`, `rollout_status`, etc. — Manage rollouts
+
+### Secret Management (`cipher_read` / `cipher_write`)
+
+**Read operations** (`cipher_read` with `cipher_operation`):
+- `decrypt` — Decrypt a SOPS-encrypted file (pass file path via `args`)
+
+**Write operations** (`cipher_write` with `cipher_operation`):
+- `encrypt` — Encrypt a file with SOPS (pass file path via `args`)
+- `edit` — Edit an encrypted file in-place (pass file path via `args`)
+- `import` — Import an age key (pass the age private key via `args`)
+
+MCP clients can discover available tools dynamically and toggle them on/off as needed. Each tool includes its name (e.g., `cluster_write`), a description, and a JSON schema with the subcommand selector enum and merged flags.
 
 ## Integration Examples
 
@@ -85,11 +136,11 @@ After restarting Claude Desktop, the KSail tools will be available. Try:
 
 > "Create a Vanilla Kubernetes cluster with Cilium CNI"
 
-Claude will use the `ksail cluster init` and `ksail cluster create` tools to fulfill your request.
+Claude will use the `cluster_write` tool (with `command: "init"` and `command: "create"`) to fulfill your request.
 
 ### VSCode Extension
 
-The [KSail VSCode extension](https://marketplace.visualstudio.com/items?itemName=devantler.ksail) automatically registers the MCP server with VSCode's native MCP infrastructure.
+The [KSail VSCode extension](/vscode-extension/) automatically registers the MCP server with VSCode's native MCP infrastructure.
 
 **No manual configuration needed** — the extension handles server registration, process lifecycle, and working directory setup.
 
@@ -110,64 +161,23 @@ Once installed:
 If you're building your own MCP client:
 
 ````python
-# Example using the Python MCP SDK
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-async with stdio_client(
-    StdioServerParameters(
-        command="ksail",
-        args=["mcp"]
-    )
-) as (read, write):
+async with stdio_client(StdioServerParameters(command="ksail", args=["mcp"])) as (read, write):
     async with ClientSession(read, write) as session:
-        # Initialize and discover tools
         await session.initialize()
-        
-        # List available tools
         tools = await session.list_tools()
-        print(f"Available tools: {[t.name for t in tools.tools]}")
-        
-        # Call a tool
-        result = await session.call_tool(
-            "cluster_info",
-            arguments={}
-        )
+        print([t.name for t in tools.tools])
+        result = await session.call_tool("cluster_read", arguments={"command": "info"})
         print(result.content)
 ````
 
-**Note:** Tool names use underscores (e.g., `cluster_info` for `ksail cluster info`). Check the MCP SDK documentation for your language.
-
-## Tool Discovery
-
-MCP clients can discover available tools dynamically:
-
-````bash
-# Example using mcp-cli (if available)
-mcp list-tools --server "ksail mcp"
-````
-
-Each tool includes:
-- **Name**: Command path with underscores (e.g., `workload_apply`)
-- **Description**: Help text from the Cobra command
-- **Parameters**: JSON schema for command flags and arguments
+**Note:** Tools are consolidated into read/write pairs (e.g., `cluster_read`, `cluster_write`). Use the subcommand parameter to select the specific operation. Check the MCP SDK documentation for your language.
 
 ## Configuration
 
-### Server Behavior
-
-The server:
-- Uses **stdio** for communication (compatible with all MCP clients)
-- Runs commands in the **current working directory** (set by the client)
-- Keeps the connection alive for **30 seconds** after the last request
-- Returns results in **pages of 100 items** for large lists
-
-### Command Execution
-
-Tools execute KSail commands with:
-- The same permissions as the user running the server
-- Access to Docker (required for cluster operations)
-- Ability to read/write files in the working directory
+The server uses **stdio** for communication (compatible with all MCP clients), runs commands in the **current working directory** (set by the client), keeps the connection alive for **30 seconds** after the last request, and returns results in **pages of 100 items** for large lists. Tools execute with the same permissions as the user running the server.
 
 **Security Note:** The MCP server executes commands with your full permissions. Only run it with trusted MCP clients.
 
@@ -223,31 +233,11 @@ You can use both simultaneously — the chat command is excluded from MCP tools 
 
 ### Automation Scripts
 
-Combine MCP with automation frameworks:
-
-````python
-# Example: Automated cluster provisioning with MCP
-async def provision_dev_cluster():
-    async with mcp_session() as session:
-        # Initialize cluster configuration
-        await session.call_tool("cluster_init", {
-            "name": "dev",
-            "distribution": "K3s",
-            "cni": "Cilium"
-        })
-        
-        # Create the cluster
-        await session.call_tool("cluster_create", {})
-        
-        # Deploy workloads
-        await session.call_tool("workload_apply", {
-            "kustomize": "./k8s"
-        })
-````
+Use MCP tool calls in automation frameworks to orchestrate sequences of KSail operations — for example, `cluster_write` (init → create) → `workload_write` (apply) → `cipher_write` (encrypt). Use the same connection pattern shown in [Custom MCP Client](#custom-mcp-client).
 
 ## See Also
 
 - [AI Chat](/ai-chat/) — Interactive chat powered by GitHub Copilot
 - [CLI Flags Reference](/cli-flags/mcp/mcp-root/) — MCP command flags
-- [VSCode Extension](https://marketplace.visualstudio.com/items?itemName=devantler.ksail) — VSCode integration with automatic MCP setup
+- [VSCode Extension](/vscode-extension/) — VSCode integration with automatic MCP setup
 - [Model Context Protocol](https://modelcontextprotocol.io/) — Official MCP specification

@@ -1,0 +1,244 @@
+package readiness_test
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
+)
+
+const testClusterIP = "10.96.0.1"
+
+func newKubernetesService() *corev1.Service {
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "kubernetes",
+			Namespace: "default",
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: testClusterIP,
+		},
+	}
+}
+
+func TestWaitForInClusterAPIConnectivity_NoService(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 3*time.Second)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "get kubernetes service ClusterIP")
+}
+
+func TestWaitForInClusterAPIConnectivity_PodSucceeds(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(newKubernetesService())
+
+	// Intercept pod creation to set the pod status to Succeeded immediately.
+	clientset.PrependReactor(
+		"create",
+		"pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			createAction, isCreateAction := action.(k8stesting.CreateAction)
+			if !isCreateAction {
+				return false, nil, nil
+			}
+
+			pod, isPod := createAction.GetObject().(*corev1.Pod)
+			if !isPod {
+				return false, nil, nil
+			}
+
+			pod.Status.Phase = corev1.PodSucceeded
+
+			return false, nil, nil // let the default reactor store it
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 15*time.Second)
+
+	require.NoError(t, err)
+}
+
+func TestWaitForInClusterAPIConnectivity_Timeout(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(newKubernetesService())
+
+	// Intercept pod creation to set the pod status to Failed (simulating
+	// connectivity failure). The pod remains in Failed state, causing the
+	// outer poll to retry until the deadline.
+	clientset.PrependReactor(
+		"create",
+		"pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			createAction, isCreateAction := action.(k8stesting.CreateAction)
+			if !isCreateAction {
+				return false, nil, nil
+			}
+
+			pod, isPod := createAction.GetObject().(*corev1.Pod)
+			if !isPod {
+				return false, nil, nil
+			}
+
+			pod.Status.Phase = corev1.PodFailed
+
+			return false, nil, nil
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 3*time.Second)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "in-cluster API connectivity check failed")
+}
+
+func TestWaitForInClusterAPIConnectivity_PermanentCreateError(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(newKubernetesService())
+
+	// Return a Forbidden error on pod creation to simulate a permanent RBAC failure.
+	clientset.PrependReactor(
+		"create",
+		"pods",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewForbidden(
+				schema.GroupResource{Group: "", Resource: "pods"},
+				connectivityPodName,
+				nil,
+			)
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 3*time.Second)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "create connectivity check pod")
+}
+
+func TestWaitForInClusterAPIConnectivity_PermanentGetError(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(newKubernetesService())
+
+	// Let pod creation succeed, but return Forbidden on pod Get.
+	clientset.PrependReactor(
+		"create",
+		"pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			createAction, isCreateAction := action.(k8stesting.CreateAction)
+			if !isCreateAction {
+				return false, nil, nil
+			}
+
+			pod, isPod := createAction.GetObject().(*corev1.Pod)
+			if !isPod {
+				return false, nil, nil
+			}
+
+			pod.Status.Phase = corev1.PodPending
+
+			return false, nil, nil
+		},
+	)
+
+	clientset.PrependReactor(
+		"get",
+		"pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			getAction, isGetAction := action.(k8stesting.GetAction)
+			if !isGetAction || getAction.GetName() != connectivityPodName {
+				return false, nil, nil
+			}
+
+			return true, nil, apierrors.NewForbidden(
+				schema.GroupResource{Group: "", Resource: "pods"},
+				connectivityPodName,
+				nil,
+			)
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 3*time.Second)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "get connectivity check pod")
+}
+
+func TestConnectivityCheckPodSpec(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(newKubernetesService())
+
+	// Make the function create a pod and immediately succeed so we can
+	// inspect what was created.
+	clientset.PrependReactor(
+		"create",
+		"pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			createAction, isCreateAction := action.(k8stesting.CreateAction)
+			if !isCreateAction {
+				return false, nil, nil
+			}
+
+			pod, isPod := createAction.GetObject().(*corev1.Pod)
+			if !isPod {
+				return false, nil, nil
+			}
+
+			// Verify pod spec
+			require.Equal(t, "ksail-api-connectivity-check", pod.Name)
+			require.Equal(t, "default", pod.Namespace)
+			require.Equal(t, corev1.RestartPolicyNever, pod.Spec.RestartPolicy)
+			require.Len(t, pod.Spec.Containers, 1)
+			require.Equal(t, "busybox:stable", pod.Spec.Containers[0].Image)
+			require.Contains(t, pod.Spec.Containers[0].Command[2], "nc -w 5 "+testClusterIP+" 443")
+			require.Len(t, pod.Spec.Tolerations, 1)
+			require.Equal(t, corev1.TolerationOpExists, pod.Spec.Tolerations[0].Operator)
+
+			// Mark succeeded so the function completes
+			pod.Status.Phase = corev1.PodSucceeded
+
+			return false, nil, nil
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 15*time.Second)
+	require.NoError(t, err)
+}
+
+// connectivityPodName mirrors the constant from the production code so test
+// reactors can match by name.
+const connectivityPodName = "ksail-api-connectivity-check"

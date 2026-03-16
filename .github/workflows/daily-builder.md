@@ -10,8 +10,7 @@ on:
     - "github-merge-queue[bot]"
 
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
-  schedule:
-    - cron: "0 14 * * *"
+  schedule: daily
   workflow_dispatch:
 
 timeout-minutes: 30
@@ -32,6 +31,7 @@ safe-outputs:
   create-pull-request:
     draft: true
     labels: [automation]
+    protected-files: fallback-to-issue
 
 tools:
   github:
@@ -78,6 +78,11 @@ To decide which phase to perform:
    - Identify patterns or common themes (recurring bugs, feature requests, areas of improvement)
    - Look for duplicates or closely related issues that can be consolidated or linked
    - Identify stale issues that can be closed as out-of-date
+
+   **Discussion task mining:**
+   - Scan recent GitHub Discussions (last 7 days) in the `agentic-workflows` category for actionable improvement opportunities
+   - Look for concrete, well-scoped tasks buried in discussion reports, quality audits, or analysis summaries created by other agentic workflows (e.g., Weekly Roadmap, Daily Code Quality, CI Doctor investigations)
+   - Extract high-value action items and include them in the prioritized plan alongside backlog issues
 
 2. Use this research to create a discussion with title "${{ github.workflow }} - Research, Roadmap and Plan"
 

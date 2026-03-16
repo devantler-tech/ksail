@@ -10,5 +10,6 @@
 //   - DaemonSet readiness polling (WaitForDaemonSetReady)
 //   - Node readiness polling (WaitForNodeReady)
 //   - API server readiness and stability polling (WaitForAPIServerReady, WaitForAPIServerStable)
+//   - In-cluster API connectivity verification (WaitForInClusterAPIConnectivity)
 //   - Multi-resource coordination (WaitForMultipleResources)
 package readiness

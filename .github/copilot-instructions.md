@@ -34,9 +34,10 @@ cd /path/to/repo
 go build -o ksail
 # Takes a few seconds on first run for Go module downloads
 
-# For optimized builds (uses the same -ldflags as release builds):
+# For optimized builds (strips debug symbols):
 go build -ldflags="-s -w" -o ksail-optimized
 # Strips debug symbols and can significantly reduce binary size (in some cases by ~25–35%; see #2095 for an example benchmark; actual size varies by OS/arch, Go version, and dependencies)
+# Note: release builds additionally inject version metadata via -X flags (Version, Commit, Date) through GoReleaser
 ```
 
 **Run Unit Tests**:
@@ -162,8 +163,11 @@ go run main.go --help
 │   └── svc/                # Services (installers, managers, etc.)
 │       ├── chat/           # AI chat integration (GitHub Copilot SDK)
 │       ├── detector/       # Detects installed Kubernetes components (Helm releases, K8s API)
+│       │   ├── cluster/    # Detects distribution, provider, cluster name from kubeconfig context
+│       │   └── gitops/     # Detects existing GitOps CRs (FluxInstance, ArgoCD Application) in source dir
 │       ├── diff/           # Computes ClusterSpec config diffs and classifies update impact
 │       ├── image/          # Container image export/import services
+│       │   └── parser/     # Parses image references from Dockerfiles
 │       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
 │       ├── mcp/            # Model Context Protocol server
 │       ├── provider/       # Infrastructure providers (docker, hetzner, omni)
@@ -189,7 +193,7 @@ go run main.go --help
 - **go.mod**: Go module dependencies (includes embedded kubectl, helm, kind, k3d, vcluster, flux, argocd)
 - **package.json**: Node.js dependencies for Astro documentation
 - **.github/workflows/\*.yaml**: CI/CD pipelines
-- **.github/workflows/\*.md**: Agentic workflows (daily-code-quality, daily-docs, daily-builder, daily-workflow-maintenance, daily-plan, weekly-research, weekly-promote-ksail, ci-doctor, maintainer, etc.); each runs on a schedule or dispatch, and many operate in multiple phases
+- **.github/workflows/\*.md**: Agentic workflows (daily-code-quality, daily-docs, daily-builder, daily-workflow-maintenance, daily-plan, weekly-roadmap, weekly-promote-ksail, ci-doctor, maintainer, etc.); each runs on a schedule or dispatch, and many operate in multiple phases
 
 ### CLI Commands Reference
 
@@ -205,10 +209,13 @@ ksail cluster stop                     # Stop running cluster
 ksail cluster info                     # Show cluster status
 ksail cluster list [--all]             # List clusters
 ksail cluster connect                  # Connect to cluster with K9s
+ksail cluster switch <cluster-name>    # Switch active kubeconfig context
 ksail cluster backup                   # Backup cluster resources to .tar.gz
 ksail cluster restore                  # Restore cluster resources from .tar.gz
 ksail workload apply                   # Apply workloads
+ksail workload reconcile               # Trigger reconciliation for GitOps workloads
 ksail workload gen <resource>          # Generate resources
+ksail workload watch [--path <dir>]    # Watch a directory (defaults to k8s/ or spec.workload.sourceDirectory) and auto-apply on change
 ksail cipher <command>                 # Manage secrets with SOPS
 ksail chat                             # AI chat powered by GitHub Copilot
 ksail mcp                              # Start MCP server for AI assistants
@@ -227,6 +234,9 @@ ksail cluster init --help
 # --distribution K3s       # Lightweight K3s via K3d
 # --distribution Talos     # Immutable Talos Linux
 # --distribution VCluster  # Virtual clusters via Vind
+
+# Supported profiles:
+# --profile Default        # Default profile (current behaviour, no-op)
 ```
 
 ### Troubleshooting Build Issues
@@ -305,16 +315,18 @@ For a deeper dive into KSail's design and internals, refer to:
 
 **Key Packages:**
 
-- `pkg/toolgen/`: AI tool generation utilities for integrating with AI assistants
+- `pkg/toolgen/`: AI tool generation — auto-generates tools from the Cobra command tree for both the MCP server and the Copilot chat assistant. All runnable CLI commands (except excluded meta commands: `chat`, `mcp`, `completion`, `help`, root — see `toolgen.DefaultOptions()` and `ai.toolgen.exclude`) are automatically exposed as tools; do NOT manually register individual tool handlers. Parent commands annotated with `ai.toolgen.consolidate` group their subcommands into a single tool, then `ai.toolgen.permission` splits them into read/write pairs (e.g., `cluster_read`, `cluster_write`). Adding a new CLI command under a consolidated parent automatically makes it available as an MCP tool and a chat tool — no separate tool registration is needed
 - `pkg/apis/`: API types, schemas, and enums; each enum type lives in its own file under `pkg/apis/cluster/v1alpha1/` (e.g., `distribution.go`, `cni.go`, `csi.go`, `loadbalancer.go`, `gitopsengine.go`, etc.); the `EnumValuer` interface is in `enum.go`
 - `pkg/client/`: Embedded tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kustomize, oci, netretry); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`.
 - `pkg/svc/`: Services including installers, providers, and provisioners
   - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation
   - `pkg/svc/detector/`: Detects installed Kubernetes components by querying Helm release history and the Kubernetes API; used by the update command to build accurate baseline state
+    - `pkg/svc/detector/cluster/`: Detects Kubernetes distribution, provider, and cluster name by analyzing kubeconfig context names and server endpoints; exposes `DetectInfo`, `DetectDistributionFromContext`, and `ResolveKubeconfigPath`
+    - `pkg/svc/detector/gitops/`: Detects existing GitOps Custom Resources (FluxInstance, ArgoCD Application) managed by KSail in the source directory
   - `pkg/svc/diff/`: Computes configuration differences between old and new ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
-  - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
-  - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.); `internal/hetzner/` holds shared utilities for the Hetzner installers—`hcloudccm.Installer` and `hetznercsi.Installer` are type aliases for `hetzner.Installer` and share a single `EnsureSecret` implementation
-  - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants
+  - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions; `parser/` sub-package provides `ParseAllImagesFromDockerfile` for extracting all `FROM` directives from multi-stage Dockerfiles (used by Flux installer to include distribution controller images in mirror cache warming)
+  - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.); `internal/hetzner/` holds shared utilities for the Hetzner installers—`hcloudccm.Installer` and `hetznercsi.Installer` are type aliases for `hetzner.Installer` and share a single `EnsureSecret` implementation; `flux/Dockerfile.distribution` tracks Flux distribution controller images (updated by Dependabot) that are deployed by the Flux operator when creating a FluxInstance but are not part of the Helm chart — included in `Images()` output for mirror cache warming
+  - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants; tools are auto-generated from root Cobra commands via `pkg/toolgen/` (not manually registered) — all operational cluster/workload/cipher commands (both read and write) are consolidated into 6 tools via `ai.toolgen.consolidate` + `ai.toolgen.permission`: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `cipher_read`, `cipher_write`
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner, omni)
   - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster)
   - `pkg/svc/registryresolver/`: OCI registry detection, resolution, and artifact push utilities
@@ -335,48 +347,3 @@ For a deeper dive into KSail's design and internals, refer to:
 - Embedded Kubernetes tools (kubectl, helm, kind, k3d, vcluster, flux, argocd) as Go libraries
 - Docker as the only external dependency
 - Astro with Starlight for documentation (Node.js-based)
-
-## Recent Changes
-
-- Flattened package structure: moved from nested to flat organization in `pkg/`
-- **Provider/Provisioner Architecture**: Separated infrastructure providers (Docker, Hetzner, Omni) from distribution provisioners (Vanilla, K3s, Talos, VCluster)
-- **VCluster Support**: Added VCluster as the fourth supported distribution via VClusterProvisioner, enabling virtual Kubernetes clusters within Docker using the Vind driver
-- **Hetzner Provider**: Added support for running Talos clusters on Hetzner Cloud
-- **Omni Provider**: Added support for managing Talos clusters through the Sidero Omni SaaS API (`pkg/svc/provider/omni/`); requires `spec.cluster.omni.endpoint` and a service account key env var (default: `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.cluster.omni.serviceAccountKeyEnvVar`)
-- **Registry Authentication**: Added support for external registries with username/password authentication
-- **Default Registry Mirrors**: Enabled docker.io, ghcr.io, quay.io, and registry.k8s.io mirrors by default to avoid rate limits and improve CI/CD performance (`pkg/cli/setup/mirrorregistry/defaults.go`)
-- **Distribution Naming**: Changed user-facing names from `Kind`/`K3d` to `Vanilla`/`K3s` to focus on the Kubernetes distribution rather than the underlying tool
-- **VSCode Extension**: Added VSCode extension for managing KSail clusters from the editor with interactive wizards and MCP server support
-- **AI Chat Integration**: Added `ksail chat` command powered by GitHub Copilot SDK for interactive cluster configuration and troubleshooting (`pkg/svc/chat/`)
-  - **Chat Modes**: Two modes - Agent (`</>`) and Plan (`≡`)
-    - **Agent Mode**: Full tool execution with permission prompts for write operations
-    - **Plan Mode**: No execution; AI describes steps without making changes
-  - **Mode Switching**: Press Tab to cycle between modes during chat sessions
-  - **TUI Implementation**: Terminal UI in `pkg/cli/ui/chat/` with keyboard shortcuts and session management
-  - **Reasoning Effort**: `--reasoning-effort` flag (low, medium, high) for supported models; `^E` keybind in TUI to change effort level
-  - **Auto Model Selection**: Transparent model resolution with 10% discount; shows resolved model in picker and status bar (`auto → gpt-4o`)
-  - **Quota Tracking**: Displays premium request usage (`300/300 reqs · 0% · resets Jan 2`); for unlimited entitlements shows only `∞ reqs`
-  - **Infinite Sessions**: Background compaction enabled by default (BackgroundCompactionThreshold: 0.80, BufferExhaustionThreshold: 0.95) to manage long conversations
-  - **Authentication**: Supports `KSAIL_COPILOT_TOKEN` and `COPILOT_TOKEN` environment variables; filters `GITHUB_TOKEN`/`GH_TOKEN` to avoid scope issues
-  - **Enhanced Keybindings**: `^O` for model picker (lazy-loaded), `^E` for reasoning effort, `^H` for session history
-- **MCP Server**: Implemented Model Context Protocol server to expose KSail as a tool for Claude and other AI assistants (`pkg/svc/mcp/`)
-- **Cloud Provider KIND LoadBalancer Support**: Completed LoadBalancer support for Vanilla (Kind) × Docker using the Cloud Provider KIND controller (`pkg/svc/installer/cloudproviderkind/`); runs as an external Docker container named `ksail-cloud-provider-kind` and allocates IPs from the `kind` Docker network subnet; per-service containers use a `cpk-` prefix
-- **MetalLB LoadBalancer Support**: Completed LoadBalancer support for Talos × Docker with MetalLB installer (`pkg/svc/installer/metallb/`), configured with default IP pool (172.18.255.200-172.18.255.250) and Layer 2 mode
-- **String Building Optimization**: Replaced string concatenation with strings.Builder in tool generation (`pkg/toolgen/`) and chat UI (`pkg/cli/ui/chat/`) for better memory efficiency and reduced allocations; added Grow() pre-allocation for optimal performance (PR #2307)
-- **Daily Workflow Maintenance**: Added `daily-workflow-maintenance` agentic workflow (`.github/workflows/daily-workflow-maintenance.md`) that consolidates `daily-workflow-updater` and `daily-workflow-optimizer`; systematically identifies and implements optimizations across all GitHub Actions workflows (both `.yaml`/`.yml` and agentic `.md`)
-- **Hetzner Secret Race Fix**: Extracted shared Hetzner secret logic to `pkg/svc/installer/internal/hetzner/`; `EnsureSecret` now handles the TOCTOU race between concurrent `hcloud-ccm` and `hetzner-csi` installers via `createOrUpdateOnConflict` and `retry.RetryOnConflict` (PR #2488)
-- **VCluster Transient Startup Retry**: Added `createWithRetry` in the VCluster provisioner (`pkg/svc/provisioner/cluster/vcluster/`) to automatically retry transient `CreateDocker` failures (e.g. exit status 22 / EINVAL on CI runners); performs up to 5 total attempts (initial attempt plus 4 retries) with a 5-second delay between attempts, cleaning up partial state and verifying Docker network removal between attempts. D-Bus recovery is handled by a separate `tryDBusRecovery` helper. Both helpers accept injectable function types (`createDockerFn`, `retryCleanupFn`, `dbusRecoverFn`) for unit-test isolation; tests use the `export_test.go` pattern with static error sentinels (PR #2530, updated in PR #2655)
-- **Detector Component Tests**: Added comprehensive unit tests for `pkg/svc/detector/` covering CNI, CSI, MetricsServer, LoadBalancer, CertManager, PolicyEngine, and GitOpsEngine detection (0% → 86.9% coverage); follows the `export_test.go` pattern (exports `ExportDetectCNI`, `ExportDetectCSI`, etc. and `NewReleaseMappingForTest`) for black-box testing of unexported methods; uses `fake.NewClientset()`, static error sentinels, `t.Parallel()`, and `require.NoError/Error` (PR #2562)
-- **Agentic Workflows Threat Detection Instructions**: Added globally applicable guidelines for reliable threat detection in agentic workflow jobs: diagnostic output before CLI invocation, robust error handling (`set -euo pipefail`, separate stdout/stderr capture, timeout protection), incremental tool restriction validation, and fallback mechanisms for security-critical detection failures (PR #2575)
-- **VCluster Troubleshooting Docs**: Added a VCluster-specific section to `docs/src/content/docs/troubleshooting.md` covering transient startup failures (exit status 22 / EINVAL on CI runners) with cross-reference to auto-retry behavior (5 attempts, 5s delay), and kubectl connection errors immediately after VCluster creation; cross-references the VCluster Getting Started guide for detailed steps (PR #2599)
-- **export_test.go Pattern Documented**: Codified the `export_test.go` convention for Go tests; the pattern exposes unexported symbols to `_test` packages without leaking them into production binaries — file uses the regular package name so Go only compiles it for test builds (PR #2603)
-- **VCluster False-Positive Diff Fix**: Fixed `ksail cluster update` incorrectly reporting LoadBalancer and GitOps registry diffs for VCluster when nothing had changed. Two root causes resolved: (1) `ApplyGitOpsLocalRegistryDefault` now runs after component detection in the fallback path so the detected GitOps engine value correctly triggers the `localhost:5050` default; (2) the diff engine (`pkg/svc/diff/`) skips LoadBalancer comparison for VCluster (returns `LoadBalancerDefault` for both sides) since VCluster delegates LoadBalancer to the host cluster and KSail never installs or uninstalls anything — `spec.cluster.loadBalancer` has no effect on VCluster (PR #2549)
-- **API Server Stability Check**: Added `waitForAPIServerStability` between Phase 1 (infrastructure components) and Phase 2 (GitOps engines) in `installComponentsInPhases` (`pkg/cli/setup/post_cni.go`); requires 3 consecutive successful API server health checks within a 2-minute timeout before GitOps engines begin installation; prevents Flux/ArgoCD from entering CrashLoopBackOff with `dial tcp 10.96.0.1:443: i/o timeout` errors caused by infrastructure components (MetalLB, Kyverno, cert-manager, etc.) temporarily destabilizing API server connectivity while registering webhooks and CRDs (PR #2601)
-- **Backup/Restore Metadata and Labeling**: Extended `BackupMetadata` struct in `pkg/cli/cmd/cluster/backup.go` with `Distribution`, `Provider`, `KSailVersion`, `ResourceCount`, and `ResourceTypes` fields written to `backup-metadata.json`; restore in `pkg/cli/cmd/cluster/restore.go` now applies `ksail.io/backup-name` and `ksail.io/restore-name` labels to restored resources for provenance tracking (PR #2613)
-- **Daily Docs Workflow**: Consolidated `unbloat-docs` and `update-docs` agentic workflows into `daily-docs` (`.github/workflows/daily-docs.md`); runs in Doc Sync mode (push to main), Bloat Reduction mode (schedule or `/unbloat` slash command), or Full mode (workflow_dispatch)
-- **MetalLB Installer Tests**: Added unit tests for `pkg/svc/installer/metallb/` that exercise CRD waiting and document IPAddressPool/L2Advertisement Server-Side Apply behavior (6.6% → 23.0% coverage); follows the `export_test.go` pattern (exports `ExportWaitForCRDsWithOptions`, `ExportEnsureIPAddressPool`, `ExportEnsureL2Advertisement`); uses `fake.NewSimpleDynamicClientWithCustomListKinds()` for CRD/resource assertions, `helm.NewMockInterface(t)` for Helm install/uninstall, `t.Parallel()`, and `require.NoError/Error`; SSA-based pool/advertisement tests are currently skipped due to fake dynamic client limitations, while CRD waiting is fully exercised (PR #2673)
-- **Agentic Workflow Consolidation**: Merged 11 agentic workflows into 6, then further consolidated to 5 daily workflows; `daily-code-quality` merges `daily-refactor` + `daily-code-health` (covering refactoring, performance, and test coverage with triple domain alternation); `daily-builder` merges `daily-progress` + `daily-backlog-burner`; `daily-workflow-maintenance` merges `daily-workflow-updater` + `daily-workflow-optimizer`; `daily-docs` merges `unbloat-docs` + `update-docs`; schedules spread across 02, 10, 14, 18, 22 UTC
-- **Instructions Directory Removed**: Deleted `.github/instructions/` directory; this file (`.github/copilot-instructions.md`) is now the primary location for Copilot coding guidance, and agentic workflows were updated to review it instead of the per-topic guide files that previously lived under `.github/instructions/`
-- **VCluster Retry Increase**: Increased `createMaxAttempts` from 3 to 5 in the VCluster provisioner (`pkg/svc/provisioner/cluster/vcluster/`) to handle persistent-but-transient CI runner states; added `waitForNetworkRemoval` to verify Docker network is fully removed between retry attempts using injectable `dockerNetworkExistsFn` and `removeDockerNetworkFn`; `cleanupFailedCreate` now calls `waitForNetworkRemoval` after `DeleteDocker` to prevent stale network interference on subsequent attempts (PR #2655)
-- **Enum Split**: Split the monolithic `pkg/apis/cluster/v1alpha1/enums.go` (773 lines) into domain-specific files — `distribution.go`, `cni.go`, `csi.go`, `metricsserver.go`, `loadbalancer.go`, `certmanager.go`, `policyengine.go`, `gitopsengine.go`, `placementgroupstrategy.go`, `provider.go`, and `enum.go` (EnumValuer interface) — for easier navigation and clearer separation of concerns; maintains 100% API compatibility (PR #2725)
-- **VCluster Transient Error Coverage**: Extended `transientCreateErrors()` in the VCluster provisioner with five additional network-level patterns: `i/o timeout`, `connection reset by peer`, `TLS handshake timeout`, `no such host`, and `temporary failure in name resolution`; total patterns now seven (PR #2761); added pre-pull step for VCluster base images (`ghcr.io/loft-sh/vcluster-pro`, `ghcr.io/loft-sh/kubernetes`) in the system test action (`ksail-system-test`) with retry logic to avoid transient GHCR pull failures during cluster creation (PR #2761)

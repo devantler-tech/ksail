@@ -21,8 +21,9 @@ const CLUSTER_INIT_TOOL = "cluster_init";
  * First value in each array is the CLI default
  */
 const FALLBACK_VALUES: Record<string, string[]> = {
-  distribution: ["Vanilla", "K3s", "Talos"],
-  provider: ["Docker", "Hetzner"],
+  distribution: ["Vanilla", "K3s", "Talos", "VCluster"],
+  provider: ["Docker", "Hetzner", "Omni"],
+  profile: ["Default"],
   cni: ["Default", "Cilium", "Calico"],
   csi: ["Default", "Enabled", "Disabled"],
   "metrics-server": ["Default", "Enabled", "Disabled"],

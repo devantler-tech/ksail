@@ -8,6 +8,15 @@ import (
 	"strings"
 )
 
+// imagePattern matches "image:" lines in YAML manifests, handling:
+//   - Optional leading whitespace and dash (for YAML list items)
+//   - Optional single or double quote wrapping
+//   - Trailing inline comments
+//
+// Pre-compiled at package level to avoid repeated regex compilation overhead
+// on every ExtractImagesFromManifest call.
+var imagePattern = regexp.MustCompile(`^\s*-?\s*image:\s*["']?([^\s"'#]+)["']?\s*(?:#.*)?$`)
+
 // ExtractImagesFromManifest extracts all container image references from rendered Kubernetes manifests.
 // It parses YAML documents and extracts images from containers, initContainers, and ephemeralContainers.
 //
@@ -35,23 +44,6 @@ func ExtractImagesFromManifest(manifest string) ([]string, error) {
 // extractImagesFromReader extracts images from a YAML reader.
 func extractImagesFromReader(reader io.Reader, seen map[string]struct{}) ([]string, error) {
 	var images []string
-
-	// Pattern to match image: fields in YAML
-	// Handles various formats:
-	//   image: nginx:latest
-	//   image: "nginx:latest"
-	//   image: 'nginx:latest'
-	//   - image: docker.io/library/nginx:1.25
-	//   - image: ghcr.io/fluxcd/source-controller:v1.5.0
-	//   image: nginx:1.25  # with comment
-	//
-	// The pattern matches:
-	// - Optional leading whitespace and dash (for YAML list items)
-	// - "image:" keyword
-	// - Optional quotes (single or double)
-	// - The image reference (captured)
-	// - Optional trailing comment
-	imagePattern := regexp.MustCompile(`^\s*-?\s*image:\s*["']?([^\s"'#]+)["']?\s*(?:#.*)?$`)
 
 	scanner := bufio.NewScanner(reader)
 	// Increase buffer size to handle very long lines in Helm-rendered CRDs

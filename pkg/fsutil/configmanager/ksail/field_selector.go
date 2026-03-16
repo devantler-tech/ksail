@@ -127,6 +127,15 @@ func DefaultPolicyEngineFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
+// DefaultProfileFieldSelector creates a standard field selector for Profile.
+func DefaultProfileFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Profile },
+		Description:  "Pre-built cluster profile template (Default: current behaviour)",
+		DefaultValue: v1alpha1.ProfileDefault,
+	}
+}
+
 // DefaultCSIFieldSelector creates a standard field selector for CSI.
 func DefaultCSIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{

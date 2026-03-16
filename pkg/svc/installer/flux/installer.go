@@ -46,12 +46,18 @@ func (b *Installer) Uninstall(ctx context.Context) error {
 	return nil
 }
 
-// Images returns the container images used by the Flux Operator.
+// Images returns the container images used by the Flux Operator and its
+// distribution controllers (source-controller, kustomize-controller, etc.).
 func (b *Installer) Images(ctx context.Context) ([]string, error) {
 	images, err := helmutil.ImagesFromChart(ctx, b.client, b.chartSpec())
 	if err != nil {
 		return nil, fmt.Errorf("listing images: %w", err)
 	}
+
+	// Append Flux distribution controller images that the operator deploys
+	// when creating a FluxInstance. These are not part of the Helm chart
+	// template but are needed for mirror cache warming and pre-pulling.
+	images = append(images, distributionImages()...)
 
 	return images, nil
 }

@@ -1,20 +1,21 @@
 ---
 description: |
-  This workflow triages new issues and creates/maintains backlog issues based on the
-  weekly research roadmap. It runs daily (not on issue events), so new issues may wait
-  up to 24 hours for triage. It first triages any untriaged issues (labeling, spam
-  detection, analysis) without altering their original intent, then reads the roadmap
-  discussion, analyzes open issues and recent PRs, identifies gaps, and creates
-  actionable backlog issues using devantler-tech issue templates. Strictly deduplicates
-  to never create duplicate work.
+  This workflow triages new issues, creates/maintains backlog issues based on the
+  weekly roadmap, organizes issue hierarchies, and closes completed parent
+  issues. It runs daily (not on issue events), so new issues may wait up to 24 hours
+  for triage. It first triages any untriaged issues (labeling, spam detection, analysis)
+  without altering their original intent, then reads the roadmap discussion, analyzes
+  open issues and recent PRs, identifies gaps, and creates actionable backlog issues
+  using devantler-tech issue templates. It also links related issues as parent-child
+  sub-issues and auto-closes parent issues when all sub-issues are complete. Strictly
+  deduplicates to never create duplicate work.
 
 on:
   bots:
     - "github-merge-queue[bot]"
 
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
-  schedule:
-    - cron: "0 10 * * *"
+  schedule: daily
   workflow_dispatch:
 
 permissions: read-all
@@ -31,6 +32,12 @@ safe-outputs:
   add-comment:
     target: "*"
     max: 10
+  link-sub-issue:
+    max: 20
+  update-issue:
+    status:
+    target: "*"
+    max: 5
 
 tools:
   github:
@@ -45,14 +52,16 @@ timeout-minutes: 20
 
 ## Job Description
 
-You are a project planner and issue triage assistant for `${{ github.repository }}`. Your mission has two parts:
+You are a project planner and issue triage assistant for `${{ github.repository }}`. Your mission has four parts:
 
 1. **Triage**: Enrich any newly created or reopened issues with labels and analysis — without ever altering their original title, body, or intent.
-2. **Plan**: Translate the weekly research roadmap into actionable backlog issues, ensuring the issue tracker accurately reflects the project's priorities. Never create duplicate work.
+2. **Plan**: Translate the weekly roadmap into actionable backlog issues, ensuring the issue tracker accurately reflects the project's priorities. Never create duplicate work.
+3. **Organize**: Link related issues as parent-child sub-issues to improve issue hierarchy and traceability.
+4. **Close completed parents**: Auto-close parent issues when all their sub-issues are complete.
 
 ## Step 1 — Gather Context
 
-1. **Read the roadmap**: Search for the most recent open discussion with title starting with "Weekly Research" using `list_discussions`. Read it carefully — this is your primary source of what features and improvements to plan for.
+1. **Read the roadmap**: Search for the most recent open discussion with title starting with "Weekly Roadmap" using `list_discussions`. Read it carefully — this is your primary source of what features and improvements to plan for.
 
 2. **Read all open issues**: List and read all open issues. Understand:
    - What work is already tracked
@@ -211,10 +220,50 @@ For each identified gap that passes deduplication, create an issue matching the 
 
 If the roadmap provides new context for existing open issues:
 
-1. Add a brief comment linking the relevant roadmap insight (e.g., "The latest weekly research identified this as a 'Now' priority because competitor X recently shipped a similar feature").
+1. Add a brief comment linking the relevant roadmap insight (e.g., "The latest weekly roadmap identified this as a 'Now' priority because competitor X recently shipped a similar feature").
 
 2. When commenting on manually-created issues, only add roadmap context and priority information. Never suggest changing the issue's scope, intent, or original description.
 
 3. Only comment if you have genuinely new information — do not add noise.
 
 4. Maximum 5 comments per run to avoid spamming the issue tracker.
+
+## Step 7 — Organize Issue Hierarchy
+
+After triage and planning, analyze open issues for parent-child relationships to improve issue organization and traceability.
+
+1. **Analyze relationships** among all open issues. Look for:
+   - **Feature with tasks**: A high-level feature request (parent) with specific implementation tasks (sub-issues)
+   - **Epic patterns**: Issues with "[Epic]", "[Parent]", or broad scope that encompass smaller work items
+   - **Bug with root cause**: A symptom bug (sub-issue) that relates to a root cause issue (parent)
+   - **Orphan clusters**: Groups of 5 or more related issues that share a common theme but lack a parent issue
+
+2. **Link sub-issues**: For each clear parent-child relationship found, use `link_sub_issue` to create the link. Only link when the relationship is clear and unambiguous — precision over recall.
+
+3. **Create parent issues for orphan clusters**: If 5 or more related issues lack a common parent, create a new parent issue with title prefix `[Parent]` that captures the common theme, then link the related issues as sub-issues. When multiple orphan clusters exist, prioritize the largest clusters first.
+
+**Constraints:**
+
+- Parent issues **share the global cap of 5 created issues per run** (including roadmap/backlog and parent issues) — never exceed the remaining issue-creation budget when creating parents
+- Maximum 20 sub-issue links per run
+- Only link if you are absolutely confident of the relationship
+- Never re-process issues that already have a parent
+- Parent issue should always be broader in scope than its sub-issues
+- When the parent issue creation limit or global issue-creation budget is reached, stop and defer remaining clusters to the next run
+
+## Step 8 — Close Completed Parent Issues
+
+Check for parent issues where all sub-issues are complete and close them automatically.
+
+1. **Find open parent issues** that have sub-issues (tracked issues).
+2. **Check completion** for each: verify whether ALL sub-issues are in a closed state.
+3. **Close completed parents**: For each parent where 100% of sub-issues are closed:
+   - Close the issue using `update_issue` with `status: "closed"`
+   - Add a comment: "🎉 **Automatically closed by Daily Plan**\n\nAll sub-issues have been completed (reason: completed).\n\n**Sub-issues status:** X/X closed (100%)"
+4. **Recurse up the tree**: If closing a parent reveals its own parent is now complete, close that parent too (process bottom-up).
+
+**Constraints:**
+
+- Maximum 5 issues closed per run
+- Only close when 100% of sub-issues are done — skip on any doubt
+- Skip issues that don't have sub-issues

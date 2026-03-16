@@ -84,8 +84,6 @@ func (k *Provisioner) GetCurrentConfig(
 			return nil, fmt.Errorf("detect components: %w", err)
 		}
 
-		clusterupdate.ApplyGitOpsLocalRegistryDefault(spec)
-
 		return spec, nil
 	}
 

@@ -67,6 +67,15 @@ func SetArgoCDInstallerFactoryForTests(
 	})
 }
 
+// SetPolicyEngineInstallerFactoryForTests overrides the policy engine installer factory.
+func SetPolicyEngineInstallerFactoryForTests(
+	factory func(*v1alpha1.Cluster) (installer.Installer, error),
+) func() {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
+		f.PolicyEngine = factory
+	})
+}
+
 // SetEnsureArgoCDResourcesForTests overrides the Argo CD resource ensure function.
 func SetEnsureArgoCDResourcesForTests(
 	fn func(context.Context, string, *v1alpha1.Cluster, string) error,

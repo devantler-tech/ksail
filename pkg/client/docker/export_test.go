@@ -71,3 +71,8 @@ func (rm *RegistryManager) ExportBuildProxyCredentialsEnv(
 ) ([]string, error) {
 	return rm.buildProxyCredentialsEnv(username, password)
 }
+
+// ExportBuildHealthcheck exports buildHealthcheck for testing.
+func ExportBuildHealthcheck() *dockertypes.HealthConfig {
+	return buildHealthcheck()
+}

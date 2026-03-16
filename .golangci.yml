@@ -27,6 +27,10 @@ linters:
       - linters:
           - paralleltest
         path: pkg/cli/cmd/cipher/import_test.go
+      # Tests that modify env vars cannot run in parallel
+      - linters:
+          - paralleltest
+        path: pkg/svc/detector/cluster/cluster_test.go
       # Bubbletea requires context in the Model struct
       - linters:
           - containedctx
@@ -87,6 +91,7 @@ linters:
             - github.com/cosi-project
             - github.com/docker
             - github.com/fatih/color
+            - github.com/fsnotify/fsnotify
             - github.com/fluxcd
             - github.com/gkampitakis/go-snaps
             - github.com/jinzhu/copier

@@ -17,6 +17,7 @@ import (
 	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
@@ -433,6 +434,13 @@ func executeDelete(
 	err = provisioner.Delete(cmd.Context(), resolved.ClusterName)
 	if err != nil {
 		return fmt.Errorf("cluster deletion failed: %w", err)
+	}
+
+	// Clean up persisted state (spec + TTL) for the deleted cluster.
+	// Best-effort: log a warning on failure rather than blocking success.
+	stateErr := state.DeleteClusterState(resolved.ClusterName)
+	if stateErr != nil {
+		notify.Warningf(cmd.OutOrStdout(), "failed to clean up cluster state: %v", stateErr)
 	}
 
 	outputTimer := flags.MaybeTimer(cmd, tmr)

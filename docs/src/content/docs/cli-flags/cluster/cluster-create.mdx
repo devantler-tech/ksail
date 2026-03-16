@@ -29,6 +29,7 @@ Flags:
   -n, --name string                    Cluster name used for container names, registry names, and kubeconfig context
       --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider              Infrastructure provider backend (e.g., Docker)
+      --ttl string                     Auto-destroy cluster after duration (e.g. 1h, 30m, 2h30m). If not set, cluster persists indefinitely.
       --workers int32                  Number of worker nodes
 
 Global Flags:

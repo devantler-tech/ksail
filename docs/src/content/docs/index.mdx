@@ -19,14 +19,10 @@ hero:
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
-import { Image } from "astro:assets";
-import mentalModel from "../../assets/mental-model.svg";
 
 ## Why KSail?
 
 Setting up and operating Kubernetes clusters often requires juggling multiple CLI tools, writing bespoke scripts, and dealing with inconsistent workflows. KSail removes the tooling overhead so you can focus on your workloads.
-
-**No Vendor Lock-In:** KSail works with native distribution configurations (Kind's `kind.yaml`, K3d's config, Talos patches, vCluster's `vcluster.yaml`) — you can run the same cluster outside KSail using the underlying tools directly. KSail is a superset that provides a unified workflow while preserving full compatibility with Kind, K3d, Talos, and vCluster.
 
 ## Key Features
 
@@ -85,7 +81,42 @@ ksail cluster connect
 
 ## How It Works
 
-<Image src={mentalModel} alt="KSail Mental Model" />
+````mermaid
+flowchart TD
+    Dev["🧑‍💻 Developer"]
+
+    Dev -->|"edits"| Project
+    Dev -->|"runs"| KSail
+
+    subgraph Project ["📁 Project Repository"]
+        Config["ksail.yaml"] ~~~ DistConfig["kind.yaml · k3d.yaml<br/>vcluster.yaml"] ~~~ Manifests["k8s/ manifests"]
+    end
+
+    KSail -->|"scaffolds & reads"| Project
+    KSail -->|"provisions & operates"| Cluster
+
+    subgraph KSail ["🛥️ KSail — One Binary"]
+        CLI["CLI Commands"] ~~~ Tools["Kind · K3d · Talos · vCluster<br/>Flux · ArgoCD · SOPS<br/>Helm · Kustomize"]
+    end
+
+    subgraph Cluster ["☸️ Kubernetes Cluster"]
+        Infra["CNI · CSI · Metrics<br/>Cert-Manager · Policy Engine"] ~~~ Workloads["Your Workloads ✅"]
+    end
+
+    Manifests -.->|"GitOps sync"| Workloads
+
+    style Dev fill:#f59e0b,stroke:#d97706,color:#000
+    style Project fill:#7c3aed22,stroke:#7c3aed
+    style KSail fill:#10b98122,stroke:#10b981
+    style Cluster fill:#3b82f622,stroke:#3b82f6
+    style CLI fill:#10b981,stroke:#059669,color:#000
+    style Tools fill:#065f46,stroke:#10b981,color:#fff
+    style Infra fill:#1e40af,stroke:#3b82f6,color:#fff
+    style Workloads fill:#166534,stroke:#22c55e,color:#fff
+    style Config fill:#5b21b6,stroke:#7c3aed,color:#fff
+    style DistConfig fill:#5b21b6,stroke:#7c3aed,color:#fff
+    style Manifests fill:#5b21b6,stroke:#7c3aed,color:#fff
+````
 
 ## Documentation
 
@@ -115,6 +146,14 @@ ksail cluster connect
   </Card>
   <Card title="CLI Flags" icon="forward-slash">
     Complete CLI flags for all commands. [Learn more →](/cli-flags/)
+  </Card>
+</CardGrid>
+
+## Integrations
+
+<CardGrid>
+  <Card title="VSCode Extension" icon="laptop">
+    Manage clusters from Visual Studio Code with wizards, sidebar views, and command palette. [Learn more →](/vscode-extension/)
   </Card>
 </CardGrid>
 

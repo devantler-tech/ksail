@@ -97,12 +97,15 @@ type ProgressGroup struct {
 	labels ProgressLabels
 	writer io.Writer
 	timer  timer.Timer
+	clock  Clock
 	isTTY  bool // Whether output is a TTY (interactive terminal)
 
 	mu             sync.Mutex
 	taskStatus     map[string]taskState
-	taskOrder      []string // Original task order
-	taskStartOrder []string // Order tasks started running (for display)
+	taskOrder      []string                 // Original task order
+	taskStartOrder []string                 // Order tasks started running (for display)
+	taskStartTime  map[string]time.Time     // Per-task start times
+	taskDuration   map[string]time.Duration // Per-task elapsed durations
 	spinnerIdx     int
 	stopSpinner    chan struct{}
 	spinnerDone    chan struct{}
@@ -130,6 +133,18 @@ func getSpinnerFrames() []string {
 	return []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 }
 
+// Clock provides the current time for per-task duration tracking.
+// This enables deterministic testing by injecting a fake clock.
+type Clock interface {
+	Now() time.Time
+	Since(t time.Time) time.Duration
+}
+
+type realClock struct{}
+
+func (realClock) Now() time.Time                  { return time.Now() }
+func (realClock) Since(t time.Time) time.Duration { return time.Since(t) }
+
 // ProgressOption is a functional option for configuring a ProgressGroup.
 type ProgressOption func(*ProgressGroup)
 
@@ -144,6 +159,18 @@ func WithLabels(labels ProgressLabels) ProgressOption {
 func WithTimer(tmr timer.Timer) ProgressOption {
 	return func(pg *ProgressGroup) {
 		pg.timer = tmr
+	}
+}
+
+// WithClock sets the clock used for per-task duration tracking.
+// If not set, the real system clock is used. A nil clock is ignored.
+func WithClock(clock Clock) ProgressOption {
+	return func(pg *ProgressGroup) {
+		if clock == nil {
+			return
+		}
+
+		pg.clock = clock
 	}
 }
 
@@ -168,7 +195,7 @@ func NewProgressGroup(
 	// Detect if we're outputting to a TTY
 	isTTY := false
 	if file, ok := writer.(*os.File); ok {
-		isTTY = term.IsTerminal(int(file.Fd()))
+		isTTY = term.IsTerminal(int(file.Fd())) //nolint:gosec // G115: safe fd conversion
 	}
 
 	progressGroup := &ProgressGroup{
@@ -176,10 +203,13 @@ func NewProgressGroup(
 		emoji:          emoji,
 		labels:         DefaultLabels(),
 		writer:         writer,
+		clock:          realClock{},
 		isTTY:          isTTY,
 		taskStatus:     make(map[string]taskState),
 		taskOrder:      make([]string, 0),
 		taskStartOrder: make([]string, 0),
+		taskStartTime:  make(map[string]time.Time),
+		taskDuration:   make(map[string]time.Duration),
 		stopSpinner:    make(chan struct{}),
 		spinnerDone:    make(chan struct{}),
 	}
@@ -278,30 +308,28 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 
 	for _, task := range tasks {
 		group.Go(func() error {
-			// Print start message
+			pg.setTaskState(task.Name, taskRunning)
+
 			pg.mu.Lock()
-			pg.taskStatus[task.Name] = taskRunning
 			_, _ = fmt.Fprintf(pg.writer, "► %s %s\n", task.Name, pg.labels.Running)
 			pg.mu.Unlock()
 
 			taskErr := task.Fn(groupCtx)
-
-			pg.mu.Lock()
-
 			if taskErr != nil {
-				pg.taskStatus[task.Name] = taskFailed
+				pg.setTaskState(task.Name, taskFailed)
+
+				pg.mu.Lock()
 				_, _ = fcolor.New(fcolor.FgRed).Fprintf(pg.writer, "✗ %s failed\n", task.Name)
-			} else {
-				pg.taskStatus[task.Name] = taskComplete
-				_, _ = fcolor.New(fcolor.FgGreen).
-					Fprintf(pg.writer, "✔ %s %s\n", task.Name, pg.labels.Completed)
-			}
+				pg.mu.Unlock()
 
-			pg.mu.Unlock()
-
-			if taskErr != nil {
 				return fmt.Errorf("%s: %w", task.Name, taskErr)
 			}
+
+			pg.setTaskState(task.Name, taskComplete)
+
+			pg.mu.Lock()
+			_, _ = fmt.Fprintln(pg.writer, pg.formatTaskLine(task.Name, taskComplete))
+			pg.mu.Unlock()
 
 			return nil
 		})
@@ -329,14 +357,22 @@ func (pg *ProgressGroup) printTiming() {
 	_, _ = successColor.Fprintf(pg.writer, "  total:  %s\n", total.String())
 }
 
-// setTaskState safely updates a task's state and tracks start order.
+// setTaskState safely updates a task's state and tracks start order and timing.
 func (pg *ProgressGroup) setTaskState(name string, state taskState) {
 	pg.mu.Lock()
 	defer pg.mu.Unlock()
 
-	// Track when tasks start running (for display order)
+	// Track when tasks start running (for display order and timing)
 	if state == taskRunning && pg.taskStatus[name] == taskPending {
 		pg.taskStartOrder = append(pg.taskStartOrder, name)
+		pg.taskStartTime[name] = pg.clock.Now()
+	}
+
+	// Record duration when task completes
+	if state == taskComplete {
+		if startTime, ok := pg.taskStartTime[name]; ok {
+			pg.taskDuration[name] = pg.clock.Since(startTime)
+		}
 	}
 
 	pg.taskStatus[name] = state
@@ -439,6 +475,13 @@ func (pg *ProgressGroup) formatTaskLine(name string, state taskState) string {
 
 		return fcolor.New(fcolor.FgCyan).Sprintf("%s %s %s", spinner, name, pg.labels.Running)
 	case taskComplete:
+		if pg.timer != nil {
+			if d, ok := pg.taskDuration[name]; ok {
+				return fcolor.New(fcolor.FgGreen).
+					Sprintf("✔ %s %s [%s]", name, pg.labels.Completed, d)
+			}
+		}
+
 		return fcolor.New(fcolor.FgGreen).Sprintf("✔ %s %s", name, pg.labels.Completed)
 	case taskFailed:
 		return fcolor.New(fcolor.FgRed).Sprintf("✗ %s failed", name)

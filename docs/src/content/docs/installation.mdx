@@ -165,21 +165,24 @@ For Visual Studio Code users, install the KSail extension to manage clusters dir
 
 The extension provides:
 
-- **Cluster sidebar** with status indicators and context menus
+- **Clusters View**: Sidebar with cluster list, provider info, status indicators, and context menus
+- **Cluster Status View**: Real-time sidebar panel with cluster health, pod summaries by namespace, and GitOps reconciliation state — updated every 10 seconds
+- **Status Bar**: Compact health indicator (Healthy/Degraded/Error/Unknown/No Cluster) in the bottom status bar
 - **Interactive wizards** for cluster init and create
 - **Command palette** integration for all cluster operations
 - **Keyboard shortcuts** for common actions
 - **MCP server** integration for AI assistants
 
-See the [Features - VSCode Extension](/features/#vscode-extension) section for detailed capabilities.
+See the [VSCode Extension](/vscode-extension/) guide for detailed capabilities, commands, and settings.
 
 ### Extension Settings
 
 Configure the extension in VSCode settings (`Cmd+,` / `Ctrl+,`):
 
-| Setting            | Description          | Default |
-| ------------------ | -------------------- | ------- |
-| `ksail.binaryPath` | Path to ksail binary | `ksail` |
+| Setting                       | Description                                        | Default |
+| ----------------------------- | -------------------------------------------------- | ------- |
+| `ksail.binaryPath`            | Path to ksail binary                               | `ksail` |
+| `ksail.statusPollingInterval` | Cluster status polling interval in seconds (5–300) | `10`    |
 
 ## Verification
 

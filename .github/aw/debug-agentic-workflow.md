@@ -16,13 +16,13 @@ The tools output is not visible to the user unless you explicitly print it. Alwa
 
 ## Quick Start Example
 
-**Example: Debugging from a workflow run URL**
+### Example: Debugging from a workflow run URL
 
 User: "Investigate the reason there is a missing tool call in this run: <https://github.com/github/gh-aw/actions/runs/20135841934>"
 
 Your response:
 
-```
+```text
 🔍 Analyzing workflow run #20135841934...
 
 Let me audit this run to identify the missing tool issue.
@@ -36,7 +36,7 @@ gh aw audit 20135841934 --json
 
 Or if `gh aw` is not authenticated, use the `agentic-workflows` tool:
 
-```
+```text
 Use the audit tool with run_id: 20135841934
 ```
 
@@ -50,14 +50,14 @@ Report back with specific findings and actionable fixes.
 
 ## Capabilities & Responsibilities
 
-**Prerequisites**
+### Prerequisites
 
 - The `gh aw` CLI is already installed in this environment.
 - Always consult the **instructions file** for schema and features:
   - Local copy: @.github/aw/github-agentic-workflows.md
   - Canonical upstream: <https://raw.githubusercontent.com/github/gh-aw/main/.github/aw/github-agentic-workflows.md>
 
-**Key Commands Available**
+### Key Commands Available
 
 - `gh aw compile` → compile all workflows
 - `gh aw compile <workflow-name>` → compile a specific workflow
@@ -88,14 +88,14 @@ Report back with specific findings and actionable fixes.
 
    Start by asking the user:
 
-   ```
+   ```text
    🔍 Let's debug your agentic workflow!
 
    First, which workflow would you like to debug?
 
    I can help you:
    - List all workflows with: `gh aw status`
-   - Or tell me the workflow name directly (e.g., 'weekly-research', 'daily-plan')
+   - Or tell me the workflow name directly (e.g., 'weekly-roadmap', 'daily-plan')
    - Or provide a workflow run URL (e.g., https://github.com/owner/repo/actions/runs/12345)
 
    Note: For running workflows, they must have a `workflow_dispatch` trigger.
@@ -121,7 +121,7 @@ Report back with specific findings and actionable fixes.
 
    Once a valid workflow is identified, ask the user:
 
-   ```
+   ```text
    📊 How would you like to debug this workflow?
 
    **Option 1: Analyze existing logs** 📂
@@ -159,7 +159,7 @@ When the user provides a workflow run URL (e.g., `https://github.com/github/gh-a
 
    Or if `gh aw` is not authenticated, use the `agentic-workflows` tool:
 
-   ```
+   ```text
    Use the audit tool with run_id: <run-id>
    ```
 
@@ -196,7 +196,7 @@ When the user provides a workflow run URL (e.g., `https://github.com/github/gh-a
 
    - **If tool name is incorrect:**
 
-     ```
+     ```text
      The agent called `safeoutputs-create_pull_request` but the correct name is `create_pull_request`.
      The safe-outputs tools don't have a "safeoutputs-" prefix.
 
@@ -205,7 +205,7 @@ When the user provides a workflow run URL (e.g., `https://github.com/github/gh-a
 
    - **If tool is not configured:**
 
-     ```
+     ```text
      The agent tried to call `<tool-name>` which is not configured in the workflow.
 
      Fix: Add to frontmatter:
@@ -215,7 +215,7 @@ When the user provides a workflow run URL (e.g., `https://github.com/github/gh-a
 
    - **If safe-output is not enabled:**
 
-     ```
+     ```text
      The agent tried to use safe-output `<output-type>` which is not configured.
 
      Fix: Add to frontmatter:
@@ -253,7 +253,7 @@ When the user chooses to analyze existing logs:
 
    Or if `gh aw` is not authenticated, use the `agentic-workflows` tool:
 
-   ```
+   ```text
    Use the logs tool with workflow_name: <workflow-name>
    ```
 
@@ -465,7 +465,7 @@ Before finishing:
 
    After changes are made and validated, explicitly ask the user:
 
-   ```
+   ```text
    Would you like to run the workflow again with the new changes to verify the improvements?
 
    I can help you:

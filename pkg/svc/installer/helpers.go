@@ -35,13 +35,28 @@ const (
 	FluxInstallTimeout = 12 * time.Minute
 	// ArgoCDInstallTimeout is the timeout for ArgoCD installs, which need
 	// extra time for multiple components to become ready (server, repo-server,
-	// application-controller, and Redis).
-	ArgoCDInstallTimeout = 10 * time.Minute
+	// application-controller, applicationset-controller, and Redis).
+	// In VCluster environments with layered stacks (e.g., Calico + Gatekeeper + ArgoCD),
+	// ArgoCD can take significantly longer to stabilize because each component runs
+	// inside the virtual cluster and inherits both the VCluster networking overhead and
+	// the latency imposed by active admission-webhook policies. 20 minutes provides
+	// sufficient headroom while keeping feedback reasonable for actual failures.
+	// See: https://github.com/devantler-tech/ksail/issues/2899
+	ArgoCDInstallTimeout = 20 * time.Minute
+	// VClusterInstallTimeout is the base timeout for component installs inside a VCluster
+	// distribution. VCluster adds ~20-30% overhead relative to a native-node cluster
+	// because every API call is forwarded through an extra hop (syncer) and admission
+	// webhooks from CNI/policy layers run inside the virtual cluster. Using a slightly
+	// larger base timeout ensures that even lightweight components have enough margin
+	// to become ready in a heavily-loaded CI environment.
+	// See: https://github.com/devantler-tech/ksail/issues/2899
+	VClusterInstallTimeout = 8 * time.Minute
 )
 
 // GetInstallTimeout determines the timeout for component installation.
 // Uses cluster connection timeout if configured, otherwise defaults to:
 //   - TalosInstallTimeout (5m) for Talos distribution
+//   - VClusterInstallTimeout (8m) for VCluster distribution
 //   - DefaultInstallTimeout (5m) for all other distributions
 //
 // Returns DefaultInstallTimeout if clusterCfg is nil.
@@ -58,6 +73,13 @@ func GetInstallTimeout(clusterCfg *v1alpha1.Cluster) time.Duration {
 	// Use longer timeout for Talos
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
 		return TalosInstallTimeout
+	}
+
+	// Use longer base timeout for VCluster to account for the additional hop through
+	// the syncer and the latency introduced by admission webhooks running inside the
+	// virtual cluster.
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionVCluster {
+		return VClusterInstallTimeout
 	}
 
 	return DefaultInstallTimeout

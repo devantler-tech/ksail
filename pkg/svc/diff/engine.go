@@ -48,6 +48,10 @@ type fieldRule struct {
 	reason   string
 	// getVal extracts the string representation of this field from a ClusterSpec.
 	getVal func(*v1alpha1.ClusterSpec) string
+	// defaultVal, when non-empty, is substituted for any zero/empty value returned
+	// by getVal. This prevents false-positive diffs when a config field is unset
+	// (zero value) but the cluster state contains the applied default.
+	defaultVal string
 }
 
 // scalarFieldRules returns the table of simple scalar field diff rules.
@@ -80,8 +84,20 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			field:    "cluster.csi",
 			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "CSI can be switched via Helm install/uninstall",
-			getVal: func(s *v1alpha1.ClusterSpec) string {
-				return string(s.CSI.EffectiveValue(e.distribution, e.provider))
+			getVal: func(spec *v1alpha1.ClusterSpec) string {
+				// Vanilla (Kind) and VCluster (Vind with k8s distro) always bundle
+				// local-path-provisioner regardless of KSail's CSI configuration. The
+				// detector reports CSIEnabled when the deployment exists, but it
+				// cannot distinguish the distribution-bundled CSI from one installed
+				// by KSail. To prevent false-positive diffs (e.g. config says
+				// CSIDisabled while the bundled deployment is still present), skip
+				// CSI comparison entirely by returning a constant for both sides.
+				if e.distribution == v1alpha1.DistributionVanilla ||
+					e.distribution == v1alpha1.DistributionVCluster {
+					return string(v1alpha1.CSIEnabled)
+				}
+
+				return string(spec.CSI.EffectiveValue(e.distribution, e.provider))
 			},
 		},
 		{
@@ -138,6 +154,16 @@ func (e *Engine) applyFieldRules(
 		oldVal := rule.getVal(oldSpec)
 		newVal := rule.getVal(newSpec)
 
+		if rule.defaultVal != "" {
+			if oldVal == "" {
+				oldVal = rule.defaultVal
+			}
+
+			if newVal == "" {
+				newVal = rule.defaultVal
+			}
+		}
+
 		if oldVal == newVal {
 			continue
 		}
@@ -162,10 +188,23 @@ func (e *Engine) applyFieldRules(
 }
 
 // checkLocalRegistryChange checks if local registry config has changed.
+//
+// When the old registry is empty, the comparison is skipped because the
+// detector cannot introspect the running cluster's local registry
+// configuration. An empty old value means "unknown", not "none".
+//
+// Limitation: this means a genuine change from no-registry to a configured
+// registry (or vice versa) will be silently ignored until state persistence
+// is implemented. State persistence will populate the old value correctly,
+// enabling proper change detection for all transitions.
 func (e *Engine) checkLocalRegistryChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *clusterupdate.UpdateResult,
 ) {
+	if oldSpec.LocalRegistry.Registry == "" {
+		return
+	}
+
 	if oldSpec.LocalRegistry.Registry != newSpec.LocalRegistry.Registry {
 		// For Kind, registry changes require recreate (containerd config is baked in)
 		// For Talos/K3d, registry mirrors can be updated in-place
@@ -275,22 +314,25 @@ func (e *Engine) checkHetznerOptionsChange(
 func hetznerFieldRules() []fieldRule {
 	return []fieldRule{
 		{
-			field:    "cluster.hetzner.controlPlaneServerType",
-			category: clusterupdate.ChangeCategoryRecreateRequired,
-			reason:   "existing control-plane servers cannot change VM type",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.ControlPlaneServerType },
+			field:      "cluster.hetzner.controlPlaneServerType",
+			category:   clusterupdate.ChangeCategoryRecreateRequired,
+			reason:     "existing control-plane servers cannot change VM type",
+			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.ControlPlaneServerType },
+			defaultVal: v1alpha1.DefaultHetznerServerType,
 		},
 		{
-			field:    "cluster.hetzner.workerServerType",
-			category: clusterupdate.ChangeCategoryInPlace,
-			reason:   "new worker servers will use the new type; existing workers unchanged",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.WorkerServerType },
+			field:      "cluster.hetzner.workerServerType",
+			category:   clusterupdate.ChangeCategoryInPlace,
+			reason:     "new worker servers will use the new type; existing workers unchanged",
+			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.WorkerServerType },
+			defaultVal: v1alpha1.DefaultHetznerServerType,
 		},
 		{
-			field:    "cluster.hetzner.location",
-			category: clusterupdate.ChangeCategoryRecreateRequired,
-			reason:   "datacenter location cannot be changed for existing servers",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.Location },
+			field:      "cluster.hetzner.location",
+			category:   clusterupdate.ChangeCategoryRecreateRequired,
+			reason:     "datacenter location cannot be changed for existing servers",
+			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.Location },
+			defaultVal: v1alpha1.DefaultHetznerLocation,
 		},
 		{
 			field:    "cluster.hetzner.networkName",
@@ -299,10 +341,11 @@ func hetznerFieldRules() []fieldRule {
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkName },
 		},
 		{
-			field:    "cluster.hetzner.networkCidr",
-			category: clusterupdate.ChangeCategoryRecreateRequired,
-			reason:   "network CIDR change requires PKI regeneration",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkCIDR },
+			field:      "cluster.hetzner.networkCidr",
+			category:   clusterupdate.ChangeCategoryRecreateRequired,
+			reason:     "network CIDR change requires PKI regeneration",
+			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkCIDR },
+			defaultVal: v1alpha1.DefaultHetznerNetworkCIDR,
 		},
 		{
 			field:    "cluster.hetzner.sshKeyName",

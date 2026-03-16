@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
@@ -22,6 +23,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -65,13 +67,10 @@ func NewCreateCmd(runtimeContainer *di.Runtime) *cobra.Command {
 		},
 	}
 
-	cfgManager := ksailconfigmanager.NewCommandConfigManager(
-		cmd,
-		defaultClusterMutationFieldSelectors(),
-	)
+	cfgManager := setupMutationCmdFlags(cmd)
 
-	registerMirrorRegistryFlag(cmd)
-	registerNameFlag(cmd, cfgManager)
+	cmd.Flags().String("ttl", "",
+		"Auto-destroy cluster after duration (e.g. 1h, 30m, 2h30m). If not set, cluster persists indefinitely.")
 
 	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleCreateRunE)
 
@@ -88,12 +87,17 @@ func handleCreateRunE(
 ) error {
 	deps.Timer.Start()
 
-	ctx, _, err := loadAndValidateClusterConfig(cfgManager, deps)
+	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps)
 	if err != nil {
 		return err
 	}
 
-	return runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
+	err = runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
+	if err != nil {
+		return err
+	}
+
+	return maybeWaitForTTL(cmd, clusterName, ctx.ClusterCfg)
 }
 
 // newProvisionerFactory returns the cluster provisioner factory, using any test override if set.
@@ -555,4 +559,41 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 
 		return "ksail"
 	}
+}
+
+// maybeWaitForTTL parses the --ttl flag and, if set, blocks to auto-destroy the cluster
+// after the TTL duration expires. TTL state is persisted for display in
+// `ksail cluster list` and `ksail cluster info`, and the function then blocks by
+// calling waitForTTLAndDelete until the cluster is removed or an error occurs.
+func maybeWaitForTTL(
+	cmd *cobra.Command,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	ttlStr, _ := cmd.Flags().GetString("ttl")
+	if ttlStr == "" {
+		return nil
+	}
+
+	ttl, err := time.ParseDuration(ttlStr)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStdout(),
+			"invalid --ttl value %q: %v (cluster created without TTL)", ttlStr, err)
+
+		return nil
+	}
+
+	if ttl <= 0 {
+		return nil
+	}
+
+	// Persist TTL for informational display (ksail cluster list / info).
+	saveErr := state.SaveClusterTTL(clusterName, ttl)
+	if saveErr != nil {
+		notify.Warningf(cmd.OutOrStdout(),
+			"failed to save cluster TTL: %v", saveErr)
+	}
+
+	// Block and wait for TTL, then auto-destroy.
+	return waitForTTLAndDelete(cmd, clusterName, clusterCfg, ttl)
 }

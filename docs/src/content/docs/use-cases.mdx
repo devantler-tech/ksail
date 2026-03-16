@@ -3,8 +3,6 @@ title: Use Cases
 description: KSail supports three primary use cases with workflows tailored to each scenario.
 ---
 
-KSail supports three primary use cases with workflows tailored to each scenario: learning Kubernetes, iterating on applications, and testing in CI/CD.
-
 ## Learning Kubernetes
 
 For developers new to Kubernetes who want to explore concepts and experiment with different configurations.
@@ -19,11 +17,7 @@ ksail cluster init \
   --gitops-engine None
 ```
 
-**Why this configuration:**
-
-- **Vanilla distribution** – Standard upstream Kubernetes behavior
-- **Cilium CNI** – Modern networking with observability features
-- **No GitOps** – Direct kubectl/apply workflow for immediate feedback
+Vanilla provides standard upstream Kubernetes, Cilium adds modern networking with observability, and skipping GitOps enables a direct apply workflow for immediate feedback.
 
 ### Workflow
 
@@ -57,6 +51,7 @@ ksail cluster init \
 
 - Use `ksail workload gen` to generate example manifests
 - Use `ksail workload explain <resource>` to learn about Kubernetes resources
+- Use `ksail workload watch` to watch for file changes and auto-apply; it scopes `kubectl apply` to the nearest directory containing a `kustomization.yaml` for faster iteration
 - Use `ksail cluster connect` to open K9s for interactive exploration
 
 ## Iterating on Applications
@@ -75,13 +70,7 @@ ksail cluster init \
   --local-registry localhost:5050
 ```
 
-**Why this configuration:**
-
-- **K3s distribution** – Fast startup and low resource usage
-- **Cilium CNI** – Network policies and observability
-- **LocalPathProvisioner CSI** – Persistent volumes for stateful apps
-- **Flux GitOps** – Declarative deployments matching production patterns
-- **Local registry** – Fast image iteration without pushing to remote registry
+K3s starts faster with lower resource usage, Cilium provides network policies and observability, Local Path Provisioner enables persistent volumes for stateful apps, Flux mirrors production GitOps patterns, and a local registry avoids pushing images to a remote registry during iteration.
 
 ### Workflow
 
@@ -112,20 +101,12 @@ ksail cluster init \
    ksail workload reconcile
    ```
 
-5. **Iterate**
-
-   ```bash
-   # Make code changes
-   docker build -t localhost:5050/my-app:dev .
-   docker push localhost:5050/my-app:dev
-   ksail workload reconcile
-   ```
-
 ### Tips
 
 - Use `ksail workload logs -f deployment/my-app` for live log streaming
 - Use `ksail workload exec deployment/my-app -- /bin/sh` for debugging
 - Keep terminal running with `ksail cluster info` to monitor cluster health
+- Pair KSail with **[Tilt, Skaffold, DevSpace, Telepresence, or mirrord](/guides/companion-tools/)** to automate the build-deploy loop, hot-reload interpreted code, or bridge local↔remote traffic
 
 ## Testing in CI/CD
 
@@ -148,14 +129,11 @@ spec:
     sourceDirectory: k8s
 ```
 
-**Why this configuration:**
+K3s starts fastest in CI, Cilium enforces network policies, Flux tests the actual deployment workflow, and declarative config ensures reproducibility across runs.
 
-- **K3s distribution** – Fastest startup time for CI
-- **Cilium CNI** – Required for network policies
-- **Flux GitOps** – Test actual deployment workflow
-- **Declarative config** – Reproducible across CI runs
+### GitHub Actions (Recommended)
 
-### CI Pipeline Example
+Use the official `ksail-cluster` composite action to provision a cluster in one step. It handles installation, Helm chart caching, mirror registry caching, and image pre-pulling automatically.
 
 ```yaml
 # .github/workflows/test.yaml
@@ -171,32 +149,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install KSail
-        run: |
-          curl -sSL https://github.com/devantler-tech/ksail/releases/latest/download/ksail_linux_amd64 -o ksail
-          chmod +x ksail
-          sudo mv ksail /usr/local/bin/
-
-      - name: Create cluster
-        run: ksail cluster create
+      - name: Provision KSail cluster
+        id: cluster
+        uses: devantler-tech/ksail/.github/actions/ksail-cluster@v5.59.0
+        with:
+          distribution: K3s   # Vanilla, K3s, Talos, VCluster
 
       - name: Build and push
         run: |
           docker build -t localhost:5050/my-app:${{ github.sha }} .
           docker push localhost:5050/my-app:${{ github.sha }}
 
-      - name: Deploy
+      - name: Deploy and test
+        env:
+          KUBECONFIG: ${{ steps.cluster.outputs.kubeconfig }}
         run: |
           sed -i "s|image:.*|image: localhost:5050/my-app:${{ github.sha }}|" k8s/deployment.yaml
           ksail workload push
           ksail workload reconcile
-
-      - name: Run tests
-        run: |
-          # Wait for deployment
           ksail workload wait deployment/my-app --for=condition=available
-
-          # Run integration tests
           npm run test:integration
 
       - name: Cleanup
@@ -204,11 +175,46 @@ jobs:
         run: ksail cluster delete
 ```
 
+**Action inputs:**
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `distribution` | `Vanilla` | Distribution to provision (Vanilla, K3s, Talos, VCluster) |
+| `provider` | `Docker` | Infrastructure provider (Docker, Hetzner) |
+| `args` | `""` | Additional args passed to `cluster init` / `cluster create` |
+| `init` | `true` | Run `ksail cluster init` before create |
+| `ksail-version` | `latest` | KSail version to install (e.g. `5.55.0`) or `latest` |
+| `install` | `true` | Install KSail from GitHub releases |
+| `cache` | `true` | Cache Helm charts and mirror registry volumes between runs |
+| `hcloud-token` | `""` | Hetzner Cloud API token (required when provider is Hetzner) |
+
+**Action outputs:** `kubeconfig` — path to the kubeconfig file for the provisioned cluster.
+
+### Other CI Systems
+
+For non-GitHub CI (GitLab CI, CircleCI, etc.), install KSail directly and run lifecycle commands:
+
+```bash
+# Install (see https://github.com/devantler-tech/ksail/releases for available versions)
+VERSION=5.59.0
+curl -sSL "https://github.com/devantler-tech/ksail/releases/download/v${VERSION}/ksail_${VERSION}_linux_amd64.tar.gz" | tar -xz
+sudo mv ksail /usr/local/bin/
+
+# Provision cluster (using declarative ksail.yaml)
+ksail cluster create
+
+# ... run tests ...
+
+# Cleanup
+ksail cluster delete
+```
+
 ### Tips
 
 - Use `--timeout` flags to handle slow CI runners
 - Cache Docker layers for faster builds
 - Use matrix builds to test across multiple Kubernetes versions/distributions
+- Use `--ttl` as a best-effort safety net — the cluster auto-destroys when the TTL elapses provided the `ksail cluster create` process stays alive
 - Consider using `ksail cluster start` and `ksail cluster stop` if tests can share a cluster
 
 ## Configuration Comparison
@@ -217,14 +223,16 @@ jobs:
 |------------------|------------------|------------------|------------------|
 | Distribution     | Vanilla          | K3s              | K3s              |
 | CNI              | Cilium           | Cilium           | Cilium           |
-| CSI              | None             | LocalPathProvisioner | None        |
+| CSI              | None             | Local Path Provisioner | None        |
 | GitOps           | None             | Flux             | Flux             |
 | Local Registry   | Optional         | Yes              | Yes              |
 | Declarative Config | Optional       | Recommended      | Required         |
-| Cluster Lifetime | Session          | Days/Weeks       | Minutes          |
+| Cluster Lifetime | Session          | Days/Weeks       | Minutes (or `--ttl`) |
 
 ## Next Steps
 
+- **[Ephemeral Clusters](/guides/ephemeral-clusters/)** – Use `--ttl` for time-limited clusters for debugging, demos, and temporary access
+- **[Companion Tools](/guides/companion-tools/)** – Use KSail with Tilt, Skaffold, DevSpace, Telepresence, or mirrord for inner-loop development
 - **[Features](/features/)** – Deep dive into KSail capabilities
 - **[Concepts](/concepts/)** – Understand the underlying technologies
 - **[Configuration](/configuration/)** – Complete configuration reference

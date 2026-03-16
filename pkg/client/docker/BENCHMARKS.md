@@ -58,7 +58,7 @@ Generate fresh baselines on your machine using the commands in [Running Benchmar
 
 Example baseline (AMD EPYC 7763, Linux, Go 1.26.0):
 
-```
+```text
 BenchmarkGetDockerClient-4                               780775       1499 ns/op     1784 B/op       23 allocs/op
 BenchmarkGetConcreteDockerClient-4                       766017       1495 ns/op     1784 B/op       23 allocs/op
 BenchmarkNewRegistryManager-4                          47744233         24.15 ns/op       16 B/op        1 allocs/op
