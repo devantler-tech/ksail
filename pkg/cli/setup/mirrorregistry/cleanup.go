@@ -392,6 +392,39 @@ func displayRegistryCleanupOutputWithTimer(
 	})
 }
 
+// cleanupRegistriesOrFallback either falls back to network-based discovery when
+// registryNames is empty or delegates to runMirrorRegistryCleanup with a
+// context-normalised wrapper around provisionerCleanup.
+func cleanupRegistriesOrFallback(
+	cmd *cobra.Command,
+	deps lifecycle.Deps,
+	registryNames []string,
+	networkName string,
+	clusterName string,
+	deleteVolumes bool,
+	cleanupDeps CleanupDependencies,
+	provisionerCleanup func(ctx context.Context, dockerClient client.APIClient) error,
+) error {
+	if len(registryNames) == 0 {
+		return cleanupRegistriesByNetwork(cmd, deps, networkName, clusterName, deleteVolumes, cleanupDeps)
+	}
+
+	return runMirrorRegistryCleanup(
+		cmd,
+		deps,
+		registryNames,
+		func(dockerClient client.APIClient) error {
+			ctx := cmd.Context()
+			if ctx == nil {
+				ctx = context.Background()
+			}
+
+			return provisionerCleanup(ctx, dockerClient)
+		},
+		cleanupDeps,
+	)
+}
+
 func runMirrorRegistryCleanup(
 	cmd *cobra.Command,
 	deps lifecycle.Deps,
