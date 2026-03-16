@@ -392,6 +392,50 @@ func displayRegistryCleanupOutputWithTimer(
 	})
 }
 
+// cmdContext returns the context from the command, falling back to
+// context.Background() if cmd.Context() is nil.
+func cmdContext(cmd *cobra.Command) context.Context {
+	ctx := cmd.Context()
+	if ctx == nil {
+		return context.Background()
+	}
+
+	return ctx
+}
+
+// cleanupWithNetworkFallback runs provisioner-specific registry cleanup if
+// registry names are available, falling back to network-based discovery
+// otherwise.
+func cleanupWithNetworkFallback(
+	cmd *cobra.Command,
+	deps lifecycle.Deps,
+	registryNames []string,
+	networkName string,
+	clusterName string,
+	deleteVolumes bool,
+	cleanup func(client.APIClient) error,
+	cleanupDeps CleanupDependencies,
+) error {
+	if len(registryNames) == 0 {
+		return cleanupRegistriesByNetwork(
+			cmd,
+			deps,
+			networkName,
+			clusterName,
+			deleteVolumes,
+			cleanupDeps,
+		)
+	}
+
+	return runMirrorRegistryCleanup(
+		cmd,
+		deps,
+		registryNames,
+		cleanup,
+		cleanupDeps,
+	)
+}
+
 func runMirrorRegistryCleanup(
 	cmd *cobra.Command,
 	deps lifecycle.Deps,

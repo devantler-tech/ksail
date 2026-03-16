@@ -297,23 +297,8 @@ func cleanupTalosMirrorRegistries(
 	// Talos uses the cluster name as the network name
 	networkName := clusterName
 
-	// If no registry specs found from config (non-scaffolded cluster),
-	// fall back to network-based discovery
-	if len(registryNames) == 0 {
-		return cleanupRegistriesByNetwork(
-			cmd,
-			deps,
-			networkName,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	}
-
-	return runMirrorRegistryCleanup(
-		cmd,
-		deps,
-		registryNames,
+	return cleanupWithNetworkFallback(
+		cmd, deps, registryNames, networkName, clusterName, deleteVolumes,
 		func(dockerAPIClient client.APIClient) error {
 			// Build registry infos from mirror specs
 			registryInfos := registry.BuildRegistryInfosFromSpecs(
@@ -333,12 +318,8 @@ func cleanupTalosMirrorRegistries(
 				return fmt.Errorf("failed to create registry manager: %w", mgrErr)
 			}
 
-			ctx := cmd.Context()
-			if ctx == nil {
-				ctx = context.Background()
-			}
 			return registry.CleanupRegistries(
-				ctx,
+				cmdContext(cmd),
 				registryMgr,
 				registryInfos,
 				clusterName,
