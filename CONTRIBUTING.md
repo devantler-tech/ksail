@@ -273,7 +273,7 @@ KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.githu
 | `daily-builder`              | Daily (14:00 UTC)                           | Backlog issue resolution and feature delivery from the project plan       |
 | `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, and dependency upgrades             |
 | `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes and bloat reduction                  |
-| `weekly-research`            | Weekly                                      | Market research and actionable feature roadmap                            |
+| `weekly-roadmap`             | Weekly                                      | Market research and actionable feature roadmap                            |
 | `weekly-promote-ksail`       | Weekly                                      | Project promotion and visibility                                          |
 | `ci-doctor`                  | On CI failure                               | CI failure investigation and diagnostics                                  |
 | `pr-fix`                     | On `/pr-fix` slash command                  | Fixes PR CI failures, linting issues, and Copilot Review feedback         |

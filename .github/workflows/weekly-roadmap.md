@@ -36,7 +36,7 @@ tools:
 timeout-minutes: 15
 ---
 
-# Weekly Research
+# Weekly Roadmap
 
 ## Job Description
 
@@ -150,10 +150,10 @@ Before creating the new discussion, locate and read the most recent previous "${
 
 **Include a "How to Control this Workflow" section:**
 
-    gh aw disable weekly-research --repo ${{ github.repository }}
-    gh aw enable weekly-research --repo ${{ github.repository }}
-    gh aw run weekly-research --repo ${{ github.repository }}
-    gh aw logs weekly-research --repo ${{ github.repository }}
+    gh aw disable weekly-roadmap --repo ${{ github.repository }}
+    gh aw enable weekly-roadmap --repo ${{ github.repository }}
+    gh aw run weekly-roadmap --repo ${{ github.repository }}
+    gh aw logs weekly-roadmap --repo ${{ github.repository }}
 
 At the end, write a collapsed "Research Methodology" section listing:
 

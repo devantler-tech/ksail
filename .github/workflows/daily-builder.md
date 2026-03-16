@@ -81,7 +81,7 @@ To decide which phase to perform:
 
    **Discussion task mining:**
    - Scan recent GitHub Discussions (last 7 days) in the `agentic-workflows` category for actionable improvement opportunities
-   - Look for concrete, well-scoped tasks buried in discussion reports, quality audits, or analysis summaries created by other agentic workflows (e.g., Weekly Research, Daily Code Quality, CI Doctor investigations)
+   - Look for concrete, well-scoped tasks buried in discussion reports, quality audits, or analysis summaries created by other agentic workflows (e.g., Weekly Roadmap, Daily Code Quality, CI Doctor investigations)
    - Extract high-value action items and include them in the prioritized plan alongside backlog issues
 
 2. Use this research to create a discussion with title "${{ github.workflow }} - Research, Roadmap and Plan"
