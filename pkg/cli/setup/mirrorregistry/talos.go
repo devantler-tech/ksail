@@ -315,39 +315,34 @@ func cleanupTalosMirrorRegistries(
 		deps,
 		registryNames,
 		func(dockerAPIClient client.APIClient) error {
-			// Build registry infos from mirror specs
-			registryInfos := registry.BuildRegistryInfosFromSpecs(
-				mirrorSpecs,
-				nil,
-				nil,
-				clusterName,
-			)
-
-			if len(registryInfos) == 0 {
-				return nil
-			}
-
-			// Create registry manager
-			registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerAPIClient)
-			if mgrErr != nil {
-				return fmt.Errorf("failed to create registry manager: %w", mgrErr)
-			}
-
-			ctx := cmd.Context()
-			if ctx == nil {
-				ctx = context.Background()
-			}
-
-			return registry.CleanupRegistries(
-				ctx,
-				registryMgr,
-				registryInfos,
-				clusterName,
-				deleteVolumes,
-				networkName,
-				nil,
-			)
+			return executeTalosRegistryCleanup(cmd, dockerAPIClient, mirrorSpecs, clusterName, deleteVolumes, networkName)
 		},
 		cleanupDeps,
 	)
+}
+
+func executeTalosRegistryCleanup(
+	cmd *cobra.Command,
+	dockerAPIClient client.APIClient,
+	mirrorSpecs []registry.MirrorSpec,
+	clusterName string,
+	deleteVolumes bool,
+	networkName string,
+) error {
+	registryInfos := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil, clusterName)
+	if len(registryInfos) == 0 {
+		return nil
+	}
+
+	registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerAPIClient)
+	if mgrErr != nil {
+		return fmt.Errorf("failed to create registry manager: %w", mgrErr)
+	}
+
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	return registry.CleanupRegistries(ctx, registryMgr, registryInfos, clusterName, deleteVolumes, networkName, nil)
 }
