@@ -36,8 +36,8 @@ jobs:
           jq -e . skills-lock.json >/dev/null
           while IFS= read -r skill; do
             echo "Updating $skill..."
-            npx skills add "$skill" -y
-          done < <(jq -e -r '.skills | to_entries[] | select(.value.source == "github/awesome-copilot") | "\(.value.source)@\(.key)"' skills-lock.json)
+            npx skills add "$skill" -y --agent github-copilot
+          done < <(jq -e -r '.skills | to_entries[] | "\(.value.source)@\(.key)"' skills-lock.json)
 
       - name: 📦 Create pull request
         uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
@@ -45,7 +45,7 @@ jobs:
           commit-message: "chore(deps): update copilot skills"
           title: "chore(deps): update copilot skills"
           body: |
-            Automated update of GitHub Copilot skills from `github/awesome-copilot` to their latest versions.
+            Automated update of skills for GitHub Copilot to their latest versions.
 
             Updated files:
             - `skills-lock.json`
