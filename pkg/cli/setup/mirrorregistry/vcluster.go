@@ -6,10 +6,13 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	vclusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/vcluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
+	"github.com/spf13/cobra"
 )
 
 // vclusterDefaultClusterName is the default cluster name for VCluster.
@@ -137,4 +140,57 @@ func PrepareVClusterConfigWithMirrors(
 	}
 
 	return len(mirrorSpecs) > 0
+}
+
+func cleanupVClusterMirrorRegistries(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	deps lifecycle.Deps,
+	clusterName string,
+	deleteVolumes bool,
+	cleanupDeps CleanupDependencies,
+) error {
+	// VCluster uses "vcluster.<clusterName>" as the network name
+	networkName := "vcluster." + clusterName
+
+	// Collect mirror specs from kind/mirrors directory (VCluster uses the same
+	// hosts.toml-based mirror configuration as Kind)
+	mirrorSpecs, registryNames, err := CollectMirrorSpecs(
+		cmd,
+		cfgManager,
+		GetKindMirrorsDir(cfgManager.Config),
+		cfgManager.Config.Spec.Cluster.Provider,
+	)
+	if err != nil {
+		return err
+	}
+
+	// If no registry specs found from config (non-scaffolded cluster),
+	// fall back to network-based discovery
+	if len(registryNames) == 0 {
+		return cleanupRegistriesByNetwork(
+			cmd,
+			deps,
+			networkName,
+			clusterName,
+			deleteVolumes,
+			cleanupDeps,
+		)
+	}
+
+	return runMirrorRegistryCleanup(
+		cmd,
+		deps,
+		registryNames,
+		func(dockerClient client.APIClient) error {
+			return vclusterprovisioner.CleanupRegistries(
+				cmd.Context(),
+				mirrorSpecs,
+				clusterName,
+				dockerClient,
+				deleteVolumes,
+			)
+		},
+		cleanupDeps,
+	)
 }
