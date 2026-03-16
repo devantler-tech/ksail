@@ -159,7 +159,7 @@ jobs:
                 } else if (deltaMatch) {
                   const delta = deltaMatch[1];
                   const pValue = parseFloat(deltaMatch[2]);
-                  const absDelta = parseFloat(delta.replace(/[+%]/g, ''));
+                  const absDelta = Math.abs(parseFloat(delta));
 
                   // Strict filtering: p < 0.001 required for significance.
                   // For sec/op, also require >= 10% change to filter runner noise.
