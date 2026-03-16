@@ -510,14 +510,6 @@ func (p *Provisioner) checkDockerAvailable(ctx context.Context) error {
 	return nil
 }
 
-// Talos image pull retry configuration.
-// ghcr.io may experience transient 5xx errors during image pulls.
-const (
-	talosImagePullMaxRetries    = 3
-	talosImagePullRetryBaseWait = 5 * time.Second
-	talosImagePullRetryMaxWait  = 30 * time.Second
-)
-
 // ensureTalosImage pulls the Talos node image if not already present locally.
 // Retries transient network errors (e.g., ghcr.io 504 Gateway Timeout) with exponential backoff.
 func (p *Provisioner) ensureTalosImage(ctx context.Context) error {
@@ -531,18 +523,22 @@ func (p *Provisioner) ensureTalosImage(ctx context.Context) error {
 
 	var lastErr error
 
-	for attempt := 1; attempt <= talosImagePullMaxRetries; attempt++ {
+	for attempt := 1; attempt <= p.imagePullRetry.maxRetries; attempt++ {
 		pullErr := p.pullTalosImage(ctx)
 		if pullErr == nil {
 			return nil
 		}
 
 		lastErr = pullErr
-		if !netretry.IsRetryable(lastErr) || attempt == talosImagePullMaxRetries {
+		if !netretry.IsRetryable(lastErr) || attempt == p.imagePullRetry.maxRetries {
 			break
 		}
 
-		delay := netretry.ExponentialDelay(attempt, talosImagePullRetryBaseWait, talosImagePullRetryMaxWait)
+		delay := netretry.ExponentialDelay(
+			attempt,
+			p.imagePullRetry.baseWait,
+			p.imagePullRetry.maxWait,
+		)
 
 		_, _ = fmt.Fprintf(p.logWriter,
 			"Talos image pull attempt %d failed (retrying in %s): %v\n",

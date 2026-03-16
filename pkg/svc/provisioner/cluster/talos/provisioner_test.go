@@ -21,6 +21,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Sentinel errors for test assertions.
+var (
+	errImageNotFound  = errors.New("image not found")
+	errGatewayTimeout = errors.New("received unexpected HTTP status: 504 Gateway Timeout")
+	errRepoNotFound   = errors.New("repository not found: 404 Not Found")
+)
+
 // createTestTalosConfigs creates a minimal TalosConfigs for testing.
 func createTestTalosConfigs(t *testing.T, clusterName string) *talosconfigmanager.Configs {
 	t.Helper()
@@ -236,8 +243,6 @@ func TestProvisioner_Create_WithPatches(t *testing.T) {
 func TestProvisioner_Create_ImagePullRetryOnTransientError(t *testing.T) {
 	t.Parallel()
 
-	errGatewayTimeout := errors.New("received unexpected HTTP status: 504 Gateway Timeout")
-
 	// Mock Docker client - no existing clusters
 	mockClient := docker.NewMockAPIClient(t)
 	mockClient.EXPECT().
@@ -249,7 +254,7 @@ func TestProvisioner_Create_ImagePullRetryOnTransientError(t *testing.T) {
 	// Image not present locally
 	mockClient.EXPECT().
 		ImageInspect(mock.Anything, mock.Anything).
-		Return(image.InspectResponse{}, errors.New("image not found"))
+		Return(image.InspectResponse{}, errImageNotFound)
 	// First pull attempt fails with 504 Gateway Timeout
 	mockClient.EXPECT().
 		ImagePull(mock.Anything, mock.Anything, mock.Anything).
@@ -280,6 +285,7 @@ func TestProvisioner_Create_ImagePullRetryOnTransientError(t *testing.T) {
 		WithProvisionerFactory(func(_ context.Context) (provision.Provisioner, error) {
 			return mockTalosProvisioner, nil
 		}).
+		WithImagePullRetryConfig(3, 0, 0).
 		WithLogWriter(io.Discard)
 
 	ctx := context.Background()
@@ -292,8 +298,6 @@ func TestProvisioner_Create_ImagePullRetryOnTransientError(t *testing.T) {
 func TestProvisioner_Create_ImagePullNonRetryableError(t *testing.T) {
 	t.Parallel()
 
-	errNotFound := errors.New("repository not found: 404 Not Found")
-
 	// Mock Docker client - no existing clusters
 	mockClient := docker.NewMockAPIClient(t)
 	mockClient.EXPECT().
@@ -305,16 +309,17 @@ func TestProvisioner_Create_ImagePullNonRetryableError(t *testing.T) {
 	// Image not present locally
 	mockClient.EXPECT().
 		ImageInspect(mock.Anything, mock.Anything).
-		Return(image.InspectResponse{}, errors.New("image not found"))
+		Return(image.InspectResponse{}, errImageNotFound)
 	// Pull fails with non-retryable error
 	mockClient.EXPECT().
 		ImagePull(mock.Anything, mock.Anything, mock.Anything).
-		Return(nil, errNotFound).
+		Return(nil, errRepoNotFound).
 		Once()
 
 	configs := createTestTalosConfigs(t, "test-cluster-nonretry")
 	provisioner := talosprovisioner.NewProvisioner(configs, nil).
 		WithDockerClient(mockClient).
+		WithImagePullRetryConfig(3, 0, 0).
 		WithLogWriter(io.Discard)
 
 	ctx := context.Background()
