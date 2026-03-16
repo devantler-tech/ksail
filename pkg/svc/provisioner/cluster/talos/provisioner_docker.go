@@ -3,17 +3,16 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
 	"time"
 
+	docker "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kernelmod"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/go-connections/nat"
 	"github.com/siderolabs/talos/pkg/cluster/check"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
@@ -561,21 +560,9 @@ func (p *Provisioner) ensureTalosImage(ctx context.Context) error {
 
 // pullTalosImage performs a single attempt to pull the Talos node image.
 func (p *Provisioner) pullTalosImage(ctx context.Context) error {
-	reader, err := p.dockerClient.ImagePull(ctx, p.options.TalosImage, image.PullOptions{})
+	err := docker.PullImage(ctx, p.dockerClient, p.options.TalosImage)
 	if err != nil {
-		return fmt.Errorf("image pull request: %w", err)
-	}
-
-	// Consume pull output to complete the download
-	_, err = io.Copy(io.Discard, reader)
-	closeErr := reader.Close()
-
-	if err != nil {
-		return fmt.Errorf("reading image pull output: %w", err)
-	}
-
-	if closeErr != nil {
-		return fmt.Errorf("closing image pull reader: %w", closeErr)
+		return fmt.Errorf("pulling talos image: %w", err)
 	}
 
 	return nil
