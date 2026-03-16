@@ -150,8 +150,7 @@ func cleanupVClusterMirrorRegistries(
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
 ) error {
-	// VCluster uses "vcluster.<clusterName>" as the network name
-	networkName := "vcluster." + clusterName
+	networkName := vclusterNetworkPrefix + clusterName
 
 	// Collect mirror specs from kind/mirrors directory (VCluster uses the same
 	// hosts.toml-based mirror configuration as Kind)
