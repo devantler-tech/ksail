@@ -286,28 +286,16 @@ func cleanupK3dMirrorRegistries(
 	registriesInfo := k3dprovisioner.ExtractRegistriesFromConfig(k3dConfig, clusterName)
 
 	registryNames := registry.CollectRegistryNames(registriesInfo)
-	if len(registryNames) == 0 {
-		// No registries in config, fall back to network-based discovery
-		return cleanupRegistriesByNetwork(
-			cmd,
-			deps,
-			networkName,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	}
 
-	return runMirrorRegistryCleanup(
+	return cleanupRegistriesOrFallback(
 		cmd,
 		deps,
 		registryNames,
-		func(dockerClient client.APIClient) error {
-			ctx := cmd.Context()
-			if ctx == nil {
-				ctx = context.Background()
-			}
-
+		networkName,
+		clusterName,
+		deleteVolumes,
+		cleanupDeps,
+		func(ctx context.Context, dockerClient client.APIClient) error {
 			return k3dprovisioner.CleanupRegistries(
 				ctx,
 				k3dConfig,
@@ -317,6 +305,5 @@ func cleanupK3dMirrorRegistries(
 				cmd.ErrOrStderr(),
 			)
 		},
-		cleanupDeps,
 	)
 }

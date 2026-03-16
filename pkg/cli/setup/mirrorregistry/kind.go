@@ -188,29 +188,15 @@ func cleanupKindMirrorRegistries(
 	// Kind uses "kind" as the network name
 	networkName := "kind"
 
-	// If no registry specs found from config (non-scaffolded cluster),
-	// fall back to network-based discovery
-	if len(registryNames) == 0 {
-		return cleanupRegistriesByNetwork(
-			cmd,
-			deps,
-			networkName,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	}
-
-	return runMirrorRegistryCleanup(
+	return cleanupRegistriesOrFallback(
 		cmd,
 		deps,
 		registryNames,
-		func(dockerClient client.APIClient) error {
-			ctx := cmd.Context()
-			if ctx == nil {
-				ctx = context.Background()
-			}
-
+		networkName,
+		clusterName,
+		deleteVolumes,
+		cleanupDeps,
+		func(ctx context.Context, dockerClient client.APIClient) error {
 			return kindprovisioner.CleanupRegistries(
 				ctx,
 				mirrorSpecs,
@@ -219,6 +205,5 @@ func cleanupKindMirrorRegistries(
 				deleteVolumes,
 			)
 		},
-		cleanupDeps,
 	)
 }
