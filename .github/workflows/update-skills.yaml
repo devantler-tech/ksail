@@ -1,4 +1,4 @@
-name: Update Skills
+name: Update Copilot Skills
 on:
   workflow_dispatch:
   schedule:
@@ -11,7 +11,7 @@ concurrency:
 permissions: {}
 
 jobs:
-  update-skills:
+  update-copilot-skills:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: "22"
 
-      - name: 🔄 Update skills
+      - name: 🔄 Update Copilot skills
         run: |
           if [ ! -f skills-lock.json ]; then
             echo "::error::skills-lock.json not found"
@@ -36,20 +36,20 @@ jobs:
           jq -e . skills-lock.json >/dev/null
           while IFS= read -r skill; do
             echo "Updating $skill..."
-            npx skills add "$skill" -y
+            npx skills add "$skill" -y --agent github-copilot
           done < <(jq -e -r '.skills | to_entries[] | "\(.value.source)@\(.key)"' skills-lock.json)
 
       - name: 📦 Create pull request
         uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
         with:
-          commit-message: "chore(deps): update npx skills"
-          title: "chore(deps): update npx skills"
+          commit-message: "chore(deps): update copilot skills"
+          title: "chore(deps): update copilot skills"
           body: |
-            Automated update of npx skills to their latest versions.
+            Automated update of skills for GitHub Copilot to their latest versions.
 
             Updated files:
             - `skills-lock.json`
             - `.agents/skills/`
-          branch: deps/skills-update
+          branch: deps/copilot-skills-update
           labels: dependencies,automation
           delete-branch: true
