@@ -323,6 +323,8 @@ func TestProvisioner_Create_ImagePullNonRetryableError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to pull talos image")
 }
+
+// setupPatchDirectories creates temp patch directories and a sample patch file.
 func setupPatchDirectories(t *testing.T) string {
 	t.Helper()
 
