@@ -49,7 +49,7 @@ This lets you debug a specific service using real cluster traffic without image 
 ### 1. Create a cluster with KSail
 
 ```bash
-ksail cluster init --name dev
+ksail cluster init --name dev --distribution K3s
 ksail cluster create
 ```
 
@@ -108,10 +108,12 @@ Create a `.mirrord/mirrord.json` configuration file in your project directory:
     },
     "fs": "read",
     "env": true
-  },
-  "kubeconfig": "~/.kube/config"
+  }
 }
 ```
+
+> [!NOTE]
+> mirrord uses your default kubeconfig (`~/.kube/config`) unless you set `kube_context` or point to a different file. If you have configured a custom kubeconfig path in KSail via `spec.cluster.connection.kubeconfig`, add `"kubeconfig": "<path>"` here to match.
 
 | Field | Description |
 |-------|-------------|
