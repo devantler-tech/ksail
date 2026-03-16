@@ -54,6 +54,7 @@ export default defineConfig({
             { label: "Cluster Profiles (--profile)", link: "/guides/cluster-profiles/" },
             { label: "Ephemeral Clusters (--ttl)", link: "/guides/ephemeral-clusters/" },
             { label: "Companion Tools", link: "/guides/companion-tools/" },
+            { label: "KSail + mirrord", link: "/guides/mirrord/" },
           ],
         },
         {
