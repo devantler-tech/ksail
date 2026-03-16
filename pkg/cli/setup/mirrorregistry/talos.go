@@ -315,7 +315,9 @@ func cleanupTalosMirrorRegistries(
 		deps,
 		registryNames,
 		func(dockerAPIClient client.APIClient) error {
-			return executeTalosRegistryCleanup(cmd, dockerAPIClient, mirrorSpecs, clusterName, deleteVolumes, networkName)
+			return executeTalosRegistryCleanup(
+				cmd, dockerAPIClient, mirrorSpecs, clusterName, deleteVolumes, networkName,
+			)
 		},
 		cleanupDeps,
 	)
@@ -344,5 +346,12 @@ func executeTalosRegistryCleanup(
 		ctx = context.Background()
 	}
 
-	return registry.CleanupRegistries(ctx, registryMgr, registryInfos, clusterName, deleteVolumes, networkName, nil)
+	err := registry.CleanupRegistries(
+		ctx, registryMgr, registryInfos, clusterName, deleteVolumes, networkName, nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to cleanup talos registries: %w", err)
+	}
+
+	return nil
 }

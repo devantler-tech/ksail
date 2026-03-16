@@ -406,7 +406,9 @@ func cleanupRegistriesOrFallback(
 	provisionerCleanup func(ctx context.Context, dockerClient client.APIClient) error,
 ) error {
 	if len(registryNames) == 0 {
-		return cleanupRegistriesByNetwork(cmd, deps, networkName, clusterName, deleteVolumes, cleanupDeps)
+		return cleanupRegistriesByNetwork(
+			cmd, deps, networkName, clusterName, deleteVolumes, cleanupDeps,
+		)
 	}
 
 	return runMirrorRegistryCleanup(
