@@ -28,7 +28,15 @@ jobs:
           node-version: "22"
 
       - name: 🔄 Update skills
-        run: npx skills update
+        run: |
+          if [ ! -f skills-lock.json ]; then
+            echo "::error::skills-lock.json not found"
+            exit 1
+          fi
+          for skill in $(jq -e -r '.skills | to_entries[] | "\(.value.source)@\(.key)"' skills-lock.json); do
+            echo "Updating $skill..."
+            npx skills add "$skill" -y
+          done
 
       - name: 📦 Create pull request
         uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
