@@ -65,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "$PACKAGES" \
-            | xargs go test -bench=. -benchmem -count=5 -benchtime=1s -run='^$' -timeout=30m \
+            | xargs go test -bench=. -benchmem -count=10 -benchtime=1s -run='^$' -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
       - name: 📤 Upload results
@@ -109,7 +109,7 @@ jobs:
             exit 0
           fi
 
-          benchstat -confidence 0.99 "$main_file" "$pr_file" > "$result_file" 2>&1 || true
+          benchstat -confidence 0.999 "$main_file" "$pr_file" > "$result_file" 2>&1 || true
 
       - name: 💬 Post benchmark comparison
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -159,12 +159,19 @@ jobs:
                 } else if (deltaMatch) {
                   const delta = deltaMatch[1];
                   const pValue = parseFloat(deltaMatch[2]);
-                  if (pValue >= 0.01) {
+                  const absDelta = parseFloat(delta.replace(/[+%]/g, ''));
+
+                  // Strict filtering: p < 0.001 required for significance.
+                  // For sec/op, also require >= 10% change to filter runner noise.
+                  const isSignificant = pValue < 0.001;
+                  const isAboveNoiseFloor = currentMetric !== 'sec/op' || absDelta >= 10;
+
+                  if (!isSignificant || !isAboveNoiseFloor) {
                     unchanged.push({ name, metric: currentMetric });
                   } else if (delta.startsWith('+')) {
-                    regressions.push({ name, metric: currentMetric, delta, pValue: pValue.toFixed(3) });
+                    regressions.push({ name, metric: currentMetric, delta, pValue: pValue.toFixed(4) });
                   } else {
-                    improvements.push({ name, metric: currentMetric, delta, pValue: pValue.toFixed(3) });
+                    improvements.push({ name, metric: currentMetric, delta, pValue: pValue.toFixed(4) });
                   }
                 } else {
                   unchanged.push({ name, metric: currentMetric });
@@ -223,9 +230,9 @@ jobs:
               '- **sec/op**: Time per operation (lower is better)',
               '- **B/op**: Bytes allocated per operation (lower is better)',
               '- **allocs/op**: Allocations per operation (lower is better)',
-              '- **🔴 Regression**: Statistically significant increase (p < 0.01)',
-              '- **🟢 Improvement**: Statistically significant decrease (p < 0.01)',
-              '- **⚪ ~ (Unchanged)**: No significant change (p ≥ 0.01)',
+              '- **🔴 Regression**: Statistically significant increase (p < 0.001, and ≥ 10% for sec/op)',
+              '- **🟢 Improvement**: Statistically significant decrease (p < 0.001, and ≥ 10% for sec/op)',
+              '- **⚪ ~ (Unchanged)**: No significant change (p ≥ 0.001 or < 10% for sec/op)',
               '',
               '</details>',
               '',

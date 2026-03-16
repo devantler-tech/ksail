@@ -7,7 +7,7 @@ KSail includes automated benchmark regression testing to detect performance chan
 The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workflow runs automatically on PRs that change `**/*.go`, `go.mod`, or `go.sum` files. It:
 
 1. Discovers packages that contain benchmark functions (avoids compiling the entire module)
-2. Runs benchmarks on the PR branch and `main` **in parallel** (5 iterations, 1 s per benchmark)
+2. Runs benchmarks on the PR branch and `main` **in parallel** (10 iterations, 1 s per benchmark)
 3. Compares results with [`benchstat`](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat) for statistical analysis
 4. Posts (or updates) a comparison comment on the PR
 
@@ -15,11 +15,11 @@ The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workf
 
 The PR comment groups results into three sections:
 
-| Symbol | Label       | Meaning                                       |
-|--------|-------------|-----------------------------------------------|
-| 🔴     | Regression  | Statistically significant increase (p < 0.01) |
-| 🟢     | Improvement | Statistically significant decrease (p < 0.01) |
-| ⚪ ~    | Unchanged   | No significant change (p ≥ 0.01)              |
+| Symbol | Label       | Meaning                                                              |
+|--------|-------------|----------------------------------------------------------------------|
+| 🔴     | Regression  | Statistically significant increase (p < 0.001, and ≥ 10% for sec/op) |
+| 🟢     | Improvement | Statistically significant decrease (p < 0.001, and ≥ 10% for sec/op) |
+| ⚪ ~    | Unchanged   | No significant change (p ≥ 0.001 or < 10% for sec/op)               |
 
 Each row in the tables shows:
 
@@ -28,7 +28,7 @@ Each row in the tables shows:
 | **Benchmark** | Name of the benchmark function (without `Benchmark` prefix)    | —                  |
 | **Metric**    | `sec/op`, `B/op`, or `allocs/op`                               | Lower is better    |
 | **Change**    | Delta percentage vs `main`                                     | Negative is better |
-| **p-value**   | Statistical confidence; < 0.01 means the change is significant | —                  |
+| **p-value**   | Statistical confidence; < 0.001 means the change is significant | —                  |
 
 The comment also includes a collapsed **Unchanged** section and a **Raw benchstat output** block for deeper inspection.
 
@@ -42,9 +42,9 @@ go test -bench=. -benchmem -run=^$ ./...
 go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/...
 
 # Compare before/after with benchstat
-go test -bench=. -benchmem -count=5 -run=^$ ./... > before.txt
+go test -bench=. -benchmem -count=10 -run=^$ ./... > before.txt
 # (make changes)
-go test -bench=. -benchmem -count=5 -run=^$ ./... > after.txt
+go test -bench=. -benchmem -count=10 -run=^$ ./... > after.txt
 benchstat before.txt after.txt
 ```
 
@@ -92,7 +92,7 @@ Follow the conventions established in the existing benchmark files:
 
 **Benchstat shows `~` for everything:** The change is within measurement noise, which is the expected result for most PRs that don't touch hot paths.
 
-**Benchmark times are inconsistent:** CI runners share hardware, so some variance is expected. If you need higher confidence, increase `-count` or `-benchtime` when running locally.
+**Benchmark times are inconsistent:** CI runners share hardware, so some variance is expected. The workflow uses strict thresholds (p < 0.001 and ≥ 10% delta for sec/op) to filter out runner noise. If you need higher confidence locally, increase `-count` or `-benchtime`.
 
 **Workflow skipped:** The workflow only triggers on PRs that modify Go source files or module files.
 
