@@ -7,7 +7,7 @@ VCluster creates lightweight, isolated virtual Kubernetes clusters that run as D
 
 ## What is VCluster?
 
-[VCluster](https://www.vcluster.com/) provides virtual Kubernetes clusters—fully functional Kubernetes control planes that run inside Docker containers. KSail uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run VCluster directly on Docker. Each VCluster is isolated, starts in seconds, and shares Docker infrastructure—making it ideal for CI/CD and local multi-environment development.
+[VCluster](https://www.vcluster.com/) provides virtual Kubernetes clusters—fully functional Kubernetes control planes that ordinarily run as pods inside a host Kubernetes cluster. KSail uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run VCluster directly on Docker instead, without requiring a host cluster. Each VCluster is isolated, starts in seconds, and shares Docker infrastructure—making it ideal for CI/CD and local multi-environment development.
 
 ## When to Use VCluster
 
@@ -121,7 +121,7 @@ For real-world VCluster workflow examples — CI/CD pipelines, multi-environment
 
 ## Architecture
 
-VCluster runs a full Kubernetes control plane (API server, scheduler, controller manager, etcd) in a single Docker container. Worker nodes are optional additional containers. Pods are scheduled to worker nodes or run directly in the control plane container. When using host-cluster deployment mode, selected resources can be synced between the virtual and host cluster.
+VCluster runs a full Kubernetes control plane (API server, scheduler, controller manager, etcd) as pods inside a host Kubernetes cluster. In KSail, the Vind driver runs these components as Docker containers instead. Pods are scheduled onto cluster nodes (the control-plane node or optional worker nodes), each of which runs as a Docker container. When using host-cluster deployment mode, selected resources can be synced between the virtual and host cluster.
 
 ## Comparison with Other Distributions
 
@@ -174,7 +174,7 @@ Increase Docker resources (4 GB RAM, 2 CPUs minimum) in Docker Desktop settings,
 
 ### Worker Nodes
 
-By default, VCluster runs workload pods inside the control plane container. For more realistic multi-node scenarios, enable worker nodes:
+By default, workload pods are scheduled onto the control-plane node, which runs as a Docker container. For more realistic multi-node scenarios, enable worker nodes:
 
 ````yaml
 # vcluster.yaml
