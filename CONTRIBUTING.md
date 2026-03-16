@@ -258,7 +258,7 @@ To test the Omni provider locally, you need:
 
 | Workflow        | Schedule                   | Purpose                            |
 |-----------------|----------------------------|------------------------------------|
-| `update-skills` | Daily (06:00 UTC)          | Copilot skills upgrades              |
+| `update-skills` | Daily (06:00 UTC)          | Copilot skills upgrades            |
 | `maintenance`   | Monthly (1st, 00:00 UTC)   | Old workflow run and image cleanup |
 | `sync-labels`   | Weekly (Monday, 07:00 UTC) | Label synchronization              |
 
