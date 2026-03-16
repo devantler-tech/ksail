@@ -62,7 +62,7 @@ name: "CI Doctor"
       - Daily Workflow Maintenance
       - PR Fix
       - Weekly Promote KSail
-      - Weekly Research
+      - Weekly Roadmap
 
 permissions: {}
 

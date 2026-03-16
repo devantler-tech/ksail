@@ -9,7 +9,7 @@ rules:
       - daily-test-improver.lock.yml
       - portfolio-analyst.lock.yml
       - update-docs.lock.yml
-      - weekly-research.lock.yml
+      - weekly-roadmap.lock.yml
   template-injection:
     ignore:
       - audit-workflows.lock.yml
@@ -20,7 +20,7 @@ rules:
       - daily-test-improver.lock.yml
       - portfolio-analyst.lock.yml
       - update-docs.lock.yml
-      - weekly-research.lock.yml
+      - weekly-roadmap.lock.yml
   ref-version-mismatch:
     ignore:
       - audit-workflows.lock.yml
@@ -31,7 +31,7 @@ rules:
       - daily-test-improver.lock.yml
       - portfolio-analyst.lock.yml
       - update-docs.lock.yml
-      - weekly-research.lock.yml
+      - weekly-roadmap.lock.yml
   excessive-permissions:
     ignore:
       - audit-workflows.lock.yml
@@ -42,7 +42,7 @@ rules:
       - daily-test-improver.lock.yml
       - portfolio-analyst.lock.yml
       - update-docs.lock.yml
-      - weekly-research.lock.yml
+      - weekly-roadmap.lock.yml
   artipacked:
     ignore:
       - audit-workflows.lock.yml
@@ -53,7 +53,7 @@ rules:
       - daily-test-improver.lock.yml
       - portfolio-analyst.lock.yml
       - update-docs.lock.yml
-      - weekly-research.lock.yml
+      - weekly-roadmap.lock.yml
   unpinned-uses:
     ignore:
       - agentics-maintenance.yml
@@ -65,4 +65,4 @@ rules:
       - daily-test-improver.lock.yml
       - portfolio-analyst.lock.yml
       - update-docs.lock.yml
-      - weekly-research.lock.yml
+      - weekly-roadmap.lock.yml

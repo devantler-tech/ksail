@@ -29,7 +29,7 @@
 #
 # gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"319456557555e6224ef501107743a62d98a9d96ddc33691aefda593c3ad833c9","compiler_version":"v0.58.2","strict":true}
 
-name: "Weekly Research"
+name: "Weekly Roadmap"
 "on":
   # bots: # Bots processed as bot check in pre-activation job
   # - github-merge-queue[bot] # Bots processed as bot check in pre-activation job
@@ -46,7 +46,7 @@ permissions: {}
 concurrency:
   group: "gh-aw-${{ github.workflow }}"
 
-run-name: "Weekly Research"
+run-name: "Weekly Roadmap"
 
 jobs:
   activation:
@@ -74,7 +74,7 @@ jobs:
           GH_AW_INFO_VERSION: ""
           GH_AW_INFO_AGENT_VERSION: "latest"
           GH_AW_INFO_CLI_VERSION: "v0.58.2"
-          GH_AW_INFO_WORKFLOW_NAME: "Weekly Research"
+          GH_AW_INFO_WORKFLOW_NAME: "Weekly Roadmap"
           GH_AW_INFO_EXPERIMENTAL: "false"
           GH_AW_INFO_SUPPORTS_TOOLS_ALLOWLIST: "true"
           GH_AW_INFO_STAGED: "false"
@@ -106,7 +106,7 @@ jobs:
       - name: Check workflow file timestamps
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          GH_AW_WORKFLOW_FILE: "weekly-research.lock.yml"
+          GH_AW_WORKFLOW_FILE: "weekly-roadmap.lock.yml"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -173,7 +173,7 @@ jobs:
           </system>
           GH_AW_PROMPT_EOF
           cat << 'GH_AW_PROMPT_EOF'
-          {{#runtime-import .github/workflows/weekly-research.md}}
+          {{#runtime-import .github/workflows/weekly-roadmap.md}}
           GH_AW_PROMPT_EOF
           } > "$GH_AW_PROMPT"
       - name: Interpolate variables and render templates
@@ -258,7 +258,7 @@ jobs:
       GH_AW_SAFE_OUTPUTS: /opt/gh-aw/safeoutputs/outputs.jsonl
       GH_AW_SAFE_OUTPUTS_CONFIG_PATH: /opt/gh-aw/safeoutputs/config.json
       GH_AW_SAFE_OUTPUTS_TOOLS_PATH: /opt/gh-aw/safeoutputs/tools.json
-      GH_AW_WORKFLOW_ID_SANITIZED: weeklyresearch
+      GH_AW_WORKFLOW_ID_SANITIZED: weeklyroadmap
     outputs:
       checkout_pr_success: ${{ steps.checkout-pr.outputs.checkout_pr_success || 'true' }}
       detection_conclusion: ${{ steps.detection_conclusion.outputs.conclusion }}
@@ -816,7 +816,7 @@ jobs:
         if: always() && steps.detection_guard.outputs.run_detection == 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          WORKFLOW_NAME: "Weekly Research"
+          WORKFLOW_NAME: "Weekly Roadmap"
           WORKFLOW_DESCRIPTION: "This workflow performs thorough market research and competitive analysis for KSail.\nDeeply understands KSail's current capabilities, then researches competitors, industry\ntrends, and emerging opportunities. Maintains a single living roadmap discussion with\na \"Now / Next / Later\" structure that enhances KSail's existing strengths rather than\nproposing radical changes."
           HAS_PATCH: ${{ steps.collect_output.outputs.has_patch }}
         with:
@@ -917,7 +917,7 @@ jobs:
       discussions: write
       issues: write
     concurrency:
-      group: "gh-aw-conclusion-weekly-research"
+      group: "gh-aw-conclusion-weekly-roadmap"
       cancel-in-progress: false
     outputs:
       tools_reported: ${{ steps.missing_tool.outputs.tools_reported }}
@@ -945,7 +945,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Weekly Research"
+          GH_AW_WORKFLOW_NAME: "Weekly Roadmap"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -958,10 +958,10 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Weekly Research"
+          GH_AW_WORKFLOW_NAME: "Weekly Roadmap"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
-          GH_AW_WORKFLOW_ID: "weekly-research"
+          GH_AW_WORKFLOW_ID: "weekly-roadmap"
           GH_AW_SECRET_VERIFICATION_RESULT: ${{ needs.activation.outputs.secret_verification_result }}
           GH_AW_CHECKOUT_PR_SUCCESS: ${{ needs.agent.outputs.checkout_pr_success }}
           GH_AW_INFERENCE_ACCESS_ERROR: ${{ needs.agent.outputs.inference_access_error }}
@@ -982,7 +982,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Weekly Research"
+          GH_AW_WORKFLOW_NAME: "Weekly Roadmap"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
         with:
@@ -1021,7 +1021,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_SKIP_BOTS: dependabot[bot],renovate[bot]
-          GH_AW_WORKFLOW_NAME: "Weekly Research"
+          GH_AW_WORKFLOW_NAME: "Weekly Roadmap"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -1039,10 +1039,10 @@ jobs:
       issues: write
     timeout-minutes: 15
     env:
-      GH_AW_CALLER_WORKFLOW_ID: "${{ github.repository }}/weekly-research"
+      GH_AW_CALLER_WORKFLOW_ID: "${{ github.repository }}/weekly-roadmap"
       GH_AW_ENGINE_ID: "copilot"
-      GH_AW_WORKFLOW_ID: "weekly-research"
-      GH_AW_WORKFLOW_NAME: "Weekly Research"
+      GH_AW_WORKFLOW_ID: "weekly-roadmap"
+      GH_AW_WORKFLOW_NAME: "Weekly Roadmap"
     outputs:
       code_push_failure_count: ${{ steps.process_safe_outputs.outputs.code_push_failure_count }}
       code_push_failure_errors: ${{ steps.process_safe_outputs.outputs.code_push_failure_errors }}
