@@ -206,8 +206,12 @@ func cleanupKindMirrorRegistries(
 		deps,
 		registryNames,
 		func(dockerClient client.APIClient) error {
+			ctx := cmd.Context()
+			if ctx == nil {
+				ctx = context.Background()
+			}
 			return kindprovisioner.CleanupRegistries(
-				cmd.Context(),
+				ctx,
 				mirrorSpecs,
 				clusterName,
 				dockerClient,

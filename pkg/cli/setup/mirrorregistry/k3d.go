@@ -303,8 +303,12 @@ func cleanupK3dMirrorRegistries(
 		deps,
 		registryNames,
 		func(dockerClient client.APIClient) error {
+			ctx := cmd.Context()
+			if ctx == nil {
+				ctx = context.Background()
+			}
 			return k3dprovisioner.CleanupRegistries(
-				cmd.Context(),
+				ctx,
 				k3dConfig,
 				clusterName,
 				dockerClient,

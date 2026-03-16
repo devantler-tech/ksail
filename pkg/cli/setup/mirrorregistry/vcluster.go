@@ -183,8 +183,12 @@ func cleanupVClusterMirrorRegistries(
 		deps,
 		registryNames,
 		func(dockerClient client.APIClient) error {
+			ctx := cmd.Context()
+			if ctx == nil {
+				ctx = context.Background()
+			}
 			return vclusterprovisioner.CleanupRegistries(
-				cmd.Context(),
+				ctx,
 				mirrorSpecs,
 				clusterName,
 				dockerClient,
