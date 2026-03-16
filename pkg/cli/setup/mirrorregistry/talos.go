@@ -333,8 +333,12 @@ func cleanupTalosMirrorRegistries(
 				return fmt.Errorf("failed to create registry manager: %w", mgrErr)
 			}
 
+			ctx := cmd.Context()
+			if ctx == nil {
+				ctx = context.Background()
+			}
 			return registry.CleanupRegistries(
-				cmd.Context(),
+				ctx,
 				registryMgr,
 				registryInfos,
 				clusterName,
