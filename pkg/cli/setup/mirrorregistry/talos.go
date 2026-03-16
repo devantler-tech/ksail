@@ -337,6 +337,7 @@ func cleanupTalosMirrorRegistries(
 			if ctx == nil {
 				ctx = context.Background()
 			}
+
 			return registry.CleanupRegistries(
 				ctx,
 				registryMgr,

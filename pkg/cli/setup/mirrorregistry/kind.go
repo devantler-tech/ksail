@@ -210,6 +210,7 @@ func cleanupKindMirrorRegistries(
 			if ctx == nil {
 				ctx = context.Background()
 			}
+
 			return kindprovisioner.CleanupRegistries(
 				ctx,
 				mirrorSpecs,

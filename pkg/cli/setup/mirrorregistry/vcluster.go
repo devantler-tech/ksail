@@ -187,6 +187,7 @@ func cleanupVClusterMirrorRegistries(
 			if ctx == nil {
 				ctx = context.Background()
 			}
+
 			return vclusterprovisioner.CleanupRegistries(
 				ctx,
 				mirrorSpecs,

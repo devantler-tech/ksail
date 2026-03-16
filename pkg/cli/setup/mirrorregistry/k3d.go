@@ -307,6 +307,7 @@ func cleanupK3dMirrorRegistries(
 			if ctx == nil {
 				ctx = context.Background()
 			}
+
 			return k3dprovisioner.CleanupRegistries(
 				ctx,
 				k3dConfig,
