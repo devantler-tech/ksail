@@ -1626,7 +1626,7 @@ Analyze issue #${{ github.event.issue.number }} and:
 3. Post helpful triage comment
 ```
 
-### Weekly Research Report
+### Weekly Roadmap Report
 
 ```markdown
 ---
@@ -1648,7 +1648,7 @@ safe-outputs:
 timeout-minutes: 15
 ---
 
-# Weekly Research
+# Weekly Roadmap
 
 Research latest developments in ${{ github.repository }}:
 - Review recent commits and issues
@@ -1726,7 +1726,7 @@ Monitor workflow execution and costs using the `logs` command:
 gh aw logs
 
 # Download logs for a specific workflow
-gh aw logs weekly-research
+gh aw logs weekly-roadmap
 
 # Filter logs by AI engine type
 gh aw logs --engine copilot          # Only Copilot workflows
@@ -1877,7 +1877,7 @@ Use the `mcp list-tools` command to explore tools available from specific MCP se
 gh aw mcp list-tools github
 
 # List tools from a specific MCP server in a workflow
-gh aw mcp list-tools github weekly-research
+gh aw mcp list-tools github weekly-roadmap
 ```
 
 This command is useful for:

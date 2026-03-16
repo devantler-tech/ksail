@@ -44,7 +44,7 @@ Gather what's genuinely interesting about KSail right now:
 
 1. Read the repository README.md for current feature highlights.
 2. Check recent releases and merged PRs for new or improved features.
-3. Read the most recent Weekly Research discussion (category: `agentic-workflows`, title prefix: `Weekly Research`) for roadmap context and competitive insights.
+3. Read the most recent Weekly Roadmap discussion (category: `agentic-workflows`, title prefix: `Weekly Roadmap`) for roadmap context and competitive insights.
 4. Read the previous Weekly Promote KSail discussions to see which mediums were used recently.
 5. Identify the single most compelling thing to write about this week — a new feature, a solved problem, a use case, a comparison, or a lesson learned.
 

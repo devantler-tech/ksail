@@ -29,7 +29,7 @@ on:
       - "Daily Workflow Maintenance"
       - "PR Fix"
       - "Weekly Promote KSail"
-      - "Weekly Research"
+      - "Weekly Roadmap"
     types:
       - completed
     branches:
