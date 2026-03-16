@@ -7,16 +7,7 @@ VCluster creates lightweight, isolated virtual Kubernetes clusters that run as D
 
 ## What is VCluster?
 
-[VCluster](https://www.vcluster.com/) provides virtual Kubernetes clusters—fully functional Kubernetes control planes that run inside Docker containers instead of requiring a host cluster. KSail uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run VCluster directly on Docker, making it perfect for development and CI/CD without the overhead of a full Kubernetes cluster.
-
-### Key Benefits
-
-- **Lightweight**: Control plane runs in a single Docker container
-- **Fast startup**: Clusters ready in seconds
-- **Isolated**: Each VCluster is completely isolated
-- **Cost-effective**: Share Docker infrastructure across multiple clusters
-- **CI/CD friendly**: Perfect for ephemeral test environments
-- **Multi-tenancy**: Run multiple isolated clusters on one machine
+[VCluster](https://www.vcluster.com/) provides virtual Kubernetes clusters—fully functional Kubernetes control planes that ordinarily run as pods inside a host Kubernetes cluster. KSail uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run VCluster directly on Docker instead, without requiring a host cluster. Each VCluster is isolated, starts in seconds, and shares Docker infrastructure—making it ideal for CI/CD and local multi-environment development.
 
 ## When to Use VCluster
 
@@ -51,19 +42,7 @@ This generates:
 ksail cluster create
 ````
 
-**What happens:**
-1. Docker containers are created for the VCluster control plane
-2. Optional worker nodes are started (if configured)
-3. GitOps engine (Flux or ArgoCD) is bootstrapped
-4. Kubeconfig is automatically configured
-
-**Expected output:**
-````
-✓ Creating VCluster cluster 'dev-cluster'...
-✓ Waiting for control plane to be ready...
-✓ Cluster created successfully
-✓ Kubeconfig updated: kubectl config use-context dev-cluster
-````
+KSail creates Docker containers for the control plane, bootstraps the GitOps engine, and configures kubectl automatically.
 
 ### 3. Verify the Cluster
 
@@ -100,24 +79,9 @@ ksail cluster delete
 docker ps | grep dev-cluster
 ````
 
-## Configuration Options
+## Configuration
 
-### Basic Configuration
-
-The generated `ksail.yaml` controls cluster behavior:
-
-````yaml
-apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    distribution: VCluster
-    gitOpsEngine: Flux  # or ArgoCD
-````
-
-### VCluster-Specific Configuration
-
-Customize VCluster behavior in `vcluster.yaml`:
+For general KSail YAML options, see the [Configuration Reference](/configuration/). Customize VCluster-specific behavior in `vcluster.yaml`:
 
 ````yaml
 # Control plane configuration
@@ -157,40 +121,7 @@ For real-world VCluster workflow examples — CI/CD pipelines, multi-environment
 
 ## Architecture
 
-### How VCluster Works
-
-````
-┌─────────────────────────────────────────────┐
-│          Your Host Machine                  │
-│                                             │
-│  ┌────────────────────────────────────┐   │
-│  │  Docker Engine                     │   │
-│  │                                    │   │
-│  │  ┌──────────────────────────┐     │   │
-│  │  │  VCluster Control Plane  │     │   │
-│  │  │  (Docker Container)      │     │   │
-│  │  │                          │     │   │
-│  │  │  • API Server            │     │   │
-│  │  │  • Controller Manager    │     │   │
-│  │  │  • Scheduler             │     │   │
-│  │  │  • etcd                  │     │   │
-│  │  └──────────────────────────┘     │   │
-│  │                                    │   │
-│  │  ┌──────────────────────────┐     │   │
-│  │  │  Worker Nodes (Optional) │     │   │
-│  │  │  (Docker Containers)     │     │   │
-│  │  └──────────────────────────┘     │   │
-│  └────────────────────────────────────┘   │
-│                                             │
-│  Your applications run in the VCluster     │
-│  and appear as normal pods from the        │
-│  virtual cluster's perspective             │
-└─────────────────────────────────────────────┘
-````
-
-### Components
-
-The VCluster control plane runs in a Docker container and includes a Kubernetes API server, scheduler, controller manager, and etcd. Pods are scheduled to worker node containers (optional) or directly within the control plane container. When VCluster is used in a host-cluster deployment mode (outside KSail's Docker/Vind setup), selected resources can be synced between the virtual cluster and its host cluster.
+VCluster runs a full Kubernetes control plane (API server, scheduler, controller manager, etcd) as pods inside a host Kubernetes cluster. In KSail, the Vind driver runs these components as Docker containers instead. Pods are scheduled onto cluster nodes (the control-plane node or optional worker nodes), each of which runs as a Docker container. When using host-cluster deployment mode, selected resources can be synced between the virtual and host cluster.
 
 ## Comparison with Other Distributions
 
@@ -243,7 +174,7 @@ Increase Docker resources (4 GB RAM, 2 CPUs minimum) in Docker Desktop settings,
 
 ### Worker Nodes
 
-By default, VCluster runs workload pods inside the control plane container. For more realistic multi-node scenarios, enable worker nodes:
+By default, workload pods are scheduled onto the control-plane node, which runs as a Docker container. For more realistic multi-node scenarios, enable worker nodes:
 
 ````yaml
 # vcluster.yaml
@@ -256,21 +187,7 @@ This creates separate Docker containers acting as worker nodes.
 
 ### Custom Distributions
 
-VCluster can run different Kubernetes distributions internally:
-
-````yaml
-# vcluster.yaml
-controlPlane:
-  distro:
-    k3s:
-      enabled: true  # Default, lightweight
-    # OR
-    k8s:
-      enabled: true  # Standard Kubernetes
-    # OR
-    k0s:
-      enabled: true  # K0s distribution
-````
+VCluster supports `k3s` (default), `k8s`, and `k0s` as internal distributions. Set `controlPlane.distro.<name>.enabled: true` in `vcluster.yaml`.
 
 ### Resource Limits
 
