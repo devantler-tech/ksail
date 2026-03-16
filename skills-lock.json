@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "597a4587f30f1152d3ab2923e84db842a18604e09e16885ffa067730fb435d9d"
     },
+    "copilot-instructions-blueprint-generator": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "45fd25e507349b05f80a0cafc159109071ed6c24ac5f014b9c749fd6846bd62b"
+    },
     "copilot-sdk": {
       "source": "github/awesome-copilot",
       "sourceType": "github",
@@ -45,11 +50,6 @@
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",
       "computedHash": "a6a44d5498f7e8f68289902f3dedfc6f38ae0cee1e96527c80724cf27f727c2a"
-    },
-    "copilot-instructions-blueprint-generator": {
-      "source": "github/awesome-copilot",
-      "sourceType": "github",
-      "computedHash": "45fd25e507349b05f80a0cafc159109071ed6c24ac5f014b9c749fd6846bd62b"
     }
   }
 }
