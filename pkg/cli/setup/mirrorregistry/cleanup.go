@@ -13,10 +13,6 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
-	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
-	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
-	vclusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/vcluster"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
@@ -396,38 +392,22 @@ func displayRegistryCleanupOutputWithTimer(
 	})
 }
 
-func cleanupKindMirrorRegistries(
+// cleanupRegistriesOrFallback either falls back to network-based discovery when
+// registryNames is empty or delegates to runMirrorRegistryCleanup with a
+// context-normalised wrapper around provisionerCleanup.
+func cleanupRegistriesOrFallback(
 	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	clusterCfg *v1alpha1.Cluster,
 	deps lifecycle.Deps,
+	registryNames []string,
+	networkName string,
 	clusterName string,
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
+	provisionerCleanup func(ctx context.Context, dockerClient client.APIClient) error,
 ) error {
-	mirrorSpecs, registryNames, err := CollectMirrorSpecs(
-		cmd,
-		cfgManager,
-		GetKindMirrorsDir(clusterCfg),
-		clusterCfg.Spec.Cluster.Provider,
-	)
-	if err != nil {
-		return err
-	}
-
-	// Kind uses "kind" as the network name
-	networkName := "kind"
-
-	// If no registry specs found from config (non-scaffolded cluster),
-	// fall back to network-based discovery
 	if len(registryNames) == 0 {
 		return cleanupRegistriesByNetwork(
-			cmd,
-			deps,
-			networkName,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
+			cmd, deps, networkName, clusterName, deleteVolumes, cleanupDeps,
 		)
 	}
 
@@ -436,189 +416,12 @@ func cleanupKindMirrorRegistries(
 		deps,
 		registryNames,
 		func(dockerClient client.APIClient) error {
-			return kindprovisioner.CleanupRegistries(
-				cmd.Context(),
-				mirrorSpecs,
-				clusterName,
-				dockerClient,
-				deleteVolumes,
-			)
-		},
-		cleanupDeps,
-	)
-}
-
-func cleanupK3dMirrorRegistries(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	deps lifecycle.Deps,
-	clusterName string,
-	deleteVolumes bool,
-	cleanupDeps CleanupDependencies,
-) error {
-	// K3d uses "k3d-{clusterName}" as the network name
-	networkName := "k3d-" + clusterName
-
-	// Use cached distribution config from ConfigManager
-	k3dConfig := cfgManager.DistributionConfig.K3d
-	if k3dConfig == nil {
-		// No config found (non-scaffolded cluster), fall back to network-based discovery
-		return cleanupRegistriesByNetwork(
-			cmd,
-			deps,
-			networkName,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	}
-
-	registriesInfo := k3dprovisioner.ExtractRegistriesFromConfig(k3dConfig, clusterName)
-
-	registryNames := registry.CollectRegistryNames(registriesInfo)
-	if len(registryNames) == 0 {
-		// No registries in config, fall back to network-based discovery
-		return cleanupRegistriesByNetwork(
-			cmd,
-			deps,
-			networkName,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	}
-
-	return runMirrorRegistryCleanup(
-		cmd,
-		deps,
-		registryNames,
-		func(dockerClient client.APIClient) error {
-			return k3dprovisioner.CleanupRegistries(
-				cmd.Context(),
-				k3dConfig,
-				clusterName,
-				dockerClient,
-				deleteVolumes,
-				cmd.ErrOrStderr(),
-			)
-		},
-		cleanupDeps,
-	)
-}
-
-func cleanupTalosMirrorRegistries(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	deps lifecycle.Deps,
-	clusterName string,
-	deleteVolumes bool,
-	cleanupDeps CleanupDependencies,
-	provider v1alpha1.Provider,
-) error {
-	// Collect mirror specs from Talos config (not kind/mirrors directory)
-	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cmd, cfgManager, provider)
-
-	// Talos uses the cluster name as the network name
-	networkName := clusterName
-
-	// If no registry specs found from config (non-scaffolded cluster),
-	// fall back to network-based discovery
-	if len(registryNames) == 0 {
-		return cleanupRegistriesByNetwork(
-			cmd,
-			deps,
-			networkName,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	}
-
-	return runMirrorRegistryCleanup(
-		cmd,
-		deps,
-		registryNames,
-		func(dockerAPIClient client.APIClient) error {
-			// Build registry infos from mirror specs
-			registryInfos := registry.BuildRegistryInfosFromSpecs(
-				mirrorSpecs,
-				nil,
-				nil,
-				clusterName,
-			)
-
-			if len(registryInfos) == 0 {
-				return nil
+			ctx := cmd.Context()
+			if ctx == nil {
+				ctx = context.Background()
 			}
 
-			// Create registry manager
-			registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerAPIClient)
-			if mgrErr != nil {
-				return fmt.Errorf("failed to create registry manager: %w", mgrErr)
-			}
-
-			return registry.CleanupRegistries(
-				cmd.Context(),
-				registryMgr,
-				registryInfos,
-				clusterName,
-				deleteVolumes,
-				networkName,
-				nil,
-			)
-		},
-		cleanupDeps,
-	)
-}
-
-func cleanupVClusterMirrorRegistries(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	deps lifecycle.Deps,
-	clusterName string,
-	deleteVolumes bool,
-	cleanupDeps CleanupDependencies,
-) error {
-	// VCluster uses "vcluster.<clusterName>" as the network name
-	networkName := "vcluster." + clusterName
-
-	// Collect mirror specs from kind/mirrors directory (VCluster uses the same
-	// hosts.toml-based mirror configuration as Kind)
-	mirrorSpecs, registryNames, err := CollectMirrorSpecs(
-		cmd,
-		cfgManager,
-		GetKindMirrorsDir(cfgManager.Config),
-		cfgManager.Config.Spec.Cluster.Provider,
-	)
-	if err != nil {
-		return err
-	}
-
-	// If no registry specs found from config (non-scaffolded cluster),
-	// fall back to network-based discovery
-	if len(registryNames) == 0 {
-		return cleanupRegistriesByNetwork(
-			cmd,
-			deps,
-			networkName,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	}
-
-	return runMirrorRegistryCleanup(
-		cmd,
-		deps,
-		registryNames,
-		func(dockerClient client.APIClient) error {
-			return vclusterprovisioner.CleanupRegistries(
-				cmd.Context(),
-				mirrorSpecs,
-				clusterName,
-				dockerClient,
-				deleteVolumes,
-			)
+			return provisionerCleanup(ctx, dockerClient)
 		},
 		cleanupDeps,
 	)
