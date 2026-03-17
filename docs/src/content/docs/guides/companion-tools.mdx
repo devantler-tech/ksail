@@ -189,7 +189,7 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
 **Tips**
 
 - Use `skaffold dev --port-forward` for automatic port forwarding.
-- If you enabled a local registry in KSail, set `build.local.push: true` and prefix artifact images with `localhost:5050/` in `skaffold.yaml`.
+- If you enabled a local registry in KSail, set `build.local.push: true` and prefix artifact images with your `--local-registry` value (e.g., `localhost:5050/`) in `skaffold.yaml`.
 
 ## KSail + mirrord
 
