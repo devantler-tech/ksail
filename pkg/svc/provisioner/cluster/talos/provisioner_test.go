@@ -2,6 +2,7 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"testing"
@@ -13,10 +14,18 @@ import (
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+)
+
+// Sentinel errors for test assertions.
+var (
+	errImageNotFound  = errors.New("image not found")
+	errGatewayTimeout = errors.New("received unexpected HTTP status: 504 Gateway Timeout")
+	errRepoNotFound   = errors.New("repository not found: 404 Not Found")
 )
 
 // createTestTalosConfigs creates a minimal TalosConfigs for testing.
@@ -151,6 +160,10 @@ func TestProvisioner_Create_Success(t *testing.T) {
 	mockClient.EXPECT().
 		ContainerList(mock.Anything, mock.Anything).
 		Return([]container.Summary{}, nil)
+	// Image already exists locally - skip pull
+	mockClient.EXPECT().
+		ImageInspect(mock.Anything, mock.Anything).
+		Return(image.InspectResponse{}, nil)
 
 	// Mock Cluster to return from Create
 	mockCluster := NewMockCluster()
@@ -192,6 +205,10 @@ func TestProvisioner_Create_WithPatches(t *testing.T) {
 	mockClient.EXPECT().
 		ContainerList(mock.Anything, mock.Anything).
 		Return([]container.Summary{}, nil)
+	// Image already exists locally - skip pull
+	mockClient.EXPECT().
+		ImageInspect(mock.Anything, mock.Anything).
+		Return(image.InspectResponse{}, nil)
 
 	// Mock Cluster to return from Create
 	mockCluster := NewMockCluster()
@@ -221,6 +238,95 @@ func TestProvisioner_Create_WithPatches(t *testing.T) {
 	require.NoError(t, err)
 	mockProvisioner.AssertExpectations(t)
 	mockCluster.AssertExpectations(t)
+}
+
+func TestProvisioner_Create_ImagePullRetryOnTransientError(t *testing.T) {
+	t.Parallel()
+
+	// Mock Docker client - no existing clusters
+	mockClient := docker.NewMockAPIClient(t)
+	mockClient.EXPECT().
+		Ping(mock.Anything).
+		Return(types.Ping{}, nil)
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{}, nil)
+	// Image not present locally
+	mockClient.EXPECT().
+		ImageInspect(mock.Anything, mock.Anything).
+		Return(image.InspectResponse{}, errImageNotFound)
+	// First pull attempt fails with 504 Gateway Timeout
+	mockClient.EXPECT().
+		ImagePull(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, errGatewayTimeout).
+		Once()
+	// Second pull attempt succeeds
+	mockClient.EXPECT().
+		ImagePull(mock.Anything, mock.Anything, mock.Anything).
+		Return(io.NopCloser(io.LimitReader(nil, 0)), nil).
+		Once()
+
+	// Mock Cluster to return from Create
+	mockCluster := NewMockCluster()
+	mockCluster.On("Info").Return(provision.ClusterInfo{
+		ClusterName: "test-cluster-retry",
+		Nodes:       []provision.NodeInfo{{Name: "node-1"}},
+	})
+
+	// Mock Provisioner
+	mockTalosProvisioner := NewMockProvisioner()
+	mockTalosProvisioner.On("Create", mock.Anything, mock.Anything, mock.Anything).
+		Return(mockCluster, nil)
+	mockTalosProvisioner.On("Close").Return(nil)
+
+	configs := createTestTalosConfigs(t, "test-cluster-retry")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithDockerClient(mockClient).
+		WithProvisionerFactory(func(_ context.Context) (provision.Provisioner, error) {
+			return mockTalosProvisioner, nil
+		}).
+		WithImagePullRetryConfig(3, 0, 0).
+		WithLogWriter(io.Discard)
+
+	ctx := context.Background()
+	err := provisioner.Create(ctx, "test-cluster-retry")
+
+	require.NoError(t, err)
+	mockTalosProvisioner.AssertExpectations(t)
+}
+
+func TestProvisioner_Create_ImagePullNonRetryableError(t *testing.T) {
+	t.Parallel()
+
+	// Mock Docker client - no existing clusters
+	mockClient := docker.NewMockAPIClient(t)
+	mockClient.EXPECT().
+		Ping(mock.Anything).
+		Return(types.Ping{}, nil)
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{}, nil)
+	// Image not present locally
+	mockClient.EXPECT().
+		ImageInspect(mock.Anything, mock.Anything).
+		Return(image.InspectResponse{}, errImageNotFound)
+	// Pull fails with non-retryable error
+	mockClient.EXPECT().
+		ImagePull(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, errRepoNotFound).
+		Once()
+
+	configs := createTestTalosConfigs(t, "test-cluster-nonretry")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithDockerClient(mockClient).
+		WithImagePullRetryConfig(3, 0, 0).
+		WithLogWriter(io.Discard)
+
+	ctx := context.Background()
+	err := provisioner.Create(ctx, "test-cluster-nonretry")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to pull talos image")
 }
 
 // setupPatchDirectories creates temp patch directories and a sample patch file.
