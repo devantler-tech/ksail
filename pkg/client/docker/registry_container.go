@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -12,7 +11,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/envvar"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/volume"
@@ -262,24 +260,7 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 
 // pullRegistryImage performs a single attempt to pull the registry image.
 func (rm *RegistryManager) pullRegistryImage(ctx context.Context) error {
-	reader, err := rm.client.ImagePull(ctx, RegistryImageName, image.PullOptions{})
-	if err != nil {
-		return fmt.Errorf("image pull request: %w", err)
-	}
-
-	// Consume pull output
-	_, err = io.Copy(io.Discard, reader)
-	closeErr := reader.Close()
-
-	if err != nil {
-		return fmt.Errorf("reading image pull output: %w", err)
-	}
-
-	if closeErr != nil {
-		return fmt.Errorf("closing image pull reader: %w", closeErr)
-	}
-
-	return nil
+	return PullImage(ctx, rm.client, RegistryImageName)
 }
 
 // Volume management.
