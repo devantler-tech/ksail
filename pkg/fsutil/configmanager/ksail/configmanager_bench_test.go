@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -74,7 +75,7 @@ func BenchmarkLoad_NoConfigFile(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		mgr := configmanager.NewConfigManager(io.Discard)
+		mgr := configmanager.NewConfigManager(io.Discard, configmanager.DefaultClusterFieldSelectors()...)
 		cfg, loadErr := mgr.Load(configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true})
 		if loadErr != nil {
 			b.Fatal(loadErr)
@@ -109,7 +110,7 @@ func BenchmarkLoad_WithConfigFile(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		mgr := configmanager.NewConfigManager(io.Discard)
+		mgr := configmanager.NewConfigManager(io.Discard, configmanager.DefaultClusterFieldSelectors()...)
 		cfg, loadErr := mgr.Load(configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true})
 		if loadErr != nil {
 			b.Fatal(loadErr)
@@ -131,7 +132,7 @@ func BenchmarkLoad_WithConfigFile_DeepTree(b *testing.B) {
 	// Build a 10-level deep subdirectory structure below the project root.
 	deepDir := tmpDir
 	for i := range 10 {
-		deepDir = filepath.Join(deepDir, "level"+string(rune('0'+i)))
+		deepDir = filepath.Join(deepDir, "level"+strconv.Itoa(i))
 		if err := os.MkdirAll(deepDir, 0o750); err != nil {
 			b.Fatal(err)
 		}
@@ -152,7 +153,7 @@ func BenchmarkLoad_WithConfigFile_DeepTree(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		mgr := configmanager.NewConfigManager(io.Discard)
+		mgr := configmanager.NewConfigManager(io.Discard, configmanager.DefaultClusterFieldSelectors()...)
 		cfg, loadErr := mgr.Load(configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true})
 		if loadErr != nil {
 			b.Fatal(loadErr)
@@ -180,7 +181,7 @@ func BenchmarkLoad_Cached(b *testing.B) {
 
 	b.Cleanup(func() { _ = os.Chdir(origDir) })
 
-	mgr := configmanager.NewConfigManager(io.Discard)
+	mgr := configmanager.NewConfigManager(io.Discard, configmanager.DefaultClusterFieldSelectors()...)
 
 	// Prime the cache with a first load.
 	if _, err := mgr.Load(configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true}); err != nil {
