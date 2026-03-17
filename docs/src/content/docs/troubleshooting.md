@@ -129,6 +129,14 @@ If new LoadBalancer services remain pending after several successful allocations
 
 If pods are stuck in `ContainerCreating` with CNI errors, check CNI pods with `ksail workload get pods -n kube-system -l k8s-app=cilium` (or `calico-node`). If failed, recreate: `ksail cluster init --cni Cilium && ksail cluster create`
 
+## Talos Issues
+
+### Transient Image Pull Failures
+
+KSail automatically retries transient Talos node image pull failures (up to 3 attempts, exponential backoff 5s–30s) to handle network glitches from `ghcr.io` (e.g., 504 Gateway Timeout). `Talos image pull attempt N failed (retrying in Xs): ...` messages are expected — no action required.
+
+If all retries fail, check your internet connection and `ghcr.io` availability with `curl -I https://ghcr.io/v2/`, then retry with `ksail cluster delete && ksail cluster create`.
+
 ## VCluster Issues
 
 ### Transient Startup Failures
