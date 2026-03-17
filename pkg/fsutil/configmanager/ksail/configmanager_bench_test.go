@@ -17,8 +17,8 @@ import (
 //nolint:gochecknoglobals // Benchmark sink variables are required to prevent compiler optimization.
 var (
 	benchNewManagerSink   *configmanager.ConfigManager
-	benchLoadNoFileSink   interface{}
-	benchLoadWithFileSink interface{}
+	benchLoadNoFileSink   any
+	benchLoadWithFileSink any
 )
 
 // BenchmarkInitializeViper measures the cost of creating a fresh ConfigManager,
@@ -60,23 +60,21 @@ func BenchmarkNewConfigManager_WithSelectors(b *testing.B) {
 func BenchmarkLoad_NoConfigFile(b *testing.B) {
 	tmpDir := b.TempDir()
 
-	origDir, err := os.Getwd()
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	if err := os.Chdir(tmpDir); err != nil {
-		b.Fatal(err)
-	}
-
-	b.Cleanup(func() { _ = os.Chdir(origDir) })
+	b.Chdir(tmpDir)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for b.Loop() {
-		mgr := configmanager.NewConfigManager(io.Discard, configmanager.DefaultClusterFieldSelectors()...)
-		cfg, loadErr := mgr.Load(configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true})
+		mgr := configmanager.NewConfigManager(
+			io.Discard,
+			configmanager.DefaultClusterFieldSelectors()...,
+		)
+
+		cfg, loadErr := mgr.Load(configmanagerinterface.LoadOptions{
+			Silent:         true,
+			SkipValidation: true,
+		})
 		if loadErr != nil {
 			b.Fatal(loadErr)
 		}
@@ -95,23 +93,21 @@ func BenchmarkLoad_WithConfigFile(b *testing.B) {
 	tmpDir := b.TempDir()
 	writeConfigFiles(b, tmpDir)
 
-	origDir, err := os.Getwd()
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	if err := os.Chdir(tmpDir); err != nil {
-		b.Fatal(err)
-	}
-
-	b.Cleanup(func() { _ = os.Chdir(origDir) })
+	b.Chdir(tmpDir)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for b.Loop() {
-		mgr := configmanager.NewConfigManager(io.Discard, configmanager.DefaultClusterFieldSelectors()...)
-		cfg, loadErr := mgr.Load(configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true})
+		mgr := configmanager.NewConfigManager(
+			io.Discard,
+			configmanager.DefaultClusterFieldSelectors()...,
+		)
+
+		cfg, loadErr := mgr.Load(configmanagerinterface.LoadOptions{
+			Silent:         true,
+			SkipValidation: true,
+		})
 		if loadErr != nil {
 			b.Fatal(loadErr)
 		}
@@ -133,28 +129,28 @@ func BenchmarkLoad_WithConfigFile_DeepTree(b *testing.B) {
 	deepDir := tmpDir
 	for i := range 10 {
 		deepDir = filepath.Join(deepDir, "level"+strconv.Itoa(i))
-		if err := os.MkdirAll(deepDir, 0o750); err != nil {
+
+		err := os.MkdirAll(deepDir, 0o750)
+		if err != nil {
 			b.Fatal(err)
 		}
 	}
 
-	origDir, err := os.Getwd()
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	if err := os.Chdir(deepDir); err != nil {
-		b.Fatal(err)
-	}
-
-	b.Cleanup(func() { _ = os.Chdir(origDir) })
+	b.Chdir(deepDir)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for b.Loop() {
-		mgr := configmanager.NewConfigManager(io.Discard, configmanager.DefaultClusterFieldSelectors()...)
-		cfg, loadErr := mgr.Load(configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true})
+		mgr := configmanager.NewConfigManager(
+			io.Discard,
+			configmanager.DefaultClusterFieldSelectors()...,
+		)
+
+		cfg, loadErr := mgr.Load(configmanagerinterface.LoadOptions{
+			Silent:         true,
+			SkipValidation: true,
+		})
 		if loadErr != nil {
 			b.Fatal(loadErr)
 		}
@@ -170,21 +166,19 @@ func BenchmarkLoad_Cached(b *testing.B) {
 	tmpDir := b.TempDir()
 	writeConfigFiles(b, tmpDir)
 
-	origDir, err := os.Getwd()
-	if err != nil {
-		b.Fatal(err)
-	}
+	b.Chdir(tmpDir)
 
-	if err := os.Chdir(tmpDir); err != nil {
-		b.Fatal(err)
-	}
-
-	b.Cleanup(func() { _ = os.Chdir(origDir) })
-
-	mgr := configmanager.NewConfigManager(io.Discard, configmanager.DefaultClusterFieldSelectors()...)
+	mgr := configmanager.NewConfigManager(
+		io.Discard,
+		configmanager.DefaultClusterFieldSelectors()...,
+	)
 
 	// Prime the cache with a first load.
-	if _, err := mgr.Load(configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true}); err != nil {
+	_, err := mgr.Load(configmanagerinterface.LoadOptions{
+		Silent:         true,
+		SkipValidation: true,
+	})
+	if err != nil {
 		b.Fatal(err)
 	}
 
@@ -192,7 +186,10 @@ func BenchmarkLoad_Cached(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		cfg, loadErr := mgr.Load(configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true})
+		cfg, loadErr := mgr.Load(configmanagerinterface.LoadOptions{
+			Silent:         true,
+			SkipValidation: true,
+		})
 		if loadErr != nil {
 			b.Fatal(loadErr)
 		}
@@ -206,7 +203,8 @@ func BenchmarkLoad_Cached(b *testing.B) {
 func writeConfigFiles(tb testing.TB, dir string) {
 	tb.Helper()
 
-	if err := os.MkdirAll(filepath.Join(dir, "k8s"), 0o750); err != nil {
+	err := os.MkdirAll(filepath.Join(dir, "k8s"), 0o750)
+	if err != nil {
 		tb.Fatal(err)
 	}
 
@@ -221,11 +219,13 @@ func writeConfigFiles(tb testing.TB, dir string) {
 
 	kindContent := "apiVersion: kind.x-k8s.io/v1alpha4\nkind: Cluster\nname: kind\n"
 
-	if err := os.WriteFile(filepath.Join(dir, "ksail.yaml"), []byte(ksailContent), 0o600); err != nil {
+	err = os.WriteFile(filepath.Join(dir, "ksail.yaml"), []byte(ksailContent), 0o600)
+	if err != nil {
 		tb.Fatal(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "kind.yaml"), []byte(kindContent), 0o600); err != nil {
+	err = os.WriteFile(filepath.Join(dir, "kind.yaml"), []byte(kindContent), 0o600)
+	if err != nil {
 		tb.Fatal(err)
 	}
 }
