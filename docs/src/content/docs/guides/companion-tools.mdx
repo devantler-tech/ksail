@@ -189,67 +189,13 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
 **Tips**
 
 - Use `skaffold dev --port-forward` for automatic port forwarding.
-- If you enabled a local registry in KSail, point Skaffold at it:
-
-  ```yaml
-  build:
-    local:
-      push: true
-    artifacts:
-      - image: localhost:5050/my-app
-  ```
+- If you enabled a local registry in KSail, set `build.local.push: true` and prefix artifact images with `localhost:5050/` in `skaffold.yaml`.
 
 ## KSail + mirrord
 
 [mirrord](https://mirrord.dev/) lets you run a local process as if it were inside the cluster by mirroring or stealing traffic from a remote pod. KSail sets up the cluster; mirrord connects your local process to it.
 
 See the **[KSail + mirrord guide](/guides/mirrord/)** for full setup instructions, mirror vs. steal mode comparison, IDE integration, and usage tips.
-
-**Quick example:**
-
-1. **Deploy your application**
-
-   ```bash
-   kubectl --context <your-context> create deployment my-app --image=my-app:latest
-   kubectl --context <your-context> expose deployment my-app --port=80
-   ```
-
-2. **Create `.mirrord/mirrord.json`** to configure the target and traffic mirroring.
-
-   ```json
-   {
-     "target": {
-       "path": "deployment/my-app",
-       "namespace": "default"
-     },
-     "feature": {
-       "network": {
-         "incoming": "mirror"
-       },
-       "fs": "read"
-     }
-   }
-   ```
-
-3. **Run your process through mirrord**
-
-   ```bash
-   mirrord exec --config .mirrord/mirrord.json -- ./my-app
-   ```
-
-   Your local process receives traffic destined for `deployment/my-app`, while reading remote files and environment variables from the pod.
-
-4. **Tear down**
-
-   ```bash
-   # Stop the mirrord session (Ctrl+C)
-   ksail cluster delete
-   ```
-
-**Tips**
-
-- mirrord also integrates as a VS Code and JetBrains plugin—no CLI needed.
-- Use `"incoming": "steal"` instead of `"mirror"` to redirect all traffic to your local process rather than duplicating it.
 
 ## When to Use Which Tool
 
@@ -263,16 +209,7 @@ See the **[KSail + mirrord guide](/guides/mirrord/)** for full setup instruction
 | Debugging a service locally with live cluster traffic | **Telepresence** |
 | Mirroring pod traffic to a local process | **mirrord** |
 
-You can combine `ksail workload watch` with any companion tool — they operate at different layers and do not conflict. You can also layer companion tools together. For example, use Tilt for the build-deploy loop and mirrord to debug a specific service locally:
-
-```bash
-# Terminal 1 — cluster + Tilt
-ksail cluster create
-tilt up
-
-# Terminal 2 — mirrord for live debugging
-mirrord exec --target deployment/my-app -- dlv debug ./cmd/server
-```
+You can combine `ksail workload watch` with any companion tool — they operate at different layers and do not conflict. Companion tools can also be layered together (for example, Tilt for the build-deploy loop and mirrord in a separate terminal for live debugging).
 
 ## Next Steps
 
