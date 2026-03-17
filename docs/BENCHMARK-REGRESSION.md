@@ -19,15 +19,15 @@ The PR comment groups results into three sections:
 |--------|-------------|----------------------------------------------------------------------|
 | 🔴     | Regression  | Statistically significant increase (p < 0.001, and ≥ 10% for sec/op) |
 | 🟢     | Improvement | Statistically significant decrease (p < 0.001, and ≥ 10% for sec/op) |
-| ⚪ ~    | Unchanged   | No significant change (p ≥ 0.001 or < 10% for sec/op)               |
+| ⚪ ~    | Unchanged   | No significant change (p ≥ 0.001 or < 10% for sec/op)                |
 
 Each row in the tables shows:
 
-| Column        | Meaning                                                        | Goal               |
-|---------------|----------------------------------------------------------------|--------------------|
-| **Benchmark** | Name of the benchmark function (without `Benchmark` prefix)    | —                  |
-| **Metric**    | `sec/op`, `B/op`, or `allocs/op`                               | Lower is better    |
-| **Change**    | Delta percentage vs `main`                                     | Negative is better |
+| Column        | Meaning                                                         | Goal               |
+|---------------|-----------------------------------------------------------------|--------------------|
+| **Benchmark** | Name of the benchmark function (without `Benchmark` prefix)     | —                  |
+| **Metric**    | `sec/op`, `B/op`, or `allocs/op`                                | Lower is better    |
+| **Change**    | Delta percentage vs `main`                                      | Negative is better |
 | **p-value**   | Statistical confidence; < 0.001 means the change is significant | —                  |
 
 The comment also includes a collapsed **Unchanged** section and a **Raw benchstat output** block for deeper inspection.
