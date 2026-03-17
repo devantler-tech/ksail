@@ -7,11 +7,11 @@ KSail's `--profile` flag provides **pre-built cluster profile templates** that b
 
 ## How `--profile` Works
 
-When you pass `--profile` to `ksail cluster init`, KSail applies the profile's defaults to the generated `ksail.yaml`. Individual flags (`--cni`, `--csi`, `--gitops-engine`, etc.) still override profile defaults when explicitly provided.
+When you pass `--profile` to `ksail cluster init`, KSail applies the profile's implied defaults to the generated `ksail.yaml`. Individual flags (`--cni`, `--csi`, `--gitops-engine`, etc.) still override profile defaults when explicitly provided.
 
 ```bash
-# Initialize with the default profile (same as omitting --profile)
-ksail cluster init --profile Default
+# Initialize with the ArgoCD profile
+ksail cluster init --profile ArgoCD
 ```
 
 ## Available Profiles
@@ -20,34 +20,136 @@ ksail cluster init --profile Default
 
 The `Default` profile preserves the current `ksail cluster init` behaviour — it is a no-op that uses the standard defaults for all fields:
 
-- **Distribution:** Vanilla (Kind)
-- **CNI:** Default (distribution-provided)
-- **CSI:** Default (distribution-provided)
-- **GitOps Engine:** None
-- **Policy Engine:** None
+| Field | Value |
+|-------|-------|
+| Distribution | Vanilla (Kind) |
+| CNI | Default (distribution-provided) |
+| CSI | Default (distribution-provided) |
+| GitOps Engine | None |
+| Policy Engine | None |
+| Cert-Manager | Disabled |
+| Metrics Server | Default |
 
 ```bash
 ksail cluster init --profile Default
 # Equivalent to: ksail cluster init
 ```
 
+---
+
+### ArgoCD
+
+The `ArgoCD` profile pre-configures the cluster for **ArgoCD-native GitOps workflows**. It targets teams whose local development environment mirrors an ArgoCD-managed production setup.
+
+**Implied defaults:**
+
+| Field | Value | Why |
+|-------|-------|-----|
+| GitOps Engine | ArgoCD | Installs and manages Argo CD controllers |
+| Cert-Manager | Enabled | Required for ArgoCD HTTPS and notification webhooks |
+
+```bash
+ksail cluster init --profile ArgoCD
+```
+
+This generates a `ksail.yaml` equivalent to:
+
+```yaml
+spec:
+  cluster:
+    profile: ArgoCD
+    gitOpsEngine: ArgoCD
+    certManager: Enabled
+```
+
+> [!TIP]
+> After initialization, run `ksail cluster create` to spin up the cluster with ArgoCD pre-installed. ArgoCD's UI is available at `https://localhost:8080` once the cluster is running.
+
+---
+
+### Mesh
+
+The `Mesh` profile pre-configures the cluster for **service-mesh-native applications** using Cilium as the CNI. It targets teams building applications that rely on eBPF-based networking, mTLS, or L7 network policies.
+
+**Implied defaults:**
+
+| Field | Value | Why |
+|-------|-------|-----|
+| CNI | Cilium | eBPF-powered CNI with built-in mTLS and L7 policy support |
+
+```bash
+ksail cluster init --profile Mesh
+```
+
+This generates a `ksail.yaml` equivalent to:
+
+```yaml
+spec:
+  cluster:
+    profile: Mesh
+    cni: Cilium
+```
+
+> [!TIP]
+> Cilium's Hubble observability UI can be enabled after cluster creation for live network traffic inspection.
+
+---
+
+### Observability
+
+The `Observability` profile pre-configures the cluster with a **local monitoring stack** — ideal for teams who want a local environment that matches the observability story of their production setup.
+
+**Implied defaults:**
+
+| Field | Value | Why |
+|-------|-------|-----|
+| Metrics Server | Enabled | Enables `kubectl top` and HPA in local clusters |
+| Cert-Manager | Enabled | Required for TLS certificates used by Prometheus and Grafana ingress |
+
+```bash
+ksail cluster init --profile Observability
+```
+
+This generates a `ksail.yaml` equivalent to:
+
+```yaml
+spec:
+  cluster:
+    profile: Observability
+    metricsServer: Enabled
+    certManager: Enabled
+```
+
+---
+
 ## Overriding Profile Defaults
 
 Profiles set defaults — any explicitly provided flag takes precedence:
 
 ```bash
-# Start from Default profile but switch to Cilium CNI
-ksail cluster init --profile Default --cni Cilium
+# Use ArgoCD profile but keep cert-manager disabled
+ksail cluster init --profile ArgoCD --cert-manager Disabled
 
-# Start from Default profile with K3s distribution
-ksail cluster init --profile Default --distribution K3s
+# Use Mesh profile with K3s distribution
+ksail cluster init --profile Mesh --distribution K3s
+
+# Use Observability profile with Calico CNI instead of default
+ksail cluster init --profile Observability --cni Calico
 ```
 
 ## Compatibility
 
-The `--profile` flag is compatible with all four distributions (Vanilla, K3s, Talos, VCluster). Unsupported combinations will produce a clear error during initialization.
+The `--profile` flag is compatible with all four distributions (Vanilla, K3s, Talos, VCluster). Some profile-distribution combinations may have limited support:
+
+| Profile | Vanilla | K3s | Talos | VCluster |
+|---------|---------|-----|-------|---------|
+| Default | ✅ | ✅ | ✅ | ✅ |
+| ArgoCD | ✅ | ✅ | ✅ | ✅ |
+| Mesh | ✅ | ✅ | ✅ | ✅ |
+| Observability | ✅ | ✅ | ✅ | ✅ |
 
 ## Related
 
 - [Declarative Configuration](/configuration/declarative-configuration/) — Full reference for `ksail.yaml`
 - [CLI Flags: cluster init](/cli-flags/cluster/cluster-init/) — All available init flags
+- [Ephemeral Clusters (--ttl)](/guides/ephemeral-clusters/) — Create time-limited clusters

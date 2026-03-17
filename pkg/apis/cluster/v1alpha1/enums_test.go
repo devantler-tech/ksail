@@ -279,7 +279,10 @@ func TestProfile_ValidValues(t *testing.T) {
 
 	values := profile.ValidValues()
 	assert.Contains(t, values, "Default")
-	assert.Len(t, values, 1)
+	assert.Contains(t, values, "ArgoCD")
+	assert.Contains(t, values, "Mesh")
+	assert.Contains(t, values, "Observability")
+	assert.Len(t, values, 4)
 }
 
 func TestProfile_StringAndType(t *testing.T) {
@@ -318,6 +321,24 @@ func TestProfile_Set(t *testing.T) {
 			wantError: false,
 		},
 		{
+			name:      "argocd",
+			input:     "ArgoCD",
+			expected:  v1alpha1.ProfileArgoCD,
+			wantError: false,
+		},
+		{
+			name:      "mesh",
+			input:     "Mesh",
+			expected:  v1alpha1.ProfileMesh,
+			wantError: false,
+		},
+		{
+			name:      "observability",
+			input:     "Observability",
+			expected:  v1alpha1.ProfileObservability,
+			wantError: false,
+		},
+		{
 			name:      "invalid_profile",
 			input:     "invalid",
 			wantError: true,
@@ -343,6 +364,62 @@ func TestProfile_Set(t *testing.T) {
 }
 
 // Provider tests.
+
+// TestApplyProfileDefaults verifies that ApplyProfileDefaults sets the expected
+// implied defaults for each profile without overriding already-set values.
+func TestApplyProfileDefaults(t *testing.T) {
+	t.Parallel()
+
+	t.Run("argocd_sets_gitops_and_certmanager", func(t *testing.T) {
+		t.Parallel()
+
+		spec := v1alpha1.ClusterSpec{}
+		v1alpha1.ApplyProfileDefaults(&spec, v1alpha1.ProfileArgoCD)
+		assert.Equal(t, v1alpha1.GitOpsEngineArgoCD, spec.GitOpsEngine)
+		assert.Equal(t, v1alpha1.CertManagerEnabled, spec.CertManager)
+	})
+
+	t.Run("argocd_does_not_override_explicit_gitops", func(t *testing.T) {
+		t.Parallel()
+
+		spec := v1alpha1.ClusterSpec{GitOpsEngine: v1alpha1.GitOpsEngineFlux}
+		v1alpha1.ApplyProfileDefaults(&spec, v1alpha1.ProfileArgoCD)
+		assert.Equal(t, v1alpha1.GitOpsEngineFlux, spec.GitOpsEngine)
+	})
+
+	t.Run("mesh_sets_cilium_cni", func(t *testing.T) {
+		t.Parallel()
+
+		spec := v1alpha1.ClusterSpec{}
+		v1alpha1.ApplyProfileDefaults(&spec, v1alpha1.ProfileMesh)
+		assert.Equal(t, v1alpha1.CNICilium, spec.CNI)
+	})
+
+	t.Run("mesh_does_not_override_explicit_cni", func(t *testing.T) {
+		t.Parallel()
+
+		spec := v1alpha1.ClusterSpec{CNI: v1alpha1.CNICalico}
+		v1alpha1.ApplyProfileDefaults(&spec, v1alpha1.ProfileMesh)
+		assert.Equal(t, v1alpha1.CNICalico, spec.CNI)
+	})
+
+	t.Run("observability_sets_metrics_server_and_certmanager", func(t *testing.T) {
+		t.Parallel()
+
+		spec := v1alpha1.ClusterSpec{}
+		v1alpha1.ApplyProfileDefaults(&spec, v1alpha1.ProfileObservability)
+		assert.Equal(t, v1alpha1.MetricsServerEnabled, spec.MetricsServer)
+		assert.Equal(t, v1alpha1.CertManagerEnabled, spec.CertManager)
+	})
+
+	t.Run("default_profile_is_noop", func(t *testing.T) {
+		t.Parallel()
+
+		spec := v1alpha1.ClusterSpec{}
+		v1alpha1.ApplyProfileDefaults(&spec, v1alpha1.ProfileDefault)
+		assert.Equal(t, v1alpha1.ClusterSpec{}, spec)
+	})
+}
 
 //nolint:funlen // Table-driven test with multiple provider cases is clearer as single function
 func TestProvider_Set(t *testing.T) {

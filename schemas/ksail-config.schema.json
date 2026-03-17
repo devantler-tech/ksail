@@ -43,7 +43,10 @@
             "profile": {
               "type": "string",
               "enum": [
-                "Default"
+                "Default",
+                "ArgoCD",
+                "Mesh",
+                "Observability"
               ],
               "description": "Pre-built cluster profile template (Default: current behaviour)"
             },

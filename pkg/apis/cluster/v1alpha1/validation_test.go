@@ -241,7 +241,10 @@ func TestValidProfiles(t *testing.T) {
 	profiles := v1alpha1.ValidProfiles()
 
 	assert.Contains(t, profiles, v1alpha1.ProfileDefault)
-	assert.Len(t, profiles, 1)
+	assert.Contains(t, profiles, v1alpha1.ProfileArgoCD)
+	assert.Contains(t, profiles, v1alpha1.ProfileMesh)
+	assert.Contains(t, profiles, v1alpha1.ProfileObservability)
+	assert.Len(t, profiles, 4)
 }
 
 func TestValidPlacementGroupStrategies(t *testing.T) {

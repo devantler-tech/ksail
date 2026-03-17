@@ -114,7 +114,7 @@ func ValidProviders() []Provider {
 
 // ValidProfiles returns supported profile values.
 func ValidProfiles() []Profile {
-	return []Profile{ProfileDefault}
+	return []Profile{ProfileDefault, ProfileArgoCD, ProfileMesh, ProfileObservability}
 }
 
 // ValidPlacementGroupStrategies returns supported placement group strategy values.

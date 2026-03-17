@@ -137,6 +137,12 @@ func HandleInitRunE(
 		return fmt.Errorf("failed to resolve configuration for scaffolding: %w", err)
 	}
 
+	// Apply profile-implied defaults before validation and scaffolding.
+	// For each implied field, only apply the profile default when the corresponding
+	// flag was not explicitly set by the user on the command line. This ensures that
+	// explicit flags always take precedence over profile-implied defaults.
+	applyProfileDefaultsForInit(cmd, &clusterCfg.Spec.Cluster)
+
 	err = validateInitConfig(clusterCfg)
 	if err != nil {
 		return err
@@ -233,4 +239,34 @@ func resolveInitTargetPath(cfgManager *ksailconfigmanager.ConfigManager) (string
 	}
 
 	return wd, nil
+}
+
+// applyProfileDefaultsForInit applies profile-implied defaults for the init command.
+// Only fields whose corresponding CLI flag was NOT explicitly set by the user are
+// overridden, so any explicitly provided flag always takes precedence.
+func applyProfileDefaultsForInit(cmd *cobra.Command, spec *v1alpha1.ClusterSpec) {
+	switch spec.Profile {
+	case v1alpha1.ProfileArgoCD:
+		if !cmd.Flags().Changed("gitops-engine") {
+			spec.GitOpsEngine = v1alpha1.GitOpsEngineArgoCD
+		}
+
+		if !cmd.Flags().Changed("cert-manager") {
+			spec.CertManager = v1alpha1.CertManagerEnabled
+		}
+
+	case v1alpha1.ProfileMesh:
+		if !cmd.Flags().Changed("cni") {
+			spec.CNI = v1alpha1.CNICilium
+		}
+
+	case v1alpha1.ProfileObservability:
+		if !cmd.Flags().Changed("metrics-server") {
+			spec.MetricsServer = v1alpha1.MetricsServerEnabled
+		}
+
+		if !cmd.Flags().Changed("cert-manager") {
+			spec.CertManager = v1alpha1.CertManagerEnabled
+		}
+	}
 }
