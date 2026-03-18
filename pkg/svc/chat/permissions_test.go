@@ -36,9 +36,6 @@ func TestIsReadOperation(t *testing.T) {
 func TestGetPermissionDescription(t *testing.T) {
 	t.Parallel()
 
-	toolName := "ksail_cluster_create"
-	path := "/tmp/test.yaml"
-
 	tests := []struct {
 		name     string
 		request  copilot.PermissionRequest
@@ -55,7 +52,7 @@ func TestGetPermissionDescription(t *testing.T) {
 			name: "with tool name",
 			request: copilot.PermissionRequest{
 				Kind:     copilot.Write,
-				ToolName: &toolName,
+				ToolName: new("ksail_cluster_create"),
 			},
 			expected: "Tool: ksail_cluster_create",
 		},
@@ -63,7 +60,7 @@ func TestGetPermissionDescription(t *testing.T) {
 			name: "with path",
 			request: copilot.PermissionRequest{
 				Kind: copilot.Write,
-				Path: &path,
+				Path: new("/tmp/test.yaml"),
 			},
 			expected: "Path: /tmp/test.yaml",
 		},

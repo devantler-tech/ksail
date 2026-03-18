@@ -58,7 +58,7 @@ func TestExtractPermissionDetails_CommandFields(t *testing.T) {
 			name: "full command text",
 			request: copilot.PermissionRequest{
 				Kind:            copilot.KindShell,
-				FullCommandText: ptrStr("rm -rf /tmp/test"),
+				FullCommandText: new("rm -rf /tmp/test"),
 			},
 			wantTool:    "Shell Command",
 			wantCommand: "rm -rf /tmp/test",
@@ -67,7 +67,7 @@ func TestExtractPermissionDetails_CommandFields(t *testing.T) {
 			name: "tool name field",
 			request: copilot.PermissionRequest{
 				Kind:     copilot.MCP,
-				ToolName: ptrStr("ksail_cluster_create"),
+				ToolName: new("ksail_cluster_create"),
 			},
 			wantTool:    "MCP Tool",
 			wantCommand: "ksail_cluster_create",
@@ -104,7 +104,7 @@ func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
 			name: "path field",
 			request: copilot.PermissionRequest{
 				Kind: copilot.Read,
-				Path: ptrStr("/etc/config.yaml"),
+				Path: new("/etc/config.yaml"),
 			},
 			wantTool:    "File Read",
 			wantCommand: "/etc/config.yaml",
@@ -113,7 +113,7 @@ func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
 			name: "fileName field",
 			request: copilot.PermissionRequest{
 				Kind:     copilot.Write,
-				FileName: ptrStr("/tmp/output.txt"),
+				FileName: new("/tmp/output.txt"),
 			},
 			wantTool:    "File Write",
 			wantCommand: "/tmp/output.txt",
@@ -122,7 +122,7 @@ func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
 			name: "url field",
 			request: copilot.PermissionRequest{
 				Kind: copilot.URL,
-				URL:  ptrStr("https://example.com"),
+				URL:  new("https://example.com"),
 			},
 			wantTool:    "URL",
 			wantCommand: "https://example.com",
@@ -150,9 +150,6 @@ func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
 		})
 	}
 }
-
-// ptrStr returns a pointer to the given string.
-func ptrStr(s string) *string { return &s }
 
 // TestHumanizeToolName tests conversion of snake_case tool names to readable format.
 func TestHumanizeToolName(t *testing.T) {

@@ -26,7 +26,9 @@ func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandlerFunc {
 	) (copilot.PermissionRequestResult, error) {
 		// Auto-approve read operations
 		if isReadOperation(request.Kind) {
-			return copilot.PermissionRequestResult{Kind: copilot.PermissionRequestResultKindApproved}, nil
+			return copilot.PermissionRequestResult{
+				Kind: copilot.PermissionRequestResultKindApproved,
+			}, nil
 		}
 
 		// Prompt for write operations
@@ -39,6 +41,8 @@ func isReadOperation(kind copilot.PermissionRequestKind) bool {
 	switch kind {
 	case copilot.Read, copilot.URL:
 		return true
+	case copilot.CustomTool, copilot.KindShell, copilot.MCP, copilot.Memory, copilot.Write:
+		return false
 	default:
 		return false
 	}
@@ -110,7 +114,9 @@ func readPermissionResponse(
 			Writer:  writer,
 		})
 
-		return copilot.PermissionRequestResult{Kind: copilot.PermissionRequestResultKindApproved}, nil
+		return copilot.PermissionRequestResult{
+			Kind: copilot.PermissionRequestResultKindApproved,
+		}, nil
 	}
 
 	notify.WriteMessage(notify.Message{
@@ -119,7 +125,9 @@ func readPermissionResponse(
 		Writer:  writer,
 	})
 
-	return copilot.PermissionRequestResult{Kind: copilot.PermissionRequestResultKindDeniedInteractivelyByUser}, nil
+	return copilot.PermissionRequestResult{
+		Kind: copilot.PermissionRequestResultKindDeniedInteractivelyByUser,
+	}, nil
 }
 
 // getPermissionDescription extracts a human-readable description from the permission request.

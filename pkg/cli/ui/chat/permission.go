@@ -144,7 +144,9 @@ func CreateTUIPermissionHandler(
 	) (copilot.PermissionRequestResult, error) {
 		// In YOLO mode, auto-approve all SDK permission requests
 		if yoloModeRef != nil && yoloModeRef.IsEnabled() {
-			return copilot.PermissionRequestResult{Kind: copilot.PermissionRequestResultKindApproved}, nil
+			return copilot.PermissionRequestResult{
+				Kind: copilot.PermissionRequestResultKindApproved,
+			}, nil
 		}
 
 		// Extract tool name and command from the permission request.
@@ -172,52 +174,46 @@ func CreateTUIPermissionHandler(
 		approved := <-responseChan
 
 		if approved {
-			return copilot.PermissionRequestResult{Kind: copilot.PermissionRequestResultKindApproved}, nil
+			return copilot.PermissionRequestResult{
+				Kind: copilot.PermissionRequestResultKindApproved,
+			}, nil
 		}
 
-		return copilot.PermissionRequestResult{Kind: copilot.PermissionRequestResultKindDeniedInteractivelyByUser}, nil
+		return copilot.PermissionRequestResult{
+			Kind: copilot.PermissionRequestResultKindDeniedInteractivelyByUser,
+		}, nil
 	}
 }
 
-// extractPermissionDetails extracts human-readable tool name and command from an SDK permission request.
+// extractPermissionDetails extracts human-readable tool name and command
+// from an SDK permission request.
 // The PermissionRequest has typed fields for each permission kind.
-// Uses priority-based field checking with early returns to avoid deep nesting.
 func extractPermissionDetails(request copilot.PermissionRequest) (string, string) {
-	// Default tool name based on permission kind
 	toolName := formatPermissionKind(request.Kind)
 
-	// Try FullCommandText for shell commands first
-	if request.FullCommandText != nil && *request.FullCommandText != "" {
-		return toolName, *request.FullCommandText
+	if detail := firstNonEmpty(
+		request.FullCommandText,
+		request.FileName,
+		request.Path,
+		request.ToolName,
+		request.URL,
+		request.Diff,
+	); detail != "" {
+		return toolName, detail
 	}
 
-	// Try FileName for file operations
-	if request.FileName != nil && *request.FileName != "" {
-		return toolName, *request.FileName
-	}
-
-	// Try Path for read/write operations
-	if request.Path != nil && *request.Path != "" {
-		return toolName, *request.Path
-	}
-
-	// Try ToolName for MCP/custom-tool operations
-	if request.ToolName != nil && *request.ToolName != "" {
-		return toolName, *request.ToolName
-	}
-
-	// Try URL for url operations
-	if request.URL != nil && *request.URL != "" {
-		return toolName, *request.URL
-	}
-
-	// Try Diff for file edit previews
-	if request.Diff != nil && *request.Diff != "" {
-		return toolName, *request.Diff
-	}
-
-	// Last resort: just show the permission kind
 	return toolName, string(request.Kind)
+}
+
+// firstNonEmpty returns the first non-nil, non-empty string from the given pointers.
+func firstNonEmpty(ptrs ...*string) string {
+	for _, p := range ptrs {
+		if p != nil && *p != "" {
+			return *p
+		}
+	}
+
+	return ""
 }
 
 // formatPermissionKind converts a permission kind to a human-readable tool name.

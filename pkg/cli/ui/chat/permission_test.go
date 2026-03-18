@@ -193,11 +193,10 @@ func TestPermissionHandler_YoloAutoApproves(t *testing.T) {
 
 	handler := chat.CreateTUIPermissionHandler(eventChan, yoloRef)
 
-	cmd := "rm -rf /"
 	result, err := handler(
 		copilot.PermissionRequest{
 			Kind:            copilot.KindShell,
-			FullCommandText: &cmd,
+			FullCommandText: new("rm -rf /"),
 		},
 		copilot.PermissionInvocation{},
 	)
@@ -224,13 +223,11 @@ func TestPermissionHandler_NonYoloSendsToChannel(t *testing.T) {
 	resultChan := make(chan copilot.PermissionRequestResult, 1)
 
 	go func() {
-		cmd := "echo hello"
-		toolCallID := "test-123"
 		result, _ := handler(
 			copilot.PermissionRequest{
 				Kind:            copilot.KindShell,
-				ToolCallID:      &toolCallID,
-				FullCommandText: &cmd,
+				ToolCallID:      new("test-123"),
+				FullCommandText: new("echo hello"),
 			},
 			copilot.PermissionInvocation{},
 		)
@@ -292,11 +289,10 @@ func TestPermissionHandler_NilYoloRef(t *testing.T) {
 	resultChan := make(chan copilot.PermissionRequestResult, 1)
 
 	go func() {
-		cmd := "ls"
 		result, _ := handler(
 			copilot.PermissionRequest{
 				Kind:            copilot.KindShell,
-				FullCommandText: &cmd,
+				FullCommandText: new("ls"),
 			},
 			copilot.PermissionInvocation{},
 		)
