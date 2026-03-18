@@ -102,7 +102,7 @@ func runTUIChat(
 		case <-ctx.Done():
 			os.Exit(signalExitCode)
 		default:
-			_ = session.Destroy()
+			_ = session.Disconnect()
 		}
 	}()
 

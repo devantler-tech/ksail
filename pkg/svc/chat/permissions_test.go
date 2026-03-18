@@ -12,13 +12,13 @@ func TestIsReadOperation(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		kind     string
+		kind     copilot.PermissionRequestKind
 		expected bool
 	}{
-		{"read kind", "read", true},
-		{"url kind", "url", true},
-		{"write kind", "write", false},
-		{"execute kind", "execute", false},
+		{"read kind", copilot.Read, true},
+		{"url kind", copilot.URL, true},
+		{"write kind", copilot.Write, false},
+		{"shell kind", copilot.KindShell, false},
 		{"empty kind", "", false},
 		{"unknown kind", "unknown", false},
 	}
@@ -42,40 +42,25 @@ func TestGetPermissionDescription(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "nil extra",
+			name: "no typed fields set",
 			request: copilot.PermissionRequest{
-				Kind:  "write",
-				Extra: nil,
+				Kind: copilot.Write,
 			},
 			expected: "",
 		},
 		{
 			name: "with tool name",
 			request: copilot.PermissionRequest{
-				Kind: "write",
-				Extra: map[string]any{
-					"toolName": "ksail_cluster_create",
-				},
+				Kind:     copilot.Write,
+				ToolName: new("ksail_cluster_create"),
 			},
 			expected: "Tool: ksail_cluster_create",
 		},
 		{
-			name: "with command",
-			request: copilot.PermissionRequest{
-				Kind: "execute",
-				Extra: map[string]any{
-					"command": "ls -la",
-				},
-			},
-			expected: "$ ls -la",
-		},
-		{
 			name: "with path",
 			request: copilot.PermissionRequest{
-				Kind: "write",
-				Extra: map[string]any{
-					"path": "/tmp/test.yaml",
-				},
+				Kind: copilot.Write,
+				Path: new("/tmp/test.yaml"),
 			},
 			expected: "Path: /tmp/test.yaml",
 		},

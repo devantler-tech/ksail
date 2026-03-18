@@ -309,7 +309,7 @@ func (m *Model) startNewSession() error {
 	m.cleanup()
 
 	if m.session != nil {
-		_ = m.session.Destroy()
+		_ = m.session.Disconnect()
 	}
 
 	m.sessionConfig.SessionID = ""
@@ -353,7 +353,7 @@ func (m *Model) loadSession(metadata *SessionMetadata) {
 	m.cleanup()
 
 	if m.session != nil {
-		_ = m.session.Destroy()
+		_ = m.session.Disconnect()
 	}
 
 	if metadata.Model != "" {
