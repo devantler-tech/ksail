@@ -17,6 +17,6 @@
     "starlight-links-validator": "^0.19.2"
   },
   "devDependencies": {
-    "starlight-github-alerts": "^0.1.1"
+    "starlight-github-alerts": "^0.2.0"
   }
 }
