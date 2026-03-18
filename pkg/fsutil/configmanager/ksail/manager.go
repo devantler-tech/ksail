@@ -224,9 +224,7 @@ func (m *ConfigManager) readConfig(silent bool) error {
 
 func (m *ConfigManager) unmarshalAndApplyDefaults(ignoreConfigFile bool) error {
 	decoderConfig := func(dc *mapstructure.DecoderConfig) {
-		dc.DecodeHook = mapstructure.ComposeDecodeHookFunc(
-			metav1DurationDecodeHook(),
-		)
+		dc.DecodeHook = clusterDecodeHook
 	}
 
 	// Reset TypeMeta fields only if a config file was found.
