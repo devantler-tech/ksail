@@ -25,14 +25,14 @@ benchstat baseline.txt new.txt
 
 ## Benchmark Scenarios
 
-| Benchmark | Description |
-|-----------|-------------|
-| `BenchmarkInitializeViper` | `NewConfigManager` with no field selectors: Viper init, file-type/config-name settings, parent-directory traversal, and env-var binding |
-| `BenchmarkNewConfigManager_WithSelectors` | Same as above but with the four typical production field selectors registered (distribution, provider, source directory, distribution config) |
-| `BenchmarkLoad_NoConfigFile` | Full `Load()` cycle when no `ksail.yaml` exists in the working directory tree (e.g., `ksail cluster init`) — includes Viper ReadInConfig miss, mapstructure Unmarshal, and field-selector default application |
-| `BenchmarkLoad_WithConfigFile` | Full `Load()` cycle when a valid `ksail.yaml` is present — the operational hot path for all cluster lifecycle commands |
-| `BenchmarkLoad_WithConfigFile_DeepTree` | Same as `BenchmarkLoad_WithConfigFile` but run from a 10-level deep subdirectory; measures the extra `os.Stat()` overhead of the parent-directory traversal |
-| `BenchmarkLoad_Cached` | Second `Load()` call on the same manager after the cache has been warmed; should return in nanoseconds with zero allocations |
+| Benchmark                                 | Description                                                                                                                                                                                                   |
+|-------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `BenchmarkInitializeViper`                | `NewConfigManager` with no field selectors: Viper init, file-type/config-name settings, parent-directory traversal, and env-var binding                                                                       |
+| `BenchmarkNewConfigManager_WithSelectors` | Same as above but with the four typical production field selectors registered (distribution, provider, source directory, distribution config)                                                                 |
+| `BenchmarkLoad_NoConfigFile`              | Full `Load()` cycle when no `ksail.yaml` exists in the working directory tree (e.g., `ksail cluster init`) — includes Viper ReadInConfig miss, mapstructure Unmarshal, and field-selector default application |
+| `BenchmarkLoad_WithConfigFile`            | Full `Load()` cycle when a valid `ksail.yaml` is present — the operational hot path for all cluster lifecycle commands                                                                                        |
+| `BenchmarkLoad_WithConfigFile_DeepTree`   | Same as `BenchmarkLoad_WithConfigFile` but run from a 10-level deep subdirectory; measures the extra `os.Stat()` overhead of the parent-directory traversal                                                   |
+| `BenchmarkLoad_Cached`                    | Second `Load()` call on the same manager after the cache has been warmed; should return in nanoseconds with zero allocations                                                                                  |
 
 ## Baseline Results
 
@@ -51,11 +51,11 @@ BenchmarkLoad_Cached-4                           2.9 ns/op      0 B/op     0 all
 
 ## Interpreting Results
 
-| Column | Description |
-|--------|-------------|
-| `N` | Number of iterations |
-| `ns/op` | Nanoseconds per operation (lower is better) |
-| `B/op` | Bytes allocated per operation (lower is better) |
+| Column      | Description                                                |
+|-------------|------------------------------------------------------------|
+| `N`         | Number of iterations                                       |
+| `ns/op`     | Nanoseconds per operation (lower is better)                |
+| `B/op`      | Bytes allocated per operation (lower is better)            |
 | `allocs/op` | Number of heap allocations per operation (lower is better) |
 
 ## Optimization Opportunities
