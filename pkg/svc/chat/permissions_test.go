@@ -1,11 +1,15 @@
 package chat //nolint:testpackage // white-box tests for unexported functions
 
 import (
+	"strings"
 	"testing"
 
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/stretchr/testify/assert"
 )
+
+// longDiff is a diff string exceeding 200 characters, used to test truncation.
+var longDiff = strings.Repeat("x", 250) //nolint:gochecknoglobals // test data
 
 func TestIsReadOperation(t *testing.T) {
 	t.Parallel()
@@ -33,7 +37,7 @@ func TestIsReadOperation(t *testing.T) {
 	}
 }
 
-func TestGetPermissionDescription(t *testing.T) {
+func TestGetPermissionDescription_BasicFields(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -46,7 +50,6 @@ func TestGetPermissionDescription(t *testing.T) {
 			request: copilot.PermissionRequest{
 				Kind: copilot.Write,
 			},
-			expected: "",
 		},
 		{
 			name: "with tool name",
@@ -64,14 +67,62 @@ func TestGetPermissionDescription(t *testing.T) {
 			},
 			expected: "Path: /tmp/test.yaml",
 		},
+		{
+			name: "with full command text",
+			request: copilot.PermissionRequest{
+				Kind:            copilot.KindShell,
+				FullCommandText: new("rm -rf /tmp/test"),
+			},
+			expected: "$ rm -rf /tmp/test",
+		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := getPermissionDescription(tc.request)
-			assert.Contains(t, result, tc.expected)
+			result := getPermissionDescription(testCase.request)
+			if testCase.expected == "" {
+				assert.Empty(t, result)
+			} else {
+				assert.Contains(t, result, testCase.expected)
+			}
+		})
+	}
+}
+
+func TestGetPermissionDescription_DiffPreview(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		request  copilot.PermissionRequest
+		expected string
+	}{
+		{
+			name: "short diff",
+			request: copilot.PermissionRequest{
+				Kind: copilot.Write,
+				Diff: new("- old line\n+ new line"),
+			},
+			expected: "Diff:\n- old line\n+ new line",
+		},
+		{
+			name: "truncated diff",
+			request: copilot.PermissionRequest{
+				Kind: copilot.Write,
+				Diff: new(longDiff),
+			},
+			expected: "Diff:\n" + longDiff[:200] + "...",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := getPermissionDescription(testCase.request)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }
