@@ -38,15 +38,15 @@ benchstat baseline.txt new.txt
 
 Baseline results are hardware-, OS-, and Go-version dependent. Generate fresh baselines on your machine using the commands in [Running Benchmarks](#running-benchmarks).
 
-Example baseline (AMD EPYC 7763, Linux, Go 1.26.0):
+Example baseline (AMD EPYC 7763, Linux, Go 1.26.0, captured in [#3134](https://github.com/devantler-tech/ksail/pull/3134)):
 
 ```text
-BenchmarkInitializeViper-4                               71757     16700 ns/op     5041 B/op     77 allocs/op
-BenchmarkNewConfigManager_WithSelectors-4                72000     16700 ns/op     5041 B/op     77 allocs/op
-BenchmarkLoad_NoConfigFile-4                             19000     62400 ns/op    16200 B/op    463 allocs/op
-BenchmarkLoad_WithConfigFile-4                            7400    161000 ns/op    38100 B/op   1030 allocs/op
-BenchmarkLoad_WithConfigFile_DeepTree-4                   8000    149000 ns/op    35500 B/op    956 allocs/op
-BenchmarkLoad_Cached-4                                1000000000      2.9 ns/op       0 B/op      0 allocs/op
+BenchmarkInitializeViper-4                    18335 ns/op    6416 B/op    77 allocs/op
+BenchmarkNewConfigManager_WithSelectors-4     16858 ns/op    6416 B/op    77 allocs/op
+BenchmarkLoad_NoConfigFile-4                  62419 ns/op   21489 B/op   463 allocs/op
+BenchmarkLoad_WithConfigFile-4               162055 ns/op   67762 B/op  1030 allocs/op
+BenchmarkLoad_WithConfigFile_DeepTree-4      149671 ns/op   62251 B/op   956 allocs/op
+BenchmarkLoad_Cached-4                           2.9 ns/op      0 B/op     0 allocs/op
 ```
 
 ## Interpreting Results
@@ -62,5 +62,5 @@ BenchmarkLoad_Cached-4                                1000000000      2.9 ns/op 
 
 - **Decode hook**: The `clusterDecodeHook` (`ComposeDecodeHookFunc` + `metav1DurationDecodeHook`) is precomputed once as a package-level variable in `decode_hooks.go`, avoiding 3 heap allocations per `Load()` call.
 - **Viper traversal**: `InitializeViper` walks every ancestor directory up to the filesystem root issuing an `os.Stat` per level. Caching the discovered config root across invocations (e.g., via an environment variable set by the CLI wrapper) could reduce this overhead for deeply nested working directories.
-- **mapstructure allocations**: `BenchmarkLoad_WithConfigFile` accounts for ~1030 allocs/op. Profiling shows the majority originate inside mapstructure's reflection-based decoder. A code-generated decoder (e.g., using `go-json` or hand-written) could cut this significantly.
+- **mapstructure allocations**: `BenchmarkLoad_WithConfigFile` accounts for ~1030 allocs/op. The majority originate inside mapstructure's reflection-based decoder, which operates on an intermediate `map[string]any` produced by Viper. A future optimisation could unmarshal the YAML file directly into the target struct using `gopkg.in/yaml.v3` (or `sigs.k8s.io/yaml`), bypassing the intermediate map and the mapstructure step entirely and significantly reducing allocation overhead.
 - **Cache hit path**: `BenchmarkLoad_Cached` shows the cache is effectively free (2.9 ns / 0 allocs). Ensure callers that invoke `Load()` more than once per command reuse the same `ConfigManager` instance.
