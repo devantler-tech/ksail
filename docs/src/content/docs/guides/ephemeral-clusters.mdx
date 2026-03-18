@@ -93,7 +93,7 @@ The cluster creates normally and the TTL countdown runs in the background. When 
 
 ## Kubeconfig Context
 
-KSail writes the kubeconfig context to `~/.kube/config` (configurable via `spec.cluster.connection.kubeconfig`). Use `kubectl`, `k9s`, or `ksail cluster connect` immediately after creation. For context name formats per distribution, see [Companion Tools](/guides/companion-tools/).
+KSail writes the kubeconfig context to the configured kubeconfig path (default `~/.kube/config`, configurable via `spec.cluster.connection.kubeconfig`). Use `kubectl`, `k9s`, or `ksail cluster connect` immediately after creation. For context name formats per distribution, see [Companion Tools](/guides/companion-tools/).
 
 ## Sharing a Cluster
 
@@ -122,7 +122,7 @@ For local Docker-based clusters, this typically means running on the same machin
 
 ## CI/CD with the GitHub Action
 
-Add `--ttl` as a best-effort safety net in CI pipelines — the cluster auto-destroys when the TTL elapses provided the `ksail cluster create` process stays alive. For full GitHub Actions integration and the `ksail-cluster` composite action, see [Testing in CI/CD](/use-cases/#testing-in-cicd).
+Use the `ksail-cluster` GitHub Actions composite action to set up KSail, cache Helm charts and mirror images, and run `ksail cluster init` + `ksail cluster create` in a single step. See [Testing in CI/CD](/use-cases/#testing-in-cicd) for the full workflow, available inputs, and outputs.
 
 ## Next Steps
 
