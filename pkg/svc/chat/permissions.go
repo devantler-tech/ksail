@@ -18,8 +18,8 @@ import (
 // The handler displays operation details in a formatted box showing:
 //   - Tool name being executed
 //   - Shell command (for command execution)
-//   - File path and diff for write operations
-//   - Content preview for write operations (truncated to 200 chars)
+//   - File path (from FileName or Path fields)
+//   - Diff preview for write operations (truncated to 200 chars)
 func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandlerFunc {
 	return func(
 		request copilot.PermissionRequest, _ copilot.PermissionInvocation,
@@ -101,7 +101,7 @@ func readPermissionResponse(
 
 	if strings.TrimSpace(line) == "" {
 		return copilot.PermissionRequestResult{
-			Kind: copilot.PermissionRequestResultKindDeniedCouldNotRequestFromUser,
+			Kind: copilot.PermissionRequestResultKindDeniedInteractivelyByUser,
 		}, nil
 	}
 
