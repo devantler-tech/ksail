@@ -13,19 +13,16 @@ func TestFormatPermissionKind_AllKinds(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		kind     string
+		kind     copilot.PermissionRequestKind
 		expected string
 	}{
-		{name: "shell", kind: "shell", expected: "Shell Command"},
-		{name: "file_edit", kind: "file_edit", expected: "File Edit"},
-		{name: "fileEdit", kind: "fileEdit", expected: "File Edit"},
-		{name: "file_read", kind: "file_read", expected: "File Read"},
-		{name: "fileRead", kind: "fileRead", expected: "File Read"},
-		{name: "file_write", kind: "file_write", expected: "File Write"},
-		{name: "fileWrite", kind: "fileWrite", expected: "File Write"},
-		{name: "terminal", kind: "terminal", expected: "Terminal"},
-		{name: "browser", kind: "browser", expected: "Browser"},
-		{name: "network", kind: "network", expected: "Network Request"},
+		{name: "shell", kind: copilot.KindShell, expected: "Shell Command"},
+		{name: "write", kind: copilot.Write, expected: "File Write"},
+		{name: "read", kind: copilot.Read, expected: "File Read"},
+		{name: "url", kind: copilot.URL, expected: "URL"},
+		{name: "mcp", kind: copilot.MCP, expected: "MCP Tool"},
+		{name: "custom-tool", kind: copilot.CustomTool, expected: "Custom Tool"},
+		{name: "memory", kind: copilot.Memory, expected: "Memory"},
 		{name: "empty kind", kind: "", expected: "Unknown Operation"},
 		{name: "custom kind", kind: "custom_action", expected: "Custom Action"},
 	}
@@ -58,33 +55,22 @@ func TestExtractPermissionDetails_CommandFields(t *testing.T) {
 		wantCommand string
 	}{
 		{
-			name: "command field",
+			name: "full command text",
 			request: copilot.PermissionRequest{
-				Kind:  "shell",
-				Extra: map[string]any{"command": "rm -rf /tmp/test"},
+				Kind:            copilot.KindShell,
+				FullCommandText: new("rm -rf /tmp/test"),
 			},
 			wantTool:    "Shell Command",
 			wantCommand: "rm -rf /tmp/test",
 		},
 		{
-			name: "cmd field",
+			name: "tool name field",
 			request: copilot.PermissionRequest{
-				Kind:  "shell",
-				Extra: map[string]any{"cmd": "echo hello"},
+				Kind:     copilot.MCP,
+				ToolName: new("ksail_cluster_create"),
 			},
-			wantTool:    "Shell Command",
-			wantCommand: "echo hello",
-		},
-		{
-			name: "command as array",
-			request: copilot.PermissionRequest{
-				Kind: "shell",
-				Extra: map[string]any{
-					"command": []any{"npm", "install"},
-				},
-			},
-			wantTool:    "Shell Command",
-			wantCommand: "npm install",
+			wantTool:    "MCP Tool",
+			wantCommand: "ksail_cluster_create",
 		},
 	}
 
@@ -117,35 +103,35 @@ func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
 		{
 			name: "path field",
 			request: copilot.PermissionRequest{
-				Kind:  "file_edit",
-				Extra: map[string]any{"path": "/etc/config.yaml"},
+				Kind: copilot.Read,
+				Path: new("/etc/config.yaml"),
 			},
-			wantTool:    "File Edit",
+			wantTool:    "File Read",
 			wantCommand: "/etc/config.yaml",
 		},
 		{
-			name: "nested execution",
+			name: "fileName field",
 			request: copilot.PermissionRequest{
-				Kind:  "shell",
-				Extra: map[string]any{"execution": map[string]any{"command": "docker ps"}},
+				Kind:     copilot.Write,
+				FileName: new("/tmp/output.txt"),
 			},
-			wantTool:    "Shell Command",
-			wantCommand: "docker ps",
+			wantTool:    "File Write",
+			wantCommand: "/tmp/output.txt",
 		},
 		{
-			name: "fallback to non-metadata field",
+			name: "url field",
 			request: copilot.PermissionRequest{
-				Kind:  "shell",
-				Extra: map[string]any{"description": "running tests"},
+				Kind: copilot.URL,
+				URL:  new("https://example.com"),
 			},
-			wantTool:    "Shell Command",
-			wantCommand: "running tests",
+			wantTool:    "URL",
+			wantCommand: "https://example.com",
 		},
 		{
-			name:        "empty extra falls back to kind",
-			request:     copilot.PermissionRequest{Kind: "browser", Extra: map[string]any{}},
-			wantTool:    "Browser",
-			wantCommand: "browser",
+			name:        "no fields falls back to kind",
+			request:     copilot.PermissionRequest{Kind: copilot.Memory},
+			wantTool:    "Memory",
+			wantCommand: "memory",
 		},
 	}
 
@@ -160,46 +146,6 @@ func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
 
 			if command != testCase.wantCommand {
 				t.Errorf("command = %q, want %q", command, testCase.wantCommand)
-			}
-		})
-	}
-}
-
-// TestExtractStringValue tests extraction of string values from various types.
-func TestExtractStringValue(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		val      any
-		expected string
-	}{
-		{name: "string value", val: "hello", expected: "hello"},
-		{name: "empty string", val: "", expected: ""},
-		{name: "string array", val: []any{"a", "b", "c"}, expected: "a b c"},
-		{name: "empty array", val: []any{}, expected: ""},
-		{name: "array with empty strings", val: []any{"", ""}, expected: ""},
-		{name: "mixed array", val: []any{"cmd", 123, "arg"}, expected: "cmd arg"},
-		{name: "map with command", val: map[string]any{"command": "ls"}, expected: "ls"},
-		{name: "map with cmd", val: map[string]any{"cmd": "pwd"}, expected: "pwd"},
-		{name: "map without command", val: map[string]any{"other": "val"}, expected: ""},
-		{name: "int value", val: 42, expected: ""},
-		{name: "nil value", val: nil, expected: ""},
-		{name: "bool value", val: true, expected: ""},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := chat.ExportExtractStringValue(testCase.val)
-			if result != testCase.expected {
-				t.Errorf(
-					"extractStringValue(%v) = %q, want %q",
-					testCase.val,
-					result,
-					testCase.expected,
-				)
 			}
 		})
 	}

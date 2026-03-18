@@ -18,15 +18,17 @@ import (
 // The handler displays operation details in a formatted box showing:
 //   - Tool name being executed
 //   - Shell command (for command execution)
-//   - Arguments and file paths involved
-//   - Content preview for write operations (truncated to 200 chars)
+//   - File path (from FileName or Path fields)
+//   - Diff preview for write operations (truncated to 200 chars)
 func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandlerFunc {
 	return func(
 		request copilot.PermissionRequest, _ copilot.PermissionInvocation,
 	) (copilot.PermissionRequestResult, error) {
 		// Auto-approve read operations
 		if isReadOperation(request.Kind) {
-			return copilot.PermissionRequestResult{Kind: "approved"}, nil
+			return copilot.PermissionRequestResult{
+				Kind: copilot.PermissionRequestResultKindApproved,
+			}, nil
 		}
 
 		// Prompt for write operations
@@ -35,10 +37,12 @@ func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandlerFunc {
 }
 
 // isReadOperation determines if a permission request is for a read-only operation.
-func isReadOperation(kind string) bool {
+func isReadOperation(kind copilot.PermissionRequestKind) bool {
 	switch kind {
-	case "read", "url":
+	case copilot.Read, copilot.URL:
 		return true
+	case copilot.CustomTool, copilot.KindShell, copilot.MCP, copilot.Memory, copilot.Write:
+		return false
 	default:
 		return false
 	}
@@ -68,7 +72,7 @@ func promptForPermission(
 	} else {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
-			Content: "Permission requested: " + request.Kind,
+			Content: "Permission requested: " + string(request.Kind),
 			Writer:  writer,
 		})
 	}
@@ -91,13 +95,13 @@ func readPermissionResponse(
 	//nolint:nilerr // I/O errors (EOF) treated as denial in non-interactive contexts
 	if readErr != nil {
 		return copilot.PermissionRequestResult{
-			Kind: "denied-no-approval-rule-and-could-not-request-from-user",
+			Kind: copilot.PermissionRequestResultKindDeniedCouldNotRequestFromUser,
 		}, nil
 	}
 
 	if strings.TrimSpace(line) == "" {
 		return copilot.PermissionRequestResult{
-			Kind: "denied-no-approval-rule-and-could-not-request-from-user",
+			Kind: copilot.PermissionRequestResultKindDeniedInteractivelyByUser,
 		}, nil
 	}
 
@@ -110,7 +114,9 @@ func readPermissionResponse(
 			Writer:  writer,
 		})
 
-		return copilot.PermissionRequestResult{Kind: "approved"}, nil
+		return copilot.PermissionRequestResult{
+			Kind: copilot.PermissionRequestResultKindApproved,
+		}, nil
 	}
 
 	notify.WriteMessage(notify.Message{
@@ -119,82 +125,66 @@ func readPermissionResponse(
 		Writer:  writer,
 	})
 
-	return copilot.PermissionRequestResult{Kind: "denied-interactively-by-user"}, nil
+	return copilot.PermissionRequestResult{
+		Kind: copilot.PermissionRequestResultKindDeniedInteractivelyByUser,
+	}, nil
 }
 
 // getPermissionDescription extracts a human-readable description from the permission request.
 func getPermissionDescription(request copilot.PermissionRequest) string {
-	// Try to extract common fields from the Extra data
-	if request.Extra == nil {
-		return ""
-	}
-
 	var parts []string
 
-	parts = appendToolName(parts, request.Extra)
-	parts = appendCommand(parts, request.Extra)
-	parts = appendArgs(parts, request.Extra)
-	parts = appendPath(parts, request.Extra)
-	parts = appendContentPreview(parts, request.Extra)
+	parts = appendToolName(parts, request.ToolName)
+	parts = appendCommand(parts, request.FullCommandText)
+	parts = appendPath(parts, request.Path, request.FileName)
+	parts = appendDiffPreview(parts, request.Diff)
 
 	return strings.Join(parts, "\n")
 }
 
 // appendToolName appends the tool name to parts if present.
-func appendToolName(parts []string, extra map[string]any) []string {
-	if tool, ok := extra["toolName"].(string); ok && tool != "" {
-		return append(parts, "Tool: "+tool)
+func appendToolName(parts []string, toolName *string) []string {
+	if toolName != nil && *toolName != "" {
+		return append(parts, "Tool: "+*toolName)
 	}
 
 	return parts
 }
 
 // appendCommand appends the shell command to parts if present.
-func appendCommand(parts []string, extra map[string]any) []string {
-	if cmd, ok := extra["command"].(string); ok && cmd != "" {
-		return append(parts, "$ "+cmd)
+func appendCommand(parts []string, fullCommandText *string) []string {
+	if fullCommandText != nil && *fullCommandText != "" {
+		return append(parts, "$ "+*fullCommandText)
 	}
 
 	return parts
-}
-
-// appendArgs appends the arguments to parts if present.
-func appendArgs(parts []string, extra map[string]any) []string {
-	args, ok := extra["args"].([]any)
-	if !ok || len(args) == 0 {
-		return parts
-	}
-
-	argStrs := make([]string, len(args))
-	for i, arg := range args {
-		argStrs[i] = fmt.Sprintf("%v", arg)
-	}
-
-	return append(parts, "Args: "+strings.Join(argStrs, " "))
 }
 
 // appendPath appends the file path to parts if present.
-func appendPath(parts []string, extra map[string]any) []string {
-	if path, ok := extra["path"].(string); ok && path != "" {
-		return append(parts, "Path: "+path)
+func appendPath(parts []string, path *string, fileName *string) []string {
+	if fileName != nil && *fileName != "" {
+		return append(parts, "Path: "+*fileName)
+	}
+
+	if path != nil && *path != "" {
+		return append(parts, "Path: "+*path)
 	}
 
 	return parts
 }
 
-// appendContentPreview appends a truncated content preview to parts if present.
-func appendContentPreview(parts []string, extra map[string]any) []string {
+// appendDiffPreview appends a truncated diff preview to parts if present.
+func appendDiffPreview(parts []string, diff *string) []string {
 	const maxContentPreview = 200
 
-	content, ok := extra["content"].(string)
-	if !ok || content == "" {
+	if diff == nil || *diff == "" {
 		return parts
 	}
 
-	preview := content
+	preview := *diff
 	if len(preview) > maxContentPreview {
 		preview = preview[:maxContentPreview] + "..."
 	}
 
-	return append(parts, "Content:\n"+preview)
+	return append(parts, "Diff:\n"+preview)
 }

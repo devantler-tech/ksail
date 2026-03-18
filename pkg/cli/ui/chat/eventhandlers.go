@@ -161,8 +161,8 @@ func (d *sessionEventDispatcher) handleToolComplete(event copilot.SessionEvent) 
 	}
 
 	output := ""
-	if event.Data.Result != nil {
-		output = event.Data.Result.Content
+	if event.Data.Result != nil && event.Data.Result.Content != nil {
+		output = *event.Data.Result.Content
 	}
 
 	d.eventChan <- toolEndMsg{toolName: toolName, output: output, success: true}
