@@ -93,22 +93,7 @@ The cluster creates normally and the TTL countdown runs in the background. When 
 
 ## Kubeconfig Context
 
-KSail writes the kubeconfig context to the configured kubeconfig path (defaults to `~/.kube/config`, configurable via `spec.cluster.connection.kubeconfig`) during cluster creation. You can use `kubectl`, `k9s`, or any other Kubernetes tool immediately.
-
-The context name depends on the distribution:
-
-| Distribution | Context name |
-|-------------|-------------|
-| Vanilla (Kind) | `kind-<name>` |
-| K3s (K3d) | `k3d-<name>` |
-| Talos | `admin@<name>` |
-| VCluster | `vcluster-docker_<name>` |
-
-To connect with K9s for interactive debugging:
-
-```bash
-ksail cluster connect
-```
+KSail writes the kubeconfig context to the configured kubeconfig path (default `~/.kube/config`, configurable via `spec.cluster.connection.kubeconfig`). Use `kubectl`, `k9s`, or `ksail cluster connect` immediately after creation. For context name formats per distribution, see [Companion Tools](/guides/companion-tools/).
 
 ## Sharing a Cluster
 
@@ -128,19 +113,6 @@ For local Docker-based clusters, this typically means running on the same machin
 > [!CAUTION]
 > Kubeconfig files contain cluster credentials (client certificates or tokens). Always share a minimal, context-specific kubeconfig rather than your full `~/.kube/config`, use secure channels, and only share with trusted individuals. Note that your kubeconfig path may differ if you configured `spec.cluster.connection.kubeconfig`.
 
-## TTL Sizing Guide
-
-Choose a TTL based on how long you expect to need the cluster, plus some buffer:
-
-| Session type | Recommended TTL |
-|--------------|-----------------|
-| Quick check (< 15 min) | `--ttl 30m` |
-| Debugging session | `--ttl 1h` |
-| Extended investigation | `--ttl 2h` |
-| Workshop or demo | `--ttl 4h` |
-
-Set the TTL to **roughly 2× your expected session length** — long enough that you won't be interrupted, short enough that forgotten clusters don't waste resources.
-
 ## Distribution Tips
 
 - **K3s** starts fastest and uses the fewest resources — good for quick debugging sessions.
@@ -150,63 +122,7 @@ Set the TTL to **roughly 2× your expected session length** — long enough that
 
 ## CI/CD with the GitHub Action
 
-KSail publishes a composite GitHub Action that provisions a cluster in CI. Add it as a step in any job to get a ready-to-use cluster for smoke tests, integration tests, or demos.
-
-### Usage
-
-```yaml
-# .github/workflows/smoke-test.yaml
-name: Smoke Test
-on: [push]
-permissions:
-  contents: read
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Provision cluster
-        id: cluster
-        uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
-        with:
-          distribution: K3s     # Vanilla (default), K3s, Talos, or VCluster
-          ksail-version: latest  # KSail release version (default: latest)
-
-      - name: Run tests
-        run: |
-          # The cluster is ready — kubectl, helm, etc. work immediately
-          ksail cluster info
-          # ... run your tests here ...
-
-      - name: Cleanup
-        if: always()
-        run: ksail cluster delete
-```
-
-The action runs within your job, so subsequent steps have full access to the cluster.
-
-### Inputs
-
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| `distribution` | string | `Vanilla` | KSail distribution to provision |
-| `ksail-version` | string | `latest` | KSail version to install (e.g. `5.55.0`) |
-| `provider` | string | `Docker` | Infrastructure provider (`Docker`, `Hetzner`) |
-| `args` | string | | Additional CLI arguments for init (and create when init is skipped) |
-| `init` | string | `true` | Whether to run `ksail cluster init` before create |
-| `install` | string | `true` | Whether to install KSail from releases (set `false` if already in PATH) |
-| `cache` | string | `true` | Enable caching of Helm charts and mirror registry volumes between CI runs |
-| `hcloud-token` | string | | Hetzner Cloud API token (required when provider is `Hetzner`) |
-
-### Outputs
-
-| Output | Description |
-|--------|-------------|
-| `kubeconfig` | Path to the kubeconfig file for the provisioned cluster |
-
-> [!NOTE]
-> The action requires `ubuntu-latest` (or compatible) runners with Docker pre-installed and `contents: read` permission for downloading KSail from [GitHub Releases](https://github.com/devantler-tech/ksail/releases). The cluster runs inside Docker containers on the runner and is cleaned up when the runner is recycled (or explicitly via `ksail cluster delete`).
+Use the `ksail-cluster` GitHub Actions composite action to set up KSail, cache Helm charts and mirror images, and run `ksail cluster init` + `ksail cluster create` in a single step. See [Testing in CI/CD](/use-cases/#testing-in-cicd) for the full workflow, available inputs, and outputs.
 
 ## Next Steps
 
