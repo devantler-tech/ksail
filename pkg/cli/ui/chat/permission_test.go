@@ -193,10 +193,11 @@ func TestPermissionHandler_YoloAutoApproves(t *testing.T) {
 
 	handler := chat.CreateTUIPermissionHandler(eventChan, yoloRef)
 
+	cmd := "rm -rf /"
 	result, err := handler(
 		copilot.PermissionRequest{
-			Kind:  "shell",
-			Extra: map[string]any{"command": "rm -rf /"},
+			Kind:            copilot.KindShell,
+			FullCommandText: &cmd,
 		},
 		copilot.PermissionInvocation{},
 	)
@@ -204,7 +205,7 @@ func TestPermissionHandler_YoloAutoApproves(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if result.Kind != "approved" {
+	if result.Kind != copilot.PermissionRequestResultKindApproved {
 		t.Errorf("expected 'approved' in YOLO mode, got %q", result.Kind)
 	}
 }
@@ -223,11 +224,13 @@ func TestPermissionHandler_NonYoloSendsToChannel(t *testing.T) {
 	resultChan := make(chan copilot.PermissionRequestResult, 1)
 
 	go func() {
+		cmd := "echo hello"
+		toolCallID := "test-123"
 		result, _ := handler(
 			copilot.PermissionRequest{
-				Kind:       "shell",
-				ToolCallID: "test-123",
-				Extra:      map[string]any{"command": "echo hello"},
+				Kind:            copilot.KindShell,
+				ToolCallID:      &toolCallID,
+				FullCommandText: &cmd,
 			},
 			copilot.PermissionInvocation{},
 		)
@@ -258,7 +261,7 @@ func TestPermissionHandler_NonYoloSendsToChannel(t *testing.T) {
 	// Verify the handler goroutine returns "approved"
 	select {
 	case result := <-resultChan:
-		if result.Kind != "approved" {
+		if result.Kind != copilot.PermissionRequestResultKindApproved {
 			t.Errorf("expected 'approved', got %q", result.Kind)
 		}
 	case <-time.After(5 * time.Second):
@@ -289,10 +292,11 @@ func TestPermissionHandler_NilYoloRef(t *testing.T) {
 	resultChan := make(chan copilot.PermissionRequestResult, 1)
 
 	go func() {
+		cmd := "ls"
 		result, _ := handler(
 			copilot.PermissionRequest{
-				Kind:  "shell",
-				Extra: map[string]any{"command": "ls"},
+				Kind:            copilot.KindShell,
+				FullCommandText: &cmd,
 			},
 			copilot.PermissionInvocation{},
 		)
@@ -323,7 +327,7 @@ func TestPermissionHandler_NilYoloRef(t *testing.T) {
 	// Verify the handler goroutine returns "denied-interactively-by-user"
 	select {
 	case result := <-resultChan:
-		if result.Kind != "denied-interactively-by-user" {
+		if result.Kind != copilot.PermissionRequestResultKindDeniedInteractivelyByUser {
 			t.Errorf("expected 'denied-interactively-by-user', got %q", result.Kind)
 		}
 	case <-time.After(5 * time.Second):

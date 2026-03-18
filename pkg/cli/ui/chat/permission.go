@@ -144,20 +144,24 @@ func CreateTUIPermissionHandler(
 	) (copilot.PermissionRequestResult, error) {
 		// In YOLO mode, auto-approve all SDK permission requests
 		if yoloModeRef != nil && yoloModeRef.IsEnabled() {
-			return copilot.PermissionRequestResult{Kind: "approved"}, nil
+			return copilot.PermissionRequestResult{Kind: copilot.PermissionRequestResultKindApproved}, nil
 		}
 
 		// Extract tool name and command from the permission request.
-		// The Extra map contains the raw permission request data from the SDK.
-		// Common keys vary by permission kind (shell, file_edit, etc.)
+		// The PermissionRequest now has typed fields for all permission details.
 		toolName, command := extractPermissionDetails(request)
 
 		// Create response channel
 		responseChan := make(chan bool, 1)
 
 		// Send permission request to TUI
+		toolCallID := ""
+		if request.ToolCallID != nil {
+			toolCallID = *request.ToolCallID
+		}
+
 		eventChan <- permissionRequestMsg{
-			toolCallID: request.ToolCallID,
+			toolCallID: toolCallID,
 			toolName:   toolName,
 			command:    command,
 			arguments:  "", // Arguments are included in the command for SDK permissions
@@ -168,163 +172,80 @@ func CreateTUIPermissionHandler(
 		approved := <-responseChan
 
 		if approved {
-			return copilot.PermissionRequestResult{Kind: "approved"}, nil
+			return copilot.PermissionRequestResult{Kind: copilot.PermissionRequestResultKindApproved}, nil
 		}
 
-		return copilot.PermissionRequestResult{Kind: "denied-interactively-by-user"}, nil
+		return copilot.PermissionRequestResult{Kind: copilot.PermissionRequestResultKindDeniedInteractivelyByUser}, nil
 	}
 }
 
 // extractPermissionDetails extracts human-readable tool name and command from an SDK permission request.
-// The Extra map contains different fields depending on the permission kind.
+// The PermissionRequest has typed fields for each permission kind.
 // Uses priority-based field checking with early returns to avoid deep nesting.
 func extractPermissionDetails(request copilot.PermissionRequest) (string, string) {
 	// Default tool name based on permission kind
 	toolName := formatPermissionKind(request.Kind)
 
-	// Try command fields first, then nested execution, then path fields, then fallback
-	if cmd := findCommandInMap(request.Extra); cmd != "" {
-		return toolName, cmd
+	// Try FullCommandText for shell commands first
+	if request.FullCommandText != nil && *request.FullCommandText != "" {
+		return toolName, *request.FullCommandText
 	}
 
-	if cmd := findCommandInExecution(request.Extra); cmd != "" {
-		return toolName, cmd
+	// Try FileName for file operations
+	if request.FileName != nil && *request.FileName != "" {
+		return toolName, *request.FileName
 	}
 
-	if path := findPathInMap(request.Extra); path != "" {
-		return toolName, path
+	// Try Path for read/write operations
+	if request.Path != nil && *request.Path != "" {
+		return toolName, *request.Path
 	}
 
-	if cmd := findFallbackValue(request.Extra); cmd != "" {
-		return toolName, cmd
+	// Try ToolName for MCP/custom-tool operations
+	if request.ToolName != nil && *request.ToolName != "" {
+		return toolName, *request.ToolName
+	}
+
+	// Try URL for url operations
+	if request.URL != nil && *request.URL != "" {
+		return toolName, *request.URL
+	}
+
+	// Try Diff for file edit previews
+	if request.Diff != nil && *request.Diff != "" {
+		return toolName, *request.Diff
 	}
 
 	// Last resort: just show the permission kind
-	return toolName, request.Kind
-}
-
-// commandFields contains field names that typically hold the command to execute.
-var commandFields = []string{
-	"command", "cmd", "shell", "runInTerminal", "execute", "run", "script", "input",
-}
-
-// pathFields contains field names for file path operations.
-var pathFields = []string{"path", "filePath", "file", "target"}
-
-// metadataFields contains field names to skip during fallback search.
-var metadataFields = map[string]bool{
-	"kind": true, "toolCallId": true, "possiblePaths": true,
-	"possibleUrls": true, "sessionId": true, "requestId": true,
-	"timestamp": true, "type": true, "id": true,
-}
-
-// findCommandInMap searches for a command value in the given map.
-func findCommandInMap(extra map[string]any) string {
-	for _, field := range commandFields {
-		if val, ok := extra[field]; ok {
-			if cmd := extractStringValue(val); cmd != "" {
-				return cmd
-			}
-		}
-	}
-
-	return ""
-}
-
-// findCommandInExecution checks for a nested execution object with command fields.
-func findCommandInExecution(extra map[string]any) string {
-	exec, ok := extra["execution"].(map[string]any)
-	if !ok {
-		return ""
-	}
-
-	return findCommandInMap(exec)
-}
-
-// findPathInMap searches for a path value in the given map.
-func findPathInMap(extra map[string]any) string {
-	for _, field := range pathFields {
-		if val, ok := extra[field]; ok {
-			if path := extractStringValue(val); path != "" {
-				return path
-			}
-		}
-	}
-
-	return ""
-}
-
-// findFallbackValue searches for any non-metadata string value in the given map.
-func findFallbackValue(extra map[string]any) string {
-	for key, val := range extra {
-		if metadataFields[key] {
-			continue
-		}
-
-		if cmd := extractStringValue(val); cmd != "" {
-			return cmd
-		}
-	}
-
-	return ""
-}
-
-// extractStringValue extracts a string from various value types.
-func extractStringValue(val any) string {
-	switch typedVal := val.(type) {
-	case string:
-		return typedVal
-	case []any:
-		// Join array elements
-		parts := make([]string, 0, len(typedVal))
-		for _, item := range typedVal {
-			if s, ok := item.(string); ok && s != "" {
-				parts = append(parts, s)
-			}
-		}
-
-		if len(parts) > 0 {
-			return strings.Join(parts, " ")
-		}
-	case map[string]any:
-		// Try to extract command from nested object
-		if cmd, ok := typedVal["command"].(string); ok {
-			return cmd
-		}
-
-		if cmd, ok := typedVal["cmd"].(string); ok {
-			return cmd
-		}
-	}
-
-	return ""
+	return toolName, string(request.Kind)
 }
 
 // formatPermissionKind converts a permission kind to a human-readable tool name.
-func formatPermissionKind(kind string) string {
+func formatPermissionKind(kind copilot.PermissionRequestKind) string {
 	switch kind {
-	case "shell":
+	case copilot.KindShell:
 		return "Shell Command"
-	case "file_edit", "fileEdit":
-		return "File Edit"
-	case "file_read", "fileRead":
-		return "File Read"
-	case "file_write", "fileWrite":
+	case copilot.Write:
 		return "File Write"
-	case "terminal":
-		return "Terminal"
-	case "browser":
-		return "Browser"
-	case "network":
-		return "Network Request"
+	case copilot.Read:
+		return "File Read"
+	case copilot.URL:
+		return "URL"
+	case copilot.MCP:
+		return "MCP Tool"
+	case copilot.CustomTool:
+		return "Custom Tool"
+	case copilot.Memory:
+		return "Memory"
 	default:
 		// Capitalize and format the kind
-		if kind == "" {
+		kindStr := string(kind)
+		if kindStr == "" {
 			return unknownOperation
 		}
 		// Replace underscores with spaces and title case.
 		// English titlecase is appropriate for all SDK permission kinds (shell, file_edit, etc.)
-		formatted := strings.ReplaceAll(kind, "_", " ")
+		formatted := strings.ReplaceAll(kindStr, "_", " ")
 		caser := cases.Title(language.English)
 
 		return caser.String(formatted)

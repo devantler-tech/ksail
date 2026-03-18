@@ -134,9 +134,6 @@ var ExportExtractPermissionDetails = extractPermissionDetails
 // ExportFormatPermissionKind exposes formatPermissionKind for testing.
 var ExportFormatPermissionKind = formatPermissionKind
 
-// ExportExtractStringValue exposes extractStringValue for testing.
-var ExportExtractStringValue = extractStringValue
-
 // ExportHumanizeToolName exposes humanizeToolName for testing.
 var ExportHumanizeToolName = humanizeToolName
 
