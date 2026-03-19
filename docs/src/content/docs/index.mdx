@@ -118,20 +118,63 @@ flowchart TD
     style Manifests fill:#5b21b6,stroke:#7c3aed,color:#fff
 ````
 
-## Documentation
+## Getting Started
 
 <CardGrid>
+  <Card title="Installation" icon="approve-check">
+    Install KSail and set up your environment. [Learn more →](/installation/)
+  </Card>
   <Card title="Features" icon="rocket">
     Cluster provisioning, GitOps, secret management, VSCode extension, and more. [Learn more →](/features/)
   </Card>
+</CardGrid>
+
+<CardGrid>
   <Card title="Concepts" icon="open-book">
     Kubernetes, CNI, CSI, GitOps, and related technologies. [Learn more →](/concepts/)
+  </Card>
+  <Card title="Architecture" icon="pencil">
+    Internal architecture, design decisions, and how components work together. [Learn more →](/architecture/)
   </Card>
   <Card title="Use Cases" icon="puzzle">
     Workflows for learning, development, and CI/CD. [Learn more →](/use-cases/)
   </Card>
   <Card title="Support Matrix" icon="list-format">
     Supported platforms, distributions, and components. [Learn more →](/support-matrix/)
+  </Card>
+</CardGrid>
+
+## Guides
+
+<CardGrid>
+  <Card title="Cluster Profiles" icon="document">
+    Pre-built templates with opinionated CNI, CSI, and GitOps settings via `--profile`. [Learn more →](/guides/cluster-profiles/)
+  </Card>
+  <Card title="Ephemeral Clusters" icon="star">
+    Time-limited clusters that auto-destroy via `--ttl` for debugging and demos. [Learn more →](/guides/ephemeral-clusters/)
+  </Card>
+  <Card title="Companion Tools" icon="puzzle">
+    Use KSail alongside DevSpace, Telepresence, Tilt, Skaffold, and mirrord. [Learn more →](/guides/companion-tools/)
+  </Card>
+  <Card title="KSail + mirrord" icon="laptop">
+    Run a local process as if it were inside the cluster with mirrord. [Learn more →](/guides/mirrord/)
+  </Card>
+</CardGrid>
+
+## Configuration
+
+<CardGrid>
+  <Card title="Configuration Overview" icon="setting">
+    Configuration sources, precedence, and when to use each. [Learn more →](/configuration/)
+  </Card>
+  <Card title="Declarative Configuration" icon="document">
+    Complete `ksail.yaml` reference. [Learn more →](/configuration/declarative-configuration/)
+  </Card>
+  <Card title="LoadBalancer" icon="setting">
+    Configure LoadBalancer support across distributions and providers. [Learn more →](/configuration/loadbalancer/)
+  </Card>
+  <Card title="CLI Flags" icon="forward-slash">
+    Complete CLI flags for all commands. [Learn more →](/cli-flags/)
   </Card>
 </CardGrid>
 
@@ -152,17 +195,11 @@ flowchart TD
   </Card>
 </CardGrid>
 
-## Configuration
+## Providers
 
 <CardGrid>
-  <Card title="Configuration Overview" icon="setting">
-    Configuration sources, precedence, and when to use each. [Learn more →](/configuration/)
-  </Card>
-  <Card title="Declarative Configuration" icon="document">
-    Complete `ksail.yaml` reference. [Learn more →](/configuration/declarative-configuration/)
-  </Card>
-  <Card title="CLI Flags" icon="forward-slash">
-    Complete CLI flags for all commands. [Learn more →](/cli-flags/)
+  <Card title="Omni (Sidero)" icon="setting">
+    Manage Talos clusters through the Sidero Omni SaaS platform. [Learn more →](/providers/omni/)
   </Card>
 </CardGrid>
 
@@ -188,6 +225,9 @@ flowchart TD
 ## Help
 
 <CardGrid>
+  <Card title="Development Guide" icon="open-book">
+    Development environment setup, coding standards, and CI/CD workflows. [Learn more →](/development/)
+  </Card>
   <Card title="FAQ" icon="information">
     Frequently asked questions about KSail. [Learn more →](/faq/)
   </Card>
@@ -196,8 +236,10 @@ flowchart TD
   </Card>
 </CardGrid>
 
-## Quick Links
+## Resources
 
-- **Installing?** See the [Installation Guide](/installation/)
-- **Issues?** Open an [issue](https://github.com/devantler-tech/ksail/issues) in the repository
-- **Questions?** Start a [discussion](https://github.com/devantler-tech/ksail/discussions) in the repository
+<CardGrid>
+  <Card title="Resources" icon="open-book">
+    Presentations, tutorials, blog posts, and community projects. [Learn more →](/resources/)
+  </Card>
+</CardGrid>
