@@ -5,6 +5,12 @@ import starlightGithubAlerts from "starlight-github-alerts";
 
 export default defineConfig({
   site: "https://ksail.devantler.tech",
+  redirects: {
+    "/getting-started/vanilla/": "/distributions/vanilla/",
+    "/getting-started/k3s/": "/distributions/k3s/",
+    "/getting-started/talos/": "/distributions/talos/",
+    "/getting-started/vcluster/": "/distributions/vcluster/",
+  },
   integrations: [
     mermaid(),
     starlight({
