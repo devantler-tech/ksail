@@ -5,6 +5,12 @@ import starlightGithubAlerts from "starlight-github-alerts";
 
 export default defineConfig({
   site: "https://ksail.devantler.tech",
+  redirects: {
+    "/getting-started/vanilla/": "/distributions/vanilla/",
+    "/getting-started/k3s/": "/distributions/k3s/",
+    "/getting-started/talos/": "/distributions/talos/",
+    "/getting-started/vcluster/": "/distributions/vcluster/",
+  },
   integrations: [
     mermaid(),
     starlight({
@@ -38,10 +44,6 @@ export default defineConfig({
           items: [
             { label: "Installation", link: "/installation/" },
             { label: "Features", link: "/features/" },
-            { label: "Vanilla (Kind)", link: "/getting-started/vanilla/" },
-            { label: "K3s (K3d)", link: "/getting-started/k3s/" },
-            { label: "Talos", link: "/getting-started/talos/" },
-            { label: "VCluster", link: "/getting-started/vcluster/" },
           ],
         },
         { label: "Concepts", link: "/concepts/" },
@@ -68,6 +70,15 @@ export default defineConfig({
               collapsed: true,
               autogenerate: { directory: "cli-flags" },
             },
+          ],
+        },
+        {
+          label: "Distributions",
+          items: [
+            { label: "Vanilla (Kind)", link: "/distributions/vanilla/" },
+            { label: "K3s (K3d)", link: "/distributions/k3s/" },
+            { label: "Talos", link: "/distributions/talos/" },
+            { label: "VCluster", link: "/distributions/vcluster/" },
           ],
         },
         {

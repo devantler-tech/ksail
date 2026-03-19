@@ -143,7 +143,7 @@ If all retries fail, check your internet connection and `ghcr.io` availability w
 
 KSail automatically retries transient VCluster startup failures (up to 5 attempts, 5-second delay), including exit status 22/EINVAL, D-Bus errors, network transients, and GHCR pull failures. `Retrying vCluster create (attempt 2/5)...` messages are expected — no action required.
 
-If all retries fail, check Docker resource limits and D-Bus availability. See the [VCluster Getting Started guide](/getting-started/vcluster/#troubleshooting) for details.
+If all retries fail, check Docker resource limits and D-Bus availability. See the [VCluster guide](/distributions/vcluster/#troubleshooting) for details.
 
 ### kubectl Commands Fail After VCluster Creation
 
