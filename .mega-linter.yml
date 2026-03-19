@@ -25,7 +25,7 @@ EXCLUDED_DIRECTORIES:
   - .agents
 ACTION_ACTIONLINT_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
 FILTER_REGEX_EXCLUDE: (megalinter-reports/.*|skills-lock\.json)
-JSON_V8R_FILTER_REGEX_EXCLUDE: (.github/workflows/.*\.lock\.yml|skills-lock\.json)
+JSON_V8R_FILTER_REGEX_EXCLUDE: (\.github/workflows/.*\.lock\.yml|skills-lock\.json)
 MARKDOWN_MARKDOWN_TABLE_FORMATTER_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)
 MARKDOWN_MARKDOWNLINT_FILTER_REGEX_EXCLUDE: (.github/(agents|prompts)|\.github/workflows/.*\.lock\.yml)
 SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (.github/copilot-instructions\.md|.*\.mdx|docs/src/.*\.md|\.github/workflows/.*\.md)
