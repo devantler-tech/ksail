@@ -84,6 +84,8 @@ export default defineConfig({
         {
           label: "Providers",
           items: [
+            { label: "Docker", link: "/providers/docker/" },
+            { label: "Hetzner", link: "/providers/hetzner/" },
             { label: "Omni (Sidero)", link: "/providers/omni/" },
           ],
         },
