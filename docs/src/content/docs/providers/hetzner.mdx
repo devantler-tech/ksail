@@ -1,0 +1,245 @@
+---
+title: Hetzner Provider
+description: Deploy production-ready Talos Linux clusters on Hetzner Cloud servers with KSail.
+---
+
+The Hetzner provider creates Kubernetes cluster nodes as [Hetzner Cloud](https://www.hetzner.com/cloud/) servers running Talos Linux. It provisions real cloud infrastructure with public IPs, private networking, load balancers, and persistent volumes — ideal for production-grade clusters and cloud testing.
+
+## When to Use the Hetzner Provider
+
+The Hetzner provider is ideal when you:
+
+- Need production-grade Kubernetes on affordable European cloud infrastructure
+- Want real cloud load balancers and persistent volumes (not emulated locally)
+- Run performance or integration tests that require dedicated server resources
+- Deploy Talos Linux clusters with high-availability placement groups
+
+> [!NOTE]
+> The Hetzner provider only supports the **Talos** distribution. For local Docker-based clusters, see the [Docker Provider](/providers/docker/) or the [Talos distribution guide](/distributions/talos/).
+
+## Prerequisites
+
+1. **Hetzner Cloud account** — Sign up at [hetzner.com/cloud](https://www.hetzner.com/cloud/)
+2. **API token** — Create one in the [Hetzner Cloud Console](https://console.hetzner.cloud/) → Project → Security → API Tokens (read/write permissions)
+3. **Talos ISO** — A Talos Linux ISO must be available in your Hetzner Cloud project (x86 default: `122630`, ARM: `122629` — see [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options))
+4. **Docker** — Required locally for `ksail` CLI operations
+
+## Configuration
+
+### Environment Variable
+
+Export the Hetzner Cloud API token so KSail can manage servers:
+
+```bash
+export HCLOUD_TOKEN=your-hetzner-api-token
+```
+
+> [!TIP]
+> Add the export to your shell profile (`~/.bashrc`, `~/.zshrc`) to persist across sessions.
+
+By default, KSail reads from `HCLOUD_TOKEN`. To use a different environment variable name, set `spec.cluster.hetzner.tokenEnvVar` in `ksail.yaml`.
+
+### ksail.yaml Reference
+
+The Hetzner provider is configured through `spec.cluster.hetzner` in `ksail.yaml`:
+
+```yaml
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: my-hetzner-cluster
+spec:
+  cluster:
+    distribution: Talos
+    provider: Hetzner
+    hetzner:
+      # Server types (default: cx23 for both)
+      controlPlaneServerType: "cx23"
+      workerServerType: "cx23"
+      # Datacenter location (default: fsn1)
+      location: "fsn1"
+      # Private network settings
+      networkCidr: "10.0.0.0/16"
+      # networkName: "my-network"  # defaults to <cluster>-network
+      # Optional: SSH key for server access (Talos API is primary)
+      # sshKeyName: "my-key"
+      # Optional: override the default env var name (default: HCLOUD_TOKEN)
+      # tokenEnvVar: "MY_CUSTOM_HCLOUD_TOKEN"
+      # Placement group settings for HA
+      placementGroupStrategy: "Spread"  # or "None"
+      # placementGroup: "my-placement"  # defaults to <cluster>-placement
+      # fallbackLocations: ["nbg1", "hel1"]
+      # placementGroupFallbackToNone: false
+    talos:
+      controlPlanes: 1
+      workers: 2
+      # ISO image ID for Hetzner (default: 122630 for x86, use 122629 for ARM)
+      iso: 122630
+```
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `hetzner.controlPlaneServerType` | string | `cx23` | Hetzner server type for control-plane nodes |
+| `hetzner.workerServerType` | string | `cx23` | Hetzner server type for worker nodes |
+| `hetzner.location` | string | `fsn1` | Datacenter location (`fsn1`, `nbg1`, `hel1`) |
+| `hetzner.networkName` | string | `<cluster>-network` | Private network name |
+| `hetzner.networkCidr` | string | `10.0.0.0/16` | Network CIDR block |
+| `hetzner.sshKeyName` | string | _(empty)_ | SSH key for server access (optional) |
+| `hetzner.tokenEnvVar` | string | `HCLOUD_TOKEN` | Environment variable containing the API token |
+| `hetzner.placementGroupStrategy` | string | `Spread` | `Spread` (HA) or `None` (no placement group) |
+| `hetzner.placementGroup` | string | `<cluster>-placement` | Placement group name |
+| `hetzner.fallbackLocations` | list | `["nbg1", "hel1"]` | Alternative locations if primary is unavailable |
+| `hetzner.placementGroupFallbackToNone` | bool | `false` | Fall back to no placement group on capacity issues |
+
+### Talos options for Hetzner clusters
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `talos.iso` | int | `122630` | Hetzner Cloud ISO/image ID for Talos (use `122629` for ARM) |
+
+## Quick Start
+
+### Step 1: Configure API Token
+
+Set `HCLOUD_TOKEN` as described in the [Configuration](#configuration) section above, then verify it is exported in your shell.
+
+### Step 2: Initialize Project
+
+```bash
+ksail cluster init \
+  --name my-hetzner-cluster \
+  --distribution Talos \
+  --provider Hetzner \
+  --control-planes 1 \
+  --workers 2
+```
+
+This creates `ksail.yaml` and a `talos/` directory for Talos configuration patches.
+
+### Step 3: Create Cluster
+
+```bash
+ksail cluster create
+```
+
+KSail creates Hetzner Cloud servers, boots them with Talos Linux, bootstraps Kubernetes, configures kubectl context, and installs the Hetzner Cloud Controller Manager and CSI driver.
+
+### Step 4: Verify Cluster
+
+```bash
+ksail cluster info
+kubectl get nodes -o wide
+kubectl get pods -n kube-system
+```
+
+### Step 5: Cleanup
+
+```bash
+ksail cluster delete
+```
+
+> [!WARNING]
+> This deletes the Hetzner Cloud servers, load balancers, and associated resources. You will stop being charged, but the operation is irreversible.
+
+## Architecture
+
+KSail provisions Hetzner Cloud servers running Talos Linux, connected via a private network. The Hetzner Cloud Controller Manager provides native load balancer integration, and the Hetzner CSI Driver provisions persistent volumes backed by Hetzner Block Storage.
+
+````mermaid
+graph TB
+    subgraph "Your Machine"
+        KSAIL["ksail CLI"]
+    end
+
+    subgraph "Hetzner Cloud"
+        API["Hetzner Cloud API"]
+        NET["Private Network"]
+        LB["Cloud Load Balancer"]
+
+        subgraph "Servers"
+            CP["Control Plane (Talos)"]
+            W1["Worker Node 1 (Talos)"]
+            W2["Worker Node 2 (Talos)"]
+        end
+    end
+
+    KSAIL -->|"HCLOUD_TOKEN"| API
+    API --> CP
+    API --> W1
+    API --> W2
+    CP --- NET
+    W1 --- NET
+    W2 --- NET
+    LB -->|"traffic"| W1
+    LB -->|"traffic"| W2
+    CP -.->|"kubeconfig"| KSAIL
+````
+
+### Installed Components
+
+When using the Hetzner provider, KSail automatically installs:
+
+- **Hetzner Cloud Controller Manager** — Provisions Hetzner Cloud Load Balancers for `type: LoadBalancer` services
+- **Hetzner CSI Driver** — Provisions Hetzner Block Storage volumes for `PersistentVolumeClaim` resources
+- **Placement groups** — Distributes servers across physical hosts for high availability (configurable)
+
+## Operations
+
+### List Clusters
+
+```bash
+ksail cluster list
+```
+
+### Cluster Info
+
+```bash
+ksail cluster info
+```
+
+Displays Kubernetes control-plane and core service endpoints for the current context.
+
+### Update Cluster
+
+```bash
+ksail cluster update
+```
+
+Applies in-place changes to components (CNI, GitOps engine, cert-manager, etc.). Node scaling changes for Talos are applied in-place. Changes to `hetzner.location`, `hetzner.controlPlaneServerType`, or `hetzner.networkCidr` require cluster recreation. See the [Update Behavior table](/support-matrix/#update-behavior) for details.
+
+### Deploy with LoadBalancer
+
+```bash
+kubectl create deployment web --image=nginx --replicas=3
+kubectl expose deployment web --port=80 --type=LoadBalancer
+kubectl get svc web --watch
+```
+
+The `type: LoadBalancer` service provisions a real Hetzner Cloud Load Balancer with a public IP.
+
+## Troubleshooting
+
+**`hcloud token is not set`** — The `HCLOUD_TOKEN` environment variable is missing or empty. Run `echo $HCLOUD_TOKEN` to check. Re-export if needed. If you use a custom variable name, verify it matches `spec.cluster.hetzner.tokenEnvVar` in `ksail.yaml`.
+
+**Server creation fails with resource unavailability** — The selected location may be out of capacity for the requested server type. Configure `spec.cluster.hetzner.fallbackLocations` to try alternative datacenter locations automatically:
+
+```yaml
+spec:
+  cluster:
+    hetzner:
+      location: "fsn1"
+      fallbackLocations: ["nbg1", "hel1"]
+```
+
+**Placement group errors** — Hetzner limits spread placement groups to 10 servers per datacenter. Reduce your node count or set `placementGroupStrategy: "None"`. For best-effort HA, set `placementGroupFallbackToNone: true` to fall back automatically when spread placement fails.
+
+**`context deadline exceeded` or connection errors** — Verify `HCLOUD_TOKEN` is valid and has read/write permissions. Check connectivity with `curl -sI https://api.hetzner.cloud/v1/servers -H "Authorization: Bearer $HCLOUD_TOKEN"`.
+
+**Cluster deletion leaves orphaned resources** — If `ksail cluster delete` is interrupted, manually clean up in the [Hetzner Cloud Console](https://console.hetzner.cloud/): delete servers, load balancers, networks, and placement groups associated with your cluster name.
+
+## Next Steps
+
+- **[Talos](/distributions/talos/)** — Complete Talos guide with Docker, Hetzner, and Omni tabs
+- **[Support Matrix](/support-matrix/)** — Distribution × Provider compatibility
+- **[Configuration](/configuration/)** — Full configuration reference
+- **[Concepts — Providers](/concepts/#hetzner)** — Provider concept overview

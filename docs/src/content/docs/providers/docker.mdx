@@ -1,0 +1,170 @@
+---
+title: Docker Provider
+description: Run Kubernetes cluster nodes as Docker containers for fast local development with KSail.
+---
+
+The Docker provider runs Kubernetes cluster nodes as local Docker containers. It is the default provider for all distributions and is the only external dependency required by KSail — no cloud accounts or remote infrastructure needed.
+
+## When to Use the Docker Provider
+
+The Docker provider is ideal when you:
+
+- Develop and test Kubernetes workloads on your local machine
+- Want fast cluster creation and teardown cycles (seconds, not minutes)
+- Need a consistent local environment that mirrors production cluster structure
+- Run CI/CD pipelines that require an ephemeral Kubernetes cluster
+
+> [!NOTE]
+> The Docker provider supports **all** distributions: Vanilla, K3s, Talos, and VCluster. See the [Support Matrix](/support-matrix/) for component compatibility.
+
+## Prerequisites
+
+1. **Docker Desktop** (macOS / Windows WSL2) or **Docker Engine** (Linux) — installed and running
+2. Verify with `docker ps` — the command must succeed without errors
+
+## Configuration
+
+No additional configuration is needed — Docker is the default provider. If you want to be explicit, set `provider: Docker` in `ksail.yaml`:
+
+```yaml
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: my-cluster
+spec:
+  cluster:
+    distribution: Vanilla   # or K3s, Talos, VCluster
+    provider: Docker         # default — can be omitted
+```
+
+### Distribution-Specific Container Labeling
+
+The Docker provider uses different labeling schemes depending on the distribution, so it can identify and manage the correct containers:
+
+| Distribution | Labeling Scheme |
+| --- | --- |
+| Vanilla (Kind) | Container name prefix `kind-` |
+| K3s (K3d) | Labels `k3d.cluster` and `k3d.role` |
+| Talos | Labels `talos.cluster.name` and `talos.type` |
+| VCluster (Vind) | Name prefixes `vcluster.cp.`, `vcluster.node.`, `vcluster.lb.` |
+
+You do not need to configure labeling manually — KSail handles it automatically.
+
+## Quick Start
+
+### Step 1: Initialize Project
+
+```bash
+ksail cluster init \
+  --name my-cluster \
+  --distribution Vanilla \
+  --control-planes 1 \
+  --workers 2
+```
+
+This creates `ksail.yaml` and distribution-specific configuration files.
+
+### Step 2: Create Cluster
+
+```bash
+ksail cluster create
+```
+
+KSail creates Docker containers as Kubernetes nodes, bootstraps the cluster, and configures your kubectl context.
+
+### Step 3: Verify Cluster
+
+```bash
+ksail cluster info
+kubectl get nodes
+kubectl get pods -A
+```
+
+### Step 4: Cleanup
+
+```bash
+ksail cluster delete
+```
+
+## Architecture
+
+Each Kubernetes node runs as an isolated Docker container on a shared Docker bridge network. No VMs are involved — container start-up is near-instant.
+
+````mermaid
+graph TB
+    subgraph "Your Machine"
+        KSAIL["ksail CLI"]
+        DOCKER["Docker Engine"]
+    end
+
+    subgraph "Docker Containers"
+        CP["Control Plane Node"]
+        W1["Worker Node 1"]
+        W2["Worker Node 2"]
+        REG["Local Registry (optional)"]
+    end
+
+    KSAIL -->|"create / manage"| DOCKER
+    DOCKER --> CP
+    DOCKER --> W1
+    DOCKER --> W2
+    DOCKER --> REG
+    CP -.->|"kubeconfig"| KSAIL
+````
+
+The Docker provider delegates distribution-specific bootstrapping to the appropriate provisioner (Kind, K3d, Talos SDK, or vCluster SDK). KSail never requires you to interact with Docker directly after initial installation.
+
+## Operations
+
+### Start / Stop
+
+```bash
+ksail cluster stop     # Stop containers without deleting them
+ksail cluster start    # Restart stopped containers
+```
+
+### List Clusters
+
+```bash
+ksail cluster list
+```
+
+Lists all Docker-based clusters managed by KSail across every distribution.
+
+### Cluster Info
+
+```bash
+ksail cluster info
+```
+
+Displays Kubernetes control-plane and core service endpoints for the current context.
+
+## LoadBalancer Support
+
+LoadBalancer behavior depends on the distribution running on Docker:
+
+| Distribution | LoadBalancer Implementation |
+| --- | --- |
+| Vanilla (Kind) | [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) (external Docker container) |
+| K3s (K3d) | Built-in ServiceLB (Klipper-LB) |
+| Talos | [MetalLB](https://metallb.io/) with default IP pool `172.18.255.200–172.18.255.250` |
+| VCluster | Delegated to host cluster |
+
+See [LoadBalancer Configuration](/configuration/loadbalancer/) for details.
+
+## Troubleshooting
+
+**`Cannot connect to the Docker daemon`** — Docker is not running. Start Docker Desktop or the Docker Engine service (`sudo systemctl start docker` on Linux).
+
+**`docker ps` returns permission errors** — Your user is not in the `docker` group. Run `sudo usermod -aG docker $USER` and log out/in, or use `sudo` for Docker commands.
+
+**Cluster creation hangs** — Check available system resources. Docker containers need sufficient CPU and memory. See [Platform Requirements](/support-matrix/#platform-requirements) for minimums.
+
+**Port conflicts** — Another service is using a port that KSail needs. Stop the conflicting service or delete stale clusters with `ksail cluster delete`.
+
+## Next Steps
+
+- **[Distributions](/distributions/vanilla/)** — Choose a distribution for your Docker cluster
+- **[Support Matrix](/support-matrix/)** — Distribution × Provider compatibility
+- **[Configuration](/configuration/)** — Full configuration reference
+- **[Concepts — Providers](/concepts/#docker)** — Provider concept overview
