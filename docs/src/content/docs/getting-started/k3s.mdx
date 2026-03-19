@@ -3,17 +3,11 @@ title: Getting Started with K3s (K3d)
 description: Learn how to create and manage lightweight K3s clusters with KSail using K3d for fast local development, CI/CD pipelines, and resource-constrained environments.
 ---
 
-[K3s](https://k3s.io/) is a lightweight, certified Kubernetes distribution designed for resource-constrained environments. KSail uses [K3d](https://k3d.io/) to run K3s clusters in Docker containers, giving you fast cluster creation with batteries-included defaults like a built-in load balancer, local storage provisioner, and metrics server.
+[K3s](https://k3s.io/) is a lightweight, certified Kubernetes distribution for resource-constrained environments. [K3d](https://k3d.io/) runs K3s clusters in Docker containers — each node is a container, with a dedicated load balancer container routing traffic to control planes — providing fast 15–30 s cluster creation with batteries-included defaults (ServiceLB, local-path-provisioner, metrics-server), standard `k3d.yaml` files, and no vendor lock-in.
 
-## What is K3s (K3d)?
-
-K3s is a minimal Kubernetes distribution that bundles everything into a single binary. K3d wraps K3s in Docker containers so you can run full clusters locally. It offers a minimal footprint, batteries-included defaults (ServiceLB, local-path-provisioner, metrics-server), fast 15–30 s cluster creation, and standard `k3d.yaml` files with no lock-in.
-
-K3s (K3d) is ideal for quick local development, resource-constrained machines or CI runners, CI/CD pipelines with ephemeral clusters, and multi-node topology testing.
+K3s (K3d) is ideal for quick local development, CI/CD pipelines with ephemeral clusters, resource-constrained machines or CI runners, and multi-node topology testing.
 
 ## Quick Start
-
-Create your first K3s cluster in under 30 seconds.
 
 ### Prerequisites
 
@@ -43,36 +37,21 @@ ksail cluster create
 ### Step 3: Verify Cluster
 
 ```bash
-# Check cluster info
 ksail cluster info
-
-# View nodes
 kubectl get nodes
-
-# Expected output:
-# NAME                      STATUS   ROLES                  AGE   VERSION
-# k3d-my-cluster-server-0   Ready    control-plane,master   2m    v1.31.x+k3s1
-# k3d-my-cluster-agent-0    Ready    <none>                 2m    v1.31.x+k3s1
-# k3d-my-cluster-agent-1    Ready    <none>                 2m    v1.31.x+k3s1
 ```
 
 ### Step 4: Deploy Sample Application
 
 ```bash
-# Create a deployment
 kubectl create deployment nginx --image=nginx
-
-# Expose as LoadBalancer (K3s ServiceLB assigns an IP automatically)
 kubectl expose deployment nginx --port=80 --type=LoadBalancer
-
-# Verify — EXTERNAL-IP should appear within a few seconds
-kubectl get svc nginx
+kubectl get svc nginx  # EXTERNAL-IP appears within seconds via ServiceLB
 ```
 
 ### Step 5: Cleanup
 
 ```bash
-# Delete cluster and all resources
 ksail cluster delete
 ```
 
@@ -80,40 +59,25 @@ ksail cluster delete
 
 ### Basic Configuration
 
-The `ksail.yaml` file controls your cluster:
-
 ```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
 apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
-    name: my-cluster
     distribution: K3s
-    provider: Docker
-    controlPlanes: 1
-    workers: 2
+    distributionConfig: k3d.yaml
 ```
 
 ### K3d-Specific Configuration
 
-Customize K3d behavior in `k3d.yaml`:
-
 ```yaml
 apiVersion: k3d.io/v1alpha5
 kind: Simple
-metadata:
-  name: my-cluster
 servers: 1       # control-plane nodes
 agents: 2        # worker nodes
 ports:
-  - port: 8080:80@loadbalancer   # Map host port 8080 to cluster port 80
-  - port: 8443:443@loadbalancer  # Map host port 8443 to cluster port 443
-options:
-  k3s:
-    extraArgs:
-      - arg: --disable=traefik   # Disable built-in Traefik ingress
-        nodeFilters:
-          - server:*
+  - port: 8080:80@loadbalancer
 ```
 
 ### Built-in Components
@@ -142,14 +106,6 @@ ksail cluster init --name my-cluster --distribution K3s \
 
 K3d injects registry configuration so all nodes use your mirrors automatically.
 
-## Architecture
-
-K3d uses Docker containers as cluster nodes. A dedicated K3d load balancer container routes traffic to control-plane nodes. Each control-plane container runs the K3s server binary (embedding all control-plane components, etcd, ServiceLB, local-path-provisioner, and metrics-server). Worker nodes run the K3s agent with containerd.
-
-## Distribution Comparison
-
-See the [Support Matrix](/support-matrix/) for a full feature and component comparison across all distributions.
-
 ## Troubleshooting
 
 ### 1. Cluster Creation Fails
@@ -175,14 +131,10 @@ ksail cluster delete && ksail cluster create
 
 ### 3. LoadBalancer Stuck in Pending
 
-K3s uses ServiceLB (Klipper-LB), which binds to host ports. Ensure the port is not already in use:
+K3s uses ServiceLB (Klipper-LB), which binds to host ports. Ensure the port is not already in use and update `ports` in `k3d.yaml` (e.g., `9080:80@loadbalancer`) if needed.
 
 ```bash
 docker ps --format "table {{.Names}}\t{{.Ports}}" | grep k3d
-
-# Use different ports in k3d.yaml
-ports:
-  - port: 9080:80@loadbalancer
 ```
 
 ### 4. Port Already in Use
@@ -204,22 +156,9 @@ Reduce node count in `ksail.yaml` (`workers: 0` for a single-node cluster) and r
 
 ### Worker Node Scaling
 
-Unlike Vanilla (Kind), K3s supports in-place worker node scaling:
-
-```yaml
-# ksail.yaml — increase workers
-spec:
-  cluster:
-    workers: 4
-```
-
-```bash
-ksail cluster update  # Adds/removes worker containers without recreation
-```
+Unlike Vanilla (Kind), K3s supports in-place worker node scaling. Update `agents` in `k3d.yaml` and run `ksail cluster update` to add or remove worker containers without recreation.
 
 ### Disabling Built-in Components
-
-Remove K3s default components you don't need:
 
 ```yaml
 # k3d.yaml
@@ -233,8 +172,6 @@ options:
 ```
 
 ### Custom CNI
-
-Replace the default Flannel CNI with Cilium:
 
 ```yaml
 # ksail.yaml
@@ -256,21 +193,15 @@ options:
 
 ### Kubernetes Version
 
-K3s version is determined by the K3d image. Pin a specific version in `k3d.yaml`:
+K3s version is determined by the K3d image. Pin a specific version in `k3d.yaml` (see [K3d image tags](https://hub.docker.com/r/rancher/k3s/tags)):
 
 ```yaml
-# k3d.yaml
 image: rancher/k3s:v1.31.0-k3s1
 ```
 
-See [K3d image tags](https://hub.docker.com/r/rancher/k3s/tags) for available versions.
-
 ### Port Mappings
 
-Expose services on host ports:
-
 ```yaml
-# k3d.yaml
 ports:
   - port: 8080:80@loadbalancer    # HTTP
   - port: 8443:443@loadbalancer   # HTTPS
@@ -283,16 +214,25 @@ KSail generates standard `k3d.yaml` files—use K3d CLI directly (`k3d cluster c
 
 ## Next Steps
 
+### Explore KSail Features
+
 - [**GitOps Integration**](/features/#gitops-workflows): Bootstrap Flux or ArgoCD
 - [**Secret Management**](/features/#secret-management): Encrypt secrets with SOPS
 - [**AI Chat**](/ai-chat/): Interactive cluster management with GitHub Copilot
 - [**VSCode Extension**](/features/#vscode-extension): Manage clusters from your editor
-- [**Use Cases**](/use-cases/): Workflows for learning, development, and CI/CD
+
+### Try Other Distributions
+
+See the [Support Matrix](/support-matrix/) for a full feature and component comparison.
+
 - [**Vanilla (Kind)**](/getting-started/vanilla/): Upstream Kubernetes for maximum compatibility
 - [**Talos**](/getting-started/talos/): Immutable infrastructure for production
 - [**VCluster**](/getting-started/vcluster/): Virtual clusters for multi-tenancy
+
+### Learn More
+
 - [**Installation Guide**](/installation/): Install KSail on your system
-- [**Contributing**](/contributing/): How to contribute to KSail
 - [**CLI Flags**](/cli-flags/): Comprehensive command documentation
 - [**Configuration Reference**](/configuration/): Detailed YAML options
 - [**LoadBalancer Configuration**](/configuration/loadbalancer/): LoadBalancer options for K3s
+- [**Contributing**](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md): Contribute to KSail development
