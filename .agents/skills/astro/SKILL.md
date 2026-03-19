@@ -48,8 +48,8 @@ Astro leverages an opinionated folder layout for your project. Every Astro proje
 
 ## Core Config Options
 
-| Option | Notes                                                                                                               |
-|--------|---------------------------------------------------------------------------------------------------------------------|
+| Option | Notes |
+|--------|-------|
 | `site` | Your final, deployed URL. Astro uses this full URL to generate your sitemap and canonical URLs in your final build. |
 
 ---
