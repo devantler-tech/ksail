@@ -90,6 +90,11 @@ spec:
 | `hetzner.placementGroup` | string | `<cluster>-placement` | Placement group name |
 | `hetzner.fallbackLocations` | list | `["nbg1", "hel1"]` | Alternative locations if primary is unavailable |
 | `hetzner.placementGroupFallbackToNone` | bool | `false` | Fall back to no placement group on capacity issues |
+
+### Talos options for Hetzner clusters
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
 | `talos.iso` | int | `122630` | Hetzner Cloud ISO/image ID for Talos (use `122629` for ARM) |
 
 ## Quick Start
