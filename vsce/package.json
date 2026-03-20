@@ -172,8 +172,7 @@
       "activitybar": [
         {
           "id": "ksail",
-          "title": "KSail",
-          "icon": "resources/ksail-icon.svg"
+          "title": "KSail"
         }
       ]
     },
