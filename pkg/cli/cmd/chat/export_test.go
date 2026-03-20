@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"time"
 
 	copilot "github.com/github/copilot-sdk/go"
 )
@@ -37,4 +38,10 @@ type AuthStatusChecker = authStatusChecker
 // GetAuthStatusWithRetry exposes getAuthStatusWithRetry for white-box testing.
 func GetAuthStatusWithRetry(ctx context.Context, checker AuthStatusChecker) (*copilot.GetAuthStatusResponse, error) {
 	return getAuthStatusWithRetry(ctx, checker)
+}
+
+// GetAuthStatusWithRetryOpts exposes getAuthStatusWithRetryOpts for white-box testing
+// with injectable backoff durations so tests can avoid real sleep delays.
+func GetAuthStatusWithRetryOpts(ctx context.Context, checker AuthStatusChecker, baseWait, maxWait time.Duration) (*copilot.GetAuthStatusResponse, error) {
+	return getAuthStatusWithRetryOpts(ctx, checker, baseWait, maxWait)
 }

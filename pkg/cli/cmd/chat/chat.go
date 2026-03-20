@@ -318,6 +318,12 @@ func attemptInlineLogin(
 // for transient errors (e.g., "fetch failed" when the Copilot subprocess
 // hasn't fully initialized).
 func getAuthStatusWithRetry(ctx context.Context, client authStatusChecker) (*copilot.GetAuthStatusResponse, error) {
+	return getAuthStatusWithRetryOpts(ctx, client, authRetryBaseWait, authRetryMaxWait)
+}
+
+// getAuthStatusWithRetryOpts is the underlying implementation for getAuthStatusWithRetry
+// with injectable baseWait/maxWait durations to support testing without real sleep delays.
+func getAuthStatusWithRetryOpts(ctx context.Context, client authStatusChecker, baseWait, maxWait time.Duration) (*copilot.GetAuthStatusResponse, error) {
 	var lastErr error
 
 	for attempt := 1; attempt <= authMaxRetries; attempt++ {
@@ -332,12 +338,14 @@ func getAuthStatusWithRetry(ctx context.Context, client authStatusChecker) (*cop
 			break
 		}
 
-		delay := netretry.ExponentialDelay(attempt, authRetryBaseWait, authRetryMaxWait)
+		delay := netretry.ExponentialDelay(attempt, baseWait, maxWait)
 
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
-			timer.Stop()
+			if !timer.Stop() {
+				<-timer.C
+			}
 
 			return nil, fmt.Errorf("auth status check cancelled: %w", ctx.Err())
 		case <-timer.C:

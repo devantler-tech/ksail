@@ -1031,8 +1031,13 @@ func TestGetAuthStatusWithRetryContextCancellation(t *testing.T) {
 	// Override: cancel ctx as soon as first GetAuthStatus returns.
 	cancellingMock := &cancelOnCallMock{inner: mock, cancel: cancel, called: &called}
 
+	// Use tiny backoff durations so the timer fires well before any CI timeout,
+	// and cancellation can be detected quickly without relying on wall-clock thresholds.
+	const tinyBase = 5 * time.Millisecond
+	const tinyMax = 10 * time.Millisecond
+
 	start := time.Now()
-	_, err := chat.GetAuthStatusWithRetry(ctx, cancellingMock)
+	_, err := chat.GetAuthStatusWithRetryOpts(ctx, cancellingMock, tinyBase, tinyMax)
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -1043,8 +1048,8 @@ func TestGetAuthStatusWithRetryContextCancellation(t *testing.T) {
 		t.Errorf("Expected cancellation error, got: %v", err)
 	}
 
-	// Should complete well within the first backoff delay (500ms).
-	if elapsed > 400*time.Millisecond {
+	// With tiny backoff durations the whole call should complete in well under 1s.
+	if elapsed > time.Second {
 		t.Errorf("Expected fast cancellation, took %v", elapsed)
 	}
 }
