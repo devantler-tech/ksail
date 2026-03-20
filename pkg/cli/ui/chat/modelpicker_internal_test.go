@@ -304,34 +304,33 @@ func TestModelPickerFilter_BackspaceRemovesChar(t *testing.T) {
 	}
 }
 
-// TestBuildModelStatusText tests model status text rendering.
-func TestBuildModelStatusText(t *testing.T) {
-	t.Parallel()
+type modelStatusTextCase struct {
+	name         string
+	configModel  string
+	currentModel string
+	lastUsage    string
+	models       []copilot.ModelInfo
+	expected     string
+}
 
-	tests := []struct {
-		name         string
-		configModel  string
-		currentModel string
-		lastUsage    string
-		models       []copilot.ModelInfo
-		expected     string
-	}{
-		{
-			name:         "auto mode unresolved",
-			configModel:  "",
-			currentModel: "",
-			lastUsage:    "",
-			expected:     "auto",
-		},
+func buildModelStatusTextCases() []modelStatusTextCase {
+	return []modelStatusTextCase{
+		{name: "auto mode unresolved", expected: "auto"},
 		{
 			name:         "auto mode resolved with multiplier",
-			configModel:  "",
 			currentModel: "gpt-4o",
-			lastUsage:    "",
 			models: []copilot.ModelInfo{
 				{ID: "gpt-4o", Billing: &copilot.ModelBilling{Multiplier: 1.0}},
 			},
-			expected: "gpt-4o",
+			expected: "gpt-4o (1x)",
+		},
+		{
+			name:         "auto mode resolved with fractional multiplier",
+			currentModel: "claude-haiku-4.5",
+			models: []copilot.ModelInfo{
+				{ID: "claude-haiku-4.5", Billing: &copilot.ModelBilling{Multiplier: 0.33}},
+			},
+			expected: "claude-haiku-4.5 (0.33x)",
 		},
 		{
 			name:         "explicit model",
@@ -340,8 +339,13 @@ func TestBuildModelStatusText(t *testing.T) {
 			expected:     "claude-3",
 		},
 	}
+}
 
-	for _, testCase := range tests {
+// TestBuildModelStatusText tests model status text rendering.
+func TestBuildModelStatusText(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range buildModelStatusTextCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
