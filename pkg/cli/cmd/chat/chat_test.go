@@ -23,6 +23,12 @@ const (
 	failureResult = "failure"
 )
 
+var (
+	errAuthFetchFailed    = errors.New("auth check: fetch failed")
+	errFetchFailed        = errors.New("fetch failed")
+	errUnauthorized       = errors.New("unauthorized: authentication required")
+)
+
 // createTestTool creates a test tool that tracks whether it was called.
 func createTestTool(called *bool) copilot.Tool {
 	return copilot.Tool{
@@ -971,7 +977,7 @@ func TestGetAuthStatusWithRetryRetriesOnRetryableError(t *testing.T) {
 	login := "testuser"
 	mock := &mockAuthChecker{
 		responses: []mockAuthResponse{
-			{status: nil, err: errors.New("auth check: fetch failed")},
+			{status: nil, err: errAuthFetchFailed},
 			{
 				status: &copilot.GetAuthStatusResponse{IsAuthenticated: true, Login: &login},
 				err:    nil,
@@ -1001,7 +1007,7 @@ func TestGetAuthStatusWithRetryStopsOnNonRetryableError(t *testing.T) {
 
 	mock := &mockAuthChecker{
 		responses: []mockAuthResponse{
-			{status: nil, err: errors.New("unauthorized: authentication required")},
+			{status: nil, err: errUnauthorized},
 		},
 	}
 
@@ -1034,7 +1040,7 @@ func TestGetAuthStatusWithRetryExhaustedRetries(t *testing.T) {
 	// Build authMaxRetries responses, all retryable ("fetch failed").
 	responses := make([]mockAuthResponse, chat.AuthMaxRetries)
 	for i := range responses {
-		responses[i] = mockAuthResponse{status: nil, err: errors.New("auth check: fetch failed")}
+		responses[i] = mockAuthResponse{status: nil, err: errAuthFetchFailed}
 	}
 
 	mock := &mockAuthChecker{responses: responses}
@@ -1079,7 +1085,7 @@ func TestGetAuthStatusWithRetryContextCancellation(t *testing.T) {
 
 	mock := &mockAuthChecker{
 		responses: []mockAuthResponse{
-			{status: nil, err: errors.New("fetch failed")},
+			{status: nil, err: errFetchFailed},
 		},
 	}
 
