@@ -144,6 +144,14 @@ export function createKSailCloudProvider(
         const distribution = await detectDistribution(cluster.name, cluster.provider);
         const contextName = getContextName(cluster.name, distribution);
 
+        // Validate context name to prevent command injection
+        if (!/^[\w@._-]+$/.test(contextName)) {
+          vscode.window.showErrorMessage(
+            `Invalid context name for "${cluster.name}": contains unexpected characters`
+          );
+          return undefined;
+        }
+
         // Use the Kubernetes extension's KubectlV1 API when available
         if (kubectlAPI) {
           const result = await kubectlAPI.invokeCommand(
