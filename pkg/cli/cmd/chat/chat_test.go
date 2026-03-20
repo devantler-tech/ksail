@@ -1055,7 +1055,11 @@ func TestGetAuthStatusWithRetryExhaustedRetries(t *testing.T) {
 		t.Errorf("Expected original error preserved, got: %v", err)
 	}
 
-	expectedMsg := fmt.Sprintf("auth status check failed after %d/%d attempts", chat.AuthMaxRetries, chat.AuthMaxRetries)
+	expectedMsg := fmt.Sprintf(
+		"auth status check failed after %d/%d attempts",
+		chat.AuthMaxRetries,
+		chat.AuthMaxRetries,
+	)
 	if !strings.Contains(err.Error(), expectedMsg) {
 		t.Errorf("Expected error to contain %q, got: %v", expectedMsg, err)
 	}
