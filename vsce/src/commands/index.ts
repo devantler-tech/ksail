@@ -22,6 +22,7 @@ import {
   restoreCluster,
   startCluster,
   stopCluster,
+  switchCluster,
   updateCluster,
 } from "../ksail/index.js";
 import type { KSailCloudCluster, KSailCloudTreeDataProvider } from "../kubernetes/index.js";
@@ -36,10 +37,10 @@ import {
  * KSail context name patterns for each distribution
  */
 const KSAIL_CONTEXT_PATTERNS: [RegExp, number][] = [
-  [/^kind-/, 5],      // Vanilla (Kind): "kind-{name}"
-  [/^k3d-/, 4],       // K3s (K3d): "k3d-{name}"
-  [/^admin@/, 6],     // Talos: "admin@{name}"
-  [/^vcluster_/, 9],  // VCluster: "vcluster_{name}"
+  [/^kind-/, 5],              // Vanilla (Kind): "kind-{name}"
+  [/^k3d-/, 4],               // K3s (K3d): "k3d-{name}"
+  [/^admin@/, 6],             // Talos: "admin@{name}"
+  [/^vcluster-docker_/, 17],  // VCluster: "vcluster-docker_{name}"
 ];
 
 /**
@@ -325,12 +326,14 @@ export function registerCommands(
             contextName = getContextName(clusterName, distribution);
           }
 
-          // If from cluster explorer, derive context from cluster name
+          // If from cluster explorer, resolve provider from cluster list
           if (!clusterName) {
             const clusterExplorerName = resolveClusterExplorerTarget(clusterExplorerAPI, target);
             if (clusterExplorerName) {
               clusterName = clusterExplorerName;
-              const distribution = await detectDistribution(clusterName, "docker");
+              const clusters = await listClusters();
+              const matchedCluster = clusters.find((c) => c.name === clusterName);
+              const distribution = await detectDistribution(clusterName, matchedCluster?.provider ?? "docker");
               contextName = getContextName(clusterName, distribution);
             }
           }
@@ -398,7 +401,14 @@ export function registerCommands(
           }
 
           await executeWithProgress("Getting cluster info...", async () => {
-            const distribution = await detectDistribution(clusterName, provider ?? "docker");
+            // Resolve provider from cluster list when not available from cloud target
+            let resolvedProvider = provider;
+            if (!resolvedProvider) {
+              const clusters = await listClusters();
+              const matchedCluster = clusters.find((c) => c.name === clusterName);
+              resolvedProvider = matchedCluster?.provider ?? "docker";
+            }
+            const distribution = await detectDistribution(clusterName, resolvedProvider);
             const contextName = getContextName(clusterName, distribution);
             const info = await clusterInfo(contextName, outputChannel);
             const infoChannel = vscode.window.createOutputChannel(`KSail: Cluster Info (${clusterName})`);
@@ -498,6 +508,29 @@ export function registerCommands(
           });
         } catch (error) {
           showError("restore cluster", error, outputChannel);
+        }
+      }
+    )
+  );
+
+  // Cluster switch
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "ksail.cluster.switch",
+      async (target?: unknown) => {
+        try {
+          const clusterName = await resolveClusterNameOrPrompt(target, "Select cluster to switch to");
+          if (!clusterName) {return;}
+
+          await executeWithProgress("Switching cluster...", async () => {
+            await switchCluster(clusterName, outputChannel);
+            vscode.window.showInformationMessage(
+              `Switched to cluster "${clusterName}"`
+            );
+            refreshAllViews();
+          });
+        } catch (error) {
+          showError("switch cluster", error, outputChannel);
         }
       }
     )

@@ -133,13 +133,31 @@ function getWizardStyles(): string {
 }
 
 /**
+ * HTML-escape a string for safe insertion into attribute values and text nodes.
+ */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (ch) => {
+    switch (ch) {
+      case "&": return "&amp;";
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case '"': return "&quot;";
+      case "'": return "&#39;";
+      default: return ch;
+    }
+  });
+}
+
+/**
  * Build a select dropdown HTML string
  */
 function buildSelect(name: string, values: string[], defaultIndex = 0): string {
-  const options = values.map((v, i) =>
-    `<option value="${v}"${i === defaultIndex ? " selected" : ""}>${v}</option>`
-  ).join("\n          ");
-  return `<select name="${name}" id="${name}">\n          ${options}\n        </select>`;
+  const safeName = escapeHtml(name);
+  const options = values.map((v, i) => {
+    const safeValue = escapeHtml(v);
+    return `<option value="${safeValue}"${i === defaultIndex ? " selected" : ""}>${safeValue}</option>`;
+  }).join("\n          ");
+  return `<select name="${safeName}" id="${safeName}">\n          ${options}\n        </select>`;
 }
 
 /**
@@ -214,11 +232,12 @@ async function buildConfigurePage(): Promise<string> {
  * Generate the creating/progress HTML page
  */
 function buildCreatingPage(clusterName: string): string {
+  const safeName = escapeHtml(clusterName);
   return `
     ${getWizardStyles()}
     <div class="progress">
       <div class="spinner"></div>
-      <h2>Creating Cluster "${clusterName}"</h2>
+      <h2>Creating Cluster "${safeName}"</h2>
       <p>This may take several minutes. Please do not close this window.</p>
     </div>
   `;
@@ -228,21 +247,23 @@ function buildCreatingPage(clusterName: string): string {
  * Generate a result HTML page (success or error)
  */
 function buildResultPage(success: boolean, clusterName: string, errorMessage?: string): string {
+  const safeName = escapeHtml(clusterName);
   if (success) {
     return `
       ${getWizardStyles()}
       <div class="progress">
-        <h2>Cluster "${clusterName}" Created</h2>
+        <h2>Cluster "${safeName}" Created</h2>
         <p>Your KSail cluster has been created successfully.</p>
         <p>The cluster context has been added to your kubeconfig.</p>
       </div>
     `;
   }
+  const safeError = escapeHtml(errorMessage ?? "Unknown error");
   return `
     ${getWizardStyles()}
     <div class="progress">
       <h2>Failed to Create Cluster</h2>
-      <p style="color: var(--vscode-errorForeground);">${errorMessage ?? "Unknown error"}</p>
+      <p style="color: var(--vscode-errorForeground);">${safeError}</p>
     </div>
   `;
 }

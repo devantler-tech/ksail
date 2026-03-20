@@ -7,7 +7,7 @@
  */
 
 import * as vscode from "vscode";
-import type { CloudExplorerV1 } from "vscode-kubernetes-tools-api";
+import type { CloudExplorerV1, KubectlV1 } from "vscode-kubernetes-tools-api";
 import {
   detectClusterStatus,
   detectDistribution,
@@ -127,7 +127,10 @@ export class KSailCloudTreeDataProvider implements vscode.TreeDataProvider<KSail
 /**
  * Create the KSail CloudProvider for the Kubernetes extension's Cloud Explorer.
  */
-export function createKSailCloudProvider(outputChannel: vscode.OutputChannel): {
+export function createKSailCloudProvider(
+  outputChannel: vscode.OutputChannel,
+  kubectlAPI?: KubectlV1
+): {
   cloudProvider: CloudExplorerV1.CloudProvider;
   treeDataProvider: KSailCloudTreeDataProvider;
 } {
@@ -141,7 +144,29 @@ export function createKSailCloudProvider(outputChannel: vscode.OutputChannel): {
         const distribution = await detectDistribution(cluster.name, cluster.provider);
         const contextName = getContextName(cluster.name, distribution);
 
-        // Read kubeconfig and extract the relevant context
+        // Validate context name to prevent command injection
+        if (!/^[\w@._-]+$/.test(contextName)) {
+          vscode.window.showErrorMessage(
+            `Invalid context name for "${cluster.name}": contains unexpected characters`
+          );
+          return undefined;
+        }
+
+        // Use the Kubernetes extension's KubectlV1 API when available
+        if (kubectlAPI) {
+          const result = await kubectlAPI.invokeCommand(
+            `config view --minify --flatten --context ${contextName}`
+          );
+          if (result && result.code === 0 && result.stdout.trim()) {
+            return result.stdout;
+          }
+          vscode.window.showErrorMessage(
+            `Failed to get kubeconfig for "${cluster.name}": ${result?.stderr || "unknown error"}`
+          );
+          return undefined;
+        }
+
+        // Fallback: spawn kubectl binary directly
         const { spawn } = await import("child_process");
         return new Promise((resolve) => {
           const proc = spawn("kubectl", [
