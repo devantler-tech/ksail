@@ -1,14 +1,14 @@
 # KSail VSCode Extension
 
-A VSCode extension for managing local Kubernetes clusters with KSail.
+A VSCode extension for managing local Kubernetes clusters with KSail. Integrates with the [VS Code Kubernetes extension](https://marketplace.visualstudio.com/items?itemName=ms-kubernetes-tools.vscode-kubernetes-tools) to surface KSail clusters in the Cloud Explorer and Cluster Explorer.
 
 ## Features
 
-- **Clusters View**: View and manage Kubernetes clusters in the sidebar with provider info
-- **Cluster Status View**: Real-time sidebar view showing cluster health, pod summaries by namespace, and GitOps reconciliation state — updated every 10 seconds
-- **Status Bar**: Compact cluster health indicator in the status bar with color-coded states (Healthy/Degraded/Error/Unknown/No Cluster)
+- **Cloud Explorer Integration**: KSail clusters appear under **KSail** in the Kubernetes extension's Clouds view with status icons and context menus
+- **Cluster Explorer Contributor**: KSail-managed kubeconfig contexts are annotated with `(KSail)` and a status label in the Kubernetes extension's Cluster Explorer
+- **Cluster Provider Wizard**: HTML-based "Create Cluster" wizard integrated into the Kubernetes extension; enum values fetched live from the KSail MCP schema
 - **Interactive Wizards**: Step-by-step configuration for init and create operations
-- **Command Palette**: Full access to cluster lifecycle operations
+- **Command Palette**: Full access to cluster lifecycle operations (init, create, update, start, stop, switch, backup, restore, delete, connect)
 - **Keyboard Shortcuts**: Quick access to common operations
 - **MCP Server Provider**: Exposes KSail as an MCP server for AI assistants
 
@@ -16,6 +16,7 @@ A VSCode extension for managing local Kubernetes clusters with KSail.
 
 - [KSail](https://ksail.devantler.tech/installation/) CLI installed and available in PATH
 - Docker running (for local cluster operations)
+- [VS Code Kubernetes Tools](https://marketplace.visualstudio.com/items?itemName=ms-kubernetes-tools.vscode-kubernetes-tools) extension (installed automatically as a dependency)
 
 ## Installation
 
@@ -39,13 +40,19 @@ All cluster operations are available via the Command Palette (`Cmd+Shift+P` / `C
 |-----------------------------------|-------------------------------------------|-----------------|
 | `KSail: Init Cluster`             | Initialize a new ksail.yaml configuration | `Cmd+Shift+K I` |
 | `KSail: Create Cluster`           | Create and start a cluster                | `Cmd+Shift+K C` |
-| `KSail: Delete Cluster`           | Delete the cluster                        | `Cmd+Shift+K D` |
+| `KSail: Update Cluster`           | Update a running cluster                  | -               |
 | `KSail: Start Cluster`            | Start an existing cluster                 | -               |
 | `KSail: Stop Cluster`             | Stop a running cluster                    | -               |
+| `KSail: Switch Cluster`           | Switch the active kubeconfig context      | -               |
+| `KSail: Backup Cluster`           | Backup cluster resources                  | -               |
+| `KSail: Restore Cluster`          | Restore cluster resources from a backup   | -               |
+| `KSail: Delete Cluster`           | Delete the cluster                        | `Cmd+Shift+K D` |
 | `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI (embedded in KSail)  | -               |
-| `KSail: Refresh Clusters`         | Refresh the clusters tree view            | -               |
-| `KSail: Refresh Cluster Status`   | Manually refresh the cluster status view  | -               |
+| `KSail: Show KSail Info`          | Show cluster info via KSail CLI           | -               |
+| `KSail: Refresh Clusters`         | Refresh the Cloud Explorer view           | -               |
 | `KSail: Show Output`              | Open the KSail output channel             | -               |
+
+Commands are also available via right-click context menus in the Kubernetes extension's Cloud Explorer and Cluster Explorer.
 
 ### Interactive Wizards
 
@@ -56,50 +63,11 @@ The **Init** and **Create** commands feature multi-step wizards with:
 - Component configuration (CNI, CSI, GitOps engine, etc.)
 - Output path selection for generated files
 
-### Tree View
-
-The KSail sidebar shows:
-
-- **Clusters**: Lists clusters with name and provider (e.g., `my-cluster - Docker`)
-- **Status Indicators**: Visual icons show cluster state
-  - ✅ Green checkmark: Running
-  - 🚫 Red slash: Stopped
-  - 📦 Server icon: Unknown status
-- **Smart Context Menus**: Right-click shows relevant actions based on cluster state
-  - Running clusters: Stop, Delete, Connect
-  - Stopped clusters: Start, Delete, Connect
-- **Pending Clusters**: Spinner icon during cluster creation
-
-### Cluster Status View
-
-The **Cluster Status** panel in the sidebar shows real-time health information for the active cluster, polling every 10 seconds (configurable):
-
-- **Health Indicator**: Overall cluster health (Healthy / Degraded / Error / Unknown)
-- **Pod Summary**: Pods grouped by namespace with running/pending/failed counts; click a failed or pending pod to open its logs
-- **GitOps Reconciliation**: Flux or ArgoCD resource readiness (e.g., `Flux (3/3 ready)`)
-
-When no cluster is connected, the panel shows a prompt to create or start one.
-
-### Status Bar
-
-A compact cluster health item appears in the bottom status bar:
-
-| State      | Display                                  |
-|------------|------------------------------------------|
-| Healthy    | `✔ KSail: Healthy`                       |
-| Degraded   | `⚠ KSail: Degraded` (warning background) |
-| Error      | `✖ KSail: Error` (error background)      |
-| Unknown    | `? KSail: Unknown`                       |
-| No cluster | `? KSail: No Cluster`                    |
-
-Click the status bar item to manually refresh the cluster status.
-
 ## Extension Settings
 
-| Setting                       | Description                                        | Default |
-|-------------------------------|----------------------------------------------------|---------|
-| `ksail.binaryPath`            | Path to ksail binary                               | `ksail` |
-| `ksail.statusPollingInterval` | Cluster status polling interval in seconds (5–300) | `10`    |
+| Setting            | Description                  | Default |
+|--------------------|------------------------------|---------|
+| `ksail.binaryPath` | Path to ksail binary         | `ksail` |
 
 ## Development
 
@@ -137,15 +105,16 @@ vsce/
 │   │   ├── binary.ts         # KSail binary discovery and execution
 │   │   ├── kubectl.ts        # kubectl wrapper for cluster status queries
 │   │   └── index.ts          # Module exports
-│   ├── mcp/
-│   │   ├── serverProvider.ts # MCP server definition provider
-│   │   ├── schemaClient.ts   # MCP schema client for KSail
-│   │   └── index.ts          # Module exports
-│   └── views/
-│       ├── clustersView.ts       # Clusters tree view provider
-│       ├── clusterStatusView.ts  # Real-time cluster status tree view
-│       ├── statusBar.ts          # Status bar health indicator
-│       └── index.ts              # Module exports
+│   ├── kubernetes/
+│   │   ├── cloudProvider.ts          # Cloud Explorer tree provider (KSail clusters in Clouds view)
+│   │   ├── clusterExplorerContributor.ts  # Annotates KSail contexts in Cluster Explorer
+│   │   ├── clusterProvider.ts        # Create Cluster wizard (HTML-based)
+│   │   ├── contextNames.ts           # Shared helpers for parsing kubeconfig context names
+│   │   └── index.ts                  # Module exports
+│   └── mcp/
+│       ├── serverProvider.ts # MCP server definition provider
+│       ├── schemaClient.ts   # MCP schema client for KSail
+│       └── index.ts          # Module exports
 ├── dist/                     # Compiled output
 └── package.json              # Extension manifest
 ```
