@@ -311,7 +311,10 @@ func attemptInlineLogin(
 // getAuthStatusWithRetry calls GetAuthStatus with exponential backoff retries
 // for transient errors (e.g., "fetch failed" when the Copilot subprocess
 // hasn't fully initialized).
-func getAuthStatusWithRetry(ctx context.Context, client *copilot.Client) (*copilot.GetAuthStatusResponse, error) {
+func getAuthStatusWithRetry(
+	ctx context.Context,
+	client *copilot.Client,
+) (*copilot.GetAuthStatusResponse, error) {
 	var lastErr error
 
 	for attempt := 1; attempt <= authMaxRetries; attempt++ {
