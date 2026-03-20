@@ -243,6 +243,12 @@ func filterEnvVars(env []string, remove []string) []string {
 	return filtered
 }
 
+// authStatusChecker is the minimal interface required by getAuthStatusWithRetry,
+// allowing the concrete *copilot.Client to be swapped for a test double.
+type authStatusChecker interface {
+	GetAuthStatus(ctx context.Context) (*copilot.GetAuthStatusResponse, error)
+}
+
 // validateCopilotAuth checks authentication. If not authenticated, it attempts
 // an inline `copilot auth login` device flow before returning an error.
 func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, error) {
@@ -311,10 +317,7 @@ func attemptInlineLogin(
 // getAuthStatusWithRetry calls GetAuthStatus with exponential backoff retries
 // for transient errors (e.g., "fetch failed" when the Copilot subprocess
 // hasn't fully initialized).
-func getAuthStatusWithRetry(
-	ctx context.Context,
-	client *copilot.Client,
-) (*copilot.GetAuthStatusResponse, error) {
+func getAuthStatusWithRetry(ctx context.Context, client authStatusChecker) (*copilot.GetAuthStatusResponse, error) {
 	var lastErr error
 
 	for attempt := 1; attempt <= authMaxRetries; attempt++ {
