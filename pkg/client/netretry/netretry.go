@@ -35,6 +35,7 @@ func IsRetryable(err error) bool {
 		"i/o timeout", "TLS handshake timeout",
 		"unexpected EOF", "no such host",
 		"context deadline exceeded",
+		"fetch failed",
 	}
 
 	for _, pattern := range textPatterns {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v5/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	chatsvc "github.com/devantler-tech/ksail/v5/pkg/svc/chat"
@@ -35,6 +36,12 @@ const (
 	signalSleepDuration = 50 * time.Millisecond
 	// permissionTimeoutMinutes is the timeout for permission requests.
 	permissionTimeoutMinutes = 5
+	// authMaxRetries is the maximum number of retries for auth status checks.
+	authMaxRetries = 3
+	// authRetryBaseWait is the base wait duration for auth retry backoff.
+	authRetryBaseWait = 500 * time.Millisecond
+	// authRetryMaxWait is the maximum wait duration for auth retry backoff.
+	authRetryMaxWait = 4 * time.Second
 )
 
 // Sentinel errors for the chat command.
@@ -239,7 +246,7 @@ func filterEnvVars(env []string, remove []string) []string {
 // validateCopilotAuth checks authentication. If not authenticated, it attempts
 // an inline `copilot auth login` device flow before returning an error.
 func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, error) {
-	authStatus, err := client.GetAuthStatus(ctx)
+	authStatus, err := getAuthStatusWithRetry(ctx, client)
 	if err != nil {
 		return "", fmt.Errorf("failed to check authentication: %w", err)
 	}
@@ -284,7 +291,7 @@ func attemptInlineLogin(
 		return nil, fmt.Errorf("%w: login failed: %w", errNotAuthenticated, loginErr)
 	}
 
-	authStatus, err := client.GetAuthStatus(ctx)
+	authStatus, err := getAuthStatusWithRetry(ctx, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify authentication after login: %w", err)
 	}
@@ -299,6 +306,39 @@ func attemptInlineLogin(
 	}
 
 	return authStatus, nil
+}
+
+// getAuthStatusWithRetry calls GetAuthStatus with exponential backoff retries
+// for transient errors (e.g., "fetch failed" when the Copilot subprocess
+// hasn't fully initialized).
+func getAuthStatusWithRetry(ctx context.Context, client *copilot.Client) (*copilot.GetAuthStatusResponse, error) {
+	var lastErr error
+
+	for attempt := 1; attempt <= authMaxRetries; attempt++ {
+		authStatus, err := client.GetAuthStatus(ctx)
+		if err == nil {
+			return authStatus, nil
+		}
+
+		lastErr = err
+
+		if !netretry.IsRetryable(lastErr) || attempt == authMaxRetries {
+			break
+		}
+
+		delay := netretry.ExponentialDelay(attempt, authRetryBaseWait, authRetryMaxWait)
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+
+			return nil, fmt.Errorf("auth status check cancelled: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+
+	return nil, lastErr
 }
 
 // resolveCopilotCLIPath finds the Copilot CLI binary, checking:
