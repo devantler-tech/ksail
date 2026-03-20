@@ -9,7 +9,7 @@
 import * as vscode from "vscode";
 import { ClusterProviderV1 } from "vscode-kubernetes-tools-api";
 import { createCluster } from "../ksail/index.js";
-import { getEnumValues } from "../mcp/index.js";
+import { getSchemaEnumValues as resolveSchemaEnumValues } from "../mcp/index.js";
 
 /**
  * Fallback enum values when MCP schema is unavailable.
@@ -33,18 +33,10 @@ const STEPS = {
 } as const;
 
 /**
- * Get enum values from MCP schema with fallback
+ * Get enum values from MCP schema with fallback for cluster init properties
  */
-async function getSchemaEnumValues(propertyName: string): Promise<string[]> {
-  try {
-    const values = await getEnumValues(CLUSTER_INIT_TOOL, propertyName);
-    if (values && values.length > 0) {
-      return values;
-    }
-  } catch {
-    // MCP unavailable, use fallback
-  }
-  return FALLBACK_VALUES[propertyName] || [];
+function getSchemaEnumValues(propertyName: string): Promise<string[]> {
+  return resolveSchemaEnumValues(CLUSTER_INIT_TOOL, propertyName, FALLBACK_VALUES);
 }
 
 /**

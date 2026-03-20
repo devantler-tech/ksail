@@ -106,6 +106,25 @@ export function registerCommands(
     }
   }
 
+  /**
+   * Resolve a cluster name from a command target (Cloud Explorer or Cluster Explorer)
+   * or prompt the user to select one.
+   * Returns undefined if the user cancels the selection.
+   */
+  async function resolveClusterNameOrPrompt(
+    target: unknown | undefined,
+    promptMessage: string
+  ): Promise<string | undefined> {
+    const cloud = resolveCloudTarget(cloudExplorerAPI, target);
+    const clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
+    if (clusterName) {
+      return clusterName;
+    }
+    const clusters = await listClusters();
+    const selected = await promptClusterSelection(clusters, promptMessage);
+    return selected?.name;
+  }
+
   // Refresh command
   context.subscriptions.push(
     vscode.commands.registerCommand("ksail.refresh", () => {
@@ -202,19 +221,8 @@ export function registerCommands(
       "ksail.cluster.delete",
       async (target?: unknown) => {
         try {
-          const cloud = resolveCloudTarget(cloudExplorerAPI, target);
-          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
-
-          // If not from cloud or cluster explorer, prompt for cluster selection
-          if (!clusterName) {
-            const clusters = await listClusters();
-            const selected = await promptClusterSelection(
-              clusters,
-              "Select cluster to delete"
-            );
-            if (!selected) {return;}
-            clusterName = selected.name;
-          }
+          const clusterName = await resolveClusterNameOrPrompt(target, "Select cluster to delete");
+          if (!clusterName) {return;}
 
           // Confirm deletion
           const confirm = await vscode.window.showWarningMessage(
@@ -259,18 +267,8 @@ export function registerCommands(
       "ksail.cluster.start",
       async (target?: unknown) => {
         try {
-          const cloud = resolveCloudTarget(cloudExplorerAPI, target);
-          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
-
-          if (!clusterName) {
-            const clusters = await listClusters();
-            const selected = await promptClusterSelection(
-              clusters,
-              "Select cluster to start"
-            );
-            if (!selected) {return;}
-            clusterName = selected.name;
-          }
+          const clusterName = await resolveClusterNameOrPrompt(target, "Select cluster to start");
+          if (!clusterName) {return;}
 
           await executeWithProgress("Starting cluster...", async () => {
             await startCluster(clusterName, outputChannel);
@@ -292,18 +290,8 @@ export function registerCommands(
       "ksail.cluster.stop",
       async (target?: unknown) => {
         try {
-          const cloud = resolveCloudTarget(cloudExplorerAPI, target);
-          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
-
-          if (!clusterName) {
-            const clusters = await listClusters();
-            const selected = await promptClusterSelection(
-              clusters,
-              "Select cluster to stop"
-            );
-            if (!selected) {return;}
-            clusterName = selected.name;
-          }
+          const clusterName = await resolveClusterNameOrPrompt(target, "Select cluster to stop");
+          if (!clusterName) {return;}
 
           await executeWithProgress("Stopping cluster...", async () => {
             await stopCluster(clusterName, outputChannel);
@@ -431,18 +419,8 @@ export function registerCommands(
       "ksail.cluster.update",
       async (target?: unknown) => {
         try {
-          const cloud = resolveCloudTarget(cloudExplorerAPI, target);
-          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
-
-          if (!clusterName) {
-            const clusters = await listClusters();
-            const selected = await promptClusterSelection(
-              clusters,
-              "Select cluster to update"
-            );
-            if (!selected) {return;}
-            clusterName = selected.name;
-          }
+          const clusterName = await resolveClusterNameOrPrompt(target, "Select cluster to update");
+          if (!clusterName) {return;}
 
           await executeWithProgress("Updating cluster...", async () => {
             await updateCluster(clusterName, outputChannel);
@@ -464,18 +442,8 @@ export function registerCommands(
       "ksail.cluster.backup",
       async (target?: unknown) => {
         try {
-          const cloud = resolveCloudTarget(cloudExplorerAPI, target);
-          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
-
-          if (!clusterName) {
-            const clusters = await listClusters();
-            const selected = await promptClusterSelection(
-              clusters,
-              "Select cluster to backup"
-            );
-            if (!selected) {return;}
-            clusterName = selected.name;
-          }
+          const clusterName = await resolveClusterNameOrPrompt(target, "Select cluster to backup");
+          if (!clusterName) {return;}
 
           const saveUri = await vscode.window.showSaveDialog({
             defaultUri: vscode.Uri.file(`${clusterName}-backup.tar.gz`),
@@ -503,18 +471,8 @@ export function registerCommands(
       "ksail.cluster.restore",
       async (target?: unknown) => {
         try {
-          const cloud = resolveCloudTarget(cloudExplorerAPI, target);
-          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
-
-          if (!clusterName) {
-            const clusters = await listClusters();
-            const selected = await promptClusterSelection(
-              clusters,
-              "Select cluster to restore"
-            );
-            if (!selected) {return;}
-            clusterName = selected.name;
-          }
+          const clusterName = await resolveClusterNameOrPrompt(target, "Select cluster to restore");
+          if (!clusterName) {return;}
 
           // Confirm restore
           const confirm = await vscode.window.showWarningMessage(
