@@ -157,7 +157,32 @@ func convertDefaultValue(jsonSchemaType string, defaultStr string) any {
 		result := make([]any, 0, len(parts))
 
 		for _, part := range parts {
-			result = append(result, strings.TrimSpace(part))
+			elem := strings.TrimSpace(part)
+
+			// Try to infer a more specific scalar type for each element.
+			// Order: boolean -> integer -> number -> string fallback.
+			if elem == "true" {
+				result = append(result, true)
+				continue
+			}
+
+			if elem == "false" {
+				result = append(result, false)
+				continue
+			}
+
+			if intVal, err := strconv.ParseInt(elem, 10, 64); err == nil {
+				result = append(result, intVal)
+				continue
+			}
+
+			if floatVal, err := strconv.ParseFloat(elem, 64); err == nil {
+				result = append(result, floatVal)
+				continue
+			}
+
+			// Fallback to string if no other type matches.
+			result = append(result, elem)
 		}
 
 		return result
