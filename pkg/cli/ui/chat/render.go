@@ -139,7 +139,7 @@ func (m *Model) renderExitConfirmModal() string {
 	var content strings.Builder
 
 	content.WriteString(
-		mStyles.clipStyle.Render(mStyles.warningStyle.Render("Exit KSail chat?")) + "\n\n",
+		mStyles.clipStyle.Render(mStyles.warningStyle.Render(m.theme.ExitMessage)) + "\n\n",
 	)
 
 	if count := m.pendingPromptCount(); count > 0 {

@@ -34,6 +34,9 @@ type ThemeConfig struct {
 	// WelcomeMessage is shown in the viewport before any messages.
 	WelcomeMessage string
 
+	// ExitMessage is shown as the title in the exit confirmation modal (e.g., "Exit KSail chat?").
+	ExitMessage string
+
 	// GoodbyeMessage is shown when the user quits.
 	GoodbyeMessage string
 
@@ -172,6 +175,7 @@ func DefaultThemeConfig() ThemeConfig {
 		AssistantLabel: "▶ KSail",
 		Placeholder:    "Ask me anything about Kubernetes, KSail, or cluster management...",
 		WelcomeMessage: "Type a message below to start chatting with KSail AI.",
+		ExitMessage:    "Exit KSail chat?",
 		GoodbyeMessage: "Goodbye! Thanks for using KSail.",
 		SessionDir:     ".ksail",
 		PrimaryColor: lipgloss.AdaptiveColor{
