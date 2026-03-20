@@ -3,16 +3,13 @@
  */
 
 export {
-  createKSailCloudProvider,
-  KSailCloudTreeDataProvider,
-  type KSailCloudCluster,
+  KSailCloudTreeDataProvider, createKSailCloudProvider, type KSailCloudCluster
 } from "./cloudProvider.js";
 
 export { createKSailClusterProvider } from "./clusterProvider.js";
 
 export {
-  createKSailNodeContributor,
-  createKSailNodeUICustomizer,
-  showPodLogs,
-  disposePodLogChannels,
+  createKSailNodeUICustomizer, disposePodLogChannels, showPodLogs,
+  type KSailNodeUICustomizerResult
 } from "./clusterExplorerContributor.js";
+

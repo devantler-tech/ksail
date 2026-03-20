@@ -406,3 +406,101 @@ export async function initCluster(
     throw new Error(`Failed to init cluster: ${result.stderr || result.stdout}`);
   }
 }
+
+/**
+ * Update a cluster
+ */
+export async function updateCluster(
+  name?: string,
+  outputChannel?: vscode.OutputChannel
+): Promise<void> {
+  const args = ["cluster", "update"];
+
+  if (name) {
+    args.push("--name", name);
+  }
+
+  const result = await runKsailCommand(args, undefined, outputChannel);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to update cluster: ${result.stderr || result.stdout}`);
+  }
+}
+
+/**
+ * Get cluster info
+ */
+export async function clusterInfo(
+  contextName?: string,
+  outputChannel?: vscode.OutputChannel
+): Promise<string> {
+  const args = ["cluster", "info"];
+
+  if (contextName) {
+    args.push("--context", contextName);
+  }
+
+  const result = await runKsailCommand(args, undefined, outputChannel);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to get cluster info: ${result.stderr || result.stdout}`);
+  }
+
+  return result.stdout;
+}
+
+/**
+ * Backup a cluster
+ */
+export async function backupCluster(
+  name?: string,
+  outputChannel?: vscode.OutputChannel
+): Promise<void> {
+  const args = ["cluster", "backup"];
+
+  if (name) {
+    args.push("--name", name);
+  }
+
+  const result = await runKsailCommand(args, undefined, outputChannel);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to backup cluster: ${result.stderr || result.stdout}`);
+  }
+}
+
+/**
+ * Restore a cluster
+ */
+export async function restoreCluster(
+  name?: string,
+  outputChannel?: vscode.OutputChannel
+): Promise<void> {
+  const args = ["cluster", "restore"];
+
+  if (name) {
+    args.push("--name", name);
+  }
+
+  const result = await runKsailCommand(args, undefined, outputChannel);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to restore cluster: ${result.stderr || result.stdout}`);
+  }
+}
+
+/**
+ * Switch active kubeconfig context to a cluster
+ */
+export async function switchCluster(
+  name: string,
+  outputChannel?: vscode.OutputChannel
+): Promise<void> {
+  const args = ["cluster", "switch", name];
+
+  const result = await runKsailCommand(args, undefined, outputChannel);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to switch cluster: ${result.stderr || result.stdout}`);
+  }
+}

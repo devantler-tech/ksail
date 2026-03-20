@@ -19,7 +19,6 @@ import { isBinaryAvailable } from "./ksail/index.js";
 import {
   createKSailCloudProvider,
   createKSailClusterProvider,
-  createKSailNodeContributor,
   createKSailNodeUICustomizer,
   disposePodLogChannels,
   showPodLogs,
@@ -34,7 +33,6 @@ import {
 
 // Global extension state
 let outputChannel: vscode.OutputChannel;
-let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 /**
  * Extension activation
@@ -95,26 +93,16 @@ export async function activate(
     );
   }
 
-  // ── Kubernetes Extension: Cluster Explorer (status nodes + context annotation) ──
+  // ── Kubernetes Extension: Cluster Explorer (context annotation) ──
   const clusterExplorerAPI = await k8s.extension.clusterExplorer.v1_1;
-  if (clusterExplorerAPI.available && kubectlAPI.available) {
-    // Add KSail status nodes under active contexts
-    const contributor = createKSailNodeContributor(kubectlAPI.api, outputChannel);
-    clusterExplorerAPI.api.registerNodeContributor(contributor);
-    outputChannel.appendLine("Registered KSail status nodes in Cluster Explorer");
-
-    // Annotate KSail-managed contexts with "(KSail)" label
-    const customizer = createKSailNodeUICustomizer(outputChannel);
+  let invalidateClusterCache: (() => void) | undefined;
+  if (clusterExplorerAPI.available) {
+    // Annotate KSail-managed contexts with "(KSail · Running/Stopped)" label
+    const { customizer, invalidateCache } = createKSailNodeUICustomizer(outputChannel);
+    invalidateClusterCache = invalidateCache;
     clusterExplorerAPI.api.registerNodeUICustomizer(customizer);
     outputChannel.appendLine("Registered KSail context customizer");
-
-    // Periodic refresh for live status updates
-    const config = vscode.workspace.getConfiguration("ksail");
-    const pollingInterval = config.get<number>("statusPollingInterval", 10) * 1000;
-    pollTimer = setInterval(() => {
-      clusterExplorerAPI.api.refresh();
-    }, pollingInterval);
-  } else if (!clusterExplorerAPI.available) {
+  } else {
     outputChannel.appendLine(
       `Cluster Explorer API not available: ${clusterExplorerAPI.reason}`
     );
@@ -135,6 +123,9 @@ export async function activate(
     });
     clusterProviderAPI.api.register(ksailClusterProvider);
     outputChannel.appendLine("Registered KSail with Kubernetes Cluster Provider");
+    // Debug: list all registered providers to verify registration persists
+    const registeredProviders = clusterProviderAPI.api.list();
+    outputChannel.appendLine(`Registered cluster providers: ${JSON.stringify(registeredProviders.map(p => p.id))}`);
   } else {
     outputChannel.appendLine(
       `Cluster Provider API not available: ${clusterProviderAPI.reason}`
@@ -142,7 +133,7 @@ export async function activate(
   }
 
   // Register commands (cloud explorer context commands + standalone commands)
-  registerCommands(context, outputChannel, cloudTreeProvider, cloudExplorerAPI, clusterExplorerAPI.available ? clusterExplorerAPI : undefined);
+  registerCommands(context, outputChannel, cloudTreeProvider, cloudExplorerAPI, clusterExplorerAPI.available ? clusterExplorerAPI : undefined, invalidateClusterCache);
 
   // ── Kubernetes Extension: ConfigurationV1_1 (reactive events) ──
   const configAPI = await k8s.extension.configuration.v1_1;
@@ -234,10 +225,6 @@ export async function activate(
  */
 export function deactivate(): void {
   outputChannel?.appendLine("KSail extension deactivating...");
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = undefined;
-  }
   disposePodLogChannels();
 }
 

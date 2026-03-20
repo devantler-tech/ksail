@@ -10,6 +10,8 @@
 import * as vscode from "vscode";
 import type { API, CloudExplorerV1, ClusterExplorerV1_1 } from "vscode-kubernetes-tools-api";
 import {
+  backupCluster,
+  clusterInfo,
   createCluster,
   deleteCluster,
   detectDistribution,
@@ -17,8 +19,11 @@ import {
   getContextName,
   initCluster,
   listClusters,
+  restoreCluster,
   startCluster,
   stopCluster,
+  switchCluster,
+  updateCluster,
 } from "../ksail/index.js";
 import type { KSailCloudCluster, KSailCloudTreeDataProvider } from "../kubernetes/index.js";
 import {
@@ -27,6 +32,16 @@ import {
   runClusterCreateWizard,
   runClusterInitWizard,
 } from "./prompts.js";
+
+/**
+ * KSail context name patterns for each distribution
+ */
+const KSAIL_CONTEXT_PATTERNS: [RegExp, number][] = [
+  [/^kind-/, 5],      // Vanilla (Kind): "kind-{name}"
+  [/^k3d-/, 4],       // K3s (K3d): "k3d-{name}"
+  [/^admin@/, 6],     // Talos: "admin@{name}"
+  [/^vcluster_/, 9],  // VCluster: "vcluster_{name}"
+];
 
 /**
  * Resolve a Cloud Explorer command target to a KSail cluster.
@@ -46,6 +61,30 @@ function resolveCloudTarget(
 }
 
 /**
+ * Resolve a Cluster Explorer command target to a KSail cluster name.
+ * Returns the cluster name if the target is a KSail-managed context node.
+ */
+function resolveClusterExplorerTarget(
+  clusterExplorerAPI: API<ClusterExplorerV1_1> | undefined,
+  target?: unknown
+): string | undefined {
+  if (!clusterExplorerAPI?.available || !target) {
+    return undefined;
+  }
+  const node = clusterExplorerAPI.api.resolveCommandTarget(target);
+  if (!node || node.nodeType !== "context") {
+    return undefined;
+  }
+  const contextName = node.name;
+  for (const [pattern, prefixLen] of KSAIL_CONTEXT_PATTERNS) {
+    if (pattern.test(contextName)) {
+      return contextName.slice(prefixLen);
+    }
+  }
+  return undefined;
+}
+
+/**
  * Register all extension commands
  */
 export function registerCommands(
@@ -53,18 +92,25 @@ export function registerCommands(
   outputChannel: vscode.OutputChannel,
   cloudTreeProvider: KSailCloudTreeDataProvider,
   cloudExplorerAPI: API<CloudExplorerV1>,
-  clusterExplorerAPI?: API<ClusterExplorerV1_1>
+  clusterExplorerAPI?: API<ClusterExplorerV1_1>,
+  invalidateClusterCache?: () => void
 ): void {
+  /** Invalidate cached status and refresh all explorer views */
+  function refreshAllViews(): void {
+    invalidateClusterCache?.();
+    cloudTreeProvider.refresh();
+    if (cloudExplorerAPI.available) {
+      cloudExplorerAPI.api.refresh();
+    }
+    if (clusterExplorerAPI?.available) {
+      clusterExplorerAPI.api.refresh();
+    }
+  }
+
   // Refresh command
   context.subscriptions.push(
     vscode.commands.registerCommand("ksail.refresh", () => {
-      cloudTreeProvider.refresh();
-      if (cloudExplorerAPI.available) {
-        cloudExplorerAPI.api.refresh();
-      }
-      if (clusterExplorerAPI?.available) {
-        clusterExplorerAPI.api.refresh();
-      }
+      refreshAllViews();
       vscode.window.showInformationMessage("Refreshed KSail clusters");
     })
   );
@@ -93,7 +139,7 @@ export function registerCommands(
           vscode.window.showInformationMessage(
             `Cluster "${options.name}" initialized successfully`
           );
-          cloudTreeProvider.refresh();
+          refreshAllViews();
         });
       } catch (error) {
         showError("initialize cluster", error, outputChannel);
@@ -143,14 +189,7 @@ export function registerCommands(
             : "Cluster created successfully";
           vscode.window.showInformationMessage(successMessage);
         } finally {
-          // Refresh cloud explorer
-          cloudTreeProvider.refresh();
-          if (cloudExplorerAPI.available) {
-            cloudExplorerAPI.api.refresh();
-          }
-          if (clusterExplorerAPI?.available) {
-            clusterExplorerAPI.api.refresh();
-          }
+          refreshAllViews();
         }
       } catch (error) {
         showError("create cluster", error, outputChannel);
@@ -165,9 +204,9 @@ export function registerCommands(
       async (target?: unknown) => {
         try {
           const cloud = resolveCloudTarget(cloudExplorerAPI, target);
-          let clusterName = cloud?.name;
+          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
 
-          // If not from cloud explorer, prompt for cluster selection
+          // If not from cloud or cluster explorer, prompt for cluster selection
           if (!clusterName) {
             const clusters = await listClusters();
             const selected = await promptClusterSelection(
@@ -206,13 +245,7 @@ export function registerCommands(
             vscode.window.showInformationMessage(
               `Cluster "${clusterName}" deleted successfully`
             );
-            cloudTreeProvider.refresh();
-            if (cloudExplorerAPI.available) {
-              cloudExplorerAPI.api.refresh();
-            }
-            if (clusterExplorerAPI?.available) {
-              clusterExplorerAPI.api.refresh();
-            }
+            refreshAllViews();
           });
         } catch (error) {
           showError("delete cluster", error, outputChannel);
@@ -228,7 +261,7 @@ export function registerCommands(
       async (target?: unknown) => {
         try {
           const cloud = resolveCloudTarget(cloudExplorerAPI, target);
-          let clusterName = cloud?.name;
+          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
 
           if (!clusterName) {
             const clusters = await listClusters();
@@ -245,13 +278,7 @@ export function registerCommands(
             vscode.window.showInformationMessage(
               `Cluster "${clusterName}" started successfully`
             );
-            cloudTreeProvider.refresh();
-            if (cloudExplorerAPI.available) {
-              cloudExplorerAPI.api.refresh();
-            }
-            if (clusterExplorerAPI?.available) {
-              clusterExplorerAPI.api.refresh();
-            }
+            refreshAllViews();
           });
         } catch (error) {
           showError("start cluster", error, outputChannel);
@@ -267,7 +294,7 @@ export function registerCommands(
       async (target?: unknown) => {
         try {
           const cloud = resolveCloudTarget(cloudExplorerAPI, target);
-          let clusterName = cloud?.name;
+          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
 
           if (!clusterName) {
             const clusters = await listClusters();
@@ -284,13 +311,7 @@ export function registerCommands(
             vscode.window.showInformationMessage(
               `Cluster "${clusterName}" stopped successfully`
             );
-            cloudTreeProvider.refresh();
-            if (cloudExplorerAPI.available) {
-              cloudExplorerAPI.api.refresh();
-            }
-            if (clusterExplorerAPI?.available) {
-              clusterExplorerAPI.api.refresh();
-            }
+            refreshAllViews();
           });
         } catch (error) {
           showError("stop cluster", error, outputChannel);
@@ -315,7 +336,19 @@ export function registerCommands(
             const provider = cloud.provider;
             const distribution = await detectDistribution(clusterName, provider);
             contextName = getContextName(clusterName, distribution);
-          } else {
+          }
+
+          // If from cluster explorer, derive context from cluster name
+          if (!clusterName) {
+            const clusterExplorerName = resolveClusterExplorerTarget(clusterExplorerAPI, target);
+            if (clusterExplorerName) {
+              clusterName = clusterExplorerName;
+              const distribution = await detectDistribution(clusterName, "docker");
+              contextName = getContextName(clusterName, distribution);
+            }
+          }
+
+          if (!clusterName) {
             // Not from cloud explorer - check for ksail.yaml or prompt for cluster
             const ksailYamlExists = await vscode.workspace.findFiles("ksail.yaml", null, 1);
             if (ksailYamlExists.length === 0) {
@@ -351,6 +384,182 @@ export function registerCommands(
           }
         } catch (error) {
           showError("connect to cluster", error, outputChannel);
+        }
+      }
+    )
+  );
+
+  // Cluster info
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "ksail.cluster.info",
+      async (target?: unknown) => {
+        try {
+          const cloud = resolveCloudTarget(cloudExplorerAPI, target);
+          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
+          let provider = cloud?.provider;
+
+          if (!clusterName) {
+            const clusters = await listClusters();
+            const selected = await promptClusterSelection(
+              clusters,
+              "Select cluster to inspect"
+            );
+            if (!selected) {return;}
+            clusterName = selected.name;
+            provider = selected.provider;
+          }
+
+          await executeWithProgress("Getting cluster info...", async () => {
+            const distribution = await detectDistribution(clusterName, provider ?? "docker");
+            const contextName = getContextName(clusterName, distribution);
+            const info = await clusterInfo(contextName, outputChannel);
+            const infoChannel = vscode.window.createOutputChannel(`KSail: Cluster Info (${clusterName})`);
+            infoChannel.clear();
+            infoChannel.appendLine(info);
+            infoChannel.show();
+          });
+        } catch (error) {
+          showError("get cluster info", error, outputChannel);
+        }
+      }
+    )
+  );
+
+  // Cluster update
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "ksail.cluster.update",
+      async (target?: unknown) => {
+        try {
+          const cloud = resolveCloudTarget(cloudExplorerAPI, target);
+          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
+
+          if (!clusterName) {
+            const clusters = await listClusters();
+            const selected = await promptClusterSelection(
+              clusters,
+              "Select cluster to update"
+            );
+            if (!selected) {return;}
+            clusterName = selected.name;
+          }
+
+          await executeWithProgress("Updating cluster...", async () => {
+            await updateCluster(clusterName, outputChannel);
+            vscode.window.showInformationMessage(
+              `Cluster "${clusterName}" updated successfully`
+            );
+            refreshAllViews();
+          });
+        } catch (error) {
+          showError("update cluster", error, outputChannel);
+        }
+      }
+    )
+  );
+
+  // Cluster switch
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "ksail.cluster.switch",
+      async (target?: unknown) => {
+        try {
+          const cloud = resolveCloudTarget(cloudExplorerAPI, target);
+          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
+
+          if (!clusterName) {
+            const clusters = await listClusters();
+            const selected = await promptClusterSelection(
+              clusters,
+              "Select cluster to switch to"
+            );
+            if (!selected) {return;}
+            clusterName = selected.name;
+          }
+
+          await executeWithProgress("Switching cluster...", async () => {
+            await switchCluster(clusterName, outputChannel);
+            vscode.window.showInformationMessage(
+              `Switched to cluster "${clusterName}"`
+            );
+            refreshAllViews();
+          });
+        } catch (error) {
+          showError("switch cluster", error, outputChannel);
+        }
+      }
+    )
+  );
+
+  // Cluster backup
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "ksail.cluster.backup",
+      async (target?: unknown) => {
+        try {
+          const cloud = resolveCloudTarget(cloudExplorerAPI, target);
+          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
+
+          if (!clusterName) {
+            const clusters = await listClusters();
+            const selected = await promptClusterSelection(
+              clusters,
+              "Select cluster to backup"
+            );
+            if (!selected) {return;}
+            clusterName = selected.name;
+          }
+
+          await executeWithProgress("Backing up cluster...", async () => {
+            await backupCluster(clusterName, outputChannel);
+            vscode.window.showInformationMessage(
+              `Cluster "${clusterName}" backed up successfully`
+            );
+          });
+        } catch (error) {
+          showError("backup cluster", error, outputChannel);
+        }
+      }
+    )
+  );
+
+  // Cluster restore
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "ksail.cluster.restore",
+      async (target?: unknown) => {
+        try {
+          const cloud = resolveCloudTarget(cloudExplorerAPI, target);
+          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
+
+          if (!clusterName) {
+            const clusters = await listClusters();
+            const selected = await promptClusterSelection(
+              clusters,
+              "Select cluster to restore"
+            );
+            if (!selected) {return;}
+            clusterName = selected.name;
+          }
+
+          // Confirm restore
+          const confirm = await vscode.window.showWarningMessage(
+            `Are you sure you want to restore cluster "${clusterName}"? This will overwrite current state.`,
+            { modal: true },
+            "Restore"
+          );
+          if (confirm !== "Restore") {return;}
+
+          await executeWithProgress("Restoring cluster...", async () => {
+            await restoreCluster(clusterName, outputChannel);
+            vscode.window.showInformationMessage(
+              `Cluster "${clusterName}" restored successfully`
+            );
+            refreshAllViews();
+          });
+        } catch (error) {
+          showError("restore cluster", error, outputChannel);
         }
       }
     )

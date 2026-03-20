@@ -38,8 +38,7 @@
     "ms-kubernetes-tools.vscode-kubernetes-tools"
   ],
   "activationEvents": [
-    "workspaceContains:ksail.yaml",
-    "onCommand:ksail.cluster.init"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -91,6 +90,36 @@
         "title": "Connect to Cluster (K9s)",
         "category": "KSail",
         "icon": "$(terminal)"
+      },
+      {
+        "command": "ksail.cluster.info",
+        "title": "Show Cluster Info",
+        "category": "KSail",
+        "icon": "$(info)"
+      },
+      {
+        "command": "ksail.cluster.update",
+        "title": "Update Cluster",
+        "category": "KSail",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "ksail.cluster.switch",
+        "title": "Switch Cluster",
+        "category": "KSail",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "ksail.cluster.backup",
+        "title": "Backup Cluster",
+        "category": "KSail",
+        "icon": "$(save)"
+      },
+      {
+        "command": "ksail.cluster.restore",
+        "title": "Restore Cluster",
+        "category": "KSail",
+        "icon": "$(history)"
       },
       {
         "command": "ksail.showOutput",
@@ -152,7 +181,54 @@
           "when": "false"
         }
       ],
-      "view/title": []
+      "view/title": [],
+      "view/item/context": [
+        {
+          "command": "ksail.cluster.info",
+          "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "0@1"
+        },
+        {
+          "command": "ksail.cluster.start",
+          "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "1@1"
+        },
+        {
+          "command": "ksail.cluster.stop",
+          "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "1@2"
+        },
+        {
+          "command": "ksail.cluster.connect",
+          "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "1@3"
+        },
+        {
+          "command": "ksail.cluster.update",
+          "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "1@4"
+        },
+        {
+          "command": "ksail.cluster.switch",
+          "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "1@5"
+        },
+        {
+          "command": "ksail.cluster.backup",
+          "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "2@1"
+        },
+        {
+          "command": "ksail.cluster.restore",
+          "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "2@2"
+        },
+        {
+          "command": "ksail.cluster.delete",
+          "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "3@1"
+        }
+      ]
     }
   },
   "scripts": {
