@@ -1,5 +1,11 @@
 package chat
 
+import (
+	"context"
+
+	copilot "github.com/github/copilot-sdk/go"
+)
+
 // GetLoadChatConfig returns the loadChatConfig function for testing purposes.
 func GetLoadChatConfig() func() chatConfig {
 	return loadChatConfig
@@ -23,4 +29,12 @@ func GetResolveReasoningEffort() func(string, string) (string, error) {
 // GetFilterEnvVars returns the filterEnvVars function for testing.
 func GetFilterEnvVars() func([]string, []string) []string {
 	return filterEnvVars
+}
+
+// AuthStatusChecker is the exported alias for the authStatusChecker interface.
+type AuthStatusChecker = authStatusChecker
+
+// GetAuthStatusWithRetry exposes getAuthStatusWithRetry for white-box testing.
+func GetAuthStatusWithRetry(ctx context.Context, checker AuthStatusChecker) (*copilot.GetAuthStatusResponse, error) {
+	return getAuthStatusWithRetry(ctx, checker)
 }

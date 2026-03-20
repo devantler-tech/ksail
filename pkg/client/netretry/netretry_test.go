@@ -54,6 +54,9 @@ var (
 	errRedirectLimit = errors.New(
 		`get "https://ghcr.io/v2/token": stopped after 10 redirects`,
 	)
+	errFetchFailed = errors.New(
+		"auth status check failed: fetch failed",
+	)
 )
 
 func TestIsRetryable(t *testing.T) {
@@ -95,6 +98,8 @@ func TestIsRetryable(t *testing.T) {
 		{name: "context deadline exceeded", err: errContextDeadline, expected: true},
 		// HTTP redirect limit errors.
 		{name: "stopped after redirects", err: errRedirectLimit, expected: true},
+		// Copilot auth "fetch failed" transient errors.
+		{name: "fetch failed", err: errFetchFailed, expected: true},
 	}
 
 	for _, tt := range tests {
