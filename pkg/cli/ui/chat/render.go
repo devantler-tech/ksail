@@ -188,8 +188,8 @@ func (m *Model) renderFooter() string {
 }
 
 // buildModelStatusText renders the model indicator for the status bar.
-// Shows "auto → resolved-model (0.9x)" when in auto mode with a resolved model,
-// "auto (-10%)" when not yet resolved, or the explicit model ID otherwise.
+// Shows "auto → resolved-model (Nx)" when in auto mode with a resolved model,
+// "auto" when not yet resolved, or the explicit model ID otherwise.
 func (m *Model) buildModelStatusText() string {
 	modelStyle := lipgloss.NewStyle().Foreground(m.theme.DimColor)
 
@@ -197,15 +197,13 @@ func (m *Model) buildModelStatusText() string {
 	case m.isAutoMode():
 		resolved := m.resolvedAutoModel()
 		if resolved == "" {
-			return modelStyle.Render(modelAuto + " (-10%)")
+			return modelStyle.Render(modelAuto)
 		}
 
 		mult := m.findModelMultiplier(resolved)
 		if mult > 0 {
-			discounted := mult * autoDiscountFactor
-
 			return modelStyle.Render(
-				fmt.Sprintf("%s \u2192 %s (%.1fx)", modelAuto, resolved, discounted),
+				fmt.Sprintf("%s \u2192 %s (%gx)", modelAuto, resolved, mult),
 			)
 		}
 

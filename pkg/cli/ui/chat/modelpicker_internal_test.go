@@ -331,7 +331,17 @@ func TestBuildModelStatusText(t *testing.T) {
 			models: []copilot.ModelInfo{
 				{ID: "gpt-4o", Billing: &copilot.ModelBilling{Multiplier: 1.0}},
 			},
-			expected: "gpt-4o",
+			expected: "gpt-4o (1x)",
+		},
+		{
+			name:         "auto mode resolved with fractional multiplier",
+			configModel:  "",
+			currentModel: "claude-haiku-4.5",
+			lastUsage:    "",
+			models: []copilot.ModelInfo{
+				{ID: "claude-haiku-4.5", Billing: &copilot.ModelBilling{Multiplier: 0.33}},
+			},
+			expected: "claude-haiku-4.5 (0.33x)",
 		},
 		{
 			name:         "explicit model",

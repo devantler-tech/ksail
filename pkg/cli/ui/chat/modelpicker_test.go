@@ -176,7 +176,7 @@ func TestModelPickerAutoResolvedDisplay(t *testing.T) {
 
 	output := model.View()
 
-	// Should show "auto (gpt-4o · 0.9x)" with resolved model and discount
+	// Should show "auto (gpt-4o · 1x)" with resolved model and multiplier
 	if !strings.Contains(output, "auto") {
 		t.Error("expected 'auto' in view when showing resolved model")
 	}
