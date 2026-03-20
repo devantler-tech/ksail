@@ -6,6 +6,7 @@ package chat_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -995,7 +996,8 @@ func TestGetAuthStatusWithRetryRetriesOnRetryableError(t *testing.T) {
 }
 
 // TestGetAuthStatusWithRetryStopsOnNonRetryableError verifies that a permanent
-// error (e.g., unauthorized) is not retried and the error is returned immediately.
+// error (e.g., unauthorized) is not retried and the error is returned immediately,
+// wrapped with attempt context.
 func TestGetAuthStatusWithRetryStopsOnNonRetryableError(t *testing.T) {
 	t.Parallel()
 
@@ -1014,11 +1016,52 @@ func TestGetAuthStatusWithRetryStopsOnNonRetryableError(t *testing.T) {
 		t.Errorf("Expected unauthorized error, got: %v", err)
 	}
 
+	if !strings.Contains(err.Error(), "non-retryable") {
+		t.Errorf("Expected error to mention non-retryable, got: %v", err)
+	}
+
 	if mock.callCount.Load() != 1 {
 		t.Errorf(
 			"Expected exactly 1 call (no retry on non-retryable), got %d",
 			mock.callCount.Load(),
 		)
+	}
+}
+
+// TestGetAuthStatusWithRetryExhaustedRetries verifies that when all retries are
+// exhausted the returned error is wrapped with attempt count and max retries context.
+func TestGetAuthStatusWithRetryExhaustedRetries(t *testing.T) {
+	t.Parallel()
+
+	// Build authMaxRetries responses, all retryable ("fetch failed").
+	responses := make([]mockAuthResponse, chat.AuthMaxRetries)
+	for i := range responses {
+		responses[i] = mockAuthResponse{status: nil, err: errors.New("auth check: fetch failed")}
+	}
+
+	mock := &mockAuthChecker{responses: responses}
+
+	const (
+		tinyBase = 1 * time.Millisecond
+		tinyMax  = 2 * time.Millisecond
+	)
+
+	_, err := chat.GetAuthStatusWithRetryOpts(context.Background(), mock, tinyBase, tinyMax)
+	if err == nil {
+		t.Fatal("Expected error after exhausting retries")
+	}
+
+	if !strings.Contains(err.Error(), "fetch failed") {
+		t.Errorf("Expected original error preserved, got: %v", err)
+	}
+
+	expectedMsg := fmt.Sprintf("auth status check failed after %d/%d attempts", chat.AuthMaxRetries, chat.AuthMaxRetries)
+	if !strings.Contains(err.Error(), expectedMsg) {
+		t.Errorf("Expected error to contain %q, got: %v", expectedMsg, err)
+	}
+
+	if int(mock.callCount.Load()) != chat.AuthMaxRetries {
+		t.Errorf("Expected exactly %d calls, got %d", chat.AuthMaxRetries, mock.callCount.Load())
 	}
 }
 
