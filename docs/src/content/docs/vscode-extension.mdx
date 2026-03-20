@@ -3,7 +3,7 @@ title: VSCode Extension
 description: Manage Kubernetes clusters directly from Visual Studio Code with the KSail extension
 ---
 
-The KSail VSCode extension brings cluster management into your editor. It provides a sidebar with live cluster status, interactive wizards for cluster operations, a command palette, keyboard shortcuts, and a built-in MCP server for AI assistants.
+The KSail VSCode extension brings cluster management into your editor. It integrates with the [VS Code Kubernetes extension](https://marketplace.visualstudio.com/items?itemName=ms-kubernetes-tools.vscode-kubernetes-tools) to surface KSail clusters in the Cloud Explorer and Cluster Explorer, provides interactive wizards for cluster operations, a command palette with keyboard shortcuts, and a built-in MCP server for AI assistants.
 
 ## Installation
 
@@ -13,57 +13,32 @@ See the [Installation Guide — VSCode Extension](/installation/#vscode-extensio
 
 - [KSail CLI](/installation/) installed and available in PATH
 - Docker running (for local cluster operations)
+- [VS Code Kubernetes Tools](https://marketplace.visualstudio.com/items?itemName=ms-kubernetes-tools.vscode-kubernetes-tools) extension (installed automatically as a dependency)
 - K9s (optional — for `Connect to Cluster` command)
 
 ## Features
 
-### Clusters View
+### Cloud Explorer Integration
 
-The KSail sidebar panel lists your clusters with provider info and status indicators:
+KSail clusters appear as top-level entries under **KSail** in the Kubernetes extension's **Clouds** view. Each cluster shows its name, provider, and status icon. Right-click a cluster for context-sensitive actions:
 
-| Icon | Meaning |
-|------|---------|
-| Green pass icon (`pass`) | Cluster is running |
-| Red slash icon (`circle-slash`) | Cluster is stopped |
-| Server icon (`server`) | Status unknown |
-| Spinning loader (`loading~spin`) | Cluster is being created |
+- **All clusters:** Info, Start, Stop, Connect, Update, Switch, Backup, Restore, Delete
+- **From the KSail cloud node context menu:** Create Cluster
 
-Right-click a cluster for context-sensitive actions:
+### Cluster Explorer Contributor
 
-- **All clusters:** Connect to Cluster (K9s), Delete
-- **Stopped / Unknown clusters:** + Start
-- **Running clusters:** + Stop
+In the Kubernetes extension's **Cluster Explorer**, KSail-managed contexts are annotated with `(KSail)` and a status label (Running / Stopped / Unknown). Right-click a KSail context for the same cluster lifecycle actions.
 
-### Cluster Status View
+### Cluster Provider (Create Cluster Wizard)
 
-The **Cluster Status** panel polls the active cluster every 10 seconds (configurable) and shows:
-
-- **Health indicator:** Healthy / Degraded / Error / Unknown
-- **Pod summary:** Pods grouped by namespace with running/pending/failed counts; click a failed or pending pod to view its logs
-- **GitOps reconciliation:** Flux or ArgoCD resource readiness (e.g., `Flux (3/3 ready)`)
-
-When no cluster is connected, the panel prompts you to create or start one.
-
-### Status Bar
-
-A compact health indicator appears in the bottom status bar:
-
-| State | Display |
-|-------|---------|
-| Healthy | `✔ KSail: Healthy` |
-| Degraded | `⚠ KSail: Degraded` (warning background) |
-| Error | `✖ KSail: Error` (error background) |
-| Unknown | `? KSail: Unknown` |
-| No cluster | `? KSail: No Cluster` |
-
-Click the status bar item to manually refresh cluster status.
+Selecting **Create Cluster → KSail** in the Kubernetes extension opens an HTML-based wizard. Configuration options (distribution, provider, CNI, GitOps engine) are fetched at runtime from the KSail MCP schema so they stay in sync with the installed CLI version. Built-in fallback values are used when the MCP server is unreachable.
 
 ### Interactive Wizards
 
-The **Init** and **Create** commands launch multi-step wizards. Option lists are fetched at runtime from the KSail MCP schema, so they automatically stay in sync with the installed CLI version. If the MCP server is unreachable, a built-in fallback set is used:
+The **Init** and **Create** commands launch multi-step wizards with:
 
-- Distribution: Vanilla, K3s, Talos *(VCluster available when MCP schema is reachable)*
-- Provider: Docker, Hetzner *(Omni available when MCP schema is reachable)*
+- Distribution selection: Vanilla, K3s, Talos, VCluster
+- Provider selection: Docker, Hetzner, Omni
 - Component configuration (CNI, CSI, GitOps engine, etc.)
 - Output path selection for generated files
 
@@ -79,12 +54,16 @@ Access all commands via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
 |---------|-------------|---------|
 | `KSail: Init Cluster` | Initialize a new `ksail.yaml` configuration | `Cmd+Shift+K I` |
 | `KSail: Create Cluster` | Create and start a cluster | `Cmd+Shift+K C` |
-| `KSail: Delete Cluster` | Delete the cluster | `Cmd+Shift+K D` |
+| `KSail: Update Cluster` | Update a running cluster | — |
 | `KSail: Start Cluster` | Start an existing cluster | — |
 | `KSail: Stop Cluster` | Stop a running cluster | — |
+| `KSail: Switch Cluster` | Switch the active kubeconfig context | — |
+| `KSail: Backup Cluster` | Backup cluster resources | — |
+| `KSail: Restore Cluster` | Restore cluster resources from a backup | — |
+| `KSail: Delete Cluster` | Delete the cluster | `Cmd+Shift+K D` |
 | `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI | — |
-| `KSail: Refresh Clusters` | Refresh the clusters tree view | — |
-| `KSail: Refresh Cluster Status` | Manually refresh cluster status | — |
+| `KSail: Show KSail Info` | Show cluster info via KSail CLI | — |
+| `KSail: Refresh Clusters` | Refresh the Cloud Explorer and Cluster Explorer views (and clear cached status) | — |
 | `KSail: Show Output` | Open the KSail output channel | — |
 
 ## Settings
@@ -94,7 +73,6 @@ Configure in VSCode settings (`Cmd+,` / `Ctrl+,`) or `settings.json`:
 | Setting | Description | Default |
 |---------|-------------|---------|
 | `ksail.binaryPath` | Path to the KSail binary | `ksail` |
-| `ksail.statusPollingInterval` | Cluster status polling interval in seconds (5–300) | `10` |
 
 ## Development
 
