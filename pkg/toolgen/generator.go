@@ -47,7 +47,7 @@ func generateToolsRecursive(cmd *cobra.Command, tools *[]ToolDefinition, opts To
 
 // hasExcludeAnnotation checks if a command has the explicit exclude annotation.
 func hasExcludeAnnotation(cmd *cobra.Command) bool {
-	return cmd.Annotations != nil && cmd.Annotations[AnnotationExclude] == "true"
+	return cmd.Annotations != nil && cmd.Annotations[AnnotationExclude] == annotationValueTrue
 }
 
 // processCommandAndChildren traverses children and adds the command as a tool if applicable.

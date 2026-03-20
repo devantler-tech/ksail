@@ -133,6 +133,11 @@ func standardTypeTestCases() []standardTypeTest {
 				"default":     "default",
 			},
 		},
+	}
+}
+
+func sliceTypeTestCases() []standardTypeTest {
+	return []standardTypeTest{
 		{
 			name:     "string slice flag",
 			setup:    func(cmd *cobra.Command) { cmd.Flags().StringSlice("tags", []string{}, "Tag values") },
@@ -187,6 +192,25 @@ func TestBuildParameterSchema_StandardTypes(t *testing.T) {
 	t.Parallel()
 
 	for _, testCase := range standardTypeTestCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := newTestCmd()
+			testCase.setup(cmd)
+
+			properties := generateToolProperties(t, cmd)
+
+			propMap, propOK := properties[testCase.flagName].(map[string]any)
+
+			require.True(t, propOK, "property %q should be a map", testCase.flagName)
+
+			for field, expected := range testCase.expected {
+				assertPropertyField(t, propMap, field, expected)
+			}
+		})
+	}
+
+	for _, testCase := range sliceTypeTestCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 

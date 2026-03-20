@@ -45,8 +45,11 @@ const (
 // Parameter key for positional arguments.
 const argsKey = "args"
 
-// Permission annotation value.
-const permissionWrite = "write"
+// Annotation value constants.
+const (
+	annotationValueTrue = "true"
+	permissionWrite     = "write"
+)
 
 // Sentinel errors for tool execution.
 var (
