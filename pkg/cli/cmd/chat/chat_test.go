@@ -1,3 +1,6 @@
+// Package chat_test provides unit tests for the chat command package.
+//
+//nolint:err113 // Tests use dynamic errors for mock behaviors
 package chat_test
 
 import (
@@ -970,7 +973,10 @@ func TestGetAuthStatusWithRetryRetriesOnRetryableError(t *testing.T) {
 	mock := &mockAuthChecker{
 		responses: []mockAuthResponse{
 			{status: nil, err: errors.New("auth check: fetch failed")},
-			{status: &copilot.GetAuthStatusResponse{IsAuthenticated: true, Login: &login}, err: nil},
+			{
+				status: &copilot.GetAuthStatusResponse{IsAuthenticated: true, Login: &login},
+				err:    nil,
+			},
 		},
 	}
 
@@ -1009,7 +1015,10 @@ func TestGetAuthStatusWithRetryStopsOnNonRetryableError(t *testing.T) {
 	}
 
 	if mock.callCount.Load() != 1 {
-		t.Errorf("Expected exactly 1 call (no retry on non-retryable), got %d", mock.callCount.Load())
+		t.Errorf(
+			"Expected exactly 1 call (no retry on non-retryable), got %d",
+			mock.callCount.Load(),
+		)
 	}
 }
 
@@ -1022,6 +1031,7 @@ func TestGetAuthStatusWithRetryContextCancellation(t *testing.T) {
 
 	// Cancel the context immediately after the first call returns.
 	var called atomic.Bool
+
 	mock := &mockAuthChecker{
 		responses: []mockAuthResponse{
 			{status: nil, err: errors.New("fetch failed")},
@@ -1033,8 +1043,10 @@ func TestGetAuthStatusWithRetryContextCancellation(t *testing.T) {
 
 	// Use tiny backoff durations so the timer fires well before any CI timeout,
 	// and cancellation can be detected quickly without relying on wall-clock thresholds.
-	const tinyBase = 5 * time.Millisecond
-	const tinyMax = 10 * time.Millisecond
+	const (
+		tinyBase = 5 * time.Millisecond
+		tinyMax  = 10 * time.Millisecond
+	)
 
 	start := time.Now()
 	_, err := chat.GetAuthStatusWithRetryOpts(ctx, cancellingMock, tinyBase, tinyMax)
@@ -1061,12 +1073,14 @@ type cancelOnCallMock struct {
 	called *atomic.Bool
 }
 
-func (m *cancelOnCallMock) GetAuthStatus(ctx context.Context) (*copilot.GetAuthStatusResponse, error) {
+func (m *cancelOnCallMock) GetAuthStatus(
+	ctx context.Context,
+) (*copilot.GetAuthStatusResponse, error) {
 	resp, err := m.inner.GetAuthStatus(ctx)
 	// Cancel after the first call so the retry wait is interrupted.
 	if m.called.CompareAndSwap(false, true) {
 		m.cancel()
 	}
 
-	return resp, err
+	return resp, err //nolint:wrapcheck // Mock function, wrapping not needed
 }
