@@ -331,7 +331,10 @@ func getAuthStatusWithRetryOpts(
 	client authStatusChecker,
 	baseWait, maxWait time.Duration,
 ) (*copilot.GetAuthStatusResponse, error) {
-	var lastErr error
+	var (
+		lastErr     error
+		lastAttempt int
+	)
 
 	for attempt := 1; attempt <= authMaxRetries; attempt++ {
 		authStatus, err := client.GetAuthStatus(ctx)
@@ -340,6 +343,7 @@ func getAuthStatusWithRetryOpts(
 		}
 
 		lastErr = err
+		lastAttempt = attempt
 
 		if !netretry.IsRetryable(lastErr) || attempt == authMaxRetries {
 			break
@@ -359,7 +363,11 @@ func getAuthStatusWithRetryOpts(
 		}
 	}
 
-	return nil, lastErr
+	if !netretry.IsRetryable(lastErr) {
+		return nil, fmt.Errorf("auth status check failed on attempt %d/%d (non-retryable): %w", lastAttempt, authMaxRetries, lastErr)
+	}
+
+	return nil, fmt.Errorf("auth status check failed after %d/%d attempts: %w", lastAttempt, authMaxRetries, lastErr)
 }
 
 // resolveCopilotCLIPath finds the Copilot CLI binary, checking:

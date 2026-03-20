@@ -32,6 +32,9 @@ func GetFilterEnvVars() func([]string, []string) []string {
 	return filterEnvVars
 }
 
+// AuthMaxRetries exports the authMaxRetries constant for testing.
+const AuthMaxRetries = authMaxRetries
+
 // AuthStatusChecker is the exported alias for the authStatusChecker interface.
 type AuthStatusChecker = authStatusChecker
 
