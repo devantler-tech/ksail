@@ -202,8 +202,10 @@ func (m *Model) buildModelStatusText() string {
 
 		mult := m.findModelMultiplier(resolved)
 		if mult > 0 {
+			multStr := strings.TrimRight(fmt.Sprintf("%.2f", mult), "0")
+			multStr = strings.TrimRight(multStr, ".")
 			return modelStyle.Render(
-				fmt.Sprintf("%s \u2192 %s (%gx)", modelAuto, resolved, mult),
+				fmt.Sprintf("%s \u2192 %s (%sx)", modelAuto, resolved, multStr),
 			)
 		}
 
