@@ -1,7 +1,5 @@
 // Package chat_test provides unit tests for the chat command package.
-//
-//nolint:err113 // Tests use dynamic errors for mock behaviors
-package chat_test
+package chat_test //nolint:err113 // Tests use dynamic errors for mock behaviors
 
 import (
 	"context"
