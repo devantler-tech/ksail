@@ -21,22 +21,6 @@ K3s and Talos × Hetzner enable LoadBalancer by default; Vanilla and Talos × Do
 
 ## Platform-Specific Configuration
 
-All platforms accept the same LoadBalancer service manifest:
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-app
-spec:
-  type: LoadBalancer
-  ports:
-    - port: 80
-      targetPort: 8080
-  selector:
-    app: my-app
-```
-
 ### Vanilla (Kind) on Docker
 
 **Implementation:** Cloud Provider KIND
@@ -69,21 +53,10 @@ spec:
 
 Cloud Provider KIND runs as a single Docker container named `ksail-cloud-provider-kind` on the `kind` network, mounting the Docker socket to watch for `type: LoadBalancer` services. For each service it creates a dedicated `cpk-<namespace>-<name>` container that routes traffic from an IP on the `kind` network bridge subnet (typically `172.18.0.0/16`) to the service's pods. `ksail cluster delete` removes the controller and all `cpk-*` containers.
 
-#### Verification
-
 ```bash
-# Verify the controller is running
-docker ps --filter name=ksail-cloud-provider-kind
-# CONTAINER ID   IMAGE                                          STATUS
-# abc123         registry.k8s.io/cloud-provider-kind/...        Up 5 minutes
-
-# Check service external IP
-kubectl get svc my-app
-# NAME     TYPE           CLUSTER-IP    EXTERNAL-IP    PORT(S)        AGE
-# my-app   LoadBalancer   10.96.1.10    172.18.0.100   80:30123/TCP   10s
-
-# Test connectivity from host
-curl http://172.18.0.100
+docker ps --filter name=ksail-cloud-provider-kind  # verify controller is running
+kubectl get svc my-app                             # get external IP
+curl http://172.18.0.100                           # test connectivity (replace IP)
 ```
 
 ### K3s on Docker
@@ -95,12 +68,6 @@ K3s includes [ServiceLB](https://docs.k3s.io/networking/networking-services#serv
 ```bash
 ksail cluster init --name my-cluster --distribution K3s
 ksail cluster create
-```
-
-```bash
-kubectl get svc my-app
-# NAME     TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)        AGE
-# my-app   LoadBalancer   10.43.123.45   192.168.1.100   80:30456/TCP   5s
 ```
 
 #### Disabling LoadBalancer Support
@@ -159,14 +126,6 @@ KSail configures MetalLB with a default IP pool of `172.18.255.200–172.18.255.
 #### How It Works
 
 KSail installs MetalLB via Helm, configures an `IPAddressPool` and `L2Advertisement` automatically, and MetalLB assigns IPs from the pool via ARP on the Docker network.
-
-#### Example
-
-```bash
-kubectl get svc my-app
-# NAME     TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)        AGE
-# my-app   LoadBalancer   10.96.123.200   172.18.255.200   80:31234/TCP   8s
-```
 
 #### Custom IP Pool
 
@@ -229,10 +188,7 @@ spec:
 The Hetzner CCM provisions a real cloud load balancer with a public IP in 30–60 seconds (subject to Hetzner billing).
 
 ```bash
-# Watch for EXTERNAL-IP assignment (takes 30–60 seconds)
-kubectl get svc my-app -w
-# NAME     TYPE           CLUSTER-IP      EXTERNAL-IP       PORT(S)        AGE
-# my-app   LoadBalancer   10.32.45.100    135.181.10.50     80:32100/TCP   45s
+kubectl get svc my-app -w  # EXTERNAL-IP appears after 30–60 seconds
 ```
 
 #### Annotations
@@ -240,28 +196,14 @@ kubectl get svc my-app -w
 You can customize Hetzner Load Balancer behavior using annotations:
 
 ```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-app
-  annotations:
-    load-balancer.hetzner.cloud/location: nbg1
-    load-balancer.hetzner.cloud/use-private-ip: "true"
-    load-balancer.hetzner.cloud/health-check-interval: "15s"
-spec:
-  type: LoadBalancer
-  ports:
-    - port: 80
-      targetPort: 8080
-  selector:
-    app: my-app
+# Add to your Service metadata:
+annotations:
+  load-balancer.hetzner.cloud/location: nbg1
+  load-balancer.hetzner.cloud/use-private-ip: "true"
+  load-balancer.hetzner.cloud/health-check-interval: "15s"
 ```
 
 See the [Hetzner CCM documentation](https://github.com/hetznercloud/hcloud-cloud-controller-manager#service) for all available annotations.
-
-## Migration from NodePort
-
-Change `type: NodePort` to `type: LoadBalancer`, remove the `nodePort` field, enable LoadBalancer if needed (see above), then wait for an external IP: `kubectl get svc my-app -w`.
 
 ## Troubleshooting
 
@@ -272,18 +214,11 @@ Change `type: NodePort` to `type: LoadBalancer`, remove the `nodePort` field, en
 **Diagnosis:**
 
 ```bash
-# 1. Check LoadBalancer is enabled in ksail.yaml
-grep -A 5 loadBalancer ksail.yaml
-
-# 2. Verify the controller is running:
-#    Vanilla:  docker ps | grep ksail-cloud-provider-kind
-#    Talos:    kubectl get pods -n metallb-system
-#    Hetzner:  kubectl get pods -n kube-system | grep hcloud
-
-# 3. Check controller logs:
-#    Vanilla:  docker logs ksail-cloud-provider-kind
-#    Talos:    kubectl logs -n metallb-system -l app.kubernetes.io/component=controller
-#    Hetzner:  kubectl logs -n kube-system -l app=hcloud-cloud-controller-manager
+# Verify LoadBalancer is enabled:
+grep loadBalancer ksail.yaml
+# Vanilla:  docker logs ksail-cloud-provider-kind
+# Talos:    kubectl logs -n metallb-system -l app.kubernetes.io/component=controller
+# Hetzner:  kubectl logs -n kube-system -l app=hcloud-cloud-controller-manager
 ```
 
 **Common fixes:** LoadBalancer disabled → re-init with `--load-balancer Enabled`. Cloud Provider KIND not running → delete and recreate cluster. MetalLB IP pool exhausted → expand the pool (see below). Hetzner → ensure `HCLOUD_TOKEN` is set during cluster creation.
