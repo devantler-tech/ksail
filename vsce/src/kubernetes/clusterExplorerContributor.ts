@@ -9,18 +9,9 @@ import * as vscode from "vscode";
 import type { ClusterExplorerV1_1, KubectlV1 } from "vscode-kubernetes-tools-api";
 import { detectClusterStatus, listClusters, type ClusterStatus } from "../ksail/clusters.js";
 import { getPodLogs } from "../ksail/kubectl.js";
+import { isKSailContext, parseClusterName } from "./contextNames.js";
 
 // ── NodeUICustomizer ─────────────────────────────────────────────────
-
-/**
- * KSail context name patterns for each distribution
- */
-const KSAIL_CONTEXT_PATTERNS = [
-  /^kind-/,              // Vanilla (Kind)
-  /^k3d-/,               // K3s (K3d)
-  /^admin@/,             // Talos
-  /^vcluster-docker_/,   // VCluster
-];
 
 /**
  * Result of creating a NodeUICustomizer
@@ -94,23 +85,14 @@ export function createKSailNodeUICustomizer(
 
       const contextName = node.name;
 
-      // Quick pattern check first
-      const matchesPattern = KSAIL_CONTEXT_PATTERNS.some((p) => p.test(contextName));
-      if (!matchesPattern) {
+      // Quick pattern check using shared helper
+      if (!isKSailContext(contextName)) {
         return;
       }
 
-      // Extract cluster name from context name
-      let clusterName: string;
-      if (contextName.startsWith("kind-")) {
-        clusterName = contextName.slice(5);
-      } else if (contextName.startsWith("k3d-")) {
-        clusterName = contextName.slice(4);
-      } else if (contextName.startsWith("admin@")) {
-        clusterName = contextName.slice(6);
-      } else if (contextName.startsWith("vcluster-docker_")) {
-        clusterName = contextName.slice(17);
-      } else {
+      // Extract cluster name using shared helper
+      const clusterName = parseClusterName(contextName);
+      if (!clusterName) {
         return;
       }
 

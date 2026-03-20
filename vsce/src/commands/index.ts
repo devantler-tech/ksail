@@ -26,22 +26,13 @@ import {
   updateCluster,
 } from "../ksail/index.js";
 import type { KSailCloudCluster, KSailCloudTreeDataProvider } from "../kubernetes/index.js";
+import { parseClusterName } from "../kubernetes/contextNames.js";
 import {
   promptClusterSelection,
   promptYesNo,
   runClusterCreateWizard,
   runClusterInitWizard,
 } from "./prompts.js";
-
-/**
- * KSail context name patterns for each distribution
- */
-const KSAIL_CONTEXT_PATTERNS: [RegExp, number][] = [
-  [/^kind-/, 5],              // Vanilla (Kind): "kind-{name}"
-  [/^k3d-/, 4],               // K3s (K3d): "k3d-{name}"
-  [/^admin@/, 6],             // Talos: "admin@{name}"
-  [/^vcluster-docker_/, 17],  // VCluster: "vcluster-docker_{name}"
-];
 
 /**
  * Resolve a Cloud Explorer command target to a KSail cluster.
@@ -75,13 +66,7 @@ function resolveClusterExplorerTarget(
   if (!node || node.nodeType !== "context") {
     return undefined;
   }
-  const contextName = node.name;
-  for (const [pattern, prefixLen] of KSAIL_CONTEXT_PATTERNS) {
-    if (pattern.test(contextName)) {
-      return contextName.slice(prefixLen);
-    }
-  }
-  return undefined;
+  return parseClusterName(node.name);
 }
 
 /**
@@ -379,6 +364,10 @@ export function registerCommands(
     )
   );
 
+  // Reusable output channel for cluster info display
+  const clusterInfoChannel = vscode.window.createOutputChannel("KSail: Cluster Info");
+  context.subscriptions.push(clusterInfoChannel);
+
   // Cluster info
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -411,10 +400,10 @@ export function registerCommands(
             const distribution = await detectDistribution(clusterName, resolvedProvider);
             const contextName = getContextName(clusterName, distribution);
             const info = await clusterInfo(contextName, outputChannel);
-            const infoChannel = vscode.window.createOutputChannel(`KSail: Cluster Info (${clusterName})`);
-            infoChannel.clear();
-            infoChannel.appendLine(info);
-            infoChannel.show();
+            clusterInfoChannel.clear();
+            clusterInfoChannel.appendLine(`── Cluster: ${clusterName} ──`);
+            clusterInfoChannel.appendLine(info);
+            clusterInfoChannel.show();
           });
         } catch (error) {
           showError("get cluster info", error, outputChannel);
