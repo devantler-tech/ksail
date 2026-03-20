@@ -352,3 +352,24 @@ export async function isPropertyRequired(
   const tool = await getToolSchema(toolName);
   return tool?.inputSchema?.required?.includes(propertyName) ?? false;
 }
+
+/**
+ * Get enum values from MCP schema with fallback.
+ * Queries the MCP server for valid enum values of a tool property.
+ * Falls back to the provided defaults when MCP is unavailable.
+ */
+export async function getSchemaEnumValues(
+  toolName: string,
+  propertyName: string,
+  fallbackValues: Record<string, string[]>
+): Promise<string[]> {
+  try {
+    const values = await getEnumValues(toolName, propertyName);
+    if (values && values.length > 0) {
+      return values;
+    }
+  } catch {
+    // MCP unavailable, use fallback
+  }
+  return fallbackValues[propertyName] || [];
+}
