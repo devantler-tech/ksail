@@ -116,6 +116,12 @@
         "icon": "$(history)"
       },
       {
+        "command": "ksail.cluster.switch",
+        "title": "Switch Cluster",
+        "category": "KSail",
+        "icon": "$(arrow-swap)"
+      },
+      {
         "command": "ksail.showOutput",
         "title": "Show Output",
         "category": "KSail",
@@ -152,13 +158,6 @@
           "type": "string",
           "default": "ksail",
           "description": "Path to the KSail binary"
-        },
-        "ksail.statusPollingInterval": {
-          "type": "number",
-          "default": 10,
-          "minimum": 5,
-          "maximum": 300,
-          "description": "Cluster status polling interval in seconds"
         }
       }
     },
@@ -231,6 +230,16 @@
           "command": "ksail.cluster.update",
           "when": "viewItem =~ /ksail-cluster-/",
           "group": "1@4"
+        },
+        {
+          "command": "ksail.cluster.switch",
+          "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "1@5"
+        },
+        {
+          "command": "ksail.cluster.switch",
+          "when": "viewItem =~ /ksail-cluster-/",
+          "group": "1@5"
         },
         {
           "command": "ksail.cluster.backup",

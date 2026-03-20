@@ -71,9 +71,17 @@ export async function activate(
     );
   }
 
+  // ── Kubernetes Extension: KubectlV1 API ──
+  const kubectlAPI = await k8s.extension.kubectl.v1;
+  if (!kubectlAPI.available) {
+    outputChannel.appendLine(
+      `Kubectl API not available: ${kubectlAPI.reason}`
+    );
+  }
+
   // Register with the Kubernetes extension's Cloud Explorer (Clouds view)
   const { cloudProvider, treeDataProvider: cloudTreeProvider } =
-    createKSailCloudProvider(outputChannel);
+    createKSailCloudProvider(outputChannel, kubectlAPI.available ? kubectlAPI.api : undefined);
 
   const cloudExplorerAPI = await k8s.extension.cloudExplorer.v1;
   if (cloudExplorerAPI.available) {
@@ -82,14 +90,6 @@ export async function activate(
   } else {
     outputChannel.appendLine(
       `Cloud Explorer API not available: ${cloudExplorerAPI.reason}`
-    );
-  }
-
-  // ── Kubernetes Extension: KubectlV1 API ──
-  const kubectlAPI = await k8s.extension.kubectl.v1;
-  if (!kubectlAPI.available) {
-    outputChannel.appendLine(
-      `Kubectl API not available: ${kubectlAPI.reason}`
     );
   }
 
@@ -123,9 +123,6 @@ export async function activate(
     });
     clusterProviderAPI.api.register(ksailClusterProvider);
     outputChannel.appendLine("Registered KSail with Kubernetes Cluster Provider");
-    // Debug: list all registered providers to verify registration persists
-    const registeredProviders = clusterProviderAPI.api.list();
-    outputChannel.appendLine(`Registered cluster providers: ${JSON.stringify(registeredProviders.map(p => p.id))}`);
   } else {
     outputChannel.appendLine(
       `Cluster Provider API not available: ${clusterProviderAPI.reason}`

@@ -16,10 +16,10 @@ import { getPodLogs } from "../ksail/kubectl.js";
  * KSail context name patterns for each distribution
  */
 const KSAIL_CONTEXT_PATTERNS = [
-  /^kind-/,      // Vanilla (Kind)
-  /^k3d-/,       // K3s (K3d)
-  /^admin@/,     // Talos
-  /^vcluster_/,  // VCluster
+  /^kind-/,              // Vanilla (Kind)
+  /^k3d-/,               // K3s (K3d)
+  /^admin@/,             // Talos
+  /^vcluster-docker_/,   // VCluster
 ];
 
 /**
@@ -108,8 +108,8 @@ export function createKSailNodeUICustomizer(
         clusterName = contextName.slice(4);
       } else if (contextName.startsWith("admin@")) {
         clusterName = contextName.slice(6);
-      } else if (contextName.startsWith("vcluster_")) {
-        clusterName = contextName.slice(9);
+      } else if (contextName.startsWith("vcluster-docker_")) {
+        clusterName = contextName.slice(17);
       } else {
         return;
       }
