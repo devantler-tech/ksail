@@ -453,14 +453,10 @@ export async function clusterInfo(
  * Backup a cluster
  */
 export async function backupCluster(
-  name?: string,
+  outputPath: string,
   outputChannel?: vscode.OutputChannel
 ): Promise<void> {
-  const args = ["cluster", "backup"];
-
-  if (name) {
-    args.push("--name", name);
-  }
+  const args = ["cluster", "backup", "--output", outputPath];
 
   const result = await runKsailCommand(args, undefined, outputChannel);
 
@@ -473,14 +469,10 @@ export async function backupCluster(
  * Restore a cluster
  */
 export async function restoreCluster(
-  name?: string,
+  inputPath: string,
   outputChannel?: vscode.OutputChannel
 ): Promise<void> {
-  const args = ["cluster", "restore"];
-
-  if (name) {
-    args.push("--name", name);
-  }
+  const args = ["cluster", "restore", "--input", inputPath];
 
   const result = await runKsailCommand(args, undefined, outputChannel);
 

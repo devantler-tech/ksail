@@ -22,7 +22,6 @@ import {
   restoreCluster,
   startCluster,
   stopCluster,
-  switchCluster,
   updateCluster,
 } from "../ksail/index.js";
 import type { KSailCloudCluster, KSailCloudTreeDataProvider } from "../kubernetes/index.js";
@@ -459,39 +458,6 @@ export function registerCommands(
     )
   );
 
-  // Cluster switch
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "ksail.cluster.switch",
-      async (target?: unknown) => {
-        try {
-          const cloud = resolveCloudTarget(cloudExplorerAPI, target);
-          let clusterName = cloud?.name ?? resolveClusterExplorerTarget(clusterExplorerAPI, target);
-
-          if (!clusterName) {
-            const clusters = await listClusters();
-            const selected = await promptClusterSelection(
-              clusters,
-              "Select cluster to switch to"
-            );
-            if (!selected) {return;}
-            clusterName = selected.name;
-          }
-
-          await executeWithProgress("Switching cluster...", async () => {
-            await switchCluster(clusterName, outputChannel);
-            vscode.window.showInformationMessage(
-              `Switched to cluster "${clusterName}"`
-            );
-            refreshAllViews();
-          });
-        } catch (error) {
-          showError("switch cluster", error, outputChannel);
-        }
-      }
-    )
-  );
-
   // Cluster backup
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -511,10 +477,17 @@ export function registerCommands(
             clusterName = selected.name;
           }
 
+          const saveUri = await vscode.window.showSaveDialog({
+            defaultUri: vscode.Uri.file(`${clusterName}-backup.tar.gz`),
+            filters: { "Backup archives": ["tar.gz"] },
+            title: "Save cluster backup",
+          });
+          if (!saveUri) {return;}
+
           await executeWithProgress("Backing up cluster...", async () => {
-            await backupCluster(clusterName, outputChannel);
+            await backupCluster(saveUri.fsPath, outputChannel);
             vscode.window.showInformationMessage(
-              `Cluster "${clusterName}" backed up successfully`
+              `Cluster "${clusterName}" backed up to ${saveUri.fsPath}`
             );
           });
         } catch (error) {
@@ -551,8 +524,15 @@ export function registerCommands(
           );
           if (confirm !== "Restore") {return;}
 
+          const openUris = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            filters: { "Backup archives": ["tar.gz"] },
+            title: "Select backup archive to restore",
+          });
+          if (!openUris || openUris.length === 0) {return;}
+
           await executeWithProgress("Restoring cluster...", async () => {
-            await restoreCluster(clusterName, outputChannel);
+            await restoreCluster(openUris[0].fsPath, outputChannel);
             vscode.window.showInformationMessage(
               `Cluster "${clusterName}" restored successfully`
             );

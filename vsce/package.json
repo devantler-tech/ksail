@@ -93,7 +93,7 @@
       },
       {
         "command": "ksail.cluster.info",
-        "title": "Show Cluster Info",
+        "title": "Show KSail Info",
         "category": "KSail",
         "icon": "$(info)"
       },
@@ -102,12 +102,6 @@
         "title": "Update Cluster",
         "category": "KSail",
         "icon": "$(sync)"
-      },
-      {
-        "command": "ksail.cluster.switch",
-        "title": "Switch Cluster",
-        "category": "KSail",
-        "icon": "$(arrow-swap)"
       },
       {
         "command": "ksail.cluster.backup",
@@ -184,8 +178,18 @@
       "view/title": [],
       "view/item/context": [
         {
+          "command": "ksail.cluster.create",
+          "when": "viewItem == kubernetes.cloudExplorer.cloud.KSail",
+          "group": "0@1"
+        },
+        {
           "command": "ksail.cluster.info",
           "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "0@1"
+        },
+        {
+          "command": "ksail.cluster.info",
+          "when": "viewItem =~ /ksail-cluster-/",
           "group": "0@1"
         },
         {
@@ -194,8 +198,18 @@
           "group": "1@1"
         },
         {
+          "command": "ksail.cluster.start",
+          "when": "viewItem =~ /ksail-cluster-/",
+          "group": "1@1"
+        },
+        {
           "command": "ksail.cluster.stop",
           "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "1@2"
+        },
+        {
+          "command": "ksail.cluster.stop",
+          "when": "viewItem =~ /ksail-cluster-/",
           "group": "1@2"
         },
         {
@@ -204,18 +218,28 @@
           "group": "1@3"
         },
         {
+          "command": "ksail.cluster.connect",
+          "when": "viewItem =~ /ksail-cluster-/",
+          "group": "1@3"
+        },
+        {
           "command": "ksail.cluster.update",
           "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
           "group": "1@4"
         },
         {
-          "command": "ksail.cluster.switch",
-          "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
-          "group": "1@5"
+          "command": "ksail.cluster.update",
+          "when": "viewItem =~ /ksail-cluster-/",
+          "group": "1@4"
         },
         {
           "command": "ksail.cluster.backup",
           "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "2@1"
+        },
+        {
+          "command": "ksail.cluster.backup",
+          "when": "viewItem =~ /ksail-cluster-/",
           "group": "2@1"
         },
         {
@@ -224,8 +248,18 @@
           "group": "2@2"
         },
         {
+          "command": "ksail.cluster.restore",
+          "when": "viewItem =~ /ksail-cluster-/",
+          "group": "2@2"
+        },
+        {
           "command": "ksail.cluster.delete",
           "when": "view == extension.vsKubernetesExplorer && viewItem =~ /ksail\\.cluster/i",
+          "group": "3@1"
+        },
+        {
+          "command": "ksail.cluster.delete",
+          "when": "viewItem =~ /ksail-cluster-/",
           "group": "3@1"
         }
       ]
