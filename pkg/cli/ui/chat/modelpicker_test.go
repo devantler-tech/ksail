@@ -176,7 +176,7 @@ func TestModelPickerAutoResolvedDisplay(t *testing.T) {
 
 	output := model.View()
 
-	// Should show "auto (gpt-4o · 0.9x)" with resolved model and discount
+	// Should show "auto (gpt-4o · 1x)" with resolved model and multiplier
 	if !strings.Contains(output, "auto") {
 		t.Error("expected 'auto' in view when showing resolved model")
 	}
@@ -238,5 +238,86 @@ func TestModelPickerSelectCurrentModel(t *testing.T) {
 
 	if strings.Contains(output, "Select Model") {
 		t.Error("expected model picker to close after selecting same model")
+	}
+}
+
+// TestModelPickerItemMultiplierDisplay tests that non-auto model list items render
+// their billing multiplier, including fractional values like 0.33x.
+func TestModelPickerItemMultiplierDisplay(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		modelID    string
+		multiplier float64
+		wantSuffix string
+	}{
+		{
+			name:       "integer multiplier",
+			modelID:    "gpt-4o",
+			multiplier: 1.0,
+			wantSuffix: "(1x)",
+		},
+		{
+			name:       "fractional multiplier",
+			modelID:    "claude-haiku-4.5",
+			multiplier: 0.33,
+			wantSuffix: "(0.33x)",
+		},
+		{
+			name:       "non-integer multiplier",
+			modelID:    "claude-3-5-sonnet",
+			multiplier: 2.5,
+			wantSuffix: "(2.5x)",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			model := chat.NewModel(newTestParams())
+			chat.ExportSetAvailableModels(model, []copilot.ModelInfo{
+				{
+					ID:      testCase.modelID,
+					Policy:  &copilot.ModelPolicy{State: "enabled"},
+					Billing: &copilot.ModelBilling{Multiplier: testCase.multiplier},
+				},
+			})
+			chat.ExportSetShowModelPicker(model, true)
+
+			output := model.View()
+
+			if !strings.Contains(output, testCase.wantSuffix) {
+				t.Errorf(
+					"model picker item for %q with multiplier %g: expected %q in view, got:\n%s",
+					testCase.modelID,
+					testCase.multiplier,
+					testCase.wantSuffix,
+					output,
+				)
+			}
+		})
+	}
+}
+
+// TestModelPickerItemNoMultiplier tests that model list items without billing show no multiplier suffix.
+func TestModelPickerItemNoMultiplier(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetAvailableModels(model, []copilot.ModelInfo{
+		{
+			ID:      "gpt-4o",
+			Policy:  &copilot.ModelPolicy{State: "enabled"},
+			Billing: nil,
+		},
+	})
+	chat.ExportSetShowModelPicker(model, true)
+
+	output := model.View()
+
+	if strings.Contains(output, "gpt-4o (") {
+		t.Errorf("expected no multiplier suffix for model without billing, got:\n%s", output)
 	}
 }

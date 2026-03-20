@@ -58,11 +58,6 @@ const (
 	checkmarkSuffix = " ✓"
 	roleUser        = "user"
 	roleAssistant   = "assistant"
-
-	// Auto model selection discount.
-	// Paid Copilot plans receive a 10% multiplier discount when using auto model selection.
-	// See: https://docs.github.com/en/copilot/concepts/auto-model-selection#multiplier-discounts
-	autoDiscountFactor = 0.9
 )
 
 // createHelpModel creates a configured help model.
