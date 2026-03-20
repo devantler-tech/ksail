@@ -6,12 +6,24 @@
  * Architecture:
  * - MCP server provider: Registers KSail with VSCode's native MCP infrastructure
  *   for GitHub Copilot and agent mode integration
- * - Binary execution: Direct CLI execution for extension UI (clusters view, commands)
+ * - Kubernetes extension integration: Registers KSail as a Cloud Provider,
+ *   Cluster Provider, and Cluster Explorer contributor in the Kubernetes
+ *   extension's activity bar
+ * - Binary execution: Direct CLI execution for extension UI (commands, status)
  */
 
 import * as vscode from "vscode";
+import * as k8s from "vscode-kubernetes-tools-api";
 import { registerCommands } from "./commands/index.js";
 import { isBinaryAvailable } from "./ksail/index.js";
+import {
+  createKSailCloudProvider,
+  createKSailClusterProvider,
+  createKSailNodeContributor,
+  createKSailNodeUICustomizer,
+  disposePodLogChannels,
+  showPodLogs,
+} from "./kubernetes/index.js";
 import {
   createConfigChangeListener,
   createKSailConfigWatcher,
@@ -19,19 +31,10 @@ import {
   initializeServerProvider,
   KSailMcpServerDefinitionProvider,
 } from "./mcp/index.js";
-import { ClustersTreeDataProvider } from "./views/clustersView.js";
-import {
-  ClusterStatusBar,
-  ClusterStatusTreeDataProvider,
-  disposePodLogChannels,
-  showPodLogs,
-} from "./views/index.js";
 
 // Global extension state
 let outputChannel: vscode.OutputChannel;
-let clustersProvider: ClustersTreeDataProvider;
-let statusProvider: ClusterStatusTreeDataProvider;
-let statusBar: ClusterStatusBar;
+let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 /**
  * Extension activation
@@ -70,51 +73,132 @@ export async function activate(
     );
   }
 
-  // Create tree data provider for clusters
-  clustersProvider = new ClustersTreeDataProvider(outputChannel);
+  // Register with the Kubernetes extension's Cloud Explorer (Clouds view)
+  const { cloudProvider, treeDataProvider: cloudTreeProvider } =
+    createKSailCloudProvider(outputChannel);
 
-  // Register tree view using createTreeView for programmatic access
-  const clustersTreeView = vscode.window.createTreeView("ksailClusters", {
-    treeDataProvider: clustersProvider,
-    showCollapseAll: false,
-  });
-  clustersProvider.setTreeView(clustersTreeView);
-  context.subscriptions.push(clustersTreeView);
+  const cloudExplorerAPI = await k8s.extension.cloudExplorer.v1;
+  if (cloudExplorerAPI.available) {
+    cloudExplorerAPI.api.registerCloudProvider(cloudProvider);
+    outputChannel.appendLine("Registered KSail with Kubernetes Cloud Explorer");
+  } else {
+    outputChannel.appendLine(
+      `Cloud Explorer API not available: ${cloudExplorerAPI.reason}`
+    );
+  }
 
-  // Register commands
-  registerCommands(context, outputChannel, clustersProvider);
+  // ── Kubernetes Extension: KubectlV1 API ──
+  const kubectlAPI = await k8s.extension.kubectl.v1;
+  if (!kubectlAPI.available) {
+    outputChannel.appendLine(
+      `Kubectl API not available: ${kubectlAPI.reason}`
+    );
+  }
 
-  // Create cluster status tree data provider
-  statusProvider = new ClusterStatusTreeDataProvider();
+  // ── Kubernetes Extension: Cluster Explorer (status nodes + context annotation) ──
+  const clusterExplorerAPI = await k8s.extension.clusterExplorer.v1_1;
+  if (clusterExplorerAPI.available && kubectlAPI.available) {
+    // Add KSail status nodes under active contexts
+    const contributor = createKSailNodeContributor(kubectlAPI.api, outputChannel);
+    clusterExplorerAPI.api.registerNodeContributor(contributor);
+    outputChannel.appendLine("Registered KSail status nodes in Cluster Explorer");
 
-  const statusTreeView = vscode.window.createTreeView("ksailClusterStatus", {
-    treeDataProvider: statusProvider,
-    showCollapseAll: true,
-  });
-  statusProvider.setTreeView(statusTreeView);
-  context.subscriptions.push(statusTreeView);
+    // Annotate KSail-managed contexts with "(KSail)" label
+    const customizer = createKSailNodeUICustomizer(outputChannel);
+    clusterExplorerAPI.api.registerNodeUICustomizer(customizer);
+    outputChannel.appendLine("Registered KSail context customizer");
 
-  // Start polling for cluster status
-  const config = vscode.workspace.getConfiguration("ksail");
-  const pollingInterval = config.get<number>("statusPollingInterval", 10) * 1000;
-  statusProvider.startPolling(pollingInterval);
+    // Periodic refresh for live status updates
+    const config = vscode.workspace.getConfiguration("ksail");
+    const pollingInterval = config.get<number>("statusPollingInterval", 10) * 1000;
+    pollTimer = setInterval(() => {
+      clusterExplorerAPI.api.refresh();
+    }, pollingInterval);
+  } else if (!clusterExplorerAPI.available) {
+    outputChannel.appendLine(
+      `Cluster Explorer API not available: ${clusterExplorerAPI.reason}`
+    );
+  }
 
-  // Create status bar
-  statusBar = new ClusterStatusBar(statusProvider);
-  context.subscriptions.push(statusBar);
+  // Register with the Kubernetes extension's Cluster Provider ("Create Cluster" wizard)
+  const clusterProviderAPI = await k8s.extension.clusterProvider.v1;
+  if (clusterProviderAPI.available) {
+    const ksailClusterProvider = createKSailClusterProvider(outputChannel, () => {
+      // Refresh cloud explorer when a cluster is created via the wizard
+      cloudTreeProvider.refresh();
+      if (cloudExplorerAPI.available) {
+        cloudExplorerAPI.api.refresh();
+      }
+      if (clusterExplorerAPI.available) {
+        clusterExplorerAPI.api.refresh();
+      }
+    });
+    clusterProviderAPI.api.register(ksailClusterProvider);
+    outputChannel.appendLine("Registered KSail with Kubernetes Cluster Provider");
+  } else {
+    outputChannel.appendLine(
+      `Cluster Provider API not available: ${clusterProviderAPI.reason}`
+    );
+  }
 
-  // Register status commands
-  context.subscriptions.push(
-    vscode.commands.registerCommand("ksail.status.refresh", () => {
-      statusProvider.refresh();
-    })
-  );
+  // Register commands (cloud explorer context commands + standalone commands)
+  registerCommands(context, outputChannel, cloudTreeProvider, cloudExplorerAPI, clusterExplorerAPI.available ? clusterExplorerAPI : undefined);
 
+  // ── Kubernetes Extension: ConfigurationV1_1 (reactive events) ──
+  const configAPI = await k8s.extension.configuration.v1_1;
+  if (configAPI.available) {
+    // Refresh on context switch
+    context.subscriptions.push(
+      configAPI.api.onDidChangeContext(() => {
+        cloudTreeProvider.refresh();
+        if (cloudExplorerAPI.available) {
+          cloudExplorerAPI.api.refresh();
+        }
+        if (clusterExplorerAPI.available) {
+          clusterExplorerAPI.api.refresh();
+        }
+      })
+    );
+
+    // Refresh on namespace switch
+    context.subscriptions.push(
+      configAPI.api.onDidChangeNamespace(() => {
+        if (clusterExplorerAPI.available) {
+          clusterExplorerAPI.api.refresh();
+        }
+      })
+    );
+
+    // Refresh on kubeconfig path change
+    context.subscriptions.push(
+      configAPI.api.onDidChangeKubeconfigPath(() => {
+        cloudTreeProvider.refresh();
+        if (cloudExplorerAPI.available) {
+          cloudExplorerAPI.api.refresh();
+        }
+        if (clusterExplorerAPI.available) {
+          clusterExplorerAPI.api.refresh();
+        }
+      })
+    );
+
+    outputChannel.appendLine("Listening for Kubernetes configuration changes");
+  } else {
+    outputChannel.appendLine(
+      `Configuration API not available: ${configAPI.reason}`
+    );
+  }
+
+  // Register pod logs command (used by ClusterExplorer pod nodes)
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "ksail.status.showPodLogs",
       async (namespace: string, podName: string) => {
-        await showPodLogs(namespace, podName);
+        if (kubectlAPI.available) {
+          await showPodLogs(kubectlAPI.api, namespace, podName);
+        } else {
+          vscode.window.showErrorMessage("Kubectl API not available");
+        }
       }
     )
   );
@@ -133,11 +217,11 @@ export async function activate(
   context.subscriptions.push(
     configWatcher.onDidCreate(async () => {
       await vscode.commands.executeCommand("setContext", "ksail.hasConfig", true);
-      clustersProvider.refresh();
+      cloudTreeProvider.refresh();
     }),
     configWatcher.onDidDelete(async () => {
       await vscode.commands.executeCommand("setContext", "ksail.hasConfig", false);
-      clustersProvider.refresh();
+      cloudTreeProvider.refresh();
     }),
     configWatcher
   );
@@ -150,7 +234,10 @@ export async function activate(
  */
 export function deactivate(): void {
   outputChannel?.appendLine("KSail extension deactivating...");
-  statusProvider?.stopPolling();
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = undefined;
+  }
   disposePodLogChannels();
 }
 

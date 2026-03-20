@@ -1,10 +1,11 @@
 /**
  * Kubectl Utilities
  *
- * Provides functions for querying Kubernetes cluster state via kubectl.
+ * Provides functions for querying Kubernetes cluster state via the
+ * Kubernetes extension's KubectlV1 API.
  */
 
-import { spawn } from "child_process";
+import type { KubectlV1 } from "vscode-kubernetes-tools-api";
 
 /**
  * Pod phase as reported by kubectl
@@ -63,67 +64,27 @@ export interface ClusterStatusSnapshot {
 }
 
 /**
- * Default timeout for kubectl commands (30 seconds)
+ * Invoke a kubectl command via the Kubernetes extension's API.
  */
-const COMMAND_TIMEOUT_MS = 30_000;
-
-/**
- * Run a command and capture output with a timeout
- */
-function runCommand(
-  command: string,
-  args: string[],
-  timeoutMs = COMMAND_TIMEOUT_MS
+async function invokeKubectl(
+  kubectl: KubectlV1,
+  args: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  return new Promise((resolve) => {
-    const proc = spawn(command, args);
-
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-
-    const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        proc.kill();
-        resolve({ stdout, stderr: "Command timed out", exitCode: 1 });
-      }
-    }, timeoutMs);
-
-    proc.stdout.on("data", (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    proc.stderr.on("data", (data: Buffer) => {
-      stderr += data.toString();
-    });
-
-    proc.on("close", (code) => {
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        resolve({ stdout, stderr, exitCode: code ?? 1 });
-      }
-    });
-
-    proc.on("error", (error) => {
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        resolve({ stdout, stderr: stderr || error.message, exitCode: 1 });
-      }
-    });
-  });
+  const result = await kubectl.invokeCommand(args);
+  if (!result) {
+    return { stdout: "", stderr: "kubectl not configured", exitCode: 1 };
+  }
+  return { stdout: result.stdout, stderr: result.stderr, exitCode: result.code };
 }
 
 /**
  * Get all pods across all namespaces
  */
-export async function getAllPods(): Promise<PodInfo[]> {
-  const result = await runCommand("kubectl", [
-    "get", "pods", "--all-namespaces",
-    "-o", "jsonpath={range .items[*]}{.metadata.namespace}{\"\\t\"}{.metadata.name}{\"\\t\"}{.status.phase}{\"\\t\"}{range .status.containerStatuses[*]}{.ready}{\" \"}{end}{\"\\t\"}{range .status.containerStatuses[*]}{.restartCount}{\" \"}{end}{\"\\n\"}{end}",
-  ]);
+export async function getAllPods(kubectl: KubectlV1): Promise<PodInfo[]> {
+  const result = await invokeKubectl(
+    kubectl,
+    'get pods --all-namespaces -o jsonpath={range .items[*]}{.metadata.namespace}{"\\t"}{.metadata.name}{"\\t"}{.status.phase}{"\\t"}{range .status.containerStatuses[*]}{.ready}{" "}{end}{"\\t"}{range .status.containerStatuses[*]}{.restartCount}{" "}{end}{"\\n"}{end}'
+  );
 
   if (result.exitCode !== 0) {
     throw new Error(
@@ -204,21 +165,21 @@ export function summarizePodsByNamespace(pods: PodInfo[]): NamespacePodSummary[]
 /**
  * Detect which GitOps engine is running in the cluster
  */
-export async function detectGitOpsEngine(): Promise<string | undefined> {
+export async function detectGitOpsEngine(kubectl: KubectlV1): Promise<string | undefined> {
   // Check for Flux
-  const fluxResult = await runCommand("kubectl", [
-    "get", "namespace", "flux-system",
-    "--no-headers", "--ignore-not-found",
-  ]);
+  const fluxResult = await invokeKubectl(
+    kubectl,
+    "get namespace flux-system --no-headers --ignore-not-found"
+  );
   if (fluxResult.exitCode === 0 && fluxResult.stdout.trim()) {
     return "Flux";
   }
 
   // Check for ArgoCD
-  const argoResult = await runCommand("kubectl", [
-    "get", "namespace", "argocd",
-    "--no-headers", "--ignore-not-found",
-  ]);
+  const argoResult = await invokeKubectl(
+    kubectl,
+    "get namespace argocd --no-headers --ignore-not-found"
+  );
   if (argoResult.exitCode === 0 && argoResult.stdout.trim()) {
     return "ArgoCD";
   }
@@ -229,12 +190,11 @@ export async function detectGitOpsEngine(): Promise<string | undefined> {
 /**
  * Get Flux reconciliation statuses
  */
-async function getFluxStatuses(): Promise<GitOpsStatus[]> {
-  const result = await runCommand("kubectl", [
-    "get", "kustomizations.kustomize.toolkit.fluxcd.io",
-    "--all-namespaces",
-    "-o", "jsonpath={range .items[*]}{.kind}{\"\\t\"}{.metadata.name}{\"\\t\"}{.metadata.namespace}{\"\\t\"}{.status.conditions[?(@.type==\"Ready\")].status}{\"\\t\"}{.status.conditions[?(@.type==\"Ready\")].message}{\"\\n\"}{end}",
-  ]);
+async function getFluxStatuses(kubectl: KubectlV1): Promise<GitOpsStatus[]> {
+  const result = await invokeKubectl(
+    kubectl,
+    'get kustomizations.kustomize.toolkit.fluxcd.io --all-namespaces -o jsonpath={range .items[*]}{.kind}{"\\t"}{.metadata.name}{"\\t"}{.metadata.namespace}{"\\t"}{.status.conditions[?(@.type=="Ready")].status}{"\\t"}{.status.conditions[?(@.type=="Ready")].message}{"\\n"}{end}'
+  );
 
   if (result.exitCode !== 0) {
     return [];
@@ -246,12 +206,11 @@ async function getFluxStatuses(): Promise<GitOpsStatus[]> {
 /**
  * Get ArgoCD application statuses (normalized to True/False ready)
  */
-async function getArgoCDStatuses(): Promise<GitOpsStatus[]> {
-  const result = await runCommand("kubectl", [
-    "get", "applications.argoproj.io",
-    "--all-namespaces",
-    "-o", "jsonpath={range .items[*]}{.kind}{\"\\t\"}{.metadata.name}{\"\\t\"}{.metadata.namespace}{\"\\t\"}{.status.health.status}{\"\\t\"}{.status.sync.status}{\"\\n\"}{end}",
-  ]);
+async function getArgoCDStatuses(kubectl: KubectlV1): Promise<GitOpsStatus[]> {
+  const result = await invokeKubectl(
+    kubectl,
+    'get applications.argoproj.io --all-namespaces -o jsonpath={range .items[*]}{.kind}{"\\t"}{.metadata.name}{"\\t"}{.metadata.namespace}{"\\t"}{.status.health.status}{"\\t"}{.status.sync.status}{"\\n"}{end}'
+  );
 
   if (result.exitCode !== 0) {
     return [];
@@ -330,18 +289,18 @@ export function determineClusterHealth(
 /**
  * Fetch a complete cluster status snapshot
  */
-export async function fetchClusterStatus(): Promise<ClusterStatusSnapshot> {
+export async function fetchClusterStatus(kubectl: KubectlV1): Promise<ClusterStatusSnapshot> {
   try {
     const [pods, gitopsEngine] = await Promise.all([
-      getAllPods(),
-      detectGitOpsEngine(),
+      getAllPods(kubectl),
+      detectGitOpsEngine(kubectl),
     ]);
 
     let gitopsStatuses: GitOpsStatus[] = [];
     if (gitopsEngine === "Flux") {
-      gitopsStatuses = await getFluxStatuses();
+      gitopsStatuses = await getFluxStatuses(kubectl);
     } else if (gitopsEngine === "ArgoCD") {
-      gitopsStatuses = await getArgoCDStatuses();
+      gitopsStatuses = await getArgoCDStatuses(kubectl);
     }
 
     const podSummaries = summarizePodsByNamespace(pods);
@@ -371,15 +330,15 @@ export async function fetchClusterStatus(): Promise<ClusterStatusSnapshot> {
  * Get logs for a specific pod
  */
 export async function getPodLogs(
+  kubectl: KubectlV1,
   namespace: string,
   podName: string,
   tailLines = 100
 ): Promise<string> {
-  const result = await runCommand("kubectl", [
-    "logs", podName,
-    "-n", namespace,
-    "--tail", tailLines.toString(),
-  ]);
+  const result = await invokeKubectl(
+    kubectl,
+    `logs ${podName} -n ${namespace} --tail ${tailLines}`
+  );
 
   if (result.exitCode !== 0) {
     return `Failed to get logs: ${result.stderr}`;
