@@ -103,3 +103,5 @@ actionlint
 
 # Copilot CLI bundler artifacts (generated at build time)
 zcopilot_*
+vsce/node_modules/
+vsce/dist/

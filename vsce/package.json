@@ -38,7 +38,9 @@
     "ms-kubernetes-tools.vscode-kubernetes-tools"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onView:extension.vsKubernetesExplorer",
+    "onView:kubernetes.cloudExplorer",
+    "onCommand:ksail.refresh"
   ],
   "main": "./dist/extension.js",
   "contributes": {

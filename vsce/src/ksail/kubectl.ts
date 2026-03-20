@@ -8,6 +8,11 @@
 import type { KubectlV1 } from "vscode-kubernetes-tools-api";
 
 /**
+ * Kubernetes DNS label regex for validating namespace and pod names.
+ */
+const K8S_DNS_LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+
+/**
  * Invoke a kubectl command via the Kubernetes extension's API.
  */
 async function invokeKubectl(
@@ -30,6 +35,10 @@ export async function getPodLogs(
   podName: string,
   tailLines = 100
 ): Promise<string> {
+  if (!K8S_DNS_LABEL.test(namespace) || !K8S_DNS_LABEL.test(podName)) {
+    return "Invalid namespace or pod name: must match Kubernetes DNS label format [a-z0-9]([a-z0-9-]*[a-z0-9])?";
+  }
+
   const result = await invokeKubectl(
     kubectl,
     `logs ${podName} -n ${namespace} --tail ${tailLines}`
