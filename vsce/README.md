@@ -36,21 +36,21 @@ Search for "KSail" in the VSCode Extensions Marketplace.
 
 All cluster operations are available via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
 
-| Command                           | Description                               | Shortcut        |
-|-----------------------------------|-------------------------------------------|-----------------|
-| `KSail: Init Cluster`             | Initialize a new ksail.yaml configuration | `Cmd+Shift+K I` |
-| `KSail: Create Cluster`           | Create and start a cluster                | `Cmd+Shift+K C` |
-| `KSail: Update Cluster`           | Update a running cluster                  | -               |
-| `KSail: Start Cluster`            | Start an existing cluster                 | -               |
-| `KSail: Stop Cluster`             | Stop a running cluster                    | -               |
-| `KSail: Switch Cluster`           | Switch the active kubeconfig context      | -               |
-| `KSail: Backup Cluster`           | Backup cluster resources                  | -               |
-| `KSail: Restore Cluster`          | Restore cluster resources from a backup   | -               |
-| `KSail: Delete Cluster`           | Delete the cluster                        | `Cmd+Shift+K D` |
-| `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI (embedded in KSail)  | -               |
-| `KSail: Show KSail Info`          | Show cluster info via KSail CLI           | -               |
+| Command                           | Description                                                                     | Shortcut        |
+|-----------------------------------|---------------------------------------------------------------------------------|-----------------|
+| `KSail: Init Cluster`             | Initialize a new ksail.yaml configuration                                       | `Cmd+Shift+K I` |
+| `KSail: Create Cluster`           | Create and start a cluster                                                      | `Cmd+Shift+K C` |
+| `KSail: Update Cluster`           | Update a running cluster                                                        | -               |
+| `KSail: Start Cluster`            | Start an existing cluster                                                       | -               |
+| `KSail: Stop Cluster`             | Stop a running cluster                                                          | -               |
+| `KSail: Switch Cluster`           | Switch the active kubeconfig context                                            | -               |
+| `KSail: Backup Cluster`           | Backup cluster resources                                                        | -               |
+| `KSail: Restore Cluster`          | Restore cluster resources from a backup                                         | -               |
+| `KSail: Delete Cluster`           | Delete the cluster                                                              | `Cmd+Shift+K D` |
+| `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI (embedded in KSail)                                        | -               |
+| `KSail: Show KSail Info`          | Show cluster info via KSail CLI                                                 | -               |
 | `KSail: Refresh Clusters`         | Refresh the Cloud Explorer and Cluster Explorer views (and clear cached status) | -               |
-| `KSail: Show Output`              | Open the KSail output channel             | -               |
+| `KSail: Show Output`              | Open the KSail output channel                                                   | -               |
 
 Commands are also available via right-click context menus in the Kubernetes extension's Cloud Explorer and Cluster Explorer.
 
@@ -65,9 +65,9 @@ The **Init** and **Create** commands feature multi-step wizards with:
 
 ## Extension Settings
 
-| Setting            | Description                  | Default |
-|--------------------|------------------------------|---------|
-| `ksail.binaryPath` | Path to ksail binary         | `ksail` |
+| Setting            | Description          | Default |
+|--------------------|----------------------|---------|
+| `ksail.binaryPath` | Path to ksail binary | `ksail` |
 
 ## Development
 
