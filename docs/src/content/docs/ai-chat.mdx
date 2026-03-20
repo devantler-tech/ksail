@@ -36,7 +36,7 @@ This opens an interactive TUI (Terminal User Interface) with markdown rendering,
 # Use a specific model with high reasoning effort
 ksail chat --model gpt-5 --reasoning-effort high
 
-# Use auto model selection (applies 10% discount when available)
+# Use auto model selection (let Copilot choose the model)
 ksail chat --model auto --timeout 10m
 ``````
 
@@ -70,7 +70,7 @@ Control analysis depth with `--reasoning-effort` (`low`, `medium`, `high`) or pr
 
 ### Auto Model Selection
 
-Use `--model auto` for automatic model selection with 10% discount (when available). The TUI shows the resolved model (e.g., `Model: auto → gpt-4o`).
+Use `--model auto` to let Copilot choose the best available model. The TUI shows the resolved model and its billing multiplier (e.g., `auto → gpt-4o (1x)`).
 
 ### Quota Tracking
 
