@@ -204,6 +204,7 @@ func (m *Model) buildModelStatusText() string {
 		if mult > 0 {
 			multStr := strings.TrimRight(fmt.Sprintf("%.2f", mult), "0")
 			multStr = strings.TrimRight(multStr, ".")
+
 			return modelStyle.Render(
 				fmt.Sprintf("%s \u2192 %s (%sx)", modelAuto, resolved, multStr),
 			)
