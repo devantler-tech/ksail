@@ -197,10 +197,11 @@ You can customize Hetzner Load Balancer behavior using annotations:
 
 ```yaml
 # Add to your Service metadata:
-annotations:
-  load-balancer.hetzner.cloud/location: nbg1
-  load-balancer.hetzner.cloud/use-private-ip: "true"
-  load-balancer.hetzner.cloud/health-check-interval: "15s"
+metadata:
+  annotations:
+    load-balancer.hetzner.cloud/location: nbg1
+    load-balancer.hetzner.cloud/use-private-ip: "true"
+    load-balancer.hetzner.cloud/health-check-interval: "15s"
 ```
 
 See the [Hetzner CCM documentation](https://github.com/hetznercloud/hcloud-cloud-controller-manager#service) for all available annotations.
