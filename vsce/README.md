@@ -49,7 +49,7 @@ All cluster operations are available via the Command Palette (`Cmd+Shift+P` / `C
 | `KSail: Delete Cluster`           | Delete the cluster                        | `Cmd+Shift+K D` |
 | `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI (embedded in KSail)  | -               |
 | `KSail: Show KSail Info`          | Show cluster info via KSail CLI           | -               |
-| `KSail: Refresh Clusters`         | Refresh the Cloud Explorer view           | -               |
+| `KSail: Refresh Clusters`         | Refresh the Cloud Explorer and Cluster Explorer views (and clear cached status) | -               |
 | `KSail: Show Output`              | Open the KSail output channel             | -               |
 
 Commands are also available via right-click context menus in the Kubernetes extension's Cloud Explorer and Cluster Explorer.
