@@ -1,5 +1,5 @@
 // Package chat_test provides unit tests for the chat command package.
-package chat_test //nolint:err113 // Tests use dynamic errors for mock behaviors
+package chat_test
 
 import (
 	"context"
@@ -24,9 +24,9 @@ const (
 )
 
 var (
-	errAuthFetchFailed    = errors.New("auth check: fetch failed")
-	errFetchFailed        = errors.New("fetch failed")
-	errUnauthorized       = errors.New("unauthorized: authentication required")
+	errAuthFetchFailed = errors.New("auth check: fetch failed")
+	errFetchFailed     = errors.New("fetch failed")
+	errUnauthorized    = errors.New("unauthorized: authentication required")
 )
 
 // createTestTool creates a test tool that tracks whether it was called.
