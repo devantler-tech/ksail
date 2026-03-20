@@ -56,8 +56,8 @@ const (
 	// Model and role constants.
 	modelAuto       = "auto"
 	checkmarkSuffix = " ✓"
-	roleUser      = "user"
-	roleAssistant = "assistant"
+	roleUser        = "user"
+	roleAssistant   = "assistant"
 )
 
 // createHelpModel creates a configured help model.
