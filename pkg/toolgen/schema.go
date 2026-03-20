@@ -140,8 +140,29 @@ func convertDefaultValue(jsonSchemaType string, defaultStr string) any {
 		}
 
 		return defaultStr // Fallback to string if parsing fails
+	case jsonSchemaTypeArray:
+		// Parse pflag array format "[val1,val2,...]" into an actual array.
+		// pflag serializes slice defaults as bracket-enclosed, comma-separated strings.
+		// Note: values containing commas are not supported in defaults.
+		if !strings.HasPrefix(defaultStr, "[") || !strings.HasSuffix(defaultStr, "]") {
+			return []any{defaultStr}
+		}
+
+		trimmed := defaultStr[1 : len(defaultStr)-1]
+		if trimmed == "" {
+			return []any{}
+		}
+
+		parts := strings.Split(trimmed, ",")
+		result := make([]any, 0, len(parts))
+
+		for _, part := range parts {
+			result = append(result, strings.TrimSpace(part))
+		}
+
+		return result
 	default:
-		// For strings, arrays, and other types, return as-is
+		// For strings and other types, return as-is
 		return defaultStr
 	}
 }

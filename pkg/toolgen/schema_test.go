@@ -144,6 +144,32 @@ func standardTypeTestCases() []standardTypeTest {
 			},
 		},
 		{
+			name: "string slice flag with non-empty default",
+			setup: func(cmd *cobra.Command) {
+				cmd.Flags().StringSlice("exclude-types", []string{"events"}, "Types to exclude")
+			},
+			flagName: "exclude-types",
+			expected: map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Types to exclude",
+				"default":     []any{"events"},
+			},
+		},
+		{
+			name: "string slice flag with multiple defaults",
+			setup: func(cmd *cobra.Command) {
+				cmd.Flags().StringSlice("skip", []string{"a", "b", "c"}, "Items to skip")
+			},
+			flagName: "skip",
+			expected: map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Items to skip",
+				"default":     []any{"a", "b", "c"},
+			},
+		},
+		{
 			name:     "int slice flag",
 			setup:    func(cmd *cobra.Command) { cmd.Flags().IntSlice("ports", []int{}, "Port numbers") },
 			flagName: "ports",
