@@ -56,7 +56,7 @@ Each tool accepts a **subcommand parameter** that selects the specific operation
 
 | Tool | Subcommands |
 |------|-------------|
-| `workload_read` | `get`, `describe`, `logs`, `explain`, `wait` (pass target resource via `args`), `images`, `export`, `validate`, `gen_deployment`, `gen_service_clusterip`, `gen_namespace`, `gen_helmrelease` (pass release name via `args`), and other `gen_*` commands |
+| `workload_read` | `get`, `describe`, `logs`, `explain`, `wait` (pass target resource(s) via `args`), `images`, `export` (pass optional output path via `args`), `validate` (pass optional path via `args`), `gen_deployment`, `gen_service_clusterip`, `gen_namespace`, `gen_helmrelease` (pass release name via `args`), and other `gen_*` commands |
 | `workload_write` | `apply`, `create`, `delete`, `edit`, `exec` (pass pod and command via `args`, e.g., `["pod/foo", "--", "sh"]`), `expose` (pass resource type and name via `args`), `scale`, `reconcile`, `push`, `install` (pass release name and chart via `args`), `import`, `watch`, `rollout_restart`, `rollout_status`, and other `rollout_*` commands |
 
 ### Secret Management
