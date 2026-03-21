@@ -314,6 +314,19 @@ func attemptInlineLogin(
 	return authStatus, nil
 }
 
+// isAuthStatusRetryable reports whether err should be retried during auth status checks.
+// It augments the generic netretry.IsRetryable with a Copilot-auth-specific check:
+// "fetch failed" is a transient error emitted by the Copilot subprocess when it has not
+// yet fully initialized, and is not a generic network error that should be retried
+// globally across all callers (Helm/Docker/OCI/etc.).
+func isAuthStatusRetryable(err error) bool {
+	if netretry.IsRetryable(err) {
+		return true
+	}
+
+	return strings.Contains(err.Error(), "fetch failed")
+}
+
 // getAuthStatusWithRetry calls GetAuthStatus with exponential backoff retries
 // for transient errors (e.g., "fetch failed" when the Copilot subprocess
 // hasn't fully initialized).
@@ -345,7 +358,7 @@ func getAuthStatusWithRetryOpts(
 		lastErr = err
 		lastAttempt = attempt
 
-		if !netretry.IsRetryable(lastErr) || attempt == authMaxRetries {
+		if !isAuthStatusRetryable(lastErr) || attempt == authMaxRetries {
 			break
 		}
 
@@ -363,7 +376,7 @@ func getAuthStatusWithRetryOpts(
 		}
 	}
 
-	if !netretry.IsRetryable(lastErr) {
+	if !isAuthStatusRetryable(lastErr) {
 		return nil, fmt.Errorf(
 			"auth status check failed on attempt %d/%d (non-retryable): %w",
 			lastAttempt,
