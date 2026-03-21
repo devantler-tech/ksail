@@ -932,6 +932,10 @@ type mockAuthResponse struct {
 }
 
 func (m *mockAuthChecker) GetAuthStatus(_ context.Context) (*copilot.GetAuthStatusResponse, error) {
+	if len(m.responses) == 0 {
+		return nil, fmt.Errorf("mockAuthChecker: no responses configured") //nolint:goerr113 // Test helper
+	}
+
 	idx := int(m.callCount.Add(1)) - 1
 	if idx >= len(m.responses) {
 		idx = len(m.responses) - 1
@@ -985,7 +989,12 @@ func TestGetAuthStatusWithRetryRetriesOnRetryableError(t *testing.T) {
 		},
 	}
 
-	status, err := chat.GetAuthStatusWithRetry(context.Background(), mock)
+	const (
+		tinyBase = 1 * time.Millisecond
+		tinyMax  = 2 * time.Millisecond
+	)
+
+	status, err := chat.GetAuthStatusWithRetryOpts(context.Background(), mock, tinyBase, tinyMax)
 	if err != nil {
 		t.Fatalf("Expected no error after retry, got: %v", err)
 	}
@@ -1037,8 +1046,8 @@ func TestGetAuthStatusWithRetryStopsOnNonRetryableError(t *testing.T) {
 func TestGetAuthStatusWithRetryExhaustedRetries(t *testing.T) {
 	t.Parallel()
 
-	// Build authMaxRetries responses, all retryable ("fetch failed").
-	responses := make([]mockAuthResponse, chat.AuthMaxRetries)
+	// Build authMaxAttempts responses, all retryable ("fetch failed").
+	responses := make([]mockAuthResponse, chat.AuthMaxAttempts)
 	for i := range responses {
 		responses[i] = mockAuthResponse{status: nil, err: errAuthFetchFailed}
 	}
@@ -1061,15 +1070,15 @@ func TestGetAuthStatusWithRetryExhaustedRetries(t *testing.T) {
 
 	expectedMsg := fmt.Sprintf(
 		"auth status check failed after %d/%d attempts",
-		chat.AuthMaxRetries,
-		chat.AuthMaxRetries,
+		chat.AuthMaxAttempts,
+		chat.AuthMaxAttempts,
 	)
 	if !strings.Contains(err.Error(), expectedMsg) {
 		t.Errorf("Expected error to contain %q, got: %v", expectedMsg, err)
 	}
 
-	if int(mock.callCount.Load()) != chat.AuthMaxRetries {
-		t.Errorf("Expected exactly %d calls, got %d", chat.AuthMaxRetries, mock.callCount.Load())
+	if int(mock.callCount.Load()) != chat.AuthMaxAttempts {
+		t.Errorf("Expected exactly %d calls, got %d", chat.AuthMaxAttempts, mock.callCount.Load())
 	}
 }
 
