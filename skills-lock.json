@@ -4,7 +4,7 @@
     "astro": {
       "source": "astrolicious/agent-skills",
       "sourceType": "github",
-      "computedHash": "597a4587f30f1152d3ab2923e84db842a18604e09e16885ffa067730fb435d9d"
+      "computedHash": "ebefe26b231d32379c14e41a46c2de7b4b0184543bedab7febdabe4fb21fba4e"
     },
     "copilot-instructions-blueprint-generator": {
       "source": "github/awesome-copilot",
