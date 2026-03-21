@@ -33,7 +33,8 @@ updates:
       # memory limit on cache-miss builds. Ignore until build footprint is
       # reduced or runners are verified to handle it.
       - dependency-name: "github.com/anchore/syft"
-        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
