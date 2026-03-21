@@ -13,6 +13,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v5/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	chatsvc "github.com/devantler-tech/ksail/v5/pkg/svc/chat"
@@ -35,6 +36,12 @@ const (
 	signalSleepDuration = 50 * time.Millisecond
 	// permissionTimeoutMinutes is the timeout for permission requests.
 	permissionTimeoutMinutes = 5
+	// authMaxAttempts is the maximum number of attempts for auth status checks.
+	authMaxAttempts = 3
+	// authRetryBaseWait is the base wait duration for auth retry backoff.
+	authRetryBaseWait = 500 * time.Millisecond
+	// authRetryMaxWait is the maximum wait duration for auth retry backoff.
+	authRetryMaxWait = 4 * time.Second
 )
 
 // Sentinel errors for the chat command.
@@ -236,10 +243,16 @@ func filterEnvVars(env []string, remove []string) []string {
 	return filtered
 }
 
+// authStatusChecker is the minimal interface required by getAuthStatusWithRetry,
+// allowing the concrete *copilot.Client to be swapped for a test double.
+type authStatusChecker interface {
+	GetAuthStatus(ctx context.Context) (*copilot.GetAuthStatusResponse, error)
+}
+
 // validateCopilotAuth checks authentication. If not authenticated, it attempts
 // an inline `copilot auth login` device flow before returning an error.
 func validateCopilotAuth(ctx context.Context, client *copilot.Client) (string, error) {
-	authStatus, err := client.GetAuthStatus(ctx)
+	authStatus, err := getAuthStatusWithRetry(ctx, client)
 	if err != nil {
 		return "", fmt.Errorf("failed to check authentication: %w", err)
 	}
@@ -284,7 +297,7 @@ func attemptInlineLogin(
 		return nil, fmt.Errorf("%w: login failed: %w", errNotAuthenticated, loginErr)
 	}
 
-	authStatus, err := client.GetAuthStatus(ctx)
+	authStatus, err := getAuthStatusWithRetry(ctx, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify authentication after login: %w", err)
 	}
@@ -299,6 +312,85 @@ func attemptInlineLogin(
 	}
 
 	return authStatus, nil
+}
+
+// isAuthStatusRetryable reports whether err should be retried during auth status checks.
+// It augments the generic netretry.IsRetryable with a Copilot-auth-specific check:
+// "fetch failed" is a transient error emitted by the Copilot subprocess when it has not
+// yet fully initialized, and is not a generic network error that should be retried
+// globally across all callers (Helm/Docker/OCI/etc.).
+func isAuthStatusRetryable(err error) bool {
+	if netretry.IsRetryable(err) {
+		return true
+	}
+
+	return strings.Contains(err.Error(), "fetch failed")
+}
+
+// getAuthStatusWithRetry calls GetAuthStatus with exponential backoff retries
+// for transient errors (e.g., "fetch failed" when the Copilot subprocess
+// hasn't fully initialized).
+func getAuthStatusWithRetry(
+	ctx context.Context,
+	client authStatusChecker,
+) (*copilot.GetAuthStatusResponse, error) {
+	return getAuthStatusWithRetryOpts(ctx, client, authRetryBaseWait, authRetryMaxWait)
+}
+
+// getAuthStatusWithRetryOpts is the underlying implementation for getAuthStatusWithRetry
+// with injectable baseWait/maxWait durations to support testing without real sleep delays.
+func getAuthStatusWithRetryOpts(
+	ctx context.Context,
+	client authStatusChecker,
+	baseWait, maxWait time.Duration,
+) (*copilot.GetAuthStatusResponse, error) {
+	var (
+		lastErr     error
+		lastAttempt int
+	)
+
+	for attempt := 1; attempt <= authMaxAttempts; attempt++ {
+		authStatus, err := client.GetAuthStatus(ctx)
+		if err == nil {
+			return authStatus, nil
+		}
+
+		lastErr = err
+		lastAttempt = attempt
+
+		if !isAuthStatusRetryable(lastErr) || attempt == authMaxAttempts {
+			break
+		}
+
+		delay := netretry.ExponentialDelay(attempt, baseWait, maxWait)
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+
+			return nil, fmt.Errorf("auth status check cancelled: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+
+	if !isAuthStatusRetryable(lastErr) {
+		return nil, fmt.Errorf(
+			"auth status check failed on attempt %d/%d (non-retryable): %w",
+			lastAttempt,
+			authMaxAttempts,
+			lastErr,
+		)
+	}
+
+	return nil, fmt.Errorf(
+		"auth status check failed after %d/%d attempts: %w",
+		lastAttempt,
+		authMaxAttempts,
+		lastErr,
+	)
 }
 
 // resolveCopilotCLIPath finds the Copilot CLI binary, checking:
