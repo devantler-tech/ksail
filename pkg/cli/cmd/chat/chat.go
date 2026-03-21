@@ -36,8 +36,8 @@ const (
 	signalSleepDuration = 50 * time.Millisecond
 	// permissionTimeoutMinutes is the timeout for permission requests.
 	permissionTimeoutMinutes = 5
-	// authMaxRetries is the maximum number of retries for auth status checks.
-	authMaxRetries = 3
+	// authMaxAttempts is the maximum number of attempts for auth status checks.
+	authMaxAttempts = 3
 	// authRetryBaseWait is the base wait duration for auth retry backoff.
 	authRetryBaseWait = 500 * time.Millisecond
 	// authRetryMaxWait is the maximum wait duration for auth retry backoff.
@@ -349,7 +349,7 @@ func getAuthStatusWithRetryOpts(
 		lastAttempt int
 	)
 
-	for attempt := 1; attempt <= authMaxRetries; attempt++ {
+	for attempt := 1; attempt <= authMaxAttempts; attempt++ {
 		authStatus, err := client.GetAuthStatus(ctx)
 		if err == nil {
 			return authStatus, nil
@@ -358,7 +358,7 @@ func getAuthStatusWithRetryOpts(
 		lastErr = err
 		lastAttempt = attempt
 
-		if !isAuthStatusRetryable(lastErr) || attempt == authMaxRetries {
+		if !isAuthStatusRetryable(lastErr) || attempt == authMaxAttempts {
 			break
 		}
 
@@ -380,7 +380,7 @@ func getAuthStatusWithRetryOpts(
 		return nil, fmt.Errorf(
 			"auth status check failed on attempt %d/%d (non-retryable): %w",
 			lastAttempt,
-			authMaxRetries,
+			authMaxAttempts,
 			lastErr,
 		)
 	}
@@ -388,7 +388,7 @@ func getAuthStatusWithRetryOpts(
 	return nil, fmt.Errorf(
 		"auth status check failed after %d/%d attempts: %w",
 		lastAttempt,
-		authMaxRetries,
+		authMaxAttempts,
 		lastErr,
 	)
 }

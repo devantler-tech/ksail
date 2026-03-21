@@ -17,8 +17,8 @@ var httpStatusCodePattern = regexp.MustCompile(`\b(429|50[0-4])\b`)
 var redirectLimitPattern = regexp.MustCompile(`stopped after \d+ redirects`)
 
 // IsRetryable returns true if the error indicates a transient network error
-// that should be retried. This covers HTTP 5xx/429 status codes and TCP-level errors
-// such as connection resets, timeouts, and unexpected EOF.
+// that should be retried. This covers HTTP 429 and 500–504 status codes and TCP-level
+// errors such as connection resets, timeouts, and unexpected EOF.
 // Callers that need to handle additional domain-specific transient errors (e.g.,
 // Copilot auth "fetch failed") should augment this function with a local helper.
 func IsRetryable(err error) bool {
