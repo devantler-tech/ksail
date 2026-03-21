@@ -57,6 +57,10 @@ runs:
         # error (including 403), not just 404/410. Hardens CI against transient
         # proxy.golang.org outages. go.sum still verifies module integrity.
         GOPROXY: "https://proxy.golang.org|direct"
+        # Soft memory limit for Go build toolchain. The KSail binary links a
+        # large dependency tree and the Go linker can exceed default runner
+        # memory on cache-miss builds.
+        GOMEMLIMIT: "6GiB"
         CACHE_HIT: ${{ steps.ksail-cache.outputs.cache-hit }}
         OUTPUT_PATH: ${{ inputs.output-path }}
       run: |
@@ -99,7 +103,7 @@ runs:
           mkdir -p ./.cache
           go generate ./pkg/svc/chat/...
           go tool bundler
-          go build -ldflags="-s -w" -o ./.cache/ksail .
+          go build -trimpath -ldflags="-s -w" -o ./.cache/ksail .
           # Copy to target location
           if [[ "$output_target" = /* ]]; then
             sudo cp ./.cache/ksail "$output_target"

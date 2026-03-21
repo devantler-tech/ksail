@@ -10,6 +10,9 @@ env:
   # error (including 403), not just 404/410. Hardens CI against transient
   # proxy.golang.org outages. go.sum still verifies module integrity.
   GOPROXY: "https://proxy.golang.org|direct"
+  # Soft memory limit for Go build toolchain. GoReleaser links multiple
+  # platform binaries and the linker can exceed runner memory.
+  GOMEMLIMIT: "6GiB"
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -18,7 +21,7 @@ concurrency:
 jobs:
   goreleaser:
     name: Release with GoReleaser
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-4-cores
     permissions:
       contents: write
       packages: write
