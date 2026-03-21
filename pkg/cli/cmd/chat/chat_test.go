@@ -24,9 +24,10 @@ const (
 )
 
 var (
-	errAuthFetchFailed = errors.New("auth check: fetch failed")
-	errFetchFailed     = errors.New("fetch failed")
-	errUnauthorized    = errors.New("unauthorized: authentication required")
+	errAuthFetchFailed       = errors.New("auth check: fetch failed")
+	errFetchFailed           = errors.New("fetch failed")
+	errUnauthorized          = errors.New("unauthorized: authentication required")
+	errNoResponsesConfigured = errors.New("mockAuthChecker: no responses configured")
 )
 
 // createTestTool creates a test tool that tracks whether it was called.
@@ -933,7 +934,7 @@ type mockAuthResponse struct {
 
 func (m *mockAuthChecker) GetAuthStatus(_ context.Context) (*copilot.GetAuthStatusResponse, error) {
 	if len(m.responses) == 0 {
-		return nil, fmt.Errorf("mockAuthChecker: no responses configured") //nolint:goerr113 // Test helper
+		return nil, errNoResponsesConfigured
 	}
 
 	idx := int(m.callCount.Add(1)) - 1
