@@ -165,7 +165,7 @@ Start with Plan mode for learning and reviewing workflows, then enable auto-appr
 
 **Timeout errors:** Increase timeout for complex operations (`--timeout 15m`).
 
-**Authentication errors:** Authenticate Copilot CLI (`copilot auth login`), use `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN` environment variables, and avoid `GITHUB_TOKEN`/`GH_TOKEN` (may lack Copilot scopes).
+**Authentication errors:** Authenticate Copilot CLI (`copilot auth login`), use `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN` environment variables, and avoid `GITHUB_TOKEN`/`GH_TOKEN` (may lack Copilot scopes). KSail automatically retries transient auth failures (HTTP 429, 500–504, network errors) up to 3 times with exponential backoff — `auth status check failed after N/3 attempts` messages indicate a persistent issue requiring action.
 
 ## See Also
 
