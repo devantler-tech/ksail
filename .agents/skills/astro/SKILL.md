@@ -1,6 +1,6 @@
 ---
 name: astro
-description: Skill for using Astro projects. Includes CLI commands, project structure, core config options, and adapters. Use this skill when the user needs to work with Astro or when the user mentions Astro.
+description: Skill for building with the Astro web framework. Helps create Astro components and pages, configure SSR adapters, set up content collections, deploy static sites, and manage project structure and CLI commands. Use when the user needs to work with Astro, mentions .astro files, asks about static site generation (SSG), islands architecture, content collections, or deploying an Astro project.
 license: MIT
 metadata: 
   authors: "Astro Team"
@@ -22,27 +22,27 @@ CLI looks for `astro.config.js`, `astro.config.mjs`, `astro.config.cjs`, and `as
 
 ### CLI Commands
 
-- `npx astro dev` -  Start the development server.
+- `npx astro dev` - Start the development server.
 - `npx astro build` - Build your project and write it to disk.
 - `npx astro check` - Check your project for errors.
 - `npx astro add` - Add an integration.
-- `npmx astro sync` - Generate TypeScript types for all Astro modules.
+- `npx astro sync` - Generate TypeScript types for all Astro modules.
 
 **Re-run after adding/changing plugins.**
 
 ### Project Structure
 
-Astro leverages an opinionated folder layout for your project. Every Astro project root should include some directories and files. Reference [project structure docs](https://docs.astro.build/en/basics/project-structure).
+Reference [project structure docs](https://docs.astro.build/en/basics/project-structure).
 
-- `src/*` - Your project source code (components, pages, styles, images, etc.)
-- `src/pages` - Required sub-directory in your Astro project. Without it, your site will have no pages or routes!
-- `src/components` - It is common to group and organize all of your project components together in this folder. This is a common convention in Astro projects, but it is not required. Feel free to organize your components however you like!
-- `src/layouts` - Just like `src/components`, this directory is a common convention but not required.
-- `src/styles` - It is a common convention to store your CSS or Sass files here, but this is not required. As long as your styles live somewhere in the src/ directory and are imported correctly, Astro will handle and optimize them.
-- `public/*` - Your non-code, unprocessed assets (fonts, icons, etc.). The files in this folder will be copied into the build folder untouched, and then your site will be built.
-- `package.json` - A project manifest.
-- `astro.config.{js,mjs,cjs,ts}` - An Astro configuration file. (recommended)
-- `tsconfig.json` - A TypeScript configuration file. (recommended)
+- `src/*` - Project source code (components, pages, styles, images, etc.)
+- `src/pages` - **Required.** Defines all pages and routes.
+- `src/components` - Components (convention, not required).
+- `src/layouts` - Layout components (convention, not required).
+- `src/styles` - CSS/Sass files (convention, not required).
+- `public/*` - Non-code, unprocessed assets (fonts, icons, etc.); copied as-is to build output.
+- `package.json` - Project manifest.
+- `astro.config.{js,mjs,cjs,ts}` - Astro configuration file. (recommended)
+- `tsconfig.json` - TypeScript configuration file. (recommended)
 
 ---
 
@@ -50,7 +50,59 @@ Astro leverages an opinionated folder layout for your project. Every Astro proje
 
 | Option | Notes |
 |--------|-------|
-| `site` | Your final, deployed URL. Astro uses this full URL to generate your sitemap and canonical URLs in your final build. |
+| `site` | Your final, deployed URL. Used to generate sitemaps and canonical URLs. |
+
+### Example `astro.config.ts`
+
+```ts
+import { defineConfig } from 'astro/config';
+
+export default defineConfig({
+  site: 'https://example.com',
+});
+```
+
+---
+
+## Common Workflows
+
+### Creating a Basic Page
+
+Add a file to `src/pages/` — the filename becomes the route:
+
+```astro
+---
+// src/pages/index.astro
+const title = 'Hello, Astro!';
+---
+<html>
+  <head><title>{title}</title></head>
+  <body>
+    <h1>{title}</h1>
+  </body>
+</html>
+```
+
+### Creating a Component
+
+```astro
+---
+// src/components/Card.astro
+const { title, body } = Astro.props;
+---
+<div class="card">
+  <h2>{title}</h2>
+  <p>{body}</p>
+</div>
+```
+
+### Deploying with an Adapter
+
+1. Add the adapter: `npx astro add vercel --yes` (or `node`, `cloudflare`, `netlify`)
+2. Run `npx astro check` to catch type and configuration errors before building.
+3. Run `npx astro build` to produce the deployment artifact.
+4. Verify the build output directory (e.g. `dist/`) exists and is non-empty before proceeding.
+5. Deploy the output per the adapter's documentation.
 
 ---
 
