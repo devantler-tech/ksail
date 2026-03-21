@@ -18,6 +18,8 @@ builds:
         goarch: amd64
     env:
       - CGO_ENABLED=0
+    flags:
+      - -trimpath
     ldflags:
       - -s -w -X github.com/devantler-tech/ksail/v5/internal/buildmeta.Version={{.Version}} -X github.com/devantler-tech/ksail/v5/internal/buildmeta.Commit={{.Commit}} -X github.com/devantler-tech/ksail/v5/internal/buildmeta.Date={{.Date}}
     hooks:

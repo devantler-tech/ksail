@@ -11,6 +11,11 @@ env:
   # error (including 403), not just 404/410. Hardens CI against transient
   # proxy.golang.org outages. go.sum still verifies module integrity.
   GOPROXY: "https://proxy.golang.org|direct"
+  # Soft memory limit for Go build toolchain (compiler, linker). The KSail
+  # binary links a large dependency tree and the Go linker can exceed the
+  # default runner memory on cache-miss builds. Setting GOMEMLIMIT makes the
+  # GC work harder to stay within budget, reducing peak RSS.
+  GOMEMLIMIT: "6GiB"
 
 concurrency:
   group: "ci-ksail-${{ github.workflow }}-${{ github.ref }}"
@@ -41,7 +46,7 @@ jobs:
           persist-credentials: false
 
       - name: 🔍 Filter paths
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
           filters: |
@@ -88,7 +93,7 @@ jobs:
 
   build-artifact:
     name: 🏗️ Build KSail Binary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-4-cores
     needs: [changes]
     if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true')
     permissions:
@@ -191,7 +196,7 @@ jobs:
 
   generate-docs:
     name: 📚 Generate Reference Docs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-4-cores
     needs: [changes]
     if: needs.changes.outputs.cli == 'true'
     permissions:
@@ -240,7 +245,7 @@ jobs:
       contents: write
     steps:
       - name: 🔑 Generate GitHub App Token
-        uses: actions/create-github-app-token@bf559f85448f9380bcfa2899dbdc01eb5b37be3a # v3.0.0-beta.2
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0-beta.2
         id: generate-token
         with:
           app-id: ${{ vars.APP_ID }}
