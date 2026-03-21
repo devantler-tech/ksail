@@ -21,7 +21,7 @@ The MCP server runs over stdio and is invoked by MCP clients:
 ksail mcp
 ````
 
-The server listens on stdin, exposes all KSail commands as MCP tools, and exits when the client disconnects. See [Integration Examples](#integration-examples) for typical usage patterns.
+The server listens on stdin, exposes supported KSail commands as MCP tools, and exits when the client disconnects. See [Integration Examples](#integration-examples) for typical usage patterns.
 
 ## Available Tools
 
@@ -126,9 +126,9 @@ async with stdio_client(StdioServerParameters(command="ksail", args=["mcp"])) as
 
 ## Configuration
 
-The server uses **stdio** for communication, runs commands in the **current working directory** (set by the client), keeps alive for **30 seconds** after the last request, and returns results in **pages of 100 items** for large lists. Tools execute with the same permissions as the user running the server.
+The server uses **stdio** for communication, runs commands in the **current working directory** (set by the client), keeps the connection alive for **30 seconds** after the last request, and returns results in **pages of 100 items** for large lists.
 
-**Security Note:** Only run the MCP server with trusted MCP clients.
+**Security Note:** Only run the MCP server with trusted MCP clients; any connected client can invoke KSail tools that execute commands with the full permissions of the user running `ksail mcp`, so a compromised or misconfigured client could perform arbitrary cluster or filesystem operations on your behalf.
 
 ## Troubleshooting
 
