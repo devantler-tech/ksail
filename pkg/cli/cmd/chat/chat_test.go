@@ -1,8 +1,13 @@
+// Package chat_test provides unit tests for the chat command package.
 package chat_test
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,6 +21,13 @@ import (
 const (
 	successResult = "success"
 	failureResult = "failure"
+)
+
+var (
+	errAuthFetchFailed       = errors.New("auth check: fetch failed")
+	errFetchFailed           = errors.New("fetch failed")
+	errUnauthorized          = errors.New("unauthorized: authentication required")
+	errNoResponsesConfigured = errors.New("mockAuthChecker: no responses configured")
 )
 
 // createTestTool creates a test tool that tracks whether it was called.
@@ -904,4 +916,232 @@ func TestFilterEnvVars(t *testing.T) {
 			}
 		})
 	}
+}
+
+// mockAuthChecker is a test double for chat.AuthStatusChecker that tracks
+// call count and returns a configurable sequence of responses.
+type mockAuthChecker struct {
+	// responses to return in order; if calls exceed len(responses), the last is reused.
+	responses []mockAuthResponse
+	// callCount tracks the number of GetAuthStatus calls made.
+	callCount atomic.Int32
+}
+
+type mockAuthResponse struct {
+	status *copilot.GetAuthStatusResponse
+	err    error
+}
+
+func (m *mockAuthChecker) GetAuthStatus(_ context.Context) (*copilot.GetAuthStatusResponse, error) {
+	if len(m.responses) == 0 {
+		return nil, errNoResponsesConfigured
+	}
+
+	idx := int(m.callCount.Add(1)) - 1
+	if idx >= len(m.responses) {
+		idx = len(m.responses) - 1
+	}
+
+	return m.responses[idx].status, m.responses[idx].err
+}
+
+// TestGetAuthStatusWithRetrySucceedsFirstAttempt verifies that no retries occur when
+// GetAuthStatus succeeds on the first call.
+func TestGetAuthStatusWithRetrySucceedsFirstAttempt(t *testing.T) {
+	t.Parallel()
+
+	login := "testuser"
+	mock := &mockAuthChecker{
+		responses: []mockAuthResponse{
+			{
+				status: &copilot.GetAuthStatusResponse{IsAuthenticated: true, Login: &login},
+				err:    nil,
+			},
+		},
+	}
+
+	status, err := chat.GetAuthStatusWithRetry(context.Background(), mock)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if status == nil || !status.IsAuthenticated {
+		t.Fatal("Expected authenticated status")
+	}
+
+	if mock.callCount.Load() != 1 {
+		t.Errorf("Expected exactly 1 call, got %d", mock.callCount.Load())
+	}
+}
+
+// TestGetAuthStatusWithRetryRetriesOnRetryableError verifies that a transient
+// "fetch failed" error is retried and eventual success is returned.
+func TestGetAuthStatusWithRetryRetriesOnRetryableError(t *testing.T) {
+	t.Parallel()
+
+	login := "testuser"
+	mock := &mockAuthChecker{
+		responses: []mockAuthResponse{
+			{status: nil, err: errAuthFetchFailed},
+			{
+				status: &copilot.GetAuthStatusResponse{IsAuthenticated: true, Login: &login},
+				err:    nil,
+			},
+		},
+	}
+
+	const (
+		tinyBase = 1 * time.Millisecond
+		tinyMax  = 2 * time.Millisecond
+	)
+
+	status, err := chat.GetAuthStatusWithRetryOpts(context.Background(), mock, tinyBase, tinyMax)
+	if err != nil {
+		t.Fatalf("Expected no error after retry, got: %v", err)
+	}
+
+	if status == nil || !status.IsAuthenticated {
+		t.Fatal("Expected authenticated status on retry success")
+	}
+
+	if mock.callCount.Load() < 2 {
+		t.Errorf("Expected at least 2 calls (retry), got %d", mock.callCount.Load())
+	}
+}
+
+// TestGetAuthStatusWithRetryStopsOnNonRetryableError verifies that a permanent
+// error (e.g., unauthorized) is not retried and the error is returned immediately,
+// wrapped with attempt context.
+func TestGetAuthStatusWithRetryStopsOnNonRetryableError(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockAuthChecker{
+		responses: []mockAuthResponse{
+			{status: nil, err: errUnauthorized},
+		},
+	}
+
+	_, err := chat.GetAuthStatusWithRetry(context.Background(), mock)
+	if err == nil {
+		t.Fatal("Expected error for non-retryable failure")
+	}
+
+	if !strings.Contains(err.Error(), "unauthorized") {
+		t.Errorf("Expected unauthorized error, got: %v", err)
+	}
+
+	if !strings.Contains(err.Error(), "non-retryable") {
+		t.Errorf("Expected error to mention non-retryable, got: %v", err)
+	}
+
+	if mock.callCount.Load() != 1 {
+		t.Errorf(
+			"Expected exactly 1 call (no retry on non-retryable), got %d",
+			mock.callCount.Load(),
+		)
+	}
+}
+
+// TestGetAuthStatusWithRetryExhaustedRetries verifies that when all retries are
+// exhausted the returned error is wrapped with attempt count and max retries context.
+func TestGetAuthStatusWithRetryExhaustedRetries(t *testing.T) {
+	t.Parallel()
+
+	// Build authMaxAttempts responses, all retryable ("fetch failed").
+	responses := make([]mockAuthResponse, chat.AuthMaxAttempts)
+	for i := range responses {
+		responses[i] = mockAuthResponse{status: nil, err: errAuthFetchFailed}
+	}
+
+	mock := &mockAuthChecker{responses: responses}
+
+	const (
+		tinyBase = 1 * time.Millisecond
+		tinyMax  = 2 * time.Millisecond
+	)
+
+	_, err := chat.GetAuthStatusWithRetryOpts(context.Background(), mock, tinyBase, tinyMax)
+	if err == nil {
+		t.Fatal("Expected error after exhausting retries")
+	}
+
+	if !strings.Contains(err.Error(), "fetch failed") {
+		t.Errorf("Expected original error preserved, got: %v", err)
+	}
+
+	expectedMsg := fmt.Sprintf(
+		"auth status check failed after %d/%d attempts",
+		chat.AuthMaxAttempts,
+		chat.AuthMaxAttempts,
+	)
+	if !strings.Contains(err.Error(), expectedMsg) {
+		t.Errorf("Expected error to contain %q, got: %v", expectedMsg, err)
+	}
+
+	if int(mock.callCount.Load()) != chat.AuthMaxAttempts {
+		t.Errorf("Expected exactly %d calls, got %d", chat.AuthMaxAttempts, mock.callCount.Load())
+	}
+}
+
+// TestGetAuthStatusWithRetryContextCancellation verifies that in-flight retry
+// waits respect context cancellation and return the cancellation error promptly.
+func TestGetAuthStatusWithRetryContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel the context immediately after the first call returns.
+	var called atomic.Bool
+
+	mock := &mockAuthChecker{
+		responses: []mockAuthResponse{
+			{status: nil, err: errFetchFailed},
+		},
+	}
+
+	// Override: cancel ctx as soon as first GetAuthStatus returns.
+	cancellingMock := &cancelOnCallMock{inner: mock, cancel: cancel, called: &called}
+
+	// Use tiny backoff durations so the timer fires well before any CI timeout,
+	// and cancellation can be detected quickly without relying on wall-clock thresholds.
+	const (
+		tinyBase = 5 * time.Millisecond
+		tinyMax  = 10 * time.Millisecond
+	)
+
+	start := time.Now()
+	_, err := chat.GetAuthStatusWithRetryOpts(ctx, cancellingMock, tinyBase, tinyMax)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("Expected error due to context cancellation")
+	}
+
+	if !strings.Contains(err.Error(), "cancelled") {
+		t.Errorf("Expected cancellation error, got: %v", err)
+	}
+
+	// With tiny backoff durations the whole call should complete in well under 1s.
+	if elapsed > time.Second {
+		t.Errorf("Expected fast cancellation, took %v", elapsed)
+	}
+}
+
+// cancelOnCallMock wraps a mock and cancels the context after the first call.
+type cancelOnCallMock struct {
+	inner  chat.AuthStatusChecker
+	cancel context.CancelFunc
+	called *atomic.Bool
+}
+
+func (m *cancelOnCallMock) GetAuthStatus(
+	ctx context.Context,
+) (*copilot.GetAuthStatusResponse, error) {
+	resp, err := m.inner.GetAuthStatus(ctx)
+	// Cancel after the first call so the retry wait is interrupted.
+	if m.called.CompareAndSwap(false, true) {
+		m.cancel()
+	}
+
+	return resp, err //nolint:wrapcheck // Mock function, wrapping not needed
 }

@@ -1,5 +1,12 @@
 package chat
 
+import (
+	"context"
+	"time"
+
+	copilot "github.com/github/copilot-sdk/go"
+)
+
 // GetLoadChatConfig returns the loadChatConfig function for testing purposes.
 func GetLoadChatConfig() func() chatConfig {
 	return loadChatConfig
@@ -23,4 +30,28 @@ func GetResolveReasoningEffort() func(string, string) (string, error) {
 // GetFilterEnvVars returns the filterEnvVars function for testing.
 func GetFilterEnvVars() func([]string, []string) []string {
 	return filterEnvVars
+}
+
+// AuthMaxAttempts exports the authMaxAttempts constant for testing.
+const AuthMaxAttempts = authMaxAttempts
+
+// AuthStatusChecker is the exported alias for the authStatusChecker interface.
+type AuthStatusChecker = authStatusChecker
+
+// GetAuthStatusWithRetry exposes getAuthStatusWithRetry for white-box testing.
+func GetAuthStatusWithRetry(
+	ctx context.Context,
+	checker AuthStatusChecker,
+) (*copilot.GetAuthStatusResponse, error) {
+	return getAuthStatusWithRetry(ctx, checker)
+}
+
+// GetAuthStatusWithRetryOpts exposes getAuthStatusWithRetryOpts for white-box testing
+// with injectable backoff durations so tests can avoid real sleep delays.
+func GetAuthStatusWithRetryOpts(
+	ctx context.Context,
+	checker AuthStatusChecker,
+	baseWait, maxWait time.Duration,
+) (*copilot.GetAuthStatusResponse, error) {
+	return getAuthStatusWithRetryOpts(ctx, checker, baseWait, maxWait)
 }
