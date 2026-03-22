@@ -319,7 +319,7 @@ For a deeper dive into KSail's design and internals, refer to:
 - `pkg/apis/`: API types, schemas, and enums; each enum type lives in its own file under `pkg/apis/cluster/v1alpha1/` (e.g., `distribution.go`, `cni.go`, `csi.go`, `loadbalancer.go`, `gitopsengine.go`, etc.); the `EnumValuer` interface is in `enum.go`
 - `pkg/client/`: Embedded tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kustomize, oci, netretry); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`.
 - `pkg/svc/`: Services including installers, providers, and provisioners
-  - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation
+  - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation; `sandbox.go` exports `IsPathWithinDirectory` which uses `fsutil.EvalCanonicalPath` for path containment checks
   - `pkg/svc/detector/`: Detects installed Kubernetes components by querying Helm release history and the Kubernetes API; used by the update command to build accurate baseline state
     - `pkg/svc/detector/cluster/`: Detects Kubernetes distribution, provider, and cluster name by analyzing kubeconfig context names and server endpoints; exposes `DetectInfo`, `DetectDistributionFromContext`, and `ResolveKubeconfigPath`
     - `pkg/svc/detector/gitops/`: Detects existing GitOps Custom Resources (FluxInstance, ArgoCD Application) managed by KSail in the source directory
@@ -336,7 +336,7 @@ For a deeper dive into KSail's design and internals, refer to:
 - `pkg/k8s/`: Kubernetes helpers and templates
 - `pkg/cli/`: CLI wiring, commands, and terminal UI components
 - `pkg/envvar/`: Environment variable utilities
-- `pkg/fsutil/`: Filesystem utilities (includes configmanager for configuration loading)
+- `pkg/fsutil/`: Filesystem utilities (includes configmanager for configuration loading); exports `EvalCanonicalPath` (filepath.Abs + filepath.EvalSymlinks with parent fallback) for safe path canonicalization, and `ReadFileSafe` for path-traversal-safe file reads — reuse these instead of reimplementing containment checks
 - `pkg/notify/`: CLI notifications and progress display utilities
 - `pkg/runner/`: Cobra command execution helpers
 - `pkg/timer/`: Command timing and performance tracking
