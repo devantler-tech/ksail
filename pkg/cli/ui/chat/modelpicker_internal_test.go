@@ -418,7 +418,12 @@ func TestFormatMultiplier(t *testing.T) {
 
 			got := chat.ExportFormatMultiplier(testCase.mult)
 			if got != testCase.expected {
-				t.Errorf("formatMultiplier(%g) = %q, want %q", testCase.mult, got, testCase.expected)
+				t.Errorf(
+					"formatMultiplier(%g) = %q, want %q",
+					testCase.mult,
+					got,
+					testCase.expected,
+				)
 			}
 		})
 	}
