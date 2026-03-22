@@ -547,44 +547,57 @@ func TestWriteToolSubcommandCoverage(t *testing.T) {
 		toolMap[tool.Name] = tool
 	}
 
-	// Verify cluster_write contains expected subcommands
-	clusterWrite, ok := toolMap["cluster_write"]
-	if !ok {
-		t.Fatal("cluster_write tool not found")
-	}
+	t.Run("cluster_write", func(t *testing.T) {
+		t.Parallel()
 
-	for _, sub := range []string{"update", "create", "delete", "init", "start", "stop", "backup", "restore"} {
-		if _, exists := clusterWrite.Subcommands[sub]; !exists {
-			t.Errorf("cluster_write should contain subcommand %q", sub)
+		assertToolContainsSubcommands(t, toolMap, "cluster_write",
+			"update", "create", "delete", "init", "start", "stop", "backup", "restore",
+		)
+	})
+
+	t.Run("workload_write", func(t *testing.T) {
+		t.Parallel()
+
+		assertToolContainsSubcommands(t, toolMap, "workload_write",
+			"apply", "reconcile",
+		)
+	})
+
+	t.Run("cipher_write", func(t *testing.T) {
+		t.Parallel()
+
+		assertToolContainsSubcommands(t, toolMap, "cipher_write",
+			"encrypt", "decrypt", "edit", "import",
+		)
+	})
+
+	t.Run("cipher_read_not_generated", func(t *testing.T) {
+		t.Parallel()
+
+		if _, exists := toolMap["cipher_read"]; exists {
+			t.Error(
+				"cipher_read should not be generated — all cipher subcommands are write operations",
+			)
 		}
+	})
+}
+
+func assertToolContainsSubcommands(
+	t *testing.T,
+	toolMap map[string]toolgen.ToolDefinition,
+	toolName string,
+	expectedSubcommands ...string,
+) {
+	t.Helper()
+
+	tool, found := toolMap[toolName]
+	if !found {
+		t.Fatalf("%s tool not found", toolName)
 	}
 
-	// Verify workload_write contains expected subcommands
-	workloadWrite, ok := toolMap["workload_write"]
-	if !ok {
-		t.Fatal("workload_write tool not found")
-	}
-
-	for _, sub := range []string{"apply", "reconcile"} {
-		if _, exists := workloadWrite.Subcommands[sub]; !exists {
-			t.Errorf("workload_write should contain subcommand %q", sub)
+	for _, sub := range expectedSubcommands {
+		if _, exists := tool.Subcommands[sub]; !exists {
+			t.Errorf("%s should contain subcommand %q", toolName, sub)
 		}
-	}
-
-	// Verify cipher_write contains expected subcommands (including decrypt)
-	cipherWrite, ok := toolMap["cipher_write"]
-	if !ok {
-		t.Fatal("cipher_write tool not found")
-	}
-
-	for _, sub := range []string{"encrypt", "decrypt", "edit", "import"} {
-		if _, exists := cipherWrite.Subcommands[sub]; !exists {
-			t.Errorf("cipher_write should contain subcommand %q", sub)
-		}
-	}
-
-	// Verify cipher_read is NOT generated (all cipher subcommands are write)
-	if _, exists := toolMap["cipher_read"]; exists {
-		t.Error("cipher_read should not be generated — all cipher subcommands are write operations")
 	}
 }
