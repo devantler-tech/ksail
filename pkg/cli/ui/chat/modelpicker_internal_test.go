@@ -394,6 +394,41 @@ func TestModelPickerUpNavigation_Boundary(t *testing.T) {
 	}
 }
 
+// TestFormatMultiplier tests that formatMultiplier formats values consistently and
+// never produces scientific notation for extreme inputs.
+func TestFormatMultiplier(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		mult     float64
+		expected string
+	}{
+		{name: "integer multiplier", mult: 1.0, expected: "1"},
+		{name: "fractional multiplier", mult: 1.5, expected: "1.5"},
+		{name: "two decimal places", mult: 1.25, expected: "1.25"},
+		{name: "small fractional", mult: 0.33, expected: "0.33"},
+		{name: "large integer", mult: 1000000.0, expected: "1000000"},
+		{name: "large fractional", mult: 1000000.50, expected: "1000000.5"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := chat.ExportFormatMultiplier(testCase.mult)
+			if got != testCase.expected {
+				t.Errorf(
+					"formatMultiplier(%g) = %q, want %q",
+					testCase.mult,
+					got,
+					testCase.expected,
+				)
+			}
+		})
+	}
+}
+
 // TestModelPickerSelectAuto_WhenAlreadyAuto tests selecting auto when already in auto mode.
 func TestModelPickerSelectAuto_WhenAlreadyAuto(t *testing.T) {
 	t.Parallel()

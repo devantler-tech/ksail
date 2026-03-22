@@ -289,7 +289,7 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 
 	multiplier := ""
 	if model.Billing != nil && model.Billing.Multiplier > 0 {
-		multiplier = fmt.Sprintf(" (%gx)", model.Billing.Multiplier)
+		multiplier = fmt.Sprintf(" (%sx)", formatMultiplier(model.Billing.Multiplier))
 	}
 
 	line := fmt.Sprintf("%s%s%s", prefix, model.ID, multiplier)
@@ -313,7 +313,7 @@ func (m *Model) formatAutoOption() string {
 
 	mult := m.findModelMultiplier(resolved)
 	if mult > 0 {
-		return fmt.Sprintf("auto (%s \u00b7 %gx)", resolved, mult)
+		return fmt.Sprintf("auto (%s \u00b7 %sx)", resolved, formatMultiplier(mult))
 	}
 
 	return fmt.Sprintf("auto (%s)", resolved)

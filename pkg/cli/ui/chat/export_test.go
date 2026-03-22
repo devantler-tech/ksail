@@ -362,6 +362,9 @@ var ExportSetModelUnavailableReason = func(m *Model, reason string) {
 	m.modelUnavailableReason = reason
 }
 
+// ExportFormatMultiplier exposes formatMultiplier for testing.
+var ExportFormatMultiplier = formatMultiplier
+
 // ExportBuildModelStatusText exposes buildModelStatusText for testing.
 var ExportBuildModelStatusText = func(m *Model) string {
 	return m.buildModelStatusText()

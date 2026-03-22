@@ -202,8 +202,7 @@ func (m *Model) buildModelStatusText() string {
 
 		mult := m.findModelMultiplier(resolved)
 		if mult > 0 {
-			multStr := strings.TrimRight(fmt.Sprintf("%.2f", mult), "0")
-			multStr = strings.TrimRight(multStr, ".")
+			multStr := formatMultiplier(mult)
 
 			return modelStyle.Render(
 				fmt.Sprintf("%s \u2192 %s (%sx)", modelAuto, resolved, multStr),
@@ -216,6 +215,16 @@ func (m *Model) buildModelStatusText() string {
 	default:
 		return modelStyle.Render(modelAuto)
 	}
+}
+
+// formatMultiplier formats a model multiplier value consistently for display.
+// It renders with two decimal places, then trims trailing zeros and any trailing dot.
+func formatMultiplier(mult float64) string {
+	multStr := fmt.Sprintf("%.2f", mult)
+	multStr = strings.TrimRight(multStr, "0")
+	multStr = strings.TrimRight(multStr, ".")
+
+	return multStr
 }
 
 // buildReasoningEffortStatusText renders the reasoning effort indicator for the status bar.
