@@ -25,6 +25,7 @@ safe-outputs:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
     max: 3
+    close-older-discussions: true
   add-comment:
     target: "*"
     max: 3
