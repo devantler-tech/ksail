@@ -313,7 +313,7 @@ func (m *Model) formatAutoOption() string {
 
 	mult := m.findModelMultiplier(resolved)
 	if mult > 0 {
-		return fmt.Sprintf("auto (%s \u00b7 %gx)", resolved, mult)
+		return fmt.Sprintf("auto (%s \u00b7 %sx)", resolved, formatMultiplier(mult))
 	}
 
 	return fmt.Sprintf("auto (%s)", resolved)
