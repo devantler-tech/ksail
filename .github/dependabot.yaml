@@ -27,14 +27,6 @@ updates:
         patterns:
           - "k8s.io/*"
           - "sigs.k8s.io/*"
-    ignore:
-      # syft is an indirect transitive dep (via anchore/grype) whose major and minor
-      # bumps add heavy new deps that push the Go linker past the CI runner
-      # memory limit on cache-miss builds. Ignore non-patch updates until build
-      # footprint is reduced or runners are verified to handle it.
-      - dependency-name: "github.com/anchore/syft"
-        update-types:
-          ["version-update:semver-minor", "version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
