@@ -17,35 +17,19 @@ ksail cluster init \
   --gitops-engine None
 ```
 
-Vanilla provides standard upstream Kubernetes, Cilium adds modern networking with observability, and skipping GitOps enables a direct apply workflow for immediate feedback.
-
 ### Workflow
 
-1. **Create cluster**
+```bash
+ksail cluster create
 
-   ```bash
-   ksail cluster create
-   ```
+# Apply, inspect, and iterate
+ksail workload apply -f my-deployment.yaml
+ksail workload get pods
+ksail workload apply -f updated-deployment.yaml
+ksail workload logs deployment/my-app
 
-2. **Apply manifests directly**
-
-   ```bash
-   ksail workload apply -f my-deployment.yaml
-   ksail workload get pods
-   ```
-
-3. **Experiment with changes**
-
-   ```bash
-   ksail workload apply -f updated-deployment.yaml
-   ksail workload logs deployment/my-app
-   ```
-
-4. **Clean up**
-
-   ```bash
-   ksail cluster delete
-   ```
+ksail cluster delete
+```
 
 ### Tips
 
@@ -70,36 +54,19 @@ ksail cluster init \
   --local-registry localhost:5050
 ```
 
-K3s starts faster with lower resource usage, Cilium provides network policies and observability, Local Path Provisioner enables persistent volumes for stateful apps, Flux mirrors production GitOps patterns, and a local registry avoids pushing images to a remote registry during iteration.
-
 ### Workflow
 
-1. **Create cluster**
+```bash
+ksail cluster create
 
-   ```bash
-   ksail cluster create
-   ```
+# Build and push to local registry
+docker build -t localhost:5050/my-app:dev .
+docker push localhost:5050/my-app:dev
 
-2. **Build and push image**
-
-   ```bash
-   docker build -t localhost:5050/my-app:dev .
-   docker push localhost:5050/my-app:dev
-   ```
-
-3. **Update manifests**
-
-   ```yaml
-   # k8s/deployment.yaml
-   image: localhost:5050/my-app:dev
-   ```
-
-4. **Deploy via GitOps**
-
-   ```bash
-   ksail workload push
-   ksail workload reconcile
-   ```
+# Update k8s/deployment.yaml: image: localhost:5050/my-app:dev
+ksail workload push
+ksail workload reconcile
+```
 
 ### Tips
 
@@ -128,8 +95,6 @@ spec:
   workload:
     sourceDirectory: k8s
 ```
-
-K3s starts fastest in CI, Cilium enforces network policies, Flux tests the actual deployment workflow, and declarative config ensures reproducibility across runs.
 
 ### GitHub Actions (Recommended)
 
@@ -216,16 +181,3 @@ ksail cluster delete
 - Use matrix builds to test across multiple Kubernetes versions/distributions
 - Use `--ttl` as a best-effort safety net — the cluster auto-destroys when the TTL elapses provided the `ksail cluster create` process stays alive
 - Consider using `ksail cluster start` and `ksail cluster stop` if tests can share a cluster
-
-## Configuration Comparison
-
-| Aspect           | Learning         | Development      | CI/CD            |
-|------------------|------------------|------------------|------------------|
-| Distribution     | Vanilla          | K3s              | K3s              |
-| CNI              | Cilium           | Cilium           | Cilium           |
-| CSI              | None             | Local Path Provisioner | None        |
-| GitOps           | None             | Flux             | Flux             |
-| Local Registry   | Optional         | Yes              | Yes              |
-| Declarative Config | Optional       | Recommended      | Required         |
-| Cluster Lifetime | Session          | Days/Weeks       | Minutes (or `--ttl`) |
-
