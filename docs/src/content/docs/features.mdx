@@ -69,10 +69,14 @@ ksail workload gen deployment my-app --image=nginx --port=80
 | -------------------------- | ---------------------------------------- |
 | `ksail workload apply`     | Apply manifests to cluster               |
 | `ksail workload create`    | Create resources imperatively            |
+| `ksail workload edit`      | Edit a resource in-place                 |
 | `ksail workload get`       | Get resources                            |
+| `ksail workload describe`  | Describe resources in detail             |
+| `ksail workload explain`   | Get API documentation for a resource     |
 | `ksail workload delete`    | Delete Kubernetes resources              |
 | `ksail workload logs`      | View container logs                      |
 | `ksail workload exec`      | Execute command in container             |
+| `ksail workload expose`    | Expose a resource as a service           |
 | `ksail workload gen`       | Generate Kubernetes manifests            |
 | `ksail workload validate`  | Validate manifests against schemas       |
 | `ksail workload install`   | Install Helm charts                      |
@@ -80,6 +84,8 @@ ksail workload gen deployment my-app --image=nginx --port=80
 | `ksail workload rollout`   | Manage rollouts                          |
 | `ksail workload wait`      | Wait for conditions                      |
 | `ksail workload images`    | List required container images           |
+| `ksail workload export`    | Export container images to a tar archive |
+| `ksail workload import`    | Import container images from a tar archive |
 | `ksail workload watch`     | Watch directory and auto-apply on change |
 
 ## GitOps Workflows
