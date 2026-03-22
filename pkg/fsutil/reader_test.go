@@ -59,8 +59,9 @@ func testReadFileSafeTraversalAttempt(t *testing.T) {
 
 	base := t.TempDir()
 	parent := filepath.Join(base, "..", "traversal.txt")
-	absParent, _ := filepath.Abs(parent)
-	err := os.WriteFile(absParent, []byte("traversal"), 0o600)
+	absParent, err := filepath.Abs(parent)
+	require.NoError(t, err, "Abs parent")
+	err = os.WriteFile(absParent, []byte("traversal"), 0o600)
 	require.NoError(t, err, "WriteFile setup parent")
 
 	attempt := filepath.Join(base, "..", "traversal.txt")
