@@ -74,5 +74,6 @@ func ExponentialDelay(
 	}
 
 	delay := baseWait * time.Duration(1<<(attempt-1))
+
 	return min(delay, maxWait)
 }
