@@ -92,7 +92,9 @@ To decide which phase to perform:
    cat /tmp/existing-discussion.json | jq '.data.search'
    ```
 
-   If `discussionCount` is greater than 0, an open planning discussion exists. Read the first discussion's content using the GitHub tools and review maintainer comments. If not found (discussionCount is 0), perform Phase 1 and nothing else.
+   If `discussionCount` is 0, no planning discussion exists. Perform Phase 1 and nothing else.
+
+   If `discussionCount` is greater than 0, an open planning discussion exists. Read the first discussion's content using the GitHub tools and review maintainer comments. Then proceed to step 2.
 
    **Important:** Only use this pre-step result for phase selection. Do NOT call `list_discussions` to re-check — the pre-step result is authoritative.
 
