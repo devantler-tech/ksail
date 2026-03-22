@@ -94,7 +94,7 @@ func TestCreateMinimalProvisioner_TalosDockerError(t *testing.T) {
 	require.Nil(t, provisioner)
 	// The error must originate from the Docker code path, proving the provider
 	// defaulted to Docker (not an ErrUnsupportedProvider from an unknown provider).
-	assert.NotErrorIs(t, err, clusterprovisioner.ErrUnsupportedProvider)
+	require.NotErrorIs(t, err, clusterprovisioner.ErrUnsupportedProvider)
 	assert.Contains(t, err.Error(), "failed to create Talos provisioner")
 }
 
