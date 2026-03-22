@@ -27,7 +27,14 @@ func ReadFileSafe(basePath, filePath string) ([]byte, error) {
 	// Use filepath.Rel to enforce directory boundaries. strings.HasPrefix alone is
 	// insufficient: "/base_evil/x" would pass a HasPrefix check for "/base".
 	rel, err := filepath.Rel(basePath, filePath)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil {
+		return nil, ErrPathOutsideBase
+	}
+
+	// Reject paths that resolve outside the base directory by checking whether
+	// the first path element is "..". This is stricter than a raw HasPrefix("..")
+	// check, which would incorrectly reject valid in-base paths like "..evil/secret".
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return nil, ErrPathOutsideBase
 	}
 
