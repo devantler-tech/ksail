@@ -289,7 +289,7 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 
 	multiplier := ""
 	if model.Billing != nil && model.Billing.Multiplier > 0 {
-		multiplier = fmt.Sprintf(" (%gx)", model.Billing.Multiplier)
+		multiplier = fmt.Sprintf(" (%sx)", formatMultiplier(model.Billing.Multiplier))
 	}
 
 	line := fmt.Sprintf("%s%s%s", prefix, model.ID, multiplier)
