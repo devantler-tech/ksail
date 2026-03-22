@@ -32,7 +32,6 @@ func TestGenerateTools(t *testing.T) {
 		"cluster_write":  false,
 		"workload_read":  false,
 		"workload_write": false,
-		"cipher_read":    false,
 		"cipher_write":   false,
 	}
 
@@ -530,6 +529,75 @@ func TestExcludedCommandsAndChildren(t *testing.T) {
 				len(tool.Name) > len(prefix) && tool.Name[:len(prefix)+1] == prefix+"_" {
 				t.Errorf("excluded tool %q (or child) should not be generated", tool.Name)
 			}
+		}
+	}
+}
+
+func TestWriteToolSubcommandCoverage(t *testing.T) {
+	t.Parallel()
+
+	root := cmd.NewRootCmd("test", "abc123", "2024-01-01")
+	opts := toolgen.DefaultOptions()
+
+	tools := toolgen.GenerateTools(root, opts)
+
+	// Build a map of tool name → ToolDefinition for lookup
+	toolMap := make(map[string]toolgen.ToolDefinition, len(tools))
+	for _, tool := range tools {
+		toolMap[tool.Name] = tool
+	}
+
+	t.Run("cluster_write", func(t *testing.T) {
+		t.Parallel()
+
+		assertToolContainsSubcommands(t, toolMap, "cluster_write",
+			"update", "create", "delete", "init", "start", "stop", "backup", "restore",
+		)
+	})
+
+	t.Run("workload_write", func(t *testing.T) {
+		t.Parallel()
+
+		assertToolContainsSubcommands(t, toolMap, "workload_write",
+			"apply", "reconcile",
+		)
+	})
+
+	t.Run("cipher_write", func(t *testing.T) {
+		t.Parallel()
+
+		assertToolContainsSubcommands(t, toolMap, "cipher_write",
+			"encrypt", "decrypt", "edit", "import",
+		)
+	})
+
+	t.Run("cipher_read_not_generated", func(t *testing.T) {
+		t.Parallel()
+
+		if _, exists := toolMap["cipher_read"]; exists {
+			t.Error(
+				"cipher_read should not be generated — all cipher subcommands are write operations",
+			)
+		}
+	})
+}
+
+func assertToolContainsSubcommands(
+	t *testing.T,
+	toolMap map[string]toolgen.ToolDefinition,
+	toolName string,
+	expectedSubcommands ...string,
+) {
+	t.Helper()
+
+	tool, found := toolMap[toolName]
+	if !found {
+		t.Fatalf("%s tool not found", toolName)
+	}
+
+	for _, sub := range expectedSubcommands {
+		if _, exists := tool.Subcommands[sub]; !exists {
+			t.Errorf("%s should contain subcommand %q", toolName, sub)
 		}
 	}
 }
