@@ -167,8 +167,3 @@ Start with Plan mode for learning and reviewing workflows, then enable auto-appr
 
 **Authentication errors:** Authenticate Copilot CLI (`copilot auth login`), use `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN` environment variables, and avoid `GITHUB_TOKEN`/`GH_TOKEN` (may lack Copilot scopes). KSail automatically retries transient auth failures (HTTP 429, 500–504, network errors) up to 3 times with exponential backoff — `auth status check failed after N/3 attempts` messages indicate a persistent issue requiring action.
 
-## See Also
-
-- [CLI Flags Reference](/cli-flags/chat/chat-root/) — Complete flag documentation
-- [Configuration](/configuration/declarative-configuration/) — Chat configuration options
-- [MCP Server](/mcp/) — Expose KSail to other AI assistants
