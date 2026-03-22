@@ -21,9 +21,13 @@ import (
 //   - []byte: The file contents
 //   - error: ErrPathOutsideBase if path is outside base, or read error
 func ReadFileSafe(basePath, filePath string) ([]byte, error) {
+	basePath = filepath.Clean(basePath)
 	filePath = filepath.Clean(filePath)
 
-	if !strings.HasPrefix(filePath, basePath) {
+	// Use filepath.Rel to enforce directory boundaries. strings.HasPrefix alone is
+	// insufficient: "/base_evil/x" would pass a HasPrefix check for "/base".
+	rel, err := filepath.Rel(basePath, filePath)
+	if err != nil || strings.HasPrefix(rel, "..") {
 		return nil, ErrPathOutsideBase
 	}
 

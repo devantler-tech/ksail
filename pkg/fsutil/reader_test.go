@@ -56,6 +56,28 @@ func TestReadFileSafe(t *testing.T) {
 		require.ErrorIs(t, err, fsutil.ErrPathOutsideBase, "ReadFileSafe")
 	})
 
+	t.Run("prefix attack - sibling directory", func(t *testing.T) {
+		t.Parallel()
+
+		// Verify that a directory whose path is a string-prefix of basePath
+		// is correctly rejected. e.g. base="/tmp/dir", evil="/tmp/dir-evil".
+		parent := t.TempDir()
+		base := filepath.Join(parent, "dir")
+		sibling := filepath.Join(parent, "dir-evil")
+
+		err := os.Mkdir(base, 0o700)
+		require.NoError(t, err, "Mkdir base")
+		err = os.Mkdir(sibling, 0o700)
+		require.NoError(t, err, "Mkdir sibling")
+
+		secretFile := filepath.Join(sibling, "secret.txt")
+		err = os.WriteFile(secretFile, []byte("secret"), 0o600)
+		require.NoError(t, err, "WriteFile secret")
+
+		_, err = fsutil.ReadFileSafe(base, secretFile)
+		require.ErrorIs(t, err, fsutil.ErrPathOutsideBase, "ReadFileSafe prefix attack")
+	})
+
 	t.Run("missing file inside base", func(t *testing.T) {
 		t.Parallel()
 
