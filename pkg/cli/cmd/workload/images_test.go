@@ -3,6 +3,7 @@ package workload_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
@@ -120,11 +121,12 @@ func TestErrUnknownOutputFormatIsSentinelError(t *testing.T) {
 		t.Fatal("expected ErrUnknownOutputFormat to be a non-nil sentinel error")
 	}
 
-	if !errors.Is(workload.ErrUnknownOutputFormat, workload.ErrUnknownOutputFormat) {
-		t.Fatal("expected errors.Is to work correctly with ErrUnknownOutputFormat")
-	}
-
 	if workload.ErrUnknownOutputFormat.Error() == "" {
 		t.Fatal("expected ErrUnknownOutputFormat.Error() to return a non-empty string")
+	}
+
+	wrapped := fmt.Errorf("wrapping: %w", workload.ErrUnknownOutputFormat)
+	if !errors.Is(wrapped, workload.ErrUnknownOutputFormat) {
+		t.Fatal("expected errors.Is to identify ErrUnknownOutputFormat through wrapping")
 	}
 }
