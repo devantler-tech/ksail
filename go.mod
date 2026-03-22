@@ -797,11 +797,6 @@ replace (
 	// required by k9s, grype, and syft. This local fork patches table/table.go
 	// for the v1.x API.
 	github.com/loft-sh/log => ./patches/loft-sh-log
-
-	// containerd v1.7.x is incompatible with runtime-spec v1.3.0 (LinuxPids.Limit
-	// changed from int64 to *int64). Pin runtime-spec to v1.2.1 until containerd
-	// is upgraded to v2.x.
-	github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.1
 )
 
 tool (
