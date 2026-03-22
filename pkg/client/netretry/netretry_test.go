@@ -54,6 +54,8 @@ var (
 	errRedirectLimit = errors.New(
 		`get "https://ghcr.io/v2/token": stopped after 10 redirects`,
 	)
+	errStatus505 = errors.New("server error 505 HTTP Version Not Supported")
+	errStatus599 = errors.New("got status code 599 from proxy")
 )
 
 func TestIsRetryable(t *testing.T) {
@@ -95,6 +97,9 @@ func TestIsRetryable(t *testing.T) {
 		{name: "context deadline exceeded", err: errContextDeadline, expected: true},
 		// HTTP redirect limit errors.
 		{name: "stopped after redirects", err: errRedirectLimit, expected: true},
+		// Extended 5xx codes beyond original 500–504 range.
+		{name: "505 code", err: errStatus505, expected: true},
+		{name: "599 code", err: errStatus599, expected: true},
 	}
 
 	for _, tt := range tests {
@@ -123,6 +128,9 @@ func TestExponentialDelay(t *testing.T) {
 		{name: "third attempt", attempt: 3, expected: 8 * time.Second},
 		{name: "fourth attempt capped", attempt: 4, expected: 15 * time.Second},
 		{name: "large attempt at max", attempt: 10, expected: 15 * time.Second},
+		{name: "zero attempt same as first", attempt: 0, expected: 2 * time.Second},
+		{name: "negative attempt same as first", attempt: -5, expected: 2 * time.Second},
+		{name: "very large attempt capped at maxWait", attempt: 100, expected: 15 * time.Second},
 	}
 
 	for _, tt := range tests {

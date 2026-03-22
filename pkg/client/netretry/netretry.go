@@ -66,5 +66,13 @@ func ExponentialDelay(
 		attempt = 1
 	}
 
-	return min(baseWait*time.Duration(1<<(attempt-1)), maxWait)
+	// Cap the exponent to avoid excessively large shifts and ensure predictable behavior
+	// for very large attempt values. Beyond this, the delay is effectively saturated at maxWait.
+	const maxExponent = 30
+	if attempt-1 > maxExponent {
+		return maxWait
+	}
+
+	delay := baseWait * time.Duration(1<<(attempt-1))
+	return min(delay, maxWait)
 }
