@@ -32,7 +32,6 @@ func TestGenerateTools(t *testing.T) {
 		"cluster_write":  false,
 		"workload_read":  false,
 		"workload_write": false,
-		"cipher_read":    false,
 		"cipher_write":   false,
 	}
 
@@ -531,5 +530,61 @@ func TestExcludedCommandsAndChildren(t *testing.T) {
 				t.Errorf("excluded tool %q (or child) should not be generated", tool.Name)
 			}
 		}
+	}
+}
+
+func TestWriteToolSubcommandCoverage(t *testing.T) {
+	t.Parallel()
+
+	root := cmd.NewRootCmd("test", "abc123", "2024-01-01")
+	opts := toolgen.DefaultOptions()
+
+	tools := toolgen.GenerateTools(root, opts)
+
+	// Build a map of tool name → ToolDefinition for lookup
+	toolMap := make(map[string]toolgen.ToolDefinition, len(tools))
+	for _, tool := range tools {
+		toolMap[tool.Name] = tool
+	}
+
+	// Verify cluster_write contains expected subcommands
+	clusterWrite, ok := toolMap["cluster_write"]
+	if !ok {
+		t.Fatal("cluster_write tool not found")
+	}
+
+	for _, sub := range []string{"update", "create", "delete", "init", "start", "stop", "backup", "restore"} {
+		if _, exists := clusterWrite.Subcommands[sub]; !exists {
+			t.Errorf("cluster_write should contain subcommand %q", sub)
+		}
+	}
+
+	// Verify workload_write contains expected subcommands
+	workloadWrite, ok := toolMap["workload_write"]
+	if !ok {
+		t.Fatal("workload_write tool not found")
+	}
+
+	for _, sub := range []string{"apply", "reconcile"} {
+		if _, exists := workloadWrite.Subcommands[sub]; !exists {
+			t.Errorf("workload_write should contain subcommand %q", sub)
+		}
+	}
+
+	// Verify cipher_write contains expected subcommands (including decrypt)
+	cipherWrite, ok := toolMap["cipher_write"]
+	if !ok {
+		t.Fatal("cipher_write tool not found")
+	}
+
+	for _, sub := range []string{"encrypt", "decrypt", "edit", "import"} {
+		if _, exists := cipherWrite.Subcommands[sub]; !exists {
+			t.Errorf("cipher_write should contain subcommand %q", sub)
+		}
+	}
+
+	// Verify cipher_read is NOT generated (all cipher subcommands are write)
+	if _, exists := toolMap["cipher_read"]; exists {
+		t.Error("cipher_read should not be generated — all cipher subcommands are write operations")
 	}
 }

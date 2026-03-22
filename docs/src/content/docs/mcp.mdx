@@ -32,7 +32,7 @@ The MCP server automatically generates tools from all KSail commands except:
 - `ksail completion` — Shell completion (not relevant for MCP)
 - `ksail help` — Built-in help (use MCP tool discovery)
 
-Commands are consolidated by permission into **6 tools**:
+Commands are consolidated by permission into **5 tools**:
 
 | Tool | Description | Subcommand Parameter |
 |------|-------------|----------------------|
@@ -40,8 +40,7 @@ Commands are consolidated by permission into **6 tools**:
 | `cluster_write` | Cluster lifecycle mutations | `command` |
 | `workload_read` | Read-only workload operations | `workload_command` |
 | `workload_write` | Workload mutations | `workload_command` |
-| `cipher_read` | Read-only secret operations | `cipher_operation` |
-| `cipher_write` | Secret mutations | `cipher_operation` |
+| `cipher_write` | Secret mutations (encrypt, decrypt, edit, import) | `cipher_operation` |
 
 Each tool accepts a **subcommand parameter** that selects the specific operation. The table below shows available subcommands for each tool. Pass additional arguments via `args` where indicated.
 
@@ -63,8 +62,7 @@ Each tool accepts a **subcommand parameter** that selects the specific operation
 
 | Tool | Subcommands |
 |------|-------------|
-| `cipher_read` | `decrypt` (pass file path via `args`) |
-| `cipher_write` | `encrypt`, `edit`, `import` (pass file path or age private key via `args`) |
+| `cipher_write` | `decrypt` (pass file path via `args`), `encrypt`, `edit`, `import` (pass file path or age private key via `args`) |
 
 MCP clients can discover available tools dynamically and toggle them on/off as needed. Each tool includes its name, a description, and a JSON schema with the subcommand selector enum and merged flags.
 
