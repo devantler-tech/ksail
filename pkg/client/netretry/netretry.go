@@ -10,14 +10,14 @@ import (
 
 // httpStatusCodePattern matches HTTP 429 and 5xx status codes at word boundaries
 // to avoid false positives on port numbers like ":5000".
-var httpStatusCodePattern = regexp.MustCompile(`\b(429|50[0-4])\b`)
+var httpStatusCodePattern = regexp.MustCompile(`\b(429|5\d{2})\b`)
 
 // redirectLimitPattern matches Go's HTTP client redirect limit errors
 // (e.g., "stopped after 10 redirects").
 var redirectLimitPattern = regexp.MustCompile(`stopped after \d+ redirects`)
 
 // IsRetryable returns true if the error indicates a transient network error
-// that should be retried. This covers HTTP 429 and 500–504 status codes and TCP-level
+// that should be retried. This covers HTTP 429 and 5xx status codes and TCP-level
 // errors such as connection resets, timeouts, and unexpected EOF.
 // Callers that need to handle additional domain-specific transient errors (e.g.,
 // Copilot auth "fetch failed") should augment this function with a local helper.
@@ -62,5 +62,18 @@ func ExponentialDelay(
 	attempt int,
 	baseWait, maxWait time.Duration,
 ) time.Duration {
-	return min(baseWait*time.Duration(1<<(attempt-1)), maxWait)
+	if attempt <= 0 {
+		attempt = 1
+	}
+
+	// Cap the exponent to avoid excessively large shifts and ensure predictable behavior
+	// for very large attempt values. Beyond this, the delay is effectively saturated at maxWait.
+	const maxExponent = 30
+	if attempt-1 > maxExponent {
+		return maxWait
+	}
+
+	delay := baseWait * time.Duration(1<<(attempt-1))
+
+	return min(delay, maxWait)
 }
