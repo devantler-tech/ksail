@@ -47,7 +47,7 @@ func ReadFileSafe(basePath, filePath string) ([]byte, error) {
 		return nil, ErrPathOutsideBase
 	}
 
-	data, err := os.ReadFile(canonFile)
+	data, err := os.ReadFile(canonFile) //nolint:gosec // G304: path validated
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %q: %w", filePath, err)
 	}
