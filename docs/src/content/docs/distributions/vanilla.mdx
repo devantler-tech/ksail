@@ -76,11 +76,14 @@ When enabled, KSail installs Cloud Provider KIND, which creates `cpk-*` Docker c
 
 ### Registry Mirrors
 
-KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default. Override with `--mirror-registry` flags:
+KSail enables `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default. The `--mirror-registry` flag uses **replace semantics**: any values you provide completely replace the full default list, so omitting a registry removes it. To customize mirrors while keeping the defaults, include all four:
 
 ````bash
 ksail cluster init --name my-cluster --distribution Vanilla \
-  --mirror-registry 'docker.io=https://registry-1.docker.io'
+  --mirror-registry 'docker.io=https://registry-1.docker.io' \
+  --mirror-registry 'ghcr.io=https://ghcr.io' \
+  --mirror-registry 'quay.io=https://quay.io' \
+  --mirror-registry 'registry.k8s.io=https://registry.k8s.io'
 ````
 
 ## Troubleshooting
