@@ -26,7 +26,7 @@
 # changes found; if no updates available, proceeds to structural optimization of both
 # non-agentic and agentic workflows. Subsumes the former Maintainer workflow.
 #
-# gh-aw-metadata: {"schema_version":"v3","frontmatter_hash":"1aaefd9b22c7fb76b698fc01a27cb0019ecf5e05dda53e9509a0a48d766dc288","compiler_version":"v0.62.5","agent_id":"copilot"}
+# gh-aw-metadata: {"schema_version":"v3","frontmatter_hash":"5a34de2980f292c08a5f2ad48db6913389bfb40508aff6a3c4d5f46a3d383b3a","compiler_version":"v0.62.5","agent_id":"copilot"}
 
 name: "Daily Workflow Maintenance"
 "on":
@@ -306,10 +306,6 @@ jobs:
         run: gh aw update --verbose 2>&1 | tee /tmp/gh-aw-update-output.txt || true
       - name: Apply gh-aw codemods
         run: gh aw fix --write 2>&1 | tee /tmp/gh-aw-fix-output.txt || true
-      - env:
-          GH_TOKEN: ${{ github.token }}
-        name: Check for existing planning discussion
-        run: "RESULT=$(gh api graphql -f query='\n{\n  search(query: \"repo:${{ github.repository }} is:open category:\\\"agentic-workflows\\\" in:title \\\"${{ github.workflow }}\\\"\", type: DISCUSSION, first: 5) {\n    nodes {\n      ... on Discussion {\n        title\n        number\n        url\n      }\n    }\n    discussionCount\n  }\n}' 2>/dev/null || echo '{\"data\":{\"search\":{\"discussionCount\":0,\"nodes\":[]}}}')\necho \"$RESULT\" > /tmp/existing-discussion.json\nCOUNT=$(echo \"$RESULT\" | jq -r '.data.search.discussionCount // 0')\necho \"Found $COUNT existing planning discussion(s)\"\n"
 
       - name: Configure Git credentials
         env:

@@ -45,28 +45,6 @@ safe-outputs:
       - code-quality
       - automation
 
-steps:
-  - name: Check for existing planning discussion
-    run: |
-      RESULT=$(gh api graphql -f query='
-      {
-        search(query: "repo:${{ github.repository }} is:open category:\"agentic-workflows\" in:title \"${{ github.workflow }}\"", type: DISCUSSION, first: 5) {
-          nodes {
-            ... on Discussion {
-              title
-              number
-              url
-            }
-          }
-          discussionCount
-        }
-      }' 2>/dev/null || echo '{"data":{"search":{"discussionCount":0,"nodes":[]}}}')
-      echo "$RESULT" > /tmp/existing-discussion.json
-      COUNT=$(echo "$RESULT" | jq -r '.data.search.discussionCount // 0')
-      echo "Found $COUNT existing planning discussion(s)"
-    env:
-      GH_TOKEN: ${{ github.token }}
-
 tools:
   github:
     toolsets: [all]
@@ -86,17 +64,7 @@ You are doing your work in phases. Right now you will perform just one of the fo
 
 To decide which phase to perform:
 
-1. First read `/tmp/existing-discussion.json` to check for an existing planning discussion:
-
-   ```bash
-   cat /tmp/existing-discussion.json | jq '.data.search'
-   ```
-
-   If `discussionCount` is 0, no planning discussion exists. Perform Phase 1 and nothing else.
-
-   If `discussionCount` is greater than 0, an open planning discussion exists. Read the first discussion's content using the GitHub tools and review maintainer comments. Then proceed to step 2.
-
-   **Important:** Only use this pre-step result for phase selection. Do NOT call `list_discussions` to re-check — the pre-step result is authoritative.
+1. First check for existing open discussion titled "${{ github.workflow }}" using `list_discussions`. Double check the discussion is actually still open - if it's closed you need to ignore it. If found, and open, read it and maintainer comments. If not found, then perform Phase 1 and nothing else.
 
 2. Next check if `.github/actions/daily-code-quality/build-steps/action.yml` AND `.github/actions/daily-code-quality/coverage-steps/action.yml` both exist. If both exist then read them. If either is missing then perform Phase 2 and nothing else.
 

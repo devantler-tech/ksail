@@ -25,7 +25,7 @@
 # the full issue backlog to create a unified prioritized plan, then implement selected items
 # via pull requests. Creates discussions to coordinate with maintainers and advance the project.
 #
-# gh-aw-metadata: {"schema_version":"v3","frontmatter_hash":"b926903d58b1facc561745542dd66391bae1940def966a1cc9a121bda0f6bf97","compiler_version":"v0.62.5","strict":true,"agent_id":"copilot"}
+# gh-aw-metadata: {"schema_version":"v3","frontmatter_hash":"9f3ee298231c466f93d20e907d548e9d2e3f88f3db4246b2df68539f46cc9cbe","compiler_version":"v0.62.5","strict":true,"agent_id":"copilot"}
 
 name: "Daily Builder"
 "on":
@@ -290,11 +290,6 @@ jobs:
         run: bash ${RUNNER_TEMP}/gh-aw/actions/configure_gh_for_ghe.sh
         env:
           GH_TOKEN: ${{ github.token }}
-      - env:
-          GH_TOKEN: ${{ github.token }}
-        name: Check for existing planning discussion
-        run: "RESULT=$(gh api graphql -f query='\n{\n  search(query: \"repo:${{ github.repository }} is:open category:\\\"agentic-workflows\\\" in:title \\\"${{ github.workflow }}\\\"\", type: DISCUSSION, first: 5) {\n    nodes {\n      ... on Discussion {\n        title\n        number\n        url\n      }\n    }\n    discussionCount\n  }\n}' 2>/dev/null || echo '{\"data\":{\"search\":{\"discussionCount\":0,\"nodes\":[]}}}')\necho \"$RESULT\" > /tmp/existing-discussion.json\nCOUNT=$(echo \"$RESULT\" | jq -r '.data.search.discussionCount // 0')\necho \"Found $COUNT existing planning discussion(s)\"\n"
-
       - name: Configure Git credentials
         env:
           REPO_NAME: ${{ github.repository }}

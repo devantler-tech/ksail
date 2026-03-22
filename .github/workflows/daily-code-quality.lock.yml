@@ -30,7 +30,7 @@
 #   Imports:
 #     - githubnext/agentics/workflows/shared/reporting.md@69b5e3ae5fa7f35fa555b0a22aee14c36ab57ebb
 #
-# gh-aw-metadata: {"schema_version":"v3","frontmatter_hash":"42d15ab04f4160eabc725260cbfe82b1d993c20807c0c423d556541113fbb4c7","compiler_version":"v0.62.5","agent_id":"copilot"}
+# gh-aw-metadata: {"schema_version":"v3","frontmatter_hash":"51c901854d1e86470fc5e5d643a8ee4bfe4d196ec308c21a75967542be90b1c3","compiler_version":"v0.62.5","agent_id":"copilot"}
 
 name: "Daily Code Quality"
 "on":
@@ -299,11 +299,6 @@ jobs:
         run: bash ${RUNNER_TEMP}/gh-aw/actions/configure_gh_for_ghe.sh
         env:
           GH_TOKEN: ${{ github.token }}
-      - env:
-          GH_TOKEN: ${{ github.token }}
-        name: Check for existing planning discussion
-        run: "RESULT=$(gh api graphql -f query='\n{\n  search(query: \"repo:${{ github.repository }} is:open category:\\\"agentic-workflows\\\" in:title \\\"${{ github.workflow }}\\\"\", type: DISCUSSION, first: 5) {\n    nodes {\n      ... on Discussion {\n        title\n        number\n        url\n      }\n    }\n    discussionCount\n  }\n}' 2>/dev/null || echo '{\"data\":{\"search\":{\"discussionCount\":0,\"nodes\":[]}}}')\necho \"$RESULT\" > /tmp/existing-discussion.json\nCOUNT=$(echo \"$RESULT\" | jq -r '.data.search.discussionCount // 0')\necho \"Found $COUNT existing planning discussion(s)\"\n"
-
       - name: Configure Git credentials
         env:
           REPO_NAME: ${{ github.repository }}

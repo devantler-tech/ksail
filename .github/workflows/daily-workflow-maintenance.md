@@ -73,27 +73,6 @@ steps:
   - name: Apply gh-aw codemods
     run: gh aw fix --write 2>&1 | tee /tmp/gh-aw-fix-output.txt || true
 
-  - name: Check for existing planning discussion
-    run: |
-      RESULT=$(gh api graphql -f query='
-      {
-        search(query: "repo:${{ github.repository }} is:open category:\"agentic-workflows\" in:title \"${{ github.workflow }}\"", type: DISCUSSION, first: 5) {
-          nodes {
-            ... on Discussion {
-              title
-              number
-              url
-            }
-          }
-          discussionCount
-        }
-      }' 2>/dev/null || echo '{"data":{"search":{"discussionCount":0,"nodes":[]}}}')
-      echo "$RESULT" > /tmp/existing-discussion.json
-      COUNT=$(echo "$RESULT" | jq -r '.data.search.discussionCount // 0')
-      echo "Found $COUNT existing planning discussion(s)"
-    env:
-      GH_TOKEN: ${{ github.token }}
-
 tools:
   github:
     toolsets: [all]
@@ -248,15 +227,7 @@ Only reach this point if Quick mode produced no changes (noop). This mode follow
 
 To decide which deep-mode phase to perform:
 
-1. Read `/tmp/existing-discussion.json` to check for an existing planning discussion:
-
-   ```bash
-   cat /tmp/existing-discussion.json | jq '.data.search'
-   ```
-
-   If `discussionCount` is 0, no planning discussion exists. Perform Deep Phase 1.
-
-   **Important:** Only use this pre-step result for phase selection. Do NOT call `list_discussions` to re-check — the pre-step result is authoritative.
+1. Check for existing open discussion titled "${{ github.workflow }}" using `list_discussions`. If not found, perform Deep Phase 1.
 
 2. Check if `.github/actions/daily-workflow-maintenance/build-steps/action.yml` exists. If not, perform Deep Phase 2.
 
