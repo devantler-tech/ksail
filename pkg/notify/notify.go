@@ -166,7 +166,7 @@ func WriteMessage(msg Message) {
 	// Get message configuration based on type
 	config := getMessageConfig(msg.Type)
 
-	content = indentMultilineContent(content, config.symbol)
+	content = indentMultilineContent(content, config.indent)
 
 	// Handle TitleType specially (uses emoji instead of symbol)
 	if msg.Type == TitleType {
@@ -202,52 +202,49 @@ func WriteMessage(msg Message) {
 // messageConfig holds the styling configuration for each message type.
 type messageConfig struct {
 	symbol string
+	// indent is the precomputed indentation string for aligning subsequent lines
+	// of multi-line messages. It equals strings.Repeat(" ", len([]rune(symbol))).
+	indent string
 	color  *fcolor.Color
 }
+
+// Package-level color instances avoid allocating a new *fcolor.Color on every
+// WriteMessage call. These objects are read-only after initialization (Fprintf
+// does not mutate the Color), so sharing them across goroutines is safe.
+//
+//nolint:gochecknoglobals // cached color objects to avoid per-call allocations
+var (
+	colorError   = fcolor.New(fcolor.FgRed)
+	colorWarning = fcolor.New(fcolor.FgYellow)
+	colorDefault = fcolor.New(fcolor.Reset)
+	colorSuccess = fcolor.New(fcolor.FgGreen)
+	colorInfo    = fcolor.New(fcolor.FgBlue)
+	colorTitle   = fcolor.New(fcolor.Reset, fcolor.Bold)
+)
+
+// symbolIndent is the shared precomputed indent for all message types whose
+// symbol is exactly 2 runes wide (all typed symbols: "✗ ", "⚠ ", "► ", etc.).
+const symbolIndent = "  "
 
 // getMessageConfig returns the styling configuration for a given message type.
 func getMessageConfig(msgType MessageType) messageConfig {
 	switch msgType {
 	case ErrorType:
-		return messageConfig{
-			symbol: "✗ ",
-			color:  fcolor.New(fcolor.FgRed),
-		}
+		return messageConfig{symbol: "✗ ", indent: symbolIndent, color: colorError}
 	case WarningType:
-		return messageConfig{
-			symbol: "⚠ ",
-			color:  fcolor.New(fcolor.FgYellow),
-		}
+		return messageConfig{symbol: "⚠ ", indent: symbolIndent, color: colorWarning}
 	case ActivityType:
-		return messageConfig{
-			symbol: "► ",
-			color:  fcolor.New(fcolor.Reset),
-		}
+		return messageConfig{symbol: "► ", indent: symbolIndent, color: colorDefault}
 	case GenerateType:
-		return messageConfig{
-			symbol: "✚ ",
-			color:  fcolor.New(fcolor.Reset),
-		}
+		return messageConfig{symbol: "✚ ", indent: symbolIndent, color: colorDefault}
 	case SuccessType:
-		return messageConfig{
-			symbol: "✔ ",
-			color:  fcolor.New(fcolor.FgGreen),
-		}
+		return messageConfig{symbol: "✔ ", indent: symbolIndent, color: colorSuccess}
 	case InfoType:
-		return messageConfig{
-			symbol: "ℹ ",
-			color:  fcolor.New(fcolor.FgBlue),
-		}
+		return messageConfig{symbol: "ℹ ", indent: symbolIndent, color: colorInfo}
 	case TitleType:
-		return messageConfig{
-			symbol: "",
-			color:  fcolor.New(fcolor.Reset, fcolor.Bold),
-		}
+		return messageConfig{symbol: "", indent: "", color: colorTitle}
 	default:
-		return messageConfig{
-			symbol: "",
-			color:  fcolor.New(fcolor.Reset),
-		}
+		return messageConfig{symbol: "", indent: "", color: colorDefault}
 	}
 }
 
@@ -263,14 +260,14 @@ func handleNotifyError(err error) {
 
 // Content formatting helpers.
 
-// indentMultilineContent indents subsequent lines of multi-line content based on the symbol width.
-// This ensures that multi-line messages are properly aligned with the first line's symbol.
-func indentMultilineContent(content, symbol string) string {
-	if symbol == "" || !strings.Contains(content, "\n") {
+// indentMultilineContent indents subsequent lines of multi-line content using the
+// precomputed indent string from messageConfig. This ensures that multi-line messages
+// are properly aligned with the first line's symbol.
+func indentMultilineContent(content, indent string) string {
+	if indent == "" || !strings.Contains(content, "\n") {
 		return content
 	}
 
-	indent := strings.Repeat(" ", len([]rune(symbol)))
 	lines := strings.Split(content, "\n")
 
 	for i := 1; i < len(lines); i++ {
