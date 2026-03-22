@@ -14,57 +14,139 @@ import (
 func TestReadFileSafe(t *testing.T) {
 	t.Parallel()
 
-	t.Run("normal read", func(t *testing.T) {
-		t.Parallel()
+	t.Run("normal read", testReadFileSafeNormalRead)
+	t.Run("outside base", testReadFileSafeOutsideBase)
+	t.Run("traversal attempt", testReadFileSafeTraversalAttempt)
+	t.Run("prefix attack - sibling directory", testReadFileSafePrefixAttack)
+	t.Run("path with ..evil dir inside base", testReadFileSafeEvilDirInsideBase)
+	t.Run("symlink escape", testReadFileSafeSymlinkEscape)
+	t.Run("missing file inside base", testReadFileSafeMissingFile)
+}
 
-		base := t.TempDir()
-		filePath := filepath.Join(base, "file.txt")
-		want := "hello safe"
-		err := os.WriteFile(filePath, []byte(want), 0o600)
-		require.NoError(t, err, "WriteFile setup")
+func testReadFileSafeNormalRead(t *testing.T) {
+	t.Helper()
+	t.Parallel()
 
-		got, err := fsutil.ReadFileSafe(base, filePath)
+	base := t.TempDir()
+	filePath := filepath.Join(base, "file.txt")
+	want := "hello safe"
+	err := os.WriteFile(filePath, []byte(want), 0o600)
+	require.NoError(t, err, "WriteFile setup")
 
-		require.NoError(t, err, "ReadFileSafe")
-		assert.Equal(t, want, string(got), "content")
-	})
+	got, err := fsutil.ReadFileSafe(base, filePath)
 
-	t.Run("outside base", func(t *testing.T) {
-		t.Parallel()
+	require.NoError(t, err, "ReadFileSafe")
+	assert.Equal(t, want, string(got), "content")
+}
 
-		base := t.TempDir()
-		outside := filepath.Join(os.TempDir(), "outside-test-file.txt")
-		err := os.WriteFile(outside, []byte("nope"), 0o600)
-		require.NoError(t, err, "WriteFile setup")
+func testReadFileSafeOutsideBase(t *testing.T) {
+	t.Helper()
+	t.Parallel()
 
-		_, err = fsutil.ReadFileSafe(base, outside)
-		require.ErrorIs(t, err, fsutil.ErrPathOutsideBase, "ReadFileSafe")
-	})
+	base := t.TempDir()
+	outsideDir := t.TempDir()
+	outside := filepath.Join(outsideDir, "outside-test-file.txt")
+	err := os.WriteFile(outside, []byte("nope"), 0o600)
+	require.NoError(t, err, "WriteFile setup")
 
-	t.Run("traversal attempt", func(t *testing.T) {
-		t.Parallel()
+	_, err = fsutil.ReadFileSafe(base, outside)
+	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase, "ReadFileSafe")
+}
 
-		base := t.TempDir()
-		parent := filepath.Join(base, "..", "traversal.txt")
-		absParent, _ := filepath.Abs(parent)
-		err := os.WriteFile(absParent, []byte("traversal"), 0o600)
-		require.NoError(t, err, "WriteFile setup parent")
+func testReadFileSafeTraversalAttempt(t *testing.T) {
+	t.Helper()
+	t.Parallel()
 
-		attempt := filepath.Join(base, "..", "traversal.txt")
+	base := t.TempDir()
+	parent := filepath.Join(base, "..", "traversal.txt")
+	absParent, err := filepath.Abs(parent)
+	require.NoError(t, err, "Abs parent")
+	err = os.WriteFile(absParent, []byte("traversal"), 0o600)
+	require.NoError(t, err, "WriteFile setup parent")
 
-		_, err = fsutil.ReadFileSafe(base, attempt)
-		require.ErrorIs(t, err, fsutil.ErrPathOutsideBase, "ReadFileSafe")
-	})
+	attempt := filepath.Join(base, "..", "traversal.txt")
 
-	t.Run("missing file inside base", func(t *testing.T) {
-		t.Parallel()
+	_, err = fsutil.ReadFileSafe(base, attempt)
+	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase, "ReadFileSafe")
+}
 
-		base := t.TempDir()
-		missing := filepath.Join(base, "missing.txt")
+func testReadFileSafePrefixAttack(t *testing.T) {
+	t.Helper()
+	t.Parallel()
 
-		_, err := fsutil.ReadFileSafe(base, missing)
-		assert.ErrorContains(t, err, "failed to read file", "ReadFileSafe")
-	})
+	// Verify that a sibling directory whose path has basePath as a string-prefix
+	// is correctly rejected. e.g. base="/tmp/dir", evil="/tmp/dir-evil".
+	parent := t.TempDir()
+	base := filepath.Join(parent, "dir")
+	sibling := filepath.Join(parent, "dir-evil")
+
+	err := os.Mkdir(base, 0o700)
+	require.NoError(t, err, "Mkdir base")
+	err = os.Mkdir(sibling, 0o700)
+	require.NoError(t, err, "Mkdir sibling")
+
+	secretFile := filepath.Join(sibling, "secret.txt")
+	err = os.WriteFile(secretFile, []byte("secret"), 0o600)
+	require.NoError(t, err, "WriteFile secret")
+
+	_, err = fsutil.ReadFileSafe(base, secretFile)
+	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase, "ReadFileSafe prefix attack")
+}
+
+func testReadFileSafeEvilDirInsideBase(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	// Verify that a directory named "..evil" inside basePath is accepted.
+	// The relative path "..evil/file.txt" starts with ".." as a string but
+	// is NOT a parent-directory traversal; only rel == ".." or "../..." should be rejected.
+	base := t.TempDir()
+	evilDir := filepath.Join(base, "..evil")
+	err := os.Mkdir(evilDir, 0o700)
+	require.NoError(t, err, "Mkdir ..evil")
+
+	secretFile := filepath.Join(evilDir, "file.txt")
+	want := "safe inside base"
+	err = os.WriteFile(secretFile, []byte(want), 0o600)
+	require.NoError(t, err, "WriteFile inside ..evil")
+
+	got, err := fsutil.ReadFileSafe(base, secretFile)
+
+	require.NoError(t, err, "ReadFileSafe ..evil inside base")
+	assert.Equal(t, want, string(got), "content")
+}
+
+func testReadFileSafeSymlinkEscape(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	// Verify that a symlink inside basePath that resolves to a file outside
+	// basePath is rejected. Without symlink canonicalization the path "/base/link"
+	// passes the rel-based check, but os.ReadFile would follow the symlink and
+	// read outside the intended base directory.
+	outsideDir := t.TempDir()
+	secretFile := filepath.Join(outsideDir, "secret.txt")
+	err := os.WriteFile(secretFile, []byte("secret"), 0o600)
+	require.NoError(t, err, "WriteFile secret")
+
+	base := t.TempDir()
+	linkPath := filepath.Join(base, "link.txt")
+	err = os.Symlink(secretFile, linkPath)
+	require.NoError(t, err, "Symlink")
+
+	_, err = fsutil.ReadFileSafe(base, linkPath)
+	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase, "ReadFileSafe symlink escape")
+}
+
+func testReadFileSafeMissingFile(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	base := t.TempDir()
+	missing := filepath.Join(base, "missing.txt")
+
+	_, err := fsutil.ReadFileSafe(base, missing)
+	assert.ErrorContains(t, err, "failed to read file", "ReadFileSafe")
 }
 
 //nolint:paralleltest,tparallel // Cannot use t.Parallel() with t.Chdir()
