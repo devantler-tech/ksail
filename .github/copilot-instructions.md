@@ -212,10 +212,28 @@ ksail cluster connect                  # Connect to cluster with K9s
 ksail cluster switch <cluster-name>    # Switch active kubeconfig context
 ksail cluster backup                   # Backup cluster resources to .tar.gz
 ksail cluster restore                  # Restore cluster resources from .tar.gz
-ksail workload apply                   # Apply workloads
-ksail workload reconcile               # Trigger reconciliation for GitOps workloads
-ksail workload gen <resource>          # Generate resources
-ksail workload watch [--path <dir>]    # Watch a directory (defaults to k8s/ or spec.workload.sourceDirectory) and auto-apply on change
+ksail workload apply                   # Apply manifests to cluster
+ksail workload create                  # Create resources imperatively
+ksail workload edit                    # Edit a resource in-place
+ksail workload get                     # Get resources
+ksail workload describe                # Describe resources in detail
+ksail workload explain                 # Get API documentation for a resource
+ksail workload delete                  # Delete Kubernetes resources
+ksail workload logs                    # View container logs
+ksail workload exec                    # Execute command in container
+ksail workload expose                  # Expose a resource as a service
+ksail workload gen <resource>          # Generate Kubernetes manifests
+ksail workload validate                # Validate manifests against schemas
+ksail workload install                 # Install Helm charts
+ksail workload scale                   # Scale deployments
+ksail workload rollout                 # Manage rollouts
+ksail workload wait                    # Wait for conditions
+ksail workload images                  # List required container images
+ksail workload export                  # Export container images to a tar archive
+ksail workload import                  # Import container images from a tar archive
+ksail workload watch [--path <dir>]    # Watch directory and auto-apply on change
+ksail workload push                    # Package and push manifests to registry
+ksail workload reconcile               # Trigger GitOps sync and wait
 ksail cipher <command>                 # Manage secrets with SOPS
 ksail chat                             # AI chat powered by GitHub Copilot
 ksail mcp                              # Start MCP server for AI assistants
