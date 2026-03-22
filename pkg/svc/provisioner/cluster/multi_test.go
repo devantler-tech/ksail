@@ -46,22 +46,6 @@ func TestCreateMinimalProvisioner_K3s_Succeeds(t *testing.T) {
 	assert.IsType(t, &k3dprovisioner.Provisioner{}, provisioner)
 }
 
-func TestCreateMinimalProvisioner_DefaultsProviderToDocker(t *testing.T) {
-	t.Parallel()
-
-	// K3d does not call Docker so we can test with the default provider
-	// without requiring a live Docker daemon.
-	provisioner, err := clusterprovisioner.CreateMinimalProvisioner(
-		v1alpha1.DistributionK3s,
-		"default-provider-test",
-		"",
-		v1alpha1.Provider(""), // empty provider — should default to Docker internally
-	)
-
-	require.NoError(t, err)
-	require.NotNil(t, provisioner)
-}
-
 func TestCreateMinimalProvisioner_UnsupportedDistribution(t *testing.T) {
 	t.Parallel()
 
@@ -103,11 +87,14 @@ func TestCreateMinimalProvisioner_TalosDockerError(t *testing.T) {
 		v1alpha1.DistributionTalos,
 		"test-talos",
 		"",
-		"",
+		"", // empty — should default to ProviderDocker, not return ErrUnsupportedProvider
 	)
 
 	require.Error(t, err)
 	require.Nil(t, provisioner)
+	// The error must originate from the Docker code path, proving the provider
+	// defaulted to Docker (not an ErrUnsupportedProvider from an unknown provider).
+	assert.NotErrorIs(t, err, clusterprovisioner.ErrUnsupportedProvider)
 	assert.Contains(t, err.Error(), "failed to create Talos provisioner")
 }
 
