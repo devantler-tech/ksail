@@ -341,7 +341,7 @@ go tool trace trace.out
 If benchmark results vary significantly between runs:
 
 1. **Ensure stable system load**: Close other applications
-2. **Run with -count flag**: `go test -bench=. -count=10` (run 10 times)
+2. **Run with -count flag**: `go test -bench=. -count=5` (run 5 times)
 3. **Use benchstat for statistical analysis**: More reliable than single runs
 4. **Check CPU governor**: Set to "performance" mode on Linux
 5. **Disable CPU frequency scaling**: For more stable results

@@ -7,7 +7,7 @@ KSail includes automated benchmark regression testing to detect performance chan
 The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workflow runs automatically on PRs that change `**/*.go`, `go.mod`, or `go.sum` files. It:
 
 1. Discovers packages that contain benchmark functions (avoids compiling the entire module)
-2. Runs benchmarks on the PR branch and `main` **in parallel** (10 iterations, 1 s per benchmark)
+2. Runs benchmarks on the PR branch and `main` **in parallel** (5 iterations, 1 s per benchmark)
 3. Compares results with [`benchstat`](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat) for statistical analysis
 4. Posts (or updates) a comparison comment on the PR
 
@@ -42,9 +42,9 @@ go test -bench=. -benchmem -run=^$ ./...
 go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/...
 
 # Compare before/after with benchstat
-go test -bench=. -benchmem -count=10 -run=^$ ./... > before.txt
+go test -bench=. -benchmem -count=5 -run=^$ ./... > before.txt
 # (make changes)
-go test -bench=. -benchmem -count=10 -run=^$ ./... > after.txt
+go test -bench=. -benchmem -count=5 -run=^$ ./... > after.txt
 benchstat before.txt after.txt
 ```
 

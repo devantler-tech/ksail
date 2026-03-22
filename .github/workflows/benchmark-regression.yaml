@@ -65,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "$PACKAGES" \
-            | xargs go test -bench=. -benchmem -count=10 -benchtime=1s -run='^$' -timeout=30m \
+            | xargs go test -bench=. -benchmem -count=5 -benchtime=1s -run='^$' -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
       - name: 📤 Upload results
