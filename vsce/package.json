@@ -22,6 +22,7 @@
   ],
   "keywords": [
     "kubernetes",
+    "kubernetes-extension-cloud-provider",
     "k8s",
     "gitops",
     "flux",
