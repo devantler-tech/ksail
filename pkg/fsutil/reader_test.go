@@ -19,6 +19,7 @@ func TestReadFileSafe(t *testing.T) {
 	t.Run("traversal attempt", testReadFileSafeTraversalAttempt)
 	t.Run("prefix attack - sibling directory", testReadFileSafePrefixAttack)
 	t.Run("path with ..evil dir inside base", testReadFileSafeEvilDirInsideBase)
+	t.Run("symlink escape", testReadFileSafeSymlinkEscape)
 	t.Run("missing file inside base", testReadFileSafeMissingFile)
 }
 
@@ -43,7 +44,8 @@ func testReadFileSafeOutsideBase(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
-	outside := filepath.Join(os.TempDir(), "outside-test-file.txt")
+	outsideDir := t.TempDir()
+	outside := filepath.Join(outsideDir, "outside-test-file.txt")
 	err := os.WriteFile(outside, []byte("nope"), 0o600)
 	require.NoError(t, err, "WriteFile setup")
 
@@ -111,6 +113,28 @@ func testReadFileSafeEvilDirInsideBase(t *testing.T) {
 
 	require.NoError(t, err, "ReadFileSafe ..evil inside base")
 	assert.Equal(t, want, string(got), "content")
+}
+
+func testReadFileSafeSymlinkEscape(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	// Verify that a symlink inside basePath that resolves to a file outside
+	// basePath is rejected. Without symlink canonicalization the path "/base/link"
+	// passes the rel-based check, but os.ReadFile would follow the symlink and
+	// read outside the intended base directory.
+	outsideDir := t.TempDir()
+	secretFile := filepath.Join(outsideDir, "secret.txt")
+	err := os.WriteFile(secretFile, []byte("secret"), 0o600)
+	require.NoError(t, err, "WriteFile secret")
+
+	base := t.TempDir()
+	linkPath := filepath.Join(base, "link.txt")
+	err = os.Symlink(secretFile, linkPath)
+	require.NoError(t, err, "Symlink")
+
+	_, err = fsutil.ReadFileSafe(base, linkPath)
+	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase, "ReadFileSafe symlink escape")
 }
 
 func testReadFileSafeMissingFile(t *testing.T) {
