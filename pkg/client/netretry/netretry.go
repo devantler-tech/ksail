@@ -65,5 +65,6 @@ func ExponentialDelay(
 	if attempt <= 0 {
 		attempt = 1
 	}
+
 	return min(baseWait*time.Duration(1<<(attempt-1)), maxWait)
 }
