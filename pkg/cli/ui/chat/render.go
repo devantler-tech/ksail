@@ -223,6 +223,7 @@ func formatMultiplier(mult float64) string {
 	multStr := fmt.Sprintf("%.2f", mult)
 	multStr = strings.TrimRight(multStr, "0")
 	multStr = strings.TrimRight(multStr, ".")
+
 	return multStr
 }
 
