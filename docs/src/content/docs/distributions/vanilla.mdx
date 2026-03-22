@@ -141,10 +141,10 @@ ksail cluster init --name multi-node --distribution Vanilla --control-planes 3 -
 
 ### Kubernetes Version Selection
 
-Set the node image in `kind.yaml` to pin a Kubernetes version. Check [Kind release notes](https://github.com/kubernetes-sigs/kind/releases) for available images:
+Set the node image in `kind.yaml` to pin a Kubernetes version. Check [Kind release notes](https://github.com/kubernetes-sigs/kind/releases) for available images. Edit the `nodes:` section of the generated `kind.yaml`:
 
 ````yaml
-# kind.yaml
+# kind.yaml (partial — nodes: section)
 nodes:
   - role: control-plane
     image: kindest/node:v1.31.0
@@ -162,10 +162,10 @@ ksail cluster init --name my-cluster --distribution Vanilla --cni Calico
 
 ### Port Mappings
 
-Expose services on host ports:
+Expose services on host ports. Edit the `nodes:` section of the generated `kind.yaml`:
 
 ````yaml
-# kind.yaml
+# kind.yaml (partial — nodes: section)
 nodes:
   - role: control-plane
     extraPortMappings:
