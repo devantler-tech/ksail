@@ -9,9 +9,13 @@ import (
 )
 
 // nextNodeIndexFromNames scans a slice of node names that share a common prefix
-// and returns the next available index. Each name is expected to have the form
-// "<prefix><n>" where n is a non-negative integer. If no matching names are
-// found the function returns 0 (first node).
+// and returns the next available numeric suffix to use after that prefix.
+// Each name is expected to have the form "<prefix><n>" where n is a non-negative
+// integer; the function computes max(n)+1 over all matching names and returns it.
+// If no matching names are found (or no parsable numeric suffix is present),
+// the function returns 0, which corresponds to the first suffix. Callers that
+// maintain separate 0-based indexes for internal data structures may need to
+// map between this suffix and their own indexing scheme.
 func nextNodeIndexFromNames(names []string, prefix string) int {
 	maxIndex := 0
 
