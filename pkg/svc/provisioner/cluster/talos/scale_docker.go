@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
@@ -314,27 +313,18 @@ func (p *Provisioner) configForRole(role string) talosconfig.Provider {
 // nextDockerNodeIndex finds the next available index for a node role.
 // It scans existing container names to find the max index, avoiding collisions.
 func nextDockerNodeIndex(containers []container.Summary, clusterName, role string) int {
-	prefix := dockerNodeName(clusterName, role, 0)
-	// Remove the trailing "0" to get the base prefix
-	prefix = prefix[:len(prefix)-1]
+	// Build the name prefix used by dockerNodeName (e.g. "mycluster-controlplane-").
+	// dockerNodeName(clusterName, role, 0) returns "<clusterName>-<talosRole>-1";
+	// trimming the last character gives the base prefix without the index digit.
+	baseName := dockerNodeName(clusterName, role, 0)
+	prefix := baseName[:len(baseName)-1]
 
-	maxIndex := 0
-
-	for _, ctr := range containers {
-		name := containerName(ctr)
-
-		idx, found := strings.CutPrefix(name, prefix)
-		if !found {
-			continue
-		}
-
-		n, err := strconv.Atoi(idx)
-		if err == nil && n >= maxIndex {
-			maxIndex = n + 1
-		}
+	names := make([]string, len(containers))
+	for i, ctr := range containers {
+		names[i] = containerName(ctr)
 	}
 
-	return maxIndex
+	return nextNodeIndexFromNames(names, prefix)
 }
 
 // dockerNodeName formats a Docker container name for a Talos node.
@@ -380,32 +370,4 @@ func containerIP(ctr container.Summary, networkName string) string {
 	}
 
 	return ""
-}
-
-// recordAppliedChange adds an applied change to the update result.
-func recordAppliedChange(result *clusterupdate.UpdateResult, role, nodeName, action string) {
-	field := "talos.workers"
-	if role == RoleControlPlane {
-		field = "talos.controlPlanes"
-	}
-
-	result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
-		Field:    field,
-		NewValue: nodeName,
-		Category: clusterupdate.ChangeCategoryInPlace,
-		Reason:   action + " " + role + " node",
-	})
-}
-
-// recordFailedChange adds a failed change to the update result.
-func recordFailedChange(result *clusterupdate.UpdateResult, role, nodeName string, err error) {
-	field := "talos.workers"
-	if role == RoleControlPlane {
-		field = "talos.controlPlanes"
-	}
-
-	result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
-		Field:  field,
-		Reason: fmt.Sprintf("failed to manage %s node %s: %v", role, nodeName, err),
-	})
 }
