@@ -43,7 +43,9 @@
             "profile": {
               "type": "string",
               "enum": [
-                "Default"
+                "Default",
+                "GitOps",
+                "Security"
               ],
               "description": "Pre-built cluster profile template (Default: current behaviour)"
             },

@@ -181,6 +181,7 @@ func (m *ConfigManager) unmarshalWithFlagOverrides(ignoreConfigFile bool) error 
 		return err
 	}
 
+	m.applyProfileDefaults(flagOverrides)
 	m.applyGitOpsAwareDefaults(flagOverrides)
 	m.applyDistributionConfigDefaults()
 
@@ -397,6 +398,45 @@ func (m *ConfigManager) applyGitOpsAwareDefaults(flagOverrides map[string]string
 		if m.Config.Spec.Cluster.LocalRegistry.Registry == "" {
 			m.Config.Spec.Cluster.LocalRegistry.Registry = clusterupdate.DefaultLocalRegistryAddress
 		}
+	}
+}
+
+// applyProfileDefaults applies component defaults based on the selected profile.
+// It only sets fields that were not explicitly provided via CLI flags.
+// Profile defaults are applied before GitOps-aware defaults so that profiles
+// that select a GitOps engine also trigger local registry auto-configuration.
+func (m *ConfigManager) applyProfileDefaults(flagOverrides map[string]string) {
+	if m.Config == nil {
+		return
+	}
+
+	switch m.Config.Spec.Cluster.Profile {
+	case v1alpha1.ProfileGitOps:
+		m.applyGitOpsProfileDefaults(flagOverrides)
+	case v1alpha1.ProfileSecurity:
+		m.applySecurityProfileDefaults(flagOverrides)
+	default:
+		// ProfileDefault and unrecognised values are no-ops.
+	}
+}
+
+func (m *ConfigManager) applyGitOpsProfileDefaults(flagOverrides map[string]string) {
+	if _, ok := flagOverrides["gitops-engine"]; !ok {
+		m.Config.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineFlux
+	}
+}
+
+func (m *ConfigManager) applySecurityProfileDefaults(flagOverrides map[string]string) {
+	if _, ok := flagOverrides["cni"]; !ok {
+		m.Config.Spec.Cluster.CNI = v1alpha1.CNICilium
+	}
+
+	if _, ok := flagOverrides["policy-engine"]; !ok {
+		m.Config.Spec.Cluster.PolicyEngine = v1alpha1.PolicyEngineKyverno
+	}
+
+	if _, ok := flagOverrides["cert-manager"]; !ok {
+		m.Config.Spec.Cluster.CertManager = v1alpha1.CertManagerEnabled
 	}
 }
 

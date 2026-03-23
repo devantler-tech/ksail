@@ -279,7 +279,9 @@ func TestProfile_ValidValues(t *testing.T) {
 
 	values := profile.ValidValues()
 	assert.Contains(t, values, "Default")
-	assert.Len(t, values, 1)
+	assert.Contains(t, values, "GitOps")
+	assert.Contains(t, values, "Security")
+	assert.Len(t, values, 3)
 }
 
 func TestProfile_StringAndType(t *testing.T) {
@@ -315,6 +317,24 @@ func TestProfile_Set(t *testing.T) {
 			name:      "default_mixed_case",
 			input:     "Default",
 			expected:  v1alpha1.ProfileDefault,
+			wantError: false,
+		},
+		{
+			name:      "gitops_profile",
+			input:     "GitOps",
+			expected:  v1alpha1.ProfileGitOps,
+			wantError: false,
+		},
+		{
+			name:      "gitops_lowercase",
+			input:     "gitops",
+			expected:  v1alpha1.ProfileGitOps,
+			wantError: false,
+		},
+		{
+			name:      "security_profile",
+			input:     "Security",
+			expected:  v1alpha1.ProfileSecurity,
 			wantError: false,
 		},
 		{

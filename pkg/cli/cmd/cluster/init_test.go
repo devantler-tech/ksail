@@ -379,3 +379,121 @@ func newInitDeps(t *testing.T) clusterpkg.InitDeps {
 
 	return clusterpkg.InitDeps{Timer: tmr}
 }
+
+func TestHandleInitRunE_GitOpsProfileSetsFluxAndLocalRegistry(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := newInitCommand(t)
+	cfgManager := newConfigManager(t, cmd, io.Discard)
+
+	setFlags(t, cmd, map[string]string{
+		"output":  outDir,
+		"force":   "true",
+		"profile": "GitOps",
+	})
+
+	deps := newInitDeps(t)
+
+	err := clusterpkg.HandleInitRunE(cmd, cfgManager, deps)
+	if err != nil {
+		t.Fatalf("HandleInitRunE returned error: %v", err)
+	}
+
+	//nolint:gosec // test file path is safe
+	content, err := os.ReadFile(filepath.Join(outDir, "ksail.yaml"))
+	if err != nil {
+		t.Fatalf("expected ksail.yaml to be scaffolded: %v", err)
+	}
+
+	if !strings.Contains(string(content), "gitOpsEngine: Flux") {
+		t.Fatalf("expected ksail.yaml to set gitOpsEngine=Flux for GitOps profile\n%s", content)
+	}
+
+	if !strings.Contains(string(content), "registry: localhost:5050") {
+		t.Fatalf("expected ksail.yaml to enable local registry for GitOps profile\n%s", content)
+	}
+}
+
+func TestHandleInitRunE_SecurityProfileSetsCiliumKyvernoAndCertManager(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := newInitCommand(t)
+	cfgManager := newConfigManager(t, cmd, io.Discard)
+
+	setFlags(t, cmd, map[string]string{
+		"output":  outDir,
+		"force":   "true",
+		"profile": "Security",
+	})
+
+	deps := newInitDeps(t)
+
+	err := clusterpkg.HandleInitRunE(cmd, cfgManager, deps)
+	if err != nil {
+		t.Fatalf("HandleInitRunE returned error: %v", err)
+	}
+
+	//nolint:gosec // test file path is safe
+	content, err := os.ReadFile(filepath.Join(outDir, "ksail.yaml"))
+	if err != nil {
+		t.Fatalf("expected ksail.yaml to be scaffolded: %v", err)
+	}
+
+	if !strings.Contains(string(content), "cni: Cilium") {
+		t.Fatalf("expected ksail.yaml to set cni=Cilium for Security profile\n%s", content)
+	}
+
+	if !strings.Contains(string(content), "policyEngine: Kyverno") {
+		t.Fatalf("expected ksail.yaml to set policyEngine=Kyverno for Security profile\n%s", content)
+	}
+
+	if !strings.Contains(string(content), "certManager: Enabled") {
+		t.Fatalf("expected ksail.yaml to set certManager=Enabled for Security profile\n%s", content)
+	}
+}
+
+func TestHandleInitRunE_ExplicitFlagsOverrideProfileDefaults(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := newInitCommand(t)
+	cfgManager := newConfigManager(t, cmd, io.Discard)
+
+	setFlags(t, cmd, map[string]string{
+		"output":        outDir,
+		"force":         "true",
+		"profile":       "Security",
+		"cni":           "Calico",
+		"policy-engine": "None",
+	})
+
+	deps := newInitDeps(t)
+
+	err := clusterpkg.HandleInitRunE(cmd, cfgManager, deps)
+	if err != nil {
+		t.Fatalf("HandleInitRunE returned error: %v", err)
+	}
+
+	//nolint:gosec // test file path is safe
+	content, err := os.ReadFile(filepath.Join(outDir, "ksail.yaml"))
+	if err != nil {
+		t.Fatalf("expected ksail.yaml to be scaffolded: %v", err)
+	}
+
+	if !strings.Contains(string(content), "cni: Calico") {
+		t.Fatalf("expected explicit --cni Calico to override Security profile's Cilium default\n%s", content)
+	}
+
+	if strings.Contains(string(content), "policyEngine:") {
+		t.Fatalf("expected explicit --policy-engine None to suppress policyEngine field\n%s", content)
+	}
+
+	if !strings.Contains(string(content), "certManager: Enabled") {
+		t.Fatalf("expected certManager=Enabled (not overridden by flag) from Security profile\n%s", content)
+	}
+}

@@ -10,8 +10,8 @@ KSail's `--profile` flag provides **pre-built cluster profile templates** that b
 When you pass `--profile` to `ksail cluster init`, KSail applies the profile's defaults to the generated `ksail.yaml`. Individual flags (`--cni`, `--csi`, `--gitops-engine`, etc.) still override profile defaults when explicitly provided.
 
 ```bash
-# Initialize with the default profile (same as omitting --profile)
-ksail cluster init --profile Default
+# Initialize with a named profile
+ksail cluster init --profile GitOps
 ```
 
 ## Available Profiles
@@ -25,22 +25,57 @@ The `Default` profile preserves the current `ksail cluster init` behaviour — i
 - **CSI:** Default (distribution-provided)
 - **GitOps Engine:** None
 - **Policy Engine:** None
+- **Cert-Manager:** Disabled
 
 ```bash
 ksail cluster init --profile Default
 # Equivalent to: ksail cluster init
 ```
 
+### GitOps
+
+The `GitOps` profile configures a cluster for GitOps-first workflows. It enables Flux as the GitOps engine and automatically adds a local OCI registry for image caching.
+
+| Setting | Value |
+|---|---|
+| **GitOps Engine** | Flux |
+| **Local Registry** | `localhost:5050` (auto-configured) |
+
+```bash
+ksail cluster init --profile GitOps
+```
+
+Use this profile when you want to develop with Flux and need a local registry to avoid hitting image pull rate limits.
+
+### Security
+
+The `Security` profile configures a hardened cluster with network policy enforcement, admission control, and TLS certificate management.
+
+| Setting | Value |
+|---|---|
+| **CNI** | Cilium |
+| **Policy Engine** | Kyverno |
+| **Cert-Manager** | Enabled |
+
+```bash
+ksail cluster init --profile Security
+```
+
+Use this profile when you want to validate workloads against security policies locally before deploying to production.
+
 ## Overriding Profile Defaults
 
 Profiles set defaults — any explicitly provided flag takes precedence:
 
 ```bash
-# Start from Default profile but switch to Cilium CNI
-ksail cluster init --profile Default --cni Cilium
+# Use GitOps profile but with ArgoCD instead of Flux
+ksail cluster init --profile GitOps --gitops-engine ArgoCD
 
-# Start from Default profile with K3s distribution
-ksail cluster init --profile Default --distribution K3s
+# Use Security profile but with Calico CNI
+ksail cluster init --profile Security --cni Calico
+
+# Combine a profile with a different distribution
+ksail cluster init --profile GitOps --distribution K3s
 ```
 
 ## Compatibility
