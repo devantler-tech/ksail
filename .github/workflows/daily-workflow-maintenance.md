@@ -76,6 +76,7 @@ steps:
 tools:
   github:
     toolsets: [all]
+    min-integrity: none
   web-fetch:
   bash:
     - "*"
