@@ -40,13 +40,6 @@
               "additionalProperties": false,
               "type": "object"
             },
-            "profile": {
-              "type": "string",
-              "enum": [
-                "Default"
-              ],
-              "description": "Pre-built cluster profile template (Default: current behaviour)"
-            },
             "distribution": {
               "type": "string",
               "enum": [
