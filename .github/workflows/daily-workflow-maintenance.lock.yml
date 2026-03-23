@@ -969,7 +969,7 @@ jobs:
           destination: ${{ runner.temp }}/gh-aw/actions
       - name: Generate GitHub App token
         id: safe-outputs-app-token
-        uses: actions/create-github-app-token@a7f885bf4560200d03183ed941cb6fb072e4b343 # v3.0.0-beta.4
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0-beta.4
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -1194,7 +1194,7 @@ jobs:
           path: /tmp/gh-aw/
       - name: Generate GitHub App token
         id: safe-outputs-app-token
-        uses: actions/create-github-app-token@a7f885bf4560200d03183ed941cb6fb072e4b343 # v3.0.0-beta.4
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0-beta.4
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
