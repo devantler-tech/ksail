@@ -1,6 +1,8 @@
 package workload
 
 import (
+	"time"
+
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
@@ -83,4 +85,9 @@ func ExportTryAddDirectory(watcher *fsnotify.Watcher, path string, cmd *cobra.Co
 // ExportFindKustomizationDir exposes findKustomizationDir for testing.
 func ExportFindKustomizationDir(changedFile, rootDir string) string {
 	return findKustomizationDir(changedFile, rootDir)
+}
+
+// ExportFormatElapsed exposes formatElapsed for testing.
+func ExportFormatElapsed(d time.Duration) string {
+	return formatElapsed(d)
 }

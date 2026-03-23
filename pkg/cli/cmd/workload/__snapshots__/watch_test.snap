@@ -10,12 +10,20 @@ found, or the boundary is the watch root, it applies the full root
 directory. This scoping ensures only the affected Kustomize layer is
 re-applied, making iteration faster in monorepo-style layouts.
 
-Each reconcile prints a timestamped status line showing the changed file
-and the outcome (success or failure). Press Ctrl+C to stop the watcher.
+Each reconcile prints a timestamped status line showing the changed file,
+the outcome (success or failure), and the elapsed time for the apply.
+Press Ctrl+C to stop the watcher.
+
+Use --initial-apply to synchronize the cluster with the current state of
+the watch directory before entering the watch loop. This is useful after
+editing manifests offline or when starting a fresh session.
 
 Examples:
   # Watch the default k8s/ directory
   ksail workload watch
+
+  # Watch and apply once on startup before entering the loop
+  ksail workload watch --initial-apply
 
   # Watch a custom directory
   ksail workload watch --path=./manifests
@@ -24,7 +32,8 @@ Usage:
   watch [flags]
 
 Flags:
-  -h, --help          help for watch
-      --path string   Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
+  -h, --help             help for watch
+      --initial-apply    Apply all workloads once immediately on startup before entering the watch loop
+      --path string      Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
 
 ---
