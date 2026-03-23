@@ -46,6 +46,7 @@ safe-outputs:
     draft: false
     protected-files: allowed
     allowed-files:
+      - ".github/actions/daily-workflow-maintenance/**"
       - ".github/aw/actions-lock.json"
       - ".github/workflows/*.lock.yml"
       - ".github/agents/*.agent.md"
