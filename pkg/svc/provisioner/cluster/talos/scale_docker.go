@@ -310,8 +310,10 @@ func (p *Provisioner) configForRole(role string) talosconfig.Provider {
 	return p.talosConfigs.Worker()
 }
 
-// nextDockerNodeIndex finds the next available index for a node role.
-// It scans existing container names to find the max index, avoiding collisions.
+// nextDockerNodeIndex finds the next available 0-based index for a node role.
+// It scans existing container names to find the max suffix, then converts the
+// result to the 0-based index expected by dockerNodeName (which applies +1
+// internally when formatting names).
 func nextDockerNodeIndex(containers []container.Summary, clusterName, role string) int {
 	// Build the name prefix used by dockerNodeName (e.g. "mycluster-controlplane-").
 	// dockerNodeName(clusterName, role, 0) returns "<clusterName>-<talosRole>-1";
@@ -324,7 +326,12 @@ func nextDockerNodeIndex(containers []container.Summary, clusterName, role strin
 		names[i] = containerName(ctr)
 	}
 
-	return nextNodeIndexFromNames(names, prefix)
+	// nextNodeIndexFromNames returns the next available numeric suffix (max+1).
+	// dockerNodeName uses index+1 for the suffix, so convert: index = nextSuffix-1.
+	// When there are no existing nodes (nextSuffix==0) we want index 0 (first node).
+	nextSuffix := nextNodeIndexFromNames(names, prefix)
+
+	return max(0, nextSuffix-1)
 }
 
 // dockerNodeName formats a Docker container name for a Talos node.
