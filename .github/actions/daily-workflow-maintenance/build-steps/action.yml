@@ -1,0 +1,110 @@
+name: Daily Workflow Maintenance Build Steps
+description: |
+  Validated build, test, and workflow validation steps for the workflow maintenance agent.
+
+  Note: Test steps log warnings if they fail but do not fail the action.
+  This allows the workflow to capture diagnostic output for analysis. Check the
+  build-steps.log file for detailed results. Build failures do cause the action to fail.
+author: Daily Workflow Maintenance
+runs:
+  using: composite
+  steps:
+    - name: 📋 Initialize build log
+      shell: bash
+      run: |
+        echo "=== Daily Workflow Maintenance Build Steps ===" | tee build-steps.log
+        echo "Started: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" | tee -a build-steps.log
+        echo "" | tee -a build-steps.log
+
+    - name: ⚙️ Setup Go
+      shell: bash
+      run: |
+        echo "=== Go Environment ===" | tee -a build-steps.log
+        go version | tee -a build-steps.log
+        echo "GOPATH: $GOPATH" | tee -a build-steps.log
+        echo "GOCACHE: $(go env GOCACHE)" | tee -a build-steps.log
+        echo "" | tee -a build-steps.log
+
+    - name: 🏗️ Build KSail Binary
+      shell: bash
+      env:
+        GOPROXY: "https://proxy.golang.org|direct"
+        GOMEMLIMIT: "6GiB"
+      run: |
+        echo "=== Building KSail Binary ===" | tee -a build-steps.log
+        build_start=$(date +%s)
+        if go build -ldflags="-s -w" -o ksail . 2>&1 | tee -a build-steps.log; then
+          build_end=$(date +%s)
+          build_duration=$((build_end - build_start))
+          echo "✅ Build successful in ${build_duration}s" | tee -a build-steps.log
+          ls -lh ksail | tee -a build-steps.log
+        else
+          echo "❌ Build failed" | tee -a build-steps.log
+          exit 1
+        fi
+        echo "" | tee -a build-steps.log
+
+    - name: 🧪 Run Unit Tests
+      shell: bash
+      env:
+        GOPROXY: "https://proxy.golang.org|direct"
+      run: |
+        echo "=== Running Unit Tests ===" | tee -a build-steps.log
+        test_start=$(date +%s)
+        go env -w GOTOOLCHAIN=go1.26.0+auto
+        if go test ./... 2>&1 | tee -a build-steps.log; then
+          test_end=$(date +%s)
+          test_duration=$((test_end - test_start))
+          echo "✅ Tests passed in ${test_duration}s" | tee -a build-steps.log
+        else
+          echo "⚠️ Some tests failed - check output above" | tee -a build-steps.log
+        fi
+        echo "" | tee -a build-steps.log
+
+    - name: ✅ Validate Agentic Workflows
+      shell: bash
+      run: |
+        echo "=== Validating Agentic Workflows ===" | tee -a build-steps.log
+        validation_failed=0
+        for file in .github/workflows/*.md; do
+          if gh aw compile --validate "$file" 2>&1 | tee -a build-steps.log; then
+            echo "✅ $file is valid" | tee -a build-steps.log
+          else
+            echo "⚠️ $file failed validation" | tee -a build-steps.log
+            validation_failed=1
+          fi
+        done
+        if [ "$validation_failed" -eq 0 ]; then
+          echo "✅ All agentic workflows are valid" | tee -a build-steps.log
+        else
+          echo "⚠️ Some agentic workflows failed validation - check output above" | tee -a build-steps.log
+        fi
+        echo "" | tee -a build-steps.log
+
+    - name: 🔍 Validate Non-Agentic Workflows (actionlint)
+      shell: bash
+      run: |
+        echo "=== Validating Non-Agentic Workflows ===" | tee -a build-steps.log
+        if command -v actionlint &> /dev/null; then
+          lint_start=$(date +%s)
+          if actionlint .github/workflows/*.yaml .github/workflows/*.yml 2>&1 | tee -a build-steps.log; then
+            lint_end=$(date +%s)
+            lint_duration=$((lint_end - lint_start))
+            echo "✅ All workflows passed actionlint in ${lint_duration}s" | tee -a build-steps.log
+          else
+            echo "⚠️ Some workflows failed actionlint - check output above" | tee -a build-steps.log
+          fi
+        else
+          echo "ℹ️ actionlint not available - skipping non-agentic workflow validation" | tee -a build-steps.log
+        fi
+        echo "" | tee -a build-steps.log
+
+    - name: 📊 Build Steps Summary
+      shell: bash
+      run: |
+        echo "" | tee -a build-steps.log
+        echo "=== Build Steps Complete ===" | tee -a build-steps.log
+        echo "Finished: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" | tee -a build-steps.log
+        echo "" | tee -a build-steps.log
+        echo "--- build-steps.log summary ---"
+        grep -E "(✅|❌|⚠️|ℹ️)" build-steps.log || true
