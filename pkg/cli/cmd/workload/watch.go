@@ -120,15 +120,14 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool) error {
 	cmd.PrintErrf("  watching: %s\n", absDir)
 	cmd.PrintErrf("  press Ctrl+C to stop\n\n")
 
-	if initialApply {
-		initialApplyAndReport(cmd.Context(), cmd, absDir)
-	}
-
-	return watchLoop(cmd.Context(), cmd, absDir)
+	return watchLoop(cmd.Context(), cmd, absDir, initialApply)
 }
 
 // watchLoop sets up the fsnotify watcher and runs the debounced apply loop.
-func watchLoop(ctx context.Context, cmd *cobra.Command, dir string) error {
+// When initialApply is true, a full apply of the watch root is performed
+// after the watcher and signal context are initialized, ensuring that
+// Ctrl+C cancels the apply and any file changes during it are captured.
+func watchLoop(ctx context.Context, cmd *cobra.Command, dir string, initialApply bool) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("create file watcher: %w", err)
@@ -145,6 +144,10 @@ func watchLoop(ctx context.Context, cmd *cobra.Command, dir string) error {
 	// Set up signal handling for graceful shutdown.
 	sigCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if initialApply {
+		executeAndReportApply(sigCtx, cmd, dir, "initial apply")
+	}
 
 	return eventLoop(sigCtx, cmd, watcher, dir)
 }
@@ -314,17 +317,18 @@ func enqueueIfCurrent(state *debounceState, expectedGen uint64, applyCh chan str
 	}
 }
 
-// initialApplyAndReport runs a full kubectl apply against the watch root on
-// startup and prints a timestamped status line with elapsed time. It is
-// equivalent to applyAndReport but uses "initial apply" as the trigger label
-// so it is clearly distinguishable in the output.
-func initialApplyAndReport(ctx context.Context, cmd *cobra.Command, dir string) {
+// executeAndReportApply runs kubectl apply against the given directory and
+// prints a timestamped result line with elapsed time. The label parameter
+// (e.g. "initial apply", "reconciling") is printed before the apply starts.
+// Used directly for the initial full-root sync and called by applyAndReport
+// for scoped reconciles, keeping timing and formatting in one place.
+func executeAndReportApply(ctx context.Context, cmd *cobra.Command, dir, label string) {
 	if ctx.Err() != nil {
 		return
 	}
 
 	timestamp := time.Now().Format("15:04:05")
-	cmd.PrintErrf("[%s] initial apply\n", timestamp)
+	cmd.PrintErrf("[%s] %s\n", timestamp, label)
 
 	start := time.Now()
 	applyErr := runKubectlApply(ctx, cmd, dir)
@@ -359,26 +363,17 @@ func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile st
 
 	applyDir := findKustomizationDir(changedFile, dir)
 
+	label := "reconciling"
 	if applyDir != dir {
 		relDir, relErr := filepath.Rel(dir, applyDir)
 		if relErr != nil {
 			relDir = applyDir
 		}
 
-		cmd.PrintErrf("[%s] → reconciling subtree: %s\n", timestamp, relDir)
+		label = fmt.Sprintf("→ reconciling subtree: %s", relDir)
 	}
 
-	start := time.Now()
-	applyErr := runKubectlApply(ctx, cmd, applyDir)
-	elapsed := time.Since(start)
-
-	timestamp = time.Now().Format("15:04:05")
-
-	if applyErr != nil {
-		cmd.PrintErrf("[%s] ✗ apply failed (%s): %v\n\n", timestamp, formatElapsed(elapsed), applyErr)
-	} else {
-		cmd.PrintErrf("[%s] ✓ apply succeeded (%s)\n\n", timestamp, formatElapsed(elapsed))
-	}
+	executeAndReportApply(ctx, cmd, applyDir, label)
 }
 
 // formatElapsed formats a duration as a compact human-readable string
