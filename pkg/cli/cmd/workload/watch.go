@@ -456,7 +456,7 @@ func findKustomizationDir(changedFile, rootDir string) string {
 // The provided context is forwarded to the cobra command so that Ctrl+C
 // (which cancels ctx) also terminates an in-flight apply promptly.
 func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error {
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
 	client := kubectl.NewClient(genericiooptions.IOStreams{
 		In:     os.Stdin,
 		Out:    cmd.OutOrStdout(),

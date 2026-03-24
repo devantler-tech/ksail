@@ -15,7 +15,7 @@ type kubectlCommandCreator func(client *kubectl.Client, kubeconfigPath string) *
 // newKubectlCommand creates a kubectl wrapper command using the provided command creator.
 // This reduces duplication across all kubectl-based workload commands.
 func newKubectlCommand(creator kubectlCommandCreator) *cobra.Command {
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(nil)
 	client := kubectl.NewClient(genericiooptions.IOStreams{
 		In:     os.Stdin,
 		Out:    os.Stdout,

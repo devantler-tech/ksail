@@ -26,8 +26,10 @@ func InitializeViper(configFilePath string) *viper.Viper {
 	viperInstance := viper.New()
 
 	if configFilePath != "" {
-		// Use the explicit config file path — skip name/type/path discovery
+		// Use the explicit config file path — skip name/type/path discovery.
+		// Still set config type so Viper can decode files without a .yaml/.yml extension.
 		viperInstance.SetConfigFile(configFilePath)
+		viperInstance.SetConfigType("yaml")
 	} else {
 		// Configure file settings first (highest precedence after flags/env)
 		configureViperFileSettings(viperInstance)

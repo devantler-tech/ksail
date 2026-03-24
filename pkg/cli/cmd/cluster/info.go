@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
@@ -17,19 +18,26 @@ import (
 // NewInfoCmd creates the cluster info command.
 // The command wraps kubectl cluster-info and appends TTL status when set.
 func NewInfoCmd(_ *di.Runtime) *cobra.Command {
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
 	client := kubectl.NewClient(genericiooptions.IOStreams{
 		In:     os.Stdin,
 		Out:    os.Stdout,
 		ErrOut: os.Stderr,
 	})
 
-	cmd := client.CreateClusterInfoCommand(kubeconfigPath)
+	// Create the command with a placeholder kubeconfig (resolved at runtime).
+	cmd := client.CreateClusterInfoCommand(k8s.DefaultKubeconfigPath())
 
-	// Wrap RunE to append TTL info after kubectl cluster-info output.
+	// Wrap RunE to resolve kubeconfig at runtime (honoring --config flag)
+	// and append TTL info after kubectl cluster-info output.
 	originalRunE := cmd.RunE
 	if originalRunE != nil {
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
+			// Reconfigure the command's kubeconfig flags for the resolved path
+			if f := cmd.Flag("kubeconfig"); f != nil && !f.Changed {
+				_ = f.Value.Set(kubeconfigPath)
+			}
+
 			err := originalRunE(cmd, args)
 			if err != nil {
 				return err
