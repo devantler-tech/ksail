@@ -286,11 +286,6 @@ const gitOpsEngineDetails = `GitOps engine for continuous deployment. See [GitOp
 - ` + bt + `Flux` + bt + ` – Install [Flux CD](https://fluxcd.io/) and scaffold FluxInstance CR
 - ` + bt + `ArgoCD` + bt + ` – Install [Argo CD](https://argo-cd.readthedocs.io/) and scaffold Application CR`
 
-// profileDetails provides prose after the Profile enum list.
-const profileDetails = `Pre-built cluster profile template. Profiles bundle opinionated combinations of CNI, CSI, policy engine, and GitOps settings into named starting points. Individual flags (` + bt + `--cni` + bt + `, ` + bt + `--csi` + bt + `, etc.) still override profile defaults when explicitly provided.
-
-- ` + bt + `Default` + bt + ` (default) – Standard defaults (current behaviour, no-op)`
-
 // configDistToolOptions describes distribution and tool-specific options.
 const configDistToolOptions = `#### Distribution and Tool Options
 
