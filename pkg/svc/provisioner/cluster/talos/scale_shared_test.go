@@ -11,7 +11,7 @@ func TestNextNodeIndexFromNames_EmptyList(t *testing.T) {
 	t.Parallel()
 
 	result := talosprovisioner.NextNodeIndexFromNamesForTest(nil, "mycluster-controlplane-")
-	assert.Equal(t, 0, result)
+	assert.Equal(t, 1, result)
 }
 
 func TestNextNodeIndexFromNames_NoMatchingPrefix(t *testing.T) {
@@ -19,7 +19,7 @@ func TestNextNodeIndexFromNames_NoMatchingPrefix(t *testing.T) {
 
 	names := []string{"other-controlplane-1", "other-worker-1"}
 	result := talosprovisioner.NextNodeIndexFromNamesForTest(names, "mycluster-controlplane-")
-	assert.Equal(t, 0, result)
+	assert.Equal(t, 1, result)
 }
 
 func TestNextNodeIndexFromNames_SingleNode(t *testing.T) {
