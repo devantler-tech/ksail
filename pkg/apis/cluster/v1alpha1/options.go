@@ -41,7 +41,8 @@ type LocalRegistry struct {
 	// Tag is the OCI artifact tag used when pushing workloads (e.g., "latest", "v1.0.0").
 	// When set, overrides any tag embedded in the Registry string.
 	// The CLI oci:// argument still takes precedence over this field.
-	// Defaults to "dev" when neither this field nor a Registry-embedded tag is specified.
+	// When neither this field nor a Registry-embedded tag is specified,
+	// the push command defaults to the "dev" tag.
 	Tag string `json:"tag,omitzero"`
 }
 

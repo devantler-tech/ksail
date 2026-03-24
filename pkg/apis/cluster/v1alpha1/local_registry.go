@@ -173,7 +173,7 @@ func (r LocalRegistry) ResolvedPath() string {
 
 // ResolvedTag returns the registry tag to use for OCI artifact pushes.
 // Priority: explicit Tag field > tag embedded in Registry string.
-// Returns empty string if neither is set (caller should apply default).
+// Returns empty string if neither is set (caller applies default "dev" tag).
 func (r LocalRegistry) ResolvedTag() string {
 	if r.Tag != "" {
 		return r.Tag
