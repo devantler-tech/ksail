@@ -205,14 +205,13 @@ func TestOptions_WithExtraPortMappings(t *testing.T) {
 	}
 }
 
-func TestPortMappingsToStrings(t *testing.T) {
+func TestPortMappingsToStrings_ValidMappings(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name     string
 		mappings []v1alpha1.PortMapping
 		expected []string
-		wantErr  bool
 	}{
 		{
 			"converts TCP mappings",
@@ -221,7 +220,6 @@ func TestPortMappingsToStrings(t *testing.T) {
 				{ContainerPort: 443, HostPort: 8443, Protocol: "TCP"},
 			},
 			[]string{"8080:80/tcp", "8443:443/tcp"},
-			false,
 		},
 		{
 			"converts UDP mappings",
@@ -229,7 +227,6 @@ func TestPortMappingsToStrings(t *testing.T) {
 				{ContainerPort: 53, HostPort: 5353, Protocol: "UDP"},
 			},
 			[]string{"5353:53/udp"},
-			false,
 		},
 		{
 			"defaults protocol to tcp",
@@ -237,7 +234,6 @@ func TestPortMappingsToStrings(t *testing.T) {
 				{ContainerPort: 80, HostPort: 8080},
 			},
 			[]string{"8080:80/tcp"},
-			false,
 		},
 		{
 			"uses zero host port when not specified",
@@ -245,45 +241,11 @@ func TestPortMappingsToStrings(t *testing.T) {
 				{ContainerPort: 80},
 			},
 			[]string{"0:80/tcp"},
-			false,
 		},
 		{
 			"returns nil for empty input",
 			nil,
 			nil,
-			false,
-		},
-		{
-			"rejects zero container port",
-			[]v1alpha1.PortMapping{
-				{ContainerPort: 0, HostPort: 8080, Protocol: "TCP"},
-			},
-			nil,
-			true,
-		},
-		{
-			"rejects negative container port",
-			[]v1alpha1.PortMapping{
-				{ContainerPort: -1, HostPort: 8080, Protocol: "TCP"},
-			},
-			nil,
-			true,
-		},
-		{
-			"rejects container port over 65535",
-			[]v1alpha1.PortMapping{
-				{ContainerPort: 70000, HostPort: 8080, Protocol: "TCP"},
-			},
-			nil,
-			true,
-		},
-		{
-			"rejects invalid protocol",
-			[]v1alpha1.PortMapping{
-				{ContainerPort: 80, HostPort: 8080, Protocol: "SCTP"},
-			},
-			nil,
-			true,
 		},
 	}
 
@@ -292,14 +254,56 @@ func TestPortMappingsToStrings(t *testing.T) {
 			t.Parallel()
 
 			result, err := talosprovisioner.PortMappingsToStrings(testCase.mappings)
-			if testCase.wantErr {
-				require.Error(t, err)
-
-				return
-			}
-
 			require.NoError(t, err)
 			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
+
+func TestPortMappingsToStrings_InvalidMappings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		mappings []v1alpha1.PortMapping
+		wantErr  error
+	}{
+		{
+			"rejects zero container port",
+			[]v1alpha1.PortMapping{
+				{ContainerPort: 0, HostPort: 8080, Protocol: "TCP"},
+			},
+			talosprovisioner.ErrContainerPortOutOfRange,
+		},
+		{
+			"rejects negative container port",
+			[]v1alpha1.PortMapping{
+				{ContainerPort: -1, HostPort: 8080, Protocol: "TCP"},
+			},
+			talosprovisioner.ErrContainerPortOutOfRange,
+		},
+		{
+			"rejects container port over 65535",
+			[]v1alpha1.PortMapping{
+				{ContainerPort: 70000, HostPort: 8080, Protocol: "TCP"},
+			},
+			talosprovisioner.ErrContainerPortOutOfRange,
+		},
+		{
+			"rejects invalid protocol",
+			[]v1alpha1.PortMapping{
+				{ContainerPort: 80, HostPort: 8080, Protocol: "SCTP"},
+			},
+			talosprovisioner.ErrInvalidProtocol,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := talosprovisioner.PortMappingsToStrings(testCase.mappings)
+			require.ErrorIs(t, err, testCase.wantErr)
 		})
 	}
 }

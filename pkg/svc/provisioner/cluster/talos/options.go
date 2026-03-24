@@ -1,6 +1,7 @@
 package talosprovisioner
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -136,6 +137,37 @@ func (o *Options) WithExtraPortMappings(ports []string) *Options {
 // maxPort is the maximum valid port number.
 const maxPort = 65535
 
+// ErrContainerPortOutOfRange is returned when a container port is outside the valid range (1-65535).
+var ErrContainerPortOutOfRange = errors.New("containerPort is out of range (must be 1-65535)")
+
+// ErrHostPortOutOfRange is returned when a host port is outside the valid range (0-65535).
+var ErrHostPortOutOfRange = errors.New("hostPort is out of range (must be 0-65535)")
+
+// ErrInvalidProtocol is returned when a protocol is not TCP or UDP.
+var ErrInvalidProtocol = errors.New("protocol is invalid (must be TCP or UDP)")
+
+// validatePortMapping validates a single PortMapping and returns its normalized protocol.
+func validatePortMapping(portMapping v1alpha1.PortMapping, index int) (string, error) {
+	if portMapping.ContainerPort < 1 || portMapping.ContainerPort > maxPort {
+		return "", fmt.Errorf("extraPortMappings[%d]: %w", index, ErrContainerPortOutOfRange)
+	}
+
+	if portMapping.HostPort < 0 || portMapping.HostPort > maxPort {
+		return "", fmt.Errorf("extraPortMappings[%d]: %w", index, ErrHostPortOutOfRange)
+	}
+
+	protocol := strings.ToLower(portMapping.Protocol)
+	if protocol == "" {
+		protocol = "tcp"
+	}
+
+	if protocol != "tcp" && protocol != "udp" {
+		return "", fmt.Errorf("extraPortMappings[%d]: %w", index, ErrInvalidProtocol)
+	}
+
+	return protocol, nil
+}
+
 // PortMappingsToStrings converts API PortMapping structs to Talos SDK port strings.
 // Format: "[hostIP:]hostPort:containerPort/protocol".
 // Returns an error if any mapping has an invalid container port (must be 1-65535),
@@ -147,37 +179,16 @@ func PortMappingsToStrings(mappings []v1alpha1.PortMapping) ([]string, error) {
 
 	ports := make([]string, 0, len(mappings))
 
-	for portMappingIndex, pm := range mappings {
-		if pm.ContainerPort < 1 || pm.ContainerPort > maxPort {
-			return nil, fmt.Errorf(
-				"extraPortMappings[%d]: containerPort %d is out of range (must be 1-%d)",
-				portMappingIndex, pm.ContainerPort, maxPort,
-			)
+	for portMappingIndex, portMapping := range mappings {
+		protocol, validationErr := validatePortMapping(portMapping, portMappingIndex)
+		if validationErr != nil {
+			return nil, validationErr
 		}
 
-		if pm.HostPort < 0 || pm.HostPort > maxPort {
-			return nil, fmt.Errorf(
-				"extraPortMappings[%d]: hostPort %d is out of range (must be 0-%d)",
-				portMappingIndex, pm.HostPort, maxPort,
-			)
-		}
-
-		protocol := strings.ToLower(pm.Protocol)
-		if protocol == "" {
-			protocol = "tcp"
-		}
-
-		if protocol != "tcp" && protocol != "udp" {
-			return nil, fmt.Errorf(
-				"extraPortMappings[%d]: protocol %q is invalid (must be TCP or UDP)",
-				portMappingIndex, pm.Protocol,
-			)
-		}
-
-		if pm.HostPort > 0 {
-			ports = append(ports, fmt.Sprintf("%d:%d/%s", pm.HostPort, pm.ContainerPort, protocol))
+		if portMapping.HostPort > 0 {
+			ports = append(ports, fmt.Sprintf("%d:%d/%s", portMapping.HostPort, portMapping.ContainerPort, protocol))
 		} else {
-			ports = append(ports, fmt.Sprintf("0:%d/%s", pm.ContainerPort, protocol))
+			ports = append(ports, fmt.Sprintf("0:%d/%s", portMapping.ContainerPort, protocol))
 		}
 	}
 
