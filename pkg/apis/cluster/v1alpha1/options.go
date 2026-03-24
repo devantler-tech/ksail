@@ -28,7 +28,7 @@ type OptionsTalos struct {
 	// ExtraPortMappings defines additional port mappings from Docker containers to the host.
 	// Only used with the Docker provider. Useful on macOS where MetalLB virtual IPs
 	// are not accessible from the host because Docker runs in a Linux VM.
-	// Ports are exposed on control-plane nodes.
+	// Ports are exposed on the first control-plane node (when multiple control-planes are configured).
 	ExtraPortMappings []PortMapping `json:"extraPortMappings,omitzero"`
 }
 
