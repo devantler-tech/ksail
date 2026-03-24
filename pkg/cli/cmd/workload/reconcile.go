@@ -50,7 +50,7 @@ func NewReconcileCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "reconcile",
 		Short:        "Trigger reconciliation for GitOps workloads",
-		Long:         "Trigger reconciliation/sync and wait for completion. For Flux, waits for the root kustomization and the full downstream Kustomization dependency chain. For ArgoCD, waits for the root application.",
+		Long:         "Trigger reconciliation/sync and wait for completion. For Flux, waits for the OCIRepository (if applicable) and all Kustomizations in the Flux namespace to become ready. For ArgoCD, waits for the root application.",
 		SilenceUsage: true,
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: "write",
