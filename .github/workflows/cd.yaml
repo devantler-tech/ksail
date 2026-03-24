@@ -126,10 +126,9 @@ jobs:
           VERSION: ${{ steps.get_version.outputs.version }}
 
       - name: 📤 Upload VSIX to release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
-        with:
-          files: vsce/ksail_*.vsix
-          draft: true
+        run: gh release upload "${GITHUB_REF#refs/tags/}" ksail_*.vsix
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-release:
     name: 📢 Publish Release
