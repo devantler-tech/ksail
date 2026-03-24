@@ -202,6 +202,7 @@ func TestCluster_ExpandEnvVars_ComplexRegistry(t *testing.T) {
 		cluster.Spec.Cluster.LocalRegistry.Registry)
 }
 
+//nolint:funlen // Comprehensive test covering all expandable fields at once.
 func TestCluster_ExpandEnvVars_AllFieldsAtOnce(t *testing.T) {
 	// Set all test environment variables
 	t.Setenv("TEST_EDITOR", "nano")
