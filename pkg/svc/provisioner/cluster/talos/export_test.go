@@ -12,3 +12,8 @@ func CountNodeRolesForTest(nodes []NodeWithRoleForTest) (int32, int32) {
 func NewNodeWithRoleForTest(ip, role string) NodeWithRoleForTest {
 	return nodeWithRole{IP: ip, Role: role}
 }
+
+// NextNodeIndexFromNamesForTest exposes nextNodeIndexFromNames for unit testing.
+func NextNodeIndexFromNamesForTest(names []string, prefix string) int {
+	return nextNodeIndexFromNames(names, prefix)
+}
