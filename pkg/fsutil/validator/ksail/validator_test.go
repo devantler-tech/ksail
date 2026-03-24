@@ -931,6 +931,43 @@ func TestKSailValidatorContextPatterns(t *testing.T) {
 	t.Parallel()
 
 	testEmptyContextValidationSkipped(t)
+	testOmniProviderContextValidationSkipped(t)
+}
+
+// testOmniProviderContextValidationSkipped tests that context validation is skipped
+// for Talos + Omni provider, since Omni generates its own context naming scheme.
+func testOmniProviderContextValidationSkipped(t *testing.T) {
+	t.Helper()
+
+	t.Run("omni_provider_context_validation_skipped", func(t *testing.T) {
+		t.Parallel()
+
+		config := &v1alpha1.Cluster{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "ksail.io/v1alpha1",
+				Kind:       "Cluster",
+			},
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution:       v1alpha1.DistributionTalos,
+					DistributionConfig: "talos",
+					Provider:           v1alpha1.ProviderOmni,
+					Connection: v1alpha1.Connection{
+						Context: "devantler-prod", // Omni-generated context without admin@ prefix
+					},
+				},
+			},
+		}
+
+		validator := ksailvalidator.NewValidator()
+		result := validator.Validate(config)
+
+		// Context validation should be skipped for Omni provider
+		for _, err := range result.Errors {
+			assert.NotEqual(t, "spec.cluster.connection.context", err.Field,
+				"Omni provider context should not be validated against admin@ pattern")
+		}
+	})
 }
 
 // testEmptyContextValidationSkipped tests that empty context skips validation.

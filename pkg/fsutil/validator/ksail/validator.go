@@ -172,7 +172,17 @@ func (v *Validator) validateDistribution(
 // getExpectedContextName returns the expected context name for the given configuration.
 // Context name follows the pattern: {distribution}-{cluster_name}, where cluster_name is extracted
 // from the distribution config. Returns empty string if no distribution config is available.
+//
+// For Talos with the Omni provider, context validation is skipped because Omni generates
+// its own context naming scheme (e.g., "devantler-prod") that does not follow the
+// "admin@<name>" convention used by locally-provisioned Talos clusters.
 func (v *Validator) getExpectedContextName(config *v1alpha1.Cluster) string {
+	// Omni generates its own kubeconfig context names; skip validation
+	if config.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
+		config.Spec.Cluster.Provider == v1alpha1.ProviderOmni {
+		return ""
+	}
+
 	distributionName := v.getDistributionConfigName(config.Spec.Cluster.Distribution)
 	if distributionName == "" {
 		// No distribution config available, skip context validation
