@@ -229,6 +229,25 @@ For cloud volumes, use the `hcloud-volumes` storage class installed automaticall
 
 Upgrade without cluster recreation: `talosctl -n <node-ip> upgrade --image ghcr.io/siderolabs/installer:v1.6.0`. See [Talos upgrade docs](https://www.talos.dev/latest/talos-guides/upgrading-talos/) for coordination details.
 
+### Port Mappings (Docker Provider)
+
+On macOS, Docker runs in a Linux VM, so MetalLB virtual IPs are not directly accessible from the host. Use `extraPortMappings` in your `ksail.yaml` to expose container ports to the host:
+
+```yaml
+spec:
+  cluster:
+    talos:
+      extraPortMappings:
+        - containerPort: 80
+          hostPort: 8080
+          protocol: TCP
+        - containerPort: 443
+          hostPort: 8443
+          protocol: TCP
+```
+
+Ports are applied to the first control-plane node only. See [Declarative Configuration](/configuration/declarative-configuration/) for the full field reference.
+
 ### GitOps Integration
 
 Enable Flux or ArgoCD for declarative workload management—see [GitOps Workflows](/features/#gitops-workflows).
