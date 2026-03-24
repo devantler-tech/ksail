@@ -196,7 +196,6 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		ChartVersion: vclusterconfigmanager.ChartVersion(),
 		Connect:      false,
 		Upgrade:      false,
-		Distro:       "k8s",
 	}
 
 	valuesFiles, cleanup, err := buildValuesFiles(p.valuesPath, p.disableFlannel)

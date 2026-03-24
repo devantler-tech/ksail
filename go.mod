@@ -63,7 +63,7 @@ require (
 	github.com/hetznercloud/hcloud-go/v2 v2.36.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
-	github.com/loft-sh/vcluster v0.32.1
+	github.com/loft-sh/vcluster v0.33.0
 	github.com/modelcontextprotocol/go-sdk v1.4.1
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/omni/client v1.6.0
@@ -104,8 +104,10 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage v1.8.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys v1.4.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal v1.2.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.4 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.6.0 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
@@ -473,11 +475,11 @@ require (
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/lithammer/dedent v1.1.0 // indirect
 	github.com/lmittmann/tint v1.0.7 // indirect
-	github.com/loft-sh/admin-apis v0.0.0-20260114082031-80a031002990 // indirect
-	github.com/loft-sh/agentapi/v4 v4.7.0-alpha.3 // indirect
+	github.com/loft-sh/admin-apis v0.0.0-20260219192040-a66d50310311 // indirect
+	github.com/loft-sh/agentapi/v4 v4.8.0-alpha.1 // indirect
 	github.com/loft-sh/analytics-client v0.0.0-20240219162240-2f4c64b2494e // indirect
-	github.com/loft-sh/api/v4 v4.7.0-alpha.3 // indirect
-	github.com/loft-sh/apiserver v0.0.0-20250910060242-4b9f3ffe0646 // indirect
+	github.com/loft-sh/api/v4 v4.8.0-alpha.1 // indirect
+	github.com/loft-sh/apiserver v0.0.0-20260113122925-594495a02e96 // indirect
 	github.com/loft-sh/image v0.0.0-20250625154753-87447a6ad364 // indirect
 	github.com/loft-sh/utils v0.0.29 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
