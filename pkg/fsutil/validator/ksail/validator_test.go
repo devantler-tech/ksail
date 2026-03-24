@@ -18,6 +18,7 @@ import (
 
 const (
 	specDistributionField = "spec.cluster.distribution"
+	specConnectionContext = "spec.cluster.connection.context"
 	specCNIField          = "spec.cni"
 	kindKSailContext      = "kind-ksail"
 )
@@ -492,7 +493,7 @@ func testInvalidContextPatternWithConfig(t *testing.T) {
 		found := false
 
 		for _, err := range result.Errors {
-			if err.Field == "spec.cluster.connection.context" {
+			if err.Field == specConnectionContext {
 				found = true
 
 				assert.Contains(t, err.Message, "context name does not match expected pattern")
@@ -933,8 +934,8 @@ func TestKSailValidatorContextPatterns(t *testing.T) {
 
 	testEmptyContextValidationSkipped(t)
 	testOmniProviderContextValidationSkipped(t)
-	testDockerProviderTalosContextStillValidated(t)
-	testHetznerProviderTalosContextStillValidated(t)
+	testNonOmniProviderTalosContextStillValidated(t, "docker", v1alpha1.ProviderDocker)
+	testNonOmniProviderTalosContextStillValidated(t, "hetzner", v1alpha1.ProviderHetzner)
 }
 
 // testOmniProviderContextValidationSkipped tests that context validation is skipped
@@ -970,18 +971,22 @@ func testOmniProviderContextValidationSkipped(t *testing.T) {
 
 		// Context validation should be skipped for Omni provider
 		for _, err := range result.Errors {
-			assert.NotEqual(t, "spec.cluster.connection.context", err.Field,
+			assert.NotEqual(t, specConnectionContext, err.Field,
 				"Omni provider context should not be validated against admin@ pattern")
 		}
 	})
 }
 
-// testDockerProviderTalosContextStillValidated tests that context validation
-// still enforces the admin@<name> pattern for Talos + Docker provider.
-func testDockerProviderTalosContextStillValidated(t *testing.T) {
+// testNonOmniProviderTalosContextStillValidated tests that context validation
+// still enforces the admin@<name> pattern for Talos with the given non-Omni provider.
+func testNonOmniProviderTalosContextStillValidated(
+	t *testing.T,
+	name string,
+	provider v1alpha1.Provider,
+) {
 	t.Helper()
 
-	t.Run("docker_provider_talos_context_still_validated", func(t *testing.T) {
+	t.Run(name+"_provider_talos_context_still_validated", func(t *testing.T) {
 		t.Parallel()
 
 		talosConfigs, err := talosconfigmanager.NewDefaultConfigs()
@@ -996,7 +1001,7 @@ func testDockerProviderTalosContextStillValidated(t *testing.T) {
 				Cluster: v1alpha1.ClusterSpec{
 					Distribution:       v1alpha1.DistributionTalos,
 					DistributionConfig: "talos",
-					Provider:           v1alpha1.ProviderDocker,
+					Provider:           provider,
 					Connection: v1alpha1.Connection{
 						Context: "devantler-prod", // Missing admin@ prefix
 					},
@@ -1007,66 +1012,27 @@ func testDockerProviderTalosContextStillValidated(t *testing.T) {
 		validator := ksailvalidator.NewValidatorForTalos(talosConfigs)
 		result := validator.Validate(config)
 
-		// Context validation should flag the missing admin@ prefix for Docker provider
+		// Context validation should flag the missing admin@ prefix
 		found := false
 
 		for _, validationErr := range result.Errors {
-			if validationErr.Field == "spec.cluster.connection.context" {
+			if validationErr.Field == specConnectionContext {
 				found = true
-				assert.Contains(t, validationErr.Message, "context name does not match expected pattern")
+
+				assert.Contains(
+					t,
+					validationErr.Message,
+					"context name does not match expected pattern",
+				)
 
 				break
 			}
 		}
 
-		assert.True(t, found, "Docker provider Talos context should be validated against admin@ pattern")
-	})
-}
-
-// testHetznerProviderTalosContextStillValidated tests that context validation
-// still enforces the admin@<name> pattern for Talos + Hetzner provider.
-func testHetznerProviderTalosContextStillValidated(t *testing.T) {
-	t.Helper()
-
-	t.Run("hetzner_provider_talos_context_still_validated", func(t *testing.T) {
-		t.Parallel()
-
-		talosConfigs, err := talosconfigmanager.NewDefaultConfigs()
-		require.NoError(t, err)
-
-		config := &v1alpha1.Cluster{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.io/v1alpha1",
-				Kind:       "Cluster",
-			},
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Distribution:       v1alpha1.DistributionTalos,
-					DistributionConfig: "talos",
-					Provider:           v1alpha1.ProviderHetzner,
-					Connection: v1alpha1.Connection{
-						Context: "devantler-prod", // Missing admin@ prefix
-					},
-				},
-			},
-		}
-
-		validator := ksailvalidator.NewValidatorForTalos(talosConfigs)
-		result := validator.Validate(config)
-
-		// Context validation should flag the missing admin@ prefix for Hetzner provider
-		found := false
-
-		for _, validationErr := range result.Errors {
-			if validationErr.Field == "spec.cluster.connection.context" {
-				found = true
-				assert.Contains(t, validationErr.Message, "context name does not match expected pattern")
-
-				break
-			}
-		}
-
-		assert.True(t, found, "Hetzner provider Talos context should be validated against admin@ pattern")
+		assert.True(
+			t, found,
+			name+" provider Talos context should be validated against admin@ pattern",
+		)
 	})
 }
 
