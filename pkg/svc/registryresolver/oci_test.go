@@ -7,11 +7,19 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+// testRetryBaseWait and testRetryMaxWait are near-zero delays so retry
+// tests complete in milliseconds instead of minutes.
+const (
+	testRetryBaseWait = 1 * time.Millisecond
+	testRetryMaxWait  = 5 * time.Millisecond
 )
 
 func TestPushOCIArtifact_MissingDirectory_PushesEmptyArtifact(t *testing.T) {
@@ -147,6 +155,10 @@ func mockPushFn(
 func TestRetryExternalPush_SucceedsOnFirstAttempt(t *testing.T) {
 	t.Parallel()
 
+	t.Cleanup(registryresolver.SetExternalPushRetryParams(
+		5, testRetryBaseWait, testRetryMaxWait,
+	))
+
 	var callCount atomic.Int32
 
 	push := mockPushFn(&callCount, []error{nil})
@@ -161,6 +173,10 @@ func TestRetryExternalPush_SucceedsOnFirstAttempt(t *testing.T) {
 
 func TestRetryExternalPush_RetriesTransientErrors(t *testing.T) {
 	t.Parallel()
+
+	t.Cleanup(registryresolver.SetExternalPushRetryParams(
+		5, testRetryBaseWait, testRetryMaxWait,
+	))
 
 	var callCount atomic.Int32
 
@@ -179,6 +195,10 @@ func TestRetryExternalPush_RetriesTransientErrors(t *testing.T) {
 func TestRetryExternalPush_RetriesMultipleTransientErrors(t *testing.T) {
 	t.Parallel()
 
+	t.Cleanup(registryresolver.SetExternalPushRetryParams(
+		5, testRetryBaseWait, testRetryMaxWait,
+	))
+
 	var callCount atomic.Int32
 
 	push := mockPushFn(&callCount, []error{
@@ -196,6 +216,10 @@ func TestRetryExternalPush_RetriesMultipleTransientErrors(t *testing.T) {
 func TestRetryExternalPush_NonRetryableStopsImmediately(t *testing.T) {
 	t.Parallel()
 
+	t.Cleanup(registryresolver.SetExternalPushRetryParams(
+		5, testRetryBaseWait, testRetryMaxWait,
+	))
+
 	var callCount atomic.Int32
 
 	push := mockPushFn(&callCount, []error{errGHCRNonRetryable})
@@ -211,6 +235,10 @@ func TestRetryExternalPush_NonRetryableStopsImmediately(t *testing.T) {
 
 func TestRetryExternalPush_AllAttemptsExhausted(t *testing.T) {
 	t.Parallel()
+
+	t.Cleanup(registryresolver.SetExternalPushRetryParams(
+		5, testRetryBaseWait, testRetryMaxWait,
+	))
 
 	var callCount atomic.Int32
 
@@ -228,6 +256,10 @@ func TestRetryExternalPush_AllAttemptsExhausted(t *testing.T) {
 
 func TestRetryExternalPush_CancelledContext(t *testing.T) {
 	t.Parallel()
+
+	t.Cleanup(registryresolver.SetExternalPushRetryParams(
+		5, testRetryBaseWait, testRetryMaxWait,
+	))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

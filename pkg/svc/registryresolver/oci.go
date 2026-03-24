@@ -12,12 +12,18 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 )
 
-// External-registry push retry constants.
+// External-registry push retry configuration.
 // GHCR and similar external registries can experience transient blips
 // (rate limits, 5xx errors, redirect storms) that outlast the low-level
 // push retry in pkg/client/oci. This higher-level retry wraps the entire
 // build+push cycle with a longer back-off window.
-const (
+//
+// The default* values capture the production defaults, while the package-level
+// variables are used by the implementation and may be overridden in tests
+// to avoid long wall-clock delays.
+//
+//nolint:gochecknoglobals // package-level vars allow test overrides via export_test.go
+var (
 	externalPushMaxAttempts   = 5
 	externalPushRetryBaseWait = 5 * time.Second
 	externalPushRetryMaxWait  = 30 * time.Second
