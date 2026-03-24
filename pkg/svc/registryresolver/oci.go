@@ -144,7 +144,9 @@ func retryExternalPush(
 			break
 		}
 
-		delay := netretry.ExponentialDelay(attempt, externalPushRetryBaseWait, externalPushRetryMaxWait)
+		delay := netretry.ExponentialDelay(
+			attempt, externalPushRetryBaseWait, externalPushRetryMaxWait,
+		)
 
 		timer := time.NewTimer(delay)
 
