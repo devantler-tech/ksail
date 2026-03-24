@@ -134,7 +134,7 @@ func (o *Options) WithExtraPortMappings(ports []string) *Options {
 }
 
 // PortMappingsToStrings converts API PortMapping structs to Talos SDK port strings.
-// Format: "hostPort:containerPort/protocol".
+// Format: "[hostIP:]hostPort:containerPort/protocol".
 func PortMappingsToStrings(mappings []v1alpha1.PortMapping) []string {
 	if len(mappings) == 0 {
 		return nil

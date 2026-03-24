@@ -420,6 +420,7 @@ func recordFailedChange(result *clusterupdate.UpdateResult, role, nodeName strin
 
 // parseExtraPortMappings converts Talos SDK port strings to Docker port bindings and exposed ports.
 // Port format: "[hostIP:]hostPort:containerPort/protocol".
+// Malformed entries (missing protocol separator or unexpected part count) are silently skipped.
 func parseExtraPortMappings(ports []string) (nat.PortMap, nat.PortSet) {
 	portMap := nat.PortMap{}
 	portSet := nat.PortSet{}
