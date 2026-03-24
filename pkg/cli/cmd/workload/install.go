@@ -15,7 +15,7 @@ const requiredInstallArgs = 2
 // NewInstallCmd creates the workload install command.
 func NewInstallCmd(_ *di.Runtime) *cobra.Command {
 	// Try to load config silently to get kubeconfig path
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(nil)
 
 	cmd := &cobra.Command{
 		Use:   "install [NAME] [CHART]",

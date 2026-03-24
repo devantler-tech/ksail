@@ -70,13 +70,15 @@ func NewConfigManager(
 // NewCommandConfigManager constructs a ConfigManager bound to the provided Cobra command.
 // It registers the supplied field selectors, binds flags from struct fields, and writes output
 // to the command's standard output writer.
-// If the --config persistent flag is set on the command, its value is used as the config file path.
+// The --config persistent flag value is resolved lazily (during Load) so that it is
+// available after cobra has parsed flags.
 func NewCommandConfigManager(
 	cmd *cobra.Command,
 	selectors []FieldSelector[v1alpha1.Cluster],
 ) *ConfigManager {
-	configFile, _ := flags.GetConfigPath(cmd)
-	manager := NewConfigManager(cmd.OutOrStdout(), configFile, selectors...)
+	// Do NOT resolve --config here — flags have not been parsed yet during command
+	// construction.  The config file path is resolved lazily in readConfig().
+	manager := NewConfigManager(cmd.OutOrStdout(), "", selectors...)
 	manager.command = cmd
 	manager.AddFlagsFromFields(cmd)
 
@@ -208,6 +210,18 @@ func (m *ConfigManager) validateAndFinalizeConfig() error {
 }
 
 func (m *ConfigManager) readConfig(silent bool) error {
+	// Lazily resolve the --config flag when a command is bound.
+	// This runs inside Load() which is called from RunE — at that point cobra
+	// has already parsed all flags, so the value is reliable.
+	if m.command != nil && m.ConfigFile == "" {
+		if cfgPath, err := flags.GetConfigPath(m.command); err == nil && cfgPath != "" {
+			m.ConfigFile = cfgPath
+			// Re-initialize Viper with the explicit config file path so it
+			// skips directory traversal and uses the exact file.
+			m.Viper = InitializeViper(cfgPath)
+		}
+	}
+
 	err := m.Viper.ReadInConfig()
 	if err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError

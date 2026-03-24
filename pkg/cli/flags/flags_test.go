@@ -124,3 +124,68 @@ func TestMaybeTimer_FlagNotFound(t *testing.T) {
 	result := flags.MaybeTimer(cmd, timer.New())
 	assert.Nil(t, result)
 }
+
+func TestGetConfigPath_NilCommand(t *testing.T) {
+	t.Parallel()
+
+	_, err := flags.GetConfigPath(nil)
+	require.Error(t, err)
+	snaps.MatchSnapshot(t, err.Error())
+}
+
+func TestGetConfigPath_DefaultEmpty(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String(flags.ConfigFlagName, "", "")
+
+	path, err := flags.GetConfigPath(cmd)
+	require.NoError(t, err)
+	assert.Empty(t, path)
+}
+
+func TestGetConfigPath_ExplicitValue(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String(flags.ConfigFlagName, "ksail.prod.yaml", "")
+
+	path, err := flags.GetConfigPath(cmd)
+	require.NoError(t, err)
+	assert.Equal(t, "ksail.prod.yaml", path)
+}
+
+func TestGetConfigPath_PersistentFlags(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	cmd.PersistentFlags().String(flags.ConfigFlagName, "/etc/ksail/ksail.yaml", "")
+
+	path, err := flags.GetConfigPath(cmd)
+	require.NoError(t, err)
+	assert.Equal(t, "/etc/ksail/ksail.yaml", path)
+}
+
+func TestGetConfigPath_InheritedFromParent(t *testing.T) {
+	t.Parallel()
+
+	parent := &cobra.Command{}
+	parent.PersistentFlags().String(flags.ConfigFlagName, "ksail.staging.yaml", "")
+
+	child := &cobra.Command{Use: "child"}
+	parent.AddCommand(child)
+
+	path, err := flags.GetConfigPath(child)
+	require.NoError(t, err)
+	assert.Equal(t, "ksail.staging.yaml", path)
+}
+
+func TestGetConfigPath_FlagNotFound(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	path, err := flags.GetConfigPath(cmd)
+	require.NoError(t, err)
+	assert.Empty(t, path)
+}

@@ -32,11 +32,11 @@ Example:
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Set up editor environment variables before edit
-			cleanup := editor.SetupEditorEnv(editorFlag, "workload")
+			cleanup := editor.SetupEditorEnv(cmd, editorFlag, "workload")
 			defer cleanup()
 
 			// Try to load config silently to get kubeconfig path
-			kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+			kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
 
 			// Create IO streams for kubectl
 			ioStreams := genericiooptions.IOStreams{

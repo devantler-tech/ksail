@@ -14,3 +14,7 @@ nil command
 [TestIsBenchmarkEnabled_FlagNotFound - 1]
 flag not found: "benchmark"
 ---
+
+[TestGetConfigPath_NilCommand - 1]
+nil command
+---

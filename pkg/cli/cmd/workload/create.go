@@ -17,7 +17,7 @@ import (
 // though it's currently unused as this command wraps kubectl and flux directly.
 func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 	// Try to load config silently to get kubeconfig path
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(nil)
 
 	// Create IO streams for kubectl and flux
 	ioStreams := genericiooptions.IOStreams{

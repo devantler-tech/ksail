@@ -117,7 +117,7 @@ func runRestore(
 		return ErrInvalidResourcePolicy
 	}
 
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
 	if kubeconfigPath == "" {
 		return ErrKubeconfigNotFound
 	}

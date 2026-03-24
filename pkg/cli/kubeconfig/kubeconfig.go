@@ -10,6 +10,7 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
+	"github.com/spf13/cobra"
 )
 
 // GetKubeconfigPathFromConfig extracts and expands the kubeconfig path from a loaded cluster config.
@@ -37,12 +38,25 @@ func GetKubeconfigPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
 // GetKubeconfigPathSilently attempts to load the KSail config and extract the kubeconfig path
 // without producing any output. All config loading output is suppressed using io.Discard.
 //
+// When cmd is non-nil, the --config persistent flag is honored so that an explicit
+// config file is used instead of auto-discovery.
+//
 // If config loading fails for any reason, this function returns the default kubeconfig path
 // rather than propagating the error. This makes it suitable for scenarios where a best-effort
 // path is acceptable.
-func GetKubeconfigPathSilently() string {
-	// Use io.Discard to suppress all output
-	cfgManager := ksailconfigmanager.NewConfigManager(io.Discard, "")
+func GetKubeconfigPathSilently(cmd *cobra.Command) string {
+	var cfgManager *ksailconfigmanager.ConfigManager
+
+	if cmd != nil {
+		cfgManager = ksailconfigmanager.NewCommandConfigManager(
+			cmd,
+			ksailconfigmanager.DefaultClusterFieldSelectors(),
+		)
+		// Override writer to suppress output
+		cfgManager.Writer = io.Discard
+	} else {
+		cfgManager = ksailconfigmanager.NewConfigManager(io.Discard, "")
+	}
 
 	kubeconfigPath, err := getKubeconfigPath(cfgManager)
 	if err != nil {
