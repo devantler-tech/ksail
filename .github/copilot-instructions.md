@@ -253,8 +253,6 @@ ksail cluster init --help
 # --distribution Talos     # Immutable Talos Linux
 # --distribution VCluster  # Virtual clusters via Vind
 
-# Supported profiles:
-# --profile Default        # Default profile (current behaviour, no-op)
 ```
 
 ### Troubleshooting Build Issues
