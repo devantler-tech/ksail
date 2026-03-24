@@ -255,6 +255,11 @@ func reconcileFlux(
 		cmd.OutOrStdout(),
 	)
 
+	// Create a single deadline for the entire kustomization reconciliation
+	// so that WaitForKustomizationReady + WaitForAllKustomizationsReady
+	// together respect the user-configured timeout.
+	deadline := time.Now().Add(timeout)
+
 	err = reconciler.WaitForKustomizationReady(cmd.Context(), timeout)
 	if err != nil {
 		return fmt.Errorf("wait for kustomization ready: %w", err)
@@ -266,7 +271,12 @@ func reconcileFlux(
 		cmd.OutOrStdout(),
 	)
 
-	err = reconciler.WaitForAllKustomizationsReady(cmd.Context(), timeout)
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return fmt.Errorf("wait for all kustomizations ready: %w", flux.ErrReconcileTimeout)
+	}
+
+	err = reconciler.WaitForAllKustomizationsReady(cmd.Context(), remaining)
 	if err != nil {
 		return fmt.Errorf("wait for all kustomizations ready: %w", err)
 	}

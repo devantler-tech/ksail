@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -228,18 +229,16 @@ func (r *Reconciler) WaitForAllKustomizationsReady(
 
 // pollAllKustomizationsStatus checks if all kustomizations in the namespace are ready.
 // Returns (allReady, statusSummary, error).
+// On context cancellation/timeout, returns (false, "", nil) to let the caller's
+// outer loop handle the timeout with the last recorded status summary.
 func (r *Reconciler) pollAllKustomizationsStatus(
 	ctx context.Context,
 	client dynamic.ResourceInterface,
 ) (bool, string, error) {
-	if err := ctx.Err(); err != nil {
-		return false, "", ErrReconcileTimeout
-	}
-
 	kustomizations, err := client.List(ctx, metav1.ListOptions{})
 	if err != nil {
 		if reconciler.IsContextError(err) {
-			return false, "", ErrReconcileTimeout
+			return false, "", nil
 		}
 
 		return false, "", fmt.Errorf("list flux kustomizations: %w", err)
@@ -267,6 +266,8 @@ func (r *Reconciler) pollAllKustomizationsStatus(
 	if len(notReady) == 0 {
 		return true, "", nil
 	}
+
+	sort.Strings(notReady)
 
 	return false, fmt.Sprintf("not ready: %s", strings.Join(notReady, ", ")), nil
 }
