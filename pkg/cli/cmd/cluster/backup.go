@@ -19,6 +19,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -139,6 +140,16 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 		)
 	}
 
+	// Canonicalize user-supplied output path (resolve symlinks + absolute)
+	// so that the actual write destination is predictable and symlink-escape
+	// attacks are prevented in CI pipelines.
+	canonOutput, err := fsutil.EvalCanonicalPath(flags.outputPath)
+	if err != nil {
+		return fmt.Errorf("resolve output path %q: %w", flags.outputPath, err)
+	}
+
+	flags.outputPath = canonOutput
+
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
 	if kubeconfigPath == "" {
 		return ErrKubeconfigNotFound
@@ -169,7 +180,7 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 		}
 	}
 
-	err := createBackupArchive(ctx, kubeconfigPath, writer, flags)
+	err = createBackupArchive(ctx, kubeconfigPath, writer, flags)
 	if err != nil {
 		return fmt.Errorf("failed to create backup: %w", err)
 	}

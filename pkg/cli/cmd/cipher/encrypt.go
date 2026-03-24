@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
@@ -244,6 +245,16 @@ var errUnsupportedFileFormat = errors.New("unsupported file format")
 // the encrypted content back to disk.
 func handleEncryptRunE(cmd *cobra.Command, args []string) error {
 	inputPath := args[0]
+
+	// Canonicalize user-supplied input path (resolve symlinks + absolute)
+	// so that the actual file being encrypted is predictable and
+	// symlink-escape attacks are prevented in CI pipelines.
+	canonPath, err := fsutil.EvalCanonicalPath(inputPath)
+	if err != nil {
+		return fmt.Errorf("resolve input path %q: %w", inputPath, err)
+	}
+
+	inputPath = canonPath
 
 	inputStore, outputStore, err := getStores(inputPath)
 	if err != nil {

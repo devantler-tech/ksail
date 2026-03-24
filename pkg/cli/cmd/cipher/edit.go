@@ -14,6 +14,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
@@ -598,6 +599,16 @@ func handleEditRunE(
 	editorFlag string,
 ) error {
 	inputPath := args[0]
+
+	// Canonicalize user-supplied input path (resolve symlinks + absolute)
+	// so that the actual file being edited is predictable and
+	// symlink-escape attacks are prevented in CI pipelines.
+	canonPath, err := fsutil.EvalCanonicalPath(inputPath)
+	if err != nil {
+		return fmt.Errorf("resolve input path %q: %w", inputPath, err)
+	}
+
+	inputPath = canonPath
 
 	inputStore, outputStore, err := getStores(inputPath)
 	if err != nil {

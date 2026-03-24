@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
@@ -282,7 +283,7 @@ func resolvePushParams(
 ) (*pushParams, error) {
 	// If OCI reference is fully specified, use it directly without detection
 	if ociRef != nil && ociRef.Host != "" && ociRef.Port > 0 {
-		return newPushParamsFromOCIRef(cfg, ociRef, pathFlag), nil
+		return newPushParamsFromOCIRef(cfg, ociRef, pathFlag)
 	}
 
 	registryInfo, err := detectRegistry(cmd, cfg, viperInstance, tmr, outputTimer)
@@ -291,6 +292,16 @@ func resolvePushParams(
 	}
 
 	// Build params from detected registry info
+	sourceDir := resolveSourceDir(cfg, pathFlag)
+
+	// Canonicalize source directory (resolve symlinks + absolute) so that
+	// the OCI builder targets the real directory and symlink-escape attacks
+	// are prevented in CI pipelines processing external manifests.
+	canonDir, canonErr := fsutil.EvalCanonicalPath(sourceDir)
+	if canonErr != nil {
+		return nil, fmt.Errorf("resolve source directory %q: %w", sourceDir, canonErr)
+	}
+
 	params := &pushParams{
 		Host:       registryInfo.Host,
 		Port:       registryInfo.Port,
@@ -298,7 +309,7 @@ func resolvePushParams(
 		Username:   registryInfo.Username,
 		Password:   registryInfo.Password,
 		IsExternal: registryInfo.IsExternal,
-		SourceDir:  resolveSourceDir(cfg, pathFlag),
+		SourceDir:  canonDir,
 		Ref:        resolveRef(ociRef, cfg.Spec.Workload.Tag, registryInfo.Tag),
 	}
 
@@ -395,16 +406,26 @@ func newPushParamsFromOCIRef(
 	cfg *v1alpha1.Cluster,
 	ociRef *oci.Reference,
 	pathFlag string,
-) *pushParams {
+) (*pushParams, error) {
+	sourceDir := resolveSourceDir(cfg, pathFlag)
+
+	// Canonicalize source directory (resolve symlinks + absolute) so that
+	// the OCI builder targets the real directory and symlink-escape attacks
+	// are prevented in CI pipelines processing external manifests.
+	canonDir, err := fsutil.EvalCanonicalPath(sourceDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve source directory %q: %w", sourceDir, err)
+	}
+
 	return &pushParams{
 		Host:         ociRef.Host,
 		Port:         ociRef.Port,
 		Repository:   ociRef.FullRepository(),
 		Ref:          ociRef.Ref,
-		SourceDir:    resolveSourceDir(cfg, pathFlag),
+		SourceDir:    canonDir,
 		GitOpsEngine: resolveGitOpsEngine(cfg),
 		IsExternal:   false,
-	}
+	}, nil
 }
 
 // resolveSourceDir determines the source directory from flag, config, or default.

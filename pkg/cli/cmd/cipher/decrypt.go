@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
@@ -208,6 +209,16 @@ func handleDecryptRunE(
 
 	if !readFromStdin {
 		inputPath = args[0]
+
+		// Canonicalize user-supplied input path (resolve symlinks + absolute)
+		// so that the actual file being decrypted is predictable and
+		// symlink-escape attacks are prevented in CI pipelines.
+		canonPath, err := fsutil.EvalCanonicalPath(inputPath)
+		if err != nil {
+			return fmt.Errorf("resolve input path %q: %w", inputPath, err)
+		}
+
+		inputPath = canonPath
 	}
 
 	inputStore, outputStore, err := getDecryptStores(inputPath, readFromStdin)
@@ -246,7 +257,14 @@ func handleDecryptRunE(
 // writeDecryptedOutput writes decrypted data to either a file or stdout.
 func writeDecryptedOutput(cmd *cobra.Command, data []byte, outputPath string) error {
 	if outputPath != "" {
-		err := os.WriteFile(outputPath, data, decryptedFilePermissions)
+		// Canonicalize user-supplied output path (resolve symlinks + absolute)
+		// so that the actual write destination is predictable.
+		canonOutput, err := fsutil.EvalCanonicalPath(outputPath)
+		if err != nil {
+			return fmt.Errorf("resolve output path %q: %w", outputPath, err)
+		}
+
+		err = os.WriteFile(canonOutput, data, decryptedFilePermissions)
 		if err != nil {
 			return fmt.Errorf("failed to write decrypted file: %w", err)
 		}
