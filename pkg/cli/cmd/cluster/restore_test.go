@@ -1,10 +1,9 @@
 package cluster_test
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"strings"
+	"path/filepath"
 	"testing"
 
 	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
@@ -87,10 +86,22 @@ func TestRestoreErrors_CanBeWrapped(t *testing.T) {
 		name     string
 		sentinel error
 	}{
-		{name: "ErrInvalidResourcePolicy can be wrapped", sentinel: clusterpkg.ErrInvalidResourcePolicy},
-		{name: "ErrRestoreFailed can be wrapped", sentinel: clusterpkg.ErrRestoreFailed},
-		{name: "ErrInvalidTarPath can be wrapped", sentinel: clusterpkg.ErrInvalidTarPath},
-		{name: "ErrSymlinkInArchive can be wrapped", sentinel: clusterpkg.ErrSymlinkInArchive},
+		{
+			name:     "ErrInvalidResourcePolicy can be wrapped",
+			sentinel: clusterpkg.ErrInvalidResourcePolicy,
+		},
+		{
+			name:     "ErrRestoreFailed can be wrapped",
+			sentinel: clusterpkg.ErrRestoreFailed,
+		},
+		{
+			name:     "ErrInvalidTarPath can be wrapped",
+			sentinel: clusterpkg.ErrInvalidTarPath,
+		},
+		{
+			name:     "ErrSymlinkInArchive can be wrapped",
+			sentinel: clusterpkg.ErrSymlinkInArchive,
+		},
 	}
 
 	for _, testCase := range tests {
@@ -107,9 +118,6 @@ func TestRestoreErrors_CanBeWrapped(t *testing.T) {
 // registers all expected flags with the correct default values.
 func TestNewRestoreCmd_FlagsExistWithCorrectDefaults(t *testing.T) {
 	t.Parallel()
-
-	restoreCmd := clusterpkg.NewRestoreCmd(nil)
-	require.NotNil(t, restoreCmd)
 
 	flagTests := []struct {
 		flagName     string
@@ -136,6 +144,9 @@ func TestNewRestoreCmd_FlagsExistWithCorrectDefaults(t *testing.T) {
 	for _, flagTest := range flagTests {
 		t.Run(flagTest.flagName, func(t *testing.T) {
 			t.Parallel()
+
+			restoreCmd := clusterpkg.NewRestoreCmd(nil)
+			require.NotNil(t, restoreCmd)
 
 			flag := restoreCmd.Flags().Lookup(flagTest.flagName)
 			require.NotNil(t, flag, "flag %q should be registered", flagTest.flagName)
@@ -181,7 +192,7 @@ func TestRestoreCmd_InvalidResourcePolicy(t *testing.T) {
 		{name: "unknown policy value", policy: "unknown"},
 		{name: "capitalised none", policy: "None"},
 		{name: "capitalised update", policy: "Update"},
-		{name: "empty policy override", policy: "skip"},
+		{name: "unsupported policy value 'skip'", policy: "skip"},
 	}
 
 	for _, testCase := range tests {
@@ -199,8 +210,7 @@ func TestRestoreCmd_InvalidResourcePolicy(t *testing.T) {
 			err := restoreCmd.Execute()
 
 			require.Error(t, err)
-			assert.True(t,
-				errors.Is(err, clusterpkg.ErrInvalidResourcePolicy),
+			assert.ErrorIs(t, err, clusterpkg.ErrInvalidResourcePolicy,
 				"expected ErrInvalidResourcePolicy, got: %v", err,
 			)
 		})
@@ -208,8 +218,8 @@ func TestRestoreCmd_InvalidResourcePolicy(t *testing.T) {
 }
 
 // TestRestoreCmd_ValidPoliciesPassValidation verifies that "none" and "update"
-// are accepted as valid policy values. The command will fail later at the
-// kubeconfig check, NOT at the policy check.
+// are accepted as valid policy values. The command will fail later when trying
+// to open the nonexistent --input archive, NOT at the policy check.
 func TestRestoreCmd_ValidPoliciesPassValidation(t *testing.T) {
 	t.Parallel()
 
@@ -225,19 +235,23 @@ func TestRestoreCmd_ValidPoliciesPassValidation(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
+			nonexistentArchive := filepath.Join(t.TempDir(), "nonexistent.tar.gz")
+
 			restoreCmd := clusterpkg.NewRestoreCmd(nil)
 			restoreCmd.SetOut(io.Discard)
 			restoreCmd.SetErr(io.Discard)
 			restoreCmd.SetArgs([]string{
-				"--input", "dummy.tar.gz",
+				"--input", nonexistentArchive,
 				"--existing-resource-policy", testCase.policy,
 			})
 
 			err := restoreCmd.Execute()
 
-			require.Error(t, err, "expected a later error (kubeconfig not found), not ErrInvalidResourcePolicy")
-			assert.False(t,
-				errors.Is(err, clusterpkg.ErrInvalidResourcePolicy),
+			require.Error(
+				t, err,
+				"expected a later error (archive not found), not ErrInvalidResourcePolicy",
+			)
+			assert.NotErrorIs(t, err, clusterpkg.ErrInvalidResourcePolicy,
 				"valid policy %q should not return ErrInvalidResourcePolicy", testCase.policy,
 			)
 		})
@@ -351,15 +365,8 @@ func TestAllLinesContain_EdgeCases(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "multiple all-matching lines",
-			output: strings.Join(
-				[]string{
-					"error: resource already exists",
-					"error: configmap already exists",
-					"error: secret already exists",
-				},
-				"\n",
-			),
+			name:     "multiple all-matching lines",
+			output:   "error: resource already exists\nerror: configmap already exists\nerror: secret already exists",
 			substr:   "already exists",
 			expected: true,
 		},
