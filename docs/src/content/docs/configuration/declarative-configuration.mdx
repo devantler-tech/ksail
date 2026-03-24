@@ -330,7 +330,6 @@ Advanced configuration options are direct fields under `spec.cluster`. See [Sche
 - `workers` – Number of worker nodes (default: `0`)
 - `config` – Path to talosconfig file (default: `~/.talos/config`)
 - `iso` – Cloud provider ISO/image ID for Talos Linux (default: `122630` for x86; use `122629` for ARM)
-- `extraPortMappings` – Port mappings from Docker containers to the host (Docker provider only; useful on macOS where MetalLB IPs are not accessible)
 
 **Hetzner options (`spec.cluster.hetzner`):**
 
@@ -431,7 +430,7 @@ spec:
       workers: 2
 ```
 
-### Port Mappings (Docker Provider)
+#### Port Mappings (Docker Provider)
 
 On macOS, Docker runs in a Linux VM, so MetalLB virtual IPs are not accessible from the host. Use `extraPortMappings` to expose container ports directly:
 
@@ -449,7 +448,7 @@ spec:
           protocol: TCP
 ```
 
-Access services at `http://localhost:8080`. Port mappings are applied only to the first control-plane node to avoid host port collisions when running multiple control-plane nodes.
+Access services at `http://localhost:8080`. Ports are exposed on control-plane nodes.
 
 ## Schema Support
 
