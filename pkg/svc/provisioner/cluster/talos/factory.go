@@ -50,7 +50,12 @@ func CreateProvisioner(
 		providerType = v1alpha1.ProviderDocker
 	}
 
-	provisioner, provErr := newProvisionerFromOptions(talosConfigs, kubeconfigPath, opts, skipCNIChecks)
+	provisioner, provErr := newProvisionerFromOptions(
+		talosConfigs,
+		kubeconfigPath,
+		opts,
+		skipCNIChecks,
+	)
 	if provErr != nil {
 		return nil, provErr
 	}

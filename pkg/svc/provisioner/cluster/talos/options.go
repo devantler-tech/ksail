@@ -186,7 +186,10 @@ func PortMappingsToStrings(mappings []v1alpha1.PortMapping) ([]string, error) {
 		}
 
 		if portMapping.HostPort > 0 {
-			ports = append(ports, fmt.Sprintf("%d:%d/%s", portMapping.HostPort, portMapping.ContainerPort, protocol))
+			ports = append(
+				ports,
+				fmt.Sprintf("%d:%d/%s", portMapping.HostPort, portMapping.ContainerPort, protocol),
+			)
 		} else {
 			ports = append(ports, fmt.Sprintf("0:%d/%s", portMapping.ContainerPort, protocol))
 		}

@@ -190,7 +190,11 @@ func TestOptions_WithExtraPortMappings(t *testing.T) {
 		ports    []string
 		expected []string
 	}{
-		{"sets port mappings", []string{"8080:80/tcp", "8443:443/tcp"}, []string{"8080:80/tcp", "8443:443/tcp"}},
+		{
+			"sets port mappings",
+			[]string{"8080:80/tcp", "8443:443/tcp"},
+			[]string{"8080:80/tcp", "8443:443/tcp"},
+		},
 		{"sets nil", nil, nil},
 		{"sets empty", []string{}, []string{}},
 	}
