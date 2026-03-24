@@ -17,8 +17,9 @@ import (
 // defaults can cause "client rate limiter Wait returned an error: context
 // deadline exceeded" when the exec plugin takes time to acquire a token.
 //
-// These values match kubectl (QPS=50, Burst=300) and are safe for CLI usage
-// where requests are user-initiated rather than automated at high frequency.
+// These values align with kubectl's QPS=50 and provide generous burst
+// headroom. They are safe for CLI usage where requests are user-initiated
+// rather than automated at high frequency.
 const (
 	defaultQPS   = 50
 	defaultBurst = 100
