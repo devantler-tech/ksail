@@ -430,6 +430,26 @@ spec:
       workers: 2
 ```
 
+#### Port Mappings (Docker Provider)
+
+On macOS, Docker runs in a Linux VM, so MetalLB virtual IPs are not accessible from the host. Use `extraPortMappings` to expose container ports directly:
+
+```yaml
+spec:
+  cluster:
+    distribution: Talos
+    talos:
+      extraPortMappings:
+        - containerPort: 80
+          hostPort: 8080
+          protocol: TCP
+        - containerPort: 443
+          hostPort: 8443
+          protocol: TCP
+```
+
+Access services at `http://localhost:8080`. Ports are exposed on the first control-plane node; in multi-control-plane clusters, `extraPortMappings` apply only to that node.
+
 ## Schema Support
 
 KSail provides a JSON Schema for IDE validation and autocompletion. Reference it at the top of your `ksail.yaml`:
