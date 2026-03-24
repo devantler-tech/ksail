@@ -65,7 +65,7 @@ jobs:
       secret_verification_result: ${{ steps.validate-secret.outputs.verification_result }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@dc50be57c94373431b49d3d0927f318ac2bb5c4c # v0.62.5
+        uses: github/gh-aw-actions/setup@853312c41e88e0d6f51d0e4e0658f3ad7461366a # v0.62.5
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - name: Generate agentic run info
@@ -276,7 +276,7 @@ jobs:
       output_types: ${{ steps.collect_output.outputs.output_types }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@dc50be57c94373431b49d3d0927f318ac2bb5c4c # v0.62.5
+        uses: github/gh-aw-actions/setup@853312c41e88e0d6f51d0e4e0658f3ad7461366a # v0.62.5
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - name: Set runtime paths
@@ -964,12 +964,12 @@ jobs:
       total_count: ${{ steps.missing_tool.outputs.total_count }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@dc50be57c94373431b49d3d0927f318ac2bb5c4c # v0.62.5
+        uses: github/gh-aw-actions/setup@853312c41e88e0d6f51d0e4e0658f3ad7461366a # v0.62.5
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - name: Generate GitHub App token
         id: safe-outputs-app-token
-        uses: actions/create-github-app-token@a7f885bf4560200d03183ed941cb6fb072e4b343 # v3.0.0-beta.4
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0-beta.4
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -1107,7 +1107,7 @@ jobs:
       matched_command: ""
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@dc50be57c94373431b49d3d0927f318ac2bb5c4c # v0.62.5
+        uses: github/gh-aw-actions/setup@853312c41e88e0d6f51d0e4e0658f3ad7461366a # v0.62.5
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - name: Check team membership for workflow
@@ -1170,7 +1170,7 @@ jobs:
       process_safe_outputs_temporary_id_map: ${{ steps.process_safe_outputs.outputs.temporary_id_map }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@dc50be57c94373431b49d3d0927f318ac2bb5c4c # v0.62.5
+        uses: github/gh-aw-actions/setup@853312c41e88e0d6f51d0e4e0658f3ad7461366a # v0.62.5
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - name: Download agent output artifact
@@ -1194,7 +1194,7 @@ jobs:
           path: /tmp/gh-aw/
       - name: Generate GitHub App token
         id: safe-outputs-app-token
-        uses: actions/create-github-app-token@a7f885bf4560200d03183ed941cb6fb072e4b343 # v3.0.0-beta.4
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0-beta.4
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
