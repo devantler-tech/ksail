@@ -140,16 +140,6 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 		)
 	}
 
-	// Canonicalize user-supplied output path (resolve symlinks + absolute)
-	// so that the actual write destination is predictable and symlink-escape
-	// attacks are prevented in CI pipelines.
-	canonOutput, err := fsutil.EvalCanonicalPath(flags.outputPath)
-	if err != nil {
-		return fmt.Errorf("resolve output path %q: %w", flags.outputPath, err)
-	}
-
-	flags.outputPath = canonOutput
-
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
 	if kubeconfigPath == "" {
 		return ErrKubeconfigNotFound
@@ -179,6 +169,17 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 			return fmt.Errorf("failed to create output directory: %w", err)
 		}
 	}
+
+	// Canonicalize user-supplied output path (resolve symlinks + absolute)
+	// so that the actual write destination is predictable and symlink-escape
+	// attacks are prevented in CI pipelines.
+	// Done after MkdirAll so the parent directory exists for symlink resolution.
+	canonOutput, err := fsutil.EvalCanonicalPath(flags.outputPath)
+	if err != nil {
+		return fmt.Errorf("resolve output path %q: %w", flags.outputPath, err)
+	}
+
+	flags.outputPath = canonOutput
 
 	err = createBackupArchive(ctx, kubeconfigPath, writer, flags)
 	if err != nil {

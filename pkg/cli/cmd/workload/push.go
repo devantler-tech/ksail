@@ -316,9 +316,11 @@ func resolvePushParams(
 	// Override with OCI reference values if provided
 	applyOCIRefOverrides(params, ociRef)
 
-	// Fallback repository from source directory if not set
+	// Fallback repository from source directory if not set.
+	// Use the original (pre-canonicalized) sourceDir so the repo name
+	// reflects the user-supplied relative path, not the absolute filesystem path.
 	if params.Repository == "" {
-		params.Repository = registry.SanitizeRepoName(params.SourceDir)
+		params.Repository = registry.SanitizeRepoName(sourceDir)
 	}
 
 	// Resolve GitOps engine
