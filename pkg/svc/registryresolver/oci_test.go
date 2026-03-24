@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testRetryBaseWait and testRetryMaxWait are near-zero delays so retry
+// testRetryBaseWait and testRetryMaxWait are minimal delays so retry
 // tests complete in milliseconds instead of minutes.
 const (
 	testRetryBaseWait = 1 * time.Millisecond
