@@ -14,3 +14,6 @@ var ParseRegistryFlag = parseRegistryFlag
 func ParseHostPortHost(s string) string {
 	return parseHostPort(s).host
 }
+
+// RetryExternalPush exports retryExternalPush for testing.
+var RetryExternalPush = retryExternalPush
