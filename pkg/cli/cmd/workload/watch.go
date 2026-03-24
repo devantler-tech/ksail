@@ -28,7 +28,10 @@ var errNotDirectory = errors.New("watch path is not a directory")
 
 // NewWatchCmd creates the workload watch command.
 func NewWatchCmd() *cobra.Command {
-	var pathFlag string
+	var (
+		pathFlag     string
+		initialApply bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "watch",
@@ -43,12 +46,20 @@ found, or the boundary is the watch root, it applies the full root
 directory. This scoping ensures only the affected Kustomize layer is
 re-applied, making iteration faster in monorepo-style layouts.
 
-Each reconcile prints a timestamped status line showing the changed file
-and the outcome (success or failure). Press Ctrl+C to stop the watcher.
+Each reconcile prints a timestamped status line showing the changed file,
+the outcome (success or failure), and the elapsed time for the apply.
+Press Ctrl+C to stop the watcher.
+
+Use --initial-apply to synchronize the cluster with the current state of
+the watch directory before entering the watch loop. This is useful after
+editing manifests offline or when starting a fresh session.
 
 Examples:
   # Watch the default k8s/ directory
   ksail workload watch
+
+  # Watch and apply once on startup before entering the loop
+  ksail workload watch --initial-apply
 
   # Watch a custom directory
   ksail workload watch --path=./manifests`,
@@ -64,15 +75,20 @@ Examples:
 		"Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)",
 	)
 
+	cmd.Flags().BoolVar(
+		&initialApply, "initial-apply", false,
+		"Apply all workloads once immediately on startup before entering the watch loop",
+	)
+
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return runWatch(cmd, pathFlag)
+		return runWatch(cmd, pathFlag, initialApply)
 	}
 
 	return cmd
 }
 
 // runWatch starts the file watcher loop.
-func runWatch(cmd *cobra.Command, pathFlag string) error {
+func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool) error {
 	cmdCtx, err := initCommandContext(cmd)
 	if err != nil {
 		return err
@@ -106,11 +122,15 @@ func runWatch(cmd *cobra.Command, pathFlag string) error {
 	cmd.PrintErrf("  watching: %s\n", absDir)
 	cmd.PrintErrf("  press Ctrl+C to stop\n\n")
 
-	return watchLoop(cmd.Context(), cmd, absDir)
+	return watchLoop(cmd.Context(), cmd, absDir, initialApply)
 }
 
 // watchLoop sets up the fsnotify watcher and runs the debounced apply loop.
-func watchLoop(ctx context.Context, cmd *cobra.Command, dir string) error {
+// When initialApply is true, a full apply of the watch root is performed
+// after the event loop goroutine is started, so watcher events are consumed
+// immediately and not dropped or buffered during the initial apply. Ctrl+C
+// cancels both the initial apply and the event loop via the shared sigCtx.
+func watchLoop(ctx context.Context, cmd *cobra.Command, dir string, initialApply bool) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("create file watcher: %w", err)
@@ -128,7 +148,20 @@ func watchLoop(ctx context.Context, cmd *cobra.Command, dir string) error {
 	sigCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	return eventLoop(sigCtx, cmd, watcher, dir)
+	// Start the event loop before any apply so that watcher events are
+	// consumed immediately, avoiding backlogs or drops during the initial apply.
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- eventLoop(sigCtx, cmd, watcher, dir)
+	}()
+
+	if initialApply {
+		executeAndReportApply(sigCtx, cmd, dir, "initial apply")
+	}
+
+	// Wait for the event loop to complete and propagate its error.
+	return <-errCh
 }
 
 // debounceState holds the mutable state shared between the event loop and
@@ -296,10 +329,41 @@ func enqueueIfCurrent(state *debounceState, expectedGen uint64, applyCh chan str
 	}
 }
 
-// applyAndReport runs kubectl apply and prints a timestamped status line.
-// It scopes the apply to the nearest Kustomization subtree containing the
-// changed file, falling back to a full reconcile when the change is at the
-// root level or no kustomization.yaml boundary is found.
+// executeAndReportApply runs kubectl apply against the given directory and
+// prints a timestamped result line with elapsed time. The label parameter
+// (e.g. "initial apply", "reconciling") is printed before the apply starts.
+// Used directly for the initial full-root sync and called by applyAndReport
+// for scoped reconciles, keeping timing and formatting in one place.
+func executeAndReportApply(ctx context.Context, cmd *cobra.Command, dir, label string) {
+	if ctx.Err() != nil {
+		return
+	}
+
+	timestamp := time.Now().Format("15:04:05")
+	cmd.PrintErrf("[%s] %s\n", timestamp, label)
+
+	start := time.Now()
+	applyErr := runKubectlApply(ctx, cmd, dir)
+	elapsed := time.Since(start)
+
+	timestamp = time.Now().Format("15:04:05")
+
+	if applyErr != nil {
+		cmd.PrintErrf(
+			"[%s] ✗ apply failed (%s): %v\n\n",
+			timestamp,
+			formatElapsed(elapsed),
+			applyErr,
+		)
+	} else {
+		cmd.PrintErrf("[%s] ✓ apply succeeded (%s)\n\n", timestamp, formatElapsed(elapsed))
+	}
+}
+
+// applyAndReport runs kubectl apply and prints a timestamped status line with
+// elapsed time. It scopes the apply to the nearest Kustomization subtree
+// containing the changed file, falling back to a full reconcile when the
+// change is at the root level or no kustomization.yaml boundary is found.
 func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile string) {
 	if ctx.Err() != nil {
 		return
@@ -316,24 +380,24 @@ func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile st
 
 	applyDir := findKustomizationDir(changedFile, dir)
 
+	label := "reconciling"
+
 	if applyDir != dir {
 		relDir, relErr := filepath.Rel(dir, applyDir)
 		if relErr != nil {
 			relDir = applyDir
 		}
 
-		cmd.PrintErrf("[%s] → reconciling subtree: %s\n", timestamp, relDir)
+		label = "→ reconciling subtree: " + relDir
 	}
 
-	applyErr := runKubectlApply(ctx, cmd, applyDir)
+	executeAndReportApply(ctx, cmd, applyDir, label)
+}
 
-	timestamp = time.Now().Format("15:04:05")
-
-	if applyErr != nil {
-		cmd.PrintErrf("[%s] ✗ apply failed: %v\n", timestamp, applyErr)
-	} else {
-		cmd.PrintErrf("[%s] ✓ apply succeeded\n", timestamp)
-	}
+// formatElapsed formats a duration as a compact human-readable string
+// (e.g. "0.3s", "1.2s", "45.0s").
+func formatElapsed(d time.Duration) string {
+	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
 // findKustomizationDir walks up from the changed path to find the nearest
