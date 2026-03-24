@@ -21,7 +21,7 @@ concurrency:
 jobs:
   goreleaser:
     name: Release with GoReleaser
-    runs-on: ubuntu-latest-4-cores
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
