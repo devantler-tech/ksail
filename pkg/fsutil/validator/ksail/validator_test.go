@@ -934,6 +934,7 @@ func TestKSailValidatorContextPatterns(t *testing.T) {
 	testEmptyContextValidationSkipped(t)
 	testOmniProviderContextValidationSkipped(t)
 	testDockerProviderTalosContextStillValidated(t)
+	testHetznerProviderTalosContextStillValidated(t)
 }
 
 // testOmniProviderContextValidationSkipped tests that context validation is skipped
@@ -961,7 +962,10 @@ func testOmniProviderContextValidationSkipped(t *testing.T) {
 			},
 		}
 
-		validator := ksailvalidator.NewValidator()
+		talosConfigs, err := talosconfigmanager.NewDefaultConfigs()
+		require.NoError(t, err)
+
+		validator := ksailvalidator.NewValidatorForTalos(talosConfigs)
 		result := validator.Validate(config)
 
 		// Context validation should be skipped for Omni provider
@@ -1016,6 +1020,53 @@ func testDockerProviderTalosContextStillValidated(t *testing.T) {
 		}
 
 		assert.True(t, found, "Docker provider Talos context should be validated against admin@ pattern")
+	})
+}
+
+// testHetznerProviderTalosContextStillValidated tests that context validation
+// still enforces the admin@<name> pattern for Talos + Hetzner provider.
+func testHetznerProviderTalosContextStillValidated(t *testing.T) {
+	t.Helper()
+
+	t.Run("hetzner_provider_talos_context_still_validated", func(t *testing.T) {
+		t.Parallel()
+
+		talosConfigs, err := talosconfigmanager.NewDefaultConfigs()
+		require.NoError(t, err)
+
+		config := &v1alpha1.Cluster{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "ksail.io/v1alpha1",
+				Kind:       "Cluster",
+			},
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution:       v1alpha1.DistributionTalos,
+					DistributionConfig: "talos",
+					Provider:           v1alpha1.ProviderHetzner,
+					Connection: v1alpha1.Connection{
+						Context: "devantler-prod", // Missing admin@ prefix
+					},
+				},
+			},
+		}
+
+		validator := ksailvalidator.NewValidatorForTalos(talosConfigs)
+		result := validator.Validate(config)
+
+		// Context validation should flag the missing admin@ prefix for Hetzner provider
+		found := false
+
+		for _, validationErr := range result.Errors {
+			if validationErr.Field == "spec.cluster.connection.context" {
+				found = true
+				assert.Contains(t, validationErr.Message, "context name does not match expected pattern")
+
+				break
+			}
+		}
+
+		assert.True(t, found, "Hetzner provider Talos context should be validated against admin@ pattern")
 	})
 }
 
