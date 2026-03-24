@@ -207,11 +207,10 @@ func TestLocalRegistry_ResolvedTag(t *testing.T) {
 	tests := []struct {
 		name     string
 		registry string
-		tag      string
 		wantTag  string
 	}{
 		{
-			name:     "returns_tag_when_present_in_registry",
+			name:     "returns_tag_when_present",
 			registry: "ghcr.io/org/repo:mytag",
 			wantTag:  "mytag",
 		},
@@ -220,30 +219,13 @@ func TestLocalRegistry_ResolvedTag(t *testing.T) {
 			registry: "ghcr.io/org/repo",
 			wantTag:  "",
 		},
-		{
-			name:     "explicit_tag_field_used_when_set",
-			registry: "localhost:5050",
-			tag:      "latest",
-			wantTag:  "latest",
-		},
-		{
-			name:     "explicit_tag_field_overrides_inline_tag",
-			registry: "ghcr.io/org/repo:v1.0.0",
-			tag:      "latest",
-			wantTag:  "latest",
-		},
-		{
-			name:    "explicit_tag_field_without_registry",
-			tag:     "staging",
-			wantTag: "staging",
-		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			reg := v1alpha1.LocalRegistry{Registry: testCase.registry, Tag: testCase.tag}
+			reg := v1alpha1.LocalRegistry{Registry: testCase.registry}
 			assert.Equal(t, testCase.wantTag, reg.ResolvedTag())
 		})
 	}
