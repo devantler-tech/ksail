@@ -162,7 +162,6 @@ func TestFormatElapsed(t *testing.T) {
 	}
 }
 
-
 func TestResolveSourceDir(t *testing.T) {
 	t.Parallel()
 

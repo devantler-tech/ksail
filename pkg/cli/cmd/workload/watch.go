@@ -28,8 +28,10 @@ var errNotDirectory = errors.New("watch path is not a directory")
 
 // NewWatchCmd creates the workload watch command.
 func NewWatchCmd() *cobra.Command {
-	var pathFlag string
-	var initialApply bool
+	var (
+		pathFlag     string
+		initialApply bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "watch",
@@ -337,7 +339,12 @@ func executeAndReportApply(ctx context.Context, cmd *cobra.Command, dir, label s
 	timestamp = time.Now().Format("15:04:05")
 
 	if applyErr != nil {
-		cmd.PrintErrf("[%s] ✗ apply failed (%s): %v\n\n", timestamp, formatElapsed(elapsed), applyErr)
+		cmd.PrintErrf(
+			"[%s] ✗ apply failed (%s): %v\n\n",
+			timestamp,
+			formatElapsed(elapsed),
+			applyErr,
+		)
 	} else {
 		cmd.PrintErrf("[%s] ✓ apply succeeded (%s)\n\n", timestamp, formatElapsed(elapsed))
 	}
@@ -364,13 +371,14 @@ func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile st
 	applyDir := findKustomizationDir(changedFile, dir)
 
 	label := "reconciling"
+
 	if applyDir != dir {
 		relDir, relErr := filepath.Rel(dir, applyDir)
 		if relErr != nil {
 			relDir = applyDir
 		}
 
-		label = fmt.Sprintf("→ reconciling subtree: %s", relDir)
+		label = "→ reconciling subtree: " + relDir
 	}
 
 	executeAndReportApply(ctx, cmd, applyDir, label)
