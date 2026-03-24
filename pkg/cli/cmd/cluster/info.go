@@ -24,7 +24,9 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 		ErrOut: os.Stderr,
 	})
 
-	// Create the command with a placeholder kubeconfig (resolved at runtime).
+	// kubectl requires a kubeconfig path at construction time to wire its
+	// ConfigFlags defaults.  We pass the default path here and override it
+	// in RunE (after cobra has parsed flags) so that --config is honored.
 	cmd := client.CreateClusterInfoCommand(k8s.DefaultKubeconfigPath())
 
 	// Wrap RunE to resolve kubeconfig at runtime (honoring --config flag)
@@ -33,9 +35,12 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 	if originalRunE != nil {
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
 			kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
-			// Reconfigure the command's kubeconfig flags for the resolved path
+			// Override kubectl's --kubeconfig default when the user has not
+			// explicitly set it via --kubeconfig themselves.
 			if f := cmd.Flag("kubeconfig"); f != nil && !f.Changed {
-				_ = f.Value.Set(kubeconfigPath)
+				if err := f.Value.Set(kubeconfigPath); err != nil {
+					return fmt.Errorf("set kubeconfig flag: %w", err)
+				}
 			}
 
 			err := originalRunE(cmd, args)
