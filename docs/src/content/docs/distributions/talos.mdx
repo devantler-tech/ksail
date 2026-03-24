@@ -221,6 +221,29 @@ spec:
       workers: 5
 ```
 
+### Port Mappings (Docker Provider)
+
+On macOS, Docker runs in a Linux VM, so MetalLB virtual IPs are not directly accessible from the host. For Talos clusters using the **Docker provider** only, you can use `extraPortMappings` in `ksail.yaml` to expose container ports on the host (Hetzner and Omni Talos clusters do not use Docker port mappings):
+
+```yaml
+# Partial snippet — add to your existing ksail.yaml
+spec:
+  cluster:
+    distribution: Talos
+    talos:
+      extraPortMappings:
+        - containerPort: 80
+          hostPort: 8080
+          protocol: TCP
+        - containerPort: 443
+          hostPort: 8443
+          protocol: TCP
+```
+
+Ports are applied to the first control-plane node only. In multi-control-plane clusters, additional control-plane nodes do not receive port mappings to avoid Docker host port collisions.
+
+See [Port Mappings reference](/configuration/declarative-configuration/#port-mappings-docker-provider) for full details.
+
 ### Persistent Storage (Hetzner)
 
 For cloud volumes, use the `hcloud-volumes` storage class installed automatically by the [Hetzner Provider](/providers/hetzner/).
