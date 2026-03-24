@@ -400,7 +400,7 @@ spec:
           protocol: TCP
 ` + cbt + `
 
-Access services at ` + bt + `http://localhost:8080` + bt + `. Ports are exposed on control-plane nodes.`
+Access services at ` + bt + `http://localhost:8080` + bt + `. Ports are exposed on the first control-plane node; in multi-control-plane clusters, ` + bt + `extraPortMappings` + bt + ` apply only to that node.`
 
 // configSchemaProse describes JSON Schema support.
 const configSchemaProse = `## Schema Support
