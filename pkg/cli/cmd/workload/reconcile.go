@@ -260,6 +260,17 @@ func reconcileFlux(
 		return fmt.Errorf("wait for kustomization ready: %w", err)
 	}
 
+	writeActivityNotification(
+		"waiting for all flux kustomizations to reconcile",
+		outputTimer,
+		cmd.OutOrStdout(),
+	)
+
+	err = reconciler.WaitForAllKustomizationsReady(cmd.Context(), timeout)
+	if err != nil {
+		return fmt.Errorf("wait for all kustomizations ready: %w", err)
+	}
+
 	return nil
 }
 

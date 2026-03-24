@@ -190,6 +190,87 @@ func (r *Reconciler) WaitForKustomizationReady(ctx context.Context, timeout time
 	}
 }
 
+// WaitForAllKustomizationsReady waits for all Kustomizations in the namespace to be ready.
+// This ensures the full Flux dependency chain has propagated after the root kustomization is ready.
+func (r *Reconciler) WaitForAllKustomizationsReady(
+	ctx context.Context,
+	timeout time.Duration,
+) error {
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	client := r.kustomizationClient()
+
+	var lastStatus string
+
+	for {
+		ready, status, err := r.pollAllKustomizationsStatus(timeoutCtx, client)
+		if err != nil {
+			return err
+		}
+
+		if ready {
+			return nil
+		}
+
+		lastStatus = status
+
+		select {
+		case <-timeoutCtx.Done():
+			return kustomizationTimeoutError(lastStatus)
+		case <-ticker.C:
+		}
+	}
+}
+
+// pollAllKustomizationsStatus checks if all kustomizations in the namespace are ready.
+// Returns (allReady, statusSummary, error).
+func (r *Reconciler) pollAllKustomizationsStatus(
+	ctx context.Context,
+	client dynamic.ResourceInterface,
+) (bool, string, error) {
+	if err := ctx.Err(); err != nil {
+		return false, "", ErrReconcileTimeout
+	}
+
+	kustomizations, err := client.List(ctx, metav1.ListOptions{})
+	if err != nil {
+		if reconciler.IsContextError(err) {
+			return false, "", ErrReconcileTimeout
+		}
+
+		return false, "", fmt.Errorf("list flux kustomizations: %w", err)
+	}
+
+	if len(kustomizations.Items) == 0 {
+		return true, "", nil
+	}
+
+	var notReady []string
+
+	for i := range kustomizations.Items {
+		ks := &kustomizations.Items[i]
+
+		ready, status, err := checkKustomizationStatus(ks)
+		if err != nil {
+			return false, "", fmt.Errorf("kustomization %q: %w", ks.GetName(), err)
+		}
+
+		if !ready {
+			notReady = append(notReady, fmt.Sprintf("%s (%s)", ks.GetName(), status))
+		}
+	}
+
+	if len(notReady) == 0 {
+		return true, "", nil
+	}
+
+	return false, fmt.Sprintf("not ready: %s", strings.Join(notReady, ", ")), nil
+}
+
 // pollOCIRepositoryStatus checks OCI repository status with timeout guard.
 // It returns (ready, nil) on success, (false, nil) for transient errors (stored in lastErr),
 // or (false, err) for permanent/timeout errors.
@@ -573,10 +654,12 @@ func isStatusStale(kustomization *unstructured.Unstructured) bool {
 // evaluateKustomizationConditions processes conditions and returns readiness status.
 func evaluateKustomizationConditions(conditions []any) (bool, string, error) {
 	// Permanent failure reasons for Flux Kustomization.
+	// Note: DependencyNotReady is intentionally excluded — it is a transient state
+	// that resolves once upstream kustomizations in the dependency chain become ready.
+	// The timeout mechanism handles the case where a dependency never becomes ready.
 	permanentFailureReasons := []string{
 		"ReconciliationFailed",
 		"ValidationFailed",
-		"DependencyNotReady",
 		"ArtifactFailed",
 	}
 
