@@ -240,7 +240,7 @@ spec:
           protocol: TCP
 ```
 
-Access services at `http://localhost:8080`. Ports are applied to the first control-plane node only—in multi-control-plane clusters, additional control-plane nodes do not receive port mappings to avoid Docker host port collisions. See the [Declarative Configuration](/configuration/declarative-configuration/#port-mappings-docker-provider) reference for the full field specification.
+Access services at `http://localhost:<hostPort>` (for the example above, `http://localhost:8080`). Ports are applied to the first control-plane node only—in multi-control-plane clusters, additional control-plane nodes do not receive port mappings to avoid Docker host port collisions. See the [Declarative Configuration](/configuration/declarative-configuration/#port-mappings-docker-provider) reference for the full field specification.
 
 ### Persistent Storage (Hetzner)
 
