@@ -221,11 +221,12 @@ spec:
       workers: 5
 ```
 
-### Port Mappings (Docker)
+### Port Mappings (Docker Provider)
 
-On macOS, Docker runs in a Linux VM, so MetalLB virtual IPs are not directly accessible from the host. Use `extraPortMappings` in `ksail.yaml` to expose container ports on the host:
+On macOS, Docker runs in a Linux VM, so MetalLB virtual IPs are not directly accessible from the host. For Talos clusters using the **Docker provider** only, you can use `extraPortMappings` in `ksail.yaml` to expose container ports on the host (Hetzner and Omni Talos clusters do not use Docker port mappings):
 
 ```yaml
+# Partial snippet — add to your existing ksail.yaml
 spec:
   cluster:
     distribution: Talos
