@@ -126,7 +126,7 @@ jobs:
           VERSION: ${{ steps.get_version.outputs.version }}
 
       - name: 📤 Upload VSIX to release
-        run: gh release upload "${GITHUB_REF#refs/tags/}" ksail_*.vsix
+        run: gh release upload "${GITHUB_REF#refs/tags/}" ksail_*.vsix --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
