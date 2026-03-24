@@ -251,15 +251,15 @@ func (r *Reconciler) pollAllKustomizationsStatus(
 	var notReady []string
 
 	for i := range kustomizations.Items {
-		ks := &kustomizations.Items[i]
+		kustomization := &kustomizations.Items[i]
 
-		ready, status, err := checkKustomizationStatus(ks)
+		ready, status, err := checkKustomizationStatus(kustomization)
 		if err != nil {
-			return false, "", fmt.Errorf("kustomization %q: %w", ks.GetName(), err)
+			return false, "", fmt.Errorf("kustomization %q: %w", kustomization.GetName(), err)
 		}
 
 		if !ready {
-			notReady = append(notReady, fmt.Sprintf("%s (%s)", ks.GetName(), status))
+			notReady = append(notReady, kustomization.GetName()+" ("+status+")")
 		}
 	}
 
@@ -269,7 +269,7 @@ func (r *Reconciler) pollAllKustomizationsStatus(
 
 	sort.Strings(notReady)
 
-	return false, fmt.Sprintf("not ready: %s", strings.Join(notReady, ", ")), nil
+	return false, "not ready: " + strings.Join(notReady, ", "), nil
 }
 
 // pollOCIRepositoryStatus checks OCI repository status with timeout guard.
