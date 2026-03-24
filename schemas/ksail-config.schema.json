@@ -147,6 +147,29 @@
                 },
                 "iso": {
                   "type": "integer"
+                },
+                "extraPortMappings": {
+                  "items": {
+                    "properties": {
+                      "containerPort": {
+                        "type": "integer"
+                      },
+                      "hostPort": {
+                        "type": "integer"
+                      },
+                      "protocol": {
+                        "type": "string",
+                        "enum": [
+                          "TCP",
+                          "UDP"
+                        ],
+                        "default": "TCP"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "type": "object"
+                  },
+                  "type": "array"
                 }
               },
               "additionalProperties": false,

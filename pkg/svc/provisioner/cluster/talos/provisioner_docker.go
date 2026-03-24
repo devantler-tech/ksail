@@ -635,6 +635,7 @@ func (p *Provisioner) buildNodeRequests(
 			Type:   machine.TypeControlPlane,
 			IPs:    []netip.Addr{nodeIP},
 			Config: configBundle.ControlPlane(),
+			Ports:  p.options.ExtraPortMappings,
 		})
 	}
 

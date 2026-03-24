@@ -25,6 +25,21 @@ type OptionsTalos struct {
 	// For Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.
 	// Defaults to 122630 (Talos Linux 1.11.2 x86). Use 122629 for ARM.
 	ISO int64 `default:"122630" json:"iso,omitzero"`
+	// ExtraPortMappings defines additional port mappings from Docker containers to the host.
+	// Only used with the Docker provider. Useful on macOS where MetalLB virtual IPs
+	// are not accessible from the host because Docker runs in a Linux VM.
+	// Ports are exposed on control-plane nodes.
+	ExtraPortMappings []PortMapping `json:"extraPortMappings,omitzero"`
+}
+
+// PortMapping defines a mapping between a container port and a host port.
+type PortMapping struct {
+	// ContainerPort is the port inside the container.
+	ContainerPort int32 `json:"containerPort"`
+	// HostPort is the port on the host. If 0, Docker assigns a random port.
+	HostPort int32 `json:"hostPort,omitzero"`
+	// Protocol is the network protocol (TCP or UDP). Defaults to TCP.
+	Protocol string `default:"TCP" json:"protocol,omitzero" jsonschema:"enum=TCP,enum=UDP,default=TCP"`
 }
 
 // LocalRegistry defines options for the host-local OCI registry integration.

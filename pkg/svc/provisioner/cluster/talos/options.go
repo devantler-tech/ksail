@@ -1,8 +1,11 @@
 package talosprovisioner
 
 import (
+	"fmt"
 	"path/filepath"
+	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 )
 
@@ -44,6 +47,11 @@ type Options struct {
 	// KSail will install a custom CNI (Cilium, Calico) after cluster creation,
 	// as pods cannot start until the CNI is installed.
 	SkipCNIChecks bool
+
+	// ExtraPortMappings defines additional port mappings from Docker containers to the host.
+	// Only used with the Docker provider. Each entry is in the Talos SDK format:
+	// "[hostIP:]hostPort:containerPort/protocol".
+	ExtraPortMappings []string
 }
 
 // NewOptions creates new Options with default values.
@@ -116,6 +124,38 @@ func (o *Options) WithSkipCNIChecks(skip bool) *Options {
 	o.SkipCNIChecks = skip
 
 	return o
+}
+
+// WithExtraPortMappings sets the extra port mappings for Docker containers.
+func (o *Options) WithExtraPortMappings(ports []string) *Options {
+	o.ExtraPortMappings = ports
+
+	return o
+}
+
+// PortMappingsToStrings converts API PortMapping structs to Talos SDK port strings.
+// Format: "hostPort:containerPort/protocol".
+func PortMappingsToStrings(mappings []v1alpha1.PortMapping) []string {
+	if len(mappings) == 0 {
+		return nil
+	}
+
+	ports := make([]string, 0, len(mappings))
+
+	for _, pm := range mappings {
+		protocol := strings.ToLower(pm.Protocol)
+		if protocol == "" {
+			protocol = "tcp"
+		}
+
+		if pm.HostPort > 0 {
+			ports = append(ports, fmt.Sprintf("%d:%d/%s", pm.HostPort, pm.ContainerPort, protocol))
+		} else {
+			ports = append(ports, fmt.Sprintf("0:%d/%s", pm.ContainerPort, protocol))
+		}
+	}
+
+	return ports
 }
 
 // PatchDirs returns the patch directory structure for a given base patches directory.

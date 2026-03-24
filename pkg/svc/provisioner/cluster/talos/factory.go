@@ -88,6 +88,10 @@ func newProvisionerFromOptions(
 		options.WithWorkerNodes(int(opts.Workers))
 	}
 
+	if len(opts.ExtraPortMappings) > 0 {
+		options.WithExtraPortMappings(PortMappingsToStrings(opts.ExtraPortMappings))
+	}
+
 	return NewProvisioner(talosConfigs, options)
 }
 

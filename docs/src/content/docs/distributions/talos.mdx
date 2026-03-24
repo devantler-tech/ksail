@@ -225,6 +225,26 @@ talosctl -n <node-ip> upgrade --image ghcr.io/siderolabs/installer:v1.6.0
 
 Each node is a Docker container running Talos Linux communicating via a Docker bridge network. No VM overhead. MetalLB provides LoadBalancer services (optional, via `--load-balancer Enabled`).
 
+#### Port Mappings
+
+On macOS, Docker runs in a Linux VM, so MetalLB virtual IPs are not accessible from the host. Use `extraPortMappings` in `ksail.yaml` to expose container ports directly:
+
+```yaml
+spec:
+  cluster:
+    distribution: Talos
+    talos:
+      extraPortMappings:
+        - containerPort: 80
+          hostPort: 8080
+          protocol: TCP
+        - containerPort: 443
+          hostPort: 8443
+          protocol: TCP
+```
+
+Access services at `http://localhost:8080`. Ports are exposed on control-plane nodes.
+
 ### Talos on Hetzner
 
 Each node is a Hetzner Cloud server running Talos Linux. The Hetzner Cloud Controller Manager provisions load balancers, the Hetzner CSI Driver provisions persistent volumes, and servers have public IPs for external access.

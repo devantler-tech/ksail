@@ -380,7 +380,27 @@ spec:
     talos:
       controlPlanes: 3
       workers: 2
-` + cbt + ``
+` + cbt + `
+
+#### Port Mappings (Docker Provider)
+
+On macOS, Docker runs in a Linux VM, so MetalLB virtual IPs are not accessible from the host. Use ` + bt + `extraPortMappings` + bt + ` to expose container ports directly:
+
+` + cbt + `yaml
+spec:
+  cluster:
+    distribution: Talos
+    talos:
+      extraPortMappings:
+        - containerPort: 80
+          hostPort: 8080
+          protocol: TCP
+        - containerPort: 443
+          hostPort: 8443
+          protocol: TCP
+` + cbt + `
+
+Access services at ` + bt + `http://localhost:8080` + bt + `. Ports are exposed on control-plane nodes.`
 
 // configSchemaProse describes JSON Schema support.
 const configSchemaProse = `## Schema Support
