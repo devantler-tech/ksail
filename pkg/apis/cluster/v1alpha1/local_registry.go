@@ -171,7 +171,13 @@ func (r LocalRegistry) ResolvedPath() string {
 	return r.Parse().Path
 }
 
-// ResolvedTag returns the registry tag from the parsed spec, or empty if not specified.
+// ResolvedTag returns the registry tag to use for OCI artifact pushes.
+// Priority: explicit Tag field > tag embedded in Registry string.
+// Returns empty string if neither is set (caller should apply default).
 func (r LocalRegistry) ResolvedTag() string {
+	if r.Tag != "" {
+		return r.Tag
+	}
+
 	return r.Parse().Tag
 }
