@@ -127,8 +127,9 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool) error {
 
 // watchLoop sets up the fsnotify watcher and runs the debounced apply loop.
 // When initialApply is true, a full apply of the watch root is performed
-// after the watcher and signal context are initialized, ensuring that
-// Ctrl+C cancels the apply and any file changes during it are captured.
+// after the event loop goroutine is started, so watcher events are consumed
+// immediately and not dropped or buffered during the initial apply. Ctrl+C
+// cancels both the initial apply and the event loop via the shared sigCtx.
 func watchLoop(ctx context.Context, cmd *cobra.Command, dir string, initialApply bool) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -147,11 +148,19 @@ func watchLoop(ctx context.Context, cmd *cobra.Command, dir string, initialApply
 	sigCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Start the event loop before any apply so that watcher events are
+	// consumed immediately, avoiding backlogs or drops during the initial apply.
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- eventLoop(sigCtx, cmd, watcher, dir)
+	}()
+
 	if initialApply {
 		executeAndReportApply(sigCtx, cmd, dir, "initial apply")
 	}
 
-	return eventLoop(sigCtx, cmd, watcher, dir)
+	// Wait for the event loop to complete and propagate its error.
+	return <-errCh
 }
 
 // debounceState holds the mutable state shared between the event loop and
