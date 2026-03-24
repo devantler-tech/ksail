@@ -48,29 +48,7 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 	createCmd.Annotations[annotations.AnnotationPermission] = "write"
 
 	// Re-resolve kubeconfig after flags are parsed, honoring --config.
-	origPersistentPreRunE := createCmd.PersistentPreRunE
-	origPersistentPreRun := createCmd.PersistentPreRun
-
-	createCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		resolvedPath := kubeconfig.GetKubeconfigPathSilently(cmd)
-
-		if f := cmd.Flags().Lookup("kubeconfig"); f != nil && !cmd.Flags().Changed("kubeconfig") {
-			_ = f.Value.Set(resolvedPath)
-			f.DefValue = resolvedPath
-		}
-
-		if origPersistentPreRunE != nil {
-			return origPersistentPreRunE(cmd, args)
-		}
-
-		if origPersistentPreRun != nil {
-			origPersistentPreRun(cmd, args)
-		}
-
-		return nil
-	}
-
-	createCmd.PersistentPreRun = nil
+	wrapWithKubeconfigResolution(createCmd)
 
 	return createCmd
 }

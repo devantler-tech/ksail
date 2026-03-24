@@ -1,6 +1,7 @@
 package workload
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
@@ -27,23 +28,29 @@ func newKubectlCommand(creator kubectlCommandCreator) *cobra.Command {
 
 	cmd := creator(client, kubeconfig.GetKubeconfigPathSilently(nil))
 
-	// Wrap the existing PersistentPreRunE (if any) to re-resolve kubeconfig
-	// after flags have been parsed, honoring --config.
+	wrapWithKubeconfigResolution(cmd)
+
+	return cmd
+}
+
+// wrapWithKubeconfigResolution adds a PersistentPreRunE hook that re-resolves the
+// kubeconfig path after cobra has parsed all flags, honoring the --config flag.
+// It chains to any existing PersistentPreRunE or PersistentPreRun on the command.
+func wrapWithKubeconfigResolution(cmd *cobra.Command) {
 	origPersistentPreRunE := cmd.PersistentPreRunE
 	origPersistentPreRun := cmd.PersistentPreRun
 
 	cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {
-		// Re-resolve kubeconfig now that flags are parsed.
 		resolvedPath := kubeconfig.GetKubeconfigPathSilently(c)
 
-		// Update the --kubeconfig default on the kubectl command tree so
-		// that kubectl subcommands pick up the correct path.
 		if f := c.Flags().Lookup("kubeconfig"); f != nil && !c.Flags().Changed("kubeconfig") {
-			_ = f.Value.Set(resolvedPath)
+			if err := f.Value.Set(resolvedPath); err != nil {
+				return fmt.Errorf("failed to set kubeconfig flag: %w", err)
+			}
+
 			f.DefValue = resolvedPath
 		}
 
-		// Chain to the original hooks.
 		if origPersistentPreRunE != nil {
 			return origPersistentPreRunE(c, args)
 		}
@@ -55,8 +62,5 @@ func newKubectlCommand(creator kubectlCommandCreator) *cobra.Command {
 		return nil
 	}
 
-	// Clear PersistentPreRun since we handle it in PersistentPreRunE above.
 	cmd.PersistentPreRun = nil
-
-	return cmd
 }
