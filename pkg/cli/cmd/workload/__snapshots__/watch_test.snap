@@ -32,8 +32,8 @@ Usage:
   watch [flags]
 
 Flags:
-  -h, --help             help for watch
-      --initial-apply    Apply all workloads once immediately on startup before entering the watch loop
-      --path string      Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
+  -h, --help            help for watch
+      --initial-apply   Apply all workloads once immediately on startup before entering the watch loop
+      --path string     Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
 
 ---
