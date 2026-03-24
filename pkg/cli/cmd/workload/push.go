@@ -420,7 +420,7 @@ func resolveSourceDir(cfg *v1alpha1.Cluster, pathFlag string) string {
 	return v1alpha1.DefaultSourceDirectory
 }
 
-// resolveRef determines the artifact ref/tag from OCI ref, config tag, or default.
+// resolveRef determines the artifact ref/tag from the OCI ref, workload tag, registry-embedded tag, or default.
 // Priority: OCI ref > workload tag > registry-embedded tag > default.
 func resolveRef(ociRef *oci.Reference, workloadTag string, registryTag string) string {
 	if ociRef != nil && ociRef.Ref != "" {
