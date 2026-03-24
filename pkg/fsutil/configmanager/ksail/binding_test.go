@@ -49,7 +49,7 @@ func runFlagNameGenerationTests(
 func setupFlagBindingTest(
 	fieldSelectors ...configmanager.FieldSelector[v1alpha1.Cluster],
 ) *cobra.Command {
-	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)
+	manager := configmanager.NewConfigManager(io.Discard, "", fieldSelectors...)
 	cmd := &cobra.Command{Use: "test"}
 	manager.AddFlagsFromFields(cmd)
 
@@ -294,7 +294,7 @@ func testAddFlagFromFieldCases(t *testing.T, tests []fieldTestCase,
 func TestGenerateFlagName(t *testing.T) {
 	t.Parallel()
 
-	manager := configmanager.NewConfigManager(io.Discard)
+	manager := configmanager.NewConfigManager(io.Discard, "")
 
 	tests := []flagNameTestCase{
 		{"Distribution field", &manager.Config.Spec.Cluster.Distribution, "distribution"},
@@ -355,7 +355,7 @@ func testFlagNameGeneration(
 func TestGenerateShorthand(t *testing.T) {
 	t.Parallel()
 
-	manager := configmanager.NewConfigManager(io.Discard)
+	manager := configmanager.NewConfigManager(io.Discard, "")
 
 	tests := []struct {
 		name     string
@@ -419,7 +419,7 @@ func TestAddFlagsFromFields_GitOpsEngineAcceptsArgoCD(t *testing.T) {
 	t.Parallel()
 
 	gitOpsEngineSelector := newGitOpsEngineFieldTest().fieldSelector
-	manager := configmanager.NewConfigManager(io.Discard, gitOpsEngineSelector)
+	manager := configmanager.NewConfigManager(io.Discard, "", gitOpsEngineSelector)
 	cmd := &cobra.Command{Use: "test"}
 	manager.AddFlagsFromFields(cmd)
 
@@ -470,7 +470,7 @@ func TestAddFlagsFromFields_BoolField(t *testing.T) {
 
 			assertFlagRegistered(t, selector, "unknown", "bool", testCase.setValue)
 
-			manager := configmanager.NewConfigManager(io.Discard, selector)
+			manager := configmanager.NewConfigManager(io.Discard, "", selector)
 			cmd := &cobra.Command{Use: "test"}
 			manager.AddFlagsFromFields(cmd)
 
@@ -520,7 +520,7 @@ func TestAddFlagsFromFields_Int32Field(t *testing.T) {
 
 			assertFlagRegistered(t, selector, "control-planes", "int32", testCase.setValue)
 
-			manager := configmanager.NewConfigManager(io.Discard, selector)
+			manager := configmanager.NewConfigManager(io.Discard, "", selector)
 			cmd := &cobra.Command{Use: "test"}
 			manager.AddFlagsFromFields(cmd)
 
@@ -543,7 +543,7 @@ func assertFlagRegistered(
 ) {
 	t.Helper()
 
-	manager := configmanager.NewConfigManager(io.Discard, selector)
+	manager := configmanager.NewConfigManager(io.Discard, "", selector)
 	cmd := &cobra.Command{Use: "test"}
 	manager.AddFlagsFromFields(cmd)
 

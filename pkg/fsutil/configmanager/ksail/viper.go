@@ -21,17 +21,23 @@ const (
 // InitializeViper creates a new Viper instance with basic KSail configuration settings.
 // This function handles only the essential Viper setup and delegates specific concerns
 // to other functions. Configuration priority is: defaults < config files < environment variables < flags.
-func InitializeViper() *viper.Viper {
+// When configFilePath is non-empty, the exact file is used and directory traversal is skipped.
+func InitializeViper(configFilePath string) *viper.Viper {
 	viperInstance := viper.New()
 
-	// Configure file settings first (highest precedence after flags/env)
-	configureViperFileSettings(viperInstance)
+	if configFilePath != "" {
+		// Use the explicit config file path — skip name/type/path discovery
+		viperInstance.SetConfigFile(configFilePath)
+	} else {
+		// Configure file settings first (highest precedence after flags/env)
+		configureViperFileSettings(viperInstance)
 
-	// Add standard configuration paths
-	configureViperPaths(viperInstance)
+		// Add standard configuration paths
+		configureViperPaths(viperInstance)
 
-	// Setup directory traversal for parent directories
-	addParentDirectoriesToViperPaths(viperInstance)
+		// Setup directory traversal for parent directories
+		addParentDirectoriesToViperPaths(viperInstance)
+	}
 
 	// Setup environment variable handling (higher precedence than config files)
 	configureViperEnvironment(viperInstance)

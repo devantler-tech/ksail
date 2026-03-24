@@ -143,7 +143,7 @@ func SetupEditorEnv(editorFlag, forCommand string) func() {
 	var cfg *v1alpha1.Cluster
 
 	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
-	cfgManager := ksailconfigmanager.NewConfigManager(nil, fieldSelectors...)
+	cfgManager := ksailconfigmanager.NewConfigManager(nil, "", fieldSelectors...)
 
 	loadedCfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
 	if err == nil {

@@ -41,7 +41,7 @@ func runEnvBindingTest(t *testing.T, viperInstance *viper.Viper, testCase envTes
 // TestInitializeViper tests the InitializeViper function.
 func TestInitializeViper(t *testing.T) {
 	// Cannot use t.Parallel() because test uses t.Setenv()
-	viperInstance := configmanager.InitializeViper()
+	viperInstance := configmanager.InitializeViper("")
 
 	require.NotNil(t, viperInstance, "InitializeViper should return a non-nil viper instance")
 
@@ -64,7 +64,7 @@ func TestInitializeViper(t *testing.T) {
 // TestInitializeViper_ConfigPaths tests that config paths are set correctly.
 func TestInitializeViperConfigPaths(t *testing.T) {
 	// Cannot use t.Parallel() because test uses t.Setenv()
-	viperInstance := configmanager.InitializeViper()
+	viperInstance := configmanager.InitializeViper("")
 
 	// Test that we can set and get values (indicates viper is working)
 	viperInstance.SetDefault("test.config", "default-value")
@@ -82,7 +82,7 @@ func TestInitializeViperConfigPaths(t *testing.T) {
 //nolint:paralleltest // Cannot use t.Parallel() because subtests use t.Setenv()
 func TestInitializeViperEnvKeyReplacer(t *testing.T) {
 	// Cannot use t.Parallel() because subtests use t.Setenv()
-	viperInstance := configmanager.InitializeViper()
+	viperInstance := configmanager.InitializeViper("")
 
 	// Test that dots and dashes in keys are replaced with underscores for env vars
 	tests := []envTestCase{
@@ -139,7 +139,7 @@ spec:
 	t.Chdir(tempDir)
 
 	// Initialize viper - it should NOT automatically read the config file anymore
-	viperInstance := configmanager.InitializeViper()
+	viperInstance := configmanager.InitializeViper("")
 
 	// Test that values from the config file are NOT automatically loaded
 	// (LoadConfig method should handle file reading)
@@ -177,7 +177,7 @@ func TestViperConstants(t *testing.T) {
 //nolint:paralleltest // Cannot use t.Parallel() because subtests use t.Setenv()
 func TestInitializeViperEnvironmentVariableBinding(t *testing.T) {
 	// Cannot use t.Parallel() because subtests use t.Setenv()
-	viperInstance := configmanager.InitializeViper()
+	viperInstance := configmanager.InitializeViper("")
 
 	// Test various environment variable patterns
 	tests := []envTestCase{
@@ -211,7 +211,7 @@ func TestInitializeViperEnvironmentVariableBinding(t *testing.T) {
 //nolint:paralleltest // Cannot use t.Parallel() because subtests use t.Setenv()
 func TestInitializeViperEnvReplacerRules(t *testing.T) {
 	// Cannot use t.Parallel() because subtests use t.Setenv()
-	viperInstance := configmanager.InitializeViper()
+	viperInstance := configmanager.InitializeViper("")
 
 	// Test the key replacer rules by setting specific environment variables
 	tests := []envTestCase{
@@ -262,8 +262,8 @@ func TestInitializeViperIdempotency(t *testing.T) {
 	t.Parallel()
 
 	// Call InitializeViper multiple times
-	viper1 := configmanager.InitializeViper()
-	viper2 := configmanager.InitializeViper()
+	viper1 := configmanager.InitializeViper("")
+	viper2 := configmanager.InitializeViper("")
 
 	// Both should be valid viper instances
 	require.NotNil(t, viper1)
@@ -288,7 +288,7 @@ func TestInitializeViperIdempotency(t *testing.T) {
 func TestInitializeViperConfigType(t *testing.T) {
 	t.Parallel()
 
-	viperInstance := configmanager.InitializeViper()
+	viperInstance := configmanager.InitializeViper("")
 
 	// Create a YAML config string and test parsing
 	yamlConfig := `
@@ -310,7 +310,7 @@ func TestInitializeViperErrorHandling(t *testing.T) {
 	// Cannot use t.Parallel() because test uses t.Setenv()
 
 	// This test verifies that InitializeViper handles missing config files gracefully
-	viperInstance := configmanager.InitializeViper()
+	viperInstance := configmanager.InitializeViper("")
 
 	// Even if no config file exists, viper should still work
 	require.NotNil(t, viperInstance)
@@ -360,7 +360,7 @@ func TestAddParentDirectoriesToViperPaths_DirectoryTraversal(t *testing.T) {
 	t.Chdir(level3)
 
 	// Create a viper instance and test directory traversal
-	viperInstance := configmanager.InitializeViper()
+	viperInstance := configmanager.InitializeViper("")
 
 	// The directory traversal should have found and added both config directories
 	// We can test this by attempting to read config - it should find one of them
@@ -398,7 +398,7 @@ func TestAddParentDirectoriesToViperPaths_WithDuplicates(t *testing.T) {
 	t.Chdir(tempDir)
 
 	// Create a viper instance
-	viperInstance := configmanager.InitializeViper()
+	viperInstance := configmanager.InitializeViper("")
 
 	// The implementation should handle the case where the same directory
 	// might be added multiple times (though our current logic prevents this)
@@ -438,7 +438,7 @@ func TestAddParentDirectoriesToViperPaths_ErrorHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	// Now InitializeViper should hit the error path in addParentDirectoriesToViperPaths
-	viperInstance := configmanager.InitializeViper()
+	viperInstance := configmanager.InitializeViper("")
 
 	// The function should not panic and should return a valid instance
 	require.NotNil(t, viperInstance)

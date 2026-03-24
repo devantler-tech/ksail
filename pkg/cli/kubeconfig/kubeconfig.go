@@ -42,7 +42,7 @@ func GetKubeconfigPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
 // path is acceptable.
 func GetKubeconfigPathSilently() string {
 	// Use io.Discard to suppress all output
-	cfgManager := ksailconfigmanager.NewConfigManager(io.Discard)
+	cfgManager := ksailconfigmanager.NewConfigManager(io.Discard, "")
 
 	kubeconfigPath, err := getKubeconfigPath(cfgManager)
 	if err != nil {

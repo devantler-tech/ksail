@@ -142,7 +142,7 @@ func resolveFromConfig(
 	provider *v1alpha1.Provider,
 	kubeconfigPath *string,
 ) {
-	cfgManager := ksailconfigmanager.NewConfigManager(nil)
+	cfgManager := ksailconfigmanager.NewConfigManager(nil, "")
 
 	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
 	if err != nil || cfg == nil || !cfgManager.IsConfigFileFound() {

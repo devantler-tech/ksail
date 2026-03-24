@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
@@ -32,6 +33,8 @@ type ConfigManager struct {
 	configFileFound    bool
 	Writer             io.Writer
 	command            *cobra.Command
+	// ConfigFile is the explicit config file path (from --config flag).
+	ConfigFile string
 	// localRegistryExplicit tracks if config explicitly set the local registry behavior
 	localRegistryExplicit bool
 }
@@ -42,11 +45,14 @@ var _ configmanagerinterface.ConfigManager[v1alpha1.Cluster] = (*ConfigManager)(
 
 // NewConfigManager creates a new configuration manager with the specified field selectors.
 // Initializes Viper with all configuration including paths and environment handling.
+// The configFile parameter, when non-empty, specifies an explicit config file path,
+// skipping the default name-based discovery and directory traversal.
 func NewConfigManager(
 	writer io.Writer,
+	configFile string,
 	fieldSelectors ...FieldSelector[v1alpha1.Cluster],
 ) *ConfigManager {
-	viperInstance := InitializeViper()
+	viperInstance := InitializeViper(configFile)
 	config := v1alpha1.NewCluster()
 
 	manager := &ConfigManager{
@@ -55,6 +61,7 @@ func NewConfigManager(
 		Config:         config,
 		configLoaded:   false,
 		Writer:         writer,
+		ConfigFile:     configFile,
 	}
 
 	return manager
@@ -63,11 +70,13 @@ func NewConfigManager(
 // NewCommandConfigManager constructs a ConfigManager bound to the provided Cobra command.
 // It registers the supplied field selectors, binds flags from struct fields, and writes output
 // to the command's standard output writer.
+// If the --config persistent flag is set on the command, its value is used as the config file path.
 func NewCommandConfigManager(
 	cmd *cobra.Command,
 	selectors []FieldSelector[v1alpha1.Cluster],
 ) *ConfigManager {
-	manager := NewConfigManager(cmd.OutOrStdout(), selectors...)
+	configFile, _ := flags.GetConfigPath(cmd)
+	manager := NewConfigManager(cmd.OutOrStdout(), configFile, selectors...)
 	manager.command = cmd
 	manager.AddFlagsFromFields(cmd)
 
