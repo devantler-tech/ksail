@@ -84,7 +84,10 @@ func TestBuildRESTConfig_ValidKubeconfig(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, config)
 	assert.Equal(t, "https://127.0.0.1:6443", config.Host)
-	assert.Equal(t, float32(50), config.QPS, "QPS should be raised for exec-plugin compatibility")
+	assert.InDelta(
+		t, float32(50), config.QPS, 0,
+		"QPS should be raised for exec-plugin compatibility",
+	)
 	assert.Equal(t, 100, config.Burst, "Burst should be raised for exec-plugin compatibility")
 }
 
@@ -178,6 +181,28 @@ func TestNewClientset_ValidKubeconfig(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, clientset)
+}
+
+// TestGetRESTConfig_AppliesDefaults tests that GetRESTConfig sets raised QPS/Burst defaults.
+// This test modifies KUBECONFIG so it cannot run in parallel.
+func TestGetRESTConfig_AppliesDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+
+	err := os.WriteFile(kubeconfigPath, []byte(testKubeconfigYAML), 0o600)
+	require.NoError(t, err)
+
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+
+	config, err := k8s.GetRESTConfig()
+
+	require.NoError(t, err)
+	require.NotNil(t, config)
+	assert.InDelta(
+		t, float32(50), config.QPS, 0,
+		"QPS should be raised for exec-plugin compatibility",
+	)
+	assert.Equal(t, 100, config.Burst, "Burst should be raised for exec-plugin compatibility")
 }
 
 // TestErrKubeconfigPathEmpty_ErrorMessage tests the error message content.
