@@ -84,6 +84,8 @@ func TestBuildRESTConfig_ValidKubeconfig(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, config)
 	assert.Equal(t, "https://127.0.0.1:6443", config.Host)
+	assert.Equal(t, float32(50), config.QPS, "QPS should be raised for exec-plugin compatibility")
+	assert.Equal(t, 100, config.Burst, "Burst should be raised for exec-plugin compatibility")
 }
 
 // TestBuildRESTConfig_WithContext tests using a specific context from kubeconfig.

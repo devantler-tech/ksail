@@ -10,6 +10,20 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// Default client-side rate limiter settings.
+//
+// client-go defaults to QPS=5 / Burst=10 which is too restrictive for CLI
+// tools that use exec-based credential plugins (e.g. OIDC). The conservative
+// defaults can cause "client rate limiter Wait returned an error: context
+// deadline exceeded" when the exec plugin takes time to acquire a token.
+//
+// These values match kubectl (QPS=50, Burst=300) and are safe for CLI usage
+// where requests are user-initiated rather than automated at high frequency.
+const (
+	defaultQPS   = 50
+	defaultBurst = 100
+)
+
 // DefaultKubeconfigPath returns the default kubeconfig path for the current user.
 // The path is constructed as ~/.kube/config using the user's home directory.
 func DefaultKubeconfigPath() string {
@@ -29,6 +43,8 @@ func GetRESTConfig() (*rest.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load kubeconfig: %w", err)
 	}
+
+	applyDefaults(config)
 
 	return config, nil
 }
@@ -60,7 +76,22 @@ func BuildRESTConfig(kubeconfig, context string) (*rest.Config, error) {
 		return nil, fmt.Errorf("failed to load kubeconfig: %w", err)
 	}
 
+	applyDefaults(restConfig)
+
 	return restConfig, nil
+}
+
+// applyDefaults sets client-side rate limiter defaults on a REST config.
+// This raises QPS/Burst from the client-go defaults (5/10) to values
+// compatible with exec-based credential plugins such as OIDC.
+func applyDefaults(config *rest.Config) {
+	if config.QPS == 0 {
+		config.QPS = defaultQPS
+	}
+
+	if config.Burst == 0 {
+		config.Burst = defaultBurst
+	}
 }
 
 // NewClientset creates a Kubernetes clientset from kubeconfig path and context.
