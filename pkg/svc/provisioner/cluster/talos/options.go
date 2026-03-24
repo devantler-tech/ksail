@@ -133,19 +133,45 @@ func (o *Options) WithExtraPortMappings(ports []string) *Options {
 	return o
 }
 
+// maxPort is the maximum valid port number.
+const maxPort = 65535
+
 // PortMappingsToStrings converts API PortMapping structs to Talos SDK port strings.
 // Format: "[hostIP:]hostPort:containerPort/protocol".
-func PortMappingsToStrings(mappings []v1alpha1.PortMapping) []string {
+// Returns an error if any mapping has an invalid container port (must be 1-65535),
+// host port (must be 0-65535), or protocol (must be "TCP" or "UDP").
+func PortMappingsToStrings(mappings []v1alpha1.PortMapping) ([]string, error) {
 	if len(mappings) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	ports := make([]string, 0, len(mappings))
 
-	for _, pm := range mappings {
+	for portMappingIndex, pm := range mappings {
+		if pm.ContainerPort < 1 || pm.ContainerPort > maxPort {
+			return nil, fmt.Errorf(
+				"extraPortMappings[%d]: containerPort %d is out of range (must be 1-%d)",
+				portMappingIndex, pm.ContainerPort, maxPort,
+			)
+		}
+
+		if pm.HostPort < 0 || pm.HostPort > maxPort {
+			return nil, fmt.Errorf(
+				"extraPortMappings[%d]: hostPort %d is out of range (must be 0-%d)",
+				portMappingIndex, pm.HostPort, maxPort,
+			)
+		}
+
 		protocol := strings.ToLower(pm.Protocol)
 		if protocol == "" {
 			protocol = "tcp"
+		}
+
+		if protocol != "tcp" && protocol != "udp" {
+			return nil, fmt.Errorf(
+				"extraPortMappings[%d]: protocol %q is invalid (must be TCP or UDP)",
+				portMappingIndex, pm.Protocol,
+			)
 		}
 
 		if pm.HostPort > 0 {
@@ -155,7 +181,7 @@ func PortMappingsToStrings(mappings []v1alpha1.PortMapping) []string {
 		}
 	}
 
-	return ports
+	return ports, nil
 }
 
 // PatchDirs returns the patch directory structure for a given base patches directory.

@@ -50,7 +50,10 @@ func CreateProvisioner(
 		providerType = v1alpha1.ProviderDocker
 	}
 
-	provisioner := newProvisionerFromOptions(talosConfigs, kubeconfigPath, opts, skipCNIChecks)
+	provisioner, provErr := newProvisionerFromOptions(talosConfigs, kubeconfigPath, opts, skipCNIChecks)
+	if provErr != nil {
+		return nil, provErr
+	}
 
 	// Configure the infrastructure provider
 	err := configureInfraProvider(
@@ -69,7 +72,7 @@ func newProvisionerFromOptions(
 	kubeconfigPath string,
 	opts v1alpha1.OptionsTalos,
 	skipCNIChecks bool,
-) *Provisioner {
+) (*Provisioner, error) {
 	talosconfigPath := opts.Config
 	if talosconfigPath == "" {
 		talosconfigPath = "~/.talos/config"
@@ -89,10 +92,15 @@ func newProvisionerFromOptions(
 	}
 
 	if len(opts.ExtraPortMappings) > 0 {
-		options.WithExtraPortMappings(PortMappingsToStrings(opts.ExtraPortMappings))
+		portStrings, portErr := PortMappingsToStrings(opts.ExtraPortMappings)
+		if portErr != nil {
+			return nil, fmt.Errorf("invalid port mappings: %w", portErr)
+		}
+
+		options.WithExtraPortMappings(portStrings)
 	}
 
-	return NewProvisioner(talosConfigs, options)
+	return NewProvisioner(talosConfigs, options), nil
 }
 
 // configureInfraProvider configures the infrastructure provider on the provisioner.

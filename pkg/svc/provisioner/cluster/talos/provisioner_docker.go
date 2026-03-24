@@ -630,13 +630,19 @@ func (p *Provisioner) buildNodeRequests(
 			)
 		}
 
-		nodes = append(nodes, provision.NodeRequest{
+		nodeRequest := provision.NodeRequest{
 			Name:   fmt.Sprintf("%s-control-plane-%d", clusterName, nodeIndex+1),
 			Type:   machine.TypeControlPlane,
 			IPs:    []netip.Addr{nodeIP},
 			Config: configBundle.ControlPlane(),
-			Ports:  p.options.ExtraPortMappings,
-		})
+		}
+
+		// Only the first control-plane node gets port mappings to avoid host port collisions
+		if nodeIndex == 0 {
+			nodeRequest.Ports = p.options.ExtraPortMappings
+		}
+
+		nodes = append(nodes, nodeRequest)
 	}
 
 	// Worker nodes - use Worker config from bundle

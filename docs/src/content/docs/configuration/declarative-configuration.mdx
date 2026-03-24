@@ -449,7 +449,7 @@ spec:
           protocol: TCP
 ```
 
-Access services at `http://localhost:8080`. Ports are exposed on control-plane nodes.
+Access services at `http://localhost:8080`. Port mappings are applied only to the first control-plane node to avoid host port collisions when running multiple control-plane nodes.
 
 ## Schema Support
 

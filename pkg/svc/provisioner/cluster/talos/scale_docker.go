@@ -14,7 +14,6 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/go-connections/nat"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
 )
@@ -158,13 +157,6 @@ func (p *Provisioner) createTalosContainer(
 	}
 
 	hostConfig := buildTalosHostConfig()
-
-	// Apply extra port mappings for control-plane nodes
-	if role == RoleControlPlane && len(p.options.ExtraPortMappings) > 0 {
-		portBindings, exposedPorts := parseExtraPortMappings(p.options.ExtraPortMappings)
-		hostConfig.PortBindings = portBindings
-		containerConfig.ExposedPorts = exposedPorts
-	}
 
 	networkConfig := &network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
@@ -416,41 +408,4 @@ func recordFailedChange(result *clusterupdate.UpdateResult, role, nodeName strin
 		Field:  field,
 		Reason: fmt.Sprintf("failed to manage %s node %s: %v", role, nodeName, err),
 	})
-}
-
-// parseExtraPortMappings converts Talos SDK port strings to Docker port bindings and exposed ports.
-// Port format: "[hostIP:]hostPort:containerPort/protocol".
-// Malformed entries (missing protocol separator or unexpected part count) are silently skipped.
-func parseExtraPortMappings(ports []string) (nat.PortMap, nat.PortSet) {
-	portMap := nat.PortMap{}
-	portSet := nat.PortSet{}
-
-	for _, port := range ports {
-		portAndProtocol, protocol, ok := strings.Cut(port, "/")
-		if !ok {
-			continue
-		}
-
-		parts := strings.Split(portAndProtocol, ":")
-
-		var hostIP, hostPort, containerPort string
-
-		switch len(parts) {
-		case 2: //nolint:mnd // hostPort:containerPort
-			hostPort, containerPort = parts[0], parts[1]
-		case 3: //nolint:mnd // hostIP:hostPort:containerPort
-			hostIP, hostPort, containerPort = parts[0], parts[1], parts[2]
-		default:
-			continue
-		}
-
-		natPort := nat.Port(containerPort + "/" + protocol)
-		portSet[natPort] = struct{}{}
-		portMap[natPort] = append(portMap[natPort], nat.PortBinding{
-			HostIP:   hostIP,
-			HostPort: hostPort,
-		})
-	}
-
-	return portMap, portSet
 }
