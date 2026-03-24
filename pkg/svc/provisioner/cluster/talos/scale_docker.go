@@ -326,12 +326,11 @@ func nextDockerNodeIndex(containers []container.Summary, clusterName, role strin
 		names[i] = containerName(ctr)
 	}
 
-	// nextNodeIndexFromNames returns the next available numeric suffix (max+1).
+	// nextNodeIndexFromNames returns the next available numeric suffix (1-based).
 	// dockerNodeName uses index+1 for the suffix, so convert: index = nextSuffix-1.
-	// When there are no existing nodes (nextSuffix==0) we want index 0 (first node).
 	nextSuffix := nextNodeIndexFromNames(names, prefix)
 
-	return max(0, nextSuffix-1)
+	return nextSuffix - 1
 }
 
 // dockerNodeName formats a Docker container name for a Talos node.
