@@ -151,6 +151,7 @@ func watchLoop(ctx context.Context, cmd *cobra.Command, dir string, initialApply
 	// Start the event loop before any apply so that watcher events are
 	// consumed immediately, avoiding backlogs or drops during the initial apply.
 	errCh := make(chan error, 1)
+
 	go func() {
 		errCh <- eventLoop(sigCtx, cmd, watcher, dir)
 	}()
