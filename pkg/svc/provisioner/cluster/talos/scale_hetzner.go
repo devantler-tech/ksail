@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
@@ -227,21 +226,13 @@ func (p *Provisioner) listHetznerNodesByRole(
 // when there are gaps in the index sequence (e.g., nodes 1,2,4 after removing 3).
 func nextHetznerNodeIndex(servers []*hcloud.Server, clusterName, role string) int {
 	prefix := fmt.Sprintf("%s-%s-", clusterName, role)
-	maxIndex := 0
 
-	for _, server := range servers {
-		idx, found := strings.CutPrefix(server.Name, prefix)
-		if !found {
-			continue
-		}
-
-		n, err := strconv.Atoi(idx)
-		if err == nil && n >= maxIndex {
-			maxIndex = n + 1
-		}
+	names := make([]string, len(servers))
+	for i, server := range servers {
+		names[i] = server.Name
 	}
 
-	return maxIndex
+	return nextNodeIndexFromNames(names, prefix)
 }
 
 // deleteHetznerServer deletes a single Hetzner Cloud server.
