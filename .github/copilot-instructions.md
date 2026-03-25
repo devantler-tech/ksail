@@ -352,7 +352,7 @@ For a deeper dive into KSail's design and internals, refer to:
 - `pkg/k8s/`: Kubernetes helpers and templates
 - `pkg/cli/`: CLI wiring, commands, and terminal UI components
 - `pkg/envvar/`: Environment variable utilities
-- `pkg/fsutil/`: Filesystem utilities (includes configmanager for configuration loading); exports `EvalCanonicalPath` (filepath.Abs + filepath.EvalSymlinks with parent fallback) for safe path canonicalization, and `ReadFileSafe` for path-traversal-safe file reads — reuse these instead of reimplementing containment checks
+- `pkg/fsutil/`: Filesystem utilities (includes configmanager for configuration loading); exports `EvalCanonicalPath` (filepath.Abs + filepath.EvalSymlinks with parent fallback) for safe path canonicalization, and `ReadFileSafe` for path-traversal-safe file reads — **all user-supplied file path arguments in CLI commands must be canonicalized with `EvalCanonicalPath` before use** (resolves symlinks, prevents symlink-escape attacks); for output paths that may not yet exist, call `os.MkdirAll(filepath.Dir(outputPath), <mode>)` first, then `EvalCanonicalPath`; for constrained reads, use `ReadFileSafe` instead of reimplementing containment checks
 - `pkg/notify/`: CLI notifications and progress display utilities
 - `pkg/runner/`: Cobra command execution helpers
 - `pkg/timer/`: Command timing and performance tracking
