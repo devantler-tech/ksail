@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -27,6 +28,89 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// outputFormatText is the default human-readable output format.
+const outputFormatText = "text"
+
+// outputFormatJSON is the machine-readable JSON output format.
+const outputFormatJSON = "json"
+
+// ChangeJSON is the JSON representation of a single configuration change.
+// It is used by DiffJSONOutput for --output json mode.
+type ChangeJSON struct {
+	Field    string `json:"field"`
+	OldValue string `json:"oldValue"`
+	NewValue string `json:"newValue"`
+	Category string `json:"category"`
+	Reason   string `json:"reason"`
+}
+
+// DiffJSONOutput is the JSON representation of the diff result, emitted when
+// --output json is set. It is suitable for CI/MCP consumption.
+type DiffJSONOutput struct {
+	TotalChanges         int          `json:"totalChanges"`
+	InPlaceChanges       []ChangeJSON `json:"inPlaceChanges"`
+	RebootRequired       []ChangeJSON `json:"rebootRequired"`
+	RecreateRequired     []ChangeJSON `json:"recreateRequired"`
+	RequiresConfirmation bool         `json:"requiresConfirmation"`
+}
+
+// getOutputFormat returns the --output flag value from the command, defaulting to "text".
+// Safe to call even when the flag is not registered on cmd.
+func getOutputFormat(cmd *cobra.Command) string {
+	if cmd == nil {
+		return outputFormatText
+	}
+
+	flag := cmd.Flags().Lookup("output")
+	if flag == nil {
+		return outputFormatText
+	}
+
+	return flag.Value.String()
+}
+
+// diffToJSON converts an UpdateResult to a DiffJSONOutput struct.
+func diffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
+	convertChanges := func(changes []clusterupdate.Change) []ChangeJSON {
+		result := make([]ChangeJSON, len(changes))
+
+		for i, c := range changes {
+			result[i] = ChangeJSON{
+				Field:    c.Field,
+				OldValue: c.OldValue,
+				NewValue: c.NewValue,
+				Category: c.Category.String(),
+				Reason:   c.Reason,
+			}
+		}
+
+		return result
+	}
+
+	return DiffJSONOutput{
+		TotalChanges:         diff.TotalChanges(),
+		InPlaceChanges:       convertChanges(diff.InPlaceChanges),
+		RebootRequired:       convertChanges(diff.RebootRequired),
+		RecreateRequired:     convertChanges(diff.RecreateRequired),
+		RequiresConfirmation: diff.NeedsUserConfirmation(),
+	}
+}
+
+// emitDiffJSON serialises diff as indented JSON and writes it to cmd's stdout.
+func emitDiffJSON(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
+	out := diffToJSON(diff)
+
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		// json.MarshalIndent on a plain struct with only basic types never fails.
+		notify.Errorf(cmd.OutOrStderr(), "failed to marshal diff to JSON: %v", err)
+
+		return
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", data)
+}
+
 // NewUpdateCmd creates the cluster update command.
 // The update command applies configuration changes to a running cluster.
 // It supports in-place updates where possible and falls back to recreation when necessary.
@@ -49,7 +133,8 @@ Changes are classified into three categories:
   - Reboot-Required: Applied but may require node reboots
   - Recreate-Required: Require full cluster recreation
 
-Use --dry-run to preview changes without applying them.`,
+Use --dry-run to preview changes without applying them.
+Use --output json to emit a machine-readable diff for CI/MCP consumption.`,
 		SilenceUsage: true,
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: "write",
@@ -68,6 +153,9 @@ Use --dry-run to preview changes without applying them.`,
 	cmd.Flags().Bool("dry-run", false,
 		"Preview changes without applying them")
 	_ = cfgManager.Viper.BindPFlag("dry-run", cmd.Flags().Lookup("dry-run"))
+
+	cmd.Flags().String("output", outputFormatText,
+		"Output format: text (default) or json (machine-readable, for CI/MCP)")
 
 	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleUpdateRunE)
 
@@ -357,7 +445,14 @@ func applyOrReportChanges(
 }
 
 // reportDryRun prints a summary for dry-run mode and confirms no changes were applied.
+// When --output json is set, emits machine-readable JSON.
 func reportDryRun(cmd *cobra.Command, diff *clusterupdate.UpdateResult) error {
+	if getOutputFormat(cmd) == outputFormatJSON {
+		emitDiffJSON(cmd, diff)
+
+		return nil
+	}
+
 	if diff != nil && diff.TotalChanges() == 0 {
 		notify.Infof(cmd.OutOrStdout(), "No changes detected")
 
@@ -458,10 +553,17 @@ func applyInPlaceChanges(
 // as a before/after table with one row per changed field and impact icons.
 // Rows are ordered by severity: recreate-required → reboot-required → in-place.
 // Fields with no change are omitted.
+// When --output json is set, emits machine-readable JSON instead of the table.
 func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	totalChanges := diff.TotalChanges()
 
 	if totalChanges == 0 {
+		return
+	}
+
+	if getOutputFormat(cmd) == outputFormatJSON {
+		emitDiffJSON(cmd, diff)
+
 		return
 	}
 
