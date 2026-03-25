@@ -9,6 +9,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
+	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
@@ -604,4 +605,175 @@ func TestFindKustomizationDirDeletedFileFallsBack(t *testing.T) {
 
 	got := workload.ExportFindKustomizationDir(deletedFile, root)
 	require.Equal(t, subDir, got)
+}
+
+func TestNormalizeFluxPath(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "plain relative path",
+			input:    "apps/frontend",
+			expected: "apps/frontend",
+		},
+		{
+			name:     "dotslash prefix",
+			input:    "./apps/frontend",
+			expected: "apps/frontend",
+		},
+		{
+			name:     "root dot",
+			input:    ".",
+			expected: "",
+		},
+		{
+			name:     "dotslash only",
+			input:    "./",
+			expected: "",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "trailing slash cleaned",
+			input:    "apps/frontend/",
+			expected: "apps/frontend",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := workload.ExportNormalizeFluxPath(testCase.input)
+			require.Equal(t, testCase.expected, got)
+		})
+	}
+}
+
+func TestMatchFluxKustomizationsExactMatch(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	changedDir := filepath.Join(root, "apps", "frontend")
+
+	kustomizations := []flux.KustomizationInfo{
+		{Name: "frontend", Path: "./apps/frontend"},
+		{Name: "backend", Path: "./apps/backend"},
+	}
+
+	got := workload.ExportMatchFluxKustomizations(changedDir, root, kustomizations)
+	require.Equal(t, []string{"frontend"}, got)
+}
+
+func TestMatchFluxKustomizationsParentChange(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	changedDir := filepath.Join(root, "apps")
+
+	kustomizations := []flux.KustomizationInfo{
+		{Name: "frontend", Path: "apps/frontend"},
+		{Name: "backend", Path: "apps/backend"},
+		{Name: "infra", Path: "infra/networking"},
+	}
+
+	got := workload.ExportMatchFluxKustomizations(changedDir, root, kustomizations)
+	require.ElementsMatch(t, []string{"frontend", "backend"}, got)
+}
+
+func TestMatchFluxKustomizationsChildChange(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	changedDir := filepath.Join(root, "apps", "frontend", "overlays")
+
+	kustomizations := []flux.KustomizationInfo{
+		{Name: "frontend", Path: "apps/frontend"},
+	}
+
+	got := workload.ExportMatchFluxKustomizations(changedDir, root, kustomizations)
+	require.Equal(t, []string{"frontend"}, got)
+}
+
+func TestMatchFluxKustomizationsNoMatch(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	changedDir := filepath.Join(root, "unrelated")
+
+	kustomizations := []flux.KustomizationInfo{
+		{Name: "frontend", Path: "apps/frontend"},
+		{Name: "backend", Path: "apps/backend"},
+	}
+
+	got := workload.ExportMatchFluxKustomizations(changedDir, root, kustomizations)
+	require.Empty(t, got)
+}
+
+func TestMatchFluxKustomizationsRootChange(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	kustomizations := []flux.KustomizationInfo{
+		{Name: "frontend", Path: "apps/frontend"},
+	}
+
+	got := workload.ExportMatchFluxKustomizations(root, root, kustomizations)
+	require.Empty(t, got, "root-level changes should return nil to trigger full reconcile fallback")
+}
+
+func TestMatchFluxKustomizationsMultipleMatches(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	changedDir := filepath.Join(root, "apps")
+
+	kustomizations := []flux.KustomizationInfo{
+		{Name: "frontend-prod", Path: "apps/frontend"},
+		{Name: "frontend-dev", Path: "apps/frontend-dev"},
+		{Name: "backend", Path: "apps/backend"},
+		{Name: "monitoring", Path: "infra/monitoring"},
+	}
+
+	got := workload.ExportMatchFluxKustomizations(changedDir, root, kustomizations)
+	require.ElementsMatch(t, []string{"frontend-prod", "frontend-dev", "backend"}, got)
+}
+
+func TestMatchFluxKustomizationsSkipsRootPath(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	changedDir := filepath.Join(root, "apps")
+
+	kustomizations := []flux.KustomizationInfo{
+		{Name: "root-ks", Path: "."},
+		{Name: "frontend", Path: "apps/frontend"},
+	}
+
+	got := workload.ExportMatchFluxKustomizations(changedDir, root, kustomizations)
+	require.Equal(t, []string{"frontend"}, got,
+		"CRs with root-level paths (\".\") should be skipped by selective matching")
+}
+
+func TestMatchFluxKustomizationsNormalizesLeadingDotSlash(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	changedDir := filepath.Join(root, "apps", "frontend")
+
+	kustomizations := []flux.KustomizationInfo{
+		{Name: "with-dotslash", Path: "./apps/frontend"},
+		{Name: "without-dotslash", Path: "apps/frontend"},
+	}
+
+	got := workload.ExportMatchFluxKustomizations(changedDir, root, kustomizations)
+	require.ElementsMatch(t, []string{"with-dotslash", "without-dotslash"}, got)
 }
