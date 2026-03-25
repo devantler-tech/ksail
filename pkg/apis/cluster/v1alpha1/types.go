@@ -58,8 +58,8 @@ type ClusterSpec struct {
 
 // WorkloadSpec defines workload-related configuration.
 type WorkloadSpec struct {
-	SourceDirectory string `default:"k8s"   json:"sourceDirectory,omitzero" jsonschema_description:"Path to the directory containing Kubernetes manifests to push"`                                                                                                           //nolint:lll
-	ValidateOnPush  bool   `default:"false" json:"validateOnPush,omitzero"  jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                                                                                            //nolint:lll
+	SourceDirectory string `default:"k8s"   json:"sourceDirectory,omitzero" jsonschema_description:"Path to the directory containing Kubernetes manifests to push"`                                                 //nolint:lll
+	ValidateOnPush  bool   `default:"false" json:"validateOnPush,omitzero"  jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                            //nolint:lll
 	Tag             string `default:"dev"   json:"tag,omitzero"             jsonschema_description:"OCI artifact tag for ksail workload push. Priority: CLI oci:// ref > this field > registry-embedded tag > dev"` //nolint:lll
 }
 
