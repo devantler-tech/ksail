@@ -295,3 +295,186 @@ func TestDisplayChangesSummary_SeverityOrder(t *testing.T) {
 		t.Error("reboot-required should appear before in-place")
 	}
 }
+
+func TestNewUpdateCmd_HasOutputFlag(t *testing.T) {
+	t.Parallel()
+
+	runtimeContainer := &di.Runtime{}
+	cmd := clusterpkg.NewUpdateCmd(runtimeContainer)
+
+	outputFlag := cmd.Flags().Lookup("output")
+	if outputFlag == nil {
+		t.Fatal("expected --output flag to exist")
+	}
+
+	if outputFlag.DefValue != "text" {
+		t.Errorf("expected --output default to be 'text', got %q", outputFlag.DefValue)
+	}
+}
+
+func TestDisplayChangesSummary_JSONOutput(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var buf bytes.Buffer
+
+	cmd.SetOut(&buf)
+
+	cmd.Flags().String("output", "json", "")
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field:    "cluster.cni",
+		OldValue: "Default",
+		NewValue: "Cilium",
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   "CNI can be switched via Helm",
+	})
+	diff.RecreateRequired = append(diff.RecreateRequired, clusterupdate.Change{
+		Field:    "cluster.distribution",
+		OldValue: "Vanilla",
+		NewValue: "Talos",
+		Category: clusterupdate.ChangeCategoryRecreateRequired,
+		Reason:   "distribution change requires recreation",
+	})
+
+	clusterpkg.ExportDisplayChangesSummary(cmd, diff)
+
+	output := buf.String()
+
+	if !strings.Contains(output, `"totalChanges"`) {
+		t.Errorf("expected JSON output to contain totalChanges key, got: %q", output)
+	}
+
+	if !strings.Contains(output, `"inPlaceChanges"`) {
+		t.Errorf("expected JSON output to contain inPlaceChanges key, got: %q", output)
+	}
+
+	if !strings.Contains(output, `"recreateRequired"`) {
+		t.Errorf("expected JSON output to contain recreateRequired key, got: %q", output)
+	}
+
+	if !strings.Contains(output, `"requiresConfirmation"`) {
+		t.Errorf("expected JSON output to contain requiresConfirmation key, got: %q", output)
+	}
+
+	if strings.Contains(output, "Component") {
+		t.Error("JSON output should not contain table headers like 'Component'")
+	}
+
+	if strings.Contains(output, "🟢") || strings.Contains(output, "🔴") {
+		t.Error("JSON output should not contain emoji icons")
+	}
+}
+
+func TestDisplayChangesSummary_JSONOutput_NoChanges(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var buf bytes.Buffer
+
+	cmd.SetOut(&buf)
+
+	cmd.Flags().String("output", "json", "")
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	clusterpkg.ExportDisplayChangesSummary(cmd, diff)
+
+	if buf.Len() != 0 {
+		t.Errorf("expected no output for empty diff, got %q", buf.String())
+	}
+}
+
+func TestDiffToJSON_Structure(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field:    "cluster.cni",
+		OldValue: "Default",
+		NewValue: "Cilium",
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   "CNI can be switched",
+	})
+	diff.RebootRequired = append(diff.RebootRequired, clusterupdate.Change{
+		Field:    "talos.kernel",
+		OldValue: "",
+		NewValue: "console=ttyS0",
+		Category: clusterupdate.ChangeCategoryRebootRequired,
+		Reason:   "kernel arg change needs reboot",
+	})
+	diff.RecreateRequired = append(diff.RecreateRequired, clusterupdate.Change{
+		Field:    "cluster.distribution",
+		OldValue: "Vanilla",
+		NewValue: "Talos",
+		Category: clusterupdate.ChangeCategoryRecreateRequired,
+		Reason:   "distribution change",
+	})
+
+	out := clusterpkg.ExportDiffToJSON(diff)
+
+	if out.TotalChanges != 3 {
+		t.Errorf("expected TotalChanges=3, got %d", out.TotalChanges)
+	}
+
+	if len(out.InPlaceChanges) != 1 {
+		t.Errorf("expected 1 in-place change, got %d", len(out.InPlaceChanges))
+	}
+
+	if len(out.RebootRequired) != 1 {
+		t.Errorf("expected 1 reboot-required change, got %d", len(out.RebootRequired))
+	}
+
+	if len(out.RecreateRequired) != 1 {
+		t.Errorf("expected 1 recreate-required change, got %d", len(out.RecreateRequired))
+	}
+
+	if !out.RequiresConfirmation {
+		t.Error("expected RequiresConfirmation=true when reboot or recreate changes present")
+	}
+
+	inPlace := out.InPlaceChanges[0]
+
+	if inPlace.Field != "cluster.cni" {
+		t.Errorf("expected field=cluster.cni, got %q", inPlace.Field)
+	}
+
+	if inPlace.OldValue != "Default" {
+		t.Errorf("expected oldValue=Default, got %q", inPlace.OldValue)
+	}
+
+	if inPlace.NewValue != "Cilium" {
+		t.Errorf("expected newValue=Cilium, got %q", inPlace.NewValue)
+	}
+
+	if inPlace.Category != "in-place" {
+		t.Errorf("expected category=in-place, got %q", inPlace.Category)
+	}
+
+	if out.RecreateRequired[0].Category != "recreate-required" {
+		t.Errorf("expected category=recreate-required, got %q", out.RecreateRequired[0].Category)
+	}
+
+	if out.RebootRequired[0].Category != "reboot-required" {
+		t.Errorf("expected category=reboot-required, got %q", out.RebootRequired[0].Category)
+	}
+}
+
+func TestDiffToJSON_RequiresConfirmation_OnlyInPlace(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field:    "cluster.cni",
+		Category: clusterupdate.ChangeCategoryInPlace,
+	})
+
+	out := clusterpkg.ExportDiffToJSON(diff)
+
+	if out.RequiresConfirmation {
+		t.Error("expected RequiresConfirmation=false for in-place-only changes")
+	}
+}
+
