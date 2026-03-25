@@ -40,7 +40,7 @@ taskkill /PID <id> /F
 
 ### Registry Access and Image Push Failures
 
-KSail automatically retries transient registry errors (HTTP 429, 5xx, timeouts) during cluster create/update and `ksail workload push`. For authentication errors, verify connectivity and credentials:
+KSail automatically retries transient registry errors (HTTP 429, 5xx, timeouts) during cluster create/update and `ksail workload push` (up to 5 attempts, exponential backoff 5s–30s). For authentication errors, verify connectivity and credentials:
 
 ```bash
 curl -I https://registry.example.com/v2/

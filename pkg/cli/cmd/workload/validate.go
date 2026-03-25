@@ -9,6 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/spf13/cobra"
 )
@@ -82,6 +83,16 @@ func runValidateCmd(
 		path = args[0]
 	}
 
+	// Canonicalize user-supplied path (resolve symlinks + absolute) so that
+	// validation targets the real directory and symlink-escape attacks are
+	// prevented in CI pipelines processing external manifests.
+	canonPath, err := fsutil.EvalCanonicalPath(path)
+	if err != nil {
+		return fmt.Errorf("resolve path %q: %w", path, err)
+	}
+
+	path = canonPath
+
 	// Create kubeconform client
 	kubeconformClient := kubeconform.NewClient()
 
@@ -96,7 +107,7 @@ func runValidateCmd(
 	}
 
 	// Validate the path
-	err := validatePath(ctx, cmd, path, kubeconformClient, validationOpts)
+	err = validatePath(ctx, cmd, path, kubeconformClient, validationOpts)
 	if err != nil {
 		return err
 	}

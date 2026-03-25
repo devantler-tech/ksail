@@ -161,6 +161,51 @@ func (r *Reconciler) TriggerKustomizationReconciliation(ctx context.Context) err
 	)
 }
 
+// TriggerNamedKustomizationReconciliation triggers reconciliation for a specific
+// Kustomization CR identified by name. It uses the same retry logic as
+// TriggerKustomizationReconciliation.
+func (r *Reconciler) TriggerNamedKustomizationReconciliation(
+	ctx context.Context,
+	name string,
+) error {
+	return triggerReconciliationWithRetry(
+		ctx,
+		r.kustomizationClient(),
+		name,
+		"flux kustomization "+name,
+	)
+}
+
+// KustomizationInfo holds the name and spec.path of a Flux Kustomization CR.
+type KustomizationInfo struct {
+	Name string
+	Path string
+}
+
+// ListKustomizationPaths lists all Flux Kustomization CRs in the default
+// namespace and returns their names and spec.path values.
+func (r *Reconciler) ListKustomizationPaths(
+	ctx context.Context,
+) ([]KustomizationInfo, error) {
+	client := r.kustomizationClient()
+
+	list, err := client.List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list flux kustomizations: %w", err)
+	}
+
+	infos := make([]KustomizationInfo, 0, len(list.Items))
+
+	for i := range list.Items {
+		name := list.Items[i].GetName()
+		path, _, _ := unstructured.NestedString(list.Items[i].Object, "spec", "path")
+
+		infos = append(infos, KustomizationInfo{Name: name, Path: path})
+	}
+
+	return infos, nil
+}
+
 // WaitForKustomizationReady waits for the Kustomization to be ready.
 func (r *Reconciler) WaitForKustomizationReady(ctx context.Context, timeout time.Duration) error {
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
