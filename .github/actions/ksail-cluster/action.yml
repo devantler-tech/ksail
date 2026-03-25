@@ -26,6 +26,12 @@ inputs:
   hcloud-token:
     description: "Hetzner Cloud API token (required when provider is Hetzner)"
     default: ""
+  omni-service-account-key:
+    description: "Omni service account key (required when provider is Omni)"
+    default: ""
+  omni-endpoint:
+    description: "Omni API endpoint URL (required when provider is Omni)"
+    default: ""
 
 outputs:
   kubeconfig:
@@ -190,9 +196,19 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
       run: |
         # shellcheck disable=SC2086
         ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
+
+    - name: 🔧 Inject Omni endpoint
+      if: inputs.init == 'true' && inputs.provider == 'Omni' && inputs.omni-endpoint != ''
+      shell: bash
+      env:
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
+      run: |
+        # Patch ksail.yaml to set spec.cluster.omni.endpoint since ksail reads it from config
+        yq -i '.spec.cluster.omni.endpoint = strenv(OMNI_ENDPOINT)' ksail.yaml
 
     - name: 🚀 Create Cluster
       id: create
@@ -203,6 +219,7 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
       run: |
         set -euo pipefail
         if [ "$INIT" = "true" ]; then

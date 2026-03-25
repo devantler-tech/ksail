@@ -65,6 +65,22 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: ✅ Validate Omni inputs
+      if: inputs.provider == 'Omni'
+      shell: bash
+      env:
+        OMNI_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_EP: ${{ inputs.omni-endpoint }}
+      run: |
+        if [ -z "$OMNI_KEY" ]; then
+          echo "❌ ERROR: omni-service-account-key is required when provider is Omni"
+          exit 1
+        fi
+        if [ -z "$OMNI_EP" ]; then
+          echo "❌ ERROR: omni-endpoint is required when provider is Omni"
+          exit 1
+        fi
+
     - name: 🔧 Generate unique artifact tag
       id: generate-tag
       shell: bash
@@ -120,6 +136,8 @@ runs:
         install: "false"
         cache: "true"
         hcloud-token: ${{ inputs.hcloud-token }}
+        omni-service-account-key: ${{ inputs.omni-service-account-key }}
+        omni-endpoint: ${{ inputs.omni-endpoint }}
 
     - name: 🧪 ksail cluster list
       shell: bash
