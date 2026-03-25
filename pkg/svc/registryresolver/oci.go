@@ -134,9 +134,12 @@ func resolveOCIPushParams(
 
 	ref := opts.Ref
 	if ref == "" {
-		if registryInfo.Tag != "" {
+		switch {
+		case opts.ClusterConfig.Spec.Workload.Tag != "":
+			ref = opts.ClusterConfig.Spec.Workload.Tag
+		case registryInfo.Tag != "":
 			ref = registryInfo.Tag
-		} else {
+		default:
 			ref = registry.DefaultLocalArtifactTag
 		}
 	}

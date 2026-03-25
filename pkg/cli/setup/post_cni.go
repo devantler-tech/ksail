@@ -686,7 +686,7 @@ func buildArtifactExistsOptions(
 	return oci.ArtifactExistsOptions{
 		RegistryEndpoint: resolveRegistryEndpoint(registryInfo),
 		Repository:       resolveRepository(registryInfo, clusterCfg),
-		Tag:              resolveTag(registryInfo),
+		Tag:              resolveTag(registryInfo, clusterCfg),
 		Username:         registryInfo.Username,
 		Password:         registryInfo.Password,
 		Insecure:         !clusterCfg.Spec.Cluster.LocalRegistry.IsExternal(),
@@ -714,7 +714,13 @@ func resolveRepository(info *registryhelpers.Info, cfg *v1alpha1.Cluster) string
 	return sourceDir
 }
 
-func resolveTag(info *registryhelpers.Info) string {
+// resolveTag determines the OCI artifact tag using priority-based resolution.
+// Priority: workload tag > registry-embedded tag > default "dev".
+func resolveTag(info *registryhelpers.Info, cfg *v1alpha1.Cluster) string {
+	if cfg.Spec.Workload.Tag != "" {
+		return cfg.Spec.Workload.Tag
+	}
+
 	if info.Tag != "" {
 		return info.Tag
 	}

@@ -199,7 +199,7 @@ Check CNI pods are running (`kubectl get pods -n kube-system` and look for your 
 
 ### LoadBalancer Not Working (Docker)
 
-Verify MetalLB is enabled in `ksail.yaml` (`loadBalancer: Enabled`), check MetalLB pods (`kubectl get pods -n metallb-system`), and verify IP pool exists (`kubectl get ipaddresspools -n metallb-system`). On macOS, Docker runs in a Linux VM so MetalLB virtual IPs are not routable from the host—use `extraPortMappings` instead (see [Port Mappings (Docker)](#port-mappings-docker)).
+Verify MetalLB is enabled in `ksail.yaml` (`loadBalancer: Enabled`), check MetalLB pods (`kubectl get pods -n metallb-system`), and verify IP pool exists (`kubectl get ipaddresspools -n metallb-system`). On macOS, Docker runs in a Linux VM so MetalLB virtual IPs are not routable from the host—use `extraPortMappings` instead (see [Port Mappings (Docker Provider)](#port-mappings-docker-provider)).
 
 ### Cannot Access Talos API
 
@@ -223,7 +223,7 @@ spec:
 
 ### Port Mappings (Docker Provider)
 
-On macOS, Docker runs in a Linux VM, so MetalLB virtual IPs are not directly accessible from the host. For Talos clusters using the **Docker provider** only, you can use `extraPortMappings` in `ksail.yaml` to expose container ports on the host (Hetzner and Omni Talos clusters do not use Docker port mappings):
+On macOS, Docker runs in a Linux VM, so MetalLB virtual IPs are not directly accessible from the host. For Talos clusters using the **Docker provider** only, use `extraPortMappings` in `ksail.yaml` to expose container ports on the host (Hetzner and Omni Talos clusters do not use Docker port mappings):
 
 ```yaml
 # Partial snippet — add to your existing ksail.yaml
@@ -240,9 +240,7 @@ spec:
           protocol: TCP
 ```
 
-Ports are applied to the first control-plane node only. In multi-control-plane clusters, additional control-plane nodes do not receive port mappings to avoid Docker host port collisions.
-
-See [Port Mappings reference](/configuration/declarative-configuration/#port-mappings-docker-provider) for full details.
+Access services at `http://localhost:<hostPort>` (for the example above, `http://localhost:8080`). Ports are applied to the first control-plane node only—in multi-control-plane clusters, additional control-plane nodes do not receive port mappings to avoid Docker host port collisions. See the [Declarative Configuration](/configuration/declarative-configuration/#port-mappings-docker-provider) reference for the full field specification.
 
 ### Persistent Storage (Hetzner)
 
@@ -251,27 +249,6 @@ For cloud volumes, use the `hcloud-volumes` storage class installed automaticall
 ### Talos Upgrades
 
 Upgrade without cluster recreation: `talosctl -n <node-ip> upgrade --image ghcr.io/siderolabs/installer:v1.6.0`. See [Talos upgrade docs](https://www.talos.dev/latest/talos-guides/upgrading-talos/) for coordination details.
-
-### Port Mappings (Docker)
-
-On macOS, Docker runs in a Linux VM so MetalLB virtual IPs are not routable from the host. Use `extraPortMappings` in `ksail.yaml` to expose container ports directly on the host:
-
-```yaml
-# Partial snippet — add to your existing ksail.yaml
-spec:
-  cluster:
-    distribution: Talos
-    talos:
-      extraPortMappings:
-        - containerPort: 80
-          hostPort: 8080
-          protocol: TCP
-        - containerPort: 443
-          hostPort: 8443
-          protocol: TCP
-```
-
-Access services at `http://localhost:8080`. Ports are bound on the first control-plane node only—in multi-control-plane clusters the remaining nodes are unaffected. See the [Declarative Configuration](/configuration/declarative-configuration/#port-mappings-docker-provider) reference for the full field specification.
 
 ### GitOps Integration
 

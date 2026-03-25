@@ -44,6 +44,7 @@ func TestCluster_ExpandEnvVars_BasicFields(t *testing.T) {
 	t.Setenv("TEST_CONTEXT", "prod-cluster")
 	t.Setenv("TEST_CONFIG_DIR", "/etc/cluster")
 	t.Setenv("TEST_SOURCE_DIR", "/workloads")
+	t.Setenv("TEST_TAG", "v1.0.0")
 
 	cluster := v1alpha1.NewCluster()
 	cluster.Spec.Editor = "${TEST_EDITOR}"
@@ -51,6 +52,7 @@ func TestCluster_ExpandEnvVars_BasicFields(t *testing.T) {
 	cluster.Spec.Cluster.Connection.Context = "${TEST_CONTEXT}"
 	cluster.Spec.Cluster.DistributionConfig = "${TEST_CONFIG_DIR}/kind.yaml"
 	cluster.Spec.Workload.SourceDirectory = "${TEST_SOURCE_DIR}"
+	cluster.Spec.Workload.Tag = "${TEST_TAG}"
 
 	cluster.ExpandEnvVars()
 
@@ -59,6 +61,7 @@ func TestCluster_ExpandEnvVars_BasicFields(t *testing.T) {
 	assert.Equal(t, "prod-cluster", cluster.Spec.Cluster.Connection.Context)
 	assert.Equal(t, "/etc/cluster/kind.yaml", cluster.Spec.Cluster.DistributionConfig)
 	assert.Equal(t, "/workloads", cluster.Spec.Workload.SourceDirectory)
+	assert.Equal(t, "v1.0.0", cluster.Spec.Workload.Tag)
 }
 
 func TestCluster_ExpandEnvVars_ChatModel(t *testing.T) {
@@ -199,6 +202,7 @@ func TestCluster_ExpandEnvVars_ComplexRegistry(t *testing.T) {
 		cluster.Spec.Cluster.LocalRegistry.Registry)
 }
 
+//nolint:funlen // Comprehensive test covering all expandable fields at once.
 func TestCluster_ExpandEnvVars_AllFieldsAtOnce(t *testing.T) {
 	// Set all test environment variables
 	t.Setenv("TEST_EDITOR", "nano")
@@ -207,6 +211,7 @@ func TestCluster_ExpandEnvVars_AllFieldsAtOnce(t *testing.T) {
 	t.Setenv("TEST_DIST_CONFIG", "/test/kind.yaml")
 	t.Setenv("TEST_REGISTRY", "localhost:5000")
 	t.Setenv("TEST_SOURCE_DIR", "/test/k8s")
+	t.Setenv("TEST_TAG", "latest")
 	t.Setenv("TEST_CHAT_MODEL", "claude")
 	t.Setenv("TEST_MIRRORS_DIR", "/test/mirrors")
 	t.Setenv("TEST_TALOS_CONFIG", "/test/talosconfig")
@@ -221,6 +226,7 @@ func TestCluster_ExpandEnvVars_AllFieldsAtOnce(t *testing.T) {
 	cluster.Spec.Cluster.DistributionConfig = "${TEST_DIST_CONFIG}"
 	cluster.Spec.Cluster.LocalRegistry.Registry = "${TEST_REGISTRY}"
 	cluster.Spec.Workload.SourceDirectory = "${TEST_SOURCE_DIR}"
+	cluster.Spec.Workload.Tag = "${TEST_TAG}"
 	cluster.Spec.Chat.Model = "${TEST_CHAT_MODEL}"
 	cluster.Spec.Cluster.Vanilla.MirrorsDir = "${TEST_MIRRORS_DIR}"
 	cluster.Spec.Cluster.Talos.Config = "${TEST_TALOS_CONFIG}"
@@ -237,6 +243,7 @@ func TestCluster_ExpandEnvVars_AllFieldsAtOnce(t *testing.T) {
 	assert.Equal(t, "/test/kind.yaml", cluster.Spec.Cluster.DistributionConfig)
 	assert.Equal(t, "localhost:5000", cluster.Spec.Cluster.LocalRegistry.Registry)
 	assert.Equal(t, "/test/k8s", cluster.Spec.Workload.SourceDirectory)
+	assert.Equal(t, "latest", cluster.Spec.Workload.Tag)
 	assert.Equal(t, "claude", cluster.Spec.Chat.Model)
 	assert.Equal(t, "/test/mirrors", cluster.Spec.Cluster.Vanilla.MirrorsDir)
 	assert.Equal(t, "/test/talosconfig", cluster.Spec.Cluster.Talos.Config)

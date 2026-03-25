@@ -244,6 +244,9 @@
             },
             "validateOnPush": {
               "type": "boolean"
+            },
+            "tag": {
+              "type": "string"
             }
           },
           "additionalProperties": false,
