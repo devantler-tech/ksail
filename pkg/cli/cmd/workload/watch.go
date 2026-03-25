@@ -7,12 +7,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/fsnotify/fsnotify"
@@ -111,6 +113,11 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool) error {
 		return fmt.Errorf("resolve absolute path for %q: %w", watchDir, err)
 	}
 
+	// Try to create a Flux reconciler for selective Kustomization reconciliation.
+	// If Flux is not available (CRDs not installed, kubeconfig error, etc.),
+	// the reconciler is nil and selective reconciliation is silently skipped.
+	fluxReconciler := tryCreateFluxReconciler()
+
 	cmd.Println()
 	notify.WriteMessage(notify.Message{
 		Type:    notify.TitleType,
@@ -122,7 +129,7 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool) error {
 	cmd.PrintErrf("  watching: %s\n", absDir)
 	cmd.PrintErrf("  press Ctrl+C to stop\n\n")
 
-	return watchLoop(cmd.Context(), cmd, absDir, initialApply)
+	return watchLoop(cmd.Context(), cmd, absDir, initialApply, fluxReconciler)
 }
 
 // watchLoop sets up the fsnotify watcher and runs the debounced apply loop.
@@ -130,7 +137,13 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool) error {
 // after the event loop goroutine is started, so watcher events are consumed
 // immediately and not dropped or buffered during the initial apply. Ctrl+C
 // cancels both the initial apply and the event loop via the shared sigCtx.
-func watchLoop(ctx context.Context, cmd *cobra.Command, dir string, initialApply bool) error {
+func watchLoop(
+	ctx context.Context,
+	cmd *cobra.Command,
+	dir string,
+	initialApply bool,
+	fluxReconciler *flux.Reconciler,
+) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("create file watcher: %w", err)
@@ -153,7 +166,7 @@ func watchLoop(ctx context.Context, cmd *cobra.Command, dir string, initialApply
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- eventLoop(sigCtx, cmd, watcher, dir)
+		errCh <- eventLoop(sigCtx, cmd, watcher, dir, fluxReconciler)
 	}()
 
 	if initialApply {
@@ -184,6 +197,7 @@ func eventLoop(
 	cmd *cobra.Command,
 	watcher *fsnotify.Watcher,
 	dir string,
+	fluxReconciler *flux.Reconciler,
 ) error {
 	state := &debounceState{}
 
@@ -192,7 +206,7 @@ func eventLoop(
 	applyCh := make(chan string, 1)
 
 	// Single worker: runs applies one at a time, stops when ctx is cancelled.
-	go applyWorker(ctx, cmd, dir, applyCh)
+	go applyWorker(ctx, cmd, dir, applyCh, fluxReconciler)
 
 	defer cancelPendingDebounce(state)
 
@@ -200,7 +214,17 @@ func eventLoop(
 }
 
 // applyWorker runs applies one at a time, stopping when ctx is cancelled.
-func applyWorker(ctx context.Context, cmd *cobra.Command, dir string, applyCh <-chan string) {
+// The kustomization cache is owned exclusively by this single goroutine,
+// so no mutex is needed.
+func applyWorker(
+	ctx context.Context,
+	cmd *cobra.Command,
+	dir string,
+	applyCh <-chan string,
+	fluxReconciler *flux.Reconciler,
+) {
+	var cachedKustomizations []flux.KustomizationInfo
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -210,7 +234,7 @@ func applyWorker(ctx context.Context, cmd *cobra.Command, dir string, applyCh <-
 				return
 			}
 
-			applyAndReport(ctx, cmd, dir, file)
+			applyAndReport(ctx, cmd, dir, file, fluxReconciler, &cachedKustomizations)
 		}
 	}
 }
@@ -364,7 +388,19 @@ func executeAndReportApply(ctx context.Context, cmd *cobra.Command, dir, label s
 // elapsed time. It scopes the apply to the nearest Kustomization subtree
 // containing the changed file, falling back to a full reconcile when the
 // change is at the root level or no kustomization.yaml boundary is found.
-func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile string) {
+//
+// When a Flux reconciler is available, it additionally triggers selective
+// Flux Kustomization CR reconciliation for the affected subtree. If no
+// CRs match the change, the root Kustomization CR is reconciled instead.
+// When multiple CRs match (e.g. a parent directory change affects several
+// child Kustomizations), all matching CRs are reconciled.
+func applyAndReport(
+	ctx context.Context,
+	cmd *cobra.Command,
+	dir, changedFile string,
+	fluxReconciler *flux.Reconciler,
+	cachedKustomizations *[]flux.KustomizationInfo,
+) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -392,6 +428,8 @@ func applyAndReport(ctx context.Context, cmd *cobra.Command, dir, changedFile st
 	}
 
 	executeAndReportApply(ctx, cmd, applyDir, label)
+
+	reconcileFluxSelectively(ctx, cmd, fluxReconciler, applyDir, dir, cachedKustomizations)
 }
 
 // formatElapsed formats a duration as a compact human-readable string
@@ -449,6 +487,168 @@ func findKustomizationDir(changedFile, rootDir string) string {
 
 		dir = parent
 	}
+}
+
+// tryCreateFluxReconciler attempts to create a Flux reconciler using the
+// current kubeconfig. Returns nil if the reconciler cannot be created
+// (e.g., no kubeconfig, cluster unreachable). The caller should treat
+// a nil return as "Flux is unavailable; skip selective reconciliation".
+func tryCreateFluxReconciler() *flux.Reconciler {
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	if kubeconfigPath == "" {
+		return nil
+	}
+
+	r, err := flux.NewReconciler(kubeconfigPath)
+	if err != nil {
+		return nil
+	}
+
+	return r
+}
+
+// reconcileFluxSelectively triggers Flux Kustomization CR reconciliation
+// scoped to the affected subtree. It uses a cached list of Kustomization CRs
+// to avoid an API round-trip on every apply, refreshing the cache on the first
+// call or when a previous list returned an error.
+//
+// When the reconciler is nil or Flux is not available, the function silently
+// returns. Root-level or unmappable changes reconcile the root Kustomization
+// CR. When multiple CRs match (e.g. a parent directory change affects several
+// child Kustomizations), all matching CRs are reconciled individually.
+func reconcileFluxSelectively(
+	ctx context.Context,
+	cmd *cobra.Command,
+	reconciler *flux.Reconciler,
+	applyDir, rootDir string,
+	cachedKustomizations *[]flux.KustomizationInfo,
+) {
+	if reconciler == nil || ctx.Err() != nil {
+		return
+	}
+
+	// Populate cache on first call or refresh on previous list error.
+	if len(*cachedKustomizations) == 0 {
+		kustomizations, err := reconciler.ListKustomizationPaths(ctx)
+		if err != nil || len(kustomizations) == 0 {
+			return
+		}
+
+		*cachedKustomizations = kustomizations
+	}
+
+	// Root-level change or no subtree match: reconcile the root CR.
+	if applyDir == rootDir {
+		reconcileRootKustomization(ctx, cmd, reconciler, "root")
+
+		return
+	}
+
+	matches := matchFluxKustomizations(applyDir, rootDir, *cachedKustomizations)
+
+	if len(matches) == 0 {
+		reconcileRootKustomization(ctx, cmd, reconciler, "root fallback")
+
+		return
+	}
+
+	reconcileMatchedKustomizations(ctx, cmd, reconciler, matches)
+}
+
+// reconcileRootKustomization triggers reconciliation of the root Kustomization
+// CR and prints a timestamped status line. The label parameter (e.g. "root",
+// "root fallback") is included in the output to indicate the trigger reason.
+func reconcileRootKustomization(
+	ctx context.Context,
+	cmd *cobra.Command,
+	reconciler *flux.Reconciler,
+	label string,
+) {
+	timestamp := time.Now().Format("15:04:05")
+
+	err := reconciler.TriggerKustomizationReconciliation(ctx)
+	if err != nil {
+		cmd.PrintErrf(
+			"[%s] ⚠ flux reconcile (%s): %v\n",
+			timestamp, label, err,
+		)
+	} else {
+		cmd.PrintErrf(
+			"[%s] ↻ flux: reconciled root kustomization (%s)\n",
+			timestamp, label,
+		)
+	}
+}
+
+// reconcileMatchedKustomizations triggers reconciliation of each named
+// Kustomization CR and prints a timestamped status line per CR.
+func reconcileMatchedKustomizations(
+	ctx context.Context,
+	cmd *cobra.Command,
+	reconciler *flux.Reconciler,
+	matches []string,
+) {
+	timestamp := time.Now().Format("15:04:05")
+
+	for _, name := range matches {
+		err := reconciler.TriggerNamedKustomizationReconciliation(ctx, name)
+		if err != nil {
+			cmd.PrintErrf("[%s] ⚠ flux reconcile %q: %v\n", timestamp, name, err)
+		} else {
+			cmd.PrintErrf("[%s] ↻ flux: reconciled kustomization %q\n", timestamp, name)
+		}
+	}
+}
+
+// matchFluxKustomizations maps a changed directory (absolute path) to the
+// Flux Kustomization CR(s) whose spec.path matches. A match occurs when
+// the normalized relative path of the changed directory equals or is a
+// parent/child of the CR's spec.path. Returns nil when no CRs match.
+func matchFluxKustomizations(
+	changedDir, rootDir string,
+	kustomizations []flux.KustomizationInfo,
+) []string {
+	relDir, err := filepath.Rel(rootDir, changedDir)
+	if err != nil {
+		return nil
+	}
+
+	relDir = normalizeFluxPath(relDir)
+	if relDir == "" {
+		return nil
+	}
+
+	var matches []string
+
+	for _, kustomization := range kustomizations {
+		ksPath := normalizeFluxPath(kustomization.Path)
+		if ksPath == "" {
+			continue
+		}
+
+		if ksPath == relDir ||
+			strings.HasPrefix(ksPath, relDir+"/") ||
+			strings.HasPrefix(relDir, ksPath+"/") {
+			matches = append(matches, kustomization.Name)
+		}
+	}
+
+	return matches
+}
+
+// normalizeFluxPath strips leading "./" and cleans the path, converting
+// OS-specific separators to forward slashes so prefix checks work
+// consistently across platforms. Returns "" for paths that resolve to "."
+// (root-level).
+func normalizeFluxPath(path string) string {
+	path = strings.TrimPrefix(path, "./")
+	path = filepath.ToSlash(filepath.Clean(path))
+
+	if path == "." {
+		return ""
+	}
+
+	return path
 }
 
 // runKubectlApply executes kubectl apply -k against the provided directory,
