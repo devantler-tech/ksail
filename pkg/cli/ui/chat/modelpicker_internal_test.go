@@ -304,34 +304,33 @@ func TestModelPickerFilter_BackspaceRemovesChar(t *testing.T) {
 	}
 }
 
-// TestBuildModelStatusText tests model status text rendering.
-func TestBuildModelStatusText(t *testing.T) {
-	t.Parallel()
+type modelStatusTextCase struct {
+	name         string
+	configModel  string
+	currentModel string
+	lastUsage    string
+	models       []copilot.ModelInfo
+	expected     string
+}
 
-	tests := []struct {
-		name         string
-		configModel  string
-		currentModel string
-		lastUsage    string
-		models       []copilot.ModelInfo
-		expected     string
-	}{
-		{
-			name:         "auto mode unresolved",
-			configModel:  "",
-			currentModel: "",
-			lastUsage:    "",
-			expected:     "auto",
-		},
+func buildModelStatusTextCases() []modelStatusTextCase {
+	return []modelStatusTextCase{
+		{name: "auto mode unresolved", expected: "auto"},
 		{
 			name:         "auto mode resolved with multiplier",
-			configModel:  "",
 			currentModel: "gpt-4o",
-			lastUsage:    "",
 			models: []copilot.ModelInfo{
 				{ID: "gpt-4o", Billing: &copilot.ModelBilling{Multiplier: 1.0}},
 			},
-			expected: "gpt-4o",
+			expected: "gpt-4o (1x)",
+		},
+		{
+			name:         "auto mode resolved with fractional multiplier",
+			currentModel: "claude-haiku-4.5",
+			models: []copilot.ModelInfo{
+				{ID: "claude-haiku-4.5", Billing: &copilot.ModelBilling{Multiplier: 0.33}},
+			},
+			expected: "claude-haiku-4.5 (0.33x)",
 		},
 		{
 			name:         "explicit model",
@@ -340,8 +339,13 @@ func TestBuildModelStatusText(t *testing.T) {
 			expected:     "claude-3",
 		},
 	}
+}
 
-	for _, testCase := range tests {
+// TestBuildModelStatusText tests model status text rendering.
+func TestBuildModelStatusText(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range buildModelStatusTextCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -387,6 +391,41 @@ func TestModelPickerUpNavigation_Boundary(t *testing.T) {
 	output := updatedModel.View()
 	if !strings.Contains(output, "Select Model") {
 		t.Error("expected model picker to remain open")
+	}
+}
+
+// TestFormatMultiplier tests that formatMultiplier formats values consistently and
+// never produces scientific notation for extreme inputs.
+func TestFormatMultiplier(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		mult     float64
+		expected string
+	}{
+		{name: "integer multiplier", mult: 1.0, expected: "1"},
+		{name: "fractional multiplier", mult: 1.5, expected: "1.5"},
+		{name: "two decimal places", mult: 1.25, expected: "1.25"},
+		{name: "small fractional", mult: 0.33, expected: "0.33"},
+		{name: "large integer", mult: 1000000.0, expected: "1000000"},
+		{name: "large fractional", mult: 1000000.50, expected: "1000000.5"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := chat.ExportFormatMultiplier(testCase.mult)
+			if got != testCase.expected {
+				t.Errorf(
+					"formatMultiplier(%g) = %q, want %q",
+					testCase.mult,
+					got,
+					testCase.expected,
+				)
+			}
+		})
 	}
 }
 

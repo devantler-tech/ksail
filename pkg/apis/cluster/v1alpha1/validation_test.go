@@ -235,15 +235,6 @@ func TestValidProviders(t *testing.T) {
 	assert.Len(t, providers, 3)
 }
 
-func TestValidProfiles(t *testing.T) {
-	t.Parallel()
-
-	profiles := v1alpha1.ValidProfiles()
-
-	assert.Contains(t, profiles, v1alpha1.ProfileDefault)
-	assert.Len(t, profiles, 1)
-}
-
 func TestValidPlacementGroupStrategies(t *testing.T) {
 	t.Parallel()
 

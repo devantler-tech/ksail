@@ -35,7 +35,6 @@ type Spec struct {
 type ClusterSpec struct {
 	DistributionConfig string        `json:"distributionConfig,omitzero"`
 	Connection         Connection    `json:"connection,omitzero"`
-	Profile            Profile       `json:"profile,omitzero"            jsonschema:"description=Pre-built cluster profile template (Default: current behaviour)"` //nolint:lll
 	Distribution       Distribution  `json:"distribution,omitzero"`
 	Provider           Provider      `json:"provider,omitzero"`
 	CNI                CNI           `json:"cni,omitzero"`
@@ -59,8 +58,9 @@ type ClusterSpec struct {
 
 // WorkloadSpec defines workload-related configuration.
 type WorkloadSpec struct {
-	SourceDirectory string `default:"k8s" json:"sourceDirectory,omitzero"`
-	ValidateOnPush  bool   `              json:"validateOnPush,omitzero"`
+	SourceDirectory string `default:"k8s"   json:"sourceDirectory,omitzero" jsonschema_description:"Path to the directory containing Kubernetes manifests to push"`                                                 //nolint:lll
+	ValidateOnPush  bool   `default:"false" json:"validateOnPush,omitzero"  jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                            //nolint:lll
+	Tag             string `default:"dev"   json:"tag,omitzero"             jsonschema_description:"OCI artifact tag for ksail workload push. Priority: CLI oci:// ref > this field > registry-embedded tag > dev"` //nolint:lll
 }
 
 // ChatSpec defines AI chat assistant configuration.

@@ -16,6 +16,7 @@ export {
   clearSchemaCache,
   getEnumValues,
   getPropertyDescription,
+  getSchemaEnumValues,
   getToolProperties,
   getToolSchema,
   getToolSchemas,

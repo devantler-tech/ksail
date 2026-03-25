@@ -180,7 +180,7 @@ func BenchmarkX(b *testing.B) {
 }
 ````
 
-PRs are auto-benchmarked against `main`; see [BENCHMARK-REGRESSION.md](https://github.com/devantler-tech/ksail/blob/main/docs/BENCHMARK-REGRESSION.md). Use `ksail cluster create --benchmark` for per-component timings. Package-specific `BENCHMARKS.md` files in some package directories (e.g., [`pkg/client/helm/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/client/helm/BENCHMARKS.md)) document baseline results and optimization opportunities.
+PRs are auto-benchmarked against `main`; see [BENCHMARK-REGRESSION.md](https://github.com/devantler-tech/ksail/blob/main/docs/BENCHMARK-REGRESSION.md). Use `ksail cluster create --benchmark` for per-component timings. Package-specific `BENCHMARKS.md` files in some package directories (e.g., [`pkg/client/helm/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/client/helm/BENCHMARKS.md), [`pkg/fsutil/configmanager/ksail/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/fsutil/configmanager/ksail/BENCHMARKS.md)) document baseline results and optimization opportunities.
 
 ### Documentation
 
@@ -196,7 +196,7 @@ All new components follow the same pattern: create a package under the relevant 
 | New Provisioner | `pkg/svc/provisioner/cluster/newdist/` | `Provisioner` | `pkg/svc/provisioner/cluster/factory.go` |
 | New Installer | `pkg/svc/installer/newcomponent/` | `Installer` | `pkg/cli/setup/` |
 
-For a new Provisioner, also add a getting-started guide in `docs/src/content/docs/getting-started/`. For a new Installer, also add configuration to `pkg/apis/cluster/v1alpha1/`.
+For a new Provisioner, also add a distribution guide in `docs/src/content/docs/distributions/`. For a new Installer, also add configuration to `pkg/apis/cluster/v1alpha1/`.
 
 ### Updating Dependencies
 
@@ -245,7 +245,7 @@ VSCode users can set breakpoints and press F5 with a `.vscode/launch.json` confi
 ### GitHub Actions Workflows
 
 - **`ci.yaml`** — Builds, runs unit and system tests, uploads coverage (runs on every PR and push to main)
-- **`update-skills.yaml`** — Upgrades npx skills daily; opens a PR when updates are available
+- **`update-skills.yaml`** — Upgrades GitHub Copilot skills daily; opens a PR when updates are available
 - **`test-pages.yaml`** — Validates documentation builds on docs changes
 - **`publish-pages.yaml`** — Deploys documentation to GitHub Pages on main branch pushes
 - **`release.yaml`** — Builds release binaries and publishes to GitHub Releases

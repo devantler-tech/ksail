@@ -11,6 +11,11 @@ env:
   # error (including 403), not just 404/410. Hardens CI against transient
   # proxy.golang.org outages. go.sum still verifies module integrity.
   GOPROXY: "https://proxy.golang.org|direct"
+  # Soft memory limit for Go build toolchain (compiler, linker). The KSail
+  # binary links a large dependency tree and the Go linker can exceed the
+  # default runner memory on cache-miss builds. Setting GOMEMLIMIT makes the
+  # GC work harder to stay within budget, reducing peak RSS.
+  GOMEMLIMIT: "6GiB"
 
 concurrency:
   group: "ci-ksail-${{ github.workflow }}-${{ github.ref }}"
@@ -41,7 +46,7 @@ jobs:
           persist-credentials: false
 
       - name: 🔍 Filter paths
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
           filters: |
@@ -116,13 +121,14 @@ jobs:
     name: 🔄 Sync Module Dependencies
     runs-on: ubuntu-latest
     needs: [changes]
-    if: needs.changes.outputs.code == 'true'
+    if: github.event_name != 'merge_group' && needs.changes.outputs.code == 'true'
     permissions:
       contents: read
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
 
       - name: ⚙️ Setup Go
@@ -156,13 +162,14 @@ jobs:
     name: 📝 Generate JSON Schema
     runs-on: ubuntu-latest
     needs: [changes]
-    if: needs.changes.outputs.schema == 'true'
+    if: github.event_name != 'merge_group' && needs.changes.outputs.schema == 'true'
     permissions:
       contents: read
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
 
       - name: ⚙️ Setup Go
@@ -193,13 +200,14 @@ jobs:
     name: 📚 Generate Reference Docs
     runs-on: ubuntu-latest
     needs: [changes]
-    if: needs.changes.outputs.cli == 'true'
+    if: github.event_name != 'merge_group' && needs.changes.outputs.cli == 'true'
     permissions:
       contents: read
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
 
       - name: ⚙️ Setup Go
@@ -240,7 +248,7 @@ jobs:
       contents: write
     steps:
       - name: 🔑 Generate GitHub App Token
-        uses: actions/create-github-app-token@bf559f85448f9380bcfa2899dbdc01eb5b37be3a # v3.0.0-beta.2
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0-beta.2
         id: generate-token
         with:
           app-id: ${{ vars.APP_ID }}
@@ -249,11 +257,12 @@ jobs:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: true
           token: ${{ steps.generate-token.outputs.token }}
 
       - name: 📥 Download patches
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: "*-patch"
           merge-multiple: true
@@ -301,6 +310,7 @@ jobs:
           commit_message: "chore: sync modules and update generated files"
           commit_user_name: generator-bot
           commit_user_email: generator-bot@users.noreply.github.com
+          branch: ${{ github.head_ref || github.ref_name }}
 
   coverage:
     name: 📊 Code Coverage
@@ -340,7 +350,7 @@ jobs:
     name: 🔍 Audit Docs Dependencies
     runs-on: ubuntu-latest
     needs: [changes]
-    if: needs.changes.outputs.docs-deps == 'true'
+    if: github.event_name != 'merge_group' && needs.changes.outputs.docs-deps == 'true'
     permissions:
       contents: write
     steps:
@@ -361,7 +371,7 @@ jobs:
     name: 🔍 Audit VSCode Extension Dependencies
     runs-on: ubuntu-latest
     needs: [changes]
-    if: needs.changes.outputs.vsce-deps == 'true'
+    if: github.event_name != 'merge_group' && needs.changes.outputs.vsce-deps == 'true'
     permissions:
       contents: write
     steps:
@@ -382,7 +392,7 @@ jobs:
     name: 🧩 VSCode Extension
     runs-on: ubuntu-latest
     needs: [changes]
-    if: needs.changes.outputs.vsce == 'true'
+    if: github.event_name != 'merge_group' && needs.changes.outputs.vsce == 'true'
     permissions:
       contents: read
     defaults:

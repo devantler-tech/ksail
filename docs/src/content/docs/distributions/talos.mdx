@@ -1,5 +1,5 @@
 ---
-title: Getting Started with Talos
+title: Talos
 description: Learn how to create and manage Talos Linux clusters with KSail for immutable, secure Kubernetes infrastructure on Docker, Hetzner Cloud, or Sidero Omni.
 ---
 
@@ -7,7 +7,7 @@ import { Tabs, TabItem } from "@astrojs/starlight/components";
 
 [Talos Linux](https://www.talos.dev/) is a minimal, immutable operating system designed specifically for running Kubernetes. It provides enhanced security through API-driven configuration with no shell access, automatic updates, and a reduced attack surface. This guide shows you how to use Talos with KSail for local development (Docker provider), cloud deployments (Hetzner Cloud provider), or managed clusters through [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) (Omni provider).
 
-Talos is ideal for security-focused production workloads, GitOps workflows, and multi-cloud deployments requiring immutable infrastructure. It's not suitable for quick prototyping or scenarios requiring shell access—use [Vanilla](/getting-started/vanilla/) or [K3s](/getting-started/k3s/) instead.
+Talos is ideal for security-focused production workloads, GitOps workflows, and multi-cloud deployments requiring immutable infrastructure. It's not suitable for quick prototyping or scenarios requiring shell access—use [Vanilla](/distributions/vanilla/) or [K3s](/distributions/k3s/) instead.
 
 ## Quick Start
 
@@ -19,8 +19,7 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
 
     #### Prerequisites
 
-    - Docker Desktop or Docker Engine installed and running
-    - `docker ps` command works
+    Docker installed and running (see [Docker Provider](/providers/docker/)).
 
     #### Step 1: Initialize Project
 
@@ -33,17 +32,11 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
       --workers 2
     ```
 
-    This creates:
-    - `ksail.yaml` — KSail configuration
-    - `talos/` directory — Talos configuration patches
-
     #### Step 2: Create Cluster
 
     ```bash
     ksail cluster create
     ```
-
-    KSail downloads the Talos Docker image, creates containers as nodes, bootstraps Kubernetes, configures kubectl context, and installs the configured CNI (Flannel by default; Cilium or Calico can be enabled via `ksail.yaml`).
 
     #### Step 3: Verify Cluster
 
@@ -68,18 +61,13 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
 
     #### Prerequisites
 
-    - Hetzner Cloud account
-    - Hetzner Cloud API token (get it from [Hetzner Cloud Console](https://console.hetzner.cloud/) → Project → Security → API Tokens)
-    - Docker installed locally (for cluster initialization)
+    A Hetzner Cloud account and API token. See [Hetzner Provider](/providers/hetzner/) for full setup.
 
     #### Step 1: Configure API Token
 
     ```bash
     export HCLOUD_TOKEN=your-hetzner-api-token
     ```
-
-    > [!TIP]
-    > Add `HCLOUD_TOKEN` to your shell profile (`~/.bashrc`, `~/.zshrc`) to persist across sessions.
 
     #### Step 2: Initialize Project
 
@@ -98,8 +86,6 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
     ksail cluster create
     ```
 
-    KSail creates Hetzner Cloud servers, boots them with Talos, bootstraps Kubernetes, configures kubectl context, and installs CNI, CSI drivers, and the Hetzner Cloud Controller Manager for LoadBalancer support.
-
     #### Step 4: Verify Cluster
 
     ```bash
@@ -108,17 +94,7 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
     kubectl get pods -n kube-system | grep hcloud-csi
     ```
 
-    #### Step 5: Deploy with LoadBalancer
-
-    ```bash
-    kubectl create deployment web --image=nginx --replicas=3
-    kubectl expose deployment web --port=80 --type=LoadBalancer
-    kubectl get svc web --watch
-    ```
-
-    The LoadBalancer service provisions a real Hetzner Cloud Load Balancer with a public IP.
-
-    #### Step 6: Cleanup
+    #### Step 5: Cleanup
 
     ```bash
     ksail cluster delete
@@ -136,19 +112,13 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
 
     #### Prerequisites
 
-    - A [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account
-    - Omni service account key (create one in the Omni web UI under **Settings → Service Accounts**)
-    - Your Omni API endpoint URL (e.g., `https://<account>.omni.siderolabs.io:443`)
-    - Machines already registered in Omni and available for allocation
+    A Sidero Omni account with service account key and registered machines. See [Omni Provider](/providers/omni/) for full setup.
 
     #### Step 1: Configure Credentials
 
     ```bash
     export OMNI_SERVICE_ACCOUNT_KEY=your-base64-encoded-service-account-key
     ```
-
-    > [!TIP]
-    > Add `OMNI_SERVICE_ACCOUNT_KEY` to your shell profile (`~/.bashrc`, `~/.zshrc`) to persist across sessions.
 
     #### Step 2: Initialize Project
 
@@ -181,17 +151,7 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
     ksail cluster create
     ```
 
-    KSail connects to your Omni instance, allocates registered machines, applies Talos configuration patches via the Omni API, bootstraps Kubernetes, and configures kubectl context.
-
-    #### Step 5: Verify Cluster
-
-    ```bash
-    ksail cluster info
-    kubectl get nodes
-    kubectl get pods -A
-    ```
-
-    #### Step 6: Cleanup
+    #### Step 5: Cleanup
 
     ```bash
     ksail cluster delete
@@ -221,13 +181,7 @@ talosctl -n <node-ip> upgrade --image ghcr.io/siderolabs/installer:v1.6.0
 
 ## Architecture
 
-### Talos on Docker
-
-Each node is a Docker container running Talos Linux communicating via a Docker bridge network. No VM overhead. MetalLB provides LoadBalancer services (optional, via `--load-balancer Enabled`).
-
-### Talos on Hetzner
-
-Each node is a Hetzner Cloud server running Talos Linux. The Hetzner Cloud Controller Manager provisions load balancers, the Hetzner CSI Driver provisions persistent volumes, and servers have public IPs for external access.
+Talos node architecture varies by provider. See the [Docker Provider](/providers/docker/), [Hetzner Provider](/providers/hetzner/), and [Omni Provider](/providers/omni/) pages for details.
 
 ## Distribution Comparison
 
@@ -245,7 +199,7 @@ Check CNI pods are running (`kubectl get pods -n kube-system` and look for your 
 
 ### LoadBalancer Not Working (Docker)
 
-Verify MetalLB is enabled in `ksail.yaml` (`loadBalancer: Enabled`), check MetalLB pods (`kubectl get pods -n metallb-system`), and verify IP pool exists (`kubectl get ipaddresspools -n metallb-system`).
+Verify MetalLB is enabled in `ksail.yaml` (`loadBalancer: Enabled`), check MetalLB pods (`kubectl get pods -n metallb-system`), and verify IP pool exists (`kubectl get ipaddresspools -n metallb-system`). On macOS, Docker runs in a Linux VM so MetalLB virtual IPs are not routable from the host—use `extraPortMappings` instead (see [Port Mappings (Docker Provider)](#port-mappings-docker-provider)).
 
 ### Cannot Access Talos API
 
@@ -267,22 +221,30 @@ spec:
       workers: 5
 ```
 
-### Persistent Storage (Hetzner)
+### Port Mappings (Docker Provider)
 
-Use Hetzner CSI driver for cloud volumes:
+On macOS, Docker runs in a Linux VM, so MetalLB virtual IPs are not directly accessible from the host. For Talos clusters using the **Docker provider** only, use `extraPortMappings` in `ksail.yaml` to expose container ports on the host (Hetzner and Omni Talos clusters do not use Docker port mappings):
 
 ```yaml
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: data-pvc
+# Partial snippet — add to your existing ksail.yaml
 spec:
-  accessModes: [ReadWriteOnce]
-  storageClassName: hcloud-volumes
-  resources:
-    requests:
-      storage: 10Gi
+  cluster:
+    distribution: Talos
+    talos:
+      extraPortMappings:
+        - containerPort: 80
+          hostPort: 8080
+          protocol: TCP
+        - containerPort: 443
+          hostPort: 8443
+          protocol: TCP
 ```
+
+Access services at `http://localhost:<hostPort>` (for the example above, `http://localhost:8080`). Ports are applied to the first control-plane node only—in multi-control-plane clusters, additional control-plane nodes do not receive port mappings to avoid Docker host port collisions. See the [Declarative Configuration](/configuration/declarative-configuration/#port-mappings-docker-provider) reference for the full field specification.
+
+### Persistent Storage (Hetzner)
+
+For cloud volumes, use the `hcloud-volumes` storage class installed automatically by the [Hetzner Provider](/providers/hetzner/).
 
 ### Talos Upgrades
 
@@ -292,26 +254,3 @@ Upgrade without cluster recreation: `talosctl -n <node-ip> upgrade --image ghcr.
 
 Enable Flux or ArgoCD for declarative workload management—see [GitOps Workflows](/features/#gitops-workflows).
 
-## Next Steps
-
-### Explore KSail Features
-
-- [**GitOps Integration**](/features/#gitops-workflows): Bootstrap Flux or ArgoCD
-- [**Secret Management**](/features/#secret-management): Encrypt secrets with SOPS
-- [**AI Chat**](/ai-chat/): Interactive cluster management with GitHub Copilot
-- [**VSCode Extension**](/features/#vscode-extension): Manage clusters from your editor
-
-### Try Other Distributions
-
-- [**Vanilla (Kind)**](/getting-started/vanilla/): Upstream Kubernetes for maximum compatibility
-- [**K3s (K3d)**](/getting-started/k3s/): Lightweight K3s for resource-constrained environments and CI/CD
-- [**VCluster**](/getting-started/vcluster/): Virtual clusters for multi-tenancy
-
-### Learn More
-
-- [**Installation Guide**](/installation/): Install KSail on your system
-- [**CLI Flags**](/cli-flags/): Comprehensive command documentation
-- [**Configuration Reference**](/configuration/): Detailed YAML options
-- [**LoadBalancer Configuration**](/configuration/loadbalancer/): LoadBalancer options for Talos
-- [**Support Matrix**](/support-matrix/): Detailed Talos × component compatibility
-- [**Contributing**](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md): Contribute to KSail development

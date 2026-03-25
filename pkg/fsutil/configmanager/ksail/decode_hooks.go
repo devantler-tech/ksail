@@ -9,6 +9,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// clusterDecodeHook is the pre-compiled mapstructure decode hook for KSail cluster
+// configuration. It is stateless (no captured mutable state) and therefore safe
+// to share across all ConfigManager instances. Precomputing it avoids allocating
+// a new function value on every Load() call.
+//
+//nolint:gochecknoglobals // Stateless decode hook shared by all ConfigManager instances.
+var clusterDecodeHook = mapstructure.ComposeDecodeHookFunc(metav1DurationDecodeHook())
+
 // metav1DurationDecodeHook converts duration strings (e.g. "1m", "30s") into metav1.Duration values
 // so that string values in ksail.yaml or environment variables are accepted.
 func metav1DurationDecodeHook() mapstructure.DecodeHookFuncType {

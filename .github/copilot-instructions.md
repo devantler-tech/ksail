@@ -212,10 +212,28 @@ ksail cluster connect                  # Connect to cluster with K9s
 ksail cluster switch <cluster-name>    # Switch active kubeconfig context
 ksail cluster backup                   # Backup cluster resources to .tar.gz
 ksail cluster restore                  # Restore cluster resources from .tar.gz
-ksail workload apply                   # Apply workloads
-ksail workload reconcile               # Trigger reconciliation for GitOps workloads
-ksail workload gen <resource>          # Generate resources
-ksail workload watch [--path <dir>]    # Watch a directory (defaults to k8s/ or spec.workload.sourceDirectory) and auto-apply on change
+ksail workload apply                   # Apply manifests to cluster
+ksail workload create                  # Create resources imperatively
+ksail workload edit                    # Edit a resource in-place
+ksail workload get                     # Get resources
+ksail workload describe                # Describe resources in detail
+ksail workload explain                 # Get API documentation for a resource
+ksail workload delete                  # Delete Kubernetes resources
+ksail workload logs                    # View container logs
+ksail workload exec                    # Execute command in container
+ksail workload expose                  # Expose a resource as a service
+ksail workload gen <resource>          # Generate Kubernetes manifests
+ksail workload validate                # Validate manifests against schemas
+ksail workload install                 # Install Helm charts
+ksail workload scale                   # Scale deployments
+ksail workload rollout                 # Manage rollouts
+ksail workload wait                    # Wait for conditions
+ksail workload images                  # List required container images
+ksail workload export                  # Export container images to a tar archive
+ksail workload import                  # Import container images from a tar archive
+ksail workload watch [--path <dir>]    # Watch directory and auto-apply on change
+ksail workload push                    # Package and push manifests to registry
+ksail workload reconcile               # Trigger GitOps sync and wait
 ksail cipher <command>                 # Manage secrets with SOPS
 ksail chat                             # AI chat powered by GitHub Copilot
 ksail mcp                              # Start MCP server for AI assistants
@@ -235,8 +253,6 @@ ksail cluster init --help
 # --distribution Talos     # Immutable Talos Linux
 # --distribution VCluster  # Virtual clusters via Vind
 
-# Supported profiles:
-# --profile Default        # Default profile (current behaviour, no-op)
 ```
 
 ### Troubleshooting Build Issues
@@ -319,14 +335,14 @@ For a deeper dive into KSail's design and internals, refer to:
 - `pkg/apis/`: API types, schemas, and enums; each enum type lives in its own file under `pkg/apis/cluster/v1alpha1/` (e.g., `distribution.go`, `cni.go`, `csi.go`, `loadbalancer.go`, `gitopsengine.go`, etc.); the `EnumValuer` interface is in `enum.go`
 - `pkg/client/`: Embedded tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kustomize, oci, netretry); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`.
 - `pkg/svc/`: Services including installers, providers, and provisioners
-  - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation
+  - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation; `sandbox.go` exports `IsPathWithinDirectory` which uses `fsutil.EvalCanonicalPath` for path containment checks
   - `pkg/svc/detector/`: Detects installed Kubernetes components by querying Helm release history and the Kubernetes API; used by the update command to build accurate baseline state
     - `pkg/svc/detector/cluster/`: Detects Kubernetes distribution, provider, and cluster name by analyzing kubeconfig context names and server endpoints; exposes `DetectInfo`, `DetectDistributionFromContext`, and `ResolveKubeconfigPath`
     - `pkg/svc/detector/gitops/`: Detects existing GitOps Custom Resources (FluxInstance, ArgoCD Application) managed by KSail in the source directory
   - `pkg/svc/diff/`: Computes configuration differences between old and new ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
   - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions; `parser/` sub-package provides `ParseAllImagesFromDockerfile` for extracting all `FROM` directives from multi-stage Dockerfiles (used by Flux installer to include distribution controller images in mirror cache warming)
   - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.); `internal/hetzner/` holds shared utilities for the Hetzner installers—`hcloudccm.Installer` and `hetznercsi.Installer` are type aliases for `hetzner.Installer` and share a single `EnsureSecret` implementation; `flux/Dockerfile.distribution` tracks Flux distribution controller images (updated by Dependabot) that are deployed by the Flux operator when creating a FluxInstance but are not part of the Helm chart — included in `Images()` output for mirror cache warming
-  - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants; tools are auto-generated from root Cobra commands via `pkg/toolgen/` (not manually registered) — all operational cluster/workload/cipher commands (both read and write) are consolidated into 6 tools via `ai.toolgen.consolidate` + `ai.toolgen.permission`: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `cipher_read`, `cipher_write`
+  - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants; tools are auto-generated from root Cobra commands via `pkg/toolgen/` (not manually registered) — all operational cluster/workload/cipher commands (both read and write) are consolidated into 5 tools via `ai.toolgen.consolidate` + `ai.toolgen.permission`: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `cipher_write`
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner, omni)
   - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster)
   - `pkg/svc/registryresolver/`: OCI registry detection, resolution, and artifact push utilities
@@ -336,7 +352,7 @@ For a deeper dive into KSail's design and internals, refer to:
 - `pkg/k8s/`: Kubernetes helpers and templates
 - `pkg/cli/`: CLI wiring, commands, and terminal UI components
 - `pkg/envvar/`: Environment variable utilities
-- `pkg/fsutil/`: Filesystem utilities (includes configmanager for configuration loading)
+- `pkg/fsutil/`: Filesystem utilities (includes configmanager for configuration loading); exports `EvalCanonicalPath` (filepath.Abs + filepath.EvalSymlinks with parent fallback) for safe path canonicalization, and `ReadFileSafe` for path-traversal-safe file reads — reuse these instead of reimplementing containment checks
 - `pkg/notify/`: CLI notifications and progress display utilities
 - `pkg/runner/`: Cobra command execution helpers
 - `pkg/timer/`: Command timing and performance tracking

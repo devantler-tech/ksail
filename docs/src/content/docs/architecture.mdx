@@ -59,7 +59,7 @@ API types, schemas, and enums for KSail's configuration model. `cluster/v1alpha1
 CLI wiring, commands, and terminal UI components (`cmd/` for Cobra commands, `ui/` for TUI, `lifecycle/` for cluster orchestration, `setup/` for component installation).
 
 #### `pkg/client/`
-Embedded tool clients: `kubectl`, `helm`, `flux`, `argocd`, `docker`, `k9s`, `kubeconform`, and `kustomize`. A `reconciler` package provides a shared base for GitOps reconciliation (Flux and ArgoCD). Distribution tools (Kind, K3d, VCluster) are used directly via their SDKs in provisioners, not wrapped here.
+Embedded tool clients: `kubectl`, `helm`, `flux`, `argocd`, `docker`, `k9s`, `kubeconform`, `kustomize`, and `oci`. A `reconciler` package provides a shared base for GitOps reconciliation (Flux and ArgoCD). The `netretry` package provides shared retry utilities (`IsRetryable` and `ExponentialDelay`) for transient network errors across all client packages. Distribution tools (Kind, K3d, VCluster) are used directly via their SDKs in provisioners, not wrapped here.
 
 #### `pkg/svc/`
 Core services: `provider/` (infrastructure backends), `provisioner/cluster/` (distribution provisioners), `provisioner/registry/` (mirror registries), `installer/` (CNI, CSI, LoadBalancer, cert-manager, etc.; `flux/Dockerfile.distribution` tracks Flux distribution controller images for mirror cache warming), `chat/` (AI chat), `detector/` (installed component detection — with `cluster/` for kubeconfig-based distribution/provider/name detection and `gitops/` for GitOps CR discovery), `diff/` (config diff and impact classification), `image/` (container image export/import; `parser/` sub-package extracts all `FROM` image references from Dockerfiles for mirror cache warming), `mcp/` (MCP server), `registryresolver/` (OCI registry resolution), and `state/` (cluster state persistence).
@@ -89,9 +89,9 @@ Providers manage the underlying infrastructure where Kubernetes nodes run:
 
 | Provider | Description | Supported Distributions |
 |----------|-------------|------------------------|
-| **Docker** | Runs nodes as Docker containers | Vanilla, K3s, Talos, VCluster |
-| **Hetzner** | Runs nodes on Hetzner Cloud servers | Talos |
-| **Omni** | Manages Talos clusters via Sidero Omni API | Talos |
+| [**Docker**](/providers/docker/) | Runs nodes as Docker containers | Vanilla, K3s, Talos, VCluster |
+| [**Hetzner**](/providers/hetzner/) | Runs nodes on Hetzner Cloud servers | Talos |
+| [**Omni**](/providers/omni/) | Manages Talos clusters via Sidero Omni API | Talos |
 
 ### Provisioners
 
@@ -206,7 +206,7 @@ Uses GitHub Copilot SDK for interactive cluster configuration and troubleshootin
 
 Exposes KSail as a Model Context Protocol server for Claude and other AI assistants. Tools are **auto-generated** from the Cobra command tree by `pkg/toolgen/` — the same mechanism used for the chat assistant. All runnable CLI commands are automatically exposed except excluded meta commands (`chat`, `mcp`, `completion`, `help`, root — see `toolgen.DefaultOptions()` and the `ai.toolgen.exclude` annotation); no manual tool registration is needed.
 
-Parent commands annotated with `ai.toolgen.consolidate` group their subcommands into a single tool, then `ai.toolgen.permission` splits them into read/write pairs — producing 6 tools: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `cipher_read`, and `cipher_write`. Adding a new CLI command under a consolidated parent automatically makes it available as an MCP tool. See [MCP](/mcp/) for setup instructions.
+Parent commands annotated with `ai.toolgen.consolidate` group their subcommands into a single tool, then `ai.toolgen.permission` splits them into read/write pairs — producing 5 tools: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, and `cipher_write`. Adding a new CLI command under a consolidated parent automatically makes it available as an MCP tool. See [MCP](/mcp/) for setup instructions.
 
 ## Testing Strategy
 

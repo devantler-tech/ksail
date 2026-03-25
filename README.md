@@ -25,7 +25,7 @@ Setting up and operating Kubernetes clusters often requires juggling multiple CL
 - 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
 - 💾 **Backup & Restore** — Export cluster resources to a compressed archive and restore to any cluster with provenance labels.
 - 🤖 **AI Assistant** — Interactive chat powered by GitHub Copilot for configuration and troubleshooting.
-- 💻 **VSCode Extension** — Manage clusters from VSCode with wizards, sidebar views, and command palette.
+- 💻 **VSCode Extension** — Manage clusters from VSCode via VS Code Kubernetes extension integration (Cloud Explorer, Cluster Explorer), wizards, and command palette.
 
 ## Getting Started
 
@@ -94,7 +94,6 @@ flowchart TD
 # 1. Initialize a new project with your preferred stack
 ksail cluster init \
   --name <cluster-name> \
-  --profile Default \
   --distribution <Vanilla|K3s|Talos|VCluster> \
   --cni <Default|Cilium|Calico> \
   --csi <Default|Enabled|Disabled> \

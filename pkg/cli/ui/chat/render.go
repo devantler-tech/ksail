@@ -139,7 +139,7 @@ func (m *Model) renderExitConfirmModal() string {
 	var content strings.Builder
 
 	content.WriteString(
-		mStyles.clipStyle.Render(mStyles.warningStyle.Render("Exit KSail chat?")) + "\n\n",
+		mStyles.clipStyle.Render(mStyles.warningStyle.Render(m.theme.ExitMessage)) + "\n\n",
 	)
 
 	if count := m.pendingPromptCount(); count > 0 {
@@ -188,8 +188,8 @@ func (m *Model) renderFooter() string {
 }
 
 // buildModelStatusText renders the model indicator for the status bar.
-// Shows "auto → resolved-model (0.9x)" when in auto mode with a resolved model,
-// "auto (-10%)" when not yet resolved, or the explicit model ID otherwise.
+// Shows "auto → resolved-model (Nx)" when in auto mode with a resolved model,
+// "auto" when not yet resolved, or the explicit model ID otherwise.
 func (m *Model) buildModelStatusText() string {
 	modelStyle := lipgloss.NewStyle().Foreground(m.theme.DimColor)
 
@@ -197,15 +197,15 @@ func (m *Model) buildModelStatusText() string {
 	case m.isAutoMode():
 		resolved := m.resolvedAutoModel()
 		if resolved == "" {
-			return modelStyle.Render(modelAuto + " (-10%)")
+			return modelStyle.Render(modelAuto)
 		}
 
 		mult := m.findModelMultiplier(resolved)
 		if mult > 0 {
-			discounted := mult * autoDiscountFactor
+			multStr := formatMultiplier(mult)
 
 			return modelStyle.Render(
-				fmt.Sprintf("%s \u2192 %s (%.1fx)", modelAuto, resolved, discounted),
+				fmt.Sprintf("%s \u2192 %s (%sx)", modelAuto, resolved, multStr),
 			)
 		}
 
@@ -215,6 +215,16 @@ func (m *Model) buildModelStatusText() string {
 	default:
 		return modelStyle.Render(modelAuto)
 	}
+}
+
+// formatMultiplier formats a model multiplier value consistently for display.
+// It renders with two decimal places, then trims trailing zeros and any trailing dot.
+func formatMultiplier(mult float64) string {
+	multStr := fmt.Sprintf("%.2f", mult)
+	multStr = strings.TrimRight(multStr, "0")
+	multStr = strings.TrimRight(multStr, ".")
+
+	return multStr
 }
 
 // buildReasoningEffortStatusText renders the reasoning effort indicator for the status bar.

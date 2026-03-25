@@ -12,12 +12,6 @@ ksail cluster init --name my-cluster --distribution Vanilla --cni Cilium
 ksail cluster create
 ```
 
-Use `--profile` to select a named **cluster profile template**. `Default` is currently the only available profile and preserves the standard `ksail cluster init` defaults (a no-op). Individual flags still override profile defaults. See [Cluster Profiles](/guides/cluster-profiles/) for available profiles.
-
-```bash
-ksail cluster init --profile Default
-```
-
 Use `--ttl` to create an **ephemeral cluster** that auto-destroys after a set duration. The process blocks until the TTL expires, then deletes the cluster automatically. Press Ctrl+C to cancel the wait and keep the cluster running. See [Ephemeral Clusters](/guides/ephemeral-clusters/) for usage patterns and tips.
 
 ```bash
@@ -54,7 +48,7 @@ ksail cluster create --ttl 1h
 
 ## Workload Management
 
-Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; create, edit, delete, and inspect resources; debug with logs, exec, describe, and explain; expose services; export and import container images; validate manifests against schemas; generate resources (see [`ksail workload gen` reference](/cli-flags/workload/workload-gen/) for the full list of supported resource types); and watch directories for automatic live reconciliation scoped to the nearest directory containing a `kustomization.yaml`.
+Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; create, edit, delete, and inspect resources; debug with logs, exec, describe, and explain; expose services; export and import container images; validate manifests against schemas; generate resources (see [`ksail workload gen` reference](/cli-flags/workload/workload-gen/) for the full list of supported resource types); and watch directories for automatic live reconciliation scoped to the nearest directory containing a `kustomization.yaml` (use `--initial-apply` to sync the cluster at startup before entering the watch loop).
 
 ```bash
 ksail workload apply -k k8s/
@@ -69,10 +63,14 @@ ksail workload gen deployment my-app --image=nginx --port=80
 | -------------------------- | ---------------------------------------- |
 | `ksail workload apply`     | Apply manifests to cluster               |
 | `ksail workload create`    | Create resources imperatively            |
+| `ksail workload edit`      | Edit a resource in-place                 |
 | `ksail workload get`       | Get resources                            |
+| `ksail workload describe`  | Describe resources in detail             |
+| `ksail workload explain`   | Get API documentation for a resource     |
 | `ksail workload delete`    | Delete Kubernetes resources              |
 | `ksail workload logs`      | View container logs                      |
 | `ksail workload exec`      | Execute command in container             |
+| `ksail workload expose`    | Expose a resource as a service           |
 | `ksail workload gen`       | Generate Kubernetes manifests            |
 | `ksail workload validate`  | Validate manifests against schemas       |
 | `ksail workload install`   | Install Helm charts                      |
@@ -80,6 +78,8 @@ ksail workload gen deployment my-app --image=nginx --port=80
 | `ksail workload rollout`   | Manage rollouts                          |
 | `ksail workload wait`      | Wait for conditions                      |
 | `ksail workload images`    | List required container images           |
+| `ksail workload export`    | Export container images to a tar archive |
+| `ksail workload import`    | Import container images from a tar archive |
 | `ksail workload watch`     | Watch directory and auto-apply on change |
 
 ## GitOps Workflows
@@ -98,7 +98,7 @@ ksail workload reconcile
 | Command                    | Description                            |
 | -------------------------- | -------------------------------------- |
 | `ksail workload push`      | Package and push manifests to registry |
-| `ksail workload reconcile` | Trigger GitOps sync and wait           |
+| `ksail workload reconcile` | Trigger GitOps sync and wait for full Flux Kustomization dependency chain |
 
 ## Registry Management
 
@@ -192,14 +192,9 @@ ksail chat
 
 ## VSCode Extension
 
-Manage clusters from Visual Studio Code with the Clusters View, polling-based cluster status view, status bar health indicator, interactive wizards, command palette (`Cmd+Shift+K`), K9s integration, and MCP server for AI assistants. Requires [KSail CLI](/installation/) and [Docker](https://www.docker.com/get-started/); [K9s](https://k9scli.io/) optional.
+Manage clusters from Visual Studio Code. Integrates with the [VS Code Kubernetes extension](https://marketplace.visualstudio.com/items?itemName=ms-kubernetes-tools.vscode-kubernetes-tools) to surface KSail clusters in the Cloud Explorer and Cluster Explorer, with context menus, a Create Cluster wizard, interactive init/create wizards, command palette (`Cmd+Shift+K`), K9s integration, and an MCP server for AI assistants. Requires [KSail CLI](/installation/) and [Docker](https://www.docker.com/get-started/); [K9s](https://k9scli.io/) optional.
 
 **Marketplace:** [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=devantler.ksail)
 
 **Full Guide:** [VSCode Extension](/vscode-extension/)
 
-## Next Steps
-
-- **[Use Cases](/use-cases/)** – Workflows for learning, development, and CI/CD
-- **[Concepts](/concepts/)** – Understand the technologies KSail builds upon
-- **[Configuration](/configuration/)** – Complete configuration reference

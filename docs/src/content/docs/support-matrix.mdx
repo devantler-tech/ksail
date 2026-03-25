@@ -16,8 +16,8 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 **Notes:**
 
-- Docker provider requires Docker Desktop or Docker Engine installed locally
-- Hetzner provider requires `HCLOUD_TOKEN` environment variable and a Talos ISO uploaded to your Hetzner account (x86: `122630`, ARM: `122629` — see [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options))
+- Docker provider requires Docker Desktop or Docker Engine installed locally — see [Docker Provider](/providers/docker/) for setup details
+- Hetzner provider requires `HCLOUD_TOKEN` environment variable and a Talos ISO uploaded to your Hetzner account (x86: `122630`, ARM: `122629` — see [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options)) — see [Hetzner Provider](/providers/hetzner/) for setup details
 - Omni provider requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.cluster.omni.endpoint` in your KSail configuration — see [Omni Provider](/providers/omni/) for setup details
 - VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
 
@@ -155,7 +155,7 @@ KSail embeds specific versions of Kubernetes tooling:
 | Helm         | v4 (with kstatus) | Package manager            |
 | Kind         | Latest            | Vanilla clusters           |
 | K3d          | Latest            | K3s clusters               |
-| vCluster SDK | v0.32.1           | VCluster virtual clusters  |
+| vCluster SDK | v0.33.0           | VCluster virtual clusters  |
 | Flux         | Latest            | GitOps toolkit             |
 | ArgoCD       | Latest            | GitOps continuous delivery |
 | SOPS         | Latest            | Secret encryption          |
@@ -166,8 +166,3 @@ KSail embeds specific versions of Kubernetes tooling:
 - Component versions (CNI, CSI, etc.) are updated with KSail releases
 - See [releases](https://github.com/devantler-tech/ksail/releases) for specific version information
 
-## Next Steps
-
-- **[Features](/features/)** – Explore what KSail can do
-- **[Concepts](/concepts/)** – Understand the technologies
-- **[Configuration](/configuration/)** – Complete configuration reference

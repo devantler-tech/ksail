@@ -134,9 +134,6 @@ var ExportExtractPermissionDetails = extractPermissionDetails
 // ExportFormatPermissionKind exposes formatPermissionKind for testing.
 var ExportFormatPermissionKind = formatPermissionKind
 
-// ExportExtractStringValue exposes extractStringValue for testing.
-var ExportExtractStringValue = extractStringValue
-
 // ExportHumanizeToolName exposes humanizeToolName for testing.
 var ExportHumanizeToolName = humanizeToolName
 
@@ -364,6 +361,9 @@ var ExportSetShowModelUnavailableFeedback = func(m *Model, show bool) {
 var ExportSetModelUnavailableReason = func(m *Model, reason string) {
 	m.modelUnavailableReason = reason
 }
+
+// ExportFormatMultiplier exposes formatMultiplier for testing.
+var ExportFormatMultiplier = formatMultiplier
 
 // ExportBuildModelStatusText exposes buildModelStatusText for testing.
 var ExportBuildModelStatusText = func(m *Model) string {

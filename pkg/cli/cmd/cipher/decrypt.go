@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
@@ -164,6 +165,9 @@ Example:
 		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return handleDecryptRunE(cmd, args, extract, ignoreMac, output)
+		},
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
 		},
 	}
 

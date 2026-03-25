@@ -15,20 +15,20 @@ The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workf
 
 The PR comment groups results into three sections:
 
-| Symbol | Label       | Meaning                                       |
-|--------|-------------|-----------------------------------------------|
-| 🔴     | Regression  | Statistically significant increase (p < 0.01) |
-| 🟢     | Improvement | Statistically significant decrease (p < 0.01) |
-| ⚪ ~    | Unchanged   | No significant change (p ≥ 0.01)              |
+| Symbol | Label       | Meaning                                                              |
+|--------|-------------|----------------------------------------------------------------------|
+| 🔴     | Regression  | Statistically significant increase (p < 0.001, and ≥ 10% for sec/op) |
+| 🟢     | Improvement | Statistically significant decrease (p < 0.001, and ≥ 10% for sec/op) |
+| ⚪ ~    | Unchanged   | No significant change (p ≥ 0.001 or < 10% for sec/op)                |
 
 Each row in the tables shows:
 
-| Column        | Meaning                                                        | Goal               |
-|---------------|----------------------------------------------------------------|--------------------|
-| **Benchmark** | Name of the benchmark function (without `Benchmark` prefix)    | —                  |
-| **Metric**    | `sec/op`, `B/op`, or `allocs/op`                               | Lower is better    |
-| **Change**    | Delta percentage vs `main`                                     | Negative is better |
-| **p-value**   | Statistical confidence; < 0.01 means the change is significant | —                  |
+| Column        | Meaning                                                         | Goal               |
+|---------------|-----------------------------------------------------------------|--------------------|
+| **Benchmark** | Name of the benchmark function (without `Benchmark` prefix)     | —                  |
+| **Metric**    | `sec/op`, `B/op`, or `allocs/op`                                | Lower is better    |
+| **Change**    | Delta percentage vs `main`                                      | Negative is better |
+| **p-value**   | Statistical confidence; < 0.001 means the change is significant | —                  |
 
 The comment also includes a collapsed **Unchanged** section and a **Raw benchstat output** block for deeper inspection.
 
@@ -92,7 +92,7 @@ Follow the conventions established in the existing benchmark files:
 
 **Benchstat shows `~` for everything:** The change is within measurement noise, which is the expected result for most PRs that don't touch hot paths.
 
-**Benchmark times are inconsistent:** CI runners share hardware, so some variance is expected. If you need higher confidence, increase `-count` or `-benchtime` when running locally.
+**Benchmark times are inconsistent:** CI runners share hardware, so some variance is expected. The workflow uses strict thresholds (p < 0.001 and ≥ 10% delta for sec/op) to filter out runner noise. If you need higher confidence locally, increase `-count` or `-benchtime`.
 
 **Workflow skipped:** The workflow only triggers on PRs that modify Go source files or module files.
 

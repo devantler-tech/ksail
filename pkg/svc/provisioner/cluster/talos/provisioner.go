@@ -92,6 +92,30 @@ type HetznerNodeGroupOpts struct {
 	Location    string
 }
 
+// Image pull retry defaults.
+// ghcr.io may experience transient 5xx errors during image pulls.
+const (
+	defaultImagePullMaxRetries    = 3
+	defaultImagePullRetryBaseWait = 5 * time.Second
+	defaultImagePullRetryMaxWait  = 30 * time.Second
+)
+
+// imagePullRetryConfig holds retry parameters for Docker image pulls.
+type imagePullRetryConfig struct {
+	maxRetries int
+	baseWait   time.Duration
+	maxWait    time.Duration
+}
+
+// defaultImagePullRetryConfig returns the default retry configuration for Talos image pulls.
+func defaultImagePullRetryConfig() imagePullRetryConfig {
+	return imagePullRetryConfig{
+		maxRetries: defaultImagePullMaxRetries,
+		baseWait:   defaultImagePullRetryBaseWait,
+		maxWait:    defaultImagePullRetryMaxWait,
+	}
+}
+
 // Provisioner implements ClusterProvisioner for Talos-in-Docker clusters.
 type Provisioner struct {
 	// talosConfigs holds the loaded Talos machine configurations with all patches applied.
@@ -110,6 +134,9 @@ type Provisioner struct {
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
 	logWriter          io.Writer
 	componentDetector  *detector.ComponentDetector
+	// imagePullRetry controls retry behavior for Docker image pulls.
+	// Tests can override this via WithImagePullRetryConfig to use near-zero delays.
+	imagePullRetry imagePullRetryConfig
 }
 
 // NewProvisioner creates a new Provisioner.
@@ -130,7 +157,8 @@ func NewProvisioner(
 		provisionerFactory: func(ctx context.Context) (provision.Provisioner, error) {
 			return providers.Factory(ctx, TalosProviderName)
 		},
-		logWriter: os.Stdout,
+		logWriter:      os.Stdout,
+		imagePullRetry: defaultImagePullRetryConfig(),
 	}
 }
 
@@ -181,6 +209,21 @@ func (p *Provisioner) WithTalosOptions(opts v1alpha1.OptionsTalos) *Provisioner 
 // WithComponentDetector sets the component detector for querying cluster state.
 func (p *Provisioner) WithComponentDetector(d *detector.ComponentDetector) *Provisioner {
 	p.componentDetector = d
+
+	return p
+}
+
+// WithImagePullRetryConfig overrides the image pull retry parameters.
+// Useful in tests to use near-zero delays.
+func (p *Provisioner) WithImagePullRetryConfig(
+	maxRetries int,
+	baseWait, maxWait time.Duration,
+) *Provisioner {
+	p.imagePullRetry = imagePullRetryConfig{
+		maxRetries: maxRetries,
+		baseWait:   baseWait,
+		maxWait:    maxWait,
+	}
 
 	return p
 }

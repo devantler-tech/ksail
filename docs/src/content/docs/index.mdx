@@ -36,7 +36,7 @@ Setting up and operating Kubernetes clusters often requires juggling multiple CL
 - 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
 - 💾 **Backup & Restore** — Export cluster resources to a compressed archive and restore to any cluster with provenance labels.
 - 🤖 **AI Assistant** — Interactive chat powered by GitHub Copilot for configuration and troubleshooting.
-- 💻 **VSCode Extension** — Manage clusters from VSCode with wizards, sidebar views, and command palette.
+- 💻 **VS Code Extension** — Manage clusters from VS Code via VS Code Kubernetes extension integration (Cloud Explorer and Cluster Explorer), wizards, and command palette.
 
 ## Prerequisites
 
@@ -118,20 +118,43 @@ flowchart TD
     style Manifests fill:#5b21b6,stroke:#7c3aed,color:#fff
 ````
 
-## Documentation
+## Getting Started
 
 <CardGrid>
+  <Card title="Installation" icon="approve-check">
+    Install KSail and set up your environment. [Learn more →](/installation/)
+  </Card>
   <Card title="Features" icon="rocket">
     Cluster provisioning, GitOps, secret management, VSCode extension, and more. [Learn more →](/features/)
   </Card>
+</CardGrid>
+
+<CardGrid>
   <Card title="Concepts" icon="open-book">
     Kubernetes, CNI, CSI, GitOps, and related technologies. [Learn more →](/concepts/)
+  </Card>
+  <Card title="Architecture" icon="pencil">
+    Internal architecture, design decisions, and how components work together. [Learn more →](/architecture/)
   </Card>
   <Card title="Use Cases" icon="puzzle">
     Workflows for learning, development, and CI/CD. [Learn more →](/use-cases/)
   </Card>
   <Card title="Support Matrix" icon="list-format">
     Supported platforms, distributions, and components. [Learn more →](/support-matrix/)
+  </Card>
+</CardGrid>
+
+## Guides
+
+<CardGrid>
+  <Card title="Ephemeral Clusters" icon="star">
+    Time-limited clusters that auto-destroy via `--ttl` for debugging and demos. [Learn more →](/guides/ephemeral-clusters/)
+  </Card>
+  <Card title="Companion Tools" icon="puzzle">
+    Use KSail alongside DevSpace, Telepresence, Tilt, Skaffold, and mirrord. [Learn more →](/guides/companion-tools/)
+  </Card>
+  <Card title="KSail + mirrord" icon="laptop">
+    Run a local process as if it were inside the cluster with mirrord. [Learn more →](/guides/mirrord/)
   </Card>
 </CardGrid>
 
@@ -144,8 +167,42 @@ flowchart TD
   <Card title="Declarative Configuration" icon="document">
     Complete `ksail.yaml` reference. [Learn more →](/configuration/declarative-configuration/)
   </Card>
+  <Card title="LoadBalancer" icon="setting">
+    Configure LoadBalancer support across distributions and providers. [Learn more →](/configuration/loadbalancer/)
+  </Card>
   <Card title="CLI Flags" icon="forward-slash">
     Complete CLI flags for all commands. [Learn more →](/cli-flags/)
+  </Card>
+</CardGrid>
+
+## Distributions
+
+<CardGrid>
+  <Card title="Vanilla (Kind)" icon="rocket">
+    Standard upstream Kubernetes via Kind. Fast, Docker-only, no lock-in. [Learn more →](/distributions/vanilla/)
+  </Card>
+  <Card title="K3s (K3d)" icon="laptop">
+    Lightweight K3s in Docker. Batteries-included defaults, ideal for CI/CD and resource-constrained environments. [Learn more →](/distributions/k3s/)
+  </Card>
+  <Card title="Talos" icon="setting">
+    Immutable, API-driven OS for secure production workloads on Docker, Hetzner, or Omni. [Learn more →](/distributions/talos/)
+  </Card>
+  <Card title="VCluster (Vind)" icon="puzzle">
+    Virtual Kubernetes clusters in Docker. Ideal for multi-tenancy, feature branches, and CI isolation. [Learn more →](/distributions/vcluster/)
+  </Card>
+</CardGrid>
+
+## Providers
+
+<CardGrid>
+  <Card title="Docker" icon="laptop">
+    Run Kubernetes nodes as Docker containers locally. Default provider for all distributions. [Learn more →](/providers/docker/)
+  </Card>
+  <Card title="Hetzner" icon="external">
+    Deploy Talos clusters on affordable Hetzner Cloud servers with real load balancers and persistent volumes. [Learn more →](/providers/hetzner/)
+  </Card>
+  <Card title="Omni (Sidero)" icon="setting">
+    Manage Talos clusters through the Sidero Omni SaaS platform. [Learn more →](/providers/omni/)
   </Card>
 </CardGrid>
 
@@ -153,7 +210,7 @@ flowchart TD
 
 <CardGrid>
   <Card title="VSCode Extension" icon="laptop">
-    Manage clusters from Visual Studio Code with wizards, sidebar views, and command palette. [Learn more →](/vscode-extension/)
+    Manage clusters from Visual Studio Code via the VS Code Kubernetes extension (Cloud Explorer, Cluster Explorer), wizards, and command palette. [Learn more →](/vscode-extension/)
   </Card>
 </CardGrid>
 
@@ -171,6 +228,9 @@ flowchart TD
 ## Help
 
 <CardGrid>
+  <Card title="Development Guide" icon="open-book">
+    Development environment setup, coding standards, and CI/CD workflows. [Learn more →](/development/)
+  </Card>
   <Card title="FAQ" icon="information">
     Frequently asked questions about KSail. [Learn more →](/faq/)
   </Card>
@@ -179,8 +239,10 @@ flowchart TD
   </Card>
 </CardGrid>
 
-## Quick Links
+## Resources
 
-- **Installing?** See the [Installation Guide](/installation/)
-- **Issues?** Open an [issue](https://github.com/devantler-tech/ksail/issues) in the repository
-- **Questions?** Start a [discussion](https://github.com/devantler-tech/ksail/discussions) in the repository
+<CardGrid>
+  <Card title="Resources" icon="open-book">
+    Presentations, tutorials, blog posts, and community projects. [Learn more →](/resources/)
+  </Card>
+</CardGrid>

@@ -15,7 +15,7 @@ The Omni provider is ideal when you:
 - Run Talos across heterogeneous hardware (bare-metal servers, VMs, edge devices)
 
 > [!NOTE]
-> The Omni provider only supports the **Talos** distribution. For local Docker-based clusters, see [Getting Started with Talos — Docker](/getting-started/talos/).
+> The Omni provider only supports the **Talos** distribution. For local Docker-based clusters, see the [Talos distribution guide](/distributions/talos/).
 
 ## Prerequisites
 
@@ -105,6 +105,18 @@ ksail cluster create
 ```
 
 > [!NOTE]
+> Omni generates the kubeconfig context name (e.g., `devantler-prod`). This differs from the `admin@<name>` convention used by Docker/Hetzner Talos clusters. After creation, retrieve the context name from your kubeconfig and set it in `ksail.yaml` so KSail can resolve it:
+>
+> ```yaml
+> spec:
+>   cluster:
+>     connection:
+>       context: "your-omni-generated-context"
+> ```
+>
+> See [Context defaults by distribution](/configuration/declarative-configuration/) for the full reference.
+
+> [!NOTE]
 > Deleting the cluster removes the Omni cluster resource and deallocates machines. The machines remain registered in Omni and can be reused for future clusters.
 
 ### Step 5: Cleanup
@@ -190,9 +202,3 @@ spec:
 
 **`context deadline exceeded` or connection errors** — Verify the endpoint URL is correct and includes the port (`:443`). Check connectivity with `curl -I https://<account>.omni.siderolabs.io:443` and ensure no firewall blocks outbound HTTPS.
 
-## Next Steps
-
-- **[Getting Started with Talos](/getting-started/talos/)** — Complete Talos guide with Docker, Hetzner, and Omni tabs
-- **[Support Matrix](/support-matrix/)** — Distribution × Provider compatibility
-- **[Configuration](/configuration/)** — Full configuration reference
-- **[Concepts — Providers](/concepts/#omni)** — Provider concept overview

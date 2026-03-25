@@ -17,29 +17,11 @@ LoadBalancer support varies by Kubernetes distribution and infrastructure provid
 | Talos           | Hetzner  | hcloud-cloud-controller-manager   | Enabled          | No                     |
 | VCluster (Vind) | Docker   | Delegated to host cluster         | N/A              | N/A                    |
 
-K3s and Talos × Hetzner enable LoadBalancer by default; Vanilla and Talos × Docker require explicit enablement. VCluster delegates LoadBalancer to the host cluster—`spec.cluster.loadBalancer` has no effect and never triggers a cluster update. Use the `--load-balancer` flag or `spec.cluster.loadBalancer` in `ksail.yaml` with values `Default`, `Enabled`, or `Disabled`.
+VCluster delegates LoadBalancer to the host cluster — `spec.cluster.loadBalancer` has no effect and never triggers a cluster update. Use the `--load-balancer` flag or `spec.cluster.loadBalancer` in `ksail.yaml` with values `Default`, `Enabled`, or `Disabled`.
 
 ## Platform-Specific Configuration
 
-All platforms accept the same LoadBalancer service manifest:
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-app
-spec:
-  type: LoadBalancer
-  ports:
-    - port: 80
-      targetPort: 8080
-  selector:
-    app: my-app
-```
-
 ### Vanilla (Kind) on Docker
-
-**Implementation:** Cloud Provider KIND
 
 Vanilla clusters use the [Cloud Provider KIND](https://github.com/kubernetes-sigs/cloud-provider-kind) controller, which runs as an external Docker container and allocates LoadBalancer IPs from the Docker bridge network.
 
@@ -57,8 +39,6 @@ ksail cluster init \
 **ksail.yaml:**
 
 ```yaml
-apiVersion: ksail.io/v1alpha1
-kind: Cluster
 spec:
   cluster:
     distribution: Vanilla
@@ -69,26 +49,7 @@ spec:
 
 Cloud Provider KIND runs as a single Docker container named `ksail-cloud-provider-kind` on the `kind` network, mounting the Docker socket to watch for `type: LoadBalancer` services. For each service it creates a dedicated `cpk-<namespace>-<name>` container that routes traffic from an IP on the `kind` network bridge subnet (typically `172.18.0.0/16`) to the service's pods. `ksail cluster delete` removes the controller and all `cpk-*` containers.
 
-#### Verification
-
-```bash
-# Verify the controller is running
-docker ps --filter name=ksail-cloud-provider-kind
-# CONTAINER ID   IMAGE                                          STATUS
-# abc123         registry.k8s.io/cloud-provider-kind/...        Up 5 minutes
-
-# Check service external IP
-kubectl get svc my-app
-# NAME     TYPE           CLUSTER-IP    EXTERNAL-IP    PORT(S)        AGE
-# my-app   LoadBalancer   10.96.1.10    172.18.0.100   80:30123/TCP   10s
-
-# Test connectivity from host
-curl http://172.18.0.100
-```
-
 ### K3s on Docker
-
-**Implementation:** ServiceLB (Klipper LoadBalancer)
 
 K3s includes [ServiceLB](https://docs.k3s.io/networking/networking-services#service-load-balancer) by default, assigning the cluster node's IP as the external IP and forwarding traffic via `iptables`. No configuration needed:
 
@@ -97,37 +58,9 @@ ksail cluster init --name my-cluster --distribution K3s
 ksail cluster create
 ```
 
-```bash
-kubectl get svc my-app
-# NAME     TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)        AGE
-# my-app   LoadBalancer   10.43.123.45   192.168.1.100   80:30456/TCP   5s
-```
-
-#### Disabling LoadBalancer Support
-
-To disable LoadBalancer support:
-
-**CLI:**
-
-```bash
-ksail cluster init \
-  --name my-cluster \
-  --distribution K3s \
-  --load-balancer Disabled
-```
-
-**ksail.yaml:**
-
-```yaml
-spec:
-  cluster:
-    distribution: K3s
-    loadBalancer: Disabled
-```
+To disable: use `--load-balancer Disabled` (CLI) or set `loadBalancer: Disabled` in `ksail.yaml`.
 
 ### Talos on Docker
-
-**Implementation:** MetalLB
 
 Talos on Docker uses [MetalLB](https://metallb.universe.tf/) to provide LoadBalancer services. MetalLB operates in Layer 2 mode and allocates IPs from a pre-configured pool.
 
@@ -145,8 +78,6 @@ ksail cluster init \
 **ksail.yaml:**
 
 ```yaml
-apiVersion: ksail.io/v1alpha1
-kind: Cluster
 spec:
   cluster:
     distribution: Talos
@@ -159,14 +90,6 @@ KSail configures MetalLB with a default IP pool of `172.18.255.200–172.18.255.
 #### How It Works
 
 KSail installs MetalLB via Helm, configures an `IPAddressPool` and `L2Advertisement` automatically, and MetalLB assigns IPs from the pool via ARP on the Docker network.
-
-#### Example
-
-```bash
-kubectl get svc my-app
-# NAME     TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)        AGE
-# my-app   LoadBalancer   10.96.123.200   172.18.255.200   80:31234/TCP   8s
-```
 
 #### Custom IP Pool
 
@@ -194,15 +117,9 @@ spec:
 
 ### Talos on Hetzner
 
-**Implementation:** hcloud-cloud-controller-manager
+Talos on Hetzner Cloud uses the [Hetzner Cloud Controller Manager](https://github.com/hetznercloud/hcloud-cloud-controller-manager) to provision real cloud load balancers. LoadBalancer is **enabled by default** — KSail automatically installs hcloud-ccm when `loadBalancer` is `Default` or `Enabled`.
 
-Talos on Hetzner Cloud uses the [Hetzner Cloud Controller Manager](https://github.com/hetznercloud/hcloud-cloud-controller-manager) to provision real cloud load balancers.
-
-#### LoadBalancer Support
-
-LoadBalancer is **enabled by default** for Talos × Hetzner clusters. KSail automatically installs hcloud-ccm when `loadBalancer` is `Default` or `Enabled`.
-
-**CLI:**
+**Prerequisites:** Set `HCLOUD_TOKEN` to a Hetzner API token with read/write permissions for Load Balancers.
 
 ```bash
 export HCLOUD_TOKEN=your-token-here
@@ -213,26 +130,10 @@ ksail cluster init \
 ksail cluster create
 ```
 
-**ksail.yaml:**
-
-```yaml
-apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    distribution: Talos
-    provider: Hetzner
-```
-
-**Prerequisite:** Set `HCLOUD_TOKEN` to a Hetzner API token with read/write permissions for Load Balancers.
-
 The Hetzner CCM provisions a real cloud load balancer with a public IP in 30–60 seconds (subject to Hetzner billing).
 
 ```bash
-# Watch for EXTERNAL-IP assignment (takes 30–60 seconds)
-kubectl get svc my-app -w
-# NAME     TYPE           CLUSTER-IP      EXTERNAL-IP       PORT(S)        AGE
-# my-app   LoadBalancer   10.32.45.100    135.181.10.50     80:32100/TCP   45s
+kubectl get svc my-app -w  # EXTERNAL-IP appears after 30–60 seconds
 ```
 
 #### Annotations
@@ -250,18 +151,14 @@ metadata:
     load-balancer.hetzner.cloud/health-check-interval: "15s"
 spec:
   type: LoadBalancer
+  selector:
+    app: my-app
   ports:
     - port: 80
       targetPort: 8080
-  selector:
-    app: my-app
 ```
 
 See the [Hetzner CCM documentation](https://github.com/hetznercloud/hcloud-cloud-controller-manager#service) for all available annotations.
-
-## Migration from NodePort
-
-Change `type: NodePort` to `type: LoadBalancer`, remove the `nodePort` field, enable LoadBalancer if needed (see above), then wait for an external IP: `kubectl get svc my-app -w`.
 
 ## Troubleshooting
 
@@ -272,18 +169,11 @@ Change `type: NodePort` to `type: LoadBalancer`, remove the `nodePort` field, en
 **Diagnosis:**
 
 ```bash
-# 1. Check LoadBalancer is enabled in ksail.yaml
-grep -A 5 loadBalancer ksail.yaml
-
-# 2. Verify the controller is running:
-#    Vanilla:  docker ps | grep ksail-cloud-provider-kind
-#    Talos:    kubectl get pods -n metallb-system
-#    Hetzner:  kubectl get pods -n kube-system | grep hcloud
-
-# 3. Check controller logs:
-#    Vanilla:  docker logs ksail-cloud-provider-kind
-#    Talos:    kubectl logs -n metallb-system -l app.kubernetes.io/component=controller
-#    Hetzner:  kubectl logs -n kube-system -l app=hcloud-cloud-controller-manager
+# Check loadBalancer setting (absent field = Default; Default auto-enables on K3s and Talos×Hetzner):
+grep 'loadBalancer:' ksail.yaml || echo "(not set — effective value: Default)"
+# Vanilla:  docker logs ksail-cloud-provider-kind
+# Talos:    kubectl logs -n metallb-system -l app.kubernetes.io/component=controller
+# Hetzner:  kubectl logs -n kube-system -l app=hcloud-cloud-controller-manager
 ```
 
 **Common fixes:** LoadBalancer disabled → re-init with `--load-balancer Enabled`. Cloud Provider KIND not running → delete and recreate cluster. MetalLB IP pool exhausted → expand the pool (see below). Hetzner → ensure `HCLOUD_TOKEN` is set during cluster creation.
@@ -321,9 +211,3 @@ spec:
     - 172.18.255.200-172.18.255.254 # Expanded from .250 to .254
 ```
 
-## Next Steps
-
-- **[Support Matrix](/support-matrix/)** — View detailed platform compatibility
-- **[Features](/features/)** — Explore other KSail capabilities
-- **[Troubleshooting](/troubleshooting/)** — General troubleshooting guidance
-- **[CLI Flags](/cli-flags/)** — Complete CLI reference

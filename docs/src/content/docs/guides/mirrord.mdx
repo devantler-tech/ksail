@@ -1,0 +1,175 @@
+---
+title: KSail + mirrord
+description: How to use mirrord with KSail to run a local process as if it were inside the cluster — mirroring or stealing pod traffic for fast, realistic service debugging.
+---
+
+[mirrord](https://mirrord.dev/) lets you run a local process as if it were inside the cluster: your process inherits the pod's environment variables, file system reads, and incoming network traffic — without deploying a new image. KSail provisions and configures the cluster; mirrord connects your local process to it.
+
+| Layer | Responsibility | Tool |
+|-------|---------------|------|
+| Cluster lifecycle | Create, configure, and delete clusters | **KSail** |
+| GitOps bootstrap | Install Flux/ArgoCD, push manifests | **KSail** |
+| Local↔remote bridging | Run local process as in-cluster pod | **mirrord** |
+
+> [!NOTE]
+> KSail sets the kubeconfig context after `ksail cluster create`. For context names by distribution, see [Companion Tools](/guides/companion-tools/).
+
+## How mirrord Works
+
+mirrord injects a layer into your local process that intercepts system calls and redirects them to a target pod in the cluster:
+
+- **Incoming traffic** — mirror a copy of pod traffic to your local process (non-destructive), or steal it entirely so only your process responds.
+- **Outgoing traffic** — route your local process's outbound connections through the cluster network.
+- **Environment** — inherit environment variables from the target pod.
+- **File system** — read remote files from the pod's file system as if they were local.
+
+This lets you debug a specific service using real cluster traffic without image rebuilds, redeploys, or port-forward gymnastics.
+
+## Prerequisites
+
+- [KSail CLI](/installation/) installed
+- Docker running
+- [mirrord CLI](https://mirrord.dev/docs/overview/quick-start/) installed:
+
+  ```bash
+  brew install metalbear-co/mirrord/mirrord  # macOS
+  # or
+  curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+  ```
+
+## Quickstart
+
+### 1. Create a cluster with KSail
+
+```bash
+ksail cluster init --name dev --distribution K3s
+ksail cluster create
+```
+
+### 2. Deploy a workload
+
+```bash
+kubectl --context k3d-dev create deployment my-app --image=nginx:latest --port=80 \
+  --dry-run=client -o yaml | kubectl --context k3d-dev apply -f -
+kubectl --context k3d-dev expose deployment my-app --port=80 \
+  --dry-run=client -o yaml | kubectl --context k3d-dev apply -f -
+```
+
+### 3. Configure mirrord
+
+Create a `.mirrord/mirrord.json` configuration file in your project directory:
+
+```json
+{
+  "target": {
+    "path": "deployment/my-app",
+    "namespace": "default"
+  },
+  "feature": {
+    "network": {
+      "incoming": "mirror"
+    },
+    "fs": "read",
+    "env": true
+  }
+}
+```
+
+> [!NOTE]
+> mirrord uses your default kubeconfig (`~/.kube/config`) unless you set `kube_context` or point to a different file. If you have configured a custom kubeconfig path in KSail via `spec.cluster.connection.kubeconfig`, add `"kubeconfig": "<path>"` here to match.
+
+| Field | Description |
+|-------|-------------|
+| `target.path` | The pod/deployment/statefulset to target |
+| `feature.network.incoming` | `"mirror"` (duplicate traffic) or `"steal"` (redirect all traffic) |
+| `feature.fs` | `"read"` (remote reads), `"write"` (read+write), or `false` |
+| `feature.env` | Inherit pod environment variables |
+
+### 4. Run your process through mirrord
+
+```bash
+mirrord exec --config .mirrord/mirrord.json -- ./my-app
+```
+
+Your local `my-app` process now receives a copy of all traffic destined for `deployment/my-app`, and inherits its environment variables and file access.
+
+### 5. Tear down
+
+```bash
+# Stop the mirrord session with Ctrl+C
+ksail cluster delete
+```
+
+## Mirror vs. Steal
+
+mirrord supports two traffic modes:
+
+| Mode | Behaviour | Use case |
+|------|-----------|----------|
+| `"mirror"` | Duplicate incoming traffic to both the pod and your local process | Observe and debug without affecting production behaviour |
+| `"steal"` | Redirect all incoming traffic exclusively to your local process | Test responses, verify logic changes with real traffic |
+
+Switch modes by updating `feature.network.incoming` in your `.mirrord/mirrord.json`.
+
+> [!CAUTION]
+> `"steal"` mode takes all traffic away from the in-cluster pod. Avoid using it in shared clusters where other developers or services depend on the deployment being responsive.
+
+## Context-Specific Configuration
+
+Use the kubeconfig context for your KSail distribution. Pass it directly on the command line to override the default context:
+
+```bash
+mirrord exec --context k3d-dev --config .mirrord/mirrord.json -- ./my-app
+```
+
+Or set it in `mirrord.json`:
+
+```json
+{
+  "target": {
+    "path": "deployment/my-app",
+    "namespace": "default"
+  },
+  "kube_context": "k3d-dev"
+}
+```
+
+Replace `k3d-dev` with the context name for your distribution (see [Companion Tools](/guides/companion-tools/)).
+
+## IDE Integration
+
+mirrord integrates directly with VS Code and JetBrains IDEs — no CLI needed:
+
+- **VS Code**: Install the [mirrord VS Code extension](https://marketplace.visualstudio.com/items?itemName=MetalBear.mirrord). A mirrord toggle appears in the status bar; enable it before starting a debug session.
+- **JetBrains**: Install the [mirrord JetBrains plugin](https://plugins.jetbrains.com/plugin/19772-mirrord). A mirrord button appears in the Run toolbar.
+
+Both integrations use your `.mirrord/mirrord.json` configuration automatically.
+
+## Combining KSail + mirrord with Other Tools
+
+You can layer mirrord with other inner-loop tools. For example, use Tilt to rebuild and deploy on file save, and mirrord in a separate terminal to debug a specific service with live traffic:
+
+```bash
+# Terminal 1 — cluster + build loop
+ksail cluster create
+tilt up
+
+# Terminal 2 — live debugging with real traffic
+mirrord exec --config .mirrord/mirrord.json -- dlv debug ./cmd/server
+```
+
+See [Companion Tools](/guides/companion-tools/) for a full comparison of KSail's companion tool integrations.
+
+## Tips
+
+- **Start with `"mirror"` mode** — it's non-destructive and lets you observe real traffic without interrupting the in-cluster service.
+- **Use `ksail cluster info`** to confirm the cluster is healthy before starting a mirrord session.
+- **Target specific pods** by using `pod/<name>` instead of `deployment/<name>` for more precise targeting:
+
+  ```json
+  { "target": { "path": "pod/my-app-abc123", "namespace": "default" } }
+  ```
+
+- **Combine with `ksail workload watch`** for manifest editing: `ksail workload watch` handles YAML changes at the Kubernetes layer; mirrord connects your local process at the network layer. They operate at different layers and do not conflict.
+- **Ephemeral clusters work well with mirrord** — create a short-lived cluster with `ksail cluster create --ttl 1h` to isolate your debugging session. See [Ephemeral Clusters](/guides/ephemeral-clusters/) for details.
+

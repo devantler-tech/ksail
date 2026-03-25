@@ -6,7 +6,7 @@ import (
 )
 
 // enumValuer is implemented by flag Value types that provide valid enum values.
-// This matches the EnumValuer interface in pkg/apis/cluster/v1alpha1/enums.go.
+// This matches the EnumValuer interface in pkg/apis/cluster/v1alpha1/enum.go.
 type enumValuer interface {
 	ValidValues() []string
 }
@@ -47,8 +47,10 @@ type OutputChunk struct {
 }
 
 // DefaultOptions returns sensible default options for tool generation.
-// With permission-based consolidation, all workload and cluster commands are grouped
-// into 6 tools: cluster_read, cluster_write, workload_read, workload_write, cipher_read, and cipher_write.
+// With permission-based consolidation, commands are grouped by their permission
+// annotations (read vs write) and scope (cluster vs workload, plus cipher) so that
+// many individual commands collapse into 5 consolidated tools:
+// cluster_read, cluster_write, workload_read, workload_write, and cipher_write.
 func DefaultOptions() ToolOptions {
 	return ToolOptions{
 		ExcludeCommands: []string{

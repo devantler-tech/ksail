@@ -30,7 +30,7 @@ Before you begin developing, ensure you have the following installed:
 - [Go (v1.26.0+)](https://go.dev/doc/install)
 - [mockery (v3.5+)](https://vektra.github.io/mockery/v3.5/installation/)
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
-- [mega-linter](https://megalinter.io/latest/mega-linter-runner/#installation)
+- [mega-linter](https://github.com/oxsecurity/megalinter/tree/main/mega-linter-runner#installation)
 - [Node.js (v22+)](https://nodejs.org/en/download/) — Required for building documentation (matches CI)
 
 ### Lint
@@ -99,7 +99,7 @@ benchstat before.txt after.txt
 
 PRs that modify Go code are automatically benchmarked against `main` and the comparison is posted as a PR comment. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details on interpreting results.
 
-See package-specific BENCHMARKS.md files (e.g., `pkg/apis/cluster/v1alpha1/BENCHMARKS.md`, `pkg/cli/cmd/cipher/BENCHMARKS.md`, `pkg/cli/cmd/cluster/BENCHMARKS.md`, `pkg/client/argocd/BENCHMARKS.md`, `pkg/client/docker/BENCHMARKS.md`, `pkg/client/flux/BENCHMARKS.md`, `pkg/client/helm/BENCHMARKS.md`, `pkg/client/kubectl/BENCHMARKS.md`, `pkg/client/kustomize/BENCHMARKS.md`, `pkg/fsutil/marshaller/BENCHMARKS.md`, `pkg/k8s/readiness/BENCHMARKS.md`, `pkg/svc/diff/BENCHMARKS.md`, `pkg/svc/image/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
+See package-specific BENCHMARKS.md files (e.g., `pkg/apis/cluster/v1alpha1/BENCHMARKS.md`, `pkg/cli/cmd/cipher/BENCHMARKS.md`, `pkg/cli/cmd/cluster/BENCHMARKS.md`, `pkg/client/argocd/BENCHMARKS.md`, `pkg/client/docker/BENCHMARKS.md`, `pkg/client/flux/BENCHMARKS.md`, `pkg/client/helm/BENCHMARKS.md`, `pkg/client/kubectl/BENCHMARKS.md`, `pkg/client/kustomize/BENCHMARKS.md`, `pkg/fsutil/configmanager/ksail/BENCHMARKS.md`, `pkg/fsutil/marshaller/BENCHMARKS.md`, `pkg/k8s/readiness/BENCHMARKS.md`, `pkg/svc/diff/BENCHMARKS.md`, `pkg/svc/image/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
 
 ### Documentation
 
@@ -258,7 +258,7 @@ To test the Omni provider locally, you need:
 
 | Workflow        | Schedule                   | Purpose                            |
 |-----------------|----------------------------|------------------------------------|
-| `update-skills` | Daily (06:00 UTC)          | Npx skills upgrades                |
+| `update-skills` | Daily (06:00 UTC)          | Copilot skills upgrades            |
 | `maintenance`   | Monthly (1st, 00:00 UTC)   | Old workflow run and image cleanup |
 | `sync-labels`   | Weekly (Monday, 07:00 UTC) | Label synchronization              |
 

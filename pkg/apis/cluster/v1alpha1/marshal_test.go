@@ -135,6 +135,21 @@ func TestCluster_MarshalYAML(t *testing.T) {
 			wantContains: []string{"validateOnPush: true"},
 		},
 		{
+			name: "workload spec with tag",
+			cluster: v1alpha1.Cluster{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       v1alpha1.Kind,
+					APIVersion: v1alpha1.APIVersion,
+				},
+				Spec: v1alpha1.Spec{
+					Workload: v1alpha1.WorkloadSpec{
+						Tag: "latest",
+					},
+				},
+			},
+			wantContains: []string{"tag: latest"},
+		},
+		{
 			name: "cluster with editor",
 			cluster: v1alpha1.Cluster{
 				TypeMeta: metav1.TypeMeta{

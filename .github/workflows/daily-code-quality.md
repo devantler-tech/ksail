@@ -33,6 +33,7 @@ safe-outputs:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
     max: 5
+    close-older-discussions: true
   create-issue:
     max: 1
   add-comment:
@@ -47,6 +48,7 @@ safe-outputs:
 tools:
   github:
     toolsets: [all]
+    min-integrity: none
   web-fetch:
   bash: true
 ---

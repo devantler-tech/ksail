@@ -5,6 +5,12 @@ import starlightGithubAlerts from "starlight-github-alerts";
 
 export default defineConfig({
   site: "https://ksail.devantler.tech",
+  redirects: {
+    "/getting-started/vanilla/": "/distributions/vanilla/",
+    "/getting-started/k3s/": "/distributions/k3s/",
+    "/getting-started/talos/": "/distributions/talos/",
+    "/getting-started/vcluster/": "/distributions/vcluster/",
+  },
   integrations: [
     mermaid(),
     starlight({
@@ -38,10 +44,6 @@ export default defineConfig({
           items: [
             { label: "Installation", link: "/installation/" },
             { label: "Features", link: "/features/" },
-            { label: "Vanilla (Kind)", link: "/getting-started/vanilla/" },
-            { label: "K3s (K3d)", link: "/getting-started/k3s/" },
-            { label: "Talos", link: "/getting-started/talos/" },
-            { label: "VCluster", link: "/getting-started/vcluster/" },
           ],
         },
         { label: "Concepts", link: "/concepts/" },
@@ -51,9 +53,9 @@ export default defineConfig({
         {
           label: "Guides",
           items: [
-            { label: "Cluster Profiles (--profile)", link: "/guides/cluster-profiles/" },
             { label: "Ephemeral Clusters (--ttl)", link: "/guides/ephemeral-clusters/" },
             { label: "Companion Tools", link: "/guides/companion-tools/" },
+            { label: "KSail + mirrord", link: "/guides/mirrord/" },
           ],
         },
         {
@@ -70,8 +72,19 @@ export default defineConfig({
           ],
         },
         {
+          label: "Distributions",
+          items: [
+            { label: "Vanilla (Kind)", link: "/distributions/vanilla/" },
+            { label: "K3s (K3d)", link: "/distributions/k3s/" },
+            { label: "Talos", link: "/distributions/talos/" },
+            { label: "VCluster", link: "/distributions/vcluster/" },
+          ],
+        },
+        {
           label: "Providers",
           items: [
+            { label: "Docker", link: "/providers/docker/" },
+            { label: "Hetzner", link: "/providers/hetzner/" },
             { label: "Omni (Sidero)", link: "/providers/omni/" },
           ],
         },

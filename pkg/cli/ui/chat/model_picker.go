@@ -162,7 +162,7 @@ func (m *Model) switchModel(newModelID string) error {
 	m.cleanup()
 
 	if m.session != nil {
-		_ = m.session.Destroy()
+		_ = m.session.Disconnect()
 	}
 
 	m.sessionConfig.Model = newModelID
@@ -289,7 +289,7 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 
 	multiplier := ""
 	if model.Billing != nil && model.Billing.Multiplier > 0 {
-		multiplier = fmt.Sprintf(" (%.0fx)", model.Billing.Multiplier)
+		multiplier = fmt.Sprintf(" (%sx)", formatMultiplier(model.Billing.Multiplier))
 	}
 
 	line := fmt.Sprintf("%s%s%s", prefix, model.ID, multiplier)
@@ -304,23 +304,19 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 }
 
 // formatAutoOption formats the "auto" picker item, showing the resolved model
-// and its discounted billing multiplier when available.
-// Auto model selection provides a 10% multiplier discount on paid plans.
-// See: https://docs.github.com/en/copilot/concepts/auto-model-selection#multiplier-discounts
+// and its billing multiplier when available.
 func (m *Model) formatAutoOption() string {
 	resolved := m.resolvedAutoModel()
 	if resolved == "" {
-		return "auto (let Copilot choose \u00b7 -10%)"
+		return "auto (let Copilot choose)"
 	}
 
 	mult := m.findModelMultiplier(resolved)
 	if mult > 0 {
-		discounted := mult * autoDiscountFactor
-
-		return fmt.Sprintf("auto (%s \u00b7 %.1fx)", resolved, discounted)
+		return fmt.Sprintf("auto (%s \u00b7 %sx)", resolved, formatMultiplier(mult))
 	}
 
-	return fmt.Sprintf("auto (%s \u00b7 -10%%)", resolved)
+	return fmt.Sprintf("auto (%s)", resolved)
 }
 
 // styleModelItem applies styling to a model item.

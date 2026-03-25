@@ -37,6 +37,7 @@ safe-outputs:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
     max: 5
+    close-older-discussions: true
   add-comment:
     target: "*"
   create-pull-request:
@@ -45,6 +46,7 @@ safe-outputs:
     draft: false
     protected-files: allowed
     allowed-files:
+      - ".github/actions/daily-workflow-maintenance/**"
       - ".github/aw/actions-lock.json"
       - ".github/workflows/*.lock.yml"
       - ".github/agents/*.agent.md"
@@ -75,6 +77,7 @@ steps:
 tools:
   github:
     toolsets: [all]
+    min-integrity: none
   web-fetch:
   bash:
     - "*"

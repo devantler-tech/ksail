@@ -22,6 +22,7 @@ linters:
   exclusions:
     paths:
       - ".*mocks.*\\.go$"
+      - "^vsce/node_modules/.*\\.go$"
     rules:
       # Tests that modify env vars cannot run in parallel
       - linters:
@@ -31,6 +32,10 @@ linters:
       - linters:
           - paralleltest
         path: pkg/svc/detector/cluster/cluster_test.go
+      # Tests that modify env vars cannot run in parallel
+      - linters:
+          - paralleltest
+        path: pkg/k8s/rest_config_test.go
       # Bubbletea requires context in the Model struct
       - linters:
           - containedctx

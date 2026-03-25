@@ -171,7 +171,7 @@ function parseClusterListOutput(output: string): ClusterInfo[] {
 /**
  * Distribution type for Docker-based clusters
  */
-export type Distribution = "kind" | "k3d" | "talos" | "unknown";
+export type Distribution = "kind" | "k3d" | "talos" | "vcluster" | "unknown";
 
 /**
  * Helper to spawn Docker and collect output
@@ -205,21 +205,24 @@ async function spawnDocker(
 }
 
 /**
- * Detect cluster distribution by checking Docker container names
+ * Detect cluster distribution by checking Docker container names.
  * Kind uses pattern: {name}-control-plane, {name}-worker
  * K3d uses pattern: k3d-{name}-server-0, k3d-{name}-agent-0
+ * VCluster uses pattern: vcluster-{name}-0
  */
 export async function detectDistribution(
   clusterName: string,
   provider: string
 ): Promise<Distribution> {
-  // Hetzner provider always uses Talos
-  if (provider.toLowerCase() === "hetzner") {
+  const lowerProvider = provider.toLowerCase();
+
+  // Hetzner and Omni providers always use Talos
+  if (lowerProvider === "hetzner" || lowerProvider === "omni") {
     return "talos";
   }
 
   // Only check Docker containers for Docker provider
-  if (provider.toLowerCase() !== "docker") {
+  if (lowerProvider !== "docker") {
     return "unknown";
   }
 
@@ -238,14 +241,18 @@ export async function detectDistribution(
   if (containers.some((name) => name.includes("-control-plane") || name.includes("-worker"))) {
     return "kind";
   }
+  if (containers.some((name) => name.startsWith("vcluster-"))) {
+    return "vcluster";
+  }
   return "unknown";
 }
 
 /**
- * Get the Kubernetes context name for a cluster
+ * Get the Kubernetes context name for a cluster.
  * Kind: kind-{name}
  * K3d: k3d-{name}
- * Talos: admin@{name} or {name}
+ * Talos: admin@{name}
+ * VCluster: vcluster-docker_{name}
  */
 export function getContextName(
   clusterName: string,
@@ -258,6 +265,8 @@ export function getContextName(
       return `k3d-${clusterName}`;
     case "talos":
       return `admin@${clusterName}`;
+    case "vcluster":
+      return `vcluster-docker_${clusterName}`;
     default:
       // Fallback: try the cluster name directly
       return clusterName;
@@ -404,5 +413,95 @@ export async function initCluster(
 
   if (result.exitCode !== 0) {
     throw new Error(`Failed to init cluster: ${result.stderr || result.stdout}`);
+  }
+}
+
+/**
+ * Update a cluster
+ */
+export async function updateCluster(
+  name?: string,
+  outputChannel?: vscode.OutputChannel
+): Promise<void> {
+  const args = ["cluster", "update"];
+
+  if (name) {
+    args.push("--name", name);
+  }
+
+  const result = await runKsailCommand(args, undefined, outputChannel);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to update cluster: ${result.stderr || result.stdout}`);
+  }
+}
+
+/**
+ * Get cluster info
+ */
+export async function clusterInfo(
+  contextName?: string,
+  outputChannel?: vscode.OutputChannel
+): Promise<string> {
+  const args = ["cluster", "info"];
+
+  if (contextName) {
+    args.push("--context", contextName);
+  }
+
+  const result = await runKsailCommand(args, undefined, outputChannel);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to get cluster info: ${result.stderr || result.stdout}`);
+  }
+
+  return result.stdout;
+}
+
+/**
+ * Backup a cluster
+ */
+export async function backupCluster(
+  outputPath: string,
+  outputChannel?: vscode.OutputChannel
+): Promise<void> {
+  const args = ["cluster", "backup", "--output", outputPath];
+
+  const result = await runKsailCommand(args, undefined, outputChannel);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to backup cluster: ${result.stderr || result.stdout}`);
+  }
+}
+
+/**
+ * Restore a cluster
+ */
+export async function restoreCluster(
+  inputPath: string,
+  outputChannel?: vscode.OutputChannel
+): Promise<void> {
+  const args = ["cluster", "restore", "--input", inputPath];
+
+  const result = await runKsailCommand(args, undefined, outputChannel);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to restore cluster: ${result.stderr || result.stdout}`);
+  }
+}
+
+/**
+ * Switch active kubeconfig context to a cluster
+ */
+export async function switchCluster(
+  name: string,
+  outputChannel?: vscode.OutputChannel
+): Promise<void> {
+  const args = ["cluster", "switch", name];
+
+  const result = await runKsailCommand(args, undefined, outputChannel);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to switch cluster: ${result.stderr || result.stdout}`);
   }
 }

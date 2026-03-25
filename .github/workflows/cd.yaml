@@ -10,6 +10,9 @@ env:
   # error (including 403), not just 404/410. Hardens CI against transient
   # proxy.golang.org outages. go.sum still verifies module integrity.
   GOPROXY: "https://proxy.golang.org|direct"
+  # Soft memory limit for Go build toolchain. GoReleaser links multiple
+  # platform binaries and the linker can exceed runner memory.
+  GOMEMLIMIT: "6GiB"
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -123,10 +126,9 @@ jobs:
           VERSION: ${{ steps.get_version.outputs.version }}
 
       - name: 📤 Upload VSIX to release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
-        with:
-          files: vsce/ksail_*.vsix
-          draft: true
+        run: gh release upload "${GITHUB_REF#refs/tags/}" ksail_*.vsix --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-release:
     name: 📢 Publish Release

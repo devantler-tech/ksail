@@ -5,15 +5,13 @@
 export { getBinaryPath, isBinaryAvailable, runKsailCommand, type KSailResult } from "./binary.js";
 
 export {
-  createCluster, deleteCluster, detectClusterStatus, detectDistribution, getContextName,
-  initCluster, listClusters, startCluster, stopCluster, type ClusterInfo, type ClusterStatus,
-  type CommonClusterOptions, type CreateClusterOptions, type DeleteClusterOptions,
-  type Distribution, type InitClusterOptions
+  backupCluster, clusterInfo, createCluster, deleteCluster, detectClusterStatus, detectDistribution,
+  getContextName, initCluster, listClusters, restoreCluster, startCluster, stopCluster, switchCluster,
+  updateCluster, type ClusterInfo, type ClusterStatus, type CommonClusterOptions,
+  type CreateClusterOptions, type DeleteClusterOptions, type Distribution, type InitClusterOptions
 } from "./clusters.js";
 
 export {
-  fetchClusterStatus, getAllPods, getPodLogs, summarizePodsByNamespace,
-  type ClusterHealth, type ClusterStatusSnapshot, type GitOpsStatus,
-  type NamespacePodSummary, type PodInfo, type PodPhase
+  getPodLogs
 } from "./kubectl.js";
 

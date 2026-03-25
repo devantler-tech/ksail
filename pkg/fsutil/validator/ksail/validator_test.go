@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil/validator"
 	ksailvalidator "github.com/devantler-tech/ksail/v5/pkg/fsutil/validator/ksail"
 	k3dtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
@@ -17,6 +18,7 @@ import (
 
 const (
 	specDistributionField = "spec.cluster.distribution"
+	specConnectionContext = "spec.cluster.connection.context"
 	specCNIField          = "spec.cni"
 	kindKSailContext      = "kind-ksail"
 )
@@ -491,7 +493,7 @@ func testInvalidContextPatternWithConfig(t *testing.T) {
 		found := false
 
 		for _, err := range result.Errors {
-			if err.Field == "spec.cluster.connection.context" {
+			if err.Field == specConnectionContext {
 				found = true
 
 				assert.Contains(t, err.Message, "context name does not match expected pattern")
@@ -931,6 +933,107 @@ func TestKSailValidatorContextPatterns(t *testing.T) {
 	t.Parallel()
 
 	testEmptyContextValidationSkipped(t)
+	testOmniProviderContextValidationSkipped(t)
+	testNonOmniProviderTalosContextStillValidated(t, "docker", v1alpha1.ProviderDocker)
+	testNonOmniProviderTalosContextStillValidated(t, "hetzner", v1alpha1.ProviderHetzner)
+}
+
+// testOmniProviderContextValidationSkipped tests that context validation is skipped
+// for Talos + Omni provider, since Omni generates its own context naming scheme.
+func testOmniProviderContextValidationSkipped(t *testing.T) {
+	t.Helper()
+
+	t.Run("omni_provider_context_validation_skipped", func(t *testing.T) {
+		t.Parallel()
+
+		config := &v1alpha1.Cluster{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "ksail.io/v1alpha1",
+				Kind:       "Cluster",
+			},
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution:       v1alpha1.DistributionTalos,
+					DistributionConfig: "talos",
+					Provider:           v1alpha1.ProviderOmni,
+					Connection: v1alpha1.Connection{
+						Context: "devantler-prod", // Omni-generated context without admin@ prefix
+					},
+				},
+			},
+		}
+
+		talosConfigs, err := talosconfigmanager.NewDefaultConfigs()
+		require.NoError(t, err)
+
+		validator := ksailvalidator.NewValidatorForTalos(talosConfigs)
+		result := validator.Validate(config)
+
+		// Context validation should be skipped for Omni provider
+		for _, err := range result.Errors {
+			assert.NotEqual(t, specConnectionContext, err.Field,
+				"Omni provider context should not be validated against admin@ pattern")
+		}
+	})
+}
+
+// testNonOmniProviderTalosContextStillValidated tests that context validation
+// still enforces the admin@<name> pattern for Talos with the given non-Omni provider.
+func testNonOmniProviderTalosContextStillValidated(
+	t *testing.T,
+	name string,
+	provider v1alpha1.Provider,
+) {
+	t.Helper()
+
+	t.Run(name+"_provider_talos_context_still_validated", func(t *testing.T) {
+		t.Parallel()
+
+		talosConfigs, err := talosconfigmanager.NewDefaultConfigs()
+		require.NoError(t, err)
+
+		config := &v1alpha1.Cluster{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "ksail.io/v1alpha1",
+				Kind:       "Cluster",
+			},
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution:       v1alpha1.DistributionTalos,
+					DistributionConfig: "talos",
+					Provider:           provider,
+					Connection: v1alpha1.Connection{
+						Context: "devantler-prod", // Missing admin@ prefix
+					},
+				},
+			},
+		}
+
+		validator := ksailvalidator.NewValidatorForTalos(talosConfigs)
+		result := validator.Validate(config)
+
+		// Context validation should flag the missing admin@ prefix
+		found := false
+
+		for _, validationErr := range result.Errors {
+			if validationErr.Field == specConnectionContext {
+				found = true
+
+				assert.Contains(
+					t,
+					validationErr.Message,
+					"context name does not match expected pattern",
+				)
+
+				break
+			}
+		}
+
+		assert.True(
+			t, found,
+			name+" provider Talos context should be validated against admin@ pattern",
+		)
+	})
 }
 
 // testEmptyContextValidationSkipped tests that empty context skips validation.

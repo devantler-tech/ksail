@@ -112,11 +112,6 @@ func ValidProviders() []Provider {
 	return []Provider{ProviderDocker, ProviderHetzner, ProviderOmni}
 }
 
-// ValidProfiles returns supported profile values.
-func ValidProfiles() []Profile {
-	return []Profile{ProfileDefault}
-}
-
 // ValidPlacementGroupStrategies returns supported placement group strategy values.
 func ValidPlacementGroupStrategies() []PlacementGroupStrategy {
 	return []PlacementGroupStrategy{PlacementGroupStrategyNone, PlacementGroupStrategySpread}

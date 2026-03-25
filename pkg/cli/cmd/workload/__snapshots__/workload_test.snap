@@ -548,6 +548,41 @@ Global Flags:
 
 ---
 
+[TestWorkloadHelpSnapshots/export - 1]
+Export container images from the cluster's containerd runtime to a tar archive.
+
+The exported archive can be used to:
+  - Share image sets between development machines
+  - Pre-load images for offline development
+  - Speed up cluster recreation by avoiding registry pulls
+
+Examples:
+  # Export all images from cluster to images.tar (default)
+  ksail workload export
+
+  # Export all images to a specific file
+  ksail workload export ./backups/my-images.tar
+
+  # Export specific images from cluster
+  ksail workload export --image=nginx:latest --image=redis:7
+
+  # Export from a specific kubeconfig context
+  ksail workload export --context=kind-dev --kubeconfig=~/.kube/config
+
+Usage:
+  ksail workload export [<output>] [flags]
+
+Flags:
+  -c, --context string      Kubernetes context of cluster
+  -h, --help                help for export
+      --image stringArray   Image(s) to export (repeatable); if not specified, all images are exported
+  -k, --kubeconfig string   Path to kubeconfig file (default "~/.kube/config")
+
+Global Flags:
+      --benchmark   Show per-activity benchmark output
+
+---
+
 [TestWorkloadHelpSnapshots/expose - 1]
 Expose a resource as a new Kubernetes service.
 
@@ -719,6 +754,85 @@ Flags:
       --user string                    The name of the kubeconfig user to use
   -w, --watch                          After listing/getting the requested object, watch for changes.
       --watch-only                     Watch for changes to the requested object(s), without listing/getting first.
+
+Global Flags:
+      --benchmark   Show per-activity benchmark output
+
+---
+
+[TestWorkloadHelpSnapshots/images - 1]
+List container images required by the configured cluster components.
+
+The image list is derived from the ksail.yaml configuration and includes
+images for all enabled components (GitOps engine, CNI, policy engine, etc.).
+
+This command is useful for:
+  - Pre-pulling images before cluster creation
+  - Creating offline image archives
+  - Understanding infrastructure image requirements
+  - CI/CD caching strategies
+
+Output formats:
+  - plain: One image per line (default, suitable for scripting)
+  - json: JSON array of image strings
+
+Examples:
+  # List all images for current ksail.yaml config
+  ksail workload images
+
+  # List images as JSON array
+  ksail workload images --output=json
+
+  # Pipe to docker pull
+  ksail workload images | xargs -n1 docker pull
+
+  # Save to file for CI caching
+  ksail workload images > required-images.txt
+
+Usage:
+  ksail workload images [flags]
+
+Flags:
+      --cert-manager CertManager       Cert-Manager configuration (Enabled: install, Disabled: skip)
+      --cni CNI                        Container Network Interface (CNI) to use
+      --csi CSI                        Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI)
+  -d, --distribution Distribution      Kubernetes distribution to use
+  -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
+  -h, --help                           help for images
+      --load-balancer LoadBalancer     LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)
+      --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
+  -o, --output string                  Output format: plain, json (default "plain")
+      --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
+      --provider Provider              Infrastructure provider backend (e.g., Docker)
+
+Global Flags:
+      --benchmark   Show per-activity benchmark output
+
+---
+
+[TestWorkloadHelpSnapshots/import - 1]
+Import container images from a tar archive to the cluster's containerd runtime.
+
+Images are imported to all nodes in the cluster, making them available for
+pod scheduling without requiring registry pulls.
+
+Examples:
+  # Import images from images.tar (default)
+  ksail workload import
+
+  # Import images from a specific file
+  ksail workload import ./backups/my-images.tar
+
+  # Import to a specific kubeconfig context
+  ksail workload import --context=kind-dev --kubeconfig=~/.kube/config
+
+Usage:
+  ksail workload import [<input>] [flags]
+
+Flags:
+  -c, --context string      Kubernetes context of cluster
+  -h, --help                help for import
+  -k, --kubeconfig string   Path to kubeconfig file (default "~/.kube/config")
 
 Global Flags:
       --benchmark   Show per-activity benchmark output
@@ -1128,12 +1242,20 @@ found, or the boundary is the watch root, it applies the full root
 directory. This scoping ensures only the affected Kustomize layer is
 re-applied, making iteration faster in monorepo-style layouts.
 
-Each reconcile prints a timestamped status line showing the changed file
-and the outcome (success or failure). Press Ctrl+C to stop the watcher.
+Each reconcile prints a timestamped status line showing the changed file,
+the outcome (success or failure), and the elapsed time for the apply.
+Press Ctrl+C to stop the watcher.
+
+Use --initial-apply to synchronize the cluster with the current state of
+the watch directory before entering the watch loop. This is useful after
+editing manifests offline or when starting a fresh session.
 
 Examples:
   # Watch the default k8s/ directory
   ksail workload watch
+
+  # Watch and apply once on startup before entering the loop
+  ksail workload watch --initial-apply
 
   # Watch a custom directory
   ksail workload watch --path=./manifests
@@ -1142,8 +1264,9 @@ Usage:
   ksail workload watch [flags]
 
 Flags:
-  -h, --help          help for watch
-      --path string   Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
+  -h, --help            help for watch
+      --initial-apply   Apply all workloads once immediately on startup before entering the watch loop
+      --path string     Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
 
 Global Flags:
       --benchmark   Show per-activity benchmark output

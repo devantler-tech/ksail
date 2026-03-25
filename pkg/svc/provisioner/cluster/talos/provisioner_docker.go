@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"time"
 
+	docker "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kernelmod"
 	"github.com/docker/docker/api/types/container"
@@ -45,6 +48,15 @@ func (p *Provisioner) createDockerCluster(ctx context.Context, clusterName strin
 
 	// Use the pre-loaded configs (already have all patches applied)
 	configBundle := p.talosConfigs.Bundle()
+
+	// Pre-pull the Talos node image with retry logic to handle transient
+	// registry failures (e.g., ghcr.io 504 Gateway Timeout).
+	// The Talos SDK pulls this image internally during provision.Create(),
+	// but pre-pulling ensures retryable errors are handled gracefully.
+	err = p.ensureTalosImage(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to ensure talos image: %w", err)
+	}
 
 	// Provision cluster and save configurations
 	cluster, err := p.provisionCluster(ctx, clusterName, configBundle)
@@ -497,6 +509,65 @@ func (p *Provisioner) checkDockerAvailable(ctx context.Context) error {
 	return nil
 }
 
+// ensureTalosImage pulls the Talos node image if not already present locally.
+// Retries transient network errors (e.g., ghcr.io 504 Gateway Timeout) with exponential backoff.
+func (p *Provisioner) ensureTalosImage(ctx context.Context) error {
+	// Check if image already exists locally
+	_, err := p.dockerClient.ImageInspect(ctx, p.options.TalosImage)
+	if err == nil {
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Pulling Talos image %s...\n", p.options.TalosImage)
+
+	var lastErr error
+
+	for attempt := 1; attempt <= p.imagePullRetry.maxRetries; attempt++ {
+		pullErr := p.pullTalosImage(ctx)
+		if pullErr == nil {
+			return nil
+		}
+
+		lastErr = pullErr
+		if !netretry.IsRetryable(lastErr) || attempt == p.imagePullRetry.maxRetries {
+			break
+		}
+
+		delay := netretry.ExponentialDelay(
+			attempt,
+			p.imagePullRetry.baseWait,
+			p.imagePullRetry.maxWait,
+		)
+
+		_, _ = fmt.Fprintf(p.logWriter,
+			"Talos image pull attempt %d failed (retrying in %s): %v\n",
+			attempt, delay, lastErr)
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+
+			return fmt.Errorf("talos image pull cancelled: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+
+	return fmt.Errorf("failed to pull talos image %s: %w", p.options.TalosImage, lastErr)
+}
+
+// pullTalosImage performs a single attempt to pull the Talos node image.
+func (p *Provisioner) pullTalosImage(ctx context.Context) error {
+	err := docker.PullImage(ctx, p.dockerClient, p.options.TalosImage)
+	if err != nil {
+		return fmt.Errorf("pulling talos image: %w", err)
+	}
+
+	return nil
+}
+
 // buildClusterRequest creates a provision.ClusterRequest from our config.
 func (p *Provisioner) buildClusterRequest(
 	clusterName string,
@@ -559,12 +630,19 @@ func (p *Provisioner) buildNodeRequests(
 			)
 		}
 
-		nodes = append(nodes, provision.NodeRequest{
+		nodeRequest := provision.NodeRequest{
 			Name:   fmt.Sprintf("%s-control-plane-%d", clusterName, nodeIndex+1),
 			Type:   machine.TypeControlPlane,
 			IPs:    []netip.Addr{nodeIP},
 			Config: configBundle.ControlPlane(),
-		})
+		}
+
+		// Only the first control-plane node gets port mappings to avoid host port collisions
+		if nodeIndex == 0 {
+			nodeRequest.Ports = p.options.ExtraPortMappings
+		}
+
+		nodes = append(nodes, nodeRequest)
 	}
 
 	// Worker nodes - use Worker config from bundle

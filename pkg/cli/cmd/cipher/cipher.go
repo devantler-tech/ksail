@@ -24,7 +24,7 @@ SOPS supports multiple key management systems:
 		SilenceUsage: true,
 		Annotations: map[string]string{
 			// Consolidate cipher subcommands (encrypt, decrypt, edit, import)
-			// into tools split by permission: cipher_read and cipher_write.
+			// into a single cipher_write tool (all operations modify state or reveal secrets).
 			// The "cipher_operation" parameter will select which operation to perform.
 			annotations.AnnotationConsolidate: "cipher_operation",
 		},

@@ -140,10 +140,58 @@ func convertDefaultValue(jsonSchemaType string, defaultStr string) any {
 		}
 
 		return defaultStr // Fallback to string if parsing fails
+	case jsonSchemaTypeArray:
+		return convertArrayDefault(defaultStr)
 	default:
-		// For strings, arrays, and other types, return as-is
+		// For strings and other types, return as-is
 		return defaultStr
 	}
+}
+
+// convertArrayDefault parses pflag's bracket-enclosed array format "[val1,val2,...]" into a typed []any.
+// Each element is inferred as boolean, integer, number, or string (in that order).
+func convertArrayDefault(defaultStr string) []any {
+	if !strings.HasPrefix(defaultStr, "[") || !strings.HasSuffix(defaultStr, "]") {
+		return []any{defaultStr}
+	}
+
+	trimmed := defaultStr[1 : len(defaultStr)-1]
+	if trimmed == "" {
+		return []any{}
+	}
+
+	parts := strings.Split(trimmed, ",")
+	result := make([]any, 0, len(parts))
+
+	for _, part := range parts {
+		result = append(result, parseScalarElement(strings.TrimSpace(part)))
+	}
+
+	return result
+}
+
+// parseScalarElement infers a typed value from a string element.
+// Order: boolean -> integer -> number -> string fallback.
+func parseScalarElement(elem string) any {
+	if elem == "true" {
+		return true
+	}
+
+	if elem == "false" {
+		return false
+	}
+
+	intVal, err := strconv.ParseInt(elem, 10, 64)
+	if err == nil {
+		return intVal
+	}
+
+	floatVal, err := strconv.ParseFloat(elem, 64)
+	if err == nil {
+		return floatVal
+	}
+
+	return elem
 }
 
 // buildEnumProperty builds a JSON schema property for enum-valued flags.

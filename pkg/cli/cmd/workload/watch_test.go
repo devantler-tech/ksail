@@ -30,6 +30,10 @@ func TestNewWatchCmdHasCorrectDefaults(t *testing.T) {
 	pathFlag := cmd.Flags().Lookup("path")
 	require.NotNil(t, pathFlag, "expected --path flag to exist")
 	require.Empty(t, pathFlag.DefValue)
+
+	initialApplyFlag := cmd.Flags().Lookup("initial-apply")
+	require.NotNil(t, initialApplyFlag, "expected --initial-apply flag to exist")
+	require.Equal(t, "false", initialApplyFlag.DefValue)
 }
 
 func TestWatchCmdShowsHelp(t *testing.T) {
@@ -108,6 +112,51 @@ func TestIsRelevantEvent(t *testing.T) {
 			t.Parallel()
 
 			got := workload.ExportIsRelevantEvent(testCase.event)
+			require.Equal(t, testCase.expected, got)
+		})
+	}
+}
+
+func TestFormatElapsed(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{
+			name:     "sub-second duration",
+			duration: 300 * time.Millisecond,
+			expected: "0.3s",
+		},
+		{
+			name:     "just over one second",
+			duration: 1200 * time.Millisecond,
+			expected: "1.2s",
+		},
+		{
+			name:     "whole seconds",
+			duration: 5 * time.Second,
+			expected: "5.0s",
+		},
+		{
+			name:     "longer apply",
+			duration: 45500 * time.Millisecond,
+			expected: "45.5s",
+		},
+		{
+			name:     "zero duration",
+			duration: 0,
+			expected: "0.0s",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := workload.ExportFormatElapsed(testCase.duration)
 			require.Equal(t, testCase.expected, got)
 		})
 	}

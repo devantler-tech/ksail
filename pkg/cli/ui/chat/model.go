@@ -335,6 +335,8 @@ func NewModel(params Params) *Model {
 	theme := params.Theme
 	if theme.Logo == nil {
 		theme = DefaultThemeConfig()
+	} else if theme.ExitMessage == "" {
+		theme.ExitMessage = DefaultThemeConfig().ExitMessage
 	}
 
 	toolDisplay := params.ToolDisplay

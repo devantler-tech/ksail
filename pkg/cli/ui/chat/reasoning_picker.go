@@ -78,7 +78,7 @@ func (m *Model) switchReasoningEffort(newEffort string) error {
 	m.cleanup()
 
 	if m.session != nil {
-		_ = m.session.Destroy()
+		_ = m.session.Disconnect()
 	}
 
 	m.sessionConfig.ReasoningEffort = newEffort

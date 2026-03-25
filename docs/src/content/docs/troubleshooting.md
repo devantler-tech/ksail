@@ -129,13 +129,21 @@ If new LoadBalancer services remain pending after several successful allocations
 
 If pods are stuck in `ContainerCreating` with CNI errors, check CNI pods with `ksail workload get pods -n kube-system -l k8s-app=cilium` (or `calico-node`). If failed, recreate: `ksail cluster init --cni Cilium && ksail cluster create`
 
+## Talos Issues
+
+### Transient Image Pull Failures
+
+KSail automatically retries transient Talos node image pull failures (up to 3 attempts, exponential backoff 5s–30s) to handle network glitches from `ghcr.io` (e.g., 504 Gateway Timeout). `Talos image pull attempt N failed (retrying in Xs): ...` messages are expected — no action required.
+
+If all retries fail, check your internet connection and `ghcr.io` availability with `curl -I https://ghcr.io/v2/`, then retry with `ksail cluster delete && ksail cluster create`.
+
 ## VCluster Issues
 
 ### Transient Startup Failures
 
 KSail automatically retries transient VCluster startup failures (up to 5 attempts, 5-second delay), including exit status 22/EINVAL, D-Bus errors, network transients, and GHCR pull failures. `Retrying vCluster create (attempt 2/5)...` messages are expected — no action required.
 
-If all retries fail, check Docker resource limits and D-Bus availability. See the [VCluster Getting Started guide](/getting-started/vcluster/#troubleshooting) for details.
+If all retries fail, check Docker resource limits and D-Bus availability. See the [VCluster guide](/distributions/vcluster/#troubleshooting) for details.
 
 ### kubectl Commands Fail After VCluster Creation
 

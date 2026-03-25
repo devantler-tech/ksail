@@ -21,18 +21,72 @@ import (
 //   - []byte: The file contents
 //   - error: ErrPathOutsideBase if path is outside base, or read error
 func ReadFileSafe(basePath, filePath string) ([]byte, error) {
-	filePath = filepath.Clean(filePath)
-
-	if !strings.HasPrefix(filePath, basePath) {
+	// Canonicalize both paths (absolute + symlinks resolved) before the containment
+	// check so that directory-escape via ".." components or symlinks is rejected.
+	canonBase, err := EvalCanonicalPath(basePath)
+	if err != nil {
 		return nil, ErrPathOutsideBase
 	}
 
-	data, err := os.ReadFile(filePath)
+	canonFile, err := EvalCanonicalPath(filePath)
+	if err != nil {
+		return nil, ErrPathOutsideBase
+	}
+
+	// Use filepath.Rel to enforce directory boundaries. strings.HasPrefix alone is
+	// insufficient: "/base_evil/x" would pass a HasPrefix check for "/base".
+	rel, err := filepath.Rel(canonBase, canonFile)
+	if err != nil {
+		return nil, ErrPathOutsideBase
+	}
+
+	// Reject paths that resolve outside the base directory by checking whether
+	// the first path element is "..". This is stricter than a raw HasPrefix("..")
+	// check, which would incorrectly reject valid in-base paths like "..evil/secret".
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, ErrPathOutsideBase
+	}
+
+	data, err := os.ReadFile(canonFile) //nolint:gosec // G304: path validated
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %q: %w", filePath, err)
 	}
 
 	return data, nil
+}
+
+// EvalCanonicalPath returns the absolute, symlink-resolved form of a path.
+// If the path itself does not exist, it resolves the parent directory's symlinks
+// and appends the final component, so that containment checks remain accurate for
+// paths that are about to be created or have not yet been written.
+// It returns an error if the path cannot be made absolute or if symlinks in the
+// parent directory cannot be resolved (e.g., due to a missing parent or permissions).
+func EvalCanonicalPath(p string) (string, error) {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", fmt.Errorf("resolving absolute path: %w", err)
+	}
+
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return "", fmt.Errorf("resolving symlinks: %w", err)
+		}
+
+		// Path doesn't exist yet: resolve the parent directory's symlinks and
+		// append the final component so the check remains accurate.
+		dir := filepath.Dir(abs)
+		base := filepath.Base(abs)
+
+		resolvedDir, dirErr := filepath.EvalSymlinks(dir)
+		if dirErr != nil {
+			return "", fmt.Errorf("resolving symlinks for parent: %w", dirErr)
+		}
+
+		return filepath.Join(resolvedDir, base), nil
+	}
+
+	return resolved, nil
 }
 
 // Path resolution operations.
