@@ -537,35 +537,59 @@ func reconcileFluxSelectively(
 		*cachedKustomizations = kustomizations
 	}
 
-	timestamp := time.Now().Format("15:04:05")
-
-	// Root-level change: reconcile the root Kustomization CR.
+	// Root-level change or no subtree match: reconcile the root CR.
 	if applyDir == rootDir {
-		err := reconciler.TriggerKustomizationReconciliation(ctx)
-		if err != nil {
-			cmd.PrintErrf("[%s] ⚠ flux reconcile (root): %v\n", timestamp, err)
-		} else {
-			cmd.PrintErrf("[%s] ↻ flux: reconciled root kustomization\n", timestamp)
-		}
+		reconcileRootKustomization(ctx, cmd, reconciler, "root")
 
 		return
 	}
 
 	matches := matchFluxKustomizations(applyDir, rootDir, *cachedKustomizations)
 
-	// No match found: fall back to root reconciliation.
 	if len(matches) == 0 {
-		err := reconciler.TriggerKustomizationReconciliation(ctx)
-		if err != nil {
-			cmd.PrintErrf("[%s] ⚠ flux reconcile (root fallback): %v\n", timestamp, err)
-		} else {
-			cmd.PrintErrf("[%s] ↻ flux: reconciled root kustomization (no subtree match)\n", timestamp)
-		}
+		reconcileRootKustomization(ctx, cmd, reconciler, "root fallback")
 
 		return
 	}
 
-	// Selective reconciliation for each matched CR.
+	reconcileMatchedKustomizations(ctx, cmd, reconciler, matches)
+}
+
+// reconcileRootKustomization triggers reconciliation of the root Kustomization
+// CR and prints a timestamped status line. The label parameter (e.g. "root",
+// "root fallback") is included in the output to indicate the trigger reason.
+func reconcileRootKustomization(
+	ctx context.Context,
+	cmd *cobra.Command,
+	reconciler *flux.Reconciler,
+	label string,
+) {
+	timestamp := time.Now().Format("15:04:05")
+
+	err := reconciler.TriggerKustomizationReconciliation(ctx)
+	if err != nil {
+		cmd.PrintErrf(
+			"[%s] ⚠ flux reconcile (%s): %v\n",
+			timestamp, label, err,
+		)
+	} else {
+		cmd.PrintErrf(
+			"[%s] ↻ flux: reconciled root kustomization (%s)\n",
+			timestamp, label,
+		)
+	}
+}
+
+// reconcileMatchedKustomizations triggers reconciliation of each named
+// Kustomization CR and prints a timestamped status line per CR.
+func reconcileMatchedKustomizations(
+	ctx context.Context,
+	cmd *cobra.Command,
+	reconciler *flux.Reconciler,
+	matches []string,
+) {
+	timestamp := time.Now().Format("15:04:05")
+
 	for _, name := range matches {
 		err := reconciler.TriggerNamedKustomizationReconciliation(ctx, name)
 		if err != nil {
@@ -596,8 +620,8 @@ func matchFluxKustomizations(
 
 	var matches []string
 
-	for _, ks := range kustomizations {
-		ksPath := normalizeFluxPath(ks.Path)
+	for _, kustomization := range kustomizations {
+		ksPath := normalizeFluxPath(kustomization.Path)
 		if ksPath == "" {
 			continue
 		}
@@ -605,7 +629,7 @@ func matchFluxKustomizations(
 		if ksPath == relDir ||
 			strings.HasPrefix(ksPath, relDir+"/") ||
 			strings.HasPrefix(relDir, ksPath+"/") {
-			matches = append(matches, ks.Name)
+			matches = append(matches, kustomization.Name)
 		}
 	}
 
@@ -616,15 +640,15 @@ func matchFluxKustomizations(
 // OS-specific separators to forward slashes so prefix checks work
 // consistently across platforms. Returns "" for paths that resolve to "."
 // (root-level).
-func normalizeFluxPath(p string) string {
-	p = strings.TrimPrefix(p, "./")
-	p = filepath.ToSlash(filepath.Clean(p))
+func normalizeFluxPath(path string) string {
+	path = strings.TrimPrefix(path, "./")
+	path = filepath.ToSlash(filepath.Clean(path))
 
-	if p == "." {
+	if path == "." {
 		return ""
 	}
 
-	return p
+	return path
 }
 
 // runKubectlApply executes kubectl apply -k against the provided directory,
