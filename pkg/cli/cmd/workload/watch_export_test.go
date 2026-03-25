@@ -4,6 +4,7 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 )
@@ -85,6 +86,19 @@ func ExportTryAddDirectory(watcher *fsnotify.Watcher, path string, cmd *cobra.Co
 // ExportFindKustomizationDir exposes findKustomizationDir for testing.
 func ExportFindKustomizationDir(changedFile, rootDir string) string {
 	return findKustomizationDir(changedFile, rootDir)
+}
+
+// ExportMatchFluxKustomizations exposes matchFluxKustomizations for testing.
+func ExportMatchFluxKustomizations(
+	changedDir, rootDir string,
+	kustomizations []flux.KustomizationInfo,
+) []string {
+	return matchFluxKustomizations(changedDir, rootDir, kustomizations)
+}
+
+// ExportNormalizeFluxPath exposes normalizeFluxPath for testing.
+func ExportNormalizeFluxPath(p string) string {
+	return normalizeFluxPath(p)
 }
 
 // ExportFormatElapsed exposes formatElapsed for testing.

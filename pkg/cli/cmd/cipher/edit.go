@@ -597,9 +597,7 @@ func handleEditRunE(
 	ignoreMac, showMasterKeys bool,
 	editorFlag string,
 ) error {
-	inputPath := args[0]
-
-	inputStore, outputStore, err := getStores(inputPath)
+	inputPath, inputStore, outputStore, err := canonicalizeAndGetStores(args[0])
 	if err != nil {
 		return err
 	}
