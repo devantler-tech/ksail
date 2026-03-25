@@ -44,6 +44,16 @@ ksail cluster create --ttl 1h
 | `ksail cluster backup`  | Backup cluster resources         |
 | `ksail cluster restore` | Restore cluster resources        |
 
+**Updating clusters:** `ksail cluster update` applies changes from `ksail.yaml` to a running cluster. Changes are classified as in-place (no disruption), reboot-required, or recreate-required. Use `--dry-run` to preview changes without applying them. Use `--output json` for a machine-readable diff in CI pipelines or [MCP tools](/mcp/):
+
+```bash
+# Preview changes without applying
+ksail cluster update --dry-run
+
+# Machine-readable diff for CI gating or MCP consumption
+ksail cluster update --dry-run --output json | jq .recreateRequired
+```
+
 **Configuration:** [Declarative Configuration](/configuration/declarative-configuration/)
 
 ## Workload Management
