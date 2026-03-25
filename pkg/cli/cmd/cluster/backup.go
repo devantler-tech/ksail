@@ -19,6 +19,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -129,6 +130,26 @@ Example:
 	return cmd
 }
 
+// prepareOutputPath creates the output directory if needed and canonicalizes
+// the output path via EvalCanonicalPath to prevent symlink-escape attacks.
+func prepareOutputPath(outputPath string) (string, error) {
+	outputDir := filepath.Dir(outputPath)
+	if outputDir != "." && outputDir != "" {
+		err := os.MkdirAll(outputDir, dirPerm)
+		if err != nil {
+			return "", fmt.Errorf("failed to create output directory: %w", err)
+		}
+	}
+
+	// Canonicalize after MkdirAll so the parent directory exists for symlink resolution.
+	canonOutput, err := fsutil.EvalCanonicalPath(outputPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve output path %q: %w", outputPath, err)
+	}
+
+	return canonOutput, nil
+}
+
 func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) error {
 	if flags.compressionLevel < minCompressionLevel ||
 		flags.compressionLevel > maxCompressionLevel {
@@ -161,15 +182,14 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 		_, _ = fmt.Fprintf(writer, "   Namespaces: all\n")
 	}
 
-	outputDir := filepath.Dir(flags.outputPath)
-	if outputDir != "." && outputDir != "" {
-		err := os.MkdirAll(outputDir, dirPerm)
-		if err != nil {
-			return fmt.Errorf("failed to create output directory: %w", err)
-		}
+	canonOutput, err := prepareOutputPath(flags.outputPath)
+	if err != nil {
+		return err
 	}
 
-	err := createBackupArchive(ctx, kubeconfigPath, writer, flags)
+	flags.outputPath = canonOutput
+
+	err = createBackupArchive(ctx, kubeconfigPath, writer, flags)
 	if err != nil {
 		return fmt.Errorf("failed to create backup: %w", err)
 	}

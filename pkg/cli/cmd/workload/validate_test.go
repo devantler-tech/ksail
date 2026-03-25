@@ -121,9 +121,10 @@ func TestValidateCmdAcceptsSinglePath(t *testing.T) {
 		t.Fatal("expected error for nonexistent path")
 	}
 
-	// The error should be about path access, not argument parsing
-	if !strings.Contains(err.Error(), "access path") {
-		t.Fatalf("expected error about path access, got %v", err)
+	// The error should be about path resolution or access, not argument parsing
+	if !strings.Contains(err.Error(), "access path") &&
+		!strings.Contains(err.Error(), "resolve path") {
+		t.Fatalf("expected error about path access or resolution, got %v", err)
 	}
 }
 

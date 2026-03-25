@@ -16,6 +16,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
@@ -108,9 +109,12 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool) error {
 		return fmt.Errorf("%q: %w", watchDir, errNotDirectory)
 	}
 
-	absDir, err := filepath.Abs(watchDir)
+	// Canonicalize the watch directory (resolve symlinks + absolute) so that
+	// file events are matched against the real directory and symlink-escape
+	// attacks are prevented in CI pipelines processing external manifests.
+	absDir, err := fsutil.EvalCanonicalPath(watchDir)
 	if err != nil {
-		return fmt.Errorf("resolve absolute path for %q: %w", watchDir, err)
+		return fmt.Errorf("resolve watch directory %q: %w", watchDir, err)
 	}
 
 	// Try to create a Flux reconciler for selective Kustomization reconciliation.
