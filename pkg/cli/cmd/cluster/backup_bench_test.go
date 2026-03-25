@@ -104,7 +104,11 @@ func BenchmarkSanitizeYAMLOutput_SinglePod(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		result, _ := clusterpkg.ExportSanitizeYAMLOutput(podYAML)
+		result, err := clusterpkg.ExportSanitizeYAMLOutput(podYAML)
+		if err != nil {
+			b.Fatalf("ExportSanitizeYAMLOutput: %v", err)
+		}
+
 		benchSanitizeYAMLSink = result
 	}
 }
@@ -116,7 +120,11 @@ func BenchmarkSanitizeYAMLOutput_PodList(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		result, _ := clusterpkg.ExportSanitizeYAMLOutput(podListYAML)
+		result, err := clusterpkg.ExportSanitizeYAMLOutput(podListYAML)
+		if err != nil {
+			b.Fatalf("ExportSanitizeYAMLOutput: %v", err)
+		}
+
 		benchSanitizeYAMLSink = result
 	}
 }
@@ -130,7 +138,11 @@ func BenchmarkSanitizeYAMLOutput_NonYAML(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		result, _ := clusterpkg.ExportSanitizeYAMLOutput(input)
+		result, err := clusterpkg.ExportSanitizeYAMLOutput(input)
+		if err != nil {
+			b.Fatalf("ExportSanitizeYAMLOutput: %v", err)
+		}
+
 		benchSanitizeYAMLSink = result
 	}
 }
@@ -218,13 +230,17 @@ func BenchmarkCreateTarball_Small(b *testing.B) {
 	srcDir := b.TempDir()
 	setupBenchmarkFiles(b, srcDir, 3, 1024)
 
+	outDir := b.TempDir()
+
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for b.Loop() {
-		out := filepath.Join(b.TempDir(), "backup.tar.gz")
+		out := filepath.Join(outDir, "backup.tar.gz")
 
-		_ = clusterpkg.ExportCreateTarball(srcDir, out, 6)
+		if err := clusterpkg.ExportCreateTarball(srcDir, out, 6); err != nil {
+			b.Fatalf("ExportCreateTarball: %v", err)
+		}
 	}
 }
 
@@ -234,13 +250,17 @@ func BenchmarkCreateTarball_Medium(b *testing.B) {
 	srcDir := b.TempDir()
 	setupBenchmarkFiles(b, srcDir, 20, 1024)
 
+	outDir := b.TempDir()
+
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for b.Loop() {
-		out := filepath.Join(b.TempDir(), "backup.tar.gz")
+		out := filepath.Join(outDir, "backup.tar.gz")
 
-		_ = clusterpkg.ExportCreateTarball(srcDir, out, 6)
+		if err := clusterpkg.ExportCreateTarball(srcDir, out, 6); err != nil {
+			b.Fatalf("ExportCreateTarball: %v", err)
+		}
 	}
 }
 
@@ -254,12 +274,12 @@ func setupBenchmarkFiles(b *testing.B, dir string, count, size int) {
 	for i := range count {
 		subDir := filepath.Join(dir, "resources", "type"+string(rune('a'+i%26)))
 
-		if err := os.MkdirAll(subDir, 0o750); err != nil {
+		if err := os.MkdirAll(subDir, clusterpkg.ExportDirPerm); err != nil {
 			b.Fatalf("setup: mkdir: %v", err)
 		}
 
 		if err := os.WriteFile(
-			filepath.Join(subDir, "resource.yaml"), payload, 0o600,
+			filepath.Join(subDir, "resource.yaml"), payload, clusterpkg.ExportFilePerm,
 		); err != nil {
 			b.Fatalf("setup: write file: %v", err)
 		}
