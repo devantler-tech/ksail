@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
@@ -97,7 +98,10 @@ type ResolvedClusterInfo struct {
 // Priority for cluster name: flag > config > kubeconfig context.
 // Priority for provider: flag > config > default (Docker).
 // Priority for kubeconfig: flag > env (KUBECONFIG) > config > default (~/.kube/config).
+//
+// When cmd is non-nil, the --config persistent flag is honored for config loading.
 func ResolveClusterInfo(
+	cmd *cobra.Command,
 	nameFlag string,
 	providerFlag v1alpha1.Provider,
 	kubeconfigFlag string,
@@ -108,7 +112,7 @@ func ResolveClusterInfo(
 
 	// Fill missing values from ksail.yaml config file
 	if clusterName == "" {
-		resolveFromConfig(&clusterName, &provider, &kubeconfigPath)
+		resolveFromConfig(cmd, &clusterName, &provider, &kubeconfigPath)
 	}
 
 	// Fall back to kubeconfig context detection
@@ -137,12 +141,22 @@ func ResolveClusterInfo(
 }
 
 // resolveFromConfig fills missing cluster info from the ksail.yaml config file.
+// When cmd is non-nil, the --config persistent flag is honored.
 func resolveFromConfig(
+	cmd *cobra.Command,
 	clusterName *string,
 	provider *v1alpha1.Provider,
 	kubeconfigPath *string,
 ) {
-	cfgManager := ksailconfigmanager.NewConfigManager(nil, "")
+	// Resolve --config flag without registering flags on the command.
+	var configFile string
+	if cmd != nil {
+		if cfgPath, err := flags.GetConfigPath(cmd); err == nil {
+			configFile = cfgPath
+		}
+	}
+
+	cfgManager := ksailconfigmanager.NewConfigManager(nil, configFile)
 
 	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
 	if err != nil || cfg == nil || !cfgManager.IsConfigFileFound() {
@@ -215,7 +229,7 @@ func runSimpleLifecycleAction(
 
 	// Resolve cluster info from flags, config, or kubeconfig
 	// Empty kubeconfig flag - simple lifecycle commands don't need kubeconfig cleanup
-	resolved, err := ResolveClusterInfo(nameFlag, providerFlag, "")
+	resolved, err := ResolveClusterInfo(cmd, nameFlag, providerFlag, "")
 	if err != nil {
 		return err
 	}

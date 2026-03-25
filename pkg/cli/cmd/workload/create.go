@@ -16,7 +16,8 @@ import (
 // The runtime parameter is kept for consistency with other workload command constructors,
 // though it's currently unused as this command wraps kubectl and flux directly.
 func NewCreateCmd(_ *di.Runtime) *cobra.Command {
-	// Try to load config silently to get kubeconfig path
+	// Use a placeholder during command construction.
+	// Kubeconfig will be re-resolved in PersistentPreRunE after flags are parsed.
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(nil)
 
 	// Create IO streams for kubectl and flux
@@ -45,6 +46,9 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 	}
 
 	createCmd.Annotations[annotations.AnnotationPermission] = "write"
+
+	// Re-resolve kubeconfig after flags are parsed, honoring --config.
+	wrapWithKubeconfigResolution(createCmd)
 
 	return createCmd
 }

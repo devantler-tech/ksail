@@ -99,7 +99,7 @@ func runDeleteAction(
 	tmr := initTimer(runtimeContainer)
 
 	// Resolve cluster info from flags, config, or kubeconfig
-	resolved, err := lifecycle.ResolveClusterInfo(flags.name, flags.provider, flags.kubeconfig)
+	resolved, err := lifecycle.ResolveClusterInfo(cmd, flags.name, flags.provider, flags.kubeconfig)
 	if err != nil {
 		return fmt.Errorf("failed to resolve cluster info: %w", err)
 	}

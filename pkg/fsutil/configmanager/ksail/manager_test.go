@@ -1345,3 +1345,107 @@ func TestIsConfigFileFoundReturnsFalseBeforeLoadConfig(t *testing.T) {
 		"expected IsConfigFileFound to return false before LoadConfig is called",
 	)
 }
+
+// TestLazyConfigFlagResolution verifies that NewCommandConfigManager resolves the
+// --config persistent flag lazily (during Load) rather than at construction time.
+// This ensures the explicit config file is used and directory traversal is bypassed.
+//
+//nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
+func TestLazyConfigFlagResolution(t *testing.T) {
+	// Create a temp directory and change into it — no ksail.yaml in this directory.
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	// Create a workload directory needed for loading.
+	workloadDir := filepath.Join(tempDir, "k8s")
+	require.NoError(t, os.MkdirAll(workloadDir, 0o750))
+
+	// Create a Kind distribution config file.
+	kindCfg := "apiVersion: kind.x-k8s.io/v1alpha4\nkind: Cluster\nname: lazy-test\n"
+	kindPath := filepath.Join(tempDir, "kind.yaml")
+	require.NoError(t, os.WriteFile(kindPath, []byte(kindCfg), 0o600))
+
+	// Write a config file in a non-standard location (not named ksail.yaml).
+	altConfig := "apiVersion: ksail.io/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"spec:\n" +
+		"  cluster:\n" +
+		"    distribution: Vanilla\n" +
+		"    distributionConfig: " + kindPath + "\n" +
+		"    connection:\n" +
+		"      context: kind-lazy-test\n" +
+		"  workload:\n" +
+		"    sourceDirectory: k8s\n"
+
+	altPath := filepath.Join(tempDir, "custom-config.yaml")
+	require.NoError(t, os.WriteFile(altPath, []byte(altConfig), 0o600))
+
+	// Build a command tree that mirrors the real CLI: a root command with the
+	// --config persistent flag and a child that uses NewCommandConfigManager.
+	root := &cobra.Command{Use: "root"}
+	root.PersistentFlags().String("config", "", "config file")
+
+	child := &cobra.Command{
+		Use: "child",
+	}
+	root.AddCommand(child)
+
+	selectors := configmanager.DefaultClusterFieldSelectors()
+	mgr := configmanager.NewCommandConfigManager(child, selectors)
+
+	// Simulate cobra having parsed the --config flag to the alternate path.
+	root.SetArgs([]string{"child", "--config", altPath})
+	// Execute through cobra so flags are parsed.
+	child.RunE = func(_ *cobra.Command, _ []string) error {
+		// Load inside RunE — flags are now parsed.
+		cfg, err := mgr.Load(configmanagerinterface.LoadOptions{Silent: true})
+		require.NoError(t, err)
+
+		// The alternate config specifies Vanilla distribution.
+		assert.Equal(t, v1alpha1.DistributionVanilla, cfg.Spec.Cluster.Distribution)
+		// Verify the config file was actually found via --config, not discovery.
+		assert.True(t, mgr.IsConfigFileFound())
+		assert.Equal(t, altPath, mgr.ConfigFile)
+
+		return nil
+	}
+
+	require.NoError(t, root.Execute())
+}
+
+// TestLazyConfigFlagResolution_DefaultDiscovery verifies that when --config is not
+// set, the standard ksail.yaml discovery via directory traversal is used.
+//
+//nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
+func TestLazyConfigFlagResolution_DefaultDiscovery(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	// Write ksail.yaml in the current directory for auto-discovery.
+	writeValidKsailConfig(t, tempDir)
+
+	root := &cobra.Command{Use: "root"}
+	root.PersistentFlags().String("config", "", "config file")
+
+	child := &cobra.Command{Use: "child"}
+	root.AddCommand(child)
+
+	selectors := configmanager.DefaultClusterFieldSelectors()
+	mgr := configmanager.NewCommandConfigManager(child, selectors)
+
+	// No --config flag — auto-discovery should find ksail.yaml.
+	root.SetArgs([]string{"child"})
+
+	child.RunE = func(_ *cobra.Command, _ []string) error {
+		cfg, err := mgr.Load(configmanagerinterface.LoadOptions{Silent: true})
+		require.NoError(t, err)
+
+		// ksail.yaml from writeValidKsailConfig specifies Vanilla.
+		assert.Equal(t, v1alpha1.DistributionVanilla, cfg.Spec.Cluster.Distribution)
+		assert.True(t, mgr.IsConfigFileFound())
+
+		return nil
+	}
+
+	require.NoError(t, root.Execute())
+}
