@@ -31,7 +31,7 @@ var errGitOpsEngineRequired = errors.New(
 const (
 	defaultReconcileTimeout = 5 * time.Minute
 	reconcileCmdLong        = "Trigger reconciliation/sync and wait for completion. " +
-		"For Flux, waits for the OCIRepository (if applicable) and all Kustomizations " +
+		"For Flux, waits for the OCIRepository and all Kustomizations " +
 		"in the Flux namespace to become ready. For ArgoCD, waits for the root application."
 )
 
