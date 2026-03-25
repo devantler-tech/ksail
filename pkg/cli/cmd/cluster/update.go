@@ -55,6 +55,7 @@ type DiffJSONOutput struct {
 }
 
 // getOutputFormat returns the --output flag value from the command, defaulting to "text".
+// The value is normalised to lower-case so that "--output JSON" is accepted.
 // Safe to call even when the flag is not registered on cmd.
 func getOutputFormat(cmd *cobra.Command) string {
 	if cmd == nil {
@@ -66,7 +67,18 @@ func getOutputFormat(cmd *cobra.Command) string {
 		return outputFormatText
 	}
 
-	return flag.Value.String()
+	return strings.ToLower(flag.Value.String())
+}
+
+// validateOutputFormat returns an error when the --output flag value is
+// neither "text" nor "json".
+func validateOutputFormat(cmd *cobra.Command) error {
+	format := getOutputFormat(cmd)
+	if format != outputFormatText && format != outputFormatJSON {
+		return fmt.Errorf("unsupported --output format %q: expected %q or %q", format, outputFormatText, outputFormatJSON)
+	}
+
+	return nil
 }
 
 // diffToJSON converts an UpdateResult to a DiffJSONOutput struct.
@@ -170,6 +182,10 @@ func handleUpdateRunE(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps lifecycle.Deps,
 ) error {
+	if err := validateOutputFormat(cmd); err != nil {
+		return err
+	}
+
 	deps.Timer.Start()
 
 	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
@@ -445,10 +461,15 @@ func applyOrReportChanges(
 }
 
 // reportDryRun prints a summary for dry-run mode and confirms no changes were applied.
-// When --output json is set, emits machine-readable JSON.
+// When --output json is set, emits machine-readable JSON only for the empty-diff case
+// (displayChangesSummary already emits JSON when TotalChanges() > 0).
 func reportDryRun(cmd *cobra.Command, diff *clusterupdate.UpdateResult) error {
 	if getOutputFormat(cmd) == outputFormatJSON {
-		emitDiffJSON(cmd, diff)
+		// displayChangesSummary already emitted JSON when TotalChanges() > 0.
+		// Only emit JSON here for the empty-diff case so CI/MCP still get a result.
+		if diff != nil && diff.TotalChanges() == 0 {
+			emitDiffJSON(cmd, diff)
+		}
 
 		return nil
 	}
