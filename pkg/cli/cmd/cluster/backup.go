@@ -135,7 +135,8 @@ Example:
 func prepareOutputPath(outputPath string) (string, error) {
 	outputDir := filepath.Dir(outputPath)
 	if outputDir != "." && outputDir != "" {
-		if err := os.MkdirAll(outputDir, dirPerm); err != nil {
+		err := os.MkdirAll(outputDir, dirPerm)
+		if err != nil {
 			return "", fmt.Errorf("failed to create output directory: %w", err)
 		}
 	}
