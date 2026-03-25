@@ -130,6 +130,25 @@ Example:
 	return cmd
 }
 
+// prepareOutputPath creates the output directory if needed and canonicalizes
+// the output path via EvalCanonicalPath to prevent symlink-escape attacks.
+func prepareOutputPath(outputPath string) (string, error) {
+	outputDir := filepath.Dir(outputPath)
+	if outputDir != "." && outputDir != "" {
+		if err := os.MkdirAll(outputDir, dirPerm); err != nil {
+			return "", fmt.Errorf("failed to create output directory: %w", err)
+		}
+	}
+
+	// Canonicalize after MkdirAll so the parent directory exists for symlink resolution.
+	canonOutput, err := fsutil.EvalCanonicalPath(outputPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve output path %q: %w", outputPath, err)
+	}
+
+	return canonOutput, nil
+}
+
 func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) error {
 	if flags.compressionLevel < minCompressionLevel ||
 		flags.compressionLevel > maxCompressionLevel {
@@ -162,21 +181,9 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 		_, _ = fmt.Fprintf(writer, "   Namespaces: all\n")
 	}
 
-	outputDir := filepath.Dir(flags.outputPath)
-	if outputDir != "." && outputDir != "" {
-		err := os.MkdirAll(outputDir, dirPerm)
-		if err != nil {
-			return fmt.Errorf("failed to create output directory: %w", err)
-		}
-	}
-
-	// Canonicalize user-supplied output path (resolve symlinks + absolute)
-	// so that the actual write destination is predictable and symlink-escape
-	// attacks are prevented in CI pipelines.
-	// Done after MkdirAll so the parent directory exists for symlink resolution.
-	canonOutput, err := fsutil.EvalCanonicalPath(flags.outputPath)
+	canonOutput, err := prepareOutputPath(flags.outputPath)
 	if err != nil {
-		return fmt.Errorf("resolve output path %q: %w", flags.outputPath, err)
+		return err
 	}
 
 	flags.outputPath = canonOutput

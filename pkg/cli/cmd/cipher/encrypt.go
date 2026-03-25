@@ -244,19 +244,7 @@ var errUnsupportedFileFormat = errors.New("unsupported file format")
 // setting up encryption options, encrypting the file, and writing
 // the encrypted content back to disk.
 func handleEncryptRunE(cmd *cobra.Command, args []string) error {
-	inputPath := args[0]
-
-	// Canonicalize user-supplied input path (resolve symlinks + absolute)
-	// so that the actual file being encrypted is predictable and
-	// symlink-escape attacks are prevented in CI pipelines.
-	canonPath, err := fsutil.EvalCanonicalPath(inputPath)
-	if err != nil {
-		return fmt.Errorf("resolve input path %q: %w", inputPath, err)
-	}
-
-	inputPath = canonPath
-
-	inputStore, outputStore, err := getStores(inputPath)
+	inputPath, inputStore, outputStore, err := canonicalizeAndGetStores(args[0])
 	if err != nil {
 		return err
 	}
@@ -292,6 +280,23 @@ func handleEncryptRunE(cmd *cobra.Command, args []string) error {
 	})
 
 	return nil
+}
+
+// canonicalizeAndGetStores canonicalizes the input path via EvalCanonicalPath
+// and returns the resolved path along with appropriate SOPS stores.
+// This prevents symlink-escape attacks by ensuring the actual file path is predictable.
+func canonicalizeAndGetStores(inputPath string) (string, sops.Store, sops.Store, error) {
+	canonPath, err := fsutil.EvalCanonicalPath(inputPath)
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("resolve input path %q: %w", inputPath, err)
+	}
+
+	inputStore, outputStore, err := getStores(canonPath)
+	if err != nil {
+		return "", nil, nil, err
+	}
+
+	return canonPath, inputStore, outputStore, nil
 }
 
 // getStores returns the appropriate SOPS stores (input and output) based on file extension.
