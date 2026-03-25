@@ -21,6 +21,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 	"k8s.io/client-go/tools/clientcmd"
@@ -299,6 +300,13 @@ func backupResourceTypes() []string {
 	}
 }
 
+// exportResult holds the outcome of exporting a single resource type.
+type exportResult struct {
+	resourceType string
+	count        int
+	err          error
+}
+
 func exportResources(
 	ctx context.Context,
 	kubeconfigPath, outputDir string,
@@ -306,31 +314,48 @@ func exportResources(
 	flags *backupFlags,
 	filteredTypes []string,
 ) (int, []string) {
+	results := make([]exportResult, len(filteredTypes))
+
+	g, gCtx := errgroup.WithContext(ctx)
+
+	for i, resourceType := range filteredTypes {
+		g.Go(func() error {
+			count, err := exportResourceType(
+				gCtx, kubeconfigPath, outputDir, resourceType, flags,
+			)
+			// Store at the pre-allocated index; no mutex needed because
+			// each goroutine writes to a distinct slot.
+			results[i] = exportResult{resourceType: resourceType, count: count, err: err}
+
+			return nil
+		})
+	}
+
+	_ = g.Wait()
+
+	// Collect results in original order for deterministic output.
 	totalCount := 0
 
 	var backedUpTypes []string
 
-	for _, resourceType := range filteredTypes {
-		count, err := exportResourceType(
-			ctx, kubeconfigPath, outputDir, resourceType, flags,
-		)
-		if err != nil {
+	for _, r := range results {
+		if r.err != nil {
 			_, _ = fmt.Fprintf(
 				writer,
 				"Warning: failed to export %s: %v\n",
-				resourceType, err,
+				r.resourceType, r.err,
 			)
 
 			continue
 		}
 
-		if count > 0 {
+		if r.count > 0 {
 			_, _ = fmt.Fprintf(
-				writer, "   Exported %d %s\n", count, resourceType,
+				writer, "   Exported %d %s\n", r.count, r.resourceType,
 			)
-			totalCount += count
+			totalCount += r.count
 
-			backedUpTypes = append(backedUpTypes, resourceType)
+			backedUpTypes = append(backedUpTypes, r.resourceType)
 		}
 	}
 
