@@ -22,6 +22,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 	"k8s.io/client-go/tools/clientcmd"
@@ -319,6 +320,13 @@ func backupResourceTypes() []string {
 	}
 }
 
+// exportResult holds the outcome of exporting a single resource type.
+type exportResult struct {
+	resourceType string
+	count        int
+	err          error
+}
+
 func exportResources(
 	ctx context.Context,
 	kubeconfigPath, outputDir string,
@@ -326,31 +334,48 @@ func exportResources(
 	flags *backupFlags,
 	filteredTypes []string,
 ) (int, []string) {
+	results := make([]exportResult, len(filteredTypes))
+
+	group, groupCtx := errgroup.WithContext(ctx)
+
+	for idx, resourceType := range filteredTypes {
+		group.Go(func() error {
+			count, err := exportResourceType(
+				groupCtx, kubeconfigPath, outputDir, resourceType, flags,
+			)
+			// Store at the pre-allocated index; no mutex needed because
+			// each goroutine writes to a distinct slot.
+			results[idx] = exportResult{resourceType: resourceType, count: count, err: err}
+
+			return nil
+		})
+	}
+
+	_ = group.Wait()
+
+	// Collect results in original order for deterministic output.
 	totalCount := 0
 
 	var backedUpTypes []string
 
-	for _, resourceType := range filteredTypes {
-		count, err := exportResourceType(
-			ctx, kubeconfigPath, outputDir, resourceType, flags,
-		)
-		if err != nil {
+	for _, result := range results {
+		if result.err != nil {
 			_, _ = fmt.Fprintf(
 				writer,
 				"Warning: failed to export %s: %v\n",
-				resourceType, err,
+				result.resourceType, result.err,
 			)
 
 			continue
 		}
 
-		if count > 0 {
+		if result.count > 0 {
 			_, _ = fmt.Fprintf(
-				writer, "   Exported %d %s\n", count, resourceType,
+				writer, "   Exported %d %s\n", result.count, result.resourceType,
 			)
-			totalCount += count
+			totalCount += result.count
 
-			backedUpTypes = append(backedUpTypes, resourceType)
+			backedUpTypes = append(backedUpTypes, result.resourceType)
 		}
 	}
 
