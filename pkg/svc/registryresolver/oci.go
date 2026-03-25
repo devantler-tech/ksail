@@ -4,10 +4,29 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+)
+
+// External-registry push retry configuration.
+// GHCR and similar external registries can experience transient blips
+// (rate limits, 5xx errors, redirect storms) that outlast the low-level
+// push retry in pkg/client/oci. This higher-level retry wraps the entire
+// build+push cycle with a longer back-off window.
+//
+// The default* values capture the production defaults, while the package-level
+// variables are used by the implementation and may be overridden in tests
+// to avoid long wall-clock delays.
+//
+//nolint:gochecknoglobals // package-level vars allow test overrides via export_test.go
+var (
+	externalPushMaxAttempts   = 5
+	externalPushRetryBaseWait = 5 * time.Second
+	externalPushRetryMaxWait  = 30 * time.Second
 )
 
 // PushOCIArtifactOptions contains parameters for pushing OCI artifacts.
@@ -36,6 +55,8 @@ type PushOCIArtifactResult struct {
 // This function reuses the core logic from `ksail workload push` for consistency.
 // The ctx parameter must be non-nil.
 // If the source directory doesn't exist, an empty OCI artifact is pushed instead.
+// For external registries (e.g. GHCR) the entire build+push cycle is wrapped
+// with higher-level retry logic to tolerate transient blips.
 // Returns a result indicating whether an artifact was actually pushed.
 func PushOCIArtifact(
 	ctx context.Context,
@@ -59,13 +80,33 @@ func PushOCIArtifact(
 		return nil, err
 	}
 
+	pushFn := func() (*PushOCIArtifactResult, error) {
+		return executePush(ctx, opts, registryInfo, sourceDir, exists)
+	}
+
+	// For external registries (GHCR, etc.) wrap with higher-level retry
+	if registryInfo.IsExternal {
+		return retryExternalPush(ctx, pushFn)
+	}
+
+	return pushFn()
+}
+
+// executePush performs the actual build and push of the OCI artifact.
+func executePush(
+	ctx context.Context,
+	opts PushOCIArtifactOptions,
+	registryInfo *Info,
+	sourceDir string,
+	exists bool,
+) (*PushOCIArtifactResult, error) {
 	builder := oci.NewWorkloadArtifactBuilder()
 
 	if !exists {
 		// Push an empty OCI artifact when source directory doesn't exist
 		emptyOpts := buildEmptyPushOptions(registryInfo, opts, sourceDir)
 
-		_, err = builder.BuildEmpty(ctx, emptyOpts)
+		_, err := builder.BuildEmpty(ctx, emptyOpts)
 		if err != nil {
 			return nil, fmt.Errorf("build and push empty oci artifact: %w", err)
 		}
@@ -76,12 +117,64 @@ func PushOCIArtifact(
 	// Build options and push
 	buildOpts := buildPushOptions(registryInfo, opts, sourceDir)
 
-	_, err = builder.Build(ctx, buildOpts)
+	_, err := builder.Build(ctx, buildOpts)
 	if err != nil {
 		return nil, fmt.Errorf("build and push oci artifact: %w", err)
 	}
 
 	return &PushOCIArtifactResult{Pushed: true, Empty: false}, nil
+}
+
+// retryExternalPush wraps a push operation with retry logic for external registries.
+// GHCR and similar registries can experience transient blips (rate limits,
+// 5xx errors, redirect storms) that outlast the low-level push retry in
+// pkg/client/oci. This function provides a higher-level retry with longer
+// back-off windows.
+// Returns the result of the first successful attempt, or the last error
+// if all attempts are exhausted.
+func retryExternalPush(
+	ctx context.Context,
+	fn func() (*PushOCIArtifactResult, error),
+) (*PushOCIArtifactResult, error) {
+	var lastErr error
+
+	for attempt := 1; attempt <= externalPushMaxAttempts; attempt++ {
+		result, err := fn()
+		if err == nil {
+			return result, nil
+		}
+
+		lastErr = err
+
+		if !netretry.IsRetryable(lastErr) || attempt == externalPushMaxAttempts {
+			break
+		}
+
+		delay := netretry.ExponentialDelay(
+			attempt, externalPushRetryBaseWait, externalPushRetryMaxWait,
+		)
+
+		timer := time.NewTimer(delay)
+
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+
+			return nil, fmt.Errorf("push to external registry cancelled: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+
+	if !netretry.IsRetryable(lastErr) {
+		return nil, fmt.Errorf("push to external registry failed (non-retryable): %w", lastErr)
+	}
+
+	return nil, fmt.Errorf(
+		"push to external registry failed after %d attempts: %w",
+		externalPushMaxAttempts, lastErr,
+	)
 }
 
 // resolveSourceDirectory determines the source directory from options or config.
