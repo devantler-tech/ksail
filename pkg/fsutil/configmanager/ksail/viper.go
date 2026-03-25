@@ -26,6 +26,8 @@ func InitializeViper(configFilePath string) *viper.Viper {
 	viperInstance := viper.New()
 
 	if configFilePath != "" {
+		// Expand ~ to home directory since Viper doesn't handle tilde expansion.
+		configFilePath = expandHomePath(configFilePath)
 		// Use the explicit config file path — skip name/type/path discovery.
 		// Still set config type so Viper can decode files without a .yaml/.yml extension.
 		viperInstance.SetConfigFile(configFilePath)
@@ -117,4 +119,16 @@ func addParentDirectoriesToViperPaths(viperInstance *viper.Viper) {
 			break
 		}
 	}
+}
+
+// expandHomePath expands a leading ~ to the current user's home directory.
+func expandHomePath(path string) string {
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		usr, err := user.Current()
+		if err == nil {
+			return filepath.Join(usr.HomeDir, path[1:])
+		}
+	}
+
+	return path
 }
