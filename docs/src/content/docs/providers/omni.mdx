@@ -105,6 +105,18 @@ ksail cluster create
 ```
 
 > [!NOTE]
+> Omni generates the kubeconfig context name (e.g., `devantler-prod`). This differs from the `admin@<name>` convention used by Docker/Hetzner Talos clusters. After creation, retrieve the context name from your kubeconfig and set it in `ksail.yaml` so KSail can resolve it:
+>
+> ```yaml
+> spec:
+>   cluster:
+>     connection:
+>       context: "your-omni-generated-context"
+> ```
+>
+> See [Context defaults by distribution](/configuration/declarative-configuration/) for the full reference.
+
+> [!NOTE]
 > Deleting the cluster removes the Omni cluster resource and deallocates machines. The machines remain registered in Omni and can be reused for future clusters.
 
 ### Step 5: Cleanup

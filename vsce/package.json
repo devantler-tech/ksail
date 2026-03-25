@@ -18,6 +18,7 @@
     "vscode": "^1.110.0"
   },
   "categories": [
+    "Machine Learning",
     "Other"
   ],
   "keywords": [
@@ -29,7 +30,8 @@
     "kind",
     "k3d",
     "talos",
-    "mcp"
+    "mcp",
+    "mcp-server"
   ],
   "galleryBanner": {
     "color": "#1e1e1e",
