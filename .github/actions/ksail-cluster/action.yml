@@ -202,12 +202,17 @@ runs:
         ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
 
     - name: 🔧 Inject Omni endpoint
-      if: inputs.init == 'true' && inputs.provider == 'Omni' && inputs.omni-endpoint != ''
+      if: inputs.provider == 'Omni' && inputs.omni-endpoint != ''
       shell: bash
       env:
         OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
-        # Patch ksail.yaml to set spec.cluster.omni.endpoint since ksail reads it from config
+        # Patch ksail.yaml to set spec.cluster.omni.endpoint since ksail reads it from config.
+        # For non-init flow, create a minimal ksail.yaml if it doesn't exist.
+        if [ ! -f ksail.yaml ]; then
+          echo "apiVersion: ksail.io/v1alpha1" > ksail.yaml
+          echo "kind: Cluster" >> ksail.yaml
+        fi
         yq -i '.spec.cluster.omni.endpoint = strenv(OMNI_ENDPOINT)' ksail.yaml
 
     - name: 🚀 Create Cluster

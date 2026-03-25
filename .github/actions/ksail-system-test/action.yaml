@@ -73,11 +73,11 @@ runs:
         OMNI_EP: ${{ inputs.omni-endpoint }}
       run: |
         if [ -z "$OMNI_KEY" ]; then
-          echo "❌ ERROR: omni-service-account-key is required when provider is Omni"
+          echo "❌ ERROR: omni-service-account-key is required when provider is Omni" >&2
           exit 1
         fi
         if [ -z "$OMNI_EP" ]; then
-          echo "❌ ERROR: omni-endpoint is required when provider is Omni"
+          echo "❌ ERROR: omni-endpoint is required when provider is Omni" >&2
           exit 1
         fi
 
