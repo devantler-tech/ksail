@@ -498,7 +498,7 @@ func findKustomizationDir(changedFile, rootDir string) string {
 // (e.g., no kubeconfig, cluster unreachable). The caller should treat
 // a nil return as "Flux is unavailable; skip selective reconciliation".
 func tryCreateFluxReconciler() *flux.Reconciler {
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(nil)
 	if kubeconfigPath == "" {
 		return nil
 	}
