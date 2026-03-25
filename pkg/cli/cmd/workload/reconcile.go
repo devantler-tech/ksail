@@ -28,7 +28,12 @@ var errGitOpsEngineRequired = errors.New(
 )
 
 // Shared constants for reconciliation.
-const defaultReconcileTimeout = 5 * time.Minute
+const (
+	defaultReconcileTimeout = 5 * time.Minute
+	reconcileCmdLong        = "Trigger reconciliation/sync and wait for completion. " +
+		"For Flux, waits for the OCIRepository and all Kustomizations " +
+		"in the Flux namespace to become ready. For ArgoCD, waits for the root application."
+)
 
 // getKubeconfigPath returns the kubeconfig path from config or default.
 func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
@@ -50,7 +55,7 @@ func NewReconcileCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "reconcile",
 		Short:        "Trigger reconciliation for GitOps workloads",
-		Long:         "Trigger reconciliation/sync for the root Flux kustomization or root ArgoCD application.",
+		Long:         reconcileCmdLong,
 		SilenceUsage: true,
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: "write",
