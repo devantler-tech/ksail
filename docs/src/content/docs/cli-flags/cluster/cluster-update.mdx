@@ -22,6 +22,7 @@ Changes are classified into three categories:
   - Recreate-Required: Require full cluster recreation
 
 Use --dry-run to preview changes without applying them.
+Use --output json to emit a machine-readable diff for CI/MCP consumption.
 
 Usage:
   ksail cluster update [flags]
@@ -44,6 +45,7 @@ Flags:
       --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
       --mirror-registry strings        Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'
   -n, --name string                    Cluster name used for container names, registry names, and kubeconfig context
+      --output string                  Output format: text (default) or json (machine-readable, for CI/MCP) (default "text")
       --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider              Infrastructure provider backend (e.g., Docker)
       --workers int32                  Number of worker nodes

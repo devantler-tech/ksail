@@ -281,7 +281,7 @@ func setupBenchmarkFiles(b *testing.B, dir string, count, size int) {
 			b.Fatalf("setup: mkdir: %v", err)
 		}
 
-		err := os.WriteFile(
+		err = os.WriteFile(
 			filepath.Join(subDir, "resource.yaml"), payload, clusterpkg.ExportFilePerm,
 		)
 		if err != nil {
