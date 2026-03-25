@@ -14,9 +14,9 @@ import (
 //
 //nolint:gochecknoglobals // Benchmark sink variables are required to prevent compiler optimization.
 var (
-	benchSanitizeYAMLSink     string
-	benchCountYAMLDocsSink    int
-	benchFilterExcludedSink   []string
+	benchSanitizeYAMLSink   string
+	benchCountYAMLDocsSink  int
+	benchFilterExcludedSink []string
 )
 
 // podYAML is a minimal kubectl-style pod YAML used as benchmark input.
@@ -168,7 +168,7 @@ func BenchmarkCountYAMLDocuments_List(b *testing.B) {
 
 	for i := range 10 {
 		builder.WriteString("- apiVersion: v1\n  kind: Pod\n  metadata:\n    name: pod-")
-		builder.WriteString(string(rune('0' + i)))
+		builder.WriteRune(rune('0' + i))
 		builder.WriteString("\n")
 	}
 
@@ -238,7 +238,8 @@ func BenchmarkCreateTarball_Small(b *testing.B) {
 	for b.Loop() {
 		out := filepath.Join(outDir, "backup.tar.gz")
 
-		if err := clusterpkg.ExportCreateTarball(srcDir, out, 6); err != nil {
+		err := clusterpkg.ExportCreateTarball(srcDir, out, 6)
+		if err != nil {
 			b.Fatalf("ExportCreateTarball: %v", err)
 		}
 	}
@@ -258,7 +259,8 @@ func BenchmarkCreateTarball_Medium(b *testing.B) {
 	for b.Loop() {
 		out := filepath.Join(outDir, "backup.tar.gz")
 
-		if err := clusterpkg.ExportCreateTarball(srcDir, out, 6); err != nil {
+		err := clusterpkg.ExportCreateTarball(srcDir, out, 6)
+		if err != nil {
 			b.Fatalf("ExportCreateTarball: %v", err)
 		}
 	}
@@ -274,13 +276,15 @@ func setupBenchmarkFiles(b *testing.B, dir string, count, size int) {
 	for i := range count {
 		subDir := filepath.Join(dir, "resources", "type"+string(rune('a'+i%26)))
 
-		if err := os.MkdirAll(subDir, clusterpkg.ExportDirPerm); err != nil {
+		err := os.MkdirAll(subDir, clusterpkg.ExportDirPerm)
+		if err != nil {
 			b.Fatalf("setup: mkdir: %v", err)
 		}
 
-		if err := os.WriteFile(
+		err := os.WriteFile(
 			filepath.Join(subDir, "resource.yaml"), payload, clusterpkg.ExportFilePerm,
-		); err != nil {
+		)
+		if err != nil {
 			b.Fatalf("setup: write file: %v", err)
 		}
 	}
