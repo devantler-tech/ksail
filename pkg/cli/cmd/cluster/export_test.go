@@ -106,6 +106,17 @@ func ExportDisplayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateR
 	displayChangesSummary(cmd, diff)
 }
 
+// ExportDiffToJSON exports diffToJSON for testing.
+func ExportDiffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
+	return diffToJSON(diff)
+}
+
+// ExportOutputFormatJSON exports outputFormatJSON for testing.
+const ExportOutputFormatJSON = outputFormatJSON
+
+// ExportOutputFormatText exports outputFormatText for testing.
+const ExportOutputFormatText = outputFormatText
+
 // ExportFormatDiffTable exports formatDiffTable for benchmarking.
 func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, totalChanges int) string {
 	return formatDiffTable(diff, totalChanges)
