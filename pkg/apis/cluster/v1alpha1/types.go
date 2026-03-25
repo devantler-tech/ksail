@@ -58,12 +58,9 @@ type ClusterSpec struct {
 
 // WorkloadSpec defines workload-related configuration.
 type WorkloadSpec struct {
-	SourceDirectory string `default:"k8s" json:"sourceDirectory,omitzero"`
-	ValidateOnPush  bool   `              json:"validateOnPush,omitzero"`
-	// Tag is the OCI artifact tag used when pushing workloads (e.g., "latest", "v1.0.0").
-	// The CLI oci:// argument still takes precedence over this field.
-	// When not set, the push command defaults to the "dev" tag.
-	Tag string `json:"tag,omitzero"`
+	SourceDirectory string `default:"k8s"   json:"sourceDirectory,omitzero" jsonschema_description:"Path to the directory containing Kubernetes manifests to push"`                                                 //nolint:lll
+	ValidateOnPush  bool   `default:"false" json:"validateOnPush,omitzero"  jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                            //nolint:lll
+	Tag             string `default:"dev"   json:"tag,omitzero"             jsonschema_description:"OCI artifact tag for ksail workload push. Priority: CLI oci:// ref > this field > registry-embedded tag > dev"` //nolint:lll
 }
 
 // ChatSpec defines AI chat assistant configuration.
