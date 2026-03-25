@@ -316,46 +316,46 @@ func exportResources(
 ) (int, []string) {
 	results := make([]exportResult, len(filteredTypes))
 
-	g, gCtx := errgroup.WithContext(ctx)
+	group, groupCtx := errgroup.WithContext(ctx)
 
-	for i, resourceType := range filteredTypes {
-		g.Go(func() error {
+	for idx, resourceType := range filteredTypes {
+		group.Go(func() error {
 			count, err := exportResourceType(
-				gCtx, kubeconfigPath, outputDir, resourceType, flags,
+				groupCtx, kubeconfigPath, outputDir, resourceType, flags,
 			)
 			// Store at the pre-allocated index; no mutex needed because
 			// each goroutine writes to a distinct slot.
-			results[i] = exportResult{resourceType: resourceType, count: count, err: err}
+			results[idx] = exportResult{resourceType: resourceType, count: count, err: err}
 
 			return nil
 		})
 	}
 
-	_ = g.Wait()
+	_ = group.Wait()
 
 	// Collect results in original order for deterministic output.
 	totalCount := 0
 
 	var backedUpTypes []string
 
-	for _, r := range results {
-		if r.err != nil {
+	for _, result := range results {
+		if result.err != nil {
 			_, _ = fmt.Fprintf(
 				writer,
 				"Warning: failed to export %s: %v\n",
-				r.resourceType, r.err,
+				result.resourceType, result.err,
 			)
 
 			continue
 		}
 
-		if r.count > 0 {
+		if result.count > 0 {
 			_, _ = fmt.Fprintf(
-				writer, "   Exported %d %s\n", r.count, r.resourceType,
+				writer, "   Exported %d %s\n", result.count, result.resourceType,
 			)
-			totalCount += r.count
+			totalCount += result.count
 
-			backedUpTypes = append(backedUpTypes, r.resourceType)
+			backedUpTypes = append(backedUpTypes, result.resourceType)
 		}
 	}
 

@@ -162,17 +162,17 @@ func BenchmarkCountYAMLDocuments_Single(b *testing.B) {
 // BenchmarkCountYAMLDocuments_List measures counting for a kubectl list output
 // with 10 items — represents a typical namespace export.
 func BenchmarkCountYAMLDocuments_List(b *testing.B) {
-	var sb strings.Builder
+	var builder strings.Builder
 
-	sb.WriteString("apiVersion: v1\nkind: PodList\nmetadata: {}\nitems:\n")
+	builder.WriteString("apiVersion: v1\nkind: PodList\nmetadata: {}\nitems:\n")
 
 	for i := range 10 {
-		sb.WriteString("- apiVersion: v1\n  kind: Pod\n  metadata:\n    name: pod-")
-		sb.WriteString(string(rune('0' + i)))
-		sb.WriteString("\n")
+		builder.WriteString("- apiVersion: v1\n  kind: Pod\n  metadata:\n    name: pod-")
+		builder.WriteString(string(rune('0' + i)))
+		builder.WriteString("\n")
 	}
 
-	content := sb.String()
+	content := builder.String()
 
 	b.ReportAllocs()
 	b.ResetTimer()
