@@ -126,7 +126,11 @@ func expandHomePath(path string) string {
 	if path == "~" || strings.HasPrefix(path, "~/") {
 		usr, err := user.Current()
 		if err == nil {
-			return filepath.Join(usr.HomeDir, path[1:])
+			if path == "~" {
+				return usr.HomeDir
+			}
+
+			return filepath.Join(usr.HomeDir, path[2:])
 		}
 	}
 
