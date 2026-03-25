@@ -152,9 +152,8 @@ func mockPushFn(
 	}
 }
 
+//nolint:paralleltest // Mutates shared package-level retry vars via SetExternalPushRetryParams
 func TestRetryExternalPush_SucceedsOnFirstAttempt(t *testing.T) {
-	t.Parallel()
-
 	t.Cleanup(registryresolver.SetExternalPushRetryParams(
 		5, testRetryBaseWait, testRetryMaxWait,
 	))
@@ -171,9 +170,8 @@ func TestRetryExternalPush_SucceedsOnFirstAttempt(t *testing.T) {
 	assert.Equal(t, int32(1), callCount.Load())
 }
 
+//nolint:paralleltest // Mutates shared package-level retry vars via SetExternalPushRetryParams
 func TestRetryExternalPush_RetriesTransientErrors(t *testing.T) {
-	t.Parallel()
-
 	t.Cleanup(registryresolver.SetExternalPushRetryParams(
 		5, testRetryBaseWait, testRetryMaxWait,
 	))
@@ -192,9 +190,8 @@ func TestRetryExternalPush_RetriesTransientErrors(t *testing.T) {
 	assert.Equal(t, int32(2), callCount.Load())
 }
 
+//nolint:paralleltest // Mutates shared package-level retry vars via SetExternalPushRetryParams
 func TestRetryExternalPush_RetriesMultipleTransientErrors(t *testing.T) {
-	t.Parallel()
-
 	t.Cleanup(registryresolver.SetExternalPushRetryParams(
 		5, testRetryBaseWait, testRetryMaxWait,
 	))
@@ -213,9 +210,8 @@ func TestRetryExternalPush_RetriesMultipleTransientErrors(t *testing.T) {
 	assert.Equal(t, int32(4), callCount.Load())
 }
 
+//nolint:paralleltest // Mutates shared package-level retry vars via SetExternalPushRetryParams
 func TestRetryExternalPush_NonRetryableStopsImmediately(t *testing.T) {
-	t.Parallel()
-
 	t.Cleanup(registryresolver.SetExternalPushRetryParams(
 		5, testRetryBaseWait, testRetryMaxWait,
 	))
@@ -233,9 +229,8 @@ func TestRetryExternalPush_NonRetryableStopsImmediately(t *testing.T) {
 	assert.Equal(t, int32(1), callCount.Load())
 }
 
+//nolint:paralleltest // Mutates shared package-level retry vars via SetExternalPushRetryParams
 func TestRetryExternalPush_AllAttemptsExhausted(t *testing.T) {
-	t.Parallel()
-
 	t.Cleanup(registryresolver.SetExternalPushRetryParams(
 		5, testRetryBaseWait, testRetryMaxWait,
 	))
@@ -254,9 +249,8 @@ func TestRetryExternalPush_AllAttemptsExhausted(t *testing.T) {
 	assert.Equal(t, int32(5), callCount.Load())
 }
 
+//nolint:paralleltest // Mutates shared package-level retry vars via SetExternalPushRetryParams
 func TestRetryExternalPush_CancelledContext(t *testing.T) {
-	t.Parallel()
-
 	t.Cleanup(registryresolver.SetExternalPushRetryParams(
 		5, testRetryBaseWait, testRetryMaxWait,
 	))
