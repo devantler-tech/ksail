@@ -28,7 +28,7 @@ A VSCode extension for managing local Kubernetes clusters with KSail. Integrates
 
 ### From Marketplace
 
-Search for "KSail" in the VSCode Extensions Marketplace.
+Search for "KSail" in the VSCode Extensions Marketplace, or type `@mcp` in the Extensions view to filter MCP-compatible extensions and find KSail there.
 
 ## Usage
 
