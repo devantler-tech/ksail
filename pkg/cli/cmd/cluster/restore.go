@@ -18,6 +18,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
@@ -117,7 +118,17 @@ func runRestore(
 		return ErrInvalidResourcePolicy
 	}
 
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
+	// Canonicalize user-supplied input path (resolve symlinks + absolute)
+	// so that the actual file being read is predictable and symlink-escape
+	// attacks are prevented in CI pipelines.
+	canonInput, err := fsutil.EvalCanonicalPath(flags.inputPath)
+	if err != nil {
+		return fmt.Errorf("resolve input path %q: %w", flags.inputPath, err)
+	}
+
+	flags.inputPath = canonInput
+
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
 	if kubeconfigPath == "" {
 		return ErrKubeconfigNotFound
 	}

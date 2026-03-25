@@ -19,8 +19,10 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 	"k8s.io/client-go/tools/clientcmd"
@@ -129,6 +131,26 @@ Example:
 	return cmd
 }
 
+// prepareOutputPath creates the output directory if needed and canonicalizes
+// the output path via EvalCanonicalPath to prevent symlink-escape attacks.
+func prepareOutputPath(outputPath string) (string, error) {
+	outputDir := filepath.Dir(outputPath)
+	if outputDir != "." && outputDir != "" {
+		err := os.MkdirAll(outputDir, dirPerm)
+		if err != nil {
+			return "", fmt.Errorf("failed to create output directory: %w", err)
+		}
+	}
+
+	// Canonicalize after MkdirAll so the parent directory exists for symlink resolution.
+	canonOutput, err := fsutil.EvalCanonicalPath(outputPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve output path %q: %w", outputPath, err)
+	}
+
+	return canonOutput, nil
+}
+
 func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) error {
 	if flags.compressionLevel < minCompressionLevel ||
 		flags.compressionLevel > maxCompressionLevel {
@@ -161,15 +183,14 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 		_, _ = fmt.Fprintf(writer, "   Namespaces: all\n")
 	}
 
-	outputDir := filepath.Dir(flags.outputPath)
-	if outputDir != "." && outputDir != "" {
-		err := os.MkdirAll(outputDir, dirPerm)
-		if err != nil {
-			return fmt.Errorf("failed to create output directory: %w", err)
-		}
+	canonOutput, err := prepareOutputPath(flags.outputPath)
+	if err != nil {
+		return err
 	}
 
-	err := createBackupArchive(ctx, kubeconfigPath, writer, flags)
+	flags.outputPath = canonOutput
+
+	err = createBackupArchive(ctx, kubeconfigPath, writer, flags)
 	if err != nil {
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
@@ -299,6 +320,13 @@ func backupResourceTypes() []string {
 	}
 }
 
+// exportResult holds the outcome of exporting a single resource type.
+type exportResult struct {
+	resourceType string
+	count        int
+	err          error
+}
+
 func exportResources(
 	ctx context.Context,
 	kubeconfigPath, outputDir string,
@@ -306,31 +334,48 @@ func exportResources(
 	flags *backupFlags,
 	filteredTypes []string,
 ) (int, []string) {
+	results := make([]exportResult, len(filteredTypes))
+
+	group, groupCtx := errgroup.WithContext(ctx)
+
+	for idx, resourceType := range filteredTypes {
+		group.Go(func() error {
+			count, err := exportResourceType(
+				groupCtx, kubeconfigPath, outputDir, resourceType, flags,
+			)
+			// Store at the pre-allocated index; no mutex needed because
+			// each goroutine writes to a distinct slot.
+			results[idx] = exportResult{resourceType: resourceType, count: count, err: err}
+
+			return nil
+		})
+	}
+
+	_ = group.Wait()
+
+	// Collect results in original order for deterministic output.
 	totalCount := 0
 
 	var backedUpTypes []string
 
-	for _, resourceType := range filteredTypes {
-		count, err := exportResourceType(
-			ctx, kubeconfigPath, outputDir, resourceType, flags,
-		)
-		if err != nil {
+	for _, result := range results {
+		if result.err != nil {
 			_, _ = fmt.Fprintf(
 				writer,
 				"Warning: failed to export %s: %v\n",
-				resourceType, err,
+				result.resourceType, result.err,
 			)
 
 			continue
 		}
 
-		if count > 0 {
+		if result.count > 0 {
 			_, _ = fmt.Fprintf(
-				writer, "   Exported %d %s\n", count, resourceType,
+				writer, "   Exported %d %s\n", result.count, result.resourceType,
 			)
-			totalCount += count
+			totalCount += result.count
 
-			backedUpTypes = append(backedUpTypes, resourceType)
+			backedUpTypes = append(backedUpTypes, result.resourceType)
 		}
 	}
 

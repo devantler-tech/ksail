@@ -240,13 +240,16 @@
         "workload": {
           "properties": {
             "sourceDirectory": {
-              "type": "string"
+              "type": "string",
+              "description": "Path to the directory containing Kubernetes manifests to push"
             },
             "validateOnPush": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Validate manifests against schemas before pushing (validation disabled by default)"
             },
             "tag": {
-              "type": "string"
+              "type": "string",
+              "description": "OCI artifact tag for ksail workload push. Priority: CLI oci:// ref \u003e this field \u003e registry-embedded tag \u003e dev"
             }
           },
           "additionalProperties": false,
