@@ -1,9 +1,10 @@
 ---
 description: |
-  This workflow maintains documentation by synchronizing docs with code changes and reducing
-  documentation bloat. Trigger-based mode selection: push-to-main runs doc sync mode (analyzing
-  diffs and updating docs), schedule or /unbloat command runs bloat reduction mode, and
-  workflow_dispatch runs both modes sequentially.
+  This workflow maintains documentation by synchronizing docs with code changes, reducing
+  documentation bloat, and continuously refining the sidebar navigation and docs structure.
+  Trigger-based mode selection: push-to-main runs doc sync mode (analyzing diffs and updating
+  docs), schedule or /unbloat command runs bloat reduction mode, and workflow_dispatch runs
+  both modes sequentially.
 
 on:
   bots:
@@ -148,7 +149,25 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
    - Follow progressive disclosure: high-level concepts first, detailed examples second
    - Create clear, actionable documentation that serves both newcomers and power users
 
-5. **Coherence Review**
+5. **Sidebar & Structure Refinement**
+
+   Continuously evaluate and refine the sidebar navigation (`docs/astro.config.mjs`) and overall docs structure to keep them well-organized, easy to navigate, and holistic.
+
+   ```bash
+   # Read the current sidebar configuration
+   cat docs/astro.config.mjs
+   ```
+
+   - **Sync sidebar with content**: Cross-reference sidebar entries against actual pages in `docs/src/content/docs/`. Add entries for new pages and remove entries for deleted pages.
+   - **Logical grouping**: Ensure pages are grouped under the correct sidebar section. Evaluate whether the grouping follows Diátaxis alignment (getting-started → tutorials, guides → how-to, cli-flags/configuration → reference, concepts/architecture → explanation).
+   - **Ordering**: Within each group, order pages from general to specific — introductory content first, advanced content last.
+   - **Hierarchy depth**: Keep the sidebar hierarchy shallow (max 2–3 levels). Avoid deeply nested sections that make navigation difficult.
+   - **Label clarity**: Sidebar labels should be concise, descriptive, and consistent in style (e.g., noun phrases or verb phrases — pick one and stick with it).
+   - **Completeness**: Every content page should be reachable from the sidebar. Check for orphaned pages that exist on disk but have no sidebar entry.
+   - **Collapsed sections**: Use `collapsed: true` only for large reference sections (e.g., CLI flags). Keep primary navigation sections expanded.
+   - **Holistic structure**: Step back and evaluate the overall docs structure. If the documentation has grown in a way that no longer makes sense (e.g., a section has too many pages, related topics are scattered across sections), propose reorganization — move pages, rename sections, or create new groupings as needed.
+
+6. **Coherence Review**
 
    After making changes, verify the full documentation set remains coherent:
 
@@ -157,12 +176,12 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
    - The navigation hierarchy (sidebar) reflects the logical structure
    - Content depth matches the page purpose (concepts → explanatory, getting-started → tutorial, cli-flags → reference)
 
-6. **Quality Assurance**
+7. **Quality Assurance**
    - Check for broken links, missing images, or formatting issues
    - **Link verification**: Scan documentation files for HTTP(S) links and test them. For broken links, search for replacement URLs (try common variations like www, http vs https, archived pages). Fix broken links in-place. Use `cache-memory` to avoid re-checking links that were previously verified or confirmed unfixable.
    - Ensure code examples are accurate and functional
 
-7. **Output**
+8. **Output**
    - Create focused draft pull requests with clear descriptions
    - Exit if no code changes require documentation updates
 
@@ -250,13 +269,26 @@ Choose the file most in need of improvement based on: cross-page duplication sev
 
 **DO NOT REMOVE**: Technical accuracy, links, code examples, critical warnings, frontmatter metadata.
 
-#### 6. Update Cache Memory
+#### 6. Evaluate Sidebar & Structure
+
+After improving the selected file, evaluate whether the sidebar navigation or docs structure needs adjustment:
+
+```bash
+cat docs/astro.config.mjs
+```
+
+- If the file was moved, renamed, or deleted, update the corresponding sidebar entry in `docs/astro.config.mjs`
+- If the file's scope changed (e.g., content was moved to another page), verify the sidebar still accurately reflects page topics
+- Check if the sidebar grouping for this file's section is still logical and well-ordered
+- Ensure no orphaned sidebar entries exist (entries pointing to pages that no longer exist)
+
+#### 7. Update Cache Memory
 
 ```bash
 echo "$(date -u +%Y-%m-%d) - Cleaned: <filename>" >> /tmp/gh-aw/cache-memory/cleaned-files.txt
 ```
 
-#### 7. Create Pull Request
+#### 8. Create Pull Request
 
 Use the `create_pull_request` safe-outputs tool with:
 
