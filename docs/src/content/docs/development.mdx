@@ -113,6 +113,21 @@ Follow [Effective Go](https://go.dev/doc/effective_go). Use `gofmt` for formatti
 
 Return errors explicitly (no panic in library code). Wrap errors with `fmt.Errorf("context: %w", err)` and use custom error types where appropriate. `golangci-lint` enforces that all errors are checked.
 
+### Security: Path Handling
+
+All user-supplied file path arguments in CLI commands must be canonicalized with `fsutil.EvalCanonicalPath` before use. This resolves symlinks and produces an absolute path, preventing symlink-escape attacks in CI pipelines that process external manifests.
+
+````go
+import "github.com/devantler-tech/ksail/v5/pkg/fsutil"
+
+path, err = fsutil.EvalCanonicalPath(path)
+if err != nil {
+    return err
+}
+````
+
+When canonicalizing an **output** path that may not yet exist (e.g., `--output`), create parent directories with `os.MkdirAll` first, then call `EvalCanonicalPath`. For safe path-constrained reads, use `fsutil.ReadFileSafe` instead of reimplementing containment checks.
+
 ### Testing Patterns
 
 #### Unit Tests
