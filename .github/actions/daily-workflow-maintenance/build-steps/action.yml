@@ -1,0 +1,67 @@
+name: Daily Workflow Maintenance - Build Steps
+description: Validates CI/CD workflow files changed by the daily-workflow-maintenance agent
+
+runs:
+  using: composite
+  steps:
+    - name: 🔍 Validate YAML workflow syntax
+      shell: bash
+      run: |
+        echo "Validating YAML workflow files..."
+        FAILED=0
+        for file in .github/workflows/*.yaml .github/workflows/*.yml; do
+          [ -f "$file" ] || continue
+          if python3 -c "import yaml, sys; yaml.safe_load(open('$file'))" 2>/dev/null; then
+            echo "  ✅ $file"
+          else
+            echo "  ❌ $file — invalid YAML"
+            FAILED=1
+          fi
+        done
+        if [ "$FAILED" -eq 1 ]; then
+          echo "::error::One or more workflow YAML files have syntax errors"
+          exit 1
+        fi
+        echo "All YAML workflow files are valid."
+
+    - name: 🔍 Validate agentic workflow sources
+      shell: bash
+      run: |
+        echo "Validating agentic workflow .md files..."
+        FAILED=0
+        for file in .github/workflows/*.md; do
+          [ -f "$file" ] || continue
+          if gh aw compile --validate "$file" 2>&1; then
+            echo "  ✅ $file"
+          else
+            echo "  ❌ $file — compile validation failed"
+            FAILED=1
+          fi
+        done
+        if [ "$FAILED" -eq 1 ]; then
+          echo "::error::One or more agentic workflow .md files failed gh aw compile --validate"
+          exit 1
+        fi
+        echo "All agentic workflow .md files are valid."
+
+    - name: 🔍 Check required workflow fields
+      shell: bash
+      run: |
+        echo "Checking required fields in non-agentic workflows..."
+        FAILED=0
+        for file in .github/workflows/*.yaml .github/workflows/*.yml; do
+          [ -f "$file" ] || continue
+          # Check that non-trivial jobs have timeout-minutes set
+          if python3 - "$file" <<'PYEOF'
+        import yaml, sys
+        data = yaml.safe_load(open(sys.argv[1]))
+        jobs = data.get('jobs', {})
+        missing = [name for name, job in jobs.items() if isinstance(job, dict) and 'timeout-minutes' not in job]
+        if missing:
+            print(f"  ⚠️  {sys.argv[1]}: jobs missing timeout-minutes: {', '.join(missing)}")
+        PYEOF
+          then
+            :
+          fi
+        done
+        echo "Field check complete (warnings above are informational only)."
