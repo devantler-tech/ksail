@@ -161,7 +161,7 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 		)
 	}
 
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
 	if kubeconfigPath == "" {
 		return ErrKubeconfigNotFound
 	}

@@ -349,7 +349,7 @@ func TestNewStandardRunE(t *testing.T) {
 		t.Parallel()
 
 		runtimeContainer := di.NewRuntime()
-		cfgManager := ksailconfigmanager.NewConfigManager(nil)
+		cfgManager := ksailconfigmanager.NewConfigManager(nil, "")
 
 		config := lifecycle.Config{
 			TitleEmoji:      "🚀",
@@ -375,7 +375,7 @@ func TestWrapHandler(t *testing.T) {
 		t.Parallel()
 
 		runtimeContainer := di.NewRuntime()
-		cfgManager := ksailconfigmanager.NewConfigManager(nil)
+		cfgManager := ksailconfigmanager.NewConfigManager(nil, "")
 
 		handlerCalled := false
 		handler := func(_ *cobra.Command, _ *ksailconfigmanager.ConfigManager, _ lifecycle.Deps) error {

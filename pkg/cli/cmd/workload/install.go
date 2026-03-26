@@ -14,9 +14,6 @@ const requiredInstallArgs = 2
 
 // NewInstallCmd creates the workload install command.
 func NewInstallCmd(_ *di.Runtime) *cobra.Command {
-	// Try to load config silently to get kubeconfig path
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
-
 	cmd := &cobra.Command{
 		Use:   "install [NAME] [CHART]",
 		Short: "Install Helm charts",
@@ -26,6 +23,9 @@ func NewInstallCmd(_ *di.Runtime) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			releaseName := args[0]
 			chartName := args[1]
+
+			// Resolve kubeconfig lazily so --config flag is honored.
+			kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
 
 			// Create helm client
 			client, err := helm.NewClient(kubeconfigPath, "")

@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	"github.com/spf13/cobra"
 )
 
 // Resolver handles editor configuration resolution with proper precedence.
@@ -137,13 +138,21 @@ func (r *Resolver) SetEnvVars(editorCmd string, forCommand string) func() {
 }
 
 // SetupEditorEnv sets up the editor environment variables based on flag and config.
+// When cmd is non-nil, the --config persistent flag is honored for config loading.
 // It returns a cleanup function that should be called to restore the original environment.
-func SetupEditorEnv(editorFlag, forCommand string) func() {
+func SetupEditorEnv(cmd *cobra.Command, editorFlag, forCommand string) func() {
 	// Try to load config silently (don't error if it fails)
 	var cfg *v1alpha1.Cluster
 
 	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
-	cfgManager := ksailconfigmanager.NewConfigManager(nil, fieldSelectors...)
+
+	var cfgManager *ksailconfigmanager.ConfigManager
+	if cmd != nil {
+		cfgManager = ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
+		cfgManager.Writer = nil
+	} else {
+		cfgManager = ksailconfigmanager.NewConfigManager(nil, "", fieldSelectors...)
+	}
 
 	loadedCfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
 	if err == nil {

@@ -37,6 +37,12 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 		"Show per-activity benchmark output",
 	)
 
+	cmd.PersistentFlags().String(
+		flags.ConfigFlagName,
+		"",
+		"Path to config file (default: ksail.yaml found via directory traversal)",
+	)
+
 	// Add all subcommands
 	cmd.AddCommand(cluster.NewClusterCmd(runtimeContainer))
 	cmd.AddCommand(workload.NewWorkloadCmd(runtimeContainer))

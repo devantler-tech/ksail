@@ -415,6 +415,14 @@ func TestDiffToJSON_Structure(t *testing.T) {
 
 	out := clusterpkg.ExportDiffToJSON(diff)
 
+	assertDiffCounts(t, out)
+	assertInPlaceChange(t, out.InPlaceChanges[0])
+	assertCategories(t, out)
+}
+
+func assertDiffCounts(t *testing.T, out clusterpkg.DiffJSONOutput) {
+	t.Helper()
+
 	if out.TotalChanges != 3 {
 		t.Errorf("expected TotalChanges=3, got %d", out.TotalChanges)
 	}
@@ -434,8 +442,10 @@ func TestDiffToJSON_Structure(t *testing.T) {
 	if !out.RequiresConfirmation {
 		t.Error("expected RequiresConfirmation=true when reboot or recreate changes present")
 	}
+}
 
-	inPlace := out.InPlaceChanges[0]
+func assertInPlaceChange(t *testing.T, inPlace clusterpkg.ChangeJSON) {
+	t.Helper()
 
 	if inPlace.Field != "cluster.cni" {
 		t.Errorf("expected field=cluster.cni, got %q", inPlace.Field)
@@ -452,6 +462,10 @@ func TestDiffToJSON_Structure(t *testing.T) {
 	if inPlace.Category != "in-place" {
 		t.Errorf("expected category=in-place, got %q", inPlace.Category)
 	}
+}
+
+func assertCategories(t *testing.T, out clusterpkg.DiffJSONOutput) {
+	t.Helper()
 
 	if out.RecreateRequired[0].Category != "recreate-required" {
 		t.Errorf("expected category=recreate-required, got %q", out.RecreateRequired[0].Category)
@@ -477,4 +491,3 @@ func TestDiffToJSON_RequiresConfirmation_OnlyInPlace(t *testing.T) {
 		t.Error("expected RequiresConfirmation=false for in-place-only changes")
 	}
 }
-

@@ -85,6 +85,7 @@ func writeClusterConfigFile(t *testing.T, extraSpec ...string) {
 func newManagerWithDefaultSelectors() *configmanager.ConfigManager {
 	manager := configmanager.NewConfigManager(
 		io.Discard,
+		"",
 		configmanager.DefaultClusterFieldSelectors()...,
 	)
 	manager.Viper.SetConfigFile("ksail.yaml")
@@ -158,7 +159,7 @@ func TestLoadConfigLoadsKindDistributionConfig(t *testing.T) {
 		"      context: kind-kind\n"
 	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
 
-	manager := configmanager.NewConfigManager(io.Discard)
+	manager := configmanager.NewConfigManager(io.Discard, "")
 	manager.Viper.SetConfigFile("ksail.yaml")
 
 	_, err := manager.Load(configmanagerinterface.LoadOptions{})
@@ -189,7 +190,7 @@ func TestLoadConfigLoadsK3dDistributionConfig(t *testing.T) {
 		"      context: k3d-k3d-default\n"
 	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
 
-	manager := configmanager.NewConfigManager(io.Discard)
+	manager := configmanager.NewConfigManager(io.Discard, "")
 	manager.Viper.SetConfigFile("ksail.yaml")
 
 	_, err := manager.Load(configmanagerinterface.LoadOptions{})
@@ -229,7 +230,7 @@ func TestLoadConfigLoadsTalosDistributionConfig(t *testing.T) {
 		"      context: admin@my-talos-cluster\n"
 	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
 
-	manager := configmanager.NewConfigManager(io.Discard)
+	manager := configmanager.NewConfigManager(io.Discard, "")
 	manager.Viper.SetConfigFile("ksail.yaml")
 
 	_, err := manager.Load(configmanagerinterface.LoadOptions{})
@@ -262,7 +263,7 @@ func TestLoadConfigLoadsTalosDistributionConfigWithDefaultClusterName(t *testing
 		"    distributionConfig: " + talosPatchesDir + "\n"
 	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
 
-	manager := configmanager.NewConfigManager(io.Discard)
+	manager := configmanager.NewConfigManager(io.Discard, "")
 	manager.Viper.SetConfigFile("ksail.yaml")
 
 	_, err := manager.Load(configmanagerinterface.LoadOptions{})
@@ -283,6 +284,7 @@ func TestLoadIgnoresConfigFileWhenOptionSet(t *testing.T) {
 
 	manager := configmanager.NewConfigManager(
 		io.Discard,
+		"",
 		configmanager.DefaultClusterFieldSelectors()...)
 	manager.Viper.SetConfigFile("ksail.yaml")
 
@@ -351,7 +353,7 @@ func TestNewManager(t *testing.T) {
 
 	fieldSelectors := createDistributionOnlyFieldSelectors()
 
-	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)
+	manager := configmanager.NewConfigManager(io.Discard, "", fieldSelectors...)
 
 	require.NotNil(t, manager)
 	require.NotNil(t, manager.Config)
@@ -549,6 +551,7 @@ func TestLoadConfigDefaultsLocalRegistryDisabledWhenGitOpsEngineUnset(t *testing
 
 	manager := configmanager.NewConfigManager(
 		io.Discard,
+		"",
 		configmanager.DefaultClusterFieldSelectors()...)
 	manager.Viper.SetConfigFile(filepath.Join(tempDir, "ksail.yaml"))
 
@@ -600,7 +603,7 @@ func TestLoadSilentSkipsNotifications(t *testing.T) {
 		configmanager.DefaultKubeconfigFieldSelector(),
 	}
 
-	manager := configmanager.NewConfigManager(&output, selectors...)
+	manager := configmanager.NewConfigManager(&output, "", selectors...)
 	manager.Viper.SetConfigFile(configPath)
 
 	cluster, err := manager.Load(configmanagerinterface.LoadOptions{Silent: true})
@@ -624,7 +627,7 @@ func TestLoadConfigValidationFailureMessages(t *testing.T) {
 
 	var output bytes.Buffer
 
-	manager := configmanager.NewConfigManager(&output)
+	manager := configmanager.NewConfigManager(&output, "")
 
 	manager.Config.Kind = ""
 	manager.Config.APIVersion = ""
@@ -667,7 +670,7 @@ func testLoadConfigCase(
 
 	fieldSelectors := createFieldSelectorsWithName()
 
-	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)
+	manager := configmanager.NewConfigManager(io.Discard, "", fieldSelectors...)
 
 	cluster, err := manager.Load(configmanagerinterface.LoadOptions{})
 
@@ -729,7 +732,7 @@ func TestAddFlagsFromFields(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			manager := configmanager.NewConfigManager(io.Discard, testCase.fieldSelectors...)
+			manager := configmanager.NewConfigManager(io.Discard, "", testCase.fieldSelectors...)
 			cmd := &cobra.Command{
 				Use: "test",
 			}
@@ -764,7 +767,7 @@ func TestLoadConfigConfigProperty(t *testing.T) {
 	configStub := "apiVersion: ksail.io/v1alpha1\nkind: Cluster\n"
 	require.NoError(t, os.WriteFile(configPath, []byte(configStub), 0o600))
 
-	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)
+	manager := configmanager.NewConfigManager(io.Discard, "", fieldSelectors...)
 	manager.Viper.SetConfigFile(configPath)
 
 	// Before loading, Config should be initialized with proper TypeMeta
@@ -815,7 +818,7 @@ func testFieldValueSetting(
 	)
 	fieldSelectors = append(fieldSelectors, additionalSelectors...)
 
-	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)
+	manager := configmanager.NewConfigManager(io.Discard, "", fieldSelectors...)
 
 	cluster, err := manager.Load(configmanagerinterface.LoadOptions{})
 
@@ -966,7 +969,7 @@ invalid yaml content
 
 	// Create a manager
 	fieldSelectors := createFieldSelectorsWithName()
-	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)
+	manager := configmanager.NewConfigManager(io.Discard, "", fieldSelectors...)
 
 	// Try to load config - this should trigger the error path in readConfigurationFile
 	_, err = manager.Load(configmanagerinterface.LoadOptions{})
@@ -1016,7 +1019,7 @@ spec:
 
 	// Create manager and load config
 	fieldSelectors := createFieldSelectorsWithName()
-	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)
+	manager := configmanager.NewConfigManager(io.Discard, "", fieldSelectors...)
 
 	cluster, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
@@ -1040,6 +1043,7 @@ func TestLoadConfig_ValidationFailureOutputs(t *testing.T) {
 
 	manager := configmanager.NewConfigManager(
 		&out,
+		"",
 		configmanager.FieldSelector[v1alpha1.Cluster]{
 			Selector:     func(c *v1alpha1.Cluster) any { return &c.APIVersion },
 			Description:  "API version",
@@ -1125,7 +1129,7 @@ func loadConfigAndCaptureOutput(
 	t.Helper()
 
 	output := &bytes.Buffer{}
-	manager := configmanager.NewConfigManager(output, fieldSelectors...)
+	manager := configmanager.NewConfigManager(output, "", fieldSelectors...)
 
 	cluster, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
@@ -1169,7 +1173,7 @@ spec:
 
 	var (
 		output  bytes.Buffer
-		manager = configmanager.NewConfigManager(&output)
+		manager = configmanager.NewConfigManager(&output, "")
 	)
 
 	_, err := manager.Load(configmanagerinterface.LoadOptions{})
@@ -1272,7 +1276,7 @@ func newK3dManagerForScenario(
 
 	var (
 		output  bytes.Buffer
-		manager = configmanager.NewConfigManager(&output)
+		manager = configmanager.NewConfigManager(&output, "")
 	)
 
 	return manager, &output
@@ -1297,7 +1301,7 @@ func TestIsConfigFileFoundReturnsTrueWhenConfigExists(t *testing.T) {
 
 	writeValidKsailConfig(t, tempDir)
 
-	manager := configmanager.NewConfigManager(io.Discard)
+	manager := configmanager.NewConfigManager(io.Discard, "")
 	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 
@@ -1317,7 +1321,7 @@ func TestIsConfigFileFoundReturnsFalseWhenConfigMissing(t *testing.T) {
 	t.Chdir(tempDir)
 
 	// Use standard field selectors to provide valid defaults, bypassing validation errors.
-	manager := configmanager.NewConfigManager(io.Discard, createStandardFieldSelectors()...)
+	manager := configmanager.NewConfigManager(io.Discard, "", createStandardFieldSelectors()...)
 	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 
@@ -1333,11 +1337,115 @@ func TestIsConfigFileFoundReturnsFalseWhenConfigMissing(t *testing.T) {
 func TestIsConfigFileFoundReturnsFalseBeforeLoadConfig(t *testing.T) {
 	t.Parallel()
 
-	manager := configmanager.NewConfigManager(io.Discard)
+	manager := configmanager.NewConfigManager(io.Discard, "")
 
 	assert.False(
 		t,
 		manager.IsConfigFileFound(),
 		"expected IsConfigFileFound to return false before LoadConfig is called",
 	)
+}
+
+// TestLazyConfigFlagResolution verifies that NewCommandConfigManager resolves the
+// --config persistent flag lazily (during Load) rather than at construction time.
+// This ensures the explicit config file is used and directory traversal is bypassed.
+//
+//nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
+func TestLazyConfigFlagResolution(t *testing.T) {
+	// Create a temp directory and change into it — no ksail.yaml in this directory.
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	// Create a workload directory needed for loading.
+	workloadDir := filepath.Join(tempDir, "k8s")
+	require.NoError(t, os.MkdirAll(workloadDir, 0o750))
+
+	// Create a Kind distribution config file.
+	kindCfg := "apiVersion: kind.x-k8s.io/v1alpha4\nkind: Cluster\nname: lazy-test\n"
+	kindPath := filepath.Join(tempDir, "kind.yaml")
+	require.NoError(t, os.WriteFile(kindPath, []byte(kindCfg), 0o600))
+
+	// Write a config file in a non-standard location (not named ksail.yaml).
+	altConfig := "apiVersion: ksail.io/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"spec:\n" +
+		"  cluster:\n" +
+		"    distribution: Vanilla\n" +
+		"    distributionConfig: " + kindPath + "\n" +
+		"    connection:\n" +
+		"      context: kind-lazy-test\n" +
+		"  workload:\n" +
+		"    sourceDirectory: k8s\n"
+
+	altPath := filepath.Join(tempDir, "custom-config.yaml")
+	require.NoError(t, os.WriteFile(altPath, []byte(altConfig), 0o600))
+
+	// Build a command tree that mirrors the real CLI: a root command with the
+	// --config persistent flag and a child that uses NewCommandConfigManager.
+	root := &cobra.Command{Use: "root"}
+	root.PersistentFlags().String("config", "", "config file")
+
+	child := &cobra.Command{
+		Use: "child",
+	}
+	root.AddCommand(child)
+
+	selectors := configmanager.DefaultClusterFieldSelectors()
+	mgr := configmanager.NewCommandConfigManager(child, selectors)
+
+	// Simulate cobra having parsed the --config flag to the alternate path.
+	root.SetArgs([]string{"child", "--config", altPath})
+	// Execute through cobra so flags are parsed.
+	child.RunE = func(_ *cobra.Command, _ []string) error {
+		// Load inside RunE — flags are now parsed.
+		cfg, err := mgr.Load(configmanagerinterface.LoadOptions{Silent: true})
+		require.NoError(t, err)
+
+		// The alternate config specifies Vanilla distribution.
+		assert.Equal(t, v1alpha1.DistributionVanilla, cfg.Spec.Cluster.Distribution)
+		// Verify the config file was actually found via --config, not discovery.
+		assert.True(t, mgr.IsConfigFileFound())
+		assert.Equal(t, altPath, mgr.ConfigFile)
+
+		return nil
+	}
+
+	require.NoError(t, root.Execute())
+}
+
+// TestLazyConfigFlagResolution_DefaultDiscovery verifies that when --config is not
+// set, the standard ksail.yaml discovery via directory traversal is used.
+//
+//nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
+func TestLazyConfigFlagResolution_DefaultDiscovery(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	// Write ksail.yaml in the current directory for auto-discovery.
+	writeValidKsailConfig(t, tempDir)
+
+	root := &cobra.Command{Use: "root"}
+	root.PersistentFlags().String("config", "", "config file")
+
+	child := &cobra.Command{Use: "child"}
+	root.AddCommand(child)
+
+	selectors := configmanager.DefaultClusterFieldSelectors()
+	mgr := configmanager.NewCommandConfigManager(child, selectors)
+
+	// No --config flag — auto-discovery should find ksail.yaml.
+	root.SetArgs([]string{"child"})
+
+	child.RunE = func(_ *cobra.Command, _ []string) error {
+		cfg, err := mgr.Load(configmanagerinterface.LoadOptions{Silent: true})
+		require.NoError(t, err)
+
+		// ksail.yaml from writeValidKsailConfig specifies Vanilla.
+		assert.Equal(t, v1alpha1.DistributionVanilla, cfg.Spec.Cluster.Distribution)
+		assert.True(t, mgr.IsConfigFileFound())
+
+		return nil
+	}
+
+	require.NoError(t, root.Execute())
 }

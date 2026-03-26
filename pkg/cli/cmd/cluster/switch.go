@@ -55,11 +55,11 @@ func NewSwitchCmd(_ *di.Runtime) *cobra.Command {
 		Long:  switchLongDesc,
 		Args:  cobra.ExactArgs(1),
 		ValidArgsFunction: func(
-			_ *cobra.Command,
+			cmd *cobra.Command,
 			_ []string,
 			_ string,
 		) ([]string, cobra.ShellCompDirective) {
-			return listClusterNames(), cobra.ShellCompDirectiveNoFileComp
+			return listClusterNames(cmd), cobra.ShellCompDirectiveNoFileComp
 		},
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -88,7 +88,7 @@ func HandleSwitchRunE(
 	if kubeconfigPath == "" {
 		var err error
 
-		kubeconfigPath, err = resolveKubeconfigForSwitch()
+		kubeconfigPath, err = resolveKubeconfigForSwitch(cmd)
 		if err != nil {
 			return fmt.Errorf("resolve kubeconfig path: %w", err)
 		}
@@ -190,8 +190,9 @@ func switchContext(kubeconfigPath, clusterName string) (string, error) {
 
 // listClusterNames returns deduplicated cluster names from the kubeconfig for shell completion.
 // It strips known distribution prefixes from context names to produce cluster names.
-func listClusterNames() []string {
-	kubeconfigPath, err := resolveKubeconfigForSwitch()
+// When cmd is non-nil, the --config persistent flag is honored for config loading.
+func listClusterNames(cmd *cobra.Command) []string {
+	kubeconfigPath, err := resolveKubeconfigForSwitch(cmd)
 	if err != nil {
 		return nil
 	}
@@ -246,7 +247,8 @@ func stripDistributionPrefix(contextName string) string {
 // order as other cluster commands: KUBECONFIG env > ksail.yaml > default (~/.kube/config).
 // When KUBECONFIG contains multiple paths separated by the OS path list separator,
 // only the first path is used.
-func resolveKubeconfigForSwitch() (string, error) {
+// When cmd is non-nil, the --config persistent flag is honored for config loading.
+func resolveKubeconfigForSwitch(cmd *cobra.Command) (string, error) {
 	// 1. Check KUBECONFIG environment variable
 	if os.Getenv("KUBECONFIG") != "" {
 		// ResolveKubeconfigPath("") checks KUBECONFIG env, splits on path separator,
@@ -260,7 +262,7 @@ func resolveKubeconfigForSwitch() (string, error) {
 	}
 
 	// 2. Try ksail.yaml config file, falls back to default (~/.kube/config)
-	path := kubeconfig.GetKubeconfigPathSilently()
+	path := kubeconfig.GetKubeconfigPathSilently(cmd)
 
 	resolved, err := clusterdetector.ResolveKubeconfigPath(path)
 	if err != nil {

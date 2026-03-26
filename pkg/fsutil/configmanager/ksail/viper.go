@@ -1,11 +1,13 @@
 package configmanager
 
 import (
+	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/spf13/viper"
 )
 
@@ -21,22 +23,44 @@ const (
 // InitializeViper creates a new Viper instance with basic KSail configuration settings.
 // This function handles only the essential Viper setup and delegates specific concerns
 // to other functions. Configuration priority is: defaults < config files < environment variables < flags.
-func InitializeViper() *viper.Viper {
+// When configFilePath is non-empty, the exact file is used and directory traversal is skipped.
+// The path is canonicalized (home-expanded, absolute, symlink-resolved) to prevent
+// symlink-escape issues.
+func InitializeViper(configFilePath string) (*viper.Viper, error) {
 	viperInstance := viper.New()
 
-	// Configure file settings first (highest precedence after flags/env)
-	configureViperFileSettings(viperInstance)
+	if configFilePath != "" {
+		// Canonicalize the user-supplied path: expand ~, make absolute, resolve symlinks.
+		expanded, err := fsutil.ExpandHomePath(configFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("expanding config path %q: %w", configFilePath, err)
+		}
 
-	// Add standard configuration paths
-	configureViperPaths(viperInstance)
+		canonical, err := fsutil.EvalCanonicalPath(expanded)
+		if err != nil {
+			return nil, fmt.Errorf("canonicalizing config path %q: %w", configFilePath, err)
+		}
 
-	// Setup directory traversal for parent directories
-	addParentDirectoriesToViperPaths(viperInstance)
+		configFilePath = canonical
+		// Use the explicit config file path — skip name/type/path discovery.
+		// Still set config type so Viper can decode files without a .yaml/.yml extension.
+		viperInstance.SetConfigFile(configFilePath)
+		viperInstance.SetConfigType("yaml")
+	} else {
+		// Configure file settings first (highest precedence after flags/env)
+		configureViperFileSettings(viperInstance)
+
+		// Add standard configuration paths
+		configureViperPaths(viperInstance)
+
+		// Setup directory traversal for parent directories
+		addParentDirectoriesToViperPaths(viperInstance)
+	}
 
 	// Setup environment variable handling (higher precedence than config files)
 	configureViperEnvironment(viperInstance)
 
-	return viperInstance
+	return viperInstance, nil
 }
 
 // configureViperFileSettings sets up file-related configuration for Viper.
