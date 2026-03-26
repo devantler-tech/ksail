@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -27,6 +28,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
+
+// ErrUnsupportedOutputFormat is returned when the --output flag is set to an unsupported value.
+var ErrUnsupportedOutputFormat = errors.New("unsupported --output format")
 
 // outputFormatText is the default human-readable output format.
 const outputFormatText = "text"
@@ -76,7 +80,8 @@ func validateOutputFormat(cmd *cobra.Command) error {
 	format := getOutputFormat(cmd)
 	if format != outputFormatText && format != outputFormatJSON {
 		return fmt.Errorf(
-			"unsupported --output format %q: expected %q or %q",
+			"%w: %q (expected %q or %q)",
+			ErrUnsupportedOutputFormat,
 			format,
 			outputFormatText,
 			outputFormatJSON,
@@ -91,13 +96,13 @@ func diffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
 	convertChanges := func(changes []clusterupdate.Change) []ChangeJSON {
 		result := make([]ChangeJSON, len(changes))
 
-		for i, c := range changes {
+		for i, change := range changes {
 			result[i] = ChangeJSON{
-				Field:    c.Field,
-				OldValue: c.OldValue,
-				NewValue: c.NewValue,
-				Category: c.Category.String(),
-				Reason:   c.Reason,
+				Field:    change.Field,
+				OldValue: change.OldValue,
+				NewValue: change.NewValue,
+				Category: change.Category.String(),
+				Reason:   change.Reason,
 			}
 		}
 
@@ -187,7 +192,8 @@ func handleUpdateRunE(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps lifecycle.Deps,
 ) error {
-	if err := validateOutputFormat(cmd); err != nil {
+	err := validateOutputFormat(cmd)
+	if err != nil {
 		return err
 	}
 

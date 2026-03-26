@@ -150,8 +150,10 @@ func resolveFromConfig(
 ) {
 	// Resolve --config flag without registering flags on the command.
 	var configFile string
+
 	if cmd != nil {
-		if cfgPath, err := flags.GetConfigPath(cmd); err == nil {
+		cfgPath, err := flags.GetConfigPath(cmd)
+		if err == nil {
 			configFile = cfgPath
 		}
 	}

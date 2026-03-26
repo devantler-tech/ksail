@@ -52,8 +52,10 @@ func GetKubeconfigPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
 func GetKubeconfigPathSilently(cmd *cobra.Command) string {
 	// Resolve --config flag without registering additional flags on cmd.
 	var configFile string
+
 	if cmd != nil {
-		if cfgPath, err := flags.GetConfigPath(cmd); err == nil {
+		cfgPath, err := flags.GetConfigPath(cmd)
+		if err == nil {
 			configFile = cfgPath
 		}
 	}

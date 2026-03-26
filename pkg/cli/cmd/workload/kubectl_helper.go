@@ -40,23 +40,25 @@ func wrapWithKubeconfigResolution(cmd *cobra.Command) {
 	origPersistentPreRunE := cmd.PersistentPreRunE
 	origPersistentPreRun := cmd.PersistentPreRun
 
-	cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {
-		resolvedPath := kubeconfig.GetKubeconfigPathSilently(c)
+	cmd.PersistentPreRunE = func(child *cobra.Command, args []string) error {
+		resolvedPath := kubeconfig.GetKubeconfigPathSilently(child)
 
-		if f := c.Flags().Lookup("kubeconfig"); f != nil && !c.Flags().Changed("kubeconfig") {
-			if err := f.Value.Set(resolvedPath); err != nil {
+		kubeconfigFlag := child.Flags().Lookup("kubeconfig")
+		if kubeconfigFlag != nil && !child.Flags().Changed("kubeconfig") {
+			err := kubeconfigFlag.Value.Set(resolvedPath)
+			if err != nil {
 				return fmt.Errorf("failed to set kubeconfig flag: %w", err)
 			}
 
-			f.DefValue = resolvedPath
+			kubeconfigFlag.DefValue = resolvedPath
 		}
 
 		if origPersistentPreRunE != nil {
-			return origPersistentPreRunE(c, args)
+			return origPersistentPreRunE(child, args)
 		}
 
 		if origPersistentPreRun != nil {
-			origPersistentPreRun(c, args)
+			origPersistentPreRun(child, args)
 		}
 
 		return nil
