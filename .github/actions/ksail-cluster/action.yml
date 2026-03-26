@@ -232,7 +232,14 @@ runs:
       shell: bash
       env:
         SOPS_AGE_KEY: ${{ inputs.sops-age-key }}
-      run: ksail cipher import "$SOPS_AGE_KEY"
+      run: |
+        # Extract the AGE-SECRET-KEY line from the input (supports both bare keys and key files with comments)
+        AGE_KEY=$(echo "$SOPS_AGE_KEY" | grep -oE 'AGE-SECRET-KEY-[A-Za-z0-9]+' | head -1)
+        if [ -z "$AGE_KEY" ]; then
+          echo "❌ No valid AGE-SECRET-KEY found in sops-age-key input"
+          exit 1
+        fi
+        ksail cipher import "$AGE_KEY"
 
     - name: 🏗️ Initialize Project
       if: inputs.init == 'true'
@@ -292,9 +299,10 @@ runs:
       env:
         SOPS_AGE_KEY: ${{ inputs.sops-age-key }}
       run: |
+        AGE_KEY=$(echo "$SOPS_AGE_KEY" | grep -oE 'AGE-SECRET-KEY-[A-Za-z0-9]+' | head -1)
         kubectl create secret generic sops-age \
           --namespace=flux-system \
-          --from-literal=sops.agekey="$SOPS_AGE_KEY"
+          --from-literal=sops.agekey="$AGE_KEY"
 
     - name: 📦 Push manifests
       if: inputs.push == 'true'
