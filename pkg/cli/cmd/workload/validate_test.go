@@ -583,8 +583,10 @@ func TestValidateCmdFlagCombinations(t *testing.T) {
 	}
 }
 
-func TestValidateCmdSkipsKustomizePatches(t *testing.T) {
-	t.Parallel()
+// setupPatchTestDir creates a temp directory with a valid ConfigMap base resource,
+// a JSON 6902 patch (not valid standalone), and a kustomization.yaml referencing both.
+func setupPatchTestDir(t *testing.T) string {
+	t.Helper()
 
 	tmpDir := t.TempDir()
 
@@ -597,12 +599,13 @@ metadata:
 data:
   key: value
 `
+
 	err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(baseYAML), 0o600)
 	if err != nil {
 		t.Fatalf("failed to write base manifest: %v", err)
 	}
 
-	// Create a patch directory with a strategic merge patch that is NOT valid standalone
+	// Create a patch directory
 	patchDir := filepath.Join(tmpDir, "patches")
 
 	err = os.MkdirAll(patchDir, 0o750)
@@ -616,6 +619,7 @@ data:
   path: /data/extra-key
   value: extra-value
 `
+
 	err = os.WriteFile(filepath.Join(patchDir, "add-key.yaml"), []byte(patchYAML), 0o600)
 	if err != nil {
 		t.Fatalf("failed to write patch manifest: %v", err)
@@ -633,10 +637,23 @@ patchesJson6902:
       version: v1
       name: my-config
 `
-	err = os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600)
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "kustomization.yaml"),
+		[]byte(kustomizationYAML),
+		0o600,
+	)
 	if err != nil {
 		t.Fatalf("failed to write kustomization.yaml: %v", err)
 	}
+
+	return tmpDir
+}
+
+func TestValidateCmdSkipsKustomizePatches(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := setupPatchTestDir(t)
 
 	cmd := workload.NewValidateCmd()
 	cmd.SetArgs([]string{tmpDir})
@@ -647,8 +664,12 @@ patchesJson6902:
 
 	// Should succeed — the patch file is excluded from individual validation
 	// and is validated as part of the kustomize build output
-	err = cmd.Execute()
+	err := cmd.Execute()
 	if err != nil {
-		t.Fatalf("expected validation to succeed (patch should be excluded), got error: %v\noutput: %s", err, output.String())
+		t.Fatalf(
+			"expected validation to succeed (patch should be excluded), got error: %v\noutput: %s",
+			err,
+			output.String(),
+		)
 	}
 }

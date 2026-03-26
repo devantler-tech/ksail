@@ -417,49 +417,61 @@ func collectPatchPaths(kustomizationDirs []string) map[string]struct{} {
 	patchPaths := make(map[string]struct{})
 
 	for _, kustDir := range kustomizationDirs {
-		kustFile := filepath.Join(kustDir, kustomizationFileName)
-
-		data, err := os.ReadFile(kustFile) //nolint:gosec // kustFile built from walked dirs
-		if err != nil {
-			continue
-		}
-
-		var kust kustomizeTypes.Kustomization
-		if err := kust.Unmarshal(data); err != nil {
-			continue
-		}
-
-		// Modern patches field
-		for _, p := range kust.Patches {
-			if p.Path != "" {
-				abs := filepath.Join(kustDir, p.Path)
-				if resolved, err := filepath.Abs(abs); err == nil {
-					patchPaths[resolved] = struct{}{}
-				}
-			}
-		}
-
-		// Deprecated patchesStrategicMerge (file paths only, skip inline YAML)
-		for _, psm := range kust.PatchesStrategicMerge {
-			s := string(psm)
-			if s != "" && !strings.Contains(s, "\n") {
-				abs := filepath.Join(kustDir, s)
-				if resolved, err := filepath.Abs(abs); err == nil {
-					patchPaths[resolved] = struct{}{}
-				}
-			}
-		}
-
-		// Deprecated patchesJson6902
-		for _, p := range kust.PatchesJson6902 {
-			if p.Path != "" {
-				abs := filepath.Join(kustDir, p.Path)
-				if resolved, err := filepath.Abs(abs); err == nil {
-					patchPaths[resolved] = struct{}{}
-				}
-			}
-		}
+		collectPatchPathsFromDir(kustDir, patchPaths)
 	}
 
 	return patchPaths
+}
+
+// collectPatchPathsFromDir parses a single kustomization.yaml and adds the absolute
+// paths of referenced patch files to the provided set.
+func collectPatchPathsFromDir(kustDir string, patchPaths map[string]struct{}) {
+	kustFile := filepath.Join(kustDir, kustomizationFileName)
+
+	data, err := os.ReadFile(kustFile) //nolint:gosec // kustFile built from walked dirs
+	if err != nil {
+		return
+	}
+
+	var kust kustomizeTypes.Kustomization
+
+	err = kust.Unmarshal(data)
+	if err != nil {
+		return
+	}
+
+	// Modern patches field
+	for _, p := range kust.Patches {
+		addPatchPath(kustDir, p.Path, patchPaths)
+	}
+
+	// Deprecated patchesStrategicMerge (file paths only, skip inline YAML)
+	for _, psm := range kust.PatchesStrategicMerge { //nolint:staticcheck // must handle legacy kustomization files
+		s := string(psm)
+		if !strings.Contains(s, "\n") {
+			addPatchPath(kustDir, s, patchPaths)
+		}
+	}
+
+	// Deprecated patchesJson6902
+	for _, p := range kust.PatchesJson6902 { //nolint:staticcheck // must handle legacy kustomization files
+		addPatchPath(kustDir, p.Path, patchPaths)
+	}
+}
+
+// addPatchPath resolves a relative patch file path against a kustomization directory
+// and adds the absolute path to the set. Empty paths are ignored.
+func addPatchPath(kustDir, relPath string, patchPaths map[string]struct{}) {
+	if relPath == "" {
+		return
+	}
+
+	abs := filepath.Join(kustDir, relPath)
+
+	resolved, err := filepath.Abs(abs)
+	if err != nil {
+		return
+	}
+
+	patchPaths[resolved] = struct{}{}
 }
