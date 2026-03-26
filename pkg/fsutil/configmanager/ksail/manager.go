@@ -234,8 +234,11 @@ func (m *ConfigManager) resolveConfigFile() error {
 	// This runs inside Load() which is called from RunE — at that point cobra
 	// has already parsed all flags, so the value is reliable.
 	cfgPath, err := flags.GetConfigPath(m.command)
-	//nolint:nilerr // err means --config flag isn't registered; fall back to auto-discovery.
-	if err != nil || cfgPath == "" {
+	if err != nil {
+		return fmt.Errorf("resolving --config flag: %w", err)
+	}
+
+	if cfgPath == "" {
 		return nil
 	}
 
