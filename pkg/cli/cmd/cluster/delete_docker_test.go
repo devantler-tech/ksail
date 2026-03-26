@@ -23,7 +23,7 @@ func TestIsClusterContainer_KindControlPlane(t *testing.T) {
 			want:          true,
 		},
 		{
-			name:          "control-plane with different cluster name",
+			name:          "control-plane match with staging cluster",
 			containerName: "staging-control-plane",
 			clusterName:   "staging",
 			want:          true,
@@ -381,7 +381,7 @@ func TestIsNumericString(t *testing.T) {
 		{name: "single digit", input: "0", want: true},
 		{name: "multi digit", input: "123", want: true},
 		{name: "large number", input: "9999", want: true},
-		{name: "empty string", input: "", want: true}, // empty loops are vacuously true
+		{name: "empty string", input: "", want: false},
 		{name: "alpha string", input: "abc", want: false},
 		{name: "alphanumeric", input: "1a2b", want: false},
 		{name: "negative sign", input: "-1", want: false},
