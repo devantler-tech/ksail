@@ -26,6 +26,24 @@ inputs:
   hcloud-token:
     description: "Hetzner Cloud API token (required when provider is Hetzner)"
     default: ""
+  sops-age-key:
+    description: "SOPS Age private key for decrypting secrets (imports key and creates K8s secret)"
+    default: ""
+  hosts-file:
+    description: "Path to hosts file to append to /etc/hosts"
+    default: ""
+  root-ca-cert-file:
+    description: "Path to root CA certificate to install as trusted"
+    default: ""
+  push:
+    description: "Whether to push manifests after cluster creation"
+    default: "false"
+  reconcile:
+    description: "Whether to reconcile workloads after push"
+    default: "false"
+  delete:
+    description: "Whether to delete the cluster at the end (runs even on failure)"
+    default: "false"
 
 outputs:
   kubeconfig:
@@ -182,6 +200,47 @@ runs:
           fi
         done <<< "$IMAGES"
 
+    - name: 🌐 Add hosts
+      if: inputs.hosts-file != ''
+      shell: bash
+      env:
+        HOSTS_FILE: ${{ inputs.hosts-file }}
+      run: |
+        if [ -f "$HOSTS_FILE" ]; then
+          sudo sh -c 'cat "$1" >> /etc/hosts' sh "$HOSTS_FILE"
+          echo "✅ Added hosts from $HOSTS_FILE"
+        else
+          echo "⚠️ Hosts file not found: $HOSTS_FILE"
+        fi
+
+    - name: 🔐 Install root CA
+      if: inputs.root-ca-cert-file != ''
+      shell: bash
+      env:
+        ROOT_CA_CERT_FILE: ${{ inputs.root-ca-cert-file }}
+      run: |
+        if [ -f "$ROOT_CA_CERT_FILE" ]; then
+          sudo cp "$ROOT_CA_CERT_FILE" /usr/local/share/ca-certificates/root-ca.crt
+          sudo update-ca-certificates
+          echo "✅ Installed root CA certificate"
+        else
+          echo "⚠️ Root CA cert file not found: $ROOT_CA_CERT_FILE"
+        fi
+
+    - name: 🔑 Import SOPS Age key
+      if: inputs.sops-age-key != ''
+      shell: bash
+      env:
+        SOPS_AGE_KEY: ${{ inputs.sops-age-key }}
+      run: |
+        # Extract the AGE-SECRET-KEY line from the input (supports both bare keys and key files with comments)
+        AGE_KEY=$(echo "$SOPS_AGE_KEY" | grep -oE 'AGE-SECRET-KEY-[A-Za-z0-9]+' | head -1)
+        if [ -z "$AGE_KEY" ]; then
+          echo "❌ No valid AGE-SECRET-KEY found in sops-age-key input"
+          exit 1
+        fi
+        ksail cipher import "$AGE_KEY"
+
     - name: 🏗️ Initialize Project
       if: inputs.init == 'true'
       shell: bash
@@ -234,6 +293,27 @@ runs:
         done
         echo "kubeconfig=$KUBECONFIG_PATH" >> "$GITHUB_OUTPUT"
 
+    - name: 🔐 Create SOPS Age secret in cluster
+      if: inputs.sops-age-key != ''
+      shell: bash
+      env:
+        SOPS_AGE_KEY: ${{ inputs.sops-age-key }}
+      run: |
+        AGE_KEY=$(echo "$SOPS_AGE_KEY" | grep -oE 'AGE-SECRET-KEY-[A-Za-z0-9]+' | head -1)
+        kubectl create secret generic sops-age \
+          --namespace=flux-system \
+          --from-literal=sops.agekey="$AGE_KEY"
+
+    - name: 📦 Push manifests
+      if: inputs.push == 'true'
+      shell: bash
+      run: ksail workload push
+
+    - name: 🔁 Reconcile workloads
+      if: inputs.reconcile == 'true'
+      shell: bash
+      run: ksail workload reconcile
+
     - name: 📦 Export mirror volumes
       if: inputs.cache == 'true' && inputs.provider == 'Docker'
       shell: bash
@@ -261,3 +341,10 @@ runs:
         path: /tmp/ksail-mirror-cache
         key: ksail-mirror-${{ steps.cache-keys.outputs.images-hash }}-${{ runner.os }}-${{ runner.arch }}
       continue-on-error: true
+
+    - name: 🔥 Delete cluster
+      if: always() && inputs.delete == 'true'
+      shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+      run: ksail cluster delete || echo "⚠️ Cluster may not have been created"
