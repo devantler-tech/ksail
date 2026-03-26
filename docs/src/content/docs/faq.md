@@ -160,11 +160,11 @@ Yes! Commit `ksail.yaml` (and generated distribution configs like kind.yaml) to 
 
 ### How do I share configurations between environments?
 
-Use environment-specific files (`ksail-dev.yaml`, `ksail-staging.yaml`, `ksail-prod.yaml`) with the `--config` flag to select the right one at runtime:
+Use environment-specific files (`ksail.dev.yaml`, `ksail.staging.yaml`, `ksail.prod.yaml`) with the `--config` flag to select the right one at runtime:
 
 ```bash
-ksail --config ksail-staging.yaml cluster create
-ksail --config ksail-prod.yaml workload push
+ksail --config ksail.staging.yaml cluster create
+ksail --config ksail.prod.yaml workload push
 ```
 
 Alternatively, use environment variable placeholders (`${VAR}`) in a shared `ksail.yaml`. See [Configuration Overview](/configuration/) for details.
