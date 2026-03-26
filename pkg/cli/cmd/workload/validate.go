@@ -9,6 +9,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/spf13/cobra"
@@ -77,10 +79,22 @@ func runValidateCmd(
 	ignoreMissingSchemas bool,
 	verbose bool,
 ) error {
-	// Default to current directory if no path provided
-	path := "."
+	// Determine the path to validate.
+	// If an explicit argument is provided, use it.
+	// Otherwise, try loading ksail.yaml to resolve sourceDirectory.
+	// Fall back to "." if no config exists (backward compatible).
+	var path string
 	if len(args) > 0 {
 		path = args[0]
+	} else {
+		fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
+		cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
+		cfg, loadErr := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
+		if loadErr == nil && cfgManager.IsConfigFileFound() {
+			path = resolveSourceDir(cfg, "")
+		} else {
+			path = "."
+		}
 	}
 
 	// Canonicalize user-supplied path (resolve symlinks + absolute) so that
