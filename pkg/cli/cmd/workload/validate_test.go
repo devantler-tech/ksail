@@ -582,3 +582,143 @@ func TestValidateCmdFlagCombinations(t *testing.T) {
 		})
 	}
 }
+
+// setupPatchTestDir creates a temp directory with a valid ConfigMap base resource,
+// a patch file (not valid standalone), and a kustomization.yaml with the given content.
+func setupPatchTestDir(t *testing.T, patchContent, kustomizationYAML string) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	baseYAML := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+  namespace: default
+data:
+  key: value
+`
+
+	err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(baseYAML), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write base manifest: %v", err)
+	}
+
+	patchDir := filepath.Join(tmpDir, "patches")
+
+	err = os.MkdirAll(patchDir, 0o750)
+	if err != nil {
+		t.Fatalf("failed to create patch dir: %v", err)
+	}
+
+	err = os.WriteFile(filepath.Join(patchDir, "patch.yaml"), []byte(patchContent), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write patch manifest: %v", err)
+	}
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "kustomization.yaml"),
+		[]byte(kustomizationYAML),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write kustomization.yaml: %v", err)
+	}
+
+	return tmpDir
+}
+
+type patchTestCase struct {
+	name              string
+	patchContent      string
+	kustomizationYAML string
+}
+
+func patchSkipTestCases() []patchTestCase {
+	// JSON 6902 patch — an array of ops, not a valid standalone K8s resource.
+	json6902Patch := `- op: add
+  path: /data/extra-key
+  value: extra-value
+`
+
+	// Strategic merge patch — valid for kustomize, also valid standalone.
+	// Used to exercise the patchesStrategicMerge collection code path.
+	smpPatch := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+data:
+  extra-key: extra-value
+`
+
+	return []patchTestCase{
+		{
+			name:         "modern patches field",
+			patchContent: json6902Patch,
+			kustomizationYAML: `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+patches:
+  - path: patches/patch.yaml
+    target:
+      kind: ConfigMap
+      name: my-config
+`,
+		},
+		{
+			name:         "deprecated patchesStrategicMerge",
+			patchContent: smpPatch,
+			kustomizationYAML: `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+patchesStrategicMerge:
+  - patches/patch.yaml
+`,
+		},
+		{
+			name:         "deprecated patchesJson6902",
+			patchContent: json6902Patch,
+			kustomizationYAML: `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+patchesJson6902:
+  - path: patches/patch.yaml
+    target:
+      kind: ConfigMap
+      version: v1
+      name: my-config
+`,
+		},
+	}
+}
+
+func TestValidateCmdSkipsKustomizePatches(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range patchSkipTestCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			tmpDir := setupPatchTestDir(t, tc.patchContent, tc.kustomizationYAML)
+
+			cmd := workload.NewValidateCmd()
+			cmd.SetArgs([]string{tmpDir})
+
+			var output bytes.Buffer
+			cmd.SetOut(&output)
+			cmd.SetErr(&output)
+
+			err := cmd.Execute()
+			if err != nil {
+				t.Fatalf(
+					"expected validation to succeed (patch should be excluded), got error: %v\noutput: %s",
+					err,
+					output.String(),
+				)
+			}
+		})
+	}
+}

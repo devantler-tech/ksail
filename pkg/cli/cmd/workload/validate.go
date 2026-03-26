@@ -16,6 +16,7 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/spf13/cobra"
+	kustomizeTypes "sigs.k8s.io/kustomize/api/types"
 )
 
 const (
@@ -234,6 +235,20 @@ func validateDirectory(
 		return fmt.Errorf("find YAML files: %w", err)
 	}
 
+	// Exclude files referenced as kustomize patches — they are validated
+	// as part of the kustomize build output and are not valid standalone resources.
+	patchPaths := collectPatchPaths(kustomizations)
+	if len(patchPaths) > 0 {
+		filtered := yamlFiles[:0]
+		for _, f := range yamlFiles {
+			if _, ok := patchPaths[f]; !ok {
+				filtered = append(filtered, f)
+			}
+		}
+
+		yamlFiles = filtered
+	}
+
 	// Validate kustomizations in parallel with progress display
 	if len(kustomizations) > 0 {
 		kustomizeClient := kustomize.NewClient()
@@ -393,4 +408,71 @@ func isYAMLFile(filePath string) bool {
 	ext := strings.ToLower(filepath.Ext(filePath))
 
 	return ext == ".yaml" || ext == ".yml"
+}
+
+// collectPatchPaths parses each kustomization.yaml and returns the absolute paths
+// of files referenced as patches. These files are not valid standalone K8s resources
+// and should be excluded from individual file validation (they are already validated
+// as part of the kustomize build output).
+func collectPatchPaths(kustomizationDirs []string) map[string]struct{} {
+	patchPaths := make(map[string]struct{})
+
+	for _, kustDir := range kustomizationDirs {
+		collectPatchPathsFromDir(kustDir, patchPaths)
+	}
+
+	return patchPaths
+}
+
+// collectPatchPathsFromDir parses a single kustomization.yaml and adds the absolute
+// paths of referenced patch files to the provided set.
+func collectPatchPathsFromDir(kustDir string, patchPaths map[string]struct{}) {
+	kustFile := filepath.Join(kustDir, kustomizationFileName)
+
+	data, err := os.ReadFile(kustFile) //nolint:gosec // kustFile built from walked dirs
+	if err != nil {
+		return
+	}
+
+	var kust kustomizeTypes.Kustomization
+
+	err = kust.Unmarshal(data)
+	if err != nil {
+		return
+	}
+
+	// Modern patches field
+	for _, p := range kust.Patches {
+		addPatchPath(kustDir, p.Path, patchPaths)
+	}
+
+	// Deprecated patchesStrategicMerge (file paths only, skip inline YAML)
+	for _, psm := range kust.PatchesStrategicMerge { //nolint:staticcheck // must handle legacy kustomization files
+		s := string(psm)
+		if !strings.Contains(s, "\n") {
+			addPatchPath(kustDir, s, patchPaths)
+		}
+	}
+
+	// Deprecated patchesJson6902
+	for _, p := range kust.PatchesJson6902 { //nolint:staticcheck // must handle legacy kustomization files
+		addPatchPath(kustDir, p.Path, patchPaths)
+	}
+}
+
+// addPatchPath resolves a relative patch file path against a kustomization directory
+// and adds the absolute path to the set. Empty paths are ignored.
+func addPatchPath(kustDir, relPath string, patchPaths map[string]struct{}) {
+	if relPath == "" {
+		return
+	}
+
+	abs := filepath.Join(kustDir, relPath)
+
+	resolved, err := filepath.Abs(abs)
+	if err != nil {
+		return
+	}
+
+	patchPaths[resolved] = struct{}{}
 }
