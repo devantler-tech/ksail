@@ -7,42 +7,63 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestIsClusterContainer_KindControlPlane(t *testing.T) {
+type containerPatternTest struct {
+	name          string
+	containerName string
+	clusterName   string
+	want          bool
+}
+
+func dockerPatternTestCases() []containerPatternTest {
+	return []containerPatternTest{
+		// Kind control-plane cases
+		{"kind: exact control-plane match", "dev-control-plane", "dev", true},
+		{"kind: control-plane match with staging", "staging-control-plane", "staging", true},
+		{"kind: control-plane prefix clash", "dev2-control-plane", "dev", false},
+		{"kind: control-plane suffix only", "-control-plane", "dev", false},
+
+		// Kind worker cases
+		{"kind: exact worker match", "dev-worker", "dev", true},
+		{"kind: numbered worker 2", "dev-worker2", "dev", true},
+		{"kind: numbered worker 10", "dev-worker10", "dev", true},
+		{"kind: worker with non-numeric suffix", "dev-workerabc", "dev", false},
+		{"kind: worker prefix clash", "devprod-worker", "dev", false},
+		{"kind: worker with alphanumeric suffix", "dev-worker2a", "dev", false},
+
+		// K3d cases
+		{"k3d: server-0", "k3d-dev-server-0", "dev", true},
+		{"k3d: agent-0", "k3d-dev-agent-0", "dev", true},
+		{"k3d: server-1", "k3d-dev-server-1", "dev", true},
+		{"k3d: agent with multi-digit index", "k3d-dev-agent-10", "dev", true},
+		{"k3d: different cluster", "k3d-staging-server-0", "dev", false},
+		{"k3d: prefix clash", "k3d-dev2-server-0", "dev", false},
+		{"k3d: missing role segment", "k3d-dev-0", "dev", false},
+
+		// Talos cases
+		{"talos: controlplane-0", "dev-controlplane-0", "dev", true},
+		{"talos: worker-0", "dev-worker-0", "dev", true},
+		{"talos: worker-1", "dev-worker-1", "dev", true},
+		{"talos: controlplane different cluster", "staging-controlplane-0", "dev", false},
+		{"talos: prefix clash", "dev2-controlplane-0", "dev", false},
+
+		// VCluster cases
+		{"vcluster: control plane", "vcluster.cp.dev", "dev", true},
+		{"vcluster: different cluster", "vcluster.cp.staging", "dev", false},
+		{"vcluster: prefix partial match", "vcluster.cp.dev-extra", "dev", false},
+
+		// Unrelated containers
+		{"unrelated: completely unrelated", "nginx", "dev", false},
+		{"unrelated: empty container name", "", "dev", false},
+		{"unrelated: empty cluster name", "dev-control-plane", "", false},
+		{"unrelated: cloud-provider-kind", "ksail-cloud-provider-kind", "dev", false},
+		{"unrelated: cpk-service", "cpk-lb", "dev", false},
+	}
+}
+
+func TestIsClusterContainer_DockerPatterns(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name          string
-		containerName string
-		clusterName   string
-		want          bool
-	}{
-		{
-			name:          "exact control-plane match",
-			containerName: "dev-control-plane",
-			clusterName:   "dev",
-			want:          true,
-		},
-		{
-			name:          "control-plane match with staging cluster",
-			containerName: "staging-control-plane",
-			clusterName:   "staging",
-			want:          true,
-		},
-		{
-			name:          "control-plane prefix clash — 'dev' must not match 'dev2-control-plane'",
-			containerName: "dev2-control-plane",
-			clusterName:   "dev",
-			want:          false,
-		},
-		{
-			name:          "control-plane suffix only — no cluster prefix",
-			containerName: "-control-plane",
-			clusterName:   "dev",
-			want:          false,
-		},
-	}
-
-	for _, tt := range tests {
+	for _, tt := range dockerPatternTestCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -52,267 +73,7 @@ func TestIsClusterContainer_KindControlPlane(t *testing.T) {
 	}
 }
 
-func TestIsClusterContainer_KindWorkers(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name          string
-		containerName string
-		clusterName   string
-		want          bool
-	}{
-		{
-			name:          "exact worker match",
-			containerName: "dev-worker",
-			clusterName:   "dev",
-			want:          true,
-		},
-		{
-			name:          "numbered worker 2",
-			containerName: "dev-worker2",
-			clusterName:   "dev",
-			want:          true,
-		},
-		{
-			name:          "numbered worker 10",
-			containerName: "dev-worker10",
-			clusterName:   "dev",
-			want:          true,
-		},
-		{
-			name:          "worker with non-numeric suffix",
-			containerName: "dev-workerabc",
-			clusterName:   "dev",
-			want:          false,
-		},
-		{
-			name:          "worker prefix clash — 'dev' must not match 'devprod-worker'",
-			containerName: "devprod-worker",
-			clusterName:   "dev",
-			want:          false,
-		},
-		{
-			name:          "worker with alphanumeric suffix",
-			containerName: "dev-worker2a",
-			clusterName:   "dev",
-			want:          false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := clusterpkg.IsClusterContainer(tt.containerName, tt.clusterName)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestIsClusterContainer_K3d(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name          string
-		containerName string
-		clusterName   string
-		want          bool
-	}{
-		{
-			name:          "k3d server-0",
-			containerName: "k3d-dev-server-0",
-			clusterName:   "dev",
-			want:          true,
-		},
-		{
-			name:          "k3d agent-0",
-			containerName: "k3d-dev-agent-0",
-			clusterName:   "dev",
-			want:          true,
-		},
-		{
-			name:          "k3d server-1",
-			containerName: "k3d-dev-server-1",
-			clusterName:   "dev",
-			want:          true,
-		},
-		{
-			name:          "k3d agent with multi-digit index",
-			containerName: "k3d-dev-agent-10",
-			clusterName:   "dev",
-			want:          true,
-		},
-		{
-			name:          "k3d with different cluster name must not match",
-			containerName: "k3d-staging-server-0",
-			clusterName:   "dev",
-			want:          false,
-		},
-		{
-			name:          "k3d prefix clash — 'dev' must not match 'k3d-dev2-server-0'",
-			containerName: "k3d-dev2-server-0",
-			clusterName:   "dev",
-			want:          false,
-		},
-		{
-			name:          "k3d missing role segment",
-			containerName: "k3d-dev-0",
-			clusterName:   "dev",
-			want:          false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := clusterpkg.IsClusterContainer(tt.containerName, tt.clusterName)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestIsClusterContainer_Talos(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name          string
-		containerName string
-		clusterName   string
-		want          bool
-	}{
-		{
-			name:          "talos controlplane-0",
-			containerName: "dev-controlplane-0",
-			clusterName:   "dev",
-			want:          true,
-		},
-		{
-			name:          "talos worker-0",
-			containerName: "dev-worker-0",
-			clusterName:   "dev",
-			want:          true,
-		},
-		{
-			name:          "talos worker-1",
-			containerName: "dev-worker-1",
-			clusterName:   "dev",
-			want:          true,
-		},
-		{
-			name:          "talos controlplane with different cluster",
-			containerName: "staging-controlplane-0",
-			clusterName:   "dev",
-			want:          false,
-		},
-		{
-			name:          "talos prefix clash — 'dev' must not match 'dev2-controlplane-0'",
-			containerName: "dev2-controlplane-0",
-			clusterName:   "dev",
-			want:          false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := clusterpkg.IsClusterContainer(tt.containerName, tt.clusterName)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestIsClusterContainer_VCluster(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name          string
-		containerName string
-		clusterName   string
-		want          bool
-	}{
-		{
-			name:          "vcluster control plane container",
-			containerName: "vcluster.cp.dev",
-			clusterName:   "dev",
-			want:          true,
-		},
-		{
-			name:          "vcluster with different cluster name",
-			containerName: "vcluster.cp.staging",
-			clusterName:   "dev",
-			want:          false,
-		},
-		{
-			name:          "vcluster prefix partial match must not match",
-			containerName: "vcluster.cp.dev-extra",
-			clusterName:   "dev",
-			want:          false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := clusterpkg.IsClusterContainer(tt.containerName, tt.clusterName)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestIsClusterContainer_UnrelatedContainers(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name          string
-		containerName string
-		clusterName   string
-		want          bool
-	}{
-		{
-			name:          "completely unrelated container",
-			containerName: "nginx",
-			clusterName:   "dev",
-			want:          false,
-		},
-		{
-			name:          "empty container name",
-			containerName: "",
-			clusterName:   "dev",
-			want:          false,
-		},
-		{
-			name:          "empty cluster name",
-			containerName: "dev-control-plane",
-			clusterName:   "",
-			want:          false,
-		},
-		{
-			name:          "cloud-provider-kind container",
-			containerName: "ksail-cloud-provider-kind",
-			clusterName:   "dev",
-			want:          false,
-		},
-		{
-			name:          "cpk-service container",
-			containerName: "cpk-lb",
-			clusterName:   "dev",
-			want:          false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := clusterpkg.IsClusterContainer(tt.containerName, tt.clusterName)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
+//nolint:dupl // structural similarity with restore_test.go is a false positive — different function under test
 func TestMatchesKindPattern(t *testing.T) {
 	t.Parallel()
 
