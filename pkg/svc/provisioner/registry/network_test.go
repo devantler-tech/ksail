@@ -5,6 +5,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -133,7 +134,7 @@ func TestConnectRegistriesToNetwork_EmptyRegistries_ReturnsNil(t *testing.T) {
 
 	err := registry.ConnectRegistriesToNetwork(
 		context.Background(),
-		nil,
+		docker.NewMockAPIClient(t),
 		[]registry.Info{},
 		"test-network",
 		&bytes.Buffer{},
@@ -148,7 +149,7 @@ func TestConnectRegistriesToNetwork_EmptyNetworkName_ReturnsNil(t *testing.T) {
 	registries := []registry.Info{{Name: "test-registry"}}
 	err := registry.ConnectRegistriesToNetwork(
 		context.Background(),
-		nil,
+		docker.NewMockAPIClient(t),
 		registries,
 		"",
 		&bytes.Buffer{},
@@ -181,7 +182,7 @@ func TestConnectRegistriesToNetworkWithStaticIPs_EmptyRegistries_ReturnsEmptyMap
 
 	result, err := registry.ConnectRegistriesToNetworkWithStaticIPs(
 		context.Background(),
-		nil,
+		docker.NewMockAPIClient(t),
 		[]registry.Info{},
 		"test-network",
 		"10.0.0.0/24",
@@ -198,7 +199,7 @@ func TestConnectRegistriesToNetworkWithStaticIPs_EmptyNetworkName_ReturnsEmptyMa
 	registries := []registry.Info{{Name: "test-registry"}}
 	result, err := registry.ConnectRegistriesToNetworkWithStaticIPs(
 		context.Background(),
-		nil,
+		docker.NewMockAPIClient(t),
 		registries,
 		"",
 		"10.0.0.0/24",
@@ -250,7 +251,7 @@ func TestCleanupRegistries_EmptyRegistries_ReturnsNil(t *testing.T) {
 
 	err := registry.CleanupRegistries(
 		context.Background(),
-		nil,
+		registry.NewMockBackend(t),
 		[]registry.Info{},
 		"my-cluster",
 		false,
