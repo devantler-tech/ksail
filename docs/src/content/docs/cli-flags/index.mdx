@@ -22,9 +22,10 @@ Available Commands:
   workload    Manage workload operations
 
 Flags:
-      --benchmark   Show per-activity benchmark output
-  -h, --help        help for ksail
-  -v, --version     version for ksail
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+  -h, --help            help for ksail
+  -v, --version         version for ksail
 
 Use "ksail [command] --help" for more information about a command.
 ```
@@ -43,8 +44,9 @@ Explore the CLI documentation for each command group:
 
 These flags are available on all commands:
 
-| Flag            | Description                        |
-| --------------- | ---------------------------------- |
-| `--benchmark`   | Show per-activity benchmark output |
-| `-h, --help`    | Show help for any command          |
-| `-v, --version` | Show version information           |
+| Flag              | Description                                                                    |
+| ----------------- | ------------------------------------------------------------------------------ |
+| `--config string` | Path to config file (default: `ksail.yaml` found via directory traversal)      |
+| `--benchmark`     | Show per-activity benchmark output                                             |
+| `-h, --help`      | Show help for any command                                                      |
+| `-v, --version`   | Show version information                                                       |
