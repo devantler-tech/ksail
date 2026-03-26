@@ -41,6 +41,9 @@ inputs:
   reconcile:
     description: "Whether to reconcile workloads after push"
     default: "false"
+  validate:
+    description: "Whether to validate manifests before cluster creation"
+    default: "false"
   delete:
     description: "Whether to delete the cluster at the end (runs even on failure)"
     default: "false"
@@ -240,6 +243,11 @@ runs:
           exit 1
         fi
         ksail cipher import "$AGE_KEY"
+
+    - name: 🧹 Validate manifests
+      if: inputs.validate == 'true'
+      shell: bash
+      run: ksail workload validate
 
     - name: 🏗️ Initialize Project
       if: inputs.init == 'true'
