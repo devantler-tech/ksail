@@ -35,7 +35,9 @@ func NewValidateCmd() *cobra.Command {
 		Long: `Validate Kubernetes manifest files and kustomizations using kubeconform.
 
 This command validates individual YAML files and kustomizations in the specified path.
-If no path is provided, it validates the current directory.
+If no path is provided, the command looks for a ksail.yaml configuration file and uses
+its spec.workload.sourceDirectory setting (defaults to "k8s"). If no configuration
+file is found, it falls back to validating the current directory.
 
 The validation process:
 1. Validates individual YAML files
@@ -90,7 +92,12 @@ func runValidateCmd(
 		fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
 		cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
 		cfg, loadErr := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
-		if loadErr == nil && cfgManager.IsConfigFileFound() {
+		if loadErr != nil {
+			if cfgManager.IsConfigFileFound() {
+				return fmt.Errorf("load config: %w", loadErr)
+			}
+			path = "."
+		} else if cfgManager.IsConfigFileFound() {
 			path = resolveSourceDir(cfg, "")
 		} else {
 			path = "."

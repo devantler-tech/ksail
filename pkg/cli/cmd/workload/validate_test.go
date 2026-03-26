@@ -437,6 +437,92 @@ func setupValidManifestDir(t *testing.T) string {
 	return tmpDir
 }
 
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
+func TestValidateCmdUsesSourceDirectoryFromConfig(t *testing.T) {
+	// Note: Cannot use t.Parallel() here because we use t.Chdir()
+
+	tmpDir := t.TempDir()
+
+	// Create a custom source directory with a valid manifest
+	customDir := filepath.Join(tmpDir, "manifests")
+	if err := os.MkdirAll(customDir, 0o750); err != nil {
+		t.Fatalf("failed to create custom dir: %v", err)
+	}
+
+	if err := os.WriteFile(
+		filepath.Join(customDir, "namespace.yaml"),
+		[]byte(validNamespaceManifest),
+		0o600,
+	); err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	// Write ksail.yaml pointing sourceDirectory to "manifests"
+	ksailConfig := `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Vanilla
+    distributionConfig: kind.yaml
+  workload:
+    sourceDirectory: manifests
+`
+	if err := os.WriteFile(
+		filepath.Join(tmpDir, "ksail.yaml"),
+		[]byte(ksailConfig),
+		0o600,
+	); err != nil {
+		t.Fatalf("failed to write ksail.yaml: %v", err)
+	}
+
+	// Write a minimal distribution config so the config manager can load
+	kindConfig := `apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+name: kind
+`
+	if err := os.WriteFile(
+		filepath.Join(tmpDir, "kind.yaml"),
+		[]byte(kindConfig),
+		0o600,
+	); err != nil {
+		t.Fatalf("failed to write kind.yaml: %v", err)
+	}
+
+	// Also place a non-K8s YAML at the root to ensure it is NOT validated.
+	// If validate used "." instead of "manifests", this would cause a failure.
+	nonK8sYAML := `name: ci
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+`
+	if err := os.WriteFile(
+		filepath.Join(tmpDir, "ci.yaml"),
+		[]byte(nonK8sYAML),
+		0o600,
+	); err != nil {
+		t.Fatalf("failed to write non-K8s YAML: %v", err)
+	}
+
+	t.Chdir(tmpDir)
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf(
+			"expected validation to succeed using sourceDirectory from ksail.yaml, got error: %v\noutput: %s",
+			err,
+			output.String(),
+		)
+	}
+}
+
 func TestValidateCmdFlagCombinations(t *testing.T) {
 	t.Parallel()
 
