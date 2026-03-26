@@ -582,3 +582,74 @@ func TestValidateCmdFlagCombinations(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateCmdSkipsKustomizePatches(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Create a valid base resource
+	baseYAML := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+  namespace: default
+data:
+  key: value
+`
+	err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(baseYAML), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write base manifest: %v", err)
+	}
+
+	// Create a patch directory with a strategic merge patch that is NOT valid standalone
+	patchDir := filepath.Join(tmpDir, "patches")
+
+	err = os.MkdirAll(patchDir, 0o750)
+	if err != nil {
+		t.Fatalf("failed to create patch dir: %v", err)
+	}
+
+	patchYAML := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+data:
+  extra-key: extra-value
+  $patch: merge
+`
+	err = os.WriteFile(filepath.Join(patchDir, "add-key.yaml"), []byte(patchYAML), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write patch manifest: %v", err)
+	}
+
+	// Create kustomization.yaml referencing the patch
+	kustomizationYAML := `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+patches:
+  - path: patches/add-key.yaml
+    target:
+      kind: ConfigMap
+      name: my-config
+`
+	err = os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write kustomization.yaml: %v", err)
+	}
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	// Should succeed — the patch file is excluded from individual validation
+	// and is validated as part of the kustomize build output
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected validation to succeed (patch should be excluded), got error: %v\noutput: %s", err, output.String())
+	}
+}

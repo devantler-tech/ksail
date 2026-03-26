@@ -16,6 +16,7 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/spf13/cobra"
+	kustomizeTypes "sigs.k8s.io/kustomize/api/types"
 )
 
 const (
@@ -233,6 +234,20 @@ func validateDirectory(
 		return fmt.Errorf("find YAML files: %w", err)
 	}
 
+	// Exclude files referenced as kustomize patches — they are validated
+	// as part of the kustomize build output and are not valid standalone resources.
+	patchPaths := collectPatchPaths(kustomizations)
+	if len(patchPaths) > 0 {
+		filtered := yamlFiles[:0]
+		for _, f := range yamlFiles {
+			if !patchPaths[f] {
+				filtered = append(filtered, f)
+			}
+		}
+
+		yamlFiles = filtered
+	}
+
 	// Validate kustomizations in parallel with progress display
 	if len(kustomizations) > 0 {
 		kustomizeClient := kustomize.NewClient()
@@ -392,4 +407,59 @@ func isYAMLFile(filePath string) bool {
 	ext := strings.ToLower(filepath.Ext(filePath))
 
 	return ext == ".yaml" || ext == ".yml"
+}
+
+// collectPatchPaths parses each kustomization.yaml and returns the absolute paths
+// of files referenced as patches. These files are not valid standalone K8s resources
+// and should be excluded from individual file validation (they are already validated
+// as part of the kustomize build output).
+func collectPatchPaths(kustomizationDirs []string) map[string]bool {
+	patchPaths := make(map[string]bool)
+
+	for _, kustDir := range kustomizationDirs {
+		kustFile := filepath.Join(kustDir, kustomizationFileName)
+
+		data, err := os.ReadFile(kustFile) //nolint:gosec // kustFile built from walked dirs
+		if err != nil {
+			continue
+		}
+
+		var kust kustomizeTypes.Kustomization
+		if err := kust.Unmarshal(data); err != nil {
+			continue
+		}
+
+		// Modern patches field
+		for _, p := range kust.Patches {
+			if p.Path != "" {
+				abs := filepath.Join(kustDir, p.Path)
+				if resolved, err := filepath.Abs(abs); err == nil {
+					patchPaths[resolved] = true
+				}
+			}
+		}
+
+		// Deprecated patchesStrategicMerge (file paths only, skip inline YAML)
+		for _, psm := range kust.PatchesStrategicMerge {
+			s := string(psm)
+			if s != "" && !strings.Contains(s, "\n") {
+				abs := filepath.Join(kustDir, s)
+				if resolved, err := filepath.Abs(abs); err == nil {
+					patchPaths[resolved] = true
+				}
+			}
+		}
+
+		// Deprecated patchesJson6902
+		for _, p := range kust.PatchesJson6902 {
+			if p.Path != "" {
+				abs := filepath.Join(kustDir, p.Path)
+				if resolved, err := filepath.Abs(abs); err == nil {
+					patchPaths[resolved] = true
+				}
+			}
+		}
+	}
+
+	return patchPaths
 }
