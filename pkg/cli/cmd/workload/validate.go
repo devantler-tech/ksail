@@ -39,7 +39,7 @@ func NewValidateCmd() *cobra.Command {
 This command validates individual YAML files and kustomizations in the specified path.
 If no path is provided, the path is resolved in order:
   1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
-  2. The default source directory when spec.workload.sourceDirectory is unset (k8s/)
+  2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
   3. The current directory (fallback when no config exists or the config cannot be loaded)
 
 The validation process:
@@ -84,25 +84,9 @@ func runValidateCmd(
 	ignoreMissingSchemas bool,
 	verbose bool,
 ) error {
-	// Determine the path to validate.
-	// If an explicit argument is provided, use it.
-	// Otherwise, try loading ksail.yaml to resolve sourceDirectory.
-	// Fall back to "." if no config exists (backward compatible).
-	var path string
-	if len(args) > 0 {
-		path = args[0]
-	} else {
-		fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
-		cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
-
-		cfg, loadErr := cfgManager.Load(
-			configmanager.LoadOptions{Silent: true, SkipValidation: true},
-		)
-		if loadErr == nil && cfgManager.IsConfigFileFound() {
-			path = resolveSourceDir(cfg, "")
-		} else {
-			path = "."
-		}
+	path, err := resolveValidatePath(cmd, args)
+	if err != nil {
+		return err
 	}
 
 	// Canonicalize user-supplied path (resolve symlinks + absolute) so that
