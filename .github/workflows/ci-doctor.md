@@ -34,14 +34,7 @@ on:
       - completed
     branches:
       - main
-<<<<<<< current (local changes)
       - "**" # Monitor all branches including PRs
-||||||| base (original)
-    # This will trigger only when the CI workflow completes with failure
-    # The condition is handled in the workflow body
-  stop-after: +1mo
-=======
->>>>>>> new (upstream)
 
 # Only trigger for failures - check in the workflow body
 if: ${{ github.event.workflow_run.conclusion == 'failure' }}
@@ -58,12 +51,8 @@ safe-outputs:
     report-as-issue: false
   create-issue:
     title-prefix: "${{ github.workflow }}"
-<<<<<<< current (local changes)
     close-older-issues: true
-||||||| base (original)
-=======
     labels: [automation, ci]
->>>>>>> new (upstream)
   add-comment:
 
 tools:
@@ -71,25 +60,10 @@ tools:
     toolsets: [all]
   cache-memory: true
   web-fetch:
-<<<<<<< current (local changes)
   bash: true
-||||||| base (original)
-  web-search:
 
-timeout-minutes: 10
-=======
-
-timeout-minutes: 10
->>>>>>> new (upstream)
-
-<<<<<<< current (local changes)
 timeout-minutes: 60
-source: githubnext/agentics/workflows/ci-doctor.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
-||||||| base (original)
-source: githubnext/agentics/workflows/ci-doctor.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
-=======
 source: githubnext/agentics/workflows/ci-doctor.md@1f672aef974f4246124860fc532f82fe8a93a57e
->>>>>>> new (upstream)
 ---
 
 # CI Doctor
@@ -170,45 +144,17 @@ You are the CI Failure Doctor, an expert investigative agent that analyzes faile
 
 ### Phase 6: Looking for existing issues
 
-<<<<<<< current (local changes)
-1. **Convert the report to a search query**
-   - Use any advanced search features in GitHub Issues to find related issues
-   - Look for keywords, error messages, and patterns in existing issues
-2. **Judge each match issues for relevance**
-   - Analyze the content of the issues found by the search and judge if they are similar to this issue.
-3. **Add issue comment to duplicate issue and finish**
-   - If you find a duplicate issue, add a comment with your findings and close the investigation.
-   - Do NOT open a new issue since you found a duplicate already (skip next phases).
-||||||| base (original)
-1. **Convert the report to a search query**
-    - Use any advanced search features in GitHub Issues to find related issues
-    - Look for keywords, error messages, and patterns in existing issues
-2. **Judge each match issues for relevance**
-    - Analyze the content of the issues found by the search and judge if they are similar to this issue.
-3. **Add issue comment to duplicate issue and finish**
-    - If you find a duplicate issue, add a comment with your findings and close the investigation.
-    - Do NOT open a new issue since you found a duplicate already (skip next phases).
-=======
 1. **Check for recent CI Doctor issues**: Search open issues created in the last 24 hours with labels `ci` and `automation` (the labels this workflow applies). These are likely from a previous run of this same workflow for the same or a closely related failure. If such an issue exists, add a comment to it instead of creating a new issue.
 2. **Convert the report to a search query**
-    - Use any advanced search features in GitHub Issues to find related issues
-    - Look for keywords, error messages, and patterns in existing issues
+   - Use any advanced search features in GitHub Issues to find related issues
+   - Look for keywords, error messages, and patterns in existing issues
 3. **Judge each match for relevance**
-    - Analyze the content of the issues found by the search and judge if they are similar to this issue.
+   - Analyze the content of the issues found by the search and judge if they are similar to this issue.
 4. **Add issue comment to duplicate issue and finish**
-    - If you find a duplicate issue, add a comment with your findings and close the investigation.
-    - Do NOT open a new issue since you found a duplicate already (skip next phases).
->>>>>>> new (upstream)
+   - If you find a duplicate issue, add a comment with your findings and close the investigation.
+   - Do NOT open a new issue since you found a duplicate already (skip next phases).
 
-<<<<<<< current (local changes)
-### Phase 6: Reporting and Recommendations
-
-||||||| base (original)
-### Phase 6: Reporting and Recommendations
-=======
 ### Phase 7: Reporting and Recommendations
-
->>>>>>> new (upstream)
 1. **Create Investigation Report**: Generate a comprehensive analysis including:
    - **Executive Summary**: Quick overview of the failure
    - **Root Cause**: Detailed explanation of what went wrong
