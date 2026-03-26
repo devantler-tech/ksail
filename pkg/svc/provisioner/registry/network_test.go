@@ -19,6 +19,7 @@ func TestCalculateRegistryIPs_EmptyCIDR_ReturnsEmptyStrings(t *testing.T) {
 	result := registry.ExportCalculateRegistryIPs("", 3)
 
 	require.Len(t, result, 3)
+
 	for _, ip := range result {
 		assert.Empty(t, ip)
 	}
@@ -38,6 +39,7 @@ func TestCalculateRegistryIPs_InvalidCIDR_ReturnsEmptyStrings(t *testing.T) {
 	result := registry.ExportCalculateRegistryIPs("not-a-cidr", 2)
 
 	require.Len(t, result, 2)
+
 	for _, ip := range result {
 		assert.Empty(t, ip)
 	}
@@ -49,6 +51,7 @@ func TestCalculateRegistryIPs_IPv6CIDR_ReturnsEmptyStrings(t *testing.T) {
 	result := registry.ExportCalculateRegistryIPs("2001:db8::/32", 2)
 
 	require.Len(t, result, 2)
+
 	for _, ip := range result {
 		assert.Empty(t, ip)
 	}
