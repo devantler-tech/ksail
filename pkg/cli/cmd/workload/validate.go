@@ -3,10 +3,12 @@ package workload
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
@@ -122,6 +124,7 @@ func runValidateCmd(
 		IgnoreMissingSchemas: ignoreMissingSchemas,
 		Verbose:              verbose,
 	}
+
 	if skipSecrets {
 		validationOpts.SkipKinds = append(validationOpts.SkipKinds, "Secret")
 	}
@@ -139,6 +142,40 @@ func runValidateCmd(
 	})
 
 	return nil
+}
+
+// resolveValidatePath determines which path to validate.
+// If an explicit argument is given, it is returned directly.
+// Otherwise, it loads ksail.yaml (honoring --config) and returns the
+// configured sourceDirectory. Falls back to "." when no config file is found.
+func resolveValidatePath(cmd *cobra.Command, args []string) (string, error) {
+	if len(args) > 0 {
+		return args[0], nil
+	}
+
+	// Resolve --config flag without registering additional flags on cmd.
+	// This avoids "flag redefined" panics that NewCommandConfigManager would cause.
+	var configFile string
+
+	cfgPath, err := flags.GetConfigPath(cmd)
+	if err == nil {
+		configFile = cfgPath
+	}
+
+	cfgManager := ksailconfigmanager.NewConfigManager(io.Discard, configFile)
+
+	cfg, loadErr := cfgManager.Load(
+		configmanager.LoadOptions{Silent: true, SkipValidation: true},
+	)
+
+	switch {
+	case loadErr != nil && cfgManager.IsConfigFileFound():
+		return "", fmt.Errorf("load config: %w", loadErr)
+	case loadErr == nil && cfgManager.IsConfigFileFound():
+		return resolveSourceDir(cfg, ""), nil
+	default:
+		return ".", nil
+	}
 }
 
 // validatePath validates all manifests in the given path.
