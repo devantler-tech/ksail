@@ -311,6 +311,7 @@ jobs:
           persist-credentials: false
       - env:
           GH_TOKEN: ${{ github.token }}
+          GH_HOST: github.com
         name: Install gh-aw extension
         run: gh extension install github/gh-aw
       - env:
