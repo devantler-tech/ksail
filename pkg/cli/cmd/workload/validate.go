@@ -9,9 +9,9 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/spf13/cobra"
 )
