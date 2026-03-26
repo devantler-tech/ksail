@@ -6,7 +6,7 @@ This command validates individual YAML files and kustomizations in the specified
 If no path is provided, the path is resolved in order:
   1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
   2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
-  3. The current directory (fallback when no config exists or the config cannot be loaded)
+  3. The current directory (fallback when no ksail.yaml config file is found)
 
 The validation process:
 1. Validates individual YAML files
