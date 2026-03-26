@@ -155,6 +155,7 @@ You are the CI Failure Doctor, an expert investigative agent that analyzes faile
    - Do NOT open a new issue since you found a duplicate already (skip next phases).
 
 ### Phase 7: Reporting and Recommendations
+
 1. **Create Investigation Report**: Generate a comprehensive analysis including:
    - **Executive Summary**: Quick overview of the failure
    - **Root Cause**: Detailed explanation of what went wrong
