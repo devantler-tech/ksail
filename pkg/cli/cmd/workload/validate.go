@@ -240,7 +240,7 @@ func validateDirectory(
 	if len(patchPaths) > 0 {
 		filtered := yamlFiles[:0]
 		for _, f := range yamlFiles {
-			if !patchPaths[f] {
+			if _, ok := patchPaths[f]; !ok {
 				filtered = append(filtered, f)
 			}
 		}
@@ -413,8 +413,8 @@ func isYAMLFile(filePath string) bool {
 // of files referenced as patches. These files are not valid standalone K8s resources
 // and should be excluded from individual file validation (they are already validated
 // as part of the kustomize build output).
-func collectPatchPaths(kustomizationDirs []string) map[string]bool {
-	patchPaths := make(map[string]bool)
+func collectPatchPaths(kustomizationDirs []string) map[string]struct{} {
+	patchPaths := make(map[string]struct{})
 
 	for _, kustDir := range kustomizationDirs {
 		kustFile := filepath.Join(kustDir, kustomizationFileName)
@@ -434,7 +434,7 @@ func collectPatchPaths(kustomizationDirs []string) map[string]bool {
 			if p.Path != "" {
 				abs := filepath.Join(kustDir, p.Path)
 				if resolved, err := filepath.Abs(abs); err == nil {
-					patchPaths[resolved] = true
+					patchPaths[resolved] = struct{}{}
 				}
 			}
 		}
@@ -445,7 +445,7 @@ func collectPatchPaths(kustomizationDirs []string) map[string]bool {
 			if s != "" && !strings.Contains(s, "\n") {
 				abs := filepath.Join(kustDir, s)
 				if resolved, err := filepath.Abs(abs); err == nil {
-					patchPaths[resolved] = true
+					patchPaths[resolved] = struct{}{}
 				}
 			}
 		}
@@ -455,7 +455,7 @@ func collectPatchPaths(kustomizationDirs []string) map[string]bool {
 			if p.Path != "" {
 				abs := filepath.Join(kustDir, p.Path)
 				if resolved, err := filepath.Abs(abs); err == nil {
-					patchPaths[resolved] = true
+					patchPaths[resolved] = struct{}{}
 				}
 			}
 		}

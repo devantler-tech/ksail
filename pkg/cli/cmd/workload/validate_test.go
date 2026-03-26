@@ -610,28 +610,27 @@ data:
 		t.Fatalf("failed to create patch dir: %v", err)
 	}
 
-	patchYAML := `apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: my-config
-data:
-  extra-key: extra-value
-  $patch: merge
+	// JSON 6902 patch — an array of ops, not a valid standalone K8s resource.
+	// Without the patch-skipping logic this would fail kubeconform validation.
+	patchYAML := `- op: add
+  path: /data/extra-key
+  value: extra-value
 `
 	err = os.WriteFile(filepath.Join(patchDir, "add-key.yaml"), []byte(patchYAML), 0o600)
 	if err != nil {
 		t.Fatalf("failed to write patch manifest: %v", err)
 	}
 
-	// Create kustomization.yaml referencing the patch
+	// Create kustomization.yaml referencing the patch via patchesJson6902
 	kustomizationYAML := `apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - configmap.yaml
-patches:
+patchesJson6902:
   - path: patches/add-key.yaml
     target:
       kind: ConfigMap
+      version: v1
       name: my-config
 `
 	err = os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600)
