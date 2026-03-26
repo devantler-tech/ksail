@@ -38,7 +38,8 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 			// Override kubectl's --kubeconfig default when the user has not
 			// explicitly set it via --kubeconfig themselves.
 			if f := cmd.Flag("kubeconfig"); f != nil && !f.Changed {
-				if err := f.Value.Set(kubeconfigPath); err != nil {
+				err := f.Value.Set(kubeconfigPath)
+				if err != nil {
 					return fmt.Errorf("set kubeconfig flag: %w", err)
 				}
 			}

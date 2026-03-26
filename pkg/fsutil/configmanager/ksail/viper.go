@@ -1,11 +1,13 @@
 package configmanager
 
 import (
+	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/spf13/viper"
 )
 
@@ -22,12 +24,24 @@ const (
 // This function handles only the essential Viper setup and delegates specific concerns
 // to other functions. Configuration priority is: defaults < config files < environment variables < flags.
 // When configFilePath is non-empty, the exact file is used and directory traversal is skipped.
-func InitializeViper(configFilePath string) *viper.Viper {
+// The path is canonicalized (home-expanded, absolute, symlink-resolved) to prevent
+// symlink-escape issues.
+func InitializeViper(configFilePath string) (*viper.Viper, error) {
 	viperInstance := viper.New()
 
 	if configFilePath != "" {
-		// Expand ~ to home directory since Viper doesn't handle tilde expansion.
-		configFilePath = expandHomePath(configFilePath)
+		// Canonicalize the user-supplied path: expand ~, make absolute, resolve symlinks.
+		expanded, err := fsutil.ExpandHomePath(configFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("expanding config path %q: %w", configFilePath, err)
+		}
+
+		canonical, err := fsutil.EvalCanonicalPath(expanded)
+		if err != nil {
+			return nil, fmt.Errorf("canonicalizing config path %q: %w", configFilePath, err)
+		}
+
+		configFilePath = canonical
 		// Use the explicit config file path — skip name/type/path discovery.
 		// Still set config type so Viper can decode files without a .yaml/.yml extension.
 		viperInstance.SetConfigFile(configFilePath)
@@ -46,7 +60,7 @@ func InitializeViper(configFilePath string) *viper.Viper {
 	// Setup environment variable handling (higher precedence than config files)
 	configureViperEnvironment(viperInstance)
 
-	return viperInstance
+	return viperInstance, nil
 }
 
 // configureViperFileSettings sets up file-related configuration for Viper.
@@ -119,20 +133,4 @@ func addParentDirectoriesToViperPaths(viperInstance *viper.Viper) {
 			break
 		}
 	}
-}
-
-// expandHomePath expands a leading ~ to the current user's home directory.
-func expandHomePath(path string) string {
-	if path == "~" || strings.HasPrefix(path, "~/") {
-		usr, err := user.Current()
-		if err == nil {
-			if path == "~" {
-				return usr.HomeDir
-			}
-
-			return filepath.Join(usr.HomeDir, path[2:])
-		}
-	}
-
-	return path
 }

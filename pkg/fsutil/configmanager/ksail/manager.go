@@ -37,6 +37,9 @@ type ConfigManager struct {
 	ConfigFile string
 	// localRegistryExplicit tracks if config explicitly set the local registry behavior
 	localRegistryExplicit bool
+	// initErr stores any error from Viper initialization (e.g. invalid --config path).
+	// It is surfaced on the first call to readConfig / Load.
+	initErr error
 }
 
 // Compile-time interface compliance verification.
@@ -52,7 +55,12 @@ func NewConfigManager(
 	configFile string,
 	fieldSelectors ...FieldSelector[v1alpha1.Cluster],
 ) *ConfigManager {
-	viperInstance := InitializeViper(configFile)
+	viperInstance, initErr := InitializeViper(configFile)
+	if viperInstance == nil {
+		// Ensure a valid (empty) Viper so callers never dereference nil.
+		viperInstance = viper.New()
+	}
+
 	config := v1alpha1.NewCluster()
 
 	manager := &ConfigManager{
@@ -62,6 +70,7 @@ func NewConfigManager(
 		configLoaded:   false,
 		Writer:         writer,
 		ConfigFile:     configFile,
+		initErr:        initErr,
 	}
 
 	return manager
@@ -209,20 +218,48 @@ func (m *ConfigManager) validateAndFinalizeConfig() error {
 	return m.loadAndCacheDistributionConfig()
 }
 
-func (m *ConfigManager) readConfig(silent bool) error {
+// resolveConfigFile resolves the config file path from the --config flag or
+// stored initErr. Called once at the start of readConfig.
+func (m *ConfigManager) resolveConfigFile() error {
+	// Surface any initialization error from NewConfigManager (e.g. invalid --config path).
+	if m.initErr != nil {
+		return fmt.Errorf("config initialization failed: %w", m.initErr)
+	}
+
+	if m.command == nil || m.ConfigFile != "" {
+		return nil
+	}
+
 	// Lazily resolve the --config flag when a command is bound.
 	// This runs inside Load() which is called from RunE — at that point cobra
 	// has already parsed all flags, so the value is reliable.
-	if m.command != nil && m.ConfigFile == "" {
-		if cfgPath, err := flags.GetConfigPath(m.command); err == nil && cfgPath != "" {
-			m.ConfigFile = cfgPath
-			// Re-initialize Viper with the explicit config file path so it
-			// skips directory traversal and uses the exact file.
-			m.Viper = InitializeViper(cfgPath)
-		}
+	cfgPath, err := flags.GetConfigPath(m.command)
+	//nolint:nilerr // err means --config flag isn't registered; fall back to auto-discovery.
+	if err != nil || cfgPath == "" {
+		return nil
 	}
 
-	err := m.Viper.ReadInConfig()
+	m.ConfigFile = cfgPath
+
+	// Re-initialize Viper with the explicit config file path so it
+	// skips directory traversal and uses the exact file.
+	v, viperErr := InitializeViper(cfgPath)
+	if viperErr != nil {
+		return fmt.Errorf("invalid --config path: %w", viperErr)
+	}
+
+	m.Viper = v
+
+	return nil
+}
+
+func (m *ConfigManager) readConfig(silent bool) error {
+	err := m.resolveConfigFile()
+	if err != nil {
+		return err
+	}
+
+	err = m.Viper.ReadInConfig()
 	if err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if !errors.As(err, &configFileNotFoundError) {

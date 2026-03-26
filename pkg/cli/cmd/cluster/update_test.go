@@ -477,4 +477,3 @@ func TestDiffToJSON_RequiresConfirmation_OnlyInPlace(t *testing.T) {
 		t.Error("expected RequiresConfirmation=false for in-place-only changes")
 	}
 }
-

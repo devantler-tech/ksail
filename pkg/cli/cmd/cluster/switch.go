@@ -55,11 +55,11 @@ func NewSwitchCmd(_ *di.Runtime) *cobra.Command {
 		Long:  switchLongDesc,
 		Args:  cobra.ExactArgs(1),
 		ValidArgsFunction: func(
-			_ *cobra.Command,
+			cmd *cobra.Command,
 			_ []string,
 			_ string,
 		) ([]string, cobra.ShellCompDirective) {
-			return listClusterNames(), cobra.ShellCompDirectiveNoFileComp
+			return listClusterNames(cmd), cobra.ShellCompDirectiveNoFileComp
 		},
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -190,8 +190,9 @@ func switchContext(kubeconfigPath, clusterName string) (string, error) {
 
 // listClusterNames returns deduplicated cluster names from the kubeconfig for shell completion.
 // It strips known distribution prefixes from context names to produce cluster names.
-func listClusterNames() []string {
-	kubeconfigPath, err := resolveKubeconfigForSwitch(nil)
+// When cmd is non-nil, the --config persistent flag is honored for config loading.
+func listClusterNames(cmd *cobra.Command) []string {
+	kubeconfigPath, err := resolveKubeconfigForSwitch(cmd)
 	if err != nil {
 		return nil
 	}

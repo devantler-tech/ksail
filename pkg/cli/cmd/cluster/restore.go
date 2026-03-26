@@ -128,7 +128,7 @@ func runRestore(
 
 	flags.inputPath = canonInput
 
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
 	if kubeconfigPath == "" {
 		return ErrKubeconfigNotFound
 	}

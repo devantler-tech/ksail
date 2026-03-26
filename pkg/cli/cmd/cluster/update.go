@@ -75,7 +75,12 @@ func getOutputFormat(cmd *cobra.Command) string {
 func validateOutputFormat(cmd *cobra.Command) error {
 	format := getOutputFormat(cmd)
 	if format != outputFormatText && format != outputFormatJSON {
-		return fmt.Errorf("unsupported --output format %q: expected %q or %q", format, outputFormatText, outputFormatJSON)
+		return fmt.Errorf(
+			"unsupported --output format %q: expected %q or %q",
+			format,
+			outputFormatText,
+			outputFormatJSON,
+		)
 	}
 
 	return nil
