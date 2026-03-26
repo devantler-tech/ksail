@@ -120,8 +120,6 @@ jobs:
         with:
           distribution: K3s   # Vanilla, K3s, Talos, VCluster
           sops-age-key: ${{ secrets.SOPS_AGE_KEY }}  # optional: import SOPS key + create sops-age secret
-          push: true           # run ksail workload push after cluster creation
-          reconcile: true      # run ksail workload reconcile after push
           delete: true         # delete cluster at the end (runs even on failure)
 
       - name: Build and push app image
@@ -129,10 +127,13 @@ jobs:
           docker build -t localhost:5050/my-app:${{ github.sha }} .
           docker push localhost:5050/my-app:${{ github.sha }}
 
-      - name: Run integration tests
+      - name: Deploy and test
         env:
           KUBECONFIG: ${{ steps.cluster.outputs.kubeconfig }}
         run: |
+          sed -i "s|image:.*|image: localhost:5050/my-app:${{ github.sha }}|" k8s/deployment.yaml
+          ksail workload push
+          ksail workload reconcile
           ksail workload wait deployment/my-app --for=condition=available
           npm run test:integration
 ```
