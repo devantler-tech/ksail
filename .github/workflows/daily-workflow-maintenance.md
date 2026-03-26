@@ -62,6 +62,7 @@ steps:
     run: gh extension install github/gh-aw
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_HOST: github.com
 
   - name: Verify gh-aw installation
     run: gh aw version
