@@ -352,7 +352,7 @@ Advanced configuration options are direct fields under `spec.cluster`. See [Sche
 
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
-| `sourceDirectory` | string | `k8s` | Path to the directory containing Kubernetes manifests to push |
+| `sourceDirectory` | string | `k8s` | Path to the directory containing Kubernetes manifests. Used as the default path by `validate`, `watch`, and `push` when no explicit path argument is given. |
 | `validateOnPush` | boolean | `false` | Validate manifests against schemas before pushing (validation disabled by default) |
 | `tag` | string | `dev` | OCI artifact tag for ksail workload push. Priority: CLI oci:// ref > this field > registry-embedded tag > dev |
 
