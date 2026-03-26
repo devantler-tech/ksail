@@ -325,8 +325,8 @@ func TestDeriveBackupName_ExtensionStripping(t *testing.T) {
 
 // TestAllLinesContain_EdgeCases tests additional edge cases for the
 // allLinesContain helper used in restore's "already exists" detection.
-//
-//nolint:dupl // structural similarity with delete_docker_test.go is a false positive — different function under test
+
+//nolint:dupl
 func TestAllLinesContain_EdgeCases(t *testing.T) {
 	t.Parallel()
 
