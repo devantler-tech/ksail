@@ -2,7 +2,6 @@ package workload
 
 import (
 	"fmt"
-	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
@@ -428,19 +427,6 @@ func newPushParamsFromOCIRef(
 		GitOpsEngine: resolveGitOpsEngine(cfg),
 		IsExternal:   false,
 	}, nil
-}
-
-// resolveSourceDir determines the source directory from flag, config, or default.
-func resolveSourceDir(cfg *v1alpha1.Cluster, pathFlag string) string {
-	if dir := strings.TrimSpace(pathFlag); dir != "" {
-		return dir
-	}
-
-	if dir := strings.TrimSpace(cfg.Spec.Workload.SourceDirectory); dir != "" {
-		return dir
-	}
-
-	return v1alpha1.DefaultSourceDirectory
 }
 
 // resolveRef determines the artifact ref/tag from the OCI ref, workload tag, registry-embedded tag, or default.
