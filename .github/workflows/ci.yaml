@@ -508,7 +508,7 @@ jobs:
       contents: read
       packages: write
     strategy:
-      max-parallel: 10
+      max-parallel: 15
       matrix:
         distribution: [Vanilla, K3s, Talos, VCluster]
         provider: [Docker]
