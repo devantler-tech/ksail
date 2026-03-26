@@ -9,7 +9,9 @@ description: "Validate Kubernetes manifests and kustomizations"
 Validate Kubernetes manifest files and kustomizations using kubeconform.
 
 This command validates individual YAML files and kustomizations in the specified path.
-If no path is provided, it validates the current directory.
+If no path is provided, the path is resolved in order:
+  1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found)
+  2. The current directory (fallback when no config exists)
 
 The validation process:
 1. Validates individual YAML files
