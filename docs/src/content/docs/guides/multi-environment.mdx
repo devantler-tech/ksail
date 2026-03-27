@@ -159,19 +159,19 @@ CLUSTER_NAME=ci CLUSTER_DISTRIBUTION=K3s ksail cluster create
 
 For convenience, manage per-environment variables in `.env` files and source them before running KSail:
 
-```text
+```bash
 # .env.dev
-CLUSTER_NAME=dev
-CLUSTER_DISTRIBUTION=Vanilla
-LOCAL_REGISTRY=localhost:5050
+export CLUSTER_NAME=dev
+export CLUSTER_DISTRIBUTION=Vanilla
+export LOCAL_REGISTRY=localhost:5050
 ```
 
-```text
+```bash
 # .env.staging
-CLUSTER_NAME=staging
-CLUSTER_DISTRIBUTION=Talos
-CLUSTER_PROVIDER=Hetzner
-CLUSTER_CNI=Cilium
+export CLUSTER_NAME=staging
+export CLUSTER_DISTRIBUTION=Talos
+export CLUSTER_PROVIDER=Hetzner
+export CLUSTER_CNI=Cilium
 ```
 
 ```bash
