@@ -282,7 +282,7 @@ Five AI-powered daily workflows run on schedules (triggerable via `gh aw`): [**`
 
 ## Release Process
 
-Releases are automated via `.goreleaser.yaml` and `.github/workflows/release.yaml`:
+Releases are automated via `.goreleaser.yaml`, `.github/workflows/release.yaml` (tagging), and `.github/workflows/cd.yaml` (publishing):
 
 1. **Prepare:** Bump the version, update changelog, and open a PR targeting `main`.
 2. **Merge triggers tagging:** Push to `main` runs `.github/workflows/release.yaml`, which validates the release configuration and creates/pushes the version tag (for example, `v5.x.x`). The same tagging workflow can also be run manually via `workflow_dispatch` on `release.yaml` to create and push a release tag without a new `main` commit.
