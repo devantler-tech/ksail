@@ -145,6 +145,7 @@ jobs:
 | `distribution` | `Vanilla` | Distribution to provision (Vanilla, K3s, Talos, VCluster) |
 | `provider` | `Docker` | Infrastructure provider (Docker, Hetzner) |
 | `args` | `""` | Additional args passed to `cluster init` / `cluster create` |
+| `validate` | `false` | Run `ksail workload validate` before cluster creation |
 | `init` | `true` | Run `ksail cluster init` before create |
 | `ksail-version` | `latest` | KSail version to install (e.g. `5.55.0`) or `latest` |
 | `install` | `true` | Install KSail from GitHub releases |
@@ -153,7 +154,6 @@ jobs:
 | `sops-age-key` | `""` | SOPS Age private key — imports the key and creates a `sops-age` Kubernetes secret in `flux-system` |
 | `hosts-file` | `""` | Path to a hosts file whose entries are appended to `/etc/hosts` |
 | `root-ca-cert-file` | `""` | Path to a root CA certificate to install as trusted on the runner |
-| `validate` | `false` | Run `ksail workload validate` before cluster creation |
 | `push` | `false` | Run `ksail workload push` after cluster creation |
 | `reconcile` | `false` | Run `ksail workload reconcile` after push |
 | `delete` | `false` | Run `ksail cluster delete` at the end (runs even on failure) |
