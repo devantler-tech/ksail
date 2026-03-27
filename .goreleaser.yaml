@@ -39,6 +39,9 @@ homebrew_casks:
       owner: devantler-tech
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
+      branch: "goreleaser/{{ .ProjectName }}-{{ .Tag }}"
+      pull_request:
+        enabled: true
     hooks:
       post:
         install: |
