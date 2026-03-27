@@ -232,7 +232,8 @@ Pass `--config` as an argument to the [`ksail-cluster` composite action](https:/
 - uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
   with:
     config: ksail.staging.yaml    # path to the environment-specific config
-    gitops: "true"                # enable GitOps reconcile step
+    push: "true"                  # push manifests for GitOps
+    reconcile: "true"             # trigger GitOps reconcile step
   env:
     OMNI_ENDPOINT: ${{ secrets.OMNI_ENDPOINT }}
 ```
