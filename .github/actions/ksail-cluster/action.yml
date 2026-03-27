@@ -2,6 +2,9 @@ name: "KSail Cluster"
 description: "Provision a KSail Kubernetes cluster for CI testing"
 
 inputs:
+  config:
+    description: "Path to a KSail config file (e.g. 'ksail.staging.yaml'). When set, --config is passed to all ksail commands."
+    default: ""
   distribution:
     description: "KSail distribution to provision (Vanilla, K3s, Talos, VCluster)"
     default: "Vanilla"
@@ -96,12 +99,13 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
         KSAIL_VERSION: ${{ inputs.ksail-version }}
+        CONFIG: ${{ inputs.config }}
       run: |
         echo "ksail-version=$KSAIL_VERSION" >> "$GITHUB_OUTPUT"
 
         if [ "$PROVIDER" = "Docker" ]; then
           # shellcheck disable=SC2086
-          IMAGES=$(ksail workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
+          IMAGES=$(ksail ${CONFIG:+--config "$CONFIG"} workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
           if [ -n "$IMAGES" ]; then
             IMAGES_HASH=$(echo "$IMAGES" | sort -u | sha256sum | cut -c1-12)
           else
@@ -177,10 +181,11 @@ runs:
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
         ARGS: ${{ inputs.args }}
+        CONFIG: ${{ inputs.config }}
       run: |
         # Use ksail workload images to list images for this distribution (no source code needed)
         # shellcheck disable=SC2086
-        IMAGES=$(ksail workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
+        IMAGES=$(ksail ${CONFIG:+--config "$CONFIG"} workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
         if [ -z "$IMAGES" ]; then
           echo "ℹ️ No images to pre-pull for distribution $DISTRIBUTION"
           exit 0
@@ -247,7 +252,9 @@ runs:
     - name: 🧹 Validate manifests
       if: inputs.validate == 'true'
       shell: bash
-      run: ksail workload validate
+      env:
+        CONFIG: ${{ inputs.config }}
+      run: ksail ${CONFIG:+--config "$CONFIG"} workload validate
 
     - name: 🏗️ Initialize Project
       if: inputs.init == 'true'
@@ -257,9 +264,10 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        CONFIG: ${{ inputs.config }}
       run: |
         # shellcheck disable=SC2086
-        ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
+        ksail ${CONFIG:+--config "$CONFIG"} cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
 
     - name: 🚀 Create Cluster
       id: create
@@ -270,13 +278,14 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        CONFIG: ${{ inputs.config }}
       run: |
         set -euo pipefail
         if [ "$INIT" = "true" ]; then
-          ksail cluster create
+          ksail ${CONFIG:+--config "$CONFIG"} cluster create
         else
           # shellcheck disable=SC2086
-          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+          ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
         fi
         # Determine kubeconfig path: parse --kubeconfig from args, fall back to default
         KUBECONFIG_PATH="${HOME}/.kube/config"
@@ -315,12 +324,16 @@ runs:
     - name: 📦 Push manifests
       if: inputs.push == 'true'
       shell: bash
-      run: ksail workload push
+      env:
+        CONFIG: ${{ inputs.config }}
+      run: ksail ${CONFIG:+--config "$CONFIG"} workload push
 
     - name: 🔁 Reconcile workloads
       if: inputs.reconcile == 'true'
       shell: bash
-      run: ksail workload reconcile
+      env:
+        CONFIG: ${{ inputs.config }}
+      run: ksail ${CONFIG:+--config "$CONFIG"} workload reconcile
 
     - name: 📦 Export mirror volumes
       if: inputs.cache == 'true' && inputs.provider == 'Docker'
@@ -355,4 +368,5 @@ runs:
       shell: bash
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-      run: ksail cluster delete || echo "⚠️ Cluster may not have been created"
+        CONFIG: ${{ inputs.config }}
+      run: ksail ${CONFIG:+--config "$CONFIG"} cluster delete || echo "⚠️ Cluster may not have been created"
