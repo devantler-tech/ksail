@@ -109,11 +109,12 @@ ksail --config ksail.dev.yaml cluster delete
 ```
 
 > [!NOTE]
-> `--config` is a **persistent flag** that must appear immediately after `ksail` and before any subcommand:
+> `--config` is a **root persistent flag**. You can provide it anywhere before the subcommand's positional arguments, just like other global flags:
 >
 > ```bash
-> ksail --config ksail.dev.yaml cluster create   ✅ correct
-> ksail cluster --config ksail.dev.yaml create   ❌ incorrect
+> ksail --config ksail.dev.yaml cluster create
+> ksail cluster --config ksail.dev.yaml create
+> ksail cluster create --config ksail.dev.yaml
 > ```
 
 ## Approach 2 — Shared Config with Environment Variables
