@@ -67,7 +67,7 @@ jobs:
       title: ${{ steps.sanitized.outputs.title }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@f2ebb97e47f0704f098aeb6f8f32546ddc8fee85 # v0.64.1
+        uses: github/gh-aw-actions/setup@ef6d19b6ddd5d24eb2787355d2afcd70bd8392bf # v0.64.1
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - name: Generate agentic run info
@@ -324,7 +324,7 @@ jobs:
       output_types: ${{ steps.collect_output.outputs.output_types }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@f2ebb97e47f0704f098aeb6f8f32546ddc8fee85 # v0.64.1
+        uses: github/gh-aw-actions/setup@ef6d19b6ddd5d24eb2787355d2afcd70bd8392bf # v0.64.1
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - name: Set runtime paths
@@ -864,7 +864,7 @@ jobs:
       total_count: ${{ steps.missing_tool.outputs.total_count }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@f2ebb97e47f0704f098aeb6f8f32546ddc8fee85 # v0.64.1
+        uses: github/gh-aw-actions/setup@ef6d19b6ddd5d24eb2787355d2afcd70bd8392bf # v0.64.1
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - name: Download agent output artifact
@@ -979,7 +979,7 @@ jobs:
       detection_success: ${{ steps.detection_conclusion.outputs.success }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@f2ebb97e47f0704f098aeb6f8f32546ddc8fee85 # v0.64.1
+        uses: github/gh-aw-actions/setup@ef6d19b6ddd5d24eb2787355d2afcd70bd8392bf # v0.64.1
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - name: Download agent output artifact
@@ -1112,7 +1112,7 @@ jobs:
       matched_command: ${{ steps.check_command_position.outputs.matched_command }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@f2ebb97e47f0704f098aeb6f8f32546ddc8fee85 # v0.64.1
+        uses: github/gh-aw-actions/setup@ef6d19b6ddd5d24eb2787355d2afcd70bd8392bf # v0.64.1
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - name: Check team membership for command workflow
@@ -1173,7 +1173,7 @@ jobs:
       push_commit_url: ${{ steps.process_safe_outputs.outputs.push_commit_url }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@f2ebb97e47f0704f098aeb6f8f32546ddc8fee85 # v0.64.1
+        uses: github/gh-aw-actions/setup@ef6d19b6ddd5d24eb2787355d2afcd70bd8392bf # v0.64.1
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - name: Download agent output artifact
