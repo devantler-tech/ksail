@@ -316,7 +316,8 @@ The CD workflow implements an atomic publication strategy to ensure users never 
    - Compiled binaries for multiple platforms (Darwin arm64, Linux/Windows on amd64/arm64)
    - Docker images published to GHCR
    - Generated changelog from commit history
-   - Homebrew cask update published as a PR to [`devantler-tech/homebrew-tap`](https://github.com/devantler-tech/homebrew-tap) (branch pattern: `goreleaser/ksail-vX.Y.Z`)
+
+   GoReleaser also opens a separate PR to update the Homebrew cask in [`devantler-tech/homebrew-tap`](https://github.com/devantler-tech/homebrew-tap) (branch pattern: `goreleaser/ksail-vX.Y.Z`).
 
 2. **VSCode Extension Upload**: A separate job builds the VSCode extension and uploads it as a release asset to the same draft release.
 
