@@ -285,7 +285,7 @@ Five AI-powered daily workflows run on schedules (triggerable via `gh aw`): [**`
 Releases are automated via `.goreleaser.yaml` and `.github/workflows/release.yaml`:
 
 1. **Prepare:** Bump the version, update changelog, and open a PR targeting `main`.
-2. **Merge triggers release:** Push to `main` builds binaries for all platforms, generates checksums, creates a GitHub Release, and publishes the VSCode extension to the marketplace. Can also be triggered via `workflow_dispatch`.
+2. **Merge triggers release:** Push to `main` builds binaries for all platforms, generates checksums, creates a GitHub Release, publishes the VSCode extension to the marketplace, and opens a PR to update the Homebrew cask in [`devantler-tech/homebrew-tap`](https://github.com/devantler-tech/homebrew-tap). Can also be triggered via `workflow_dispatch`.
 3. **Optional tagging:** Create an annotated tag (`git tag -a v5.x.x -m "v5.x.x" && git push origin v5.x.x`) for explicit versioning.
 
 ## Getting Help
