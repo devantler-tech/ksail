@@ -168,7 +168,7 @@ ksail --config ksail.staging.yaml cluster update
 ksail --config ksail.prod.yaml workload push
 ```
 
-Alternatively, use environment variable placeholders in a shared `ksail.yaml`. See [Configuration — Alternate Config File](/configuration/#alternate-config-file---config) for details.
+Alternatively, use environment variable placeholders in a shared `ksail.yaml`. For a complete walkthrough covering both approaches and CI/CD patterns, see [Multi-Environment Workflows](/guides/multi-environment/).
 
 ## Security & Secrets
 
