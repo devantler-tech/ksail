@@ -282,11 +282,11 @@ Five AI-powered daily workflows run on schedules (triggerable via `gh aw`): [**`
 
 ## Release Process
 
-Releases are automated via `.goreleaser.yaml` and `.github/workflows/release.yaml`:
+Releases are automated via `.goreleaser.yaml`, `.github/workflows/release.yaml` (tagging), and `.github/workflows/cd.yaml` (publishing):
 
 1. **Prepare:** Bump the version, update changelog, and open a PR targeting `main`.
-2. **Merge triggers release:** Push to `main` builds binaries for all platforms, generates checksums, creates a GitHub Release, and publishes the VSCode extension to the marketplace. Can also be triggered via `workflow_dispatch`.
-3. **Optional tagging:** Create an annotated tag (`git tag -a v5.x.x -m "v5.x.x" && git push origin v5.x.x`) for explicit versioning.
+2. **Merge triggers tagging:** Push to `main` runs `.github/workflows/release.yaml`, which validates the release configuration and creates/pushes the version tag (for example, `v5.x.x`). The same tagging workflow can also be run manually via `workflow_dispatch` on `release.yaml` to create and push a release tag without a new `main` commit.
+3. **Tag-triggered CD:** Any push of a version tag like `v5.x.x` (whether created by `release.yaml` or manually via `git tag -a v5.x.x -m "v5.x.x" && git push origin v5.x.x`) triggers `.github/workflows/cd.yaml`, which builds binaries for all platforms, generates checksums, creates the GitHub Release, publishes the VSCode extension to the marketplace, and opens a PR to update the Homebrew cask in [`devantler-tech/homebrew-tap`](https://github.com/devantler-tech/homebrew-tap).
 
 ## Getting Help
 
