@@ -13,7 +13,7 @@ require (
 	github.com/derailed/k9s v0.50.18
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.6.0
-	github.com/fatih/color v1.18.0
+	github.com/fatih/color v1.19.0
 	github.com/fluxcd/helm-controller/api v1.5.3
 	github.com/fluxcd/kustomize-controller/api v1.8.2
 	github.com/fluxcd/pkg/apis/meta v1.26.0
