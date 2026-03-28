@@ -238,3 +238,8 @@ func ExportIsCloudProviderKindContainer(name string) bool {
 func ExportIsKindClusterFromNodes(nodes []string, clusterName string) bool {
 	return isKindClusterFromNodes(nodes, clusterName)
 }
+
+// ExportPickCluster exposes pickCluster for unit testing.
+func ExportPickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
+	return pickCluster(cmd, deps)
+}
