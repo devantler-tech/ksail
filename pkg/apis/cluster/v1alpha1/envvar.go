@@ -44,6 +44,8 @@ func (c *Cluster) expandClusterSpec() {
 	// become no-ops since expansion has already occurred.
 	cluster.LocalRegistry.Registry = envvar.Expand(cluster.LocalRegistry.Registry)
 
+	// Note: SOPS.AgeKeyEnvVar is the name of the env var itself, not a value to expand
+
 	// Expand distribution-specific options
 	c.expandVanillaOptions()
 	c.expandTalosOptions()
