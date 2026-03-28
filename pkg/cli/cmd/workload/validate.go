@@ -23,7 +23,11 @@ import (
 
 const (
 	kustomizationFileName = "kustomization.yaml"
+	validationConcurrency = 5
 )
+
+// ErrBuildFailed is returned when a kustomize build or manifest validation fails.
+var ErrBuildFailed = errors.New("build failed")
 
 // NewValidateCmd creates the workload validate command.
 func NewValidateCmd() *cobra.Command {
@@ -73,6 +77,7 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 		true,
 		"Ignore resources with missing schemas",
 	)
+
 	return cmd
 }
 
@@ -221,58 +226,39 @@ func validateDirectory(
 		return fmt.Errorf("find YAML files: %w", err)
 	}
 
-	// Exclude files referenced as kustomize patches — they are validated
-	// as part of the kustomize build output and are not valid standalone resources.
+	// Exclude patch files — already validated as part of kustomize build output.
 	patchPaths := collectPatchPaths(kustomizations)
-	if len(patchPaths) > 0 {
-		filtered := yamlFiles[:0]
-		for _, f := range yamlFiles {
-			if _, ok := patchPaths[f]; !ok {
-				filtered = append(filtered, f)
-			}
-		}
+	yamlFiles = filterPatchFiles(yamlFiles, patchPaths)
 
-		yamlFiles = filtered
-	}
-
-	// Common progress options for parallel validation groups.
 	progressOpts := []notify.ProgressOption{
 		notify.WithAppendOnly(),
-		notify.WithConcurrency(5),
+		notify.WithConcurrency(validationConcurrency),
 		notify.WithContinueOnError(),
 	}
 
-	// Validate kustomizations in parallel with progress display
 	if len(kustomizations) > 0 {
 		kustomizeClient := kustomize.NewClient()
 
-		if err := runParallelValidation(
+		err := runParallelValidation(
 			ctx, cmd, kustomizations, dirPath, "Validating kustomizations", "✅",
-			func(taskCtx context.Context, kustDir string) error {
-				err := validateKustomizationSilent(
-					taskCtx, kustDir, kubeconformClient, kustomizeClient, opts,
-				)
-				if err != nil {
-					return simplifyBuildError(err, dirPath)
-				}
-
-				return nil
-			},
+			buildKustomizationValidator(dirPath, kubeconformClient, kustomizeClient, opts),
 			append(progressOpts, notify.WithCountLabel("kustomizations"))...,
-		); err != nil {
+		)
+		if err != nil {
 			return fmt.Errorf("kustomization validation failed: %w", err)
 		}
 	}
 
 	// Validate individual YAML files in parallel with progress display
 	if len(yamlFiles) > 0 {
-		if err := runParallelValidation(
+		err := runParallelValidation(
 			ctx, cmd, yamlFiles, dirPath, "Validating YAML files", "📄",
 			func(taskCtx context.Context, file string) error {
 				return validateFileSilent(taskCtx, file, kubeconformClient, opts)
 			},
 			append(progressOpts, notify.WithCountLabel("files"))...,
-		); err != nil {
+		)
+		if err != nil {
 			return fmt.Errorf("yaml validation failed: %w", err)
 		}
 	}
@@ -296,7 +282,9 @@ func runParallelValidation(
 	tasks := make([]notify.ProgressTask, len(items))
 	for taskIdx, item := range items {
 		name := filepath.Base(item)
-		if rel, relErr := filepath.Rel(basePath, item); relErr == nil && rel != "." {
+
+		rel, relErr := filepath.Rel(basePath, item)
+		if relErr == nil && rel != "." {
 			name = rel
 		}
 
@@ -308,9 +296,16 @@ func runParallelValidation(
 		}
 	}
 
-	opts := append([]notify.ProgressOption{notify.WithLabels(notify.ValidatingLabels())}, extraOpts...)
+	opts := append(
+		[]notify.ProgressOption{notify.WithLabels(notify.ValidatingLabels())},
+		extraOpts...)
 
-	return notify.NewProgressGroup(title, emoji, cmd.OutOrStdout(), opts...).Run(ctx, tasks...)
+	err := notify.NewProgressGroup(title, emoji, cmd.OutOrStdout(), opts...).Run(ctx, tasks...)
+	if err != nil {
+		return fmt.Errorf("run validation group: %w", err)
+	}
+
+	return nil
 }
 
 // validateKustomizationSilent validates a kustomization without output (for parallel execution).
@@ -324,11 +319,40 @@ func validateKustomizationSilent(
 	// Build the kustomization
 	output, err := kustomizeClient.Build(ctx, kustDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("kustomize build: %w", err)
 	}
 
 	// Validate the output
-	return kubeconformClient.ValidateManifests(ctx, output, opts)
+	err = kubeconformClient.ValidateManifests(ctx, output, opts)
+	if err != nil {
+		return fmt.Errorf("validate manifests: %w", err)
+	}
+
+	return nil
+}
+
+// buildKustomizationValidator returns a task function that validates a kustomization directory.
+// Errors are simplified for readability by stripping verbose kustomize output.
+func buildKustomizationValidator(
+	dirPath string,
+	kubeconformClient *kubeconform.Client,
+	kustomizeClient *kustomize.Client,
+	opts *kubeconform.ValidationOptions,
+) func(context.Context, string) error {
+	return func(taskCtx context.Context, kustDir string) error {
+		err := validateKustomizationSilent(
+			taskCtx,
+			kustDir,
+			kubeconformClient,
+			kustomizeClient,
+			opts,
+		)
+		if err != nil {
+			return simplifyBuildError(err, dirPath)
+		}
+
+		return nil
+	}
 }
 
 // validateFileSilent validates a single YAML file without output (for parallel execution).
@@ -343,7 +367,12 @@ func validateFileSilent(
 		return nil
 	}
 
-	return kubeconformClient.ValidateFile(ctx, filePath, opts)
+	err := kubeconformClient.ValidateFile(ctx, filePath, opts)
+	if err != nil {
+		return fmt.Errorf("validate file %s: %w", filePath, err)
+	}
+
+	return nil
 }
 
 // simplifyBuildError extracts an actionable error message from a kustomize build error.
@@ -380,7 +409,7 @@ func simplifyBuildError(err error, basePath string) error {
 		msg = strings.ReplaceAll(msg, basePath, ".")
 	}
 
-	return errors.New(msg)
+	return fmt.Errorf("%w: %s", ErrBuildFailed, msg)
 }
 
 // walkFiles collects file paths under rootPath that satisfy match.
@@ -422,7 +451,7 @@ func findKustomizations(rootPath string) ([]string, error) {
 
 // findYAMLFiles finds all YAML files in a directory, excluding kustomization.yaml files.
 func findYAMLFiles(rootPath string) ([]string, error) {
-	return walkFiles(rootPath, func(path string, info os.FileInfo) string {
+	return walkFiles(rootPath, func(path string, _ os.FileInfo) string {
 		if isYAMLFile(path) && filepath.Base(path) != kustomizationFileName {
 			return path
 		}
@@ -436,6 +465,24 @@ func isYAMLFile(filePath string) bool {
 	ext := strings.ToLower(filepath.Ext(filePath))
 
 	return ext == ".yaml" || ext == ".yml"
+}
+
+// filterPatchFiles removes from yamlFiles any path present in patchPaths.
+// Patch files are not valid standalone resources; they are validated as part of
+// the kustomize build output.
+func filterPatchFiles(yamlFiles []string, patchPaths map[string]struct{}) []string {
+	if len(patchPaths) == 0 {
+		return yamlFiles
+	}
+
+	filtered := yamlFiles[:0]
+	for _, f := range yamlFiles {
+		if _, ok := patchPaths[f]; !ok {
+			filtered = append(filtered, f)
+		}
+	}
+
+	return filtered
 }
 
 // collectPatchPaths parses each kustomization.yaml and returns the absolute paths

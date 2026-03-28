@@ -115,14 +115,14 @@ type ProgressGroup struct {
 	linesDrawn     int // Number of lines currently drawn (for cursor movement)
 
 	// Compact display mode fields
-	maxVisible      int    // Max task lines to show at once (0 = show all)
-	concurrency     int    // Max parallel goroutines (0 = unlimited)
-	completedCount  int    // Number of completed tasks (for summary line)
-	failedCount     int    // Number of failed tasks (for summary line)
-	continueOnError bool   // Don't cancel other tasks when one fails
-	appendOnly      bool   // Force append-only output (no ANSI redraws, no starting lines)
-	termWidth       int    // Terminal width in columns (0 = non-TTY or unknown)
-	countLabel      string // Label for counts (e.g., "kustomizations", "files")
+	maxVisible      int             // Max task lines to show at once (0 = show all)
+	concurrency     int             // Max parallel goroutines (0 = unlimited)
+	completedCount  int             // Number of completed tasks (for summary line)
+	failedCount     int             // Number of failed tasks (for summary line)
+	continueOnError bool            // Don't cancel other tasks when one fails
+	appendOnly      bool            // Force append-only output (no ANSI redraws, no starting lines)
+	termWidth       int             // Terminal width in columns (0 = non-TTY or unknown)
+	countLabel      string          // Label for counts (e.g., "kustomizations", "files")
 	emitted         map[string]bool // tasks whose completion has been permanently printed (streaming mode)
 }
 
@@ -142,6 +142,18 @@ const (
 	// streamingPendingPreview is the number of pending tasks shown below
 	// running tasks in streaming interactive mode.
 	streamingPendingPreview = 3
+	// compactWindowExtraLines is the number of non-task lines in the compact window
+	// (1 summary line + 1 remaining count line).
+	compactWindowExtraLines = 2
+	// summaryPartsInitCap is the initial capacity of the summary parts slice
+	// (at most 2 parts: completed and failed).
+	summaryPartsInitCap = 2
+	// taskLineNonNameCols is the number of columns used by non-name parts of a task line
+	// (icon + space + space + suffix = 3 cols total, excluding suffix length).
+	taskLineNonNameCols = 3
+	// truncationHalvingDivisor halves the max name length to compute the first portion
+	// when middle-truncating long names.
+	truncationHalvingDivisor = 2
 )
 
 // getSpinnerFrames returns the spinner animation frames.
@@ -268,7 +280,8 @@ func NewProgressGroup(
 		isTTY = term.IsTerminal(fd)
 
 		if isTTY {
-			if w, _, err := term.GetSize(fd); err == nil {
+			w, _, err := term.GetSize(fd)
+			if err == nil {
 				termWidth = w
 			}
 		}
@@ -351,7 +364,11 @@ func (pg *ProgressGroup) runStreamingInteractive(ctx context.Context, tasks []Pr
 
 // runWithSpinner orchestrates the common spinner lifecycle shared by interactive modes:
 // start spinner → run tasks → stop spinner → finalize display → print summary/timing.
-func (pg *ProgressGroup) runWithSpinner(ctx context.Context, tasks []ProgressTask, finalize func()) error {
+func (pg *ProgressGroup) runWithSpinner(
+	ctx context.Context,
+	tasks []ProgressTask,
+	finalize func(),
+) error {
 	go pg.runSpinner()
 
 	err := pg.executeTasks(ctx, tasks)
@@ -442,7 +459,7 @@ func (pg *ProgressGroup) redrawStreamingZone() {
 
 	// Move cursor to start of live zone
 	if pg.linesDrawn > 0 {
-		fmt.Fprintf(pg.writer, "\033[%dA", pg.linesDrawn)
+		_, _ = fmt.Fprintf(pg.writer, "\033[%dA", pg.linesDrawn)
 	}
 
 	var buf bytes.Buffer
@@ -455,6 +472,7 @@ func (pg *ProgressGroup) redrawStreamingZone() {
 	for _, name := range pg.taskStartOrder {
 		if pg.taskStatus[name] == taskRunning {
 			fmt.Fprintf(&buf, "\033[K%s\n", pg.formatTaskLine(name, taskRunning))
+
 			liveLines++
 		}
 	}
@@ -488,7 +506,7 @@ func (pg *ProgressGroup) finalizeStreamingOutput() {
 	defer pg.mu.Unlock()
 
 	if pg.linesDrawn > 0 {
-		fmt.Fprintf(pg.writer, "\033[%dA", pg.linesDrawn)
+		_, _ = fmt.Fprintf(pg.writer, "\033[%dA", pg.linesDrawn)
 	}
 
 	var buf bytes.Buffer
@@ -497,7 +515,7 @@ func (pg *ProgressGroup) finalizeStreamingOutput() {
 
 	// Clear leftover live zone lines and reposition cursor
 	excess := pg.linesDrawn - emittedCount
-	for i := 0; i < excess; i++ {
+	for range excess {
 		fmt.Fprint(&buf, "\033[K\n")
 	}
 
@@ -515,7 +533,8 @@ func (pg *ProgressGroup) finalizeStreamingOutput() {
 func (pg *ProgressGroup) runTask(ctx context.Context, task ProgressTask) error {
 	pg.setTaskState(task.Name, taskRunning)
 
-	if err := task.Fn(ctx); err != nil {
+	err := task.Fn(ctx)
+	if err != nil {
 		pg.setTaskState(task.Name, taskFailed)
 
 		return fmt.Errorf("%s: %w", task.Name, err)
@@ -538,7 +557,12 @@ func (pg *ProgressGroup) runFailFastTasks(ctx context.Context, tasks []ProgressT
 		})
 	}
 
-	return group.Wait()
+	err := group.Wait()
+	if err != nil {
+		return fmt.Errorf("run tasks: %w", err)
+	}
+
+	return nil
 }
 
 // runAllTasks runs all tasks without cancelling on failure. Errors are collected
@@ -555,8 +579,10 @@ func (pg *ProgressGroup) runAllTasks(ctx context.Context, tasks []ProgressTask) 
 
 	for _, task := range tasks {
 		group.Go(func() error {
-			if err := pg.runTask(ctx, task); err != nil {
+			err := pg.runTask(ctx, task)
+			if err != nil {
 				errMu.Lock()
+
 				allErrs = append(allErrs, err)
 				errMu.Unlock()
 			}
@@ -579,6 +605,53 @@ func (pg *ProgressGroup) applyGroupLimits(group interface{ SetLimit(n int) }) {
 	}
 }
 
+// runCIWorker returns a goroutine function that executes a single task in CI mode.
+// It updates task state and records errors when continueOnError is set.
+func (pg *ProgressGroup) runCIWorker(
+	ctx context.Context,
+	task ProgressTask,
+	errMu *sync.Mutex,
+	allErrs *[]error,
+) func() error {
+	return func() error {
+		pg.setTaskState(task.Name, taskRunning)
+
+		if !pg.appendOnly {
+			pg.mu.Lock()
+			_, _ = fmt.Fprintf(pg.writer, "► %s %s\n", task.Name, pg.labels.Running)
+			pg.mu.Unlock()
+		}
+
+		taskErr := task.Fn(ctx)
+		if taskErr != nil {
+			pg.setTaskState(task.Name, taskFailed)
+
+			pg.mu.Lock()
+			_, _ = fcolor.New(fcolor.FgRed).Fprintf(pg.writer, "✗ %s failed\n", task.Name)
+			pg.mu.Unlock()
+
+			if pg.continueOnError {
+				errMu.Lock()
+
+				*allErrs = append(*allErrs, fmt.Errorf("%s: %w", task.Name, taskErr))
+				errMu.Unlock()
+
+				return nil
+			}
+
+			return fmt.Errorf("%s: %w", task.Name, taskErr)
+		}
+
+		pg.setTaskState(task.Name, taskComplete)
+
+		pg.mu.Lock()
+		_, _ = fmt.Fprintln(pg.writer, pg.formatTaskLine(task.Name, taskComplete))
+		pg.mu.Unlock()
+
+		return nil
+	}
+}
+
 // runCI runs tasks with simple line-based output for CI environments.
 // Only prints when tasks start or complete (no spinner animation).
 func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error {
@@ -596,6 +669,7 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 		taskCtx = ctx
 	} else {
 		var gCtx context.Context
+
 		group, gCtx = errgroup.WithContext(ctx)
 		taskCtx = gCtx
 	}
@@ -603,42 +677,7 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 	pg.applyGroupLimits(group)
 
 	for _, task := range tasks {
-		group.Go(func() error {
-			pg.setTaskState(task.Name, taskRunning)
-
-			if !pg.appendOnly {
-				pg.mu.Lock()
-				_, _ = fmt.Fprintf(pg.writer, "► %s %s\n", task.Name, pg.labels.Running)
-				pg.mu.Unlock()
-			}
-
-			taskErr := task.Fn(taskCtx)
-			if taskErr != nil {
-				pg.setTaskState(task.Name, taskFailed)
-
-				pg.mu.Lock()
-				_, _ = fcolor.New(fcolor.FgRed).Fprintf(pg.writer, "✗ %s failed\n", task.Name)
-				pg.mu.Unlock()
-
-				if pg.continueOnError {
-					errMu.Lock()
-					allErrs = append(allErrs, fmt.Errorf("%s: %w", task.Name, taskErr))
-					errMu.Unlock()
-
-					return nil
-				}
-
-				return fmt.Errorf("%s: %w", task.Name, taskErr)
-			}
-
-			pg.setTaskState(task.Name, taskComplete)
-
-			pg.mu.Lock()
-			_, _ = fmt.Fprintln(pg.writer, pg.formatTaskLine(task.Name, taskComplete))
-			pg.mu.Unlock()
-
-			return nil
-		})
+		group.Go(pg.runCIWorker(taskCtx, task, &errMu, &allErrs))
 	}
 
 	err := group.Wait()
@@ -776,7 +815,7 @@ func (pg *ProgressGroup) printCompactLines() {
 // compactWindowHeight returns the fixed height of the compact window:
 // 1 summary line + maxVisible task slots + 1 remaining line.
 func (pg *ProgressGroup) compactWindowHeight() int {
-	return pg.maxVisible + 2
+	return pg.maxVisible + compactWindowExtraLines
 }
 
 // buildCompactWindow builds the compact display lines into a buffer and returns
@@ -789,6 +828,7 @@ func (pg *ProgressGroup) buildCompactWindow(buf *bytes.Buffer) int {
 	if pg.completedCount > 0 || pg.failedCount > 0 {
 		fmt.Fprint(buf, "\033[K")
 		pg.writeSummaryLine(buf)
+
 		lines++
 	}
 
@@ -798,13 +838,19 @@ func (pg *ProgressGroup) buildCompactWindow(buf *bytes.Buffer) int {
 		state := pg.taskStatus[name]
 		line := pg.formatTaskLine(name, state)
 		fmt.Fprintf(buf, "\033[K%s\n", line)
+
 		lines++
 	}
 
 	// Remaining count at bottom
 	pendingCount := pg.countPending()
 	if pendingCount > 0 {
-		fmt.Fprintf(buf, "\033[K%s\n", fcolor.New(fcolor.FgHiBlack).Sprintf("○ %d remaining", pendingCount))
+		fmt.Fprintf(
+			buf,
+			"\033[K%s\n",
+			fcolor.New(fcolor.FgHiBlack).Sprintf("○ %d remaining", pendingCount),
+		)
+
 		lines++
 	}
 
@@ -823,15 +869,21 @@ func (pg *ProgressGroup) writeSummaryLine(buf *bytes.Buffer) {
 // Returns empty string when there are no completed or failed tasks.
 // Must be called with mutex held.
 func (pg *ProgressGroup) formatSummary() string {
-	parts := make([]string, 0, 2)
+	parts := make([]string, 0, summaryPartsInitCap)
 
 	if pg.completedCount > 0 {
 		if pg.countLabel != "" {
-			parts = append(parts,
-				fcolor.New(fcolor.FgGreen).Sprintf("✔ %d %s %s", pg.completedCount, pg.countLabel, pg.labels.Completed))
+			parts = append(
+				parts,
+				fcolor.New(fcolor.FgGreen).
+					Sprintf("✔ %d %s %s", pg.completedCount, pg.countLabel, pg.labels.Completed),
+			)
 		} else {
-			parts = append(parts,
-				fcolor.New(fcolor.FgGreen).Sprintf("✔ %d %s", pg.completedCount, pg.labels.Completed))
+			parts = append(
+				parts,
+				fcolor.New(fcolor.FgGreen).
+					Sprintf("✔ %d %s", pg.completedCount, pg.labels.Completed),
+			)
 		}
 	}
 
@@ -847,6 +899,19 @@ func (pg *ProgressGroup) formatSummary() string {
 	return strings.Join(parts, "  ")
 }
 
+// appendSlots appends items (from the tail) to fill remaining slots up to limit.
+// Does nothing when result is already at or above limit or items is empty.
+func appendSlots(result, items []string, limit int) []string {
+	slots := limit - len(result)
+	if slots <= 0 || len(items) == 0 {
+		return result
+	}
+
+	start := max(len(items)-slots, 0)
+
+	return append(result, items[start:]...)
+}
+
 // getVisibleTasks returns up to maxVisible tasks that should be shown in the compact window.
 // Priority: running tasks first, then failed tasks, then most recently completed tasks.
 // Must be called with mutex held.
@@ -855,15 +920,15 @@ func (pg *ProgressGroup) getVisibleTasks() []string {
 
 	// Walk start order to categorize tasks
 	for _, name := range pg.taskStartOrder {
-		state := pg.taskStatus[name]
-
-		switch state {
+		switch pg.taskStatus[name] {
 		case taskRunning:
 			running = append(running, name)
 		case taskFailed:
 			failed = append(failed, name)
 		case taskComplete:
 			completed = append(completed, name)
+		case taskPending:
+			// pending tasks are counted separately via countPending; skip here
 		}
 	}
 
@@ -872,25 +937,11 @@ func (pg *ProgressGroup) getVisibleTasks() []string {
 	// Running tasks first (in-progress work)
 	result = append(result, running...)
 
-	// Then failed tasks (most important to surface)
-	slots := pg.maxVisible - len(result)
-	if slots > 0 && len(failed) > 0 {
-		end := min(slots, len(failed))
-		result = append(result, failed[len(failed)-end:]...)
-	}
+	// Then failed tasks (most important to surface), then most recently completed
+	result = appendSlots(result, failed, pg.maxVisible)
+	result = appendSlots(result, completed, pg.maxVisible)
 
-	// Fill remaining slots with most recently completed
-	slots = pg.maxVisible - len(result)
-	if slots > 0 && len(completed) > 0 {
-		start := len(completed) - slots
-		if start < 0 {
-			start = 0
-		}
-
-		result = append(result, completed[start:]...)
-	}
-
-	// Cap to maxVisible
+	// Cap to maxVisible (protects against running > maxVisible)
 	if len(result) > pg.maxVisible {
 		result = result[:pg.maxVisible]
 	}
@@ -1031,7 +1082,7 @@ func (pg *ProgressGroup) fitName(name string, state taskState) string {
 	}
 
 	// icon(1 col) + space(1) + name + space(1) + suffix
-	overhead := 3 + suffixLen
+	overhead := taskLineNonNameCols + suffixLen
 	maxNameLen := pg.termWidth - overhead - 1 // -1 safety margin
 
 	const minNameLen = 10
@@ -1044,7 +1095,7 @@ func (pg *ProgressGroup) fitName(name string, state taskState) string {
 	}
 
 	// Middle truncation: show beginning and end for best context
-	firstLen := (maxNameLen - 1) / 2
+	firstLen := (maxNameLen - 1) / truncationHalvingDivisor
 	lastLen := maxNameLen - 1 - firstLen
 
 	return name[:firstLen] + "…" + name[len(name)-lastLen:]

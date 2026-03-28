@@ -15,6 +15,11 @@ import (
 // ErrValidationFailed indicates that validation failed.
 var ErrValidationFailed = errors.New("validation failed")
 
+const (
+	// schemaCacheDirPerm is the permission for the schema cache directory.
+	schemaCacheDirPerm = 0o700
+)
+
 // Client provides kubeconform validation functionality.
 type Client struct{}
 
@@ -31,7 +36,7 @@ func (c *Client) ValidateFile(ctx context.Context, filePath string, opts *Valida
 
 	// Check context before starting
 	if ctx.Err() != nil {
-		return ctx.Err()
+		return fmt.Errorf("%w", ctx.Err())
 	}
 
 	// Open the file
@@ -69,7 +74,7 @@ func (c *Client) ValidateManifests(
 
 	// Check context before starting
 	if ctx.Err() != nil {
-		return ctx.Err()
+		return fmt.Errorf("%w", ctx.Err())
 	}
 
 	// Create validator
@@ -137,10 +142,12 @@ func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, 
 	// Set up schema cache directory
 	var cacheDir string
 
-	if userCacheDir, err := os.UserCacheDir(); err == nil {
+	userCacheDir, userCacheDirErr := os.UserCacheDir()
+	if userCacheDirErr == nil {
 		cacheDir = filepath.Join(userCacheDir, "ksail", "kubeconform")
 
-		if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		err := os.MkdirAll(cacheDir, schemaCacheDirPerm)
+		if err != nil {
 			return nil, fmt.Errorf("create schema cache directory: %w", err)
 		}
 	} else {

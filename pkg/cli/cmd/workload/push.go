@@ -167,9 +167,9 @@ func validateManifests(cmd *cobra.Command, sourceDir string, outputTimer timer.T
 		cmd.Context(),
 		cmd,
 		[]string{sourceDir},
-		true,  // skipSecrets
-		true,  // strict
-		true,  // ignoreMissingSchemas
+		true, // skipSecrets
+		true, // strict
+		true, // ignoreMissingSchemas
 	)
 	if err != nil {
 		return fmt.Errorf("validate manifests: %w", err)
