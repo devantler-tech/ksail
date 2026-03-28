@@ -45,6 +45,7 @@ type ClusterSpec struct {
 	PolicyEngine       PolicyEngine  `json:"policyEngine,omitzero"`
 	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`
 	GitOpsEngine       GitOpsEngine  `json:"gitOpsEngine,omitzero"`
+	SOPS               SOPS          `json:"sops,omitzero"`
 	ImportImages       string        `json:"importImages,omitzero"       jsonschema:"description=Path to tar archive with container images to import after cluster creation but before component installation"` //nolint:lll // Long description required for JSON schema
 
 	// Distribution-specific options

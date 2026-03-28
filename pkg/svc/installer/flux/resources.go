@@ -75,6 +75,12 @@ func setupFluxCore(ctx context.Context, params setupParams) error {
 		return err
 	}
 
+	// Create SOPS Age decryption secret if an Age key is available
+	err = ensureSopsAgeSecret(ctx, params.restConfig, params.clusterCfg)
+	if err != nil {
+		return err
+	}
+
 	// Setup FluxInstance
 	fluxMgr := newFluxInstanceManager(
 		params.restConfig,
