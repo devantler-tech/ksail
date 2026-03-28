@@ -21,10 +21,14 @@ var errDockerDaemonUnavailable = errors.New("docker: connection refused")
 
 // newScaleProvisioner builds a Provisioner wired with the given mock Docker client.
 // TalosConfigs are generated fresh so every test has valid CP/worker configs.
-func newScaleProvisioner(t *testing.T, mockClient *docker.MockAPIClient) *talosprovisioner.Provisioner {
+func newScaleProvisioner(
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+) *talosprovisioner.Provisioner {
 	t.Helper()
 
 	configs := createTestTalosConfigs(t, "scale-cluster")
+
 	return talosprovisioner.NewProvisioner(configs, talosprovisioner.NewOptions()).
 		WithDockerClient(mockClient).
 		WithLogWriter(io.Discard)
@@ -52,8 +56,14 @@ func TestAddDockerNodes_ControlPlane_CreatesAllNodes(t *testing.T) {
 		Return([]container.Summary{}, nil).Once()
 
 	// Three parallel ContainerCreate calls (order not guaranteed)
-	mockClient.On("ContainerCreate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.AnythingOfType("string")).
-		Return(container.CreateResponse{ID: "container-id"}, nil).Times(3)
+	mockClient.On(
+		"ContainerCreate",
+		mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything,
+		mock.AnythingOfType("string"),
+	).
+		Return(container.CreateResponse{ID: "container-id"}, nil).
+		Times(3)
 
 	// Three ContainerStart calls
 	mockClient.On("ContainerStart", mock.Anything, mock.Anything, mock.Anything).
@@ -64,7 +74,13 @@ func TestAddDockerNodes_ControlPlane_CreatesAllNodes(t *testing.T) {
 	provisioner := newScaleProvisioner(t, mockClient)
 	result := clusterupdate.NewEmptyUpdateResult()
 
-	err := provisioner.AddDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleControlPlane, 3, result)
+	err := provisioner.AddDockerNodesForTest(
+		context.Background(),
+		"scale-cluster",
+		talosprovisioner.RoleControlPlane,
+		3,
+		result,
+	)
 
 	require.NoError(t, err)
 	assert.Len(t, result.AppliedChanges, 3, "expected 3 applied changes")
@@ -76,13 +92,18 @@ func TestAddDockerNodes_Workers_CreatesAllNodes(t *testing.T) {
 
 	mockClient := docker.NewMockAPIClient(t)
 
-	// listDockerNodesByRole for existing workers → none
-	// countDockerRole for CP (called once per worker = twice) → 1 CP node
+	// 1 call for listDockerNodesByRole (existing workers) + 1 call for countDockerRole (CP count)
 	mockClient.On("ContainerList", mock.Anything, mock.Anything).
-		Return([]container.Summary{}, nil)
+		Return([]container.Summary{}, nil).Times(2)
 
-	mockClient.On("ContainerCreate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.AnythingOfType("string")).
-		Return(container.CreateResponse{ID: "container-id"}, nil).Times(2)
+	mockClient.On(
+		"ContainerCreate",
+		mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything,
+		mock.AnythingOfType("string"),
+	).
+		Return(container.CreateResponse{ID: "container-id"}, nil).
+		Times(2)
 
 	mockClient.On("ContainerStart", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil).Times(2)
@@ -90,7 +111,13 @@ func TestAddDockerNodes_Workers_CreatesAllNodes(t *testing.T) {
 	provisioner := newScaleProvisioner(t, mockClient)
 	result := clusterupdate.NewEmptyUpdateResult()
 
-	err := provisioner.AddDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleWorker, 2, result)
+	err := provisioner.AddDockerNodesForTest(
+		context.Background(),
+		"scale-cluster",
+		talosprovisioner.RoleWorker,
+		2,
+		result,
+	)
 
 	require.NoError(t, err)
 	assert.Len(t, result.AppliedChanges, 2, "expected 2 applied changes")
@@ -107,16 +134,28 @@ func TestAddDockerNodes_ContainerCreateFails_ReturnsError(t *testing.T) {
 		Return([]container.Summary{}, nil).Once()
 
 	// All container creations fail
-	mockClient.On("ContainerCreate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.AnythingOfType("string")).
-		Return(container.CreateResponse{}, errDockerDaemonUnavailable).Times(2)
+	mockClient.On(
+		"ContainerCreate",
+		mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything,
+		mock.AnythingOfType("string"),
+	).
+		Return(container.CreateResponse{}, errDockerDaemonUnavailable).
+		Times(2)
 
 	provisioner := newScaleProvisioner(t, mockClient)
 	result := clusterupdate.NewEmptyUpdateResult()
 
-	err := provisioner.AddDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleControlPlane, 2, result)
+	err := provisioner.AddDockerNodesForTest(
+		context.Background(),
+		"scale-cluster",
+		talosprovisioner.RoleControlPlane,
+		2,
+		result,
+	)
 
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to create")
+	require.ErrorContains(t, err, "failed to create")
 	assert.Len(t, result.FailedChanges, 2, "both failed changes should be recorded")
 	assert.Empty(t, result.AppliedChanges, "no nodes should have been applied")
 }
@@ -133,7 +172,13 @@ func TestAddDockerNodes_ZeroCount_NoOp(t *testing.T) {
 	provisioner := newScaleProvisioner(t, mockClient)
 	result := clusterupdate.NewEmptyUpdateResult()
 
-	err := provisioner.AddDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleControlPlane, 0, result)
+	err := provisioner.AddDockerNodesForTest(
+		context.Background(),
+		"scale-cluster",
+		talosprovisioner.RoleControlPlane,
+		0,
+		result,
+	)
 
 	require.NoError(t, err)
 	assert.Empty(t, result.AppliedChanges)
@@ -152,10 +197,16 @@ func TestAddDockerNodes_ListExistingFails_ReturnsError(t *testing.T) {
 	provisioner := newScaleProvisioner(t, mockClient)
 	result := clusterupdate.NewEmptyUpdateResult()
 
-	err := provisioner.AddDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleControlPlane, 1, result)
+	err := provisioner.AddDockerNodesForTest(
+		context.Background(),
+		"scale-cluster",
+		talosprovisioner.RoleControlPlane,
+		1,
+		result,
+	)
 
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to list")
+	require.ErrorContains(t, err, "failed to list")
 	assert.Empty(t, result.AppliedChanges)
 }
 
@@ -182,7 +233,13 @@ func TestRemoveDockerNodes_Workers_RemovesAll(t *testing.T) {
 	provisioner := newScaleProvisioner(t, mockClient)
 	result := clusterupdate.NewEmptyUpdateResult()
 
-	err := provisioner.RemoveDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleWorker, 2, result)
+	err := provisioner.RemoveDockerNodesForTest(
+		context.Background(),
+		"scale-cluster",
+		talosprovisioner.RoleWorker,
+		2,
+		result,
+	)
 
 	require.NoError(t, err)
 	assert.Len(t, result.AppliedChanges, 2, "expected 2 applied changes")
@@ -211,10 +268,16 @@ func TestRemoveDockerNodes_Workers_ContainerRemoveFails_ReturnsError(t *testing.
 	provisioner := newScaleProvisioner(t, mockClient)
 	result := clusterupdate.NewEmptyUpdateResult()
 
-	err := provisioner.RemoveDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleWorker, 1, result)
+	err := provisioner.RemoveDockerNodesForTest(
+		context.Background(),
+		"scale-cluster",
+		talosprovisioner.RoleWorker,
+		1,
+		result,
+	)
 
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to remove")
+	require.ErrorContains(t, err, "failed to remove")
 	assert.Len(t, result.FailedChanges, 1, "expected 1 failed change")
 	assert.Empty(t, result.AppliedChanges, "no nodes should have been applied")
 }
@@ -233,7 +296,13 @@ func TestRemoveDockerNodes_Workers_ZeroCount_NoOp(t *testing.T) {
 	provisioner := newScaleProvisioner(t, mockClient)
 	result := clusterupdate.NewEmptyUpdateResult()
 
-	err := provisioner.RemoveDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleWorker, 0, result)
+	err := provisioner.RemoveDockerNodesForTest(
+		context.Background(),
+		"scale-cluster",
+		talosprovisioner.RoleWorker,
+		0,
+		result,
+	)
 
 	require.NoError(t, err)
 	assert.Empty(t, result.AppliedChanges)
@@ -252,10 +321,16 @@ func TestRemoveDockerNodes_Workers_ListFails_ReturnsError(t *testing.T) {
 	provisioner := newScaleProvisioner(t, mockClient)
 	result := clusterupdate.NewEmptyUpdateResult()
 
-	err := provisioner.RemoveDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleWorker, 1, result)
+	err := provisioner.RemoveDockerNodesForTest(
+		context.Background(),
+		"scale-cluster",
+		talosprovisioner.RoleWorker,
+		1,
+		result,
+	)
 
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "listing existing")
+	require.ErrorContains(t, err, "listing existing")
 	assert.Empty(t, result.AppliedChanges)
 	assert.Empty(t, result.FailedChanges)
 }

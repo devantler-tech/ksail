@@ -51,6 +51,12 @@ type nodeRemovalResult struct {
 	err  error
 }
 
+// nodeSpec holds the pre-calculated name and IP for a node to be created.
+type nodeSpec struct {
+	name string
+	ip   netip.Addr
+}
+
 // addDockerNodes creates new Talos Docker containers for the given role.
 // IPs are pre-calculated sequentially (to preserve deterministic address assignment),
 // then containers are created in parallel (up to maxConcurrentContainerOps at a time)
@@ -78,77 +84,96 @@ func (p *Provisioner) addDockerNodes(
 		return fmt.Errorf("%w: %s", ErrNoConfigForRole, role)
 	}
 
-	// Pre-calculate all node names and IPs sequentially before parallelizing
-	// creation. calculateNodeIP may call the Docker API for worker nodes
-	// (to count control-plane slots), so we do this once per node upfront.
-	type nodeSpec struct {
-		name string
-		ip   netip.Addr
+	// For worker nodes, fetch the control-plane count once upfront to avoid
+	// querying the Docker API on every loop iteration during IP calculation.
+	cpCount := p.options.ControlPlaneNodes
+
+	if role != RoleControlPlane {
+		cpNodes, countErr := p.countDockerRole(
+			ctx, clusterName, RoleControlPlane,
+		)
+		if countErr == nil {
+			cpCount = cpNodes
+		}
 	}
 
+	// Pre-calculate all node names and IPs sequentially before parallelizing creation.
+	specs, err := preCalculateNodeSpecs(
+		cidr, clusterName, role, nextIndex, count, cpCount,
+	)
+	if err != nil {
+		return err
+	}
+
+	results, err := p.createNodesInParallel(ctx, clusterName, role, specs, config)
+	if err != nil {
+		return err
+	}
+
+	return p.collectCreationResults(results, role, result)
+}
+
+// preCalculateNodeSpecs determines the name and static IP for each node to be created.
+func preCalculateNodeSpecs(
+	cidr netip.Prefix,
+	clusterName, role string,
+	nextIndex, count, cpCount int,
+) ([]nodeSpec, error) {
 	specs := make([]nodeSpec, count)
 
-	for i := range count {
-		nodeIndex := nextIndex + i
+	for idx := range count {
+		nodeIndex := nextIndex + idx
 		nodeName := dockerNodeName(clusterName, role, nodeIndex)
 
-		nodeIP, ipErr := p.calculateNodeIP(ctx, cidr, clusterName, role, nodeIndex)
+		nodeIP, ipErr := calculateNodeIP(cidr, role, nodeIndex, cpCount)
 		if ipErr != nil {
-			return fmt.Errorf("failed to calculate IP for %s: %w", nodeName, ipErr)
+			return nil, fmt.Errorf("failed to calculate IP for %s: %w", nodeName, ipErr)
 		}
 
-		specs[i] = nodeSpec{name: nodeName, ip: nodeIP}
+		specs[idx] = nodeSpec{name: nodeName, ip: nodeIP}
 	}
 
-	// Parallelize container creation. Each goroutine writes to its own slot
-	// in the results slice, so no mutex is needed.
-	results := make([]nodeCreationResult, count)
+	return specs, nil
+}
 
-	g, _ := errgroup.WithContext(ctx)
-	g.SetLimit(maxConcurrentContainerOps)
+// createNodesInParallel creates Talos containers for each spec in parallel
+// (up to maxConcurrentContainerOps at a time) and collects the results.
+func (p *Provisioner) createNodesInParallel(
+	ctx context.Context,
+	clusterName, role string,
+	specs []nodeSpec,
+	config talosconfig.Provider,
+) ([]nodeCreationResult, error) {
+	results := make([]nodeCreationResult, len(specs))
 
-	for i, spec := range specs {
-		i, spec := i, spec
+	group, _ := errgroup.WithContext(ctx)
+	group.SetLimit(maxConcurrentContainerOps)
 
-		g.Go(func() error {
+	for idx, spec := range specs {
+		group.Go(func() error {
 			createErr := p.createTalosContainer(ctx, clusterName, spec.name, role, spec.ip, config)
-			results[i] = nodeCreationResult{name: spec.name, ip: spec.ip, err: createErr}
+			results[idx] = nodeCreationResult{name: spec.name, ip: spec.ip, err: createErr}
 
 			return nil // errors collected in results; don't cancel sibling goroutines
 		})
 	}
 
-	if waitErr := g.Wait(); waitErr != nil {
-		// With the current g.Go bodies this should be unreachable, but handle defensively
-		// to satisfy errcheck and surface any unexpected errgroup errors.
-		return fmt.Errorf("unexpected error while waiting for Talos node creation goroutines: %w", waitErr)
+	waitErr := group.Wait()
+	if waitErr != nil {
+		return nil, fmt.Errorf(
+			"unexpected error during Talos node creation: %w",
+			waitErr,
+		)
 	}
 
-	// Record applied/failed changes and surface the first error encountered.
-	var firstErr error
-
-	for _, res := range results {
-		if res.err != nil {
-			recordFailedChange(result, role, res.name, res.err)
-
-			if firstErr == nil {
-				firstErr = fmt.Errorf("failed to create %s node %s: %w", role, res.name, res.err)
-			}
-		} else {
-			recordAppliedChange(result, role, res.name, "added")
-
-			_, _ = fmt.Fprintf(p.logWriter, "  ✓ Added %s node %s (IP: %s)\n",
-				role, res.name, res.ip.String())
-		}
-	}
-
-	return firstErr
+	return results, nil
 }
 
-// removeDockerNodes removes nodes of the given role (highest-index first).
-// For control-plane nodes, etcd membership is cleaned up sequentially before each removal
-// (etcd safety requires ordered operations). For worker nodes, containers are removed
-// in parallel (up to maxConcurrentContainerOps at a time).
+// removeDockerNodes removes nodes of the given role.
+// For control-plane nodes, etcd membership is cleaned up and containers are removed
+// sequentially (highest-index first, since etcd safety requires ordered operations).
+// For worker nodes, containers are removed in parallel (up to maxConcurrentContainerOps
+// at a time) without guaranteed ordering.
 func (p *Provisioner) removeDockerNodes(
 	ctx context.Context,
 	clusterName, role string,
@@ -162,69 +187,133 @@ func (p *Provisioner) removeDockerNodes(
 
 	count = min(count, len(existing))
 
-	// Control-plane nodes must be removed sequentially: etcd membership cleanup
-	// must run in order before each container is stopped.
 	if role == RoleControlPlane {
-		for i := len(existing) - 1; i >= len(existing)-count; i-- {
-			ctr := existing[i]
-			nodeName := containerName(ctr)
-
-			nodeIP := containerIP(ctr, clusterName)
-			p.etcdCleanupBeforeRemoval(ctx, nodeIP)
-
-			if removeErr := p.removeDockerContainer(ctx, ctr.ID); removeErr != nil {
-				recordFailedChange(result, role, nodeName, removeErr)
-
-				return fmt.Errorf("failed to remove %s node %s: %w", role, nodeName, removeErr)
-			}
-
-			recordAppliedChange(result, role, nodeName, "removed")
-
-			_, _ = fmt.Fprintf(p.logWriter, "  ✓ Removed %s node %s\n", role, nodeName)
-		}
-
-		return nil
+		return p.removeControlPlaneNodesSequentially(
+			ctx, clusterName, existing, count, result,
+		)
 	}
 
 	// Worker nodes have no etcd dependency and can be removed in parallel.
 	toRemove := existing[len(existing)-count:]
 	results := make([]nodeRemovalResult, len(toRemove))
 
-	g, _ := errgroup.WithContext(ctx)
-	g.SetLimit(maxConcurrentContainerOps)
+	group, _ := errgroup.WithContext(ctx)
+	group.SetLimit(maxConcurrentContainerOps)
 
-	for i, ctr := range toRemove {
-		i, ctr := i, ctr
+	for idx, ctr := range toRemove {
 		nodeName := containerName(ctr)
 
-		g.Go(func() error {
+		group.Go(func() error {
 			removeErr := p.removeDockerContainer(ctx, ctr.ID)
-			results[i] = nodeRemovalResult{name: nodeName, err: removeErr}
+			results[idx] = nodeRemovalResult{name: nodeName, err: removeErr}
 
 			return nil // errors collected in results; don't cancel sibling goroutines
 		})
 	}
 
-	if waitErr := g.Wait(); waitErr != nil {
-		// With the current g.Go bodies this should be unreachable, but handle defensively
-		// to satisfy errcheck and surface any unexpected errgroup errors.
-		return fmt.Errorf("unexpected error while waiting for Talos node removal goroutines: %w", waitErr)
+	waitErr := group.Wait()
+	if waitErr != nil {
+		return fmt.Errorf(
+			"unexpected error during Talos node removal: %w",
+			waitErr,
+		)
 	}
 
-	// Record applied/failed changes and surface the first error encountered.
+	return p.collectRemovalResults(results, role, result)
+}
+
+// removeControlPlaneNodesSequentially removes control-plane nodes one at a time,
+// cleaning up etcd membership before each removal (highest-index first).
+func (p *Provisioner) removeControlPlaneNodesSequentially(
+	ctx context.Context,
+	clusterName string,
+	existing []container.Summary,
+	count int,
+	result *clusterupdate.UpdateResult,
+) error {
+	for idx := len(existing) - 1; idx >= len(existing)-count; idx-- {
+		ctr := existing[idx]
+		nodeName := containerName(ctr)
+		nodeIP := containerIP(ctr, clusterName)
+		p.etcdCleanupBeforeRemoval(ctx, nodeIP)
+
+		removeErr := p.removeDockerContainer(ctx, ctr.ID)
+		if removeErr != nil {
+			recordFailedChange(result, RoleControlPlane, nodeName, removeErr)
+
+			return fmt.Errorf(
+				"failed to remove control-plane node %s: %w",
+				nodeName, removeErr,
+			)
+		}
+
+		recordAppliedChange(result, RoleControlPlane, nodeName, "removed")
+
+		_, _ = fmt.Fprintf(
+			p.logWriter, "  ✓ Removed %s node %s\n",
+			RoleControlPlane, nodeName,
+		)
+	}
+
+	return nil
+}
+
+// collectCreationResults records creation outcomes and returns the first error encountered.
+func (p *Provisioner) collectCreationResults(
+	results []nodeCreationResult,
+	role string,
+	updateResult *clusterupdate.UpdateResult,
+) error {
 	var firstErr error
 
 	for _, res := range results {
 		if res.err != nil {
-			recordFailedChange(result, role, res.name, res.err)
+			recordFailedChange(updateResult, role, res.name, res.err)
 
 			if firstErr == nil {
-				firstErr = fmt.Errorf("failed to remove %s node %s: %w", role, res.name, res.err)
+				firstErr = fmt.Errorf(
+					"failed to create %s node %s: %w",
+					role, res.name, res.err,
+				)
 			}
 		} else {
-			recordAppliedChange(result, role, res.name, "removed")
+			recordAppliedChange(updateResult, role, res.name, "added")
 
-			_, _ = fmt.Fprintf(p.logWriter, "  ✓ Removed %s node %s\n", role, res.name)
+			_, _ = fmt.Fprintf(
+				p.logWriter, "  ✓ Added %s node %s (IP: %s)\n",
+				role, res.name, res.ip.String(),
+			)
+		}
+	}
+
+	return firstErr
+}
+
+// collectRemovalResults records removal outcomes and returns the first error encountered.
+func (p *Provisioner) collectRemovalResults(
+	results []nodeRemovalResult,
+	role string,
+	updateResult *clusterupdate.UpdateResult,
+) error {
+	var firstErr error
+
+	for _, res := range results {
+		if res.err != nil {
+			recordFailedChange(updateResult, role, res.name, res.err)
+
+			if firstErr == nil {
+				firstErr = fmt.Errorf(
+					"failed to remove %s node %s: %w",
+					role, res.name, res.err,
+				)
+			}
+		} else {
+			recordAppliedChange(updateResult, role, res.name, "removed")
+
+			_, _ = fmt.Fprintf(
+				p.logWriter, "  ✓ Removed %s node %s\n",
+				role, res.name,
+			)
 		}
 	}
 
@@ -368,23 +457,11 @@ func (p *Provisioner) listDockerNodesByRole(
 }
 
 // calculateNodeIP determines the static IP for a new node based on its role and index.
-// Control-plane nodes start at offset 2 from the network base.
-// Worker nodes start after all control-plane slots.
-func (p *Provisioner) calculateNodeIP(
-	ctx context.Context,
-	cidr netip.Prefix,
-	clusterName, role string,
-	nodeIndex int,
-) (netip.Addr, error) {
+// Control-plane nodes start at offset 2 from the network base (cpCount is ignored).
+// Worker nodes start after all control-plane slots (cpCount must be pre-fetched by the caller).
+func calculateNodeIP(cidr netip.Prefix, role string, nodeIndex, cpCount int) (netip.Addr, error) {
 	if role == RoleControlPlane {
 		return nthIPInNetwork(cidr, nodeIndex+ipv4Offset)
-	}
-
-	// Workers start after the maximum control-plane count
-	cpCount, err := p.countDockerRole(ctx, clusterName, RoleControlPlane)
-	if err != nil {
-		// Fall back to configured count
-		cpCount = p.options.ControlPlaneNodes
 	}
 
 	return nthIPInNetwork(cidr, cpCount+nodeIndex+ipv4Offset)
