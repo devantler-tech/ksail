@@ -23,7 +23,7 @@ imports:
   - githubnext/agentics/workflows/shared/reporting.md@69b5e3ae5fa7f35fa555b0a22aee14c36ab57ebb
 
 network:
-  allowed: [defaults, go, dl.google.com]
+  allowed: [defaults, go, github, dl.google.com]
 
 strict: false
 
