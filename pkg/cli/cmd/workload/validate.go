@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
@@ -115,12 +116,6 @@ func runValidateCmd(
 	if err != nil {
 		return err
 	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "all validations passed",
-		Writer:  cmd.OutOrStdout(),
-	})
 
 	return nil
 }
@@ -256,6 +251,10 @@ func validateDirectory(
 					taskCtx, kustDir, kubeconformClient, kustomizeClient, opts,
 				)
 			},
+			notify.WithCountLabel("kustomizations"),
+			notify.WithAppendOnly(),
+			notify.WithConcurrency(5),
+			notify.WithContinueOnError(),
 		)
 		if kustErr != nil {
 			return fmt.Errorf("kustomization validation failed: %w", kustErr)
@@ -268,7 +267,8 @@ func validateDirectory(
 			func(taskCtx context.Context, file string) error {
 				return validateFileSilent(taskCtx, file, kubeconformClient, opts)
 			},
-			notify.WithMaxVisible(5),
+			notify.WithCountLabel("files"),
+			notify.WithAppendOnly(),
 			notify.WithConcurrency(5),
 			notify.WithContinueOnError(),
 		)
@@ -291,6 +291,8 @@ func runParallelValidation(
 	validateFn func(ctx context.Context, item string) error,
 	extraOpts ...notify.ProgressOption,
 ) error {
+	slices.Sort(items)
+
 	tasks := make([]notify.ProgressTask, len(items))
 	for taskIdx, item := range items {
 		name := filepath.Base(item)

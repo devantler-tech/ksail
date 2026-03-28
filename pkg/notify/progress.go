@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -114,12 +115,15 @@ type ProgressGroup struct {
 	linesDrawn     int // Number of lines currently drawn (for cursor movement)
 
 	// Compact display mode fields
-	maxVisible      int  // Max task lines to show at once (0 = show all)
-	concurrency     int  // Max parallel goroutines (0 = unlimited)
-	completedCount  int  // Number of completed tasks (for summary line)
-	failedCount     int  // Number of failed tasks (for summary line)
-	continueOnError bool // Don't cancel other tasks when one fails
-	termWidth       int  // Terminal width in columns (0 = non-TTY or unknown)
+	maxVisible      int    // Max task lines to show at once (0 = show all)
+	concurrency     int    // Max parallel goroutines (0 = unlimited)
+	completedCount  int    // Number of completed tasks (for summary line)
+	failedCount     int    // Number of failed tasks (for summary line)
+	continueOnError bool   // Don't cancel other tasks when one fails
+	appendOnly      bool   // Force append-only output (no ANSI redraws, no starting lines)
+	termWidth       int    // Terminal width in columns (0 = non-TTY or unknown)
+	countLabel      string // Label for counts (e.g., "kustomizations", "files")
+	emitted         map[string]bool // tasks whose completion has been permanently printed (streaming mode)
 }
 
 // taskState represents the current state of a task.
@@ -135,6 +139,9 @@ const (
 const (
 	// spinnerTickInterval is the interval between spinner animation frames.
 	spinnerTickInterval = 100 * time.Millisecond
+	// streamingPendingPreview is the number of pending tasks shown below
+	// running tasks in streaming interactive mode.
+	streamingPendingPreview = 3
 )
 
 // getSpinnerFrames returns the spinner animation frames.
@@ -203,12 +210,30 @@ func WithConcurrency(n int) ProgressOption {
 	}
 }
 
+// WithCountLabel sets a label used in summary lines to describe what is being counted.
+// For example, WithCountLabel("kustomizations") produces "✔ 62 kustomizations validated".
+// Without this, the summary shows just "✔ 62 validated".
+func WithCountLabel(label string) ProgressOption {
+	return func(pg *ProgressGroup) {
+		pg.countLabel = label
+	}
+}
+
 // WithContinueOnError makes the group run all tasks even when some fail.
 // Without this option, the first failure cancels remaining tasks.
 // When set, all errors are collected and returned as a combined error.
 func WithContinueOnError() ProgressOption {
 	return func(pg *ProgressGroup) {
 		pg.continueOnError = true
+	}
+}
+
+// WithAppendOnly forces append-only output regardless of TTY detection.
+// Tasks are printed as they complete (no ANSI cursor movement, no spinners,
+// no starting lines). Use with WithConcurrency to control parallelism.
+func WithAppendOnly() ProgressOption {
+	return func(pg *ProgressGroup) {
+		pg.appendOnly = true
 	}
 }
 
@@ -260,6 +285,7 @@ func NewProgressGroup(
 		taskDuration:   make(map[string]time.Duration),
 		stopSpinner:    make(chan struct{}),
 		spinnerDone:    make(chan struct{}),
+		emitted:        make(map[string]bool),
 	}
 
 	// Apply options
@@ -292,6 +318,10 @@ func (pg *ProgressGroup) Run(ctx context.Context, tasks ...ProgressTask) error {
 	_, _ = fmt.Fprintf(pg.writer, "%s %s...\n", pg.emoji, pg.title)
 
 	// Use different modes for TTY vs non-TTY
+	if pg.appendOnly && pg.isTTY {
+		return pg.runStreamingInteractive(ctx, tasks)
+	}
+
 	if pg.isTTY {
 		return pg.runInteractive(ctx, tasks)
 	}
@@ -322,6 +352,9 @@ func (pg *ProgressGroup) runInteractive(ctx context.Context, tasks []ProgressTas
 	// Final redraw to show completed state
 	pg.redrawAllLines()
 
+	// Print final summary below task lines
+	pg.printFinalSummary()
+
 	// Print timing if available
 	if err == nil && pg.timer != nil {
 		pg.printTiming()
@@ -332,6 +365,181 @@ func (pg *ProgressGroup) runInteractive(ctx context.Context, tasks []ProgressTas
 	}
 
 	return nil
+}
+
+// runStreamingInteractive runs tasks with a hybrid display: completed lines
+// scroll up permanently while a small live zone at the bottom shows running
+// tasks with spinners and a preview of the next pending tasks.
+func (pg *ProgressGroup) runStreamingInteractive(ctx context.Context, tasks []ProgressTask) error {
+	// Draw initial live zone (first batch shown as pending)
+	pg.drawStreamingZone()
+
+	// Start spinner animation (runSpinner branches to redrawStreamingZone when appendOnly)
+	go pg.runSpinner()
+
+	var err error
+
+	if pg.continueOnError {
+		err = pg.runAllTasks(ctx, tasks)
+	} else {
+		err = pg.runFailFastTasks(ctx, tasks)
+	}
+
+	// Stop spinner and wait for it to finish
+	close(pg.stopSpinner)
+	<-pg.spinnerDone
+
+	// Final redraw: emit remaining completed lines, clear live zone
+	pg.finalizeStreamingOutput()
+
+	// Print final summary below task lines
+	pg.printFinalSummary()
+
+	// Print timing if available
+	if err == nil && pg.timer != nil {
+		pg.printTiming()
+	}
+
+	if err != nil {
+		return fmt.Errorf("parallel execution: %w", err)
+	}
+
+	return nil
+}
+
+// drawStreamingZone draws the initial live zone showing pending tasks.
+// The zone covers at most concurrency + streamingPendingPreview lines.
+func (pg *ProgressGroup) drawStreamingZone() {
+	pg.mu.Lock()
+	defer pg.mu.Unlock()
+
+	maxInitial := pg.concurrency + streamingPendingPreview
+	if maxInitial <= streamingPendingPreview {
+		maxInitial = len(pg.taskOrder) // unlimited concurrency: show all
+	}
+
+	var buf bytes.Buffer
+
+	shown := 0
+
+	for _, name := range pg.taskOrder {
+		if shown >= maxInitial {
+			break
+		}
+
+		line := pg.formatTaskLine(name, pg.taskStatus[name])
+		fmt.Fprintf(&buf, "%s\n", line)
+
+		shown++
+	}
+
+	_, _ = pg.writer.Write(buf.Bytes())
+
+	pg.linesDrawn = shown
+}
+
+// redrawStreamingZone redraws only the live zone at the bottom of the output.
+// Newly completed tasks are emitted as permanent lines above the zone.
+// The live zone shows currently running tasks plus up to streamingPendingPreview
+// pending tasks, updated in place via ANSI cursor movement.
+func (pg *ProgressGroup) redrawStreamingZone() {
+	pg.mu.Lock()
+	defer pg.mu.Unlock()
+
+	if pg.linesDrawn == 0 && len(pg.emitted) == len(pg.taskOrder) {
+		return // nothing to draw
+	}
+
+	// Move cursor to start of live zone
+	if pg.linesDrawn > 0 {
+		fmt.Fprintf(pg.writer, "\033[%dA", pg.linesDrawn)
+	}
+
+	var buf bytes.Buffer
+
+	emittedCount := 0
+
+	// Emit newly completed/failed tasks as permanent lines (in start order)
+	for _, name := range pg.taskStartOrder {
+		state := pg.taskStatus[name]
+		if (state == taskComplete || state == taskFailed) && !pg.emitted[name] {
+			fmt.Fprintf(&buf, "\033[K%s\n", pg.formatTaskLine(name, state))
+
+			pg.emitted[name] = true
+			emittedCount++
+		}
+	}
+
+	// Build live zone: running tasks (in start order)
+	liveLines := 0
+
+	for _, name := range pg.taskStartOrder {
+		if pg.taskStatus[name] == taskRunning {
+			fmt.Fprintf(&buf, "\033[K%s\n", pg.formatTaskLine(name, taskRunning))
+			liveLines++
+		}
+	}
+
+	// Append up to streamingPendingPreview pending tasks
+	pendingShown := 0
+
+	for _, name := range pg.taskOrder {
+		if pg.taskStatus[name] == taskPending && pendingShown < streamingPendingPreview {
+			fmt.Fprintf(&buf, "\033[K%s\n", pg.formatTaskLine(name, taskPending))
+
+			liveLines++
+			pendingShown++
+		}
+	}
+
+	// Clear excess lines from previous draw
+	totalContent := emittedCount + liveLines
+	for i := totalContent; i < pg.linesDrawn; i++ {
+		fmt.Fprint(&buf, "\033[K\n")
+	}
+
+	_, _ = pg.writer.Write(buf.Bytes())
+
+	pg.linesDrawn = liveLines // only the live zone is rewritable next time
+}
+
+// finalizeStreamingOutput emits any remaining completed/failed lines and
+// clears the live zone. Called after spinner stops and all tasks are done.
+func (pg *ProgressGroup) finalizeStreamingOutput() {
+	pg.mu.Lock()
+	defer pg.mu.Unlock()
+
+	if pg.linesDrawn > 0 {
+		fmt.Fprintf(pg.writer, "\033[%dA", pg.linesDrawn)
+	}
+
+	var buf bytes.Buffer
+
+	emittedCount := 0
+
+	for _, name := range pg.taskStartOrder {
+		state := pg.taskStatus[name]
+		if (state == taskComplete || state == taskFailed) && !pg.emitted[name] {
+			fmt.Fprintf(&buf, "\033[K%s\n", pg.formatTaskLine(name, state))
+
+			pg.emitted[name] = true
+			emittedCount++
+		}
+	}
+
+	// Clear leftover live zone lines and reposition cursor
+	excess := pg.linesDrawn - emittedCount
+	for i := 0; i < excess; i++ {
+		fmt.Fprint(&buf, "\033[K\n")
+	}
+
+	if excess > 0 {
+		fmt.Fprintf(&buf, "\033[%dA", excess)
+	}
+
+	_, _ = pg.writer.Write(buf.Bytes())
+
+	pg.linesDrawn = 0
 }
 
 // runFailFastTasks runs tasks with errgroup.WithContext — first failure cancels the rest.
@@ -438,9 +646,11 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 		group.Go(func() error {
 			pg.setTaskState(task.Name, taskRunning)
 
-			pg.mu.Lock()
-			_, _ = fmt.Fprintf(pg.writer, "► %s %s\n", task.Name, pg.labels.Running)
-			pg.mu.Unlock()
+			if !pg.appendOnly {
+				pg.mu.Lock()
+				_, _ = fmt.Fprintf(pg.writer, "► %s %s\n", task.Name, pg.labels.Running)
+				pg.mu.Unlock()
+			}
 
 			taskErr := task.Fn(taskCtx)
 			if taskErr != nil {
@@ -477,6 +687,9 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 		err = errors.Join(allErrs...)
 	}
 
+	// Print final summary below task lines
+	pg.printFinalSummary()
+
 	// Print timing if available
 	if err == nil && pg.timer != nil {
 		pg.printTiming()
@@ -487,6 +700,34 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 	}
 
 	return nil
+}
+
+// printFinalSummary prints a one-line summary after all tasks complete.
+// Example: "✔ 62 kustomizations validated" or "✔ 60 validated  ✗ 2 failed".
+func (pg *ProgressGroup) printFinalSummary() {
+	pg.mu.Lock()
+	defer pg.mu.Unlock()
+
+	var parts []string
+
+	if pg.completedCount > 0 {
+		if pg.countLabel != "" {
+			parts = append(parts,
+				fcolor.New(fcolor.FgGreen).Sprintf("✔ %d %s %s", pg.completedCount, pg.countLabel, pg.labels.Completed))
+		} else {
+			parts = append(parts,
+				fcolor.New(fcolor.FgGreen).Sprintf("✔ %d %s", pg.completedCount, pg.labels.Completed))
+		}
+	}
+
+	if pg.failedCount > 0 {
+		parts = append(parts,
+			fcolor.New(fcolor.FgRed).Sprintf("✗ %d failed", pg.failedCount))
+	}
+
+	if len(parts) > 0 {
+		_, _ = fmt.Fprintln(pg.writer, strings.Join(parts, "  "))
+	}
 }
 
 // printTiming prints the timing information.
@@ -541,7 +782,12 @@ func (pg *ProgressGroup) runSpinner() {
 			pg.mu.Lock()
 			pg.spinnerIdx = (pg.spinnerIdx + 1) % len(frames)
 			pg.mu.Unlock()
-			pg.redrawAllLines()
+
+			if pg.appendOnly {
+				pg.redrawStreamingZone()
+			} else {
+				pg.redrawAllLines()
+			}
 		}
 	}
 }
@@ -631,8 +877,13 @@ func (pg *ProgressGroup) writeSummaryLine(buf *bytes.Buffer) {
 	parts := make([]string, 0, 2)
 
 	if pg.completedCount > 0 {
-		parts = append(parts,
-			fcolor.New(fcolor.FgGreen).Sprintf("✔ %d %s", pg.completedCount, pg.labels.Completed))
+		if pg.countLabel != "" {
+			parts = append(parts,
+				fcolor.New(fcolor.FgGreen).Sprintf("✔ %d %s %s", pg.completedCount, pg.countLabel, pg.labels.Completed))
+		} else {
+			parts = append(parts,
+				fcolor.New(fcolor.FgGreen).Sprintf("✔ %d %s", pg.completedCount, pg.labels.Completed))
+		}
 	}
 
 	if pg.failedCount > 0 {
