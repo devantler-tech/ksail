@@ -42,8 +42,9 @@ func (p *Provisioner) scaleDockerByRole(
 type nodeResult interface {
 	nodeName() string
 	nodeErr() error
-	action() string
-	successLog() string
+	verb() string              // past-tense for recordAppliedChange ("added", "removed")
+	action() string            // imperative for error messages ("add", "remove")
+	logLine(role string) string // complete success log line
 }
 
 // nodeCreationResult records the outcome of a single container creation attempt.
@@ -55,9 +56,12 @@ type nodeCreationResult struct {
 
 func (r nodeCreationResult) nodeName() string { return r.name }
 func (r nodeCreationResult) nodeErr() error   { return r.err }
-func (r nodeCreationResult) action() string   { return "create" }
+func (r nodeCreationResult) verb() string     { return "added" }
+func (r nodeCreationResult) action() string   { return "add" }
 
-func (r nodeCreationResult) successLog() string { return fmt.Sprintf("Added (IP: %s)", r.ip.String()) }
+func (r nodeCreationResult) logLine(role string) string {
+	return fmt.Sprintf("  ✓ Added %s node %s (IP: %s)\n", role, r.name, r.ip.String())
+}
 
 // nodeRemovalResult records the outcome of a single container removal attempt.
 type nodeRemovalResult struct {
@@ -65,10 +69,14 @@ type nodeRemovalResult struct {
 	err  error
 }
 
-func (r nodeRemovalResult) nodeName() string   { return r.name }
-func (r nodeRemovalResult) nodeErr() error     { return r.err }
-func (r nodeRemovalResult) action() string     { return "remove" }
-func (r nodeRemovalResult) successLog() string { return "Removed" }
+func (r nodeRemovalResult) nodeName() string { return r.name }
+func (r nodeRemovalResult) nodeErr() error   { return r.err }
+func (r nodeRemovalResult) verb() string     { return "removed" }
+func (r nodeRemovalResult) action() string   { return "remove" }
+
+func (r nodeRemovalResult) logLine(role string) string {
+	return fmt.Sprintf("  ✓ Removed %s node %s\n", role, r.name)
+}
 
 // nodeSpec holds the pre-calculated name and IP for a node to be created.
 type nodeSpec struct {
@@ -296,12 +304,9 @@ func (p *Provisioner) collectResults(
 				)
 			}
 		} else {
-			recordAppliedChange(updateResult, role, res.nodeName(), res.action()+"d")
+			recordAppliedChange(updateResult, role, res.nodeName(), res.verb())
 
-			_, _ = fmt.Fprintf(
-				p.logWriter, "  ✓ %s %s node %s\n",
-				res.successLog(), role, res.nodeName(),
-			)
+			_, _ = fmt.Fprint(p.logWriter, res.logLine(role))
 		}
 	}
 
