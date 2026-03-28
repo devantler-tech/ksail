@@ -3,6 +3,7 @@
 ► Processing...
 ► task-1 running
 ✔ task-1 completed
+✔ 1 completed
 
 ---
 
@@ -10,6 +11,7 @@
 📦 Installing...
 ► failing-component running
 ✗ failing-component failed
+✗ 1 failed
 
 ---
 
@@ -17,6 +19,7 @@
 📦 Installing...
 ► test-component installing
 ✔ test-component installed
+✔ 1 installed
 
 ---
 
@@ -24,5 +27,6 @@
 ✅ Validating...
 ► schema validating
 ✔ schema validated
+✔ 1 validated
 
 ---
