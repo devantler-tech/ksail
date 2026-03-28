@@ -195,7 +195,7 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | `policyEngine` | enum | – |  |
 | `localRegistry` | LocalRegistry | – |  |
 | `gitOpsEngine` | enum | – |  |
-| `sops` | SOPS | – |  |
+| `sops` | SOPS | – | Automatic SOPS Age secret injection for Flux (auto-detect by default) |
 | `importImages` | string | – | Path to tar archive with container images to import after cluster creation but before component installation |
 | `vanilla` | OptionsVanilla | – |  |
 | `talos` | OptionsTalos | – |  |
@@ -323,6 +323,33 @@ GitOps engine for continuous deployment. See [GitOps](/concepts/#gitops). When s
 - `None` (default) – No GitOps engine
 - `Flux` – Install [Flux CD](https://fluxcd.io/) and scaffold FluxInstance CR
 - `ArgoCD` – Install [Argo CD](https://argo-cd.readthedocs.io/) and scaffold Application CR
+
+#### sops (SOPS)
+
+Controls automatic SOPS Age secret injection. When `gitOpsEngine` is `Flux`, KSail creates (or updates) a `sops-age` secret in the `flux-system` namespace containing your Age private key. Flux Kustomization CRDs reference this via `spec.decryption.secretRef`.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `ageKeyEnvVar` | string | `SOPS_AGE_KEY` | Environment variable containing the Age private key. Set empty to skip env var lookup. |
+| `enabled` | bool or null | null (auto-detect) | `null` = create secret if key is found; `true` = require key (error if missing); `false` = disable entirely |
+
+**Key resolution priority:**
+
+1. Environment variable named by `ageKeyEnvVar` (default: `SOPS_AGE_KEY`)
+2. Platform-specific key file (`SOPS_AGE_KEY_FILE` → `$XDG_CONFIG_HOME/sops/age/keys.txt` → OS default)
+
+Use `ksail cipher import AGE-SECRET-KEY-1...` to save a key to the local key file, or export `SOPS_AGE_KEY` before running `ksail cluster create`.
+
+**Example — require a key:**
+
+```yaml
+spec:
+  cluster:
+    gitOpsEngine: Flux
+    sops:
+      enabled: true
+      ageKeyEnvVar: MY_AGE_KEY
+```
 
 #### Distribution and Tool Options
 
