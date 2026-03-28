@@ -331,7 +331,7 @@ Controls automatic SOPS Age secret injection. When `gitOpsEngine` is `Flux`, KSa
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
 | `ageKeyEnvVar` | string | `SOPS_AGE_KEY` | Environment variable containing the Age private key. Set empty to skip env var lookup. |
-| `enabled` | bool or null | null (auto-detect) | `null` = create secret if key is found; `true` = require key (error if missing); `false` = disable entirely |
+| `enabled` | bool | auto-detect (field omitted) | Omit this field to auto-detect (create secret if key is found); `true` = require key (error if missing); `false` = disable entirely |
 
 **Key resolution priority:**
 
