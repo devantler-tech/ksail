@@ -1,7 +1,10 @@
 package workload
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -13,12 +16,15 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
+	"github.com/devantler-tech/ksail/v5/pkg/envvar"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/spf13/cobra"
+	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 	kustomizeTypes "sigs.k8s.io/kustomize/api/types"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -28,6 +34,48 @@ const (
 
 // ErrBuildFailed is returned when a kustomize build or manifest validation fails.
 var ErrBuildFailed = errors.New("build failed")
+
+type fluxSubstituteSourceRef struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}
+
+type fluxKustomizationManifest struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Spec       struct {
+		PostBuild struct {
+			SubstituteFrom []fluxSubstituteSourceRef `json:"substituteFrom"`
+		} `json:"postBuild"`
+	} `json:"spec"`
+}
+
+type variableResourceManifest struct {
+	Kind     string `json:"kind"`
+	Metadata struct {
+		Name string `json:"name"`
+	} `json:"metadata"`
+	Data       map[string]string `json:"data"`
+	StringData map[string]string `json:"stringData"`
+}
+
+type validationSubstitutions map[string]string
+
+type substituteSourceSet map[string]struct{}
+
+func (s substituteSourceSet) add(kind, name string) {
+	if kind == "" || name == "" {
+		return
+	}
+
+	s[strings.ToLower(kind)+"/"+name] = struct{}{}
+}
+
+func (s substituteSourceSet) contains(kind, name string) bool {
+	_, ok := s[strings.ToLower(kind)+"/"+name]
+
+	return ok
+}
 
 // NewValidateCmd creates the workload validate command.
 func NewValidateCmd() *cobra.Command {
@@ -170,7 +218,12 @@ func validatePath(
 
 	// If it's a file, validate it directly
 	if !info.IsDir() {
-		return validateFile(ctx, cmd, path, kubeconformClient, opts)
+		substitutions, loadErr := loadValidationSubstitutions(filepath.Dir(path))
+		if loadErr != nil {
+			return loadErr
+		}
+
+		return validateFile(ctx, cmd, path, kubeconformClient, opts, substitutions)
 	}
 
 	// If it's a directory, walk it to find YAML files and kustomizations
@@ -184,6 +237,7 @@ func validateFile(
 	filePath string,
 	kubeconformClient *kubeconform.Client,
 	opts *kubeconform.ValidationOptions,
+	substitutions validationSubstitutions,
 ) error {
 	// Only validate YAML files
 	if !isYAMLFile(filePath) {
@@ -197,7 +251,7 @@ func validateFile(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	err := kubeconformClient.ValidateFile(ctx, filePath, opts)
+	err := validateFileSilent(ctx, filePath, kubeconformClient, opts, substitutions)
 	if err != nil {
 		return fmt.Errorf("validate file %s: %w", filePath, err)
 	}
@@ -230,6 +284,11 @@ func validateDirectory(
 	patchPaths := collectPatchPaths(kustomizations)
 	yamlFiles = filterPatchFiles(yamlFiles, patchPaths)
 
+	substitutions, err := loadValidationSubstitutions(dirPath)
+	if err != nil {
+		return err
+	}
+
 	progressOpts := []notify.ProgressOption{
 		notify.WithAppendOnly(),
 		notify.WithConcurrency(validationConcurrency),
@@ -241,7 +300,13 @@ func validateDirectory(
 
 		err := runParallelValidation(
 			ctx, cmd, kustomizations, dirPath, "Validating kustomizations", "✅",
-			buildKustomizationValidator(dirPath, kubeconformClient, kustomizeClient, opts),
+			buildKustomizationValidator(
+				dirPath,
+				kubeconformClient,
+				kustomizeClient,
+				opts,
+				substitutions,
+			),
 			append(progressOpts, notify.WithCountLabel("kustomizations"))...,
 		)
 		if err != nil {
@@ -254,7 +319,7 @@ func validateDirectory(
 		err := runParallelValidation(
 			ctx, cmd, yamlFiles, dirPath, "Validating YAML files", "📄",
 			func(taskCtx context.Context, file string) error {
-				return validateFileSilent(taskCtx, file, kubeconformClient, opts)
+				return validateFileSilent(taskCtx, file, kubeconformClient, opts, substitutions)
 			},
 			append(progressOpts, notify.WithCountLabel("files"))...,
 		)
@@ -317,6 +382,7 @@ func validateKustomizationSilent(
 	kubeconformClient *kubeconform.Client,
 	kustomizeClient *kustomize.Client,
 	opts *kubeconform.ValidationOptions,
+	substitutions validationSubstitutions,
 ) error {
 	// Build the kustomization — return the raw error so simplifyBuildError can strip its prefix.
 	output, err := kustomizeClient.Build(ctx, kustDir)
@@ -325,7 +391,12 @@ func validateKustomizationSilent(
 	}
 
 	// Validate the output
-	err = kubeconformClient.ValidateManifests(ctx, output, opts)
+	err = kubeconformClient.ValidateBytes(
+		ctx,
+		kustDir,
+		applyValidationSubstitutions(output.Bytes(), substitutions),
+		opts,
+	)
 	if err != nil {
 		return fmt.Errorf("validate manifests: %w", err)
 	}
@@ -340,6 +411,7 @@ func buildKustomizationValidator(
 	kubeconformClient *kubeconform.Client,
 	kustomizeClient *kustomize.Client,
 	opts *kubeconform.ValidationOptions,
+	substitutions validationSubstitutions,
 ) func(context.Context, string) error {
 	return func(taskCtx context.Context, kustDir string) error {
 		err := validateKustomizationSilent(
@@ -348,6 +420,7 @@ func buildKustomizationValidator(
 			kubeconformClient,
 			kustomizeClient,
 			opts,
+			substitutions,
 		)
 		if err != nil {
 			return simplifyBuildError(err, dirPath)
@@ -363,13 +436,24 @@ func validateFileSilent(
 	filePath string,
 	kubeconformClient *kubeconform.Client,
 	opts *kubeconform.ValidationOptions,
+	substitutions validationSubstitutions,
 ) error {
 	// Only validate YAML files
 	if !isYAMLFile(filePath) {
 		return nil
 	}
 
-	err := kubeconformClient.ValidateFile(ctx, filePath, opts)
+	data, err := os.ReadFile(filePath) //nolint:gosec // filePath is discovered from walked paths or explicitly canonicalized
+	if err != nil {
+		return fmt.Errorf("read file %s: %w", filePath, err)
+	}
+
+	err = kubeconformClient.ValidateBytes(
+		ctx,
+		filePath,
+		applyValidationSubstitutions(data, substitutions),
+		opts,
+	)
 	if err != nil {
 		return fmt.Errorf("validate file %s: %w", filePath, err)
 	}
@@ -552,4 +636,188 @@ func addPatchPath(kustDir, relPath string, patchPaths map[string]struct{}) {
 	}
 
 	patchPaths[resolved] = struct{}{}
+}
+
+func loadValidationSubstitutions(rootPath string) (validationSubstitutions, error) {
+	refs, err := collectFluxSubstituteSources(rootPath)
+	if err != nil {
+		return nil, fmt.Errorf("collect flux substitute sources: %w", err)
+	}
+
+	if len(refs) == 0 {
+		return nil, nil
+	}
+
+	files, err := walkFiles(rootPath, func(path string, _ os.FileInfo) string {
+		if isYAMLFile(path) {
+			return path
+		}
+
+		return ""
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find substitution manifests: %w", err)
+	}
+
+	slices.Sort(files)
+
+	values := make(validationSubstitutions)
+	for _, filePath := range files {
+		err = collectSubstitutionValuesFromFile(filePath, refs, values)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return values, nil
+}
+
+func collectFluxSubstituteSources(rootPath string) (substituteSourceSet, error) {
+	files, err := walkFiles(rootPath, func(path string, _ os.FileInfo) string {
+		if isYAMLFile(path) {
+			return path
+		}
+
+		return ""
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	slices.Sort(files)
+
+	refs := make(substituteSourceSet)
+	for _, filePath := range files {
+		err = collectFluxSubstituteSourcesFromFile(filePath, refs)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return refs, nil
+}
+
+func collectFluxSubstituteSourcesFromFile(filePath string, refs substituteSourceSet) error {
+	docs, err := readYAMLDocuments(filePath)
+	if err != nil {
+		return err
+	}
+
+	for _, doc := range docs {
+		var manifest fluxKustomizationManifest
+
+		err = yaml.Unmarshal(doc, &manifest)
+		if err != nil {
+			continue
+		}
+
+		if manifest.Kind != "Kustomization" || !strings.HasPrefix(manifest.APIVersion, "kustomize.toolkit.fluxcd.io/") {
+			continue
+		}
+
+		for _, ref := range manifest.Spec.PostBuild.SubstituteFrom {
+			refs.add(ref.Kind, ref.Name)
+		}
+	}
+
+	return nil
+}
+
+func collectSubstitutionValuesFromFile(
+	filePath string,
+	refs substituteSourceSet,
+	values validationSubstitutions,
+) error {
+	docs, err := readYAMLDocuments(filePath)
+	if err != nil {
+		return err
+	}
+
+	for _, doc := range docs {
+		var manifest variableResourceManifest
+
+		err = yaml.Unmarshal(doc, &manifest)
+		if err != nil {
+			continue
+		}
+
+		if !refs.contains(manifest.Kind, manifest.Metadata.Name) {
+			continue
+		}
+
+		for key, value := range manifest.StringData {
+			if _, exists := values[key]; !exists {
+				values[key] = value
+			}
+		}
+
+		for key, value := range manifest.Data {
+			if _, exists := values[key]; exists {
+				continue
+			}
+
+			if manifest.Kind == "Secret" {
+				values[key] = decodeSecretValue(value)
+
+				continue
+			}
+
+			values[key] = value
+		}
+	}
+
+	return nil
+}
+
+func readYAMLDocuments(filePath string) ([][]byte, error) {
+	data, err := os.ReadFile(filePath) //nolint:gosec // filePath is discovered from walked paths or explicitly canonicalized
+	if err != nil {
+		return nil, fmt.Errorf("read yaml file %s: %w", filePath, err)
+	}
+
+	reader := utilyaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
+
+	var docs [][]byte
+	for {
+		doc, err := reader.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("read yaml document %s: %w", filePath, err)
+		}
+
+		doc = bytes.TrimSpace(doc)
+		if len(doc) == 0 {
+			continue
+		}
+
+		docs = append(docs, doc)
+	}
+
+	return docs, nil
+}
+
+func decodeSecretValue(value string) string {
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return value
+	}
+
+	return string(decoded)
+}
+
+func applyValidationSubstitutions(data []byte, substitutions validationSubstitutions) []byte {
+	if len(substitutions) == 0 {
+		return envvar.ExpandBytes(data)
+	}
+
+	return envvar.ExpandBytesWithLookup(data, func(name string) (string, bool) {
+		if value, ok := substitutions[name]; ok {
+			return value, true
+		}
+
+		return os.LookupEnv(name)
+	})
 }

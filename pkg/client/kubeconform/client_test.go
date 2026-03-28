@@ -245,10 +245,30 @@ data: "this is not valid"
 	if err == nil {
 		t.Fatal("expected invalid YAML to fail validation")
 	}
-
 	// Check that it's a validation error
 	if !strings.Contains(err.Error(), "validation failed") {
 		t.Fatalf("expected validation error, got: %v", err)
+	}
+}
+
+func TestValidateBytes_ValidYAML(t *testing.T) {
+	t.Parallel()
+
+	validYAML := `apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-namespace
+`
+
+	client := kubeconform.NewClient()
+	opts := &kubeconform.ValidationOptions{
+		Strict:               true,
+		IgnoreMissingSchemas: true,
+	}
+
+	err := client.ValidateBytes(context.Background(), "test.yaml", []byte(validYAML), opts)
+	if err != nil {
+		t.Fatalf("expected valid YAML to pass validation, got error: %v", err)
 	}
 }
 

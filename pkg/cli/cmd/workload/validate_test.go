@@ -684,3 +684,153 @@ func TestValidateCmdSkipsKustomizePatches(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateCmdSubstitutesFluxPostBuildVariables(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	err := os.MkdirAll(filepath.Join(tmpDir, "bases", "apps"), 0o750)
+	if err != nil {
+		t.Fatalf("failed to create bases/apps dir: %v", err)
+	}
+
+	err = os.MkdirAll(filepath.Join(tmpDir, "clusters", "local", "apps"), 0o750)
+	if err != nil {
+		t.Fatalf("failed to create clusters/local/apps dir: %v", err)
+	}
+
+	err = os.MkdirAll(filepath.Join(tmpDir, "clusters", "local", "variables"), 0o750)
+	if err != nil {
+		t.Fatalf("failed to create clusters/local/variables dir: %v", err)
+	}
+
+	basesKustomization := `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+`
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "bases", "apps", "kustomization.yaml"),
+		[]byte(basesKustomization),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write base kustomization: %v", err)
+	}
+
+	deploymentYAML := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-proxy
+spec:
+  replicas: ${auth_proxy_replicas:=2}
+  selector:
+    matchLabels:
+      app: auth-proxy
+  template:
+    metadata:
+      labels:
+        app: auth-proxy
+    spec:
+      containers:
+        - name: auth-proxy
+          image: nginx:1.27.1
+`
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "bases", "apps", "deployment.yaml"),
+		[]byte(deploymentYAML),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write deployment: %v", err)
+	}
+
+	appsFluxKustomization := "apiVersion: kustomize.toolkit.fluxcd.io/v1\n" +
+		"kind: Kustomization\n" +
+		"metadata:\n" +
+		"  name: apps\n" +
+		"  namespace: flux-system\n" +
+		"spec:\n" +
+		"  interval: 60m\n" +
+		"  prune: true\n" +
+		"  postBuild:\n" +
+		"    substituteFrom:\n" +
+		"      - kind: ConfigMap\n" +
+		"        name: variables-cluster\n" +
+		"  sourceRef:\n" +
+		"    kind: OCIRepository\n" +
+		"    name: flux-system\n" +
+		"  path: clusters/local/apps/\n"
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "apps", "flux-kustomization.yaml"),
+		[]byte(appsFluxKustomization),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write apps flux kustomization: %v", err)
+	}
+
+	clusterAppsKustomization := `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../bases/apps/
+`
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "apps", "kustomization.yaml"),
+		[]byte(clusterAppsKustomization),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write apps kustomization: %v", err)
+	}
+
+	variablesKustomization := `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - variables-cluster-config-map.yaml
+`
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "variables", "kustomization.yaml"),
+		[]byte(variablesKustomization),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write variables kustomization: %v", err)
+	}
+
+	variablesConfigMap := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: variables-cluster
+  namespace: flux-system
+data:
+  auth_proxy_replicas: "3"
+`
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "variables", "variables-cluster-config-map.yaml"),
+		[]byte(variablesConfigMap),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write variables configmap: %v", err)
+	}
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected validation to succeed with Flux substitutions, got error: %v\noutput: %s", err, output.String())
+	}
+}

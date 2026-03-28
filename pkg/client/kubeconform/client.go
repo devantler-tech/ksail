@@ -1,6 +1,7 @@
 package kubeconform
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -59,6 +60,31 @@ func (c *Client) ValidateFile(ctx context.Context, filePath string, opts *Valida
 	results := kubeValidator.Validate(filePath, file)
 
 	// Check for validation errors
+	return c.processResults(results)
+}
+
+// ValidateBytes validates Kubernetes manifests from raw bytes while preserving the source name.
+func (c *Client) ValidateBytes(
+	ctx context.Context,
+	sourceName string,
+	data []byte,
+	opts *ValidationOptions,
+) error {
+	if opts == nil {
+		opts = &ValidationOptions{}
+	}
+
+	if ctx.Err() != nil {
+		return fmt.Errorf("%w", ctx.Err())
+	}
+
+	kubeValidator, err := c.createValidator(opts)
+	if err != nil {
+		return fmt.Errorf("create validator: %w", err)
+	}
+
+	results := kubeValidator.Validate(sourceName, io.NopCloser(bytes.NewReader(data)))
+
 	return c.processResults(results)
 }
 
