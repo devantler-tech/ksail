@@ -1,7 +1,9 @@
 package notify
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -110,6 +112,14 @@ type ProgressGroup struct {
 	stopSpinner    chan struct{}
 	spinnerDone    chan struct{}
 	linesDrawn     int // Number of lines currently drawn (for cursor movement)
+
+	// Compact display mode fields
+	maxVisible      int  // Max task lines to show at once (0 = show all)
+	concurrency     int  // Max parallel goroutines (0 = unlimited)
+	completedCount  int  // Number of completed tasks (for summary line)
+	failedCount     int  // Number of failed tasks (for summary line)
+	continueOnError bool // Don't cancel other tasks when one fails
+	termWidth       int  // Terminal width in columns (0 = non-TTY or unknown)
 }
 
 // taskState represents the current state of a task.
@@ -174,6 +184,34 @@ func WithClock(clock Clock) ProgressOption {
 	}
 }
 
+// WithMaxVisible sets the maximum number of task lines shown at once.
+// When set, a compact display mode is used: a summary line at the top
+// shows completed/failed counts, up to maxVisible active tasks are shown,
+// and a remaining count is shown at the bottom.
+// Default 0 means show all tasks (backward compatible).
+func WithMaxVisible(n int) ProgressOption {
+	return func(pg *ProgressGroup) {
+		pg.maxVisible = n
+	}
+}
+
+// WithConcurrency limits the number of tasks running in parallel.
+// Default 0 means unlimited concurrency.
+func WithConcurrency(n int) ProgressOption {
+	return func(pg *ProgressGroup) {
+		pg.concurrency = n
+	}
+}
+
+// WithContinueOnError makes the group run all tasks even when some fail.
+// Without this option, the first failure cancels remaining tasks.
+// When set, all errors are collected and returned as a combined error.
+func WithContinueOnError() ProgressOption {
+	return func(pg *ProgressGroup) {
+		pg.continueOnError = true
+	}
+}
+
 // NewProgressGroup creates a new ProgressGroup for parallel task execution.
 // title: The title shown during execution (e.g., "Installing components")
 // emoji: Optional emoji for the title (defaults to ►)
@@ -192,10 +230,19 @@ func NewProgressGroup(
 		emoji = "►"
 	}
 
-	// Detect if we're outputting to a TTY
+	// Detect if we're outputting to a TTY and get terminal width
 	isTTY := false
+	termWidth := 0
+
 	if file, ok := writer.(*os.File); ok {
-		isTTY = term.IsTerminal(int(file.Fd())) //nolint:gosec // G115: safe fd conversion
+		fd := int(file.Fd()) //nolint:gosec // G115: safe fd conversion
+		isTTY = term.IsTerminal(fd)
+
+		if isTTY {
+			if w, _, err := term.GetSize(fd); err == nil {
+				termWidth = w
+			}
+		}
 	}
 
 	progressGroup := &ProgressGroup{
@@ -205,6 +252,7 @@ func NewProgressGroup(
 		writer:         writer,
 		clock:          realClock{},
 		isTTY:          isTTY,
+		termWidth:      termWidth,
 		taskStatus:     make(map[string]taskState),
 		taskOrder:      make([]string, 0),
 		taskStartOrder: make([]string, 0),
@@ -259,27 +307,13 @@ func (pg *ProgressGroup) runInteractive(ctx context.Context, tasks []ProgressTas
 	// Start spinner animation
 	go pg.runSpinner()
 
-	// Execute tasks in parallel
-	group, groupCtx := errgroup.WithContext(ctx)
+	var err error
 
-	for _, task := range tasks {
-		group.Go(func() error {
-			pg.setTaskState(task.Name, taskRunning)
-
-			taskErr := task.Fn(groupCtx)
-			if taskErr != nil {
-				pg.setTaskState(task.Name, taskFailed)
-
-				return fmt.Errorf("%s: %w", task.Name, taskErr)
-			}
-
-			pg.setTaskState(task.Name, taskComplete)
-
-			return nil
-		})
+	if pg.continueOnError {
+		err = pg.runAllTasks(ctx, tasks)
+	} else {
+		err = pg.runFailFastTasks(ctx, tasks)
 	}
-
-	err := group.Wait()
 
 	// Stop spinner and wait for it to finish
 	close(pg.stopSpinner)
@@ -300,11 +334,107 @@ func (pg *ProgressGroup) runInteractive(ctx context.Context, tasks []ProgressTas
 	return nil
 }
 
+// runFailFastTasks runs tasks with errgroup.WithContext — first failure cancels the rest.
+func (pg *ProgressGroup) runFailFastTasks(ctx context.Context, tasks []ProgressTask) error {
+	group, groupCtx := errgroup.WithContext(ctx)
+
+	pg.applyGroupLimits(group)
+
+	for _, task := range tasks {
+		group.Go(func() error {
+			pg.setTaskState(task.Name, taskRunning)
+
+			taskErr := task.Fn(groupCtx)
+			if taskErr != nil {
+				pg.setTaskState(task.Name, taskFailed)
+
+				return fmt.Errorf("%s: %w", task.Name, taskErr)
+			}
+
+			pg.setTaskState(task.Name, taskComplete)
+
+			return nil
+		})
+	}
+
+	return group.Wait()
+}
+
+// runAllTasks runs all tasks without cancelling on failure. Errors are collected
+// and returned as a combined error so the caller sees every failure.
+func (pg *ProgressGroup) runAllTasks(ctx context.Context, tasks []ProgressTask) error {
+	var group errgroup.Group
+
+	pg.applyGroupLimits(&group)
+
+	var (
+		errMu   sync.Mutex
+		allErrs []error
+	)
+
+	for _, task := range tasks {
+		group.Go(func() error {
+			pg.setTaskState(task.Name, taskRunning)
+
+			taskErr := task.Fn(ctx)
+			if taskErr != nil {
+				pg.setTaskState(task.Name, taskFailed)
+
+				errMu.Lock()
+				allErrs = append(allErrs, fmt.Errorf("%s: %w", task.Name, taskErr))
+				errMu.Unlock()
+
+				return nil // Don't cancel other tasks
+			}
+
+			pg.setTaskState(task.Name, taskComplete)
+
+			return nil
+		})
+	}
+
+	_ = group.Wait()
+
+	if len(allErrs) > 0 {
+		return errors.Join(allErrs...)
+	}
+
+	return nil
+}
+
+// applyGroupLimits sets the concurrency limit on an errgroup.
+func (pg *ProgressGroup) applyGroupLimits(group interface{ SetLimit(n int) }) {
+	if pg.concurrency > 0 {
+		group.SetLimit(pg.concurrency)
+	} else if pg.maxVisible > 0 {
+		group.SetLimit(pg.maxVisible)
+	}
+}
+
 // runCI runs tasks with simple line-based output for CI environments.
 // Only prints when tasks start or complete (no spinner animation).
 func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error {
-	// Execute tasks in parallel
-	group, groupCtx := errgroup.WithContext(ctx)
+	var taskCtx context.Context
+
+	var group errgroup.Group
+
+	var (
+		errMu   sync.Mutex
+		allErrs []error
+	)
+
+	if pg.continueOnError {
+		taskCtx = ctx
+	} else {
+		var groupCtx context.Context
+
+		g, gCtx := errgroup.WithContext(ctx)
+		group = *g
+		groupCtx = gCtx
+		taskCtx = groupCtx
+	}
+
+	pg.applyGroupLimits(&group)
 
 	for _, task := range tasks {
 		group.Go(func() error {
@@ -314,13 +444,21 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 			_, _ = fmt.Fprintf(pg.writer, "► %s %s\n", task.Name, pg.labels.Running)
 			pg.mu.Unlock()
 
-			taskErr := task.Fn(groupCtx)
+			taskErr := task.Fn(taskCtx)
 			if taskErr != nil {
 				pg.setTaskState(task.Name, taskFailed)
 
 				pg.mu.Lock()
 				_, _ = fcolor.New(fcolor.FgRed).Fprintf(pg.writer, "✗ %s failed\n", task.Name)
 				pg.mu.Unlock()
+
+				if pg.continueOnError {
+					errMu.Lock()
+					allErrs = append(allErrs, fmt.Errorf("%s: %w", task.Name, taskErr))
+					errMu.Unlock()
+
+					return nil
+				}
 
 				return fmt.Errorf("%s: %w", task.Name, taskErr)
 			}
@@ -336,6 +474,10 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 	}
 
 	err := group.Wait()
+
+	if pg.continueOnError && len(allErrs) > 0 {
+		err = errors.Join(allErrs...)
+	}
 
 	// Print timing if available
 	if err == nil && pg.timer != nil {
@@ -373,6 +515,12 @@ func (pg *ProgressGroup) setTaskState(name string, state taskState) {
 		if startTime, ok := pg.taskStartTime[name]; ok {
 			pg.taskDuration[name] = pg.clock.Since(startTime)
 		}
+
+		pg.completedCount++
+	}
+
+	if state == taskFailed {
+		pg.failedCount++
 	}
 
 	pg.taskStatus[name] = state
@@ -400,10 +548,17 @@ func (pg *ProgressGroup) runSpinner() {
 	}
 }
 
-// printAllLines prints all task lines (initial draw).
+// printAllLines prints task lines (initial draw).
+// In compact mode, only the visible window is printed.
 func (pg *ProgressGroup) printAllLines() {
 	pg.mu.Lock()
 	defer pg.mu.Unlock()
+
+	if pg.maxVisible > 0 {
+		pg.printCompactLines()
+
+		return
+	}
 
 	for _, name := range pg.taskOrder {
 		state := pg.taskStatus[name]
@@ -414,8 +569,157 @@ func (pg *ProgressGroup) printAllLines() {
 	pg.linesDrawn = len(pg.taskOrder)
 }
 
+// printCompactLines prints the compact window with a fixed height.
+// The window is always compactWindowHeight() lines tall, padded with blank
+// lines for unused slots. A fixed height ensures linesDrawn never changes
+// after the initial draw, making cursor-up positioning robust across redraws.
+// Must be called with mutex held.
+func (pg *ProgressGroup) printCompactLines() {
+	var buf bytes.Buffer
+
+	fixedHeight := pg.compactWindowHeight()
+	contentLines := pg.buildCompactWindow(&buf)
+
+	// Pad to fixed height with blank lines
+	for i := contentLines; i < fixedHeight; i++ {
+		fmt.Fprint(&buf, "\033[K\n")
+	}
+
+	_, _ = pg.writer.Write(buf.Bytes())
+
+	pg.linesDrawn = fixedHeight
+}
+
+// compactWindowHeight returns the fixed height of the compact window:
+// 1 summary line + maxVisible task slots + 1 remaining line.
+func (pg *ProgressGroup) compactWindowHeight() int {
+	return pg.maxVisible + 2
+}
+
+// buildCompactWindow builds the compact display lines into a buffer and returns
+// the number of lines written. Must be called with mutex held.
+// Each line is prefixed with \033[K to clear residual content from longer previous lines.
+func (pg *ProgressGroup) buildCompactWindow(buf *bytes.Buffer) int {
+	lines := 0
+
+	// Summary line: show completed/failed counts (only after first completion)
+	if pg.completedCount > 0 || pg.failedCount > 0 {
+		fmt.Fprint(buf, "\033[K")
+		pg.writeSummaryLine(buf)
+		lines++
+	}
+
+	// Visible task lines: running tasks first, then failed, then recently completed
+	visibleTasks := pg.getVisibleTasks()
+	for _, name := range visibleTasks {
+		state := pg.taskStatus[name]
+		line := pg.formatTaskLine(name, state)
+		fmt.Fprintf(buf, "\033[K%s\n", line)
+		lines++
+	}
+
+	// Remaining count at bottom
+	pendingCount := pg.countPending()
+	if pendingCount > 0 {
+		fmt.Fprintf(buf, "\033[K%s\n", fcolor.New(fcolor.FgHiBlack).Sprintf("○ %d remaining", pendingCount))
+		lines++
+	}
+
+	return lines
+}
+
+// writeSummaryLine writes the summary line with completed/failed counts.
+func (pg *ProgressGroup) writeSummaryLine(buf *bytes.Buffer) {
+	parts := make([]string, 0, 2)
+
+	if pg.completedCount > 0 {
+		parts = append(parts,
+			fcolor.New(fcolor.FgGreen).Sprintf("✔ %d %s", pg.completedCount, pg.labels.Completed))
+	}
+
+	if pg.failedCount > 0 {
+		parts = append(parts,
+			fcolor.New(fcolor.FgRed).Sprintf("✗ %d failed", pg.failedCount))
+	}
+
+	for i, part := range parts {
+		if i > 0 {
+			fmt.Fprint(buf, "  ")
+		}
+
+		fmt.Fprint(buf, part)
+	}
+
+	fmt.Fprintln(buf)
+}
+
+// getVisibleTasks returns up to maxVisible tasks that should be shown in the compact window.
+// Priority: running tasks first, then failed tasks, then most recently completed tasks.
+// Must be called with mutex held.
+func (pg *ProgressGroup) getVisibleTasks() []string {
+	var running, failed, completed []string
+
+	// Walk start order to categorize tasks
+	for _, name := range pg.taskStartOrder {
+		state := pg.taskStatus[name]
+
+		switch state {
+		case taskRunning:
+			running = append(running, name)
+		case taskFailed:
+			failed = append(failed, name)
+		case taskComplete:
+			completed = append(completed, name)
+		}
+	}
+
+	result := make([]string, 0, pg.maxVisible)
+
+	// Running tasks first (in-progress work)
+	result = append(result, running...)
+
+	// Then failed tasks (most important to surface)
+	slots := pg.maxVisible - len(result)
+	if slots > 0 && len(failed) > 0 {
+		end := min(slots, len(failed))
+		result = append(result, failed[len(failed)-end:]...)
+	}
+
+	// Fill remaining slots with most recently completed
+	slots = pg.maxVisible - len(result)
+	if slots > 0 && len(completed) > 0 {
+		start := len(completed) - slots
+		if start < 0 {
+			start = 0
+		}
+
+		result = append(result, completed[start:]...)
+	}
+
+	// Cap to maxVisible
+	if len(result) > pg.maxVisible {
+		result = result[:pg.maxVisible]
+	}
+
+	return result
+}
+
+// countPending returns the number of pending tasks. Must be called with mutex held.
+func (pg *ProgressGroup) countPending() int {
+	count := 0
+
+	for _, name := range pg.taskOrder {
+		if pg.taskStatus[name] == taskPending {
+			count++
+		}
+	}
+
+	return count
+}
+
 // redrawAllLines moves cursor up and redraws all task lines.
 // Tasks are ordered: started tasks first (in start order), then pending tasks.
+// All ANSI escape sequences are buffered and written atomically to prevent corruption.
 func (pg *ProgressGroup) redrawAllLines() {
 	pg.mu.Lock()
 	defer pg.mu.Unlock()
@@ -424,20 +728,34 @@ func (pg *ProgressGroup) redrawAllLines() {
 		return
 	}
 
+	var buf bytes.Buffer
+
 	// Move cursor up N lines
-	_, _ = fmt.Fprintf(pg.writer, "\033[%dA", pg.linesDrawn)
+	fmt.Fprintf(&buf, "\033[%dA", pg.linesDrawn)
 
-	// Build display order: started tasks first, then pending
-	displayOrder := pg.getDisplayOrder()
+	if pg.maxVisible > 0 {
+		// Compact mode: rebuild content and pad to fixed height.
+		// linesDrawn stays constant — never changes after initial draw.
+		contentLines := pg.buildCompactWindow(&buf)
 
-	// Redraw each line
-	for _, name := range displayOrder {
-		state := pg.taskStatus[name]
-		line := pg.formatTaskLine(name, state)
-		// Clear line and print new content
-		_, _ = fmt.Fprint(pg.writer, "\033[K")
-		_, _ = fmt.Fprintln(pg.writer, line)
+		for i := contentLines; i < pg.linesDrawn; i++ {
+			fmt.Fprint(&buf, "\033[K\n")
+		}
+	} else {
+		// Standard mode: redraw all tasks in display order
+		displayOrder := pg.getDisplayOrder()
+
+		for _, name := range displayOrder {
+			state := pg.taskStatus[name]
+			line := pg.formatTaskLine(name, state)
+			// Clear line and print new content
+			fmt.Fprint(&buf, "\033[K")
+			fmt.Fprintln(&buf, line)
+		}
 	}
+
+	// Flush entire buffer atomically
+	_, _ = pg.writer.Write(buf.Bytes())
 }
 
 // getDisplayOrder returns tasks ordered by start time, with pending tasks at the end.
@@ -464,7 +782,9 @@ func (pg *ProgressGroup) getDisplayOrder() []string {
 }
 
 // formatTaskLine formats a task's status line for display.
+// Names are truncated to prevent line wrapping in TTY mode.
 func (pg *ProgressGroup) formatTaskLine(name string, state taskState) string {
+	name = pg.fitName(name, state)
 	frames := getSpinnerFrames()
 
 	switch state {
@@ -488,4 +808,50 @@ func (pg *ProgressGroup) formatTaskLine(name string, state taskState) string {
 	default:
 		return fmt.Sprintf("? %s unknown", name)
 	}
+}
+
+// fitName truncates long names to prevent terminal line wrapping in TTY mode.
+// Uses middle truncation (beginning…end) to preserve directory context and filename.
+// Returns the name unchanged in non-TTY mode or when the name already fits.
+func (pg *ProgressGroup) fitName(name string, state taskState) string {
+	if pg.termWidth <= 0 {
+		return name
+	}
+
+	// Calculate display columns used by non-name parts: icon(1) + space + name + space + label
+	var suffixLen int
+
+	switch state {
+	case taskPending:
+		suffixLen = len(pg.labels.Pending)
+	case taskRunning:
+		suffixLen = len(pg.labels.Running)
+	case taskComplete:
+		suffixLen = len(pg.labels.Completed)
+
+		if pg.timer != nil {
+			suffixLen += 12 // " [XXXms]" approximate
+		}
+	case taskFailed:
+		suffixLen = 6 // "failed"
+	}
+
+	// icon(1 col) + space(1) + name + space(1) + suffix
+	overhead := 3 + suffixLen
+	maxNameLen := pg.termWidth - overhead - 1 // -1 safety margin
+
+	const minNameLen = 10
+	if maxNameLen < minNameLen {
+		maxNameLen = minNameLen
+	}
+
+	if len(name) <= maxNameLen {
+		return name
+	}
+
+	// Middle truncation: show beginning and end for best context
+	firstLen := (maxNameLen - 1) / 2
+	lastLen := maxNameLen - 1 - firstLen
+
+	return name[:firstLen] + "…" + name[len(name)-lastLen:]
 }

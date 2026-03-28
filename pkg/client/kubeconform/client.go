@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/yannh/kubeconform/pkg/validator"
 )
@@ -22,9 +24,14 @@ func NewClient() *Client {
 }
 
 // ValidateFile validates a single Kubernetes manifest file.
-func (c *Client) ValidateFile(_ context.Context, filePath string, opts *ValidationOptions) error {
+func (c *Client) ValidateFile(ctx context.Context, filePath string, opts *ValidationOptions) error {
 	if opts == nil {
 		opts = &ValidationOptions{}
+	}
+
+	// Check context before starting
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 
 	// Open the file
@@ -52,12 +59,17 @@ func (c *Client) ValidateFile(_ context.Context, filePath string, opts *Validati
 
 // ValidateManifests validates Kubernetes manifests from a reader (e.g., kustomize build output).
 func (c *Client) ValidateManifests(
-	_ context.Context,
+	ctx context.Context,
 	reader io.Reader,
 	opts *ValidationOptions,
 ) error {
 	if opts == nil {
 		opts = &ValidationOptions{}
+	}
+
+	// Check context before starting
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 
 	// Create validator
@@ -77,23 +89,19 @@ func (c *Client) ValidateManifests(
 }
 
 // processResults processes validation results and returns an error if validation failed.
-func (c *Client) processResults(results []validator.Result, source string, verbose bool) error {
-	hasErrors := false
+// Error details are included in the returned error message (not written to stderr)
+// to avoid interleaving with ProgressGroup's ANSI output.
+func (c *Client) processResults(results []validator.Result, source string, _ bool) error {
+	var errDetails []string
 
 	for _, res := range results {
 		if res.Status == validator.Invalid || res.Status == validator.Error {
-			hasErrors = true
-
-			if verbose {
-				_, _ = fmt.Fprintf(os.Stderr, "❌ %s: %v\n", source, res.Err)
-			}
-		} else if res.Status == validator.Valid && verbose {
-			_, _ = fmt.Fprintf(os.Stdout, "✅ %s is valid\n", source)
+			errDetails = append(errDetails, fmt.Sprintf("%s: %v", source, res.Err))
 		}
 	}
 
-	if hasErrors {
-		return fmt.Errorf("%w for %s", ErrValidationFailed, source)
+	if len(errDetails) > 0 {
+		return fmt.Errorf("%w: %s", ErrValidationFailed, strings.Join(errDetails, "; "))
 	}
 
 	return nil
@@ -128,6 +136,13 @@ func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, 
 		skipKinds[kind] = struct{}{}
 	}
 
+	// Set up schema cache directory
+	cacheDir := filepath.Join(os.TempDir(), "ksail-schema-cache")
+
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		return nil, fmt.Errorf("create schema cache directory: %w", err)
+	}
+
 	// Create validator options
 	validatorOpts := validator.Opts{
 		SkipKinds:            skipKinds,
@@ -136,7 +151,7 @@ func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, 
 		Strict:               opts.Strict,
 		IgnoreMissingSchemas: opts.IgnoreMissingSchemas,
 		SkipTLS:              false,
-		Cache:                "",
+		Cache:                cacheDir,
 		Debug:                false,
 	}
 

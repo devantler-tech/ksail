@@ -40,8 +40,8 @@ func TestNewValidateCmdHasCorrectDefaults(t *testing.T) {
 	}
 
 	strict, _ := cmd.Flags().GetBool("strict")
-	if !strict {
-		t.Fatal("expected strict to default to true")
+	if strict {
+		t.Fatal("expected strict to default to false")
 	}
 
 	ignoreMissingSchemas, _ := cmd.Flags().GetBool("ignore-missing-schemas")

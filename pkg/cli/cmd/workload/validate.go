@@ -66,7 +66,7 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 
 	// Add flags
 	cmd.Flags().BoolVar(&skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
-	cmd.Flags().BoolVar(&strict, "strict", true, "Enable strict validation mode")
+	cmd.Flags().BoolVar(&strict, "strict", false, "Enable strict validation mode")
 	cmd.Flags().BoolVar(
 		&ignoreMissingSchemas,
 		"ignore-missing-schemas",
@@ -256,7 +256,7 @@ func validateDirectory(
 		kustomizeClient := kustomize.NewClient()
 
 		kustErr := runParallelValidation(
-			ctx, cmd, kustomizations, "Validating kustomizations", "✅",
+			ctx, cmd, kustomizations, dirPath, "Validating kustomizations", "✅",
 			func(taskCtx context.Context, kustDir string) error {
 				return validateKustomizationSilent(
 					taskCtx, kustDir, kubeconformClient, kustomizeClient, opts,
@@ -270,10 +270,13 @@ func validateDirectory(
 
 	// Validate individual YAML files in parallel with progress display
 	if len(yamlFiles) > 0 {
-		filesErr := runParallelValidation(ctx, cmd, yamlFiles, "Validating YAML files", "📄",
+		filesErr := runParallelValidation(ctx, cmd, yamlFiles, dirPath, "Validating YAML files", "📄",
 			func(taskCtx context.Context, file string) error {
 				return validateFileSilent(taskCtx, file, kubeconformClient, opts)
 			},
+			notify.WithMaxVisible(5),
+			notify.WithConcurrency(5),
+			notify.WithContinueOnError(),
 		)
 		if filesErr != nil {
 			return fmt.Errorf("yaml validation failed: %w", filesErr)
@@ -288,25 +291,35 @@ func runParallelValidation(
 	ctx context.Context,
 	cmd *cobra.Command,
 	items []string,
+	basePath string,
 	title string,
 	emoji string,
 	validateFn func(ctx context.Context, item string) error,
+	extraOpts ...notify.ProgressOption,
 ) error {
 	tasks := make([]notify.ProgressTask, len(items))
 	for taskIdx, item := range items {
+		name := filepath.Base(item)
+		if rel, relErr := filepath.Rel(basePath, item); relErr == nil {
+			name = rel
+		}
+
 		tasks[taskIdx] = notify.ProgressTask{
-			Name: filepath.Base(item),
+			Name: name,
 			Fn: func(taskCtx context.Context) error {
 				return validateFn(taskCtx, item)
 			},
 		}
 	}
 
+	opts := []notify.ProgressOption{notify.WithLabels(notify.ValidatingLabels())}
+	opts = append(opts, extraOpts...)
+
 	progressGroup := notify.NewProgressGroup(
 		title,
 		emoji,
 		cmd.OutOrStdout(),
-		notify.WithLabels(notify.ValidatingLabels()),
+		opts...,
 	)
 
 	pgErr := progressGroup.Run(ctx, tasks...)
