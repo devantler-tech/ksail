@@ -142,6 +142,8 @@ ksail cipher import AGE-SECRET-KEY-1...
 
 **Supported KMS:** See [Key Management Systems](/concepts/#key-management-systems) for supported providers and documentation links.
 
+When using Flux as the GitOps engine and SOPS is enabled, KSail automatically creates or updates a `sops-age` Secret in the `flux-system` namespace containing your Age private key, if one can be resolved. Flux Kustomization CRDs reference this Secret via `spec.decryption.secretRef`. Key resolution priority: `SOPS_AGE_KEY` env var → platform-specific key file. Configure via `spec.cluster.sops` in `ksail.yaml`. See [sops (SOPS)](/configuration/declarative-configuration/#sops-sops).
+
 ## Cluster Backup & Restore
 
 Export cluster resources to a compressed archive and restore to any cluster. Backups capture YAML in dependency order, strip server metadata, and include a manifest inventory.
