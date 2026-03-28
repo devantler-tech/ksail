@@ -48,11 +48,6 @@ func TestNewValidateCmdHasCorrectDefaults(t *testing.T) {
 	if !ignoreMissingSchemas {
 		t.Fatal("expected ignore-missing-schemas to default to true")
 	}
-
-	verbose, _ := cmd.Flags().GetBool("verbose")
-	if verbose {
-		t.Fatal("expected verbose to default to false")
-	}
 }
 
 func TestValidateCmdShowsHelp(t *testing.T) {
@@ -285,38 +280,6 @@ sops:
 	if err != nil {
 		t.Fatalf("expected validation with skip-secrets to succeed, got error: %v", err)
 	}
-}
-
-func TestValidateCmdWithVerboseFlag(t *testing.T) {
-	t.Parallel()
-
-	// Create a temporary directory with a valid manifest
-	tmpDir := t.TempDir()
-
-	manifestPath := filepath.Join(tmpDir, "namespace.yaml")
-
-	err := os.WriteFile(manifestPath, []byte(validNamespaceManifest), 0o600)
-	if err != nil {
-		t.Fatalf("failed to write test manifest: %v", err)
-	}
-
-	cmd := workload.NewValidateCmd()
-	cmd.SetArgs([]string{
-		"--verbose",
-		tmpDir,
-	})
-
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
-
-	err = cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected validation to succeed, got error: %v", err)
-	}
-
-	// Note: We can't easily check for verbose output without capturing stdout/stderr
-	// but we can verify the command ran successfully with the flag
 }
 
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
@@ -554,7 +517,6 @@ func TestValidateCmdFlagCombinations(t *testing.T) {
 				"--skip-secrets=true",
 				"--strict=true",
 				"--ignore-missing-schemas=true",
-				"--verbose",
 				tmpDir,
 			},
 		},

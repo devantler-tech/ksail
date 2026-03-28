@@ -416,7 +416,7 @@ func (pg *ProgressGroup) applyGroupLimits(group interface{ SetLimit(n int) }) {
 func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error {
 	var taskCtx context.Context
 
-	var group errgroup.Group
+	var group *errgroup.Group
 
 	var (
 		errMu   sync.Mutex
@@ -424,17 +424,15 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 	)
 
 	if pg.continueOnError {
+		group = &errgroup.Group{}
 		taskCtx = ctx
 	} else {
-		var groupCtx context.Context
-
-		g, gCtx := errgroup.WithContext(ctx)
-		group = *g
-		groupCtx = gCtx
-		taskCtx = groupCtx
+		var gCtx context.Context
+		group, gCtx = errgroup.WithContext(ctx)
+		taskCtx = gCtx
 	}
 
-	pg.applyGroupLimits(&group)
+	pg.applyGroupLimits(group)
 
 	for _, task := range tasks {
 		group.Go(func() error {

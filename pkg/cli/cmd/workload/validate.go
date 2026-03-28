@@ -29,7 +29,6 @@ func NewValidateCmd() *cobra.Command {
 		skipSecrets          bool
 		strict               bool
 		ignoreMissingSchemas bool
-		verbose              bool
 	)
 
 	cmd := &cobra.Command{
@@ -59,7 +58,6 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 				skipSecrets,
 				strict,
 				ignoreMissingSchemas,
-				verbose,
 			)
 		},
 	}
@@ -73,8 +71,6 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 		true,
 		"Ignore resources with missing schemas",
 	)
-	cmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
-
 	return cmd
 }
 
@@ -85,7 +81,6 @@ func runValidateCmd(
 	skipSecrets bool,
 	strict bool,
 	ignoreMissingSchemas bool,
-	verbose bool,
 ) error {
 	path, err := resolveValidatePath(cmd, args)
 	if err != nil {
@@ -109,7 +104,6 @@ func runValidateCmd(
 	validationOpts := &kubeconform.ValidationOptions{
 		Strict:               strict,
 		IgnoreMissingSchemas: ignoreMissingSchemas,
-		Verbose:              verbose,
 	}
 
 	if skipSecrets {
@@ -300,7 +294,7 @@ func runParallelValidation(
 	tasks := make([]notify.ProgressTask, len(items))
 	for taskIdx, item := range items {
 		name := filepath.Base(item)
-		if rel, relErr := filepath.Rel(basePath, item); relErr == nil {
+		if rel, relErr := filepath.Rel(basePath, item); relErr == nil && rel != "." {
 			name = rel
 		}
 

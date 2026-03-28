@@ -28,7 +28,6 @@ func TestValidationOptions(t *testing.T) {
 		SkipKinds:            []string{"Secret", "ConfigMap"},
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	if len(opts.SkipKinds) != 2 {
@@ -45,10 +44,6 @@ func TestValidationOptions(t *testing.T) {
 
 	if !opts.IgnoreMissingSchemas {
 		t.Fatal("expected IgnoreMissingSchemas to be true")
-	}
-
-	if opts.Verbose {
-		t.Fatal("expected Verbose to be false")
 	}
 }
 
@@ -79,7 +74,6 @@ data:
 	opts := &kubeconform.ValidationOptions{
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	ctx := context.Background()
@@ -116,7 +110,6 @@ data: invalid
 	opts := &kubeconform.ValidationOptions{
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	ctx := context.Background()
@@ -139,7 +132,6 @@ func TestValidateFile_NonExistentFile(t *testing.T) {
 	opts := &kubeconform.ValidationOptions{
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	ctx := context.Background()
@@ -185,7 +177,6 @@ data:
 		SkipKinds:            []string{"Secret"},
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	ctx := context.Background()
@@ -219,7 +210,6 @@ data:
 	opts := &kubeconform.ValidationOptions{
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	ctx := context.Background()
@@ -246,7 +236,6 @@ data: "this is not valid"
 	opts := &kubeconform.ValidationOptions{
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	ctx := context.Background()
