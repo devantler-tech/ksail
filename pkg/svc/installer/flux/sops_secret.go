@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	goruntime "runtime"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -28,10 +26,7 @@ const (
 	ageSecretKeyPrefix = "AGE-SECRET-KEY-"
 )
 
-var (
-	errSOPSKeyNotFound = errors.New("SOPS is enabled but no Age key found")
-	errAppDataNotSet   = errors.New("AppData environment variable not set")
-)
+var errSOPSKeyNotFound = errors.New("SOPS is enabled but no Age key found")
 
 // ensureSopsAgeSecret creates or updates the sops-age secret in flux-system namespace
 // if SOPS is enabled and an Age key is available.
@@ -41,25 +36,33 @@ func ensureSopsAgeSecret(
 	clusterCfg *v1alpha1.Cluster,
 ) error {
 	sops := clusterCfg.Spec.Cluster.SOPS
+	explicitlyEnabled := sops.Enabled != nil && *sops.Enabled
 
 	// If explicitly disabled, skip
-	if sops.Enabled != nil && !*sops.Enabled {
+	if sops.Enabled != nil && !explicitlyEnabled {
 		return nil
 	}
 
-	ageKey := resolveAgeKey(sops)
+	ageKey, err := resolveAgeKey(sops)
+	if err != nil {
+		if explicitlyEnabled {
+			return fmt.Errorf("resolve SOPS Age key: %w", err)
+		}
 
-	// If explicitly enabled but no key found, error
-	if sops.Enabled != nil && *sops.Enabled && ageKey == "" {
-		return fmt.Errorf(
-			"%w (checked env var %q and local key file)",
-			errSOPSKeyNotFound,
-			sops.AgeKeyEnvVar,
-		)
+		// Auto-detect mode: treat errors as "no key available"
+		return nil
 	}
 
-	// Auto-detect mode: no key found, skip silently
 	if ageKey == "" {
+		if explicitlyEnabled {
+			return fmt.Errorf(
+				"%w (checked env var %q and local key file)",
+				errSOPSKeyNotFound,
+				sops.AgeKeyEnvVar,
+			)
+		}
+
+		// Auto-detect mode: no key found, skip silently
 		return nil
 	}
 
@@ -76,25 +79,30 @@ func ensureSopsAgeSecret(
 // resolveAgeKey resolves the Age private key from available sources.
 // Priority: (1) environment variable named by AgeKeyEnvVar, (2) local key file.
 // Returns the extracted AGE-SECRET-KEY-... string, or empty if not found.
-func resolveAgeKey(sops v1alpha1.SOPS) string {
+// Returns an error if the key file exists but cannot be read.
+func resolveAgeKey(sops v1alpha1.SOPS) (string, error) {
 	// Try environment variable first
 	if sops.AgeKeyEnvVar != "" {
 		if val := os.Getenv(sops.AgeKeyEnvVar); val != "" {
 			if key := extractAgeKey(val); key != "" {
-				return key
+				return key, nil
 			}
 		}
 	}
 
 	// Try local key file
-	keyPath, err := sopsAgeKeyPath()
+	keyPath, err := fsutil.SOPSAgeKeyPath()
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("determine age key path: %w", err)
 	}
 
 	canonicalKeyPath, err := fsutil.EvalCanonicalPath(keyPath)
 	if err != nil {
-		return ""
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+
+		return "", fmt.Errorf("canonicalize age key path: %w", err)
 	}
 
 	// Canonicalization above resolves symlinks and normalizes env-derived paths
@@ -102,10 +110,14 @@ func resolveAgeKey(sops v1alpha1.SOPS) string {
 	//nolint:gosec // G304: canonicalized path from controlled env/config inputs
 	data, err := os.ReadFile(canonicalKeyPath)
 	if err != nil {
-		return ""
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+
+		return "", fmt.Errorf("read age key file: %w", err)
 	}
 
-	return extractAgeKey(string(data))
+	return extractAgeKey(string(data)), nil
 }
 
 // extractAgeKey finds and returns the first AGE-SECRET-KEY-... line from the input.
@@ -135,42 +147,4 @@ func buildSopsAgeSecret(ageKey string) *corev1.Secret {
 			sopsAgeKeyField: []byte(ageKey),
 		},
 	}
-}
-
-// sopsAgeKeyPath returns the platform-specific path for the SOPS age keys file.
-// Follows the same convention as cipher/import.go getAgeKeyPath():
-//   - First checks SOPS_AGE_KEY_FILE environment variable
-//   - Linux: $XDG_CONFIG_HOME/sops/age/keys.txt or $HOME/.config/sops/age/keys.txt
-//   - macOS: $XDG_CONFIG_HOME/sops/age/keys.txt or $HOME/Library/Application Support/sops/age/keys.txt
-//   - Windows: %AppData%\sops\age\keys.txt
-func sopsAgeKeyPath() (string, error) {
-	if sopsAgeKeyFile := os.Getenv("SOPS_AGE_KEY_FILE"); sopsAgeKeyFile != "" {
-		return sopsAgeKeyFile, nil
-	}
-
-	if xdgConfigHome := os.Getenv("XDG_CONFIG_HOME"); xdgConfigHome != "" {
-		return filepath.Join(xdgConfigHome, "sops", "age", "keys.txt"), nil
-	}
-
-	if goruntime.GOOS == "windows" {
-		appData := os.Getenv("AppData")
-		if appData == "" {
-			return "", errAppDataNotSet
-		}
-
-		return filepath.Join(appData, "sops", "age", "keys.txt"), nil
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err)
-	}
-
-	if goruntime.GOOS == "darwin" {
-		return filepath.Join(
-			homeDir, "Library", "Application Support", "sops", "age", "keys.txt",
-		), nil
-	}
-
-	return filepath.Join(homeDir, ".config", "sops", "age", "keys.txt"), nil
 }

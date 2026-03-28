@@ -124,8 +124,11 @@ func upsertSecret(ctx context.Context, k8sClient client.Client, secret *corev1.S
 		return fmt.Errorf("failed to get secret %q: %w", secretRef, err)
 	}
 
-	// Update existing secret
+	// Update existing secret data and metadata
 	existing.Data = secret.Data
+	existing.Type = secret.Type
+	existing.Labels = secret.Labels
+	existing.Annotations = secret.Annotations
 
 	updateErr := k8sClient.Update(ctx, existing)
 	if updateErr != nil {

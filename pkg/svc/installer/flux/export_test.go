@@ -112,7 +112,7 @@ func SetNewFluxResourcesClient(fn func(*rest.Config) (any, error)) func() {
 }
 
 // ResolveAgeKey exports resolveAgeKey for testing.
-func ResolveAgeKey(sops v1alpha1.SOPS) string {
+func ResolveAgeKey(sops v1alpha1.SOPS) (string, error) {
 	return resolveAgeKey(sops)
 }
 

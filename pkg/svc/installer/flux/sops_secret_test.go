@@ -64,66 +64,48 @@ AGE-SECRET-KEY-SECOND0000000000000000000000000000000000000000000000000`,
 	}
 }
 
-//nolint:tparallel // subtests use t.Setenv which is incompatible with t.Parallel
 func TestResolveAgeKey(t *testing.T) {
+	const testKey = "AGE-SECRET-KEY-1TESTKEY000000000000000000000000000000000000000000000000"
+
 	t.Run("env var set with valid key", func(t *testing.T) {
-		t.Setenv(
-			"TEST_SOPS_AGE_KEY_RESOLVE",
-			"AGE-SECRET-KEY-1TESTKEY000000000000000000000000000000000000000000000000",
-		)
+		t.Setenv("TEST_SOPS_AGE_KEY_RESOLVE", testKey)
 
-		sops := v1alpha1.SOPS{
-			AgeKeyEnvVar: "TEST_SOPS_AGE_KEY_RESOLVE",
-		}
+		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPS_AGE_KEY_RESOLVE"}
 
-		got := fluxinstaller.ResolveAgeKey(sops)
-		assert.Equal(
-			t,
-			"AGE-SECRET-KEY-1TESTKEY000000000000000000000000000000000000000000000000",
-			got,
-		)
+		got, err := fluxinstaller.ResolveAgeKey(sops)
+		require.NoError(t, err)
+		assert.Equal(t, testKey, got)
 	})
 
 	t.Run("env var not set and no key file returns empty", func(t *testing.T) {
-		// Point SOPS_AGE_KEY_FILE to a nonexistent path to prevent local key file fallback
 		t.Setenv("SOPS_AGE_KEY_FILE", "/tmp/nonexistent-ksail-test-keys.txt")
 
-		sops := v1alpha1.SOPS{
-			AgeKeyEnvVar: "TEST_SOPS_NONEXISTENT_VAR_12345",
-		}
+		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPS_NONEXISTENT_VAR_12345"}
 
-		got := fluxinstaller.ResolveAgeKey(sops)
+		got, err := fluxinstaller.ResolveAgeKey(sops)
+		require.NoError(t, err)
 		assert.Empty(t, got)
 	})
 
 	t.Run("env var name empty skips env lookup", func(t *testing.T) {
-		t.Parallel()
+		t.Setenv("SOPS_AGE_KEY_FILE", "/tmp/nonexistent-ksail-test-keys-empty-var.txt")
 
-		sops := v1alpha1.SOPS{
-			AgeKeyEnvVar: "",
-		}
+		sops := v1alpha1.SOPS{AgeKeyEnvVar: ""}
 
-		got := fluxinstaller.ResolveAgeKey(sops)
-		// May or may not find a local key file; key point is it doesn't panic
-		_ = got
+		got, err := fluxinstaller.ResolveAgeKey(sops)
+		require.NoError(t, err)
+		assert.Empty(t, got)
 	})
 
 	t.Run("env var with metadata extracts key", func(t *testing.T) {
-		t.Setenv(
-			"TEST_SOPS_AGE_KEY_META",
-			"# comment\nAGE-SECRET-KEY-1METAKEY000000000000000000000000000000000000000000000000\n",
-		)
+		const metaKey = "AGE-SECRET-KEY-1METAKEY000000000000000000000000000000000000000000000000"
+		t.Setenv("TEST_SOPS_AGE_KEY_META", "# comment\n"+metaKey+"\n")
 
-		sops := v1alpha1.SOPS{
-			AgeKeyEnvVar: "TEST_SOPS_AGE_KEY_META",
-		}
+		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPS_AGE_KEY_META"}
 
-		got := fluxinstaller.ResolveAgeKey(sops)
-		assert.Equal(
-			t,
-			"AGE-SECRET-KEY-1METAKEY000000000000000000000000000000000000000000000000",
-			got,
-		)
+		got, err := fluxinstaller.ResolveAgeKey(sops)
+		require.NoError(t, err)
+		assert.Equal(t, metaKey, got)
 	})
 }
 
