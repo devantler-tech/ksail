@@ -38,6 +38,14 @@ func (p *Provisioner) scaleDockerByRole(
 	return p.removeDockerNodes(ctx, clusterName, role, -delta, result)
 }
 
+// nodeResult describes a single container operation outcome.
+type nodeResult interface {
+	nodeName() string
+	nodeErr() error
+	action() string
+	successLog() string
+}
+
 // nodeCreationResult records the outcome of a single container creation attempt.
 type nodeCreationResult struct {
 	name string
@@ -45,11 +53,22 @@ type nodeCreationResult struct {
 	err  error
 }
 
+func (r nodeCreationResult) nodeName() string { return r.name }
+func (r nodeCreationResult) nodeErr() error   { return r.err }
+func (r nodeCreationResult) action() string   { return "create" }
+
+func (r nodeCreationResult) successLog() string { return fmt.Sprintf("Added (IP: %s)", r.ip.String()) }
+
 // nodeRemovalResult records the outcome of a single container removal attempt.
 type nodeRemovalResult struct {
 	name string
 	err  error
 }
+
+func (r nodeRemovalResult) nodeName() string   { return r.name }
+func (r nodeRemovalResult) nodeErr() error     { return r.err }
+func (r nodeRemovalResult) action() string     { return "remove" }
+func (r nodeRemovalResult) successLog() string { return "Removed" }
 
 // nodeSpec holds the pre-calculated name and IP for a node to be created.
 type nodeSpec struct {
@@ -110,7 +129,7 @@ func (p *Provisioner) addDockerNodes(
 		return err
 	}
 
-	return p.collectCreationResults(results, role, result)
+	return p.collectResults(results, role, result)
 }
 
 // preCalculateNodeSpecs determines the name and static IP for each node to be created.
@@ -143,8 +162,8 @@ func (p *Provisioner) createNodesInParallel(
 	clusterName, role string,
 	specs []nodeSpec,
 	config talosconfig.Provider,
-) ([]nodeCreationResult, error) {
-	results := make([]nodeCreationResult, len(specs))
+) ([]nodeResult, error) {
+	results := make([]nodeResult, len(specs))
 
 	group, _ := errgroup.WithContext(ctx)
 	group.SetLimit(maxConcurrentContainerOps)
@@ -195,7 +214,7 @@ func (p *Provisioner) removeDockerNodes(
 
 	// Worker nodes have no etcd dependency and can be removed in parallel.
 	toRemove := existing[len(existing)-count:]
-	results := make([]nodeRemovalResult, len(toRemove))
+	results := make([]nodeResult, len(toRemove))
 
 	group, _ := errgroup.WithContext(ctx)
 	group.SetLimit(maxConcurrentContainerOps)
@@ -219,7 +238,7 @@ func (p *Provisioner) removeDockerNodes(
 		)
 	}
 
-	return p.collectRemovalResults(results, role, result)
+	return p.collectResults(results, role, result)
 }
 
 // removeControlPlaneNodesSequentially removes control-plane nodes one at a time,
@@ -258,61 +277,30 @@ func (p *Provisioner) removeControlPlaneNodesSequentially(
 	return nil
 }
 
-// collectCreationResults records creation outcomes and returns the first error encountered.
-func (p *Provisioner) collectCreationResults(
-	results []nodeCreationResult,
+// collectResults records operation outcomes and returns the first error encountered.
+func (p *Provisioner) collectResults(
+	results []nodeResult,
 	role string,
 	updateResult *clusterupdate.UpdateResult,
 ) error {
 	var firstErr error
 
 	for _, res := range results {
-		if res.err != nil {
-			recordFailedChange(updateResult, role, res.name, res.err)
+		if res.nodeErr() != nil {
+			recordFailedChange(updateResult, role, res.nodeName(), res.nodeErr())
 
 			if firstErr == nil {
 				firstErr = fmt.Errorf(
-					"failed to create %s node %s: %w",
-					role, res.name, res.err,
+					"failed to %s %s node %s: %w",
+					res.action(), role, res.nodeName(), res.nodeErr(),
 				)
 			}
 		} else {
-			recordAppliedChange(updateResult, role, res.name, "added")
+			recordAppliedChange(updateResult, role, res.nodeName(), res.action()+"d")
 
 			_, _ = fmt.Fprintf(
-				p.logWriter, "  ✓ Added %s node %s (IP: %s)\n",
-				role, res.name, res.ip.String(),
-			)
-		}
-	}
-
-	return firstErr
-}
-
-// collectRemovalResults records removal outcomes and returns the first error encountered.
-func (p *Provisioner) collectRemovalResults(
-	results []nodeRemovalResult,
-	role string,
-	updateResult *clusterupdate.UpdateResult,
-) error {
-	var firstErr error
-
-	for _, res := range results {
-		if res.err != nil {
-			recordFailedChange(updateResult, role, res.name, res.err)
-
-			if firstErr == nil {
-				firstErr = fmt.Errorf(
-					"failed to remove %s node %s: %w",
-					role, res.name, res.err,
-				)
-			}
-		} else {
-			recordAppliedChange(updateResult, role, res.name, "removed")
-
-			_, _ = fmt.Fprintf(
-				p.logWriter, "  ✓ Removed %s node %s\n",
-				role, res.name,
+				p.logWriter, "  ✓ %s %s node %s\n",
+				res.successLog(), role, res.nodeName(),
 			)
 		}
 	}
