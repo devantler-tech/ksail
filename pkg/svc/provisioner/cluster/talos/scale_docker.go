@@ -15,7 +15,12 @@ import (
 	"github.com/docker/docker/api/types/network"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
+	"golang.org/x/sync/errgroup"
 )
+
+// maxConcurrentContainerOps caps the number of Docker containers created or removed in parallel.
+// A value of 3 offers a good balance between throughput and Docker daemon load.
+const maxConcurrentContainerOps = 3
 
 // scaleDockerByRole adjusts the number of Docker nodes for the given role.
 // Scale-up: creates new containers with proper Talos config and static IPs.
@@ -33,9 +38,17 @@ func (p *Provisioner) scaleDockerByRole(
 	return p.removeDockerNodes(ctx, clusterName, role, -delta, result)
 }
 
+// nodeCreationResult records the outcome of a single container creation attempt.
+type nodeCreationResult struct {
+	name string
+	ip   netip.Addr
+	err  error
+}
+
 // addDockerNodes creates new Talos Docker containers for the given role.
-// It calculates the next available index and IP, creates the container matching
-// the exact spec the Talos SDK uses, then starts it.
+// IPs are pre-calculated sequentially (to preserve deterministic address assignment),
+// then containers are created in parallel (up to maxConcurrentContainerOps at a time)
+// to reduce wall-clock time when adding multiple nodes.
 func (p *Provisioner) addDockerNodes(
 	ctx context.Context,
 	clusterName, role string,
@@ -59,6 +72,16 @@ func (p *Provisioner) addDockerNodes(
 		return fmt.Errorf("%w: %s", ErrNoConfigForRole, role)
 	}
 
+	// Pre-calculate all node names and IPs sequentially before parallelizing
+	// creation. calculateNodeIP may call the Docker API for worker nodes
+	// (to count control-plane slots), so we do this once per node upfront.
+	type nodeSpec struct {
+		name string
+		ip   netip.Addr
+	}
+
+	specs := make([]nodeSpec, count)
+
 	for i := range count {
 		nodeIndex := nextIndex + i
 		nodeName := dockerNodeName(clusterName, role, nodeIndex)
@@ -68,20 +91,48 @@ func (p *Provisioner) addDockerNodes(
 			return fmt.Errorf("failed to calculate IP for %s: %w", nodeName, ipErr)
 		}
 
-		err = p.createTalosContainer(ctx, clusterName, nodeName, role, nodeIP, config)
-		if err != nil {
-			recordFailedChange(result, role, nodeName, err)
-
-			return fmt.Errorf("failed to create %s node %s: %w", role, nodeName, err)
-		}
-
-		recordAppliedChange(result, role, nodeName, "added")
-
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Added %s node %s (IP: %s)\n",
-			role, nodeName, nodeIP.String())
+		specs[i] = nodeSpec{name: nodeName, ip: nodeIP}
 	}
 
-	return nil
+	// Parallelize container creation. Each goroutine writes to its own slot
+	// in the results slice, so no mutex is needed.
+	results := make([]nodeCreationResult, count)
+
+	g, _ := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentContainerOps)
+
+	for i, spec := range specs {
+		i, spec := i, spec
+
+		g.Go(func() error {
+			createErr := p.createTalosContainer(ctx, clusterName, spec.name, role, spec.ip, config)
+			results[i] = nodeCreationResult{name: spec.name, ip: spec.ip, err: createErr}
+
+			return nil // errors collected in results; don't cancel sibling goroutines
+		})
+	}
+
+	_ = g.Wait()
+
+	// Record applied/failed changes and surface the first error encountered.
+	var firstErr error
+
+	for _, res := range results {
+		if res.err != nil {
+			recordFailedChange(result, role, res.name, res.err)
+
+			if firstErr == nil {
+				firstErr = fmt.Errorf("failed to create %s node %s: %w", role, res.name, res.err)
+			}
+		} else {
+			recordAppliedChange(result, role, res.name, "added")
+
+			_, _ = fmt.Fprintf(p.logWriter, "  ✓ Added %s node %s (IP: %s)\n",
+				role, res.name, res.ip.String())
+		}
+	}
+
+	return firstErr
 }
 
 // removeDockerNodes removes nodes of the given role (highest-index first).

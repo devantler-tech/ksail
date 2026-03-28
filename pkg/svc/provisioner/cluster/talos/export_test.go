@@ -1,5 +1,11 @@
 package talosprovisioner
 
+import (
+	"context"
+
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+)
+
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
 type NodeWithRoleForTest = nodeWithRole
 
@@ -16,4 +22,14 @@ func NewNodeWithRoleForTest(ip, role string) NodeWithRoleForTest {
 // NextNodeIndexFromNamesForTest exposes nextNodeIndexFromNames for unit testing.
 func NextNodeIndexFromNamesForTest(names []string, prefix string) int {
 	return nextNodeIndexFromNames(names, prefix)
+}
+
+// AddDockerNodesForTest exposes addDockerNodes for unit testing.
+func (p *Provisioner) AddDockerNodesForTest(
+	ctx context.Context,
+	clusterName, role string,
+	count int,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.addDockerNodes(ctx, clusterName, role, count, result)
 }
