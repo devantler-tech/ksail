@@ -23,6 +23,7 @@ type Installer struct {
 	*cni.InstallerBase
 
 	distribution           v1alpha1.Distribution
+	provider               v1alpha1.Provider
 	gatewayAPICRDInstaller GatewayAPICRDInstallerFunc
 }
 
@@ -32,19 +33,21 @@ func NewInstaller(
 	kubeconfig, context string,
 	timeout time.Duration,
 ) *Installer {
-	return NewInstallerWithDistribution(client, kubeconfig, context, timeout, "")
+	return NewInstallerWithDistribution(client, kubeconfig, context, timeout, "", "")
 }
 
 // NewInstallerWithDistribution creates a new Cilium installer instance
-// with distribution-specific configuration.
+// with distribution and provider-specific configuration.
 func NewInstallerWithDistribution(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
 ) *Installer {
 	ciliumInstaller := &Installer{
 		distribution: distribution,
+		provider:     provider,
 	}
 	ciliumInstaller.InstallerBase = cni.NewInstallerBase(
 		client,
@@ -163,7 +166,7 @@ func (c *Installer) helmInstallOrUpgradeCilium(ctx context.Context) error {
 	return nil
 }
 
-// getCiliumValues returns the Helm values for Cilium based on the distribution.
+// getCiliumValues returns the Helm values for Cilium based on the distribution and provider.
 func (c *Installer) getCiliumValues() map[string]string {
 	values := defaultCiliumValues()
 
@@ -176,6 +179,12 @@ func (c *Installer) getCiliumValues() map[string]string {
 		// Vanilla, K3s, and VCluster use default values
 	}
 
+	// Add provider-specific values
+	switch c.provider {
+	case v1alpha1.ProviderDocker:
+		maps.Copy(values, dockerCiliumValues())
+	}
+
 	return values
 }
 
@@ -183,6 +192,18 @@ func defaultCiliumValues() map[string]string {
 	return map[string]string{
 		"operator.replicas":  "1", // numeric values don't need quotes
 		"gatewayAPI.enabled": "true",
+	}
+}
+
+// dockerCiliumValues returns Docker-provider-specific Cilium configuration.
+// hostNetwork is required because Docker clusters use port mappings from
+// container to host, and there is no external load balancer to assign IPs.
+// NET_BIND_SERVICE is needed for binding to privileged ports (80, 443).
+func dockerCiliumValues() map[string]string {
+	return map[string]string{
+		"gatewayAPI.hostNetwork.enabled":                          "true",
+		"envoy.securityContext.capabilities.keepCapNetBindService": "true",
+		"envoy.securityContext.capabilities.envoy":                `["NET_ADMIN","NET_BIND_SERVICE","SYS_ADMIN"]`,
 	}
 }
 

@@ -111,6 +111,7 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		clusterCfg.Spec.Cluster.Connection.Context,
 		setup.timeout,
 		clusterCfg.Spec.Cluster.Distribution,
+		clusterCfg.Spec.Cluster.Provider,
 	)
 
 	return runCNIInstallation(
