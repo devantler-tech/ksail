@@ -121,6 +121,18 @@
                 "ArgoCD"
               ]
             },
+            "sops": {
+              "properties": {
+                "ageKeyEnvVar": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            },
             "importImages": {
               "type": "string",
               "description": "Path to tar archive with container images to import after cluster creation but before component installation"
