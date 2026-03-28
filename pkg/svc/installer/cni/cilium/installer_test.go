@@ -296,6 +296,7 @@ func expectCiliumInstall(t *testing.T, client *helm.MockInterface, installErr er
 				assert.True(t, spec.Wait)
 				assert.True(t, spec.WaitForJobs)
 				assert.Equal(t, 2*time.Minute, spec.Timeout)
+				assert.Equal(t, "true", spec.SetJSONVals["gatewayAPI.enabled"])
 
 				return true
 			}),
