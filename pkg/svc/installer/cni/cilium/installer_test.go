@@ -222,6 +222,32 @@ func TestInstaller_Install_NilGatewayAPICRDInstaller(t *testing.T) {
 	assert.Contains(t, err.Error(), "gateway API CRD installer is not configured")
 }
 
+func TestInstaller_Install_GatewayAPICRDError(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := ciliuminstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		5*time.Minute,
+		v1alpha1.DistributionVanilla,
+		"",
+	)
+
+	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error {
+		return assert.AnError
+	})
+
+	err := installer.Install(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Gateway API CRDs")
+	// Verify Helm install was never attempted.
+	client.AssertNotCalled(t, "AddRepository")
+	client.AssertNotCalled(t, "InstallOrUpgradeChart")
+}
+
 func TestInstaller_Uninstall_Success(t *testing.T) {
 	t.Parallel()
 

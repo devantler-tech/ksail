@@ -183,6 +183,8 @@ func (c *Installer) getCiliumValues() map[string]string {
 	switch c.provider {
 	case v1alpha1.ProviderDocker:
 		maps.Copy(values, dockerCiliumValues())
+	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
+		// Hetzner and Omni use default values
 	}
 
 	return values
@@ -201,9 +203,9 @@ func defaultCiliumValues() map[string]string {
 // NET_BIND_SERVICE is needed for binding to privileged ports (80, 443).
 func dockerCiliumValues() map[string]string {
 	return map[string]string{
-		"gatewayAPI.hostNetwork.enabled":                          "true",
+		"gatewayAPI.hostNetwork.enabled":                           "true",
 		"envoy.securityContext.capabilities.keepCapNetBindService": "true",
-		"envoy.securityContext.capabilities.envoy":                `["NET_ADMIN","NET_BIND_SERVICE","SYS_ADMIN"]`,
+		"envoy.securityContext.capabilities.envoy":                 `["NET_ADMIN","NET_BIND_SERVICE","SYS_ADMIN"]`,
 	}
 }
 

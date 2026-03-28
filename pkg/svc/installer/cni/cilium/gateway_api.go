@@ -15,8 +15,8 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/image/parser"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
@@ -42,7 +42,7 @@ func gatewayAPICRDsURL() string {
 // Cilium requires these CRDs to be pre-installed when gatewayAPI.enabled is true.
 // See: https://docs.cilium.io/en/v1.19/network/servicemesh/gateway-api/gateway-api/#prerequisites
 func (c *Installer) installGatewayAPICRDs(ctx context.Context) error {
-	crds, err := fetchGatewayAPICRDs(ctx, gatewayAPICRDsURL())
+	crds, err := fetchGatewayAPICRDs(ctx, gatewayAPICRDsURL(), c.GetTimeout())
 	if err != nil {
 		return fmt.Errorf("fetch Gateway API CRDs: %w", err)
 	}
@@ -58,31 +58,18 @@ func (c *Installer) installGatewayAPICRDs(ctx context.Context) error {
 	}
 
 	for _, crd := range crds {
-		existing, getErr := client.ApiextensionsV1().
-			CustomResourceDefinitions().
-			Get(ctx, crd.Name, metav1.GetOptions{})
-		if apierrors.IsNotFound(getErr) {
-			_, createErr := client.ApiextensionsV1().
-				CustomResourceDefinitions().
-				Create(ctx, &crd, metav1.CreateOptions{})
-			if createErr != nil {
-				return fmt.Errorf("create CRD %s: %w", crd.Name, createErr)
-			}
-
-			continue
+		data, marshalErr := json.Marshal(&crd)
+		if marshalErr != nil {
+			return fmt.Errorf("marshal CRD %s: %w", crd.Name, marshalErr)
 		}
 
-		if getErr != nil {
-			return fmt.Errorf("get CRD %s: %w", crd.Name, getErr)
-		}
-
-		crd.ResourceVersion = existing.ResourceVersion
-
-		_, updateErr := client.ApiextensionsV1().
+		_, patchErr := client.ApiextensionsV1().
 			CustomResourceDefinitions().
-			Update(ctx, &crd, metav1.UpdateOptions{})
-		if updateErr != nil {
-			return fmt.Errorf("update CRD %s: %w", crd.Name, updateErr)
+			Patch(ctx, crd.Name, types.ApplyPatchType, data, metav1.PatchOptions{
+				FieldManager: "ksail",
+			})
+		if patchErr != nil {
+			return fmt.Errorf("apply CRD %s: %w", crd.Name, patchErr)
 		}
 	}
 
@@ -92,20 +79,18 @@ func (c *Installer) installGatewayAPICRDs(ctx context.Context) error {
 // errUnexpectedHTTPStatus is returned when the CRD download receives a non-200 response.
 var errUnexpectedHTTPStatus = errors.New("unexpected HTTP status")
 
-// httpTimeout is the maximum duration for downloading Gateway API CRDs.
-const httpTimeout = 30 * time.Second
-
 // fetchGatewayAPICRDs downloads and parses CRDs from the Gateway API release bundle.
 func fetchGatewayAPICRDs(
 	ctx context.Context,
 	url string,
+	timeout time.Duration,
 ) ([]apiextensionsv1.CustomResourceDefinition, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	httpClient := &http.Client{Timeout: httpTimeout}
+	httpClient := &http.Client{Timeout: timeout}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

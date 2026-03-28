@@ -127,7 +127,9 @@ func TestFetchGatewayAPICRDs(t *testing.T) {
 		server := newCRDServer(http.StatusOK, sampleCRDBundle)
 		defer server.Close()
 
-		crds, err := ciliuminstaller.FetchGatewayAPICRDs(context.Background(), server.URL)
+		crds, err := ciliuminstaller.FetchGatewayAPICRDs(
+			context.Background(), server.URL, 5*time.Second,
+		)
 
 		require.NoError(t, err)
 		require.Len(t, crds, 2)
@@ -140,7 +142,9 @@ func TestFetchGatewayAPICRDs(t *testing.T) {
 		server := newCRDServer(http.StatusNotFound, "")
 		defer server.Close()
 
-		_, err := ciliuminstaller.FetchGatewayAPICRDs(context.Background(), server.URL)
+		_, err := ciliuminstaller.FetchGatewayAPICRDs(
+			context.Background(), server.URL, 5*time.Second,
+		)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unexpected")
@@ -152,7 +156,7 @@ func TestFetchGatewayAPICRDs(t *testing.T) {
 		t.Parallel()
 
 		_, err := ciliuminstaller.FetchGatewayAPICRDs(
-			context.Background(), "http://127.0.0.1:0/nonexistent",
+			context.Background(), "http://127.0.0.1:0/nonexistent", 5*time.Second,
 		)
 
 		require.Error(t, err)
@@ -168,7 +172,9 @@ func TestFetchGatewayAPICRDs(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		_, err := ciliuminstaller.FetchGatewayAPICRDs(ctx, server.URL)
+		_, err := ciliuminstaller.FetchGatewayAPICRDs(
+			ctx, server.URL, 5*time.Second,
+		)
 
 		require.Error(t, err)
 	})
@@ -185,10 +191,4 @@ func newCRDServer(statusCode int, body string) *httptest.Server {
 		writer.Header().Set("Content-Type", "application/x-yaml")
 		_, _ = writer.Write([]byte(body))
 	}))
-}
-
-func TestHTTPTimeout(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 30*time.Second, ciliuminstaller.HTTPTimeout)
 }

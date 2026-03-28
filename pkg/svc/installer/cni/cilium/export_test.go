@@ -2,6 +2,7 @@ package ciliuminstaller
 
 import (
 	"context"
+	"time"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -20,9 +21,7 @@ func ParseGatewayAPICRDs(data []byte) ([]apiextensionsv1.CustomResourceDefinitio
 func FetchGatewayAPICRDs(
 	ctx context.Context,
 	url string,
+	timeout time.Duration,
 ) ([]apiextensionsv1.CustomResourceDefinition, error) {
-	return fetchGatewayAPICRDs(ctx, url)
+	return fetchGatewayAPICRDs(ctx, url, timeout)
 }
-
-// HTTPTimeout exports httpTimeout for testing.
-const HTTPTimeout = httpTimeout
