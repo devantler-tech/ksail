@@ -3,6 +3,7 @@ package cluster_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -279,4 +280,80 @@ func TestSwitchCmd_SameContext(t *testing.T) {
 
 	assert.Contains(t, buf.String(),
 		"Switched to cluster 'dev'")
+}
+
+func TestSwitchCmd_InteractivePicker(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+
+	require.NoError(t, os.WriteFile(
+		kubeconfigPath,
+		[]byte(testKubeconfigTwoContexts),
+		0o600,
+	))
+
+	cmd, buf := newSwitchTestCmd()
+
+	deps := clusterpkg.SwitchDeps{
+		KubeconfigPath: kubeconfigPath,
+		PickCluster: func(_ string, items []string) (string, error) {
+			// Simulate user selecting "staging"
+			for _, item := range items {
+				if item == "staging" {
+					return item, nil
+				}
+			}
+
+			return "", fmt.Errorf("staging not in list: %w", clusterpkg.ErrNoClusters)
+		},
+	}
+
+	clusterName, err := clusterpkg.PickCluster(cmd, deps)
+	require.NoError(t, err)
+	assert.Equal(t, "staging", clusterName)
+
+	err = clusterpkg.HandleSwitchRunE(cmd, clusterName, deps)
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "Switched to cluster 'staging'")
+}
+
+func TestSwitchCmd_InteractivePicker_NoClusters(t *testing.T) {
+	t.Parallel()
+
+	// Kubeconfig with no KSail-managed contexts (no known distribution prefix)
+	kubeconfig := `apiVersion: v1
+kind: Config
+current-context: ""
+clusters:
+- cluster:
+    server: https://127.0.0.1:6443
+  name: unknown-cluster
+contexts:
+- context:
+    cluster: unknown-cluster
+    user: some-user
+  name: unknown-cluster
+users:
+- name: some-user
+  user: {}
+`
+
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+
+	require.NoError(t, os.WriteFile(
+		kubeconfigPath, []byte(kubeconfig), 0o600,
+	))
+
+	cmd, _ := newSwitchTestCmd()
+
+	deps := clusterpkg.SwitchDeps{
+		KubeconfigPath: kubeconfigPath,
+	}
+
+	_, err := clusterpkg.PickCluster(cmd, deps)
+	require.Error(t, err)
+	require.ErrorIs(t, err, clusterpkg.ErrNoClusters)
 }
