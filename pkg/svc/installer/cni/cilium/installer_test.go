@@ -77,6 +77,7 @@ func TestNewInstallerWithDistribution(t *testing.T) {
 				"test-context",
 				5*time.Minute,
 				testCase.distribution,
+				"",
 			)
 
 			require.NotNil(t, installer, "expected installer to be created")
@@ -191,6 +192,7 @@ func TestInstaller_Install_NilClient(t *testing.T) {
 		"test-context",
 		5*time.Minute,
 		v1alpha1.DistributionVanilla,
+		"",
 	)
 
 	// Skip Gateway API CRD installation to test nil Helm client handling.
@@ -240,6 +242,7 @@ func TestInstaller_Uninstall_NilClient(t *testing.T) {
 		"test-context",
 		5*time.Minute,
 		v1alpha1.DistributionVanilla,
+		"",
 	)
 
 	err := installer.Uninstall(context.Background())
@@ -263,6 +266,7 @@ func newInstallerWithDistribution(
 		"test-context",
 		2*time.Minute,
 		distribution,
+		"",
 	)
 
 	// Use no-op Gateway API CRD installer to avoid requiring a real cluster.
