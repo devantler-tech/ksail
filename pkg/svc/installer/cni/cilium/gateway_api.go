@@ -63,10 +63,13 @@ func (c *Installer) installGatewayAPICRDs(ctx context.Context) error {
 			return fmt.Errorf("marshal CRD %s: %w", crd.Name, marshalErr)
 		}
 
+		force := true
+
 		_, patchErr := client.ApiextensionsV1().
 			CustomResourceDefinitions().
 			Patch(ctx, crd.Name, types.ApplyPatchType, data, metav1.PatchOptions{
 				FieldManager: "ksail",
+				Force:        &force,
 			})
 		if patchErr != nil {
 			return fmt.Errorf("apply CRD %s: %w", crd.Name, patchErr)
@@ -106,7 +109,11 @@ func fetchGatewayAPICRDs(
 		)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// Limit response body to 10 MiB to prevent excessive memory usage
+	// from unexpected responses.
+	const maxResponseBytes = 10 << 20
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}

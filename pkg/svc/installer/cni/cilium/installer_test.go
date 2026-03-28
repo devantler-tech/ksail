@@ -157,6 +157,55 @@ func TestInstaller_Install_K3sDistribution(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestInstaller_Install_DockerProvider(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := ciliuminstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+	)
+
+	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error {
+		return nil
+	})
+
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				if spec == nil {
+					return false
+				}
+
+				assert.Equal(t, "true", spec.SetJSONVals["gatewayAPI.hostNetwork.enabled"])
+				assert.Equal(
+					t, "true",
+					spec.SetJSONVals["envoy.securityContext.capabilities.keepCapNetBindService"],
+				)
+				assert.Contains(
+					t, spec.SetJSONVals["envoy.securityContext.capabilities.envoy"],
+					"NET_BIND_SERVICE",
+				)
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
 func TestInstaller_Install_RepoError(t *testing.T) {
 	t.Parallel()
 
