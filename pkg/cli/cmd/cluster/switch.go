@@ -79,7 +79,7 @@ func NewSwitchCmd(_ *di.Runtime) *cobra.Command {
 				return HandleSwitchRunE(cmd, args[0], deps)
 			}
 
-			clusterName, err := PickCluster(cmd, deps)
+			clusterName, err := pickCluster(cmd, deps)
 			if err != nil {
 				return err
 			}
@@ -134,10 +134,9 @@ func HandleSwitchRunE(
 	return nil
 }
 
-// PickCluster resolves the kubeconfig, lists available cluster names, and
+// pickCluster resolves the kubeconfig, lists available cluster names, and
 // presents an interactive picker for the user to select one.
-// Exported for testing purposes.
-func PickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
+func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 	kubeconfigPath := deps.KubeconfigPath
 	if kubeconfigPath == "" {
 		var err error

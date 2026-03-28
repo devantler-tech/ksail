@@ -310,7 +310,7 @@ func TestSwitchCmd_InteractivePicker(t *testing.T) {
 		},
 	}
 
-	clusterName, err := clusterpkg.PickCluster(cmd, deps)
+	clusterName, err := clusterpkg.ExportPickCluster(cmd, deps)
 	require.NoError(t, err)
 	assert.Equal(t, "staging", clusterName)
 
@@ -353,7 +353,7 @@ users:
 		KubeconfigPath: kubeconfigPath,
 	}
 
-	_, err := clusterpkg.PickCluster(cmd, deps)
+	_, err := clusterpkg.ExportPickCluster(cmd, deps)
 	require.Error(t, err)
 	require.ErrorIs(t, err, clusterpkg.ErrNoClusters)
 }
