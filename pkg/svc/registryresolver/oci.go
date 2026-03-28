@@ -102,6 +102,18 @@ func executePush(
 ) (*PushOCIArtifactResult, error) {
 	builder := oci.NewWorkloadArtifactBuilder()
 
+	// Fail fast when external registry credentials are partially configured.
+	// A username with an empty password (e.g. GITHUB_ACTOR set but GITHUB_TOKEN
+	// unset) causes the OCI push to receive a write-less anonymous token from GHCR,
+	// which surfaces as a confusing 403 rather than a clear auth error.
+	if registryInfo.IsExternal && registryInfo.Username != "" && registryInfo.Password == "" {
+		return nil, fmt.Errorf(
+			"external registry credentials are incomplete: username is set but password is empty\n" +
+				"  - ensure the token environment variable (e.g. GITHUB_TOKEN) is exported in the current environment\n" +
+				"  - configure credentials with: ksail workload push --registry 'user:token@host/repo'",
+		)
+	}
+
 	if !exists {
 		// Push an empty OCI artifact when source directory doesn't exist
 		emptyOpts := buildEmptyPushOptions(registryInfo, opts, sourceDir)
