@@ -84,7 +84,11 @@ func pushImage(
 ) error {
 	remoteOpts := []remote.Option{remote.WithContext(ctx)}
 
-	if username != "" || password != "" {
+	// Require BOTH username and password to be non-empty before setting Basic auth.
+	// If only one is set (e.g. GITHUB_ACTOR present but GITHUB_TOKEN missing),
+	// GHCR issues a write-less anonymous token instead of returning 401, producing
+	// a misleading 403 "permission_denied" rather than an actionable auth error.
+	if username != "" && password != "" {
 		auth := &authn.Basic{
 			Username: username,
 			Password: password,
