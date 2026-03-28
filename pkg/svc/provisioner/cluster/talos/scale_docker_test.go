@@ -158,3 +158,104 @@ func TestAddDockerNodes_ListExistingFails_ReturnsError(t *testing.T) {
 	assert.ErrorContains(t, err, "failed to list")
 	assert.Empty(t, result.AppliedChanges)
 }
+
+func TestRemoveDockerNodes_Workers_RemovesAll(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+
+	// listDockerNodesByRole: two existing worker nodes
+	mockClient.On("ContainerList", mock.Anything, mock.Anything).
+		Return([]container.Summary{
+			{ID: "worker-1", Names: []string{"/scale-cluster-worker-1"}},
+			{ID: "worker-2", Names: []string{"/scale-cluster-worker-2"}},
+		}, nil).Once()
+
+	// ContainerStop is best-effort (result ignored)
+	mockClient.On("ContainerStop", mock.Anything, mock.Anything, mock.Anything).
+		Return(nil).Times(2)
+
+	// ContainerRemove succeeds for both workers
+	mockClient.On("ContainerRemove", mock.Anything, mock.Anything, mock.Anything).
+		Return(nil).Times(2)
+
+	provisioner := newScaleProvisioner(t, mockClient)
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	err := provisioner.RemoveDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleWorker, 2, result)
+
+	require.NoError(t, err)
+	assert.Len(t, result.AppliedChanges, 2, "expected 2 applied changes")
+	assert.Empty(t, result.FailedChanges, "expected no failed changes")
+}
+
+func TestRemoveDockerNodes_Workers_ContainerRemoveFails_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+
+	// listDockerNodesByRole: one existing worker node
+	mockClient.On("ContainerList", mock.Anything, mock.Anything).
+		Return([]container.Summary{
+			{ID: "worker-1", Names: []string{"/scale-cluster-worker-1"}},
+		}, nil).Once()
+
+	// ContainerStop is best-effort
+	mockClient.On("ContainerStop", mock.Anything, mock.Anything, mock.Anything).
+		Return(nil).Once()
+
+	// ContainerRemove fails
+	mockClient.On("ContainerRemove", mock.Anything, mock.Anything, mock.Anything).
+		Return(errDockerDaemonUnavailable).Once()
+
+	provisioner := newScaleProvisioner(t, mockClient)
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	err := provisioner.RemoveDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleWorker, 1, result)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "failed to remove")
+	assert.Len(t, result.FailedChanges, 1, "expected 1 failed change")
+	assert.Empty(t, result.AppliedChanges, "no nodes should have been applied")
+}
+
+func TestRemoveDockerNodes_Workers_ZeroCount_NoOp(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+
+	// listDockerNodesByRole: one existing worker node
+	mockClient.On("ContainerList", mock.Anything, mock.Anything).
+		Return([]container.Summary{
+			{ID: "worker-1", Names: []string{"/scale-cluster-worker-1"}},
+		}, nil).Once()
+
+	provisioner := newScaleProvisioner(t, mockClient)
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	err := provisioner.RemoveDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleWorker, 0, result)
+
+	require.NoError(t, err)
+	assert.Empty(t, result.AppliedChanges)
+	assert.Empty(t, result.FailedChanges)
+}
+
+func TestRemoveDockerNodes_Workers_ListFails_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+
+	// listDockerNodesByRole fails
+	mockClient.On("ContainerList", mock.Anything, mock.Anything).
+		Return([]container.Summary{}, errDockerDaemonUnavailable).Once()
+
+	provisioner := newScaleProvisioner(t, mockClient)
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	err := provisioner.RemoveDockerNodesForTest(context.Background(), "scale-cluster", talosprovisioner.RoleWorker, 1, result)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "listing existing")
+	assert.Empty(t, result.AppliedChanges)
+	assert.Empty(t, result.FailedChanges)
+}

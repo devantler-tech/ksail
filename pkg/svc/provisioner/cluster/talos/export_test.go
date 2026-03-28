@@ -33,3 +33,13 @@ func (p *Provisioner) AddDockerNodesForTest(
 ) error {
 	return p.addDockerNodes(ctx, clusterName, role, count, result)
 }
+
+// RemoveDockerNodesForTest exposes removeDockerNodes for unit testing.
+func (p *Provisioner) RemoveDockerNodesForTest(
+	ctx context.Context,
+	clusterName, role string,
+	count int,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.removeDockerNodes(ctx, clusterName, role, count, result)
+}

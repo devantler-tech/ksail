@@ -19,7 +19,7 @@ import (
 )
 
 // maxConcurrentContainerOps caps the number of Docker containers created or removed in parallel.
-// A value of 3 offers a good balance between throughput and Docker daemon load.
+// A value of 3 balances throughput and Docker daemon load for both scale-up and worker scale-down.
 const maxConcurrentContainerOps = 3
 
 // scaleDockerByRole adjusts the number of Docker nodes for the given role.
@@ -42,6 +42,12 @@ func (p *Provisioner) scaleDockerByRole(
 type nodeCreationResult struct {
 	name string
 	ip   netip.Addr
+	err  error
+}
+
+// nodeRemovalResult records the outcome of a single container removal attempt.
+type nodeRemovalResult struct {
+	name string
 	err  error
 }
 
@@ -112,7 +118,11 @@ func (p *Provisioner) addDockerNodes(
 		})
 	}
 
-	_ = g.Wait()
+	if waitErr := g.Wait(); waitErr != nil {
+		// With the current g.Go bodies this should be unreachable, but handle defensively
+		// to satisfy errcheck and surface any unexpected errgroup errors.
+		return fmt.Errorf("unexpected error while waiting for Talos node creation goroutines: %w", waitErr)
+	}
 
 	// Record applied/failed changes and surface the first error encountered.
 	var firstErr error
@@ -136,7 +146,9 @@ func (p *Provisioner) addDockerNodes(
 }
 
 // removeDockerNodes removes nodes of the given role (highest-index first).
-// For control-plane nodes, etcd membership is cleaned up before each removal.
+// For control-plane nodes, etcd membership is cleaned up sequentially before each removal
+// (etcd safety requires ordered operations). For worker nodes, containers are removed
+// in parallel (up to maxConcurrentContainerOps at a time).
 func (p *Provisioner) removeDockerNodes(
 	ctx context.Context,
 	clusterName, role string,
@@ -150,29 +162,73 @@ func (p *Provisioner) removeDockerNodes(
 
 	count = min(count, len(existing))
 
-	for i := len(existing) - 1; i >= len(existing)-count; i-- {
-		ctr := existing[i]
-		nodeName := containerName(ctr)
+	// Control-plane nodes must be removed sequentially: etcd membership cleanup
+	// must run in order before each container is stopped.
+	if role == RoleControlPlane {
+		for i := len(existing) - 1; i >= len(existing)-count; i-- {
+			ctr := existing[i]
+			nodeName := containerName(ctr)
 
-		// Best-effort etcd cleanup for control-plane nodes
-		if role == RoleControlPlane {
 			nodeIP := containerIP(ctr, clusterName)
 			p.etcdCleanupBeforeRemoval(ctx, nodeIP)
+
+			if removeErr := p.removeDockerContainer(ctx, ctr.ID); removeErr != nil {
+				recordFailedChange(result, role, nodeName, removeErr)
+
+				return fmt.Errorf("failed to remove %s node %s: %w", role, nodeName, removeErr)
+			}
+
+			recordAppliedChange(result, role, nodeName, "removed")
+
+			_, _ = fmt.Fprintf(p.logWriter, "  ✓ Removed %s node %s\n", role, nodeName)
 		}
 
-		err = p.removeDockerContainer(ctx, ctr.ID)
-		if err != nil {
-			recordFailedChange(result, role, nodeName, err)
-
-			return fmt.Errorf("failed to remove %s node %s: %w", role, nodeName, err)
-		}
-
-		recordAppliedChange(result, role, nodeName, "removed")
-
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Removed %s node %s\n", role, nodeName)
+		return nil
 	}
 
-	return nil
+	// Worker nodes have no etcd dependency and can be removed in parallel.
+	toRemove := existing[len(existing)-count:]
+	results := make([]nodeRemovalResult, len(toRemove))
+
+	g, _ := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentContainerOps)
+
+	for i, ctr := range toRemove {
+		i, ctr := i, ctr
+		nodeName := containerName(ctr)
+
+		g.Go(func() error {
+			removeErr := p.removeDockerContainer(ctx, ctr.ID)
+			results[i] = nodeRemovalResult{name: nodeName, err: removeErr}
+
+			return nil // errors collected in results; don't cancel sibling goroutines
+		})
+	}
+
+	if waitErr := g.Wait(); waitErr != nil {
+		// With the current g.Go bodies this should be unreachable, but handle defensively
+		// to satisfy errcheck and surface any unexpected errgroup errors.
+		return fmt.Errorf("unexpected error while waiting for Talos node removal goroutines: %w", waitErr)
+	}
+
+	// Record applied/failed changes and surface the first error encountered.
+	var firstErr error
+
+	for _, res := range results {
+		if res.err != nil {
+			recordFailedChange(result, role, res.name, res.err)
+
+			if firstErr == nil {
+				firstErr = fmt.Errorf("failed to remove %s node %s: %w", role, res.name, res.err)
+			}
+		} else {
+			recordAppliedChange(result, role, res.name, "removed")
+
+			_, _ = fmt.Fprintf(p.logWriter, "  ✓ Removed %s node %s\n", role, res.name)
+		}
+	}
+
+	return firstErr
 }
 
 // createTalosContainer creates and starts a Docker container matching the
