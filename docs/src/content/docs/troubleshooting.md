@@ -48,6 +48,7 @@ docker ps | grep registry
 ksail cluster init --local-registry '${REG_USER}:${REG_TOKEN}@registry.example.com/my-org/my-repo'
 ```
 
+- `external registry credentials are incomplete: username is set but password is empty` — a username was provided (e.g. `GITHUB_ACTOR` is set) but the password/token is missing. Export the token environment variable (e.g. `export GITHUB_TOKEN=...`) and ensure both are set in `spec.cluster.localRegistry.registry` in `ksail.yaml`, or re-initialize with `ksail cluster init --local-registry 'user:token@host/repo'`.
 - `registry requires authentication` — missing or incorrect `--local-registry` credentials
 - `registry access denied` — credentials lack write permission
 - `registry is unreachable` — DNS failure, firewall, or registry down
