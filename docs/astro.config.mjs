@@ -55,6 +55,7 @@ export default defineConfig({
           items: [
             { label: "Ephemeral Clusters (--ttl)", link: "/guides/ephemeral-clusters/" },
             { label: "Multi-Environment Workflows", link: "/guides/multi-environment/" },
+            { label: "PR Preview Clusters", link: "/guides/pr-preview-clusters/" },
             { label: "Companion Tools", link: "/guides/companion-tools/" },
             { label: "KSail + mirrord", link: "/guides/mirrord/" },
           ],
