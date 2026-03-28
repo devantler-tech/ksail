@@ -135,6 +135,18 @@ func TestModel_SelectFirstItem(t *testing.T) {
 	assert.Equal(t, "only", mdl.Selected())
 }
 
+func TestModel_EnterWithEmptyItems(t *testing.T) {
+	t.Parallel()
+
+	mdl := picker.NewModel("Pick:", nil)
+
+	// Pressing enter on an empty model should not panic
+	updated, cmd := mdl.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mdl = assertModel(t, updated)
+	assert.Empty(t, mdl.Selected())
+	assert.Nil(t, cmd)
+}
+
 // assertModel performs a checked type assertion from tea.Model to picker.Model.
 func assertModel(t *testing.T, teaModel tea.Model) picker.Model {
 	t.Helper()

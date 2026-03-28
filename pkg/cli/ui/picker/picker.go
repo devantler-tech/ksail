@@ -89,6 +89,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cursor++
 		}
 	case "enter":
+		if len(m.items) == 0 {
+			return m, nil
+		}
+
 		m.selected = m.items[m.cursor]
 
 		return m, tea.Quit
