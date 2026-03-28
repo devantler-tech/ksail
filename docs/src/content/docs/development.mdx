@@ -50,37 +50,7 @@ golangci-lint run --fix  # auto-fix (import order, etc.)
 
 ## Project Structure
 
-### Key Directories
-
-````
-ksail/
-├── .github/              # CI/CD workflows and agentic workflows
-│   ├── workflows/        # GitHub Actions workflows (.yaml + .md)
-│   └── copilot-instructions.md  # Copilot coding instructions
-├── docs/                 # Documentation (Astro/Starlight)
-│   ├── src/content/docs/ # Markdown documentation files
-│   └── public/           # Static assets
-├── internal/             # Internal (private) packages
-│   └── buildmeta/        # Build metadata (version, commit, date)
-├── pkg/                  # Public packages
-│   ├── apis/             # API types and schemas
-│   ├── cli/              # CLI commands and UI
-│   ├── client/           # Embedded tool clients
-│   ├── svc/              # Core services
-│   │   ├── provider/     # Infrastructure providers
-│   │   ├── provisioner/  # Distribution provisioners
-│   │   └── installer/    # Component installers
-│   └── [utilities]       # di, envvar, fsutil, k8s, notify, etc.
-├── schemas/              # JSON schemas for validation
-├── vsce/                 # VSCode extension
-├── main.go               # Application entry point
-├── go.mod                # Go module definition
-└── .golangci.yml         # Linter configuration
-````
-
-### Import Restrictions
-
-`internal/` packages can only be imported within the `ksail` module; `pkg/` packages are public. Circular dependencies are not allowed.
+See the [Architecture Guide](/architecture/#package-structure) for the full package structure and descriptions of each package. `internal/` packages can only be imported within the `ksail` module; `pkg/` packages are public. Circular dependencies are not allowed.
 
 ## Development Workflow
 
@@ -118,23 +88,11 @@ Return errors explicitly (no panic in library code). Wrap errors with `fmt.Error
 All user-supplied file path arguments in CLI commands must be canonicalized with `fsutil.EvalCanonicalPath` before use. This resolves symlinks and produces an absolute path, preventing symlink-escape attacks in CI pipelines that process external manifests.
 
 ````go
-import (
-    "fmt"
-
-    "github.com/devantler-tech/ksail/v5/pkg/fsutil"
-)
-
-func openConfig(inputPath string) error {
-    canonPath, err := fsutil.EvalCanonicalPath(inputPath)
-    if err != nil {
-        return fmt.Errorf("canonicalizing path %q: %w", inputPath, err)
-    }
-
-    // Use canonPath for any subsequent file operations
-    _ = canonPath
-
-    return nil
+canonPath, err := fsutil.EvalCanonicalPath(inputPath)
+if err != nil {
+    return fmt.Errorf("canonicalizing path %q: %w", inputPath, err)
 }
+// use canonPath for all subsequent file operations
 ````
 
 When canonicalizing an **output** path that may not yet exist (e.g., `--output`), first create the *parent directory* of the output path with `os.MkdirAll(filepath.Dir(outputPath), <mode>)`, then call `EvalCanonicalPath` on the output path. For safe path-constrained reads, use `fsutil.ReadFileSafe` instead of reimplementing containment checks.
@@ -159,14 +117,7 @@ func TestMyFunction(t *testing.T) {
 
 #### Export Pattern for Testing Unexported Functions
 
-Use `export_test.go` to expose unexported symbols without leaking into production binaries. Test from `<pkg>_test` package; add `//nolint:gochecknoglobals` on exported vars if required by `golangci-lint`.
-
-````go
-// pkg/svc/provisioner/export_test.go
-package provisioner
-
-var ExportValidateConfig = validateConfig
-````
+Use `export_test.go` (in the package namespace) to expose unexported symbols without leaking into production binaries — e.g., `var ExportValidateConfig = validateConfig`. Test from `<pkg>_test` package; add `//nolint:gochecknoglobals` on exported vars if required by `golangci-lint`.
 
 #### DI Override Pattern for Command Tests
 
@@ -198,15 +149,7 @@ KSail uses [mockery v3.5+](https://vektra.github.io/mockery/v3.5/) for generatin
 
 #### Benchmarks
 
-````go
-func BenchmarkX(b *testing.B) {
-    for b.Loop() { // Go 1.26+ style
-        // operation
-    }
-}
-````
-
-PRs are auto-benchmarked against `main`; see [BENCHMARK-REGRESSION.md](https://github.com/devantler-tech/ksail/blob/main/docs/BENCHMARK-REGRESSION.md). Use `ksail cluster create --benchmark` for per-component timings. Package-specific `BENCHMARKS.md` files in some package directories (e.g., [`pkg/client/helm/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/client/helm/BENCHMARKS.md), [`pkg/fsutil/configmanager/ksail/BENCHMARKS.md`](https://github.com/devantler-tech/ksail/blob/main/pkg/fsutil/configmanager/ksail/BENCHMARKS.md)) document baseline results and optimization opportunities.
+Use `for b.Loop()` style (Go 1.26+). PRs are auto-benchmarked against `main`; see [BENCHMARK-REGRESSION.md](https://github.com/devantler-tech/ksail/blob/main/docs/BENCHMARK-REGRESSION.md). Use `ksail cluster create --benchmark` for per-component timings.
 
 ### Documentation
 
@@ -278,7 +221,7 @@ VSCode users can set breakpoints and press F5 with a `.vscode/launch.json` confi
 
 ### Agentic Workflows
 
-Five AI-powered daily workflows run on schedules (triggerable via `gh aw`): [**`daily-code-quality`**](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/daily-code-quality.lock.yml) (refactoring/performance), [**`daily-plan`**](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/daily-plan.lock.yml) (issue triage), [**`daily-builder`**](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/daily-builder.lock.yml) (feature implementation), [**`daily-workflow-maintenance`**](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/daily-workflow-maintenance.lock.yml) (CI updates), and [**`daily-docs`**](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/daily-docs.lock.yml) (documentation sync).
+Five AI-powered daily workflows run on schedules (triggerable via `gh aw`): `daily-code-quality` (refactoring/performance), `daily-plan` (issue triage), `daily-builder` (feature implementation), `daily-workflow-maintenance` (CI updates), and `daily-docs` (documentation sync).
 
 ## Release Process
 
@@ -290,13 +233,8 @@ Releases are automated via `.goreleaser.yaml`, `.github/workflows/release.yaml` 
 
 ## Getting Help
 
-- **Discussions:** [github.com/devantler-tech/ksail/discussions](https://github.com/devantler-tech/ksail/discussions)
-- **Issues:** [github.com/devantler-tech/ksail/issues](https://github.com/devantler-tech/ksail/issues)
-- **Documentation:** [ksail.devantler.tech](https://ksail.devantler.tech)
-- **Contributing Guide:** [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md)
+[Discussions](https://github.com/devantler-tech/ksail/discussions) · [Issues](https://github.com/devantler-tech/ksail/issues) · [Documentation](https://ksail.devantler.tech) · [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md)
 
 ## Code Review Guidelines
 
-PRs should be focused on a single concern with clear commit messages, tests for new functionality, and updated documentation. Squash commits before merge (or allow maintainer to).
-
-**Review checklist:** code style ✓ | tests added and passing ✓ | docs updated ✓ | commit messages clear ✓ | CI passes ✓ | no security issues ✓
+PRs should be focused on a single concern with clear commit messages, tests for new functionality, and updated documentation. Squash commits before merge. **Checklist:** code style · tests added and passing · docs updated · commit messages clear · CI passes · no security issues
