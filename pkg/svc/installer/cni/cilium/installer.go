@@ -154,7 +154,8 @@ func (c *Installer) getCiliumValues() map[string]string {
 
 func defaultCiliumValues() map[string]string {
 	return map[string]string{
-		"operator.replicas": "1", // numeric values don't need quotes
+		"operator.replicas":  "1", // numeric values don't need quotes
+		"gatewayAPI.enabled": "true",
 	}
 }
 
