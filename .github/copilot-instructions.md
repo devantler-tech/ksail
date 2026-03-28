@@ -172,7 +172,7 @@ go run main.go --help
 │       ├── mcp/            # Model Context Protocol server
 │       ├── provider/       # Infrastructure providers (docker, hetzner, omni)
 │       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos, VCluster)
-│       ├── registryresolver/ # OCI registry detection, resolution, and artifact push
+│       ├── registryresolver/ # OCI registry detection, credential resolution, and artifact push
 │       └── state/          # Cluster state persistence for distributions without introspection
 ├── docs/                   # Astro documentation source
 │   ├── dist/               # Generated site (after npm run build)
@@ -332,7 +332,7 @@ For a deeper dive into KSail's design and internals, refer to:
 **Key Packages:**
 
 - `pkg/toolgen/`: AI tool generation — auto-generates tools from the Cobra command tree for both the MCP server and the Copilot chat assistant. All runnable CLI commands (except excluded meta commands: `chat`, `mcp`, `completion`, `help`, root — see `toolgen.DefaultOptions()` and `ai.toolgen.exclude`) are automatically exposed as tools; do NOT manually register individual tool handlers. Parent commands annotated with `ai.toolgen.consolidate` group their subcommands into a single tool, then `ai.toolgen.permission` splits them into read/write pairs (e.g., `cluster_read`, `cluster_write`). Adding a new CLI command under a consolidated parent automatically makes it available as an MCP tool and a chat tool — no separate tool registration is needed
-- `pkg/apis/`: API types, schemas, and enums; each enum type lives in its own file under `pkg/apis/cluster/v1alpha1/` (e.g., `distribution.go`, `cni.go`, `csi.go`, `loadbalancer.go`, `gitopsengine.go`, etc.); the `EnumValuer` interface is in `enum.go`
+- `pkg/apis/`: API types, schemas, and enums; each enum type lives in its own file under `pkg/apis/cluster/v1alpha1/` (e.g., `distribution.go`, `cni.go`, `csi.go`, `loadbalancer.go`, `gitopsengine.go`, etc.); the `EnumValuer` interface is in `enum.go`; API-level validation errors (e.g., `ErrInvalidDistribution`, `ErrInvalidGitOpsEngine`, `ErrClusterNameTooLong`, `ErrInvalidDistributionProviderCombination`) are centralized in `errors.go`
 - `pkg/client/`: Embedded tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kustomize, oci, netretry); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`.
 - `pkg/svc/`: Services including installers, providers, and provisioners
   - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation; `sandbox.go` exports `IsPathWithinDirectory` which uses `fsutil.EvalCanonicalPath` for path containment checks
@@ -345,7 +345,7 @@ For a deeper dive into KSail's design and internals, refer to:
   - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants; tools are auto-generated from root Cobra commands via `pkg/toolgen/` (not manually registered) — all operational cluster/workload/cipher commands (both read and write) are consolidated into 5 tools via `ai.toolgen.consolidate` + `ai.toolgen.permission`: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `cipher_write`
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner, omni)
   - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster)
-  - `pkg/svc/registryresolver/`: OCI registry detection, resolution, and artifact push utilities
+  - `pkg/svc/registryresolver/`: OCI registry detection, resolution, credential merging (from Flux/ArgoCD cluster secrets and Docker config), and artifact push utilities; `ErrExternalRegistryCredentialsIncomplete` is returned when a username is set (e.g. `GITHUB_ACTOR`) but the password/token is missing
   - `pkg/svc/state/`: Cluster state persistence for distributions that cannot introspect running configuration (Kind, K3d); stores spec as JSON in `~/.ksail/clusters/<name>/spec.json`
 - `pkg/client/reconciler/`: Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - `pkg/di/`: Dependency injection for wiring components
