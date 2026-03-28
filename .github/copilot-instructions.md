@@ -345,7 +345,7 @@ For a deeper dive into KSail's design and internals, refer to:
   - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants; tools are auto-generated from root Cobra commands via `pkg/toolgen/` (not manually registered) — all operational cluster/workload/cipher commands (both read and write) are consolidated into 5 tools via `ai.toolgen.consolidate` + `ai.toolgen.permission`: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `cipher_write`
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner, omni)
   - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster)
-  - `pkg/svc/registryresolver/`: OCI registry detection, resolution, credential merging (from Flux/ArgoCD cluster secrets and Docker config), and artifact push utilities; `ErrExternalRegistryCredentialsIncomplete` is returned when a username is set (e.g. `GITHUB_ACTOR`) but the password/token is missing
+  - `pkg/svc/registryresolver/`: OCI registry detection, resolution, credential merging from cluster secrets (Flux dockerconfigjson / ArgoCD repo secret), and artifact push utilities; `ErrExternalRegistryCredentialsIncomplete` is returned when a username is set (e.g. `GITHUB_ACTOR`) but the password/token is missing
   - `pkg/svc/state/`: Cluster state persistence for distributions that cannot introspect running configuration (Kind, K3d); stores spec as JSON in `~/.ksail/clusters/<name>/spec.json`
 - `pkg/client/reconciler/`: Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - `pkg/di/`: Dependency injection for wiring components
