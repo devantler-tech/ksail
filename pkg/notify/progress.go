@@ -195,6 +195,8 @@ func WithClock(clock Clock) ProgressOption {
 // When set, a compact display mode is used: a summary line at the top
 // shows completed/failed counts, up to maxVisible active tasks are shown,
 // and a remaining count is shown at the bottom.
+// If WithConcurrency is not set, maxVisible also limits concurrency so
+// the number of running tasks stays within the visible window.
 // Default 0 means show all tasks (backward compatible).
 func WithMaxVisible(n int) ProgressOption {
 	return func(pg *ProgressGroup) {
@@ -229,8 +231,10 @@ func WithContinueOnError() ProgressOption {
 }
 
 // WithAppendOnly forces append-only output regardless of TTY detection.
-// Tasks are printed as they complete (no ANSI cursor movement, no spinners,
-// no starting lines). Use with WithConcurrency to control parallelism.
+// Completed tasks are emitted as permanent lines rather than being updated
+// in-place. In TTY mode, the output still uses ANSI cursor movement and
+// spinners for a live zone showing running and pending tasks.
+// Use with WithConcurrency to control parallelism.
 func WithAppendOnly() ProgressOption {
 	return func(pg *ProgressGroup) {
 		pg.appendOnly = true
