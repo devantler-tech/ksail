@@ -49,16 +49,9 @@ func ensureRegistrySecret(
 	restConfig *rest.Config,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
-	scheme := runtime.NewScheme()
-
-	err := corev1.AddToScheme(scheme)
+	k8sClient, err := newCoreV1Client(restConfig)
 	if err != nil {
-		return fmt.Errorf("failed to add core scheme: %w", err)
-	}
-
-	k8sClient, err := newDynamicClient(restConfig, scheme)
-	if err != nil {
-		return fmt.Errorf("failed to create kubernetes client: %w", err)
+		return err
 	}
 
 	secret, err := buildRegistrySecret(clusterCfg)
@@ -67,6 +60,23 @@ func ensureRegistrySecret(
 	}
 
 	return upsertSecret(ctx, k8sClient, secret)
+}
+
+// newCoreV1Client creates a Kubernetes client with core/v1 types registered.
+func newCoreV1Client(restConfig *rest.Config) (client.Client, error) {
+	scheme := runtime.NewScheme()
+
+	err := corev1.AddToScheme(scheme)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add core scheme: %w", err)
+	}
+
+	k8sClient, err := newDynamicClient(restConfig, scheme)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	return k8sClient, nil
 }
 
 // buildRegistrySecret creates the Secret object for registry authentication.
@@ -99,18 +109,19 @@ func buildRegistrySecret(clusterCfg *v1alpha1.Cluster) (*corev1.Secret, error) {
 func upsertSecret(ctx context.Context, k8sClient client.Client, secret *corev1.Secret) error {
 	existing := &corev1.Secret{}
 	err := k8sClient.Get(ctx, client.ObjectKeyFromObject(secret), existing)
+	secretRef := secret.Namespace + "/" + secret.Name
 
 	if apierrors.IsNotFound(err) {
 		createErr := k8sClient.Create(ctx, secret)
 		if createErr != nil {
-			return fmt.Errorf("failed to create registry secret: %w", createErr)
+			return fmt.Errorf("failed to create secret %q: %w", secretRef, createErr)
 		}
 
 		return nil
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to check existing secret: %w", err)
+		return fmt.Errorf("failed to get secret %q: %w", secretRef, err)
 	}
 
 	// Update existing secret
@@ -118,7 +129,7 @@ func upsertSecret(ctx context.Context, k8sClient client.Client, secret *corev1.S
 
 	updateErr := k8sClient.Update(ctx, existing)
 	if updateErr != nil {
-		return fmt.Errorf("failed to update registry secret: %w", updateErr)
+		return fmt.Errorf("failed to update secret %q: %w", secretRef, updateErr)
 	}
 
 	return nil

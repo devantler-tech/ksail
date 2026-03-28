@@ -30,7 +30,7 @@ inputs:
     description: "Hetzner Cloud API token (required when provider is Hetzner)"
     default: ""
   sops-age-key:
-    description: "SOPS Age private key for decrypting secrets (imports key and creates K8s secret)"
+    description: "SOPS Age private key for decrypting secrets (imports key locally; KSail creates the in-cluster secret during Flux setup)"
     default: ""
   hosts-file:
     description: "Path to hosts file to append to /etc/hosts"
@@ -235,7 +235,7 @@ runs:
           echo "⚠️ Root CA cert file not found: $ROOT_CA_CERT_FILE"
         fi
 
-    - name: 🔑 Import SOPS Age key
+    - name: 🔑 Import SOPS Age key (local)
       if: inputs.sops-age-key != ''
       shell: bash
       env:

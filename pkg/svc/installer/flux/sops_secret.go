@@ -11,9 +11,9 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	fluxclient "github.com/devantler-tech/ksail/v5/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 )
 
@@ -65,16 +65,9 @@ func ensureSopsAgeSecret(
 
 	secret := buildSopsAgeSecret(ageKey)
 
-	scheme := k8sruntime.NewScheme()
-
-	err := corev1.AddToScheme(scheme)
+	k8sClient, err := newCoreV1Client(restConfig)
 	if err != nil {
-		return fmt.Errorf("failed to add core scheme: %w", err)
-	}
-
-	k8sClient, err := newDynamicClient(restConfig, scheme)
-	if err != nil {
-		return fmt.Errorf("failed to create kubernetes client: %w", err)
+		return err
 	}
 
 	return upsertSecret(ctx, k8sClient, secret)
@@ -99,8 +92,15 @@ func resolveAgeKey(sops v1alpha1.SOPS) string {
 		return ""
 	}
 
-	//#nosec G304 -- keyPath comes from platform-specific well-known paths
-	data, err := os.ReadFile(keyPath)
+	canonicalKeyPath, err := fsutil.EvalCanonicalPath(keyPath)
+	if err != nil {
+		return ""
+	}
+
+	// Canonicalization above resolves symlinks and normalizes env-derived paths
+	// before reading, so gosec G304 is acceptable here.
+	//nolint:gosec // G304: canonicalized path from controlled env/config inputs
+	data, err := os.ReadFile(canonicalKeyPath)
 	if err != nil {
 		return ""
 	}
@@ -152,31 +152,25 @@ func sopsAgeKeyPath() (string, error) {
 		return filepath.Join(xdgConfigHome, "sops", "age", "keys.txt"), nil
 	}
 
-	switch goruntime.GOOS {
-	case "windows":
+	if goruntime.GOOS == "windows" {
 		appData := os.Getenv("AppData")
 		if appData == "" {
 			return "", errAppDataNotSet
 		}
 
 		return filepath.Join(appData, "sops", "age", "keys.txt"), nil
+	}
 
-	case "darwin":
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("failed to get user home directory: %w", err)
-		}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
 
+	if goruntime.GOOS == "darwin" {
 		return filepath.Join(
 			homeDir, "Library", "Application Support", "sops", "age", "keys.txt",
 		), nil
-
-	default:
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("failed to get user home directory: %w", err)
-		}
-
-		return filepath.Join(homeDir, ".config", "sops", "age", "keys.txt"), nil
 	}
+
+	return filepath.Join(homeDir, ".config", "sops", "age", "keys.txt"), nil
 }
