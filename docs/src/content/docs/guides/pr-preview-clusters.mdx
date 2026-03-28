@@ -1,0 +1,225 @@
+---
+title: PR Preview Clusters with ksail-cluster Action
+description: How to provision ephemeral Kubernetes preview clusters for pull requests using the ksail-cluster GitHub Actions composite action, GitOps CI validation, and --ttl auto-teardown.
+---
+
+KSail can provision short-lived, per-PR preview Kubernetes clusters in GitHub Actions using:
+
+- **`ksail-cluster` composite action** — one-step cluster provisioning with caching and GitOps CI support
+- **`--ttl` flag** — auto-destroys the cluster after a configurable duration (safety net)
+- **`validate` input** — validates manifests before cluster creation
+- **`delete: true` input** — always-on cluster cleanup, even on failure
+
+This pattern positions KSail as a lightweight alternative to tools like [mirrord-preview](https://mirrord.dev/) for teams who want GitOps-native preview environments backed by real Kubernetes clusters.
+
+## Minimal Example
+
+The following workflow creates an ephemeral cluster on every pull request, validates manifests, deploys via GitOps, runs smoke tests, then tears the cluster down:
+
+```yaml
+# .github/workflows/pr-preview.yaml
+name: PR Preview Cluster
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provision preview cluster
+        id: cluster
+        uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
+        with:
+          validate: "true"      # validate manifests before cluster creation
+          push: "true"          # push manifests to OCI registry for GitOps
+          reconcile: "true"     # trigger GitOps reconcile and wait
+          delete: "true"        # delete cluster when done (runs even on failure)
+
+      - name: Run smoke tests
+        env:
+          KUBECONFIG: ${{ steps.cluster.outputs.kubeconfig }}
+        run: |
+          kubectl get pods -A
+          # ... your smoke/integration tests here
+```
+
+> [!NOTE]
+> `delete: true` uses `if: always()` internally, so the cluster is deleted even if upstream steps fail. You do not need a separate cleanup step for the success path.
+
+## Complete GitOps CI Workflow
+
+For teams using Flux or ArgoCD, the full GitOps preview pattern includes manifest validation, OCI push, and reconcile:
+
+```yaml
+# .github/workflows/pr-preview.yaml
+name: PR Preview Cluster
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "k8s/**"
+      - "ksail.yaml"
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # required if pushing to GHCR
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provision preview cluster with GitOps
+        id: cluster
+        uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
+        with:
+          distribution: K3s       # K3s starts fastest; swap for Vanilla, Talos, or VCluster
+          validate: "true"        # fail fast if manifests are invalid
+          push: "true"            # push manifests to the cluster's local OCI registry
+          reconcile: "true"       # wait for Flux/ArgoCD to reconcile successfully
+          delete: "true"          # always clean up
+          sops-age-key: ${{ secrets.SOPS_AGE_KEY }}   # optional: decrypt SOPS secrets
+
+      - name: Run integration tests
+        env:
+          KUBECONFIG: ${{ steps.cluster.outputs.kubeconfig }}
+        run: |
+          # Tests run against the fully reconciled cluster
+          kubectl get pods -n my-app -l app=my-app
+          curl -f http://localhost:8080/healthz || exit 1
+```
+
+## With `--ttl` as a Safety Net
+
+Use `--ttl` to automatically destroy the cluster after a time limit, protecting against runner crashes or orphaned clusters when `delete: true` cannot run:
+
+```yaml
+- name: Provision preview cluster
+  id: cluster
+  uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
+  with:
+    args: "--ttl 30m"   # auto-destroy after 30 minutes (safety net)
+    validate: "true"
+    push: "true"
+    reconcile: "true"
+    delete: "true"      # explicit cleanup also runs — ttl is a backup
+```
+
+> [!IMPORTANT]
+> `--ttl` only fires while the `ksail cluster create` process is alive. On a runner crash or `SIGKILL`, the process is gone and the TTL timer stops. `delete: true` (which runs even on failure) is the primary cleanup mechanism. Use `--ttl` as an additional safety net, not the sole cleanup path.
+
+## Multi-Environment PR Preview
+
+Combine `--config` with the preview pattern to test against a staging-like config:
+
+```yaml
+- name: Provision staging-like preview cluster
+  id: cluster
+  uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
+  with:
+    config: ksail.staging.yaml   # use staging config (Talos + Cilium + Kyverno)
+    init: "false"                # config already exists in the repo, skip reinit
+    validate: "true"
+    push: "true"
+    reconcile: "true"
+    delete: "true"
+```
+
+See [Multi-Environment Workflows](/guides/multi-environment/) for the full `--config` guide.
+
+## Failure Path: Manual Cleanup
+
+When running without `delete: true` (e.g., you want to keep the cluster alive for debugging a failed CI run), add an explicit cleanup step using `if: always()`:
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+
+  - name: Provision preview cluster
+    id: cluster
+    uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
+    with:
+      push: "true"
+      reconcile: "true"
+      # NOTE: delete is intentionally omitted here — handled below
+
+  - name: Run smoke tests
+    env:
+      KUBECONFIG: ${{ steps.cluster.outputs.kubeconfig }}
+    run: ./scripts/smoke-test.sh
+
+  - name: Delete preview cluster
+    if: always()   # runs even when smoke tests fail
+    run: ksail cluster delete
+```
+
+> [!TIP]
+> Using `delete: true` on the action is equivalent to the manual cleanup pattern above — both use `if: always()`. Prefer `delete: true` for simplicity unless you need custom cleanup logic (e.g., exporting logs before deletion).
+
+## Kubeconfig Access
+
+The action outputs the kubeconfig file path in `steps.<id>.outputs.kubeconfig`. Pass it to subsequent steps via `KUBECONFIG`:
+
+```yaml
+- name: Deploy additional resources
+  env:
+    KUBECONFIG: ${{ steps.cluster.outputs.kubeconfig }}
+  run: |
+    kubectl apply -f manifests/smoke-test-job.yaml
+    kubectl wait job/smoke-test --for=condition=complete --timeout=120s
+    kubectl logs job/smoke-test
+```
+
+You can also set it globally for all subsequent steps:
+
+```yaml
+- name: Set KUBECONFIG globally
+  run: echo "KUBECONFIG=${{ steps.cluster.outputs.kubeconfig }}" >> "$GITHUB_ENV"
+```
+
+## Action Inputs Reference
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `distribution` | `Vanilla` | Cluster distribution (Vanilla, K3s, Talos, VCluster) |
+| `config` | `""` | Path to alternate `ksail.yaml` (e.g. `ksail.staging.yaml`) |
+| `validate` | `false` | Run `ksail workload validate` before cluster creation |
+| `push` | `false` | Run `ksail workload push` after creation |
+| `reconcile` | `false` | Run `ksail workload reconcile` after push |
+| `delete` | `false` | Delete cluster at the end (`if: always()`) |
+| `args` | `""` | Extra args passed to `cluster init`/`create` (e.g. `--ttl 30m`) |
+| `init` | `true` | Run `ksail cluster init` before create |
+| `cache` | `true` | Cache Helm charts and mirror registry volumes |
+| `sops-age-key` | `""` | SOPS Age private key for secret decryption |
+| `ksail-version` | `latest` | KSail version to install |
+
+**Action output:** `kubeconfig` — path to the kubeconfig file for the provisioned cluster.
+
+## Tips
+
+- **K3s starts fastest** — use `distribution: K3s` for PRs where spin-up time matters.
+- **Pin the action version** using a tag (e.g. `@v5.73.0`) for reproducible CI, or `@main` for bleeding-edge.
+- **Cache hits speed up CI significantly** — the `cache: true` default restores Helm charts and mirror registry volumes, avoiding repeated Docker Hub pulls.
+- **Combine with path filters** (`paths:` in `on.pull_request`) to skip the preview cluster when only non-Kubernetes files changed.
+- **Validate early** — set `validate: true` to fail fast on invalid manifests before spending time on cluster provisioning.
+- **Export logs before deletion** — if tests fail, capture pod logs before the cluster is deleted:
+
+  ```yaml
+  - name: Capture logs on failure
+    if: failure()
+    env:
+      KUBECONFIG: ${{ steps.cluster.outputs.kubeconfig }}
+    run: kubectl logs -n my-app -l app=my-app --tail=100 || true
+  ```
+
+## Related Guides
+
+- [Ephemeral Clusters (`--ttl`)](/guides/ephemeral-clusters/) — full TTL guide for local and CI use cases
+- [Multi-Environment Workflows](/guides/multi-environment/) — using `--config` for dev/staging/prod
+- [Testing in CI/CD](/use-cases/#testing-in-cicd) — broader CI testing patterns with KSail
