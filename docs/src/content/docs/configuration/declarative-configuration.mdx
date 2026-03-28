@@ -258,7 +258,7 @@ When using Talos with Omni, Omni generates the context name; set `spec.cluster.c
 See [CNI](/concepts/#container-network-interface-cni) for more details.
 
 - `Default` (default) – Uses the distribution's built-in CNI (`kindnetd` for Vanilla, `flannel` for K3s)
-- `Cilium` – Installs [Cilium](https://cilium.io/) for advanced networking and observability
+- `Cilium` – Installs [Cilium](https://cilium.io/) for advanced networking and observability. Gateway API is enabled by default (`gatewayAPI.enabled: true`); KSail automatically pre-installs the standard [Gateway API CRDs](https://gateway-api.sigs.k8s.io/guides/) before the Cilium Helm chart. On Docker clusters, `gatewayAPI.hostNetwork.enabled: true` is set automatically so Cilium can route traffic without an external load balancer.
 - `Calico` – Installs [Calico](https://www.tigera.io/project-calico/) for network policies
 
 #### csi
