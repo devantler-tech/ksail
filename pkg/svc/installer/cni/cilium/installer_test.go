@@ -195,15 +195,31 @@ func TestInstaller_Install_NilClient(t *testing.T) {
 		"",
 	)
 
-	// Skip Gateway API CRD installation to test nil Helm client handling.
-	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error {
-		return nil
-	})
-
 	err := installer.Install(context.Background())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "helm client is nil")
+}
+
+func TestInstaller_Install_NilGatewayAPICRDInstaller(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := ciliuminstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		5*time.Minute,
+		v1alpha1.DistributionVanilla,
+		"",
+	)
+
+	installer.SetGatewayAPICRDInstaller(nil)
+
+	err := installer.Install(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "gateway API CRD installer is not configured")
 }
 
 func TestInstaller_Uninstall_Success(t *testing.T) {

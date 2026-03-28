@@ -2,6 +2,7 @@ package ciliuminstaller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"time"
@@ -10,6 +11,9 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
 )
+
+// errGatewayAPICRDInstallerNil is returned when the Gateway API CRD installer is not configured.
+var errGatewayAPICRDInstallerNil = errors.New("gateway API CRD installer is not configured")
 
 // GatewayAPICRDInstallerFunc is a function that installs Gateway API CRDs.
 type GatewayAPICRDInstallerFunc func(ctx context.Context) error
@@ -32,7 +36,8 @@ func NewInstaller(
 	return NewInstallerWithDistribution(client, kubeconfig, context, timeout, "", "")
 }
 
-// NewInstallerWithDistribution creates a new Cilium installer instance with distribution and provider-specific configuration.
+// NewInstallerWithDistribution creates a new Cilium installer instance
+// with distribution and provider-specific configuration.
 func NewInstallerWithDistribution(
 	client helm.Interface,
 	kubeconfig, context string,
@@ -57,6 +62,12 @@ func NewInstallerWithDistribution(
 
 // Install installs or upgrades Cilium via its Helm chart.
 func (c *Installer) Install(ctx context.Context) error {
+	// Validate Helm client early to avoid unnecessary CRD work when misconfigured.
+	_, err := c.GetClient()
+	if err != nil {
+		return fmt.Errorf("get helm client: %w", err)
+	}
+
 	// For Talos, wait for API server to stabilize before CNI installation.
 	// The API server may be unstable immediately after bootstrap.
 	if c.distribution == v1alpha1.DistributionTalos {
@@ -68,7 +79,11 @@ func (c *Installer) Install(ctx context.Context) error {
 
 	// Install Gateway API CRDs before Cilium, as Cilium requires them
 	// to be pre-installed when gatewayAPI.enabled is true.
-	err := c.gatewayAPICRDInstaller(ctx)
+	if c.gatewayAPICRDInstaller == nil {
+		return errGatewayAPICRDInstallerNil
+	}
+
+	err = c.gatewayAPICRDInstaller(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install Gateway API CRDs: %w", err)
 	}
@@ -168,6 +183,8 @@ func (c *Installer) getCiliumValues() map[string]string {
 	switch c.provider {
 	case v1alpha1.ProviderDocker:
 		maps.Copy(values, dockerCiliumValues())
+	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
+		// No provider-specific values needed.
 	}
 
 	return values

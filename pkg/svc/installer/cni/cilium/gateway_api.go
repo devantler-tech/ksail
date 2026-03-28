@@ -6,9 +6,11 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/image/parser"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -40,7 +42,7 @@ func gatewayAPICRDsURL() string {
 // Cilium requires these CRDs to be pre-installed when gatewayAPI.enabled is true.
 // See: https://docs.cilium.io/en/v1.19/network/servicemesh/gateway-api/gateway-api/#prerequisites
 func (c *Installer) installGatewayAPICRDs(ctx context.Context) error {
-	crds, err := fetchGatewayAPICRDs(ctx)
+	crds, err := fetchGatewayAPICRDs(ctx, gatewayAPICRDsURL())
 	if err != nil {
 		return fmt.Errorf("fetch Gateway API CRDs: %w", err)
 	}
@@ -75,6 +77,7 @@ func (c *Installer) installGatewayAPICRDs(ctx context.Context) error {
 		}
 
 		crd.ResourceVersion = existing.ResourceVersion
+
 		_, updateErr := client.ApiextensionsV1().
 			CustomResourceDefinitions().
 			Update(ctx, &crd, metav1.UpdateOptions{})
@@ -86,14 +89,25 @@ func (c *Installer) installGatewayAPICRDs(ctx context.Context) error {
 	return nil
 }
 
+// errUnexpectedHTTPStatus is returned when the CRD download receives a non-200 response.
+var errUnexpectedHTTPStatus = errors.New("unexpected HTTP status")
+
+// httpTimeout is the maximum duration for downloading Gateway API CRDs.
+const httpTimeout = 30 * time.Second
+
 // fetchGatewayAPICRDs downloads and parses CRDs from the Gateway API release bundle.
-func fetchGatewayAPICRDs(ctx context.Context) ([]apiextensionsv1.CustomResourceDefinition, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, gatewayAPICRDsURL(), nil)
+func fetchGatewayAPICRDs(
+	ctx context.Context,
+	url string,
+) ([]apiextensionsv1.CustomResourceDefinition, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	httpClient := &http.Client{Timeout: httpTimeout}
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("download CRDs: %w", err)
 	}
@@ -101,7 +115,10 @@ func fetchGatewayAPICRDs(ctx context.Context) ([]apiextensionsv1.CustomResourceD
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status %d downloading CRDs", resp.StatusCode)
+		return nil, fmt.Errorf(
+			"%w: %s downloading CRDs from %s",
+			errUnexpectedHTTPStatus, resp.Status, url,
+		)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -120,7 +137,7 @@ func parseGatewayAPICRDs(data []byte) ([]apiextensionsv1.CustomResourceDefinitio
 
 	for {
 		doc, err := reader.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 
@@ -143,7 +160,8 @@ func parseGatewayAPICRDs(data []byte) ([]apiextensionsv1.CustomResourceDefinitio
 			Kind string `json:"kind"`
 		}
 
-		if err := json.Unmarshal(jsonData, &meta); err != nil {
+		err = json.Unmarshal(jsonData, &meta)
+		if err != nil {
 			continue
 		}
 
@@ -152,7 +170,9 @@ func parseGatewayAPICRDs(data []byte) ([]apiextensionsv1.CustomResourceDefinitio
 		}
 
 		crd := apiextensionsv1.CustomResourceDefinition{}
-		if err := json.Unmarshal(jsonData, &crd); err != nil {
+
+		err = json.Unmarshal(jsonData, &crd)
+		if err != nil {
 			return nil, fmt.Errorf("unmarshal CRD: %w", err)
 		}
 
