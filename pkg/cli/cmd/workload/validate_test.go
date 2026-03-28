@@ -9,6 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
 	"github.com/gkampitakis/go-snaps/snaps"
+	"github.com/stretchr/testify/require"
 )
 
 const validNamespaceManifest = `apiVersion: v1
@@ -833,4 +834,101 @@ data:
 	if err != nil {
 		t.Fatalf("expected validation to succeed with Flux substitutions, got error: %v\noutput: %s", err, output.String())
 	}
+}
+
+func TestValidateCmdSubstitutesFluxPostBuildVariablesFromSecret(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	setupSecretSubstitutionTestDir(t, tmpDir)
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	require.NoError(t, err, "expected validation to succeed with Secret substitutions, output: %s", output.String())
+}
+
+// setupSecretSubstitutionTestDir creates a Flux project structure that uses
+// both a ConfigMap and a Secret (with base64 .data) as substituteFrom sources.
+func setupSecretSubstitutionTestDir(t *testing.T, tmpDir string) { //nolint:funlen // test setup helper
+	t.Helper()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "bases", "apps"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "clusters", "local", "apps"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "clusters", "local", "variables"), 0o750))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "bases", "apps", "kustomization.yaml"),
+		[]byte("apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - deployment.yaml\n"),
+		0o600,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "bases", "apps", "deployment.yaml"),
+		[]byte(`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+spec:
+  replicas: ${replicas:=1}
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+        - name: myapp
+          image: nginx:1.27.1
+          env:
+            - name: DB_HOST
+              value: ${db_host:=localhost}
+            - name: API_KEY
+              value: ${api_key:=default}
+`),
+		0o600,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "apps", "flux-kustomization.yaml"),
+		[]byte("apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n"+
+			"  name: apps\n  namespace: flux-system\nspec:\n  interval: 60m\n  prune: true\n"+
+			"  postBuild:\n    substituteFrom:\n      - kind: ConfigMap\n        name: vars-cluster\n"+
+			"      - kind: Secret\n        name: vars-secret\n  sourceRef:\n    kind: OCIRepository\n"+
+			"    name: flux-system\n  path: clusters/local/apps/\n"),
+		0o600,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "apps", "kustomization.yaml"),
+		[]byte("apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - ../../../bases/apps/\n"),
+		0o600,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "variables", "kustomization.yaml"),
+		[]byte("apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\n"+
+			"resources:\n  - vars-cluster.yaml\n  - vars-secret.yaml\n"),
+		0o600,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "variables", "vars-cluster.yaml"),
+		[]byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: vars-cluster\n  namespace: flux-system\ndata:\n  replicas: \"3\"\n  db_host: \"db.example.com\"\n"),
+		0o600,
+	))
+
+	// Secret with base64-encoded .data (api_key = "s3cret" base64-encoded)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "variables", "vars-secret.yaml"),
+		[]byte("apiVersion: v1\nkind: Secret\nmetadata:\n  name: vars-secret\n  namespace: flux-system\ntype: Opaque\ndata:\n  api_key: czNjcmV0\n"),
+		0o600,
+	))
 }

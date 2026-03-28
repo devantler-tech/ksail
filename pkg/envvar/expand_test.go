@@ -291,7 +291,9 @@ func TestExpandBytes(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
-func TestExpandBytes_WithDefaultValue(t *testing.T) { //nolint:paralleltest // Uses t.Setenv
+func TestExpandBytes_WithDefaultValue(t *testing.T) {
+	t.Parallel()
+
 	input := []byte("registry: ${REGISTRY:-localhost:5000}")
 	expected := []byte("registry: localhost:5000")
 
@@ -299,7 +301,9 @@ func TestExpandBytes_WithDefaultValue(t *testing.T) { //nolint:paralleltest // U
 	assert.Equal(t, expected, result)
 }
 
-func TestExpandBytes_WithFluxDefaultValue(t *testing.T) { //nolint:paralleltest // Uses t.Setenv
+func TestExpandBytes_WithFluxDefaultValue(t *testing.T) {
+	t.Parallel()
+
 	input := []byte("replicas: ${REPLICAS:=2}")
 	expected := []byte("replicas: 2")
 

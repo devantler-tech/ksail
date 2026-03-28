@@ -814,10 +814,19 @@ func applyValidationSubstitutions(data []byte, substitutions validationSubstitut
 	}
 
 	return envvar.ExpandBytesWithLookup(data, func(name string) (string, bool) {
+		// Prefer explicit validation substitutions when provided.
 		if value, ok := substitutions[name]; ok {
 			return value, true
 		}
 
-		return os.LookupEnv(name)
+		// Fall back to process environment.
+		if value, ok := os.LookupEnv(name); ok {
+			return value, true
+		}
+
+		// Treat unknown variables as present-but-empty to avoid noisy warnings
+		// from envvar.ExpandBytes during validation. This keeps validation
+		// output focused on schema issues instead of missing env vars.
+		return "", true
 	})
 }
