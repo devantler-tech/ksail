@@ -30,7 +30,7 @@ inputs:
     description: "Hetzner Cloud API token (required when provider is Hetzner)"
     default: ""
   sops-age-key:
-    description: "SOPS Age private key for decrypting secrets (imports key and creates K8s secret)"
+    description: "SOPS Age private key for decrypting secrets (imports key locally; KSail creates the in-cluster secret during Flux setup)"
     default: ""
   hosts-file:
     description: "Path to hosts file to append to /etc/hosts"
@@ -235,7 +235,7 @@ runs:
           echo "⚠️ Root CA cert file not found: $ROOT_CA_CERT_FILE"
         fi
 
-    - name: 🔑 Import SOPS Age key
+    - name: 🔑 Import SOPS Age key (local)
       if: inputs.sops-age-key != ''
       shell: bash
       env:
@@ -309,17 +309,6 @@ runs:
           esac
         done
         echo "kubeconfig=$KUBECONFIG_PATH" >> "$GITHUB_OUTPUT"
-
-    - name: 🔐 Create SOPS Age secret in cluster
-      if: inputs.sops-age-key != ''
-      shell: bash
-      env:
-        SOPS_AGE_KEY: ${{ inputs.sops-age-key }}
-      run: |
-        AGE_KEY=$(echo "$SOPS_AGE_KEY" | grep -oE 'AGE-SECRET-KEY-[A-Za-z0-9]+' | head -1)
-        kubectl create secret generic sops-age \
-          --namespace=flux-system \
-          --from-literal=sops.agekey="$AGE_KEY"
 
     - name: 📦 Push manifests
       if: inputs.push == 'true'

@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
 	"filippo.io/age"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/spf13/cobra"
 )
@@ -19,8 +19,6 @@ var (
 	errInvalidAgeKey        = errors.New("invalid age key format")
 	errFailedToCreateDir    = errors.New("failed to create directory")
 	errFailedToWriteKey     = errors.New("failed to write key")
-	errAppDataNotSet        = errors.New("AppData environment variable not set")
-	errFailedToGetUserHome  = errors.New("failed to get user home directory")
 	errFailedToDetermineAge = errors.New("failed to determine age key path")
 )
 
@@ -38,49 +36,12 @@ const (
 //   - macOS: $XDG_CONFIG_HOME/sops/age/keys.txt or $HOME/Library/Application Support/sops/age/keys.txt
 //   - Windows: %AppData%\sops\age\keys.txt
 func getAgeKeyPath() (string, error) {
-	// Check SOPS_AGE_KEY_FILE first (highest priority)
-	if sopsAgeKeyFile := os.Getenv("SOPS_AGE_KEY_FILE"); sopsAgeKeyFile != "" {
-		return sopsAgeKeyFile, nil
+	p, err := fsutil.SOPSAgeKeyPath()
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", errFailedToDetermineAge, err)
 	}
 
-	// Check XDG_CONFIG_HOME (works on all platforms)
-	if xdgConfigHome := os.Getenv("XDG_CONFIG_HOME"); xdgConfigHome != "" {
-		return filepath.Join(xdgConfigHome, "sops", "age", "keys.txt"), nil
-	}
-
-	// Platform-specific fallbacks
-	switch runtime.GOOS {
-	case "windows":
-		appData := os.Getenv("AppData")
-		if appData == "" {
-			return "", errAppDataNotSet
-		}
-
-		return filepath.Join(appData, "sops", "age", "keys.txt"), nil
-
-	case "darwin":
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("%w: %w", errFailedToGetUserHome, err)
-		}
-
-		return filepath.Join(
-			homeDir,
-			"Library",
-			"Application Support",
-			"sops",
-			"age",
-			"keys.txt",
-		), nil
-
-	default: // Linux and other Unix-like systems
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("%w: %w", errFailedToGetUserHome, err)
-		}
-
-		return filepath.Join(homeDir, ".config", "sops", "age", "keys.txt"), nil
-	}
+	return p, nil
 }
 
 // validateAgeKey performs basic validation on an age private key string.

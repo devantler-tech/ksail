@@ -110,3 +110,27 @@ func SetNewFluxResourcesClient(fn func(*rest.Config) (any, error)) func() {
 		newFluxResourcesClient = original
 	}
 }
+
+// ResolveAgeKey exports resolveAgeKey for testing.
+func ResolveAgeKey(sops v1alpha1.SOPS) (string, error) {
+	return resolveAgeKey(sops)
+}
+
+// ExtractAgeKey exports extractAgeKey for testing.
+func ExtractAgeKey(input string) string {
+	return extractAgeKey(input)
+}
+
+// BuildSopsAgeSecret exports buildSopsAgeSecret for testing.
+func BuildSopsAgeSecret(ageKey string) *corev1.Secret {
+	return buildSopsAgeSecret(ageKey)
+}
+
+// EnsureSopsAgeSecret exports ensureSopsAgeSecret for testing.
+func EnsureSopsAgeSecret(
+	ctx context.Context,
+	restConfig *rest.Config,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	return ensureSopsAgeSecret(ctx, restConfig, clusterCfg)
+}
