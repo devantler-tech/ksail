@@ -59,7 +59,7 @@ func (c *Client) ValidateFile(ctx context.Context, filePath string, opts *Valida
 	results := kubeValidator.Validate(filePath, file)
 
 	// Check for validation errors
-	return c.processResults(results, filePath)
+	return c.processResults(results)
 }
 
 // ValidateManifests validates Kubernetes manifests from a reader (e.g., kustomize build output).
@@ -90,13 +90,14 @@ func (c *Client) ValidateManifests(
 	results := kubeValidator.Validate("stdin", rc)
 
 	// Check for validation errors
-	return c.processResults(results, "stdin")
+	return c.processResults(results)
 }
 
 // processResults processes validation results and returns an error if validation failed.
 // Error details are included in the returned error message (not written to stderr)
 // to avoid interleaving with ProgressGroup's ANSI output.
-func (c *Client) processResults(results []validator.Result, source string) error {
+// The caller is responsible for including any file/source context in the wrapping error.
+func (c *Client) processResults(results []validator.Result) error {
 	var errDetails []string
 
 	for _, res := range results {
@@ -106,7 +107,7 @@ func (c *Client) processResults(results []validator.Result, source string) error
 	}
 
 	if len(errDetails) > 0 {
-		return fmt.Errorf("%w: %s: %s", ErrValidationFailed, source, strings.Join(errDetails, "; "))
+		return fmt.Errorf("%w: %s", ErrValidationFailed, strings.Join(errDetails, "; "))
 	}
 
 	return nil
@@ -151,12 +152,14 @@ func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, 
 			return nil, fmt.Errorf("create schema cache directory: %w", err)
 		}
 	} else {
-		tmpDir, mkErr := os.MkdirTemp("", "ksail-kubeconform-*")
-		if mkErr != nil {
-			return nil, fmt.Errorf("create temporary schema cache directory: %w", mkErr)
-		}
+		// Fallback: use a stable cache directory under the system temp dir to avoid leaking
+		// unique directories on every validator construction when $HOME is unavailable (e.g. CI).
+		cacheDir = filepath.Join(os.TempDir(), "ksail", "kubeconform")
 
-		cacheDir = tmpDir
+		err := os.MkdirAll(cacheDir, schemaCacheDirPerm)
+		if err != nil {
+			return nil, fmt.Errorf("create fallback schema cache directory: %w", err)
+		}
 	}
 
 	// Create validator options

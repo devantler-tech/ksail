@@ -398,13 +398,15 @@ func (pg *ProgressGroup) executeTasks(ctx context.Context, tasks []ProgressTask)
 
 // drawStreamingZone draws the initial live zone showing pending tasks.
 // The zone covers at most concurrency + streamingPendingPreview lines.
+// When concurrency is unset (0), the zone is capped to streamingPendingPreview lines
+// to avoid flooding the terminal.
 func (pg *ProgressGroup) drawStreamingZone() {
 	pg.mu.Lock()
 	defer pg.mu.Unlock()
 
-	maxInitial := pg.concurrency + streamingPendingPreview
-	if maxInitial <= streamingPendingPreview {
-		maxInitial = len(pg.taskOrder) // unlimited concurrency: show all
+	maxInitial := streamingPendingPreview
+	if pg.concurrency > 0 {
+		maxInitial = pg.concurrency + streamingPendingPreview
 	}
 
 	var buf bytes.Buffer
@@ -557,12 +559,7 @@ func (pg *ProgressGroup) runFailFastTasks(ctx context.Context, tasks []ProgressT
 		})
 	}
 
-	err := group.Wait()
-	if err != nil {
-		return fmt.Errorf("run tasks: %w", err)
-	}
-
-	return nil
+	return group.Wait() //nolint:wrapcheck // runTask already labels errors with the task name
 }
 
 // runAllTasks runs all tasks without cancelling on failure. Errors are collected

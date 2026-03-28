@@ -309,6 +309,8 @@ func runParallelValidation(
 }
 
 // validateKustomizationSilent validates a kustomization without output (for parallel execution).
+// Build errors are returned unwrapped so that simplifyBuildError in the caller can strip the
+// kustomize client's verbose "kustomize build <path>:" prefix correctly.
 func validateKustomizationSilent(
 	ctx context.Context,
 	kustDir string,
@@ -316,10 +318,10 @@ func validateKustomizationSilent(
 	kustomizeClient *kustomize.Client,
 	opts *kubeconform.ValidationOptions,
 ) error {
-	// Build the kustomization
+	// Build the kustomization — return the raw error so simplifyBuildError can strip its prefix.
 	output, err := kustomizeClient.Build(ctx, kustDir)
 	if err != nil {
-		return fmt.Errorf("kustomize build: %w", err)
+		return err //nolint:wrapcheck // intentionally unwrapped: simplifyBuildError in the caller strips the kustomize prefix
 	}
 
 	// Validate the output
