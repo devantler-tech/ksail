@@ -193,6 +193,11 @@ func TestInstaller_Install_NilClient(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 	)
 
+	// Skip Gateway API CRD installation to test nil Helm client handling.
+	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error {
+		return nil
+	})
+
 	err := installer.Install(context.Background())
 
 	require.Error(t, err)
@@ -259,6 +264,11 @@ func newInstallerWithDistribution(
 		2*time.Minute,
 		distribution,
 	)
+
+	// Use no-op Gateway API CRD installer to avoid requiring a real cluster.
+	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error {
+		return nil
+	})
 
 	return installer, client
 }

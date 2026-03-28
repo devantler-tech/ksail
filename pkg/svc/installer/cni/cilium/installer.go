@@ -11,11 +11,15 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
 )
 
+// GatewayAPICRDInstallerFunc is a function that installs Gateway API CRDs.
+type GatewayAPICRDInstallerFunc func(ctx context.Context) error
+
 // Installer implements the installer.Installer interface for Cilium.
 type Installer struct {
 	*cni.InstallerBase
 
-	distribution v1alpha1.Distribution
+	distribution            v1alpha1.Distribution
+	gatewayAPICRDInstaller  GatewayAPICRDInstallerFunc
 }
 
 // NewInstaller creates a new Cilium installer instance.
@@ -43,6 +47,7 @@ func NewInstallerWithDistribution(
 		context,
 		timeout,
 	)
+	ciliumInstaller.gatewayAPICRDInstaller = ciliumInstaller.installGatewayAPICRDs
 
 	return ciliumInstaller
 }
@@ -58,7 +63,14 @@ func (c *Installer) Install(ctx context.Context) error {
 		}
 	}
 
-	err := c.helmInstallOrUpgradeCilium(ctx)
+	// Install Gateway API CRDs before Cilium, as Cilium requires them
+	// to be pre-installed when gatewayAPI.enabled is true.
+	err := c.gatewayAPICRDInstaller(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to install Gateway API CRDs: %w", err)
+	}
+
+	err = c.helmInstallOrUpgradeCilium(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install Cilium: %w", err)
 	}
