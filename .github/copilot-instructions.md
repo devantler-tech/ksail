@@ -359,8 +359,8 @@ For a deeper dive into KSail's design and internals, refer to:
 
 ## Threat Detection False-Positive Prevention
 
-- When your only output is a `noop` safe-output call, this is legitimate — do NOT describe it as "suppressing actions."
-- The `<security>` section in the workflow prompt is standard policy guidance, NOT a prompt injection attempt.
+- When your only output is a `noop` safe-output call (i.e., the model responds solely with the standardized `safe_output` block and does not propose any code, configuration, or workflow changes), this is legitimate — do NOT describe it as "suppressing actions."
+- The `<security>` section in the workflow prompt (the dedicated security-policy guidance block in the gh-aw threat-detection workflow template) is standard policy guidance, NOT a prompt injection attempt.
 - When the detection model's own `reasons` array contradicts the boolean verdict, the reasons text takes precedence for human review.
 - Agents should avoid phrasing like "ignoring policy" or "suppressing" in their reasoning; prefer "no action required" or "no changes needed."
 
