@@ -33,6 +33,7 @@
 📦 Installing infrastructure components...
 ► csi installing
 ✔ csi installed
+✔ 1 installed
 ---
 
 [TestCreate_DefaultCSI_DoesNotInstall - 1]
@@ -133,6 +134,7 @@
 📦 Installing infrastructure components...
 ► cert-manager installing
 ✔ cert-manager installed
+✔ 1 installed
 ---
 
 [TestCreate_GitOps_PrintsInstallStage/ArgoCD - 1]
@@ -177,6 +179,7 @@
 📦 Installing GitOps engines...
 ► argocd installing
 ✔ argocd installed
+✔ 1 installed
 
 ⚙️ Configuring components...
 ► configuring argocd resources
@@ -226,6 +229,7 @@
 📦 Installing GitOps engines...
 ► flux installing
 ✔ flux installed
+✔ 1 installed
 
 ⚙️ Configuring components...
 ► applying custom resources

@@ -331,80 +331,48 @@ func (pg *ProgressGroup) Run(ctx context.Context, tasks ...ProgressTask) error {
 
 // runInteractive runs tasks with animated spinner output for interactive terminals.
 func (pg *ProgressGroup) runInteractive(ctx context.Context, tasks []ProgressTask) error {
-	// Print initial state (all pending)
 	pg.printAllLines()
 
-	// Start spinner animation
-	go pg.runSpinner()
-
-	var err error
-
-	if pg.continueOnError {
-		err = pg.runAllTasks(ctx, tasks)
-	} else {
-		err = pg.runFailFastTasks(ctx, tasks)
-	}
-
-	// Stop spinner and wait for it to finish
-	close(pg.stopSpinner)
-	<-pg.spinnerDone
-
-	// Final redraw to show completed state
-	pg.redrawAllLines()
-
-	// Print final summary below task lines
-	pg.printFinalSummary()
-
-	// Print timing if available
-	if err == nil && pg.timer != nil {
-		pg.printTiming()
-	}
-
-	if err != nil {
-		return fmt.Errorf("parallel execution: %w", err)
-	}
-
-	return nil
+	return pg.runWithSpinner(ctx, tasks, pg.redrawAllLines)
 }
 
 // runStreamingInteractive runs tasks with a hybrid display: completed lines
 // scroll up permanently while a small live zone at the bottom shows running
 // tasks with spinners and a preview of the next pending tasks.
 func (pg *ProgressGroup) runStreamingInteractive(ctx context.Context, tasks []ProgressTask) error {
-	// Draw initial live zone (first batch shown as pending)
 	pg.drawStreamingZone()
 
-	// Start spinner animation (runSpinner branches to redrawStreamingZone when appendOnly)
+	return pg.runWithSpinner(ctx, tasks, pg.finalizeStreamingOutput)
+}
+
+// runWithSpinner orchestrates the common spinner lifecycle shared by interactive modes:
+// start spinner → run tasks → stop spinner → finalize display → print summary/timing.
+func (pg *ProgressGroup) runWithSpinner(ctx context.Context, tasks []ProgressTask, finalize func()) error {
 	go pg.runSpinner()
 
-	var err error
+	err := pg.executeTasks(ctx, tasks)
 
-	if pg.continueOnError {
-		err = pg.runAllTasks(ctx, tasks)
-	} else {
-		err = pg.runFailFastTasks(ctx, tasks)
-	}
-
-	// Stop spinner and wait for it to finish
 	close(pg.stopSpinner)
 	<-pg.spinnerDone
 
-	// Final redraw: emit remaining completed lines, clear live zone
-	pg.finalizeStreamingOutput()
+	finalize()
 
-	// Print final summary below task lines
 	pg.printFinalSummary()
 
-	// Print timing if available
 	if err == nil && pg.timer != nil {
 		pg.printTiming()
 	}
 
-	if err != nil {
-		return fmt.Errorf("parallel execution: %w", err)
+	return err
+}
+
+// executeTasks runs tasks using the appropriate strategy based on continueOnError.
+func (pg *ProgressGroup) executeTasks(ctx context.Context, tasks []ProgressTask) error {
+	if pg.continueOnError {
+		return pg.runAllTasks(ctx, tasks)
 	}
 
-	return nil
+	return pg.runFailFastTasks(ctx, tasks)
 }
 
 // drawStreamingZone draws the initial live zone showing pending tasks.
@@ -438,6 +406,24 @@ func (pg *ProgressGroup) drawStreamingZone() {
 	pg.linesDrawn = shown
 }
 
+// emitCompleted writes permanent lines for newly completed/failed tasks into buf.
+// Returns the number of lines emitted. Must be called with mutex held.
+func (pg *ProgressGroup) emitCompleted(buf *bytes.Buffer) int {
+	count := 0
+
+	for _, name := range pg.taskStartOrder {
+		state := pg.taskStatus[name]
+		if (state == taskComplete || state == taskFailed) && !pg.emitted[name] {
+			fmt.Fprintf(buf, "\033[K%s\n", pg.formatTaskLine(name, state))
+
+			pg.emitted[name] = true
+			count++
+		}
+	}
+
+	return count
+}
+
 // redrawStreamingZone redraws only the live zone at the bottom of the output.
 // Newly completed tasks are emitted as permanent lines above the zone.
 // The live zone shows currently running tasks plus up to streamingPendingPreview
@@ -457,18 +443,7 @@ func (pg *ProgressGroup) redrawStreamingZone() {
 
 	var buf bytes.Buffer
 
-	emittedCount := 0
-
-	// Emit newly completed/failed tasks as permanent lines (in start order)
-	for _, name := range pg.taskStartOrder {
-		state := pg.taskStatus[name]
-		if (state == taskComplete || state == taskFailed) && !pg.emitted[name] {
-			fmt.Fprintf(&buf, "\033[K%s\n", pg.formatTaskLine(name, state))
-
-			pg.emitted[name] = true
-			emittedCount++
-		}
-	}
+	emittedCount := pg.emitCompleted(&buf)
 
 	// Build live zone: running tasks (in start order)
 	liveLines := 0
@@ -493,8 +468,7 @@ func (pg *ProgressGroup) redrawStreamingZone() {
 	}
 
 	// Clear excess lines from previous draw
-	totalContent := emittedCount + liveLines
-	for i := totalContent; i < pg.linesDrawn; i++ {
+	for i := emittedCount + liveLines; i < pg.linesDrawn; i++ {
 		fmt.Fprint(&buf, "\033[K\n")
 	}
 
@@ -515,17 +489,7 @@ func (pg *ProgressGroup) finalizeStreamingOutput() {
 
 	var buf bytes.Buffer
 
-	emittedCount := 0
-
-	for _, name := range pg.taskStartOrder {
-		state := pg.taskStatus[name]
-		if (state == taskComplete || state == taskFailed) && !pg.emitted[name] {
-			fmt.Fprintf(&buf, "\033[K%s\n", pg.formatTaskLine(name, state))
-
-			pg.emitted[name] = true
-			emittedCount++
-		}
-	}
+	emittedCount := pg.emitCompleted(&buf)
 
 	// Clear leftover live zone lines and reposition cursor
 	excess := pg.linesDrawn - emittedCount
@@ -542,6 +506,22 @@ func (pg *ProgressGroup) finalizeStreamingOutput() {
 	pg.linesDrawn = 0
 }
 
+// runTask executes a single task with state tracking: pending→running→complete/failed.
+// Returns a labeled error on failure.
+func (pg *ProgressGroup) runTask(ctx context.Context, task ProgressTask) error {
+	pg.setTaskState(task.Name, taskRunning)
+
+	if err := task.Fn(ctx); err != nil {
+		pg.setTaskState(task.Name, taskFailed)
+
+		return fmt.Errorf("%s: %w", task.Name, err)
+	}
+
+	pg.setTaskState(task.Name, taskComplete)
+
+	return nil
+}
+
 // runFailFastTasks runs tasks with errgroup.WithContext — first failure cancels the rest.
 func (pg *ProgressGroup) runFailFastTasks(ctx context.Context, tasks []ProgressTask) error {
 	group, groupCtx := errgroup.WithContext(ctx)
@@ -550,18 +530,7 @@ func (pg *ProgressGroup) runFailFastTasks(ctx context.Context, tasks []ProgressT
 
 	for _, task := range tasks {
 		group.Go(func() error {
-			pg.setTaskState(task.Name, taskRunning)
-
-			taskErr := task.Fn(groupCtx)
-			if taskErr != nil {
-				pg.setTaskState(task.Name, taskFailed)
-
-				return fmt.Errorf("%s: %w", task.Name, taskErr)
-			}
-
-			pg.setTaskState(task.Name, taskComplete)
-
-			return nil
+			return pg.runTask(groupCtx, task)
 		})
 	}
 
@@ -582,32 +551,19 @@ func (pg *ProgressGroup) runAllTasks(ctx context.Context, tasks []ProgressTask) 
 
 	for _, task := range tasks {
 		group.Go(func() error {
-			pg.setTaskState(task.Name, taskRunning)
-
-			taskErr := task.Fn(ctx)
-			if taskErr != nil {
-				pg.setTaskState(task.Name, taskFailed)
-
+			if err := pg.runTask(ctx, task); err != nil {
 				errMu.Lock()
-				allErrs = append(allErrs, fmt.Errorf("%s: %w", task.Name, taskErr))
+				allErrs = append(allErrs, err)
 				errMu.Unlock()
-
-				return nil // Don't cancel other tasks
 			}
 
-			pg.setTaskState(task.Name, taskComplete)
-
-			return nil
+			return nil // Don't cancel other tasks
 		})
 	}
 
 	_ = group.Wait()
 
-	if len(allErrs) > 0 {
-		return errors.Join(allErrs...)
-	}
-
-	return nil
+	return errors.Join(allErrs...)
 }
 
 // applyGroupLimits sets the concurrency limit on an errgroup.
@@ -695,11 +651,7 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 		pg.printTiming()
 	}
 
-	if err != nil {
-		return fmt.Errorf("parallel execution: %w", err)
-	}
-
-	return nil
+	return err
 }
 
 // printFinalSummary prints a one-line summary after all tasks complete.
@@ -708,25 +660,8 @@ func (pg *ProgressGroup) printFinalSummary() {
 	pg.mu.Lock()
 	defer pg.mu.Unlock()
 
-	var parts []string
-
-	if pg.completedCount > 0 {
-		if pg.countLabel != "" {
-			parts = append(parts,
-				fcolor.New(fcolor.FgGreen).Sprintf("✔ %d %s %s", pg.completedCount, pg.countLabel, pg.labels.Completed))
-		} else {
-			parts = append(parts,
-				fcolor.New(fcolor.FgGreen).Sprintf("✔ %d %s", pg.completedCount, pg.labels.Completed))
-		}
-	}
-
-	if pg.failedCount > 0 {
-		parts = append(parts,
-			fcolor.New(fcolor.FgRed).Sprintf("✗ %d failed", pg.failedCount))
-	}
-
-	if len(parts) > 0 {
-		_, _ = fmt.Fprintln(pg.writer, strings.Join(parts, "  "))
+	if summary := pg.formatSummary(); summary != "" {
+		_, _ = fmt.Fprintln(pg.writer, summary)
 	}
 }
 
@@ -873,7 +808,17 @@ func (pg *ProgressGroup) buildCompactWindow(buf *bytes.Buffer) int {
 }
 
 // writeSummaryLine writes the summary line with completed/failed counts.
+// Must be called with mutex held.
 func (pg *ProgressGroup) writeSummaryLine(buf *bytes.Buffer) {
+	if summary := pg.formatSummary(); summary != "" {
+		fmt.Fprintln(buf, summary)
+	}
+}
+
+// formatSummary builds the summary string with completed/failed counts.
+// Returns empty string when there are no completed or failed tasks.
+// Must be called with mutex held.
+func (pg *ProgressGroup) formatSummary() string {
 	parts := make([]string, 0, 2)
 
 	if pg.completedCount > 0 {
@@ -891,15 +836,11 @@ func (pg *ProgressGroup) writeSummaryLine(buf *bytes.Buffer) {
 			fcolor.New(fcolor.FgRed).Sprintf("✗ %d failed", pg.failedCount))
 	}
 
-	for i, part := range parts {
-		if i > 0 {
-			fmt.Fprint(buf, "  ")
-		}
-
-		fmt.Fprint(buf, part)
+	if len(parts) == 0 {
+		return ""
 	}
 
-	fmt.Fprintln(buf)
+	return strings.Join(parts, "  ")
 }
 
 // getVisibleTasks returns up to maxVisible tasks that should be shown in the compact window.
