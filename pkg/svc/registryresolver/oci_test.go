@@ -67,6 +67,37 @@ func TestPushOCIArtifact_MissingDirectory_PushesEmptyArtifact(t *testing.T) {
 	}
 }
 
+func TestPushOCIArtifact_IncompleteExternalCredentials(t *testing.T) {
+	t.Parallel()
+
+	// External registry with username but no password — simulates
+	// GITHUB_ACTOR being set but GITHUB_TOKEN missing.
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "myuser@ghcr.io/org/repo",
+				},
+			},
+			Workload: v1alpha1.WorkloadSpec{
+				SourceDirectory: "/nonexistent/directory",
+			},
+		},
+	}
+
+	_, err := registryresolver.PushOCIArtifact(
+		context.Background(),
+		registryresolver.PushOCIArtifactOptions{
+			ClusterConfig: clusterCfg,
+			ClusterName:   "test-cluster",
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, registryresolver.ErrExternalRegistryCredentialsIncomplete)
+}
+
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
 func TestPushOCIArtifact_UsesDefaultSourceDir(t *testing.T) {
 	// Note: Cannot use t.Parallel() when using t.Chdir()

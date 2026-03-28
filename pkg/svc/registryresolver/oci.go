@@ -2,6 +2,7 @@ package registryresolver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -10,6 +11,15 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+)
+
+// ErrExternalRegistryCredentialsIncomplete is returned when an external registry
+// has a username but no password (e.g. GITHUB_ACTOR set but GITHUB_TOKEN missing).
+var ErrExternalRegistryCredentialsIncomplete = errors.New(
+	"external registry credentials are incomplete: username is set but password is empty\n" +
+		"  - ensure the token environment variable (e.g. GITHUB_TOKEN) is exported in the current environment\n" +
+		"  - configure the external registry in your cluster config (spec.cluster.localRegistry.registry in ksail.yaml),\n" +
+		"    for example via: ksail cluster init --local-registry 'user:token@host/repo'",
 )
 
 // External-registry push retry configuration.
@@ -107,11 +117,7 @@ func executePush(
 	// unset) causes the OCI push to receive a write-less anonymous token from GHCR,
 	// which surfaces as a confusing 403 rather than a clear auth error.
 	if registryInfo.IsExternal && registryInfo.Username != "" && registryInfo.Password == "" {
-		return nil, fmt.Errorf(
-			"external registry credentials are incomplete: username is set but password is empty\n" +
-				"  - ensure the token environment variable (e.g. GITHUB_TOKEN) is exported in the current environment\n" +
-				"  - configure credentials with: ksail workload push --registry 'user:token@host/repo'",
-		)
+		return nil, ErrExternalRegistryCredentialsIncomplete
 	}
 
 	if !exists {
