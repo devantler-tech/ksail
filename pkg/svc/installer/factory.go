@@ -126,7 +126,7 @@ func (f *Factory) addCNIInstaller(installers map[string]Installer, spec v1alpha1
 	switch spec.CNI {
 	case v1alpha1.CNICilium:
 		installers["cilium"] = ciliuminstaller.NewInstallerWithDistribution(
-			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout, f.distribution, spec.Provider,
+			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout, f.distribution,
 		)
 	case v1alpha1.CNICalico:
 		installers["calico"] = calicoinstaller.NewInstallerWithDistribution(
