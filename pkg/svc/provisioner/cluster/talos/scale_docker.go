@@ -42,8 +42,8 @@ func (p *Provisioner) scaleDockerByRole(
 type nodeResult interface {
 	nodeName() string
 	nodeErr() error
-	verb() string              // past-tense for recordAppliedChange ("added", "removed")
-	action() string            // imperative for error messages ("add", "remove")
+	verb() string               // past-tense for recordAppliedChange ("added", "removed")
+	action() string             // imperative for error messages ("add", "remove")
 	logLine(role string) string // complete success log line
 }
 
