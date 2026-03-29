@@ -94,14 +94,9 @@ func buildMCPErrorText(commandPath, output string, err error) string {
 
 	data, jsonErr := json.Marshal(resp)
 	if jsonErr != nil {
-		// Fallback: marshal a minimal struct to guarantee valid JSON
-		fallback, _ := json.Marshal(mcpResponse{
-			Status:  "error",
-			Command: commandPath,
-			Error:   "failed to marshal response",
-		})
-
-		return string(fallback)
+		// Fallback: use a hand-crafted JSON string to guarantee valid output
+		// even when json.Marshal itself fails (e.g. unmarshalable field values).
+		return `{"status":"error","command":"` + commandPath + `","error":"failed to marshal response"}`
 	}
 
 	return string(data)
@@ -119,13 +114,9 @@ func buildMCPSuccessText(commandPath, output string) string {
 
 	data, jsonErr := json.Marshal(resp)
 	if jsonErr != nil {
-		// Fallback: marshal a minimal struct to guarantee valid JSON
-		fallback, _ := json.Marshal(mcpResponse{
-			Status:  "success",
-			Command: commandPath,
-		})
-
-		return string(fallback)
+		// Fallback: use a hand-crafted JSON string to guarantee valid output
+		// even when json.Marshal itself fails (e.g. unmarshalable field values).
+		return `{"status":"success","command":"` + commandPath + `"}`
 	}
 
 	return string(data)

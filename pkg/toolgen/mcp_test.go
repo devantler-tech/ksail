@@ -11,6 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errCommandFailed = errors.New("command failed: exit status 1")
+	errMissingParam  = errors.New(
+		"building command args: missing or invalid subcommand parameter: cluster_operation",
+	)
+)
+
 func TestToMCPTools_EmptyInput(t *testing.T) {
 	t.Parallel()
 
@@ -183,7 +190,7 @@ func TestBuildMCPErrorText(t *testing.T) {
 		text := toolgen.BuildMCPErrorText(
 			"ksail cluster create",
 			"some partial output",
-			errors.New("command failed: exit status 1"),
+			errCommandFailed,
 		)
 
 		var response map[string]any
@@ -201,7 +208,7 @@ func TestBuildMCPErrorText(t *testing.T) {
 		text := toolgen.BuildMCPErrorText(
 			"ksail workload get",
 			"",
-			errors.New("building command args: missing or invalid subcommand parameter: cluster_operation"),
+			errMissingParam,
 		)
 
 		var response map[string]any
