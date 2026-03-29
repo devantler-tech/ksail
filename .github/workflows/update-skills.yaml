@@ -33,8 +33,12 @@ jobs:
             echo "::error::skills-lock.json not found"
             exit 1
           fi
-          jq -e . skills-lock.json >/dev/null
-          mapfile -t skills < <(jq -e -r '.skills | to_entries[] | "\(.value.source)@\(.key)"' skills-lock.json)
+          jq_output=$(jq -e -r '.skills | to_entries[] | "\(.value.source)@\(.key)"' skills-lock.json)
+          if [ -z "$jq_output" ]; then
+            echo "::error::No skills found in skills-lock.json"
+            exit 1
+          fi
+          mapfile -t skills <<< "$jq_output"
           for skill in "${skills[@]}"; do
             echo "Updating $skill..."
             npx skills add "$skill" -y --agent github-copilot
