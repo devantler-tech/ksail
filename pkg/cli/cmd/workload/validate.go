@@ -108,10 +108,14 @@ The validation process:
 2. Validates kustomizations by building them with kustomize and validating the output
 
 Flux variable substitutions are resolved before validation. When Flux Kustomization resources
-in the path define spec.postBuild.substituteFrom, the referenced ConfigMaps and Secrets are
-read and their values are used to expand ${VAR} references in the manifests. Variables not
-found in those sources fall back to the process environment. Shell-style default syntax
-(${VAR:-default}, ${VAR:=default}) is preserved for unresolved variables.
+in the validated directory tree define spec.postBuild.substituteFrom, the referenced ConfigMaps
+and Secrets are loaded from YAML manifests under the same validation path (they are not fetched
+from the cluster). The key/value data from those resources is used to expand ${VAR} references
+in the rendered manifests. Variables not found in those sources fall back to the process
+environment. Shell-style default syntax (${VAR:-default}, ${VAR:=default}) continues to behave
+as in a POSIX shell, so default values are applied when variables are unset or empty. Note that
+Secrets may still be read for substitution even when --skip-secrets is used to skip validating
+Secret resources.
 
 By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.`,
 		Args: cobra.MaximumNArgs(1),
