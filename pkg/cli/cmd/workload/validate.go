@@ -261,7 +261,7 @@ func validateFile(
 
 // validateDirectory validates all YAML files and kustomizations in a directory.
 // Validation is performed in parallel with live progress display for better UX.
-func validateDirectory(
+func validateDirectory( //nolint:funlen // orchestrates two parallel validation pipelines with shared setup
 	ctx context.Context,
 	cmd *cobra.Command,
 	dirPath string,
@@ -443,7 +443,8 @@ func validateFileSilent(
 		return nil
 	}
 
-	data, err := os.ReadFile(filePath) //nolint:gosec // filePath is discovered from walked paths or explicitly canonicalized
+	//nolint:gosec // filePath is discovered from walked paths or explicitly canonicalized
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("read file %s: %w", filePath, err)
 	}
@@ -645,7 +646,7 @@ func loadValidationSubstitutions(rootPath string) (validationSubstitutions, erro
 	}
 
 	if len(refs) == 0 {
-		return nil, nil
+		return validationSubstitutions{}, nil
 	}
 
 	files, err := walkFiles(rootPath, func(path string, _ os.FileInfo) string {
@@ -711,7 +712,8 @@ func collectFluxSubstituteSourcesFromFile(filePath string, refs substituteSource
 			continue
 		}
 
-		if manifest.Kind != "Kustomization" || !strings.HasPrefix(manifest.APIVersion, "kustomize.toolkit.fluxcd.io/") {
+		if manifest.Kind != "Kustomization" ||
+			!strings.HasPrefix(manifest.APIVersion, "kustomize.toolkit.fluxcd.io/") {
 			continue
 		}
 
@@ -770,7 +772,8 @@ func collectSubstitutionValuesFromFile(
 }
 
 func readYAMLDocuments(filePath string) ([][]byte, error) {
-	data, err := os.ReadFile(filePath) //nolint:gosec // filePath is discovered from walked paths or explicitly canonicalized
+	//nolint:gosec // filePath is discovered from walked paths or explicitly canonicalized
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("read yaml file %s: %w", filePath, err)
 	}
@@ -778,6 +781,7 @@ func readYAMLDocuments(filePath string) ([][]byte, error) {
 	reader := utilyaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
 
 	var docs [][]byte
+
 	for {
 		doc, err := reader.Read()
 		if errors.Is(err, io.EOF) {

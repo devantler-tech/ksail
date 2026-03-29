@@ -57,6 +57,7 @@ func getExpandTestCasesWithNoEnvVars() []expandTestCase {
 	}
 }
 
+//nolint:funlen // explicit table keeps default-syntax coverage readable
 func getExpandTestCasesWithDefaultValues() []expandTestCase {
 	return []expandTestCase{
 		{

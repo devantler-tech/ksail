@@ -11,6 +11,12 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
 )
 
+const validNamespaceYAML = `apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-namespace
+`
+
 func TestNewClient(t *testing.T) {
 	t.Parallel()
 
@@ -254,11 +260,7 @@ data: "this is not valid"
 func TestValidateBytes_ValidYAML(t *testing.T) {
 	t.Parallel()
 
-	validYAML := `apiVersion: v1
-kind: Namespace
-metadata:
-  name: test-namespace
-`
+	validYAML := validNamespaceYAML
 
 	client := kubeconform.NewClient()
 	opts := &kubeconform.ValidationOptions{
@@ -276,11 +278,7 @@ func TestValidateManifests_NilOptions(t *testing.T) {
 	t.Parallel()
 
 	// Test that nil options are handled gracefully
-	validYAML := `apiVersion: v1
-kind: Namespace
-metadata:
-  name: test-namespace
-`
+	validYAML := validNamespaceYAML
 
 	client := kubeconform.NewClient()
 
@@ -300,11 +298,7 @@ func TestValidateFile_NilOptions(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a valid Kubernetes manifest
-	validManifest := `apiVersion: v1
-kind: Namespace
-metadata:
-  name: test-namespace
-`
+	validManifest := validNamespaceYAML
 	manifestPath := filepath.Join(tmpDir, "valid-manifest.yaml")
 
 	err := os.WriteFile(manifestPath, []byte(validManifest), 0o600)

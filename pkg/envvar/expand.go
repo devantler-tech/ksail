@@ -15,8 +15,10 @@ var pattern = regexp.MustCompile(`\$\{([a-zA-Z_][a-zA-Z0-9_]*)(?:(:-|:=)([^}]*))
 // minGroupsForVarName is the minimum number of regex groups required to extract a variable name.
 const minGroupsForVarName = 2
 
-// defaultSyntaxMarkers are the delimiters used for default value syntax in variable placeholders.
-var defaultSyntaxMarkers = []string{":-", ":="}
+const (
+	defaultSyntaxMarkerHyphen = ":-"
+	defaultSyntaxMarkerEquals = ":="
+)
 
 // Expand replaces ${VAR_NAME}, ${VAR_NAME:-default}, and ${VAR_NAME:=default}
 // placeholders with their environment variable values.
@@ -68,10 +70,9 @@ func resolveDefault(match string, groups []string) string {
 	}
 
 	// Check if default syntax was used (handles ${VAR:-} and ${VAR:=} with empty default)
-	for _, marker := range defaultSyntaxMarkers {
-		if strings.Contains(match, marker) {
-			return ""
-		}
+	if strings.Contains(match, defaultSyntaxMarkerHyphen) ||
+		strings.Contains(match, defaultSyntaxMarkerEquals) {
+		return ""
 	}
 
 	// No default syntax - warn and return empty string
