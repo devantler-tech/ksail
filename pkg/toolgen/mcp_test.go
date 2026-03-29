@@ -1,6 +1,8 @@
 package toolgen_test
 
 import (
+	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/toolgen"
@@ -137,5 +139,77 @@ func TestToMCPTools_DuplicateNameOverwrites(t *testing.T) {
 	// MCP SDK replaces tools with the same name (no panic)
 	assert.NotPanics(t, func() {
 		toolgen.ToMCPTools(server, tools, toolgen.ToolOptions{})
+	})
+}
+
+func TestBuildMCPSuccessText(t *testing.T) {
+	t.Parallel()
+
+	t.Run("with output", func(t *testing.T) {
+		t.Parallel()
+
+		text := toolgen.BuildMCPSuccessText("ksail cluster info", "cluster is running")
+
+		var response map[string]any
+		require.NoError(t, json.Unmarshal([]byte(text), &response))
+
+		assert.Equal(t, "success", response["status"])
+		assert.Equal(t, "ksail cluster info", response["command"])
+		assert.Equal(t, "cluster is running", response["output"])
+		assert.Nil(t, response["error"])
+	})
+
+	t.Run("without output", func(t *testing.T) {
+		t.Parallel()
+
+		text := toolgen.BuildMCPSuccessText("ksail cluster create", "")
+
+		var response map[string]any
+		require.NoError(t, json.Unmarshal([]byte(text), &response))
+
+		assert.Equal(t, "success", response["status"])
+		assert.Equal(t, "ksail cluster create", response["command"])
+		assert.Nil(t, response["output"])
+		assert.Nil(t, response["error"])
+	})
+}
+
+func TestBuildMCPErrorText(t *testing.T) {
+	t.Parallel()
+
+	t.Run("with output", func(t *testing.T) {
+		t.Parallel()
+
+		text := toolgen.BuildMCPErrorText(
+			"ksail cluster create",
+			"some partial output",
+			errors.New("command failed: exit status 1"),
+		)
+
+		var response map[string]any
+		require.NoError(t, json.Unmarshal([]byte(text), &response))
+
+		assert.Equal(t, "error", response["status"])
+		assert.Equal(t, "ksail cluster create", response["command"])
+		assert.Equal(t, "some partial output", response["output"])
+		assert.Equal(t, "command failed: exit status 1", response["error"])
+	})
+
+	t.Run("without output", func(t *testing.T) {
+		t.Parallel()
+
+		text := toolgen.BuildMCPErrorText(
+			"ksail workload get",
+			"",
+			errors.New("building command args: missing or invalid subcommand parameter: cluster_operation"),
+		)
+
+		var response map[string]any
+		require.NoError(t, json.Unmarshal([]byte(text), &response))
+
+		assert.Equal(t, "error", response["status"])
+		assert.Equal(t, "ksail workload get", response["command"])
+		assert.Nil(t, response["output"])
+		assert.Contains(t, response["error"], "missing or invalid subcommand parameter")
 	})
 }

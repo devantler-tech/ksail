@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"runtime"
 	"testing"
 	"time"
@@ -213,12 +214,17 @@ func TestNewServer_CallTool(t *testing.T) {
 	require.NotNil(t, result)
 
 	// The executor runs `echo hello` which outputs "hello\n".
-	// The handler wraps the output in a success response.
+	// The handler wraps the output in a structured JSON response.
 	assert.False(t, result.IsError, "tool call should succeed")
 	require.NotEmpty(t, result.Content)
 
 	textContent, ok := result.Content[0].(*mcpsdk.TextContent)
 	require.True(t, ok, "content should be TextContent")
-	assert.Contains(t, textContent.Text, "hello")
-	assert.Contains(t, textContent.Text, "completed successfully")
+
+	// Verify response is valid JSON with expected structure
+	var response map[string]any
+	require.NoError(t, json.Unmarshal([]byte(textContent.Text), &response))
+	assert.Equal(t, "success", response["status"])
+	assert.Equal(t, "echo hello", response["command"])
+	assert.Contains(t, response["output"], "hello")
 }
