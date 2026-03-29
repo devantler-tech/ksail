@@ -338,7 +338,7 @@ func validateKustomizationSilent(
 	err = kubeconformClient.ValidateBytes(
 		ctx,
 		kustDir,
-		expandFluxSubstitutions(ctx, output.Bytes()),
+		expandFluxSubstitutions(output.Bytes()),
 		opts,
 	)
 	if err != nil {
@@ -393,7 +393,7 @@ func validateFileSilent(
 	err = kubeconformClient.ValidateBytes(
 		ctx,
 		filePath,
-		expandFluxSubstitutions(ctx, data),
+		expandFluxSubstitutions(data),
 		opts,
 	)
 	if err != nil {

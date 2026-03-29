@@ -1,19 +1,19 @@
 package workload
 
 import (
+	"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
+	yamlio "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
 )
 
@@ -23,9 +23,6 @@ import (
 var fluxVarPattern = regexp.MustCompile(`\$\{([a-zA-Z_][a-zA-Z0-9_]*)(?:(:-|:=)([^}]*))?\}`)
 
 const (
-	schemaHTTPTimeout       = 10 * time.Second
-	schemaCacheDirPerms     = 0o700
-	schemaCacheFileMode     = 0o600
 	schemaCacheFileMaxChars = 200
 
 	placeholderString = "placeholder"
@@ -48,7 +45,7 @@ var schemas = &schemaRegistry{} //nolint:gochecknoglobals // singleton schema ca
 //   - ${VAR} mixed with other text → substitutes "placeholder" (string context)
 //
 // Falls back to regex-based string placeholder expansion when YAML parsing fails.
-func expandFluxSubstitutions(ctx context.Context, data []byte) []byte {
+func expandFluxSubstitutions(data []byte) []byte {
 	if !fluxVarPattern.Match(data) {
 		return data
 	}
@@ -60,55 +57,73 @@ func expandFluxSubstitutions(ctx context.Context, data []byte) []byte {
 
 	expanded := make([][]byte, 0, len(docs))
 	for _, doc := range docs {
-		expanded = append(expanded, expandDocument(ctx, doc))
+		expanded = append(expanded, expandDocument(doc))
 	}
 
 	return bytes.Join(expanded, []byte("\n---\n"))
 }
 
-// splitYAMLDocuments splits multi-document YAML by "---" separators.
+// splitYAMLDocuments splits multi-document YAML using a YAML-aware reader
+// that correctly handles document separators ("---") regardless of position,
+// trailing whitespace, or carriage returns.
 func splitYAMLDocuments(data []byte) [][]byte {
-	// Split on document separator lines
-	parts := bytes.Split(data, []byte("\n---\n"))
-	if len(parts) == 0 {
-		return [][]byte{data}
-	}
+	reader := yamlio.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
 
-	// Also handle leading "---\n"
-	result := make([][]byte, 0, len(parts))
+	var docs [][]byte
 
-	for _, part := range parts {
-		trimmed := bytes.TrimSpace(part)
-		if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("---")) {
+	for {
+		doc, err := reader.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return [][]byte{data}
+		}
+
+		doc = bytes.TrimSpace(doc)
+		if len(doc) == 0 {
 			continue
 		}
 
-		result = append(result, part)
+		docs = append(docs, doc)
 	}
 
-	if len(result) == 0 {
+	if len(docs) == 0 {
 		return [][]byte{data}
 	}
 
-	return result
+	return docs
 }
 
 // expandDocument expands variable references in a single YAML document.
-func expandDocument(ctx context.Context, doc []byte) []byte {
+func expandDocument(doc []byte) []byte {
 	if !fluxVarPattern.Match(doc) {
 		return doc
 	}
 
-	var obj map[string]any
+	var obj any
 
 	err := yaml.Unmarshal(doc, &obj)
 	if err != nil {
 		return expandFallback(doc)
 	}
 
+	switch typedObj := obj.(type) {
+	case map[string]any:
+		return expandMapDocument(typedObj, doc)
+	case []any:
+		return expandListDocument(typedObj, doc)
+	default:
+		return expandFallback(doc)
+	}
+}
+
+// expandMapDocument expands variable references in a YAML document with a map root.
+func expandMapDocument(obj map[string]any, doc []byte) []byte {
 	apiVersion, _ := obj["apiVersion"].(string)
 	kind, _ := obj["kind"].(string)
-	schema := schemas.load(ctx, apiVersion, kind)
+	schema := schemas.load(apiVersion, kind)
 
 	walkAndExpand(obj, "", schema)
 
@@ -120,16 +135,35 @@ func expandDocument(ctx context.Context, doc []byte) []byte {
 	return out
 }
 
+// expandListDocument expands variable references in a YAML document with a list root
+// (e.g., JSON6902 patch list). There is no single apiVersion/kind,
+// so map elements are walked with a nil schema.
+func expandListDocument(list []any, doc []byte) []byte {
+	for idx, elem := range list {
+		if mapElem, isMap := elem.(map[string]any); isMap {
+			walkAndExpand(mapElem, "", nil)
+			list[idx] = mapElem
+		}
+	}
+
+	out, err := yaml.Marshal(list)
+	if err != nil {
+		return expandFallback(doc)
+	}
+
+	return out
+}
+
 // expandFallback performs simple regex-based expansion when YAML parsing fails.
-// All variable references are replaced with string placeholders.
+// Variable references are expanded using env vars with defaults fallback.
 func expandFallback(data []byte) []byte {
 	return fluxVarPattern.ReplaceAllFunc(data, func(match []byte) []byte {
 		groups := fluxVarPattern.FindSubmatch(match)
-		if len(groups) > 3 && len(groups[3]) > 0 {
-			return groups[3] // use default value
+		if len(groups) < 4 { //nolint:mnd // regex groups: full, name, op, default
+			return match
 		}
 
-		return []byte(placeholderString)
+		return []byte(resolveInlineVar(string(groups[1]), string(groups[2]), string(groups[3])))
 	})
 }
 
@@ -162,29 +196,94 @@ func expandStringValue(val, path string, schema map[string]any) any {
 	}
 
 	// Check if the entire value is a single substitution (bare or with default)
-	if match := fluxVarPattern.FindStringSubmatch(val); match != nil && match[0] == val {
-		if match[2] == "" {
-			// Bare ${VAR} — use type-aware placeholder
-			schemaType := getSchemaTypeAtPath(schema, path)
-
-			return typedPlaceholderValue(schemaType)
-		}
-
-		// ${VAR:=default} or ${VAR:-default} — parse default as typed value
-		schemaType := getSchemaTypeAtPath(schema, path)
-
-		return parseTypedDefault(match[3], schemaType)
+	match := fluxVarPattern.FindStringSubmatch(val)
+	if match != nil && match[0] == val {
+		return expandSingleVar(match, path, schema)
 	}
 
 	// Mixed text — expand inline (always string context)
+	return expandMixedText(val)
+}
+
+// expandSingleVar expands a value that consists entirely of a single variable reference.
+func expandSingleVar(match []string, path string, schema map[string]any) any {
+	varName := match[1]
+	operator := match[2]
+	defaultVal := match[3]
+	schemaType := getSchemaTypeAtPath(schema, path)
+
+	if operator == "" {
+		return expandBareVar(varName, schemaType)
+	}
+
+	return expandVarWithDefault(varName, defaultVal, operator, schemaType)
+}
+
+// expandBareVar expands a bare ${VAR} reference using env vars or typed placeholders.
+func expandBareVar(varName, schemaType string) any {
+	if envVal, envSet := os.LookupEnv(varName); envSet {
+		return parseTypedDefault(envVal, schemaType)
+	}
+
+	return typedPlaceholderValue(schemaType)
+}
+
+// expandVarWithDefault expands ${VAR:=default} or ${VAR:-default} references.
+func expandVarWithDefault(varName, defaultVal, operator, schemaType string) any {
+	envVal, envSet := os.LookupEnv(varName)
+
+	switch operator {
+	case ":=":
+		if envSet {
+			return parseTypedDefault(envVal, schemaType)
+		}
+	case ":-":
+		if envSet && envVal != "" {
+			return parseTypedDefault(envVal, schemaType)
+		}
+	}
+
+	return parseTypedDefault(defaultVal, schemaType)
+}
+
+// expandMixedText expands variable references embedded within other text (always string context).
+func expandMixedText(val string) string {
 	return fluxVarPattern.ReplaceAllStringFunc(val, func(match string) string {
 		groups := fluxVarPattern.FindStringSubmatch(match)
-		if len(groups) > 3 && groups[3] != "" {
-			return groups[3] // use default value
+		if len(groups) < 4 { //nolint:mnd // regex groups: full, name, op, default
+			return match
+		}
+
+		return resolveInlineVar(groups[1], groups[2], groups[3])
+	})
+}
+
+// resolveInlineVar resolves a single variable reference in a mixed-text context to a string.
+func resolveInlineVar(varName, operator, defaultVal string) string {
+	envVal, envSet := os.LookupEnv(varName)
+
+	switch operator {
+	case "":
+		if envSet {
+			return envVal
 		}
 
 		return placeholderString
-	})
+	case ":=":
+		if envSet {
+			return envVal
+		}
+
+		return defaultVal
+	case ":-":
+		if envSet && envVal != "" {
+			return envVal
+		}
+
+		return defaultVal
+	default:
+		return "${" + varName + operator + defaultVal + "}"
+	}
 }
 
 // typedPlaceholderValue returns a Go value matching the schema type.
@@ -204,37 +303,77 @@ func typedPlaceholderValue(schemaType string) any {
 
 // parseTypedDefault parses a default value string into the appropriate Go type
 // based on the schema type, so that sigs.k8s.io/yaml marshals it without quotes.
+// When the schema type is unknown (empty string), YAML-native type inference is
+// used, matching Flux's behavior where substitution occurs at the text level.
 func parseTypedDefault(defaultVal, schemaType string) any {
+	trimmed := strings.TrimSpace(defaultVal)
+
 	switch schemaType {
 	case "integer":
-		var intVal int64
-
-		_, err := fmt.Sscanf(defaultVal, "%d", &intVal)
-		if err == nil {
-			return intVal
-		}
+		return parseInteger(trimmed, defaultVal)
 	case "number":
-		var floatVal float64
-
-		_, err := fmt.Sscanf(defaultVal, "%f", &floatVal)
-		if err == nil {
-			return floatVal
-		}
+		return parseNumber(trimmed, defaultVal)
 	case "boolean":
-		if defaultVal == "true" {
-			return true
-		}
+		return parseBoolean(trimmed, defaultVal)
+	case typeString:
+		return defaultVal
+	default:
+		return inferYAMLType(trimmed, defaultVal)
+	}
+}
 
-		if defaultVal == "false" {
-			return false
-		}
+func parseInteger(trimmed, defaultVal string) any {
+	var intVal int64
+
+	_, err := fmt.Sscanf(trimmed, "%d", &intVal)
+	if err == nil {
+		return intVal
 	}
 
 	return defaultVal
 }
 
-// load returns the JSON schema for a Kubernetes resource, or nil if unavailable.
-func (reg *schemaRegistry) load(ctx context.Context, apiVersion, kind string) map[string]any {
+func parseNumber(trimmed, defaultVal string) any {
+	var floatVal float64
+
+	_, err := fmt.Sscanf(trimmed, "%f", &floatVal)
+	if err == nil {
+		return floatVal
+	}
+
+	return defaultVal
+}
+
+func parseBoolean(trimmed, defaultVal string) any {
+	if trimmed == "true" {
+		return true
+	}
+
+	if trimmed == "false" {
+		return false
+	}
+
+	return defaultVal
+}
+
+// inferYAMLType uses YAML-native type inference so that values like "2" become
+// integers and "true" becomes a boolean, matching how YAML would parse the
+// substituted text.
+func inferYAMLType(trimmed, defaultVal string) any {
+	var typedVal any
+
+	err := yaml.Unmarshal([]byte(trimmed), &typedVal)
+	if err == nil && typedVal != nil {
+		return typedVal
+	}
+
+	return defaultVal
+}
+
+// load returns the JSON schema for a Kubernetes resource from disk cache, or nil if unavailable.
+// Network fetching is intentionally omitted to keep validation fast, deterministic, and
+// offline-friendly. Schemas are available if kubeconform has previously cached them on disk.
+func (reg *schemaRegistry) load(apiVersion, kind string) map[string]any {
 	if apiVersion == "" || kind == "" {
 		return nil
 	}
@@ -248,9 +387,6 @@ func (reg *schemaRegistry) load(ctx context.Context, apiVersion, kind string) ma
 	}
 
 	schema := fetchSchemaFromDisk(apiVersion, kind)
-	if schema == nil {
-		schema = fetchSchemaFromNetwork(ctx, apiVersion, kind)
-	}
 
 	reg.cache.Store(cacheKey, schema)
 
@@ -276,63 +412,6 @@ func fetchSchemaFromDisk(apiVersion, kind string) map[string]any {
 	}
 
 	return nil
-}
-
-// fetchSchemaFromNetwork downloads a schema from the remote URL.
-func fetchSchemaFromNetwork(ctx context.Context, apiVersion, kind string) map[string]any {
-	client := &http.Client{Timeout: schemaHTTPTimeout}
-
-	for _, schemaURL := range schemaURLs(apiVersion, kind) {
-		schema := downloadSchema(ctx, client, schemaURL)
-		if schema != nil {
-			return schema
-		}
-	}
-
-	return nil
-}
-
-// downloadSchema fetches and parses a single schema URL.
-func downloadSchema(ctx context.Context, client *http.Client, schemaURL string) map[string]any {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, schemaURL, nil)
-	if err != nil {
-		return nil
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil
-	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil
-	}
-
-	schema := parseJSONSchema(data)
-	if schema != nil {
-		writeSchemaCache(schemaURL, data)
-	}
-
-	return schema
-}
-
-// writeSchemaCache writes a schema to the disk cache.
-func writeSchemaCache(schemaURL string, data []byte) {
-	cacheDir := schemaCacheDir()
-
-	_ = os.MkdirAll(cacheDir, schemaCacheDirPerms)
-	_ = os.WriteFile(
-		filepath.Join(cacheDir, schemaCacheFileName(schemaURL)),
-		data,
-		schemaCacheFileMode,
-	)
 }
 
 // schemaCacheDir returns the schema cache directory.
@@ -415,10 +494,10 @@ func parseJSONSchema(data []byte) map[string]any {
 
 // getSchemaTypeAtPath walks a JSON schema following a path like "/spec/replicas"
 // and returns the type of the field ("string", "integer", "number", "boolean").
-// Returns "string" as fallback when the path or type cannot be resolved.
+// Returns empty string when the schema is nil, path is empty, or type cannot be resolved.
 func getSchemaTypeAtPath(schema map[string]any, path string) string {
 	if schema == nil || path == "" {
-		return typeString
+		return ""
 	}
 
 	trimmed := strings.TrimPrefix(path, "/")
@@ -428,7 +507,7 @@ func getSchemaTypeAtPath(schema map[string]any, path string) string {
 	for _, seg := range segments {
 		current = resolveSchemaNode(current, seg)
 		if current == nil {
-			return typeString
+			return ""
 		}
 	}
 
@@ -513,7 +592,7 @@ func schemaNodeType(schema map[string]any) string {
 		}
 	}
 
-	return typeString
+	return ""
 }
 
 // isNumericIndex checks if a string represents a numeric array index.

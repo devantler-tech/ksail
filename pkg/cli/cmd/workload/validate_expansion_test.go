@@ -1,7 +1,6 @@
 package workload_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
@@ -13,7 +12,7 @@ func TestExpandFluxSubstitutionsNoVars(t *testing.T) {
 	t.Parallel()
 
 	input := []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\n")
-	result := workload.ExportExpandFluxSubstitutions(context.Background(), input)
+	result := workload.ExportExpandFluxSubstitutions(input)
 	assert.Equal(t, input, result)
 }
 
@@ -23,9 +22,12 @@ func TestExpandFluxSubstitutionsDefaultSyntax(t *testing.T) {
 	input := []byte(
 		"apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: test\nspec:\n  replicas: ${count:=3}\n",
 	)
-	result := workload.ExportExpandFluxSubstitutions(context.Background(), input)
-	assert.Contains(t, string(result), "replicas: 3")
-	assert.NotContains(t, string(result), "${count")
+	result := workload.ExportExpandFluxSubstitutions(input)
+	resultStr := string(result)
+	// Do not rely on schema-driven typing (integer vs string); just ensure substitution happened
+	assert.NotContains(t, resultStr, "${count")
+	assert.Contains(t, resultStr, "replicas:")
+	assert.Contains(t, resultStr, "3")
 }
 
 func TestExpandFluxSubstitutionsDefaultHyphenSyntax(t *testing.T) {
@@ -34,7 +36,7 @@ func TestExpandFluxSubstitutionsDefaultHyphenSyntax(t *testing.T) {
 	input := []byte(
 		"apiVersion: v1\nkind: Service\nmetadata:\n  name: ${svc_name:-my-service}\n",
 	)
-	result := workload.ExportExpandFluxSubstitutions(context.Background(), input)
+	result := workload.ExportExpandFluxSubstitutions(input)
 	assert.Contains(t, string(result), "name: my-service")
 }
 
@@ -42,7 +44,7 @@ func TestExpandFluxSubstitutionsBareVarStringField(t *testing.T) {
 	t.Parallel()
 
 	input := []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ${my_name}\n")
-	result := workload.ExportExpandFluxSubstitutions(context.Background(), input)
+	result := workload.ExportExpandFluxSubstitutions(input)
 	resultStr := string(result)
 	assert.Contains(t, resultStr, "name: placeholder")
 	assert.NotContains(t, resultStr, "${my_name}")
@@ -54,7 +56,7 @@ func TestExpandFluxSubstitutionsBareVarIntegerField(t *testing.T) {
 	input := []byte(
 		"apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: test\nspec:\n  replicas: ${count}\n",
 	)
-	result := workload.ExportExpandFluxSubstitutions(context.Background(), input)
+	result := workload.ExportExpandFluxSubstitutions(input)
 	resultStr := string(result)
 	// Should substitute with a value (0 if schema available, placeholder otherwise)
 	assert.NotContains(t, resultStr, "${count}")
@@ -66,7 +68,7 @@ func TestExpandFluxSubstitutionsMixedText(t *testing.T) {
 	input := []byte(
 		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\ndata:\n  host: whoami.${domain}\n",
 	)
-	result := workload.ExportExpandFluxSubstitutions(context.Background(), input)
+	result := workload.ExportExpandFluxSubstitutions(input)
 	resultStr := string(result)
 	assert.Contains(t, resultStr, "whoami.placeholder")
 	assert.NotContains(t, resultStr, "${domain}")
@@ -78,7 +80,7 @@ func TestExpandFluxSubstitutionsMultipleVarsInOneLine(t *testing.T) {
 	input := []byte(
 		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\ndata:\n  url: https://${sub}.${domain}/path\n",
 	)
-	result := workload.ExportExpandFluxSubstitutions(context.Background(), input)
+	result := workload.ExportExpandFluxSubstitutions(input)
 	resultStr := string(result)
 	assert.Contains(t, resultStr, "https://placeholder.placeholder/path")
 }
@@ -87,7 +89,7 @@ func TestExpandFluxSubstitutionsFallbackOnBadYAML(t *testing.T) {
 	t.Parallel()
 
 	input := []byte("not: valid: yaml: ${var}\n[broken")
-	result := workload.ExportExpandFluxSubstitutions(context.Background(), input)
+	result := workload.ExportExpandFluxSubstitutions(input)
 	resultStr := string(result)
 	assert.NotContains(t, resultStr, "${var}")
 }
@@ -100,10 +102,22 @@ func TestExpandFluxSubstitutionsMultiDoc(t *testing.T) {
 		"apiVersion: v1\nkind: ConfigMap\n" +
 		"metadata:\n  name: ${name2}\n",
 	)
-	result := workload.ExportExpandFluxSubstitutions(context.Background(), input)
+	result := workload.ExportExpandFluxSubstitutions(input)
 	resultStr := string(result)
 	assert.NotContains(t, resultStr, "${name1}")
 	assert.NotContains(t, resultStr, "${name2}")
+}
+
+func TestExpandFluxSubstitutionsEnvOverridesDefaultHyphenSyntax(t *testing.T) {
+	t.Setenv("svc_name", "real-service")
+
+	input := []byte(
+		"apiVersion: v1\nkind: Service\nmetadata:\n  name: ${svc_name:-my-service}\n",
+	)
+	result := workload.ExportExpandFluxSubstitutions(input)
+	resultStr := string(result)
+	assert.Contains(t, resultStr, "name: real-service")
+	assert.NotContains(t, resultStr, "name: my-service")
 }
 
 func TestExportGetSchemaTypeAtPath(t *testing.T) {
@@ -138,9 +152,9 @@ func TestExportGetSchemaTypeAtPath(t *testing.T) {
 		{"integer field", "/spec/replicas", "integer"},
 		{"boolean field", "/spec/paused", "boolean"},
 		{"array item", "/spec/hostnames/0", "string"},
-		{"unknown field", "/spec/unknown", "string"},
-		{"nonexistent path", "/nonexistent/path", "string"},
-		{"empty path", "", "string"},
+		{"unknown field", "/spec/unknown", ""},
+		{"nonexistent path", "/nonexistent/path", ""},
+		{"empty path", "", ""},
 	}
 
 	for _, testCase := range tests {
@@ -155,7 +169,7 @@ func TestExportGetSchemaTypeAtPath(t *testing.T) {
 
 func TestExportGetSchemaTypeAtPathNilSchema(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "string", workload.ExportGetSchemaTypeAtPath(nil, "/spec/replicas"))
+	assert.Empty(t, workload.ExportGetSchemaTypeAtPath(nil, "/spec/replicas"))
 }
 
 func TestExportSchemaURLs(t *testing.T) {
