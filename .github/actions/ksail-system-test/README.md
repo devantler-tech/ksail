@@ -5,7 +5,7 @@ A GitHub composite action that runs a full end-to-end system test of KSail, test
 ## What It Tests
 
 1. **Cluster Init** (optional) - Initialize a new KSail project
-2. **Manifest Validate** (when init is enabled) - Validate generated manifests before cluster creation
+2. **Manifest Validate** (when `init` is enabled) - Validate generated manifests before cluster creation
 3. **Cluster Create** - Create and start a Kubernetes cluster
 4. **Cluster List** - Verify cluster appears in list
 5. **Workload Create** - Create a deployment imperatively
