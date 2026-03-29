@@ -9,6 +9,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/picker"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
@@ -22,6 +23,9 @@ var ErrContextNotFound = errors.New("no matching context found for cluster")
 
 // ErrAmbiguousCluster is returned when multiple distribution contexts match the cluster name.
 var ErrAmbiguousCluster = errors.New("ambiguous cluster name")
+
+// ErrNoClusters is returned when no KSail-managed clusters are found in the kubeconfig.
+var ErrNoClusters = errors.New("no KSail-managed clusters found in kubeconfig")
 
 // switchKubeconfigFileMode is the file mode for kubeconfig files.
 const switchKubeconfigFileMode = 0o600
@@ -40,20 +44,26 @@ The kubeconfig is resolved in the following priority order:
   2. From ksail.yaml config file (if present)
   3. Defaults to ~/.kube/config
 
+When called without arguments, an interactive picker is shown
+to select from available clusters.
+
 Examples:
   # Switch to a Vanilla (Kind) cluster named "dev"
   ksail cluster switch dev
 
   # Switch to a cluster named "staging"
-  ksail cluster switch staging`
+  ksail cluster switch staging
+
+  # Select a cluster interactively
+  ksail cluster switch`
 
 // NewSwitchCmd creates the switch command for clusters.
 func NewSwitchCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "switch <cluster-name>",
+		Use:   "switch [cluster-name]",
 		Short: "Switch active cluster context",
 		Long:  switchLongDesc,
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		ValidArgsFunction: func(
 			cmd *cobra.Command,
 			_ []string,
@@ -63,7 +73,18 @@ func NewSwitchCmd(_ *di.Runtime) *cobra.Command {
 		},
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return HandleSwitchRunE(cmd, args[0], SwitchDeps{})
+			deps := SwitchDeps{}
+
+			if len(args) > 0 {
+				return HandleSwitchRunE(cmd, args[0], deps)
+			}
+
+			clusterName, err := pickCluster(cmd, deps)
+			if err != nil {
+				return err
+			}
+
+			return HandleSwitchRunE(cmd, clusterName, deps)
 		},
 	}
 
@@ -75,6 +96,10 @@ type SwitchDeps struct {
 	// KubeconfigPath overrides the kubeconfig path resolution.
 	// If empty, the path is resolved from ksail.yaml or the default.
 	KubeconfigPath string
+
+	// PickCluster overrides the interactive picker for testing.
+	// If nil, the default bubbletea picker is used.
+	PickCluster func(title string, items []string) (string, error)
 }
 
 // HandleSwitchRunE handles the switch command.
@@ -107,6 +132,37 @@ func HandleSwitchRunE(
 	)
 
 	return nil
+}
+
+// pickCluster resolves the kubeconfig, lists available cluster names, and
+// presents an interactive picker for the user to select one.
+func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
+	kubeconfigPath := deps.KubeconfigPath
+	if kubeconfigPath == "" {
+		var err error
+
+		kubeconfigPath, err = resolveKubeconfigForSwitch(cmd)
+		if err != nil {
+			return "", fmt.Errorf("resolve kubeconfig path: %w", err)
+		}
+	}
+
+	names := clusterNamesFromPath(kubeconfigPath)
+	if len(names) == 0 {
+		return "", fmt.Errorf("%w", ErrNoClusters)
+	}
+
+	pick := deps.PickCluster
+	if pick == nil {
+		pick = picker.Run
+	}
+
+	selected, err := pick("Select a cluster:", names)
+	if err != nil {
+		return "", fmt.Errorf("cluster selection: %w", err)
+	}
+
+	return selected, nil
 }
 
 // resolveContextName finds the matching kubeconfig context for a cluster name
@@ -197,7 +253,14 @@ func listClusterNames(cmd *cobra.Command) []string {
 		return nil
 	}
 
-	//nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default
+	return clusterNamesFromPath(kubeconfigPath)
+}
+
+// clusterNamesFromPath reads the given kubeconfig and returns sorted, deduplicated
+// cluster names by stripping distribution prefixes from context names.
+//
+//nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default
+func clusterNamesFromPath(kubeconfigPath string) []string {
 	configBytes, err := os.ReadFile(kubeconfigPath)
 	if err != nil {
 		return nil
