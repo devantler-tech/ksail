@@ -36,7 +36,7 @@ Documentation‑as‑Code, transparency, single source of truth, continuous impr
 
    - **README.md** (audience: end-user, medium: GitHub landing page)
      - Keep under ~100 lines: badges, one-paragraph intro, feature bullet list, prerequisites table, and a prominent link to the docs site
-     - Do NOT include tutorials, detailed configuration, architecture internals, or content that duplicates `docs/index.mdx`
+     - Do NOT include tutorials, detailed configuration, architecture internals, or content that duplicates `docs/src/content/docs/index.mdx`
      - Link to the docs site for anything beyond a quick overview
 
    - **docs/src/content/docs/index.mdx** (audience: end-user, medium: docs site home)
