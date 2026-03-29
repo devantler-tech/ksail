@@ -8,6 +8,7 @@ KSail can provision short-lived, per-PR preview Kubernetes clusters in GitHub Ac
 - **`ksail-cluster` composite action** — one-step cluster provisioning with caching and GitOps CI support
 - **`validate` input** — validates manifests before cluster creation
 - **`delete: true` input** — always-on cluster cleanup, even on failure
+- **`--ttl` flag** (via `args`) — safety-net auto-teardown if the cleanup step is skipped (e.g. runner crash)
 
 This pattern positions KSail as a lightweight alternative to tools like [mirrord-preview](https://mirrord.dev/) for teams who want GitOps-native preview environments backed by real Kubernetes clusters.
 
@@ -79,6 +80,7 @@ jobs:
         uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
         with:
           distribution: K3s       # K3s starts fastest; swap for Vanilla, Talos, or VCluster
+          args: "--ttl 1h"        # safety-net auto-teardown if cleanup is missed
           validate: "true"        # fail fast if manifests are invalid
           push: "true"            # push manifests to the cluster's local OCI registry
           reconcile: "true"       # wait for Flux/ArgoCD to reconcile successfully
@@ -112,6 +114,25 @@ Combine `--config` with the preview pattern to test against a staging-like confi
 ```
 
 See [Multi-Environment Workflows](/guides/multi-environment/) for the full `--config` guide.
+
+## `--ttl` as a Safety Net
+
+The `--ttl` flag makes `ksail cluster create` auto-destroy the cluster after a duration — even if the GitHub Actions runner crashes or the `delete` step is skipped. Pass it via the `args` input:
+
+```yaml
+- name: Provision preview cluster with TTL safety net
+  id: cluster
+  uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
+  with:
+    args: "--ttl 1h"       # auto-destroy after 1 hour if cleanup is missed
+    validate: "true"
+    push: "true"
+    reconcile: "true"
+    delete: "true"         # primary cleanup — still runs on success and failure
+```
+
+> [!TIP]
+> `delete: true` is the primary cleanup mechanism — it runs immediately when the job finishes (including on failure). `--ttl` is a best-effort safety net: the cluster auto-destroys when the TTL elapses, **provided the `ksail cluster create` process stays alive**. Use both together for defence in depth. See [Ephemeral Clusters (`--ttl`)](/guides/ephemeral-clusters/) for full TTL details.
 
 ## Failure Path: Manual Cleanup
 
