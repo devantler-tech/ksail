@@ -13,7 +13,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
-	"github.com/devantler-tech/ksail/v5/pkg/envvar"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
@@ -339,7 +338,7 @@ func validateKustomizationSilent(
 	err = kubeconformClient.ValidateBytes(
 		ctx,
 		kustDir,
-		expandFluxSubstitutions(output.Bytes()),
+		expandFluxSubstitutions(ctx, output.Bytes()),
 		opts,
 	)
 	if err != nil {
@@ -394,7 +393,7 @@ func validateFileSilent(
 	err = kubeconformClient.ValidateBytes(
 		ctx,
 		filePath,
-		expandFluxSubstitutions(data),
+		expandFluxSubstitutions(ctx, data),
 		opts,
 	)
 	if err != nil {
@@ -579,19 +578,4 @@ func addPatchPath(kustDir, relPath string, patchPaths map[string]struct{}) {
 	}
 
 	patchPaths[resolved] = struct{}{}
-}
-
-// expandFluxSubstitutions performs generic environment-variable expansion
-// for `${VAR}`, `${VAR:-default}`, and `${VAR:=default}` patterns using the
-// current process environment. It is applied to all validated YAML files and
-// kustomize build output (including Flux postBuild contexts) so that unset
-// variables are treated as absent and default syntax still applies.
-func expandFluxSubstitutions(data []byte) []byte {
-	return envvar.ExpandBytesWithLookup(data, func(name string) (string, bool) {
-		if value, ok := os.LookupEnv(name); ok {
-			return value, true
-		}
-
-		return "", false
-	})
 }
