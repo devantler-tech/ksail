@@ -824,9 +824,9 @@ func applyValidationSubstitutions(data []byte, substitutions validationSubstitut
 			return value, true
 		}
 
-		// Treat unknown variables as present-but-empty to avoid noisy warnings
-		// from envvar.ExpandBytes during validation. This keeps validation
-		// output focused on schema issues instead of missing env vars.
-		return "", true
+		// Unknown variables are reported as unset so that shell-style default
+		// syntax (${VAR:-default}, ${VAR:=default}) continues to work even
+		// when validation substitutions are provided.
+		return "", false
 	})
 }
