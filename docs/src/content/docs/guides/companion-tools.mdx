@@ -48,8 +48,14 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
    tilt up
    ```
 
-   When done: `tilt down && ksail cluster delete`
+   When done, tear down with:
 
+   ```bash
+   tilt down
+   ksail cluster delete
+   ```
+
+> [!TIP]
 > If you use a local registry (`--local-registry localhost:5050`), add `default_registry("localhost:5050")` to your Tiltfile.
 
 ## KSail + DevSpace
@@ -84,8 +90,14 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
    devspace dev --kube-context <your-context>
    ```
 
-   When done: `devspace purge && ksail cluster delete`
+   When done, tear down with:
 
+   ```bash
+   devspace purge
+   ksail cluster delete
+   ```
+
+> [!TIP]
 > For compiled languages (Go, Rust, Java), use `devspace.yaml` build pipelines or pair with Tilt instead of file sync.
 
 ## KSail + Telepresence
@@ -113,8 +125,15 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
    go run ./cmd/server --port 8080
    ```
 
-   When done: `telepresence leave my-app && telepresence quit && ksail cluster delete`
+   When done, tear down with:
 
+   ```bash
+   telepresence leave my-app || true
+   telepresence quit || true
+   ksail cluster delete
+   ```
+
+> [!TIP]
 > Use `telepresence list` to see available services for interception. For selective routing, use `--http-header` to intercept only requests matching specific headers (useful in shared clusters).
 
 ## KSail + Skaffold
@@ -148,6 +167,7 @@ KSail manages **cluster provisioning and GitOps bootstrapping**. Inner-loop tool
 
    When done: Ctrl+C (also cleans up deployed resources), then `ksail cluster delete`.
 
+> [!TIP]
 > Use `skaffold dev --port-forward` for automatic port forwarding. If using a local registry, set `build.local.push: true` and prefix artifact images with your `--local-registry` value (e.g., `localhost:5050/`).
 
 ## KSail + mirrord
