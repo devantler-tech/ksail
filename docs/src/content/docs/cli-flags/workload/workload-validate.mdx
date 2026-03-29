@@ -20,6 +20,12 @@ The validation process:
    Kubernetes resources and are validated as part of the kustomize build output instead)
 2. Validates kustomizations by building them with kustomize and validating the output
 
+Flux variable substitutions are resolved before validation. When Flux Kustomization resources
+in the path define spec.postBuild.substituteFrom, the referenced ConfigMaps and Secrets are
+read and their values are used to expand ${VAR} references in the manifests. Variables not
+found in those sources fall back to the process environment. Shell-style default syntax
+(${VAR:-default}, ${VAR:=default}) is preserved for unresolved variables.
+
 By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.
 
 Usage:
