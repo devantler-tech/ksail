@@ -209,7 +209,7 @@ ksail cluster stop                     # Stop running cluster
 ksail cluster info                     # Show cluster status
 ksail cluster list [--all]             # List clusters
 ksail cluster connect                  # Connect to cluster with K9s
-ksail cluster switch <cluster-name>    # Switch active kubeconfig context
+ksail cluster switch [cluster-name]    # Switch active kubeconfig context (interactive picker if no arg)
 ksail cluster backup                   # Backup cluster resources to .tar.gz
 ksail cluster restore                  # Restore cluster resources from .tar.gz
 ksail workload apply                   # Apply manifests to cluster
