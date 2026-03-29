@@ -168,16 +168,21 @@ You can also set it globally for all subsequent steps:
 | Input | Default | Description |
 |-------|---------|-------------|
 | `distribution` | `Vanilla` | Cluster distribution (Vanilla, K3s, Talos, VCluster) |
+| `provider` | `Docker` | Infrastructure provider (Docker, Hetzner) |
 | `config` | `""` | Path to alternate `ksail.yaml` (e.g. `ksail.staging.yaml`) |
-| `validate` | `false` | Run `ksail workload validate` before cluster creation (after `init`, if enabled) |
+| `validate` | `false` | Run `ksail workload validate` after `init` (so generated manifests are also validated) |
 | `push` | `false` | Run `ksail workload push` after creation |
 | `reconcile` | `false` | Run `ksail workload reconcile` after push |
 | `delete` | `false` | Delete cluster at the end (`if: always()`) |
-| `args` | `""` | Extra args passed to `cluster init` |
+| `args` | `""` | Extra args passed to `cluster init` (and `cluster create` when `init` is skipped) |
 | `init` | `true` | Run `ksail cluster init` before create |
+| `install` | `true` | Install KSail from releases (set to `false` if already in PATH) |
 | `cache` | `true` | Cache Helm charts and mirror registry volumes |
+| `ksail-version` | `latest` | KSail version to install (e.g. `5.55.0`) |
 | `sops-age-key` | `""` | SOPS Age private key for secret decryption |
-| `ksail-version` | `latest` | KSail version to install |
+| `hcloud-token` | `""` | Hetzner Cloud API token (required when `provider` is `Hetzner`) |
+| `hosts-file` | `""` | Path to a hosts file to append to `/etc/hosts` |
+| `root-ca-cert-file` | `""` | Path to a root CA certificate to install as trusted |
 
 **Action output:** `kubeconfig` — path to the kubeconfig file for the provisioned cluster.
 
