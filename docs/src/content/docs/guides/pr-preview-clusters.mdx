@@ -169,7 +169,7 @@ You can also set it globally for all subsequent steps:
 |-------|---------|-------------|
 | `distribution` | `Vanilla` | Cluster distribution (Vanilla, K3s, Talos, VCluster) |
 | `config` | `""` | Path to alternate `ksail.yaml` (e.g. `ksail.staging.yaml`) |
-| `validate` | `false` | Run `ksail workload validate` before cluster creation |
+| `validate` | `false` | Run `ksail workload validate` before cluster creation (after `init`, if enabled) |
 | `push` | `false` | Run `ksail workload push` after creation |
 | `reconcile` | `false` | Run `ksail workload reconcile` after push |
 | `delete` | `false` | Delete cluster at the end (`if: always()`) |
