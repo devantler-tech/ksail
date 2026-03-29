@@ -57,6 +57,7 @@ func getExpandTestCasesWithNoEnvVars() []expandTestCase {
 	}
 }
 
+//nolint:funlen // explicit table keeps default-syntax coverage readable
 func getExpandTestCasesWithDefaultValues() []expandTestCase {
 	return []expandTestCase{
 		{
@@ -111,6 +112,24 @@ func getExpandTestCasesWithDefaultValues() []expandTestCase {
 			name:     "default value - empty string env var overrides default",
 			input:    "${EMPTY_VAR:-fallback}",
 			envVars:  map[string]string{"EMPTY_VAR": ""},
+			expected: "",
+		},
+		{
+			name:     "flux default value - undefined var uses default",
+			input:    "${UNDEFINED_VAR:=fallback}",
+			envVars:  nil,
+			expected: "fallback",
+		},
+		{
+			name:     "flux default value - defined var ignores default",
+			input:    "${TEST_DEFINED:=fallback}",
+			envVars:  map[string]string{"TEST_DEFINED": "actual"},
+			expected: "actual",
+		},
+		{
+			name:     "flux default value - empty default for undefined",
+			input:    "${UNDEFINED_VAR:=}",
+			envVars:  nil,
 			expected: "",
 		},
 	}
@@ -273,12 +292,39 @@ func TestExpandBytes(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
-func TestExpandBytes_WithDefaultValue(t *testing.T) { //nolint:paralleltest // Uses t.Setenv
+func TestExpandBytes_WithDefaultValue(t *testing.T) {
+	t.Parallel()
+
 	input := []byte("registry: ${REGISTRY:-localhost:5000}")
 	expected := []byte("registry: localhost:5000")
 
 	result := envvar.ExpandBytes(input)
 	assert.Equal(t, expected, result)
+}
+
+func TestExpandBytes_WithFluxDefaultValue(t *testing.T) {
+	t.Parallel()
+
+	input := []byte("replicas: ${REPLICAS:=2}")
+	expected := []byte("replicas: 2")
+
+	result := envvar.ExpandBytes(input)
+	assert.Equal(t, expected, result)
+}
+
+func TestExpandWithLookup(t *testing.T) {
+	t.Parallel()
+
+	lookup := func(name string) (string, bool) {
+		if name == "DOMAIN" {
+			return "example.com", true
+		}
+
+		return "", false
+	}
+
+	result := envvar.ExpandWithLookup("https://${DOMAIN}/${MISSING:=fallback}", lookup)
+	assert.Equal(t, "https://example.com/fallback", result)
 }
 
 func TestExpandBytes_YAMLContent(t *testing.T) {

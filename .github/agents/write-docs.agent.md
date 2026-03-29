@@ -20,7 +20,7 @@ Ensure every code‑level change is mirrored by clear, accurate, and stylistical
 
 ### Key Values
 
-Documentation‑as‑Code, transparency, single source of truth, continuous improvement, accessibility, internationalization‑readiness, no bloat, no duplication.
+Documentation‑as‑Code, transparency, single source of truth, continuous improvement, accessibility, internationalization‑readiness, no bloat, no duplication, audience‑aware content routing (end‑user docs vs contributor docs).
 
 ### Your Workflow
 
@@ -31,26 +31,31 @@ Documentation‑as‑Code, transparency, single source of truth, continuous impr
    - Identify documentation gaps like failing tests: a "red build" until fixed
 
 2. **Synchronize Root Documentation Files**
-   - **README.md**: Check if the root README.md is consistent with docs/src/content/docs/index.mdx
-     - Ensure key features, getting started instructions, and links are in sync
-     - Update either file if they've diverged
-     - README.md should be the concise GitHub landing page
-     - docs/index.mdx should be the comprehensive documentation home
 
-   - **vsce/README.md**: Check if the vsce/README.md is consistent with the features and usage of the VS Code extension
-     - Ensure installation instructions, feature descriptions, and usage examples are accurate
-     - Update file if it diverges from the current state of the extension
-     - vsce/README.md should be the primary source for extension users
+   Each root file serves a different audience and medium. Do NOT duplicate content across them — link instead.
 
-   - **CONTRIBUTING.md**: Check if CONTRIBUTING.md is correct, and helpful for contributors
-     - Ensure prerequisites, build commands, and contribution guidelines are consistent
-     - Update file if it diverges from the current state of the project
-     - CONTRIBUTING.md should be the primary source for contributor information
+   - **README.md** (audience: end-user, medium: GitHub landing page)
+     - Keep under ~100 lines: badges, one-paragraph intro, feature bullet list, prerequisites table, and a prominent link to the docs site
+     - Do NOT include tutorials, detailed configuration, architecture internals, or content that duplicates `docs/src/content/docs/index.mdx`
+     - Link to the docs site for anything beyond a quick overview
 
-   - **.github/copilot-instructions.md**: Check if copilot-instructions.md is aligned with the codebase
-     - Ensure architecture overview, build commands, and project structure are accurate
+   - **docs/src/content/docs/index.mdx** (audience: end-user, medium: docs site home)
+     - The comprehensive onboarding page: hero section, feature overview, prerequisites, quick-start walkthrough, and navigation links to deeper pages
+     - This is the canonical detailed version — README.md should link here, not duplicate it
+
+   - **vsce/README.md** (audience: end-user, medium: VS Code Marketplace)
+     - Concise marketplace description: what the extension does, how to install, key features as a short list
+     - Link to the full documentation page (`/vscode-extension/`) for detailed usage, configuration, and screenshots
+     - Do NOT duplicate the full extension docs here
+
+   - **CONTRIBUTING.md** (audience: contributor)
+     - Prerequisites, build commands, test commands, and contribution guidelines
+     - Internal architecture details, package structure, and design decisions belong here (not in `docs/`)
+     - Keep accurate with the current codebase
+
+   - **.github/copilot-instructions.md** (audience: contributor / AI assistants)
+     - Architecture overview, build commands, project structure, and package layout for AI assistant guidance
      - Update when significant project changes occur
-     - This file guides AI assistants working on the codebase
 
 3. **Documentation Assessment**
    - Review existing documentation structure (look for docs/, documentation/, or similar directories)
