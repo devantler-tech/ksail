@@ -112,7 +112,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
    | Page                            | Audience    | Owns                                                                          | Does NOT cover                                     |
    |---------------------------------|-------------|-------------------------------------------------------------------------------|----------------------------------------------------|
    | README.md                       | end-user    | GitHub landing page, badges, feature bullets, link to docs                    | Tutorials, detailed config, architecture internals |
-   | docs/index.mdx                  | end-user    | Docs home, hero, full onboarding, navigation                                  | Contributor workflows, internal APIs               |
+   | docs/src/content/docs/index.mdx | end-user    | Docs home, hero, full onboarding, navigation                                  | Contributor workflows, internal APIs               |
    | CONTRIBUTING.md                 | contributor | Build commands, prerequisites, contribution guidelines, internal architecture | End-user tutorials, feature explanations           |
    | .github/copilot-instructions.md | contributor | AI assistant guidance, project structure, package layout                      | End-user docs                                      |
    | vsce/README.md                  | end-user    | VS Code Marketplace description, install link                                 | Full extension docs (link to /vscode-extension/)   |
@@ -135,7 +135,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
 
    - **README.md** (audience: end-user, medium: GitHub landing page)
      - Keep under ~100 lines: badges, one-paragraph intro, feature bullet list, prerequisites table, and a prominent link to the docs site
-     - Do NOT include tutorials, detailed configuration, architecture internals, or content that duplicates `docs/index.mdx`
+     - Do NOT include tutorials, detailed configuration, architecture internals, or content that duplicates `docs/src/content/docs/index.mdx`
      - Link to the docs site for anything beyond a quick overview (e.g., "See the [Installation Guide](https://ksail.devantler.tech/installation/)")
 
    - **docs/src/content/docs/index.mdx** (audience: end-user, medium: documentation site home)
