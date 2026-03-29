@@ -195,7 +195,7 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | `policyEngine` | enum | – |  |
 | `localRegistry` | LocalRegistry | – |  |
 | `gitOpsEngine` | enum | – |  |
-| `sops` | SOPS | – | Automatic SOPS Age secret injection for Flux (auto-detect by default) |
+| `sops` | SOPS | – |  |
 | `importImages` | string | – | Path to tar archive with container images to import after cluster creation but before component installation |
 | `vanilla` | OptionsVanilla | – |  |
 | `talos` | OptionsTalos | – |  |
@@ -258,7 +258,7 @@ When using Talos with Omni, Omni generates the context name; set `spec.cluster.c
 See [CNI](/concepts/#container-network-interface-cni) for more details.
 
 - `Default` (default) – Uses the distribution's built-in CNI (`kindnetd` for Vanilla, `flannel` for K3s)
-- `Cilium` – Installs [Cilium](https://cilium.io/) for advanced networking and observability. Gateway API is enabled by default (`gatewayAPI.enabled: true`); KSail automatically pre-installs the standard [Gateway API CRDs](https://gateway-api.sigs.k8s.io/guides/) before the Cilium Helm chart. On Docker clusters, `gatewayAPI.hostNetwork.enabled: true` is set automatically so Cilium can route traffic without an external load balancer.
+- `Cilium` – Installs [Cilium](https://cilium.io/) for advanced networking and observability
 - `Calico` – Installs [Calico](https://www.tigera.io/project-calico/) for network policies
 
 #### csi
@@ -323,33 +323,6 @@ GitOps engine for continuous deployment. See [GitOps](/concepts/#gitops). When s
 - `None` (default) – No GitOps engine
 - `Flux` – Install [Flux CD](https://fluxcd.io/) and scaffold FluxInstance CR
 - `ArgoCD` – Install [Argo CD](https://argo-cd.readthedocs.io/) and scaffold Application CR
-
-#### sops (SOPS)
-
-Controls automatic SOPS Age secret injection. When `gitOpsEngine` is `Flux` and SOPS integration is enabled with an available Age key, KSail creates (or updates) a `sops-age` secret in the `flux-system` namespace containing your Age private key; otherwise, secret creation is skipped. In auto-detect mode (`enabled: null`), the secret is only created when a key is found. Flux Kustomization CRDs reference this via `spec.decryption.secretRef`.
-
-| Field | Type | Default | Description |
-| ----- | ---- | ------- | ----------- |
-| `ageKeyEnvVar` | string | `SOPS_AGE_KEY` | Environment variable containing the Age private key. Set empty to skip env var lookup. |
-| `enabled` | bool | auto-detect (field omitted) | Omit this field to auto-detect (create secret if key is found); `true` = require key (error if missing); `false` = disable entirely |
-
-**Key resolution priority:**
-
-1. Environment variable named by `ageKeyEnvVar` (default: `SOPS_AGE_KEY`)
-2. Platform-specific key file (`SOPS_AGE_KEY_FILE` → `$XDG_CONFIG_HOME/sops/age/keys.txt` → OS default)
-
-Use `ksail cipher import AGE-SECRET-KEY-1...` to save a key to the local key file, or export `SOPS_AGE_KEY` before running `ksail cluster create`.
-
-**Example — require a key:**
-
-```yaml
-spec:
-  cluster:
-    gitOpsEngine: Flux
-    sops:
-      enabled: true
-      ageKeyEnvVar: MY_AGE_KEY
-```
 
 #### Distribution and Tool Options
 
