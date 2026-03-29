@@ -75,11 +75,10 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 
 // mcpResponse is the structured JSON envelope returned by MCP tool handlers.
 type mcpResponse struct {
-	Status  string         `json:"status"`
-	Command string         `json:"command"`
-	Output  string         `json:"output,omitempty"`
-	Error   string         `json:"error,omitempty"`
-	Context map[string]any `json:"context,omitempty"`
+	Status  string `json:"status"`
+	Command string `json:"command"`
+	Output  string `json:"output,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 func buildMCPErrorText(commandPath, output string, err error) string {
@@ -95,8 +94,14 @@ func buildMCPErrorText(commandPath, output string, err error) string {
 
 	data, jsonErr := json.Marshal(resp)
 	if jsonErr != nil {
-		// Fallback: return a minimal JSON string if marshalling fails
-		return `{"status":"error","command":"` + commandPath + `","error":"failed to marshal response"}`
+		// Fallback: marshal a minimal struct to guarantee valid JSON
+		fallback, _ := json.Marshal(mcpResponse{
+			Status:  "error",
+			Command: commandPath,
+			Error:   "failed to marshal response",
+		})
+
+		return string(fallback)
 	}
 
 	return string(data)
@@ -114,8 +119,13 @@ func buildMCPSuccessText(commandPath, output string) string {
 
 	data, jsonErr := json.Marshal(resp)
 	if jsonErr != nil {
-		// Fallback: return a minimal JSON string if marshalling fails
-		return `{"status":"success","command":"` + commandPath + `"}`
+		// Fallback: marshal a minimal struct to guarantee valid JSON
+		fallback, _ := json.Marshal(mcpResponse{
+			Status:  "success",
+			Command: commandPath,
+		})
+
+		return string(fallback)
 	}
 
 	return string(data)
