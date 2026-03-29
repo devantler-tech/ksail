@@ -111,7 +111,7 @@ runs:
         init: ${{ inputs.init }}
         install: "false"
         cache: "true"
-        validate: "true"
+        validate: ${{ inputs.init }}
         hcloud-token: ${{ inputs.hcloud-token }}
 
     - name: 🧪 ksail cluster list
