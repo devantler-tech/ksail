@@ -73,7 +73,14 @@ TTL annotations are shown on a separate indented line in `ksail cluster list` ou
 
 ### How do I switch between clusters?
 
-KSail automatically configures your kubeconfig. Switch with `kubectl config use-context <cluster-name>` and list contexts with `kubectl config get-contexts`.
+Use `ksail cluster switch` for the native experience. Run it without arguments for an interactive picker, or pass a cluster name directly:
+
+```bash
+ksail cluster switch          # interactive picker (requires a TTY)
+ksail cluster switch dev      # switch directly to "dev"
+```
+
+You can also use `kubectl config use-context <context-name>` directly, or list all contexts with `kubectl config get-contexts`.
 
 ### Can I use my own container registry?
 

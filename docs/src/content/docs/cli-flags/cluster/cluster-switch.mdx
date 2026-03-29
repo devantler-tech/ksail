@@ -20,6 +20,9 @@ The kubeconfig is resolved in the following priority order:
   2. From ksail.yaml config file (if present)
   3. Defaults to ~/.kube/config
 
+When called without arguments, an interactive picker is shown
+to select from available clusters.
+
 Examples:
   # Switch to a Vanilla (Kind) cluster named "dev"
   ksail cluster switch dev
@@ -27,8 +30,11 @@ Examples:
   # Switch to a cluster named "staging"
   ksail cluster switch staging
 
+  # Select a cluster interactively
+  ksail cluster switch
+
 Usage:
-  ksail cluster switch <cluster-name> [flags]
+  ksail cluster switch [cluster-name] [flags]
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
