@@ -31,7 +31,12 @@ func Expand(value string) string {
 
 // ExpandWithLookup expands placeholders using the provided lookup function.
 // The lookup function is checked before default handling.
+// If lookup is nil, it defaults to os.LookupEnv.
 func ExpandWithLookup(value string, lookup func(string) (string, bool)) string {
+	if lookup == nil {
+		lookup = os.LookupEnv
+	}
+
 	if value == "" {
 		return value
 	}

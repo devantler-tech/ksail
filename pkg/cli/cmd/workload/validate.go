@@ -36,14 +36,18 @@ const (
 var ErrBuildFailed = errors.New("build failed")
 
 type fluxSubstituteSourceRef struct {
-	Kind string `json:"kind"`
-	Name string `json:"name"`
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
 }
 
 type fluxKustomizationManifest struct {
 	APIVersion string `json:"apiVersion"`
 	Kind       string `json:"kind"`
-	Spec       struct {
+	Metadata   struct {
+		Namespace string `json:"namespace"`
+	} `json:"metadata"`
+	Spec struct {
 		PostBuild struct {
 			SubstituteFrom []fluxSubstituteSourceRef `json:"substituteFrom"`
 		} `json:"postBuild"`
@@ -53,7 +57,8 @@ type fluxKustomizationManifest struct {
 type variableResourceManifest struct {
 	Kind     string `json:"kind"`
 	Metadata struct {
-		Name string `json:"name"`
+		Name      string `json:"name"`
+		Namespace string `json:"namespace"`
 	} `json:"metadata"`
 	Data       map[string]string `json:"data"`
 	StringData map[string]string `json:"stringData"`
@@ -63,16 +68,16 @@ type validationSubstitutions map[string]string
 
 type substituteSourceSet map[string]struct{}
 
-func (s substituteSourceSet) add(kind, name string) {
+func (s substituteSourceSet) add(kind, name, namespace string) {
 	if kind == "" || name == "" {
 		return
 	}
 
-	s[strings.ToLower(kind)+"/"+name] = struct{}{}
+	s[strings.ToLower(kind)+"/"+namespace+"/"+name] = struct{}{}
 }
 
-func (s substituteSourceSet) contains(kind, name string) bool {
-	_, ok := s[strings.ToLower(kind)+"/"+name]
+func (s substituteSourceSet) contains(kind, name, namespace string) bool {
+	_, ok := s[strings.ToLower(kind)+"/"+namespace+"/"+name]
 
 	return ok
 }
@@ -725,8 +730,15 @@ func collectFluxSubstituteSourcesFromFile(
 			continue
 		}
 
+		kustomizationNS := manifest.Metadata.Namespace
+
 		for _, ref := range manifest.Spec.PostBuild.SubstituteFrom {
-			refs.add(ref.Kind, ref.Name)
+			ns := ref.Namespace
+			if ns == "" {
+				ns = kustomizationNS
+			}
+
+			refs.add(ref.Kind, ref.Name, ns)
 		}
 	}
 
@@ -751,7 +763,7 @@ func collectSubstitutionValuesFromFile(
 			continue
 		}
 
-		if !refs.contains(manifest.Kind, manifest.Metadata.Name) {
+		if !refs.contains(manifest.Kind, manifest.Metadata.Name, manifest.Metadata.Namespace) {
 			continue
 		}
 
