@@ -249,13 +249,6 @@ runs:
         fi
         ksail cipher import "$AGE_KEY"
 
-    - name: 🧹 Validate manifests
-      if: inputs.validate == 'true'
-      shell: bash
-      env:
-        CONFIG: ${{ inputs.config }}
-      run: ksail ${CONFIG:+--config "$CONFIG"} workload validate
-
     - name: 🏗️ Initialize Project
       if: inputs.init == 'true'
       shell: bash
@@ -268,6 +261,13 @@ runs:
       run: |
         # shellcheck disable=SC2086
         ksail ${CONFIG:+--config "$CONFIG"} cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
+
+    - name: 🧹 Validate manifests
+      if: inputs.validate == 'true'
+      shell: bash
+      env:
+        CONFIG: ${{ inputs.config }}
+      run: ksail ${CONFIG:+--config "$CONFIG"} workload validate
 
     - name: 🚀 Create Cluster
       id: create
