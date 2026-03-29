@@ -120,6 +120,18 @@ func TestExpandFluxSubstitutionsEnvOverridesDefaultHyphenSyntax(t *testing.T) {
 	assert.NotContains(t, resultStr, "name: my-service")
 }
 
+func TestExpandFluxSubstitutionsEnvOverridesDefaultEqualsSyntax(t *testing.T) {
+	t.Setenv("svc_name", "real-service")
+
+	input := []byte(
+		"apiVersion: v1\nkind: Service\nmetadata:\n  name: ${svc_name:=my-service}\n",
+	)
+	result := workload.ExportExpandFluxSubstitutions(input)
+	resultStr := string(result)
+	assert.Contains(t, resultStr, "name: real-service")
+	assert.NotContains(t, resultStr, "name: my-service")
+}
+
 func TestExportGetSchemaTypeAtPath(t *testing.T) {
 	t.Parallel()
 
