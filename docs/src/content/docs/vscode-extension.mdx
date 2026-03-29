@@ -96,6 +96,34 @@ npx @vscode/vsce package --no-dependencies
 2. Press `F5` to launch the Extension Development Host
 3. Test commands from the Command Palette
 
+### Architecture
+
+```text
+vsce/
+├── src/
+│   ├── extension.ts                       # Entry point, command registration
+│   ├── commands/
+│   │   ├── index.ts                       # Command handlers (command registry)
+│   │   └── prompts.ts                     # Interactive wizard implementations
+│   ├── ksail/
+│   │   ├── clusters.ts                    # KSail CLI wrapper functions
+│   │   ├── binary.ts                      # KSail binary discovery and execution
+│   │   ├── kubectl.ts                     # kubectl wrapper for cluster status queries
+│   │   └── index.ts                       # Module exports
+│   ├── kubernetes/
+│   │   ├── cloudProvider.ts               # Cloud Explorer tree provider
+│   │   ├── clusterExplorerContributor.ts  # Annotates KSail contexts in Cluster Explorer
+│   │   ├── clusterProvider.ts             # Create Cluster wizard (HTML-based)
+│   │   ├── contextNames.ts                # Shared helpers for parsing kubeconfig context names
+│   │   └── index.ts                       # Module exports
+│   └── mcp/
+│       ├── serverProvider.ts              # MCP server definition provider
+│       ├── schemaClient.ts                # MCP schema client for KSail
+│       └── index.ts                       # Module exports
+├── dist/                                  # Compiled output
+└── package.json                           # Extension manifest
+```
+
 ## Further Reading
 
 - [Features — VSCode Extension](/features/#vscode-extension) — Feature overview
