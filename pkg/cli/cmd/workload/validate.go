@@ -581,10 +581,11 @@ func addPatchPath(kustDir, relPath string, patchPaths map[string]struct{}) {
 	patchPaths[resolved] = struct{}{}
 }
 
-// expandFluxSubstitutions expands Flux postBuild variable references
-// (${VAR}, ${VAR:-default}, ${VAR:=default}) using environment variables
-// and Flux-convention defaults. Variables not found in the environment
-// are treated as unset so that default syntax still applies.
+// expandFluxSubstitutions performs generic environment-variable expansion
+// for `${VAR}`, `${VAR:-default}`, and `${VAR:=default}` patterns using the
+// current process environment. It is applied to all validated YAML files and
+// kustomize build output (including Flux postBuild contexts) so that unset
+// variables are treated as absent and default syntax still applies.
 func expandFluxSubstitutions(data []byte) []byte {
 	return envvar.ExpandBytesWithLookup(data, func(name string) (string, bool) {
 		if value, ok := os.LookupEnv(name); ok {
