@@ -296,7 +296,7 @@ Use this skill when:
 +   return processOrder(order);
 + }
 
-# EVEN BETER: Using Result type
+# EVEN BETTER: Using Result type
 + function process(order): Result<ProcessedOrder, Error> {
 +   return Result.combine([
 +     validateOrderExists(order),
@@ -625,7 +625,7 @@ Use this skill when:
 ## Common Refactoring Operations
 
 | Operation                                     | Description                           |
-|-----------------------------------------------|---------------------------------------|
+| --------------------------------------------- | ------------------------------------- |
 | Extract Method                                | Turn code fragment into method        |
 | Extract Class                                 | Move behavior to new class            |
 | Extract Interface                             | Create interface from implementation  |
