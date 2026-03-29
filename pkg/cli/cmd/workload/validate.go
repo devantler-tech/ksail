@@ -218,12 +218,14 @@ func validatePath(
 
 	// If it's a file, validate it directly
 	if !info.IsDir() {
-		substitutions, loadErr := loadValidationSubstitutions(filepath.Dir(path))
+		rootDir := filepath.Dir(path)
+
+		substitutions, loadErr := loadValidationSubstitutions(rootDir)
 		if loadErr != nil {
 			return loadErr
 		}
 
-		return validateFile(ctx, cmd, path, kubeconformClient, opts, substitutions)
+		return validateFile(ctx, cmd, rootDir, path, kubeconformClient, opts, substitutions)
 	}
 
 	// If it's a directory, walk it to find YAML files and kustomizations
@@ -234,6 +236,7 @@ func validatePath(
 func validateFile(
 	ctx context.Context,
 	cmd *cobra.Command,
+	rootDir string,
 	filePath string,
 	kubeconformClient *kubeconform.Client,
 	opts *kubeconform.ValidationOptions,
@@ -251,7 +254,7 @@ func validateFile(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	err := validateFileSilent(ctx, filePath, kubeconformClient, opts, substitutions)
+	err := validateFileSilent(ctx, rootDir, filePath, kubeconformClient, opts, substitutions)
 	if err != nil {
 		return fmt.Errorf("validate file %s: %w", filePath, err)
 	}
@@ -281,7 +284,7 @@ func validateDirectory( //nolint:funlen // orchestrates two parallel validation 
 	}
 
 	// Exclude patch files — already validated as part of kustomize build output.
-	patchPaths := collectPatchPaths(kustomizations)
+	patchPaths := collectPatchPaths(dirPath, kustomizations)
 	yamlFiles = filterPatchFiles(yamlFiles, patchPaths)
 
 	substitutions, err := loadValidationSubstitutions(dirPath)
@@ -319,7 +322,9 @@ func validateDirectory( //nolint:funlen // orchestrates two parallel validation 
 		err := runParallelValidation(
 			ctx, cmd, yamlFiles, dirPath, "Validating YAML files", "📄",
 			func(taskCtx context.Context, file string) error {
-				return validateFileSilent(taskCtx, file, kubeconformClient, opts, substitutions)
+				return validateFileSilent(
+					taskCtx, dirPath, file, kubeconformClient, opts, substitutions,
+				)
 			},
 			append(progressOpts, notify.WithCountLabel("files"))...,
 		)
@@ -433,6 +438,7 @@ func buildKustomizationValidator(
 // validateFileSilent validates a single YAML file without output (for parallel execution).
 func validateFileSilent(
 	ctx context.Context,
+	rootDir string,
 	filePath string,
 	kubeconformClient *kubeconform.Client,
 	opts *kubeconform.ValidationOptions,
@@ -443,8 +449,7 @@ func validateFileSilent(
 		return nil
 	}
 
-	//nolint:gosec // filePath is discovered from walked paths or explicitly canonicalized
-	data, err := os.ReadFile(filePath)
+	data, err := fsutil.ReadFileSafe(rootDir, filePath)
 	if err != nil {
 		return fmt.Errorf("read file %s: %w", filePath, err)
 	}
@@ -576,11 +581,11 @@ func filterPatchFiles(yamlFiles []string, patchPaths map[string]struct{}) []stri
 // of files referenced as patches. These files are not valid standalone K8s resources
 // and should be excluded from individual file validation (they are already validated
 // as part of the kustomize build output).
-func collectPatchPaths(kustomizationDirs []string) map[string]struct{} {
+func collectPatchPaths(rootDir string, kustomizationDirs []string) map[string]struct{} {
 	patchPaths := make(map[string]struct{})
 
 	for _, kustDir := range kustomizationDirs {
-		collectPatchPathsFromDir(kustDir, patchPaths)
+		collectPatchPathsFromDir(rootDir, kustDir, patchPaths)
 	}
 
 	return patchPaths
@@ -588,10 +593,10 @@ func collectPatchPaths(kustomizationDirs []string) map[string]struct{} {
 
 // collectPatchPathsFromDir parses a single kustomization.yaml and adds the absolute
 // paths of referenced patch files to the provided set.
-func collectPatchPathsFromDir(kustDir string, patchPaths map[string]struct{}) {
+func collectPatchPathsFromDir(rootDir, kustDir string, patchPaths map[string]struct{}) {
 	kustFile := filepath.Join(kustDir, kustomizationFileName)
 
-	data, err := os.ReadFile(kustFile) //nolint:gosec // kustFile built from walked dirs
+	data, err := fsutil.ReadFileSafe(rootDir, kustFile)
 	if err != nil {
 		return
 	}
@@ -664,7 +669,7 @@ func loadValidationSubstitutions(rootPath string) (validationSubstitutions, erro
 
 	values := make(validationSubstitutions)
 	for _, filePath := range files {
-		err = collectSubstitutionValuesFromFile(filePath, refs, values)
+		err = collectSubstitutionValuesFromFile(rootPath, filePath, refs, values)
 		if err != nil {
 			return nil, err
 		}
@@ -689,7 +694,7 @@ func collectFluxSubstituteSources(rootPath string) (substituteSourceSet, error) 
 
 	refs := make(substituteSourceSet)
 	for _, filePath := range files {
-		err = collectFluxSubstituteSourcesFromFile(filePath, refs)
+		err = collectFluxSubstituteSourcesFromFile(rootPath, filePath, refs)
 		if err != nil {
 			return nil, err
 		}
@@ -698,8 +703,11 @@ func collectFluxSubstituteSources(rootPath string) (substituteSourceSet, error) 
 	return refs, nil
 }
 
-func collectFluxSubstituteSourcesFromFile(filePath string, refs substituteSourceSet) error {
-	docs, err := readYAMLDocuments(filePath)
+func collectFluxSubstituteSourcesFromFile(
+	rootPath, filePath string,
+	refs substituteSourceSet,
+) error {
+	docs, err := readYAMLDocuments(rootPath, filePath)
 	if err != nil {
 		return err
 	}
@@ -726,11 +734,11 @@ func collectFluxSubstituteSourcesFromFile(filePath string, refs substituteSource
 }
 
 func collectSubstitutionValuesFromFile(
-	filePath string,
+	rootPath, filePath string,
 	refs substituteSourceSet,
 	values validationSubstitutions,
 ) error {
-	docs, err := readYAMLDocuments(filePath)
+	docs, err := readYAMLDocuments(rootPath, filePath)
 	if err != nil {
 		return err
 	}
@@ -771,9 +779,8 @@ func collectSubstitutionValuesFromFile(
 	return nil
 }
 
-func readYAMLDocuments(filePath string) ([][]byte, error) {
-	//nolint:gosec // filePath is discovered from walked paths or explicitly canonicalized
-	data, err := os.ReadFile(filePath)
+func readYAMLDocuments(rootPath, filePath string) ([][]byte, error) {
+	data, err := fsutil.ReadFileSafe(rootPath, filePath)
 	if err != nil {
 		return nil, fmt.Errorf("read yaml file %s: %w", filePath, err)
 	}
