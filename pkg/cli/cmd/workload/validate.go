@@ -524,7 +524,7 @@ func collectPatchPathsFromDir(kustDir string, patchPaths map[string]struct{}) {
 	}
 
 	// Deprecated patchesStrategicMerge (file paths only, skip inline YAML)
-	for _, psm := range kust.PatchesStrategicMerge {
+	for _, psm := range kust.PatchesStrategicMerge { //nolint:staticcheck // must handle legacy kustomization files
 		s := string(psm)
 		if !strings.Contains(s, "\n") {
 			addPatchPath(kustDir, s, patchPaths)
@@ -532,7 +532,7 @@ func collectPatchPathsFromDir(kustDir string, patchPaths map[string]struct{}) {
 	}
 
 	// Deprecated patchesJson6902
-	for _, p := range kust.PatchesJson6902 {
+	for _, p := range kust.PatchesJson6902 { //nolint:staticcheck // must handle legacy kustomization files
 		addPatchPath(kustDir, p.Path, patchPaths)
 	}
 }

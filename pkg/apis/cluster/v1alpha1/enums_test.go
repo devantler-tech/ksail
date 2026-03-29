@@ -789,6 +789,13 @@ func TestCSI_EffectiveValue(t *testing.T) {
 			provider:     v1alpha1.ProviderDocker,
 			expected:     v1alpha1.CSIDisabled,
 		},
+		{
+			name:         "empty_string_treated_as_default",
+			csi:          v1alpha1.CSI(""),
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CSIEnabled,
+		},
 	}
 
 	for _, testCase := range tests {
@@ -839,6 +846,12 @@ func TestMetricsServer_EffectiveValue(t *testing.T) {
 			ms:           v1alpha1.MetricsServerDisabled,
 			distribution: v1alpha1.DistributionK3s,
 			expected:     v1alpha1.MetricsServerDisabled,
+		},
+		{
+			name:         "empty_string_treated_as_default",
+			ms:           v1alpha1.MetricsServer(""),
+			distribution: v1alpha1.DistributionK3s,
+			expected:     v1alpha1.MetricsServerEnabled,
 		},
 	}
 
@@ -918,6 +931,13 @@ func TestLoadBalancer_EffectiveValue(t *testing.T) {
 			distribution: v1alpha1.DistributionK3s,
 			provider:     v1alpha1.ProviderDocker,
 			expected:     v1alpha1.LoadBalancerDisabled,
+		},
+		{
+			name:         "empty_string_treated_as_default",
+			lb:           v1alpha1.LoadBalancer(""),
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.LoadBalancerEnabled,
 		},
 	}
 
