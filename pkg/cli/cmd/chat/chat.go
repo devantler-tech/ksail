@@ -34,8 +34,7 @@ const (
 	defaultTimeoutMinutes = 5
 	// signalSleepDuration is the delay before exiting after a signal to allow cleanup.
 	signalSleepDuration = 50 * time.Millisecond
-	// permissionTimeoutMinutes is the timeout for permission requests.
-	permissionTimeoutMinutes = 5
+
 	// authMaxAttempts is the maximum number of attempts for auth status checks.
 	authMaxAttempts = 3
 	// authRetryBaseWait is the base wait duration for auth retry backoff.

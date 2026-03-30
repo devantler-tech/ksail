@@ -56,10 +56,7 @@ func runNonTUIChat(
 	tools, toolMetadata := chatsvc.GetKSailToolMetadata( //nolint:contextcheck
 		cmd.Root(), nil, sessionLog,
 	)
-	// In non-TUI mode, pass nil for eventChan and yoloModeRef:
-	// - nil eventChan: write tools are auto-approved (no UI to prompt for confirmation)
-	// - nil yoloModeRef: YOLO mode toggle is not available (write tools auto-approve via nil eventChan)
-	tools = WrapToolsWithPermissionAndModeMetadata(tools, nil, nil, toolMetadata)
+	tools = WrapToolsWithForceInjection(tools, toolMetadata)
 	sessionConfig.Tools = tools
 
 	// Set up permission handler for non-KSail tools (git, shell, etc.)

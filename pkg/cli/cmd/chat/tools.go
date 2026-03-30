@@ -4,10 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 	chatsvc "github.com/devantler-tech/ksail/v5/pkg/svc/chat"
 	"github.com/devantler-tech/ksail/v5/pkg/toolgen"
 	copilot "github.com/github/copilot-sdk/go"
@@ -64,16 +61,6 @@ func getToolArgs(event copilot.SessionEvent) string {
 	return " (" + formatted + ")"
 }
 
-// formatToolArguments converts tool invocation arguments to a display string.
-func formatToolArguments(args any) string {
-	params, ok := args.(map[string]any)
-	if !ok {
-		return ""
-	}
-
-	return formatArgsMap(params)
-}
-
 // injectForceFlag injects a "force" argument into the tool invocation.
 // This skips interactive confirmation prompts when the tool supports --force.
 // Only call this after verifying the tool supports force via toolSupportsForce.
@@ -117,49 +104,6 @@ func toolSupportsForce(metadata map[string]toolgen.ToolDefinition, toolName stri
 	return hasForce
 }
 
-// awaitToolPermission sends a permission request to the TUI and waits for user response.
-// Returns the approval state and an optional denial/timeout ToolResult.
-func awaitToolPermission(
-	eventChan chan<- tea.Msg,
-	toolName string,
-	invocation copilot.ToolInvocation,
-) (bool, *copilot.ToolResult) {
-	responseChan := make(chan bool, 1)
-	cmdDescription := strings.ReplaceAll(toolName, "_", " ")
-
-	eventChan <- chatui.PermissionRequestMsg{
-		ToolCallID: invocation.ToolCallID,
-		ToolName:   toolName,
-		Command:    cmdDescription,
-		Arguments:  formatToolArguments(invocation.Arguments),
-		Response:   responseChan,
-	}
-
-	var approved bool
-
-	select {
-	case approved = <-responseChan:
-	case <-time.After(permissionTimeoutMinutes * time.Minute):
-		return false, &copilot.ToolResult{
-			TextResultForLLM: "Permission request timed out for: " + cmdDescription + "\n" +
-				"The user did not respond within the timeout period.",
-			ResultType: "failure",
-			SessionLog: "[TIMEOUT] " + cmdDescription,
-		}
-	}
-
-	if !approved {
-		return false, &copilot.ToolResult{
-			TextResultForLLM: "Permission denied by user for: " + cmdDescription + "\n" +
-				"The user chose not to allow this operation.",
-			ResultType: "failure",
-			SessionLog: "[DENIED] " + cmdDescription,
-		}
-	}
-
-	return true, nil
-}
-
 // pathArgKeys returns the argument keys that SDK-managed file tools use for paths.
 // Checked in order; the first match is validated.
 func pathArgKeys() []string {
@@ -184,12 +128,12 @@ func validatePathAccess(
 	allowedRoot string,
 ) (*copilot.PreToolUseHookOutput, error) {
 	if allowedRoot == "" {
-		return &copilot.PreToolUseHookOutput{}, nil
+		return &copilot.PreToolUseHookOutput{PermissionDecision: "allow"}, nil
 	}
 
 	args, ok := input.ToolArgs.(map[string]any)
 	if !ok || len(args) == 0 {
-		return &copilot.PreToolUseHookOutput{}, nil
+		return &copilot.PreToolUseHookOutput{PermissionDecision: "allow"}, nil
 	}
 
 	for _, key := range pathArgKeys() {
@@ -215,18 +159,14 @@ func validatePathAccess(
 		}
 	}
 
-	return &copilot.PreToolUseHookOutput{}, nil
+	return &copilot.PreToolUseHookOutput{PermissionDecision: "allow"}, nil
 }
 
-// WrapToolsWithPermissionAndModeMetadata wraps ALL tools with permission prompts.
-// In agent mode, edit tools require permission (based on RequiresPermission annotation),
-// while read-only tools are auto-approved.
-// When YOLO mode is enabled, permission prompts are skipped and all tools are auto-approved.
-// Mode enforcement (plan mode tool blocking) is handled server-side via Session.RPC.Mode.Set().
-func WrapToolsWithPermissionAndModeMetadata(
+// WrapToolsWithForceInjection wraps write tools to inject the --force flag after
+// SDK-native permission approval. Permission handling is delegated entirely to the
+// SDK's OnPermissionRequest handler — this wrapper only handles force-flag injection.
+func WrapToolsWithForceInjection(
 	tools []copilot.Tool,
-	eventChan chan tea.Msg,
-	yoloModeRef *chatui.YoloModeRef,
 	toolMetadata map[string]toolgen.ToolDefinition,
 ) []copilot.Tool {
 	wrappedTools := make([]copilot.Tool, len(tools))
@@ -240,55 +180,11 @@ func WrapToolsWithPermissionAndModeMetadata(
 		toolName := tool.Name
 
 		wrappedTools[toolIdx].Handler = func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-			return executeWrappedTool(
-				invocation, toolName, originalHandler,
-				eventChan, yoloModeRef, toolMetadata,
-			)
+			return invokeWithOptionalForce(invocation, toolMetadata, toolName, originalHandler)
 		}
 	}
 
 	return wrappedTools
-}
-
-// executeWrappedTool handles permission checks, YOLO mode,
-// force flag injection, and user approval for a single tool invocation.
-// Mode enforcement (plan mode) is handled server-side via Session.RPC.Mode.Set().
-func executeWrappedTool(
-	invocation copilot.ToolInvocation,
-	toolName string,
-	originalHandler func(copilot.ToolInvocation) (copilot.ToolResult, error),
-	eventChan chan tea.Msg,
-	yoloModeRef *chatui.YoloModeRef,
-	toolMetadata map[string]toolgen.ToolDefinition,
-) (copilot.ToolResult, error) {
-	// Check if tool requires permission from metadata.
-	// If metadata is nil or tool not found, defaults to requiresPermission=false (auto-approve).
-	requiresPermission := false
-	if metadata, metaExists := toolMetadata[toolName]; metaExists {
-		requiresPermission = metadata.RequiresPermission
-	}
-
-	if !requiresPermission {
-		return originalHandler(invocation)
-	}
-
-	// In YOLO mode, auto-approve all tools that would normally require permission
-	if yoloModeRef != nil && yoloModeRef.IsEnabled() {
-		return invokeWithOptionalForce(invocation, toolMetadata, toolName, originalHandler)
-	}
-
-	// If no event channel is available (non-TUI mode), auto-approve write tools
-	// to avoid deadlocking on a nil channel send.
-	if eventChan == nil {
-		return invokeWithOptionalForce(invocation, toolMetadata, toolName, originalHandler)
-	}
-
-	approved, result := awaitToolPermission(eventChan, toolName, invocation)
-	if !approved {
-		return *result, nil
-	}
-
-	return invokeWithOptionalForce(invocation, toolMetadata, toolName, originalHandler)
 }
 
 // invokeWithOptionalForce injects the force flag if the tool supports it, then calls the handler.

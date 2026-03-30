@@ -47,9 +47,7 @@ func setupChatTools(
 	tools, toolMetadata := chatsvc.GetKSailToolMetadata(rootCmd, outputChan, sessionLog)
 	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode)
 	yoloModeRef := chatui.NewYoloModeRef(false)
-	tools = WrapToolsWithPermissionAndModeMetadata(
-		tools, eventChan, yoloModeRef, toolMetadata,
-	)
+	tools = WrapToolsWithForceInjection(tools, toolMetadata)
 	sessionConfig.Tools = tools
 	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan, yoloModeRef)
 

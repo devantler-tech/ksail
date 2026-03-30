@@ -26,10 +26,9 @@ func toCopilotTool(tool ToolDefinition, opts ToolOptions) copilot.Tool {
 		Description: tool.Description,
 		Parameters:  tool.Parameters,
 		Handler:     buildCopilotHandler(tool, opts),
-		// KSail wraps tools with its own permission and mode metadata and also
-		// installs a global OnPermissionRequest handler. To avoid double prompts
-		// and stdin blocking, always skip the Copilot SDK's built-in permission flow.
-		SkipPermission: true,
+		// Read-only tools skip the SDK permission flow (auto-approve).
+		// Write tools go through the SDK-native OnPermissionRequest handler.
+		SkipPermission: !tool.RequiresPermission,
 	}
 }
 
