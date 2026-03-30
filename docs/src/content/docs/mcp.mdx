@@ -66,6 +66,38 @@ Each tool accepts a **subcommand parameter** that selects the specific operation
 
 MCP clients can discover available tools dynamically and toggle them on/off as needed. Each tool includes its name, a description, and a JSON schema with the subcommand selector enum and merged flags.
 
+## Response Format
+
+All MCP tool handlers return a structured JSON envelope, making it easy to parse results programmatically:
+
+**Success:**
+
+````json
+{
+  "status": "success",
+  "command": "cluster info",
+  "output": "<command stdout>"
+}
+````
+
+**Error:**
+
+````json
+{
+  "status": "error",
+  "command": "cluster create",
+  "error": "exit status 1",
+  "output": "<command stderr / captured output>"
+}
+````
+
+| Field | Always present | Description |
+|-------|---------------|-------------|
+| `status` | ✓ | `"success"` or `"error"` |
+| `command` | ✓ | Full command path that was executed |
+| `output` | When non-empty | Captured stdout (success) or stderr (error) |
+| `error` | On error only | Error message (e.g., exit status) |
+
 ## Integration Examples
 
 ### Claude Desktop
@@ -110,6 +142,7 @@ Once installed:
 If you're building your own MCP client:
 
 ````python
+import json
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -119,7 +152,12 @@ async with stdio_client(StdioServerParameters(command="ksail", args=["mcp"])) as
         tools = await session.list_tools()
         print([t.name for t in tools.tools])
         result = await session.call_tool("cluster_read", arguments={"command": "info"})
-        print(result.content)
+        # Response content is a structured JSON envelope
+        envelope = json.loads(result.content[0].text)
+        if envelope["status"] == "success":
+            print(envelope.get("output", ""))
+        else:
+            print("Error:", envelope.get("error"), envelope.get("output", ""))
 ````
 
 ## Configuration
