@@ -1,0 +1,210 @@
+---
+title: Using KSail with Claude, Cursor, and Windsurf
+description: Configure KSail's MCP server for AI assistants — Claude Desktop, Cursor, Windsurf, and VS Code Copilot — so you can manage Kubernetes clusters with natural language.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+KSail's MCP ([Model Context Protocol](https://modelcontextprotocol.io/)) server exposes all cluster and workload commands as structured tools that AI assistants can invoke. This guide shows how to connect Claude Desktop, Cursor, and Windsurf to KSail so you can manage Kubernetes clusters using natural language.
+
+> [!NOTE]
+> For a full reference of the MCP server's available tools, configuration options, and troubleshooting, see the [MCP Server](/mcp/) reference page.
+
+## Prerequisites
+
+- [KSail](/installation/) installed and available in `PATH`
+- Docker running (required for local cluster operations)
+- An MCP-compatible AI client (see setup steps below)
+
+Verify KSail is reachable from your shell:
+
+```bash
+ksail mcp --help
+```
+
+## Client Setup
+
+<Tabs>
+<TabItem label="Claude Desktop">
+
+Add KSail to your Claude Desktop MCP server configuration.
+
+**Configuration file location:**
+
+| Platform | Path |
+|----------|------|
+| macOS    | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows  | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Linux    | `~/.config/Claude/claude_desktop_config.json` |
+
+Edit (or create) the config file and add the `ksail` entry to `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "ksail": {
+      "command": "ksail",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+After saving, **restart Claude Desktop**. The KSail tools will appear in Claude's tool picker.
+
+> [!NOTE]
+> On macOS, Claude Desktop may not inherit your shell's `PATH`. If KSail is installed via `brew` or a custom path, use the full binary path (e.g., `/usr/local/bin/ksail` or `/opt/homebrew/bin/ksail`). Run `which ksail` to find it.
+
+```json
+{
+  "mcpServers": {
+    "ksail": {
+      "command": "/opt/homebrew/bin/ksail",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem label="Cursor">
+
+Add KSail to Cursor's MCP configuration. Cursor supports both project-level and global MCP servers.
+
+**Project-level** (shared with team, checked into version control):
+
+Create or edit `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "ksail": {
+      "command": "ksail",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+**Global** (available in all Cursor projects):
+
+Edit `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "ksail": {
+      "command": "ksail",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+After saving, **restart Cursor** or reload the MCP configuration from the Cursor settings panel (`Cursor Settings → MCP`). The KSail tools will be listed as available servers.
+
+> [!NOTE]
+> Cursor executes MCP servers from the workspace root directory, so KSail will find `ksail.yaml` automatically if it exists at the project root.
+
+</TabItem>
+<TabItem label="Windsurf">
+
+Add KSail to Windsurf's MCP configuration.
+
+Open **Windsurf Settings** (`Cmd+,` on macOS / `Ctrl+,` on Windows/Linux) and navigate to **MCP** → **Add MCP Server**, or edit your Windsurf MCP config file directly:
+
+```json
+{
+  "mcpServers": {
+    "ksail": {
+      "command": "ksail",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+After saving, **restart the Cascade AI** session or reload MCP servers from the Windsurf settings. The KSail tools will be listed as available.
+
+> [!NOTE]
+> If KSail is not on Windsurf's `PATH`, provide the full binary path. Run `which ksail` to find it.
+
+</TabItem>
+<TabItem label="VS Code (Copilot)">
+
+The [KSail VSCode extension](/vscode-extension/) handles MCP registration automatically — no manual configuration needed.
+
+1. Install the [KSail extension](https://marketplace.visualstudio.com/items?itemName=devantler.ksail) from the VS Code Marketplace.
+2. Open a workspace with a `ksail.yaml` file (or run **KSail: Init Cluster** from the Command Palette to create one).
+3. Switch GitHub Copilot to **agent mode** — Copilot can now invoke KSail commands directly.
+
+For manual configuration or if you prefer not to use the extension, add KSail to VS Code's `settings.json`:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "ksail": {
+        "command": "ksail",
+        "args": ["mcp"]
+      }
+    }
+  }
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Example Prompts
+
+Once connected, you can manage Kubernetes clusters with natural language. Here are some prompts to get started:
+
+### Cluster management
+
+| Prompt | Tool invoked |
+|--------|-------------|
+| "Create a Vanilla Kubernetes cluster with Flux and Cilium" | `cluster_write` (init → create) |
+| "List all my KSail clusters" | `cluster_read` (list) |
+| "Show me the status of the dev cluster" | `cluster_read` (info) |
+| "Update the staging cluster to match the latest config" | `cluster_write` (update) |
+| "Delete the dev cluster" | `cluster_write` (delete) |
+
+### Workload operations
+
+| Prompt | Tool invoked |
+|--------|-------------|
+| "Get all pods in the default namespace" | `workload_read` (get) |
+| "Show logs for the api-server pod" | `workload_read` (logs) |
+| "Apply all manifests in the k8s/ directory" | `workload_write` (apply) |
+| "Validate my Kubernetes manifests" | `workload_read` (validate) |
+| "Scale the api deployment to 3 replicas" | `workload_write` (scale) |
+| "Generate a Deployment manifest for my-app" | `workload_read` (gen_deployment) |
+
+### Secret management
+
+| Prompt | Tool invoked |
+|--------|-------------|
+| "Encrypt the secrets.yaml file with SOPS" | `cipher_write` (encrypt) |
+| "Import my SOPS age key from the key file" | `cipher_write` (import) |
+
+## Available Tools Reference
+
+KSail exposes **5 tools** via MCP, grouped by permission level:
+
+| Tool | Type | What it does |
+|------|------|-------------|
+| `cluster_read` | Read-only | `info`, `list`, `connect`, `switch` |
+| `cluster_write` | Mutating | `init`, `create`, `update`, `delete`, `start`, `stop`, `backup`, `restore` |
+| `workload_read` | Read-only | `get`, `describe`, `logs`, `explain`, `validate`, `images`, `export`, `gen_*` |
+| `workload_write` | Mutating | `apply`, `create`, `delete`, `edit`, `exec`, `scale`, `reconcile`, `push`, `install`, `rollout_*` |
+| `cipher_write` | Mutating | `encrypt`, `decrypt`, `edit`, `import` |
+
+Each tool accepts a **subcommand parameter** selecting the operation, plus an `args` array for additional flags and arguments. For a detailed breakdown of subcommands and their flags, see the [MCP Server reference](/mcp/#available-tools).
+
+## Tips
+
+- **Working directory**: The MCP server runs in the directory set by the client. KSail looks for `ksail.yaml` from that directory upward. For Claude Desktop, set `cwd` in the config to pin a project directory (see the MCP spec for client-specific options).
+- **Multiple environments**: Combine with the `--config` flag in your prompts — for example, "Apply manifests using the staging config" will work if you reference the config file path in your prompt and KSail finds it.
+- **Cluster creation takes time**: Inform your AI assistant that cluster creation can take 2–5 minutes. Most MCP clients have configurable tool timeouts.
+- **Security**: The MCP server runs with the full permissions of the `ksail` process. Only connect trusted AI clients. See the [MCP Server security note](/mcp/#configuration) for details.
