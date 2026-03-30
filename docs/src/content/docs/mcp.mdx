@@ -75,8 +75,8 @@ All MCP tool handlers return a structured JSON envelope, making it easy to parse
 ````json
 {
   "status": "success",
-  "command": "cluster info",
-  "output": "<command stdout>"
+  "command": "ksail cluster info",
+  "output": "..."
 }
 ````
 
@@ -85,18 +85,18 @@ All MCP tool handlers return a structured JSON envelope, making it easy to parse
 ````json
 {
   "status": "error",
-  "command": "cluster create",
-  "error": "exit status 1",
-  "output": "<command stderr / captured output>"
+  "command": "ksail cluster create",
+  "error": "command failed: exit status 1",
+  "output": "..."
 }
 ````
 
 | Field | Always present | Description |
 |-------|---------------|-------------|
 | `status` | ✓ | `"success"` or `"error"` |
-| `command` | ✓ | Full command path that was executed |
-| `output` | When non-empty | Captured stdout (success) or stderr (error) |
-| `error` | On error only | Error message (e.g., exit status) |
+| `command` | ✓ | Full command path (e.g., `"ksail cluster info"`) |
+| `output` | When non-empty | Combined stdout/stderr from the command |
+| `error` | On error only | Human-readable error message |
 
 ## Integration Examples
 
