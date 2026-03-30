@@ -122,22 +122,18 @@ func BuildPreToolUseHook(
 }
 
 // validatePathAccess checks whether a tool invocation's file path arguments fall within
-// the allowed root directory. Returns nil for valid paths so the SDK sends no hook output
-// to the CLI server (identical to having no hook registered), avoiding a duplicate
-// permission.request. Returns "deny" only when a path escapes the allowed root.
+// the allowed root directory. Only SDK-managed tools (not in toolMetadata) are checked.
 func validatePathAccess(
 	input copilot.PreToolUseHookInput,
 	allowedRoot string,
 ) (*copilot.PreToolUseHookOutput, error) {
 	if allowedRoot == "" {
-		//nolint:nilnil // nil output omits the "output" key from the RPC response, matching no-hook behavior
-		return nil, nil
+		return &copilot.PreToolUseHookOutput{}, nil
 	}
 
 	args, ok := input.ToolArgs.(map[string]any)
 	if !ok || len(args) == 0 {
-		//nolint:nilnil // nil output omits the "output" key from the RPC response, matching no-hook behavior
-		return nil, nil
+		return &copilot.PreToolUseHookOutput{}, nil
 	}
 
 	for _, key := range pathArgKeys() {
@@ -163,8 +159,7 @@ func validatePathAccess(
 		}
 	}
 
-	//nolint:nilnil // nil output omits the "output" key from the RPC response, matching no-hook behavior
-	return nil, nil
+	return &copilot.PreToolUseHookOutput{}, nil
 }
 
 // WrapToolsWithForceInjection wraps write tools to inject the --force flag after
