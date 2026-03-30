@@ -849,11 +849,11 @@ data:
 	}
 }
 
-func TestValidateCmdSubstitutesFluxPostBuildVariablesFromSecret(t *testing.T) {
+func TestValidateCmdSubstitutesFluxPostBuildVariablesWithDefaults(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	setupSecretSubstitutionTestDir(t, tmpDir)
+	setupDefaultSubstitutionTestDir(t, tmpDir)
 
 	cmd := workload.NewValidateCmd()
 	cmd.SetArgs([]string{tmpDir})
@@ -871,11 +871,13 @@ func TestValidateCmdSubstitutesFluxPostBuildVariablesFromSecret(t *testing.T) {
 	)
 }
 
-// setupSecretSubstitutionTestDir creates a Flux project structure that uses
-// both a ConfigMap and a Secret (with base64 .data) as substituteFrom sources.
+// setupDefaultSubstitutionTestDir creates a Flux-like project structure used to
+// validate default and env-var style expansion in manifests. The fixture includes
+// ConfigMap and Secret manifests that resemble substituteFrom sources for realism,
+// but the current validate implementation does not read or use those resources.
 //
 //nolint:funlen // test setup helper builds full fixture tree for readability
-func setupSecretSubstitutionTestDir(
+func setupDefaultSubstitutionTestDir(
 	t *testing.T,
 	tmpDir string,
 ) {
