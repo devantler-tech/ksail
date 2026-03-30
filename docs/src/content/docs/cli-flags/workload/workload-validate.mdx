@@ -20,22 +20,20 @@ The validation process:
    Kubernetes resources and are validated as part of the kustomize build output instead)
 2. Validates kustomizations by building them with kustomize and validating the output
 
-Flux variable substitutions are resolved before validation using type-aware placeholders:
-  - ${VAR} (bare, no default): when a JSON schema is available, substitutes a typed placeholder
-    derived from the schema for the field ("placeholder" for strings, 0 for integers, true for
-    booleans). If no schema is found in the local cache for the resource/field, ${VAR} falls back
-    to the string value "placeholder" regardless of the actual field type.
-  - ${VAR:-default} / ${VAR:=default}: when a JSON schema is available, uses the default value,
-    parsed according to the field schema type (e.g., "3" → int 3 for integer fields). If no
-    schema is found in the local cache, the default is parsed using YAML-native type inference
-    instead of the JSON schema.
-  - Mixed text (e.g., "prefix.${VAR}"): substitutes "placeholder" in string context (this applies
-    both when a schema is present and when falling back to the schema-less behavior)
+	Flux variable substitutions are resolved before validation using type-aware placeholders:
+  - ${VAR} (bare, no default): when a JSON schema type is available, substitutes a typed
+    placeholder derived from the schema for the field ("placeholder" for strings, 0 for
+    integers, true for booleans); when no schema type is available, it falls back to the
+    string value "placeholder"
+  - ${VAR:-default} / ${VAR:=default}: when a schema type is available, uses the default
+    value parsed according to the field schema type (e.g., "3" → int 3 for integer fields);
+    when no schema type is available, the default is parsed using YAML-native type inference
+  - Mixed text (e.g., "prefix.${VAR}"): substitutes "placeholder" in string context
 
 Environment variables take precedence — if the variable is set in the process environment,
-its value is still processed by the same type-aware rules (bare/defaulted placeholders are
-coerced to the field type; mixed-text substitutions remain strings). Schema lookups use a
-local disk cache and require no network access.
+its value is used as-is. Schema lookups use a local disk cache and require no network access.
+When no cached JSON schema is available for a field, placeholders that cannot be typed from
+schema fall back to string values with YAML-native parsing for any defaults.
 
 By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.
 
