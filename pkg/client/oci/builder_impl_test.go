@@ -285,6 +285,8 @@ func TestShouldWriteAtRoot(t *testing.T) {
 // TestCollectManifestFiles verifies that only non-empty YAML/YML/JSON files
 // are collected, directories are skipped, empty files cause an error, and
 // results are returned in sorted order.
+//
+//nolint:funlen // Table-driven test with many sub-tests is clearer as a single function.
 func TestCollectManifestFiles(t *testing.T) {
 	t.Parallel()
 
@@ -303,8 +305,14 @@ func TestCollectManifestFiles(t *testing.T) {
 
 		root := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("# docs"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(root, "run.sh"), []byte("#!/bin/bash"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(root, "config.toml"), []byte("[section]"), 0o600))
+		require.NoError(
+			t,
+			os.WriteFile(filepath.Join(root, "run.sh"), []byte("#!/bin/bash"), 0o600),
+		)
+		require.NoError(
+			t,
+			os.WriteFile(filepath.Join(root, "config.toml"), []byte("[section]"), 0o600),
+		)
 
 		files, err := oci.CollectManifestFiles(root)
 
@@ -317,8 +325,14 @@ func TestCollectManifestFiles(t *testing.T) {
 
 		root := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(root, "a.yaml"), []byte("kind: Pod"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(root, "b.yml"), []byte("kind: Service"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(root, "c.json"), []byte(`{"kind":"Deployment"}`), 0o600))
+		require.NoError(
+			t,
+			os.WriteFile(filepath.Join(root, "b.yml"), []byte("kind: Service"), 0o600),
+		)
+		require.NoError(
+			t,
+			os.WriteFile(filepath.Join(root, "c.json"), []byte(`{"kind":"Deployment"}`), 0o600),
+		)
 		require.NoError(t, os.WriteFile(filepath.Join(root, "ignore.md"), []byte("# skip"), 0o600))
 
 		files, err := oci.CollectManifestFiles(root)
@@ -371,8 +385,14 @@ func TestCollectManifestFiles(t *testing.T) {
 		root := t.TempDir()
 		sub := filepath.Join(root, "subdir", "nested")
 		require.NoError(t, os.MkdirAll(sub, 0o750))
-		require.NoError(t, os.WriteFile(filepath.Join(root, "top.yaml"), []byte("kind: Top"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(sub, "deep.yaml"), []byte("kind: Deep"), 0o600))
+		require.NoError(
+			t,
+			os.WriteFile(filepath.Join(root, "top.yaml"), []byte("kind: Top"), 0o600),
+		)
+		require.NoError(
+			t,
+			os.WriteFile(filepath.Join(sub, "deep.yaml"), []byte("kind: Deep"), 0o600),
+		)
 
 		files, err := oci.CollectManifestFiles(root)
 
@@ -392,8 +412,14 @@ func TestCollectManifestFiles(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "manifest.YAML"), []byte("kind: Pod"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(root, "other.YML"), []byte("kind: Service"), 0o600))
+		require.NoError(
+			t,
+			os.WriteFile(filepath.Join(root, "manifest.YAML"), []byte("kind: Pod"), 0o600),
+		)
+		require.NoError(
+			t,
+			os.WriteFile(filepath.Join(root, "other.YML"), []byte("kind: Service"), 0o600),
+		)
 
 		files, err := oci.CollectManifestFiles(root)
 
