@@ -448,13 +448,13 @@ func (m *Model) sessionEventsToMessages(
 
 		//nolint:exhaustive // Only user and assistant messages are relevant for session history.
 		switch event.Type {
-		case copilot.UserMessage:
+		case copilot.SessionEventTypeUserMessage:
 			role = roleUser
 
 			if event.Data.Content != nil {
 				content = *event.Data.Content
 			}
-		case copilot.AssistantMessage:
+		case copilot.SessionEventTypeAssistantMessage:
 			role = roleAssistant
 
 			if event.Data.Content != nil {

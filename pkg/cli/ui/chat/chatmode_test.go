@@ -144,12 +144,12 @@ func TestChatMode_ToSDKMode(t *testing.T) {
 		mode     chat.ChatMode
 		expected rpc.Mode
 	}{
-		{name: "agent maps to interactive", mode: chat.AgentMode, expected: rpc.Interactive},
-		{name: "plan maps to plan", mode: chat.PlanMode, expected: rpc.Plan},
+		{name: "agent maps to interactive", mode: chat.AgentMode, expected: rpc.ModeInteractive},
+		{name: "plan maps to plan", mode: chat.PlanMode, expected: rpc.ModePlan},
 		{
 			name:     "unknown defaults to interactive",
 			mode:     chat.ChatMode(99),
-			expected: rpc.Interactive,
+			expected: rpc.ModeInteractive,
 		},
 	}
 

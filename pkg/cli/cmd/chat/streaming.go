@@ -53,25 +53,27 @@ func handleStreamingEvent(
 
 // computeStreamingOutput processes state changes under the lock and returns
 // the I/O action to perform after unlocking.
+//
+//nolint:cyclop // type-switch dispatcher for session events
 func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) streamingOutput {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 
 	//nolint:exhaustive // Only a subset of ~30 SDK event types are relevant for streaming display.
 	switch event.Type {
-	case copilot.AssistantMessageDelta:
+	case copilot.SessionEventTypeAssistantMessageDelta:
 		if event.Data.DeltaContent != nil {
 			return streamingOutput{action: actionDelta, text: *event.Data.DeltaContent}
 		}
-	case copilot.SessionIdle:
+	case copilot.SessionEventTypeSessionIdle:
 		state.markDone()
-	case copilot.SessionError:
+	case copilot.SessionEventTypeSessionError:
 		if event.Data.Message != nil {
 			state.responseErr = fmt.Errorf("%w: %s", errSessionError, *event.Data.Message)
 		}
 
 		state.markDone()
-	case copilot.ToolExecutionStart:
+	case copilot.SessionEventTypeToolExecutionStart:
 		toolName := getToolName(event)
 		toolArgs := getToolArgs(event)
 
@@ -79,8 +81,16 @@ func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) s
 			action: actionToolStart,
 			text:   fmt.Sprintf("\n🔧 Running: %s%s\n", toolName, toolArgs),
 		}
-	case copilot.ToolExecutionComplete:
+	case copilot.SessionEventTypeToolExecutionComplete:
 		return streamingOutput{action: actionToolComplete}
+	case copilot.SessionEventTypeSystemNotification:
+		if event.Data.Message != nil {
+			return streamingOutput{action: actionDelta, text: "\nℹ️ " + *event.Data.Message + "\n"}
+		}
+	case copilot.SessionEventTypeSessionWarning:
+		if event.Data.Message != nil {
+			return streamingOutput{action: actionDelta, text: "\n⚠️ " + *event.Data.Message + "\n"}
+		}
 	default:
 		// Ignore other event types
 	}

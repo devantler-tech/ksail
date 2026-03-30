@@ -39,9 +39,14 @@ func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandlerFunc {
 // isReadOperation determines if a permission request is for a read-only operation.
 func isReadOperation(kind copilot.PermissionRequestKind) bool {
 	switch kind {
-	case copilot.Read, copilot.URL:
+	case copilot.PermissionRequestKindRead, copilot.PermissionRequestKindURL:
 		return true
-	case copilot.CustomTool, copilot.KindShell, copilot.MCP, copilot.Memory, copilot.Write:
+	case copilot.PermissionRequestKindCustomTool,
+		copilot.PermissionRequestKindShell,
+		copilot.PermissionRequestKindMcp,
+		copilot.PermissionRequestKindMemory,
+		copilot.PermissionRequestKindWrite,
+		copilot.PermissionRequestKindHook:
 		return false
 	default:
 		return false

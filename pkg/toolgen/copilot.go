@@ -22,10 +22,11 @@ func ToCopilotTools(tools []ToolDefinition, opts ToolOptions) []copilot.Tool {
 // toCopilotTool converts a single tool definition to a Copilot SDK tool.
 func toCopilotTool(tool ToolDefinition, opts ToolOptions) copilot.Tool {
 	return copilot.Tool{
-		Name:        tool.Name,
-		Description: tool.Description,
-		Parameters:  tool.Parameters,
-		Handler:     buildCopilotHandler(tool, opts),
+		Name:           tool.Name,
+		Description:    tool.Description,
+		Parameters:     tool.Parameters,
+		Handler:        buildCopilotHandler(tool, opts),
+		SkipPermission: !tool.RequiresPermission,
 	}
 }
 

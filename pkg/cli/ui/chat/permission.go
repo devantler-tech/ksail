@@ -217,22 +217,26 @@ func firstNonEmpty(ptrs ...*string) string {
 }
 
 // formatPermissionKind converts a permission kind to a human-readable tool name.
+//
+//nolint:cyclop // exhaustive type-switch over permission kinds
 func formatPermissionKind(kind copilot.PermissionRequestKind) string {
 	switch kind {
-	case copilot.KindShell:
+	case copilot.PermissionRequestKindShell:
 		return "Shell Command"
-	case copilot.Write:
+	case copilot.PermissionRequestKindWrite:
 		return "File Write"
-	case copilot.Read:
+	case copilot.PermissionRequestKindRead:
 		return "File Read"
-	case copilot.URL:
+	case copilot.PermissionRequestKindURL:
 		return "URL"
-	case copilot.MCP:
+	case copilot.PermissionRequestKindMcp:
 		return "MCP Tool"
-	case copilot.CustomTool:
+	case copilot.PermissionRequestKindCustomTool:
 		return "Custom Tool"
-	case copilot.Memory:
+	case copilot.PermissionRequestKindMemory:
 		return "Memory"
+	case copilot.PermissionRequestKindHook:
+		return "Hook"
 	default:
 		// Capitalize and format the kind
 		kindStr := string(kind)

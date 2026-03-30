@@ -150,3 +150,15 @@ type modelChangeMsg struct {
 type shutdownMsg struct {
 	shutdownType string
 }
+
+// systemNotificationMsg carries an informational notification from the system.
+type systemNotificationMsg struct {
+	message  string
+	infoType string
+}
+
+// sessionWarningMsg carries a warning from the session.
+type sessionWarningMsg struct {
+	message     string
+	warningType string
+}

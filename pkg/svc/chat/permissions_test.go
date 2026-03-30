@@ -19,10 +19,10 @@ func TestIsReadOperation(t *testing.T) {
 		kind     copilot.PermissionRequestKind
 		expected bool
 	}{
-		{"read kind", copilot.Read, true},
-		{"url kind", copilot.URL, true},
-		{"write kind", copilot.Write, false},
-		{"shell kind", copilot.KindShell, false},
+		{"read kind", copilot.PermissionRequestKindRead, true},
+		{"url kind", copilot.PermissionRequestKindURL, true},
+		{"write kind", copilot.PermissionRequestKindWrite, false},
+		{"shell kind", copilot.PermissionRequestKindShell, false},
 		{"empty kind", "", false},
 		{"unknown kind", "unknown", false},
 	}
@@ -48,13 +48,13 @@ func TestGetPermissionDescription_BasicFields(t *testing.T) {
 		{
 			name: "no typed fields set",
 			request: copilot.PermissionRequest{
-				Kind: copilot.Write,
+				Kind: copilot.PermissionRequestKindWrite,
 			},
 		},
 		{
 			name: "with tool name",
 			request: copilot.PermissionRequest{
-				Kind:     copilot.Write,
+				Kind:     copilot.PermissionRequestKindWrite,
 				ToolName: new("ksail_cluster_create"),
 			},
 			expected: "Tool: ksail_cluster_create",
@@ -62,7 +62,7 @@ func TestGetPermissionDescription_BasicFields(t *testing.T) {
 		{
 			name: "with path",
 			request: copilot.PermissionRequest{
-				Kind: copilot.Write,
+				Kind: copilot.PermissionRequestKindWrite,
 				Path: new("/tmp/test.yaml"),
 			},
 			expected: "Path: /tmp/test.yaml",
@@ -70,7 +70,7 @@ func TestGetPermissionDescription_BasicFields(t *testing.T) {
 		{
 			name: "with full command text",
 			request: copilot.PermissionRequest{
-				Kind:            copilot.KindShell,
+				Kind:            copilot.PermissionRequestKindShell,
 				FullCommandText: new("rm -rf /tmp/test"),
 			},
 			expected: "$ rm -rf /tmp/test",
@@ -102,7 +102,7 @@ func TestGetPermissionDescription_DiffPreview(t *testing.T) {
 		{
 			name: "short diff",
 			request: copilot.PermissionRequest{
-				Kind: copilot.Write,
+				Kind: copilot.PermissionRequestKindWrite,
 				Diff: new("- old line\n+ new line"),
 			},
 			expected: "Diff:\n- old line\n+ new line",
@@ -110,7 +110,7 @@ func TestGetPermissionDescription_DiffPreview(t *testing.T) {
 		{
 			name: "truncated diff",
 			request: copilot.PermissionRequest{
-				Kind: copilot.Write,
+				Kind: copilot.PermissionRequestKindWrite,
 				Diff: new(longDiff),
 			},
 			expected: "Diff:\n" + longDiff[:200] + "...",

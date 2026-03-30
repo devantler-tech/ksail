@@ -98,11 +98,11 @@ func (m ChatMode) Next() ChatMode {
 func (m ChatMode) ToSDKMode() rpc.Mode {
 	switch m {
 	case PlanMode:
-		return rpc.Plan
+		return rpc.ModePlan
 	case AgentMode:
-		return rpc.Interactive
+		return rpc.ModeInteractive
 	default:
-		return rpc.Interactive
+		return rpc.ModeInteractive
 	}
 }
 
@@ -620,6 +620,12 @@ func (m *Model) handleStreamEvent(
 
 	case shutdownMsg:
 		return m.handleShutdown(msg)
+
+	case systemNotificationMsg:
+		return m.handleSystemNotification(msg)
+
+	case sessionWarningMsg:
+		return m.handleSessionWarning(msg)
 
 	default:
 		return m, nil

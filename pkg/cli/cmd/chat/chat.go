@@ -532,7 +532,7 @@ func buildSessionConfig(
 	model string,
 	reasoningEffort string,
 	streaming bool,
-	systemContext string,
+	sections map[string]copilot.SectionOverride,
 ) *copilot.SessionConfig {
 	backgroundThreshold := 0.80
 	exhaustionThreshold := 0.95
@@ -540,8 +540,8 @@ func buildSessionConfig(
 	config := &copilot.SessionConfig{
 		Streaming: streaming,
 		SystemMessage: &copilot.SystemMessageConfig{
-			Mode:    "append",
-			Content: systemContext,
+			Mode:     "customize",
+			Sections: sections,
 		},
 		InfiniteSessions: &copilot.InfiniteSessionConfig{
 			Enabled:                       new(true),
@@ -646,20 +646,13 @@ func handleChatRunE(cmd *cobra.Command) error {
 		})
 	}
 
-	systemContext, err := chatsvc.BuildSystemContext()
-	if err != nil && !flags.useTUI {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.WarningType,
-			Content: "Could not load full context: " + err.Error(),
-			Writer:  writer,
-		})
-	}
+	sections := chatsvc.BuildSystemSections()
 
 	sessionConfig := buildSessionConfig(
 		flags.model,
 		flags.reasoningEffort,
 		flags.streaming,
-		systemContext,
+		sections,
 	)
 
 	if flags.useTUI {

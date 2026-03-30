@@ -558,3 +558,31 @@ func (m *Model) handleShutdown(_ shutdownMsg) (tea.Model, tea.Cmd) {
 
 	return m, nil
 }
+
+// handleSystemNotification handles informational notifications from the system.
+func (m *Model) handleSystemNotification(msg systemNotificationMsg) (tea.Model, tea.Cmd) {
+	if msg.message != "" && len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		if last.role == roleAssistant && last.isStreaming {
+			m.currentResponse.WriteString("\n> ℹ️ " + msg.message + "\n")
+			last.content = m.currentResponse.String()
+			m.updateViewportContent()
+		}
+	}
+
+	return m, m.waitForEvent()
+}
+
+// handleSessionWarning handles warning events from the session.
+func (m *Model) handleSessionWarning(msg sessionWarningMsg) (tea.Model, tea.Cmd) {
+	if msg.message != "" && len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		if last.role == roleAssistant && last.isStreaming {
+			m.currentResponse.WriteString("\n> ⚠️ " + msg.message + "\n")
+			last.content = m.currentResponse.String()
+			m.updateViewportContent()
+		}
+	}
+
+	return m, m.waitForEvent()
+}
