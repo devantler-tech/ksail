@@ -14,12 +14,12 @@
     "copilot-sdk": {
       "source": "github/awesome-copilot",
       "sourceType": "github",
-      "computedHash": "3265212ec108eb3967ac061bf501d5f019d1e1ffef1d1f043d5346d0e4fa5097"
+      "computedHash": "c18b24fbb034c7f2ef74ab9349bbb35d84d19480c1f5f8f7a5a81451816180f3"
     },
     "find-skills": {
       "source": "vercel-labs/skills",
       "sourceType": "github",
-      "computedHash": "6412eb4eb3b91595ebab937f0c69501240e7ba761b3d82510b5cf506ec5c7adc"
+      "computedHash": "d31e234f0c90694a670222cdd1dafa853e051d7066beda389f1097c22dadd461"
     },
     "frontend-design": {
       "source": "anthropics/skills",
@@ -39,12 +39,12 @@
     "github-issues": {
       "source": "github/awesome-copilot",
       "sourceType": "github",
-      "computedHash": "8d31978128b593461c2b8e73eb517526b67dafe71a833773774fe4cc1cbdec05"
+      "computedHash": "3a752d99ddc3178f443fe242d490800398b2b42030a9d221b298b9486d90cc87"
     },
     "golang-pro": {
       "source": "jeffallan/claude-skills",
       "sourceType": "github",
-      "computedHash": "709f35fe79694533e7e8f1059eecb627cced758a1e31ae2d0c0c6f4bffa91277"
+      "computedHash": "c90a0798a12ea2d9191508439ec3191dd96713310615260ebe82ec5a09a4a434"
     },
     "refactor": {
       "source": "github/awesome-copilot",
