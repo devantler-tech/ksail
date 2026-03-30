@@ -101,6 +101,7 @@ export default defineConfig({
           items: [
             { label: "AI Chat Assistant", link: "/ai-chat/" },
             { label: "MCP Server", link: "/mcp/" },
+            { label: "Using KSail with AI Assistants", link: "/guides/ai-mcp/" },
           ],
         },
         {
