@@ -449,7 +449,7 @@ func (m *Model) Init() tea.Cmd {
 
 // Update handles messages and updates the model.
 //
-//nolint:cyclop // type-switch dispatcher for tea.Msg
+//nolint:cyclop,funlen // type-switch dispatcher for tea.Msg
 func (m *Model) Update(
 	msg tea.Msg,
 ) (tea.Model, tea.Cmd) {
@@ -473,7 +473,9 @@ func (m *Model) Update(
 		PermissionRequestMsg, streamEndMsg, turnStartMsg, turnEndMsg,
 		reasoningMsg, abortMsg, snapshotRewindMsg, streamErrMsg,
 		usageMsg, compactionStartMsg, compactionCompleteMsg,
-		intentMsg, modelChangeMsg, shutdownMsg:
+		intentMsg, modelChangeMsg, shutdownMsg,
+		systemNotificationMsg, sessionWarningMsg,
+		ToolProgressMsg, TaskCompleteMsg:
 		return m.handleStreamEvent(msg)
 
 	case copyFeedbackClearMsg:
@@ -626,6 +628,12 @@ func (m *Model) handleStreamEvent(
 
 	case sessionWarningMsg:
 		return m.handleSessionWarning(msg)
+
+	case ToolProgressMsg:
+		return m.handleToolProgress(msg)
+
+	case TaskCompleteMsg:
+		return m.handleTaskComplete(msg)
 
 	default:
 		return m, nil

@@ -328,20 +328,8 @@ func BuildSystemContext(cfg SystemContextConfig) (string, error) {
 		appendWorkingDirContext(&builder, cfg.ConfigFileName)
 	}
 
-	if cfg.Documentation != "" {
-		builder.WriteString("<documentation>\n")
-		builder.WriteString(cfg.Documentation)
-		builder.WriteString("\n</documentation>\n\n")
-	}
-
-	if cfg.CLIHelp != "" {
-		builder.WriteString("<cli_help>\n")
-		builder.WriteString(cfg.CLIHelp)
-		builder.WriteString("\n</cli_help>\n\n")
-	}
-
-	if cfg.Instructions != "" {
-		builder.WriteString(cfg.Instructions)
+	if custom := buildCustomInstructions(cfg); custom != "" {
+		builder.WriteString(custom)
 	}
 
 	return builder.String(), nil

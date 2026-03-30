@@ -54,11 +54,12 @@ var (
 
 // flags holds parsed flags for the chat command.
 type flags struct {
-	model           string
-	reasoningEffort string
-	streaming       bool
-	timeout         time.Duration
-	useTUI          bool
+	model             string
+	reasoningEffort   string
+	streaming         bool
+	timeout           time.Duration
+	useTUI            bool
+	telemetryEndpoint string
 }
 
 // parseChatFlags extracts and resolves chat command flags.
@@ -75,6 +76,7 @@ func parseChatFlags(cmd *cobra.Command) (flags, error) {
 	streaming, _ := cmd.Flags().GetBool("streaming")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 	useTUI, _ := cmd.Flags().GetBool("tui")
+	telemetryEndpoint, _ := cmd.Flags().GetString("telemetry-endpoint")
 
 	// Load config values
 	cfg := loadChatConfig()
@@ -89,11 +91,12 @@ func parseChatFlags(cmd *cobra.Command) (flags, error) {
 	}
 
 	return flags{
-		model:           model,
-		reasoningEffort: reasoningEffort,
-		streaming:       streaming,
-		timeout:         timeout,
-		useTUI:          useTUI,
+		model:             model,
+		reasoningEffort:   reasoningEffort,
+		streaming:         streaming,
+		timeout:           timeout,
+		useTUI:            useTUI,
+		telemetryEndpoint: telemetryEndpoint,
 	}, nil
 }
 
@@ -143,8 +146,9 @@ func resolveReasoningEffort(flagValue, configValue string) (string, error) {
 // and returns a cleanup function that should be deferred.
 func setupCopilotClient(
 	ctx context.Context,
+	telemetryEndpoint string,
 ) (*copilot.Client, string, func(), error) {
-	client, err := startCopilotClient(ctx)
+	client, err := startCopilotClient(ctx, telemetryEndpoint)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -176,7 +180,7 @@ func setupCopilotClient(
 // GITHUB_TOKEN is intentionally NOT used: it is a general-purpose PAT that
 // may lack Copilot-specific scopes, causing API endpoints like models.list
 // to return 400.
-func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
+func startCopilotClient(ctx context.Context, telemetryEndpoint string) (*copilot.Client, error) {
 	// Environment variables to check for explicit Copilot tokens (priority order).
 	tokenEnvVars := []string{"KSAIL_COPILOT_TOKEN", "COPILOT_TOKEN"}
 
@@ -200,6 +204,14 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 			opts.GitHubToken = token
 
 			break
+		}
+	}
+
+	if telemetryEndpoint != "" {
+		opts.Telemetry = &copilot.TelemetryConfig{
+			OTLPEndpoint: telemetryEndpoint,
+			ExporterType: "otlp-http",
+			SourceName:   "ksail",
 		}
 	}
 
@@ -596,6 +608,10 @@ Write operations require explicit confirmation before execution.`,
 		"Response timeout duration",
 	)
 	cmd.Flags().Bool("tui", true, "Use interactive TUI mode with markdown rendering")
+	cmd.Flags().String(
+		"telemetry-endpoint", "",
+		"OpenTelemetry OTLP endpoint for trace export (e.g., http://localhost:4318)",
+	)
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		return handleChatRunE(cmd)
@@ -631,7 +647,7 @@ func handleChatRunE(cmd *cobra.Command) error {
 		notifyNonTUIStartup(writer)
 	}
 
-	client, loginName, cleanup, err := setupCopilotClient(ctx)
+	client, loginName, cleanup, err := setupCopilotClient(ctx, flags.telemetryEndpoint)
 	if err != nil {
 		return err
 	}

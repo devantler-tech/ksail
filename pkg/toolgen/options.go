@@ -1,7 +1,9 @@
 package toolgen
 
 import (
+	"context"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -37,6 +39,40 @@ type ToolOptions struct {
 	// Logger is used for debug logging during command execution.
 	// If nil, no logging is performed.
 	Logger *slog.Logger
+	// SessionLog is an optional shared reference to a session log function.
+	// Set after session creation to enable SDK-native logging from tool handlers.
+	// Tool handlers check if the function is set before calling.
+	SessionLog *SessionLogRef
+}
+
+// SessionLogRef holds a session log function that can be set after session creation.
+// It is safe for concurrent read/write access.
+type SessionLogRef struct {
+	mu sync.RWMutex
+	fn func(ctx context.Context, message, level string)
+}
+
+// NewSessionLogRef creates a new empty SessionLogRef.
+func NewSessionLogRef() *SessionLogRef {
+	return &SessionLogRef{}
+}
+
+// Set configures the log function. Call after session creation.
+func (r *SessionLogRef) Set(fn func(ctx context.Context, message, level string)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.fn = fn
+}
+
+// Log sends a log message to the session. No-op if the function is not set.
+func (r *SessionLogRef) Log(ctx context.Context, message, level string) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if r.fn != nil {
+		r.fn(ctx, message, level)
+	}
 }
 
 // OutputChunk represents a chunk of output from a running command.

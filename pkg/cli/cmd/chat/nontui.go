@@ -14,6 +14,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	chatsvc "github.com/devantler-tech/ksail/v5/pkg/svc/chat"
+	"github.com/devantler-tech/ksail/v5/pkg/toolgen"
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/spf13/cobra"
 )
@@ -48,8 +49,13 @@ func runNonTUIChat(
 	cmd *cobra.Command,
 	writer io.Writer,
 ) error {
+	// Create session log ref for SDK-native tool logging
+	sessionLog := toolgen.NewSessionLogRef()
+
 	// Set up tools without streaming
-	tools, toolMetadata := chatsvc.GetKSailToolMetadata(cmd.Root(), nil) //nolint:contextcheck
+	tools, toolMetadata := chatsvc.GetKSailToolMetadata( //nolint:contextcheck
+		cmd.Root(), nil, sessionLog,
+	)
 	// In non-TUI mode, pass nil for eventChan and yoloModeRef:
 	// - nil eventChan: write tools are auto-approved (no UI to prompt for confirmation)
 	// - nil yoloModeRef: YOLO mode toggle is not available (write tools auto-approve via nil eventChan)
@@ -69,11 +75,17 @@ func runNonTUIChat(
 		OnPreToolUse: BuildPreToolUseHook(allowedRoot),
 	}
 
+	// Register OnEvent handler for session-level events not in the per-turn handler
+	sessionConfig.OnEvent = buildNonTUIOnEventHandler(writer)
+
 	// Create session
 	session, err := client.CreateSession(ctx, sessionConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create chat session: %w", err)
 	}
+
+	// Wire session log now that the session exists
+	wireSessionLog(session, sessionLog)
 
 	defer func() {
 		select {
@@ -224,4 +236,22 @@ func isExitCommand(input string) bool {
 
 	return lower == "exit" || lower == "quit" || lower == "q" || lower == "/exit" ||
 		lower == "/quit"
+}
+
+// buildNonTUIOnEventHandler creates an OnEvent handler for non-TUI mode that logs
+// session-level events not covered by the per-turn streaming handler.
+func buildNonTUIOnEventHandler(writer io.Writer) copilot.SessionEventHandler {
+	return func(event copilot.SessionEvent) {
+		//nolint:exhaustive // Only session-level events not in per-turn handler; rest ignored.
+		switch event.Type {
+		case copilot.SessionEventTypeToolExecutionProgress:
+			if event.Data.ProgressMessage != nil {
+				_, _ = fmt.Fprintf(writer, "  ⏳ %s\n", *event.Data.ProgressMessage)
+			}
+		case copilot.SessionEventTypeSessionTaskComplete:
+			if event.Data.Summary != nil {
+				_, _ = fmt.Fprintf(writer, "\n✅ %s\n", *event.Data.Summary)
+			}
+		}
+	}
 }

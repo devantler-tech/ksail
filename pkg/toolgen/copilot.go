@@ -22,11 +22,14 @@ func ToCopilotTools(tools []ToolDefinition, opts ToolOptions) []copilot.Tool {
 // toCopilotTool converts a single tool definition to a Copilot SDK tool.
 func toCopilotTool(tool ToolDefinition, opts ToolOptions) copilot.Tool {
 	return copilot.Tool{
-		Name:           tool.Name,
-		Description:    tool.Description,
-		Parameters:     tool.Parameters,
-		Handler:        buildCopilotHandler(tool, opts),
-		SkipPermission: !tool.RequiresPermission,
+		Name:        tool.Name,
+		Description: tool.Description,
+		Parameters:  tool.Parameters,
+		Handler:     buildCopilotHandler(tool, opts),
+		// KSail wraps tools with its own permission and mode metadata and also
+		// installs a global OnPermissionRequest handler. To avoid double prompts
+		// and stdin blocking, always skip the Copilot SDK's built-in permission flow.
+		SkipPermission: true,
 	}
 }
 
@@ -42,14 +45,30 @@ func buildCopilotHandler(tool ToolDefinition, opts ToolOptions) copilot.ToolHand
 		// Build the full command string for reporting
 		fullCmd := buildFullCommand(tool.CommandPath, params)
 
+		// Log tool execution start to the session
+		if opts.SessionLog != nil {
+			opts.SessionLog.Log(context.Background(), "Running: "+fullCmd, "info")
+		}
+
 		// Execute the command
 		// Note: The Copilot SDK ToolHandler doesn't provide a context parameter,
 		// so we create our own. This means parent context cancellation won't
 		// stop running commands. Use CommandTimeout in ToolOptions for timeouts.
 		ctx := context.Background()
 		output, err := executeTool(ctx, tool, params, opts)
+		result := buildCopilotResult(fullCmd, output, err)
 
-		return buildCopilotResult(fullCmd, output, err), nil
+		// Log tool completion to the session
+		if opts.SessionLog != nil {
+			level := "info"
+			if err != nil {
+				level = "warning"
+			}
+
+			opts.SessionLog.Log(context.Background(), result.SessionLog, level)
+		}
+
+		return result, nil
 	}
 }
 

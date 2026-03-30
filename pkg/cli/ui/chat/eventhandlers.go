@@ -32,7 +32,7 @@ func newSessionEventDispatcher(
 
 // dispatch routes a Copilot session event to the appropriate handler.
 //
-//nolint:cyclop // type-switch dispatcher for session events
+//nolint:cyclop,funlen // type-switch dispatcher for session events
 func (d *sessionEventDispatcher) dispatch(
 	event copilot.SessionEvent,
 ) {
@@ -75,6 +75,10 @@ func (d *sessionEventDispatcher) dispatch(
 		d.handleSystemNotification(event)
 	case copilot.SessionEventTypeSessionWarning:
 		d.handleSessionWarning(event)
+	case copilot.SessionEventTypeToolExecutionProgress:
+		d.handleToolProgress(event)
+	case copilot.SessionEventTypeSessionTaskComplete:
+		d.handleTaskComplete(event)
 	}
 }
 
@@ -302,4 +306,22 @@ func (d *sessionEventDispatcher) handleSessionWarning(event copilot.SessionEvent
 	}
 
 	d.eventChan <- msg
+}
+
+func (d *sessionEventDispatcher) handleToolProgress(event copilot.SessionEvent) {
+	if event.Data.ProgressMessage != nil && event.Data.ToolCallID != nil {
+		d.eventChan <- ToolProgressMsg{
+			ToolID:  *event.Data.ToolCallID,
+			Message: *event.Data.ProgressMessage,
+		}
+	}
+}
+
+func (d *sessionEventDispatcher) handleTaskComplete(event copilot.SessionEvent) {
+	msg := ""
+	if event.Data.Summary != nil {
+		msg = *event.Data.Summary
+	}
+
+	d.eventChan <- TaskCompleteMsg{Message: msg}
 }

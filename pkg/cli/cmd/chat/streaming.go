@@ -91,6 +91,17 @@ func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) s
 		if event.Data.Message != nil {
 			return streamingOutput{action: actionDelta, text: "\n⚠️ " + *event.Data.Message + "\n"}
 		}
+	case copilot.SessionEventTypeToolExecutionProgress:
+		if event.Data.ProgressMessage != nil {
+			return streamingOutput{
+				action: actionDelta,
+				text:   "  ⏳ " + *event.Data.ProgressMessage + "\n",
+			}
+		}
+	case copilot.SessionEventTypeSessionTaskComplete:
+		if event.Data.Summary != nil {
+			return streamingOutput{action: actionDelta, text: "\n✅ " + *event.Data.Summary + "\n"}
+		}
 	default:
 		// Ignore other event types
 	}
