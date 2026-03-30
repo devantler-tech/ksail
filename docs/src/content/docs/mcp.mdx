@@ -100,6 +100,8 @@ All MCP tool handlers return a structured JSON envelope, making it easy to parse
 
 ## Integration Examples
 
+For a complete setup guide with step-by-step instructions for each AI client — including PATH configuration, example prompts, and tool reference — see [Using KSail with AI Assistants](/guides/ai-mcp/).
+
 ### Claude Desktop
 
 Add KSail to your Claude Desktop configuration:
@@ -126,6 +128,38 @@ After restarting Claude Desktop, the KSail tools will be available. Try:
 > "Create a Vanilla Kubernetes cluster with Cilium CNI"
 
 Claude will use the `cluster_write` tool (with `command: "init"` and `command: "create"`) to fulfill your request.
+
+### Cursor
+
+Add KSail to your Cursor MCP configuration. Create or edit `.cursor/mcp.json` in your project root (project-level) or `~/.cursor/mcp.json` (global):
+
+````json
+{
+  "mcpServers": {
+    "ksail": {
+      "command": "ksail",
+      "args": ["mcp"]
+    }
+  }
+}
+````
+
+After saving, restart Cursor or reload MCP configuration from Cursor Settings → MCP.
+
+### Windsurf
+
+Add KSail via **Windsurf Settings → MCP → Add MCP Server**:
+
+````json
+{
+  "mcpServers": {
+    "ksail": {
+      "command": "ksail",
+      "args": ["mcp"]
+    }
+  }
+}
+````
 
 ### VSCode Extension
 
