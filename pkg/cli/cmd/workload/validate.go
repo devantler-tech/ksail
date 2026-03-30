@@ -54,15 +54,18 @@ The validation process:
    Kubernetes resources and are validated as part of the kustomize build output instead)
 2. Validates kustomizations by building them with kustomize and validating the output
 
-Flux variable substitutions are resolved before validation. When Flux Kustomization resources
-in the validated directory tree define spec.postBuild.substituteFrom, the referenced ConfigMaps
-and Secrets are loaded from YAML manifests under the same validation path (they are not fetched
-from the cluster). The key/value data from those resources is used to expand ${VAR} references
-in the rendered manifests. Variables not found in those sources fall back to the process
-environment. Shell-style default syntax (${VAR:-default}, ${VAR:=default}) applies default
-values only when a variable is unset in both substitution sources and the environment; an
-explicitly set empty string does not trigger the default. Note that Secrets may still be read
-for substitution even when --skip-secrets is used to skip validating Secret resources.
+	Flux variable substitutions are resolved before validation using type-aware placeholders:
+  - ${VAR} (bare, no default): when a JSON schema type is available, substitutes a typed
+    placeholder derived from the schema for the field ("placeholder" for strings, 0 for
+    integers, true for booleans); when no schema type is available, it falls back to the
+    string value "placeholder"
+  - ${VAR:-default} / ${VAR:=default}: when a schema type is available, uses the default
+    value parsed according to the field schema type (e.g., "3" → int 3 for integer fields);
+    when no schema type is available, the default is parsed using YAML-native type inference
+  - Mixed text (e.g., "prefix.${VAR}"): substitutes "placeholder" in string context
+
+Schema lookups use a local disk cache and require no network access. When no cached
+JSON schema is available, placeholders fall back to strings with YAML-native parsing.
 
 By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.`,
 		Args: cobra.MaximumNArgs(1),
