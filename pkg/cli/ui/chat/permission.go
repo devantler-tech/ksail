@@ -133,6 +133,7 @@ func (m *Model) renderPermissionModal() string {
 // CreateTUIPermissionHandler creates a permission handler that integrates with the TUI.
 // It sends permission requests to the provided event channel and waits for a response.
 // This allows the TUI to display permission prompts and collect user input.
+// Read and URL operations are auto-approved to avoid excessive prompting.
 // When yoloModeRef is provided and YOLO mode is enabled, permissions are auto-approved.
 func CreateTUIPermissionHandler(
 	eventChan chan<- tea.Msg,
@@ -144,6 +145,14 @@ func CreateTUIPermissionHandler(
 	) (copilot.PermissionRequestResult, error) {
 		// In YOLO mode, auto-approve all SDK permission requests
 		if yoloModeRef != nil && yoloModeRef.IsEnabled() {
+			return copilot.PermissionRequestResult{
+				Kind: copilot.PermissionRequestResultKindApproved,
+			}, nil
+		}
+
+		// Auto-approve read operations to avoid excessive prompting.
+		// Matches the non-TUI handler's behavior.
+		if isReadOperation(request.Kind) {
 			return copilot.PermissionRequestResult{
 				Kind: copilot.PermissionRequestResultKindApproved,
 			}, nil
@@ -249,5 +258,22 @@ func formatPermissionKind(kind copilot.PermissionRequestKind) string {
 		caser := cases.Title(language.English)
 
 		return caser.String(formatted)
+	}
+}
+
+// isReadOperation determines if a permission request is for a read-only operation.
+func isReadOperation(kind copilot.PermissionRequestKind) bool {
+	switch kind {
+	case copilot.PermissionRequestKindRead, copilot.PermissionRequestKindURL:
+		return true
+	case copilot.PermissionRequestKindCustomTool,
+		copilot.PermissionRequestKindShell,
+		copilot.PermissionRequestKindMcp,
+		copilot.PermissionRequestKindMemory,
+		copilot.PermissionRequestKindWrite,
+		copilot.PermissionRequestKindHook:
+		return false
+	default:
+		return false
 	}
 }
