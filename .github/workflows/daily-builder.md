@@ -152,7 +152,7 @@ To decide which phase to perform:
    The PR description **must** follow the repository PR template (<https://github.com/devantler-tech/.github/blob/main/.github/PULL_REQUEST_TEMPLATE.md>):
 
    ```
-   Please include a summary of the changes. **What** has changed and **why**?.
+   Please include a summary of the changes. **What** has changed and **why**?
 
    Fixes [url OR #issue]
 
