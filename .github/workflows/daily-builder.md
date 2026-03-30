@@ -149,7 +149,7 @@ To decide which phase to perform:
 
    **Critical:** Exclude tool-generated files from PR. Double-check added files and remove any that don't belong.
 
-   The PR description **must** follow the repository PR template (https://github.com/devantler-tech/.github/blob/main/.github/PULL_REQUEST_TEMPLATE.md):
+   The PR description **must** follow the repository PR template (<https://github.com/devantler-tech/.github/blob/main/.github/PULL_REQUEST_TEMPLATE.md>):
 
    ```
    Please include a summary of the changes. **What** has changed and **why**?.
