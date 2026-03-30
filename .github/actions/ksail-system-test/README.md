@@ -5,14 +5,15 @@ A GitHub composite action that runs a full end-to-end system test of KSail, test
 ## What It Tests
 
 1. **Cluster Init** (optional) - Initialize a new KSail project
-2. **Cluster Create** - Create and start a Kubernetes cluster
-3. **Cluster List** - Verify cluster appears in list
-4. **Workload Create** - Create a deployment imperatively
-5. **Workload Apply** (optional) - Apply a kustomize overlay
-6. **Workload Push & Reconcile** (GitOps only) - Test GitOps workflow
-7. **Cluster Stop** - Stop the running cluster
-8. **Cluster Start** - Start the stopped cluster
-9. **Cluster Delete** - Clean up the cluster
+2. **Manifest Validate** (when `init` is enabled) - Validate generated manifests before cluster creation
+3. **Cluster Create** - Create and start a Kubernetes cluster
+4. **Cluster List** - Verify cluster appears in list
+5. **Workload Create** - Create a deployment imperatively
+6. **Workload Apply** (optional) - Apply a kustomize overlay
+7. **Workload Push & Reconcile** (GitOps only) - Test GitOps workflow
+8. **Cluster Stop** - Stop the running cluster
+9. **Cluster Start** - Start the stopped cluster
+10. **Cluster Delete** - Clean up the cluster
 
 ## Usage
 
