@@ -108,7 +108,7 @@ func TestExpandFluxSubstitutionsMultiDoc(t *testing.T) {
 	assert.NotContains(t, resultStr, "${name2}")
 }
 
-func TestExpandFluxSubstitutionsEnvOverridesDefaultHyphenSyntax(t *testing.T) {
+func TestExpandFluxSubstitutionsEnvIgnoredDefaultHyphenSyntax(t *testing.T) {
 	t.Setenv("svc_name", "real-service")
 
 	input := []byte(
@@ -116,11 +116,11 @@ func TestExpandFluxSubstitutionsEnvOverridesDefaultHyphenSyntax(t *testing.T) {
 	)
 	result := workload.ExportExpandFluxSubstitutions(input)
 	resultStr := string(result)
-	assert.Contains(t, resultStr, "name: real-service")
-	assert.NotContains(t, resultStr, "name: my-service")
+	assert.Contains(t, resultStr, "name: my-service")
+	assert.NotContains(t, resultStr, "name: real-service")
 }
 
-func TestExpandFluxSubstitutionsEnvOverridesDefaultEqualsSyntax(t *testing.T) {
+func TestExpandFluxSubstitutionsEnvIgnoredDefaultEqualsSyntax(t *testing.T) {
 	t.Setenv("svc_name", "real-service")
 
 	input := []byte(
@@ -128,8 +128,8 @@ func TestExpandFluxSubstitutionsEnvOverridesDefaultEqualsSyntax(t *testing.T) {
 	)
 	result := workload.ExportExpandFluxSubstitutions(input)
 	resultStr := string(result)
-	assert.Contains(t, resultStr, "name: real-service")
-	assert.NotContains(t, resultStr, "name: my-service")
+	assert.Contains(t, resultStr, "name: my-service")
+	assert.NotContains(t, resultStr, "name: real-service")
 }
 
 func TestExportGetSchemaTypeAtPath(t *testing.T) {

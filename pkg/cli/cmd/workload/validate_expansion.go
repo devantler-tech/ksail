@@ -155,7 +155,7 @@ func expandListDocument(list []any, doc []byte) []byte {
 }
 
 // expandFallback performs simple regex-based expansion when YAML parsing fails.
-// Variable references are expanded using env vars with defaults fallback.
+// Variable references are expanded using defaults with fallback to placeholder values.
 func expandFallback(data []byte) []byte {
 	return fluxVarPattern.ReplaceAllFunc(data, func(match []byte) []byte {
 		groups := fluxVarPattern.FindSubmatch(match)
@@ -219,30 +219,13 @@ func expandSingleVar(match []string, path string, schema map[string]any) any {
 	return expandVarWithDefault(varName, defaultVal, operator, schemaType)
 }
 
-// expandBareVar expands a bare ${VAR} reference using env vars or typed placeholders.
-func expandBareVar(varName, schemaType string) any {
-	if envVal, envSet := os.LookupEnv(varName); envSet {
-		return parseTypedDefault(envVal, schemaType)
-	}
-
+// expandBareVar expands a bare ${VAR} reference using typed placeholders.
+func expandBareVar(_, schemaType string) any {
 	return typedPlaceholderValue(schemaType)
 }
 
 // expandVarWithDefault expands ${VAR:=default} or ${VAR:-default} references.
-func expandVarWithDefault(varName, defaultVal, operator, schemaType string) any {
-	envVal, envSet := os.LookupEnv(varName)
-
-	switch operator {
-	case ":=":
-		if envSet {
-			return parseTypedDefault(envVal, schemaType)
-		}
-	case ":-":
-		if envSet && envVal != "" {
-			return parseTypedDefault(envVal, schemaType)
-		}
-	}
-
+func expandVarWithDefault(_, defaultVal, _, schemaType string) any {
 	return parseTypedDefault(defaultVal, schemaType)
 }
 
@@ -259,30 +242,14 @@ func expandMixedText(val string) string {
 }
 
 // resolveInlineVar resolves a single variable reference in a mixed-text context to a string.
-func resolveInlineVar(varName, operator, defaultVal string) string {
-	envVal, envSet := os.LookupEnv(varName)
-
+func resolveInlineVar(_, operator, defaultVal string) string {
 	switch operator {
 	case "":
-		if envSet {
-			return envVal
-		}
-
 		return placeholderString
-	case ":=":
-		if envSet {
-			return envVal
-		}
-
-		return defaultVal
-	case ":-":
-		if envSet && envVal != "" {
-			return envVal
-		}
-
+	case ":=", ":-":
 		return defaultVal
 	default:
-		return "${" + varName + operator + defaultVal + "}"
+		return placeholderString
 	}
 }
 

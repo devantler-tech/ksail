@@ -64,10 +64,8 @@ The validation process:
     when no schema type is available, the default is parsed using YAML-native type inference
   - Mixed text (e.g., "prefix.${VAR}"): substitutes "placeholder" in string context
 
-Environment variables take precedence — if the variable is set in the process environment,
-its value is used as-is. Schema lookups use a local disk cache and require no network access.
-When no cached JSON schema is available for a field, placeholders that cannot be typed from
-schema fall back to string values with YAML-native parsing for any defaults.
+Schema lookups use a local disk cache and require no network access. When no cached
+JSON schema is available, placeholders fall back to strings with YAML-native parsing.
 
 By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.`,
 		Args: cobra.MaximumNArgs(1),
