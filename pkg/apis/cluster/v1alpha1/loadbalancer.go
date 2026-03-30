@@ -68,7 +68,7 @@ func (l *LoadBalancer) ValidValues() []string {
 func (l *LoadBalancer) EffectiveValue(
 	distribution Distribution, provider Provider,
 ) LoadBalancer {
-	if *l != LoadBalancerDefault {
+	if *l != LoadBalancerDefault && *l != "" {
 		return *l
 	}
 

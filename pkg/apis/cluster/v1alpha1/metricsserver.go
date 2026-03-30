@@ -66,7 +66,7 @@ func (m *MetricsServer) ValidValues() []string {
 // distributions that bundle metrics-server (e.g. K3s), Default resolves
 // to Enabled; otherwise it resolves to Disabled.
 func (m *MetricsServer) EffectiveValue(distribution Distribution) MetricsServer {
-	if *m != MetricsServerDefault {
+	if *m != MetricsServerDefault && *m != "" {
 		return *m
 	}
 

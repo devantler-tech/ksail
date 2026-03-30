@@ -24,6 +24,7 @@ type Installer struct {
 
 	distribution           v1alpha1.Distribution
 	provider               v1alpha1.Provider
+	loadBalancer           v1alpha1.LoadBalancer
 	gatewayAPICRDInstaller GatewayAPICRDInstallerFunc
 }
 
@@ -33,7 +34,10 @@ func NewInstaller(
 	kubeconfig, context string,
 	timeout time.Duration,
 ) *Installer {
-	return NewInstallerWithDistribution(client, kubeconfig, context, timeout, "", "")
+	return NewInstallerWithDistribution(
+		client, kubeconfig, context, timeout,
+		"", "", v1alpha1.LoadBalancerDefault,
+	)
 }
 
 // NewInstallerWithDistribution creates a new Cilium installer instance
@@ -44,10 +48,12 @@ func NewInstallerWithDistribution(
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,
 	provider v1alpha1.Provider,
+	loadBalancer v1alpha1.LoadBalancer,
 ) *Installer {
 	ciliumInstaller := &Installer{
 		distribution: distribution,
 		provider:     provider,
+		loadBalancer: loadBalancer,
 	}
 	ciliumInstaller.InstallerBase = cni.NewInstallerBase(
 		client,
@@ -179,10 +185,17 @@ func (c *Installer) getCiliumValues() map[string]string {
 		// Vanilla, K3s, and VCluster use default values
 	}
 
-	// Add provider-specific values
+	// Add provider-specific values.
+	// hostNetwork is only needed on Docker when no LoadBalancer is configured,
+	// because Docker clusters use port mappings and there is no external LB.
+	// When a LoadBalancer IS configured (e.g. MetalLB), it assigns IPs and
+	// hostNetwork is not required.
 	switch c.provider {
 	case v1alpha1.ProviderDocker:
-		maps.Copy(values, dockerCiliumValues())
+		effective := c.loadBalancer.EffectiveValue(c.distribution, c.provider)
+		if effective != v1alpha1.LoadBalancerEnabled {
+			maps.Copy(values, dockerCiliumValues())
+		}
 	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
 		// Hetzner and Omni use default values
 	}
