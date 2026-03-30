@@ -169,7 +169,7 @@ To decide which phase to perform:
 
    Fill in the template as follows:
    - Replace the summary placeholder with a clear explanation of what changed and why, including the source (roadmap or backlog), your approach, and validation steps taken.
-   - **Critical:** If the PR addresses one or more open issues, you **must** include `Fixes <issue-url>` (e.g., `Fixes https://github.com/${{ github.repository }}/issues/123`) so that merging the PR automatically closes the issue. Use one `Fixes <url>` line per issue. If the work does not resolve any issue, omit the `Fixes` line.
+   - **Critical:** If the PR addresses one or more open issues, you **must** include `Fixes <issue-url>` (e.g., `Fixes #123`) so that merging the PR automatically closes the issue. Use one `Fixes <url>` line per issue. If the work does not resolve any issue, omit the `Fixes` line.
    - Check the appropriate type(s) of change and delete the rest.
 
    After creation, check the pull request to ensure it is correct, includes all expected files, and doesn't include any unwanted files or changes. Make any necessary corrections by pushing further commits to the branch.
