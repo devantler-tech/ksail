@@ -56,7 +56,7 @@ func (c *CSI) ValidValues() []string {
 // unchanged. For distributions that bundle a CSI driver (e.g. K3s),
 // Default resolves to Enabled; otherwise it resolves to Disabled.
 func (c *CSI) EffectiveValue(distribution Distribution, provider Provider) CSI {
-	if *c != CSIDefault {
+	if *c != CSIDefault && *c != "" {
 		return *c
 	}
 
