@@ -2,6 +2,7 @@ package chat
 
 import (
 	"strings"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -28,6 +29,8 @@ func (m *Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "Y":
 		return m.allowPermission()
+	case "a", "A":
+		return m.allowAlwaysPermission()
 	case "n", "N", "esc":
 		return m.denyPermission()
 	case "ctrl+c":
@@ -57,6 +60,18 @@ func (m *Model) allowPermission() (tea.Model, tea.Cmd) {
 	m.updateViewportContent()
 
 	return m, m.waitForEvent()
+}
+
+// allowAlwaysPermission approves the pending permission request and activates YOLO mode
+// so all future permission requests are auto-approved for the rest of the session.
+func (m *Model) allowAlwaysPermission() (tea.Model, tea.Cmd) {
+	m.yoloMode = true
+
+	if m.yoloModeRef != nil {
+		m.yoloModeRef.SetEnabled(true)
+	}
+
+	return m.allowPermission()
 }
 
 // denyPermission denies the pending permission request.
@@ -130,6 +145,42 @@ func (m *Model) renderPermissionModal() string {
 	return modalStyle.Render(strings.TrimRight(content.String(), "\n"))
 }
 
+// permissionDeduplicator tracks approved ToolCallIDs to prevent duplicate permission prompts.
+// The CLI server may deliver the same permission request via both the V3 broadcast
+// (session.event) and V2 RPC (permission.request) protocols.
+type permissionDeduplicator struct {
+	mu      sync.Mutex
+	allowed map[string]struct{}
+}
+
+func newPermissionDeduplicator() *permissionDeduplicator {
+	return &permissionDeduplicator{allowed: make(map[string]struct{})}
+}
+
+func (d *permissionDeduplicator) wasApproved(toolCallID string) bool {
+	if toolCallID == "" {
+		return false
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	_, ok := d.allowed[toolCallID]
+
+	return ok
+}
+
+func (d *permissionDeduplicator) markApproved(toolCallID string) {
+	if toolCallID == "" {
+		return
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.allowed[toolCallID] = struct{}{}
+}
+
 // CreateTUIPermissionHandler creates a permission handler that integrates with the TUI.
 // It sends permission requests to the provided event channel and waits for a response.
 // This allows the TUI to display permission prompts and collect user input.
@@ -139,6 +190,8 @@ func CreateTUIPermissionHandler(
 	eventChan chan<- tea.Msg,
 	yoloModeRef *YoloModeRef,
 ) copilot.PermissionHandlerFunc {
+	dedup := newPermissionDeduplicator()
+
 	return func(
 		request copilot.PermissionRequest,
 		_ copilot.PermissionInvocation,
@@ -151,38 +204,39 @@ func CreateTUIPermissionHandler(
 		}
 
 		// Auto-approve read operations to avoid excessive prompting.
-		// Matches the non-TUI handler's behavior.
 		if isReadOperation(request.Kind) {
 			return copilot.PermissionRequestResult{
 				Kind: copilot.PermissionRequestResultKindApproved,
 			}, nil
 		}
 
-		// Extract tool name and command from the permission request.
-		// The PermissionRequest now has typed fields for all permission details.
-		toolName, command := extractPermissionDetails(request)
-
-		// Create response channel
-		responseChan := make(chan bool, 1)
-
-		// Send permission request to TUI
 		toolCallID := ""
 		if request.ToolCallID != nil {
 			toolCallID = *request.ToolCallID
 		}
 
+		// Deduplicate: auto-approve if this ToolCallID was already approved.
+		if dedup.wasApproved(toolCallID) {
+			return copilot.PermissionRequestResult{
+				Kind: copilot.PermissionRequestResultKindApproved,
+			}, nil
+		}
+
+		toolName, command := extractPermissionDetails(request)
+		responseChan := make(chan bool, 1)
+
 		eventChan <- permissionRequestMsg{
 			toolCallID: toolCallID,
 			toolName:   toolName,
 			command:    command,
-			arguments:  "", // Arguments are included in the command for SDK permissions
+			arguments:  "",
 			response:   responseChan,
 		}
 
-		// Wait for response from TUI
 		approved := <-responseChan
-
 		if approved {
+			dedup.markApproved(toolCallID)
+
 			return copilot.PermissionRequestResult{
 				Kind: copilot.PermissionRequestResultKindApproved,
 			}, nil

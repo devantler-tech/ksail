@@ -128,12 +128,12 @@ func validatePathAccess(
 	allowedRoot string,
 ) (*copilot.PreToolUseHookOutput, error) {
 	if allowedRoot == "" {
-		return &copilot.PreToolUseHookOutput{}, nil
+		return nil, nil //nolint:nilnil // nil omits "output" key from JSON-RPC response
 	}
 
 	args, ok := input.ToolArgs.(map[string]any)
 	if !ok || len(args) == 0 {
-		return &copilot.PreToolUseHookOutput{}, nil
+		return nil, nil //nolint:nilnil // nil omits "output" key from JSON-RPC response
 	}
 
 	for _, key := range pathArgKeys() {
@@ -159,7 +159,7 @@ func validatePathAccess(
 		}
 	}
 
-	return &copilot.PreToolUseHookOutput{}, nil
+	return nil, nil //nolint:nilnil // nil omits "output" key from JSON-RPC response
 }
 
 // WrapToolsWithForceInjection wraps write tools to inject the --force flag after
