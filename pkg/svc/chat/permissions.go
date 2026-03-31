@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	copilot "github.com/github/copilot-sdk/go"
 )
@@ -25,7 +26,7 @@ func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandlerFunc {
 		request copilot.PermissionRequest, _ copilot.PermissionInvocation,
 	) (copilot.PermissionRequestResult, error) {
 		// Auto-approve read operations
-		if isReadOperation(request.Kind) {
+		if chatui.IsReadOperation(request.Kind) {
 			return copilot.PermissionRequestResult{
 				Kind: copilot.PermissionRequestResultKindApproved,
 			}, nil
@@ -33,18 +34,6 @@ func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandlerFunc {
 
 		// Prompt for write operations
 		return promptForPermission(writer, request)
-	}
-}
-
-// isReadOperation determines if a permission request is for a read-only operation.
-func isReadOperation(kind copilot.PermissionRequestKind) bool {
-	switch kind {
-	case copilot.Read, copilot.URL:
-		return true
-	case copilot.CustomTool, copilot.KindShell, copilot.MCP, copilot.Memory, copilot.Write:
-		return false
-	default:
-		return false
 	}
 }
 

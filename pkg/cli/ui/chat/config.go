@@ -328,6 +328,58 @@ func BuildSystemContext(cfg SystemContextConfig) (string, error) {
 		appendWorkingDirContext(&builder, cfg.ConfigFileName)
 	}
 
+	if custom := buildCustomInstructions(cfg); custom != "" {
+		builder.WriteString(custom)
+	}
+
+	return builder.String(), nil
+}
+
+// BuildSystemSections builds system prompt section overrides for the "customize" mode.
+// This maps the SystemContextConfig fields to SDK section identifiers.
+func BuildSystemSections(cfg SystemContextConfig) map[string]copilot.SectionOverride {
+	sections := make(map[string]copilot.SectionOverride)
+
+	if cfg.Identity != "" {
+		sections[copilot.SectionIdentity] = copilot.SectionOverride{
+			Action:  copilot.SectionActionReplace,
+			Content: cfg.Identity,
+		}
+	}
+
+	if envCtx := buildEnvironmentContext(cfg); envCtx != "" {
+		sections[copilot.SectionEnvironmentContext] = copilot.SectionOverride{
+			Action:  copilot.SectionActionAppend,
+			Content: envCtx,
+		}
+	}
+
+	if customCtx := buildCustomInstructions(cfg); customCtx != "" {
+		sections[copilot.SectionCustomInstructions] = copilot.SectionOverride{
+			Action:  copilot.SectionActionAppend,
+			Content: customCtx,
+		}
+	}
+
+	return sections
+}
+
+// buildEnvironmentContext builds the environment context content (working directory + config file).
+func buildEnvironmentContext(cfg SystemContextConfig) string {
+	if !cfg.IncludeWorkingDirContext {
+		return ""
+	}
+
+	var builder strings.Builder
+	appendWorkingDirContext(&builder, cfg.ConfigFileName)
+
+	return builder.String()
+}
+
+// buildCustomInstructions builds the custom instructions content (documentation + CLI help + instructions).
+func buildCustomInstructions(cfg SystemContextConfig) string {
+	var builder strings.Builder
+
 	if cfg.Documentation != "" {
 		builder.WriteString("<documentation>\n")
 		builder.WriteString(cfg.Documentation)
@@ -344,7 +396,7 @@ func BuildSystemContext(cfg SystemContextConfig) (string, error) {
 		builder.WriteString(cfg.Instructions)
 	}
 
-	return builder.String(), nil
+	return builder.String()
 }
 
 // appendWorkingDirContext adds working directory and config file context to the builder.

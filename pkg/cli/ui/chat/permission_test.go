@@ -195,7 +195,7 @@ func TestPermissionHandler_YoloAutoApproves(t *testing.T) {
 
 	result, err := handler(
 		copilot.PermissionRequest{
-			Kind:            copilot.KindShell,
+			Kind:            copilot.PermissionRequestKindShell,
 			FullCommandText: new("rm -rf /"),
 		},
 		copilot.PermissionInvocation{},
@@ -225,7 +225,7 @@ func TestPermissionHandler_NonYoloSendsToChannel(t *testing.T) {
 	go func() {
 		result, _ := handler(
 			copilot.PermissionRequest{
-				Kind:            copilot.KindShell,
+				Kind:            copilot.PermissionRequestKindShell,
 				ToolCallID:      new("test-123"),
 				FullCommandText: new("echo hello"),
 			},
@@ -291,7 +291,7 @@ func TestPermissionHandler_NilYoloRef(t *testing.T) {
 	go func() {
 		result, _ := handler(
 			copilot.PermissionRequest{
-				Kind:            copilot.KindShell,
+				Kind:            copilot.PermissionRequestKindShell,
 				FullCommandText: new("ls"),
 			},
 			copilot.PermissionInvocation{},
