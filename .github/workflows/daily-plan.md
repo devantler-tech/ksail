@@ -31,12 +31,12 @@ safe-outputs:
     max: 10
   add-comment:
     target: "*"
-    max: 5
+    max: 10
   link-sub-issue:
     max: 20
   update-issue:
-    body:
-    status:
+    body: true
+    status: true
     target: "*"
     max: 15
 
@@ -77,7 +77,7 @@ You are a project planner and issue triage assistant for `${{ github.repository 
 ## Step 2 — Triage New Issues
 
 Identify candidate issues by listing issues that were opened or reopened in the last 24 hours (relative to the current run time) using the GitHub tools; do not rely on a triggering event payload.
-Treat an issue as **untriaged** only if it does NOT have the `triaged` label. Skip any issue that already has this label, even if it falls within the last 24 hours.
+Treat an issue as **untriaged** if it does NOT have the `triaged` label. For reopened issues (issues whose most recent timeline event is a "reopened" event within the last 24 hours), remove the `triaged` label first so they are re-triaged — their description may need updating after the circumstances that led to reopening.
 
 For each untriaged issue:
 
@@ -96,7 +96,7 @@ For each untriaged issue:
 
 5. **Search for similar issues**: Use `search_issues` to find related open or closed issues. If the issue is a duplicate of another OPEN issue, consider applying a "duplicate" label.
 
-6. **Apply labels**: Use `update_issue` to apply appropriate labels from the available set. Select priority labels (high-priority, med-priority, low-priority) when urgency can be determined. Only use labels that exist in the repository. It is fine to apply no labels if none clearly fit.
+6. **Apply labels**: Use `add_labels` to apply appropriate labels from the available set. Select priority labels (high-priority, med-priority, low-priority) when urgency can be determined. Only use labels that exist in the repository. It is fine to apply no labels if none clearly fit.
 
 7. **Enhance the issue description** if it is incomplete, poorly structured, or does not follow the devantler-tech issue templates. Use `update_issue` to update the body so it matches the appropriate template structure below. Preserve the author's original intent and information — restructure and fill in gaps, do not remove or rewrite their content.
 
