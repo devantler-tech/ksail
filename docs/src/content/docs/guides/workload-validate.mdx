@@ -1,0 +1,156 @@
+---
+title: Substitution Expansion in `workload validate`
+description: How KSail `workload validate` handles Flux ${VAR} substitutions — typed placeholders, defaults, and why local environment variables are not read.
+---
+
+`ksail workload validate` runs [kubeconform](https://github.com/yannh/kubeconform) against your Kubernetes manifests to catch schema errors before they reach the cluster. When your manifests use [Flux postBuild substitutions](https://fluxcd.io/flux/components/kustomize/kustomizations/#post-build-variable-substitution) (`${VAR}`, `${VAR:-default}`, `${VAR:=default}`), the validator needs concrete values to produce valid YAML for schema checking.
+
+This guide explains how the expansion works, why environment variables are not read, and how to write substitutions that validate cleanly.
+
+## Why Local Environment Variables Are Not Used
+
+`workload validate` is designed to be **deterministic** — the same manifests should produce the same validation result regardless of the machine, user, or environment they are run on. Reading from local environment variables would break this:
+
+- A manifest that validates on a developer's machine (because `$REPLICA_COUNT` is set) might fail in CI (where it is not set).
+- Conversely, an incorrectly typed default (`replicas: "3"` instead of `replicas: 3`) might slip through validation on a machine where the env var overrides the bad default.
+
+Instead, KSail uses **typed schema-aware placeholders** derived from the Kubernetes JSON schema. Validation catches type mismatches at schema-check time, not at deploy time.
+
+> [!NOTE]
+> Commands that deploy or push manifests (`workload apply`, `workload push`, `workload reconcile`) do **not** expand Flux `${VAR}` substitutions from your local environment. They pass manifests through (or trigger GitOps reconciliation), and Flux performs substitution **in-cluster** via Kustomization `postBuild.substitute` / `substituteFrom`. Only `workload validate` simulates substitutions client-side, using deterministic placeholders instead of reading environment variables.
+
+## Expansion Rules
+
+### `${VAR}` — Bare Variable Reference (No Default)
+
+A bare `${VAR}` is replaced with a **typed placeholder** based on the JSON schema type of the field it occupies.
+
+| Schema type | Placeholder value |
+|-------------|------------------|
+| `string`    | `"placeholder"` |
+| `integer`   | `0`             |
+| `number`    | `0.0`           |
+| `boolean`   | `true`          |
+| unknown / no schema | `"placeholder"` |
+
+**Example:**
+
+```yaml
+spec:
+  replicas: ${REPLICA_COUNT}   # integer field → 0
+  image: ${IMAGE_REF}          # string field  → "placeholder"
+  enableFeature: ${FEATURE_ON} # boolean field → true
+```
+
+After expansion:
+
+```yaml
+spec:
+  replicas: 0
+  image: placeholder
+  enableFeature: true
+```
+
+### `${VAR:-default}` and `${VAR:=default}` — Variable With Default
+
+When a default is provided (either `:-` or `:=` syntax), the default value is used as-is and coerced to the schema type.
+
+```yaml
+spec:
+  replicas: ${REPLICA_COUNT:-3}    # integer field → 3 (not "3")
+  name: ${APP_NAME:-my-app}        # string field  → "my-app"
+  debug: ${DEBUG_MODE:-false}      # boolean field → false
+```
+
+> [!NOTE]
+> Coercion only applies to scalar-only substitutions (when the entire field value is a single `${VAR:-...}`). In mixed-text contexts (e.g., `prefix-${VAR}-suffix`), the result is always a string: bare `${VAR}` references are replaced with the string placeholder `"placeholder"`, while `${VAR:-default}` / `${VAR:=default}` expand to the provided default text.
+
+### Mixed-Text Substitution
+
+When a variable reference is embedded inside a larger string, the result is always a string:
+
+```yaml
+spec:
+  hostname: ${ENV}-app.example.com   # → "placeholder-app.example.com"
+  image: myrepo/${IMAGE_NAME:-nginx}:latest  # → "myrepo/nginx:latest"
+```
+
+## Schema Inference
+
+KSail loads JSON schemas from the kubeconform disk cache (populated on previous `workload validate` runs). Schema files are looked up from the OS user cache directory (for example `~/.cache/ksail/kubeconform/`), or from `${TMPDIR}/ksail/kubeconform` when the user cache directory is unavailable (such as in some CI environments).
+
+- **Core Kubernetes resources** (Deployment, Service, ConfigMap, …): typed via [kubernetes-json-schema](https://github.com/yannh/kubernetes-json-schema) **when the relevant schema is present in the kubeconform disk cache**
+- **CRDs** (FluxCD, cert-manager, …): typed via the [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) **when their schemas are present in the kubeconform disk cache**
+- **Resources without a cached schema** (including core kinds or CRDs whose schemas have not yet been cached): all bare `${VAR}` expand to `"placeholder"` (string)
+
+> [!NOTE]
+> Placeholder type inference reads schemas **only from the local kubeconform cache** — it does not itself make any network requests while deciding how to type `${VAR}` placeholders.
+> Kubeconform may still download missing schemas from its configured remote schema locations on a cache miss (typically the first time it sees a given kind), and then caches them under the same directory for subsequent validations.
+
+## Practical Guidance
+
+### Avoid False Validation Failures
+
+If `workload validate` reports a type error for a field that uses `${VAR}` without a default, add a meaningful default of the correct type:
+
+```yaml
+# Before — bare ${VAR} expands to "placeholder" (string), fails integer validation
+spec:
+  replicas: ${REPLICA_COUNT}
+
+# After — default 2 is correctly typed as an integer
+spec:
+  replicas: ${REPLICA_COUNT:-2}
+```
+
+### Verify Your Defaults Are Well-Typed
+
+When using `${VAR:-default}`, ensure the default value matches the field's expected type. Incorrect defaults will cause validation failures even if the env var is always set at runtime:
+
+```yaml
+# This will fail validation: "2" is a string, but replicas expects an integer
+spec:
+  replicas: ${REPLICA_COUNT:-"2"}
+
+# Correct: unquoted numeric default
+spec:
+  replicas: ${REPLICA_COUNT:-2}
+```
+
+### Use `workload validate` Before Pushing
+
+Combine `workload validate` with `workload push` in your workflow to catch schema errors before they enter the GitOps pipeline:
+
+```bash
+# Validate first, then push if clean
+ksail workload validate && ksail workload push
+```
+
+This is the same pattern the `ksail-cluster` composite GitHub Action uses when `validate: "true"` is set. See [PR Preview Clusters](/guides/pr-preview-clusters/) for the full CI/CD workflow.
+
+### Multi-Environment Validation
+
+Use `--config` to validate against the settings of a specific environment:
+
+```bash
+# Validate against staging schema/constraints
+ksail --config ksail.staging.yaml workload validate
+
+# Validate against production
+ksail --config ksail.prod.yaml workload validate
+```
+
+See [Multi-Environment Workflows](/guides/multi-environment/) for how to structure per-environment config files.
+
+## Supported Substitution Syntax
+
+KSail supports the standard Flux postBuild variable syntax:
+
+| Syntax | Behavior during validation |
+|--------|---------------------------|
+| `${VAR}` | Typed placeholder (schema-derived) |
+| `${VAR:-default}` | `default` value, coerced to schema type |
+| `${VAR:=default}` | `default` value, coerced to schema type |
+| `${VAR}` in mixed text | Replaced with `"placeholder"` (string) |
+
+Other Flux substitution forms (e.g., shell-style `$VAR` without braces, `$(VAR)` command substitution) are **not** expanded by KSail and are left as-is.
