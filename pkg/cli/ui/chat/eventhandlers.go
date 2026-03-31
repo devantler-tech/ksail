@@ -32,53 +32,62 @@ func newSessionEventDispatcher(
 
 // dispatch routes a Copilot session event to the appropriate handler.
 //
-//nolint:cyclop // type-switch dispatcher for session events
+//nolint:cyclop,funlen // type-switch dispatcher for session events
 func (d *sessionEventDispatcher) dispatch(
 	event copilot.SessionEvent,
 ) {
 	//nolint:exhaustive // Only handling events relevant to the chat TUI.
 	switch event.Type {
-	case copilot.AssistantTurnStart:
+	case copilot.SessionEventTypeAssistantTurnStart:
 		d.handleTurnStart()
-	case copilot.AssistantMessageDelta:
+	case copilot.SessionEventTypeAssistantMessageDelta:
 		d.handleMessageDelta(event)
-	case copilot.AssistantMessage:
+	case copilot.SessionEventTypeAssistantMessage:
 		d.handleMessage(event)
-	case copilot.AssistantReasoning, copilot.AssistantReasoningDelta:
+	case copilot.SessionEventTypeAssistantReasoning,
+		copilot.SessionEventTypeAssistantReasoningDelta:
 		d.handleReasoning(event)
-	case copilot.SessionIdle, copilot.AssistantTurnEnd:
+	case copilot.SessionEventTypeSessionIdle, copilot.SessionEventTypeAssistantTurnEnd:
 		d.handleSessionLifecycle(event.Type)
-	case copilot.Abort:
+	case copilot.SessionEventTypeAbort:
 		d.handleAbort()
-	case copilot.SessionError:
+	case copilot.SessionEventTypeSessionError:
 		d.handleSessionError(event)
-	case copilot.ToolExecutionStart:
+	case copilot.SessionEventTypeToolExecutionStart:
 		d.handleToolStart(event)
-	case copilot.ToolExecutionComplete:
+	case copilot.SessionEventTypeToolExecutionComplete:
 		d.handleToolComplete(event)
-	case copilot.SessionSnapshotRewind:
+	case copilot.SessionEventTypeSessionSnapshotRewind:
 		d.handleSnapshotRewind()
-	case copilot.AssistantUsage:
+	case copilot.SessionEventTypeAssistantUsage:
 		d.handleUsage(event)
-	case copilot.SessionCompactionStart:
+	case copilot.SessionEventTypeSessionCompactionStart:
 		d.handleCompactionStart()
-	case copilot.SessionCompactionComplete:
+	case copilot.SessionEventTypeSessionCompactionComplete:
 		d.handleCompactionComplete(event)
-	case copilot.AssistantIntent:
+	case copilot.SessionEventTypeAssistantIntent:
 		d.handleIntent(event)
-	case copilot.SessionModelChange:
+	case copilot.SessionEventTypeSessionModelChange:
 		d.handleModelChange(event)
-	case copilot.SessionShutdown:
+	case copilot.SessionEventTypeSessionShutdown:
 		d.handleShutdown(event)
+	case copilot.SessionEventTypeSystemNotification:
+		d.handleSystemNotification(event)
+	case copilot.SessionEventTypeSessionWarning:
+		d.handleSessionWarning(event)
+	case copilot.SessionEventTypeToolExecutionProgress:
+		d.handleToolProgress(event)
+	case copilot.SessionEventTypeSessionTaskComplete:
+		d.handleTaskComplete(event)
 	}
 }
 
 func (d *sessionEventDispatcher) handleSessionLifecycle(eventType copilot.SessionEventType) {
 	//nolint:exhaustive // Only SessionIdle and TurnEnd are relevant here.
 	switch eventType {
-	case copilot.SessionIdle:
+	case copilot.SessionEventTypeSessionIdle:
 		d.eventChan <- streamEndMsg{}
-	case copilot.AssistantTurnEnd:
+	case copilot.SessionEventTypeAssistantTurnEnd:
 		d.eventChan <- turnEndMsg{}
 	default:
 	}
@@ -110,7 +119,7 @@ func (d *sessionEventDispatcher) handleReasoning(event copilot.SessionEvent) {
 
 	d.eventChan <- reasoningMsg{
 		content: content,
-		isDelta: event.Type == copilot.AssistantReasoningDelta,
+		isDelta: event.Type == copilot.SessionEventTypeAssistantReasoningDelta,
 	}
 }
 
@@ -269,4 +278,50 @@ func (d *sessionEventDispatcher) handleShutdown(event copilot.SessionEvent) {
 	}
 
 	d.eventChan <- msg
+}
+
+func (d *sessionEventDispatcher) handleSystemNotification(event copilot.SessionEvent) {
+	msg := systemNotificationMsg{}
+
+	if event.Data.Message != nil {
+		msg.message = *event.Data.Message
+	}
+
+	if event.Data.InfoType != nil {
+		msg.infoType = *event.Data.InfoType
+	}
+
+	d.eventChan <- msg
+}
+
+func (d *sessionEventDispatcher) handleSessionWarning(event copilot.SessionEvent) {
+	msg := sessionWarningMsg{}
+
+	if event.Data.Message != nil {
+		msg.message = *event.Data.Message
+	}
+
+	if event.Data.WarningType != nil {
+		msg.warningType = *event.Data.WarningType
+	}
+
+	d.eventChan <- msg
+}
+
+func (d *sessionEventDispatcher) handleToolProgress(event copilot.SessionEvent) {
+	if event.Data.ProgressMessage != nil && event.Data.ToolCallID != nil {
+		d.eventChan <- ToolProgressMsg{
+			ToolID:  *event.Data.ToolCallID,
+			Message: *event.Data.ProgressMessage,
+		}
+	}
+}
+
+func (d *sessionEventDispatcher) handleTaskComplete(event copilot.SessionEvent) {
+	msg := ""
+	if event.Data.Summary != nil {
+		msg = *event.Data.Summary
+	}
+
+	d.eventChan <- TaskCompleteMsg{Message: msg}
 }

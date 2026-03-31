@@ -1,68 +1,79 @@
 rules:
   impostor-commit:
     ignore:
-      - audit-workflows.lock.yml
       - ci-doctor.lock.yml
-      - daily-perf-improver.lock.yml
-      - daily-progress.lock.yml
-      - daily-qa.lock.yml
-      - daily-test-improver.lock.yml
-      - portfolio-analyst.lock.yml
-      - update-docs.lock.yml
+      - daily-builder.lock.yml
+      - daily-code-quality.lock.yml
+      - daily-docs.lock.yml
+      - daily-plan.lock.yml
+      - daily-workflow-maintenance.lock.yml
+      - pr-fix.lock.yml
+      - weekly-promote-ksail.lock.yml
       - weekly-roadmap.lock.yml
   template-injection:
     ignore:
-      - audit-workflows.lock.yml
       - ci-doctor.lock.yml
-      - daily-perf-improver.lock.yml
-      - daily-progress.lock.yml
-      - daily-qa.lock.yml
-      - daily-test-improver.lock.yml
-      - portfolio-analyst.lock.yml
-      - update-docs.lock.yml
+      - daily-builder.lock.yml
+      - daily-code-quality.lock.yml
+      - daily-docs.lock.yml
+      - daily-plan.lock.yml
+      - daily-workflow-maintenance.lock.yml
+      - pr-fix.lock.yml
+      - weekly-promote-ksail.lock.yml
       - weekly-roadmap.lock.yml
   ref-version-mismatch:
     ignore:
-      - audit-workflows.lock.yml
       - ci-doctor.lock.yml
-      - daily-perf-improver.lock.yml
-      - daily-progress.lock.yml
-      - daily-qa.lock.yml
-      - daily-test-improver.lock.yml
-      - portfolio-analyst.lock.yml
-      - update-docs.lock.yml
+      - daily-builder.lock.yml
+      - daily-code-quality.lock.yml
+      - daily-docs.lock.yml
+      - daily-plan.lock.yml
+      - daily-workflow-maintenance.lock.yml
+      - pr-fix.lock.yml
+      - weekly-promote-ksail.lock.yml
       - weekly-roadmap.lock.yml
   excessive-permissions:
     ignore:
-      - audit-workflows.lock.yml
       - ci-doctor.lock.yml
-      - daily-perf-improver.lock.yml
-      - daily-progress.lock.yml
-      - daily-qa.lock.yml
-      - daily-test-improver.lock.yml
-      - portfolio-analyst.lock.yml
-      - update-docs.lock.yml
+      - daily-builder.lock.yml
+      - daily-code-quality.lock.yml
+      - daily-docs.lock.yml
+      - daily-plan.lock.yml
+      - daily-workflow-maintenance.lock.yml
+      - pr-fix.lock.yml
+      - weekly-promote-ksail.lock.yml
       - weekly-roadmap.lock.yml
   artipacked:
     ignore:
-      - audit-workflows.lock.yml
       - ci-doctor.lock.yml
-      - daily-perf-improver.lock.yml
-      - daily-progress.lock.yml
-      - daily-qa.lock.yml
-      - daily-test-improver.lock.yml
-      - portfolio-analyst.lock.yml
-      - update-docs.lock.yml
+      - daily-builder.lock.yml
+      - daily-code-quality.lock.yml
+      - daily-docs.lock.yml
+      - daily-plan.lock.yml
+      - daily-workflow-maintenance.lock.yml
+      - pr-fix.lock.yml
+      - weekly-promote-ksail.lock.yml
+      - weekly-roadmap.lock.yml
+  dangerous-triggers:
+    ignore:
+      - ci-doctor.lock.yml
+      - daily-builder.lock.yml
+      - daily-code-quality.lock.yml
+      - daily-docs.lock.yml
+      - daily-plan.lock.yml
+      - daily-workflow-maintenance.lock.yml
+      - pr-fix.lock.yml
+      - weekly-promote-ksail.lock.yml
       - weekly-roadmap.lock.yml
   unpinned-uses:
     ignore:
       - agentics-maintenance.yml
-      - audit-workflows.lock.yml
       - ci-doctor.lock.yml
-      - daily-perf-improver.lock.yml
-      - daily-progress.lock.yml
-      - daily-qa.lock.yml
-      - daily-test-improver.lock.yml
-      - portfolio-analyst.lock.yml
-      - update-docs.lock.yml
+      - daily-builder.lock.yml
+      - daily-code-quality.lock.yml
+      - daily-docs.lock.yml
+      - daily-plan.lock.yml
+      - daily-workflow-maintenance.lock.yml
+      - pr-fix.lock.yml
+      - weekly-promote-ksail.lock.yml
       - weekly-roadmap.lock.yml

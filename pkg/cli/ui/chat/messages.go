@@ -150,3 +150,28 @@ type modelChangeMsg struct {
 type shutdownMsg struct {
 	shutdownType string
 }
+
+// systemNotificationMsg carries an informational notification from the system.
+type systemNotificationMsg struct {
+	message  string
+	infoType string
+}
+
+// sessionWarningMsg carries a warning from the session.
+type sessionWarningMsg struct {
+	message     string
+	warningType string
+}
+
+// ToolProgressMsg carries a progress update from a running tool.
+// Exported so the OnEvent handler in tui.go can create instances.
+type ToolProgressMsg struct {
+	ToolID  string
+	Message string
+}
+
+// TaskCompleteMsg signals that the session has completed a task.
+// Exported so the OnEvent handler in tui.go can create instances.
+type TaskCompleteMsg struct {
+	Message string
+}

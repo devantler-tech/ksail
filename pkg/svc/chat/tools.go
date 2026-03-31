@@ -10,10 +10,16 @@ import (
 // It auto-generates tools from Cobra commands using the toolgen package.
 // The rootCmd parameter should be the root Cobra command for the CLI.
 // The outputChan parameter enables real-time output streaming (can be nil).
-func GetKSailTools(rootCmd *cobra.Command, outputChan chan<- toolgen.OutputChunk) []copilot.Tool {
+// The sessionLog parameter enables SDK-native session logging from tool handlers (can be nil).
+func GetKSailTools(
+	rootCmd *cobra.Command,
+	outputChan chan<- toolgen.OutputChunk,
+	sessionLog *toolgen.SessionLogRef,
+) []copilot.Tool {
 	// Generate tools from the Cobra command tree
 	opts := toolgen.DefaultOptions()
 	opts.OutputChan = outputChan
+	opts.SessionLog = sessionLog
 
 	// Get SDK-agnostic tool definitions from Cobra command tree
 	toolDefs := toolgen.GenerateTools(rootCmd, opts)
@@ -24,12 +30,18 @@ func GetKSailTools(rootCmd *cobra.Command, outputChan chan<- toolgen.OutputChunk
 
 // GetKSailToolMetadata returns both the Copilot tools and their metadata.
 // This allows callers to access RequiresPermission and other metadata.
-func GetKSailToolMetadata(rootCmd *cobra.Command, outputChan chan<- toolgen.OutputChunk) (
+// The sessionLog parameter enables SDK-native session logging from tool handlers (can be nil).
+func GetKSailToolMetadata(
+	rootCmd *cobra.Command,
+	outputChan chan<- toolgen.OutputChunk,
+	sessionLog *toolgen.SessionLogRef,
+) (
 	[]copilot.Tool, map[string]toolgen.ToolDefinition,
 ) {
 	// Generate tools from the Cobra command tree
 	opts := toolgen.DefaultOptions()
 	opts.OutputChan = outputChan
+	opts.SessionLog = sessionLog
 
 	// Get SDK-agnostic tool definitions
 	toolDefs := toolgen.GenerateTools(rootCmd, opts)
