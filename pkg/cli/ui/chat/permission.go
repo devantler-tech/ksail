@@ -204,7 +204,7 @@ func CreateTUIPermissionHandler(
 		}
 
 		// Auto-approve read operations to avoid excessive prompting.
-		if isReadOperation(request.Kind) {
+		if IsReadOperation(request.Kind) {
 			return copilot.PermissionRequestResult{
 				Kind: copilot.PermissionRequestResultKindApproved,
 			}, nil
@@ -315,8 +315,9 @@ func formatPermissionKind(kind copilot.PermissionRequestKind) string {
 	}
 }
 
-// isReadOperation determines if a permission request is for a read-only operation.
-func isReadOperation(kind copilot.PermissionRequestKind) bool {
+// IsReadOperation determines if a permission request is for a read-only operation.
+// This is shared by both TUI and non-TUI permission handlers.
+func IsReadOperation(kind copilot.PermissionRequestKind) bool {
 	switch kind {
 	case copilot.PermissionRequestKindRead, copilot.PermissionRequestKindURL:
 		return true

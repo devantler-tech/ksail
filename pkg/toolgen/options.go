@@ -66,12 +66,15 @@ func (r *SessionLogRef) Set(fn func(ctx context.Context, message, level string))
 }
 
 // Log sends a log message to the session. No-op if the function is not set.
+// The function pointer is copied under the lock to avoid holding the lock
+// during the (potentially blocking) callback invocation.
 func (r *SessionLogRef) Log(ctx context.Context, message, level string) {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
+	fn := r.fn
+	r.mu.RUnlock()
 
-	if r.fn != nil {
-		r.fn(ctx, message, level)
+	if fn != nil {
+		fn(ctx, message, level)
 	}
 }
 
