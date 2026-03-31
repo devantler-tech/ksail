@@ -84,7 +84,8 @@ KSail loads JSON schemas from the kubeconform disk cache (populated on previous 
 - **Unknown resources** (no cached schema): all bare `${VAR}` expand to `"placeholder"` (string)
 
 > [!NOTE]
-> Schema loading is **disk-cache only** — no network requests are made during validation. If the schema hasn't been downloaded yet (first run), bare variable references in custom resources fall back to `"placeholder"` until the cache is populated.
+> Placeholder type inference reads schemas **only from the local kubeconform cache** — it does not itself make any network requests while deciding how to type `${VAR}` placeholders.
+> Kubeconform may still download missing schemas from its configured remote schema locations on a cache miss (typically the first time it sees a given kind), and then caches them under the same directory for subsequent validations.
 
 ## Practical Guidance
 
