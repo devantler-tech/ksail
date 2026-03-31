@@ -22,6 +22,7 @@ jobs:
   goreleaser:
     name: Release with GoReleaser
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write
       packages: write
@@ -77,6 +78,7 @@ jobs:
   vscode-extension:
     name: 🧩 Release VSCode Extension
     runs-on: ubuntu-latest
+    environment: release
     needs: [goreleaser]
     permissions:
       contents: write

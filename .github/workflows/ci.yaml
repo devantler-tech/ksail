@@ -237,6 +237,7 @@ jobs:
   auto-commit:
     name: 📤 Auto-Commit Generated Changes
     runs-on: ubuntu-latest
+    environment: ci
     needs: [changes, sync-modules, generate-schema, generate-docs]
     if: >-
       always()
@@ -315,6 +316,7 @@ jobs:
   coverage:
     name: 📊 Code Coverage
     runs-on: ubuntu-latest
+    environment: ci
     needs: [changes]
     # Only run on push to main, skip if no code files changed
     if: |
@@ -349,6 +351,7 @@ jobs:
   audit-docs:
     name: 🔍 Audit Docs Dependencies
     runs-on: ubuntu-latest
+    environment: ci
     needs: [changes]
     if: github.event_name != 'merge_group' && needs.changes.outputs.docs-deps == 'true'
     permissions:
@@ -370,6 +373,7 @@ jobs:
   audit-vsce:
     name: 🔍 Audit VSCode Extension Dependencies
     runs-on: ubuntu-latest
+    environment: ci
     needs: [changes]
     if: github.event_name != 'merge_group' && needs.changes.outputs.vsce-deps == 'true'
     permissions:
@@ -501,6 +505,7 @@ jobs:
   system-test:
     name: 🧪 System Test
     runs-on: ubuntu-latest
+    environment: ci
     timeout-minutes: 30
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
     if: github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true'
@@ -575,6 +580,7 @@ jobs:
   cleanup-hetzner:
     name: 🧹 Cleanup Hetzner Resources
     runs-on: ubuntu-latest
+    environment: ci
     needs: [system-test]
     if: ${{ always() && github.event_name == 'merge_group' && needs.system-test.result != 'skipped' }}
     permissions:
