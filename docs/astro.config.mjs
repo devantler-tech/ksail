@@ -58,7 +58,7 @@ export default defineConfig({
             { label: "PR Preview Clusters", link: "/guides/pr-preview-clusters/" },
             { label: "Companion Tools", link: "/guides/companion-tools/" },
             { label: "KSail + mirrord", link: "/guides/mirrord/" },
-            { label: "Workload Validate Substitution Expansion", link: "/guides/workload-validate/" },
+            { label: "Substitution Expansion (validate)", link: "/guides/workload-validate/" },
           ],
         },
         {
