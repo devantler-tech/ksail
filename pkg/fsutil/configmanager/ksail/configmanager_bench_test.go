@@ -30,7 +30,7 @@ func BenchmarkInitializeViper(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchNewManagerSink = configmanager.NewConfigManager(io.Discard)
+		benchNewManagerSink = configmanager.NewConfigManager(io.Discard, "")
 	}
 }
 
@@ -49,7 +49,7 @@ func BenchmarkNewConfigManager_WithSelectors(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchNewManagerSink = configmanager.NewConfigManager(io.Discard, selectors...)
+		benchNewManagerSink = configmanager.NewConfigManager(io.Discard, "", selectors...)
 	}
 }
 
@@ -68,6 +68,7 @@ func BenchmarkLoad_NoConfigFile(b *testing.B) {
 	for b.Loop() {
 		mgr := configmanager.NewConfigManager(
 			io.Discard,
+			"",
 			configmanager.DefaultClusterFieldSelectors()...,
 		)
 
@@ -101,6 +102,7 @@ func BenchmarkLoad_WithConfigFile(b *testing.B) {
 	for b.Loop() {
 		mgr := configmanager.NewConfigManager(
 			io.Discard,
+			"",
 			configmanager.DefaultClusterFieldSelectors()...,
 		)
 
@@ -144,6 +146,7 @@ func BenchmarkLoad_WithConfigFile_DeepTree(b *testing.B) {
 	for b.Loop() {
 		mgr := configmanager.NewConfigManager(
 			io.Discard,
+			"",
 			configmanager.DefaultClusterFieldSelectors()...,
 		)
 
@@ -170,6 +173,7 @@ func BenchmarkLoad_Cached(b *testing.B) {
 
 	mgr := configmanager.NewConfigManager(
 		io.Discard,
+		"",
 		configmanager.DefaultClusterFieldSelectors()...,
 	)
 

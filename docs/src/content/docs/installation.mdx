@@ -103,28 +103,14 @@ The supported Kubernetes distributions (x-axis) run on different infrastructure 
 
 ## Embedded Tools
 
-KSail embeds common Kubernetes tools as Go libraries, so **you don't need to install them separately**:
-
-- **kubectl** — Kubernetes command-line tool
-- **helm** — Kubernetes package manager
-- **kind** — Kubernetes in Docker (for Vanilla distribution)
-- **k3d** — K3s in Docker (for K3s distribution)
-- **flux** — GitOps toolkit (optional)
-- **argocd** — Declarative GitOps (optional)
-- **sops** — Secret encryption (optional)
-
-All these tools are available through KSail's unified CLI interface.
+KSail embeds common Kubernetes tools as Go libraries — including kubectl, helm, kind (Vanilla), k3d (K3s), vcluster/Vind (VCluster), flux, argocd, sops, and others — so no separate installation is needed. All tools are accessible through KSail's unified CLI.
 
 ## Optional: GitHub Copilot CLI (for AI Chat)
 
-To use the `ksail chat` AI assistant feature, you need the GitHub Copilot CLI:
-
-1. **Install Copilot CLI**: Follow the [Copilot CLI installation guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/install-copilot-cli)
-2. **Authenticate**: Run `copilot auth login` to authenticate with your GitHub account
-3. **Set path (if needed)**: Set `COPILOT_CLI_PATH` environment variable if the CLI is not in your PATH
+Install the [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/install-copilot-cli) and run `copilot auth login`. Set `COPILOT_CLI_PATH` if the CLI is not in your PATH.
 
 > [!NOTE]
-> GitHub Copilot requires an active subscription. The `ksail chat` command is optional and all other KSail features work without it.
+> An active GitHub Copilot subscription is required. All other KSail features work without it.
 
 ## VSCode Extension
 
@@ -136,7 +122,7 @@ For Visual Studio Code users, install the KSail extension to manage clusters dir
 
     1. Open VSCode
     2. Press `Cmd+Shift+X` (macOS) or `Ctrl+Shift+X` (Windows/Linux) to open Extensions view
-    3. Search for "KSail"
+    3. Search for "KSail" — or type `@mcp` to filter MCP-compatible extensions and find KSail there
     4. Click **Install** on the extension by devantler
 
     **Marketplace Link:** [KSail - Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=devantler.ksail)
@@ -161,39 +147,12 @@ For Visual Studio Code users, install the KSail extension to manage clusters dir
 - **Docker** running (for cluster operations)
 - **K9s** (optional, for cluster connection via `Connect to Cluster` command)
 
-### Extension Features
-
-The extension provides:
-
-- **Cloud Explorer Integration**: KSail clusters appear under **KSail** in the Kubernetes extension's Clouds view with status icons and context menus
-- **Cluster Explorer Contributor**: KSail-managed kubeconfig contexts are annotated with `(KSail)` and a status label in the Kubernetes extension's Cluster Explorer
-- **Cluster Provider Wizard**: HTML-based "Create Cluster" wizard integrated into the Kubernetes extension
-- **Interactive wizards** for cluster init and create
-- **Command palette** integration for all cluster operations
-- **Keyboard shortcuts** for common actions
-- **MCP server** integration for AI assistants
-
 See the [VSCode Extension](/vscode-extension/) guide for detailed capabilities, commands, and settings.
-
-### Extension Settings
-
-Configure the extension in VSCode settings (`Cmd+,` / `Ctrl+,`):
-
-| Setting                       | Description                                        | Default |
-| ----------------------------- | -------------------------------------------------- | ------- |
-| `ksail.binaryPath`            | Path to ksail binary                               | `ksail` |
 
 ## Verification
 
-After installation, verify that KSail is installed correctly:
-
 ```bash
-ksail --version
-```
-
-You should see version information displayed. To see all available commands:
-
-```bash
-ksail --help
+ksail --version   # show version
+ksail --help      # show all commands
 ```
 

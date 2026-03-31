@@ -11,6 +11,7 @@ import (
 	"time"
 
 	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
+	copilot "github.com/github/copilot-sdk/go"
 )
 
 // BuildSystemContext builds the system prompt context for the chat assistant.
@@ -22,6 +23,12 @@ func BuildSystemContext() (string, error) {
 	}
 
 	return result, nil
+}
+
+// BuildSystemSections builds system prompt section overrides for the "customize" mode.
+// It delegates to the generic chatui.BuildSystemSections with KSail-specific defaults.
+func BuildSystemSections() map[string]copilot.SectionOverride {
+	return chatui.BuildSystemSections(DefaultSystemContextConfig())
 }
 
 // DefaultSystemContextConfig returns the default KSail system context configuration.

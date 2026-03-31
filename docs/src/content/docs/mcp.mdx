@@ -66,7 +66,39 @@ Each tool accepts a **subcommand parameter** that selects the specific operation
 
 MCP clients can discover available tools dynamically and toggle them on/off as needed. Each tool includes its name, a description, and a JSON schema with the subcommand selector enum and merged flags.
 
+## Tool Responses
+
+All MCP tools return a structured JSON envelope, making responses easy to parse programmatically:
+
+**Success:**
+````json
+{
+  "status": "success",
+  "command": "ksail cluster info",
+  "output": "..."
+}
+````
+
+**Error:**
+````json
+{
+  "status": "error",
+  "command": "ksail cluster info",
+  "error": "docker is not running",
+  "output": "..."
+}
+````
+
+| Field | Present when | Description |
+|-------|-------------|-------------|
+| `status` | Always | `"success"` or `"error"` |
+| `command` | Always | Full command path (e.g. `"ksail cluster info"`) |
+| `output` | Optional | Captured stdout/stderr from the command |
+| `error` | Error only | Human-readable error message |
+
 ## Integration Examples
+
+For a complete setup guide with step-by-step instructions for each AI client — including PATH configuration, example prompts, and tool reference — see [Using KSail with AI Assistants](/guides/ai-mcp/).
 
 ### Claude Desktop
 
@@ -95,6 +127,38 @@ After restarting Claude Desktop, the KSail tools will be available. Try:
 
 Claude will use the `cluster_write` tool (with `command: "init"` and `command: "create"`) to fulfill your request.
 
+### Cursor
+
+Add KSail to your Cursor MCP configuration. Create or edit `.cursor/mcp.json` in your project root (project-level) or `~/.cursor/mcp.json` (global):
+
+````json
+{
+  "mcpServers": {
+    "ksail": {
+      "command": "ksail",
+      "args": ["mcp"]
+    }
+  }
+}
+````
+
+After saving, restart Cursor or reload MCP configuration from Cursor Settings → MCP.
+
+### Windsurf
+
+Add KSail via **Windsurf Settings → MCP → Add MCP Server**:
+
+````json
+{
+  "mcpServers": {
+    "ksail": {
+      "command": "ksail",
+      "args": ["mcp"]
+    }
+  }
+}
+````
+
 ### VSCode Extension
 
 The [KSail VSCode extension](/vscode-extension/) automatically registers the MCP server with VSCode's native MCP infrastructure.
@@ -110,6 +174,7 @@ Once installed:
 If you're building your own MCP client:
 
 ````python
+import json
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -119,8 +184,14 @@ async with stdio_client(StdioServerParameters(command="ksail", args=["mcp"])) as
         tools = await session.list_tools()
         print([t.name for t in tools.tools])
         result = await session.call_tool("cluster_read", arguments={"command": "info"})
-        print(result.content)
+        response = json.loads(result.content[0].text)
+        if response["status"] == "success":
+            print(response.get("output", ""))
+        else:
+            print(f"Error: {response['error']}")
 ````
+
+See [Tool Responses](#tool-responses) for the full JSON envelope format.
 
 ## Configuration
 

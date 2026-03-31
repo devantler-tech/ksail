@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -22,10 +21,6 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
-
-// debounceInterval is the time to wait after the last file event before
-// triggering an apply. This prevents redundant reconciles during batch saves.
-const debounceInterval = 500 * time.Millisecond
 
 var errNotDirectory = errors.New("watch path is not a directory")
 
@@ -181,15 +176,6 @@ func watchLoop(
 	return <-errCh
 }
 
-// debounceState holds the mutable state shared between the event loop and
-// debounce timer callbacks.
-type debounceState struct {
-	timer      *time.Timer
-	mutex      sync.Mutex
-	lastFile   string
-	generation uint64
-}
-
 // eventLoop processes fsnotify events with debouncing.
 //
 // Applies are serialized through a single worker goroutine fed by a
@@ -240,19 +226,6 @@ func applyWorker(
 
 			applyAndReport(ctx, cmd, dir, file, fluxReconciler, &cachedKustomizations)
 		}
-	}
-}
-
-// cancelPendingDebounce increments the generation counter to invalidate any
-// pending timer callback and stops the timer if active.
-func cancelPendingDebounce(state *debounceState) {
-	state.mutex.Lock()
-	defer state.mutex.Unlock()
-
-	state.generation++
-
-	if state.timer != nil {
-		state.timer.Stop()
 	}
 }
 
@@ -308,53 +281,6 @@ func handleFileEvent(
 	}
 
 	scheduleApply(state, event.Name, applyCh)
-}
-
-// scheduleApply updates the debounce state and (re)starts the timer.
-func scheduleApply(state *debounceState, file string, applyCh chan string) {
-	state.mutex.Lock()
-	defer state.mutex.Unlock()
-
-	state.lastFile = file
-	state.generation++
-
-	currentGen := state.generation
-
-	if state.timer != nil {
-		state.timer.Stop()
-	}
-
-	state.timer = time.AfterFunc(debounceInterval, func() {
-		enqueueIfCurrent(state, currentGen, applyCh)
-	})
-}
-
-// enqueueIfCurrent checks whether the generation is still current and, if so,
-// coalesces any stale pending apply and enqueues the latest file.
-func enqueueIfCurrent(state *debounceState, expectedGen uint64, applyCh chan string) {
-	state.mutex.Lock()
-
-	if expectedGen != state.generation {
-		state.mutex.Unlock()
-
-		return
-	}
-
-	file := state.lastFile
-	state.mutex.Unlock()
-
-	// Coalesce: drain any stale pending apply, then enqueue latest.
-	// NOTE: safe because the generation guard above ensures only one
-	// timer callback is active at any time (single sender).
-	select {
-	case <-applyCh:
-	default:
-	}
-
-	select {
-	case applyCh <- file:
-	default:
-	}
 }
 
 // executeAndReportApply runs kubectl apply against the given directory and
@@ -498,7 +424,7 @@ func findKustomizationDir(changedFile, rootDir string) string {
 // (e.g., no kubeconfig, cluster unreachable). The caller should treat
 // a nil return as "Flux is unavailable; skip selective reconciliation".
 func tryCreateFluxReconciler() *flux.Reconciler {
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(nil)
 	if kubeconfigPath == "" {
 		return nil
 	}
@@ -660,7 +586,7 @@ func normalizeFluxPath(path string) string {
 // The provided context is forwarded to the cobra command so that Ctrl+C
 // (which cancels ctx) also terminates an in-flight apply promptly.
 func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error {
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
 	client := kubectl.NewClient(genericiooptions.IOStreams{
 		In:     os.Stdin,
 		Out:    cmd.OutOrStdout(),

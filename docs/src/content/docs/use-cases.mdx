@@ -119,8 +119,10 @@ jobs:
         uses: devantler-tech/ksail/.github/actions/ksail-cluster@v5.59.0
         with:
           distribution: K3s   # Vanilla, K3s, Talos, VCluster
+          sops-age-key: ${{ secrets.SOPS_AGE_KEY }}  # optional: import SOPS key + create sops-age secret
+          delete: true         # delete cluster at the end (runs even on failure)
 
-      - name: Build and push
+      - name: Build and push app image
         run: |
           docker build -t localhost:5050/my-app:${{ github.sha }} .
           docker push localhost:5050/my-app:${{ github.sha }}
@@ -134,26 +136,9 @@ jobs:
           ksail workload reconcile
           ksail workload wait deployment/my-app --for=condition=available
           npm run test:integration
-
-      - name: Cleanup
-        if: always()
-        run: ksail cluster delete
 ```
 
-**Action inputs:**
-
-| Input | Default | Description |
-|-------|---------|-------------|
-| `distribution` | `Vanilla` | Distribution to provision (Vanilla, K3s, Talos, VCluster) |
-| `provider` | `Docker` | Infrastructure provider (Docker, Hetzner) |
-| `args` | `""` | Additional args passed to `cluster init` / `cluster create` |
-| `init` | `true` | Run `ksail cluster init` before create |
-| `ksail-version` | `latest` | KSail version to install (e.g. `5.55.0`) or `latest` |
-| `install` | `true` | Install KSail from GitHub releases |
-| `cache` | `true` | Cache Helm charts and mirror registry volumes between runs |
-| `hcloud-token` | `""` | Hetzner Cloud API token (required when provider is Hetzner) |
-
-**Action outputs:** `kubeconfig` — path to the kubeconfig file for the provisioned cluster.
+For the full action inputs reference, PR preview patterns, and GitOps CI workflows, see [PR Preview Clusters](/guides/pr-preview-clusters/).
 
 ### Other CI Systems
 

@@ -123,10 +123,7 @@ Example:
 		"Compression level (0-9, default: -1 (gzip default))",
 	)
 
-	err := cmd.MarkFlagRequired("output")
-	if err != nil {
-		panic(fmt.Sprintf("failed to mark output flag as required: %v", err))
-	}
+	cobra.CheckErr(cmd.MarkFlagRequired("output"))
 
 	return cmd
 }
@@ -161,7 +158,7 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 		)
 	}
 
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
 	if kubeconfigPath == "" {
 		return ErrKubeconfigNotFound
 	}

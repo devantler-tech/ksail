@@ -85,7 +85,7 @@ func TestGetKubeconfigPathSilently(t *testing.T) {
 
 	// GetKubeconfigPathSilently should not panic and should return a valid path
 	// even when there's no ksail.yaml config file
-	path := kubeconfig.GetKubeconfigPathSilently()
+	path := kubeconfig.GetKubeconfigPathSilently(nil)
 
 	// Should return the default kubeconfig path when no config is found
 	assert.NotEmpty(t, path)

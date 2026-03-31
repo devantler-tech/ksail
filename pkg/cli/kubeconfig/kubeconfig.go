@@ -5,11 +5,13 @@ import (
 	"io"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
+	"github.com/spf13/cobra"
 )
 
 // GetKubeconfigPathFromConfig extracts and expands the kubeconfig path from a loaded cluster config.
@@ -37,12 +39,28 @@ func GetKubeconfigPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
 // GetKubeconfigPathSilently attempts to load the KSail config and extract the kubeconfig path
 // without producing any output. All config loading output is suppressed using io.Discard.
 //
+// When cmd is non-nil, the --config persistent flag is honored so that an explicit
+// config file is used instead of auto-discovery.
+//
+// This function intentionally avoids NewCommandConfigManager (which calls AddFlagsFromFields)
+// to prevent "flag redefined" panics on commands that already define flags like --kubeconfig.
+// Instead, it resolves the --config flag value directly and passes it to NewConfigManager.
+//
 // If config loading fails for any reason, this function returns the default kubeconfig path
 // rather than propagating the error. This makes it suitable for scenarios where a best-effort
 // path is acceptable.
-func GetKubeconfigPathSilently() string {
-	// Use io.Discard to suppress all output
-	cfgManager := ksailconfigmanager.NewConfigManager(io.Discard)
+func GetKubeconfigPathSilently(cmd *cobra.Command) string {
+	// Resolve --config flag without registering additional flags on cmd.
+	var configFile string
+
+	if cmd != nil {
+		cfgPath, err := flags.GetConfigPath(cmd)
+		if err == nil {
+			configFile = cfgPath
+		}
+	}
+
+	cfgManager := ksailconfigmanager.NewConfigManager(io.Discard, configFile)
 
 	kubeconfigPath, err := getKubeconfigPath(cfgManager)
 	if err != nil {

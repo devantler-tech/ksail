@@ -325,6 +325,8 @@ func TestDeriveBackupName_ExtensionStripping(t *testing.T) {
 
 // TestAllLinesContain_EdgeCases tests additional edge cases for the
 // allLinesContain helper used in restore's "already exists" detection.
+
+//nolint:dupl
 func TestAllLinesContain_EdgeCases(t *testing.T) {
 	t.Parallel()
 

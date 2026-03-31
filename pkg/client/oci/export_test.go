@@ -9,3 +9,9 @@ var PushWithRetry = pushWithRetry
 
 // PushFn exports pushFn for testing.
 type PushFn = pushFn
+
+// ShouldWriteAtRoot exports shouldWriteAtRoot for testing.
+var ShouldWriteAtRoot = shouldWriteAtRoot
+
+// CollectManifestFiles exports collectManifestFiles for testing.
+var CollectManifestFiles = collectManifestFiles

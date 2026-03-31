@@ -118,7 +118,8 @@ Flags:
       --wait                            If true, wait for resources to be gone before returning. This waits for finalizers.
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 Use "ksail workload apply [command] --help" for more information about a command.
 
@@ -201,7 +202,8 @@ Flags:
       --windows-line-endings           Only relevant if --edit=true. Defaults to the line ending native to your platform.
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 Use "ksail workload create [command] --help" for more information about a command.
 
@@ -241,7 +243,8 @@ Flags:
       --wait                      enable health checking
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -260,7 +263,8 @@ Flags:
   -h, --help   help for source
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 Use "ksail workload create source [command] --help" for more information about a command.
 
@@ -344,7 +348,8 @@ Flags:
       --wait                            If true, wait for resources to be gone before returning. This waits for finalizers. (default true)
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -404,7 +409,8 @@ Flags:
       --user string                    The name of the kubeconfig user to use
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -429,7 +435,8 @@ Flags:
   -h, --help            help for edit
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -492,7 +499,8 @@ Flags:
       --user string                    The name of the kubeconfig user to use
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -544,7 +552,8 @@ Flags:
       --user string                    The name of the kubeconfig user to use
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -579,7 +588,8 @@ Flags:
   -k, --kubeconfig string   Path to kubeconfig file (default "~/.kube/config")
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -657,7 +667,8 @@ Flags:
       --user string                    The name of the kubeconfig user to use
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -756,7 +767,8 @@ Flags:
       --watch-only                     Watch for changes to the requested object(s), without listing/getting first.
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -806,7 +818,8 @@ Flags:
       --provider Provider              Infrastructure provider backend (e.g., Docker)
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -835,7 +848,8 @@ Flags:
   -k, --kubeconfig string   Path to kubeconfig file (default "~/.kube/config")
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -853,7 +867,8 @@ Flags:
       --wait               wait until resources are ready
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -957,7 +972,8 @@ Flags:
       --user string                        The name of the kubeconfig user to use
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -996,7 +1012,8 @@ Flags:
   -h, --help   help for workload
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 Use "ksail workload [command] --help" for more information about a command.
 
@@ -1041,7 +1058,8 @@ Flags:
       --validate          Validate manifests before pushing
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -1056,7 +1074,8 @@ Flags:
       --timeout duration   timeout for waiting for reconciliation to complete (overrides config timeout)
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -1111,7 +1130,8 @@ Flags:
       --user string                    The name of the kubeconfig user to use
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 Use "ksail workload rollout [command] --help" for more information about a command.
 
@@ -1176,7 +1196,8 @@ Flags:
       --user string                    The name of the kubeconfig user to use
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -1227,7 +1248,8 @@ Flags:
       --timeout duration              The length of time to wait before giving up. Zero means check once and don't wait, negative means wait for a week. (default 30s)
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -1269,6 +1291,7 @@ Flags:
       --path string     Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
 
 Global Flags:
-      --benchmark   Show per-activity benchmark output
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---

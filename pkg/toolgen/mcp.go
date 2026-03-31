@@ -2,7 +2,7 @@ package toolgen
 
 import (
 	"context"
-	"strings"
+	"encoding/json"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -73,41 +73,51 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 	mcp.AddTool(server, mcpTool, handler)
 }
 
+// mcpResponse is the structured JSON envelope returned by MCP tool handlers.
+type mcpResponse struct {
+	Status  string `json:"status"`
+	Command string `json:"command"`
+	Output  string `json:"output,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
 func buildMCPErrorText(commandPath, output string, err error) string {
-	const overhead = len("Command '' failed\nOutput:\n\nError: ")
-
-	var result strings.Builder
-	result.Grow(overhead + len(commandPath) + len(output) + len(err.Error()))
-
-	result.WriteString("Command '")
-	result.WriteString(commandPath)
-	result.WriteString("' failed")
-
-	if output != "" {
-		result.WriteString("\nOutput:\n")
-		result.WriteString(output)
+	resp := mcpResponse{
+		Status:  "error",
+		Command: commandPath,
+		Error:   err.Error(),
 	}
 
-	result.WriteString("\nError: ")
-	result.WriteString(err.Error())
+	if output != "" {
+		resp.Output = output
+	}
 
-	return result.String()
+	data, jsonErr := json.Marshal(resp)
+	if jsonErr != nil {
+		// Fallback: use a hand-crafted JSON string to guarantee valid output
+		// even when json.Marshal itself fails (e.g. unmarshalable field values).
+		return `{"status":"error","command":"` + commandPath + `","error":"failed to marshal response"}`
+	}
+
+	return string(data)
 }
 
 func buildMCPSuccessText(commandPath, output string) string {
-	const overhead = len("Command '' completed successfully\nOutput:\n")
-
-	var result strings.Builder
-	result.Grow(overhead + len(commandPath) + len(output))
-
-	result.WriteString("Command '")
-	result.WriteString(commandPath)
-	result.WriteString("' completed successfully")
-
-	if output != "" {
-		result.WriteString("\nOutput:\n")
-		result.WriteString(output)
+	resp := mcpResponse{
+		Status:  "success",
+		Command: commandPath,
 	}
 
-	return result.String()
+	if output != "" {
+		resp.Output = output
+	}
+
+	data, jsonErr := json.Marshal(resp)
+	if jsonErr != nil {
+		// Fallback: use a hand-crafted JSON string to guarantee valid output
+		// even when json.Marshal itself fails (e.g. unmarshalable field values).
+		return `{"status":"success","command":"` + commandPath + `"}`
+	}
+
+	return string(data)
 }

@@ -432,22 +432,47 @@ func getContainerTestCases() []containerTestCase {
 	return []containerTestCase{
 		// Kind patterns
 		{"kind_control_plane", "my-cluster-control-plane", "my-cluster", true},
+		{"kind_control_plane_staging", "staging-control-plane", "staging", true},
+		{"kind_control_plane_prefix_clash", "dev2-control-plane", "dev", false},
+		{"kind_control_plane_suffix_only", "-control-plane", "dev", false},
 		{"kind_worker", "my-cluster-worker", "my-cluster", true},
 		{"kind_worker_numbered", "my-cluster-worker2", "my-cluster", true},
+		{"kind_worker_10", "dev-worker10", "dev", true},
+		{"kind_worker_non_numeric_suffix", "dev-workerabc", "dev", false},
+		{"kind_worker_prefix_clash", "devprod-worker", "dev", false},
+		{"kind_worker_alphanumeric_suffix", "dev-worker2a", "dev", false},
+
 		// K3d patterns
 		{"k3d_server", "k3d-my-cluster-server-0", "my-cluster", true},
 		{"k3d_agent", "k3d-my-cluster-agent-0", "my-cluster", true},
+		{"k3d_server_1", "k3d-dev-server-1", "dev", true},
+		{"k3d_agent_multi_digit", "k3d-dev-agent-10", "dev", true},
+		{"k3d_different_cluster", "k3d-staging-server-0", "dev", false},
+		{"k3d_prefix_clash", "k3d-dev2-server-0", "dev", false},
+		{"k3d_missing_role", "k3d-dev-0", "dev", false},
+
 		// Talos patterns
 		{"talos_controlplane", "my-cluster-controlplane-1", "my-cluster", true},
 		{"talos_worker", "my-cluster-worker-1", "my-cluster", true},
+		{"talos_worker_0", "dev-worker-0", "dev", true},
+		{"talos_different_cluster", "staging-controlplane-0", "dev", false},
+		{"talos_prefix_clash", "dev2-controlplane-0", "dev", false},
+
 		// VCluster patterns
 		{"vcluster_cp", "vcluster.cp.my-cluster", "my-cluster", true},
 		{"vcluster_cp_different_cluster", "vcluster.cp.other-cluster", "my-cluster", false},
+		{"vcluster_prefix_partial_match", "vcluster.cp.dev-extra", "dev", false},
+
 		// Non-matching
 		{"different_cluster", "other-cluster-control-plane", "my-cluster", false},
 		{"registry_container", "registry.localhost", "my-cluster", false},
 		{"partial_match", "my-cluster-registry", "my-cluster", false},
 		{"prefix_collision", "my-cluster-test-control-plane", "my-cluster", false},
+		{"unrelated_container", "nginx", "dev", false},
+		{"empty_container_name", "", "dev", false},
+		{"empty_cluster_name", "dev-control-plane", "", false},
+		{"cloud_provider_kind", "ksail-cloud-provider-kind", "dev", false},
+		{"cpk_service", "cpk-lb", "dev", false},
 	}
 }
 

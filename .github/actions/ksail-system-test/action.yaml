@@ -135,6 +135,7 @@ runs:
         init: ${{ inputs.init }}
         install: "false"
         cache: "true"
+        validate: ${{ inputs.init }}
         hcloud-token: ${{ inputs.hcloud-token }}
         omni-service-account-key: ${{ inputs.omni-service-account-key }}
         omni-endpoint: ${{ inputs.omni-endpoint }}

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/chat"
 	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 	"github.com/devantler-tech/ksail/v5/pkg/toolgen"
@@ -50,13 +49,11 @@ func createTestTool(called *bool) copilot.Tool {
 func TestModeToolExecution(t *testing.T) {
 	t.Parallel()
 
-	eventChan := make(chan tea.Msg, 10)
-
 	toolCalled := false
 	testTool := createTestTool(&toolCalled)
 
-	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{testTool}, eventChan, nil, nil,
+	wrappedTools := chat.WrapToolsWithForceInjection(
+		[]copilot.Tool{testTool}, nil,
 	)
 
 	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
@@ -152,264 +149,10 @@ func createToolMetadataWithForce(
 	}
 }
 
-// waitForPermissionRequestAndRespond waits for a permission request and responds with the given value.
-func waitForPermissionRequestAndRespond(
-	t *testing.T,
-	eventChan chan tea.Msg,
-	expectedToolName string,
-	approved bool,
-) {
-	t.Helper()
-
-	select {
-	case msg := <-eventChan:
-		permReq, ok := msg.(chatui.PermissionRequestMsg)
-		if !ok {
-			t.Fatalf("Expected PermissionRequestMsg, got %T", msg)
-		}
-
-		if permReq.ToolName != expectedToolName {
-			t.Errorf("Expected tool name '%s', got '%s'", expectedToolName, permReq.ToolName)
-		}
-
-		permReq.Response <- approved
-
-	case <-time.After(2 * time.Second):
-		t.Fatal("Timeout waiting for permission request")
-	}
-}
-
-// TestWriteToolSendsPermissionRequest verifies that tools with RequiresPermission=true
-// send permission requests and execute after approval.
-func TestWriteToolSendsPermissionRequest(t *testing.T) {
-	t.Parallel()
-
-	eventChan := make(chan tea.Msg, 10)
-
-	toolCalled := false
-	writeTool := createTestWriteTool("test_write_tool", &toolCalled)
-	metadata := createToolMetadata("test_write_tool")
-
-	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, nil, metadata,
-	)
-
-	// Start tool invocation in goroutine since it will block waiting for permission
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-
-		_, _ = wrappedTools[0].Handler(copilot.ToolInvocation{
-			ToolCallID: "test_write",
-			ToolName:   "test_write_tool",
-		})
-	}()
-
-	// Wait for permission request and approve it
-	waitForPermissionRequestAndRespond(t, eventChan, "test_write_tool", true)
-
-	// Wait for handler to complete
-	<-done
-
-	if !toolCalled {
-		t.Error("Tool should have been called after permission approval")
-	}
-}
-
-// TestWriteToolDeniedPermission verifies that tools are blocked when permission is denied.
-func TestWriteToolDeniedPermission(t *testing.T) {
-	t.Parallel()
-
-	eventChan := make(chan tea.Msg, 10)
-
-	toolCalled := false
-	writeTool := createTestWriteTool("test_write_tool2", &toolCalled)
-	metadata := createToolMetadata("test_write_tool2")
-
-	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, nil, metadata,
-	)
-
-	// Start tool invocation in goroutine
-	var result copilot.ToolResult
-
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-
-		result, _ = wrappedTools[0].Handler(copilot.ToolInvocation{
-			ToolCallID: "test_write_denied",
-			ToolName:   "test_write_tool2",
-		})
-	}()
-
-	// Wait for permission request and deny it
-	waitForPermissionRequestAndRespond(t, eventChan, "test_write_tool2", false)
-
-	// Wait for handler to complete
-	<-done
-
-	if toolCalled {
-		t.Error("Tool should NOT have been called after permission denial")
-	}
-
-	if result.ResultType != "failure" {
-		t.Errorf("Expected failure result, got %s", result.ResultType)
-	}
-
-	if !strings.Contains(result.TextResultForLLM, "Permission denied") {
-		t.Errorf("Expected denial message, got: %s", result.TextResultForLLM)
-	}
-}
-
-// TestReadToolSkipsPermission verifies that read-only tools execute without permission requests.
-func TestReadToolSkipsPermission(t *testing.T) {
-	t.Parallel()
-
-	eventChan := make(chan tea.Msg, 10)
-
-	toolCalled := false
-	readTool := copilot.Tool{
-		Name:        "test_read_tool",
-		Description: "A read tool",
-		Handler: func(_ copilot.ToolInvocation) (copilot.ToolResult, error) {
-			toolCalled = true
-
-			return copilot.ToolResult{
-				TextResultForLLM: "Read operation completed",
-				ResultType:       successResult,
-			}, nil
-		},
-	}
-
-	// Metadata with RequiresPermission=false (read-only)
-	metadata := map[string]toolgen.ToolDefinition{
-		"test_read_tool": {
-			Name:               "test_read_tool",
-			RequiresPermission: false,
-		},
-	}
-
-	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{readTool}, eventChan, nil, metadata,
-	)
-
-	// Execute directly - should not send permission request
-	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
-		ToolCallID: "test_read",
-		ToolName:   "test_read_tool",
-	})
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
-
-	// Check no permission request was sent
-	select {
-	case msg := <-eventChan:
-		t.Errorf("Read tool should not send permission request, got: %T", msg)
-	default:
-		// Good - no message sent
-	}
-
-	if !toolCalled {
-		t.Error("Read tool should have been called directly")
-	}
-
-	if result.ResultType != successResult {
-		t.Errorf("Expected success, got %s", result.ResultType)
-	}
-}
-
-// TestYoloModeAutoApproves verifies that YOLO mode auto-approves write tools
-// without sending permission requests.
-func TestYoloModeAutoApproves(t *testing.T) {
-	t.Parallel()
-
-	eventChan := make(chan tea.Msg, 10)
-	yoloModeRef := chatui.NewYoloModeRef(true) // YOLO mode enabled
-
-	toolCalled := false
-	writeTool := createTestWriteTool("test_yolo_tool", &toolCalled)
-	metadata := createToolMetadata("test_yolo_tool")
-
-	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, yoloModeRef, metadata,
-	)
-
-	// Execute directly - should auto-approve without permission prompt
-	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
-		ToolCallID: "test_yolo",
-		ToolName:   "test_yolo_tool",
-	})
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
-
-	// Check no permission request was sent
-	select {
-	case msg := <-eventChan:
-		t.Errorf("YOLO mode should not send permission request, got: %T", msg)
-	default:
-		// Good - no message sent
-	}
-
-	if !toolCalled {
-		t.Error("Tool should have been called in YOLO mode")
-	}
-
-	if result.ResultType != successResult {
-		t.Errorf("Expected success, got %s", result.ResultType)
-	}
-}
-
-// TestYoloModeDisabledStillPrompts verifies that with YOLO mode disabled,
-// write tools still require permission.
-func TestYoloModeDisabledStillPrompts(t *testing.T) {
-	t.Parallel()
-
-	eventChan := make(chan tea.Msg, 10)
-	yoloModeRef := chatui.NewYoloModeRef(false) // YOLO mode disabled
-
-	toolCalled := false
-	writeTool := createTestWriteTool("test_yolo_off_tool", &toolCalled)
-	metadata := createToolMetadata("test_yolo_off_tool")
-
-	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, yoloModeRef, metadata,
-	)
-
-	// Start tool invocation in goroutine since it will block waiting for permission
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-
-		_, _ = wrappedTools[0].Handler(copilot.ToolInvocation{
-			ToolCallID: "test_yolo_off",
-			ToolName:   "test_yolo_off_tool",
-		})
-	}()
-
-	// Wait for permission request and approve it
-	waitForPermissionRequestAndRespond(t, eventChan, "test_yolo_off_tool", true)
-
-	// Wait for handler to complete
-	<-done
-
-	if !toolCalled {
-		t.Error("Tool should have been called after permission approval")
-	}
-}
-
 // TestForceInjection verifies that the force flag is injected into tool arguments
-// when a tool requiring permission is approved and its schema defines a force parameter.
+// when a tool's schema defines a force parameter.
 func TestForceInjection(t *testing.T) {
 	t.Parallel()
-
-	eventChan := make(chan tea.Msg, 10)
-	yoloModeRef := chatui.NewYoloModeRef(true) // YOLO mode to avoid permission prompt
 
 	var receivedArgs map[string]any
 
@@ -431,8 +174,8 @@ func TestForceInjection(t *testing.T) {
 
 	metadata := createToolMetadataWithForce("test_force_tool")
 
-	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, yoloModeRef, metadata,
+	wrappedTools := chat.WrapToolsWithForceInjection(
+		[]copilot.Tool{writeTool}, metadata,
 	)
 
 	_, err := wrappedTools[0].Handler(copilot.ToolInvocation{
@@ -470,9 +213,6 @@ func TestForceInjection(t *testing.T) {
 func TestForceNotInjectedWithoutSchemaSupport(t *testing.T) {
 	t.Parallel()
 
-	eventChan := make(chan tea.Msg, 10)
-	yoloModeRef := chatui.NewYoloModeRef(true) // YOLO mode to avoid permission prompt
-
 	var receivedArgs map[string]any
 
 	writeTool := copilot.Tool{
@@ -494,8 +234,8 @@ func TestForceNotInjectedWithoutSchemaSupport(t *testing.T) {
 	// Use metadata WITHOUT force in schema
 	metadata := createToolMetadata("test_no_force_tool")
 
-	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, eventChan, yoloModeRef, metadata,
+	wrappedTools := chat.WrapToolsWithForceInjection(
+		[]copilot.Tool{writeTool}, metadata,
 	)
 
 	_, err := wrappedTools[0].Handler(copilot.ToolInvocation{
@@ -523,30 +263,29 @@ func TestForceNotInjectedWithoutSchemaSupport(t *testing.T) {
 	}
 }
 
-// TestNilEventChanAutoApproves verifies that write tools with a nil event channel
-// auto-approve instead of deadlocking (non-TUI mode).
-func TestNilEventChanAutoApproves(t *testing.T) {
+// TestToolExecutesDirectlyWithoutWrapper verifies that tools without metadata
+// still execute correctly through the force injection wrapper.
+func TestToolExecutesDirectlyWithoutWrapper(t *testing.T) {
 	t.Parallel()
 
 	toolCalled := false
-	writeTool := createTestWriteTool("test_nil_chan_tool", &toolCalled)
-	metadata := createToolMetadata("test_nil_chan_tool")
+	writeTool := createTestWriteTool("test_direct_tool", &toolCalled)
 
-	// Pass nil for eventChan — simulates non-TUI mode
-	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
-		[]copilot.Tool{writeTool}, nil, nil, metadata,
+	// Pass nil metadata — tool should still execute
+	wrappedTools := chat.WrapToolsWithForceInjection(
+		[]copilot.Tool{writeTool}, nil,
 	)
 
 	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
-		ToolCallID: "test_nil_chan",
-		ToolName:   "test_nil_chan_tool",
+		ToolCallID: "test_direct",
+		ToolName:   "test_direct_tool",
 	})
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
 	if !toolCalled {
-		t.Error("Tool should have been called with nil eventChan (auto-approve)")
+		t.Error("Tool should have been called directly")
 	}
 
 	if result.ResultType != successResult {

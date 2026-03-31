@@ -1,17 +1,25 @@
 package kubeconform
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/yannh/kubeconform/pkg/validator"
 )
 
 // ErrValidationFailed indicates that validation failed.
 var ErrValidationFailed = errors.New("validation failed")
+
+const (
+	// schemaCacheDirPerm is the permission for the schema cache directory.
+	schemaCacheDirPerm = 0o700
+)
 
 // Client provides kubeconform validation functionality.
 type Client struct{}
@@ -22,9 +30,14 @@ func NewClient() *Client {
 }
 
 // ValidateFile validates a single Kubernetes manifest file.
-func (c *Client) ValidateFile(_ context.Context, filePath string, opts *ValidationOptions) error {
+func (c *Client) ValidateFile(ctx context.Context, filePath string, opts *ValidationOptions) error {
 	if opts == nil {
 		opts = &ValidationOptions{}
+	}
+
+	// Check context before starting
+	if ctx.Err() != nil {
+		return fmt.Errorf("%w", ctx.Err())
 	}
 
 	// Open the file
@@ -47,17 +60,47 @@ func (c *Client) ValidateFile(_ context.Context, filePath string, opts *Validati
 	results := kubeValidator.Validate(filePath, file)
 
 	// Check for validation errors
-	return c.processResults(results, filePath, opts.Verbose)
+	return c.processResults(results)
+}
+
+// ValidateBytes validates Kubernetes manifests from raw bytes while preserving the source name.
+func (c *Client) ValidateBytes(
+	ctx context.Context,
+	sourceName string,
+	data []byte,
+	opts *ValidationOptions,
+) error {
+	if opts == nil {
+		opts = &ValidationOptions{}
+	}
+
+	if ctx.Err() != nil {
+		return fmt.Errorf("%w", ctx.Err())
+	}
+
+	kubeValidator, err := c.createValidator(opts)
+	if err != nil {
+		return fmt.Errorf("create validator: %w", err)
+	}
+
+	results := kubeValidator.Validate(sourceName, io.NopCloser(bytes.NewReader(data)))
+
+	return c.processResults(results)
 }
 
 // ValidateManifests validates Kubernetes manifests from a reader (e.g., kustomize build output).
 func (c *Client) ValidateManifests(
-	_ context.Context,
+	ctx context.Context,
 	reader io.Reader,
 	opts *ValidationOptions,
 ) error {
 	if opts == nil {
 		opts = &ValidationOptions{}
+	}
+
+	// Check context before starting
+	if ctx.Err() != nil {
+		return fmt.Errorf("%w", ctx.Err())
 	}
 
 	// Create validator
@@ -73,27 +116,24 @@ func (c *Client) ValidateManifests(
 	results := kubeValidator.Validate("stdin", rc)
 
 	// Check for validation errors
-	return c.processResults(results, "stdin", opts.Verbose)
+	return c.processResults(results)
 }
 
 // processResults processes validation results and returns an error if validation failed.
-func (c *Client) processResults(results []validator.Result, source string, verbose bool) error {
-	hasErrors := false
+// Error details are included in the returned error message (not written to stderr)
+// to avoid interleaving with ProgressGroup's ANSI output.
+// The caller is responsible for including any file/source context in the wrapping error.
+func (c *Client) processResults(results []validator.Result) error {
+	var errDetails []string
 
 	for _, res := range results {
 		if res.Status == validator.Invalid || res.Status == validator.Error {
-			hasErrors = true
-
-			if verbose {
-				_, _ = fmt.Fprintf(os.Stderr, "❌ %s: %v\n", source, res.Err)
-			}
-		} else if res.Status == validator.Valid && verbose {
-			_, _ = fmt.Fprintf(os.Stdout, "✅ %s is valid\n", source)
+			errDetails = append(errDetails, fmt.Sprintf("%v", res.Err))
 		}
 	}
 
-	if hasErrors {
-		return fmt.Errorf("%w for %s", ErrValidationFailed, source)
+	if len(errDetails) > 0 {
+		return fmt.Errorf("%w: %s", ErrValidationFailed, strings.Join(errDetails, "; "))
 	}
 
 	return nil
@@ -107,8 +147,6 @@ type ValidationOptions struct {
 	Strict bool
 	// IgnoreMissingSchemas ignores resources with missing schemas.
 	IgnoreMissingSchemas bool
-	// Verbose enables verbose output.
-	Verbose bool
 }
 
 // createValidator creates a kubeconform validator with the given options.
@@ -128,6 +166,28 @@ func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, 
 		skipKinds[kind] = struct{}{}
 	}
 
+	// Set up schema cache directory
+	var cacheDir string
+
+	userCacheDir, userCacheDirErr := os.UserCacheDir()
+	if userCacheDirErr == nil {
+		cacheDir = filepath.Join(userCacheDir, "ksail", "kubeconform")
+
+		err := os.MkdirAll(cacheDir, schemaCacheDirPerm)
+		if err != nil {
+			return nil, fmt.Errorf("create schema cache directory: %w", err)
+		}
+	} else {
+		// Fallback: use a stable cache directory under the system temp dir to avoid leaking
+		// unique directories on every validator construction when $HOME is unavailable (e.g. CI).
+		cacheDir = filepath.Join(os.TempDir(), "ksail", "kubeconform")
+
+		err := os.MkdirAll(cacheDir, schemaCacheDirPerm)
+		if err != nil {
+			return nil, fmt.Errorf("create fallback schema cache directory: %w", err)
+		}
+	}
+
 	// Create validator options
 	validatorOpts := validator.Opts{
 		SkipKinds:            skipKinds,
@@ -136,7 +196,7 @@ func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, 
 		Strict:               opts.Strict,
 		IgnoreMissingSchemas: opts.IgnoreMissingSchemas,
 		SkipTLS:              false,
-		Cache:                "",
+		Cache:                cacheDir,
 		Debug:                false,
 	}
 

@@ -77,6 +77,8 @@ func TestNewInstallerWithDistribution(t *testing.T) {
 				"test-context",
 				5*time.Minute,
 				testCase.distribution,
+				"",
+				v1alpha1.LoadBalancerDefault,
 			)
 
 			require.NotNil(t, installer, "expected installer to be created")
@@ -156,6 +158,106 @@ func TestInstaller_Install_K3sDistribution(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestInstaller_Install_DockerProvider(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := ciliuminstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		v1alpha1.LoadBalancerDefault,
+	)
+
+	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error {
+		return nil
+	})
+
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				if spec == nil {
+					return false
+				}
+
+				assert.Equal(t, "true", spec.SetJSONVals["gatewayAPI.hostNetwork.enabled"])
+				assert.Equal(
+					t, "true",
+					spec.SetJSONVals["envoy.securityContext.capabilities.keepCapNetBindService"],
+				)
+				assert.Contains(
+					t, spec.SetJSONVals["envoy.securityContext.capabilities.envoy"],
+					"NET_BIND_SERVICE",
+				)
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestInstaller_Install_DockerProviderWithLoadBalancer(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := ciliuminstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		v1alpha1.LoadBalancerEnabled,
+	)
+
+	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error {
+		return nil
+	})
+
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				if spec == nil {
+					return false
+				}
+
+				// hostNetwork should NOT be set when LoadBalancer is enabled
+				_, hasHostNetwork := spec.SetJSONVals["gatewayAPI.hostNetwork.enabled"]
+				assert.False(
+					t, hasHostNetwork,
+					"hostNetwork should not be set when LoadBalancer is enabled",
+				)
+
+				// gatewayAPI should still be enabled
+				assert.Equal(t, "true", spec.SetJSONVals["gatewayAPI.enabled"])
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
 func TestInstaller_Install_RepoError(t *testing.T) {
 	t.Parallel()
 
@@ -191,12 +293,63 @@ func TestInstaller_Install_NilClient(t *testing.T) {
 		"test-context",
 		5*time.Minute,
 		v1alpha1.DistributionVanilla,
+		"",
+		v1alpha1.LoadBalancerDefault,
 	)
 
 	err := installer.Install(context.Background())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "helm client is nil")
+}
+
+func TestInstaller_Install_NilGatewayAPICRDInstaller(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := ciliuminstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		5*time.Minute,
+		v1alpha1.DistributionVanilla,
+		"",
+		v1alpha1.LoadBalancerDefault,
+	)
+
+	installer.SetGatewayAPICRDInstaller(nil)
+
+	err := installer.Install(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "gateway API CRD installer is not configured")
+}
+
+func TestInstaller_Install_GatewayAPICRDError(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := ciliuminstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		5*time.Minute,
+		v1alpha1.DistributionVanilla,
+		"",
+		v1alpha1.LoadBalancerDefault,
+	)
+
+	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error {
+		return assert.AnError
+	})
+
+	err := installer.Install(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Gateway API CRDs")
+	// Verify Helm install was never attempted.
+	client.AssertNotCalled(t, "AddRepository")
+	client.AssertNotCalled(t, "InstallOrUpgradeChart")
 }
 
 func TestInstaller_Uninstall_Success(t *testing.T) {
@@ -235,6 +388,8 @@ func TestInstaller_Uninstall_NilClient(t *testing.T) {
 		"test-context",
 		5*time.Minute,
 		v1alpha1.DistributionVanilla,
+		"",
+		v1alpha1.LoadBalancerDefault,
 	)
 
 	err := installer.Uninstall(context.Background())
@@ -258,7 +413,14 @@ func newInstallerWithDistribution(
 		"test-context",
 		2*time.Minute,
 		distribution,
+		"",
+		v1alpha1.LoadBalancerDefault,
 	)
+
+	// Use no-op Gateway API CRD installer to avoid requiring a real cluster.
+	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error {
+		return nil
+	})
 
 	return installer, client
 }
@@ -296,6 +458,7 @@ func expectCiliumInstall(t *testing.T, client *helm.MockInterface, installErr er
 				assert.True(t, spec.Wait)
 				assert.True(t, spec.WaitForJobs)
 				assert.Equal(t, 2*time.Minute, spec.Timeout)
+				assert.Equal(t, "true", spec.SetJSONVals["gatewayAPI.enabled"])
 
 				return true
 			}),

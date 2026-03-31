@@ -2,6 +2,9 @@ name: "KSail Cluster"
 description: "Provision a KSail Kubernetes cluster for CI testing"
 
 inputs:
+  config:
+    description: "Path to a KSail config file (e.g. 'ksail.staging.yaml'). When set, --config is passed to all ksail commands."
+    default: ""
   distribution:
     description: "KSail distribution to provision (Vanilla, K3s, Talos, VCluster)"
     default: "Vanilla"
@@ -32,6 +35,27 @@ inputs:
   omni-endpoint:
     description: "Omni API endpoint URL (required when provider is Omni)"
     default: ""
+  sops-age-key:
+    description: "SOPS Age private key for decrypting secrets (imports key locally; KSail creates the in-cluster secret during Flux setup)"
+    default: ""
+  hosts-file:
+    description: "Path to hosts file to append to /etc/hosts"
+    default: ""
+  root-ca-cert-file:
+    description: "Path to root CA certificate to install as trusted"
+    default: ""
+  push:
+    description: "Whether to push manifests after cluster creation"
+    default: "false"
+  reconcile:
+    description: "Whether to reconcile workloads after push"
+    default: "false"
+  validate:
+    description: "Whether to validate manifests before cluster creation"
+    default: "false"
+  delete:
+    description: "Whether to delete the cluster at the end (runs even on failure)"
+    default: "false"
 
 outputs:
   kubeconfig:
@@ -81,12 +105,13 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
         KSAIL_VERSION: ${{ inputs.ksail-version }}
+        CONFIG: ${{ inputs.config }}
       run: |
         echo "ksail-version=$KSAIL_VERSION" >> "$GITHUB_OUTPUT"
 
         if [ "$PROVIDER" = "Docker" ]; then
           # shellcheck disable=SC2086
-          IMAGES=$(ksail workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
+          IMAGES=$(ksail ${CONFIG:+--config "$CONFIG"} workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
           if [ -n "$IMAGES" ]; then
             IMAGES_HASH=$(echo "$IMAGES" | sort -u | sha256sum | cut -c1-12)
           else
@@ -162,10 +187,11 @@ runs:
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
         ARGS: ${{ inputs.args }}
+        CONFIG: ${{ inputs.config }}
       run: |
         # Use ksail workload images to list images for this distribution (no source code needed)
         # shellcheck disable=SC2086
-        IMAGES=$(ksail workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
+        IMAGES=$(ksail ${CONFIG:+--config "$CONFIG"} workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
         if [ -z "$IMAGES" ]; then
           echo "ℹ️ No images to pre-pull for distribution $DISTRIBUTION"
           exit 0
@@ -188,6 +214,47 @@ runs:
           fi
         done <<< "$IMAGES"
 
+    - name: 🌐 Add hosts
+      if: inputs.hosts-file != ''
+      shell: bash
+      env:
+        HOSTS_FILE: ${{ inputs.hosts-file }}
+      run: |
+        if [ -f "$HOSTS_FILE" ]; then
+          sudo sh -c 'cat "$1" >> /etc/hosts' sh "$HOSTS_FILE"
+          echo "✅ Added hosts from $HOSTS_FILE"
+        else
+          echo "⚠️ Hosts file not found: $HOSTS_FILE"
+        fi
+
+    - name: 🔐 Install root CA
+      if: inputs.root-ca-cert-file != ''
+      shell: bash
+      env:
+        ROOT_CA_CERT_FILE: ${{ inputs.root-ca-cert-file }}
+      run: |
+        if [ -f "$ROOT_CA_CERT_FILE" ]; then
+          sudo cp "$ROOT_CA_CERT_FILE" /usr/local/share/ca-certificates/root-ca.crt
+          sudo update-ca-certificates
+          echo "✅ Installed root CA certificate"
+        else
+          echo "⚠️ Root CA cert file not found: $ROOT_CA_CERT_FILE"
+        fi
+
+    - name: 🔑 Import SOPS Age key (local)
+      if: inputs.sops-age-key != ''
+      shell: bash
+      env:
+        SOPS_AGE_KEY: ${{ inputs.sops-age-key }}
+      run: |
+        # Extract the AGE-SECRET-KEY line from the input (supports both bare keys and key files with comments)
+        AGE_KEY=$(echo "$SOPS_AGE_KEY" | grep -oE 'AGE-SECRET-KEY-[A-Za-z0-9]+' | head -1)
+        if [ -z "$AGE_KEY" ]; then
+          echo "❌ No valid AGE-SECRET-KEY found in sops-age-key input"
+          exit 1
+        fi
+        ksail cipher import "$AGE_KEY"
+
     - name: 🏗️ Initialize Project
       if: inputs.init == 'true'
       shell: bash
@@ -197,9 +264,17 @@ runs:
         ARGS: ${{ inputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        CONFIG: ${{ inputs.config }}
       run: |
         # shellcheck disable=SC2086
-        ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
+        ksail ${CONFIG:+--config "$CONFIG"} cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
+
+    - name: 🧹 Validate manifests
+      if: inputs.validate == 'true'
+      shell: bash
+      env:
+        CONFIG: ${{ inputs.config }}
+      run: ksail ${CONFIG:+--config "$CONFIG"} workload validate
 
     - name: 🔧 Inject Omni endpoint
       if: inputs.provider == 'Omni' && inputs.omni-endpoint != ''
@@ -225,13 +300,14 @@ runs:
         ARGS: ${{ inputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        CONFIG: ${{ inputs.config }}
       run: |
         set -euo pipefail
         if [ "$INIT" = "true" ]; then
-          ksail cluster create
+          ksail ${CONFIG:+--config "$CONFIG"} cluster create
         else
           # shellcheck disable=SC2086
-          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+          ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
         fi
         # Determine kubeconfig path: parse --kubeconfig from args, fall back to default
         KUBECONFIG_PATH="${HOME}/.kube/config"
@@ -255,6 +331,20 @@ runs:
           esac
         done
         echo "kubeconfig=$KUBECONFIG_PATH" >> "$GITHUB_OUTPUT"
+
+    - name: 📦 Push manifests
+      if: inputs.push == 'true'
+      shell: bash
+      env:
+        CONFIG: ${{ inputs.config }}
+      run: ksail ${CONFIG:+--config "$CONFIG"} workload push
+
+    - name: 🔁 Reconcile workloads
+      if: inputs.reconcile == 'true'
+      shell: bash
+      env:
+        CONFIG: ${{ inputs.config }}
+      run: ksail ${CONFIG:+--config "$CONFIG"} workload reconcile
 
     - name: 📦 Export mirror volumes
       if: inputs.cache == 'true' && inputs.provider == 'Docker'
@@ -283,3 +373,11 @@ runs:
         path: /tmp/ksail-mirror-cache
         key: ksail-mirror-${{ steps.cache-keys.outputs.images-hash }}-${{ runner.os }}-${{ runner.arch }}
       continue-on-error: true
+
+    - name: 🔥 Delete cluster
+      if: always() && inputs.delete == 'true'
+      shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        CONFIG: ${{ inputs.config }}
+      run: ksail ${CONFIG:+--config "$CONFIG"} cluster delete || echo "⚠️ Cluster may not have been created"

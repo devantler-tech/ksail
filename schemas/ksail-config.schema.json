@@ -121,6 +121,18 @@
                 "ArgoCD"
               ]
             },
+            "sops": {
+              "properties": {
+                "ageKeyEnvVar": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            },
             "importImages": {
               "type": "string",
               "description": "Path to tar archive with container images to import after cluster creation but before component installation"
@@ -241,7 +253,7 @@
           "properties": {
             "sourceDirectory": {
               "type": "string",
-              "description": "Path to the directory containing Kubernetes manifests to push"
+              "description": "Path to the directory containing Kubernetes manifests. Used as the default path by validate, watch, and push when no explicit path argument is given."
             },
             "validateOnPush": {
               "type": "boolean",

@@ -26,6 +26,9 @@ func toCopilotTool(tool ToolDefinition, opts ToolOptions) copilot.Tool {
 		Description: tool.Description,
 		Parameters:  tool.Parameters,
 		Handler:     buildCopilotHandler(tool, opts),
+		// Read-only tools skip the SDK permission flow (auto-approve).
+		// Write tools go through the SDK-native OnPermissionRequest handler.
+		SkipPermission: !tool.RequiresPermission,
 	}
 }
 
@@ -41,14 +44,30 @@ func buildCopilotHandler(tool ToolDefinition, opts ToolOptions) copilot.ToolHand
 		// Build the full command string for reporting
 		fullCmd := buildFullCommand(tool.CommandPath, params)
 
+		// Log tool execution start to the session
+		if opts.SessionLog != nil {
+			opts.SessionLog.Log(context.Background(), "Running: "+fullCmd, "info")
+		}
+
 		// Execute the command
 		// Note: The Copilot SDK ToolHandler doesn't provide a context parameter,
 		// so we create our own. This means parent context cancellation won't
 		// stop running commands. Use CommandTimeout in ToolOptions for timeouts.
 		ctx := context.Background()
 		output, err := executeTool(ctx, tool, params, opts)
+		result := buildCopilotResult(fullCmd, output, err)
 
-		return buildCopilotResult(fullCmd, output, err), nil
+		// Log tool completion to the session
+		if opts.SessionLog != nil {
+			level := "info"
+			if err != nil {
+				level = "warning"
+			}
+
+			opts.SessionLog.Log(context.Background(), result.SessionLog, level)
+		}
+
+		return result, nil
 	}
 }
 

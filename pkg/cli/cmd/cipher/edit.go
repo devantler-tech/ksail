@@ -614,7 +614,7 @@ func handleEditRunE(
 	}
 
 	// Set up editor environment variables before edit
-	cleanup := editor.SetupEditorEnv(editorFlag, "cipher")
+	cleanup := editor.SetupEditorEnv(cmd, editorFlag, "cipher")
 	defer cleanup()
 
 	var output []byte

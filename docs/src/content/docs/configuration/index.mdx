@@ -81,6 +81,22 @@ ksail cluster create --distribution K3s
 ksail cluster create --metrics-server Disabled
 ```
 
+#### Alternate Config File (`--config`)
+
+The root `--config` flag points KSail to a specific config file instead of searching for `ksail.yaml` via directory traversal. This is useful for managing multiple environments from the same directory:
+
+```bash
+# Use a production config
+ksail --config ksail.prod.yaml workload push
+
+# Use a staging config
+ksail --config ksail.staging.yaml cluster update
+```
+
+`--config` is a persistent flag inherited by all subcommands, so it can be placed immediately after `ksail` before any subcommand.
+
+For multi-environment patterns (separate config files per environment, environment variable expansion, and CI/CD usage), see [Multi-Environment Workflows](/guides/multi-environment/).
+
 ### Environment Variables
 
 Use environment variables for:

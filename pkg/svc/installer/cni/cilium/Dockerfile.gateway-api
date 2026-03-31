@@ -1,0 +1,7 @@
+# This file is the source of truth for the Gateway API CRDs version used in Go code.
+# Dependabot updates this file, and Go code reads from it via go:embed.
+#
+# Image mappings:
+# - registry.k8s.io/gateway-api/admission-server → Gateway API CRDs version
+
+FROM registry.k8s.io/gateway-api/admission-server:v1.4.1

@@ -9,8 +9,12 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// BenchmarkFlagName is the global/root persistent flag that enables benchmark output.
-const BenchmarkFlagName = "benchmark"
+const (
+	// BenchmarkFlagName is the global/root persistent flag that enables benchmark output.
+	BenchmarkFlagName = "benchmark"
+	// ConfigFlagName is the global/root persistent flag that specifies an alternate config file path.
+	ConfigFlagName = "config"
+)
 
 var (
 	errNilCommand   = errors.New("nil command")
@@ -58,6 +62,45 @@ func IsBenchmarkEnabled(cmd *cobra.Command) (bool, error) {
 	}
 
 	return false, fmt.Errorf("%w: %q", errFlagNotFound, BenchmarkFlagName)
+}
+
+func getStringFlag(flagSet *pflag.FlagSet, name string) (string, bool, error) {
+	if flagSet == nil {
+		return "", false, nil
+	}
+
+	if flagSet.Lookup(name) == nil {
+		return "", false, nil
+	}
+
+	v, err := flagSet.GetString(name)
+	if err != nil {
+		return "", true, fmt.Errorf("get %q flag: %w", name, err)
+	}
+
+	return v, true, nil
+}
+
+// GetConfigPath returns the config file path from the --config persistent flag.
+// Returns an empty string if the flag is not set or not found.
+func GetConfigPath(cmd *cobra.Command) (string, error) {
+	if cmd == nil {
+		return "", errNilCommand
+	}
+
+	value, found, err := getStringFlag(cmd.Flags(), ConfigFlagName)
+	if found || err != nil {
+		return value, err
+	}
+
+	value, found, err = getStringFlag(cmd.InheritedFlags(), ConfigFlagName)
+	if found || err != nil {
+		return value, err
+	}
+
+	value, _, err = getStringFlag(cmd.PersistentFlags(), ConfigFlagName)
+
+	return value, err
 }
 
 // MaybeTimer returns the provided timer when benchmark output is enabled.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
 	"github.com/gkampitakis/go-snaps/snaps"
+	"github.com/stretchr/testify/require"
 )
 
 const validNamespaceManifest = `apiVersion: v1
@@ -40,18 +41,13 @@ func TestNewValidateCmdHasCorrectDefaults(t *testing.T) {
 	}
 
 	strict, _ := cmd.Flags().GetBool("strict")
-	if !strict {
-		t.Fatal("expected strict to default to true")
+	if strict {
+		t.Fatal("expected strict to default to false")
 	}
 
 	ignoreMissingSchemas, _ := cmd.Flags().GetBool("ignore-missing-schemas")
 	if !ignoreMissingSchemas {
 		t.Fatal("expected ignore-missing-schemas to default to true")
-	}
-
-	verbose, _ := cmd.Flags().GetBool("verbose")
-	if verbose {
-		t.Fatal("expected verbose to default to false")
 	}
 }
 
@@ -287,38 +283,6 @@ sops:
 	}
 }
 
-func TestValidateCmdWithVerboseFlag(t *testing.T) {
-	t.Parallel()
-
-	// Create a temporary directory with a valid manifest
-	tmpDir := t.TempDir()
-
-	manifestPath := filepath.Join(tmpDir, "namespace.yaml")
-
-	err := os.WriteFile(manifestPath, []byte(validNamespaceManifest), 0o600)
-	if err != nil {
-		t.Fatalf("failed to write test manifest: %v", err)
-	}
-
-	cmd := workload.NewValidateCmd()
-	cmd.SetArgs([]string{
-		"--verbose",
-		tmpDir,
-	})
-
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
-
-	err = cmd.Execute()
-	if err != nil {
-		t.Fatalf("expected validation to succeed, got error: %v", err)
-	}
-
-	// Note: We can't easily check for verbose output without capturing stdout/stderr
-	// but we can verify the command ran successfully with the flag
-}
-
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
 func TestValidateCmdWithDefaultPath(t *testing.T) {
 	// Note: Cannot use t.Parallel() here because we use t.Chdir()
@@ -437,6 +401,92 @@ func setupValidManifestDir(t *testing.T) string {
 	return tmpDir
 }
 
+// setupSourceDirTestDir creates a temporary directory with a custom "manifests" source
+// directory, a ksail.yaml pointing to it, a Kind distribution config, and a non-K8s
+// YAML at the root to verify that only the source directory is validated.
+func setupSourceDirTestDir(t *testing.T) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	customDir := filepath.Join(tmpDir, "manifests")
+
+	err := os.MkdirAll(customDir, 0o750)
+	if err != nil {
+		t.Fatalf("failed to create custom dir: %v", err)
+	}
+
+	err = os.WriteFile(
+		filepath.Join(customDir, "namespace.yaml"),
+		[]byte(validNamespaceManifest), 0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	ksailConfig := `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Vanilla
+    distributionConfig: kind.yaml
+  workload:
+    sourceDirectory: manifests
+`
+
+	err = os.WriteFile(filepath.Join(tmpDir, "ksail.yaml"), []byte(ksailConfig), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write ksail.yaml: %v", err)
+	}
+
+	kindConfig := `apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+name: kind
+`
+
+	err = os.WriteFile(filepath.Join(tmpDir, "kind.yaml"), []byte(kindConfig), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write kind.yaml: %v", err)
+	}
+
+	nonK8sYAML := `name: ci
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+`
+
+	err = os.WriteFile(filepath.Join(tmpDir, "ci.yaml"), []byte(nonK8sYAML), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write non-K8s YAML: %v", err)
+	}
+
+	return tmpDir
+}
+
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
+func TestValidateCmdUsesSourceDirectoryFromConfig(t *testing.T) {
+	tmpDir := setupSourceDirTestDir(t)
+
+	t.Chdir(tmpDir)
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{})
+
+	var output bytes.Buffer
+
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf(
+			"expected validation to succeed using sourceDirectory from ksail.yaml, got error: %v\noutput: %s",
+			err,
+			output.String(),
+		)
+	}
+}
+
 func TestValidateCmdFlagCombinations(t *testing.T) {
 	t.Parallel()
 
@@ -468,7 +518,6 @@ func TestValidateCmdFlagCombinations(t *testing.T) {
 				"--skip-secrets=true",
 				"--strict=true",
 				"--ignore-missing-schemas=true",
-				"--verbose",
 				tmpDir,
 			},
 		},
@@ -495,4 +544,428 @@ func TestValidateCmdFlagCombinations(t *testing.T) {
 			}
 		})
 	}
+}
+
+// setupPatchTestDir creates a temp directory with a valid ConfigMap base resource,
+// a patch file (not valid standalone), and a kustomization.yaml with the given content.
+func setupPatchTestDir(t *testing.T, patchContent, kustomizationYAML string) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	baseYAML := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+  namespace: default
+data:
+  key: value
+`
+
+	err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(baseYAML), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write base manifest: %v", err)
+	}
+
+	patchDir := filepath.Join(tmpDir, "patches")
+
+	err = os.MkdirAll(patchDir, 0o750)
+	if err != nil {
+		t.Fatalf("failed to create patch dir: %v", err)
+	}
+
+	err = os.WriteFile(filepath.Join(patchDir, "patch.yaml"), []byte(patchContent), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write patch manifest: %v", err)
+	}
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "kustomization.yaml"),
+		[]byte(kustomizationYAML),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write kustomization.yaml: %v", err)
+	}
+
+	return tmpDir
+}
+
+type patchTestCase struct {
+	name              string
+	patchContent      string
+	kustomizationYAML string
+}
+
+func patchSkipTestCases() []patchTestCase {
+	// JSON 6902 patch — an array of ops, not a valid standalone K8s resource.
+	json6902Patch := `- op: add
+  path: /data/extra-key
+  value: extra-value
+`
+
+	// Strategic merge patch — valid for kustomize, also valid standalone.
+	// Used to exercise the patchesStrategicMerge collection code path.
+	smpPatch := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+data:
+  extra-key: extra-value
+`
+
+	return []patchTestCase{
+		{
+			name:         "modern patches field",
+			patchContent: json6902Patch,
+			kustomizationYAML: `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+patches:
+  - path: patches/patch.yaml
+    target:
+      kind: ConfigMap
+      name: my-config
+`,
+		},
+		{
+			name:         "deprecated patchesStrategicMerge",
+			patchContent: smpPatch,
+			kustomizationYAML: `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+patchesStrategicMerge:
+  - patches/patch.yaml
+`,
+		},
+		{
+			name:         "deprecated patchesJson6902",
+			patchContent: json6902Patch,
+			kustomizationYAML: `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+patchesJson6902:
+  - path: patches/patch.yaml
+    target:
+      kind: ConfigMap
+      version: v1
+      name: my-config
+`,
+		},
+	}
+}
+
+func TestValidateCmdSkipsKustomizePatches(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range patchSkipTestCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			tmpDir := setupPatchTestDir(t, tc.patchContent, tc.kustomizationYAML)
+
+			cmd := workload.NewValidateCmd()
+			cmd.SetArgs([]string{tmpDir})
+
+			var output bytes.Buffer
+			cmd.SetOut(&output)
+			cmd.SetErr(&output)
+
+			err := cmd.Execute()
+			if err != nil {
+				t.Fatalf(
+					"expected validation to succeed (patch should be excluded), got error: %v\noutput: %s",
+					err,
+					output.String(),
+				)
+			}
+		})
+	}
+}
+
+//nolint:funlen,cyclop // integration-style setup test with intentional multi-step assertions
+func TestValidateCmdSubstitutesFluxPostBuildVariables(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	err := os.MkdirAll(filepath.Join(tmpDir, "bases", "apps"), 0o750)
+	if err != nil {
+		t.Fatalf("failed to create bases/apps dir: %v", err)
+	}
+
+	err = os.MkdirAll(filepath.Join(tmpDir, "clusters", "local", "apps"), 0o750)
+	if err != nil {
+		t.Fatalf("failed to create clusters/local/apps dir: %v", err)
+	}
+
+	err = os.MkdirAll(filepath.Join(tmpDir, "clusters", "local", "variables"), 0o750)
+	if err != nil {
+		t.Fatalf("failed to create clusters/local/variables dir: %v", err)
+	}
+
+	basesKustomization := `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+`
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "bases", "apps", "kustomization.yaml"),
+		[]byte(basesKustomization),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write base kustomization: %v", err)
+	}
+
+	deploymentYAML := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-proxy
+spec:
+  replicas: ${auth_proxy_replicas:=2}
+  selector:
+    matchLabels:
+      app: auth-proxy
+  template:
+    metadata:
+      labels:
+        app: auth-proxy
+    spec:
+      containers:
+        - name: auth-proxy
+          image: nginx:1.27.1
+`
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "bases", "apps", "deployment.yaml"),
+		[]byte(deploymentYAML),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write deployment: %v", err)
+	}
+
+	appsFluxKustomization := "apiVersion: kustomize.toolkit.fluxcd.io/v1\n" +
+		"kind: Kustomization\n" +
+		"metadata:\n" +
+		"  name: apps\n" +
+		"  namespace: flux-system\n" +
+		"spec:\n" +
+		"  interval: 60m\n" +
+		"  prune: true\n" +
+		"  postBuild:\n" +
+		"    substituteFrom:\n" +
+		"      - kind: ConfigMap\n" +
+		"        name: variables-cluster\n" +
+		"  sourceRef:\n" +
+		"    kind: OCIRepository\n" +
+		"    name: flux-system\n" +
+		"  path: clusters/local/apps/\n"
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "apps", "flux-kustomization.yaml"),
+		[]byte(appsFluxKustomization),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write apps flux kustomization: %v", err)
+	}
+
+	clusterAppsKustomization := `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../bases/apps/
+`
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "apps", "kustomization.yaml"),
+		[]byte(clusterAppsKustomization),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write apps kustomization: %v", err)
+	}
+
+	variablesKustomization := `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - variables-cluster-config-map.yaml
+`
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "variables", "kustomization.yaml"),
+		[]byte(variablesKustomization),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write variables kustomization: %v", err)
+	}
+
+	variablesConfigMap := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: variables-cluster
+  namespace: flux-system
+data:
+  auth_proxy_replicas: "3"
+`
+
+	err = os.WriteFile(
+		filepath.Join(
+			tmpDir,
+			"clusters",
+			"local",
+			"variables",
+			"variables-cluster-config-map.yaml",
+		),
+		[]byte(variablesConfigMap),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write variables configmap: %v", err)
+	}
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf(
+			"expected validation to succeed with Flux substitutions, got error: %v\noutput: %s",
+			err,
+			output.String(),
+		)
+	}
+}
+
+func TestValidateCmdSubstitutesFluxPostBuildVariablesWithDefaults(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	setupDefaultSubstitutionTestDir(t, tmpDir)
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	require.NoError(
+		t,
+		err,
+		"expected validation to succeed with Secret substitutions, output: %s",
+		output.String(),
+	)
+}
+
+// setupDefaultSubstitutionTestDir creates a Flux-like project structure used to
+// validate default and env-var style expansion in manifests. The fixture includes
+// ConfigMap and Secret manifests that resemble substituteFrom sources for realism,
+// but the current validate implementation does not read or use those resources.
+//
+//nolint:funlen // test setup helper builds full fixture tree for readability
+func setupDefaultSubstitutionTestDir(
+	t *testing.T,
+	tmpDir string,
+) {
+	t.Helper()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "bases", "apps"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "clusters", "local", "apps"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "clusters", "local", "variables"), 0o750))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "bases", "apps", "kustomization.yaml"),
+		[]byte(
+			"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - deployment.yaml\n",
+		),
+		0o600,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "bases", "apps", "deployment.yaml"),
+		[]byte(`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+spec:
+  replicas: ${replicas:=1}
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+        - name: myapp
+          image: nginx:1.27.1
+          env:
+            - name: DB_HOST
+              value: ${db_host:=localhost}
+            - name: API_KEY
+              value: ${api_key:=default}
+`),
+		0o600,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "apps", "flux-kustomization.yaml"),
+		[]byte("apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n"+
+			"  name: apps\n  namespace: flux-system\nspec:\n  interval: 60m\n  prune: true\n"+
+			"  postBuild:\n    substituteFrom:\n      - kind: ConfigMap\n        name: vars-cluster\n"+
+			"      - kind: Secret\n        name: vars-secret\n  sourceRef:\n    kind: OCIRepository\n"+
+			"    name: flux-system\n  path: clusters/local/apps/\n"),
+		0o600,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "apps", "kustomization.yaml"),
+		[]byte(
+			"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - ../../../bases/apps/\n",
+		),
+		0o600,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "variables", "kustomization.yaml"),
+		[]byte("apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\n"+
+			"resources:\n  - vars-cluster.yaml\n  - vars-secret.yaml\n"),
+		0o600,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "variables", "vars-cluster.yaml"),
+		[]byte(
+			"apiVersion: v1\nkind: ConfigMap\nmetadata:\n"+
+				"  name: vars-cluster\n  namespace: flux-system\n"+
+				"data:\n  replicas: \"3\"\n  db_host: \"db.example.com\"\n",
+		),
+		0o600,
+	))
+
+	// Secret with base64-encoded .data (api_key = "s3cret" base64-encoded)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "clusters", "local", "variables", "vars-secret.yaml"),
+		[]byte(
+			"apiVersion: v1\nkind: Secret\nmetadata:\n"+
+				"  name: vars-secret\n  namespace: flux-system\n"+
+				"type: Opaque\ndata:\n  api_key: czNjcmV0\n",
+		),
+		0o600,
+	))
 }

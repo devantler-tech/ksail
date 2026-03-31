@@ -62,6 +62,7 @@ steps:
     run: gh extension install github/gh-aw
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_HOST: github.com
 
   - name: Verify gh-aw installation
     run: gh aw version
@@ -163,6 +164,20 @@ done
 ```
 
 **Do not run write-mode compilation if validation failed** — fix errors first (see Section 2.4).
+
+#### 2.3.1. Inject `permission-workflows: write` into daily-workflow-maintenance.lock.yml
+
+The gh-aw compiler does not automatically add `permission-workflows: write` to the GitHub App token permissions, but this permission is required to push `.github/workflows/*.lock.yml` files. After every compilation, inject it:
+
+```bash
+sed -i '/permission-pull-requests: write/a\          permission-workflows: write' .github/workflows/daily-workflow-maintenance.lock.yml
+```
+
+Verify the injection:
+
+```bash
+grep "permission-workflows" .github/workflows/daily-workflow-maintenance.lock.yml
+```
 
 #### 2.4. Fix compilation errors
 

@@ -24,7 +24,7 @@ func TestGetKSailTools(t *testing.T) {
 	}
 	rootCmd.AddCommand(subCmd)
 
-	tools := chat.GetKSailTools(rootCmd, nil)
+	tools := chat.GetKSailTools(rootCmd, nil, nil)
 
 	require.NotNil(t, tools)
 	assert.NotEmpty(t, tools)
@@ -45,7 +45,7 @@ func TestGetKSailToolMetadata(t *testing.T) {
 	}
 	rootCmd.AddCommand(subCmd)
 
-	tools, metadata := chat.GetKSailToolMetadata(rootCmd, nil)
+	tools, metadata := chat.GetKSailToolMetadata(rootCmd, nil, nil)
 
 	require.NotNil(t, tools)
 	require.NotNil(t, metadata)

@@ -558,3 +558,57 @@ func (m *Model) handleShutdown(_ shutdownMsg) (tea.Model, tea.Cmd) {
 
 	return m, nil
 }
+
+// handleSystemNotification handles informational notifications from the system.
+func (m *Model) handleSystemNotification(msg systemNotificationMsg) (tea.Model, tea.Cmd) {
+	if msg.message != "" && len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		if last.role == roleAssistant && last.isStreaming {
+			m.currentResponse.WriteString("\n> ℹ️ " + msg.message + "\n")
+			last.content = m.currentResponse.String()
+			m.updateViewportContent()
+		}
+	}
+
+	return m, m.waitForEvent()
+}
+
+// handleSessionWarning handles warning events from the session.
+func (m *Model) handleSessionWarning(msg sessionWarningMsg) (tea.Model, tea.Cmd) {
+	if msg.message != "" && len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		if last.role == roleAssistant && last.isStreaming {
+			m.currentResponse.WriteString("\n> ⚠️ " + msg.message + "\n")
+			last.content = m.currentResponse.String()
+			m.updateViewportContent()
+		}
+	}
+
+	return m, m.waitForEvent()
+}
+
+// handleToolProgress handles progress updates from a running tool.
+func (m *Model) handleToolProgress(msg ToolProgressMsg) (tea.Model, tea.Cmd) {
+	// Find the tool and update its status message
+	if tool, ok := m.tools[msg.ToolID]; ok && tool.status == toolRunning {
+		tool.output += "\n⏳ " + msg.Message
+
+		m.updateViewportContent()
+	}
+
+	return m, m.waitForEvent()
+}
+
+// handleTaskComplete handles session task completion events.
+func (m *Model) handleTaskComplete(msg TaskCompleteMsg) (tea.Model, tea.Cmd) {
+	if msg.Message != "" && len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		if last.role == roleAssistant && last.isStreaming {
+			m.currentResponse.WriteString("\n> ✅ " + msg.Message + "\n")
+			last.content = m.currentResponse.String()
+			m.updateViewportContent()
+		}
+	}
+
+	return m, m.waitForEvent()
+}

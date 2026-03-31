@@ -16,13 +16,17 @@ func TestFormatPermissionKind_AllKinds(t *testing.T) {
 		kind     copilot.PermissionRequestKind
 		expected string
 	}{
-		{name: "shell", kind: copilot.KindShell, expected: "Shell Command"},
-		{name: "write", kind: copilot.Write, expected: "File Write"},
-		{name: "read", kind: copilot.Read, expected: "File Read"},
-		{name: "url", kind: copilot.URL, expected: "URL"},
-		{name: "mcp", kind: copilot.MCP, expected: "MCP Tool"},
-		{name: "custom-tool", kind: copilot.CustomTool, expected: "Custom Tool"},
-		{name: "memory", kind: copilot.Memory, expected: "Memory"},
+		{name: "shell", kind: copilot.PermissionRequestKindShell, expected: "Shell Command"},
+		{name: "write", kind: copilot.PermissionRequestKindWrite, expected: "File Write"},
+		{name: "read", kind: copilot.PermissionRequestKindRead, expected: "File Read"},
+		{name: "url", kind: copilot.PermissionRequestKindURL, expected: "URL"},
+		{name: "mcp", kind: copilot.PermissionRequestKindMcp, expected: "MCP Tool"},
+		{
+			name:     "custom-tool",
+			kind:     copilot.PermissionRequestKindCustomTool,
+			expected: "Custom Tool",
+		},
+		{name: "memory", kind: copilot.PermissionRequestKindMemory, expected: "Memory"},
 		{name: "empty kind", kind: "", expected: "Unknown Operation"},
 		{name: "custom kind", kind: "custom_action", expected: "Custom Action"},
 	}
@@ -57,7 +61,7 @@ func TestExtractPermissionDetails_CommandFields(t *testing.T) {
 		{
 			name: "full command text",
 			request: copilot.PermissionRequest{
-				Kind:            copilot.KindShell,
+				Kind:            copilot.PermissionRequestKindShell,
 				FullCommandText: new("rm -rf /tmp/test"),
 			},
 			wantTool:    "Shell Command",
@@ -66,7 +70,7 @@ func TestExtractPermissionDetails_CommandFields(t *testing.T) {
 		{
 			name: "tool name field",
 			request: copilot.PermissionRequest{
-				Kind:     copilot.MCP,
+				Kind:     copilot.PermissionRequestKindMcp,
 				ToolName: new("ksail_cluster_create"),
 			},
 			wantTool:    "MCP Tool",
@@ -103,7 +107,7 @@ func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
 		{
 			name: "path field",
 			request: copilot.PermissionRequest{
-				Kind: copilot.Read,
+				Kind: copilot.PermissionRequestKindRead,
 				Path: new("/etc/config.yaml"),
 			},
 			wantTool:    "File Read",
@@ -112,7 +116,7 @@ func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
 		{
 			name: "fileName field",
 			request: copilot.PermissionRequest{
-				Kind:     copilot.Write,
+				Kind:     copilot.PermissionRequestKindWrite,
 				FileName: new("/tmp/output.txt"),
 			},
 			wantTool:    "File Write",
@@ -121,7 +125,7 @@ func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
 		{
 			name: "url field",
 			request: copilot.PermissionRequest{
-				Kind: copilot.URL,
+				Kind: copilot.PermissionRequestKindURL,
 				URL:  new("https://example.com"),
 			},
 			wantTool:    "URL",
@@ -129,7 +133,7 @@ func TestExtractPermissionDetails_PathAndFallback(t *testing.T) {
 		},
 		{
 			name:        "no fields falls back to kind",
-			request:     copilot.PermissionRequest{Kind: copilot.Memory},
+			request:     copilot.PermissionRequest{Kind: copilot.PermissionRequestKindMemory},
 			wantTool:    "Memory",
 			wantCommand: "memory",
 		},

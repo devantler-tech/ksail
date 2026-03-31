@@ -23,6 +23,7 @@ func TestResolveClusterInfo(t *testing.T) {
 		t.Parallel()
 
 		resolved, err := lifecycle.ResolveClusterInfo(
+			nil,
 			"my-cluster",
 			v1alpha1.ProviderDocker,
 			"",
@@ -38,6 +39,7 @@ func TestResolveClusterInfo(t *testing.T) {
 		t.Parallel()
 
 		resolved, err := lifecycle.ResolveClusterInfo(
+			nil,
 			"my-cluster",
 			"", // Empty provider
 			"",
@@ -54,6 +56,7 @@ func TestResolveClusterInfo(t *testing.T) {
 
 		// No flags, no config file, and an explicit invalid kubeconfig path
 		resolved, err := lifecycle.ResolveClusterInfo(
+			nil,
 			"",
 			"",
 			"/non-existent-kubeconfig",

@@ -317,6 +317,8 @@ The CD workflow implements an atomic publication strategy to ensure users never 
    - Docker images published to GHCR
    - Generated changelog from commit history
 
+   GoReleaser also opens a separate PR to update the Homebrew cask in [`devantler-tech/homebrew-tap`](https://github.com/devantler-tech/homebrew-tap) (branch pattern: `goreleaser/ksail-vX.Y.Z`).
+
 2. **VSCode Extension Upload**: A separate job builds the VSCode extension and uploads it as a release asset to the same draft release.
 
 3. **Atomic Publication**: A final `publish-release` job waits for both the `goreleaser` and `vscode-extension` jobs to complete successfully, then publishes the draft release.

@@ -218,3 +218,28 @@ func ExportReconcileComponents(
 
 	return r.reconcileComponents(context.Background(), diff, result)
 }
+
+// ExportMatchesKindPattern exposes matchesKindPattern for unit testing.
+func ExportMatchesKindPattern(containerName, clusterName string) bool {
+	return matchesKindPattern(containerName, clusterName)
+}
+
+// ExportIsNumericString exposes isNumericString for unit testing.
+func ExportIsNumericString(s string) bool {
+	return isNumericString(s)
+}
+
+// ExportIsCloudProviderKindContainer exposes isCloudProviderKindContainer for unit testing.
+func ExportIsCloudProviderKindContainer(name string) bool {
+	return isCloudProviderKindContainer(name)
+}
+
+// ExportIsKindClusterFromNodes exposes isKindClusterFromNodes for unit testing.
+func ExportIsKindClusterFromNodes(nodes []string, clusterName string) bool {
+	return isKindClusterFromNodes(nodes, clusterName)
+}
+
+// ExportPickCluster exposes pickCluster for unit testing.
+func ExportPickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
+	return pickCluster(cmd, deps)
+}

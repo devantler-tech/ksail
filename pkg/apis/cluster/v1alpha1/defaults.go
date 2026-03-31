@@ -17,6 +17,13 @@ const (
 	DefaultLocalRegistryPort int32 = 5050
 )
 
+// SOPS default values — canonical source for SOPS struct tag defaults.
+const (
+	// DefaultSOPSAgeKeyEnvVar is the default environment variable name
+	// for the Age private key (matches `default:"SOPS_AGE_KEY"` struct tag).
+	DefaultSOPSAgeKeyEnvVar = "SOPS_AGE_KEY"
+)
+
 // Hetzner default values — canonical source for OptionsHetzner struct tag defaults.
 const (
 	// DefaultHetznerServerType is the default Hetzner server type for both

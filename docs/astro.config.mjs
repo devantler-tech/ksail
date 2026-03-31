@@ -54,8 +54,11 @@ export default defineConfig({
           label: "Guides",
           items: [
             { label: "Ephemeral Clusters (--ttl)", link: "/guides/ephemeral-clusters/" },
+            { label: "Multi-Environment Workflows", link: "/guides/multi-environment/" },
+            { label: "PR Preview Clusters", link: "/guides/pr-preview-clusters/" },
             { label: "Companion Tools", link: "/guides/companion-tools/" },
             { label: "KSail + mirrord", link: "/guides/mirrord/" },
+            { label: "Substitution Expansion (validate)", link: "/guides/workload-validate/" },
           ],
         },
         {
@@ -99,6 +102,7 @@ export default defineConfig({
           items: [
             { label: "AI Chat Assistant", link: "/ai-chat/" },
             { label: "MCP Server", link: "/mcp/" },
+            { label: "Using KSail with AI Assistants", link: "/guides/ai-mcp/" },
           ],
         },
         {

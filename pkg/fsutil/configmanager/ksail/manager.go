@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
@@ -32,8 +33,13 @@ type ConfigManager struct {
 	configFileFound    bool
 	Writer             io.Writer
 	command            *cobra.Command
+	// ConfigFile is the explicit config file path (from --config flag).
+	ConfigFile string
 	// localRegistryExplicit tracks if config explicitly set the local registry behavior
 	localRegistryExplicit bool
+	// initErr stores any error from Viper initialization (e.g. invalid --config path).
+	// It is surfaced on the first call to readConfig / Load.
+	initErr error
 }
 
 // Compile-time interface compliance verification.
@@ -42,11 +48,19 @@ var _ configmanagerinterface.ConfigManager[v1alpha1.Cluster] = (*ConfigManager)(
 
 // NewConfigManager creates a new configuration manager with the specified field selectors.
 // Initializes Viper with all configuration including paths and environment handling.
+// The configFile parameter, when non-empty, specifies an explicit config file path,
+// skipping the default name-based discovery and directory traversal.
 func NewConfigManager(
 	writer io.Writer,
+	configFile string,
 	fieldSelectors ...FieldSelector[v1alpha1.Cluster],
 ) *ConfigManager {
-	viperInstance := InitializeViper()
+	viperInstance, initErr := InitializeViper(configFile)
+	if viperInstance == nil {
+		// Ensure a valid (empty) Viper so callers never dereference nil.
+		viperInstance = viper.New()
+	}
+
 	config := v1alpha1.NewCluster()
 
 	manager := &ConfigManager{
@@ -55,6 +69,8 @@ func NewConfigManager(
 		Config:         config,
 		configLoaded:   false,
 		Writer:         writer,
+		ConfigFile:     configFile,
+		initErr:        initErr,
 	}
 
 	return manager
@@ -63,11 +79,15 @@ func NewConfigManager(
 // NewCommandConfigManager constructs a ConfigManager bound to the provided Cobra command.
 // It registers the supplied field selectors, binds flags from struct fields, and writes output
 // to the command's standard output writer.
+// The --config persistent flag value is resolved lazily (during Load) so that it is
+// available after cobra has parsed flags.
 func NewCommandConfigManager(
 	cmd *cobra.Command,
 	selectors []FieldSelector[v1alpha1.Cluster],
 ) *ConfigManager {
-	manager := NewConfigManager(cmd.OutOrStdout(), selectors...)
+	// Do NOT resolve --config here — flags have not been parsed yet during command
+	// construction.  The config file path is resolved lazily in readConfig().
+	manager := NewConfigManager(cmd.OutOrStdout(), "", selectors...)
 	manager.command = cmd
 	manager.AddFlagsFromFields(cmd)
 
@@ -198,8 +218,51 @@ func (m *ConfigManager) validateAndFinalizeConfig() error {
 	return m.loadAndCacheDistributionConfig()
 }
 
+// resolveConfigFile resolves the config file path from the --config flag or
+// stored initErr. Called once at the start of readConfig.
+func (m *ConfigManager) resolveConfigFile() error {
+	// Surface any initialization error from NewConfigManager (e.g. invalid --config path).
+	if m.initErr != nil {
+		return fmt.Errorf("config initialization failed: %w", m.initErr)
+	}
+
+	if m.command == nil || m.ConfigFile != "" {
+		return nil
+	}
+
+	// Lazily resolve the --config flag when a command is bound.
+	// This runs inside Load() which is called from RunE — at that point cobra
+	// has already parsed all flags, so the value is reliable.
+	cfgPath, err := flags.GetConfigPath(m.command)
+	if err != nil {
+		return fmt.Errorf("resolving --config flag: %w", err)
+	}
+
+	if cfgPath == "" {
+		return nil
+	}
+
+	m.ConfigFile = cfgPath
+
+	// Re-initialize Viper with the explicit config file path so it
+	// skips directory traversal and uses the exact file.
+	v, viperErr := InitializeViper(cfgPath)
+	if viperErr != nil {
+		return fmt.Errorf("invalid --config path: %w", viperErr)
+	}
+
+	m.Viper = v
+
+	return nil
+}
+
 func (m *ConfigManager) readConfig(silent bool) error {
-	err := m.Viper.ReadInConfig()
+	err := m.resolveConfigFile()
+	if err != nil {
+		return err
+	}
+
+	err = m.Viper.ReadInConfig()
 	if err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if !errors.As(err, &configFileNotFoundError) {

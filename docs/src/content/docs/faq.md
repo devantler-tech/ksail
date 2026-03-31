@@ -73,7 +73,14 @@ TTL annotations are shown on a separate indented line in `ksail cluster list` ou
 
 ### How do I switch between clusters?
 
-KSail automatically configures your kubeconfig. Switch with `kubectl config use-context <cluster-name>` and list contexts with `kubectl config get-contexts`.
+Use `ksail cluster switch` for the native experience. Run it without arguments for an interactive picker, or pass a cluster name directly:
+
+```bash
+ksail cluster switch          # interactive picker (requires a TTY)
+ksail cluster switch dev      # switch directly to "dev"
+```
+
+You can also use `kubectl config use-context <context-name>` directly, or list all contexts with `kubectl config get-contexts`.
 
 ### Can I use my own container registry?
 
@@ -160,7 +167,15 @@ Yes! Commit `ksail.yaml` (and generated distribution configs like kind.yaml) to 
 
 ### How do I share configurations between environments?
 
-Use environment-specific files (`ksail-dev.yaml`, `ksail-staging.yaml`, `ksail-prod.yaml`) or environment variable placeholders in a shared `ksail.yaml`.
+Use the `--config` flag to point KSail at environment-specific files:
+
+```bash
+ksail --config ksail.dev.yaml cluster create
+ksail --config ksail.staging.yaml cluster update
+ksail --config ksail.prod.yaml workload push
+```
+
+Alternatively, use environment variable placeholders in a shared `ksail.yaml`. For a complete walkthrough covering both approaches and CI/CD patterns, see [Multi-Environment Workflows](/guides/multi-environment/).
 
 ## Security & Secrets
 

@@ -86,8 +86,8 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 | Command Group    | Commands Available                                                                                                                                                                              |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ksail cluster`  | `init`, `create`, `update`, `delete`, `start`, `stop`, `info`, `list`, `connect`, `backup`, `restore`                                                                                           |
-| `ksail workload` | `apply`, `create`, `delete`, `describe`, `edit`, `exec`, `explain`, `export`, `expose`, `gen`, `get`, `images`, `import`, `install`, `logs`, `push`, `reconcile`, `rollout`, `scale`, `validate`, `wait` |
+| `ksail cluster`  | `init`, `create`, `update`, `delete`, `start`, `stop`, `info`, `list`, `connect`, `switch`, `backup`, `restore`                                                                                 |
+| `ksail workload` | `apply`, `create`, `delete`, `describe`, `edit`, `exec`, `explain`, `export`, `expose`, `gen`, `get`, `images`, `import`, `install`, `logs`, `push`, `reconcile`, `rollout`, `scale`, `validate`, `wait`, `watch` |
 | `ksail cipher`   | `encrypt`, `decrypt`, `edit`, `import`                                                                                                                                                          |
 
 ## Update Behavior
@@ -119,7 +119,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 - "In-place" changes are applied without cluster downtime via Helm or provider APIs
 - "Recreate" changes trigger a cluster recreation. `ksail cluster update` will prompt before proceeding; use `--force` (or `-y` / `--yes`) to skip the prompt for non-interactive runs, or run `ksail cluster delete && ksail cluster create` manually.
 - If no changes are detected, `ksail cluster update` exits immediately with no modifications (idempotent no-op)
-- Use `ksail cluster update --dry-run` to preview changes before applying
+- Use `ksail cluster update --dry-run` to preview changes before applying; add `--output json` for machine-readable diff output (suitable for CI gating or [MCP tools](/mcp/))
 - Talos supports the broadest set of in-place updates, including node scaling for both control-plane and worker nodes
 - Kind does not support any structural node changes after creation
 - VCluster (Vind) runs control-plane and optional worker nodes as Docker containers — CNI, CSI, and metrics-server are managed by the vCluster Helm chart and are N/A for update operations; LoadBalancer services are provided by the host cluster, and `spec.cluster.loadBalancer` is ignored for VCluster and will not trigger a cluster update
@@ -155,7 +155,7 @@ KSail embeds specific versions of Kubernetes tooling:
 | Helm         | v4 (with kstatus) | Package manager            |
 | Kind         | Latest            | Vanilla clusters           |
 | K3d          | Latest            | K3s clusters               |
-| vCluster SDK | v0.33.0           | VCluster virtual clusters  |
+| vCluster SDK | v0.33.1           | VCluster virtual clusters  |
 | Flux         | Latest            | GitOps toolkit             |
 | ArgoCD       | Latest            | GitOps continuous delivery |
 | SOPS         | Latest            | Secret encryption          |

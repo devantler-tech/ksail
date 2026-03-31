@@ -13,7 +13,7 @@ require (
 	github.com/derailed/k9s v0.50.18
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.6.0
-	github.com/fatih/color v1.18.0
+	github.com/fatih/color v1.19.0
 	github.com/fluxcd/helm-controller/api v1.5.3
 	github.com/fluxcd/kustomize-controller/api v1.8.2
 	github.com/fluxcd/pkg/apis/meta v1.26.0
@@ -38,12 +38,12 @@ require (
 	golang.org/x/sync v0.20.0
 	golang.org/x/term v0.41.0
 	helm.sh/helm/v4 v4.1.3
-	k8s.io/api v0.35.2
-	k8s.io/apiextensions-apiserver v0.35.2
+	k8s.io/api v0.35.3
+	k8s.io/apiextensions-apiserver v0.35.3
 	k8s.io/apimachinery v0.35.3
-	k8s.io/cli-runtime v0.35.2
-	k8s.io/client-go v0.35.2
-	k8s.io/kubectl v0.35.2
+	k8s.io/cli-runtime v0.35.3
+	k8s.io/client-go v0.35.3
+	k8s.io/kubectl v0.35.3
 	sigs.k8s.io/controller-runtime v0.23.3
 	sigs.k8s.io/kind v0.31.0
 	sigs.k8s.io/kustomize/api v0.21.1
@@ -57,13 +57,13 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
-	github.com/cosi-project/runtime v1.14.0
+	github.com/cosi-project/runtime v1.14.1
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/github/copilot-sdk/go v0.1.32
+	github.com/github/copilot-sdk/go v0.2.0
 	github.com/hetznercloud/hcloud-go/v2 v2.36.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
-	github.com/loft-sh/vcluster v0.33.0
+	github.com/loft-sh/vcluster v0.33.1
 	github.com/modelcontextprotocol/go-sdk v1.4.1
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/omni/client v1.6.1
@@ -130,9 +130,9 @@ require (
 	github.com/NYTimes/gziphandler v1.1.1 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/OpenPeeDeeP/depguard/v2 v2.2.1 // indirect
-	github.com/ProtonMail/go-crypto v1.4.0 // indirect
+	github.com/ProtonMail/go-crypto v1.4.1 // indirect
 	github.com/ProtonMail/go-mime v0.0.0-20230322103455-7d82a3887f2f // indirect
-	github.com/ProtonMail/gopenpgp/v2 v2.9.0 // indirect
+	github.com/ProtonMail/gopenpgp/v2 v2.10.0 // indirect
 	github.com/STARRY-S/zip v0.2.3 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
@@ -319,7 +319,7 @@ require (
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.8.0 // indirect
-	github.com/go-git/go-git/v5 v5.17.0 // indirect
+	github.com/go-git/go-git/v5 v5.17.1 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -451,7 +451,7 @@ require (
 	github.com/kevinburke/ssh_config v1.4.0 // indirect
 	github.com/kisielk/errcheck v1.9.0 // indirect
 	github.com/kkHAIKE/contextcheck v1.1.6 // indirect
-	github.com/klauspost/compress v1.18.4 // indirect
+	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/knqyf263/go-apk-version v0.0.0-20200609155635-041fdbb8563f // indirect
 	github.com/knqyf263/go-deb-version v0.0.0-20241115132648-6f4aee6ccd23 // indirect
@@ -480,7 +480,7 @@ require (
 	github.com/loft-sh/analytics-client v0.0.0-20240219162240-2f4c64b2494e // indirect
 	github.com/loft-sh/api/v4 v4.8.0-alpha.1 // indirect
 	github.com/loft-sh/apiserver v0.0.0-20260113122925-594495a02e96 // indirect
-	github.com/loft-sh/image v0.0.0-20250625154753-87447a6ad364 // indirect
+	github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 // indirect
 	github.com/loft-sh/utils v0.0.29 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/macabu/inamedparam v0.2.0 // indirect
@@ -757,10 +757,10 @@ require (
 	gorm.io/gorm v1.31.1 // indirect
 	helm.sh/helm/v3 v3.19.2 // indirect
 	honnef.co/go/tools v0.6.1 // indirect
-	k8s.io/apiserver v0.35.2 // indirect
+	k8s.io/apiserver v0.35.3 // indirect
 	k8s.io/cluster-bootstrap v0.35.0 // indirect
-	k8s.io/component-base v0.35.2 // indirect
-	k8s.io/component-helpers v0.35.2 // indirect
+	k8s.io/component-base v0.35.3 // indirect
+	k8s.io/component-helpers v0.35.3 // indirect
 	k8s.io/cri-api v0.35.2 // indirect
 	k8s.io/cri-client v0.35.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
@@ -769,7 +769,7 @@ require (
 	k8s.io/kube-proxy v0.33.0 // indirect
 	k8s.io/kubelet v0.35.2 // indirect
 	k8s.io/kubernetes v1.35.0 // indirect
-	k8s.io/metrics v0.35.2 // indirect
+	k8s.io/metrics v0.35.3 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

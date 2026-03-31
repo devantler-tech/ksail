@@ -11,6 +11,12 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
 )
 
+const validNamespaceYAML = `apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-namespace
+`
+
 func TestNewClient(t *testing.T) {
 	t.Parallel()
 
@@ -28,7 +34,6 @@ func TestValidationOptions(t *testing.T) {
 		SkipKinds:            []string{"Secret", "ConfigMap"},
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	if len(opts.SkipKinds) != 2 {
@@ -45,10 +50,6 @@ func TestValidationOptions(t *testing.T) {
 
 	if !opts.IgnoreMissingSchemas {
 		t.Fatal("expected IgnoreMissingSchemas to be true")
-	}
-
-	if opts.Verbose {
-		t.Fatal("expected Verbose to be false")
 	}
 }
 
@@ -79,7 +80,6 @@ data:
 	opts := &kubeconform.ValidationOptions{
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	ctx := context.Background()
@@ -116,7 +116,6 @@ data: invalid
 	opts := &kubeconform.ValidationOptions{
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	ctx := context.Background()
@@ -139,7 +138,6 @@ func TestValidateFile_NonExistentFile(t *testing.T) {
 	opts := &kubeconform.ValidationOptions{
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	ctx := context.Background()
@@ -185,7 +183,6 @@ data:
 		SkipKinds:            []string{"Secret"},
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	ctx := context.Background()
@@ -219,7 +216,6 @@ data:
 	opts := &kubeconform.ValidationOptions{
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	ctx := context.Background()
@@ -246,7 +242,6 @@ data: "this is not valid"
 	opts := &kubeconform.ValidationOptions{
 		Strict:               true,
 		IgnoreMissingSchemas: true,
-		Verbose:              false,
 	}
 
 	ctx := context.Background()
@@ -256,10 +251,26 @@ data: "this is not valid"
 	if err == nil {
 		t.Fatal("expected invalid YAML to fail validation")
 	}
-
 	// Check that it's a validation error
 	if !strings.Contains(err.Error(), "validation failed") {
 		t.Fatalf("expected validation error, got: %v", err)
+	}
+}
+
+func TestValidateBytes_ValidYAML(t *testing.T) {
+	t.Parallel()
+
+	validYAML := validNamespaceYAML
+
+	client := kubeconform.NewClient()
+	opts := &kubeconform.ValidationOptions{
+		Strict:               true,
+		IgnoreMissingSchemas: true,
+	}
+
+	err := client.ValidateBytes(context.Background(), "test.yaml", []byte(validYAML), opts)
+	if err != nil {
+		t.Fatalf("expected valid YAML to pass validation, got error: %v", err)
 	}
 }
 
@@ -267,11 +278,7 @@ func TestValidateManifests_NilOptions(t *testing.T) {
 	t.Parallel()
 
 	// Test that nil options are handled gracefully
-	validYAML := `apiVersion: v1
-kind: Namespace
-metadata:
-  name: test-namespace
-`
+	validYAML := validNamespaceYAML
 
 	client := kubeconform.NewClient()
 
@@ -291,11 +298,7 @@ func TestValidateFile_NilOptions(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a valid Kubernetes manifest
-	validManifest := `apiVersion: v1
-kind: Namespace
-metadata:
-  name: test-namespace
-`
+	validManifest := validNamespaceYAML
 	manifestPath := filepath.Join(tmpDir, "valid-manifest.yaml")
 
 	err := os.WriteFile(manifestPath, []byte(validManifest), 0o600)

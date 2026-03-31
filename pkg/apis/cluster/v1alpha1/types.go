@@ -45,6 +45,7 @@ type ClusterSpec struct {
 	PolicyEngine       PolicyEngine  `json:"policyEngine,omitzero"`
 	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`
 	GitOpsEngine       GitOpsEngine  `json:"gitOpsEngine,omitzero"`
+	SOPS               SOPS          `json:"sops,omitzero"`
 	ImportImages       string        `json:"importImages,omitzero"       jsonschema:"description=Path to tar archive with container images to import after cluster creation but before component installation"` //nolint:lll // Long description required for JSON schema
 
 	// Distribution-specific options
@@ -58,9 +59,9 @@ type ClusterSpec struct {
 
 // WorkloadSpec defines workload-related configuration.
 type WorkloadSpec struct {
-	SourceDirectory string `default:"k8s"   json:"sourceDirectory,omitzero" jsonschema_description:"Path to the directory containing Kubernetes manifests to push"`                                                 //nolint:lll
-	ValidateOnPush  bool   `default:"false" json:"validateOnPush,omitzero"  jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                            //nolint:lll
-	Tag             string `default:"dev"   json:"tag,omitzero"             jsonschema_description:"OCI artifact tag for ksail workload push. Priority: CLI oci:// ref > this field > registry-embedded tag > dev"` //nolint:lll
+	SourceDirectory string `default:"k8s"   json:"sourceDirectory,omitzero" jsonschema_description:"Path to the directory containing Kubernetes manifests. Used as the default path by validate, watch, and push when no explicit path argument is given."` //nolint:lll
+	ValidateOnPush  bool   `default:"false" json:"validateOnPush,omitzero"  jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                                                                    //nolint:lll
+	Tag             string `default:"dev"   json:"tag,omitzero"             jsonschema_description:"OCI artifact tag for ksail workload push. Priority: CLI oci:// ref > this field > registry-embedded tag > dev"`                                         //nolint:lll
 }
 
 // ChatSpec defines AI chat assistant configuration.

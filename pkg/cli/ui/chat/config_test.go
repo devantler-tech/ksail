@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
+	copilot "github.com/github/copilot-sdk/go"
 )
 
 // TestBuildSystemContext_Empty tests BuildSystemContext with empty config.
@@ -451,5 +452,217 @@ func TestCommandBuilder_ListDirectory(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestBuildSystemSections_Empty tests BuildSystemSections with empty config.
+func TestBuildSystemSections_Empty(t *testing.T) {
+	t.Parallel()
+
+	sections := chat.BuildSystemSections(chat.SystemContextConfig{})
+
+	if len(sections) != 0 {
+		t.Errorf("expected no sections for empty config, got %d", len(sections))
+	}
+}
+
+// TestBuildSystemSections_WithIdentity tests that Identity maps to SectionIdentity with Replace action.
+func TestBuildSystemSections_WithIdentity(t *testing.T) {
+	t.Parallel()
+
+	sections := chat.BuildSystemSections(chat.SystemContextConfig{
+		Identity: "You are a Kubernetes assistant.",
+	})
+
+	section, ok := sections[copilot.SectionIdentity]
+	if !ok {
+		t.Fatal("expected SectionIdentity key in sections")
+	}
+
+	if section.Action != copilot.SectionActionReplace {
+		t.Errorf("expected SectionActionReplace, got %q", section.Action)
+	}
+
+	if section.Content != "You are a Kubernetes assistant." {
+		t.Errorf("unexpected content: %q", section.Content)
+	}
+}
+
+// TestBuildSystemSections_WithWorkingDir tests that IncludeWorkingDirContext maps to
+// SectionEnvironmentContext with Append action.
+func TestBuildSystemSections_WithWorkingDir(t *testing.T) {
+	t.Parallel()
+
+	sections := chat.BuildSystemSections(chat.SystemContextConfig{
+		IncludeWorkingDirContext: true,
+		ConfigFileName:           "nonexistent-config-for-test.yaml",
+	})
+
+	section, ok := sections[copilot.SectionEnvironmentContext]
+	if !ok {
+		t.Fatal("expected SectionEnvironmentContext key in sections")
+	}
+
+	if section.Action != copilot.SectionActionAppend {
+		t.Errorf("expected SectionActionAppend, got %q", section.Action)
+	}
+
+	if !strings.Contains(section.Content, "<working_directory>") {
+		t.Error("expected <working_directory> tag in environment context")
+	}
+}
+
+// TestBuildSystemSections_WithDocumentation tests that Documentation maps to
+// SectionCustomInstructions with Append action.
+func TestBuildSystemSections_WithDocumentation(t *testing.T) {
+	t.Parallel()
+
+	sections := chat.BuildSystemSections(chat.SystemContextConfig{
+		Documentation: "# KSail Docs\nUsage info here.",
+	})
+
+	section, ok := sections[copilot.SectionCustomInstructions]
+	if !ok {
+		t.Fatal("expected SectionCustomInstructions key in sections")
+	}
+
+	if section.Action != copilot.SectionActionAppend {
+		t.Errorf("expected SectionActionAppend, got %q", section.Action)
+	}
+
+	if !strings.Contains(section.Content, "<documentation>") {
+		t.Error("expected <documentation> tag in custom instructions content")
+	}
+
+	if !strings.Contains(section.Content, "KSail Docs") {
+		t.Error("expected documentation content in custom instructions")
+	}
+}
+
+// TestBuildSystemSections_WithCLIHelp tests that CLIHelp maps to SectionCustomInstructions.
+func TestBuildSystemSections_WithCLIHelp(t *testing.T) {
+	t.Parallel()
+
+	sections := chat.BuildSystemSections(chat.SystemContextConfig{
+		CLIHelp: "ksail cluster init [flags]",
+	})
+
+	section, ok := sections[copilot.SectionCustomInstructions]
+	if !ok {
+		t.Fatal("expected SectionCustomInstructions key in sections")
+	}
+
+	if !strings.Contains(section.Content, "<cli_help>") {
+		t.Error("expected <cli_help> tag in custom instructions content")
+	}
+
+	if !strings.Contains(section.Content, "ksail cluster init") {
+		t.Error("expected CLI help content in custom instructions")
+	}
+}
+
+// TestBuildSystemSections_WithInstructions tests that Instructions maps to SectionCustomInstructions.
+func TestBuildSystemSections_WithInstructions(t *testing.T) {
+	t.Parallel()
+
+	sections := chat.BuildSystemSections(chat.SystemContextConfig{
+		Instructions: "Always respond in JSON format.",
+	})
+
+	section, ok := sections[copilot.SectionCustomInstructions]
+	if !ok {
+		t.Fatal("expected SectionCustomInstructions key in sections")
+	}
+
+	if !strings.Contains(section.Content, "Always respond in JSON format.") {
+		t.Error("expected instructions content in custom instructions")
+	}
+}
+
+// TestBuildSystemSections_AllFields tests BuildSystemSections with all fields populated.
+func TestBuildSystemSections_AllFields(t *testing.T) {
+	t.Parallel()
+
+	sections := chat.BuildSystemSections(chat.SystemContextConfig{
+		Identity:                 "KSail Assistant",
+		Documentation:            "Some docs",
+		CLIHelp:                  "ksail --help",
+		Instructions:             "Be helpful",
+		IncludeWorkingDirContext: true,
+		ConfigFileName:           "nonexistent-config-for-test.yaml",
+	})
+
+	// Should have all three section keys
+	if _, ok := sections[copilot.SectionIdentity]; !ok {
+		t.Error("expected SectionIdentity key")
+	}
+
+	if _, ok := sections[copilot.SectionEnvironmentContext]; !ok {
+		t.Error("expected SectionEnvironmentContext key")
+	}
+
+	if _, ok := sections[copilot.SectionCustomInstructions]; !ok {
+		t.Error("expected SectionCustomInstructions key")
+	}
+
+	// Verify identity uses Replace
+	if sections[copilot.SectionIdentity].Action != copilot.SectionActionReplace {
+		t.Error("expected identity to use SectionActionReplace")
+	}
+
+	// Verify environment context uses Append
+	if sections[copilot.SectionEnvironmentContext].Action != copilot.SectionActionAppend {
+		t.Error("expected environment context to use SectionActionAppend")
+	}
+
+	// Verify custom instructions uses Append and combines all content
+	custom := sections[copilot.SectionCustomInstructions]
+	if custom.Action != copilot.SectionActionAppend {
+		t.Error("expected custom instructions to use SectionActionAppend")
+	}
+
+	if !strings.Contains(custom.Content, "<documentation>") {
+		t.Error("expected documentation in custom instructions")
+	}
+
+	if !strings.Contains(custom.Content, "<cli_help>") {
+		t.Error("expected cli_help in custom instructions")
+	}
+
+	if !strings.Contains(custom.Content, "Be helpful") {
+		t.Error("expected instructions text in custom instructions")
+	}
+}
+
+// TestBuildSystemSections_NoIdentity_OnlyCustom tests that custom instructions section
+// is present even without identity.
+func TestBuildSystemSections_NoIdentity_OnlyCustom(t *testing.T) {
+	t.Parallel()
+
+	sections := chat.BuildSystemSections(chat.SystemContextConfig{
+		Documentation: "docs only",
+	})
+
+	if _, ok := sections[copilot.SectionIdentity]; ok {
+		t.Error("expected no SectionIdentity key when identity is empty")
+	}
+
+	if _, ok := sections[copilot.SectionCustomInstructions]; !ok {
+		t.Fatal("expected SectionCustomInstructions key")
+	}
+}
+
+// TestBuildSystemSections_WorkingDirDisabled tests that SectionEnvironmentContext is absent
+// when IncludeWorkingDirContext is false.
+func TestBuildSystemSections_WorkingDirDisabled(t *testing.T) {
+	t.Parallel()
+
+	sections := chat.BuildSystemSections(chat.SystemContextConfig{
+		Identity:                 "test",
+		IncludeWorkingDirContext: false,
+	})
+
+	if _, ok := sections[copilot.SectionEnvironmentContext]; ok {
+		t.Error("expected no SectionEnvironmentContext key when working dir context is disabled")
 	}
 }

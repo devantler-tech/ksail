@@ -149,13 +149,28 @@ To decide which phase to perform:
 
    **Critical:** Exclude tool-generated files from PR. Double-check added files and remove any that don't belong.
 
-   In the description, explain:
-   - **Source:** Whether this came from the roadmap or the backlog (include issue link if applicable)
-   - **Goal and rationale:** What you worked on and why it matters
-   - **Approach:** Strategy, methodology, and implementation steps
-   - **Impact:** What changed and what was fixed or improved
-   - **Validation:** Testing approach and success criteria met
-   - **Future work:** Related opportunities identified
+   The PR description **must** follow the repository PR template (<https://github.com/devantler-tech/.github/blob/main/.github/PULL_REQUEST_TEMPLATE.md>):
+
+   ```markdown
+   Please include a summary of the changes. **What** has changed and **why**?
+
+   Fixes [url OR #issue]
+
+   ## Type of change
+
+   Select the appropriate options and delete the rest:
+
+   - [ ] 🧹 Refactor
+   - [ ] 🪲 Bug fix
+   - [ ] 🚀 New feature
+   - [ ] ⛓️‍💥 Breaking change
+   - [ ] 📚 Documentation update
+   ```
+
+   Fill in the template as follows:
+   - Replace the summary placeholder with a clear explanation of what changed and why, including the source (roadmap or backlog), your approach, and validation steps taken.
+   - **Critical:** If the PR addresses one or more open issues, you **must** include `Fixes <issue-url>` (e.g., `Fixes #123`) so that merging the PR automatically closes the issue. Use one `Fixes <url>` line per issue. If the work does not resolve any issue, omit the `Fixes` line.
+   - Check the appropriate type(s) of change and delete the rest.
 
    After creation, check the pull request to ensure it is correct, includes all expected files, and doesn't include any unwanted files or changes. Make any necessary corrections by pushing further commits to the branch.
 

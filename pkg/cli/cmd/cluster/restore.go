@@ -100,10 +100,7 @@ Example:
 		"Print what would be restored without applying",
 	)
 
-	err := cmd.MarkFlagRequired("input")
-	if err != nil {
-		panic(fmt.Sprintf("failed to mark input flag as required: %v", err))
-	}
+	cobra.CheckErr(cmd.MarkFlagRequired("input"))
 
 	return cmd
 }
@@ -128,7 +125,7 @@ func runRestore(
 
 	flags.inputPath = canonInput
 
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
 	if kubeconfigPath == "" {
 		return ErrKubeconfigNotFound
 	}
