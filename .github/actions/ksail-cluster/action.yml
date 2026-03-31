@@ -276,20 +276,6 @@ runs:
         CONFIG: ${{ inputs.config }}
       run: ksail ${CONFIG:+--config "$CONFIG"} workload validate
 
-    - name: 🔧 Inject Omni endpoint
-      if: inputs.provider == 'Omni' && inputs.omni-endpoint != ''
-      shell: bash
-      env:
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
-      run: |
-        # Patch ksail.yaml to set spec.cluster.omni.endpoint since ksail reads it from config.
-        # For non-init flow, create a minimal ksail.yaml if it doesn't exist.
-        if [ ! -f ksail.yaml ]; then
-          echo "apiVersion: ksail.io/v1alpha1" > ksail.yaml
-          echo "kind: Cluster" >> ksail.yaml
-        fi
-        yq -i '.spec.cluster.omni.endpoint = strenv(OMNI_ENDPOINT)' ksail.yaml
-
     - name: 🚀 Create Cluster
       id: create
       shell: bash
@@ -300,6 +286,7 @@ runs:
         ARGS: ${{ inputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
         CONFIG: ${{ inputs.config }}
       run: |
         set -euo pipefail
@@ -379,5 +366,7 @@ runs:
       shell: bash
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
         CONFIG: ${{ inputs.config }}
       run: ksail ${CONFIG:+--config "$CONFIG"} cluster delete || echo "⚠️ Cluster may not have been created"

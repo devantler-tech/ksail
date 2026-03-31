@@ -158,6 +158,7 @@ runs:
         TIMEOUT: ${{ inputs.workload-timeout }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         for attempt in 1 2 3; do
           if ksail workload create deployment "$WORKLOAD_NAME" --image="$WORKLOAD_IMAGE"; then
@@ -177,6 +178,7 @@ runs:
         TIMEOUT: ${{ inputs.workload-timeout }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: ksail workload apply -k "$OVERLAY_PATH" --wait --timeout="$TIMEOUT"
 
     - name: 🧪 ksail workload push and reconcile
@@ -187,6 +189,7 @@ runs:
         GITOPS_PATH: ${{ inputs.gitops-path }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
         GHCR_USER: ${{ inputs.ghcr-user }}
         GHCR_TOKEN: ${{ inputs.ghcr-token }}
       run: |
@@ -208,6 +211,7 @@ runs:
         ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         set -o pipefail
         # shellcheck disable=SC2086
@@ -230,6 +234,7 @@ runs:
         ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         set -o pipefail
         # shellcheck disable=SC2086
@@ -254,6 +259,7 @@ runs:
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail cluster stop
 
@@ -262,6 +268,7 @@ runs:
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         timeout 600 ksail cluster start
 
@@ -271,5 +278,6 @@ runs:
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail cluster delete || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"

@@ -238,6 +238,9 @@
                 "endpoint": {
                   "type": "string"
                 },
+                "endpointEnvVar": {
+                  "type": "string"
+                },
                 "serviceAccountKeyEnvVar": {
                   "type": "string"
                 }
