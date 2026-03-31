@@ -184,6 +184,7 @@ For each untriaged issue:
 8. **Add the `triaged` label** to mark the issue as processed so it is not re-triaged in future runs.
 
 **Critical rules:**
+
 - NEVER modify the issue's title.
 - NEVER change the scope or intent of a manually-created issue.
 - Only restructure and enrich the body to follow the appropriate devantler-tech issue template — preserve all original information.
