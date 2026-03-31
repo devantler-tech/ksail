@@ -253,7 +253,7 @@ See [Ephemeral Clusters (--ttl)](/guides/ephemeral-clusters/) for the full TTL g
 - **Name your clusters after their environment** (`dev`, `staging`, `production`) so context names are predictable across machines.
 - **Keep distribution-specific config files** (`kind.yaml`, `talos/`) named consistently — `ksail cluster init` generates them alongside `ksail.yaml`.
 - **Version-control all `ksail.<env>.yaml` files** but keep credentials in environment variables or a secret manager.
-- **Use `ksail workload validate`** with the target environment config before promoting manifests:
+- **Use `ksail workload validate`** with the target environment config before promoting manifests. See [Substitution Expansion (validate)](/guides/workload-validate/) for how Flux `${VAR}` substitutions are handled during validation.
 
   ```bash
   ksail --config ksail.staging.yaml workload validate
