@@ -94,12 +94,20 @@ Chat sessions support unlimited conversation length through automatic background
 
 ### Modes & Settings
 - **Tab** — Cycle chat mode (Agent → Plan → Agent)
-- **Ctrl+Y** — Toggle auto-approve mode (bypasses permission prompts)
+- **Ctrl+Y** — Toggle auto-approve mode (bypasses all future permission prompts for the session)
 - **Ctrl+T** — Expand/collapse tool execution details
 - **Ctrl+O** — Change AI model (lazy-loaded picker)
 - **Ctrl+E** — Change reasoning effort level
 - **Ctrl+H** — View session history
 - **Ctrl+N** — Start new chat session
+
+### Permission Prompts
+When an operation requires approval, an inline permission modal appears:
+- **y** — Allow this operation once
+- **a** — Allow always (enables auto-approve for all future operations in this session)
+- **n / Esc** — Deny
+
+Read and URL operations are auto-approved without a prompt.
 
 ### Prompt Queue
 - **Ctrl+Q** — Queue current input as a pending prompt (processed after the active response completes)
