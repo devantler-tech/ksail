@@ -42,6 +42,7 @@ safe-outputs:
 tools:
   github:
     toolsets: [all]
+    min-integrity: unapproved
   web-fetch:
   bash: true
 
