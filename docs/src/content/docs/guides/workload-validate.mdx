@@ -63,7 +63,7 @@ spec:
 ```
 
 > [!NOTE]
-> Coercion only applies to scalar-only substitutions (when the entire field value is a single `${VAR:-...}`). When `${VAR}` appears mixed with other text (e.g., `prefix-${VAR}-suffix`), the result is always a string — the placeholder `"placeholder"` replaces the variable reference.
+> Coercion only applies to scalar-only substitutions (when the entire field value is a single `${VAR:-...}`). In mixed-text contexts (e.g., `prefix-${VAR}-suffix`), the result is always a string: bare `${VAR}` references are replaced with the string placeholder `"placeholder"`, while `${VAR:-default}` / `${VAR:=default}` expand to the provided default text.
 
 ### Mixed-Text Substitution
 
