@@ -1,6 +1,6 @@
 ---
-title: Substitution Expansion in workload validate
-description: How ksail workload validate handles Flux ${VAR} substitutions — typed placeholders, defaults, and why local environment variables are not read.
+title: Substitution Expansion in `workload validate`
+description: How KSail `workload validate` handles Flux ${VAR} substitutions — typed placeholders, defaults, and why local environment variables are not read.
 ---
 
 `ksail workload validate` runs [kubeconform](https://github.com/yannh/kubeconform) against your Kubernetes manifests to catch schema errors before they reach the cluster. When your manifests use [Flux postBuild substitutions](https://fluxcd.io/flux/components/kustomize/kustomizations/#post-build-variable-substitution) (`${VAR}`, `${VAR:-default}`, `${VAR:=default}`), the validator needs concrete values to produce valid YAML for schema checking.
@@ -17,7 +17,7 @@ This guide explains how the expansion works, why environment variables are not r
 Instead, KSail uses **typed schema-aware placeholders** derived from the Kubernetes JSON schema. Validation catches type mismatches at schema-check time, not at deploy time.
 
 > [!NOTE]
-> Commands that deploy or push manifests (`workload apply`, `workload push`, `workload reconcile`) **do** expand from actual environment variables at runtime. Only `workload validate` uses deterministic placeholders.
+> Commands that deploy or push manifests (`workload apply`, `workload push`, `workload reconcile`) do **not** expand Flux `${VAR}` substitutions from your local environment. They pass manifests through (or trigger GitOps reconciliation), and Flux performs substitution **in-cluster** via Kustomization `postBuild.substitute` / `substituteFrom`. Only `workload validate` simulates substitutions client-side, using deterministic placeholders instead of reading environment variables.
 
 ## Expansion Rules
 
@@ -79,9 +79,9 @@ spec:
 
 KSail loads JSON schemas from the kubeconform disk cache (populated on previous `workload validate` runs). Schema files are looked up from the OS user cache directory (for example `~/.cache/ksail/kubeconform/`), or from `${TMPDIR}/ksail/kubeconform` when the user cache directory is unavailable (such as in some CI environments).
 
-- **Core Kubernetes resources** (Deployment, Service, ConfigMap, …): typed via [kubernetes-json-schema](https://github.com/yannh/kubernetes-json-schema)
-- **CRDs** (FluxCD, cert-manager, …): typed via the [CRDs-catalog](https://github.com/datreeio/CRDs-catalog)
-- **Unknown resources** (no cached schema): all bare `${VAR}` expand to `"placeholder"` (string)
+- **Core Kubernetes resources** (Deployment, Service, ConfigMap, …): typed via [kubernetes-json-schema](https://github.com/yannh/kubernetes-json-schema) **when the relevant schema is present in the kubeconform disk cache**
+- **CRDs** (FluxCD, cert-manager, …): typed via the [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) **when their schemas are present in the kubeconform disk cache**
+- **Resources without a cached schema** (including core kinds or CRDs whose schemas have not yet been cached): all bare `${VAR}` expand to `"placeholder"` (string)
 
 > [!NOTE]
 > Placeholder type inference reads schemas **only from the local kubeconform cache** — it does not itself make any network requests while deciding how to type `${VAR}` placeholders.
