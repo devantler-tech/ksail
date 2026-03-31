@@ -77,7 +77,7 @@ spec:
 
 ## Schema Inference
 
-KSail loads JSON schemas from the kubeconform disk cache (populated on previous `workload validate` runs). Schema files are looked up from `~/.cache/ksail/kubeconform/` (or the OS-equivalent cache directory).
+KSail loads JSON schemas from the kubeconform disk cache (populated on previous `workload validate` runs). Schema files are looked up from the OS user cache directory (for example `~/.cache/ksail/kubeconform/`), or from `${TMPDIR}/ksail/kubeconform` when the user cache directory is unavailable (such as in some CI environments).
 
 - **Core Kubernetes resources** (Deployment, Service, ConfigMap, …): typed via [kubernetes-json-schema](https://github.com/yannh/kubernetes-json-schema)
 - **CRDs** (FluxCD, cert-manager, …): typed via the [CRDs-catalog](https://github.com/datreeio/CRDs-catalog)
