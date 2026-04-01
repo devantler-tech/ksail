@@ -151,12 +151,12 @@ When investigating a **Benchmark Regression** workflow failure, apply this speci
    - Command to reproduce locally: `go test -bench=<BenchmarkName> -benchmem -count=5 ./path/to/package/`
    - Suggested profiling: `go test -bench=<BenchmarkName> -cpuprofile=cpu.prof -memprofile=mem.prof ./path/to/package/`
 
-1. **Store Investigation**: Save structured investigation data to files:
+6. **Store Investigation**: Save structured investigation data to files:
    - Write investigation report to `/tmp/memory/investigations/<timestamp>-<run-id>.json`
    - Store error patterns in `/tmp/memory/patterns/`
    - Maintain an index file of all investigations for fast searching
-2. **Update Pattern Database**: Enhance knowledge with new findings by updating pattern files
-3. **Save Artifacts**: Store detailed logs and analysis in the cached directories
+7. **Update Pattern Database**: Enhance knowledge with new findings by updating pattern files
+8. **Save Artifacts**: Store detailed logs and analysis in the cached directories
 
 ### Phase 6: Looking for existing issues
 
