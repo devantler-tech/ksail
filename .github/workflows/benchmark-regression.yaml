@@ -119,9 +119,10 @@ jobs:
 
           # Detect regressions from benchstat output.
           # With -confidence 0.95, benchstat shows directional changes when p < 0.05.
-          # An additional 10% noise floor is applied to sec/op to filter CI runner variance.
+          # An additional 10% noise floor filters CI runner variance across all metrics.
           # Together these two layers keep the practical false-positive rate very low.
           regressions=0
+          regression_details=""
           current_metric=""
 
           while IFS= read -r line; do
@@ -134,13 +135,13 @@ jobs:
             if echo "$line" | grep -qE '\+[0-9]+(\.[0-9]+)?%.*\(p='; then
               delta=$(echo "$line" | grep -oE '\+[0-9]+(\.[0-9]+)?%' | head -1 | tr -d '+%')
 
-              if [ "$current_metric" = "sec/op" ]; then
-                above_threshold=$(awk "BEGIN { print ($delta >= 10) }")
-                if [ "$above_threshold" = "1" ]; then
-                  regressions=$((regressions + 1))
-                fi
-              else
+              # Apply 10% noise floor to all metrics — CI runners are noisy for
+              # timing, allocations, and allocation counts alike.
+              above_threshold=$(awk "BEGIN { print ($delta >= 10) }")
+              if [ "$above_threshold" = "1" ]; then
                 regressions=$((regressions + 1))
+                bench_name=$(echo "$line" | awk '{print $1}')
+                regression_details="${regression_details}  ${bench_name} (${current_metric}): +${delta}%\n"
               fi
             fi
           done <<< "$result"
@@ -148,6 +149,7 @@ jobs:
           if [ "$regressions" -gt 0 ]; then
             echo ""
             echo "❌ $regressions benchmark regression(s) detected — failing check."
+            echo -e "$regression_details"
             echo "Run 'go test -bench=. -benchmem -count=5 ./...' locally to investigate."
             exit 1
           else
