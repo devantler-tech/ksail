@@ -33,14 +33,17 @@ func createTarball(
 	sourceDir, targetPath string,
 	compressionLevel int,
 ) error {
-	// Write to a temp file in the same directory so that on failure we can
-	// remove it without leaving a corrupt archive at the final targetPath.
-	tmpPath := targetPath + ".tmp"
+	// Use os.CreateTemp so the temp path is unique — avoids clobbering a
+	// pre-existing .tmp file from a previous failed run and reduces races.
+	tmpDir := filepath.Dir(targetPath)
+	tmpPrefix := filepath.Base(targetPath) + ".tmp-"
 
-	outFile, err := os.Create(tmpPath) //nolint:gosec // path is user-controlled output
+	outFile, err := os.CreateTemp(tmpDir, tmpPrefix) //nolint:gosec // path is user-controlled output
 	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
+		return fmt.Errorf("failed to create temp file: %w", err)
 	}
+
+	tmpPath := outFile.Name()
 
 	gzipWriter, err := gzip.NewWriterLevel(outFile, compressionLevel)
 	if err != nil {
@@ -89,6 +92,10 @@ func createTarball(
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to close output file: %w", err)
 	}
+
+	// Remove targetPath first so os.Rename works on Windows when the target
+	// already exists (on Unix, Rename atomically replaces the destination).
+	_ = os.Remove(targetPath) //nolint:errcheck // best-effort; Rename will report any real error
 
 	err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
 	if err != nil {

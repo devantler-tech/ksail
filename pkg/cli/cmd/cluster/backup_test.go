@@ -683,3 +683,58 @@ func TestInjectRestoreLabels(t *testing.T) {
 		t.Error("labeled file should contain restore name value")
 	}
 }
+
+func TestCreateTarball_OverwritesExistingTarget(t *testing.T) {
+	t.Parallel()
+
+	srcDir := t.TempDir()
+
+	err := os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("data"), cluster.ExportFilePerm)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	outputPath := filepath.Join(t.TempDir(), "backup.tar.gz")
+
+	// First run creates the archive.
+	err = cluster.ExportCreateTarball(srcDir, outputPath, -1)
+	if err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+
+	// Second run to the same path must succeed (overwrite) without error.
+	err = cluster.ExportCreateTarball(srcDir, outputPath, -1)
+	if err != nil {
+		t.Fatalf("second run (overwrite): %v", err)
+	}
+
+	info, err := os.Stat(outputPath)
+	if err != nil || info.Size() == 0 {
+		t.Fatal("archive not present or empty after overwrite")
+	}
+}
+
+func TestCreateTarball_NoTempFileLeftOnSourceDirError(t *testing.T) {
+	t.Parallel()
+
+	outputDir := t.TempDir()
+	outputPath := filepath.Join(outputDir, "backup.tar.gz")
+
+	// Use a non-existent source directory to force a Walk error.
+	err := cluster.ExportCreateTarball("/nonexistent-source-dir-xyz", outputPath, -1)
+	if err == nil {
+		t.Fatal("expected error for non-existent source dir, got nil")
+	}
+
+	// No .tmp* files should remain in the output directory.
+	entries, readErr := os.ReadDir(outputDir)
+	if readErr != nil {
+		t.Fatalf("ReadDir: %v", readErr)
+	}
+
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tmp") {
+			t.Errorf("temp file left behind: %s", e.Name())
+		}
+	}
+}
