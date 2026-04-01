@@ -48,5 +48,6 @@ func (p *Provisioner) RemoveDockerNodesForTest(
 // CreateOmniProviderForTest exposes createOmniProvider for unit testing.
 func CreateOmniProviderForTest(opts v1alpha1.OptionsOmni) error {
 	_, err := createOmniProvider(opts)
+
 	return err
 }

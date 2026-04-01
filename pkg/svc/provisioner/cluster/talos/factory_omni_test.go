@@ -17,9 +17,12 @@ func TestCreateOmniProvider_EndpointResolution(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name:    "env var overrides config endpoint",
-			opts:    v1alpha1.OptionsOmni{Endpoint: "https://config.example.com:443"},
-			envVars: map[string]string{"OMNI_ENDPOINT": "https://env.example.com:443", "OMNI_SERVICE_ACCOUNT_KEY": "test-key"},
+			name: "env var overrides config endpoint",
+			opts: v1alpha1.OptionsOmni{Endpoint: "https://config.example.com:443"},
+			envVars: map[string]string{
+				"OMNI_ENDPOINT":            "https://env.example.com:443",
+				"OMNI_SERVICE_ACCOUNT_KEY": "test-key",
+			},
 			wantErr: nil, // endpoint resolved from env var
 		},
 		{
@@ -29,10 +32,10 @@ func TestCreateOmniProvider_EndpointResolution(t *testing.T) {
 			wantErr: nil, // endpoint resolved from config
 		},
 		{
-			name:    "custom EndpointEnvVar name is honored",
-			opts:    v1alpha1.OptionsOmni{EndpointEnvVar: "CUSTOM_OMNI_EP"},
+			name: "custom EndpointEnvVar name is honored",
+			opts: v1alpha1.OptionsOmni{EndpointEnvVar: "CUSTOM_OMNI_EP"},
 			envVars: map[string]string{
-				"CUSTOM_OMNI_EP":          "https://custom.example.com:443",
+				"CUSTOM_OMNI_EP":           "https://custom.example.com:443",
 				"OMNI_SERVICE_ACCOUNT_KEY": "test-key",
 			},
 			wantErr: nil, // endpoint resolved from custom env var
@@ -58,6 +61,7 @@ func TestCreateOmniProvider_EndpointResolution(t *testing.T) {
 			t.Setenv("OMNI_ENDPOINT", "")
 			t.Setenv("OMNI_SERVICE_ACCOUNT_KEY", "")
 			t.Setenv("CUSTOM_OMNI_EP", "")
+
 			for k, v := range testCase.envVars {
 				t.Setenv(k, v)
 			}
