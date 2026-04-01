@@ -393,7 +393,7 @@ func TestAllLinesContain_EdgeCases(t *testing.T) {
 
 // TestPrintRestoreHeader verifies that printRestoreHeader writes the expected
 // lines including the input path, policy, and (when dry-run) the dry-run note.
-func TestPrintRestoreHeader(t *testing.T) {
+func TestPrintRestoreHeader(t *testing.T) { //nolint:funlen // Table-driven test with multiple comprehensive cases
 	t.Parallel()
 
 	tests := []struct {
@@ -466,7 +466,7 @@ func TestPrintRestoreHeader(t *testing.T) {
 
 // TestPrintRestoreMetadata verifies that printRestoreMetadata correctly outputs
 // all metadata fields, including optional Distribution and Provider.
-func TestPrintRestoreMetadata(t *testing.T) {
+func TestPrintRestoreMetadata(t *testing.T) { //nolint:funlen // Table-driven test with multiple comprehensive cases
 	t.Parallel()
 
 	tests := []struct {
@@ -541,7 +541,7 @@ func TestPrintRestoreMetadata(t *testing.T) {
 }
 
 // TestReadBackupMetadata verifies error paths and happy path of readBackupMetadata.
-func TestReadBackupMetadata(t *testing.T) {
+func TestReadBackupMetadata(t *testing.T) { //nolint:funlen // Covers multiple distinct error and success paths
 	t.Parallel()
 
 	t.Run("returns error when metadata file is missing", func(t *testing.T) {
@@ -638,15 +638,15 @@ func TestExtractBackupArchive_ErrorPaths(t *testing.T) {
 		tmpDir := t.TempDir()
 		archivePath := filepath.Join(tmpDir, "empty.tar.gz")
 
-		f, err := os.Create(archivePath) //nolint:gosec // test-controlled temp path
+		archiveFile, err := os.Create(archivePath) //nolint:gosec // test-controlled temp path
 		require.NoError(t, err)
 
-		gz := gzip.NewWriter(f)
+		gz := gzip.NewWriter(archiveFile)
 		// Write a single byte so gzip stream is valid but not a valid tar archive
 		_, err = gz.Write([]byte{0x00})
 		require.NoError(t, err)
 		require.NoError(t, gz.Close())
-		require.NoError(t, f.Close())
+		require.NoError(t, archiveFile.Close())
 
 		_, _, err = clusterpkg.ExportExtractBackupArchive(archivePath)
 		require.Error(t, err)
@@ -676,8 +676,8 @@ func createArchiveWithoutMetadata(t *testing.T) string {
 
 	defer func() { _ = f.Close() }()
 
-	gz := gzip.NewWriter(f)
-	tw := tar.NewWriter(gz)
+	gzipWriter := gzip.NewWriter(f)
+	tarWriter := tar.NewWriter(gzipWriter)
 
 	content := []byte("apiVersion: v1\nkind: Pod\n")
 	hdr := &tar.Header{
@@ -687,14 +687,14 @@ func createArchiveWithoutMetadata(t *testing.T) string {
 		Mode:     0o600,
 	}
 
-	err = tw.WriteHeader(hdr)
+	err = tarWriter.WriteHeader(hdr)
 	require.NoError(t, err)
 
-	_, err = tw.Write(content)
+	_, err = tarWriter.Write(content)
 	require.NoError(t, err)
 
-	require.NoError(t, tw.Close())
-	require.NoError(t, gz.Close())
+	require.NoError(t, tarWriter.Close())
+	require.NoError(t, gzipWriter.Close())
 
 	return archivePath
 }
