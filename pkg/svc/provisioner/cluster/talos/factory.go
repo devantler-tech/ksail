@@ -241,7 +241,11 @@ func createOmniProvider(opts v1alpha1.OptionsOmni) (*omni.Provider, error) {
 	}
 
 	if endpoint == "" {
-		return nil, omni.ErrEndpointRequired
+		return nil, fmt.Errorf(
+			"%w: set via environment variable %s or spec.cluster.omni.endpoint in config",
+			omni.ErrEndpointRequired,
+			endpointEnvVar,
+		)
 	}
 
 	// Determine the service account key environment variable name
