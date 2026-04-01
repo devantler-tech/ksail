@@ -65,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "$PACKAGES" \
-            | xargs go test -bench=. -benchmem -count=3 -benchtime=500ms -run='^$' -timeout=30m \
+            | xargs go test -bench=. -benchmem -count=5 -benchtime=500ms -run='^$' -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
       - name: 📤 Upload results
@@ -110,16 +110,17 @@ jobs:
             exit 0
           fi
 
-          echo "=== Benchmark Comparison (benchstat, confidence 0.999) ==="
+          echo "=== Benchmark Comparison (benchstat, confidence 0.95) ==="
           echo ""
 
-          result=$(benchstat -confidence 0.999 "$main_file" "$pr_file" 2>&1) || true
+          result=$(benchstat -confidence 0.95 "$main_file" "$pr_file" 2>&1) || true
           echo "$result"
           echo ""
 
           # Detect regressions from benchstat output.
-          # With -confidence 0.999, benchstat only shows directional changes when p < 0.001.
+          # With -confidence 0.95, benchstat shows directional changes when p < 0.05.
           # An additional 10% noise floor is applied to sec/op to filter CI runner variance.
+          # Together these two layers keep the practical false-positive rate very low.
           regressions=0
           current_metric=""
 
@@ -147,7 +148,7 @@ jobs:
           if [ "$regressions" -gt 0 ]; then
             echo ""
             echo "❌ $regressions benchmark regression(s) detected — failing check."
-            echo "Run 'go test -bench=. -benchmem -count=3 ./...' locally to investigate."
+            echo "Run 'go test -bench=. -benchmem -count=5 ./...' locally to investigate."
             exit 1
           else
             echo "✅ No benchmark regressions detected."

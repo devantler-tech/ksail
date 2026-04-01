@@ -148,7 +148,7 @@ When investigating a **Benchmark Regression** workflow failure, apply this speci
 5. **Remediation guidance**: Include in the investigation issue:
    - Which benchmarks regressed and by how much
    - The specific packages and functions affected
-   - Command to reproduce locally: `go test -bench=<BenchmarkName> -benchmem -count=3 ./path/to/package/`
+   - Command to reproduce locally: `go test -bench=<BenchmarkName> -benchmem -count=5 ./path/to/package/`
    - Suggested profiling: `go test -bench=<BenchmarkName> -cpuprofile=cpu.prof -memprofile=mem.prof ./path/to/package/`
 
 1. **Store Investigation**: Save structured investigation data to files:
