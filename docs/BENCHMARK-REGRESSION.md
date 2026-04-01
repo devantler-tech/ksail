@@ -15,11 +15,11 @@ The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workf
 
 The workflow gates on regressions using three layers of filtering:
 
-| Layer | Filter | Purpose |
-|-------|--------|---------|
-| 1 | Mann-Whitney U test (p < 0.05) | Statistical significance — filters random variation |
-| 2 | 20% noise floor (all metrics) | Filters CI runner variance — main and PR run on different machines |
-| 3 | Sub-microsecond exclusion (sec/op only) | Skips nanosecond-range benchmarks where CPU clock jitter dominates |
+| Layer | Filter                                  | Purpose                                                            |
+|-------|-----------------------------------------|--------------------------------------------------------------------|
+| 1     | Mann-Whitney U test (p < 0.05)          | Statistical significance — filters random variation                |
+| 2     | 20% noise floor (all metrics)           | Filters CI runner variance — main and PR run on different machines |
+| 3     | Sub-microsecond exclusion (sec/op only) | Skips nanosecond-range benchmarks where CPU clock jitter dominates |
 
 A regression is only flagged when **all three layers** agree. This means only substantial, statistically confirmed performance degradations block the PR.
 
