@@ -6,7 +6,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,7 +31,10 @@ func TestCreateOmniProvider_EndpointResolution(t *testing.T) {
 		{
 			name:    "custom EndpointEnvVar name is honored",
 			opts:    v1alpha1.OptionsOmni{EndpointEnvVar: "CUSTOM_OMNI_EP"},
-			envVars: map[string]string{"CUSTOM_OMNI_EP": "https://custom.example.com:443", "OMNI_SERVICE_ACCOUNT_KEY": "test-key"},
+			envVars: map[string]string{
+				"CUSTOM_OMNI_EP":          "https://custom.example.com:443",
+				"OMNI_SERVICE_ACCOUNT_KEY": "test-key",
+			},
 			wantErr: nil, // endpoint resolved from custom env var
 		},
 		{
@@ -52,6 +54,10 @@ func TestCreateOmniProvider_EndpointResolution(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			// t.Setenv is incompatible with t.Parallel
+			// Ensure a clean baseline for all relevant Omni env vars before applying test-specific overrides.
+			t.Setenv("OMNI_ENDPOINT", "")
+			t.Setenv("OMNI_SERVICE_ACCOUNT_KEY", "")
+			t.Setenv("CUSTOM_OMNI_EP", "")
 			for k, v := range testCase.envVars {
 				t.Setenv(k, v)
 			}
@@ -60,14 +66,12 @@ func TestCreateOmniProvider_EndpointResolution(t *testing.T) {
 
 			if testCase.wantErr != nil {
 				require.ErrorIs(t, err, testCase.wantErr)
-			} else {
+			} else if err != nil {
 				// The function may fail at omniclient.New() with invalid credentials,
 				// but the endpoint/key resolution should have succeeded — so the error
 				// should NOT be ErrEndpointRequired or ErrServiceAccountKeyRequired.
-				if err != nil {
-					assert.NotErrorIs(t, err, omni.ErrEndpointRequired)
-					assert.NotErrorIs(t, err, omni.ErrServiceAccountKeyRequired)
-				}
+				require.NotErrorIs(t, err, omni.ErrEndpointRequired)
+				require.NotErrorIs(t, err, omni.ErrServiceAccountKeyRequired)
 			}
 		})
 	}
