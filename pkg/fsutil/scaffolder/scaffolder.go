@@ -422,11 +422,11 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 		cleanPath := filepath.Clean(rawKustomizationPath)
 
 		if filepath.IsAbs(cleanPath) {
-			return fmt.Errorf("invalid kustomizationFile %q: must be a relative path", rawKustomizationPath)
+			return fmt.Errorf("%w: %q is absolute", ErrInvalidKustomizationFilePath, rawKustomizationPath)
 		}
 
 		if cleanPath == ".." || strings.HasPrefix(cleanPath, ".."+string(os.PathSeparator)) {
-			return fmt.Errorf("invalid kustomizationFile %q: must not contain parent directory traversal", rawKustomizationPath)
+			return fmt.Errorf("%w: %q traverses parent directories", ErrInvalidKustomizationFilePath, rawKustomizationPath)
 		}
 
 		kustomizationDir = filepath.Join(s.KSailConfig.Spec.Workload.SourceDirectory, cleanPath)

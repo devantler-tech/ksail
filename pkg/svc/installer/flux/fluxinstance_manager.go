@@ -363,37 +363,37 @@ func normalizeFluxPath(kustomizationFile string) string {
 	// and filepath functions are OS-dependent, so we validate using slash semantics.
 	trimmed := strings.TrimSpace(strings.ReplaceAll(kustomizationFile, `\`, "/"))
 
-	if trimmed == "" || trimmed == "." || trimmed == "./" {
+	if isFluxPathRoot(trimmed) {
 		return "./"
 	}
 
-	// Reject Windows drive-letter paths (e.g. "C:/...") after separator normalization.
-	if len(trimmed) >= 2 && trimmed[1] == ':' {
+	normalized := path.Clean(trimmed)
+
+	if isFluxPathRoot(normalized) || isInvalidFluxPath(normalized) {
 		return "./"
 	}
 
-	// Reject slash-absolute paths.
-	if path.IsAbs(trimmed) {
-		return "./"
+	if !strings.HasPrefix(normalized, "./") {
+		normalized = "./" + normalized
 	}
 
-	p := path.Clean(trimmed)
+	return normalized
+}
 
-	// After cleaning, "." still means root.
-	if p == "." {
-		return "./"
+// isFluxPathRoot reports whether p represents the artifact root ("./" semantics).
+func isFluxPathRoot(p string) bool {
+	return p == "" || p == "." || p == "./"
+}
+
+// isInvalidFluxPath reports whether p should be rejected and coerced to root.
+// p must already be slash-normalized before calling this function.
+func isInvalidFluxPath(p string) bool {
+	// Windows drive-letter paths (e.g. "C:/...") after separator normalization.
+	if len(p) >= 2 && p[1] == ':' {
+		return true
 	}
 
-	// Block parent traversal that could escape the artifact root.
-	if p == ".." || strings.HasPrefix(p, "../") {
-		return "./"
-	}
-
-	if !strings.HasPrefix(p, "./") {
-		p = "./" + p
-	}
-
-	return p
+	return path.IsAbs(p) || p == ".." || strings.HasPrefix(p, "../")
 }
 
 // newFluxResourcesClient creates a client for FluxInstance and OCIRepository resources.
