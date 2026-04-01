@@ -60,7 +60,7 @@ Before any external research, deeply understand KSail's current state:
    - What's already planned or in progress
    - Any issue that has significant community engagement (reactions, comments)
 
-3. Read **open community-facing discussions** in categories like Ideas, General, and Q&A, prioritizing the **30 most recently updated** ones. **Explicitly exclude internal/automation categories such as `"agentic-workflows"`** (including this workflow's own discussion). Look for:
+3. Read **open community-facing discussions** in categories like Ideas, General, and Q&A, prioritizing the **30 most recently updated** ones. **Explicitly exclude internal/automation categories such as `agentic-workflows`** (including this workflow's own discussion). Look for:
    - Feature requests and ideas proposed in discussions
    - Questions that reveal common pain points or confusion
    - Community feedback on existing features
