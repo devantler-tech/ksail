@@ -35,8 +35,6 @@ safe-outputs:
   link-sub-issue:
     max: 20
   update-issue:
-    body: true
-    status: true
     target: "*"
     max: 15
 

@@ -49,6 +49,8 @@ safe-outputs:
       - ".github/actions/daily-workflow-maintenance/**"
       - ".github/aw/actions-lock.json"
       - ".github/workflows/*.lock.yml"
+      - ".github/workflows/*.md"
+      - ".github/workflows/shared/*.md"
       - ".github/workflows/*.yaml"
       - ".github/workflows/*.yml"
       - ".github/agents/*.agent.md"
@@ -202,14 +204,9 @@ If you **cannot fix** compilation errors, skip to "Fallback: Create Issue" below
 git diff .github/workflows/*.md .github/workflows/shared/*.md 2>/dev/null | tee /tmp/workflow-md-diffs.patch || true
 ```
 
-#### 3.2. Reset only `.md` source files under `.github/workflows/`
+#### 3.2. Include `.md` source file changes
 
-Reset only the `.md` workflow source files. The compiled `.lock.yml` files should be kept and included in the PR, as they reflect the updated action versions.
-
-```bash
-git checkout -- .github/workflows/*.md
-git checkout -- .github/workflows/shared/*.md 2>/dev/null || true
-```
+The `.md` workflow source files are included in the PR alongside the compiled `.lock.yml` files, so that any source-level updates (action version bumps, config changes) are preserved.
 
 #### 3.3. Check remaining changes
 
