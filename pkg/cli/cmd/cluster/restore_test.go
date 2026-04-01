@@ -393,7 +393,9 @@ func TestAllLinesContain_EdgeCases(t *testing.T) {
 
 // TestPrintRestoreHeader verifies that printRestoreHeader writes the expected
 // lines including the input path, policy, and (when dry-run) the dry-run note.
-func TestPrintRestoreHeader(t *testing.T) { //nolint:funlen // Table-driven test with multiple comprehensive cases
+func TestPrintRestoreHeader(
+	t *testing.T,
+) { //nolint:funlen // Table-driven test with multiple comprehensive cases
 	t.Parallel()
 
 	tests := []struct {
@@ -466,7 +468,9 @@ func TestPrintRestoreHeader(t *testing.T) { //nolint:funlen // Table-driven test
 
 // TestPrintRestoreMetadata verifies that printRestoreMetadata correctly outputs
 // all metadata fields, including optional Distribution and Provider.
-func TestPrintRestoreMetadata(t *testing.T) { //nolint:funlen // Table-driven test with multiple comprehensive cases
+func TestPrintRestoreMetadata(
+	t *testing.T,
+) { //nolint:funlen // Table-driven test with multiple comprehensive cases
 	t.Parallel()
 
 	tests := []struct {
@@ -541,7 +545,9 @@ func TestPrintRestoreMetadata(t *testing.T) { //nolint:funlen // Table-driven te
 }
 
 // TestReadBackupMetadata verifies error paths and happy path of readBackupMetadata.
-func TestReadBackupMetadata(t *testing.T) { //nolint:funlen // Covers multiple distinct error and success paths
+func TestReadBackupMetadata(
+	t *testing.T,
+) { //nolint:funlen // Covers multiple distinct error and success paths
 	t.Parallel()
 
 	t.Run("returns error when metadata file is missing", func(t *testing.T) {
@@ -725,6 +731,7 @@ func TestBackupResourceTypes(t *testing.T) {
 
 	// CRDs must come before namespaces in restore ordering.
 	crdIdx, nsIdx := -1, -1
+
 	for i, rt := range types {
 		switch rt {
 		case "customresourcedefinitions":
@@ -753,4 +760,3 @@ func TestBackupResourceTypes(t *testing.T) {
 			"resource type %q should not contain spaces", rt)
 	}
 }
-
