@@ -1,6 +1,7 @@
 rules:
   impostor-commit:
     ignore:
+      - agentics-maintenance.yml
       - ci-doctor.lock.yml
       - daily-builder.lock.yml
       - daily-code-quality.lock.yml
@@ -23,6 +24,7 @@ rules:
       - weekly-roadmap.lock.yml
   ref-version-mismatch:
     ignore:
+      - agentics-maintenance.yml
       - ci-doctor.lock.yml
       - daily-builder.lock.yml
       - daily-code-quality.lock.yml
