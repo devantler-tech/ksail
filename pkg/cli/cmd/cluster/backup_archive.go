@@ -38,7 +38,7 @@ func createTarball(
 	tmpDir := filepath.Dir(targetPath)
 	tmpPrefix := filepath.Base(targetPath) + ".tmp-"
 
-	outFile, err := os.CreateTemp(tmpDir, tmpPrefix) //nolint:gosec // path is user-controlled output
+	outFile, err := os.CreateTemp(tmpDir, tmpPrefix)
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -49,6 +49,7 @@ func createTarball(
 	if err != nil {
 		_ = outFile.Close()
 		_ = os.Remove(tmpPath)
+
 		return fmt.Errorf("failed to create gzip writer: %w", err)
 	}
 
@@ -112,11 +113,11 @@ func commitTarball(
 	// operation, so the previous archive survives if Rename fails.
 	// On Windows Rename fails when targetPath already exists, so we remove it
 	// and retry — only touching the existing file after the first attempt fails.
-	err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
+	err = os.Rename(tmpPath, targetPath)
 	if err != nil {
 		_ = os.Remove(targetPath)
 
-		err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
+		err = os.Rename(tmpPath, targetPath)
 	}
 
 	if err != nil {
