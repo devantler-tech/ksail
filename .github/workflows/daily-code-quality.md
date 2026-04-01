@@ -236,7 +236,13 @@ To decide which phase to perform:
 
    a. Create a new branch starting with "perf/".
 
-   b. Work towards the performance goal. Consider approaches like:
+   b. **Check for benchmark regression signals** before selecting a target:
+      - Search for recent Benchmark Regression workflow failures: `gh run list --workflow=benchmark-regression.yaml --status=failure --limit=5`
+      - If failures exist, download the logs and look for regressed benchmarks (lines with `+XX%` in the benchstat output)
+      - Prioritize packages with detected benchmark regressions as optimization targets
+      - Run benchmarks locally before changes to establish a baseline: `go test -bench=. -benchmem -count=3 ./path/to/package/`
+
+   c. Work towards the performance goal. Consider approaches like:
    - Code optimization: algorithm improvements, data structure changes, caching
    - User experience: reducing load times, improving responsiveness
    - System efficiency: resource utilization, concurrency, I/O optimization
@@ -247,7 +253,9 @@ To decide which phase to perform:
 
    c. Ensure the code still works and relevant tests pass. Add new tests if appropriate.
 
-   d. Measure performance impact. Document measurement attempts even if unsuccessful.
+   d. Measure performance impact. Run benchmarks after changes and compare:
+      `go test -bench=. -benchmem -count=3 ./path/to/package/`
+      Include before/after benchmark results in the PR description. Document measurement attempts even if unsuccessful.
 
    **If working on TEST COVERAGE (branch prefix: `test/`):**
 
