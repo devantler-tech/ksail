@@ -33,18 +33,13 @@ func createTarball(
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
 
-	defer func() { _ = outFile.Close() }()
-
 	gzipWriter, err := gzip.NewWriterLevel(outFile, compressionLevel)
 	if err != nil {
+		_ = outFile.Close()
 		return fmt.Errorf("failed to create gzip writer: %w", err)
 	}
 
-	defer func() { _ = gzipWriter.Close() }()
-
 	tarWriter := tar.NewWriter(gzipWriter)
-
-	defer func() { _ = tarWriter.Close() }()
 
 	err = filepath.Walk(
 		sourceDir,
@@ -57,7 +52,25 @@ func createTarball(
 		},
 	)
 	if err != nil {
+		_ = tarWriter.Close()
+		_ = gzipWriter.Close()
+		_ = outFile.Close()
 		return fmt.Errorf("failed to walk source directory: %w", err)
+	}
+
+	if err = tarWriter.Close(); err != nil {
+		_ = gzipWriter.Close()
+		_ = outFile.Close()
+		return fmt.Errorf("failed to close tar writer: %w", err)
+	}
+
+	if err = gzipWriter.Close(); err != nil {
+		_ = outFile.Close()
+		return fmt.Errorf("failed to close gzip writer: %w", err)
+	}
+
+	if err = outFile.Close(); err != nil {
+		return fmt.Errorf("failed to close output file: %w", err)
 	}
 
 	return nil
@@ -68,6 +81,13 @@ func addFileToTar(
 	sourceDir, path string,
 	info os.FileInfo,
 ) error {
+	// Skip symlinks and special files (devices, pipes, sockets, etc.).
+	// restore explicitly rejects non-regular files, so including them would
+	// produce backups that cannot be restored.
+	if !info.IsDir() && info.Mode()&os.ModeType != 0 {
+		return nil
+	}
+
 	header, err := tar.FileInfoHeader(info, "")
 	if err != nil {
 		return fmt.Errorf("failed to create tar header: %w", err)

@@ -118,7 +118,7 @@ Example:
 	)
 	cmd.Flags().IntVar(
 		&flags.compressionLevel, "compression", defaultCompressionLevel,
-		"Compression level (0-9, default: -1 (gzip default))",
+		"Compression level (-1..9, -1 = gzip default)",
 	)
 
 	cobra.CheckErr(cmd.MarkFlagRequired("output"))
