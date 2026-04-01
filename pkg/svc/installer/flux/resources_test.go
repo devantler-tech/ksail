@@ -410,12 +410,12 @@ func TestNormalizeFluxPath(t *testing.T) {
 	}{
 		{
 			name:              "windows backslash path normalized",
-			kustomizationFile: `clusters\local`,
+			kustomizationFile: "clusters\\local",
 			expected:          "./clusters/local",
 		},
 		{
 			name:              "windows drive-letter coerced to root",
-			kustomizationFile: `C:\clusters\local`,
+			kustomizationFile: "C:\\clusters\\local",
 			expected:          "./",
 		},
 		{

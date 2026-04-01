@@ -462,12 +462,20 @@ func (s *Scaffolder) resolveKustomizationDir() (string, error) {
 		// Normalize Windows-style backslashes to forward slashes before validation:
 		// Flux uses slash semantics, and the OS-independent path package must be used
 		// to reject absolute paths and traversal on all platforms.
-		normalizedRaw := strings.ReplaceAll(rawPath, `\`, "/")
+		normalizedRaw := strings.ReplaceAll(rawPath, "\\", "/")
 		cleanPath := path.Clean(normalizedRaw)
 
 		if path.IsAbs(cleanPath) {
 			return "", fmt.Errorf(
 				"%w: %q is absolute",
+				ErrInvalidKustomizationFilePath,
+				rawPath,
+			)
+		}
+
+		if len(cleanPath) >= 2 && cleanPath[1] == ':' {
+			return "", fmt.Errorf(
+				"%w: %q contains a Windows drive letter",
 				ErrInvalidKustomizationFilePath,
 				rawPath,
 			)
