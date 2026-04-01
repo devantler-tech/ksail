@@ -26,7 +26,7 @@ var (
 	ErrKustomizationGeneration = errors.New("failed to generate kustomization configuration")
 
 	// ErrInvalidKustomizationFilePath indicates an absolute or traversing kustomizationFile path.
-	ErrInvalidKustomizationFilePath = errors.New("invalid kustomizationFile: must be a relative path without parent directory traversal")
+	ErrInvalidKustomizationFilePath = errors.New("kustomizationFile must be a relative path within the source tree")
 
 	// ErrGitOpsConfigGeneration wraps failures when creating GitOps CR manifests.
 	ErrGitOpsConfigGeneration = errors.New("failed to generate gitops configuration")

@@ -385,15 +385,15 @@ func isFluxPathRoot(p string) bool {
 	return p == "" || p == "." || p == "./"
 }
 
-// isInvalidFluxPath reports whether p should be rejected and coerced to root.
-// p must already be slash-normalized before calling this function.
-func isInvalidFluxPath(p string) bool {
+// isInvalidFluxPath reports whether slashPath should be rejected and coerced to root.
+// slashPath must already be slash-normalized before calling this function.
+func isInvalidFluxPath(slashPath string) bool {
 	// Windows drive-letter paths (e.g. "C:/...") after separator normalization.
-	if len(p) >= 2 && p[1] == ':' {
+	if len(slashPath) >= 2 && slashPath[1] == ':' {
 		return true
 	}
 
-	return path.IsAbs(p) || p == ".." || strings.HasPrefix(p, "../")
+	return path.IsAbs(slashPath) || slashPath == ".." || strings.HasPrefix(slashPath, "../")
 }
 
 // newFluxResourcesClient creates a client for FluxInstance and OCIRepository resources.
