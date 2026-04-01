@@ -240,7 +240,7 @@ To decide which phase to perform:
       - Search for recent Benchmark Regression workflow failures: `gh run list --workflow=benchmark-regression.yaml --status=failure --limit=5`
       - If failures exist, download the logs and look for regressed benchmarks (lines with `+XX%` in the benchstat output)
       - Prioritize packages with detected benchmark regressions as optimization targets
-      - Run benchmarks locally before changes to establish a baseline: `go test -bench=. -benchmem -count=3 ./path/to/package/`
+      - Run benchmarks locally before changes to establish a baseline: `go test -bench=. -benchmem -count=5 ./path/to/package/`
 
    c. Work towards the performance goal. Consider approaches like:
    - Code optimization: algorithm improvements, data structure changes, caching
@@ -251,10 +251,10 @@ To decide which phase to perform:
    **Measurement strategy:**
    Plan before/after measurements using appropriate methods — synthetic benchmarks for algorithms, user journey tests for UX, load tests for scalability, or build time comparisons for developer experience.
 
-   c. Ensure the code still works and relevant tests pass. Add new tests if appropriate.
+   d. Ensure the code still works and relevant tests pass. Add new tests if appropriate.
 
-   d. Measure performance impact. Run benchmarks after changes and compare:
-      `go test -bench=. -benchmem -count=3 ./path/to/package/`
+   e. Measure performance impact. Run benchmarks after changes and compare:
+      `go test -bench=. -benchmem -count=5 ./path/to/package/`
       Include before/after benchmark results in the PR description. Document measurement attempts even if unsuccessful.
 
    **If working on TEST COVERAGE (branch prefix: `test/`):**
