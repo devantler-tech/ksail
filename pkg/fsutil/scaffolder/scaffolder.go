@@ -502,6 +502,7 @@ func validateKustomizationPath(rawPath string) (string, error) {
 	return cleanPath, nil
 }
 
+// jscpd:ignore-start
 // isWindowsDriveLetter reports whether slashPath begins with a Windows drive-letter prefix
 // (a letter A-Z or a-z followed by ':' and then '/' or end of string).
 // slashPath must already be slash-normalized before calling this function.
@@ -514,8 +515,10 @@ func isWindowsDriveLetter(slashPath string) bool {
 
 	return ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')) &&
 		slashPath[1] == ':' &&
-		(len(slashPath) == 2 || slashPath[2] == '/')
+		(len(slashPath) == 2 || slashPath[2] == '/') //nolint:mnd // drive letter "X:" is 2 chars
 }
+
+// jscpd:ignore-end
 
 // getKustomizationResources returns the resources to include in the kustomization.
 // GitOps resources (FluxInstance, ArgoCD Application) are created server-side via Kubernetes API,
