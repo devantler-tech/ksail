@@ -412,13 +412,24 @@ func (s *Scaffolder) generateGitOpsConfig(_ string, _ bool) error {
 // When kustomizationFile is set to a subdirectory, the kustomization.yaml is generated
 // at that subdirectory rather than at the root of the source directory.
 func (s *Scaffolder) generateKustomizationConfig(output string, force bool) error {
-	kustomizationPath := strings.TrimSpace(s.KSailConfig.Spec.Workload.KustomizationFile)
+	rawKustomizationPath := strings.TrimSpace(s.KSailConfig.Spec.Workload.KustomizationFile)
 
 	var kustomizationDir string
-	if kustomizationPath == "" || kustomizationPath == "." || kustomizationPath == "./" {
+	switch rawKustomizationPath {
+	case "", ".", "./":
 		kustomizationDir = s.KSailConfig.Spec.Workload.SourceDirectory
-	} else {
-		kustomizationDir = filepath.Join(s.KSailConfig.Spec.Workload.SourceDirectory, kustomizationPath)
+	default:
+		cleanPath := filepath.Clean(rawKustomizationPath)
+
+		if filepath.IsAbs(cleanPath) {
+			return fmt.Errorf("invalid kustomizationFile %q: must be a relative path", rawKustomizationPath)
+		}
+
+		if cleanPath == ".." || strings.HasPrefix(cleanPath, ".."+string(os.PathSeparator)) {
+			return fmt.Errorf("invalid kustomizationFile %q: must not contain parent directory traversal", rawKustomizationPath)
+		}
+
+		kustomizationDir = filepath.Join(s.KSailConfig.Spec.Workload.SourceDirectory, cleanPath)
 	}
 
 	kustomization := ktypes.Kustomization{}

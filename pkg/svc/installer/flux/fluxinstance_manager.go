@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"path/filepath"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -359,24 +359,32 @@ func buildLocalRegistryURL(
 }
 
 func normalizeFluxPath(kustomizationFile string) string {
-	trimmed := strings.TrimSpace(kustomizationFile)
+	// Normalize all separators to forward slash first: Flux paths are always slash-based
+	// and filepath functions are OS-dependent, so we validate using slash semantics.
+	trimmed := strings.TrimSpace(strings.ReplaceAll(kustomizationFile, `\`, "/"))
+
 	if trimmed == "" || trimmed == "." || trimmed == "./" {
 		return "./"
 	}
 
-	// Reject absolute paths (including Windows drive paths) by coercing to root.
-	if filepath.IsAbs(trimmed) {
+	// Reject Windows drive-letter paths (e.g. "C:/...") after separator normalization.
+	if len(trimmed) >= 2 && trimmed[1] == ':' {
 		return "./"
 	}
 
-	p := filepath.ToSlash(filepath.Clean(trimmed))
+	// Reject slash-absolute paths.
+	if path.IsAbs(trimmed) {
+		return "./"
+	}
+
+	p := path.Clean(trimmed)
 
 	// After cleaning, "." still means root.
 	if p == "." {
 		return "./"
 	}
 
-	// Block parent traversal that could escape the artifact root by coercing to root.
+	// Block parent traversal that could escape the artifact root.
 	if p == ".." || strings.HasPrefix(p, "../") {
 		return "./"
 	}
