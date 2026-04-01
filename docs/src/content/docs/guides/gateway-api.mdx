@@ -96,7 +96,7 @@ The Gateway API request path is: **`GatewayClass` → `Gateway` → `HTTPRoute` 
    ```
 
    > [!NOTE]
-   > On Docker-based clusters (Vanilla, K3s, VCluster), the Gateway uses `hostNetwork` mode — no external IP is assigned. Traffic reaches the Gateway through the cluster node's host port. For Hetzner and Omni cloud providers, the Gateway receives a real external IP.
+   > On Docker-based clusters (Vanilla, K3s, VCluster) **without an external LoadBalancer** (such as MetalLB), KSail configures Cilium's Gateway API integration to use `hostNetwork` mode — the Gateway does not get its own external IP and traffic reaches it via the node's host ports. When you enable an external LoadBalancer, `hostNetwork` is not applied and Gateways may receive an IP via a `Service`. For Hetzner and Omni cloud providers, the Gateway receives a real external IP.
 
 3. **Create an HTTPRoute**
 
@@ -129,21 +129,14 @@ The Gateway API request path is: **`GatewayClass` → `Gateway` → `HTTPRoute` 
 
 4. **Test the route**
 
-   For local Docker clusters, port-forward the Gateway's Envoy listener to test:
+   For local Docker clusters, port-forward the Cilium Gateway Service to test:
 
    ```bash
-   # Find the Cilium Envoy pod or Gateway service
-   kubectl port-forward svc/httpbin 8080:80 &
+   # Port-forward the Cilium Envoy listener Service created for the Gateway
+   kubectl -n kube-system port-forward svc/cilium-gateway-my-gateway 8080:80 &
 
+   # Send a request that matches the HTTPRoute hostname
    curl -H "Host: httpbin.local" http://localhost:8080/get
-   ```
-
-   Alternatively, add a `/etc/hosts` entry and send traffic directly (when the gateway exposes a node port):
-
-   ```bash
-   # Discover the node port (Docker clusters only)
-   kubectl get svc -n kube-system | grep -i cilium-gateway
-   curl -H "Host: httpbin.local" http://localhost:<node-port>/get
    ```
 
 </Steps>
@@ -243,7 +236,7 @@ spec:
 ```
 
 > [!TIP]
-> Use [cert-manager](https://cert-manager.io/) to automatically provision TLS certificates. Install it with `ksail workload install cert-manager --repo https://charts.jetstack.io --chart cert-manager --version v1.x` and configure an `Issuer` or `ClusterIssuer` to populate the secret automatically.
+> Use [cert-manager](https://cert-manager.io/) to automatically provision TLS certificates. Install it with `ksail workload install cert-manager jetstack/cert-manager` and configure an `Issuer` or `ClusterIssuer` to populate the secret automatically.
 
 ## Migration from Ingress
 
@@ -351,7 +344,7 @@ kubectl get pods -n kube-system -l k8s-app=cilium
 kubectl describe gateway my-gateway
 ```
 
-Check for port conflicts or missing CRDs. On Docker clusters, confirm Cilium is running with `gatewayAPI.hostNetwork.enabled: true` (KSail sets this automatically for Docker providers).
+Check for port conflicts or missing CRDs. On Docker clusters without an external LoadBalancer, confirm Cilium is running with `gatewayAPI.hostNetwork.enabled: true` (KSail sets this automatically for Docker providers when no LoadBalancer is configured).
 
 **HTTPRoute not routing traffic:**
 
