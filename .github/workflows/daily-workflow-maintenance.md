@@ -50,6 +50,7 @@ safe-outputs:
       - ".github/aw/actions-lock.json"
       - ".github/workflows/*.lock.yml"
       - ".github/workflows/*.yaml"
+      - ".github/workflows/*.yml"
       - ".github/agents/*.agent.md"
   create-issue:
 
