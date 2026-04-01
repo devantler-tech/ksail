@@ -33,7 +33,7 @@ tools:
   web-fetch:
   bash: true
 
-timeout-minutes: 15
+timeout-minutes: 20
 ---
 
 # Weekly Roadmap
@@ -53,19 +53,19 @@ Before any external research, deeply understand KSail's current state:
    - Its architecture (provider/provisioner model, embedded tools, GitOps support)
    - Its target audience and value proposition
 
-2. Read **all open issues** and categorize them by theme (e.g., distribution support, UX improvements, documentation gaps, provider features, GitOps, CI/CD). For each theme, note:
+2. Read open issues, prioritizing the **50 most recently updated** ones. Categorize them by theme (e.g., distribution support, UX improvements, documentation gaps, provider features, GitOps, CI/CD). For each theme, note:
    - The number and severity of issues
    - Known gaps and feature requests from users
    - Bugs and pain points
    - What's already planned or in progress
    - Any issue that has significant community engagement (reactions, comments)
 
-3. Read **all open discussions** across all categories (not just previous roadmap discussions). Look for:
+3. Read **open community-facing discussions** in categories like Ideas, General, and Q&A, prioritizing the **30 most recently updated** ones. **Explicitly exclude internal/automation categories such as `"agentic-workflows"`** (including this workflow's own discussion). Look for:
    - Feature requests and ideas proposed in discussions
    - Questions that reveal common pain points or confusion
    - Community feedback on existing features
    - Suggestions and proposals from contributors
-   - Any discussion with significant engagement (upvotes, replies)
+   - Any discussion with significant engagement (upvotes, replies) from community members (not bots or automation)
 
 4. Read recent merged PRs (last 2 weeks) to understand:
    - Current development momentum and direction
