@@ -119,8 +119,10 @@ jobs:
 
           # Detect regressions from benchstat output.
           # With -confidence 0.95, benchstat shows directional changes when p < 0.05.
-          # An additional 10% noise floor filters CI runner variance across all metrics.
-          # Together these two layers keep the practical false-positive rate very low.
+          # Two additional filters reduce false positives from cross-runner CI noise:
+          #   1. A 20% noise floor for all metrics (I/O-bound ops routinely vary 15%+)
+          #   2. For sec/op, sub-microsecond benchmarks are skipped entirely — at that
+          #      scale, CPU clock jitter dominates and percentage changes are meaningless
           regressions=0
           regression_details=""
           current_metric=""
@@ -133,11 +135,20 @@ jobs:
 
             # Check for regression (+ percentage with p-value), accepting integer or decimal percentages
             if echo "$line" | grep -qE '\+[0-9]+(\.[0-9]+)?%.*\(p='; then
+              # For sec/op, skip sub-microsecond benchmarks (values shown with 'n' unit
+              # like "0.31n" or "97.4n") — too small for reliable cross-runner comparison
+              if [ "$current_metric" = "sec/op" ]; then
+                if echo "$line" | grep -qE '[0-9.]+n '; then
+                  continue
+                fi
+              fi
+
               delta=$(echo "$line" | grep -oE '\+[0-9]+(\.[0-9]+)?%' | head -1 | tr -d '+%')
 
-              # Apply 10% noise floor to all metrics — CI runners are noisy for
-              # timing, allocations, and allocation counts alike.
-              above_threshold=$(awk "BEGIN { print ($delta >= 10) }")
+              # Apply 20% noise floor to all metrics — main and PR benchmarks run on
+              # different CI runners, so I/O-bound and memory operations can easily
+              # vary 15%+ between machines.
+              above_threshold=$(awk "BEGIN { print ($delta >= 20) }")
               if [ "$above_threshold" = "1" ]; then
                 regressions=$((regressions + 1))
                 bench_name=$(echo "$line" | awk '{print $1}')

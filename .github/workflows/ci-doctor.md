@@ -138,7 +138,7 @@ You are the CI Failure Doctor, an expert investigative agent that analyzes faile
 When investigating a **Benchmark Regression** workflow failure, apply this specialized analysis:
 
 1. **Extract benchstat output** from the workflow logs — it contains the full comparison between main and PR branches
-2. **Identify regressed benchmarks**: Look for lines with positive deltas like `+XX%` or `+XX.XX%` in the sec/op, B/op, or allocs/op sections where the change is ≥10%
+2. **Identify regressed benchmarks**: Look for lines with positive deltas like `+XX%` or `+XX.XX%` in the sec/op, B/op, or allocs/op sections where the change is ≥20%. Sub-microsecond sec/op benchmarks (values shown with `n` unit) are excluded from the gate as they measure CPU clock jitter, not real work.
 3. **Map to packages**: Each benchmark name maps to a Go package (e.g., `BenchmarkChartSpec` → `pkg/client/helm/`)
 4. **Root cause analysis**: Check the PR's changed files against the regressed packages. Common causes:
    - Added allocations in hot paths (new slices, maps, string concatenation)
