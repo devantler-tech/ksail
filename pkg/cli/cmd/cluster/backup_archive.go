@@ -72,11 +72,24 @@ func createTarball(
 		return errors.Join(fmt.Errorf("failed to walk source directory: %w", err), closeErr)
 	}
 
-	err = tarWriter.Close()
+	return commitTarball(tarWriter, gzipWriter, outFile, tmpPath, targetPath)
+}
+
+// commitTarball flushes and closes the writers, then atomically renames the
+// temp file to targetPath. It is extracted from createTarball to keep that
+// function within the project's line-length limit.
+func commitTarball(
+	tarWriter *tar.Writer,
+	gzipWriter *gzip.Writer,
+	outFile *os.File,
+	tmpPath, targetPath string,
+) error {
+	err := tarWriter.Close()
 	if err != nil {
 		_ = gzipWriter.Close()
 		_ = outFile.Close()
 		_ = os.Remove(tmpPath)
+
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
@@ -84,12 +97,14 @@ func createTarball(
 	if err != nil {
 		_ = outFile.Close()
 		_ = os.Remove(tmpPath)
+
 		return fmt.Errorf("failed to close gzip writer: %w", err)
 	}
 
 	err = outFile.Close()
 	if err != nil {
 		_ = os.Remove(tmpPath)
+
 		return fmt.Errorf("failed to close output file: %w", err)
 	}
 
@@ -100,6 +115,7 @@ func createTarball(
 	err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
 	if err != nil {
 		_ = os.Remove(tmpPath)
+
 		return fmt.Errorf("failed to finalize archive: %w", err)
 	}
 

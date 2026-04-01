@@ -747,35 +747,41 @@ func TestCreateTarball_SkipsSymlinks(t *testing.T) {
 	srcDir := t.TempDir()
 
 	realFile := filepath.Join(srcDir, "real.txt")
-	if err := os.WriteFile(realFile, []byte("data"), cluster.ExportFilePerm); err != nil {
+
+	err := os.WriteFile(realFile, []byte("data"), cluster.ExportFilePerm)
+	if err != nil {
 		t.Fatalf("setup real file: %v", err)
 	}
 
 	linkPath := filepath.Join(srcDir, "link.txt")
-	if err := os.Symlink(realFile, linkPath); err != nil {
+
+	err = os.Symlink(realFile, linkPath)
+	if err != nil {
 		// Symlinks may be unsupported on this platform/OS configuration.
 		t.Skipf("skipping: os.Symlink not supported: %v", err)
 	}
 
 	outputPath := filepath.Join(t.TempDir(), "backup.tar.gz")
-	if err := cluster.ExportCreateTarball(srcDir, outputPath, -1); err != nil {
+
+	err = cluster.ExportCreateTarball(srcDir, outputPath, -1)
+	if err != nil {
 		t.Fatalf("createTarball: %v", err)
 	}
 
 	// Read back the archive and verify no symlink entry is present.
-	f, err := os.Open(outputPath)
+	f, err := os.Open(outputPath) //nolint:gosec // G304: test-generated path in t.TempDir()
 	if err != nil {
 		t.Fatalf("open archive: %v", err)
 	}
 	defer func() { _ = f.Close() }()
 
-	gz, err := gzip.NewReader(f)
+	gzReader, err := gzip.NewReader(f)
 	if err != nil {
 		t.Fatalf("gzip.NewReader: %v", err)
 	}
-	defer func() { _ = gz.Close() }()
+	defer func() { _ = gzReader.Close() }()
 
-	tr := tar.NewReader(gz)
+	tr := tar.NewReader(gzReader)
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
