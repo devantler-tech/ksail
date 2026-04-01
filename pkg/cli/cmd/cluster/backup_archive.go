@@ -108,11 +108,17 @@ func commitTarball(
 		return fmt.Errorf("failed to close output file: %w", err)
 	}
 
-	// Remove targetPath first so os.Rename works on Windows when the target
-	// already exists (on Unix, Rename atomically replaces the destination).
-	_ = os.Remove(targetPath) //nolint:errcheck // best-effort; Rename will report any real error
-
+	// Try an atomic rename first; on Unix this replaces the destination in one
+	// operation, so the previous archive survives if Rename fails.
+	// On Windows Rename fails when targetPath already exists, so we remove it
+	// and retry — only touching the existing file after the first attempt fails.
 	err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
+	if err != nil {
+		_ = os.Remove(targetPath)
+
+		err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
+	}
+
 	if err != nil {
 		_ = os.Remove(tmpPath)
 
