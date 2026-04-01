@@ -414,6 +414,41 @@ func TestNormalizeFluxPath(t *testing.T) {
 			expected:          "./",
 		},
 		{
+			name:              "dot returns root",
+			kustomizationFile: ".",
+			expected:          "./",
+		},
+		{
+			name:              "dot-slash returns root",
+			kustomizationFile: "./",
+			expected:          "./",
+		},
+		{
+			name:              "absolute path coerced to root",
+			kustomizationFile: "/clusters/local",
+			expected:          "./",
+		},
+		{
+			name:              "parent traversal coerced to root",
+			kustomizationFile: "../escape",
+			expected:          "./",
+		},
+		{
+			name:              "double-dot coerced to root",
+			kustomizationFile: "..",
+			expected:          "./",
+		},
+		{
+			name:              "whitespace-only treated as root",
+			kustomizationFile: "   ",
+			expected:          "./",
+		},
+		{
+			name:              "path with surrounding whitespace trimmed",
+			kustomizationFile: "  clusters/local  ",
+			expected:          "./clusters/local",
+		},
+		{
 			name:              "subdirectory path",
 			kustomizationFile: "clusters/local",
 			expected:          "./clusters/local",

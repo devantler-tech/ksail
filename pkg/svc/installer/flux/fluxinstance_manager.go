@@ -359,13 +359,32 @@ func buildLocalRegistryURL(
 }
 
 func normalizeFluxPath(kustomizationFile string) string {
-	if kustomizationFile == "" {
+	trimmed := strings.TrimSpace(kustomizationFile)
+	if trimmed == "" || trimmed == "." || trimmed == "./" {
 		return "./"
 	}
-	p := filepath.ToSlash(filepath.Clean(kustomizationFile))
+
+	// Reject absolute paths (including Windows drive paths) by coercing to root.
+	if filepath.IsAbs(trimmed) {
+		return "./"
+	}
+
+	p := filepath.ToSlash(filepath.Clean(trimmed))
+
+	// After cleaning, "." still means root.
+	if p == "." {
+		return "./"
+	}
+
+	// Block parent traversal that could escape the artifact root by coercing to root.
+	if p == ".." || strings.HasPrefix(p, "../") {
+		return "./"
+	}
+
 	if !strings.HasPrefix(p, "./") {
 		p = "./" + p
 	}
+
 	return p
 }
 

@@ -410,8 +410,10 @@ func (s *Scaffolder) generateGitOpsConfig(_ string, _ bool) error {
 
 // generateKustomizationConfig generates the kustomization.yaml file.
 func (s *Scaffolder) generateKustomizationConfig(output string, force bool) error {
-	// Skip root kustomization generation when kustomizationFile points Flux to a subdirectory
-	if s.KSailConfig.Spec.Workload.KustomizationFile != "" {
+	// Skip root kustomization generation when kustomizationFile points Flux to a subdirectory.
+	// Treat "." and "./" as equivalent to root (do not skip generation in those cases).
+	kustomizationPath := strings.TrimSpace(s.KSailConfig.Spec.Workload.KustomizationFile)
+	if kustomizationPath != "" && kustomizationPath != "." && kustomizationPath != "./" {
 		return nil
 	}
 

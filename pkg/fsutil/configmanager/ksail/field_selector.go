@@ -41,11 +41,12 @@ func StandardSourceDirectoryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
-// StandardKustomizationFileFieldSelector creates a standard field selector for kustomization file path.
+// StandardKustomizationFileFieldSelector creates a standard field selector for the kustomization path
+// within the source directory (directory used as the kustomize entry point).
 func StandardKustomizationFileFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Workload.KustomizationFile },
-		Description:  "Path to the root kustomization relative to source directory (e.g., clusters/local)",
+		Description:  "Relative directory within sourceDirectory used as the kustomize entry point (e.g., clusters/local)",
 		DefaultValue: "",
 	}
 }
