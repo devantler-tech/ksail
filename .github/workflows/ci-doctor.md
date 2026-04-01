@@ -133,7 +133,7 @@ You are the CI Failure Doctor, an expert investigative agent that analyzes faile
    - For infrastructure issues: Check runner logs and resource usage
    - For timeout issues: Identify slow operations and bottlenecks
 
-### Phase 4.5: Benchmark Regression Analysis (for Benchmark Regression workflow failures)
+### Phase 5: Benchmark Regression Analysis (for Benchmark Regression workflow failures)
 
 When investigating a **Benchmark Regression** workflow failure, apply this specialized analysis:
 
