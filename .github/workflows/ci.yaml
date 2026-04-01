@@ -541,7 +541,7 @@ jobs:
             provider: Omni
             init: false
             args: "--name system-test-cluster-without-scaffolding"
-    continue-on-error: ${{ matrix.provider == 'Hetzner' }}
+    continue-on-error: ${{ matrix.provider == 'Hetzner' || matrix.provider == 'Omni' }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -583,7 +583,7 @@ jobs:
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           hcloud-token: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }}
           omni-service-account-key: ${{ matrix.provider == 'Omni' && secrets.OMNI_SERVICE_ACCOUNT_KEY || '' }}
-          omni-endpoint: ${{ matrix.provider == 'Omni' && secrets.OMNI_ENDPOINT || '' }}
+          omni-endpoint: ${{ matrix.provider == 'Omni' && vars.OMNI_ENDPOINT || '' }}
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
 
