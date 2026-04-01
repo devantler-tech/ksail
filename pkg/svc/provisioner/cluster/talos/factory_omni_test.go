@@ -60,13 +60,10 @@ func TestCreateOmniProvider_EndpointResolution(t *testing.T) {
 			t.Setenv("OMNI_ENDPOINT", "")
 			t.Setenv("OMNI_SERVICE_ACCOUNT_KEY", "")
 			t.Setenv("CUSTOM_OMNI_EP", "")
-
 			for k, v := range testCase.envVars {
 				t.Setenv(k, v)
 			}
-
 			err := talosprovisioner.CreateOmniProviderForTest(testCase.opts)
-
 			if testCase.wantErr != nil {
 				require.ErrorIs(t, err, testCase.wantErr)
 			} else if err != nil {

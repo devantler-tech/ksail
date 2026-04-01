@@ -279,7 +279,6 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
         CONFIG: ${{ inputs.config }}
       run: |
         # shellcheck disable=SC2086
