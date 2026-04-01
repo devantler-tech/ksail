@@ -2,7 +2,9 @@ package cluster_test
 
 import (
 	"archive/tar"
+	"compress/gzip"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -735,6 +737,55 @@ func TestCreateTarball_NoTempFileLeftOnSourceDirError(t *testing.T) {
 	for _, e := range entries {
 		if strings.Contains(e.Name(), ".tmp") {
 			t.Errorf("temp file left behind: %s", e.Name())
+		}
+	}
+}
+
+func TestCreateTarball_SkipsSymlinks(t *testing.T) {
+	t.Parallel()
+
+	srcDir := t.TempDir()
+
+	realFile := filepath.Join(srcDir, "real.txt")
+	if err := os.WriteFile(realFile, []byte("data"), cluster.ExportFilePerm); err != nil {
+		t.Fatalf("setup real file: %v", err)
+	}
+
+	linkPath := filepath.Join(srcDir, "link.txt")
+	if err := os.Symlink(realFile, linkPath); err != nil {
+		// Symlinks may be unsupported on this platform/OS configuration.
+		t.Skipf("skipping: os.Symlink not supported: %v", err)
+	}
+
+	outputPath := filepath.Join(t.TempDir(), "backup.tar.gz")
+	if err := cluster.ExportCreateTarball(srcDir, outputPath, -1); err != nil {
+		t.Fatalf("createTarball: %v", err)
+	}
+
+	// Read back the archive and verify no symlink entry is present.
+	f, err := os.Open(outputPath)
+	if err != nil {
+		t.Fatalf("open archive: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatalf("gzip.NewReader: %v", err)
+	}
+	defer func() { _ = gz.Close() }()
+
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("tar.Next: %v", err)
+		}
+		if hdr.Name == "link.txt" {
+			t.Errorf("symlink entry %q must not appear in the archive", hdr.Name)
 		}
 	}
 }
