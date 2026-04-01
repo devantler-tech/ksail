@@ -393,9 +393,9 @@ func TestAllLinesContain_EdgeCases(t *testing.T) {
 
 // TestPrintRestoreHeader verifies that printRestoreHeader writes the expected
 // lines including the input path, policy, and (when dry-run) the dry-run note.
-func TestPrintRestoreHeader(
+func TestPrintRestoreHeader( //nolint:funlen // Table-driven test with multiple comprehensive cases
 	t *testing.T,
-) { //nolint:funlen // Table-driven test with multiple comprehensive cases
+) {
 	t.Parallel()
 
 	tests := []struct {
@@ -468,9 +468,9 @@ func TestPrintRestoreHeader(
 
 // TestPrintRestoreMetadata verifies that printRestoreMetadata correctly outputs
 // all metadata fields, including optional Distribution and Provider.
-func TestPrintRestoreMetadata(
+func TestPrintRestoreMetadata( //nolint:funlen // Table-driven test with multiple comprehensive cases
 	t *testing.T,
-) { //nolint:funlen // Table-driven test with multiple comprehensive cases
+) {
 	t.Parallel()
 
 	tests := []struct {
@@ -545,9 +545,9 @@ func TestPrintRestoreMetadata(
 }
 
 // TestReadBackupMetadata verifies error paths and happy path of readBackupMetadata.
-func TestReadBackupMetadata(
+func TestReadBackupMetadata( //nolint:funlen // Covers multiple distinct error and success paths
 	t *testing.T,
-) { //nolint:funlen // Covers multiple distinct error and success paths
+) {
 	t.Parallel()
 
 	t.Run("returns error when metadata file is missing", func(t *testing.T) {
