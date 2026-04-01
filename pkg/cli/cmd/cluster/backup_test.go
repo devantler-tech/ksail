@@ -722,8 +722,12 @@ func TestCreateTarball_NoTempFileLeftOnSourceDirError(t *testing.T) {
 	outputDir := t.TempDir()
 	outputPath := filepath.Join(outputDir, "backup.tar.gz")
 
-	// Use a non-existent source directory to force a Walk error.
-	err := cluster.ExportCreateTarball("/nonexistent-source-dir-xyz", outputPath, -1)
+	// Use a guaranteed-nonexistent directory under t.TempDir() so the test is
+	// deterministic across all environments (avoids /nonexistent-... paths that
+	// could theoretically exist on some systems).
+	nonexistentDir := filepath.Join(t.TempDir(), "does-not-exist")
+
+	err := cluster.ExportCreateTarball(nonexistentDir, outputPath, -1)
 	if err == nil {
 		t.Fatal("expected error for non-existent source dir, got nil")
 	}
