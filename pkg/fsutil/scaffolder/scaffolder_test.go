@@ -1542,7 +1542,11 @@ func TestResolveKustomizationDir_ValidPaths(t *testing.T) {
 		{name: "empty uses source directory root", kustomizationFile: "", expectedSubdir: ""},
 		{name: "dot uses source directory root", kustomizationFile: ".", expectedSubdir: ""},
 		{name: "dot-slash uses source directory root", kustomizationFile: "./", expectedSubdir: ""},
-		{name: "valid subdir", kustomizationFile: "clusters/local", expectedSubdir: "clusters/local"},
+		{
+			name:              "valid subdir",
+			kustomizationFile: "clusters/local",
+			expectedSubdir:    "clusters/local",
+		},
 	}
 
 	for _, testCase := range tests {

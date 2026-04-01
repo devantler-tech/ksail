@@ -484,11 +484,19 @@ func validateKustomizationPath(rawPath string) (string, error) {
 	}
 
 	if isWindowsDriveLetter(cleanPath) {
-		return "", fmt.Errorf("%w: %q contains a Windows drive letter", ErrInvalidKustomizationFilePath, rawPath) //nolint:lll
+		return "", fmt.Errorf(
+			"%w: %q contains a Windows drive letter",
+			ErrInvalidKustomizationFilePath,
+			rawPath,
+		)
 	}
 
 	if cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {
-		return "", fmt.Errorf("%w: %q traverses parent directories", ErrInvalidKustomizationFilePath, rawPath)
+		return "", fmt.Errorf(
+			"%w: %q traverses parent directories",
+			ErrInvalidKustomizationFilePath,
+			rawPath,
+		)
 	}
 
 	return cleanPath, nil
@@ -506,7 +514,7 @@ func isWindowsDriveLetter(slashPath string) bool {
 
 	return ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')) &&
 		slashPath[1] == ':' &&
-		(len(slashPath) == 2 || slashPath[2] == '/') //nolint:mnd // drive letter "X:" is 2 chars
+		(len(slashPath) == 2 || slashPath[2] == '/')
 }
 
 // getKustomizationResources returns the resources to include in the kustomization.
