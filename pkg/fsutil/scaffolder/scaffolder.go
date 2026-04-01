@@ -515,7 +515,7 @@ func isWindowsDriveLetter(slashPath string) bool {
 
 	return ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')) &&
 		slashPath[1] == ':' &&
-		(len(slashPath) == 2 || slashPath[2] == '/') //nolint:mnd // drive letter "X:" is 2 chars
+		(len(slashPath) == 2 || slashPath[2] == '/')
 }
 
 // jscpd:ignore-end
