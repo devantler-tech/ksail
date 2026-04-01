@@ -769,13 +769,13 @@ func TestCreateTarball_SkipsSymlinks(t *testing.T) {
 	}
 
 	// Read back the archive and verify no symlink entry is present.
-	f, err := os.Open(outputPath) //nolint:gosec // G304: test-generated path in t.TempDir()
+	archiveFile, err := os.Open(outputPath) //nolint:gosec // G304: test-generated path in t.TempDir()
 	if err != nil {
 		t.Fatalf("open archive: %v", err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = archiveFile.Close() }()
 
-	gzReader, err := gzip.NewReader(f)
+	gzReader, err := gzip.NewReader(archiveFile)
 	if err != nil {
 		t.Fatalf("gzip.NewReader: %v", err)
 	}
