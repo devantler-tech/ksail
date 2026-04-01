@@ -111,14 +111,17 @@ func commitTarball(
 
 	// Try an atomic rename first; on Unix this replaces the destination in one
 	// operation, so the previous archive survives if Rename fails.
-	// On Windows Rename fails when targetPath already exists, so we detect that
-	// specific error, remove the destination, and retry — never removing the
-	// existing file when the failure has a different cause.
+	// On Windows, Rename can fail with a permission/access error when the
+	// destination already exists. Fall back to remove-and-retry only when the
+	// target actually exists (os.Stat succeeds) so unrelated failures never
+	// destroy a valid backup.
 	err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
-	if err != nil && os.IsExist(err) {
-		_ = os.Remove(targetPath)
+	if err != nil {
+		if _, statErr := os.Stat(targetPath); statErr == nil {
+			_ = os.Remove(targetPath)
 
-		err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
+			err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
+		}
 	}
 
 	if err != nil {

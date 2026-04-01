@@ -59,7 +59,9 @@ func sanitizeList(list *unstructured.Unstructured) (string, error) {
 	const estimatedBytesPerItem = 256
 	builder.Grow(len(items) * estimatedBytesPerItem)
 
-	for idx, item := range items {
+	wroteAny := false
+
+	for _, item := range items {
 		itemMap, ok := item.(map[string]any)
 		if !ok {
 			continue // Skip malformed items that aren't maps
@@ -73,11 +75,13 @@ func sanitizeList(list *unstructured.Unstructured) (string, error) {
 			continue // Skip items that can't be marshaled
 		}
 
-		if idx > 0 {
+		if wroteAny {
 			builder.WriteString("---\n")
 		}
 
 		builder.Write(data)
+
+		wroteAny = true
 	}
 
 	return builder.String(), nil
