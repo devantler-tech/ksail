@@ -60,12 +60,12 @@ Before any external research, deeply understand KSail's current state:
    - What's already planned or in progress
    - Any issue that has significant community engagement (reactions, comments)
 
-3. Read **open community-facing discussions** in categories like Ideas, General, and Q&A, prioritizing the **30 most recently updated** ones. **Explicitly exclude internal/automation categories such as `agentic-workflows`** (including this workflow's own discussion). Look for:
+3. Read **open discussions** across all categories, prioritizing the **30 most recently updated** ones. Look for:
    - Feature requests and ideas proposed in discussions
    - Questions that reveal common pain points or confusion
    - Community feedback on existing features
    - Suggestions and proposals from contributors
-   - Any discussion with significant engagement (upvotes, replies) from community members (not bots or automation)
+   - Any discussion with significant engagement (upvotes, replies)
 
 4. Read recent merged PRs (last 2 weeks) to understand:
    - Current development momentum and direction
