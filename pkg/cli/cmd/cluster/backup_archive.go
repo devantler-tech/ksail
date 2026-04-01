@@ -117,7 +117,8 @@ func commitTarball(
 	// destroy a valid backup.
 	err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
 	if err != nil {
-		if _, statErr := os.Stat(targetPath); statErr == nil {
+		_, statErr := os.Stat(targetPath)
+		if statErr == nil {
 			_ = os.Remove(targetPath)
 
 			err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
