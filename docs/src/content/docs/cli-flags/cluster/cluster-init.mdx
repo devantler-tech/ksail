@@ -32,7 +32,7 @@ Flags:
       --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider              Infrastructure provider backend (e.g., Docker)
   -s, --source-directory string        Directory containing workloads to deploy (default "k8s")
-      --unknown string                 Path to the root kustomization relative to source directory (e.g., clusters/local)
+      --unknown string                 Relative directory within sourceDirectory used as the kustomize entry point (e.g., clusters/local)
       --workers int32                  Number of worker nodes
 
 Global Flags:
