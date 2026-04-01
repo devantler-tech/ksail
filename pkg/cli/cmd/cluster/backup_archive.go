@@ -10,6 +10,10 @@ import (
 	"path/filepath"
 )
 
+// defaultCompressionLevel uses gzip.DefaultCompression so the constant stays
+// co-located with the gzip import and avoids a magic number in backup.go.
+const defaultCompressionLevel = gzip.DefaultCompression
+
 func writeMetadata(metadata *BackupMetadata, path string) error {
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {

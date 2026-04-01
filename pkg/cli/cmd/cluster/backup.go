@@ -29,9 +29,6 @@ const (
 	filePerm = 0o600
 	// bytesPerMB is the number of bytes in a megabyte.
 	bytesPerMB = 1024 * 1024
-	// defaultCompressionLevel is gzip.DefaultCompression (-1), which tells
-	// the gzip writer to use its built-in default compression level.
-	defaultCompressionLevel = -1
 	// minCompressionLevel is the minimum gzip compression level.
 	minCompressionLevel = -1
 	// maxCompressionLevel is the maximum gzip compression level.
