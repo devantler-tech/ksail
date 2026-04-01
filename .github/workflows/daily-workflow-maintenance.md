@@ -49,6 +49,10 @@ safe-outputs:
       - ".github/actions/daily-workflow-maintenance/**"
       - ".github/aw/actions-lock.json"
       - ".github/workflows/*.lock.yml"
+      - ".github/workflows/*.md"
+      - ".github/workflows/shared/*.md"
+      - ".github/workflows/*.yaml"
+      - ".github/workflows/*.yml"
       - ".github/agents/*.agent.md"
   create-issue:
 
@@ -97,7 +101,7 @@ Always start with Quick mode. Only proceed to Deep mode if Quick mode produces n
 
 ## Quick Mode: Dependency Updates
 
-Both tasks have already had their CLI commands run as pre-steps. Your job is to review the results, compile workflows, regenerate `.lock.yml` files, reset only `.md` source files, and create a single PR if any changes were detected.
+Both tasks have already had their CLI commands run as pre-steps. Your job is to review the results, compile workflows, regenerate `.lock.yml` files, and create a single PR if any changes were detected.
 
 ### Phase 1: Review Action Version Updates
 
@@ -190,43 +194,24 @@ If there are compilation errors:
 
 If you **cannot fix** compilation errors, skip to "Fallback: Create Issue" below.
 
-### Phase 3: Reset Workflow Source Files and Create Output
+### Phase 3: Review Changes and Create Output
 
-#### 3.1. Save workflow source diffs for PR description
-
-**Before resetting**, capture diffs of any modified `.github/workflows/*.md` or `.github/workflows/shared/*.md` files. These diffs will be included in the PR description so a maintainer can apply them manually after merge:
-
-```bash
-git diff .github/workflows/*.md .github/workflows/shared/*.md 2>/dev/null | tee /tmp/workflow-md-diffs.patch || true
-```
-
-#### 3.2. Reset only `.md` source files under `.github/workflows/`
-
-Reset only the `.md` workflow source files. The compiled `.lock.yml` files should be kept and included in the PR, as they reflect the updated action versions.
-
-```bash
-git checkout -- .github/workflows/*.md
-git checkout -- .github/workflows/shared/*.md 2>/dev/null || true
-```
-
-#### 3.3. Check remaining changes
+#### 3.1. Check remaining changes
 
 ```bash
 git status
 ```
 
-Changes should include `.github/aw/actions-lock.json`, any updated `.lock.yml` files, and other non-source files (e.g., `.github/agents/*.md`).
+Changes should include `.github/aw/actions-lock.json`, any updated `.lock.yml` files, `.md` workflow source files, and other files (e.g., `.github/agents/*.md`).
 
-#### 3.4. Decide what to do
+#### 3.2. Decide what to do
 
 - **If changes exist**: Create a pull request (see below) and exit the workflow
 - **If no changes remain**: Call the `noop` safe output, then proceed to **Deep Mode** below
 
-#### 3.5. Create pull request
+#### 3.3. Create pull request
 
 Use the `create-pull-request` safe-output with title `Update workflows - [date]` and include details of action version updates and gh-aw changes.
-
-If any `.github/workflows/*.md` files were modified but had to be reset, include their diffs in the PR description under a "Workflow File Updates" section so they can be applied manually.
 
 After creating the PR, **exit the workflow** — do not proceed to Deep mode.
 
@@ -382,8 +367,7 @@ To decide which deep-mode phase to perform:
 
 ## Important Guidelines
 
-- **Include `.lock.yml` files in PRs, but reset `.md` source files** — `.lock.yml` compiled files should be committed when they change (e.g., after action version updates). Reset only `.md` source files under `.github/workflows/` and include their diffs in the PR description so they can be applied manually.
+- **Include both `.lock.yml` and `.md` source files in PRs** — both compiled `.lock.yml` files and `.md` workflow source files should be committed when they change (e.g., after action version updates or codemod fixes).
 - The gh-aw CLI extension has already been installed and is available
 - Always check the gh-aw changelog before making manual fixes
 - **You MUST always produce a safe output** — either `noop`, `create_pull_request`, or `create_issue`
-- If only `.md` source files changed (no `.lock.yml` or other files outside `.github/workflows/*.md`), reset them and call `noop`

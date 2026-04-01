@@ -2,10 +2,7 @@ name: Benchmark Regression
 
 on:
   pull_request:
-    paths:
-      - "**/*.go"
-      - "go.mod"
-      - "go.sum"
+  merge_group:
 
 env:
   GOPROXY: "https://proxy.golang.org|direct"
@@ -17,8 +14,34 @@ concurrency:
 permissions: {}
 
 jobs:
+  changes:
+    name: 🔍 Detect Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: 🔍 Filter paths
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        with:
+          filters: |
+            code:
+              - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
+
   benchmark:
     name: 📊 Benchmark (${{ matrix.branch }})
+    needs: [changes]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -65,7 +88,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "$PACKAGES" \
-            | xargs go test -bench=. -benchmem -count=5 -benchtime=1s -run='^$' -timeout=30m \
+            | xargs go test -bench=. -benchmem -count=5 -benchtime=500ms -run='^$' -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
       - name: 📤 Upload results
@@ -77,13 +100,13 @@ jobs:
           retention-days: 1
 
   compare:
-    name: 📊 Compare & Report
-    needs: benchmark
+    name: 📊 Compare & Gate
+    needs: [changes, benchmark]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write
     steps:
       - name: ⚙️ Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -91,185 +114,79 @@ jobs:
           go-version: stable
 
       - name: 📦 Install benchstat
-        run: go install golang.org/x/perf/cmd/benchstat@latest
+        run: go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260312031701-16a31bc5fbd0
 
       - name: 📥 Download results
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: ${{ runner.temp }}/benchmarks
 
-      - name: 📊 Compare benchmarks
+      - name: 📊 Compare and gate on regressions
+        shell: bash
         run: |
+          set -euo pipefail
+
           main_file="${RUNNER_TEMP}/benchmarks/bench-main/bench.txt"
           pr_file="${RUNNER_TEMP}/benchmarks/bench-pr/bench.txt"
-          result_file="${RUNNER_TEMP}/benchstat-result.txt"
 
           if [ ! -f "$main_file" ] || [ ! -f "$pr_file" ]; then
-            echo "No benchmark results to compare (no benchmarks found)." > "$result_file"
+            echo "ℹ️ No benchmark results to compare (no benchmarks found)."
             exit 0
           fi
 
-          benchstat -confidence 0.999 "$main_file" "$pr_file" > "$result_file" 2>&1 || true
+          echo "=== Benchmark Comparison (benchstat, confidence 0.95) ==="
+          echo ""
 
-      - name: 💬 Post benchmark comparison
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        with:
-          script: |
-            const fs = require('fs');
-            const resultFile = process.env.RUNNER_TEMP + '/benchstat-result.txt';
-            const raw = fs.existsSync(resultFile) ? fs.readFileSync(resultFile, 'utf8').trimEnd() : '';
+          result=$(benchstat -confidence 0.95 "$main_file" "$pr_file" 2>&1) || true
+          echo "$result"
+          echo ""
 
-            // Parse benchstat v2 output into regressions, improvements, unchanged
-            const regressions = [];
-            const improvements = [];
-            const unchanged = [];
+          # Detect regressions from benchstat output.
+          # With -confidence 0.95, benchstat shows directional changes when p < 0.05.
+          # Two additional filters reduce false positives from cross-runner CI noise:
+          #   1. A 20% noise floor for all metrics (I/O-bound ops routinely vary 15%+)
+          #   2. For sec/op, sub-microsecond benchmarks are skipped entirely — at that
+          #      scale, CPU clock jitter dominates and percentage changes are meaningless
+          regressions=0
+          regression_details=""
+          current_metric=""
 
-            if (raw && !raw.startsWith('No benchmark results')) {
-              let currentMetric = '';
+          while IFS= read -r line; do
+            # Detect which metric this line refers to (sec/op, B/op, or allocs/op)
+            if echo "$line" | grep -qE '(sec/op|B/op|allocs/op)'; then
+              current_metric=$(echo "$line" | grep -oE '(sec/op|B/op|allocs/op)' | head -1)
+            fi
 
-              for (const line of raw.split('\n')) {
-                const trimmed = line.trim();
-                if (!trimmed) continue;
+            # Check for regression (+ percentage with p-value), accepting integer or decimal percentages
+            if echo "$line" | grep -qE '\+[0-9]+(\.[0-9]+)?%.*\(p='; then
+              # For sec/op, skip sub-microsecond benchmarks (values shown with 'n' unit
+              # like "0.31n" or "97.4n") — too small for reliable cross-runner comparison
+              if [ "$current_metric" = "sec/op" ]; then
+                if echo "$line" | grep -qE '[0-9.]+n '; then
+                  continue
+                fi
+              fi
 
-                // Detect metric from header rows (contain │ and a metric keyword)
-                const metricMatch = trimmed.match(/│\s*(sec\/op|B\/op|allocs\/op)\s/i);
-                if (metricMatch) {
-                  currentMetric = metricMatch[1];
-                  continue;
-                }
+              delta=$(echo "$line" | grep -oE '\+[0-9]+(\.[0-9]+)?%' | head -1 | tr -d '+%')
 
-                // Skip header/separator lines
-                if (trimmed.includes('│')) continue;
-                if (!trimmed.match(/^\S/)) continue;
-                if (trimmed.startsWith('geomean')) continue;
+              # Apply 20% noise floor to all metrics — main and PR benchmarks run on
+              # different CI runners, so I/O-bound and memory operations can easily
+              # vary 15%+ between machines.
+              above_threshold=$(awk "BEGIN { print ($delta >= 20) }")
+              if [ "$above_threshold" = "1" ]; then
+                regressions=$((regressions + 1))
+                bench_name=$(echo "$line" | awk '{print $1}')
+                regression_details="${regression_details}  ${bench_name} (${current_metric}): +${delta}%\n"
+              fi
+            fi
+          done <<< "$result"
 
-                // Extract benchmark name (first token)
-                const nameRaw = trimmed.split(/\s+/)[0] || '';
-                const name = nameRaw
-                  .replace(/^Benchmark/, '')
-                  .replace(/-\d+$/, '');
-                if (!name || !currentMetric) continue;
-
-                // Classify: unchanged (~), regression (+), or improvement (-)
-                const unchangedMatch = trimmed.match(/~\s*\(p=[\d.]+/);
-                const deltaMatch = trimmed.match(/([+-][\d.]+%)\s*\(p=([\d.]+)/);
-
-                if (unchangedMatch) {
-                  unchanged.push({ name, metric: currentMetric });
-                } else if (deltaMatch) {
-                  const delta = deltaMatch[1];
-                  const pValue = parseFloat(deltaMatch[2]);
-                  const absDelta = Math.abs(parseFloat(delta));
-
-                  // Strict filtering: p < 0.001 required for significance.
-                  // For sec/op, also require >= 10% change to filter runner noise.
-                  const isSignificant = pValue < 0.001;
-                  const isAboveNoiseFloor = currentMetric !== 'sec/op' || absDelta >= 10;
-
-                  if (!isSignificant || !isAboveNoiseFloor) {
-                    unchanged.push({ name, metric: currentMetric });
-                  } else if (delta.startsWith('+')) {
-                    regressions.push({ name, metric: currentMetric, delta, pValue: pValue.toFixed(4) });
-                  } else {
-                    improvements.push({ name, metric: currentMetric, delta, pValue: pValue.toFixed(4) });
-                  }
-                } else {
-                  unchanged.push({ name, metric: currentMetric });
-                }
-              }
-            }
-
-            // Build verdict
-            const noData = raw.startsWith('No benchmark results') ||
-              (!regressions.length && !improvements.length && !unchanged.length);
-            let verdict;
-            if (noData) {
-              verdict = 'ℹ️ No benchmarks to compare — no benchmark functions found in changed packages.';
-            } else if (regressions.length > 0) {
-              verdict = `⚠️ **${regressions.length} benchmark${regressions.length > 1 ? 's' : ''} regressed** — review the table below.`;
-            } else if (improvements.length > 0) {
-              verdict = `✅ No regressions detected — ${improvements.length} benchmark${improvements.length > 1 ? 's' : ''} improved.`;
-            } else {
-              verdict = '✅ No regressions detected — all benchmarks are within noise.';
-            }
-
-            // Build tables
-            const tableHeader = '| Benchmark | Metric | Change | p-value |\n|:---|:---|:---|:---|';
-            let sections = '';
-
-            if (regressions.length > 0) {
-              const rows = regressions.map(r =>
-                `| ${r.name} | \`${r.metric}\` | 🔴 ${r.delta} | ${r.pValue} |`
-              ).join('\n');
-              sections += `\n### 🔴 Regressions\n\n${tableHeader}\n${rows}\n`;
-            }
-
-            if (improvements.length > 0) {
-              const rows = improvements.map(r =>
-                `| ${r.name} | \`${r.metric}\` | 🟢 ${r.delta} | ${r.pValue} |`
-              ).join('\n');
-              sections += `\n### 🟢 Improvements\n\n${tableHeader}\n${rows}\n`;
-            }
-
-            if (unchanged.length > 0) {
-              const rows = unchanged.map(r =>
-                `| ${r.name} | \`${r.metric}\` | ~ | — |`
-              ).join('\n');
-              sections += `\n<details>\n<summary>⚪ Unchanged (${unchanged.length})</summary>\n\n${tableHeader}\n${rows}\n\n</details>\n`;
-            }
-
-            // Compose comment
-            const body = [
-              '## 📊 Benchmark Regression Report',
-              '',
-              verdict,
-              sections,
-              '<details>',
-              '<summary>📖 How to interpret</summary>',
-              '',
-              '- **sec/op**: Time per operation (lower is better)',
-              '- **B/op**: Bytes allocated per operation (lower is better)',
-              '- **allocs/op**: Allocations per operation (lower is better)',
-              '- **🔴 Regression**: Statistically significant increase (p < 0.001, and ≥ 10% for sec/op)',
-              '- **🟢 Improvement**: Statistically significant decrease (p < 0.001, and ≥ 10% for sec/op)',
-              '- **⚪ ~ (Unchanged)**: No significant change (p ≥ 0.001 or < 10% for sec/op)',
-              '',
-              '</details>',
-              '',
-              '<details>',
-              '<summary>🔬 Raw benchstat output</summary>',
-              '',
-              '```',
-              raw,
-              '```',
-              '',
-              '</details>',
-              '',
-              `> Generated by the [Benchmark Regression](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) workflow. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details.`,
-            ].join('\n');
-
-            // Upsert comment
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const marker = '## 📊 Benchmark Regression Report';
-            const existing = comments.find(c => c.body.includes(marker));
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
+          if [ "$regressions" -gt 0 ]; then
+            echo ""
+            echo "❌ $regressions benchmark regression(s) detected — failing check."
+            echo -e "$regression_details"
+            echo "Run 'go test -bench=. -benchmem -count=5 ./...' locally to investigate."
+            exit 1
+          else
+            echo "✅ No benchmark regressions detected."
+          fi

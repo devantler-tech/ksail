@@ -3,6 +3,7 @@ package cluster
 import (
 	"archive/tar"
 	"context"
+	"io"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -242,4 +243,30 @@ func ExportIsKindClusterFromNodes(nodes []string, clusterName string) bool {
 // ExportPickCluster exposes pickCluster for unit testing.
 func ExportPickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 	return pickCluster(cmd, deps)
+}
+
+// ExportPrintRestoreHeader exposes printRestoreHeader for testing.
+// Parameters mirror restoreFlags fields so the unexported struct is not needed.
+func ExportPrintRestoreHeader(writer io.Writer, inputPath, policy string, dryRun bool) {
+	flags := &restoreFlags{
+		inputPath:              inputPath,
+		existingResourcePolicy: policy,
+		dryRun:                 dryRun,
+	}
+	printRestoreHeader(writer, flags)
+}
+
+// ExportPrintRestoreMetadata exposes printRestoreMetadata for testing.
+func ExportPrintRestoreMetadata(writer io.Writer, metadata *BackupMetadata) {
+	printRestoreMetadata(writer, metadata)
+}
+
+// ExportReadBackupMetadata exposes readBackupMetadata for testing.
+func ExportReadBackupMetadata(tmpDir string) (*BackupMetadata, error) {
+	return readBackupMetadata(tmpDir)
+}
+
+// ExportBackupResourceTypes exposes backupResourceTypes for testing.
+func ExportBackupResourceTypes() []string {
+	return backupResourceTypes()
 }

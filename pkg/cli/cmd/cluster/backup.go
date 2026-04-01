@@ -1,11 +1,8 @@
 package cluster
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -23,10 +20,8 @@ import (
 	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 	"k8s.io/client-go/tools/clientcmd"
-	sigsyaml "sigs.k8s.io/yaml"
 )
 
 const (
@@ -74,7 +69,7 @@ type backupFlags struct {
 // NewBackupCmd creates the cluster backup command.
 func NewBackupCmd(_ *di.Runtime) *cobra.Command {
 	flags := &backupFlags{
-		compressionLevel: gzip.DefaultCompression,
+		compressionLevel: defaultCompressionLevel,
 	}
 
 	cmd := &cobra.Command{
@@ -119,8 +114,8 @@ Example:
 		"Resource types to exclude from backup",
 	)
 	cmd.Flags().IntVar(
-		&flags.compressionLevel, "compression", gzip.DefaultCompression,
-		"Compression level (0-9, default: -1 (gzip default))",
+		&flags.compressionLevel, "compression", defaultCompressionLevel,
+		"Compression level (-1..9, -1 = gzip default)",
 	)
 
 	cobra.CheckErr(cmd.MarkFlagRequired("output"))
@@ -517,198 +512,6 @@ func runKubectlGet(
 	}
 
 	return outBuf.String(), errBuf.String(), nil
-}
-
-// sanitizeYAMLOutput removes server-assigned metadata fields from kubectl
-// output to produce portable, apply-able manifests. Fields stripped include
-// resourceVersion, uid, selfLink, creationTimestamp, managedFields, and
-// the entire status block.
-func sanitizeYAMLOutput(output string) (string, error) {
-	var obj unstructured.Unstructured
-
-	err := sigsyaml.Unmarshal([]byte(output), &obj.Object)
-	if err != nil {
-		// If we can't parse it, return the original output unchanged.
-		return output, nil //nolint:nilerr // non-parseable output is kept as-is
-	}
-
-	kind := obj.GetKind()
-	if strings.HasSuffix(kind, "List") {
-		return sanitizeList(&obj)
-	}
-
-	sanitizeObject(&obj)
-
-	result, err := sigsyaml.Marshal(obj.Object)
-	if err != nil {
-		return output, nil //nolint:nilerr // marshal failure falls back to original
-	}
-
-	return string(result), nil
-}
-
-func sanitizeList(list *unstructured.Unstructured) (string, error) {
-	items, found, err := unstructured.NestedSlice(
-		list.Object, "items",
-	)
-	if err != nil || !found {
-		// No items found; sanitize the list object itself.
-		sanitizeObject(list)
-
-		result, marshalErr := sigsyaml.Marshal(list.Object)
-		if marshalErr != nil {
-			return "", fmt.Errorf("failed to marshal list: %w", marshalErr)
-		}
-
-		return string(result), nil
-	}
-
-	var builder strings.Builder
-
-	// Pre-allocate capacity: estimate ~256 bytes per item for YAML output
-	// plus separator overhead.
-	const estimatedBytesPerItem = 256
-	builder.Grow(len(items) * estimatedBytesPerItem)
-
-	for idx, item := range items {
-		itemMap, ok := item.(map[string]any)
-		if !ok {
-			continue // Skip malformed items that aren't maps
-		}
-
-		obj := &unstructured.Unstructured{Object: itemMap}
-		sanitizeObject(obj)
-
-		data, marshalErr := sigsyaml.Marshal(obj.Object)
-		if marshalErr != nil {
-			continue // Skip items that can't be marshaled
-		}
-
-		if idx > 0 {
-			builder.WriteString("---\n")
-		}
-
-		builder.Write(data)
-	}
-
-	return builder.String(), nil
-}
-
-func sanitizeObject(obj *unstructured.Unstructured) {
-	// Remove server-assigned metadata fields
-	unstructured.RemoveNestedField(
-		obj.Object, "metadata", "resourceVersion",
-	)
-	unstructured.RemoveNestedField(obj.Object, "metadata", "uid")
-	unstructured.RemoveNestedField(obj.Object, "metadata", "selfLink")
-	unstructured.RemoveNestedField(
-		obj.Object, "metadata", "creationTimestamp",
-	)
-	unstructured.RemoveNestedField(
-		obj.Object, "metadata", "managedFields",
-	)
-	unstructured.RemoveNestedField(
-		obj.Object, "metadata", "generation",
-	)
-
-	// Remove status block
-	unstructured.RemoveNestedField(obj.Object, "status")
-}
-
-func writeMetadata(metadata *BackupMetadata, path string) error {
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %w", err)
-	}
-
-	err = os.WriteFile(path, data, filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to write metadata file: %w", err)
-	}
-
-	return nil
-}
-
-func createTarball(
-	sourceDir, targetPath string,
-	compressionLevel int,
-) error {
-	outFile, err := os.Create(targetPath) //nolint:gosec // path is user-controlled output
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-
-	defer func() { _ = outFile.Close() }()
-
-	gzipWriter, err := gzip.NewWriterLevel(outFile, compressionLevel)
-	if err != nil {
-		return fmt.Errorf("failed to create gzip writer: %w", err)
-	}
-
-	defer func() { _ = gzipWriter.Close() }()
-
-	tarWriter := tar.NewWriter(gzipWriter)
-
-	defer func() { _ = tarWriter.Close() }()
-
-	err = filepath.Walk(
-		sourceDir,
-		func(path string, info os.FileInfo, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-
-			return addFileToTar(tarWriter, sourceDir, path, info)
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("failed to walk source directory: %w", err)
-	}
-
-	return nil
-}
-
-func addFileToTar(
-	tarWriter *tar.Writer,
-	sourceDir, path string,
-	info os.FileInfo,
-) error {
-	header, err := tar.FileInfoHeader(info, "")
-	if err != nil {
-		return fmt.Errorf("failed to create tar header: %w", err)
-	}
-
-	relPath, err := filepath.Rel(sourceDir, path)
-	if err != nil {
-		return fmt.Errorf("failed to get relative path: %w", err)
-	}
-
-	header.Name = filepath.ToSlash(relPath)
-
-	err = tarWriter.WriteHeader(header)
-	if err != nil {
-		return fmt.Errorf("failed to write tar header: %w", err)
-	}
-
-	if info.IsDir() {
-		return nil
-	}
-
-	file, err := os.Open( //nolint:gosec // G304: path from archive walk
-		path,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-
-	defer func() { _ = file.Close() }()
-
-	_, err = io.Copy(tarWriter, file)
-	if err != nil {
-		return fmt.Errorf("failed to write file to tar: %w", err)
-	}
-
-	return nil
 }
 
 func getClusterNameFromKubeconfig(kubeconfigPath string) string {
