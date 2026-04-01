@@ -50,7 +50,7 @@ safe-outputs:
   noop:
     report-as-issue: false
   create-issue:
-    title-prefix: "${{ github.workflow }}"
+    title-prefix: "${{ github.workflow }} - "
     close-older-issues: true
     labels: [automation, ci]
   add-comment:

@@ -25,7 +25,7 @@ safe-outputs:
   push-to-pull-request-branch:
     max: 1
   create-issue:
-    title-prefix: "${{ github.workflow }}"
+    title-prefix: "${{ github.workflow }} - "
     labels: [automation, pr-fix]
   add-comment:
 

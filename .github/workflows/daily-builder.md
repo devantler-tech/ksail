@@ -22,7 +22,7 @@ network: defaults
 safe-outputs:
   noop: false
   create-discussion:
-    title-prefix: "${{ github.workflow }}"
+    title-prefix: "${{ github.workflow }} - "
     category: "agentic-workflows"
     max: 3
     close-older-discussions: true
@@ -86,7 +86,7 @@ To decide which phase to perform:
    - Look for concrete, well-scoped tasks buried in discussion reports, quality audits, or analysis summaries created by other agentic workflows (e.g., Weekly Roadmap, Daily Code Quality, CI Doctor investigations)
    - Extract high-value action items and include them in the prioritized plan alongside backlog issues
 
-2. Use this research to create a discussion with title "${{ github.workflow }} - Research, Roadmap and Plan"
+2. Use this research to create a discussion with title "Research, Roadmap and Plan"
 
    The discussion should organize items into these priority groups:
    - **High-priority bugs**: Critical issues affecting users

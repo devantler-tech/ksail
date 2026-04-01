@@ -34,7 +34,7 @@ safe-outputs:
     private-key: ${{ secrets.APP_PRIVATE_KEY }}
   noop:
   create-discussion:
-    title-prefix: "${{ github.workflow }}"
+    title-prefix: "${{ github.workflow }} - "
     category: "agentic-workflows"
     max: 5
     close-older-discussions: true
@@ -272,7 +272,7 @@ To decide which deep-mode phase to perform:
    - Review workflow run history for slow jobs and frequent failures
    - Identify cross-workflow inconsistencies in naming, structure, or conventions across both agentic and non-agentic workflows
 
-2. Create a discussion with title "${{ github.workflow }} - Research and Plan"
+2. Create a discussion with title "Research and Plan"
 
    **Include "How to Control this Workflow" and "What Happens Next" sections** with commands:
 

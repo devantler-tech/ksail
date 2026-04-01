@@ -22,7 +22,7 @@ network: defaults
 safe-outputs:
   noop: false
   create-discussion:
-    title-prefix: "${{ github.workflow }}"
+    title-prefix: "${{ github.workflow }} - "
     category: "agentic-workflows"
     close-older-discussions: true
     max: 1
@@ -149,7 +149,7 @@ Items that are interesting but speculative. These should:
 
 ## Discussion Format
 
-Create a discussion with title "${{ github.workflow }} - Roadmap" containing:
+Create a discussion with title "Roadmap" containing:
 
 1. **Executive Summary** — Key findings in 3-5 bullet points
 2. **KSail Current State** — Brief summary from Step 1

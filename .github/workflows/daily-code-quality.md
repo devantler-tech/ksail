@@ -30,7 +30,7 @@ strict: false
 safe-outputs:
   noop: false
   create-discussion:
-    title-prefix: "${{ github.workflow }}"
+    title-prefix: "${{ github.workflow }} - "
     category: "agentic-workflows"
     max: 5
     close-older-discussions: true
@@ -110,7 +110,7 @@ To decide which phase to perform:
 
    **Goal:** Create a unified plan covering all three dimensions so engineers can improve code quality incrementally over multiple runs, with each run producing a small, reviewable PR.
 
-2. Use this research to create a discussion with title "${{ github.workflow }} - Research and Plan"
+2. Use this research to create a discussion with title "Research and Plan"
 
    The discussion should have three main sections:
    - **Refactoring Landscape**: Code smells, structural issues, prioritized refactoring targets
