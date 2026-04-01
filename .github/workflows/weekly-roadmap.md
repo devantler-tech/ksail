@@ -33,7 +33,7 @@ tools:
   web-fetch:
   bash: true
 
-timeout-minutes: 15
+timeout-minutes: 20
 ---
 
 # Weekly Roadmap
@@ -53,16 +53,25 @@ Before any external research, deeply understand KSail's current state:
    - Its architecture (provider/provisioner model, embedded tools, GitOps support)
    - Its target audience and value proposition
 
-2. Read all open issues to understand:
+2. Read open issues, prioritizing the **50 most recently updated** ones. Categorize them by theme (e.g., distribution support, UX improvements, documentation gaps, provider features, GitOps, CI/CD). For each theme, note:
+   - The number and severity of issues
    - Known gaps and feature requests from users
    - Bugs and pain points
    - What's already planned or in progress
+   - Any issue that has significant community engagement (reactions, comments)
 
-3. Read recent merged PRs (last 2 weeks) to understand:
+3. Read **open discussions** across all categories, prioritizing the **30 most recently updated** ones. Look for:
+   - Feature requests and ideas proposed in discussions
+   - Questions that reveal common pain points or confusion
+   - Community feedback on existing features
+   - Suggestions and proposals from contributors
+   - Any discussion with significant engagement (upvotes, replies)
+
+4. Read recent merged PRs (last 2 weeks) to understand:
    - Current development momentum and direction
    - Recently completed features
 
-4. Summarize KSail's current strengths, weaknesses, and active development areas. This summary anchors all subsequent research.
+5. Summarize KSail's current strengths, weaknesses, and active development areas based on **all** of the above (README, issues, discussions, and PRs). This summary anchors all subsequent research.
 
 ## Step 2 — Market & Competitor Analysis
 
@@ -104,11 +113,12 @@ Research trends relevant to KSail's domain:
 
 Synthesize findings into a structured roadmap using the **Now / Next / Later** format:
 
-### Now (enhance current features, align with open issues)
+### Now (enhance current features, align with open issues and discussions)
 
 Items that directly improve what KSail already does. These should:
 
 - Address existing open issues or known pain points
+- Respond to feature requests raised in community discussions
 - Improve existing distributions, providers, or workflows
 - Have clear implementation paths within the current architecture
 - Deliver immediate value to current users
@@ -134,6 +144,7 @@ Items that are interesting but speculative. These should:
 - A clear, specific description of the feature or improvement
 - Rationale tied to market analysis, competitor gaps, or user demand
 - Relevant open issues (if any) that align with this item
+- Relevant discussions (if any) that raised or support this item
 - Estimated complexity (small / medium / large)
 
 ## Discussion Format
@@ -142,9 +153,10 @@ Create a discussion with title "${{ github.workflow }} - Roadmap" containing:
 
 1. **Executive Summary** — Key findings in 3-5 bullet points
 2. **KSail Current State** — Brief summary from Step 1
-3. **Competitor Landscape** — Comparison table and analysis from Step 2
-4. **Industry Trends** — Relevant trends from Step 3
-5. **Roadmap: Now / Next / Later** — The actionable roadmap from Step 4
+3. **Active Issues & Community Input** — Themed summary of open issues and discussions driving the roadmap (from Step 1), with links to the most impactful items
+4. **Competitor Landscape** — Comparison table and analysis from Step 2
+5. **Industry Trends** — Relevant trends from Step 3
+6. **Roadmap: Now / Next / Later** — The actionable roadmap from Step 4
 
 Before creating the new discussion, locate and read the most recent previous "${{ github.workflow }}" discussion (if any) and preserve any content that should be kept; then create the new discussion (which will automatically close the older one due to `close-older-discussions: true`) and add a collapsed "Previous Research" section at the bottom of the new discussion that archives the preserved content from the prior discussion.
 
