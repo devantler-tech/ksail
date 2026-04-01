@@ -773,7 +773,9 @@ func TestCreateTarball_SkipsSymlinks(t *testing.T) {
 	}
 
 	// Read back the archive and verify no symlink entry is present.
-	archiveFile, err := os.Open(outputPath) //nolint:gosec // G304: test-generated path in t.TempDir()
+	archiveFile, err := os.Open(
+		outputPath,
+	) //nolint:gosec // G304: test-generated path in t.TempDir()
 	if err != nil {
 		t.Fatalf("open archive: %v", err)
 	}

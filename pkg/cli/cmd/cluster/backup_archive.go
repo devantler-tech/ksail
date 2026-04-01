@@ -115,13 +115,13 @@ func commitTarball(
 	// destination already exists. Fall back to remove-and-retry only when the
 	// target actually exists (os.Stat succeeds) so unrelated failures never
 	// destroy a valid backup.
-	err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
+	err = os.Rename(tmpPath, targetPath)
 	if err != nil {
 		_, statErr := os.Stat(targetPath)
 		if statErr == nil {
 			_ = os.Remove(targetPath)
 
-			err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
+			err = os.Rename(tmpPath, targetPath)
 		}
 	}
 
