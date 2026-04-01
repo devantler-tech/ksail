@@ -1,0 +1,379 @@
+---
+title: Gateway API with KSail + Cilium
+description: How to use Kubernetes Gateway API (HTTPRoute, GRPCRoute) with KSail clusters that use Cilium CNI — zero extra setup required.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+KSail clusters using the **Cilium** CNI option come Gateway API–ready out of the box. When you select `cni: Cilium`, KSail automatically:
+
+1. **Installs Gateway API CRDs** (standard channel, v1.4.1) before the Cilium Helm chart.
+2. **Enables Cilium's Gateway API controller** (`gatewayAPI.enabled: true`) in the Helm values.
+3. **Creates a `GatewayClass`** named `cilium` via the Cilium controller.
+
+You don't need to install any additional controllers or CRD bundles manually.
+
+> [!NOTE]
+> This guide assumes you are using **Cilium** as your CNI. Gateway API is not automatically enabled on the Default (kindnet) CNI. If you initialized your cluster without specifying `--cni`, run `ksail cluster init --cni Cilium` to get a Cilium-enabled cluster.
+
+## Prerequisites
+
+- [KSail CLI](/installation/) installed
+- Docker running
+- A cluster initialized with Cilium:
+
+  ```bash
+  ksail cluster init --cni Cilium
+  ksail cluster create
+  ```
+
+  Or update an existing `ksail.yaml` to set `spec.cluster.cni: Cilium` and run `ksail cluster update`.
+
+- `kubectl` accessible (KSail writes the kubeconfig context — see [Companion Tools](/guides/companion-tools/) for context names per distribution).
+
+## Verify Gateway API Is Ready
+
+After cluster creation, confirm the `GatewayClass` exists and is ready:
+
+```bash
+kubectl get gatewayclass
+```
+
+Expected output:
+
+```
+NAME     CONTROLLER                      ACCEPTED   AGE
+cilium   io.cilium/gateway-controller   True       2m
+```
+
+If `ACCEPTED` is `False`, wait a few seconds for Cilium to finish initialising. You can also check:
+
+```bash
+kubectl get crd gateways.gateway.networking.k8s.io
+```
+
+## Expose a Service with HTTPRoute
+
+The Gateway API request path is: **`GatewayClass` → `Gateway` → `HTTPRoute` → `Service`**.
+
+<Steps>
+1. **Deploy a sample app**
+
+   ```bash
+   kubectl create deployment httpbin \
+     --image=kennethreitz/httpbin:latest \
+     --port=80
+   kubectl expose deployment httpbin --port=80
+   ```
+
+2. **Create a Gateway**
+
+   ```yaml
+   # gateway.yaml
+   apiVersion: gateway.networking.k8s.io/v1
+   kind: Gateway
+   metadata:
+     name: my-gateway
+     namespace: default
+   spec:
+     gatewayClassName: cilium
+     listeners:
+       - name: http
+         port: 80
+         protocol: HTTP
+   ```
+
+   ```bash
+   kubectl apply -f gateway.yaml
+   kubectl get gateway my-gateway
+   ```
+
+   Wait until `PROGRAMMED` is `True`:
+
+   ```
+   NAME          CLASS    ADDRESS      PROGRAMMED   AGE
+   my-gateway    cilium   <pending>    True         30s
+   ```
+
+   > [!NOTE]
+   > On Docker-based clusters (Vanilla, K3s, VCluster), the Gateway uses `hostNetwork` mode — no external IP is assigned. Traffic reaches the Gateway through the cluster node's host port. For Hetzner and Omni cloud providers, the Gateway receives a real external IP.
+
+3. **Create an HTTPRoute**
+
+   ```yaml
+   # httproute.yaml
+   apiVersion: gateway.networking.k8s.io/v1
+   kind: HTTPRoute
+   metadata:
+     name: httpbin-route
+     namespace: default
+   spec:
+     parentRefs:
+       - name: my-gateway
+     hostnames:
+       - "httpbin.local"
+     rules:
+       - matches:
+           - path:
+               type: PathPrefix
+               value: /
+         backendRefs:
+           - name: httpbin
+             port: 80
+   ```
+
+   ```bash
+   kubectl apply -f httproute.yaml
+   kubectl get httproute httpbin-route
+   ```
+
+4. **Test the route**
+
+   For local Docker clusters, port-forward the Gateway's Envoy listener to test:
+
+   ```bash
+   # Find the Cilium Envoy pod or Gateway service
+   kubectl port-forward svc/httpbin 8080:80 &
+
+   curl -H "Host: httpbin.local" http://localhost:8080/get
+   ```
+
+   Alternatively, add a `/etc/hosts` entry and send traffic directly (when the gateway exposes a node port):
+
+   ```bash
+   # Discover the node port (Docker clusters only)
+   kubectl get svc -n kube-system | grep -i cilium-gateway
+   curl -H "Host: httpbin.local" http://localhost:<node-port>/get
+   ```
+
+</Steps>
+
+## Path-Based Routing
+
+Split traffic between services based on URL path prefix:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: my-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: backend-api
+          port: 8080
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: frontend
+          port: 3000
+```
+
+## Header-Based Routing
+
+Route requests based on HTTP headers — useful for canary deployments or A/B testing:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: canary-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: my-gateway
+  rules:
+    - matches:
+        - headers:
+            - name: X-Version
+              value: canary
+      backendRefs:
+        - name: my-app-canary
+          port: 80
+    - backendRefs:
+        - name: my-app
+          port: 80
+```
+
+## TLS Termination
+
+Terminate TLS at the Gateway using a Kubernetes `Secret`:
+
+```yaml
+# tls-gateway.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: my-tls-gateway
+  namespace: default
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: my-tls-secret   # a kubernetes.io/tls Secret
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: my-tls-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: my-tls-gateway
+  hostnames:
+    - "myapp.example.com"
+  rules:
+    - backendRefs:
+        - name: my-app
+          port: 80
+```
+
+> [!TIP]
+> Use [cert-manager](https://cert-manager.io/) to automatically provision TLS certificates. Install it with `ksail workload install cert-manager --repo https://charts.jetstack.io --chart cert-manager --version v1.x` and configure an `Issuer` or `ClusterIssuer` to populate the secret automatically.
+
+## Migration from Ingress
+
+Gateway API replaces the Kubernetes `Ingress` resource. Here is a side-by-side comparison of a common pattern:
+
+| Concern | Ingress | HTTPRoute |
+|---------|---------|-----------|
+| Entry point | `Ingress` | `Gateway` + `HTTPRoute` |
+| Path routing | `spec.rules[].http.paths` | `spec.rules[].matches[].path` |
+| Host routing | `spec.rules[].host` | `spec.hostnames[]` |
+| TLS | `spec.tls[]` | `Gateway` listener `tls` section |
+| Annotation-based features | Varies by controller | Native spec fields |
+
+**Before (Ingress):**
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-app
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+    - host: myapp.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-app
+                port:
+                  number: 80
+```
+
+**After (HTTPRoute):**
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: my-app
+spec:
+  parentRefs:
+    - name: my-gateway
+  hostnames:
+    - "myapp.local"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: my-app
+          port: 80
+```
+
+Key changes:
+- Replace `Ingress` → `Gateway` + `HTTPRoute`
+- Move hostname from `spec.rules[].host` → `spec.hostnames[]`
+- Move path from `spec.rules[].http.paths` → `spec.rules[].matches[].path`
+- Drop controller-specific annotations — use native `HTTPRoute` filters instead
+
+## Using Gateway API in GitOps
+
+When using KSail with Flux or ArgoCD, place Gateway and HTTPRoute manifests in your source directory alongside other workload manifests:
+
+```text
+k8s/
+├── kustomization.yaml
+├── gateway.yaml          # Gateway resource
+└── my-app/
+    ├── deployment.yaml
+    ├── service.yaml
+    └── httproute.yaml    # HTTPRoute resource
+```
+
+The Gateway API CRDs and the `cilium` GatewayClass are managed by KSail (installed during `cluster create`). Your manifests only need to declare `Gateway` and `HTTPRoute` resources — no CRD or GatewayClass manifest is needed in your source directory.
+
+```bash
+ksail workload apply -f k8s/
+# or with GitOps
+ksail workload push
+ksail workload reconcile
+```
+
+## Troubleshooting
+
+**GatewayClass `ACCEPTED` is `False`:**
+
+```bash
+kubectl describe gatewayclass cilium
+```
+
+Cilium's controller may still be starting. Wait for Cilium pods to be ready:
+
+```bash
+kubectl get pods -n kube-system -l k8s-app=cilium
+```
+
+**Gateway `PROGRAMMED` is `False`:**
+
+```bash
+kubectl describe gateway my-gateway
+```
+
+Check for port conflicts or missing CRDs. On Docker clusters, confirm Cilium is running with `gatewayAPI.hostNetwork.enabled: true` (KSail sets this automatically for Docker providers).
+
+**HTTPRoute not routing traffic:**
+
+```bash
+kubectl get httproute my-route -o yaml
+```
+
+Check `status.parents[].conditions` for `Accepted` and `ResolvedRefs` — both must be `True`. If `ResolvedRefs` is `False`, the backend `Service` may not exist or the port may be wrong.
+
+**CRDs not found:**
+
+Gateway API CRDs are installed by KSail during `cluster create` for Cilium clusters. If you're seeing `No resources found` for `gateway.networking.k8s.io`:
+
+```bash
+kubectl get crd | grep gateway.networking.k8s.io
+```
+
+Re-run `ksail cluster update` to reinstall CRDs if they are missing.
+
+## Related
+
+- [Cilium Gateway API docs](https://docs.cilium.io/en/stable/network/servicemesh/gateway-api/gateway-api/) — upstream reference
+- [Kubernetes Gateway API docs](https://gateway-api.sigs.k8s.io/) — spec reference
+- [Multi-Environment Workflows](/guides/multi-environment/) — managing clusters across environments
+- [PR Preview Clusters](/guides/pr-preview-clusters/) — ephemeral clusters in CI with GitOps
