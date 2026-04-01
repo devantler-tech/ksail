@@ -56,8 +56,7 @@ func TestCreateOmniProvider_EndpointResolution(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// t.Setenv is incompatible with t.Parallel
-			// Ensure a clean baseline for all relevant Omni env vars before applying test-specific overrides.
+			// Clear relevant env vars before applying test-specific overrides.
 			t.Setenv("OMNI_ENDPOINT", "")
 			t.Setenv("OMNI_SERVICE_ACCOUNT_KEY", "")
 			t.Setenv("CUSTOM_OMNI_EP", "")
@@ -71,9 +70,7 @@ func TestCreateOmniProvider_EndpointResolution(t *testing.T) {
 			if testCase.wantErr != nil {
 				require.ErrorIs(t, err, testCase.wantErr)
 			} else if err != nil {
-				// The function may fail at omniclient.New() with invalid credentials,
-				// but the endpoint/key resolution should have succeeded — so the error
-				// should NOT be ErrEndpointRequired or ErrServiceAccountKeyRequired.
+				// Endpoint/key resolution succeeded; any error is from omniclient.New().
 				require.NotErrorIs(t, err, omni.ErrEndpointRequired)
 				require.NotErrorIs(t, err, omni.ErrServiceAccountKeyRequired)
 			}
