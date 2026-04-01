@@ -385,21 +385,28 @@ func isFluxPathRoot(p string) bool {
 	return p == "" || p == "." || p == "./"
 }
 
+// isWindowsDriveLetter reports whether slashPath begins with a Windows drive-letter prefix
+// (a letter A-Z or a-z followed by ':' and then '/' or end of string).
+// slashPath must already be slash-normalized before calling this function.
+func isWindowsDriveLetter(slashPath string) bool {
+	if len(slashPath) < 2 { //nolint:mnd // minimum length for drive letter "X:"
+		return false
+	}
+
+	first := slashPath[0]
+
+	return ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')) &&
+		slashPath[1] == ':' &&
+		(len(slashPath) == 2 || slashPath[2] == '/') //nolint:mnd // drive letter "X:" is 2 chars
+}
+
 // isInvalidFluxPath reports whether slashPath should be rejected and coerced to root.
 // slashPath must already be slash-normalized before calling this function.
 func isInvalidFluxPath(slashPath string) bool {
-	// Windows drive-letter paths (e.g. "C:/..." or "C:") after separator normalization.
-	// Only match a real drive letter (A-Z, a-z) followed by ':' and then '/' or end-of-string.
-	if len(slashPath) >= 2 {
-		first := slashPath[0]
-		if ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')) &&
-			slashPath[1] == ':' &&
-			(len(slashPath) == 2 || slashPath[2] == '/') {
-			return true
-		}
-	}
-
-	return path.IsAbs(slashPath) || slashPath == ".." || strings.HasPrefix(slashPath, "../")
+	return isWindowsDriveLetter(slashPath) ||
+		path.IsAbs(slashPath) ||
+		slashPath == ".." ||
+		strings.HasPrefix(slashPath, "../")
 }
 
 // newFluxResourcesClient creates a client for FluxInstance and OCIRepository resources.

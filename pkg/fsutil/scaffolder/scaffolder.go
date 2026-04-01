@@ -459,41 +459,9 @@ func (s *Scaffolder) resolveKustomizationDir() (string, error) {
 	case "", ".", "./":
 		return s.KSailConfig.Spec.Workload.SourceDirectory, nil
 	default:
-		// Normalize Windows-style backslashes to forward slashes before validation:
-		// Flux uses slash semantics, and the OS-independent path package must be used
-		// to reject absolute paths and traversal on all platforms.
-		normalizedRaw := strings.ReplaceAll(rawPath, "\\", "/")
-		cleanPath := path.Clean(normalizedRaw)
-
-		if path.IsAbs(cleanPath) {
-			return "", fmt.Errorf(
-				"%w: %q is absolute",
-				ErrInvalidKustomizationFilePath,
-				rawPath,
-			)
-		}
-
-		if len(cleanPath) >= 2 {
-			// Reject Windows drive-letter paths like "C:/..." or "C:" after slash normalization.
-			// Only match a real drive letter (A-Z, a-z) followed by ':' and then '/' or end-of-string.
-			first := cleanPath[0]
-			if ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')) &&
-				cleanPath[1] == ':' &&
-				(len(cleanPath) == 2 || cleanPath[2] == '/') {
-				return "", fmt.Errorf(
-					"%w: %q contains a Windows drive letter",
-					ErrInvalidKustomizationFilePath,
-					rawPath,
-				)
-			}
-		}
-
-		if cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {
-			return "", fmt.Errorf(
-				"%w: %q traverses parent directories",
-				ErrInvalidKustomizationFilePath,
-				rawPath,
-			)
+		cleanPath, err := validateKustomizationPath(rawPath)
+		if err != nil {
+			return "", err
 		}
 
 		return filepath.Join(
@@ -501,6 +469,44 @@ func (s *Scaffolder) resolveKustomizationDir() (string, error) {
 			filepath.FromSlash(cleanPath),
 		), nil
 	}
+}
+
+// validateKustomizationPath normalizes rawPath to slash semantics and validates it.
+// It returns the cleaned slash path ready for filepath.FromSlash conversion.
+func validateKustomizationPath(rawPath string) (string, error) {
+	// Normalize Windows-style backslashes to forward slashes before validation.
+	// The OS-independent path package must be used to reject absolute paths and
+	// traversal consistently on all platforms.
+	cleanPath := path.Clean(strings.ReplaceAll(rawPath, "\\", "/"))
+
+	if path.IsAbs(cleanPath) {
+		return "", fmt.Errorf("%w: %q is absolute", ErrInvalidKustomizationFilePath, rawPath)
+	}
+
+	if isWindowsDriveLetter(cleanPath) {
+		return "", fmt.Errorf("%w: %q contains a Windows drive letter", ErrInvalidKustomizationFilePath, rawPath) //nolint:lll
+	}
+
+	if cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {
+		return "", fmt.Errorf("%w: %q traverses parent directories", ErrInvalidKustomizationFilePath, rawPath)
+	}
+
+	return cleanPath, nil
+}
+
+// isWindowsDriveLetter reports whether slashPath begins with a Windows drive-letter prefix
+// (a letter A-Z or a-z followed by ':' and then '/' or end of string).
+// slashPath must already be slash-normalized before calling this function.
+func isWindowsDriveLetter(slashPath string) bool {
+	if len(slashPath) < 2 { //nolint:mnd // minimum length for drive letter "X:"
+		return false
+	}
+
+	first := slashPath[0]
+
+	return ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')) &&
+		slashPath[1] == ':' &&
+		(len(slashPath) == 2 || slashPath[2] == '/') //nolint:mnd // drive letter "X:" is 2 chars
 }
 
 // getKustomizationResources returns the resources to include in the kustomization.
