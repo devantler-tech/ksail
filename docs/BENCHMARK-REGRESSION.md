@@ -4,7 +4,7 @@ KSail includes automated benchmark regression testing to detect performance chan
 
 ## How It Works
 
-The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workflow runs automatically on PRs that change `**/*.go`, `go.mod`, or `go.sum` files. It:
+The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workflow runs on all PRs and in the merge queue. On `pull_request` events, it detects whether Go code changed and conditionally runs benchmarks. On `merge_group` events, the benchmark jobs are skipped gracefully so the required check passes without consuming CI time. When benchmarks run, the workflow:
 
 1. Discovers packages that contain benchmark functions (avoids compiling the entire module)
 2. Runs benchmarks on the PR branch and `main` **in parallel** (5 iterations, 500 ms per benchmark)
@@ -71,4 +71,4 @@ Follow the conventions established in the existing benchmark files:
 
 **Benchmark times are inconsistent:** CI runners share hardware, so some variance is expected. The workflow uses a 20% noise floor and statistical testing (p < 0.05) to filter runner noise. If you need higher confidence locally, increase `-count` or `-benchtime`.
 
-**Workflow skipped:** The workflow only triggers on PRs that modify Go source files or module files.
+**Benchmark jobs skipped:** The workflow runs on all PRs, but the benchmark and compare jobs are skipped when no Go source files (`**/*.go`, `go.mod`, `go.sum`) changed. In the merge queue, benchmark jobs are always skipped.

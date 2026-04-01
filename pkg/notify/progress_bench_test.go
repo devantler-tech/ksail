@@ -19,7 +19,9 @@ import (
 
 // busyWork performs deterministic CPU-bound work to simulate task duration
 // without sleeping. Uses an LCG (linear congruential generator) to keep the
-// CPU busy. Each iteration takes ~1ns on modern hardware.
+// CPU busy. The actual wall-clock cost of a given iteration count depends on
+// the CPU, Go version, and compiler optimizations, so it should not be treated
+// as a precise time duration.
 func busyWork(iterations int) {
 	x := uint64(1)
 	for range iterations {

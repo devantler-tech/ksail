@@ -2,6 +2,7 @@ name: Benchmark Regression
 
 on:
   pull_request:
+  merge_group:
 
 env:
   GOPROXY: "https://proxy.golang.org|direct"
@@ -40,7 +41,7 @@ jobs:
   benchmark:
     name: 📊 Benchmark (${{ matrix.branch }})
     needs: [changes]
-    if: needs.changes.outputs.code == 'true'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -101,7 +102,7 @@ jobs:
   compare:
     name: 📊 Compare & Gate
     needs: [changes, benchmark]
-    if: needs.changes.outputs.code == 'true'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
