@@ -473,12 +473,19 @@ func (s *Scaffolder) resolveKustomizationDir() (string, error) {
 			)
 		}
 
-		if len(cleanPath) >= 2 && cleanPath[1] == ':' {
-			return "", fmt.Errorf(
-				"%w: %q contains a Windows drive letter",
-				ErrInvalidKustomizationFilePath,
-				rawPath,
-			)
+		if len(cleanPath) >= 2 {
+			// Reject Windows drive-letter paths like "C:/..." or "C:" after slash normalization.
+			// Only match a real drive letter (A-Z, a-z) followed by ':' and then '/' or end-of-string.
+			first := cleanPath[0]
+			if ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')) &&
+				cleanPath[1] == ':' &&
+				(len(cleanPath) == 2 || cleanPath[2] == '/') {
+				return "", fmt.Errorf(
+					"%w: %q contains a Windows drive letter",
+					ErrInvalidKustomizationFilePath,
+					rawPath,
+				)
+			}
 		}
 
 		if cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {

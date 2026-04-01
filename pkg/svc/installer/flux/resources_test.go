@@ -419,6 +419,11 @@ func TestNormalizeFluxPath(t *testing.T) {
 			expected:          "./",
 		},
 		{
+			name:              "unix relative path with colon is allowed",
+			kustomizationFile: "a:b/clusters",
+			expected:          "./a:b/clusters",
+		},
+		{
 			name:              "empty returns root",
 			kustomizationFile: "",
 			expected:          "./",

@@ -388,9 +388,15 @@ func isFluxPathRoot(p string) bool {
 // isInvalidFluxPath reports whether slashPath should be rejected and coerced to root.
 // slashPath must already be slash-normalized before calling this function.
 func isInvalidFluxPath(slashPath string) bool {
-	// Windows drive-letter paths (e.g. "C:/...") after separator normalization.
-	if len(slashPath) >= 2 && slashPath[1] == ':' {
-		return true
+	// Windows drive-letter paths (e.g. "C:/..." or "C:") after separator normalization.
+	// Only match a real drive letter (A-Z, a-z) followed by ':' and then '/' or end-of-string.
+	if len(slashPath) >= 2 {
+		first := slashPath[0]
+		if ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')) &&
+			slashPath[1] == ':' &&
+			(len(slashPath) == 2 || slashPath[2] == '/') {
+			return true
+		}
 	}
 
 	return path.IsAbs(slashPath) || slashPath == ".." || strings.HasPrefix(slashPath, "../")
