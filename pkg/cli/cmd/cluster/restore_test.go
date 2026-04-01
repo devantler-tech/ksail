@@ -515,7 +515,7 @@ func TestPrintRestoreMetadata(t *testing.T) {
 				Version:     "v1",
 				ClusterName: "empty-cluster",
 			},
-			wantLines: []string{"0"},
+			wantLines: []string{"Resources: 0"},
 		},
 	}
 
