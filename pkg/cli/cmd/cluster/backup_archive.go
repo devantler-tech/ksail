@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -32,7 +33,11 @@ func createTarball(
 	sourceDir, targetPath string,
 	compressionLevel int,
 ) error {
-	outFile, err := os.Create(targetPath) //nolint:gosec // path is user-controlled output
+	// Write to a temp file in the same directory so that on failure we can
+	// remove it without leaving a corrupt archive at the final targetPath.
+	tmpPath := targetPath + ".tmp"
+
+	outFile, err := os.Create(tmpPath) //nolint:gosec // path is user-controlled output
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
@@ -40,6 +45,7 @@ func createTarball(
 	gzipWriter, err := gzip.NewWriterLevel(outFile, compressionLevel)
 	if err != nil {
 		_ = outFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to create gzip writer: %w", err)
 	}
 
@@ -56,28 +62,38 @@ func createTarball(
 		},
 	)
 	if err != nil {
-		_ = tarWriter.Close()
-		_ = gzipWriter.Close()
-		_ = outFile.Close()
-		return fmt.Errorf("failed to walk source directory: %w", err)
+		// Surface any close errors alongside the walk error so callers see both.
+		closeErr := errors.Join(tarWriter.Close(), gzipWriter.Close(), outFile.Close())
+		_ = os.Remove(tmpPath)
+
+		return errors.Join(fmt.Errorf("failed to walk source directory: %w", err), closeErr)
 	}
 
 	err = tarWriter.Close()
 	if err != nil {
 		_ = gzipWriter.Close()
 		_ = outFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
 	err = gzipWriter.Close()
 	if err != nil {
 		_ = outFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to close gzip writer: %w", err)
 	}
 
 	err = outFile.Close()
 	if err != nil {
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to close output file: %w", err)
+	}
+
+	err = os.Rename(tmpPath, targetPath) //nolint:gosec // both paths are user-controlled output
+	if err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to finalize archive: %w", err)
 	}
 
 	return nil
