@@ -409,12 +409,16 @@ func (s *Scaffolder) generateGitOpsConfig(_ string, _ bool) error {
 }
 
 // generateKustomizationConfig generates the kustomization.yaml file.
+// When kustomizationFile is set to a subdirectory, the kustomization.yaml is generated
+// at that subdirectory rather than at the root of the source directory.
 func (s *Scaffolder) generateKustomizationConfig(output string, force bool) error {
-	// Skip root kustomization generation when kustomizationFile points Flux to a subdirectory.
-	// Treat "." and "./" as equivalent to root (do not skip generation in those cases).
 	kustomizationPath := strings.TrimSpace(s.KSailConfig.Spec.Workload.KustomizationFile)
-	if kustomizationPath != "" && kustomizationPath != "." && kustomizationPath != "./" {
-		return nil
+
+	var kustomizationDir string
+	if kustomizationPath == "" || kustomizationPath == "." || kustomizationPath == "./" {
+		kustomizationDir = s.KSailConfig.Spec.Workload.SourceDirectory
+	} else {
+		kustomizationDir = filepath.Join(s.KSailConfig.Spec.Workload.SourceDirectory, kustomizationPath)
 	}
 
 	kustomization := ktypes.Kustomization{}
@@ -425,7 +429,7 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(
 			output,
-			s.KSailConfig.Spec.Workload.SourceDirectory,
+			kustomizationDir,
 			"kustomization.yaml",
 		),
 		Force: force,
@@ -438,7 +442,7 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 			Model: &kustomization,
 			Opts:  opts,
 			DisplayName: filepath.Join(
-				s.KSailConfig.Spec.Workload.SourceDirectory,
+				kustomizationDir,
 				"kustomization.yaml",
 			),
 			Force: force,
