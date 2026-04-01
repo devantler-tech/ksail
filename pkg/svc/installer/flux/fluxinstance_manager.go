@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -295,7 +296,7 @@ func buildInstance(
 				Kind:       fluxOCIRepositoryKind,
 				URL:        repoURL,
 				Ref:        tag,
-				Path:       normalizeFluxPath(),
+				Path:       normalizeFluxPath(clusterCfg.Spec.Workload.KustomizationFile),
 				Provider:   "generic",
 				Interval:   intervalPtr,
 				PullSecret: pullSecret,
@@ -357,9 +358,15 @@ func buildLocalRegistryURL(
 	)
 }
 
-func normalizeFluxPath() string {
-	// Flux expects paths to be relative to the root of the unpacked artifact.
-	return "./"
+func normalizeFluxPath(kustomizationFile string) string {
+	if kustomizationFile == "" {
+		return "./"
+	}
+	p := filepath.ToSlash(filepath.Clean(kustomizationFile))
+	if !strings.HasPrefix(p, "./") {
+		p = "./" + p
+	}
+	return p
 }
 
 // newFluxResourcesClient creates a client for FluxInstance and OCIRepository resources.

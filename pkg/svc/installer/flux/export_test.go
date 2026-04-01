@@ -55,8 +55,8 @@ func IsTransientAPIError(err error) bool {
 }
 
 // NormalizeFluxPath exports normalizeFluxPath for testing.
-func NormalizeFluxPath() string {
-	return normalizeFluxPath()
+func NormalizeFluxPath(kustomizationFile string) string {
+	return normalizeFluxPath(kustomizationFile)
 }
 
 // PollUntilReady exports pollUntilReady for testing.

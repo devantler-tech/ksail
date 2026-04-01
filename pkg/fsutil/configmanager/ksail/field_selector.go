@@ -41,6 +41,15 @@ func StandardSourceDirectoryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
+// StandardKustomizationFileFieldSelector creates a standard field selector for kustomization file path.
+func StandardKustomizationFileFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Workload.KustomizationFile },
+		Description:  "Path to the root kustomization relative to source directory (e.g., clusters/local)",
+		DefaultValue: "",
+	}
+}
+
 // DefaultDistributionConfigFieldSelector creates a standard field selector for distribution config.
 func DefaultDistributionConfigFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{

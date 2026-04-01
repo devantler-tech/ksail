@@ -403,8 +403,45 @@ func TestIsTransientAPIError(t *testing.T) {
 func TestNormalizeFluxPath(t *testing.T) {
 	t.Parallel()
 
-	path := fluxinstaller.NormalizeFluxPath()
-	assert.Equal(t, "./", path)
+	tests := []struct {
+		name              string
+		kustomizationFile string
+		expected          string
+	}{
+		{
+			name:              "empty returns root",
+			kustomizationFile: "",
+			expected:          "./",
+		},
+		{
+			name:              "subdirectory path",
+			kustomizationFile: "clusters/local",
+			expected:          "./clusters/local",
+		},
+		{
+			name:              "nested path",
+			kustomizationFile: "clusters/prod",
+			expected:          "./clusters/prod",
+		},
+		{
+			name:              "path with trailing slash is cleaned",
+			kustomizationFile: "clusters/local/",
+			expected:          "./clusters/local",
+		},
+		{
+			name:              "path with dot prefix is preserved",
+			kustomizationFile: "./clusters/local",
+			expected:          "./clusters/local",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			path := fluxinstaller.NormalizeFluxPath(tt.kustomizationFile)
+			assert.Equal(t, tt.expected, path)
+		})
+	}
 }
 
 func TestPollUntilReady_Success(t *testing.T) {

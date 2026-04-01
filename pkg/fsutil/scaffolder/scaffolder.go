@@ -410,6 +410,11 @@ func (s *Scaffolder) generateGitOpsConfig(_ string, _ bool) error {
 
 // generateKustomizationConfig generates the kustomization.yaml file.
 func (s *Scaffolder) generateKustomizationConfig(output string, force bool) error {
+	// Skip root kustomization generation when kustomizationFile points Flux to a subdirectory
+	if s.KSailConfig.Spec.Workload.KustomizationFile != "" {
+		return nil
+	}
+
 	kustomization := ktypes.Kustomization{}
 
 	// Add GitOps resources if a GitOps engine is configured
