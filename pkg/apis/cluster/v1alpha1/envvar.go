@@ -76,6 +76,7 @@ func (c *Cluster) expandHetznerOptions() {
 func (c *Cluster) expandWorkloadSpec() {
 	c.Spec.Workload.SourceDirectory = envvar.Expand(c.Spec.Workload.SourceDirectory)
 	c.Spec.Workload.Tag = envvar.Expand(c.Spec.Workload.Tag)
+	c.Spec.Workload.KustomizationFile = envvar.Expand(c.Spec.Workload.KustomizationFile)
 }
 
 func (c *Cluster) expandChatSpec() {

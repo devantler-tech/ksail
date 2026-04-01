@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -419,17 +420,21 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 	case "", ".", "./":
 		kustomizationDir = s.KSailConfig.Spec.Workload.SourceDirectory
 	default:
-		cleanPath := filepath.Clean(rawKustomizationPath)
+		// Normalize Windows-style backslashes to forward slashes before validation:
+		// Flux uses slash semantics, and the OS-independent path package must be used
+		// to reject absolute paths and traversal on all platforms.
+		normalizedRaw := strings.ReplaceAll(rawKustomizationPath, `\`, "/")
+		cleanPath := path.Clean(normalizedRaw)
 
-		if filepath.IsAbs(cleanPath) {
+		if path.IsAbs(cleanPath) {
 			return fmt.Errorf("%w: %q is absolute", ErrInvalidKustomizationFilePath, rawKustomizationPath)
 		}
 
-		if cleanPath == ".." || strings.HasPrefix(cleanPath, ".."+string(os.PathSeparator)) {
+		if cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {
 			return fmt.Errorf("%w: %q traverses parent directories", ErrInvalidKustomizationFilePath, rawKustomizationPath)
 		}
 
-		kustomizationDir = filepath.Join(s.KSailConfig.Spec.Workload.SourceDirectory, cleanPath)
+		kustomizationDir = filepath.Join(s.KSailConfig.Spec.Workload.SourceDirectory, filepath.FromSlash(cleanPath))
 	}
 
 	kustomization := ktypes.Kustomization{}
