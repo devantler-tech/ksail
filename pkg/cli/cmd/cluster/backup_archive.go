@@ -58,18 +58,21 @@ func createTarball(
 		return fmt.Errorf("failed to walk source directory: %w", err)
 	}
 
-	if err = tarWriter.Close(); err != nil {
+	err = tarWriter.Close()
+	if err != nil {
 		_ = gzipWriter.Close()
 		_ = outFile.Close()
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
-	if err = gzipWriter.Close(); err != nil {
+	err = gzipWriter.Close()
+	if err != nil {
 		_ = outFile.Close()
 		return fmt.Errorf("failed to close gzip writer: %w", err)
 	}
 
-	if err = outFile.Close(); err != nil {
+	err = outFile.Close()
+	if err != nil {
 		return fmt.Errorf("failed to close output file: %w", err)
 	}
 
