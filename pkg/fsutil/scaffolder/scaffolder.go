@@ -416,6 +416,7 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 	rawKustomizationPath := strings.TrimSpace(s.KSailConfig.Spec.Workload.KustomizationFile)
 
 	var kustomizationDir string
+
 	switch rawKustomizationPath {
 	case "", ".", "./":
 		kustomizationDir = s.KSailConfig.Spec.Workload.SourceDirectory
@@ -427,14 +428,25 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 		cleanPath := path.Clean(normalizedRaw)
 
 		if path.IsAbs(cleanPath) {
-			return fmt.Errorf("%w: %q is absolute", ErrInvalidKustomizationFilePath, rawKustomizationPath)
+			return fmt.Errorf(
+				"%w: %q is absolute",
+				ErrInvalidKustomizationFilePath,
+				rawKustomizationPath,
+			)
 		}
 
 		if cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {
-			return fmt.Errorf("%w: %q traverses parent directories", ErrInvalidKustomizationFilePath, rawKustomizationPath)
+			return fmt.Errorf(
+				"%w: %q traverses parent directories",
+				ErrInvalidKustomizationFilePath,
+				rawKustomizationPath,
+			)
 		}
 
-		kustomizationDir = filepath.Join(s.KSailConfig.Spec.Workload.SourceDirectory, filepath.FromSlash(cleanPath))
+		kustomizationDir = filepath.Join(
+			s.KSailConfig.Spec.Workload.SourceDirectory,
+			filepath.FromSlash(cleanPath),
+		)
 	}
 
 	kustomization := ktypes.Kustomization{}
