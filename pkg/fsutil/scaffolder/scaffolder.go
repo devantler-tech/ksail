@@ -413,40 +413,9 @@ func (s *Scaffolder) generateGitOpsConfig(_ string, _ bool) error {
 // When kustomizationFile is set to a subdirectory, the kustomization.yaml is generated
 // at that subdirectory rather than at the root of the source directory.
 func (s *Scaffolder) generateKustomizationConfig(output string, force bool) error {
-	rawKustomizationPath := strings.TrimSpace(s.KSailConfig.Spec.Workload.KustomizationFile)
-
-	var kustomizationDir string
-
-	switch rawKustomizationPath {
-	case "", ".", "./":
-		kustomizationDir = s.KSailConfig.Spec.Workload.SourceDirectory
-	default:
-		// Normalize Windows-style backslashes to forward slashes before validation:
-		// Flux uses slash semantics, and the OS-independent path package must be used
-		// to reject absolute paths and traversal on all platforms.
-		normalizedRaw := strings.ReplaceAll(rawKustomizationPath, `\`, "/")
-		cleanPath := path.Clean(normalizedRaw)
-
-		if path.IsAbs(cleanPath) {
-			return fmt.Errorf(
-				"%w: %q is absolute",
-				ErrInvalidKustomizationFilePath,
-				rawKustomizationPath,
-			)
-		}
-
-		if cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {
-			return fmt.Errorf(
-				"%w: %q traverses parent directories",
-				ErrInvalidKustomizationFilePath,
-				rawKustomizationPath,
-			)
-		}
-
-		kustomizationDir = filepath.Join(
-			s.KSailConfig.Spec.Workload.SourceDirectory,
-			filepath.FromSlash(cleanPath),
-		)
+	kustomizationDir, err := s.resolveKustomizationDir()
+	if err != nil {
+		return err
 	}
 
 	kustomization := ktypes.Kustomization{}
@@ -479,6 +448,44 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 			},
 		},
 	)
+}
+
+// resolveKustomizationDir resolves the directory where kustomization.yaml should be written.
+// It normalizes the kustomizationFile path using slash semantics and validates it.
+func (s *Scaffolder) resolveKustomizationDir() (string, error) {
+	rawPath := strings.TrimSpace(s.KSailConfig.Spec.Workload.KustomizationFile)
+
+	switch rawPath {
+	case "", ".", "./":
+		return s.KSailConfig.Spec.Workload.SourceDirectory, nil
+	default:
+		// Normalize Windows-style backslashes to forward slashes before validation:
+		// Flux uses slash semantics, and the OS-independent path package must be used
+		// to reject absolute paths and traversal on all platforms.
+		normalizedRaw := strings.ReplaceAll(rawPath, `\`, "/")
+		cleanPath := path.Clean(normalizedRaw)
+
+		if path.IsAbs(cleanPath) {
+			return "", fmt.Errorf(
+				"%w: %q is absolute",
+				ErrInvalidKustomizationFilePath,
+				rawPath,
+			)
+		}
+
+		if cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {
+			return "", fmt.Errorf(
+				"%w: %q traverses parent directories",
+				ErrInvalidKustomizationFilePath,
+				rawPath,
+			)
+		}
+
+		return filepath.Join(
+			s.KSailConfig.Spec.Workload.SourceDirectory,
+			filepath.FromSlash(cleanPath),
+		), nil
+	}
 }
 
 // getKustomizationResources returns the resources to include in the kustomization.
