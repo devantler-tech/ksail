@@ -1,10 +1,17 @@
 package cluster_test
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/stretchr/testify/assert"
@@ -383,3 +390,367 @@ func TestAllLinesContain_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// TestPrintRestoreHeader verifies that printRestoreHeader writes the expected
+// lines including the input path, policy, and (when dry-run) the dry-run note.
+func TestPrintRestoreHeader(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		inputPath string
+		policy    string
+		dryRun    bool
+		wantLines []string
+		noLines   []string
+	}{
+		{
+			name:      "standard header without dry-run",
+			inputPath: "/backups/cluster.tar.gz",
+			policy:    "none",
+			dryRun:    false,
+			wantLines: []string{
+				"Starting cluster restore",
+				"/backups/cluster.tar.gz",
+				"none",
+				"Extracting backup archive",
+			},
+			noLines: []string{"dry-run"},
+		},
+		{
+			name:      "header with dry-run enabled",
+			inputPath: "/backups/cluster.tar.gz",
+			policy:    "update",
+			dryRun:    true,
+			wantLines: []string{
+				"Starting cluster restore",
+				"/backups/cluster.tar.gz",
+				"update",
+				"dry-run",
+			},
+		},
+		{
+			name:      "header with update policy",
+			inputPath: "relative/path/backup.tar.gz",
+			policy:    "update",
+			dryRun:    false,
+			wantLines: []string{
+				"update",
+				"relative/path/backup.tar.gz",
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+			clusterpkg.ExportPrintRestoreHeader(
+				&buf, testCase.inputPath, testCase.policy, testCase.dryRun,
+			)
+			output := buf.String()
+
+			for _, want := range testCase.wantLines {
+				assert.Contains(t, output, want,
+					"output should contain %q", want)
+			}
+
+			for _, noWant := range testCase.noLines {
+				assert.NotContains(t, output, noWant,
+					"output should not contain %q", noWant)
+			}
+		})
+	}
+}
+
+// TestPrintRestoreMetadata verifies that printRestoreMetadata correctly outputs
+// all metadata fields, including optional Distribution and Provider.
+func TestPrintRestoreMetadata(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		metadata  *clusterpkg.BackupMetadata
+		wantLines []string
+		noLines   []string
+	}{
+		{
+			name: "full metadata with distribution and provider",
+			metadata: &clusterpkg.BackupMetadata{
+				Version:       "v1",
+				Timestamp:     time.Date(2026, 3, 15, 10, 0, 0, 0, time.UTC),
+				ClusterName:   "my-cluster",
+				Distribution:  "Vanilla",
+				Provider:      "Docker",
+				ResourceCount: 42,
+			},
+			wantLines: []string{
+				"v1",
+				"2026-03-15",
+				"my-cluster",
+				"Vanilla",
+				"Docker",
+				"42",
+			},
+		},
+		{
+			name: "metadata without optional distribution and provider",
+			metadata: &clusterpkg.BackupMetadata{
+				Version:       "v1",
+				Timestamp:     time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+				ClusterName:   "bare-cluster",
+				ResourceCount: 5,
+			},
+			wantLines: []string{
+				"v1",
+				"bare-cluster",
+				"5",
+			},
+			noLines: []string{"Distribution:", "Provider:"},
+		},
+		{
+			name: "zero resource count is printed",
+			metadata: &clusterpkg.BackupMetadata{
+				Version:     "v1",
+				ClusterName: "empty-cluster",
+			},
+			wantLines: []string{"0"},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+			clusterpkg.ExportPrintRestoreMetadata(&buf, testCase.metadata)
+			output := buf.String()
+
+			for _, want := range testCase.wantLines {
+				assert.Contains(t, output, want,
+					"output should contain %q", want)
+			}
+
+			for _, noWant := range testCase.noLines {
+				assert.NotContains(t, output, noWant,
+					"output should not contain %q", noWant)
+			}
+		})
+	}
+}
+
+// TestReadBackupMetadata verifies error paths and happy path of readBackupMetadata.
+func TestReadBackupMetadata(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns error when metadata file is missing", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		_, err := clusterpkg.ExportReadBackupMetadata(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "backup metadata")
+	})
+
+	t.Run("returns error when metadata is not valid JSON", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		metaPath := filepath.Join(tmpDir, "backup-metadata.json")
+		err := os.WriteFile(metaPath, []byte("{not valid json"), 0o600)
+		require.NoError(t, err)
+
+		_, err = clusterpkg.ExportReadBackupMetadata(tmpDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "parse backup metadata")
+	})
+
+	t.Run("returns metadata when file is valid JSON", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		meta := &clusterpkg.BackupMetadata{
+			Version:       "v1",
+			ClusterName:   "test",
+			ResourceCount: 7,
+		}
+
+		data, err := json.Marshal(meta)
+		require.NoError(t, err)
+
+		metaPath := filepath.Join(tmpDir, "backup-metadata.json")
+		err = os.WriteFile(metaPath, data, 0o600)
+		require.NoError(t, err)
+
+		result, err := clusterpkg.ExportReadBackupMetadata(tmpDir)
+		require.NoError(t, err)
+		assert.Equal(t, "v1", result.Version)
+		assert.Equal(t, "test", result.ClusterName)
+		assert.Equal(t, 7, result.ResourceCount)
+	})
+
+	t.Run("empty JSON object is parsed without error", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		metaPath := filepath.Join(tmpDir, "backup-metadata.json")
+		err := os.WriteFile(metaPath, []byte("{}"), 0o600)
+		require.NoError(t, err)
+
+		result, err := clusterpkg.ExportReadBackupMetadata(tmpDir)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Empty(t, result.Version)
+	})
+}
+
+// TestExtractBackupArchive_ErrorPaths validates error handling when the
+// archive is missing, corrupt, or lacks the expected metadata file.
+func TestExtractBackupArchive_ErrorPaths(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nonexistent archive returns error", func(t *testing.T) {
+		t.Parallel()
+
+		_, _, err := clusterpkg.ExportExtractBackupArchive(
+			filepath.Join(t.TempDir(), "does-not-exist.tar.gz"),
+		)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "backup archive")
+	})
+
+	t.Run("non-gzip file returns gzip error", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		badFile := filepath.Join(tmpDir, "bad.tar.gz")
+		err := os.WriteFile(badFile, []byte("this is not gzip content"), 0o600)
+		require.NoError(t, err)
+
+		_, _, err = clusterpkg.ExportExtractBackupArchive(badFile)
+		require.Error(t, err)
+	})
+
+	t.Run("valid gzip but empty content returns tar error", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "empty.tar.gz")
+
+		f, err := os.Create(archivePath) //nolint:gosec // test-controlled temp path
+		require.NoError(t, err)
+
+		gz := gzip.NewWriter(f)
+		// Write a single byte so gzip stream is valid but not a valid tar archive
+		_, err = gz.Write([]byte{0x00})
+		require.NoError(t, err)
+		require.NoError(t, gz.Close())
+		require.NoError(t, f.Close())
+
+		_, _, err = clusterpkg.ExportExtractBackupArchive(archivePath)
+		require.Error(t, err)
+	})
+
+	t.Run("valid tar.gz without metadata returns error", func(t *testing.T) {
+		t.Parallel()
+
+		archivePath := createArchiveWithoutMetadata(t)
+
+		_, _, err := clusterpkg.ExportExtractBackupArchive(archivePath)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "backup metadata")
+	})
+}
+
+// createArchiveWithoutMetadata creates a valid .tar.gz file that contains
+// a single YAML file but no backup-metadata.json entry.
+func createArchiveWithoutMetadata(t *testing.T) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "no-meta.tar.gz")
+
+	f, err := os.Create(archivePath) //nolint:gosec // test-controlled temp path
+	require.NoError(t, err)
+
+	defer func() { _ = f.Close() }()
+
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+
+	content := []byte("apiVersion: v1\nkind: Pod\n")
+	hdr := &tar.Header{
+		Name:     "resources/pods.yaml",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(content)),
+		Mode:     0o600,
+	}
+
+	err = tw.WriteHeader(hdr)
+	require.NoError(t, err)
+
+	_, err = tw.Write(content)
+	require.NoError(t, err)
+
+	require.NoError(t, tw.Close())
+	require.NoError(t, gz.Close())
+
+	return archivePath
+}
+
+// TestBackupResourceTypes verifies that backupResourceTypes returns a non-empty
+// ordered slice and that CRDs appear before namespaces (dependency ordering).
+func TestBackupResourceTypes(t *testing.T) {
+	t.Parallel()
+
+	types := clusterpkg.ExportBackupResourceTypes()
+
+	require.NotEmpty(t, types, "backupResourceTypes must return a non-empty list")
+
+	// Validate that the list contains well-known resource types.
+	typeSet := make(map[string]struct{}, len(types))
+	for _, rt := range types {
+		typeSet[rt] = struct{}{}
+	}
+
+	for _, expected := range []string{
+		"customresourcedefinitions",
+		"namespaces",
+		"deployments",
+	} {
+		assert.Contains(t, typeSet, expected,
+			"backupResourceTypes should include %q", expected)
+	}
+
+	// CRDs must come before namespaces in restore ordering.
+	crdIdx, nsIdx := -1, -1
+	for i, rt := range types {
+		switch rt {
+		case "customresourcedefinitions":
+			crdIdx = i
+		case "namespaces":
+			nsIdx = i
+		}
+	}
+
+	assert.Greater(t, nsIdx, crdIdx,
+		"customresourcedefinitions must appear before namespaces in resource ordering")
+
+	// No duplicates allowed.
+	seen := make(map[string]bool, len(types))
+	for _, rt := range types {
+		assert.False(t, seen[rt], "duplicate resource type %q in backupResourceTypes", rt)
+		seen[rt] = true
+	}
+
+	// Every entry must be a non-empty, lowercase string without whitespace.
+	for _, rt := range types {
+		assert.NotEmpty(t, rt)
+		assert.Equal(t, strings.ToLower(rt), rt,
+			"resource type %q should be lowercase", rt)
+		assert.NotContains(t, rt, " ",
+			"resource type %q should not contain spaces", rt)
+	}
+}
+
