@@ -1530,3 +1530,73 @@ func TestWithClusterName_AppliesContextToKSailConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveKustomizationDir_ValidPaths(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		kustomizationFile string
+		expectedSubdir    string // relative to sourceDirectory; "" means source directory root
+	}{
+		{name: "empty uses source directory root", kustomizationFile: "", expectedSubdir: ""},
+		{name: "dot uses source directory root", kustomizationFile: ".", expectedSubdir: ""},
+		{name: "dot-slash uses source directory root", kustomizationFile: "./", expectedSubdir: ""},
+		{
+			name:              "valid subdir",
+			kustomizationFile: "clusters/local",
+			expectedSubdir:    "clusters/local",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			tempDir := t.TempDir()
+			cluster := createTestCluster("kustomization-dir-test")
+			cluster.Spec.Workload.KustomizationFile = testCase.kustomizationFile
+			scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+			err := scaffolderInstance.Scaffold(tempDir, false)
+			require.NoError(t, err)
+
+			expectedPath := filepath.Join(tempDir, cluster.Spec.Workload.SourceDirectory)
+			if testCase.expectedSubdir != "" {
+				expectedPath = filepath.Join(expectedPath, testCase.expectedSubdir)
+			}
+
+			_, statErr := os.Stat(filepath.Join(expectedPath, "kustomization.yaml"))
+			require.NoError(t, statErr, "expected kustomization.yaml at %s", expectedPath)
+		})
+	}
+}
+
+func TestResolveKustomizationDir_InvalidPaths(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		kustomizationFile string
+	}{
+		{name: "absolute path", kustomizationFile: "/clusters/local"},
+		{name: "parent traversal", kustomizationFile: "../escape"},
+		{name: "double-dot", kustomizationFile: ".."},
+		{name: "windows drive-letter", kustomizationFile: "C:\\clusters\\local"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			tempDir := t.TempDir()
+			cluster := createTestCluster("kustomization-dir-test")
+			cluster.Spec.Workload.KustomizationFile = testCase.kustomizationFile
+			scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+			err := scaffolderInstance.Scaffold(tempDir, false)
+			require.Error(t, err)
+			require.ErrorIs(t, err, scaffolder.ErrInvalidKustomizationFilePath)
+		})
+	}
+}

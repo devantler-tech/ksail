@@ -54,9 +54,11 @@ func IsTransientAPIError(err error) bool {
 	return isTransientAPIError(err)
 }
 
-// NormalizeFluxPath exports normalizeFluxPath for testing.
-func NormalizeFluxPath() string {
-	return normalizeFluxPath()
+// NormalizeFluxPath exports normalizeFluxPath(kustomizationFile) for testing.
+// kustomizationFile is the path to the Flux kustomization entry point directory
+// that is normalized into the Flux Sync.Path used by the installer.
+func NormalizeFluxPath(kustomizationFile string) string {
+	return normalizeFluxPath(kustomizationFile)
 }
 
 // PollUntilReady exports pollUntilReady for testing.
