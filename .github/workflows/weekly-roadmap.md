@@ -22,7 +22,7 @@ network: defaults
 safe-outputs:
   noop: false
   create-discussion:
-    title-prefix: "${{ github.workflow }}"
+    title-prefix: "${{ github.workflow }} - "
     category: "agentic-workflows"
     close-older-discussions: true
     max: 1
@@ -149,7 +149,7 @@ Items that are interesting but speculative. These should:
 
 ## Discussion Format
 
-Create a discussion with title "${{ github.workflow }} - Roadmap" containing:
+Create a discussion with title "Roadmap" containing:
 
 1. **Executive Summary** — Key findings in 3-5 bullet points
 2. **KSail Current State** — Brief summary from Step 1
@@ -158,7 +158,7 @@ Create a discussion with title "${{ github.workflow }} - Roadmap" containing:
 5. **Industry Trends** — Relevant trends from Step 3
 6. **Roadmap: Now / Next / Later** — The actionable roadmap from Step 4
 
-Before creating the new discussion, locate and read the most recent previous "${{ github.workflow }}" discussion (if any) and preserve any content that should be kept; then create the new discussion (which will automatically close the older one due to `close-older-discussions: true`) and add a collapsed "Previous Research" section at the bottom of the new discussion that archives the preserved content from the prior discussion.
+Before creating the new discussion, locate and read the most recent previous "${{ github.workflow }} - Roadmap" discussion (if any) and preserve any content that should be kept; then create the new discussion (which will automatically close the older one due to `close-older-discussions: true`) and add a collapsed "Previous Research" section at the bottom of the new discussion that archives the preserved content from the prior discussion.
 
 **Include a "How to Control this Workflow" section:**
 

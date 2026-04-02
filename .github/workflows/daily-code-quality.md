@@ -30,7 +30,7 @@ strict: false
 safe-outputs:
   noop: false
   create-discussion:
-    title-prefix: "${{ github.workflow }}"
+    title-prefix: "${{ github.workflow }} - "
     category: "agentic-workflows"
     max: 5
     close-older-discussions: true
@@ -65,7 +65,7 @@ You are doing your work in phases. Right now you will perform just one of the fo
 
 To decide which phase to perform:
 
-1. First check for existing open discussion titled "${{ github.workflow }}" using `list_discussions`. Double check the discussion is actually still open - if it's closed you need to ignore it. If found, and open, read it and maintainer comments. If not found, then perform Phase 1 and nothing else.
+1. First check for existing open discussion titled "${{ github.workflow }} - Research and Plan" using `list_discussions`. Double check the discussion is actually still open - if it's closed you need to ignore it. If found, and open, read it and maintainer comments. If not found, then perform Phase 1 and nothing else.
 
 2. Next check if `.github/actions/daily-code-quality/build-steps/action.yml` AND `.github/actions/daily-code-quality/coverage-steps/action.yml` both exist. If both exist then read them. If either is missing then perform Phase 2 and nothing else.
 
@@ -110,7 +110,7 @@ To decide which phase to perform:
 
    **Goal:** Create a unified plan covering all three dimensions so engineers can improve code quality incrementally over multiple runs, with each run producing a small, reviewable PR.
 
-2. Use this research to create a discussion with title "${{ github.workflow }} - Research and Plan"
+2. Use this research to create a discussion with title "Research and Plan"
 
    The discussion should have three main sections:
    - **Refactoring Landscape**: Code smells, structural issues, prioritized refactoring targets
@@ -236,7 +236,13 @@ To decide which phase to perform:
 
    a. Create a new branch starting with "perf/".
 
-   b. Work towards the performance goal. Consider approaches like:
+   b. **Check for benchmark regression signals** before selecting a target:
+      - Search for recent Benchmark Regression workflow failures: `gh run list --workflow=benchmark-regression.yaml --status=failure --limit=5`
+      - If failures exist, download the logs and look for regressed benchmarks (lines with `+XX%` in the benchstat output)
+      - Prioritize packages with detected benchmark regressions as optimization targets
+      - Run benchmarks locally before changes to establish a baseline: `go test -bench=. -benchmem -count=5 ./path/to/package/`
+
+   c. Work towards the performance goal. Consider approaches like:
    - Code optimization: algorithm improvements, data structure changes, caching
    - User experience: reducing load times, improving responsiveness
    - System efficiency: resource utilization, concurrency, I/O optimization
@@ -245,9 +251,11 @@ To decide which phase to perform:
    **Measurement strategy:**
    Plan before/after measurements using appropriate methods — synthetic benchmarks for algorithms, user journey tests for UX, load tests for scalability, or build time comparisons for developer experience.
 
-   c. Ensure the code still works and relevant tests pass. Add new tests if appropriate.
+   d. Ensure the code still works and relevant tests pass. Add new tests if appropriate.
 
-   d. Measure performance impact. Document measurement attempts even if unsuccessful.
+   e. Measure performance impact. Run benchmarks after changes and compare:
+      `go test -bench=. -benchmem -count=5 ./path/to/package/`
+      Include before/after benchmark results in the PR description. Document measurement attempts even if unsuccessful.
 
    **If working on TEST COVERAGE (branch prefix: `test/`):**
 
