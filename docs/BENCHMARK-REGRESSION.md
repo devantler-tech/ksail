@@ -4,78 +4,54 @@ KSail includes automated benchmark regression testing to detect performance chan
 
 ## How It Works
 
-The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workflow runs automatically on PRs that change `**/*.go`, `go.mod`, or `go.sum` files. It:
+The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workflow runs on all PRs and in the merge queue. On `pull_request` events, it detects whether Go code changed and conditionally runs benchmarks. On `merge_group` events, the benchmark jobs are skipped gracefully so the required check passes without consuming CI time. When benchmarks run, the workflow:
 
 1. Discovers packages that contain benchmark functions (avoids compiling the entire module)
-2. Runs benchmarks on the PR branch and `main` **in parallel** (5 iterations, 1 s per benchmark)
+2. Runs benchmarks on the PR branch and `main` **in parallel** (5 iterations, 500 ms per benchmark)
 3. Compares results with [`benchstat`](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat) for statistical analysis
-4. Posts (or updates) a comparison comment on the PR
+4. **Fails the CI check** if statistically significant regressions are detected above the noise floor
 
-## Interpreting Results
+## Regression Detection
 
-The PR comment groups results into three sections:
+The workflow gates on regressions using three layers of filtering:
 
-| Symbol | Label       | Meaning                                                              |
-|--------|-------------|----------------------------------------------------------------------|
-| 🔴     | Regression  | Statistically significant increase (p < 0.001, and ≥ 10% for sec/op) |
-| 🟢     | Improvement | Statistically significant decrease (p < 0.001, and ≥ 10% for sec/op) |
-| ⚪ ~    | Unchanged   | No significant change (p ≥ 0.001 or < 10% for sec/op)                |
+| Layer | Filter                                  | Purpose                                                            |
+|-------|-----------------------------------------|--------------------------------------------------------------------|
+| 1     | Mann-Whitney U test (p < 0.05)          | Statistical significance — filters random variation                |
+| 2     | 20% noise floor (all metrics)           | Filters CI runner variance — main and PR run on different machines |
+| 3     | Sub-microsecond exclusion (sec/op only) | Skips nanosecond-range benchmarks where CPU clock jitter dominates |
 
-Each row in the tables shows:
+A regression is only flagged when **all three layers** agree. This means only substantial, statistically confirmed performance degradations block the PR.
 
-| Column        | Meaning                                                         | Goal               |
-|---------------|-----------------------------------------------------------------|--------------------|
-| **Benchmark** | Name of the benchmark function (without `Benchmark` prefix)     | —                  |
-| **Metric**    | `sec/op`, `B/op`, or `allocs/op`                                | Lower is better    |
-| **Change**    | Delta percentage vs `main`                                      | Negative is better |
-| **p-value**   | Statistical confidence; < 0.001 means the change is significant | —                  |
+## Interpreting CI Failures
 
-The comment also includes a collapsed **Unchanged** section and a **Raw benchstat output** block for deeper inspection.
+When the benchmark gate fails, the workflow logs show:
+
+- The full `benchstat` comparison output (sec/op, B/op, allocs/op)
+- A summary listing which benchmarks regressed and by how much
+- A command to reproduce locally
 
 ## Running Benchmarks Locally
 
 ```bash
 # Run all benchmarks
-go test -bench=. -benchmem -run=^$ ./...
+go test -bench=. -benchmem -run='^$' ./...
 
 # Run a specific package
-go test -bench=. -benchmem -run=^$ ./pkg/k8s/readiness/...
+go test -bench=. -benchmem -run='^$' ./pkg/k8s/readiness/...
 
 # Compare before/after with benchstat
-go test -bench=. -benchmem -count=5 -run=^$ ./... > before.txt
+go test -bench=. -benchmem -count=5 -run='^$' ./... > before.txt
 # (make changes)
-go test -bench=. -benchmem -count=5 -run=^$ ./... > after.txt
+go test -bench=. -benchmem -count=5 -run='^$' ./... > after.txt
 benchstat before.txt after.txt
 ```
 
 Install `benchstat` if needed:
 
 ```bash
-go install golang.org/x/perf/cmd/benchstat@latest
+go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260312031701-16a31bc5fbd0
 ```
-
-## Current Benchmark Coverage
-
-| Package                     | File                    | What It Tests                            |
-|-----------------------------|-------------------------|------------------------------------------|
-| `pkg/apis/cluster/v1alpha1` | `marshal_bench_test.go` | YAML/JSON marshalling of cluster configs |
-| `pkg/cli/cmd/cipher`        | `cipher_bench_test.go`  | SOPS encrypt/decrypt operations          |
-| `pkg/client/argocd`         | `manager_bench_test.go` | ArgoCD GitOps client operations          |
-| `pkg/client/flux`           | `client_bench_test.go`  | Flux GitOps client operations            |
-| `pkg/client/helm`           | `client_bench_test.go`  | Helm client chart operations             |
-| `pkg/client/kubectl`        | `client_bench_test.go`  | Kubectl command execution                |
-| `pkg/client/kustomize`      | `client_bench_test.go`  | Kustomize build operations               |
-| `pkg/k8s/readiness`         | `polling_bench_test.go` | Kubernetes resource polling              |
-
-This table may not be exhaustive; additional benchmarks may exist in other packages.
-
-See each package's `BENCHMARKS.md` for detailed baseline results and optimization opportunities.
-
-## Install Duration Benchmarks
-
-In addition to Go micro-benchmarks, KSail tracks real-world per-component install durations during `ksail cluster create` and `ksail cluster update` via the `--benchmark` flag. These cover Helm chart downloads, image pulls, and pod scheduling — workloads not suited to `go test -bench`.
-
-Use `ksail cluster create --benchmark` or `ksail cluster update --benchmark` to capture install durations. Output is printed inline per component during the run.
 
 ## Writing Effective Benchmarks
 
@@ -87,18 +63,12 @@ Follow the conventions established in the existing benchmark files:
 - Use `b.TempDir()` for reproducible temp files
 - Use table-driven scenarios to cover multiple input sizes
 - Fail fast with `b.Fatalf` on unexpected errors
+- Avoid `time.Sleep()` inside benchmark loops — measure real CPU work, not timers
 
 ## Troubleshooting
 
 **Benchstat shows `~` for everything:** The change is within measurement noise, which is the expected result for most PRs that don't touch hot paths.
 
-**Benchmark times are inconsistent:** CI runners share hardware, so some variance is expected. The workflow uses strict thresholds (p < 0.001 and ≥ 10% delta for sec/op) to filter out runner noise. If you need higher confidence locally, increase `-count` or `-benchtime`.
+**Benchmark times are inconsistent:** CI runners share hardware, so some variance is expected. The workflow uses a 20% noise floor and statistical testing (p < 0.05) to filter runner noise. If you need higher confidence locally, increase `-count` or `-benchtime`.
 
-**Workflow skipped:** The workflow only triggers on PRs that modify Go source files or module files.
-
-## Future Enhancements
-
-- **Threshold-based failure** — fail PRs that exceed a configurable regression limit
-- **Baseline storage** — persist baseline results as artifacts for historical comparison
-- **Performance trends** — track metrics across releases to detect gradual degradation
-- **Selective benchmarking** — run only benchmarks for packages changed in the PR
+**Benchmark jobs skipped:** The workflow runs on all PRs, but the benchmark and compare jobs are skipped when no Go source files (`**/*.go`, `go.mod`, `go.sum`) changed. In the merge queue, benchmark jobs are always skipped.

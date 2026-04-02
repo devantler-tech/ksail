@@ -133,14 +133,30 @@ You are the CI Failure Doctor, an expert investigative agent that analyzes faile
    - For infrastructure issues: Check runner logs and resource usage
    - For timeout issues: Identify slow operations and bottlenecks
 
-### Phase 5: Pattern Storage and Knowledge Building
+### Phase 5: Benchmark Regression Analysis (for Benchmark Regression workflow failures)
 
-1. **Store Investigation**: Save structured investigation data to files:
+When investigating a **Benchmark Regression** workflow failure, apply this specialized analysis:
+
+1. **Extract benchstat output** from the workflow logs — it contains the full comparison between main and PR branches
+2. **Identify regressed benchmarks**: Look for lines with positive deltas like `+XX%` or `+XX.XX%` in the sec/op, B/op, or allocs/op sections where the change is ≥20%. Sub-microsecond sec/op benchmarks (values shown with `n` unit) are excluded from the gate as they measure CPU clock jitter, not real work.
+3. **Map to packages**: Each benchmark name maps to a Go package (e.g., `BenchmarkChartSpec` → `pkg/client/helm/`)
+4. **Root cause analysis**: Check the PR's changed files against the regressed packages. Common causes:
+   - Added allocations in hot paths (new slices, maps, string concatenation)
+   - Changed algorithms with worse complexity
+   - Removed caching or memoization
+   - Added synchronization (mutexes, channels) in tight loops
+5. **Remediation guidance**: Include in the investigation issue:
+   - Which benchmarks regressed and by how much
+   - The specific packages and functions affected
+   - Command to reproduce locally: `go test -bench=<BenchmarkName> -benchmem -count=5 ./path/to/package/`
+   - Suggested profiling: `go test -bench=<BenchmarkName> -cpuprofile=cpu.prof -memprofile=mem.prof ./path/to/package/`
+
+6. **Store Investigation**: Save structured investigation data to files:
    - Write investigation report to `/tmp/memory/investigations/<timestamp>-<run-id>.json`
    - Store error patterns in `/tmp/memory/patterns/`
    - Maintain an index file of all investigations for fast searching
-2. **Update Pattern Database**: Enhance knowledge with new findings by updating pattern files
-3. **Save Artifacts**: Store detailed logs and analysis in the cached directories
+7. **Update Pattern Database**: Enhance knowledge with new findings by updating pattern files
+8. **Save Artifacts**: Store detailed logs and analysis in the cached directories
 
 ### Phase 6: Looking for existing issues
 
