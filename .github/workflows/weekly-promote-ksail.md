@@ -21,7 +21,7 @@ network: defaults
 safe-outputs:
   noop: false
   create-discussion:
-    title-prefix: "${{ github.workflow }}"
+    title-prefix: "${{ github.workflow }} - "
     category: "agentic-workflows"
     close-older-discussions: true
     max: 1

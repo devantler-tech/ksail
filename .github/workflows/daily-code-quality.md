@@ -30,7 +30,7 @@ strict: false
 safe-outputs:
   noop: false
   create-discussion:
-    title-prefix: "${{ github.workflow }}"
+    title-prefix: "${{ github.workflow }} - "
     category: "agentic-workflows"
     max: 5
     close-older-discussions: true
@@ -65,7 +65,7 @@ You are doing your work in phases. Right now you will perform just one of the fo
 
 To decide which phase to perform:
 
-1. First check for existing open discussion titled "${{ github.workflow }}" using `list_discussions`. Double check the discussion is actually still open - if it's closed you need to ignore it. If found, and open, read it and maintainer comments. If not found, then perform Phase 1 and nothing else.
+1. First check for existing open discussion titled "${{ github.workflow }} - Research and Plan" using `list_discussions`. Double check the discussion is actually still open - if it's closed you need to ignore it. If found, and open, read it and maintainer comments. If not found, then perform Phase 1 and nothing else.
 
 2. Next check if `.github/actions/daily-code-quality/build-steps/action.yml` AND `.github/actions/daily-code-quality/coverage-steps/action.yml` both exist. If both exist then read them. If either is missing then perform Phase 2 and nothing else.
 
@@ -110,7 +110,7 @@ To decide which phase to perform:
 
    **Goal:** Create a unified plan covering all three dimensions so engineers can improve code quality incrementally over multiple runs, with each run producing a small, reviewable PR.
 
-2. Use this research to create a discussion with title "${{ github.workflow }} - Research and Plan"
+2. Use this research to create a discussion with title "Research and Plan"
 
    The discussion should have three main sections:
    - **Refactoring Landscape**: Code smells, structural issues, prioritized refactoring targets
