@@ -361,7 +361,7 @@ After triage and planning, analyze open issues for parent-child relationships to
 
 ## Step 8 — Close Completed Parent Issues
 
-Check for parent issues where all sub-issues are complete and close them automatically. Use the issue data already gathered in Step 1 to check sub-issue completion status — do not make additional API calls to re-fetch issue states.
+Check for parent issues where all sub-issues are complete and close them automatically. Use the issue data already gathered in Step 1 to check sub-issue completion status. If a specific sub-issue's state is not present in the cache (e.g., closed more than 90 days ago), make a targeted `get_issue` call for that sub-issue only rather than skipping the parent or assuming it is incomplete.
 
 1. **Find open parent issues** that have sub-issues (tracked issues).
 2. **Check completion** for each: verify whether ALL sub-issues are in a closed state.
