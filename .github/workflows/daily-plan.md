@@ -68,7 +68,7 @@ You are a project planner and issue triage assistant for `${{ github.repository 
    - Current labels, priorities, and assignees
    - Which roadmap items already have corresponding issues
 
-3. **Read recently closed issues**: Also fetch issues closed in the last 30 days. These are needed for deduplication in later steps — cache them alongside the open issues so you can search locally without additional API calls.
+3. **Read recently closed issues**: Also fetch issues closed in the last 90 days. These are needed for deduplication in later steps — cache them alongside the open issues so you can search locally without additional API calls. The extended window ensures older resolved or rejected work is considered during deduplication, even for issues closed more than a month ago.
 
 4. **Read recent activity**: Check the last 48 hours of merged PRs and closed issues to understand what was just completed and what's actively being worked on.
 
@@ -205,10 +205,10 @@ Compare the roadmap against the existing open issues (including any just-triaged
 
 ## Step 4 — Deduplicate
 
-**This step is mandatory.** Before creating ANY issue, use the issue data already gathered in Step 1 (both open and recently closed issues) for all deduplication checks — do not make additional API calls:
+**This step is mandatory.** Before creating ANY issue, use the issue data already gathered in Step 1 (both open and recently closed issues) for all deduplication checks. Only fall back to a targeted `search_issues` API call if you have reason to believe a relevant issue may predate the 90-day cache window (e.g., the topic is long-standing and no match is found locally):
 
 1. Search the cached open issues for similar titles, keywords, and topics.
-2. Search the cached recently closed issues to avoid re-opening previously resolved or rejected work.
+2. Search the cached closed issues (last 90 days) to avoid re-opening previously resolved or rejected work.
 3. If an existing issue partially covers the same area, prefer enhancing that issue's description over creating a new one.
 
 **Never create an issue if:**
