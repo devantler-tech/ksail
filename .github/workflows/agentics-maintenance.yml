@@ -1,11 +1,11 @@
-#    ___                   _   _
-#   / _ \                 | | (_)
-#  | |_| | __ _  ___ _ __ | |_ _  ___
+#    ___                   _   _      
+#   / _ \                 | | (_)     
+#  | |_| | __ _  ___ _ __ | |_ _  ___ 
 #  |  _  |/ _` |/ _ \ '_ \| __| |/ __|
-#  | | | | (_| |  __/ | | | |_| | (__
+#  | | | | (_| |  __/ | | | |_| | (__ 
 #  \_| |_/\__, |\___|_| |_|\__|_|\___|
 #          __/ |
-#  _    _ |___/
+#  _    _ |___/ 
 # | |  | |                / _| |
 # | |  | | ___ _ __ _  __| |_| | _____      ____
 # | |/\| |/ _ \ '__| |/ /|  _| |/ _ \ \ /\ / / ___|
@@ -22,10 +22,10 @@
 #
 # Alternative regeneration methods:
 # make recompile
-#
+# 
 # Or use the gh-aw CLI directly:
 # ./gh-aw compile --validate --verbose
-#
+# 
 # The workflow is generated when any workflow uses the 'expires' field
 # in create-discussions, create-issues, or create-pull-request safe-outputs configuration.
 # Schedule frequency is automatically determined by the shortest expiration time.
@@ -34,26 +34,26 @@ name: Agentic Maintenance
 
 on:
   schedule:
-    - cron: "37 */2 * * *" # Every 2 hours (based on minimum expires: 1 days)
+    - cron: "37 */2 * * *"  # Every 2 hours (based on minimum expires: 1 days)
   workflow_dispatch:
     inputs:
       operation:
-        description: "Optional maintenance operation to run"
+        description: 'Optional maintenance operation to run'
         required: false
         type: choice
-        default: ""
+        default: ''
         options:
-          - ""
-          - "disable"
-          - "enable"
-          - "update"
-          - "upgrade"
-          - "safe_outputs"
+          - ''
+          - 'disable'
+          - 'enable'
+          - 'update'
+          - 'upgrade'
+          - 'safe_outputs'
       run_url:
-        description: "Run URL or run ID to replay safe outputs from (e.g. https://github.com/owner/repo/actions/runs/12345 or 12345). Required when operation is safe_outputs."
+        description: 'Run URL or run ID to replay safe outputs from (e.g. https://github.com/owner/repo/actions/runs/12345 or 12345). Required when operation is safe_outputs.'
         required: false
         type: string
-        default: ""
+        default: ''
 
 permissions: {}
 
@@ -67,7 +67,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@b5ca5364ba36e64b34a20b8e273d2c5d0e1220ec # v0.65.2
+        uses: github/gh-aw-actions/setup@9398bbf0cbb2f974bd98b8ae29f94a7ae920486d # v0.65.2
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
@@ -112,7 +112,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@b5ca5364ba36e64b34a20b8e273d2c5d0e1220ec # v0.65.2
+        uses: github/gh-aw-actions/setup@9398bbf0cbb2f974bd98b8ae29f94a7ae920486d # v0.65.2
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
@@ -127,7 +127,7 @@ jobs:
             await main();
 
       - name: Install gh-aw
-        uses: github/gh-aw-actions/setup-cli@b5ca5364ba36e64b34a20b8e273d2c5d0e1220ec # v0.65.2
+        uses: github/gh-aw-actions/setup-cli@9398bbf0cbb2f974bd98b8ae29f94a7ae920486d # v0.65.2
         with:
           version: v0.65.2
 
@@ -163,7 +163,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@b5ca5364ba36e64b34a20b8e273d2c5d0e1220ec # v0.65.2
+        uses: github/gh-aw-actions/setup@9398bbf0cbb2f974bd98b8ae29f94a7ae920486d # v0.65.2
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 

@@ -229,7 +229,7 @@ Only reach this point if Quick mode produced no changes (noop). This mode follow
 
 To decide which deep-mode phase to perform:
 
-1. Check for existing open discussion titled "${{ github.workflow }}" using `list_discussions`. If not found, perform Deep Phase 1.
+1. Check for existing open discussion titled "${{ github.workflow }} - Research and Plan" using `list_discussions`. If not found, perform Deep Phase 1.
 
 2. Check if `.github/actions/daily-workflow-maintenance/build-steps/action.yml` exists. If not, perform Deep Phase 2.
 

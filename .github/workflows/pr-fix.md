@@ -148,7 +148,7 @@ If you encounter issues you cannot resolve:
    - Why the fix couldn't be applied
    - Suggested next steps for a human developer
 
-2. **Create an issue** (if the problem is systemic) with title prefix "${{ github.workflow }}" describing the root cause and recommended approach.
+2. **Create an issue** (if the problem is systemic) with title prefix "${{ github.workflow }} - " describing the root cause and recommended approach.
 
 ## Important Guidelines
 
