@@ -23,7 +23,7 @@ Usage:
   ksail cluster backup [flags]
 
 Flags:
-      --compression int         Compression level (0-9, default: -1 (gzip default)) (default -1)
+      --compression int         Compression level (-1..9, -1 = gzip default) (default -1)
       --exclude-types strings   Resource types to exclude from backup (default [events])
       --include-volumes         Include persistent volume data in backup (not yet implemented) (default true)
   -n, --namespaces strings      Namespaces to backup (default: all)

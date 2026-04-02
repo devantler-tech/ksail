@@ -2,7 +2,9 @@ package cluster_test
 
 import (
 	"archive/tar"
+	"compress/gzip"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -681,5 +683,125 @@ func TestInjectRestoreLabels(t *testing.T) {
 
 	if !strings.Contains(result, "restore-42") {
 		t.Error("labeled file should contain restore name value")
+	}
+}
+
+func TestCreateTarball_OverwritesExistingTarget(t *testing.T) {
+	t.Parallel()
+
+	srcDir := t.TempDir()
+
+	err := os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("data"), cluster.ExportFilePerm)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	outputPath := filepath.Join(t.TempDir(), "backup.tar.gz")
+
+	// First run creates the archive.
+	err = cluster.ExportCreateTarball(srcDir, outputPath, -1)
+	if err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+
+	// Second run to the same path must succeed (overwrite) without error.
+	err = cluster.ExportCreateTarball(srcDir, outputPath, -1)
+	if err != nil {
+		t.Fatalf("second run (overwrite): %v", err)
+	}
+
+	info, err := os.Stat(outputPath)
+	if err != nil || info.Size() == 0 {
+		t.Fatal("archive not present or empty after overwrite")
+	}
+}
+
+func TestCreateTarball_NoTempFileLeftOnSourceDirError(t *testing.T) {
+	t.Parallel()
+
+	outputDir := t.TempDir()
+	outputPath := filepath.Join(outputDir, "backup.tar.gz")
+
+	// Use a guaranteed-nonexistent directory under t.TempDir() so the test is
+	// deterministic across all environments (avoids /nonexistent-... paths that
+	// could theoretically exist on some systems).
+	nonexistentDir := filepath.Join(t.TempDir(), "does-not-exist")
+
+	err := cluster.ExportCreateTarball(nonexistentDir, outputPath, -1)
+	if err == nil {
+		t.Fatal("expected error for non-existent source dir, got nil")
+	}
+
+	// No .tmp* files should remain in the output directory.
+	entries, readErr := os.ReadDir(outputDir)
+	if readErr != nil {
+		t.Fatalf("ReadDir: %v", readErr)
+	}
+
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tmp") {
+			t.Errorf("temp file left behind: %s", e.Name())
+		}
+	}
+}
+
+func TestCreateTarball_SkipsSymlinks(t *testing.T) {
+	t.Parallel()
+
+	srcDir := t.TempDir()
+
+	realFile := filepath.Join(srcDir, "real.txt")
+
+	err := os.WriteFile(realFile, []byte("data"), cluster.ExportFilePerm)
+	if err != nil {
+		t.Fatalf("setup real file: %v", err)
+	}
+
+	linkPath := filepath.Join(srcDir, "link.txt")
+
+	err = os.Symlink(realFile, linkPath)
+	if err != nil {
+		// Symlinks may be unsupported on this platform/OS configuration.
+		t.Skipf("skipping: os.Symlink not supported: %v", err)
+	}
+
+	outputPath := filepath.Join(t.TempDir(), "backup.tar.gz")
+
+	err = cluster.ExportCreateTarball(srcDir, outputPath, -1)
+	if err != nil {
+		t.Fatalf("createTarball: %v", err)
+	}
+
+	// Read back the archive and verify no symlink entry is present.
+	archiveFile, err := os.Open( //nolint:gosec // G304: test-generated path in t.TempDir()
+		outputPath,
+	)
+	if err != nil {
+		t.Fatalf("open archive: %v", err)
+	}
+
+	defer func() { _ = archiveFile.Close() }()
+
+	gzReader, err := gzip.NewReader(archiveFile)
+	if err != nil {
+		t.Fatalf("gzip.NewReader: %v", err)
+	}
+
+	defer func() { _ = gzReader.Close() }()
+
+	tr := tar.NewReader(gzReader)
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			t.Fatalf("tar.Next: %v", err)
+		}
+
+		if hdr.Name == "link.txt" {
+			t.Errorf("symlink entry %q must not appear in the archive", hdr.Name)
+		}
 	}
 }
