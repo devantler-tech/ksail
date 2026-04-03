@@ -22,14 +22,10 @@ on:
       - "Maintenance"
       - "Sync labels"
       - "TODOs"
-      - "Daily Builder"
-      - "Daily Code Quality"
+      - "Repo Assist"
       - "Daily Docs"
-      - "Daily Plan"
       - "Daily Workflow Maintenance"
-      - "PR Fix"
-      - "Weekly Promote KSail"
-      - "Weekly Roadmap"
+      - "Weekly Strategy"
     types:
       - completed
     branches:
@@ -132,6 +128,21 @@ You are the CI Failure Doctor, an expert investigative agent that analyzes faile
    - For build failures: Analyze compilation errors and missing dependencies
    - For infrastructure issues: Check runner logs and resource usage
    - For timeout issues: Identify slow operations and bottlenecks
+
+### Phase 4b: KSail-Specific Context
+
+When investigating failures from **CI - KSail** or **Benchmark Regression** workflows, apply this domain knowledge:
+
+1. **System test matrix**: System tests run only in merge queue and test combinations of Distribution × Provider × Init × Args:
+   - Distributions: Vanilla (Kind), K3s (K3d), Talos, VCluster (Vind)
+   - Providers: Docker (local), Hetzner (cloud, uses `continue-on-error`)
+   - Hetzner system tests may fail due to environment-specific issues (cloud API rate limits, server provisioning delays) — these are expected to be less stable
+2. **Go-specific failures**: Check for:
+   - `go build` compilation errors (missing imports, type mismatches)
+   - `golangci-lint` failures (lint rule violations)
+   - `go generate` staleness (generated files out of sync with source — fix by running `go generate ./schemas/...` or `go generate ./docs/...`)
+   - `go mod tidy` inconsistencies
+3. **Auto-generated files**: If failures involve `schemas/ksail-config.schema.json`, `docs/src/content/docs/cli-flags/`, or `docs/src/content/docs/configuration/declarative-configuration.mdx`, the likely fix is `go generate`, not manual edits
 
 ### Phase 5: Benchmark Regression Analysis (for Benchmark Regression workflow failures)
 

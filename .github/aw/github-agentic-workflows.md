@@ -1726,7 +1726,7 @@ Monitor workflow execution and costs using the `logs` command:
 gh aw logs
 
 # Download logs for a specific workflow
-gh aw logs weekly-roadmap
+gh aw logs weekly-strategy
 
 # Filter logs by AI engine type
 gh aw logs --engine copilot          # Only Copilot workflows
@@ -1877,7 +1877,7 @@ Use the `mcp list-tools` command to explore tools available from specific MCP se
 gh aw mcp list-tools github
 
 # List tools from a specific MCP server in a workflow
-gh aw mcp list-tools github weekly-roadmap
+gh aw mcp list-tools github weekly-strategy
 ```
 
 This command is useful for:
@@ -1899,7 +1899,7 @@ Agentic workflows compile to GitHub Actions YAML:
 
 - **`gh aw compile --strict`** - Compile all workflow files in `.github/workflows/` with strict security checks
 - **`gh aw compile <workflow-id>`** - Compile a specific workflow by ID (filename without extension)
-  - Example: `gh aw compile daily-plan` compiles `daily-plan.md`
+  - Example: `gh aw compile repo-assist` compiles `repo-assist.md`
   - Supports partial matching and fuzzy search for workflow names
 - **`gh aw compile --purge`** - Remove orphaned `.lock.yml` files that no longer have corresponding `.md` files
 - **`gh aw compile --actionlint`** - Run actionlint linter on compiled workflows (includes shellcheck)

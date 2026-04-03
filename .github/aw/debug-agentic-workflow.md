@@ -95,7 +95,7 @@ Report back with specific findings and actionable fixes.
 
    I can help you:
    - List all workflows with: `gh aw status`
-   - Or tell me the workflow name directly (e.g., 'weekly-roadmap', 'daily-plan')
+   - Or tell me the workflow name directly (e.g., 'weekly-strategy', 'repo-assist')
    - Or provide a workflow run URL (e.g., https://github.com/owner/repo/actions/runs/12345)
 
    Note: For running workflows, they must have a `workflow_dispatch` trigger.

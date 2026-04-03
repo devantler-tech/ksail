@@ -266,17 +266,13 @@ To test the Omni provider locally, you need:
 
 KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a schedule or on dispatch:
 
-| Workflow                     | Schedule                                    | Purpose                                                                   |
-|------------------------------|---------------------------------------------|---------------------------------------------------------------------------|
-| `daily-code-quality`         | Daily (02:00 UTC)                           | Refactoring, performance optimization, and test coverage improvements     |
-| `daily-plan`                 | Daily (10:00 UTC)                           | Issue triage, backlog issue creation, and prioritization from the roadmap |
-| `daily-builder`              | Daily (14:00 UTC)                           | Backlog issue resolution and feature delivery from the project plan       |
-| `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, and dependency upgrades             |
-| `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes and bloat reduction                  |
-| `weekly-roadmap`             | Weekly                                      | Market research and actionable feature roadmap                            |
-| `weekly-promote-ksail`       | Weekly                                      | Project promotion and visibility                                          |
-| `ci-doctor`                  | On CI failure                               | CI failure investigation and diagnostics                                  |
-| `pr-fix`                     | On `/pr-fix` slash command                  | Fixes PR CI failures, linting issues, and Copilot Review feedback         |
+| Workflow                     | Schedule                                    | Purpose                                                                            |
+|------------------------------|---------------------------------------------|------------------------------------------------------------------------------------|
+| `repo-assist`                | Daily / On `/repo-assist`                   | Issue triage, code quality, building, planning, and repository maintenance         |
+| `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, CI coaching, and dependency upgrades         |
+| `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes, bloat reduction, and link fixing             |
+| `weekly-strategy`            | Weekly (Mon + Wed) / On dispatch            | Market research, roadmap planning (Mon), and project promotion (Wed)               |
+| `ci-doctor`                  | On CI failure                               | CI failure investigation, diagnostics, and Go-specific analysis                    |
 
 Each agentic workflow creates a GitHub Discussion to coordinate its work and, depending on its purpose, may open draft PRs or create issues with incremental improvements. You can control them using the [`gh aw`](https://github.com/github/gh-aw) CLI extension:
 

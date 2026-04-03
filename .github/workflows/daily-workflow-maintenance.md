@@ -248,6 +248,17 @@ To decide which deep-mode phase to perform:
    - Check action versions for outdated or unpinned references
    - Look for composite action or reusable workflow opportunities
 
+   **CI performance analysis (CI Coach):**
+   - Use GitHub API to fetch the last 50-100 runs for each CI workflow
+   - Collect metrics: average runtime per workflow, success/failure rates, job-level timing data, cache hit rates, artifact sizes
+   - Identify job parallelization opportunities (independent jobs running sequentially)
+   - Evaluate cache optimization (are dependencies cached effectively? are cache keys optimal?)
+   - Assess test suite balance (are slow tests identified? can tests run in parallel?)
+   - Check resource sizing (appropriate timeouts, optimal runner types)
+   - Review conditional execution (can some jobs skip on certain conditions? are path filters used effectively?)
+   - Prioritize each optimization by: **Impact** (time/cost savings), **Risk** (chance of breaking), **Effort** (implementation complexity)
+   - Focus on **high impact + low risk + low-to-medium effort** optimizations
+
    **For agentic workflows — frontmatter configuration:**
    - Review triggers, permissions, network, tools, safe-outputs, and timeout settings
    - Check for overly broad permissions or network allowlists
@@ -320,6 +331,13 @@ To decide which deep-mode phase to perform:
    - Path filtering, caching, parallelization, deduplication
    - Conditional execution, runner optimization, timeout tuning
    - Concurrency groups, action updates, matrix optimization
+
+   **Dependabot PR bundling:**
+   - Check for multiple open Dependabot PRs using `gh pr list --author "app/dependabot"`
+   - If 3+ Dependabot PRs exist, create a single bundled PR applying all compatible updates
+   - Run tests to verify compatibility: `go build -o ksail && go test ./...`
+   - Reference the original Dependabot PRs so maintainers can close them after merging
+   - If some updates conflict, bundle the compatible ones and document investigation for the rest
 
    **Agentic workflow — frontmatter optimizations:**
    - Permission scoping, network allowlist reduction, tool selection

@@ -3,79 +3,51 @@ rules:
     ignore:
       - agentics-maintenance.yml
       - ci-doctor.lock.yml
-      - daily-builder.lock.yml
-      - daily-code-quality.lock.yml
       - daily-docs.lock.yml
-      - daily-plan.lock.yml
       - daily-workflow-maintenance.lock.yml
-      - pr-fix.lock.yml
-      - weekly-promote-ksail.lock.yml
-      - weekly-roadmap.lock.yml
+      - repo-assist.lock.yml
+      - weekly-strategy.lock.yml
   template-injection:
     ignore:
       - ci-doctor.lock.yml
-      - daily-builder.lock.yml
-      - daily-code-quality.lock.yml
       - daily-docs.lock.yml
-      - daily-plan.lock.yml
       - daily-workflow-maintenance.lock.yml
-      - pr-fix.lock.yml
-      - weekly-promote-ksail.lock.yml
-      - weekly-roadmap.lock.yml
+      - repo-assist.lock.yml
+      - weekly-strategy.lock.yml
   ref-version-mismatch:
     ignore:
       - agentics-maintenance.yml
       - ci-doctor.lock.yml
-      - daily-builder.lock.yml
-      - daily-code-quality.lock.yml
       - daily-docs.lock.yml
-      - daily-plan.lock.yml
       - daily-workflow-maintenance.lock.yml
-      - pr-fix.lock.yml
-      - weekly-promote-ksail.lock.yml
-      - weekly-roadmap.lock.yml
+      - repo-assist.lock.yml
+      - weekly-strategy.lock.yml
   excessive-permissions:
     ignore:
       - ci-doctor.lock.yml
-      - daily-builder.lock.yml
-      - daily-code-quality.lock.yml
       - daily-docs.lock.yml
-      - daily-plan.lock.yml
       - daily-workflow-maintenance.lock.yml
-      - pr-fix.lock.yml
-      - weekly-promote-ksail.lock.yml
-      - weekly-roadmap.lock.yml
+      - repo-assist.lock.yml
+      - weekly-strategy.lock.yml
   artipacked:
     ignore:
       - ci-doctor.lock.yml
-      - daily-builder.lock.yml
-      - daily-code-quality.lock.yml
       - daily-docs.lock.yml
-      - daily-plan.lock.yml
       - daily-workflow-maintenance.lock.yml
-      - pr-fix.lock.yml
-      - weekly-promote-ksail.lock.yml
-      - weekly-roadmap.lock.yml
+      - repo-assist.lock.yml
+      - weekly-strategy.lock.yml
   dangerous-triggers:
     ignore:
       - ci-doctor.lock.yml
-      - daily-builder.lock.yml
-      - daily-code-quality.lock.yml
       - daily-docs.lock.yml
-      - daily-plan.lock.yml
       - daily-workflow-maintenance.lock.yml
-      - pr-fix.lock.yml
-      - weekly-promote-ksail.lock.yml
-      - weekly-roadmap.lock.yml
+      - repo-assist.lock.yml
+      - weekly-strategy.lock.yml
   unpinned-uses:
     ignore:
       - agentics-maintenance.yml
       - ci-doctor.lock.yml
-      - daily-builder.lock.yml
-      - daily-code-quality.lock.yml
       - daily-docs.lock.yml
-      - daily-plan.lock.yml
       - daily-workflow-maintenance.lock.yml
-      - pr-fix.lock.yml
-      - weekly-promote-ksail.lock.yml
-      - weekly-roadmap.lock.yml
+      - repo-assist.lock.yml
+      - weekly-strategy.lock.yml
