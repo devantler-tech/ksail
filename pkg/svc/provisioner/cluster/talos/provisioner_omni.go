@@ -53,8 +53,9 @@ func (p *Provisioner) deleteOmniCluster(ctx context.Context, clusterName string)
 }
 
 // getOmniNodesByRole returns nodes with their roles from the Omni API.
-// Omni returns machine IDs as node identifiers; IP-based operations
-// (e.g., Talos config application) should use the saved talosconfig endpoints.
+// Omni returns machine IDs as node identifiers; the IP field of nodeWithRole
+// stores the machine ID (not an IP address) since Omni nodes are addressed
+// through the saved talosconfig endpoints, not by direct IP.
 func (p *Provisioner) getOmniNodesByRole(
 	ctx context.Context,
 	clusterName string,
@@ -77,6 +78,8 @@ func (p *Provisioner) getOmniNodesByRole(
 			role = RoleControlPlane
 		}
 
+		// node.Name is the Omni machine ID, stored in the IP field
+		// for compatibility with the nodeWithRole struct.
 		nodes = append(nodes, nodeWithRole{IP: node.Name, Role: role})
 	}
 
