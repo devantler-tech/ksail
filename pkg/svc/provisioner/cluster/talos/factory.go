@@ -219,6 +219,9 @@ func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner 
 
 // Omni default values - keep in sync with OptionsOmni struct tags.
 const (
+	// defaultOmniEndpointEnvVar is the default environment variable
+	// name for the Omni API endpoint URL.
+	defaultOmniEndpointEnvVar = "OMNI_ENDPOINT"
 	// defaultOmniServiceAccountKeyEnvVar is the default environment variable
 	// name for the Omni service account key used for API authentication.
 	defaultOmniServiceAccountKeyEnvVar = "OMNI_SERVICE_ACCOUNT_KEY"
@@ -226,8 +229,23 @@ const (
 
 // createOmniProvider creates an Omni provider from the given options.
 func createOmniProvider(opts v1alpha1.OptionsOmni) (*omni.Provider, error) {
-	if opts.Endpoint == "" {
-		return nil, omni.ErrEndpointRequired
+	// Determine the endpoint: env var takes precedence over config
+	endpointEnvVar := opts.EndpointEnvVar
+	if endpointEnvVar == "" {
+		endpointEnvVar = defaultOmniEndpointEnvVar
+	}
+
+	endpoint := os.Getenv(endpointEnvVar)
+	if endpoint == "" {
+		endpoint = opts.Endpoint
+	}
+
+	if endpoint == "" {
+		return nil, fmt.Errorf(
+			"%w: set via environment variable %s or spec.cluster.omni.endpoint in config",
+			omni.ErrEndpointRequired,
+			endpointEnvVar,
+		)
 	}
 
 	// Determine the service account key environment variable name
@@ -248,7 +266,7 @@ func createOmniProvider(opts v1alpha1.OptionsOmni) (*omni.Provider, error) {
 
 	// Create the Omni client and provider
 	client, err := omniclient.New(
-		opts.Endpoint,
+		endpoint,
 		omniclient.WithServiceAccount(serviceAccountKey),
 	)
 	if err != nil {

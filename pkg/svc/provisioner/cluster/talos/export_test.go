@@ -3,6 +3,7 @@ package talosprovisioner
 import (
 	"context"
 
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
@@ -42,4 +43,11 @@ func (p *Provisioner) RemoveDockerNodesForTest(
 	result *clusterupdate.UpdateResult,
 ) error {
 	return p.removeDockerNodes(ctx, clusterName, role, count, result)
+}
+
+// CreateOmniProviderForTest exposes createOmniProvider for unit testing.
+func CreateOmniProviderForTest(opts v1alpha1.OptionsOmni) error {
+	_, err := createOmniProvider(opts)
+
+	return err
 }

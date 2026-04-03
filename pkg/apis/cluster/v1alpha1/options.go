@@ -108,6 +108,10 @@ type OptionsOmni struct {
 	// Endpoint is the Omni API endpoint URL.
 	// Example: "https://<account>.omni.siderolabs.io:443".
 	Endpoint string `json:"endpoint,omitzero"`
+	// EndpointEnvVar is the environment variable containing the Omni API endpoint URL.
+	// When set, the value of this environment variable takes precedence over Endpoint.
+	// Defaults to "OMNI_ENDPOINT".
+	EndpointEnvVar string `default:"OMNI_ENDPOINT" json:"endpointEnvVar,omitzero"`
 	// ServiceAccountKeyEnvVar is the environment variable containing the
 	// base64-encoded Omni service account key.
 	// Defaults to "OMNI_SERVICE_ACCOUNT_KEY".

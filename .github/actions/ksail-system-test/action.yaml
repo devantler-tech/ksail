@@ -8,7 +8,7 @@ inputs:
     description: Kubernetes distribution (Vanilla, K3s, Talos, VCluster)
     required: true
   provider:
-    description: Infrastructure provider (Docker, Hetzner)
+    description: Infrastructure provider (Docker, Hetzner, Omni)
     required: false
     default: "Docker"
   args:
@@ -45,6 +45,14 @@ inputs:
     description: Hetzner Cloud API token (required when provider is Hetzner)
     required: false
     default: ""
+  omni-service-account-key:
+    description: Omni service account key (required when provider is Omni)
+    required: false
+    default: ""
+  omni-endpoint:
+    description: Omni API endpoint URL (required when provider is Omni)
+    required: false
+    default: ""
   ghcr-user:
     description: GitHub Container Registry username (for external registry auth)
     required: false
@@ -57,6 +65,22 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: ✅ Validate Omni inputs
+      if: inputs.provider == 'Omni'
+      shell: bash
+      env:
+        OMNI_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_EP: ${{ inputs.omni-endpoint }}
+      run: |
+        if [ -z "$OMNI_KEY" ]; then
+          echo "❌ ERROR: omni-service-account-key is required when provider is Omni" >&2
+          exit 1
+        fi
+        if [ -z "$OMNI_EP" ]; then
+          echo "❌ ERROR: omni-endpoint is required when provider is Omni" >&2
+          exit 1
+        fi
+
     - name: 🔧 Generate unique artifact tag
       id: generate-tag
       shell: bash
@@ -113,11 +137,15 @@ runs:
         cache: "true"
         validate: ${{ inputs.init }}
         hcloud-token: ${{ inputs.hcloud-token }}
+        omni-service-account-key: ${{ inputs.omni-service-account-key }}
+        omni-endpoint: ${{ inputs.omni-endpoint }}
 
     - name: 🧪 ksail cluster list
       shell: bash
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail cluster list
 
@@ -129,6 +157,8 @@ runs:
         WORKLOAD_IMAGE: ${{ inputs.test-workload-image }}
         TIMEOUT: ${{ inputs.workload-timeout }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         for attempt in 1 2 3; do
           if ksail workload create deployment "$WORKLOAD_NAME" --image="$WORKLOAD_IMAGE"; then
@@ -147,6 +177,8 @@ runs:
         OVERLAY_PATH: ${{ inputs.apply-overlay-path }}
         TIMEOUT: ${{ inputs.workload-timeout }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: ksail workload apply -k "$OVERLAY_PATH" --wait --timeout="$TIMEOUT"
 
     - name: 🧪 ksail workload push and reconcile
@@ -156,6 +188,8 @@ runs:
       env:
         GITOPS_PATH: ${{ inputs.gitops-path }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
         GHCR_USER: ${{ inputs.ghcr-user }}
         GHCR_TOKEN: ${{ inputs.ghcr-token }}
       run: |
@@ -176,6 +210,8 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         set -o pipefail
         # shellcheck disable=SC2086
@@ -197,6 +233,8 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         set -o pipefail
         # shellcheck disable=SC2086
@@ -220,6 +258,8 @@ runs:
       shell: bash
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail cluster stop
 
@@ -227,6 +267,8 @@ runs:
       shell: bash
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         timeout 600 ksail cluster start
 
@@ -235,5 +277,7 @@ runs:
       shell: bash
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail cluster delete || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
