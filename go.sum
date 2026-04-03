@@ -1198,8 +1198,8 @@ github.com/jsimonetti/rtnetlink v0.0.0-20210525051524-4cc836578190/go.mod h1:NmK
 github.com/jsimonetti/rtnetlink v0.0.0-20211022192332-93da33804786/go.mod h1:v4hqbTdfQngbVSZJVWUhGE/lbTFf9jb+ygmNUDQMuOs=
 github.com/jsimonetti/rtnetlink v1.3.5 h1:hVlNQNRlLDGZz31gBPicsG7Q53rnlsz1l1Ix/9XlpVA=
 github.com/jsimonetti/rtnetlink v1.3.5/go.mod h1:0LFedyiTkebnd43tE4YAkWGIq9jQphow4CcwxaT2Y00=
-github.com/jsimonetti/rtnetlink/v2 v2.2.0 h1:/KfZ310gOAFrXXol5VwnFEt+ucldD/0dsSRZwpHCP9w=
-github.com/jsimonetti/rtnetlink/v2 v2.2.0/go.mod h1:lbjDHxC+5RJ08lzPeA90Ls2pEoId3F08MoEMlhfHxeI=
+github.com/jsimonetti/rtnetlink/v2 v2.2.1-0.20260317095713-310581b9c6ac h1:UfziP9RaDM6D+f+yNdL3T/N1DztwltLDGBkpybF/fYs=
+github.com/jsimonetti/rtnetlink/v2 v2.2.1-0.20260317095713-310581b9c6ac/go.mod h1:A/gqt1BEMJcvzGQJXQ3SnsDOQL7QRNhxTiC3eb++608=
 github.com/json-iterator/go v1.1.6/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=
 github.com/json-iterator/go v1.1.9/go.mod h1:KdQUCv79m/52Kvf8AW2vK1V8akMuk1QjK/uOdHXbAo4=
 github.com/json-iterator/go v1.1.11/go.mod h1:KdQUCv79m/52Kvf8AW2vK1V8akMuk1QjK/uOdHXbAo4=
@@ -1757,8 +1757,8 @@ github.com/siderolabs/protoenc v0.2.4 h1:D3Fpn2nQSQOhl8ZlAxijZAf7K6F8CM1uZq0afIG
 github.com/siderolabs/protoenc v0.2.4/go.mod h1:i5XLHjfv5vyi7LhQrSEo19HCA+lYtDd7CWxsoWp9XE8=
 github.com/siderolabs/talos v1.13.0-beta.0 h1:4cMKC48Ig98IwTTW+K5dS8O4O7NzuaC3hjqVvXbdoVQ=
 github.com/siderolabs/talos v1.13.0-beta.0/go.mod h1:NoBEJTUnDbBRQOKhnmHvfg+fZoA7hVwJh7/UebspxPo=
-github.com/siderolabs/talos/pkg/machinery v1.13.0-beta.0 h1:V2Fd2DRgS50vk9Q5OmvpU5I0fnw/Snlmh6e7ub1cNGM=
-github.com/siderolabs/talos/pkg/machinery v1.13.0-beta.0/go.mod h1:SEOEuyZggCr/nI9THHiVds9XjSiPsTrinScqXZih2hY=
+github.com/siderolabs/talos/pkg/machinery v1.13.0-beta.1 h1:y2fbmuXt2pqzfYgjO8gAqgiIsrj73N5lYaMG1JiiWao=
+github.com/siderolabs/talos/pkg/machinery v1.13.0-beta.1/go.mod h1:tE9jKW4epcqK/Oe+icYOqK1isiB9je1AeSaBjb8i8ks=
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
 github.com/sirupsen/logrus v1.7.0/go.mod h1:yWOB1SBYBC5VeMP7gHvWumXLIWorT60ONWic61uBYv0=
