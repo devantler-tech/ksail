@@ -144,6 +144,25 @@ func csiFactory(
 	}
 }
 
+// resolveHelmClientAndTimeout creates a Helm client and computes the
+// effective install timeout for the given cluster configuration.
+func resolveHelmClientAndTimeout(
+	factories *InstallerFactories,
+	clusterCfg *v1alpha1.Cluster,
+	minTimeout time.Duration,
+) (helm.Interface, time.Duration, error) {
+	helmClient, _, err := factories.HelmClientFactory(clusterCfg)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	timeout := max(
+		installer.GetInstallTimeout(clusterCfg), minTimeout,
+	)
+
+	return helmClient, timeout, nil
+}
+
 // helmInstallerFactory creates a factory function for helm-based installers.
 func helmInstallerFactory(
 	factories *InstallerFactories,
@@ -151,15 +170,14 @@ func helmInstallerFactory(
 	minTimeout time.Duration,
 ) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
 	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-		helmClient, _, err := factories.HelmClientFactory(clusterCfg)
+		hc, t, err := resolveHelmClientAndTimeout(
+			factories, clusterCfg, minTimeout,
+		)
 		if err != nil {
 			return nil, err
 		}
 
-		timeout := installer.GetInstallTimeout(clusterCfg)
-		timeout = max(timeout, minTimeout)
-
-		return newInstaller(helmClient, timeout), nil
+		return newInstaller(hc, t), nil
 	}
 }
 
@@ -169,22 +187,19 @@ func argoCDInstallerFactory(
 	factories *InstallerFactories,
 ) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
 	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-		helmClient, _, err := factories.HelmClientFactory(clusterCfg)
+		hc, t, err := resolveHelmClientAndTimeout(
+			factories, clusterCfg,
+			installer.ArgoCDInstallTimeout,
+		)
 		if err != nil {
 			return nil, err
 		}
 
-		timeout := max(
-			installer.GetInstallTimeout(clusterCfg),
-			installer.ArgoCDInstallTimeout,
-		)
 		sopsEnabled := argocdinstaller.ShouldEnableSOPS(
 			clusterCfg.Spec.Cluster.SOPS,
 		)
 
-		return argocdinstaller.NewInstaller(
-			helmClient, timeout, sopsEnabled,
-		), nil
+		return argocdinstaller.NewInstaller(hc, t, sopsEnabled), nil
 	}
 }
 

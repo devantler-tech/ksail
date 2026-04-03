@@ -88,29 +88,24 @@ func buildRepoServerYaml() string {
 }
 
 // buildInitContainerYaml returns the SOPS binary init container section.
+// Uses the official getsops/sops image to copy the binary, avoiding
+// runtime network downloads and supply-chain risks.
 func buildInitContainerYaml() string {
 	sopsVer := sopsVersion()
-	downloadURL := "https://github.com/getsops/sops/releases/download"
 
 	return fmt.Sprintf(`repoServer:
   initContainers:
     - name: install-sops
-      image: alpine:3.21
+      image: ghcr.io/getsops/sops:v%s-alpine
       command:
         - sh
         - -c
       args:
-        - |
-          ARCH=$(uname -m \
-            | sed 's/x86_64/amd64/' \
-            | sed 's/aarch64/arm64/')
-          wget -qO /custom-tools/sops \
-            "%[1]s/v%[2]s/sops-v%[2]s.linux.${ARCH}"
-          chmod +x /custom-tools/sops
+        - cp /usr/local/bin/sops /custom-tools/sops
       volumeMounts:
         - name: custom-tools
           mountPath: /custom-tools
-`, downloadURL, sopsVer)
+`, sopsVer)
 }
 
 // buildSidecarAndVolumesYaml returns the CMP sidecar container and

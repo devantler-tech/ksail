@@ -3,6 +3,7 @@
 package sopsutil
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -13,6 +14,45 @@ import (
 
 // AgeSecretKeyPrefix is the prefix for Age private keys.
 const AgeSecretKeyPrefix = "AGE-SECRET-KEY-"
+
+// ErrSOPSKeyNotFound indicates SOPS is explicitly enabled but no key was found.
+var ErrSOPSKeyNotFound = errors.New(
+	"SOPS is enabled but no Age key found",
+)
+
+// ResolveEnabledAgeKey checks the SOPS configuration and resolves the
+// Age private key. It respects explicit enable/disable and falls back
+// to auto-detection. Returns ("", nil) when SOPS should be skipped.
+func ResolveEnabledAgeKey(sops v1alpha1.SOPS) (string, error) {
+	explicitlyEnabled := sops.Enabled != nil && *sops.Enabled
+
+	if sops.Enabled != nil && !explicitlyEnabled {
+		return "", nil
+	}
+
+	ageKey, err := ResolveAgeKey(sops)
+	if err != nil {
+		if explicitlyEnabled {
+			return "", fmt.Errorf("resolve SOPS Age key: %w", err)
+		}
+
+		return "", nil
+	}
+
+	if ageKey == "" {
+		if explicitlyEnabled {
+			return "", fmt.Errorf(
+				"%w (checked env var %q and local key file)",
+				ErrSOPSKeyNotFound,
+				sops.AgeKeyEnvVar,
+			)
+		}
+
+		return "", nil
+	}
+
+	return ageKey, nil
+}
 
 // ResolveAgeKey resolves the Age private key from available sources.
 // Priority: (1) environment variable named by AgeKeyEnvVar, (2) local key file.

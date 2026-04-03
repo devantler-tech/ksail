@@ -78,9 +78,9 @@ func TestBuildSOPSValuesYaml(t *testing.T) {
 	// Verify content-based SOPS detection (grep for sops: metadata)
 	assert.Contains(t, yaml, "grep -l '^sops:'")
 
-	// Verify init container for SOPS binary
+	// Verify init container for SOPS binary (uses official image)
 	assert.Contains(t, yaml, "install-sops")
-	assert.Contains(t, yaml, "getsops/sops/releases/download")
+	assert.Contains(t, yaml, "ghcr.io/getsops/sops:")
 	assert.Contains(t, yaml, "custom-tools")
 
 	// Verify CMP sidecar container
@@ -106,6 +106,6 @@ func TestBuildSOPSValuesYaml_SOPSVersionPresent(t *testing.T) {
 
 	yaml := argocdinstaller.BuildSOPSValuesYaml()
 
-	// Verify the SOPS version is included in the download URL
-	assert.Regexp(t, `sops-v\d+\.\d+\.\d+\.linux`, yaml)
+	// Verify the SOPS version is included in the init container image tag
+	assert.Regexp(t, `getsops/sops:v\d+\.\d+\.\d+-alpine`, yaml)
 }

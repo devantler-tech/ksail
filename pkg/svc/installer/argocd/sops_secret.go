@@ -2,7 +2,6 @@ package argocdinstaller
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -16,16 +15,12 @@ import (
 
 const (
 	// SopsAgeSecretName is the name of the Kubernetes secret used for SOPS Age decryption.
-	// ArgoCD repo-server or Config Management Plugins reference this secret for SOPS decryption.
 	SopsAgeSecretName = "sops-age"
 	// sopsAgeKeyField is the data key within the secret that holds the Age private key.
 	sopsAgeKeyField = "sops.agekey"
 )
 
-var (
-	errSOPSKeyNotFound = errors.New("SOPS is enabled but no Age key found")
-	errNilClusterCfg   = errors.New("clusterCfg is nil")
-)
+var errNilClusterCfg = fmt.Errorf("clusterCfg is nil")
 
 // EnsureSopsAgeSecret creates or updates the sops-age secret in the argocd namespace
 // if SOPS is enabled and an Age key is available.
@@ -42,45 +37,29 @@ func EnsureSopsAgeSecret(
 		return errNilClusterCfg
 	}
 
-	sops := clusterCfg.Spec.Cluster.SOPS
-	explicitlyEnabled := sops.Enabled != nil && *sops.Enabled
-
-	// If explicitly disabled, skip
-	if sops.Enabled != nil && !explicitlyEnabled {
-		return nil
-	}
-
-	ageKey, err := sopsutil.ResolveAgeKey(sops)
+	ageKey, err := sopsutil.ResolveEnabledAgeKey(
+		clusterCfg.Spec.Cluster.SOPS,
+	)
 	if err != nil {
-		if explicitlyEnabled {
-			return fmt.Errorf("resolve SOPS Age key: %w", err)
-		}
-
-		// Auto-detect mode: treat errors as "no key available"
-		return nil
+		return err
 	}
 
 	if ageKey == "" {
-		if explicitlyEnabled {
-			return fmt.Errorf(
-				"%w (checked env var %q and local key file)",
-				errSOPSKeyNotFound,
-				sops.AgeKeyEnvVar,
-			)
-		}
-
-		// Auto-detect mode: no key found, skip silently
 		return nil
 	}
 
 	restConfig, err := k8s.BuildRESTConfig(kubeconfig, "")
 	if err != nil {
-		return fmt.Errorf("build REST config for sops-age secret: %w", err)
+		return fmt.Errorf(
+			"build REST config for sops-age secret: %w", err,
+		)
 	}
 
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return fmt.Errorf("create kubernetes client for sops-age secret: %w", err)
+		return fmt.Errorf(
+			"create kubernetes client for sops-age secret: %w", err,
+		)
 	}
 
 	return upsertSopsAgeSecret(ctx, clientset, ageKey)
