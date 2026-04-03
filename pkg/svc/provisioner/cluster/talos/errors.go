@@ -22,6 +22,8 @@ var (
 	ErrNoPortMapping = errors.New("no port mapping found")
 	// ErrHetznerProviderRequired is returned when the Hetzner provider is expected but not available.
 	ErrHetznerProviderRequired = errors.New("hetzner provider required for this operation")
+	// ErrOmniProviderRequired is returned when the Omni provider is expected but not available.
+	ErrOmniProviderRequired = errors.New("omni provider required for this operation")
 	// ErrMissingKubernetesEndpoint is returned when the cluster info is missing the Kubernetes endpoint.
 	ErrMissingKubernetesEndpoint = errors.New("cluster info missing KubernetesEndpoint")
 	// ErrKernelModuleLoadFailed is returned when loading a required kernel module fails.

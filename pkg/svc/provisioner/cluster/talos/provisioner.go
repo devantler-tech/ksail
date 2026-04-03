@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
@@ -246,7 +247,7 @@ func (p *Provisioner) TalosConfigs() *talosconfigmanager.Configs {
 
 // Create creates a Talos cluster.
 // If name is non-empty, it overrides the cluster name from talosConfigs.
-// Routes to Docker-based or Hetzner-based provisioning based on configuration.
+// Routes to Docker-based, Hetzner-based, or Omni-based provisioning based on configuration.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	clusterName := p.resolveClusterName(name)
 
@@ -255,13 +256,18 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		return p.createHetznerCluster(ctx, clusterName)
 	}
 
+	// Route to Omni — Omni manages cluster creation externally
+	if _, ok := p.infraProvider.(*omni.Provider); ok {
+		return fmt.Errorf("%w: Omni manages cluster creation externally", ErrNotImplemented)
+	}
+
 	// Docker-based provisioning (default)
 	return p.createDockerCluster(ctx, clusterName)
 }
 
 // Delete deletes a Talos cluster.
 // If name is non-empty, it overrides the configured cluster name.
-// Routes to Docker-based or Hetzner-based deletion based on configuration.
+// Routes to Docker-based, Hetzner-based, or Omni-based deletion based on configuration.
 func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	clusterName := p.resolveClusterName(name)
 
@@ -270,13 +276,18 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 		return p.deleteHetznerCluster(ctx, clusterName)
 	}
 
+	// Route to Omni-based deletion if infraProvider is an Omni provider
+	if _, ok := p.infraProvider.(*omni.Provider); ok {
+		return p.deleteOmniCluster(ctx, clusterName)
+	}
+
 	// Docker-based deletion (default)
 	return p.deleteDockerCluster(ctx, clusterName)
 }
 
 // Exists checks if a Talos cluster exists.
 // If name is non-empty, it overrides the configured cluster name.
-// Routes to Docker-based or Hetzner-based existence check based on configuration.
+// Routes to Docker-based, Hetzner-based, or Omni-based existence check based on configuration.
 func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 	clusterName := p.resolveClusterName(name)
 
@@ -288,6 +299,16 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 		}
 
 		exists, err := hetznerProv.NodesExist(ctx, clusterName)
+		if err != nil {
+			return false, fmt.Errorf("failed to check if cluster exists: %w", err)
+		}
+
+		return exists, nil
+	}
+
+	// Route to Omni-based check if infraProvider is an Omni provider
+	if omniProv, ok := p.infraProvider.(*omni.Provider); ok {
+		exists, err := omniProv.NodesExist(ctx, clusterName)
 		if err != nil {
 			return false, fmt.Errorf("failed to check if cluster exists: %w", err)
 		}
