@@ -177,6 +177,7 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		&m.Config.Spec.Cluster.Provider:               "provider",
 		&m.Config.Spec.Cluster.DistributionConfig:     "distribution-config",
 		&m.Config.Spec.Workload.SourceDirectory:       "source-directory",
+		&m.Config.Spec.Workload.KustomizationFile:     "kustomization-file",
 		&m.Config.Spec.Cluster.Connection.Context:     "context",
 		&m.Config.Spec.Cluster.Connection.Kubeconfig:  "kubeconfig",
 		&m.Config.Spec.Cluster.Connection.Timeout:     "timeout",

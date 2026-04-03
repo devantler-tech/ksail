@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -409,7 +410,14 @@ func (s *Scaffolder) generateGitOpsConfig(_ string, _ bool) error {
 }
 
 // generateKustomizationConfig generates the kustomization.yaml file.
+// When kustomizationFile is set to a subdirectory, the kustomization.yaml is generated
+// at that subdirectory rather than at the root of the source directory.
 func (s *Scaffolder) generateKustomizationConfig(output string, force bool) error {
+	kustomizationDir, err := s.resolveKustomizationDir()
+	if err != nil {
+		return err
+	}
+
 	kustomization := ktypes.Kustomization{}
 
 	// Add GitOps resources if a GitOps engine is configured
@@ -418,7 +426,7 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(
 			output,
-			s.KSailConfig.Spec.Workload.SourceDirectory,
+			kustomizationDir,
 			"kustomization.yaml",
 		),
 		Force: force,
@@ -431,7 +439,7 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 			Model: &kustomization,
 			Opts:  opts,
 			DisplayName: filepath.Join(
-				s.KSailConfig.Spec.Workload.SourceDirectory,
+				kustomizationDir,
 				"kustomization.yaml",
 			),
 			Force: force,
@@ -441,6 +449,76 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 		},
 	)
 }
+
+// resolveKustomizationDir resolves the directory where kustomization.yaml should be written.
+// It normalizes the kustomizationFile path using slash semantics and validates it.
+func (s *Scaffolder) resolveKustomizationDir() (string, error) {
+	rawPath := strings.TrimSpace(s.KSailConfig.Spec.Workload.KustomizationFile)
+
+	switch rawPath {
+	case "", ".", "./":
+		return s.KSailConfig.Spec.Workload.SourceDirectory, nil
+	default:
+		cleanPath, err := validateKustomizationPath(rawPath)
+		if err != nil {
+			return "", err
+		}
+
+		return filepath.Join(
+			s.KSailConfig.Spec.Workload.SourceDirectory,
+			filepath.FromSlash(cleanPath),
+		), nil
+	}
+}
+
+// validateKustomizationPath normalizes rawPath to slash semantics and validates it.
+// It returns the cleaned slash path ready for filepath.FromSlash conversion.
+func validateKustomizationPath(rawPath string) (string, error) {
+	// Normalize Windows-style backslashes to forward slashes before validation.
+	// The OS-independent path package must be used to reject absolute paths and
+	// traversal consistently on all platforms.
+	cleanPath := path.Clean(strings.ReplaceAll(rawPath, "\\", "/"))
+
+	if path.IsAbs(cleanPath) {
+		return "", fmt.Errorf("%w: %q is absolute", ErrInvalidKustomizationFilePath, rawPath)
+	}
+
+	if isWindowsDriveLetter(cleanPath) {
+		return "", fmt.Errorf(
+			"%w: %q contains a Windows drive letter",
+			ErrInvalidKustomizationFilePath,
+			rawPath,
+		)
+	}
+
+	if cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {
+		return "", fmt.Errorf(
+			"%w: %q traverses parent directories",
+			ErrInvalidKustomizationFilePath,
+			rawPath,
+		)
+	}
+
+	return cleanPath, nil
+}
+
+// jscpd:ignore-start
+// isWindowsDriveLetter reports whether slashPath begins with a Windows drive-letter prefix
+// (a letter A-Z or a-z followed by ':' and then '/' or end of string).
+// slashPath must already be slash-normalized before calling this function.
+func isWindowsDriveLetter(slashPath string) bool {
+	if len(slashPath) < 2 { //nolint:mnd // minimum length for drive letter "X:"
+		return false
+	}
+
+	first := slashPath[0]
+
+	return ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')) &&
+		slashPath[1] == ':' &&
+		(len(slashPath) == 2 || slashPath[2] == '/')
+}
+
+// jscpd:ignore-end
 
 // getKustomizationResources returns the resources to include in the kustomization.
 // GitOps resources (FluxInstance, ArgoCD Application) are created server-side via Kubernetes API,

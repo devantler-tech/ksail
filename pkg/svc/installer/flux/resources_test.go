@@ -403,8 +403,96 @@ func TestIsTransientAPIError(t *testing.T) {
 func TestNormalizeFluxPath(t *testing.T) {
 	t.Parallel()
 
-	path := fluxinstaller.NormalizeFluxPath()
-	assert.Equal(t, "./", path)
+	tests := []struct {
+		name              string
+		kustomizationFile string
+		expected          string
+	}{
+		{
+			name:              "windows backslash path normalized",
+			kustomizationFile: "clusters\\local",
+			expected:          "./clusters/local",
+		},
+		{
+			name:              "windows drive-letter coerced to root",
+			kustomizationFile: "C:\\clusters\\local",
+			expected:          "./",
+		},
+		{
+			name:              "unix relative path with colon is allowed",
+			kustomizationFile: "a:b/clusters",
+			expected:          "./a:b/clusters",
+		},
+		{
+			name:              "empty returns root",
+			kustomizationFile: "",
+			expected:          "./",
+		},
+		{
+			name:              "dot returns root",
+			kustomizationFile: ".",
+			expected:          "./",
+		},
+		{
+			name:              "dot-slash returns root",
+			kustomizationFile: "./",
+			expected:          "./",
+		},
+		{
+			name:              "absolute path coerced to root",
+			kustomizationFile: "/clusters/local",
+			expected:          "./",
+		},
+		{
+			name:              "parent traversal coerced to root",
+			kustomizationFile: "../escape",
+			expected:          "./",
+		},
+		{
+			name:              "double-dot coerced to root",
+			kustomizationFile: "..",
+			expected:          "./",
+		},
+		{
+			name:              "whitespace-only treated as root",
+			kustomizationFile: "   ",
+			expected:          "./",
+		},
+		{
+			name:              "path with surrounding whitespace trimmed",
+			kustomizationFile: "  clusters/local  ",
+			expected:          "./clusters/local",
+		},
+		{
+			name:              "subdirectory path",
+			kustomizationFile: "clusters/local",
+			expected:          "./clusters/local",
+		},
+		{
+			name:              "nested path",
+			kustomizationFile: "clusters/prod",
+			expected:          "./clusters/prod",
+		},
+		{
+			name:              "path with trailing slash is cleaned",
+			kustomizationFile: "clusters/local/",
+			expected:          "./clusters/local",
+		},
+		{
+			name:              "path with dot prefix is preserved",
+			kustomizationFile: "./clusters/local",
+			expected:          "./clusters/local",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := fluxinstaller.NormalizeFluxPath(tt.kustomizationFile)
+			assert.Equal(t, tt.expected, path)
+		})
+	}
 }
 
 func TestPollUntilReady_Success(t *testing.T) {

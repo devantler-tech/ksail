@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -295,7 +296,7 @@ func buildInstance(
 				Kind:       fluxOCIRepositoryKind,
 				URL:        repoURL,
 				Ref:        tag,
-				Path:       normalizeFluxPath(),
+				Path:       normalizeFluxPath(clusterCfg.Spec.Workload.KustomizationFile),
 				Provider:   "generic",
 				Interval:   intervalPtr,
 				PullSecret: pullSecret,
@@ -357,9 +358,55 @@ func buildLocalRegistryURL(
 	)
 }
 
-func normalizeFluxPath() string {
-	// Flux expects paths to be relative to the root of the unpacked artifact.
-	return "./"
+func normalizeFluxPath(kustomizationFile string) string {
+	// Normalize all separators to forward slash first: Flux paths are always slash-based
+	// and filepath functions are OS-dependent, so we validate using slash semantics.
+	trimmed := strings.TrimSpace(strings.ReplaceAll(kustomizationFile, `\`, "/"))
+
+	if isFluxPathRoot(trimmed) {
+		return "./"
+	}
+
+	normalized := path.Clean(trimmed)
+
+	if isFluxPathRoot(normalized) || isInvalidFluxPath(normalized) {
+		return "./"
+	}
+
+	if !strings.HasPrefix(normalized, "./") {
+		normalized = "./" + normalized
+	}
+
+	return normalized
+}
+
+// isFluxPathRoot reports whether p represents the artifact root ("./" semantics).
+func isFluxPathRoot(p string) bool {
+	return p == "" || p == "." || p == "./"
+}
+
+// isWindowsDriveLetter reports whether slashPath begins with a Windows drive-letter prefix
+// (a letter A-Z or a-z followed by ':' and then '/' or end of string).
+// slashPath must already be slash-normalized before calling this function.
+func isWindowsDriveLetter(slashPath string) bool {
+	if len(slashPath) < 2 { //nolint:mnd // minimum length for drive letter "X:"
+		return false
+	}
+
+	first := slashPath[0]
+
+	return ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')) &&
+		slashPath[1] == ':' &&
+		(len(slashPath) == 2 || slashPath[2] == '/')
+}
+
+// isInvalidFluxPath reports whether slashPath should be rejected and coerced to root.
+// slashPath must already be slash-normalized before calling this function.
+func isInvalidFluxPath(slashPath string) bool {
+	return isWindowsDriveLetter(slashPath) ||
+		path.IsAbs(slashPath) ||
+		slashPath == ".." ||
+		strings.HasPrefix(slashPath, "../")
 }
 
 // newFluxResourcesClient creates a client for FluxInstance and OCIRepository resources.
