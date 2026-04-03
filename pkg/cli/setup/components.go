@@ -181,13 +181,19 @@ func DefaultInstallerFactories() *InstallerFactories {
 		},
 		installer.CertManagerInstallTimeout,
 	)
-	factories.ArgoCD = helmInstallerFactory(
-		factories,
-		func(c helm.Interface, t time.Duration) installer.Installer {
-			return argocdinstaller.NewInstaller(c, t)
-		},
-		installer.ArgoCDInstallTimeout,
-	)
+	factories.ArgoCD = func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		helmClient, _, err := factories.HelmClientFactory(clusterCfg)
+		if err != nil {
+			return nil, err
+		}
+
+		timeout := installer.GetInstallTimeout(clusterCfg)
+		timeout = max(timeout, installer.ArgoCDInstallTimeout)
+
+		sopsEnabled := argocdinstaller.ShouldEnableSOPS(clusterCfg.Spec.Cluster.SOPS)
+
+		return argocdinstaller.NewInstaller(helmClient, timeout, sopsEnabled), nil
+	}
 	factories.KubeletCSRApprover = helmInstallerFactory(
 		factories,
 		func(c helm.Interface, t time.Duration) installer.Installer {

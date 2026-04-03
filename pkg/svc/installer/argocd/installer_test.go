@@ -17,7 +17,7 @@ func TestNewInstaller(t *testing.T) {
 
 	timeout := 5 * time.Minute
 	client := helm.NewMockInterface(t)
-	installer := argocdinstaller.NewInstaller(client, timeout)
+	installer := argocdinstaller.NewInstaller(client, timeout, false)
 
 	require.NotNil(t, installer)
 }
@@ -75,6 +75,7 @@ func newArgoCDInstallerWithDefaults(
 	installer := argocdinstaller.NewInstaller(
 		client,
 		5*time.Second,
+		false,
 	)
 
 	return installer, client

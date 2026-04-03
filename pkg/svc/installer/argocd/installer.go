@@ -20,13 +20,16 @@ const (
 // It implements installer.Installer semantics (Install/Uninstall) so it can be
 // orchestrated by cluster lifecycle flows.
 type Installer struct {
-	timeout time.Duration
-	client  helm.Interface
+	timeout     time.Duration
+	client      helm.Interface
+	sopsEnabled bool
 }
 
 // NewInstaller creates a new Argo CD installer instance.
-func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
-	return &Installer{client: client, timeout: timeout}
+// When sopsEnabled is true the chart is deployed with a CMP sidecar that
+// transparently decrypts SOPS-encrypted manifests using an Age key.
+func NewInstaller(client helm.Interface, timeout time.Duration, sopsEnabled bool) *Installer {
+	return &Installer{client: client, timeout: timeout, sopsEnabled: sopsEnabled}
 }
 
 // Install installs or upgrades Argo CD via its Helm chart.
@@ -60,7 +63,7 @@ func (a *Installer) Images(ctx context.Context) ([]string, error) {
 }
 
 func (a *Installer) chartSpec() *helm.ChartSpec {
-	return &helm.ChartSpec{
+	spec := &helm.ChartSpec{
 		ReleaseName:     argoCDReleaseName,
 		ChartName:       argoCDChartName,
 		Namespace:       argoCDNamespace,
@@ -72,6 +75,12 @@ func (a *Installer) chartSpec() *helm.ChartSpec {
 		Wait:            true,
 		WaitForJobs:     true,
 	}
+
+	if a.sopsEnabled {
+		spec.ValuesYaml = buildSOPSValuesYaml()
+	}
+
+	return spec
 }
 
 // --- internals ---

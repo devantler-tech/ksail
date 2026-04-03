@@ -116,7 +116,9 @@ func (f *Factory) addGitOpsInstaller(installers map[string]Installer, spec v1alp
 			max(f.timeout, FluxInstallTimeout),
 		)
 	case v1alpha1.GitOpsEngineArgoCD:
-		installers["argocd"] = argocdinstaller.NewInstaller(f.helmClient, f.timeout)
+		installers["argocd"] = argocdinstaller.NewInstaller(
+			f.helmClient, f.timeout, argocdinstaller.ShouldEnableSOPS(spec.SOPS),
+		)
 	case v1alpha1.GitOpsEngineNone:
 		// No GitOps engine configured
 	}

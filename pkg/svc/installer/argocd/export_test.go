@@ -27,3 +27,8 @@ func BuildSopsAgeSecret(ageKey string) *corev1.Secret {
 func UpsertSopsAgeSecret(ctx context.Context, clientset kubernetes.Interface, ageKey string) error {
 	return upsertSopsAgeSecret(ctx, clientset, ageKey)
 }
+
+// BuildSOPSValuesYaml exports buildSOPSValuesYaml for testing.
+func BuildSOPSValuesYaml() string {
+	return buildSOPSValuesYaml()
+}
