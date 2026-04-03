@@ -41,7 +41,9 @@ func TestShouldEnableSOPS(t *testing.T) {
 		{
 			name: "auto-detect with no key returns false",
 			sops: v1alpha1.SOPS{AgeKeyEnvVar: "TEST_ARGOCD_CMP_SOPS_NONEXISTENT_99999"},
-			env:  map[string]string{"SOPS_AGE_KEY_FILE": "/tmp/nonexistent-ksail-argocd-cmp-test.txt"},
+			env: map[string]string{
+				"SOPS_AGE_KEY_FILE": "/tmp/nonexistent-ksail-argocd-cmp-test.txt",
+			},
 			want: false,
 		},
 	}

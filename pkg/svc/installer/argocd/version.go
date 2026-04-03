@@ -43,4 +43,3 @@ func appImage() string {
 
 	return "quay.io/argoproj/argocd:" + tag
 }
-
