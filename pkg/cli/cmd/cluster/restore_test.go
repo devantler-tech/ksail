@@ -771,10 +771,10 @@ func createValidArchive(t *testing.T) string {
 }
 
 // addTarEntry writes a regular file entry into the tar writer.
-func addTarEntry(t *testing.T, tw *tar.Writer, name string, content []byte) {
+func addTarEntry(t *testing.T, tarWriter *tar.Writer, name string, content []byte) {
 	t.Helper()
 
-	err := tw.WriteHeader(&tar.Header{
+	err := tarWriter.WriteHeader(&tar.Header{
 		Name:     name,
 		Typeflag: tar.TypeReg,
 		Size:     int64(len(content)),
@@ -782,7 +782,7 @@ func addTarEntry(t *testing.T, tw *tar.Writer, name string, content []byte) {
 	})
 	require.NoError(t, err)
 
-	_, err = tw.Write(content)
+	_, err = tarWriter.Write(content)
 	require.NoError(t, err)
 }
 

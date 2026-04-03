@@ -14,6 +14,11 @@ import (
 	"github.com/gkampitakis/go-snaps/snaps"
 )
 
+var (
+	errTaskA = errors.New("task-a error")
+	errTaskC = errors.New("task-c error")
+)
+
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 
@@ -624,14 +629,14 @@ func TestProgressGroup_InstallingLabels(t *testing.T) {
 	var buf bytes.Buffer
 
 	labels := notify.InstallingLabels()
-	pg := notify.NewProgressGroup("Installing", "📦", &buf, notify.WithLabels(labels))
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, notify.WithLabels(labels))
 
 	task := notify.ProgressTask{
 		Name: "my-component",
 		Fn:   func(_ context.Context) error { return nil },
 	}
 
-	err := pg.Run(context.Background(), task)
+	err := progressGroup.Run(context.Background(), task)
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
@@ -654,7 +659,7 @@ func TestProgressGroup_ContinueOnError(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	pg := notify.NewProgressGroup(
+	progressGroup := notify.NewProgressGroup(
 		"Installing", "📦", &buf,
 		notify.WithContinueOnError(),
 	)
@@ -662,7 +667,7 @@ func TestProgressGroup_ContinueOnError(t *testing.T) {
 	tasks := []notify.ProgressTask{
 		{
 			Name: "task-a",
-			Fn:   func(_ context.Context) error { return errors.New("task-a error") },
+			Fn:   func(_ context.Context) error { return errTaskA },
 		},
 		{
 			Name: "task-b",
@@ -670,11 +675,11 @@ func TestProgressGroup_ContinueOnError(t *testing.T) {
 		},
 		{
 			Name: "task-c",
-			Fn:   func(_ context.Context) error { return errors.New("task-c error") },
+			Fn:   func(_ context.Context) error { return errTaskC },
 		},
 	}
 
-	err := pg.Run(context.Background(), tasks...)
+	err := progressGroup.Run(context.Background(), tasks...)
 
 	// All tasks run; combined error should contain both failures.
 	if err == nil {
@@ -706,13 +711,13 @@ func TestProgressGroup_WithConcurrency(t *testing.T) {
 
 	const limit = 2
 
-	pg := notify.NewProgressGroup(
+	progressGroup := notify.NewProgressGroup(
 		"Installing", "📦", &buf,
 		notify.WithConcurrency(limit),
 	)
 
 	var (
-		mu      sync.Mutex
+		mutex   sync.Mutex
 		maxSeen int
 		active  int
 	)
@@ -721,18 +726,18 @@ func TestProgressGroup_WithConcurrency(t *testing.T) {
 		return notify.ProgressTask{
 			Name: name,
 			Fn: func(_ context.Context) error {
-				mu.Lock()
+				mutex.Lock()
 				active++
 				if active > maxSeen {
 					maxSeen = active
 				}
-				mu.Unlock()
+				mutex.Unlock()
 
 				time.Sleep(20 * time.Millisecond)
 
-				mu.Lock()
+				mutex.Lock()
 				active--
-				mu.Unlock()
+				mutex.Unlock()
 
 				return nil
 			},
@@ -746,7 +751,7 @@ func TestProgressGroup_WithConcurrency(t *testing.T) {
 		makeTask("t4"),
 	}
 
-	err := pg.Run(context.Background(), tasks...)
+	err := progressGroup.Run(context.Background(), tasks...)
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
@@ -763,7 +768,7 @@ func TestProgressGroup_WithCountLabel(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	pg := notify.NewProgressGroup(
+	progressGroup := notify.NewProgressGroup(
 		"Installing", "📦", &buf,
 		notify.WithCountLabel("step"),
 	)
@@ -773,7 +778,7 @@ func TestProgressGroup_WithCountLabel(t *testing.T) {
 		{Name: "second", Fn: func(_ context.Context) error { return nil }},
 	}
 
-	err := pg.Run(context.Background(), tasks...)
+	err := progressGroup.Run(context.Background(), tasks...)
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
@@ -792,7 +797,7 @@ func TestProgressGroup_WithAppendOnly(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	pg := notify.NewProgressGroup(
+	progressGroup := notify.NewProgressGroup(
 		"Installing", "📦", &buf,
 		notify.WithAppendOnly(),
 	)
@@ -801,7 +806,7 @@ func TestProgressGroup_WithAppendOnly(t *testing.T) {
 		{Name: "silent-task", Fn: func(_ context.Context) error { return nil }},
 	}
 
-	err := pg.Run(context.Background(), tasks...)
+	err := progressGroup.Run(context.Background(), tasks...)
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
