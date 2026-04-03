@@ -23,8 +23,8 @@ safe-outputs:
   create-discussion:
     title-prefix: "${{ github.workflow }} - "
     category: "agentic-workflows"
-    close-older-discussions: true
-    max: 2
+    close-older-discussions: false
+    max: 4
 
 tools:
   github:
