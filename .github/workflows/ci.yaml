@@ -577,7 +577,7 @@ jobs:
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           hcloud-token: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }}
-          omni-service-account-key: ${{ matrix.provider == 'Omni' && secrets.OMNI_SERVICE_ACCOUNT_KEY || '' }}
+          omni-service-account-key: ${{ matrix.provider == 'Omni' && secrets.OMNI_SERVICE_ACCOUNT_KEY || '' }} # zizmor: ignore[secrets-outside-env] - passed as composite action input, same pattern as hcloud-token
           omni-endpoint: ${{ matrix.provider == 'Omni' && vars.OMNI_ENDPOINT || '' }}
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
