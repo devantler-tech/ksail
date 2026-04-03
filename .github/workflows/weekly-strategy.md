@@ -214,14 +214,17 @@ If any answer is wrong, rewrite.
 Create a discussion with title "Promotion" containing:
 
 ### Platform
+
 **Medium name** — One sentence explaining why this medium was chosen.
 
 ### The Post
+
 ````text
 Complete, copy-paste-ready content in a fenced code block.
 ````
 
 ### Posting Notes
+
 - Where exactly to post
 - Best time to post
 - Relevant hashtags or flair
