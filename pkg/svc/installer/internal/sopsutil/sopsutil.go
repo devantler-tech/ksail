@@ -35,7 +35,7 @@ func ResolveEnabledAgeKey(sops v1alpha1.SOPS) (string, error) {
 	ageKey, err := ResolveAgeKey(sops)
 	if err != nil {
 		if explicitlyEnabled {
-			return "", fmt.Errorf("resolve SOPS Age key: %w", err)
+			return "", err
 		}
 
 		return "", nil
