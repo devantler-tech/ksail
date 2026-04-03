@@ -727,6 +727,7 @@ func TestProgressGroup_WithConcurrency(t *testing.T) {
 			Name: name,
 			Fn: func(_ context.Context) error {
 				mutex.Lock()
+
 				active++
 				if active > maxSeen {
 					maxSeen = active
