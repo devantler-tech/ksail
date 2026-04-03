@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/sopsutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -113,14 +114,14 @@ func SetNewFluxResourcesClient(fn func(*rest.Config) (any, error)) func() {
 	}
 }
 
-// ResolveAgeKey exports resolveAgeKey for testing.
+// ResolveAgeKey exports sopsutil.ResolveAgeKey for testing.
 func ResolveAgeKey(sops v1alpha1.SOPS) (string, error) {
-	return resolveAgeKey(sops)
+	return sopsutil.ResolveAgeKey(sops)
 }
 
-// ExtractAgeKey exports extractAgeKey for testing.
+// ExtractAgeKey exports sopsutil.ExtractAgeKey for testing.
 func ExtractAgeKey(input string) string {
-	return extractAgeKey(input)
+	return sopsutil.ExtractAgeKey(input)
 }
 
 // BuildSopsAgeSecret exports buildSopsAgeSecret for testing.

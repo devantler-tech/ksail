@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/sopsutil"
 )
 
 // ShouldEnableSOPS returns true if SOPS CMP support should be enabled for ArgoCD.
@@ -20,7 +21,7 @@ func ShouldEnableSOPS(sops v1alpha1.SOPS) bool {
 	}
 
 	// Auto-detect: check if key is available
-	key, err := resolveAgeKey(sops)
+	key, err := sopsutil.ResolveAgeKey(sops)
 
 	return err == nil && key != ""
 }

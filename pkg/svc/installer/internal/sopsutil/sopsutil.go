@@ -1,0 +1,72 @@
+// Package sopsutil provides shared helpers for SOPS Age key resolution
+// used by both the ArgoCD and Flux installers.
+package sopsutil
+
+import (
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+)
+
+// AgeSecretKeyPrefix is the prefix for Age private keys.
+const AgeSecretKeyPrefix = "AGE-SECRET-KEY-"
+
+// ResolveAgeKey resolves the Age private key from available sources.
+// Priority: (1) environment variable named by AgeKeyEnvVar, (2) local key file.
+// Returns the extracted AGE-SECRET-KEY-... string, or empty if not found.
+// Returns an error if the key file exists but cannot be read.
+func ResolveAgeKey(sops v1alpha1.SOPS) (string, error) {
+	// Try environment variable first
+	if sops.AgeKeyEnvVar != "" {
+		if val := os.Getenv(sops.AgeKeyEnvVar); val != "" {
+			if key := ExtractAgeKey(val); key != "" {
+				return key, nil
+			}
+		}
+	}
+
+	// Try local key file
+	keyPath, err := fsutil.SOPSAgeKeyPath()
+	if err != nil {
+		return "", fmt.Errorf("determine age key path: %w", err)
+	}
+
+	canonicalKeyPath, err := fsutil.EvalCanonicalPath(keyPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+
+		return "", fmt.Errorf("canonicalize age key path: %w", err)
+	}
+
+	// Canonicalization above resolves symlinks and normalizes
+	// env-derived paths before reading, so gosec G304 is acceptable.
+	//nolint:gosec // G304: canonicalized path from controlled inputs
+	data, err := os.ReadFile(canonicalKeyPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+
+		return "", fmt.Errorf("read age key file: %w", err)
+	}
+
+	return ExtractAgeKey(string(data)), nil
+}
+
+// ExtractAgeKey finds and returns the first AGE-SECRET-KEY-... line
+// from the input.
+func ExtractAgeKey(input string) string {
+	for line := range strings.SplitSeq(input, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, AgeSecretKeyPrefix) {
+			return line
+		}
+	}
+
+	return ""
+}
