@@ -615,3 +615,201 @@ func TestProgressGroup_MultipleTasksPartialOrder(t *testing.T) {
 		}
 	}
 }
+
+// TestProgressGroup_InstallingLabels verifies that InstallingLabels returns
+// labels with "installing" as the running state and "installed" as completed.
+func TestProgressGroup_InstallingLabels(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	labels := notify.InstallingLabels()
+	pg := notify.NewProgressGroup("Installing", "📦", &buf, notify.WithLabels(labels))
+
+	task := notify.ProgressTask{
+		Name: "my-component",
+		Fn:   func(_ context.Context) error { return nil },
+	}
+
+	err := pg.Run(context.Background(), task)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+
+	if !strings.Contains(output, "installing") {
+		t.Errorf("expected 'installing' label in output, got: %q", output)
+	}
+
+	if !strings.Contains(output, "installed") {
+		t.Errorf("expected 'installed' label in output, got: %q", output)
+	}
+}
+
+// TestProgressGroup_ContinueOnError verifies that WithContinueOnError makes the
+// group run all tasks even when some fail, collecting all errors.
+func TestProgressGroup_ContinueOnError(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	pg := notify.NewProgressGroup(
+		"Installing", "📦", &buf,
+		notify.WithContinueOnError(),
+	)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "task-a",
+			Fn:   func(_ context.Context) error { return errors.New("task-a error") },
+		},
+		{
+			Name: "task-b",
+			Fn:   func(_ context.Context) error { return nil },
+		},
+		{
+			Name: "task-c",
+			Fn:   func(_ context.Context) error { return errors.New("task-c error") },
+		},
+	}
+
+	err := pg.Run(context.Background(), tasks...)
+
+	// All tasks run; combined error should contain both failures.
+	if err == nil {
+		t.Fatal("expected combined error from two failing tasks, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "task-a") {
+		t.Errorf("expected task-a error in combined error, got: %v", err)
+	}
+
+	if !strings.Contains(err.Error(), "task-c") {
+		t.Errorf("expected task-c error in combined error, got: %v", err)
+	}
+
+	output := buf.String()
+
+	// task-b should still have completed successfully despite the other failures.
+	if !strings.Contains(output, "task-b") {
+		t.Errorf("expected task-b output even after other tasks failed, got: %q", output)
+	}
+}
+
+// TestProgressGroup_WithConcurrency verifies that WithConcurrency limits the
+// number of concurrently running tasks.
+func TestProgressGroup_WithConcurrency(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	const limit = 2
+
+	pg := notify.NewProgressGroup(
+		"Installing", "📦", &buf,
+		notify.WithConcurrency(limit),
+	)
+
+	var (
+		mu      sync.Mutex
+		maxSeen int
+		active  int
+	)
+
+	makeTask := func(name string) notify.ProgressTask {
+		return notify.ProgressTask{
+			Name: name,
+			Fn: func(_ context.Context) error {
+				mu.Lock()
+				active++
+				if active > maxSeen {
+					maxSeen = active
+				}
+				mu.Unlock()
+
+				time.Sleep(20 * time.Millisecond)
+
+				mu.Lock()
+				active--
+				mu.Unlock()
+
+				return nil
+			},
+		}
+	}
+
+	tasks := []notify.ProgressTask{
+		makeTask("t1"),
+		makeTask("t2"),
+		makeTask("t3"),
+		makeTask("t4"),
+	}
+
+	err := pg.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	if maxSeen > limit {
+		t.Errorf("expected at most %d concurrent tasks, saw %d", limit, maxSeen)
+	}
+}
+
+// TestProgressGroup_WithCountLabel verifies that WithCountLabel changes the
+// progress counter prefix in the output.
+func TestProgressGroup_WithCountLabel(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	pg := notify.NewProgressGroup(
+		"Installing", "📦", &buf,
+		notify.WithCountLabel("step"),
+	)
+
+	tasks := []notify.ProgressTask{
+		{Name: "first", Fn: func(_ context.Context) error { return nil }},
+		{Name: "second", Fn: func(_ context.Context) error { return nil }},
+	}
+
+	err := pg.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+
+	if !strings.Contains(output, "step") {
+		t.Errorf("expected custom count label 'step' in output, got: %q", output)
+	}
+}
+
+// TestProgressGroup_WithAppendOnly verifies that WithAppendOnly suppresses the
+// "► taskname running" prefix lines that CI mode normally prints.
+func TestProgressGroup_WithAppendOnly(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	pg := notify.NewProgressGroup(
+		"Installing", "📦", &buf,
+		notify.WithAppendOnly(),
+	)
+
+	tasks := []notify.ProgressTask{
+		{Name: "silent-task", Fn: func(_ context.Context) error { return nil }},
+	}
+
+	err := pg.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+
+	// In append-only mode the "► taskname running" line is suppressed.
+	if strings.Contains(output, "► silent-task running") {
+		t.Errorf("append-only mode should suppress running prefix, got: %q", output)
+	}
+}

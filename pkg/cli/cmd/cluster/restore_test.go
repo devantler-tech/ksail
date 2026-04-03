@@ -705,6 +705,87 @@ func createArchiveWithoutMetadata(t *testing.T) string {
 	return archivePath
 }
 
+// TestExtractBackupArchive_HappyPath validates that a well-formed .tar.gz
+// archive is correctly extracted and its metadata is returned.
+func TestExtractBackupArchive_HappyPath(t *testing.T) {
+	t.Parallel()
+
+	archivePath := createValidArchive(t)
+
+	tmpDir, meta, err := clusterpkg.ExportExtractBackupArchive(archivePath)
+	require.NoError(t, err)
+
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	require.NotNil(t, meta)
+	assert.Equal(t, "v1", meta.Version)
+	assert.Equal(t, "test-cluster", meta.ClusterName)
+	assert.Equal(t, 3, meta.ResourceCount)
+
+	// The resources directory must exist inside the extracted temp dir.
+	resourcesDir := filepath.Join(tmpDir, "resources")
+	_, err = os.Stat(resourcesDir)
+	require.NoError(t, err, "resources directory should be extracted")
+
+	// The YAML file must be present.
+	podFile := filepath.Join(resourcesDir, "pods.yaml")
+	_, err = os.Stat(podFile)
+	require.NoError(t, err, "pods.yaml should be extracted")
+}
+
+// createValidArchive builds a complete, valid backup .tar.gz that passes
+// extractBackupArchive (includes backup-metadata.json and a resource file).
+func createValidArchive(t *testing.T) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "valid.tar.gz")
+
+	f, err := os.Create(archivePath) //nolint:gosec // test-controlled temp path
+	require.NoError(t, err)
+
+	defer func() { _ = f.Close() }()
+
+	gzipWriter := gzip.NewWriter(f)
+	tarWriter := tar.NewWriter(gzipWriter)
+
+	// Add backup-metadata.json.
+	meta := `{"version":"v1","clusterName":"test-cluster","resourceCount":3}`
+	addTarEntry(t, tarWriter, "backup-metadata.json", []byte(meta))
+
+	// Add a resources directory entry.
+	err = tarWriter.WriteHeader(&tar.Header{
+		Name:     "resources/",
+		Typeflag: tar.TypeDir,
+		Mode:     0o755,
+	})
+	require.NoError(t, err)
+
+	// Add a YAML resource file.
+	addTarEntry(t, tarWriter, "resources/pods.yaml", []byte("apiVersion: v1\nkind: Pod\n"))
+
+	require.NoError(t, tarWriter.Close())
+	require.NoError(t, gzipWriter.Close())
+
+	return archivePath
+}
+
+// addTarEntry writes a regular file entry into the tar writer.
+func addTarEntry(t *testing.T, tw *tar.Writer, name string, content []byte) {
+	t.Helper()
+
+	err := tw.WriteHeader(&tar.Header{
+		Name:     name,
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(content)),
+		Mode:     0o600,
+	})
+	require.NoError(t, err)
+
+	_, err = tw.Write(content)
+	require.NoError(t, err)
+}
+
 // TestBackupResourceTypes verifies that backupResourceTypes returns a non-empty
 // ordered slice and that CRDs appear before namespaces (dependency ordering).
 func TestBackupResourceTypes(t *testing.T) {
