@@ -89,7 +89,7 @@ func NewReconcilerWithClient(dynamicClient dynamic.Interface) *Reconciler {
 
 // ReconcileOptions configures the reconciliation behavior.
 type ReconcileOptions struct {
-	// Timeout for waiting for kustomization reconciliation.
+	// Timeout for waiting for OCIRepository readiness and Kustomization reconciliation.
 	Timeout time.Duration
 }
 
@@ -98,7 +98,7 @@ type ReconcileOptions struct {
 // then reconciles the Kustomization to apply the changes.
 func (r *Reconciler) Reconcile(ctx context.Context, opts ReconcileOptions) error {
 	// First reconcile the OCIRepository to fetch the latest artifact
-	err := r.reconcileOCIRepository(ctx)
+	err := r.reconcileOCIRepository(ctx, opts.Timeout)
 	if err != nil {
 		return err
 	}
@@ -120,8 +120,13 @@ func (r *Reconciler) TriggerOCIRepositoryReconciliation(ctx context.Context) err
 }
 
 // WaitForOCIRepositoryReady waits for the OCIRepository to be ready.
-func (r *Reconciler) WaitForOCIRepositoryReady(ctx context.Context) error {
-	timeoutCtx, cancel := context.WithTimeout(ctx, ociRepositoryReadyTimeout)
+// If timeout is zero or negative, the default ociRepositoryReadyTimeout is used.
+func (r *Reconciler) WaitForOCIRepositoryReady(ctx context.Context, timeout time.Duration) error {
+	if timeout <= 0 {
+		timeout = ociRepositoryReadyTimeout
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	ticker := time.NewTicker(pollInterval)
@@ -403,13 +408,13 @@ func kustomizationTimeoutError(lastStatus string) error {
 }
 
 // reconcileOCIRepository triggers and waits for OCIRepository reconciliation.
-func (r *Reconciler) reconcileOCIRepository(ctx context.Context) error {
+func (r *Reconciler) reconcileOCIRepository(ctx context.Context, timeout time.Duration) error {
 	err := r.TriggerOCIRepositoryReconciliation(ctx)
 	if err != nil {
 		return err
 	}
 
-	return r.WaitForOCIRepositoryReady(ctx)
+	return r.WaitForOCIRepositoryReady(ctx, timeout)
 }
 
 // reconcileKustomization triggers and waits for Kustomization reconciliation.

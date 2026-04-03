@@ -238,7 +238,7 @@ func reconcileFlux(
 		cmd.OutOrStdout(),
 	)
 
-	err = reconciler.WaitForOCIRepositoryReady(cmd.Context())
+	err = reconciler.WaitForOCIRepositoryReady(cmd.Context(), timeout)
 	if err != nil {
 		return fmt.Errorf("wait for oci repository ready: %w", err)
 	}
