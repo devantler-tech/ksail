@@ -188,23 +188,9 @@ Once connected, you can manage Kubernetes clusters with natural language. Here a
 | "Encrypt the secrets.yaml file with SOPS" | `cipher_write` (encrypt) |
 | "Import my SOPS age key from the key file" | `cipher_write` (import) |
 
-## Available Tools Reference
-
-KSail exposes **5 tools** via MCP, grouped by permission level:
-
-| Tool | Type | What it does |
-|------|------|-------------|
-| `cluster_read` | Read-only | `info`, `list`, `connect`, `switch` |
-| `cluster_write` | Mutating | `init`, `create`, `update`, `delete`, `start`, `stop`, `backup`, `restore` |
-| `workload_read` | Read-only | `get`, `describe`, `logs`, `explain`, `validate`, `images`, `export`, `gen_*` |
-| `workload_write` | Mutating | `apply`, `create`, `delete`, `edit`, `exec`, `scale`, `reconcile`, `push`, `install`, `rollout_*` |
-| `cipher_write` | Mutating | `encrypt`, `decrypt`, `edit`, `import` |
-
-Each tool accepts a **subcommand parameter** selecting the operation, plus an `args` array for additional flags and arguments. For a detailed breakdown of subcommands and their flags, see the [MCP Server reference](/mcp/#available-tools).
-
 ## Tips
 
-- **Working directory**: The MCP server runs in the directory set by the client. KSail looks for `ksail.yaml` from that directory upward. For Claude Desktop, set `cwd` in the config to pin a project directory (see the MCP spec for client-specific options).
+- **Available tools**: KSail exposes 5 MCP tools grouped by permission level. For the complete tool catalog with subcommands and flags, see the [MCP Server reference](/mcp/#available-tools).
 - **Multiple environments**: Combine with the `--config` flag in your prompts — for example, "Apply manifests using the staging config" will work if you reference the config file path in your prompt and KSail finds it.
 - **Cluster creation takes time**: Inform your AI assistant that cluster creation can take 2–5 minutes. Most MCP clients have configurable tool timeouts.
 - **Security**: The MCP server runs with the full permissions of the `ksail` process. Only connect trusted AI clients. See the [MCP Server security note](/mcp/#configuration) for details.
