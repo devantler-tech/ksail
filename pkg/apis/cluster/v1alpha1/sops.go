@@ -1,9 +1,10 @@
 package v1alpha1
 
 // SOPS defines configuration for automatic SOPS Age secret creation in the cluster.
-// When enabled (default: auto-detect), KSail creates a "sops-age" generic Secret in
-// the flux-system namespace containing the Age private key, which Flux Kustomization
-// CRDs reference via spec.decryption.secretRef.
+// When enabled (default: auto-detect), KSail creates a "sops-age" generic Secret
+// containing the Age private key:
+//   - For Flux: in the flux-system namespace, referenced by Kustomization CRDs via spec.decryption.secretRef.
+//   - For ArgoCD: in the argocd namespace, for use by Config Management Plugins or repo-server SOPS integration.
 type SOPS struct {
 	// AgeKeyEnvVar is the name of the environment variable containing the Age private key.
 	// Defaults to "SOPS_AGE_KEY". Set empty to disable environment variable lookup.

@@ -17,9 +17,52 @@ func TestNewInstaller(t *testing.T) {
 
 	timeout := 5 * time.Minute
 	client := helm.NewMockInterface(t)
-	installer := argocdinstaller.NewInstaller(client, timeout)
+	installer := argocdinstaller.NewInstaller(client, timeout, false)
 
 	require.NotNil(t, installer)
+}
+
+func TestChartSpecValuesYaml(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		sopsEnabled bool
+		expectYAML  bool
+	}{
+		{
+			name:        "sops disabled",
+			sopsEnabled: false,
+			expectYAML:  false,
+		},
+		{
+			name:        "sops enabled",
+			sopsEnabled: true,
+			expectYAML:  true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := helm.NewMockInterface(t)
+			inst := argocdinstaller.NewInstaller(
+				client, 5*time.Minute, testCase.sopsEnabled,
+			)
+			spec := inst.ChartSpec()
+
+			if testCase.expectYAML {
+				assert.NotEmpty(t, spec.ValuesYaml,
+					"ValuesYaml should be set when SOPS is enabled")
+				assert.Contains(t, spec.ValuesYaml, "kustomize-sops",
+					"ValuesYaml should reference the CMP plugin")
+			} else {
+				assert.Empty(t, spec.ValuesYaml,
+					"ValuesYaml should be empty when SOPS is disabled")
+			}
+		})
+	}
 }
 
 func TestArgoCDInstallerInstallSuccess(t *testing.T) {
@@ -75,6 +118,7 @@ func newArgoCDInstallerWithDefaults(
 	installer := argocdinstaller.NewInstaller(
 		client,
 		5*time.Second,
+		false,
 	)
 
 	return installer, client
