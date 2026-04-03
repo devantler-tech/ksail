@@ -14,7 +14,7 @@
     "astro-mermaid": "^1.4.0",
     "mermaid": "^10.9.5",
     "sharp": "^0.34.5",
-    "starlight-links-validator": "^0.20.1"
+    "starlight-links-validator": "^0.21.0"
   },
   "devDependencies": {
     "starlight-github-alerts": "^0.2.0"
