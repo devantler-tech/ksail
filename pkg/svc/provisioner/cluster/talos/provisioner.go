@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
+	omniprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
@@ -130,7 +131,9 @@ type Provisioner struct {
 	// talosOpts holds Talos-specific options (node counts, cloud ISO, etc.).
 	talosOpts *v1alpha1.OptionsTalos
 	// hetznerOpts holds Hetzner-specific options when using the Hetzner provider.
-	hetznerOpts        *v1alpha1.OptionsHetzner
+	hetznerOpts *v1alpha1.OptionsHetzner
+	// omniOpts holds Omni-specific options when using the Omni provider.
+	omniOpts *v1alpha1.OptionsOmni
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
 	logWriter          io.Writer
 	componentDetector  *detector.ComponentDetector
@@ -199,6 +202,13 @@ func (p *Provisioner) WithHetznerOptions(opts v1alpha1.OptionsHetzner) *Provisio
 	return p
 }
 
+// WithOmniOptions sets the Omni-specific options for Omni provisioning.
+func (p *Provisioner) WithOmniOptions(opts v1alpha1.OptionsOmni) *Provisioner {
+	p.omniOpts = &opts
+
+	return p
+}
+
 // WithTalosOptions sets the Talos-specific options (node counts, cloud ISO, etc.).
 func (p *Provisioner) WithTalosOptions(opts v1alpha1.OptionsTalos) *Provisioner {
 	p.talosOpts = &opts
@@ -246,7 +256,7 @@ func (p *Provisioner) TalosConfigs() *talosconfigmanager.Configs {
 
 // Create creates a Talos cluster.
 // If name is non-empty, it overrides the cluster name from talosConfigs.
-// Routes to Docker-based or Hetzner-based provisioning based on configuration.
+// Routes to Docker-based, Hetzner-based, or Omni-based provisioning based on configuration.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	clusterName := p.resolveClusterName(name)
 
@@ -255,13 +265,18 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		return p.createHetznerCluster(ctx, clusterName)
 	}
 
+	// Route to Omni-based provisioning if Omni options are set
+	if p.omniOpts != nil {
+		return p.createOmniCluster(ctx, clusterName)
+	}
+
 	// Docker-based provisioning (default)
 	return p.createDockerCluster(ctx, clusterName)
 }
 
 // Delete deletes a Talos cluster.
 // If name is non-empty, it overrides the configured cluster name.
-// Routes to Docker-based or Hetzner-based deletion based on configuration.
+// Routes to Docker-based, Hetzner-based, or Omni-based deletion based on configuration.
 func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	clusterName := p.resolveClusterName(name)
 
@@ -270,13 +285,18 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 		return p.deleteHetznerCluster(ctx, clusterName)
 	}
 
+	// Route to Omni-based deletion if Omni options are set
+	if p.omniOpts != nil {
+		return p.deleteOmniCluster(ctx, clusterName)
+	}
+
 	// Docker-based deletion (default)
 	return p.deleteDockerCluster(ctx, clusterName)
 }
 
 // Exists checks if a Talos cluster exists.
 // If name is non-empty, it overrides the configured cluster name.
-// Routes to Docker-based or Hetzner-based existence check based on configuration.
+// Routes to Docker-based, Hetzner-based, or Omni-based existence check based on configuration.
 func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 	clusterName := p.resolveClusterName(name)
 
@@ -288,6 +308,21 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 		}
 
 		exists, err := hetznerProv.NodesExist(ctx, clusterName)
+		if err != nil {
+			return false, fmt.Errorf("failed to check if cluster exists: %w", err)
+		}
+
+		return exists, nil
+	}
+
+	// Route to Omni-based check if Omni options are set
+	if p.omniOpts != nil {
+		omniProv, ok := p.infraProvider.(*omniprovider.Provider)
+		if !ok {
+			return false, fmt.Errorf("%w: got %T", ErrOmniProviderRequired, p.infraProvider)
+		}
+
+		exists, err := omniProv.NodesExist(ctx, clusterName)
 		if err != nil {
 			return false, fmt.Errorf("failed to check if cluster exists: %w", err)
 		}
