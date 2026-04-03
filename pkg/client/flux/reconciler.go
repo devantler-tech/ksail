@@ -89,7 +89,7 @@ func NewReconcilerWithClient(dynamicClient dynamic.Interface) *Reconciler {
 
 // ReconcileOptions configures the reconciliation behavior.
 type ReconcileOptions struct {
-	// Timeout for waiting for kustomization reconciliation.
+	// Timeout for waiting for OCIRepository readiness and Kustomization reconciliation.
 	Timeout time.Duration
 }
 
