@@ -42,17 +42,17 @@ func TestChartSpecValuesYaml(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			client := helm.NewMockInterface(t)
 			inst := argocdinstaller.NewInstaller(
-				client, 5*time.Minute, tt.sopsEnabled,
+				client, 5*time.Minute, testCase.sopsEnabled,
 			)
 			spec := inst.ChartSpec()
 
-			if tt.expectYAML {
+			if testCase.expectYAML {
 				assert.NotEmpty(t, spec.ValuesYaml,
 					"ValuesYaml should be set when SOPS is enabled")
 				assert.Contains(t, spec.ValuesYaml, "kustomize-sops",

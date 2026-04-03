@@ -170,14 +170,14 @@ func helmInstallerFactory(
 	minTimeout time.Duration,
 ) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
 	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-		hc, t, err := resolveHelmClientAndTimeout(
+		helmClient, timeout, err := resolveHelmClientAndTimeout(
 			factories, clusterCfg, minTimeout,
 		)
 		if err != nil {
 			return nil, err
 		}
 
-		return newInstaller(hc, t), nil
+		return newInstaller(helmClient, timeout), nil
 	}
 }
 
@@ -187,7 +187,7 @@ func argoCDInstallerFactory(
 	factories *InstallerFactories,
 ) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
 	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-		hc, t, err := resolveHelmClientAndTimeout(
+		helmClient, timeout, err := resolveHelmClientAndTimeout(
 			factories, clusterCfg,
 			installer.ArgoCDInstallTimeout,
 		)
@@ -199,7 +199,9 @@ func argoCDInstallerFactory(
 			clusterCfg.Spec.Cluster.SOPS,
 		)
 
-		return argocdinstaller.NewInstaller(hc, t, sopsEnabled), nil
+		return argocdinstaller.NewInstaller(
+			helmClient, timeout, sopsEnabled,
+		), nil
 	}
 }
 

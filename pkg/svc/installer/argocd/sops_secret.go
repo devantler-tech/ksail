@@ -41,7 +41,7 @@ func EnsureSopsAgeSecret(
 		clusterCfg.Spec.Cluster.SOPS,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve SOPS Age key: %w", err)
 	}
 
 	if ageKey == "" {

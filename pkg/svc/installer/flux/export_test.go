@@ -4,6 +4,7 @@ package fluxinstaller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -116,7 +117,12 @@ func SetNewFluxResourcesClient(fn func(*rest.Config) (any, error)) func() {
 
 // ResolveAgeKey exports sopsutil.ResolveAgeKey for testing.
 func ResolveAgeKey(sops v1alpha1.SOPS) (string, error) {
-	return sopsutil.ResolveAgeKey(sops)
+	key, err := sopsutil.ResolveAgeKey(sops)
+	if err != nil {
+		return "", fmt.Errorf("resolve age key: %w", err)
+	}
+
+	return key, nil
 }
 
 // ExtractAgeKey exports sopsutil.ExtractAgeKey for testing.

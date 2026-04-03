@@ -2,6 +2,7 @@ package fluxinstaller
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	fluxclient "github.com/devantler-tech/ksail/v5/pkg/client/flux"
@@ -29,7 +30,7 @@ func ensureSopsAgeSecret(
 		clusterCfg.Spec.Cluster.SOPS,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve SOPS Age key: %w", err)
 	}
 
 	if ageKey == "" {

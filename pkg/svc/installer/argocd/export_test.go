@@ -2,6 +2,7 @@ package argocdinstaller
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/sopsutil"
@@ -16,7 +17,12 @@ func ExtractAgeKey(input string) string {
 
 // ResolveAgeKey exports sopsutil.ResolveAgeKey for testing.
 func ResolveAgeKey(sops v1alpha1.SOPS) (string, error) {
-	return sopsutil.ResolveAgeKey(sops)
+	key, err := sopsutil.ResolveAgeKey(sops)
+	if err != nil {
+		return "", fmt.Errorf("resolve age key: %w", err)
+	}
+
+	return key, nil
 }
 
 // BuildSopsAgeSecret exports buildSopsAgeSecretObj for testing.

@@ -13,6 +13,8 @@ import (
 )
 
 // AgeSecretKeyPrefix is the prefix for Age private keys.
+//
+//nolint:gosec // G101: not credentials, just a key format prefix
 const AgeSecretKeyPrefix = "AGE-SECRET-KEY-"
 
 // ErrSOPSKeyNotFound indicates SOPS is explicitly enabled but no key was found.

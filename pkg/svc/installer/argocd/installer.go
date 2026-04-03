@@ -62,6 +62,11 @@ func (a *Installer) Images(ctx context.Context) ([]string, error) {
 	return images, nil
 }
 
+// ChartSpec exports chartSpec for testing.
+func (a *Installer) ChartSpec() *helm.ChartSpec {
+	return a.chartSpec()
+}
+
 func (a *Installer) chartSpec() *helm.ChartSpec {
 	spec := &helm.ChartSpec{
 		ReleaseName:     argoCDReleaseName,
@@ -83,10 +88,6 @@ func (a *Installer) chartSpec() *helm.ChartSpec {
 	return spec
 }
 
-// ChartSpec exports chartSpec for testing.
-func (a *Installer) ChartSpec() *helm.ChartSpec {
-	return a.chartSpec()
-}
 
 func (a *Installer) helmInstallOrUpgrade(ctx context.Context) error {
 	spec := a.chartSpec()
