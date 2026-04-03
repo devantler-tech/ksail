@@ -2,6 +2,7 @@ package argocdinstaller
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 )
@@ -27,10 +28,18 @@ func ShouldEnableSOPS(sops v1alpha1.SOPS) bool {
 // buildSOPSValuesYaml returns the Helm values YAML fragment that configures
 // a CMP sidecar for SOPS Age decryption on the ArgoCD repo-server.
 func buildSOPSValuesYaml() string {
-	sopsVer := sopsVersion()
-	image := appImage()
+	var b strings.Builder
 
-	return fmt.Sprintf(`configs:
+	b.WriteString(buildCMPPluginYaml())
+	b.WriteString(buildRepoServerYaml())
+
+	return b.String()
+}
+
+// buildCMPPluginYaml returns the configs.cmp section that defines the
+// kustomize-sops Config Management Plugin.
+func buildCMPPluginYaml() string {
+	return `configs:
   cmp:
     create: true
     plugins:
@@ -40,25 +49,49 @@ func buildSOPSValuesYaml() string {
             command:
               - sh
               - -c
-              - "find . -type f \\( -name '*.yaml' -o -name '*.yml' \\) -exec grep -l '^sops:' {} \\; | head -1 | grep -q ."
+              - >-
+                find . -type f \( -name '*.yaml' -o -name '*.yml' \)
+                -exec grep -l '^sops:' {} \; | head -1 | grep -q .
         generate:
           command:
             - sh
             - -c
           args:
             - |
-              find . -type f \( -name '*.yaml' -o -name '*.yml' \) -exec grep -l '^sops:' {} \; | while read -r f; do
+              find . -type f \( -name '*.yaml' -o -name '*.yml' \) \
+                -exec grep -l '^sops:' {} \; | while read -r f; do
                 sops --decrypt --in-place "$f"
               done
-              if [ -f kustomization.yaml ] || [ -f kustomization.yml ] || [ -f Kustomization ]; then
+              if [ -f kustomization.yaml ] || [ -f kustomization.yml ] \
+                || [ -f Kustomization ]; then
                 kustomize build .
               else
-                find . -type f \( -name '*.yaml' -o -name '*.yml' \) | sort | while read -r f; do
+                find . -type f \( -name '*.yaml' -o -name '*.yml' \) \
+                  | sort | while read -r f; do
                   echo '---'
                   cat "$f"
                 done
               fi
-repoServer:
+`
+}
+
+// buildRepoServerYaml returns the repoServer section that configures
+// the init container, CMP sidecar, and volumes for SOPS decryption.
+func buildRepoServerYaml() string {
+	var b strings.Builder
+
+	b.WriteString(buildInitContainerYaml())
+	b.WriteString(buildSidecarAndVolumesYaml())
+
+	return b.String()
+}
+
+// buildInitContainerYaml returns the SOPS binary init container section.
+func buildInitContainerYaml() string {
+	sopsVer := sopsVersion()
+	downloadURL := "https://github.com/getsops/sops/releases/download"
+
+	return fmt.Sprintf(`repoServer:
   initContainers:
     - name: install-sops
       image: alpine:3.21
@@ -67,17 +100,28 @@ repoServer:
         - -c
       args:
         - |
-          ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
-          wget -qO /custom-tools/sops "https://github.com/getsops/sops/releases/download/v%[1]s/sops-v%[1]s.linux.${ARCH}"
+          ARCH=$(uname -m \
+            | sed 's/x86_64/amd64/' \
+            | sed 's/aarch64/arm64/')
+          wget -qO /custom-tools/sops \
+            "%[1]s/v%[2]s/sops-v%[2]s.linux.${ARCH}"
           chmod +x /custom-tools/sops
       volumeMounts:
         - name: custom-tools
           mountPath: /custom-tools
-  extraContainers:
+`, downloadURL, sopsVer)
+}
+
+// buildSidecarAndVolumesYaml returns the CMP sidecar container and
+// required volume definitions.
+func buildSidecarAndVolumesYaml() string {
+	image := appImage()
+
+	return fmt.Sprintf(`  extraContainers:
     - name: cmp-kustomize-sops
       command:
         - /var/run/argocd/argocd-cmp-server
-      image: %[2]s
+      image: %s
       env:
         - name: SOPS_AGE_KEY_FILE
           value: /sops/age/sops.agekey
@@ -112,5 +156,5 @@ repoServer:
       secret:
         secretName: sops-age
         optional: true
-`, sopsVer, image)
+`, image)
 }

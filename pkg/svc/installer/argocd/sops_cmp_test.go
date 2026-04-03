@@ -32,7 +32,10 @@ func TestShouldEnableSOPS(t *testing.T) {
 		{
 			name: "auto-detect with key available returns true",
 			sops: v1alpha1.SOPS{AgeKeyEnvVar: "TEST_ARGOCD_CMP_SOPS_KEY"},
-			env:  map[string]string{"TEST_ARGOCD_CMP_SOPS_KEY": "AGE-SECRET-KEY-1TESTKEY000000000000000000000000000000000000000000000000"},
+			env: map[string]string{
+				"TEST_ARGOCD_CMP_SOPS_KEY": "AGE-SECRET-KEY-1TESTKEY" +
+					"000000000000000000000000000000000000000000000000",
+			},
 			want: true,
 		},
 		{
