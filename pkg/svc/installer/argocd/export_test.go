@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/sopsutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -38,4 +39,9 @@ func UpsertSopsAgeSecret(ctx context.Context, clientset kubernetes.Interface, ag
 // BuildSOPSValuesYaml exports buildSOPSValuesYaml for testing.
 func BuildSOPSValuesYaml() string {
 	return buildSOPSValuesYaml()
+}
+
+// ChartSpec exports chartSpec for testing.
+func (a *Installer) ChartSpec() *helm.ChartSpec {
+	return a.chartSpec()
 }
