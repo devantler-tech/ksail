@@ -14,7 +14,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
-	omniprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
@@ -317,9 +316,9 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 
 	// Route to Omni-based check if Omni options are set
 	if p.omniOpts != nil {
-		omniProv, ok := p.infraProvider.(*omniprovider.Provider)
-		if !ok {
-			return false, fmt.Errorf("%w: got %T", ErrOmniProviderRequired, p.infraProvider)
+		omniProv, err := p.omniProvider()
+		if err != nil {
+			return false, err
 		}
 
 		exists, err := omniProv.NodesExist(ctx, clusterName)
