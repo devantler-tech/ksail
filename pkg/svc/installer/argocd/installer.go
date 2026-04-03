@@ -88,7 +88,6 @@ func (a *Installer) chartSpec() *helm.ChartSpec {
 	return spec
 }
 
-
 func (a *Installer) helmInstallOrUpgrade(ctx context.Context) error {
 	spec := a.chartSpec()
 

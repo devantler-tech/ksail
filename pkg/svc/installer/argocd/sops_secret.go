@@ -2,6 +2,7 @@ package argocdinstaller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -20,7 +21,7 @@ const (
 	sopsAgeKeyField = "sops.agekey"
 )
 
-var errNilClusterCfg = fmt.Errorf("clusterCfg is nil")
+var errNilClusterCfg = errors.New("clusterCfg is nil")
 
 // EnsureSopsAgeSecret creates or updates the sops-age secret in the argocd namespace
 // if SOPS is enabled and an Age key is available.
