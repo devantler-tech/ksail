@@ -22,7 +22,10 @@ const (
 	sopsAgeKeyField = "sops.agekey"
 )
 
-var errSOPSKeyNotFound = errors.New("SOPS is enabled but no Age key found")
+var (
+	errSOPSKeyNotFound = errors.New("SOPS is enabled but no Age key found")
+	errNilClusterCfg   = errors.New("clusterCfg is nil")
+)
 
 // EnsureSopsAgeSecret creates or updates the sops-age secret in the argocd namespace
 // if SOPS is enabled and an Age key is available.
@@ -31,6 +34,14 @@ func EnsureSopsAgeSecret(
 	kubeconfig string,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
+	if ctx == nil {
+		return errNilContext
+	}
+
+	if clusterCfg == nil {
+		return errNilClusterCfg
+	}
+
 	sops := clusterCfg.Spec.Cluster.SOPS
 	explicitlyEnabled := sops.Enabled != nil && *sops.Enabled
 
@@ -97,6 +108,7 @@ func upsertSopsAgeSecret(ctx context.Context, clientset kubernetes.Interface, ag
 
 	existing.Data = desired.Data
 	existing.Labels = desired.Labels
+	existing.Type = desired.Type
 
 	_, updateErr := secretsClient.Update(ctx, existing, metav1.UpdateOptions{})
 	if updateErr != nil {

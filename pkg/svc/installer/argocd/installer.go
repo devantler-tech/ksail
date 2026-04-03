@@ -83,7 +83,10 @@ func (a *Installer) chartSpec() *helm.ChartSpec {
 	return spec
 }
 
-// --- internals ---
+// ChartSpec exports chartSpec for testing.
+func (a *Installer) ChartSpec() *helm.ChartSpec {
+	return a.chartSpec()
+}
 
 func (a *Installer) helmInstallOrUpgrade(ctx context.Context) error {
 	spec := a.chartSpec()
