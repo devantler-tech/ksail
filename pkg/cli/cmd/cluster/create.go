@@ -204,6 +204,15 @@ func buildRegistryStageParams(
 	}
 }
 
+func validateRegistryForProvider(ctx *localregistry.Context) error {
+	provider := ctx.ClusterCfg.Spec.Cluster.Provider
+	registry := ctx.ClusterCfg.Spec.Cluster.LocalRegistry
+	if provider.IsCloud() && registry.Enabled() && !registry.IsExternal() {
+		return localregistry.ErrCloudProviderRequiresExternalRegistry
+	}
+	return nil
+}
+
 func ensureLocalRegistriesReady(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
@@ -214,10 +223,8 @@ func ensureLocalRegistriesReady(
 	provider := ctx.ClusterCfg.Spec.Cluster.Provider
 
 	// Cloud providers cannot use a Docker-based local registry — reject early with a clear error.
-	if provider.IsCloud() &&
-		ctx.ClusterCfg.Spec.Cluster.LocalRegistry.Enabled() &&
-		!ctx.ClusterCfg.Spec.Cluster.LocalRegistry.IsExternal() {
-		return localregistry.ErrCloudProviderRequiresExternalRegistry
+	if err := validateRegistryForProvider(ctx); err != nil {
+		return err
 	}
 
 	if !provider.IsCloud() {
