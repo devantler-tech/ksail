@@ -54,7 +54,7 @@ If `${{ github.event_name }}` is `workflow_dispatch`, perform both modes in orde
 
 ---
 
-# Roadmap Mode
+## Roadmap Mode
 
 ## Job Description
 
@@ -144,16 +144,18 @@ Before creating the new discussion, locate and read the most recent previous "${
 
 **Include a "How to Control this Workflow" section:**
 
-    gh aw disable weekly-strategy --repo ${{ github.repository }}
-    gh aw enable weekly-strategy --repo ${{ github.repository }}
-    gh aw run weekly-strategy --repo ${{ github.repository }}
-    gh aw logs weekly-strategy --repo ${{ github.repository }}
+```bash
+gh aw disable weekly-strategy --repo ${{ github.repository }}
+gh aw enable weekly-strategy --repo ${{ github.repository }}
+gh aw run weekly-strategy --repo ${{ github.repository }}
+gh aw logs weekly-strategy --repo ${{ github.repository }}
+```
 
 End with a collapsed "Research Methodology" section listing all queries, commands, and tools used.
 
 ---
 
-# Promotion Mode
+## Promotion Mode
 
 You produce **one finished piece of content** per week for KSail, a Kubernetes SDK for local GitOps development. The content must be ready to copy-paste and share without modifications.
 
