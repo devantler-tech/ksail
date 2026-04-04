@@ -149,6 +149,7 @@ func runClusterCreationWorkflow(
 			ctx,
 			deps,
 			cfgManager,
+			localDeps,
 		)
 
 		err = localregistry.ExecuteStage(

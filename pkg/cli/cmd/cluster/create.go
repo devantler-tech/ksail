@@ -189,9 +189,8 @@ func buildRegistryStageParams(
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
+	localDeps localregistry.Dependencies,
 ) mirrorregistry.StageParams {
-	localDeps := getLocalRegistryDeps()
-
 	return mirrorregistry.StageParams{
 		Cmd:            cmd,
 		ClusterCfg:     ctx.ClusterCfg,
@@ -236,7 +235,7 @@ func ensureLocalRegistriesReady(
 	}
 
 	if !provider.IsCloud() {
-		params := buildRegistryStageParams(cmd, ctx, deps, cfgManager)
+		params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, localDeps)
 
 		// Stage 3: Create and configure registry containers (local + mirrors)
 		err = mirrorregistry.SetupRegistries(params)
@@ -280,8 +279,9 @@ func configureRegistryMirrorsInClusterWithWarning(
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
+	localDeps localregistry.Dependencies,
 ) {
-	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager)
+	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, localDeps)
 
 	// Configure containerd inside cluster nodes to use registry mirrors (Kind only)
 	err := mirrorregistry.ConfigureRegistryMirrorsInCluster(params)
