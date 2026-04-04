@@ -127,8 +127,8 @@ func TestNewDecryptCmd(t *testing.T) {
 		t.Fatal("expected non-nil command")
 	}
 
-	if cmd.Use != "decrypt <file>" {
-		t.Errorf("expected Use to be 'decrypt <file>', got %q", cmd.Use)
+	if cmd.Use != "decrypt [file]" {
+		t.Errorf("expected Use to be 'decrypt [file]', got %q", cmd.Use)
 	}
 
 	if cmd.Short == "" {

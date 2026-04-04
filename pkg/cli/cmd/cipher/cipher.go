@@ -58,9 +58,11 @@ func NewDecryptCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "decrypt <file>",
+		Use:   "decrypt [file]",
 		Short: "Decrypt a file with SOPS",
 		Long: `Decrypt a file using SOPS (Secrets OPerationS).
+
+If no file is given, input is read from stdin.
 
 SOPS supports multiple key management systems:
   - age recipients
@@ -74,7 +76,8 @@ Example:
   ksail cipher decrypt secrets.yaml
   ksail cipher decrypt secrets.yaml --extract '["data"]["password"]'
   ksail cipher decrypt secrets.yaml --output plaintext.yaml
-  ksail cipher decrypt secrets.yaml --ignore-mac`,
+  ksail cipher decrypt secrets.yaml --ignore-mac
+  cat secrets.yaml | ksail cipher decrypt`,
 		SilenceUsage: true,
 		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -176,7 +179,7 @@ func writeDecryptedOutput(cmd *cobra.Command, data []byte, outputPath string) er
 		notify.WriteMessage(notify.Message{
 			Type:    notify.SuccessType,
 			Content: "decrypted to %s",
-			Args:    []any{outputPath},
+			Args:    []any{canonOutput},
 			Writer:  cmd.OutOrStdout(),
 		})
 
@@ -250,12 +253,12 @@ func handleEditRunE(
 
 	// Check if file exists
 	_, err = os.Stat(inputPath)
-	fileExists := !os.IsNotExist(err)
-
-	if fileExists {
+	if err == nil {
 		output, err = sopsclient.Edit(opts)
-	} else {
+	} else if os.IsNotExist(err) {
 		output, err = sopsclient.EditNewFile(opts, inputStore)
+	} else {
+		return fmt.Errorf("failed to stat input file: %w", err)
 	}
 
 	if err != nil {

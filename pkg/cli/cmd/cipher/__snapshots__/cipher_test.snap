@@ -32,6 +32,8 @@ Use "cipher [command] --help" for more information about a command.
 [TestDecryptCommandHelp - 1]
 Decrypt a file using SOPS (Secrets OPerationS).
 
+If no file is given, input is read from stdin.
+
 SOPS supports multiple key management systems:
   - age recipients
   - PGP fingerprints
@@ -45,9 +47,10 @@ Example:
   ksail cipher decrypt secrets.yaml --extract '["data"]["password"]'
   ksail cipher decrypt secrets.yaml --output plaintext.yaml
   ksail cipher decrypt secrets.yaml --ignore-mac
+  cat secrets.yaml | ksail cipher decrypt
 
 Usage:
-  cipher decrypt <file> [flags]
+  cipher decrypt [file] [flags]
 
 Flags:
   -e, --extract string   extract a specific key from the decrypted file (JSONPath format)
