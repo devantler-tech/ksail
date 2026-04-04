@@ -3,9 +3,13 @@ title: Benchmarks
 description: KSail performance benchmarks and historical trends
 ---
 
+import BenchmarkChart from '../../components/BenchmarkChart.astro';
+
 KSail includes automated benchmark regression testing to detect performance changes in pull requests that modify Go code.
 
-Benchmark results are recorded in every [workflow run summary](https://github.com/devantler-tech/ksail/actions/workflows/benchmark-regression.yaml). On pushes to `main`, results are stored as the new baseline. On pull requests, results are compared against the baseline without updating it.
+## Performance Trends
+
+<BenchmarkChart />
 
 ## Regression Detection
 
@@ -13,6 +17,8 @@ Benchmark results are recorded in every [workflow run summary](https://github.co
 |-------------------|-------|-------------------------------------------------------------------|
 | `alert-threshold` | 150%  | Warns (PR comment) when a benchmark is ≥1.5× slower than baseline |
 | `fail-threshold`  | 200%  | Fails the CI check when a benchmark is ≥2× slower than baseline   |
+
+Benchmark results are also recorded in every [workflow run summary](https://github.com/devantler-tech/ksail/actions/workflows/benchmark-regression.yaml). On pushes to `main`, results are stored as the new baseline.
 
 ## Running Benchmarks Locally
 

@@ -1,0 +1,215 @@
+---
+---
+
+<div class="benchmark-charts" id="benchmark-charts">
+  <p class="benchmark-loading">Loading benchmark data…</p>
+</div>
+
+<script>
+  import Chart from "chart.js/auto";
+
+  const COLORS = [
+    "#3182ce",
+    "#e53e3e",
+    "#38a169",
+    "#d69e2e",
+    "#805ad5",
+    "#dd6b20",
+    "#319795",
+    "#d53f8c",
+  ];
+
+  interface BenchEntry {
+    commit: { id: string; message: string; url: string };
+    date: number;
+    benches: { name: string; value: number; unit: string; extra: string }[];
+  }
+
+  interface BenchmarkData {
+    entries: Record<string, BenchEntry[]>;
+  }
+
+  async function renderCharts() {
+    const container = document.getElementById("benchmark-charts");
+    if (!container) return;
+
+    let data: BenchmarkData;
+    try {
+      const res = await fetch("/benchmark-data.json");
+      if (!res.ok) throw new Error(res.statusText);
+      data = await res.json();
+    } catch {
+      container.innerHTML =
+        '<p class="benchmark-empty">No benchmark data available yet. Data appears after the first push to <code>main</code>.</p>';
+      return;
+    }
+
+    const entries = Object.values(data.entries).flat();
+    if (entries.length === 0) {
+      container.innerHTML =
+        '<p class="benchmark-empty">No benchmark runs recorded yet.</p>';
+      return;
+    }
+
+    // Group all bench names across all runs
+    const benchNames = [
+      ...new Set(entries.flatMap((e) => e.benches.map((b) => b.name))),
+    ].sort();
+
+    // Build per-benchmark time series
+    const series: Record<string, { date: Date; value: number }[]> = {};
+    for (const name of benchNames) series[name] = [];
+
+    for (const entry of entries) {
+      const date = new Date(entry.date);
+      for (const bench of entry.benches) {
+        series[bench.name]?.push({ date, value: bench.value });
+      }
+    }
+
+    // Group benchmarks by package prefix (e.g. BenchmarkReadiness → "Readiness")
+    const groups = new Map<string, string[]>();
+    for (const name of benchNames) {
+      const prefix = name.split("/")[0].replace(/^Benchmark/, "");
+      const group = prefix || "Other";
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group)!.push(name);
+    }
+
+    container.innerHTML = "";
+
+    for (const [group, names] of groups) {
+      const section = document.createElement("div");
+      section.className = "benchmark-section";
+
+      const heading = document.createElement("h3");
+      heading.textContent = group;
+      section.appendChild(heading);
+
+      const canvasWrap = document.createElement("div");
+      canvasWrap.className = "benchmark-canvas-wrap";
+      const canvas = document.createElement("canvas");
+      canvasWrap.appendChild(canvas);
+      section.appendChild(canvasWrap);
+
+      container.appendChild(section);
+
+      const datasets = names.map((name, i) => {
+        const points = series[name].sort(
+          (a, b) => a.date.getTime() - b.date.getTime(),
+        );
+        return {
+          label: name.replace(/^Benchmark/, ""),
+          data: points.map((p) => ({ x: p.date.getTime(), y: p.value })),
+          borderColor: COLORS[i % COLORS.length],
+          backgroundColor: COLORS[i % COLORS.length] + "33",
+          tension: 0.3,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          fill: false,
+        };
+      });
+
+      const isDark =
+        document.documentElement.dataset.theme === "dark" ||
+        document.documentElement.classList.contains("dark") ||
+        window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+      const gridColor = isDark
+        ? "rgba(255,255,255,0.1)"
+        : "rgba(0,0,0,0.1)";
+      const textColor = isDark
+        ? "rgba(255,255,255,0.7)"
+        : "rgba(0,0,0,0.7)";
+
+      new Chart(canvas, {
+        type: "line",
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          scales: {
+            x: {
+              type: "linear",
+              ticks: {
+                color: textColor,
+                callback: (v) =>
+                  new Date(v as number).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  }),
+              },
+              grid: { color: gridColor },
+            },
+            y: {
+              title: { display: true, text: "ns/op", color: textColor },
+              ticks: { color: textColor },
+              grid: { color: gridColor },
+            },
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                title: (items) => {
+                  const ts = items[0]?.parsed?.x;
+                  return ts
+                    ? new Date(ts).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : "";
+                },
+                label: (ctx) =>
+                  `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} ns/op`,
+              },
+            },
+            legend: {
+              labels: { color: textColor },
+            },
+          },
+        },
+      });
+    }
+  }
+
+  // Run after DOM is ready
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", renderCharts);
+  } else {
+    renderCharts();
+  }
+</script>
+
+<style>
+  .benchmark-charts {
+    margin: 1.5rem 0;
+  }
+
+  .benchmark-loading,
+  .benchmark-empty {
+    color: var(--sl-color-gray-3, #888);
+    font-style: italic;
+    text-align: center;
+    padding: 2rem 1rem;
+  }
+
+  .benchmark-section {
+    margin-bottom: 2.5rem;
+  }
+
+  .benchmark-section h3 {
+    margin-bottom: 0.75rem;
+  }
+
+  .benchmark-canvas-wrap {
+    position: relative;
+    height: 320px;
+    width: 100%;
+    background: var(--sl-color-bg-nav, transparent);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--sl-color-hairline, rgba(128, 128, 128, 0.2));
+  }
+</style>
