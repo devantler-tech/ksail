@@ -63,12 +63,14 @@ func withSafeFatal(action func()) (retErr error) {
 // process. This is essential when KSail calls kubectl commands internally
 // (backup, restore, watch) and needs to handle errors gracefully.
 func ExecuteSafely(ctx context.Context, cmd *cobra.Command) error {
-	err := withSafeFatal(func() {
-		_ = cmd.ExecuteContext(ctx)
+	var execErr error
+
+	fatalErr := withSafeFatal(func() {
+		execErr = cmd.ExecuteContext(ctx)
 	})
-	if err != nil {
-		return err
+	if fatalErr != nil {
+		return fatalErr
 	}
 
-	return nil
+	return execErr
 }
