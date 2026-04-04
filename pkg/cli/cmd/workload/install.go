@@ -2,7 +2,6 @@ package workload
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
@@ -49,19 +48,17 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("create helm client: %w", err)
 	}
 
-	spec, err := buildChartSpec(cmd, releaseName, chartName)
-	if err != nil {
-		return err
-	}
+	spec := buildChartSpec(cmd, releaseName, chartName)
 
-	if _, err = client.InstallChart(cmd.Context(), spec); err != nil {
+	_, err = client.InstallChart(cmd.Context(), spec)
+	if err != nil {
 		return fmt.Errorf("install chart %q: %w", chartName, err)
 	}
 
 	return nil
 }
 
-func buildChartSpec(cmd *cobra.Command, releaseName, chartName string) (*helm.ChartSpec, error) {
+func buildChartSpec(cmd *cobra.Command, releaseName, chartName string) *helm.ChartSpec {
 	namespace, _ := cmd.Flags().GetString("namespace")
 	if namespace == "" {
 		namespace = "default"
@@ -77,10 +74,10 @@ func buildChartSpec(cmd *cobra.Command, releaseName, chartName string) (*helm.Ch
 		ReleaseName:     releaseName,
 		ChartName:       chartName,
 		Namespace:       namespace,
-		Timeout:         time.Duration(timeout),
+		Timeout:         timeout,
 		Version:         version,
 		CreateNamespace: createNamespace,
 		Wait:            wait,
 		Atomic:          atomic,
-	}, nil
+	}
 }
