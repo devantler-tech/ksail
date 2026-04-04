@@ -136,14 +136,18 @@ jobs:
           go-version-file: go.mod
 
       - name: 📥 Install deadcode
-        run: go install golang.org/x/tools/cmd/deadcode@latest
+        run: go install golang.org/x/tools/cmd/deadcode@v0.43.0
 
       - name: 🔍 Check for dead code
         run: |
-          output=$(deadcode -test ./... 2>&1) || true
-          if [ -n "$output" ]; then
+          output_file="$(mktemp)"
+          trap 'rm -f "$output_file"' EXIT
+
+          deadcode -test ./... >"$output_file"
+
+          if [ -s "$output_file" ]; then
             echo "::error::Dead code detected. Remove unreachable functions before merging."
-            echo "$output"
+            cat "$output_file"
             exit 1
           fi
           echo "No dead code found ✅"

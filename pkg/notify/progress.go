@@ -203,8 +203,6 @@ func WithClock(clock Clock) ProgressOption {
 	}
 }
 
-// WithMaxVisible sets the maximum number of task lines shown at once.
-// When set, a compact display mode is used: a summary line at the top
 // WithConcurrency limits the number of tasks running in parallel.
 // Default 0 means unlimited concurrency.
 func WithConcurrency(n int) ProgressOption {
