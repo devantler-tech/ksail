@@ -1,9 +1,11 @@
 package tenant
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
@@ -59,6 +61,15 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	opts.OutputDir = outputDir
+
+	if !confirm.ShouldSkipPrompt(opts.Force) {
+		notify.Warningf(cmd.OutOrStdout(), "This will delete tenant %q and its manifest directory", opts.Name)
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), `Type "yes" to confirm deletion: `)
+
+		if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
+			return errors.New("deletion cancelled")
+		}
+	}
 
 	if err := tenant.Delete(opts); err != nil {
 		return fmt.Errorf("deleting tenant: %w", err)

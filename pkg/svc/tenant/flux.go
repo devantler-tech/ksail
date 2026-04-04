@@ -80,7 +80,7 @@ func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 		}
 		registry := strings.TrimSuffix(opts.Registry, "/")
 		source = fluxSource{
-			APIVersion: "source.toolkit.fluxcd.io/v1beta2",
+			APIVersion: "source.toolkit.fluxcd.io/v1",
 			Kind:       "OCIRepository",
 			Metadata: fluxMetadata{
 				Name:      opts.Name,

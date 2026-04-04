@@ -1,6 +1,7 @@
 package tenant
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -11,6 +12,7 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
 	"github.com/spf13/cobra"
 )
 
@@ -117,6 +119,37 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 	if opts.Register {
 		if err := tenant.RegisterTenant(opts.Name, opts.OutputDir, opts.KustomizationPath); err != nil {
 			return fmt.Errorf("registering tenant: %w", err)
+		}
+	}
+
+	// Scaffold and push tenant repo if git provider, repo, and a valid token are available.
+	if opts.GitProvider != "" && opts.GitRepo != "" {
+		token := gitprovider.ResolveToken(opts.GitProvider, opts.GitToken)
+		if token != "" {
+			provider, err := gitprovider.New(opts.GitProvider, token)
+			if err != nil {
+				return fmt.Errorf("creating git provider: %w", err)
+			}
+
+			owner, repoName, err := gitprovider.ParseOwnerRepo(opts.GitRepo)
+			if err != nil {
+				return fmt.Errorf("parsing git-repo: %w", err)
+			}
+
+			ctx := context.Background()
+
+			if err := provider.CreateRepo(ctx, owner, repoName, gitprovider.RepoVisibility(opts.RepoVisibility)); err != nil {
+				return fmt.Errorf("creating tenant repo: %w", err)
+			}
+
+			scaffoldFiles := tenant.ScaffoldFiles(opts)
+			commitMsg := fmt.Sprintf("feat: initial scaffold for tenant %s", opts.Name)
+
+			if err := provider.PushFiles(ctx, owner, repoName, scaffoldFiles, commitMsg); err != nil {
+				return fmt.Errorf("pushing scaffold files: %w", err)
+			}
+
+			notify.Successf(cmd.OutOrStdout(), "Tenant repo %q scaffolded successfully", opts.GitRepo)
 		}
 	}
 
