@@ -91,8 +91,11 @@ func (c *Client) CreatePriorityClassCmd() (*cobra.Command, error) {
 
 // newResourceCmd creates a gen command that wraps kubectl create with forced --dry-run=client -o yaml.
 func (c *Client) newResourceCmd(resourceType string) (*cobra.Command, error) {
-	// Use empty string for kubeconfig since --dry-run=client doesn't need cluster access
+	// Hold fatalMu during command construction: kubectl's NewCmdCreate calls
+	// CheckErr which reads the global fatalErrHandler without synchronization.
+	fatalMu.Lock()
 	tempCreateCmd := c.CreateCreateCommand("")
+	fatalMu.Unlock()
 
 	// Find the subcommand for this resource type
 	var resourceCmd *cobra.Command
@@ -215,7 +218,12 @@ func (c *Client) executeSubcommandGen(
 	args []string,
 ) error {
 	freshClient := c.createFreshClient(cmd)
+
+	// Hold fatalMu during command construction: kubectl's NewCmdCreate calls
+	// CheckErr which reads the global fatalErrHandler.
+	fatalMu.Lock()
 	createCmd := freshClient.CreateCreateCommand("")
+	fatalMu.Unlock()
 
 	// Find the parent resource command
 	parentCmd := freshClient.findResourceCommand(createCmd, parentType)
@@ -235,7 +243,12 @@ func (c *Client) executeSubcommandGen(
 // executeResourceGen executes kubectl create with forced --dry-run=client -o yaml flags.
 func (c *Client) executeResourceGen(resourceType string, cmd *cobra.Command, args []string) error {
 	freshClient := c.createFreshClient(cmd)
+
+	// Hold fatalMu during command construction: kubectl's NewCmdCreate calls
+	// CheckErr which reads the global fatalErrHandler.
+	fatalMu.Lock()
 	createCmd := freshClient.CreateCreateCommand("")
+	fatalMu.Unlock()
 
 	freshResourceCmd := freshClient.findResourceCommand(createCmd, resourceType)
 	if freshResourceCmd == nil {

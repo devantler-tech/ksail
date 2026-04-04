@@ -31,7 +31,6 @@ func (e *kubectlFatalError) Error() string {
 // fatal handler is a global. This is safe to call from multiple goroutines.
 func withSafeFatal(action func()) (retErr error) {
 	fatalMu.Lock()
-	defer fatalMu.Unlock()
 
 	cmdutil.BehaviorOnFatal(func(msg string, code int) {
 		panic(&kubectlFatalError{msg: msg, code: code})
@@ -44,10 +43,13 @@ func withSafeFatal(action func()) (retErr error) {
 			if e, ok := r.(*kubectlFatalError); ok {
 				retErr = fmt.Errorf("%w", e)
 			} else {
-				// Re-panic for unexpected panics (bugs, nil pointers, etc.)
+				// Unlock before re-panicking to avoid deadlock.
+				fatalMu.Unlock()
 				panic(r)
 			}
 		}
+
+		fatalMu.Unlock()
 	}()
 
 	action()
