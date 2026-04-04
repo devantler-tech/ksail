@@ -734,7 +734,6 @@ func TestImportKeyBasic(t *testing.T) {
 	verifyFilePermissions(t, expectedPath)
 }
 
-//nolint:paralleltest // Uses t.Setenv to modify process-level env vars
 func TestImportKeyWithXDGConfigHome(t *testing.T) {
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
@@ -838,7 +837,6 @@ AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC
 	}
 }
 
-//nolint:paralleltest // Uses t.Setenv to modify process-level env vars
 func TestImportInvalidKey(t *testing.T) {
 	testCases := []struct {
 		name    string
