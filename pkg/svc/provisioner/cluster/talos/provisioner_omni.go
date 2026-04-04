@@ -36,7 +36,11 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	}
 
 	if !exists {
-		return fmt.Errorf("%w: %s (no nodes found in Omni)", clustererr.ErrClusterNotFound, clusterName)
+		return fmt.Errorf(
+			"%w: %s (no nodes found in Omni)",
+			clustererr.ErrClusterNotFound,
+			clusterName,
+		)
 	}
 
 	_, _ = fmt.Fprintf(
