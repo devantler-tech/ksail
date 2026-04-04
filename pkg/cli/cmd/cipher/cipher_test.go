@@ -698,7 +698,8 @@ func TestImportCommandHelp(t *testing.T) {
 	snaps.MatchSnapshot(t, out.String())
 }
 
-func TestImportKeyBasic(t *testing.T) { //nolint:paralleltest // modifies process-level env vars
+//nolint:paralleltest // Uses t.Setenv to modify process-level env vars
+func TestImportKeyBasic(t *testing.T) {
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
 
@@ -733,6 +734,7 @@ func TestImportKeyBasic(t *testing.T) { //nolint:paralleltest // modifies proces
 	verifyFilePermissions(t, expectedPath)
 }
 
+//nolint:paralleltest // Uses t.Setenv to modify process-level env vars
 func TestImportKeyWithXDGConfigHome(t *testing.T) {
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
@@ -768,9 +770,10 @@ func TestImportKeyWithXDGConfigHome(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Uses t.Setenv to modify process-level env vars
 func TestImportKeyAppendsToExistingFile(
 	t *testing.T,
-) { //nolint:paralleltest // modifies process-level env vars
+) {
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
 
@@ -835,6 +838,7 @@ AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC
 	}
 }
 
+//nolint:paralleltest // Uses t.Setenv to modify process-level env vars
 func TestImportInvalidKey(t *testing.T) {
 	testCases := []struct {
 		name    string
