@@ -1,0 +1,512 @@
+[TestGenClusterRoleBinding - 1]
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: test-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: test-clusterrole
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: test-user
+
+---
+[TestGenConfigMap - 1]
+apiVersion: v1
+data:
+  APP_ENV: production
+  DEBUG: "false"
+kind: ConfigMap
+metadata:
+  name: test-config
+
+---
+[TestGenCronJob - 1]
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: test-cronjob
+spec:
+  jobTemplate:
+    metadata:
+      name: test-cronjob
+    spec:
+      template:
+        metadata: {}
+        spec:
+          containers:
+          - image: busybox:latest
+            name: test-cronjob
+            resources: {}
+          restartPolicy: OnFailure
+  schedule: '*/5 * * * *'
+status: {}
+
+---
+[TestGenDeployment - 1]
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: test-deployment
+  name: test-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: test-deployment
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: test-deployment
+    spec:
+      containers:
+      - image: nginx:1.21
+        name: nginx
+        resources: {}
+status: {}
+
+---
+
+[TestGenHelmReleaseSimple - 1]
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  chart:
+    spec:
+      chart: podinfo
+      sourceRef:
+        kind: HelmRepository
+        name: podinfo
+        namespace: default
+  interval: 1m0s
+  timeout: 5m0s
+status: {}
+
+---
+
+[TestGenHelmReleaseWithAllFlags - 1]
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: webapp
+  namespace: production
+spec:
+  chart:
+    spec:
+      chart: webapp
+      sourceRef:
+        kind: HelmRepository
+        name: charts
+        namespace: flux-system
+      version: ^1.0.0
+  install:
+    crds: Create
+    createNamespace: true
+  interval: 5m0s
+  releaseName: webapp-prod
+  serviceAccountName: webapp-sa
+  storageNamespace: flux-system
+  targetNamespace: apps
+  timeout: 10m0s
+  upgrade:
+    crds: CreateReplace
+status: {}
+
+---
+
+[TestGenHelmReleaseWithChartRef - 1]
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: webapp
+  namespace: default
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: webapp
+    namespace: flux-system
+  interval: 1m0s
+  timeout: 5m0s
+status: {}
+
+---
+
+[TestGenHelmReleaseWithDependencies - 1]
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: webapp
+  namespace: default
+spec:
+  chart:
+    spec:
+      chart: webapp
+      sourceRef:
+        kind: HelmRepository
+        name: charts
+        namespace: default
+  dependsOn:
+  - name: database
+  - name: redis
+    namespace: production
+  interval: 1m0s
+  timeout: 5m0s
+status: {}
+
+---
+
+[TestGenHelmReleaseWithValuesFile - 1]
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: webapp
+  namespace: default
+spec:
+  chart:
+    spec:
+      chart: webapp
+      sourceRef:
+        kind: HelmRepository
+        name: charts
+        namespace: default
+  interval: 1m0s
+  timeout: 5m0s
+  values:
+    image:
+      tag: v2.0.0
+    replicaCount: 3
+status: {}
+
+---
+
+[TestGenHelmReleaseWithValuesFrom - 1]
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: webapp
+  namespace: default
+spec:
+  chart:
+    spec:
+      chart: webapp
+      sourceRef:
+        kind: HelmRepository
+        name: charts
+        namespace: default
+  interval: 1m0s
+  timeout: 5m0s
+  valuesFrom:
+  - kind: Secret
+    name: my-values
+  - kind: ConfigMap
+    name: common-config
+status: {}
+
+---
+
+[TestGenHelmReleaseWithVersion - 1]
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: webapp
+  namespace: production
+spec:
+  chart:
+    spec:
+      chart: webapp
+      sourceRef:
+        kind: HelmRepository
+        name: charts
+        namespace: production
+      version: ^1.0.0
+  interval: 1m0s
+  timeout: 5m0s
+status: {}
+
+---
+[TestGenIngressSimple - 1]
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: test-ingress
+spec:
+  rules:
+  - host: example.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: svc
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+status:
+  loadBalancer: {}
+
+---
+
+[TestGenIngressWithTLS - 1]
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: test-ingress-tls
+spec:
+  rules:
+  - host: secure.example.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: svc
+            port:
+              number: 443
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - secure.example.com
+    secretName: my-tls-secret
+status:
+  loadBalancer: {}
+
+---
+
+[TestGenIngressMultipleRules - 1]
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: test-ingress-multi
+spec:
+  rules:
+  - host: api.example.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: api-svc
+            port:
+              number: 8080
+        path: /
+        pathType: Prefix
+  - host: web.example.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: web-svc
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+status:
+  loadBalancer: {}
+
+---
+[TestGenJob - 1]
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-job
+spec:
+  template:
+    metadata: {}
+    spec:
+      containers:
+      - image: busybox:latest
+        name: test-job
+        resources: {}
+      restartPolicy: Never
+status: {}
+
+---
+[TestGenNamespace - 1]
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-namespace
+spec: {}
+status: {}
+
+---
+[TestGenPodDisruptionBudget - 1]
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: test-pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: test
+status:
+  currentHealthy: 0
+  desiredHealthy: 0
+  disruptionsAllowed: 0
+  expectedPods: 0
+
+---
+[TestGenPriorityClass - 1]
+apiVersion: scheduling.k8s.io/v1
+description: Test priority class
+kind: PriorityClass
+metadata:
+  name: test-priority
+preemptionPolicy: PreemptLowerPriority
+value: 1000
+
+---
+[TestGenQuota - 1]
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: test-quota
+spec:
+  hard:
+    cpu: "1"
+    memory: 1Gi
+    pods: "10"
+status: {}
+
+---
+[TestGenRoleBinding - 1]
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: test-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: test-role
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: test-user
+
+---
+[TestGenSecretGeneric - 1]
+apiVersion: v1
+data:
+  key1: dmFsdWUx
+  key2: dmFsdWUy
+kind: Secret
+metadata:
+  name: test-secret
+
+---
+
+[TestGenSecretDockerRegistry - 1]
+apiVersion: v1
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJodHRwczovL3JlZ2lzdHJ5LmV4YW1wbGUuY29tIjp7InVzZXJuYW1lIjoidGVzdHVzZXIiLCJwYXNzd29yZCI6InRlc3RwYXNzMTIzIiwiZW1haWwiOiJ0ZXN0dXNlckBleGFtcGxlLmNvbSIsImF1dGgiOiJkR1Z6ZEhWelpYSTZkR1Z6ZEhCaGMzTXhNak09In19fQ==
+kind: Secret
+metadata:
+  name: test-docker-secret
+type: kubernetes.io/dockerconfigjson
+
+---
+
+[TestGenSecretTLS - 1]
+apiVersion: v1
+data:
+  tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUREVENDQWZXZ0F3SUJBZ0lVUWcydGhGT21kRUduMDczL3YyTEgxM29GMGJJd0RRWUpLb1pJaHZjTkFRRUwKQlFBd0ZqRVVNQklHQTFVRUF3d0xaWGhoYlhCc1pTNWpiMjB3SGhjTk1qVXhNVEF6TVRrME1qSXhXaGNOTXpVeApNVEF4TVRrME1qSXhXakFXTVJRd0VnWURWUVFEREF0bGVHRnRjR3hsTG1OdmJUQ0NBU0l3RFFZSktvWklodmNOCkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQkFLbU9YWnJNMHdweWZOUHU0MEcyZ3NYWE5Qa25qekIvUmp0a0RZOE4KTmkvWWZCSzhNUjQxK3R0akYzR1J0Mm5rSURaN2d4TWZEWUJiUTV6NFJRZ2FyUExjK0FEdytUblE4YVdBSkdITgpUclVscVVzUWFZTVBpMW5VMDY2UDBjdEZ2UzBlenpKOVFibG5KTERiaG9idnlrSzV3WHA5cFdHRnZDeUdCU0dBCkxvSDNTMWRacFJOYXpsN1lleEhWem80YXFEenU5QjFtQkRtOUZQMWFQZ2ZDWVgrbzlaZkhGcEZKa0dUOFV1dG4KRVlYU2IvemVkUkh6WXcyeWEyM3pxQ1o4ZkdseFdZRDQrandKeW9nSjJQNWhQd1pRMnQwYmlETldoaTBCNVZ1TApDQ21OS0Vac1JRa09oV0hINnJmbW0xWHFnTTh3UklpaStvM0I0STMvOWpiQkdGMENBd0VBQWFOVE1GRXdIUVlEClZSME9CQllFRkw4QTZwbUlDc2pPMUcrWStVUTJ5U0FpQ3hLN01COEdBMVVkSXdRWU1CYUFGTDhBNnBtSUNzak8KMUcrWStVUTJ5U0FpQ3hLN01BOEdBMVVkRXdFQi93UUZNQU1CQWY4d0RRWUpLb1pJaHZjTkFRRUxCUUFEZ2dFQgpBRXJmNkxVdVh2dUwvR0xpeEpqT0JBRHBNOUxlanU3ZGJCMnQrc0RoK2tJUERwc0hNajRFalBzaFNpc0JtMjZtCmVtRTZnZUtBMHZqRDRmSThSTC9rSXZsUHpQd29qQkRrYnFPek5JeHNBVUYrN2psT3hhYnVDbXNRcXBqWmY0STcKenhvbUROZVNEbmRxVWdjSklmL0hqeHlXSzVGaTROMXdRdW9pZDM3NUVFaXhhdlhtekJJUXZ2WEQycVQ0NHJHWQp2bmVHbU1vZFA1RzRtY1VJZE5BZDFvUW9HWVlLRnBEUHU3YTFEaUJHV1RXYjhzaWZqQndXakhoQzFJc0hNS2cxCkwxU2pSTXptR3RtUTdja3lKanEvY0REY3ZxZWk2dFBLaE42b0xqVmV6eWZnYi9qM2ZlUU0zNFJ4T09NbG03SVYKWlFMNEdmTjN6MzlMZExwbml6N091cVU9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+  tls.key: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRQ3BqbDJhek5NS2NuelQKN3VOQnRvTEYxelQ1SjQ4d2YwWTdaQTJQRFRZdjJId1N2REVlTmZyYll4ZHhrYmRwNUNBMmU0TVRIdzJBVzBPYworRVVJR3F6eTNQZ0E4UGs1MFBHbGdDUmh6VTYxSmFsTEVHbURENHRaMU5PdWo5SExSYjB0SHM4eWZVRzVaeVN3CjI0YUc3OHBDdWNGNmZhVmhoYndzaGdVaGdDNkI5MHRYV2FVVFdzNWUySHNSMWM2T0dxZzg3dlFkWmdRNXZSVDkKV2o0SHdtRi9xUFdYeHhhUlNaQmsvRkxyWnhHRjBtLzgzblVSODJNTnNtdHQ4NmdtZkh4cGNWbUErUG84Q2NxSQpDZGorWVQ4R1VOcmRHNGd6Vm9ZdEFlVmJpd2dwalNoR2JFVUpEb1ZoeCtxMzVwdFY2b0RQTUVTSW92cU53ZUNOCi8vWTJ3UmhkQWdNQkFBRUNnZ0VBVklOTGtNOHJHZmY2MUVBc01pTGdoL0ErelRtMG0zMjA2Z0Z5Nkt5eko2SUcKSmVoN3F3MUkzblZEeUMzVGVBcG5MQURnVW5XVjZ6YVNPdmxjbnk5OHFRa083Smt3QUd0dkp3ajZHVzJXSDZDSQpBNHhJcXpUaVJvSllpSmZUQURqZ2xFN1pBOWQvSFFTV096a1FrczJPeVRlQmdxYUIrbHdJY1VEVDZlRFVUWjYvCkp0Vlk1RVptbitKRUt5bEhKem5ub0VJSUV5allqSkVEMzNiUVg0R3N6S29qckQydE5ZM0FTZ0toaSs2Y2llbm0KUEh0MEk4bDBFZG9OVXYxdEN6eHpadXlocXVzaDlTNEhZK0VHY3lGTGo1ZHJZelZERzhMOCtFT25kSmQ2Y1ozTApJSkdRRGdVaWdLR0tQd0FSNCtYbnZLSk1JQk5CSVpEenBXQnByeFdLbVFLQmdRRGgwUytObC9oc1FqUXNUeVh0CnFuUkZZQlRYbmVRcm1DbS9ZSFNCbDRVR1hLNHorWHhxeEdKRWU4KzBPVm9rN1RJa1NReUlGMHR2Y1hKV2p3VWQKSDlWWXgxQ0x5YmxkQ2RYbHpTZjR1TTNpbmxXc2dCUksvRnQwSUR5dzEzYlowTDVYdVk5Nk84MlpXRFI2LzdnQQpKMlNmMW5WVXFpYkJ0OUpSZFhCV2RPMkhUd0tCZ1FEQU9CYmd1SUNBVUNPUUQ5NTlaMTA2M0thaTBDaEYxY1hNCjh3a0EzaURUeW5KVU9seFcrdG45bjBQaUhxY21qY0xDM2dRcnhqYjUzcUM3aWFrWG5WdytyTzFYaGZhOVh6ZksKc2xJNUpCVXVlWnREK1A0NVplUkNhTTFMaGV2SUZTQm9GT1BQSll6bmluWU9qYXdaWnl0dG43dnpLRnhWQXI4YQpEcU9aamVPNmt3S0JnUURRVlh6b3hpOGtPY1FHcVJMVi9POStYZEY4eDZlTmJMbi9YUTYvekxtbWovVUw4SDJQCnh4VGVGOWdkYnRneXZ6OEdhUHFOeCtnSnJnR055Qzh3bW9EcmdoOVdpRXBpZ3NON1d0WW95dDd2MTZJMUhva2EKVVU1U2liZFVjOFNyMmNEeUVEbEZ6VXkyejhERFJZOU5YUXFoeUdyQkxLWExEVHVWZWFLbHNRUy9Vd0tCZ1FDZApLSDdVQnlYUlF6U0FZZWtvSU8zaDVXdzg2L0l4ZnVIMWVyUGV5TDZRU3hLRStSNXNZemIrSFV4MFFWbXF0UGNMCk9saXdyYVJmVVgyYk42ZFB6bklRTUhUeFBXK0tUNktmRUlNWGd2L3FlclRPczNLdjNUWHVjaDkvNHlQdStBOEIKNmlxRVFCQmZjeDZwTVg0SFd3bnYzRXpnTnh5ZXlOc1VZK213NzRqRkR3S0JnSFQwNVlBdDJSc2xOUzRmbUR2YgpXaFBJSkdva0NiMjd6MzJiSDVqVlZmcjJVcS9HZldpSVJZMDFLVFdGTEtTWnNlUUE4U2xPWjUycTdOQWNrYW41CnB0UlA4bXZFYUpWRkJpSWY5NUpsa1RwNzZxVURMckVoSTJBTEp4MUpqVng0SDFNM0pqb2VlbG0xcUtHZXNhWXoKSDI1UWY5ekVRZUpKQ2NTUVBaK2lpcGFYCi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
+kind: Secret
+metadata:
+  name: test-tls-secret
+type: kubernetes.io/tls
+
+---
+[TestGenServiceClusterIP - 1]
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: test-svc
+  name: test-svc
+spec:
+  ports:
+  - name: 80-8080
+    port: 80
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: test-svc
+  type: ClusterIP
+status:
+  loadBalancer: {}
+
+---
+
+[TestGenServiceNodePort - 1]
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: test-svc
+  name: test-svc
+spec:
+  ports:
+  - name: 80-8080
+    port: 80
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: test-svc
+  type: NodePort
+status:
+  loadBalancer: {}
+
+---
+
+[TestGenServiceLoadBalancer - 1]
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: test-svc
+  name: test-svc
+spec:
+  ports:
+  - name: 80-8080
+    port: 80
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: test-svc
+  type: LoadBalancer
+status:
+  loadBalancer: {}
+
+---
+
+[TestGenServiceExternalName - 1]
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: test-svc
+  name: test-svc
+spec:
+  externalName: example.com
+  selector:
+    app: test-svc
+  type: ExternalName
+status:
+  loadBalancer: {}
+
+---
+[TestGenServiceAccount - 1]
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: test-sa
+
+---
