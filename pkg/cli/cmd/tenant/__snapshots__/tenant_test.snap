@@ -1,0 +1,19 @@
+
+[TestTenantCmd_ShowsHelp - 1]
+Manage multi-tenancy onboarding for Kubernetes clusters, including RBAC isolation, GitOps sync resources, and tenant repository scaffolding.
+
+Usage:
+  tenant [flags]
+  tenant [command]
+
+Available Commands:
+  completion  Generate the autocompletion script for the specified shell
+  create      Create a new tenant
+  help        Help about any command
+
+Flags:
+  -h, --help   help for tenant
+
+Use "tenant [command] --help" for more information about a command.
+
+---
