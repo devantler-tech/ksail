@@ -7,9 +7,12 @@ import (
 	"os"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
 	"github.com/docker/docker/api/types"
@@ -738,4 +741,69 @@ func TestProvisioner_Delete_Success(t *testing.T) {
 	require.NoError(t, err)
 	mockProvisioner.AssertExpectations(t)
 	mockCluster.AssertExpectations(t)
+}
+
+// Omni provider tests — verify that Exists, Create, and Delete route
+// to the Omni provider instead of falling through to Docker.
+
+func TestProvisioner_Exists_OmniProvider(t *testing.T) {
+	t.Parallel()
+
+	// Create an Omni provider with nil client (simulates unit-test environment)
+	omniProv := omni.NewProvider(nil)
+
+	configs := createTestTalosConfigs(t, "omni-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithInfraProvider(omniProv).
+		WithOmniOptions(v1alpha1.OptionsOmni{Endpoint: "https://test.omni.example.com"})
+	// No Docker client set — should NOT get ErrDockerNotAvailable
+
+	ctx := context.Background()
+	exists, err := provisioner.Exists(ctx, "")
+
+	// Should fail with an Omni/provider error, NOT ErrDockerNotAvailable
+	require.Error(t, err)
+	assert.False(t, exists)
+	require.NotErrorIs(t, err, talosprovisioner.ErrDockerNotAvailable)
+	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestProvisioner_Create_OmniProvider(t *testing.T) {
+	t.Parallel()
+
+	omniProv := omni.NewProvider(nil)
+
+	configs := createTestTalosConfigs(t, "omni-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithInfraProvider(omniProv).
+		WithOmniOptions(v1alpha1.OptionsOmni{Endpoint: "https://test.omni.example.com"}).
+		WithLogWriter(io.Discard)
+
+	ctx := context.Background()
+	err := provisioner.Create(ctx, "")
+
+	// Should fail with an Omni/provider error, NOT ErrDockerNotAvailable
+	require.Error(t, err)
+	require.NotErrorIs(t, err, talosprovisioner.ErrDockerNotAvailable)
+	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestProvisioner_Delete_OmniProvider(t *testing.T) {
+	t.Parallel()
+
+	omniProv := omni.NewProvider(nil)
+
+	configs := createTestTalosConfigs(t, "omni-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithInfraProvider(omniProv).
+		WithOmniOptions(v1alpha1.OptionsOmni{Endpoint: "https://test.omni.example.com"}).
+		WithLogWriter(io.Discard)
+
+	ctx := context.Background()
+	err := provisioner.Delete(ctx, "")
+
+	// Should fail with an Omni/provider error, NOT ErrDockerNotAvailable
+	require.Error(t, err)
+	require.NotErrorIs(t, err, talosprovisioner.ErrDockerNotAvailable)
+	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }

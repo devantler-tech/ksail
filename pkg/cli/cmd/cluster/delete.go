@@ -128,7 +128,7 @@ func runDeleteAction(
 	}
 
 	// Create provisioner for the provider
-	provisioner, err := createDeleteProvisioner(clusterInfo)
+	provisioner, err := createDeleteProvisioner(clusterInfo, resolved.OmniOpts)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -270,6 +270,7 @@ func promptForDeletion(
 // It first checks for test overrides, then falls back to creating a minimal provisioner.
 func createDeleteProvisioner(
 	clusterInfo *clusterdetector.Info,
+	omniOpts v1alpha1.OptionsOmni,
 ) (clusterprovisioner.Provisioner, error) {
 	// Check for test factory override
 	clusterProvisionerFactoryMu.RLock()
@@ -287,7 +288,7 @@ func createDeleteProvisioner(
 		return provisioner, nil
 	}
 
-	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(clusterInfo)
+	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(clusterInfo, omniOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provisioner for provider: %w", err)
 	}
