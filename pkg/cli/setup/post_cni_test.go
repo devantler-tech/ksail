@@ -388,3 +388,77 @@ func TestKubeletCSRApproverLinkedToMetricsServer(t *testing.T) {
 		})
 	}
 }
+
+func TestNeedsInClusterConnectivityCheck(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		cni      v1alpha1.CNI
+		expected bool
+	}{
+		{
+			name:     "Cilium requires connectivity check",
+			cni:      v1alpha1.CNICilium,
+			expected: true,
+		},
+		{
+			name:     "Calico skips connectivity check",
+			cni:      v1alpha1.CNICalico,
+			expected: false,
+		},
+		{
+			name:     "Default CNI skips connectivity check",
+			cni:      v1alpha1.CNIDefault,
+			expected: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			clusterCfg := setup.ClusterWithCNI(testCase.cni)
+			assert.Equal(t, testCase.expected, setup.NeedsInClusterConnectivityCheck(clusterCfg))
+		})
+	}
+}
+
+func TestAPIServerStabilitySuccesses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		expected     int
+	}{
+		{
+			name:         "Vanilla uses fast (reduced) successes",
+			distribution: v1alpha1.DistributionVanilla,
+			expected:     setup.APIServerStabilitySuccessesFast,
+		},
+		{
+			name:         "K3s uses fast (reduced) successes",
+			distribution: v1alpha1.DistributionK3s,
+			expected:     setup.APIServerStabilitySuccessesFast,
+		},
+		{
+			name:         "Talos uses default (full) successes",
+			distribution: v1alpha1.DistributionTalos,
+			expected:     setup.APIServerStabilitySuccessesDefault,
+		},
+		{
+			name:         "VCluster uses default (full) successes",
+			distribution: v1alpha1.DistributionVCluster,
+			expected:     setup.APIServerStabilitySuccessesDefault,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, testCase.expected, setup.APIServerStabilitySuccesses(testCase.distribution))
+		})
+	}
+}
