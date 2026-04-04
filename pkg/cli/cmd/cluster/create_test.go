@@ -970,8 +970,19 @@ func TestEnsureLocalRegistriesReady_CloudProviders(t *testing.T) {
 
 			deps := lifecycle.Deps{Timer: timer.New()}
 
-			err := clusterpkg.ExportEnsureLocalRegistriesReady(cmd, ctx, deps, cfgManager, localDeps)
-			require.NoError(t, err, "ensureLocalRegistriesReady should succeed for cloud provider %s without Docker", provider)
+			err := clusterpkg.ExportEnsureLocalRegistriesReady(
+				cmd,
+				ctx,
+				deps,
+				cfgManager,
+				localDeps,
+			)
+			require.NoError(
+				t,
+				err,
+				"ensureLocalRegistriesReady should succeed for cloud provider %s without Docker",
+				provider,
+			)
 		})
 	}
 }
