@@ -27,10 +27,6 @@ linters:
       # Tests that modify env vars cannot run in parallel
       - linters:
           - paralleltest
-        path: pkg/cli/cmd/cipher/cipher_test.go
-      # Tests that modify env vars cannot run in parallel
-      - linters:
-          - paralleltest
         path: pkg/svc/detector/cluster/cluster_test.go
       # Tests that modify env vars cannot run in parallel
       - linters:

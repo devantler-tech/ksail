@@ -698,9 +698,7 @@ func TestImportCommandHelp(t *testing.T) {
 	snaps.MatchSnapshot(t, out.String())
 }
 
-func TestImportKeyBasic(t *testing.T) {
-	// Note: Not running in parallel due to environment variable modifications
-
+func TestImportKeyBasic(t *testing.T) { //nolint:paralleltest // modifies process-level env vars
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
 
@@ -735,9 +733,7 @@ func TestImportKeyBasic(t *testing.T) {
 	verifyFilePermissions(t, expectedPath)
 }
 
-func TestImportKeyWithXDGConfigHome(t *testing.T) {
-	// Note: Not running in parallel due to environment variable modifications
-
+func TestImportKeyWithXDGConfigHome(t *testing.T) { //nolint:paralleltest // modifies process-level env vars
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
 	xdgConfigDir := filepath.Join(tmpDir, "xdg-config")
@@ -772,9 +768,7 @@ func TestImportKeyWithXDGConfigHome(t *testing.T) {
 	}
 }
 
-func TestImportKeyAppendsToExistingFile(t *testing.T) {
-	// Note: Not running in parallel due to environment variable modifications
-
+func TestImportKeyAppendsToExistingFile(t *testing.T) { //nolint:paralleltest // modifies process-level env vars
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
 
@@ -839,8 +833,7 @@ AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC
 	}
 }
 
-func TestImportInvalidKey(t *testing.T) {
-	// Note: Not running in parallel due to environment variable modifications
+func TestImportInvalidKey(t *testing.T) { //nolint:paralleltest // modifies process-level env vars
 	testCases := []struct {
 		name    string
 		keyData string
