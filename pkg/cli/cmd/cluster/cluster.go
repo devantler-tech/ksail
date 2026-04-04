@@ -2946,7 +2946,12 @@ func getProviderClusters(
 }
 
 // getDockerClusters returns all Docker-based clusters across all distributions.
+// Results are deduplicated by cluster name because different distributions
+// (Kind, K3d, Talos, VCluster) each manage their own namespace and a cluster
+// name uniquely identifies a cluster within the Docker provider.
 func getDockerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
+	seen := make(map[string]struct{})
+
 	var allClusters []string
 
 	for _, dist := range allDistributions() {
@@ -2956,7 +2961,12 @@ func getDockerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 			continue
 		}
 
-		allClusters = append(allClusters, clusters...)
+		for _, c := range clusters {
+			if _, ok := seen[c]; !ok {
+				seen[c] = struct{}{}
+				allClusters = append(allClusters, c)
+			}
+		}
 	}
 
 	return allClusters, nil
