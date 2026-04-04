@@ -107,7 +107,10 @@ jobs:
             --json databaseId \
             --jq '.[0].databaseId')
           if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
-            gh run download "$RUN_ID" --name benchmark-data --dir . || true
+            echo "Downloading baseline from run $RUN_ID"
+            gh run download "$RUN_ID" --name benchmark-data --dir . || echo "No benchmark artifact found — first run will create the baseline"
+          else
+            echo "No previous successful run found — first run will create the baseline"
           fi
 
       - name: 📊 Store & compare benchmark results
