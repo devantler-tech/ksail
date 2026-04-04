@@ -532,16 +532,16 @@ jobs:
           }
 
           run_gen_test deployment ksail workload gen deployment test-deploy --image nginx:latest
-          run_gen_test service ksail workload gen service test-svc --tcp 80:80
+          run_gen_test service ksail workload gen service clusterip test-svc --tcp=80:80
           run_gen_test configmap ksail workload gen configmap test-cm --from-literal=key=value
-          run_gen_test secret ksail workload gen secret test-secret --from-literal=password=test123
+          run_gen_test secret ksail workload gen secret generic test-secret --from-literal=password=test123
           run_gen_test namespace ksail workload gen namespace test-ns
           run_gen_test job ksail workload gen job test-job --image=busybox:latest
           run_gen_test cronjob ksail workload gen cronjob test-cron --image=busybox:latest --schedule="*/5 * * * *"
           run_gen_test serviceaccount ksail workload gen serviceaccount test-sa
-          run_gen_test clusterrole ksail workload gen clusterrole test-cr --verb=get --resource=pods
+          run_gen_test clusterrole ksail workload gen clusterrole test-cr --verb=get --resource=pods --validate=false
           run_gen_test clusterrolebinding ksail workload gen clusterrolebinding test-crb --clusterrole=test-cr --serviceaccount=default:test-sa
-          run_gen_test role ksail workload gen role test-role --verb=get --resource=pods
+          run_gen_test role ksail workload gen role test-role --verb=get --resource=pods --validate=false
           run_gen_test rolebinding ksail workload gen rolebinding test-rb --role=test-role --serviceaccount=default:test-sa
           run_gen_test ingress ksail workload gen ingress test-ing --rule="host/path=svc:80"
           run_gen_test quota ksail workload gen quota test-quota --hard=cpu=1,memory=1Gi
