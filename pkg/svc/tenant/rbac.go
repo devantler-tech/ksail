@@ -18,7 +18,7 @@ import (
 // A RoleBinding is created in each namespace, referencing the primary-namespace SA.
 func GenerateRBACManifests(opts Options) (map[string]string, error) {
 	if len(opts.Namespaces) == 0 {
-		return nil, fmt.Errorf("at least one namespace is required")
+		return nil, fmt.Errorf("%w", ErrNamespaceRequired)
 	}
 
 	primaryNS := opts.Namespaces[0]

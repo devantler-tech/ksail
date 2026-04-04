@@ -169,7 +169,7 @@ func computeRelativePath(kustomizationPath, outputDir, tenantName string) (strin
 
 	// Reject paths that escape the kustomization root.
 	if strings.HasPrefix(rel, "..") {
-		return "", fmt.Errorf("tenant directory %q is outside the kustomization root %q", tenantDir, absKDir)
+		return "", fmt.Errorf("%w: %q is outside %q", ErrOutsideKustomizationRoot, tenantDir, absKDir)
 	}
 
 	// Normalize to forward slashes for YAML compatibility.

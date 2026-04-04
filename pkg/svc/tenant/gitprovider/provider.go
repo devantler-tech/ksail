@@ -35,6 +35,12 @@ var (
 	ErrUnsupportedProvider = errors.New("unsupported git provider")
 	// ErrTokenRequired is returned when a token is required but not provided.
 	ErrTokenRequired = errors.New("git provider API token is required")
+	// ErrInvalidGitRepoFormat is returned when the git-repo format is invalid.
+	ErrInvalidGitRepoFormat = errors.New("invalid git-repo format")
+	// ErrInvalidRepoVisibility is returned when the repo visibility is invalid.
+	ErrInvalidRepoVisibility = errors.New("invalid repo-visibility")
+	// ErrGitHubAPI is returned when the GitHub API returns an error.
+	ErrGitHubAPI = errors.New("GitHub API error")
 )
 
 // New creates a Provider for the given provider name.
@@ -75,7 +81,7 @@ func ResolveToken(providerName, explicitToken string) string {
 func ParseOwnerRepo(gitRepo string) (owner, repo string, err error) {
 	parts := strings.SplitN(gitRepo, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid git-repo format: %q (expected owner/repo-name)", gitRepo)
+		return "", "", fmt.Errorf("%w: %q (expected owner/repo-name)", ErrInvalidGitRepoFormat, gitRepo)
 	}
 	return parts[0], parts[1], nil
 }
@@ -90,6 +96,6 @@ func ParseVisibility(value string) (RepoVisibility, error) {
 	case "public":
 		return VisibilityPublic, nil
 	default:
-		return "", fmt.Errorf("invalid repo-visibility %q: must be Private, Internal, or Public", value)
+		return "", fmt.Errorf("%w %q: must be Private, Internal, or Public", ErrInvalidRepoVisibility, value)
 	}
 }

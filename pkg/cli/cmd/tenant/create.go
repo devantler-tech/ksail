@@ -56,6 +56,43 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 }
 
 func handleCreateRunE(cmd *cobra.Command, args []string) error {
+	opts, outputStr, err := resolveCreateOptions(cmd, args)
+	if err != nil {
+		return err
+	}
+
+	// Canonicalize output path.
+	outputDir, err := fsutil.EvalCanonicalPath(outputStr)
+	if err != nil {
+		return fmt.Errorf("resolving output path: %w", err)
+	}
+	opts.OutputDir = outputDir
+
+	// Generate tenant files.
+	if err := tenant.Generate(opts); err != nil {
+		return fmt.Errorf("generating tenant: %w", err)
+	}
+
+	// Register in kustomization.yaml if requested.
+	if opts.Register {
+		if err := tenant.RegisterTenant(opts.Name, opts.OutputDir, opts.KustomizationPath); err != nil {
+			return fmt.Errorf("registering tenant: %w", err)
+		}
+	}
+
+	// Scaffold and push tenant repo if git provider, repo, and a valid token are available.
+	if opts.GitProvider != "" && opts.GitRepo != "" {
+		if err := scaffoldTenantRepo(cmd, opts); err != nil {
+			return err
+		}
+	}
+
+	notify.Successf(cmd.OutOrStdout(), "Tenant %q created successfully in %s", opts.Name, outputDir)
+
+	return nil
+}
+
+func resolveCreateOptions(cmd *cobra.Command, args []string) (tenant.Options, string, error) {
 	opts := tenant.Options{
 		Name: args[0],
 	}
@@ -82,114 +119,110 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 	delivery, _ := cmd.Flags().GetString("delivery")
 
 	// Validate delivery mode (CLI concern — not passed to service layer).
-	switch delivery {
-	case "commit":
-		// Default: write files locally.
-	case "pr":
-		return fmt.Errorf("--delivery pr is not yet implemented; use --delivery commit (default)")
-	default:
-		return fmt.Errorf("invalid --delivery value %q: must be 'commit' or 'pr'", delivery)
+	if err := validateDelivery(delivery); err != nil {
+		return tenant.Options{}, "", err
 	}
 
 	// Resolve tenant type.
-	if typeStr != "" {
-		if err := opts.TenantType.Set(typeStr); err != nil {
-			return err
-		}
-	} else {
-		var configFile string
-		cfgPath, err := flags.GetConfigPath(cmd)
-		if err == nil {
-			configFile = cfgPath
-		}
-		cfgManager := ksailconfigmanager.NewConfigManager(cmd.OutOrStdout(), configFile)
-		cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
-		if err != nil {
-			return fmt.Errorf("loading config: %w", err)
-		}
-		if !cfgManager.IsConfigFileFound() {
-			return fmt.Errorf("no --type specified and no ksail.yaml found: please specify --type (flux, argocd, or kubectl)")
-		}
-		switch cfg.Spec.Cluster.GitOpsEngine {
-		case v1alpha1.GitOpsEngineFlux:
-			opts.TenantType = tenant.TenantTypeFlux
-		case v1alpha1.GitOpsEngineArgoCD:
-			opts.TenantType = tenant.TenantTypeArgoCD
-		default:
-			opts.TenantType = tenant.TenantTypeKubectl
-		}
+	if err := resolveTenantType(cmd, typeStr, &opts); err != nil {
+		return tenant.Options{}, "", err
 	}
 
 	// Validate sync source.
-	syncSourceLower := strings.ToLower(syncSourceStr)
-	switch syncSourceLower {
+	if err := resolveSyncSource(syncSourceStr, &opts); err != nil {
+		return tenant.Options{}, "", err
+	}
+
+	return opts, outputStr, nil
+}
+
+func validateDelivery(delivery string) error {
+	switch delivery {
+	case "commit":
+		return nil
+	case "pr":
+		return fmt.Errorf("%w", tenant.ErrDeliveryNotImplemented)
+	default:
+		return fmt.Errorf("%w %q: must be 'commit' or 'pr'", tenant.ErrInvalidDelivery, delivery)
+	}
+}
+
+func resolveTenantType(cmd *cobra.Command, typeStr string, opts *tenant.Options) error {
+	if typeStr != "" {
+		return opts.TenantType.Set(typeStr)
+	}
+	var configFile string
+	cfgPath, err := flags.GetConfigPath(cmd)
+	if err == nil {
+		configFile = cfgPath
+	}
+	cfgManager := ksailconfigmanager.NewConfigManager(cmd.OutOrStdout(), configFile)
+	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+	if !cfgManager.IsConfigFileFound() {
+		return fmt.Errorf("%w", tenant.ErrConfigNotFound)
+	}
+	switch cfg.Spec.Cluster.GitOpsEngine {
+	case v1alpha1.GitOpsEngineFlux:
+		opts.TenantType = tenant.TenantTypeFlux
+	case v1alpha1.GitOpsEngineArgoCD:
+		opts.TenantType = tenant.TenantTypeArgoCD
+	default:
+		opts.TenantType = tenant.TenantTypeKubectl
+	}
+	return nil
+}
+
+func resolveSyncSource(syncSourceStr string, opts *tenant.Options) error {
+	switch strings.ToLower(syncSourceStr) {
 	case "oci":
 		opts.SyncSource = tenant.SyncSourceOCI
 	case "git":
 		opts.SyncSource = tenant.SyncSourceGit
 	default:
-		return fmt.Errorf("invalid --sync-source %q: must be 'oci' or 'git'", syncSourceStr)
+		return fmt.Errorf("%w %q: must be 'oci' or 'git'", tenant.ErrInvalidSyncSource, syncSourceStr)
+	}
+	return nil
+}
+
+func scaffoldTenantRepo(cmd *cobra.Command, opts tenant.Options) error {
+	token := gitprovider.ResolveToken(opts.GitProvider, opts.GitToken)
+	if token == "" {
+		notify.Warningf(cmd.OutOrStdout(), "Skipping repo scaffolding: no API token found (set --git-token or %s environment variable)",
+			strings.ToUpper(opts.GitProvider)+"_TOKEN")
+		return nil
 	}
 
-	// Canonicalize output path.
-	outputDir, err := fsutil.EvalCanonicalPath(outputStr)
+	provider, err := gitprovider.New(opts.GitProvider, token)
 	if err != nil {
-		return fmt.Errorf("resolving output path: %w", err)
-	}
-	opts.OutputDir = outputDir
-
-	// Generate tenant files.
-	if err := tenant.Generate(opts); err != nil {
-		return fmt.Errorf("generating tenant: %w", err)
+		return fmt.Errorf("creating git provider: %w", err)
 	}
 
-	// Register in kustomization.yaml if requested.
-	if opts.Register {
-		if err := tenant.RegisterTenant(opts.Name, opts.OutputDir, opts.KustomizationPath); err != nil {
-			return fmt.Errorf("registering tenant: %w", err)
-		}
+	owner, repoName, err := gitprovider.ParseOwnerRepo(opts.GitRepo)
+	if err != nil {
+		return fmt.Errorf("parsing git-repo: %w", err)
 	}
 
-	// Scaffold and push tenant repo if git provider, repo, and a valid token are available.
-	if opts.GitProvider != "" && opts.GitRepo != "" {
-		token := gitprovider.ResolveToken(opts.GitProvider, opts.GitToken)
-		if token == "" {
-			notify.Warningf(cmd.OutOrStdout(), "Skipping repo scaffolding: no API token found (set --git-token or %s environment variable)",
-				strings.ToUpper(opts.GitProvider)+"_TOKEN")
-		} else {
-			provider, err := gitprovider.New(opts.GitProvider, token)
-			if err != nil {
-				return fmt.Errorf("creating git provider: %w", err)
-			}
-
-			owner, repoName, err := gitprovider.ParseOwnerRepo(opts.GitRepo)
-			if err != nil {
-				return fmt.Errorf("parsing git-repo: %w", err)
-			}
-
-			visibility, err := gitprovider.ParseVisibility(opts.RepoVisibility)
-			if err != nil {
-				return err
-			}
-
-			ctx := context.Background()
-
-			if err := provider.CreateRepo(ctx, owner, repoName, visibility); err != nil {
-				return fmt.Errorf("creating tenant repo: %w", err)
-			}
-
-			scaffoldFiles := tenant.ScaffoldFiles(opts)
-			commitMsg := fmt.Sprintf("feat: initial scaffold for tenant %s", opts.Name)
-
-			if err := provider.PushFiles(ctx, owner, repoName, scaffoldFiles, commitMsg); err != nil {
-				return fmt.Errorf("pushing scaffold files: %w", err)
-			}
-
-			notify.Successf(cmd.OutOrStdout(), "Tenant repo %q scaffolded successfully", opts.GitRepo)
-		}
+	visibility, err := gitprovider.ParseVisibility(opts.RepoVisibility)
+	if err != nil {
+		return err
 	}
 
-	notify.Successf(cmd.OutOrStdout(), "Tenant %q created successfully in %s", opts.Name, outputDir)
+	ctx := context.Background()
 
+	if err := provider.CreateRepo(ctx, owner, repoName, visibility); err != nil {
+		return fmt.Errorf("creating tenant repo: %w", err)
+	}
+
+	scaffoldFiles := tenant.ScaffoldFiles(opts)
+	commitMsg := fmt.Sprintf("feat: initial scaffold for tenant %s", opts.Name)
+
+	if err := provider.PushFiles(ctx, owner, repoName, scaffoldFiles, commitMsg); err != nil {
+		return fmt.Errorf("pushing scaffold files: %w", err)
+	}
+
+	notify.Successf(cmd.OutOrStdout(), "Tenant repo %q scaffolded successfully", opts.GitRepo)
 	return nil
 }

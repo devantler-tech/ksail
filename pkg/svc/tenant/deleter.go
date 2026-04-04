@@ -34,13 +34,13 @@ type DeleteOptions struct {
 // Delete removes a tenant's manifests and optionally unregisters and deletes the repo.
 func Delete(opts DeleteOptions) error {
 	if strings.Contains(opts.Name, "..") || strings.ContainsAny(opts.Name, `/\`) {
-		return fmt.Errorf("invalid tenant name %q: must not contain path separators or '..'", opts.Name)
+		return fmt.Errorf("%w: %q must not contain path separators or '..'", ErrInvalidTenantName, opts.Name)
 	}
 
 	tenantDir := filepath.Join(opts.OutputDir, opts.Name)
 
 	if _, err := os.Stat(tenantDir); os.IsNotExist(err) {
-		return fmt.Errorf("tenant directory %q does not exist", tenantDir)
+		return fmt.Errorf("%w: %q", ErrTenantDirNotExist, tenantDir)
 	}
 
 	if opts.Unregister {
@@ -48,7 +48,6 @@ func Delete(opts DeleteOptions) error {
 			if !errors.Is(err, ErrKustomizationNotFound) {
 				return fmt.Errorf("unregister tenant: %w", err)
 			}
-			// kustomization.yaml not found — continue with deletion
 		}
 	}
 
@@ -57,27 +56,33 @@ func Delete(opts DeleteOptions) error {
 	}
 
 	if opts.DeleteRepo {
-		if opts.GitProvider == "" {
-			return fmt.Errorf("--git-provider is required when --delete-repo is set")
-		}
-		if opts.GitRepo == "" {
-			return fmt.Errorf("--git-repo is required when --delete-repo is set")
-		}
+		return deleteRepo(opts)
+	}
 
-		owner, repo, err := gitprovider.ParseOwnerRepo(opts.GitRepo)
-		if err != nil {
-			return fmt.Errorf("parse git-repo: %w", err)
-		}
+	return nil
+}
 
-		token := gitprovider.ResolveToken(opts.GitProvider, opts.GitToken)
-		provider, err := gitprovider.New(opts.GitProvider, token)
-		if err != nil {
-			return fmt.Errorf("create git provider: %w", err)
-		}
+func deleteRepo(opts DeleteOptions) error {
+	if opts.GitProvider == "" {
+		return fmt.Errorf("%w", ErrDeleteRepoGitProviderRequired)
+	}
+	if opts.GitRepo == "" {
+		return fmt.Errorf("%w", ErrDeleteRepoGitRepoRequired)
+	}
 
-		if err := provider.DeleteRepo(context.Background(), owner, repo); err != nil {
-			return fmt.Errorf("delete git repo: %w", err)
-		}
+	owner, repo, err := gitprovider.ParseOwnerRepo(opts.GitRepo)
+	if err != nil {
+		return fmt.Errorf("parse git-repo: %w", err)
+	}
+
+	token := gitprovider.ResolveToken(opts.GitProvider, opts.GitToken)
+	provider, err := gitprovider.New(opts.GitProvider, token)
+	if err != nil {
+		return fmt.Errorf("create git provider: %w", err)
+	}
+
+	if err := provider.DeleteRepo(context.Background(), owner, repo); err != nil {
+		return fmt.Errorf("delete git repo: %w", err)
 	}
 
 	return nil

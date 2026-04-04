@@ -92,13 +92,13 @@ type rbacConfigMap struct {
 // Use MergeArgoCDRBACPolicy to add tenant policies to a shared argocd-rbac-cm.
 func GenerateArgoCDManifests(opts Options) (map[string]string, error) {
 	if opts.GitProvider == "" {
-		return nil, fmt.Errorf("--git-provider is required for ArgoCD tenants")
+		return nil, fmt.Errorf("%w for ArgoCD tenants", ErrGitProviderRequired)
 	}
 	if opts.GitRepo == "" {
-		return nil, fmt.Errorf("--git-repo is required for ArgoCD tenants")
+		return nil, fmt.Errorf("%w for ArgoCD tenants", ErrGitRepoRequired)
 	}
 	if len(opts.Namespaces) == 0 {
-		return nil, fmt.Errorf("at least one namespace is required")
+		return nil, fmt.Errorf("%w", ErrNamespaceRequired)
 	}
 
 	result := make(map[string]string, 2)
@@ -227,17 +227,6 @@ func newRBACConfigMap(policyCSV string) rbacConfigMap {
 			"policy.csv": policyCSV,
 		},
 	}
-}
-
-func generateRBACConfigMap(opts Options) (string, error) {
-	cm := newRBACConfigMap(buildTenantPolicyCSV(opts.Name))
-
-	data, err := yaml.Marshal(cm)
-	if err != nil {
-		return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
-	}
-
-	return string(data), nil
 }
 
 // MergeArgoCDRBACPolicy intelligently merges tenant policies into existing argocd-rbac-cm content.

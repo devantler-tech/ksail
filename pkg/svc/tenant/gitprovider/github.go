@@ -57,7 +57,7 @@ func (g *gitHubProvider) CreateRepo(ctx context.Context, owner, name string, vis
 	if err != nil {
 		return fmt.Errorf("create repo request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		// Owner is a user, not an org — internal visibility is not supported for users.
@@ -70,7 +70,7 @@ func (g *gitHubProvider) CreateRepo(ctx context.Context, owner, name string, vis
 		if err != nil {
 			return fmt.Errorf("create user repo request: %w", err)
 		}
-		defer resp2.Body.Close()
+		defer func() { _ = resp2.Body.Close() }()
 		if resp2.StatusCode >= 300 {
 			return g.readError(resp2, "create repository")
 		}
@@ -117,10 +117,10 @@ func (g *gitHubProvider) PushFiles(ctx context.Context, owner, name string, file
 		}
 		if resp.StatusCode >= 300 {
 			pushErr := g.readError(resp, fmt.Sprintf("push file %s", path))
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return pushErr
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 	return nil
 }
@@ -132,7 +132,7 @@ func (g *gitHubProvider) getFileSHA(ctx context.Context, owner, name, path strin
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return "", nil
@@ -157,7 +157,7 @@ func (g *gitHubProvider) DeleteRepo(ctx context.Context, owner, name string) err
 	if err != nil {
 		return fmt.Errorf("delete repo request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		return g.readError(resp, "delete repository")
 	}
@@ -188,5 +188,5 @@ func (g *gitHubProvider) doRequest(ctx context.Context, method, url string, body
 
 func (g *gitHubProvider) readError(resp *http.Response, action string) error {
 	body, _ := io.ReadAll(resp.Body)
-	return fmt.Errorf("GitHub API error during %s (HTTP %d): %s", action, resp.StatusCode, string(body))
+	return fmt.Errorf("%w during %s (HTTP %d): %s", ErrGitHubAPI, action, resp.StatusCode, string(body))
 }

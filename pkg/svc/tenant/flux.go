@@ -72,65 +72,13 @@ func resolveProviderHost(provider string) string {
 // Files: sync.yaml (multi-doc: source CR + Kustomization CR)
 func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 	if len(opts.Namespaces) == 0 {
-		return nil, fmt.Errorf("at least one namespace is required")
+		return nil, fmt.Errorf("%w", ErrNamespaceRequired)
 	}
 	primaryNS := opts.Namespaces[0]
 
-	var source fluxSource
-	switch opts.SyncSource {
-	case SyncSourceOCI:
-		if opts.Registry == "" {
-			return nil, fmt.Errorf("--registry is required for Flux OCI sync source")
-		}
-		if opts.GitRepo == "" {
-			return nil, fmt.Errorf("--git-repo is required for Flux OCI sync source")
-		}
-		owner, repo, err := gitprovider.ParseOwnerRepo(opts.GitRepo)
-		if err != nil {
-			return nil, fmt.Errorf("parsing git repo for OCI source: %w", err)
-		}
-		registry := strings.TrimSuffix(opts.Registry, "/")
-		source = fluxSource{
-			APIVersion: "source.toolkit.fluxcd.io/v1",
-			Kind:       "OCIRepository",
-			Metadata: fluxMetadata{
-				Name:      opts.Name,
-				Namespace: primaryNS,
-				Labels:    ManagedByLabels(),
-			},
-			Spec: fluxSourceSpec{
-				Interval: "1m",
-				URL:      fmt.Sprintf("%s/%s/%s", registry, owner, repo),
-				Ref:      fluxSourceRef{Tag: "latest"},
-			},
-		}
-	case SyncSourceGit:
-		if opts.GitProvider == "" {
-			return nil, fmt.Errorf("--git-provider is required for Flux Git sync source")
-		}
-		if opts.GitRepo == "" {
-			return nil, fmt.Errorf("--git-repo is required for Flux Git sync source")
-		}
-		if _, _, err := gitprovider.ParseOwnerRepo(opts.GitRepo); err != nil {
-			return nil, fmt.Errorf("parsing git repo for Git source: %w", err)
-		}
-		host := resolveProviderHost(opts.GitProvider)
-		source = fluxSource{
-			APIVersion: "source.toolkit.fluxcd.io/v1",
-			Kind:       "GitRepository",
-			Metadata: fluxMetadata{
-				Name:      opts.Name,
-				Namespace: primaryNS,
-				Labels:    ManagedByLabels(),
-			},
-			Spec: fluxSourceSpec{
-				Interval: "1m",
-				URL:      fmt.Sprintf("https://%s/%s", host, opts.GitRepo),
-				Ref:      fluxSourceRef{Branch: "main"},
-			},
-		}
-	default:
-		return nil, fmt.Errorf("unsupported sync source: %s", opts.SyncSource)
+	source, err := buildFluxSource(opts, primaryNS)
+	if err != nil {
+		return nil, err
 	}
 
 	kustomization := fluxKustomization{
@@ -167,5 +115,71 @@ func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 
 	return map[string]string{
 		"sync.yaml": syncYAML,
+	}, nil
+}
+
+func buildFluxSource(opts Options, primaryNS string) (fluxSource, error) {
+	switch opts.SyncSource {
+	case SyncSourceOCI:
+		return buildFluxOCISource(opts, primaryNS)
+	case SyncSourceGit:
+		return buildFluxGitSource(opts, primaryNS)
+	default:
+		return fluxSource{}, fmt.Errorf("%w: %s", ErrUnsupportedSyncSource, opts.SyncSource)
+	}
+}
+
+func buildFluxOCISource(opts Options, primaryNS string) (fluxSource, error) {
+	if opts.Registry == "" {
+		return fluxSource{}, fmt.Errorf("%w", ErrRegistryRequired)
+	}
+	if opts.GitRepo == "" {
+		return fluxSource{}, fmt.Errorf("%w for Flux OCI sync source", ErrGitRepoRequired)
+	}
+	owner, repo, err := gitprovider.ParseOwnerRepo(opts.GitRepo)
+	if err != nil {
+		return fluxSource{}, fmt.Errorf("parsing git repo for OCI source: %w", err)
+	}
+	registry := strings.TrimSuffix(opts.Registry, "/")
+	return fluxSource{
+		APIVersion: "source.toolkit.fluxcd.io/v1",
+		Kind:       "OCIRepository",
+		Metadata: fluxMetadata{
+			Name:      opts.Name,
+			Namespace: primaryNS,
+			Labels:    ManagedByLabels(),
+		},
+		Spec: fluxSourceSpec{
+			Interval: "1m",
+			URL:      fmt.Sprintf("%s/%s/%s", registry, owner, repo),
+			Ref:      fluxSourceRef{Tag: "latest"},
+		},
+	}, nil
+}
+
+func buildFluxGitSource(opts Options, primaryNS string) (fluxSource, error) {
+	if opts.GitProvider == "" {
+		return fluxSource{}, fmt.Errorf("%w for Flux Git sync source", ErrGitProviderRequired)
+	}
+	if opts.GitRepo == "" {
+		return fluxSource{}, fmt.Errorf("%w for Flux Git sync source", ErrGitRepoRequired)
+	}
+	if _, _, err := gitprovider.ParseOwnerRepo(opts.GitRepo); err != nil {
+		return fluxSource{}, fmt.Errorf("parsing git repo for Git source: %w", err)
+	}
+	host := resolveProviderHost(opts.GitProvider)
+	return fluxSource{
+		APIVersion: "source.toolkit.fluxcd.io/v1",
+		Kind:       "GitRepository",
+		Metadata: fluxMetadata{
+			Name:      opts.Name,
+			Namespace: primaryNS,
+			Labels:    ManagedByLabels(),
+		},
+		Spec: fluxSourceSpec{
+			Interval: "1m",
+			URL:      fmt.Sprintf("https://%s/%s", host, opts.GitRepo),
+			Ref:      fluxSourceRef{Branch: "main"},
+		},
 	}, nil
 }

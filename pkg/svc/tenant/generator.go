@@ -28,18 +28,8 @@ func Generate(opts Options) error {
 
 	tenantDir := filepath.Join(opts.OutputDir, opts.Name)
 
-	if info, err := os.Stat(tenantDir); err == nil && info.IsDir() {
-		if !opts.Force {
-			return fmt.Errorf("tenant directory %q already exists, use --force to overwrite", tenantDir)
-		}
-		// Clean stale files from previous generation (may have been a different type).
-		if err := os.RemoveAll(tenantDir); err != nil {
-			return fmt.Errorf("removing existing tenant directory: %w", err)
-		}
-	}
-
-	if err := os.MkdirAll(tenantDir, 0o750); err != nil {
-		return fmt.Errorf("creating tenant directory: %w", err)
+	if err := prepareTenantDir(tenantDir, opts.Force); err != nil {
+		return err
 	}
 
 	// Generate and write RBAC manifests.
@@ -54,30 +44,11 @@ func Generate(opts Options) error {
 	}
 
 	// Generate type-specific manifests.
-	switch opts.TenantType {
-	case TenantTypeFlux:
-		fluxFiles, err := GenerateFluxSyncManifests(opts)
-		if err != nil {
-			return fmt.Errorf("generating Flux manifests: %w", err)
-		}
-		names, err := writeManifests(tenantDir, fluxFiles, opts.Force)
-		if err != nil {
-			return err
-		}
-		resources = append(resources, names...)
-	case TenantTypeArgoCD:
-		argoFiles, err := GenerateArgoCDManifests(opts)
-		if err != nil {
-			return fmt.Errorf("generating ArgoCD manifests: %w", err)
-		}
-		names, err := writeManifests(tenantDir, argoFiles, opts.Force)
-		if err != nil {
-			return err
-		}
-		resources = append(resources, names...)
-	case TenantTypeKubectl:
-		// No additional files needed.
+	typeResources, err := generateTypeSpecificManifests(opts, tenantDir)
+	if err != nil {
+		return err
 	}
+	resources = append(resources, typeResources...)
 
 	sort.Strings(resources)
 
@@ -94,6 +65,42 @@ func Generate(opts Options) error {
 	}
 
 	return nil
+}
+
+func prepareTenantDir(tenantDir string, force bool) error {
+	if info, err := os.Stat(tenantDir); err == nil && info.IsDir() {
+		if !force {
+			return fmt.Errorf("%w: %q, use --force to overwrite", ErrTenantAlreadyExists, tenantDir)
+		}
+		if err := os.RemoveAll(tenantDir); err != nil {
+			return fmt.Errorf("removing existing tenant directory: %w", err)
+		}
+	}
+	if err := os.MkdirAll(tenantDir, 0o750); err != nil {
+		return fmt.Errorf("creating tenant directory: %w", err)
+	}
+	return nil
+}
+
+func generateTypeSpecificManifests(opts Options, tenantDir string) ([]string, error) {
+	switch opts.TenantType {
+	case TenantTypeFlux:
+		fluxFiles, err := GenerateFluxSyncManifests(opts)
+		if err != nil {
+			return nil, fmt.Errorf("generating Flux manifests: %w", err)
+		}
+		return writeManifests(tenantDir, fluxFiles, opts.Force)
+	case TenantTypeArgoCD:
+		argoFiles, err := GenerateArgoCDManifests(opts)
+		if err != nil {
+			return nil, fmt.Errorf("generating ArgoCD manifests: %w", err)
+		}
+		return writeManifests(tenantDir, argoFiles, opts.Force)
+	case TenantTypeKubectl:
+		return nil, nil
+	default:
+		return nil, nil
+	}
 }
 
 // writeManifests writes a map of filename->content to the given directory
