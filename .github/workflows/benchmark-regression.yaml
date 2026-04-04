@@ -102,8 +102,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: ${{ github.event_name == 'push' }}
           save-data-file: ${{ github.event_name == 'push' }}
-          alert-threshold: '150%'
-          fail-threshold: '200%'
+          alert-threshold: "150%"
+          fail-threshold: "200%"
           fail-on-alert: ${{ github.event_name == 'pull_request' }}
           comment-on-alert: ${{ github.event_name == 'pull_request' }}
           summary-always: true

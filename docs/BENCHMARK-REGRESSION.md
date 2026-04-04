@@ -17,10 +17,10 @@ On pushes to `main`, benchmark results are stored as the new baseline. On pull r
 
 The workflow uses threshold-based regression detection:
 
-| Setting | Value | Meaning |
-|---|---|---|
-| `alert-threshold` | 150% | Warns (PR comment) when a benchmark is ≥1.5× slower than baseline |
-| `fail-threshold` | 200% | Fails the CI check when a benchmark is ≥2× slower than baseline |
+| Setting           | Value | Meaning                                                           |
+|-------------------|-------|-------------------------------------------------------------------|
+| `alert-threshold` | 150%  | Warns (PR comment) when a benchmark is ≥1.5× slower than baseline |
+| `fail-threshold`  | 200%  | Fails the CI check when a benchmark is ≥2× slower than baseline   |
 
 When a regression is detected on a pull request, the action posts a comment identifying the affected benchmarks.
 
