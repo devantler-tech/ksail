@@ -244,8 +244,9 @@ func ensureLocalRegistriesReady(
 		}
 	}
 
-	// Stage 2: Verify registry access (for external registries with auth).
-	// Always runs — cloud providers use GHCR for OCI artifacts and need credential validation.
+	// Stage 2: Verify registry access.
+	// Called unconditionally here, but VerifyRegistryAccess returns early unless an enabled
+	// external registry is configured, in which case it validates any required registry auth.
 	err = localregistry.VerifyRegistryAccess(cmd, ctx.ClusterCfg, deps)
 	if err != nil {
 		return fmt.Errorf("failed to verify registry access: %w", err)
