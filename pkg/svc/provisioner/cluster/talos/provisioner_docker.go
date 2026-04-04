@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -492,7 +493,9 @@ func (p *Provisioner) saveClusterConfigs(
 	needTalosconfig := p.options.TalosconfigPath != ""
 	needKubeconfig := p.options.KubeconfigPath != ""
 
-	// When both are needed, run talosconfig save concurrently with bootstrap+kubeconfig
+	// When both are needed, run talosconfig save concurrently with bootstrap+kubeconfig.
+	// saveTalosconfig is a fast filesystem operation (expand path, mkdir, write) that
+	// completes in milliseconds, so context cancellation is not needed.
 	if needTalosconfig && needKubeconfig {
 		talosconfigErrCh := make(chan error, 1)
 
@@ -501,14 +504,13 @@ func (p *Provisioner) saveClusterConfigs(
 		}()
 
 		kubeconfigErr := p.bootstrapAndSaveKubeconfig(ctx, cluster, configBundle)
-
 		talosconfigErr := <-talosconfigErrCh
-		if talosconfigErr != nil {
-			return fmt.Errorf("failed to save talosconfig: %w", talosconfigErr)
-		}
 
-		if kubeconfigErr != nil {
-			return fmt.Errorf("failed to save kubeconfig: %w", kubeconfigErr)
+		if talosconfigErr != nil || kubeconfigErr != nil {
+			return errors.Join(
+				fmt.Errorf("failed to save cluster configs: %w",
+					errors.Join(talosconfigErr, kubeconfigErr)),
+			)
 		}
 
 		return nil
