@@ -514,10 +514,15 @@ jobs:
             local name="$1"
             shift
             local OUTPUT_FILE="$GEN_DIR/${name}.yaml"
+            local VALIDATE_FLAGS=""
+            # Secrets are skipped by default in validate; override for secret tests
+            if [ "$name" = "secret" ]; then
+              VALIDATE_FLAGS="--skip-secrets=false"
+            fi
             echo "--- gen $name ---"
             if "$@" > "$OUTPUT_FILE"; then
               echo "  ✅ gen $name succeeded"
-              if ksail workload validate "$OUTPUT_FILE"; then
+              if ksail workload validate $VALIDATE_FLAGS "$OUTPUT_FILE"; then
                 echo "  ✅ validate $name succeeded"
               else
                 echo "  ❌ validate $name FAILED"
@@ -547,6 +552,7 @@ jobs:
           run_gen_test quota ksail workload gen quota test-quota --hard=cpu=1,memory=1Gi
           run_gen_test priorityclass ksail workload gen priorityclass test-pc --value=1000
           run_gen_test poddisruptionbudget ksail workload gen poddisruptionbudget test-pdb --min-available=1 --selector=app=test
+          run_gen_test helmrelease ksail workload gen helmrelease test-hr --source=HelmRepository/test --chart=test --export
 
           rm -rf "$GEN_DIR"
 
@@ -569,8 +575,17 @@ jobs:
 
           echo "Generated Age key with public key: $PUBLIC_KEY"
 
-          # Create a test secret manifest
+          # Set SOPS_AGE_KEY_FILE so SOPS can find the private key for decrypt
+          export SOPS_AGE_KEY_FILE="$KEY_FILE"
+
+          # Create test directory and SOPS config
           TEST_DIR=$(mktemp -d)
+          cat > "$TEST_DIR/.sops.yaml" <<EOF
+          creation_rules:
+            - age: "$PUBLIC_KEY"
+          EOF
+
+          # Create a test secret manifest
           cat > "$TEST_DIR/secret.yaml" <<'EOF'
           apiVersion: v1
           kind: Secret
@@ -582,49 +597,48 @@ jobs:
             api-key: another-secret
           EOF
 
-          # Import the Age key
-          export SOPS_AGE_KEY_FILE="$KEY_FILE"
-
-          # Encrypt the secret
+          # Encrypt the secret (writes in-place, uses .sops.yaml for key config)
           echo "=== Encrypting secret ==="
-          ksail cipher encrypt "$TEST_DIR/secret.yaml" --age "$PUBLIC_KEY"
+          cd "$TEST_DIR"
+          ksail cipher encrypt secret.yaml
 
           # Verify encrypted file contains SOPS metadata
-          if ! grep -q "sops:" "$TEST_DIR/secret.yaml"; then
+          if ! grep -q "sops:" secret.yaml; then
             echo "❌ Encrypted file missing SOPS metadata"
+            cat secret.yaml
             exit 1
           fi
           echo "✅ Encrypted file contains SOPS metadata"
 
-          # Decrypt the secret
+          # Decrypt the secret to a separate output file
           echo "=== Decrypting secret ==="
-          ksail cipher decrypt "$TEST_DIR/secret.yaml"
+          ksail cipher decrypt secret.yaml --output decrypted.yaml
 
-          # Verify decrypted file no longer contains SOPS metadata
-          if grep -q "sops:" "$TEST_DIR/secret.yaml"; then
+          # Verify decrypted file does not contain SOPS metadata
+          if grep -q "sops:" decrypted.yaml; then
             echo "❌ Decrypted file still contains SOPS metadata"
             exit 1
           fi
-          echo "✅ Decrypted file no longer contains SOPS metadata"
+          echo "✅ Decrypted file does not contain SOPS metadata"
 
-          # Verify decryption restored the expected manifest content semantically
-          if ! grep -q "apiVersion:" "$TEST_DIR/secret.yaml"; then
+          # Verify decryption restored the expected manifest content
+          if ! grep -q "apiVersion:" decrypted.yaml; then
             echo "❌ Decrypted file missing expected apiVersion"
             exit 1
           fi
-          if ! grep -q "kind: Secret" "$TEST_DIR/secret.yaml"; then
+          if ! grep -q "kind: Secret" decrypted.yaml; then
             echo "❌ Decrypted file missing expected kind"
             exit 1
           fi
-          if ! grep -q "name: test-cipher-roundtrip" "$TEST_DIR/secret.yaml"; then
+          if ! grep -q "name: test-cipher-roundtrip" decrypted.yaml; then
             echo "❌ Decrypted file missing expected metadata.name"
             exit 1
           fi
-          if ! grep -q "password: super-secret-value" "$TEST_DIR/secret.yaml"; then
+          if ! grep -q "password: super-secret-value" decrypted.yaml; then
             echo "❌ Decrypted file missing expected password value"
             exit 1
           fi
-          if ! grep -q "api-key: another-secret" "$TEST_DIR/secret.yaml"; then
+          if ! grep -q "api-key: another-secret" decrypted.yaml; then
             echo "❌ Decrypted file missing expected api-key value"
             exit 1
           fi
@@ -633,7 +647,7 @@ jobs:
           echo "✅ Cipher encrypt/decrypt roundtrip passed"
 
           # Cleanup
-          rm -rf "$TEST_DIR" "$KEY_FILE"
+          rm -rf "$TEST_DIR" "$(dirname "$KEY_FILE")"
 
       - name: 🧪 smoke test — chat and mcp commands
         shell: bash

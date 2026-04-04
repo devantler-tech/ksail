@@ -239,7 +239,7 @@ runs:
         # Install a lightweight Helm chart to verify workload install works
         install_succeeded=false
         for attempt in 1 2 3; do
-          if ksail workload install ksail-install-test oci://ghcr.io/stefanprodan/charts/podinfo --wait --timeout=120s; then
+          if ksail workload install ksail-install-test oci://ghcr.io/stefanprodan/charts/podinfo --version=6.7.1 --wait --timeout=120s; then
             install_succeeded=true
             break
           fi
@@ -280,6 +280,7 @@ runs:
     - name: 🧪 ksail workload watch
       id: workload-watch
       if: inputs.apply-overlay-path != ''
+      continue-on-error: true
       shell: bash
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
@@ -334,7 +335,8 @@ runs:
         if [ "$WATCH_SUCCESS" = "true" ]; then
           echo "✅ Workload watch correctly auto-applied changes"
         else
-          echo "⚠️ Workload watch test: expected 2 replicas, got $REPLICAS (non-blocking — timing-dependent)"
+          echo "❌ Workload watch test failed: expected 2 replicas, got $REPLICAS"
+          exit 1
         fi
 
     - name: 🧪 ksail workload push and reconcile
@@ -458,10 +460,11 @@ runs:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
         OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
+        PROVIDER: ${{ inputs.provider }}
       run: |
         # Get current cluster name from ksail cluster list
         # Output format: "provider: cluster1, cluster2, ..."
-        PROVIDER_NAME=$(printf '%s' "${{ inputs.provider }}" | tr '[:upper:]' '[:lower:]')
+        PROVIDER_NAME=$(printf '%s' "$PROVIDER" | tr '[:upper:]' '[:lower:]')
         CLUSTER_NAME=$(
           ksail cluster list 2>/dev/null \
             | grep -i "^${PROVIDER_NAME}:" \
