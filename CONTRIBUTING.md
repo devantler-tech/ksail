@@ -249,6 +249,7 @@ This is useful for validating infrastructure-sensitive changes before entering t
 **Lightweight tests on every PR:**
 
 The `gen-cipher-test` job runs on every PR and validates:
+
 - All `workload gen` subcommands (manifest generation + schema validation)
 - Cipher encrypt/decrypt roundtrip (SOPS integration)
 
