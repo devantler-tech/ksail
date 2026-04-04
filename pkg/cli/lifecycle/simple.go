@@ -92,6 +92,7 @@ type ResolvedClusterInfo struct {
 	ClusterName    string
 	Provider       v1alpha1.Provider
 	KubeconfigPath string
+	OmniOpts       v1alpha1.OptionsOmni
 }
 
 // ResolveClusterInfo resolves the cluster name, provider, and kubeconfig from flags, config, or kubeconfig.
@@ -109,10 +110,11 @@ func ResolveClusterInfo(
 	clusterName := nameFlag
 	provider := providerFlag
 	kubeconfigPath := kubeconfigFlag
+	var omniOpts v1alpha1.OptionsOmni
 
 	// Fill missing values from ksail.yaml config file
 	if clusterName == "" {
-		resolveFromConfig(cmd, &clusterName, &provider, &kubeconfigPath)
+		resolveFromConfig(cmd, &clusterName, &provider, &kubeconfigPath, &omniOpts)
 	}
 
 	// Fall back to kubeconfig context detection
@@ -137,6 +139,7 @@ func ResolveClusterInfo(
 		ClusterName:    clusterName,
 		Provider:       provider,
 		KubeconfigPath: resolvedPath,
+		OmniOpts:       omniOpts,
 	}, nil
 }
 
@@ -147,6 +150,7 @@ func resolveFromConfig(
 	clusterName *string,
 	provider *v1alpha1.Provider,
 	kubeconfigPath *string,
+	omniOpts *v1alpha1.OptionsOmni,
 ) {
 	// Resolve --config flag without registering flags on the command.
 	var configFile string
@@ -173,6 +177,18 @@ func resolveFromConfig(
 
 	if *kubeconfigPath == "" && cfg.Spec.Cluster.Connection.Kubeconfig != "" {
 		*kubeconfigPath = cfg.Spec.Cluster.Connection.Kubeconfig
+	}
+
+	if omniOpts.Endpoint == "" {
+		omniOpts.Endpoint = cfg.Spec.Cluster.Omni.Endpoint
+	}
+
+	if omniOpts.EndpointEnvVar == "" {
+		omniOpts.EndpointEnvVar = cfg.Spec.Cluster.Omni.EndpointEnvVar
+	}
+
+	if omniOpts.ServiceAccountKeyEnvVar == "" {
+		omniOpts.ServiceAccountKeyEnvVar = cfg.Spec.Cluster.Omni.ServiceAccountKeyEnvVar
 	}
 }
 
@@ -261,7 +277,7 @@ func runSimpleLifecycleAction(
 		KubeconfigPath: resolved.KubeconfigPath,
 	}
 
-	provisioner, err := CreateMinimalProvisionerForProvider(clusterInfo)
+	provisioner, err := CreateMinimalProvisionerForProvider(clusterInfo, resolved.OmniOpts)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -305,6 +321,7 @@ func CreateMinimalProvisioner(
 // This is used when we only have --name and --provider flags without distribution info.
 func CreateMinimalProvisionerForProvider(
 	info *clusterdetector.Info,
+	omniOpts v1alpha1.OptionsOmni,
 ) (clusterprovisioner.Provisioner, error) {
 	switch info.Provider {
 	case v1alpha1.ProviderDocker, "":
@@ -312,8 +329,8 @@ func CreateMinimalProvisionerForProvider(
 		// that tries each distribution in order
 		return clusterprovisioner.NewMultiProvisioner(info.ClusterName), nil
 
-	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
-		// Hetzner and Omni only support Talos
+	case v1alpha1.ProviderHetzner:
+		// Hetzner only supports Talos
 		talosConfig := &talosconfigmanager.Configs{Name: info.ClusterName}
 
 		// Use default kubeconfig path for cleanup operations
@@ -329,6 +346,31 @@ func CreateMinimalProvisionerForProvider(
 			v1alpha1.OptionsTalos{},
 			v1alpha1.OptionsHetzner{},
 			v1alpha1.OptionsOmni{},
+			false,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create talos provisioner: %w", err)
+		}
+
+		return provisioner, nil
+
+	case v1alpha1.ProviderOmni:
+		// Omni only supports Talos
+		talosConfig := &talosconfigmanager.Configs{Name: info.ClusterName}
+
+		// Use default kubeconfig path for cleanup operations
+		kubeconfigPath := info.KubeconfigPath
+		if kubeconfigPath == "" {
+			kubeconfigPath = "~/.kube/config"
+		}
+
+		provisioner, err := talosprovisioner.CreateProvisioner(
+			talosConfig,
+			kubeconfigPath,
+			info.Provider,
+			v1alpha1.OptionsTalos{},
+			v1alpha1.OptionsHetzner{},
+			omniOpts,
 			false,
 		)
 		if err != nil {
