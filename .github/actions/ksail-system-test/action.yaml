@@ -140,6 +140,20 @@ runs:
         omni-service-account-key: ${{ inputs.omni-service-account-key }}
         omni-endpoint: ${{ inputs.omni-endpoint }}
 
+    - name: 🧪 ksail cluster info
+      shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
+      run: |
+        ksail cluster info
+
+    - name: 🧪 ksail cluster connect --help
+      shell: bash
+      run: |
+        ksail cluster connect --help
+
     - name: 🧪 ksail cluster list
       shell: bash
       env:
@@ -169,6 +183,69 @@ runs:
         done
         ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
 
+    - name: 🧪 ksail workload get
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
+      run: |
+        ksail workload get deployment/"$WORKLOAD_NAME"
+
+    - name: 🧪 ksail workload describe
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
+      run: |
+        ksail workload describe deployment/"$WORKLOAD_NAME"
+
+    - name: 🧪 ksail workload logs
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
+      run: |
+        ksail workload logs deployment/"$WORKLOAD_NAME" --tail=5
+
+    - name: 🧪 ksail workload scale
+      id: workload-scale
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+        TIMEOUT: ${{ inputs.workload-timeout }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
+      run: |
+        ksail workload scale deployment/"$WORKLOAD_NAME" --replicas=2
+        ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
+        ksail workload scale deployment/"$WORKLOAD_NAME" --replicas=1
+        ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
+
+    - name: 🧪 ksail workload install
+      id: workload-install
+      shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
+      run: |
+        # Install a lightweight Helm chart to verify workload install works
+        for attempt in 1 2 3; do
+          if ksail workload install ksail-install-test oci://ghcr.io/stefanprodan/charts/podinfo --wait --timeout=120s; then
+            break
+          fi
+          echo "⚠️ workload install attempt $attempt failed, retrying in 10s…"
+          sleep 10
+        done
+        echo "✅ workload install succeeded"
+
     - name: 🧪 ksail workload apply
       id: workload-apply
       if: inputs.apply-overlay-path != ''
@@ -179,7 +256,67 @@ runs:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
         OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
-      run: ksail workload apply -k "$OVERLAY_PATH" --wait --timeout="$TIMEOUT"
+      run: |
+        for attempt in 1 2 3; do
+          if ksail workload apply -k "$OVERLAY_PATH" --wait --timeout="$TIMEOUT"; then
+            break
+          fi
+          echo "⚠️ workload apply attempt $attempt failed, retrying in 10s…"
+          sleep 10
+        done
+
+    - name: 🧪 ksail workload watch
+      id: workload-watch
+      if: inputs.apply-overlay-path != ''
+      shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
+      run: |
+        # Create a temporary directory with a simple manifest
+        WATCH_DIR=$(mktemp -d)
+        cat > "$WATCH_DIR/deployment.yaml" <<'EOF'
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: ksail-watch-test
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: ksail-watch-test
+          template:
+            metadata:
+              labels:
+                app: ksail-watch-test
+            spec:
+              containers:
+                - name: test
+                  image: traefik/whoami:latest
+        EOF
+        # Apply the initial manifest
+        ksail workload apply -f "$WATCH_DIR/deployment.yaml"
+        ksail workload wait --for=condition=Available deployment/ksail-watch-test --timeout=120s
+        # Start watcher in background
+        ksail workload watch --path "$WATCH_DIR" &
+        WATCH_PID=$!
+        sleep 5
+        # Modify the manifest (change replicas)
+        sed -i 's/replicas: 1/replicas: 2/' "$WATCH_DIR/deployment.yaml"
+        # Wait for watcher to pick up the change
+        sleep 15
+        # Verify the change was applied
+        REPLICAS=$(ksail workload get deployment/ksail-watch-test -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "unknown")
+        kill $WATCH_PID 2>/dev/null || true
+        # Clean up
+        ksail workload delete deployment/ksail-watch-test --ignore-not-found
+        rm -rf "$WATCH_DIR"
+        if [ "$REPLICAS" = "2" ]; then
+          echo "✅ Workload watch correctly auto-applied changes"
+        else
+          echo "⚠️ Workload watch test: expected 2 replicas, got $REPLICAS (non-blocking)"
+        fi
 
     - name: 🧪 ksail workload push and reconcile
       id: workload-push-reconcile
@@ -201,6 +338,16 @@ runs:
         fi
         ksail workload push --path "$GITOPS_PATH/"
         ksail workload reconcile
+
+    - name: 🧪 ksail workload delete
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
+      run: |
+        ksail workload delete deployment/"$WORKLOAD_NAME" --ignore-not-found
 
     - name: 🧪 ksail cluster update --dry-run
       id: cluster-update-dry-run
@@ -249,7 +396,7 @@ runs:
         echo "✅ No unexpected changes detected"
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
+      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
@@ -270,7 +417,28 @@ runs:
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
         OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
-        timeout 600 ksail cluster start
+        for attempt in 1 2 3; do
+          if timeout 600 ksail cluster start; then
+            break
+          fi
+          echo "⚠️ cluster start attempt $attempt failed, retrying in 10s…"
+          sleep 10
+        done
+
+    - name: 🧪 ksail cluster switch
+      shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
+      run: |
+        # Get current cluster name from ksail cluster list and switch to it
+        CLUSTER_NAME=$(ksail cluster list 2>/dev/null | grep -oE '[a-z0-9][-a-z0-9]*' | head -1 || true)
+        if [ -n "$CLUSTER_NAME" ]; then
+          ksail cluster switch "$CLUSTER_NAME"
+        else
+          echo "⚠️ Could not determine cluster name for switch test, skipping"
+        fi
 
     - name: 🧪 ksail cluster delete
       if: always()

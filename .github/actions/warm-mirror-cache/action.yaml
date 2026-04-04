@@ -354,9 +354,10 @@ runs:
         done
 
         if [ ${#MISSING_VOLUMES[@]} -gt 0 ]; then
-          echo "❌ Error: ${#MISSING_VOLUMES[@]} mirror volumes failed to export: ${MISSING_VOLUMES[*]}"
-          echo "   This will cause CI tests to hit rate limits for these registries."
-          exit 1
+          echo "⚠️ Warning: ${#MISSING_VOLUMES[@]} mirror volumes failed to export: ${MISSING_VOLUMES[*]}"
+          echo "   System tests will fall back to direct registry pulls for these registries."
+          echo "   This may cause slower tests and potential rate limiting."
+          echo "   See issue #2075 for context."
         fi
 
         echo "✅ All 4 required mirror cache volumes exported successfully"

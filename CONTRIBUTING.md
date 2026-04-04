@@ -226,7 +226,41 @@ go test ./...
 
 #### System Tests
 
-System tests are configured in `.github/workflows/ci.yaml` and run in GitHub’s **merge queue** (the `merge_group` event). They do **not** run on regular `pull_request` checks; instead they gate the final merge to `main` when a PR enters the merge queue.
+System tests exercise full cluster lifecycle scenarios across all supported distributions (Vanilla, K3s, Talos, VCluster) and providers (Docker, Hetzner, Omni). They are configured in `.github/workflows/ci.yaml` and the composite action at `.github/actions/ksail-system-test/action.yaml`.
+
+**When they run:**
+
+System tests run in GitHub’s **merge queue** (`merge_group` event) and do **not** run on regular `pull_request` checks. This is intentional:
+
+- **Cost**: The test matrix spans 44+ jobs (4 distributions × 2 init modes × 5 config variants + cloud providers), consuming 6–11 CPU-hours per run. Running this on every PR push would be prohibitively expensive.
+- **Feedback time**: A full system test run takes 20–30 minutes. Deferring to the merge queue keeps PR feedback loops fast (unit tests, linting, and build run on every PR push instead).
+- **Flakiness**: Cloud provider tests (Hetzner, Omni) are inherently flaky due to network and infrastructure variability. Running them on PRs would produce noisy failures unrelated to code changes.
+
+**Manual trigger:**
+
+You can manually trigger system tests from any branch using `workflow_dispatch`:
+
+```sh
+gh workflow run ci.yaml --ref your-branch --field run-system-tests=true
+```
+
+This is useful for validating infrastructure-sensitive changes before entering the merge queue.
+
+**Lightweight tests on every PR:**
+
+The `gen-cipher-test` job runs on every PR and validates:
+- All `workload gen` subcommands (manifest generation + schema validation)
+- Cipher encrypt/decrypt roundtrip (SOPS integration)
+
+These tests do not require Docker or a cluster and complete in under a minute.
+
+**What the system test covers:**
+
+Each matrix job runs a full cluster lifecycle: `init` → `create` → workload deployment → `update` (regression detection) → `stop` → `start` → `delete`, along with workload read operations (`get`, `describe`, `logs`), scaling, and cleanup. See `.github/actions/ksail-system-test/action.yaml` for the complete test sequence.
+
+**If system tests fail in the merge queue:**
+
+The merge is blocked until the failure is resolved. The CI includes a comprehensive debug action (`.github/actions/debug-kubernetes-failure/`) that collects Kubernetes diagnostics (node status, pod status, events, component logs) to aid investigation.
 
 #### Hetzner Provider Testing
 

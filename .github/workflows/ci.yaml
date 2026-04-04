@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
   merge_group:
+  workflow_dispatch:
+    inputs:
+      run-system-tests:
+        description: "Run system tests (normally only runs in merge queue)"
+        required: false
+        type: boolean
+        default: true
 
 env:
   # Use pipe (|) instead of comma (,) so Go falls through to direct on ANY proxy
@@ -467,11 +474,178 @@ jobs:
           path: ksail.vsix
           retention-days: 7
 
+  gen-cipher-test:
+    name: 🧪 Gen & Cipher Test
+    runs-on: ubuntu-latest
+    needs: [changes, build-artifact]
+    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.changes.outputs.code == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        id: setup-go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 📦 Cache KSail Binary
+        uses: ./.github/actions/cache-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: /usr/local/bin/ksail
+          save: "false"
+
+      - name: 🧪 workload gen — generate and validate manifests
+        shell: bash
+        run: |
+          FAILED=0
+          GEN_DIR=$(mktemp -d)
+
+          echo "=== Testing workload gen subcommands ==="
+
+          # Test each gen subcommand that supports --image or similar flags
+          declare -A GEN_COMMANDS=(
+            ["deployment"]="ksail workload gen deployment test-deploy --image nginx:latest"
+            ["service"]="ksail workload gen service test-svc --tcp 80:80"
+            ["configmap"]="ksail workload gen configmap test-cm --from-literal=key=value"
+            ["secret"]="ksail workload gen secret test-secret --from-literal=password=test123"
+            ["namespace"]="ksail workload gen namespace test-ns"
+            ["job"]="ksail workload gen job test-job --image busybox:latest -- echo hello"
+            ["cronjob"]="ksail workload gen cronjob test-cron --image busybox:latest --schedule='*/5 * * * *' -- echo hello"
+            ["serviceaccount"]="ksail workload gen serviceaccount test-sa"
+            ["clusterrole"]="ksail workload gen clusterrole test-cr --verb=get --resource=pods"
+            ["clusterrolebinding"]="ksail workload gen clusterrolebinding test-crb --clusterrole=test-cr --serviceaccount=default:test-sa"
+            ["role"]="ksail workload gen role test-role --verb=get --resource=pods"
+            ["rolebinding"]="ksail workload gen rolebinding test-rb --role=test-role --serviceaccount=default:test-sa"
+            ["ingress"]="ksail workload gen ingress test-ing --rule='host/path=svc:80'"
+            ["quota"]="ksail workload gen quota test-quota --hard=cpu=1,memory=1Gi"
+            ["priorityclass"]="ksail workload gen priorityclass test-pc --value=1000"
+            ["poddisruptionbudget"]="ksail workload gen poddisruptionbudget test-pdb --min-available=1 --selector=app=test"
+          )
+
+          for name in "${!GEN_COMMANDS[@]}"; do
+            echo "--- gen $name ---"
+            OUTPUT_FILE="$GEN_DIR/${name}.yaml"
+            if eval "${GEN_COMMANDS[$name]}" > "$OUTPUT_FILE" 2>&1; then
+              echo "  ✅ gen $name succeeded"
+              # Validate the generated manifest
+              if ksail workload validate "$OUTPUT_FILE" 2>&1; then
+                echo "  ✅ validate $name succeeded"
+              else
+                echo "  ❌ validate $name FAILED"
+                cat "$OUTPUT_FILE"
+                FAILED=$((FAILED + 1))
+              fi
+            else
+              echo "  ❌ gen $name FAILED"
+              cat "$OUTPUT_FILE" 2>/dev/null || true
+              FAILED=$((FAILED + 1))
+            fi
+          done
+
+          rm -rf "$GEN_DIR"
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo "❌ $FAILED gen/validate tests failed"
+            exit 1
+          fi
+          echo "✅ All workload gen tests passed"
+
+      - name: 🧪 cipher — encrypt/decrypt roundtrip
+        shell: bash
+        run: |
+          # Install age for key generation
+          go install filippo.io/age/cmd/age-keygen@latest
+
+          # Generate an Age key pair
+          KEY_FILE=$(mktemp)
+          age-keygen -o "$KEY_FILE" 2>/dev/null
+          PUBLIC_KEY=$(grep "public key:" "$KEY_FILE" | awk '{print $NF}')
+
+          echo "Generated Age key with public key: $PUBLIC_KEY"
+
+          # Create a test secret manifest
+          TEST_DIR=$(mktemp -d)
+          cat > "$TEST_DIR/secret.yaml" <<'EOF'
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: test-cipher-roundtrip
+          type: Opaque
+          stringData:
+            password: super-secret-value
+            api-key: another-secret
+          EOF
+
+          # Save original content for comparison
+          ORIGINAL=$(cat "$TEST_DIR/secret.yaml")
+
+          # Import the Age key
+          export SOPS_AGE_KEY_FILE="$KEY_FILE"
+
+          # Encrypt the secret
+          echo "=== Encrypting secret ==="
+          ksail cipher encrypt "$TEST_DIR/secret.yaml" --age "$PUBLIC_KEY"
+          ENCRYPTED=$(cat "$TEST_DIR/secret.yaml")
+
+          # Verify encryption changed the file
+          if [ "$ORIGINAL" = "$ENCRYPTED" ]; then
+            echo "❌ Encryption did not modify the file"
+            exit 1
+          fi
+          echo "✅ File was encrypted"
+
+          # Verify encrypted file contains SOPS metadata
+          if ! grep -q "sops:" "$TEST_DIR/secret.yaml"; then
+            echo "❌ Encrypted file missing SOPS metadata"
+            exit 1
+          fi
+          echo "✅ Encrypted file contains SOPS metadata"
+
+          # Decrypt the secret
+          echo "=== Decrypting secret ==="
+          ksail cipher decrypt "$TEST_DIR/secret.yaml"
+          DECRYPTED=$(cat "$TEST_DIR/secret.yaml")
+
+          # Verify decryption restored the original content
+          if [ "$ORIGINAL" != "$DECRYPTED" ]; then
+            echo "❌ Decryption did not restore original content"
+            echo "--- Original ---"
+            echo "$ORIGINAL"
+            echo "--- Decrypted ---"
+            echo "$DECRYPTED"
+            exit 1
+          fi
+          echo "✅ Decrypt restored original content"
+
+          echo "✅ Cipher encrypt/decrypt roundtrip passed"
+
+          # Cleanup
+          rm -rf "$TEST_DIR" "$KEY_FILE"
+
+      - name: 🧪 smoke test — chat and mcp commands
+        shell: bash
+        run: |
+          echo "=== Testing chat --help ==="
+          ksail chat --help
+          echo "✅ chat --help passed"
+
+          echo "=== Testing mcp --help ==="
+          ksail mcp --help
+          echo "✅ mcp --help passed"
+
   warm-helm-cache:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true'
+    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run-system-tests == true)
     permissions:
       contents: read
     outputs:
@@ -504,7 +678,7 @@ jobs:
     name: 🔥 Warm Mirror Cache
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true'
+    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run-system-tests == true)
     permissions:
       contents: read
     outputs:
@@ -570,7 +744,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
-    if: github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true'
+    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run-system-tests == true)
     permissions:
       contents: read
       packages: write
@@ -649,11 +823,102 @@ jobs:
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
 
+  backup-restore-test:
+    name: 🧪 Backup & Restore Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
+    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run-system-tests == true)
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: 🧹 Free disk space
+        uses: ./.github/actions/free-disk-space
+
+      - name: ⚙️ Setup Go
+        id: setup-go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 📦 Cache KSail Binary
+        uses: ./.github/actions/cache-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: /usr/local/bin/ksail
+          save: "false"
+
+      - name: 🧪 Create cluster
+        uses: ./.github/actions/ksail-cluster
+        with:
+          distribution: Vanilla
+          provider: Docker
+          init: "true"
+          install: "false"
+          cache: "true"
+
+      - name: 🧪 Deploy test workload
+        shell: bash
+        run: |
+          ksail workload create deployment backup-test --image=traefik/whoami:latest
+          ksail workload wait --for=condition=Available deployment/backup-test --timeout=300s
+
+      - name: 🧪 Backup cluster
+        shell: bash
+        run: |
+          ksail cluster backup --output /tmp/cluster-backup.tar.gz
+          ls -lh /tmp/cluster-backup.tar.gz
+          echo "✅ Backup created successfully"
+
+      - name: 🧪 Delete test workload
+        shell: bash
+        run: |
+          ksail workload delete deployment/backup-test --ignore-not-found
+          # Verify it's gone
+          if ksail workload get deployment/backup-test 2>/dev/null; then
+            echo "❌ Workload still exists after delete"
+            exit 1
+          fi
+          echo "✅ Workload deleted"
+
+      - name: 🧪 Restore from backup
+        shell: bash
+        run: |
+          ksail cluster restore --input /tmp/cluster-backup.tar.gz --existing-resource-policy=update
+          echo "✅ Restore completed"
+
+      - name: 🧪 Verify restored workload
+        shell: bash
+        run: |
+          ksail workload wait --for=condition=Available deployment/backup-test --timeout=300s
+          ksail workload get deployment/backup-test
+          echo "✅ Workload restored and available"
+
+      - name: 🐞 Debug failure
+        if: failure()
+        uses: ./.github/actions/debug-kubernetes-failure
+        with:
+          kubectl-command: "ksail workload"
+
+      - name: 🧹 Cleanup
+        if: always()
+        shell: bash
+        run: |
+          ksail cluster delete || echo "⚠️ Cluster delete failed"
+          rm -f /tmp/cluster-backup.tar.gz
+
   cleanup-hetzner:
     name: 🧹 Cleanup Hetzner Resources
     runs-on: ubuntu-latest
-    needs: [system-test]
-    if: ${{ always() && github.event_name == 'merge_group' && needs.system-test.result != 'skipped' }}
+    needs: [system-test, backup-restore-test]
+    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test.result != 'skipped' }}
     permissions:
       contents: read
     steps:
@@ -710,9 +975,11 @@ jobs:
         generate-docs,
         auto-commit,
         coverage,
+        gen-cipher-test,
         warm-helm-cache,
         system-test,
         tenant-test,
+        backup-restore-test,
         cleanup-hetzner,
         rate-limit-check,
         audit-docs,
@@ -734,9 +1001,11 @@ jobs:
             ${{ needs.generate-docs.result }}
             ${{ needs.auto-commit.result }}
             ${{ needs.coverage.result }}
+            ${{ needs.gen-cipher-test.result }}
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.system-test.result }}
             ${{ needs.tenant-test.result }}
+            ${{ needs.backup-restore-test.result }}
             ${{ needs.cleanup-hetzner.result }}
             ${{ needs.rate-limit-check.result }}
             ${{ needs.audit-docs.result }}
