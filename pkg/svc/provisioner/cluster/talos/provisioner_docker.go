@@ -14,7 +14,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/go-connections/nat"
-	"github.com/siderolabs/talos/pkg/cluster/check"
 	"github.com/siderolabs/talos/pkg/machinery/client/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"github.com/siderolabs/talos/pkg/machinery/config/machine"
@@ -24,6 +23,8 @@ import (
 
 // createDockerCluster creates a Talos-in-Docker cluster using the Talos SDK.
 func (p *Provisioner) createDockerCluster(ctx context.Context, clusterName string) error {
+	provisionStart := time.Now()
+
 	// Ensure required kernel modules are loaded (Linux only)
 	err := kernelmod.EnsureBrNetfilter(ctx, p.logWriter)
 	if err != nil {
@@ -53,18 +54,33 @@ func (p *Provisioner) createDockerCluster(ctx context.Context, clusterName strin
 	// registry failures (e.g., ghcr.io 504 Gateway Timeout).
 	// The Talos SDK pulls this image internally during provision.Create(),
 	// but pre-pulling ensures retryable errors are handled gracefully.
+	imagePullStart := time.Now()
+
 	err = p.ensureTalosImage(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to ensure talos image: %w", err)
 	}
 
+	_, _ = fmt.Fprintf(p.logWriter, "Image ready [%s]\n", time.Since(imagePullStart).Truncate(time.Second))
+
 	// Provision cluster and save configurations
+	sdkCreateStart := time.Now()
+
 	cluster, err := p.provisionCluster(ctx, clusterName, configBundle)
 	if err != nil {
 		return err
 	}
 
-	return p.saveClusterConfigs(ctx, cluster, configBundle)
+	_, _ = fmt.Fprintf(p.logWriter, "SDK cluster creation completed [%s]\n", time.Since(sdkCreateStart).Truncate(time.Second))
+
+	err = p.saveClusterConfigs(ctx, cluster, configBundle)
+	if err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Total provisioning time [%s]\n", time.Since(provisionStart).Truncate(time.Second))
+
+	return nil
 }
 
 // deleteDockerCluster deletes a Talos-in-Docker cluster using the Talos SDK.
@@ -379,30 +395,26 @@ func (p *Provisioner) bootstrapAndWaitForReady(
 	// Bootstrap the cluster
 	_, _ = fmt.Fprintf(p.logWriter, "Bootstrapping cluster...\n")
 
+	bootstrapStart := time.Now()
+
 	err := clusterAccess.Bootstrap(ctx, p.logWriter)
 	if err != nil {
 		return fmt.Errorf("bootstrap failed: %w", err)
 	}
 
+	_, _ = fmt.Fprintf(p.logWriter, "Bootstrap completed [%s]\n", time.Since(bootstrapStart).Truncate(time.Second))
+
 	// Wait for cluster to be ready (Talos API, etcd, Kubernetes API via external endpoint).
 	// Since clusterAccess has ForceEndpoint set to the mapped localhost port,
 	// K8s checks in DefaultClusterChecks() validate host connectivity.
-	_, _ = fmt.Fprintf(p.logWriter, "Waiting for cluster to be ready...\n")
+	readinessStart := time.Now()
 
-	checkCtx, checkCancel := context.WithTimeout(ctx, clusterReadinessTimeout)
-	defer checkCancel()
-
-	// Select appropriate cluster checks based on CNI configuration.
-	// When using a custom CNI (e.g., Cilium), skip CNI-dependent checks (CoreDNS, kube-proxy)
-	// because pods cannot start until the CNI is installed.
-	clusterChecks := p.clusterReadinessChecks()
-
-	err = check.Wait(checkCtx, clusterAccess, clusterChecks, check.StderrReporter())
+	err = p.runClusterChecks(ctx, clusterAccess, clusterReadinessTimeout)
 	if err != nil {
-		return fmt.Errorf("cluster readiness check failed: %w", err)
+		return err
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Cluster is ready\n")
+	_, _ = fmt.Fprintf(p.logWriter, "Cluster is ready [%s]\n", time.Since(readinessStart).Truncate(time.Second))
 
 	return nil
 }
@@ -470,13 +482,40 @@ func (p *Provisioner) provisionCluster(
 }
 
 // saveClusterConfigs saves talosconfig and kubeconfig if paths are configured.
+// When both paths are configured, talosconfig is saved concurrently with the
+// bootstrap+kubeconfig flow since they are independent operations.
 func (p *Provisioner) saveClusterConfigs(
 	ctx context.Context,
 	cluster provision.Cluster,
 	configBundle *bundle.Bundle,
 ) error {
+	needTalosconfig := p.options.TalosconfigPath != ""
+	needKubeconfig := p.options.KubeconfigPath != ""
+
+	// When both are needed, run talosconfig save concurrently with bootstrap+kubeconfig
+	if needTalosconfig && needKubeconfig {
+		talosconfigErrCh := make(chan error, 1)
+
+		go func() {
+			talosconfigErrCh <- p.saveTalosconfig(configBundle)
+		}()
+
+		kubeconfigErr := p.bootstrapAndSaveKubeconfig(ctx, cluster, configBundle)
+
+		talosconfigErr := <-talosconfigErrCh
+		if talosconfigErr != nil {
+			return fmt.Errorf("failed to save talosconfig: %w", talosconfigErr)
+		}
+
+		if kubeconfigErr != nil {
+			return fmt.Errorf("failed to save kubeconfig: %w", kubeconfigErr)
+		}
+
+		return nil
+	}
+
 	// Save talosconfig if path is configured
-	if p.options.TalosconfigPath != "" {
+	if needTalosconfig {
 		saveErr := p.saveTalosconfig(configBundle)
 		if saveErr != nil {
 			return fmt.Errorf("failed to save talosconfig: %w", saveErr)
@@ -484,7 +523,7 @@ func (p *Provisioner) saveClusterConfigs(
 	}
 
 	// Bootstrap the cluster and retrieve kubeconfig
-	if p.options.KubeconfigPath != "" {
+	if needKubeconfig {
 		saveErr := p.bootstrapAndSaveKubeconfig(ctx, cluster, configBundle)
 		if saveErr != nil {
 			return fmt.Errorf("failed to save kubeconfig: %w", saveErr)

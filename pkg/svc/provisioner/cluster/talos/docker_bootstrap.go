@@ -12,8 +12,10 @@ import (
 )
 
 const (
-	// dockerClusterReadinessTimeout defines how long to wait for Docker cluster to become ready.
-	dockerClusterReadinessTimeout = 5 * time.Minute
+	// dockerClusterReadinessTimeout defines how long to wait for Docker cluster to become ready
+	// after a start operation. Since the cluster is already bootstrapped, it should come up
+	// faster than a fresh create.
+	dockerClusterReadinessTimeout = 3 * time.Minute
 )
 
 // waitForDockerClusterReadyAfterStart waits for a Docker cluster to be ready after starting.
