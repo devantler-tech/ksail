@@ -32,7 +32,8 @@ network:
     - go
 
 safe-outputs:
-  noop: false
+  noop:
+    report-as-issue: false
   create-pull-request:
     title-prefix: "[docs] "
     labels: [documentation, automation]
@@ -217,6 +218,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
 
 8. **Output**
    - Create focused draft pull requests with clear descriptions
+   - When triggered by a `push` event and no documentation changes are needed, call `noop` — do NOT call `add_comment` (there is no PR or issue context on push)
    - Exit if no code changes require documentation updates
 
 > NOTE: Never make direct pushes to the main branch. Always create a pull request.
