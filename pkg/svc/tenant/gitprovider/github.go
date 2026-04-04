@@ -60,55 +60,6 @@ func (g *gitHubProvider) CreateRepo(
 	return g.handleCreateResponse(resp, owner, name)
 }
 
-func (g *gitHubProvider) createUserRepo(
-	ctx context.Context,
-	owner, name string,
-	visibility RepoVisibility,
-	body map[string]any,
-) error {
-	authUser, verifyErr := g.getAuthenticatedUser(ctx)
-	if verifyErr != nil {
-		return fmt.Errorf("verifying authenticated user: %w", verifyErr)
-	}
-
-	if !strings.EqualFold(authUser, owner) {
-		return fmt.Errorf(
-			"%w: token belongs to %q but repo requested under %q",
-			ErrOwnerMismatch, authUser, owner,
-		)
-	}
-
-	if visibility == VisibilityInternal {
-		body["private"] = true
-		delete(body, "visibility")
-	}
-
-	url := g.apiURL + "/user/repos"
-
-	resp, userErr := g.doJSON(ctx, http.MethodPost, url, body)
-	if userErr != nil {
-		return fmt.Errorf("create user repo request: %w", userErr)
-	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	return g.handleCreateResponse(resp, owner, name)
-}
-
-func (g *gitHubProvider) handleCreateResponse(
-	resp *http.Response, owner, name string,
-) error {
-	if resp.StatusCode == http.StatusUnprocessableEntity {
-		return fmt.Errorf("%w: %s/%s", ErrRepoAlreadyExists, owner, name)
-	}
-
-	if resp.StatusCode >= http.StatusMultipleChoices {
-		return g.readError(resp, "create repository")
-	}
-
-	return nil
-}
-
 // PushFiles pushes files to a repository using the Contents API.
 // For existing files, it fetches the current SHA first to allow updates.
 func (g *gitHubProvider) PushFiles(
@@ -184,7 +135,55 @@ func (g *gitHubProvider) DeleteRepo(ctx context.Context, owner, name string) err
 	return nil
 }
 
-// getFileSHA returns the SHA of an existing file, or empty string if not found.
+func (g *gitHubProvider) createUserRepo(
+	ctx context.Context,
+	owner, name string,
+	visibility RepoVisibility,
+	body map[string]any,
+) error {
+	authUser, verifyErr := g.getAuthenticatedUser(ctx)
+	if verifyErr != nil {
+		return fmt.Errorf("verifying authenticated user: %w", verifyErr)
+	}
+
+	if !strings.EqualFold(authUser, owner) {
+		return fmt.Errorf(
+			"%w: token belongs to %q but repo requested under %q",
+			ErrOwnerMismatch, authUser, owner,
+		)
+	}
+
+	if visibility == VisibilityInternal {
+		body["private"] = true
+		delete(body, "visibility")
+	}
+
+	url := g.apiURL + "/user/repos"
+
+	resp, userErr := g.doJSON(ctx, http.MethodPost, url, body)
+	if userErr != nil {
+		return fmt.Errorf("create user repo request: %w", userErr)
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	return g.handleCreateResponse(resp, owner, name)
+}
+
+func (g *gitHubProvider) handleCreateResponse(
+	resp *http.Response, owner, name string,
+) error {
+	if resp.StatusCode == http.StatusUnprocessableEntity {
+		return fmt.Errorf("%w: %s/%s", ErrRepoAlreadyExists, owner, name)
+	}
+
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		return g.readError(resp, "create repository")
+	}
+
+	return nil
+}
+
 func (g *gitHubProvider) getFileSHA(
 	ctx context.Context, owner, name, path string,
 ) (string, error) {
