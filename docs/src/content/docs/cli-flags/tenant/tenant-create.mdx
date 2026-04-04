@@ -14,9 +14,9 @@ Usage:
 Flags:
       --cluster-role string         ClusterRole to bind to the tenant ServiceAccount (default "edit")
       --force                       Overwrite existing tenant directory
-      --git-provider string         Git provider: github, gitlab, gitea
+      --git-provider string         Git provider for manifest URLs: github, gitlab, gitea (repo scaffolding requires github)
       --git-repo string             Tenant repo as owner/repo-name
-      --git-token string            Git provider API token
+      --git-token string            GitHub API token for repo scaffolding (--git-provider=github)
       --kustomization-path string   Path to kustomization.yaml (fallback: auto-discover)
   -n, --namespace strings           Namespaces to create (repeatable, default: tenant-name)
   -o, --output string               Output directory for platform manifests (default ".")
