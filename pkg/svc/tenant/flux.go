@@ -53,18 +53,10 @@ type fluxKustomization struct {
 	Spec       fluxKustomizationSpec `json:"spec"`
 }
 
-// resolveProviderHost maps a git provider name to its hostname.
+// resolveProviderHost delegates to the shared gitprovider helper so
+// provider mappings remain centralized and do not drift between tenant integrations.
 func resolveProviderHost(provider string) string {
-	switch strings.ToLower(provider) {
-	case "github":
-		return "github.com"
-	case "gitlab":
-		return "gitlab.com"
-	case "gitea":
-		return "gitea.com"
-	default:
-		return provider
-	}
+	return gitprovider.ResolveProviderHost(provider)
 }
 
 // GenerateFluxSyncManifests generates Flux-specific sync manifests.

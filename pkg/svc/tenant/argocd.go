@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/detector/gitops"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
 	"sigs.k8s.io/yaml"
 )
 
@@ -159,17 +160,9 @@ func generateAppProject(opts Options) (string, error) {
 	return string(data), nil
 }
 
+// gitProviderHost delegates to the shared gitprovider helper.
 func gitProviderHost(provider string) string {
-	switch strings.ToLower(provider) {
-	case "github":
-		return "github.com"
-	case "gitlab":
-		return "gitlab.com"
-	case "gitea":
-		return "gitea.com"
-	default:
-		return provider
-	}
+	return gitprovider.ResolveProviderHost(provider)
 }
 
 func generateArgoCDApp(opts Options) (string, error) {

@@ -64,9 +64,9 @@ func New(providerName, token string) (Provider, error) {
 }
 
 // ResolveToken resolves the API token using the fallback chain:
-// 1. Explicit token parameter
-// 2. Environment variable (GITHUB_TOKEN, GITLAB_TOKEN, etc.)
-// 3. Empty string (let caller decide).
+// 1. Explicit token parameter (--git-token flag)
+// 2. Environment variable (GITHUB_TOKEN, GITLAB_TOKEN, GITEA_TOKEN)
+// 3. Empty string (caller should skip or warn — no SDK/CLI fallback yet)
 func ResolveToken(providerName, explicitToken string) string {
 	if explicitToken != "" {
 		return explicitToken
@@ -115,5 +115,20 @@ func ParseVisibility(value string) (RepoVisibility, error) {
 			ErrInvalidRepoVisibility,
 			value,
 		)
+	}
+}
+
+// ResolveProviderHost maps a git provider name to its hostname.
+// Unknown providers are returned as-is (assumed to be a custom host).
+func ResolveProviderHost(provider string) string {
+	switch strings.ToLower(provider) {
+	case "github":
+		return "github.com"
+	case "gitlab":
+		return "gitlab.com"
+	case "gitea":
+		return "gitea.com"
+	default:
+		return provider
 	}
 }

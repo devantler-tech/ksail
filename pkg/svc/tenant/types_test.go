@@ -1,6 +1,7 @@
 package tenant_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant"
@@ -129,7 +130,7 @@ func TestOptionsValidateInvalidDNSName(t *testing.T) {
 		{"underscores", "team_alpha"},
 		{"starts with hyphen", "-team"},
 		{"ends with hyphen", "team-"},
-		{"too long", "a" + string(make([]byte, 63))},
+		{"too long", strings.Repeat("a", 64)},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
