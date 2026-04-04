@@ -206,10 +206,12 @@ func buildRegistryStageParams(
 
 func validateRegistryForProvider(ctx *localregistry.Context) error {
 	provider := ctx.ClusterCfg.Spec.Cluster.Provider
+
 	registry := ctx.ClusterCfg.Spec.Cluster.LocalRegistry
 	if provider.IsCloud() && registry.Enabled() && !registry.IsExternal() {
 		return localregistry.ErrCloudProviderRequiresExternalRegistry
 	}
+
 	return nil
 }
 
