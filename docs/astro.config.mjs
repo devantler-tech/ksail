@@ -60,6 +60,7 @@ export default defineConfig({
             { label: "KSail + mirrord", link: "/guides/mirrord/" },
             { label: "Gateway API with Cilium", link: "/guides/gateway-api/" },
             { label: "Substitution Expansion (validate)", link: "/guides/workload-validate/" },
+            { label: "Tenant Management", link: "/guides/tenant-management/" },
           ],
         },
         {
