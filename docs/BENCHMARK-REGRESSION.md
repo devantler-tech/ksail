@@ -4,32 +4,33 @@ KSail includes automated benchmark regression testing to detect performance chan
 
 ## How It Works
 
-The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workflow runs on all PRs and in the merge queue. On `pull_request` events, it detects whether Go code changed and conditionally runs benchmarks. On `merge_group` events, the benchmark jobs are skipped gracefully so the required check passes without consuming CI time. When benchmarks run, the workflow:
+The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workflow runs on pushes to `main`, pull requests, and in the merge queue. It uses [`benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark) for regression detection and historical tracking.
 
 1. Discovers packages that contain benchmark functions (avoids compiling the entire module)
-2. Runs benchmarks on the PR branch and `main` **in parallel** (5 iterations, 500 ms per benchmark)
-3. Compares results with [`benchstat`](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat) for statistical analysis
-4. **Fails the CI check** if statistically significant regressions are detected above the noise floor
+2. Runs benchmarks on the current branch
+3. Compares results against the stored baseline on the `gh-pages` branch
+4. **Fails the CI check** if a benchmark regresses beyond the configured threshold
+
+On pushes to `main`, benchmark results are stored as the new baseline. On pull requests, results are compared against the baseline without updating it.
 
 ## Regression Detection
 
-The workflow gates on regressions using three layers of filtering:
+The workflow uses threshold-based regression detection:
 
-| Layer | Filter                                  | Purpose                                                            |
-|-------|-----------------------------------------|--------------------------------------------------------------------|
-| 1     | Mann-Whitney U test (p < 0.05)          | Statistical significance — filters random variation                |
-| 2     | 20% noise floor (all metrics)           | Filters CI runner variance — main and PR run on different machines |
-| 3     | Sub-microsecond exclusion (sec/op only) | Skips nanosecond-range benchmarks where CPU clock jitter dominates |
+| Setting           | Value | Meaning                                                           |
+|-------------------|-------|-------------------------------------------------------------------|
+| `alert-threshold` | 150%  | Warns (PR comment) when a benchmark is ≥1.5× slower than baseline |
+| `fail-threshold`  | 200%  | Fails the CI check when a benchmark is ≥2× slower than baseline   |
 
-A regression is only flagged when **all three layers** agree. This means only substantial, statistically confirmed performance degradations block the PR.
+When a regression is detected on a pull request, the action posts a comment identifying the affected benchmarks.
+
+## Historical Dashboard
+
+Benchmark trends are tracked on the `gh-pages` branch and can be viewed at the repository's GitHub Pages URL. The dashboard shows performance over time for all tracked benchmarks.
 
 ## Interpreting CI Failures
 
-When the benchmark gate fails, the workflow logs show:
-
-- The full `benchstat` comparison output (sec/op, B/op, allocs/op)
-- A summary listing which benchmarks regressed and by how much
-- A command to reproduce locally
+When the benchmark gate fails, the workflow logs and PR comment show which benchmarks regressed and by how much relative to the stored baseline.
 
 ## Running Benchmarks Locally
 
@@ -39,18 +40,6 @@ go test -bench=. -benchmem -run='^$' ./...
 
 # Run a specific package
 go test -bench=. -benchmem -run='^$' ./pkg/k8s/readiness/...
-
-# Compare before/after with benchstat
-go test -bench=. -benchmem -count=5 -run='^$' ./... > before.txt
-# (make changes)
-go test -bench=. -benchmem -count=5 -run='^$' ./... > after.txt
-benchstat before.txt after.txt
-```
-
-Install `benchstat` if needed:
-
-```bash
-go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260312031701-16a31bc5fbd0
 ```
 
 ## Writing Effective Benchmarks
@@ -67,8 +56,8 @@ Follow the conventions established in the existing benchmark files:
 
 ## Troubleshooting
 
-**Benchstat shows `~` for everything:** The change is within measurement noise, which is the expected result for most PRs that don't touch hot paths.
+**No baseline data yet:** The first push to `main` after enabling the workflow stores the initial baseline. PRs opened before that will skip the comparison.
 
-**Benchmark times are inconsistent:** CI runners share hardware, so some variance is expected. The workflow uses a 20% noise floor and statistical testing (p < 0.05) to filter runner noise. If you need higher confidence locally, increase `-count` or `-benchtime`.
+**Benchmark times are inconsistent:** CI runners share hardware, so some variance is expected. The 200% fail threshold is intentionally generous to avoid false positives from runner noise.
 
-**Benchmark jobs skipped:** The workflow runs on all PRs, but the benchmark and compare jobs are skipped when no Go source files (`**/*.go`, `go.mod`, `go.sum`) changed. In the merge queue, benchmark jobs are always skipped.
+**Benchmark jobs skipped:** The workflow runs on all PRs, but benchmark jobs are skipped when no Go source files (`**/*.go`, `go.mod`, `go.sum`) changed. In the merge queue, benchmark jobs are always skipped.
