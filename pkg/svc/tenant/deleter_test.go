@@ -132,3 +132,75 @@ func TestDelete_DeleteRepoRequiresGitRepo(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "--git-repo")
 }
+
+func TestDelete_InvalidGitRepoFormat(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	tenantDir := filepath.Join(tmpDir, "my-tenant")
+	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
+
+	err := Delete(DeleteOptions{
+		Name:        "my-tenant",
+		OutputDir:   tmpDir,
+		DeleteRepo:  true,
+		GitProvider: "github",
+		GitRepo:     "invalid-no-slash",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "parse git-repo")
+}
+
+func TestDelete_UnsupportedGitProvider(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	tenantDir := filepath.Join(tmpDir, "my-tenant")
+	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
+
+	err := Delete(DeleteOptions{
+		Name:        "my-tenant",
+		OutputDir:   tmpDir,
+		DeleteRepo:  true,
+		GitProvider: "bitbucket",
+		GitRepo:     "org/my-tenant",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "create git provider")
+}
+
+func TestDelete_UnregisterWithExplicitKustomizationPath(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	tenantDir := filepath.Join(tmpDir, "my-tenant")
+	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(tenantDir, "namespace.yaml"), []byte("test"), 0o644))
+
+	kustomContent := `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- my-tenant
+`
+	kPath := filepath.Join(tmpDir, "kustomization.yaml")
+	require.NoError(t, os.WriteFile(kPath, []byte(kustomContent), 0o644))
+
+	err := Delete(DeleteOptions{
+		Name:              "my-tenant",
+		OutputDir:         tmpDir,
+		Unregister:        true,
+		KustomizationPath: kPath,
+	})
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(tenantDir)
+	require.True(t, os.IsNotExist(statErr))
+
+	data, readErr := os.ReadFile(kPath)
+	require.NoError(t, readErr)
+
+	var raw map[string]any
+	require.NoError(t, yaml.Unmarshal(data, &raw))
+	resources := getResources(raw)
+	require.NotContains(t, resources, "my-tenant")
+}

@@ -170,3 +170,80 @@ func TestFindKustomizationReturnsErrWhenNotFound(t *testing.T) {
 	_, err := FindKustomization(nested)
 	require.ErrorIs(t, err, ErrKustomizationNotFound)
 }
+
+func TestRegisterTenantAutoDiscoversKustomization(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeKustomizationFile(t, root, `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+`)
+
+	// Tenant output dir is a subdirectory.
+	subDir := filepath.Join(root, "tenants")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	err := RegisterTenant("team-discover", subDir, "")
+	require.NoError(t, err)
+
+	kPath := filepath.Join(root, "kustomization.yaml")
+	resources := readKustomizationResources(t, kPath)
+	require.Contains(t, resources, "tenants/team-discover")
+}
+
+func TestRegisterTenantExplicitPath(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	kPath := writeKustomizationFile(t, dir, `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+`)
+
+	err := RegisterTenant("explicit-tenant", dir, kPath)
+	require.NoError(t, err)
+
+	resources := readKustomizationResources(t, kPath)
+	require.Contains(t, resources, "explicit-tenant")
+}
+
+func TestRegisterTenantRejectsPathTraversal(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kPath := writeKustomizationFile(t, root, `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+`)
+
+	// outputDir is outside the kustomization root.
+	outsideDir := t.TempDir()
+
+	err := RegisterTenant("escape-tenant", outsideDir, kPath)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "outside the kustomization root")
+}
+
+func TestUnregisterTenantAutoDiscoversKustomization(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeKustomizationFile(t, root, `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- tenants/my-team
+`)
+
+	subDir := filepath.Join(root, "tenants")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	err := UnregisterTenant("my-team", subDir, "")
+	require.NoError(t, err)
+
+	kPath := filepath.Join(root, "kustomization.yaml")
+	resources := readKustomizationResources(t, kPath)
+	require.NotContains(t, resources, "tenants/my-team")
+}
+
+func TestResolveKustomizationPath_ExplicitNotFound(t *testing.T) {
+	t.Parallel()
+	_, err := resolveKustomizationPath(".", "/nonexistent/kustomization.yaml")
+	require.Error(t, err)
+}

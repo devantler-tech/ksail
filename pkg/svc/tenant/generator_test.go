@@ -155,6 +155,59 @@ func TestGenerate_EmptyTenantType(t *testing.T) {
 	require.ErrorIs(t, err, ErrTenantTypeRequired)
 }
 
+func TestGenerate_ForceRemovesStalePreviousFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// First: create an ArgoCD tenant.
+	require.NoError(t, Generate(Options{
+		Name:        "team-switch",
+		TenantType:  TenantTypeArgoCD,
+		OutputDir:   dir,
+		GitProvider: "github",
+		GitRepo:     "acme/team-switch",
+	}))
+
+	tenantDir := filepath.Join(dir, "team-switch")
+	_, err := os.Stat(filepath.Join(tenantDir, "project.yaml"))
+	require.NoError(t, err, "ArgoCD project.yaml should exist initially")
+
+	// Now force-regenerate as kubectl (should remove ArgoCD-specific files).
+	require.NoError(t, Generate(Options{
+		Name:       "team-switch",
+		TenantType: TenantTypeKubectl,
+		OutputDir:  dir,
+		Force:      true,
+	}))
+
+	_, err = os.Stat(filepath.Join(tenantDir, "project.yaml"))
+	require.ErrorIs(t, err, os.ErrNotExist, "project.yaml should be removed after force-switching to kubectl")
+	_, err = os.Stat(filepath.Join(tenantDir, "app.yaml"))
+	require.ErrorIs(t, err, os.ErrNotExist, "app.yaml should be removed after force-switching to kubectl")
+}
+
+func TestGenerate_FluxGitSource(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	err := Generate(Options{
+		Name:        "team-flux-git",
+		TenantType:  TenantTypeFlux,
+		OutputDir:   dir,
+		SyncSource:  SyncSourceGit,
+		GitProvider: "github",
+		GitRepo:     "acme/team-flux-git",
+	})
+	require.NoError(t, err)
+
+	tenantDir := filepath.Join(dir, "team-flux-git")
+	syncContent, err := os.ReadFile(filepath.Join(tenantDir, "sync.yaml"))
+	require.NoError(t, err)
+	require.Contains(t, string(syncContent), "kind: GitRepository")
+	require.Contains(t, string(syncContent), "github.com")
+}
+
 func TestGenerate_MultiNamespace(t *testing.T) {
 	t.Parallel()
 

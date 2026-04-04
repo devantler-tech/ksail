@@ -184,6 +184,123 @@ func TestCreateCmd_InvalidType(t *testing.T) {
 	require.ErrorContains(t, err, "invalid tenant type")
 }
 
+func TestCreateCmd_DeliveryPRNotImplemented(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"pr-tenant", "--type", "kubectl", "--delivery", "pr", "--output", outDir})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	require.ErrorContains(t, err, "not yet implemented")
+}
+
+func TestCreateCmd_InvalidDelivery(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"bad-delivery", "--type", "kubectl", "--delivery", "email", "--output", outDir})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid --delivery value")
+}
+
+func TestCreateCmd_WithRegister(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	// Create a parent kustomization.yaml for registration.
+	kPath := filepath.Join(outDir, "kustomization.yaml")
+	require.NoError(t, os.WriteFile(kPath, []byte(`apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+`), 0o644))
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"registered-tenant", "--type", "kubectl", "--output", outDir, "--register"})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify the tenant was registered.
+	data, err := os.ReadFile(kPath)
+	require.NoError(t, err)
+	require.Contains(t, string(data), "registered-tenant")
+}
+
+func TestCreateCmd_MultiNamespace(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{
+		"multi-ns",
+		"--type", "kubectl",
+		"--namespace", "ns1",
+		"--namespace", "ns2",
+		"--output", outDir,
+	})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify multi-namespace RBAC.
+	tenantDir := filepath.Join(outDir, "multi-ns")
+	nsContent, err := os.ReadFile(filepath.Join(tenantDir, "namespace.yaml"))
+	require.NoError(t, err)
+	require.Contains(t, string(nsContent), "ns1")
+	require.Contains(t, string(nsContent), "ns2")
+}
+
+func TestCreateCmd_CustomClusterRole(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{
+		"custom-role",
+		"--type", "kubectl",
+		"--cluster-role", "cluster-admin",
+		"--output", outDir,
+	})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify ClusterRole.
+	rbContent, err := os.ReadFile(filepath.Join(outDir, "custom-role", "rolebinding.yaml"))
+	require.NoError(t, err)
+	require.Contains(t, string(rbContent), "cluster-admin")
+}
+
 //nolint:paralleltest // uses t.Chdir
 func TestCreateCmd_NoTypeNoConfig(t *testing.T) {
 	outDir := t.TempDir()
