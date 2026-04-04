@@ -89,8 +89,7 @@ func (s *Scaffolder) notifyTalosGenerated(
 		{enableKubeletCertRotation, "cluster", "kubelet-cert-rotation.yaml"},
 		{enableKubeletCertRotation, "cluster", "kubelet-csr-approver.yaml"},
 		{s.ClusterName != "", "cluster", "cluster-name.yaml"},
-		// Image verification config is written at the talos/ root level (not cluster/)
-		{enableImageVerification, "", "image-verification.yaml"},
+		{enableImageVerification, "cluster", "image-verification.yaml"},
 	}
 
 	for _, patch := range patches {

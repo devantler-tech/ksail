@@ -154,8 +154,13 @@ func (g *Generator) getDirectoriesWithPatches(
 		dirs["cluster"] = true
 	}
 
-	// Image verification config is written at the talos/ root level,
-	// not in cluster/, so it is NOT loaded as a machine-config patch.
+	// Image verification config document goes to cluster/ —
+	// Talos configpatcher.LoadPatch correctly recognizes it as an ImageVerificationConfig
+	// document and StrategicMerge appends it to the config bundle (it does NOT overwrite
+	// the MachineConfig since it has a different kind).
+	if model.EnableImageVerification {
+		dirs["cluster"] = true
+	}
 
 	return dirs
 }
@@ -493,15 +498,16 @@ func (g *Generator) generateClusterNamePatch(
 	return nil
 }
 
-// generateImageVerificationPatch creates a Talos ImageVerificationConfig document template.
-// The document is written beside the patch directories, not into cluster/, so patch loaders
-// do not treat it as a machine-config patch.
-// See: https://www.talos.dev/v1.13/talos-guides/configuration/image-verification/
+// generateImageVerificationPatch creates a Talos ImageVerificationConfig document.
+// The document is placed in cluster/ alongside other patches. Talos configpatcher recognizes
+// it as a registered config document (kind: ImageVerificationConfig) and StrategicMerge
+// appends it to the config bundle — it does NOT overwrite the MachineConfig.
+// See: https://docs.siderolabs.com/talos/v1.13/security/verifying-image-signatures
 func (g *Generator) generateImageVerificationPatch(
 	rootPath string,
 	force bool,
 ) error {
-	patchPath := filepath.Join(rootPath, imageVerificationFileName)
+	patchPath := filepath.Join(rootPath, "cluster", imageVerificationFileName)
 
 	// Check if file already exists
 	_, statErr := os.Stat(patchPath)
