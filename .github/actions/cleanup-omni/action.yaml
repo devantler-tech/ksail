@@ -1,0 +1,35 @@
+name: Cleanup Omni Resources
+description: |
+  Deletes all KSail test clusters from Omni to ensure clean slate
+  for next CI run, even if individual test jobs fail to clean up after themselves.
+
+inputs:
+  omni-service-account-key:
+    description: Omni service account key
+    required: true
+  omni-endpoint:
+    description: Omni API endpoint URL
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: 🧹 Cleanup all KSail test clusters from Omni
+      shell: bash
+      env:
+        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
+        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
+      run: |
+        echo "🧹 Starting Omni cleanup for KSail test clusters..."
+
+        # Delete known test clusters by name
+        for CLUSTER_NAME in "system-test-cluster-with-scaffolding" "system-test-cluster-without-scaffolding"; do
+          echo "🗑️  Deleting cluster: ${CLUSTER_NAME}"
+          if ksail cluster delete --name "${CLUSTER_NAME}" --provider Omni --force; then
+            echo "  ✓ Deleted cluster ${CLUSTER_NAME}"
+          else
+            echo "  ⚠️  Cluster ${CLUSTER_NAME} may not exist or already deleted"
+          fi
+        done
+
+        echo "✅ Omni cleanup complete!"
