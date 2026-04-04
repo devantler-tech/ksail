@@ -277,9 +277,7 @@ func TestCreateCmd_MultiNamespace(t *testing.T) {
 
 	// Verify multi-namespace RBAC.
 	tenantDir := filepath.Join(outDir, "multi-ns")
-	nsContent, err := os.ReadFile(
-		filepath.Join(tenantDir, "namespace.yaml"),
-	) //nolint:gosec // test path
+	nsContent, err := os.ReadFile(filepath.Join(tenantDir, "namespace.yaml")) //nolint:gosec // test path
 	require.NoError(t, err)
 	require.Contains(t, string(nsContent), "ns1")
 	require.Contains(t, string(nsContent), "ns2")
@@ -306,9 +304,7 @@ func TestCreateCmd_CustomClusterRole(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify ClusterRole.
-	rbContent, err := os.ReadFile(
-		filepath.Join(outDir, "custom-role", "rolebinding.yaml"),
-	) //nolint:gosec // test
+	rbContent, err := os.ReadFile(filepath.Join(outDir, "custom-role", "rolebinding.yaml")) //nolint:gosec // test
 	require.NoError(t, err)
 	require.Contains(t, string(rbContent), "cluster-admin")
 }

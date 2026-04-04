@@ -151,20 +151,20 @@ func writeKustomizationRaw(path string, raw map[string]any) error {
 
 // getResources extracts the resources list from a raw kustomization map.
 func getResources(raw map[string]any) []string {
-	res, ok := raw["resources"]
-	if !ok {
+	res, exists := raw["resources"]
+	if !exists {
 		return nil
 	}
 
-	slice, ok := res.([]any)
-	if !ok {
+	slice, isSlice := res.([]any)
+	if !isSlice {
 		return nil
 	}
 
 	result := make([]string, 0, len(slice))
 	for _, item := range slice {
-		if s, ok := item.(string); ok {
-			result = append(result, s)
+		if strVal, isStr := item.(string); isStr {
+			result = append(result, strVal)
 		}
 	}
 

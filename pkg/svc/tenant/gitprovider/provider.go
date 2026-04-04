@@ -48,6 +48,15 @@ var (
 	ErrGitHubAPI = errors.New("GitHub API error")
 )
 
+const (
+	// providerGitHub is the provider name for GitHub.
+	providerGitHub = "github"
+	// providerGitLab is the provider name for GitLab.
+	providerGitLab = "gitlab"
+	// providerGitea is the provider name for Gitea.
+	providerGitea = "gitea"
+)
+
 // New creates a Provider for the given provider name.
 // Supported: "github". Returns error for unsupported providers.
 func New(providerName, token string) (Provider, error) {
@@ -56,7 +65,7 @@ func New(providerName, token string) (Provider, error) {
 	}
 
 	switch strings.ToLower(providerName) {
-	case "github":
+	case providerGitHub:
 		return newGitHubProvider(token), nil
 	default:
 		return nil, fmt.Errorf("%w: %s (supported: github)", ErrUnsupportedProvider, providerName)
@@ -73,11 +82,11 @@ func ResolveToken(providerName, explicitToken string) string {
 	}
 
 	switch strings.ToLower(providerName) {
-	case "github":
+	case providerGitHub:
 		return os.Getenv("GITHUB_TOKEN")
-	case "gitlab":
+	case providerGitLab:
 		return os.Getenv("GITLAB_TOKEN")
-	case "gitea":
+	case providerGitea:
 		return os.Getenv("GITEA_TOKEN")
 	default:
 		return ""
@@ -122,11 +131,11 @@ func ParseVisibility(value string) (RepoVisibility, error) {
 // Unknown providers are returned as-is (assumed to be a custom host).
 func ResolveProviderHost(provider string) string {
 	switch strings.ToLower(provider) {
-	case "github":
+	case providerGitHub:
 		return "github.com"
-	case "gitlab":
+	case providerGitLab:
 		return "gitlab.com"
-	case "gitea":
+	case providerGitea:
 		return "gitea.com"
 	default:
 		return provider
