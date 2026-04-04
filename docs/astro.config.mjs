@@ -110,6 +110,7 @@ export default defineConfig({
           label: "Help",
           items: [
             { label: "Development Guide", link: "/development/" },
+            { label: "Benchmarks", link: "/benchmarks/" },
             { label: "FAQ", link: "/faq/" },
             { label: "Troubleshooting", link: "/troubleshooting/" },
           ],

@@ -49,9 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
-      contents: write
+      contents: read
+      actions: read
       pull-requests: write
-      deployments: write
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -93,17 +93,44 @@ jobs:
             | xargs go test -bench=. -benchmem -run='^$' -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
+      - name: 📥 Download previous benchmark data
+        if: steps.discover.outputs.skip == 'false'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_ID=$(gh run list \
+            --workflow=benchmark-regression.yaml \
+            --branch=main \
+            --status=success \
+            --limit=1 \
+            --json databaseId \
+            --jq '.[0].databaseId')
+          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
+            echo "Downloading baseline from run $RUN_ID"
+            gh run download "$RUN_ID" --name benchmark-data --dir . || echo "No benchmark artifact found — first run will create the baseline"
+          else
+            echo "No previous successful run found — first run will create the baseline"
+          fi
+
       - name: 📊 Store & compare benchmark results
         if: steps.discover.outputs.skip == 'false'
         uses: benchmark-action/github-action-benchmark@d48d326b4ca9ba73ca0cd0d59f108f9e02a381c7 # v1.20.4
         with:
           tool: go
           output-file-path: ${{ runner.temp }}/bench.txt
+          external-data-json-path: ./benchmark-data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: ${{ github.event_name == 'push' }}
-          save-data-file: ${{ github.event_name == 'push' }}
           alert-threshold: "150%"
           fail-threshold: "200%"
           fail-on-alert: ${{ github.event_name == 'pull_request' }}
           comment-on-alert: ${{ github.event_name == 'pull_request' }}
           summary-always: true
+
+      - name: 📤 Upload benchmark data
+        if: steps.discover.outputs.skip == 'false' && github.event_name == 'push'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: benchmark-data
+          path: ./benchmark-data.json
+          retention-days: 90

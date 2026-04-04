@@ -2,6 +2,9 @@
 dist/
 .astro/
 
+# Benchmark data (downloaded during CI build)
+public/benchmark-data.json
+
 # Node.js
 node_modules/
 npm-debug.log*
