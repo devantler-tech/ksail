@@ -73,16 +73,22 @@ func Generate(opts Options) error {
 const tenantDirPermissions = 0o750
 
 func prepareTenantDir(tenantDir string, force bool) error {
-	if info, err := os.Stat(tenantDir); err == nil && info.IsDir() {
+	info, statErr := os.Stat(tenantDir)
+	if statErr == nil && info.IsDir() {
 		if !force {
-			return fmt.Errorf("%w: %q, use --force to overwrite", ErrTenantAlreadyExists, tenantDir)
+			return fmt.Errorf(
+				"%w: %q, use --force to overwrite",
+				ErrTenantAlreadyExists, tenantDir,
+			)
 		}
-		if err := os.RemoveAll(tenantDir); err != nil {
-			return fmt.Errorf("removing existing tenant directory: %w", err)
+		removeErr := os.RemoveAll(tenantDir)
+		if removeErr != nil {
+			return fmt.Errorf("removing existing tenant directory: %w", removeErr)
 		}
 	}
-	if err := os.MkdirAll(tenantDir, tenantDirPermissions); err != nil {
-		return fmt.Errorf("creating tenant directory: %w", err)
+	mkdirErr := os.MkdirAll(tenantDir, tenantDirPermissions)
+	if mkdirErr != nil {
+		return fmt.Errorf("creating tenant directory: %w", mkdirErr)
 	}
 	return nil
 }
@@ -113,8 +119,9 @@ func generateTypeSpecificManifests(opts Options, tenantDir string) ([]string, er
 func writeManifests(dir string, files map[string]string, force bool) ([]string, error) {
 	names := make([]string, 0, len(files))
 	for filename, content := range files {
-		if _, err := fsutil.TryWriteFile(content, filepath.Join(dir, filename), force); err != nil {
-			return nil, fmt.Errorf("writing %s: %w", filename, err)
+		_, writeErr := fsutil.TryWriteFile(content, filepath.Join(dir, filename), force)
+		if writeErr != nil {
+			return nil, fmt.Errorf("writing %s: %w", filename, writeErr)
 		}
 		names = append(names, filename)
 	}

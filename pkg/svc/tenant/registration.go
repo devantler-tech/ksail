@@ -77,7 +77,8 @@ func FindKustomization(startDir string) (string, error) {
 
 	for {
 		candidate := filepath.Join(dir, "kustomization.yaml")
-		if info, statErr := os.Stat(candidate); statErr == nil && !info.IsDir() {
+		info, statErr := os.Stat(candidate)
+		if statErr == nil && !info.IsDir() {
 			return candidate, nil
 		}
 		parent := filepath.Dir(dir)
