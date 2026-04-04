@@ -69,7 +69,7 @@ KSail-specific configuration:
 
 - **Gateway API** is enabled by default (`gatewayAPI.enabled: true`); standard [Gateway API CRDs](https://gateway-api.sigs.k8s.io/guides/) are pre-installed automatically
 - **Without a LoadBalancer** (Docker-based): host network mode (`gatewayAPI.hostNetwork.enabled: true`) routes traffic via the Docker bridge using port mappings
-- **With a LoadBalancer** (Cloud Provider KIND for Vanilla, MetalLB for Talos): host network mode is skipped; traffic flows via LoadBalancer external IPs
+- **With a LoadBalancer** (e.g. Cloud Provider KIND for Vanilla, MetalLB for Talos on Docker, or `hcloud-cloud-controller-manager` for Talos on Hetzner): host network mode is skipped; traffic flows via LoadBalancer external IPs
 
 See [documentation](https://docs.cilium.io/), [Gateway API guide](https://docs.cilium.io/en/stable/network/servicemesh/gateway-api/gateway-api/), and [Gateway API with KSail](/guides/gateway-api/).
 
