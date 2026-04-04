@@ -47,12 +47,12 @@ func ExportAddRecursive(watcher *fsnotify.Watcher, root string) error {
 }
 
 // ExportNewDebounceState creates a new zero-value debounceState for testing.
-func ExportNewDebounceState() *debounceState {
-	return &debounceState{}
+func ExportNewDebounceState() *ExportDebounceState {
+	return &ExportDebounceState{}
 }
 
 // ExportSetDebounceState atomically sets the generation and lastFile fields.
-func ExportSetDebounceState(state *debounceState, generation uint64, lastFile string) {
+func ExportSetDebounceState(state *ExportDebounceState, generation uint64, lastFile string) {
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
 
@@ -61,7 +61,7 @@ func ExportSetDebounceState(state *debounceState, generation uint64, lastFile st
 }
 
 // ExportGetGeneration returns the current generation counter.
-func ExportGetGeneration(state *debounceState) uint64 {
+func ExportGetGeneration(state *ExportDebounceState) uint64 {
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
 
@@ -69,7 +69,7 @@ func ExportGetGeneration(state *debounceState) uint64 {
 }
 
 // ExportGetLastFile returns the current lastFile value.
-func ExportGetLastFile(state *debounceState) string {
+func ExportGetLastFile(state *ExportDebounceState) string {
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
 
@@ -77,17 +77,17 @@ func ExportGetLastFile(state *debounceState) string {
 }
 
 // ExportCancelPendingDebounce exposes cancelPendingDebounce for testing.
-func ExportCancelPendingDebounce(state *debounceState) {
+func ExportCancelPendingDebounce(state *ExportDebounceState) {
 	cancelPendingDebounce(state)
 }
 
 // ExportScheduleApply exposes scheduleApply for testing.
-func ExportScheduleApply(state *debounceState, file string, applyCh chan string) {
+func ExportScheduleApply(state *ExportDebounceState, file string, applyCh chan string) {
 	scheduleApply(state, file, applyCh)
 }
 
 // ExportEnqueueIfCurrent exposes enqueueIfCurrent for testing.
-func ExportEnqueueIfCurrent(state *debounceState, expectedGen uint64, applyCh chan string) {
+func ExportEnqueueIfCurrent(state *ExportDebounceState, expectedGen uint64, applyCh chan string) {
 	enqueueIfCurrent(state, expectedGen, applyCh)
 }
 

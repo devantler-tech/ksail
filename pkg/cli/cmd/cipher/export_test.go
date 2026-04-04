@@ -275,12 +275,13 @@ func BenchmarkEncrypt(b *testing.B) {
 			for b.Loop() {
 				b.StopTimer()
 				filePath := writeTempSecret(b, scenario.content)
-				b.StartTimer()
 
 				opts, err := newEncryptOpts(filePath, keyGroups)
 				if err != nil {
 					b.Fatal(err)
 				}
+
+				b.StartTimer()
 
 				_, err = sopsclient.Encrypt(opts)
 				if err != nil {
@@ -313,14 +314,14 @@ func BenchmarkDecrypt(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			filePath := encryptToFile(b, scenario.content, keyGroups)
 
+			opts, err := newDecryptOpts(filePath, scenario.extract)
+			if err != nil {
+				b.Fatal(err)
+			}
+
 			b.ResetTimer()
 
 			for b.Loop() {
-				opts, err := newDecryptOpts(filePath, scenario.extract)
-				if err != nil {
-					b.Fatal(err)
-				}
-
 				_, err = sopsclient.Decrypt(opts)
 				if err != nil {
 					b.Fatal(err)
@@ -342,12 +343,13 @@ func BenchmarkRoundtrip_Minimal(b *testing.B) {
 	for b.Loop() {
 		b.StopTimer()
 		filePath := writeTempSecret(b, content)
-		b.StartTimer()
 
 		encOpts, err := newEncryptOpts(filePath, keyGroups)
 		if err != nil {
 			b.Fatal(err)
 		}
+
+		b.StartTimer()
 
 		encryptedData, err := sopsclient.Encrypt(encOpts)
 		if err != nil {
@@ -359,10 +361,14 @@ func BenchmarkRoundtrip_Minimal(b *testing.B) {
 			b.Fatal(err)
 		}
 
+		b.StopTimer()
+
 		decOpts, err := newDecryptOpts(filePath, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
+
+		b.StartTimer()
 
 		_, err = sopsclient.Decrypt(decOpts)
 		if err != nil {
