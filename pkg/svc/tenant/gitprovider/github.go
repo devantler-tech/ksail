@@ -171,8 +171,9 @@ func (g *gitHubProvider) getFileSHA(
 	var result struct {
 		SHA string `json:"sha"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decoding file info: %w", err)
+	decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+	if decodeErr != nil {
+		return "", fmt.Errorf("decoding file info: %w", decodeErr)
 	}
 	return result.SHA, nil
 }

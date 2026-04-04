@@ -48,15 +48,17 @@ func Delete(opts DeleteOptions) error {
 	}
 
 	if opts.Unregister {
-		if err := UnregisterTenant(opts.Name, opts.OutputDir, opts.KustomizationPath); err != nil {
-			if !errors.Is(err, ErrKustomizationNotFound) {
-				return fmt.Errorf("unregister tenant: %w", err)
+		unregErr := UnregisterTenant(opts.Name, opts.OutputDir, opts.KustomizationPath)
+		if unregErr != nil {
+			if !errors.Is(unregErr, ErrKustomizationNotFound) {
+				return fmt.Errorf("unregister tenant: %w", unregErr)
 			}
 		}
 	}
 
-	if err := os.RemoveAll(tenantDir); err != nil {
-		return fmt.Errorf("remove tenant directory: %w", err)
+	removeErr := os.RemoveAll(tenantDir)
+	if removeErr != nil {
+		return fmt.Errorf("remove tenant directory: %w", removeErr)
 	}
 
 	if opts.DeleteRepo {

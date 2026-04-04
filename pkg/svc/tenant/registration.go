@@ -95,8 +95,9 @@ func resolveKustomizationPath(outputDir, explicit string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("resolving kustomization path: %w", err)
 		}
-		if _, err := os.Stat(canonical); err != nil {
-			return "", fmt.Errorf("kustomization file not found: %w", err)
+		_, statErr := os.Stat(canonical)
+		if statErr != nil {
+			return "", fmt.Errorf("kustomization file not found: %w", statErr)
 		}
 		return canonical, nil
 	}
@@ -111,8 +112,9 @@ func readKustomizationRaw(path string) (map[string]any, error) {
 		return nil, fmt.Errorf("read kustomization: %w", err)
 	}
 	var raw map[string]any
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("unmarshal kustomization: %w", err)
+	unmarshalErr := yaml.Unmarshal(data, &raw)
+	if unmarshalErr != nil {
+		return nil, fmt.Errorf("unmarshal kustomization: %w", unmarshalErr)
 	}
 	if raw == nil {
 		raw = make(map[string]any)
@@ -126,8 +128,9 @@ func writeKustomizationRaw(path string, raw map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("marshal kustomization: %w", err)
 	}
-	if err := os.WriteFile(path, data, kustomizationFilePermissions); err != nil {
-		return fmt.Errorf("write kustomization: %w", err)
+	writeErr := os.WriteFile(path, data, kustomizationFilePermissions)
+	if writeErr != nil {
+		return fmt.Errorf("write kustomization: %w", writeErr)
 	}
 	return nil
 }

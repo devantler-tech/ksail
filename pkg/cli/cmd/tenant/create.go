@@ -78,15 +78,19 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 
 	// Register in kustomization.yaml if requested.
 	if opts.Register {
-		if err := tenant.RegisterTenant(opts.Name, opts.OutputDir, opts.KustomizationPath); err != nil {
-			return fmt.Errorf("registering tenant: %w", err)
+		regErr := tenant.RegisterTenant(
+			opts.Name, opts.OutputDir, opts.KustomizationPath,
+		)
+		if regErr != nil {
+			return fmt.Errorf("registering tenant: %w", regErr)
 		}
 	}
 
 	// Scaffold and push tenant repo if git provider, repo, and a valid token are available.
 	if opts.GitProvider != "" && opts.GitRepo != "" {
-		if err := scaffoldTenantRepo(cmd, opts); err != nil {
-			return err
+		scaffoldErr := scaffoldTenantRepo(cmd, opts)
+		if scaffoldErr != nil {
+			return scaffoldErr
 		}
 	}
 
@@ -122,19 +126,22 @@ func resolveCreateOptions(cmd *cobra.Command, args []string) (tenant.Options, st
 	delivery, _ := cmd.Flags().GetString("delivery")
 
 	// Validate delivery mode (CLI concern — not passed to service layer).
-	if err := validateDelivery(delivery); err != nil {
-		return tenant.Options{}, "", err
+	deliveryErr := validateDelivery(delivery)
+	if deliveryErr != nil {
+		return tenant.Options{}, "", deliveryErr
 	}
 
 	// Resolve tenant type.
-	if err := resolveTenantType(cmd, typeStr, &opts); err != nil {
-		return tenant.Options{}, "", err
+	typeErr := resolveTenantType(cmd, typeStr, &opts)
+	if typeErr != nil {
+		return tenant.Options{}, "", typeErr
 	}
 
 	// Validate sync source only for Flux tenants.
 	if opts.TenantType == tenant.TypeFlux {
-		if err := resolveSyncSource(syncSourceStr, &opts); err != nil {
-			return tenant.Options{}, "", err
+		syncErr := resolveSyncSource(syncSourceStr, &opts)
+		if syncErr != nil {
+			return tenant.Options{}, "", syncErr
 		}
 	}
 
