@@ -22,6 +22,7 @@ import (
 //	kustomization.yaml, [sync.yaml], [project.yaml, app.yaml]
 func Generate(opts Options) error {
 	opts.ResolveDefaults()
+
 	err := opts.Validate()
 	if err != nil {
 		return err
@@ -50,6 +51,7 @@ func Generate(opts Options) error {
 	if err != nil {
 		return err
 	}
+
 	resources = append(resources, typeResources...)
 
 	sort.Strings(resources)
@@ -59,6 +61,7 @@ func Generate(opts Options) error {
 	kustomization := &ktypes.Kustomization{
 		Resources: resources,
 	}
+
 	_, err = gen.Generate(kustomization, yamlgenerator.Options{
 		Output: filepath.Join(tenantDir, "kustomization.yaml"),
 		Force:  opts.Force,
@@ -81,15 +84,18 @@ func prepareTenantDir(tenantDir string, force bool) error {
 				ErrTenantAlreadyExists, tenantDir,
 			)
 		}
+
 		removeErr := os.RemoveAll(tenantDir)
 		if removeErr != nil {
 			return fmt.Errorf("removing existing tenant directory: %w", removeErr)
 		}
 	}
+
 	mkdirErr := os.MkdirAll(tenantDir, tenantDirPermissions)
 	if mkdirErr != nil {
 		return fmt.Errorf("creating tenant directory: %w", mkdirErr)
 	}
+
 	return nil
 }
 
@@ -100,12 +106,14 @@ func generateTypeSpecificManifests(opts Options, tenantDir string) ([]string, er
 		if err != nil {
 			return nil, fmt.Errorf("generating Flux manifests: %w", err)
 		}
+
 		return writeManifests(tenantDir, fluxFiles, opts.Force)
 	case TypeArgoCD:
 		argoFiles, err := GenerateArgoCDManifests(opts)
 		if err != nil {
 			return nil, fmt.Errorf("generating ArgoCD manifests: %w", err)
 		}
+
 		return writeManifests(tenantDir, argoFiles, opts.Force)
 	case TypeKubectl:
 		return nil, nil
@@ -123,7 +131,9 @@ func writeManifests(dir string, files map[string]string, force bool) ([]string, 
 		if writeErr != nil {
 			return nil, fmt.Errorf("writing %s: %w", filename, writeErr)
 		}
+
 		names = append(names, filename)
 	}
+
 	return names, nil
 }

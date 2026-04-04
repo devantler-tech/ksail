@@ -21,6 +21,7 @@ func GenerateRBACManifests(opts Options) (map[string]string, error) {
 	}
 
 	primaryNS := opts.Namespaces[0]
+
 	var namespaceDocs, rbDocs []string
 
 	for _, namespace := range opts.Namespaces {
@@ -28,12 +29,14 @@ func GenerateRBACManifests(opts Options) (map[string]string, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		namespaceDocs = append(namespaceDocs, nsYAML)
 
 		rbYAML, err := marshalRoleBinding(opts.Name, namespace, primaryNS, opts.ClusterRole)
 		if err != nil {
 			return nil, err
 		}
+
 		rbDocs = append(rbDocs, rbYAML)
 	}
 
@@ -59,10 +62,12 @@ func marshalNamespace(name string) (string, error) {
 			"labels": ManagedByLabels(),
 		},
 	}
+
 	b, err := yaml.Marshal(namespace)
 	if err != nil {
 		return "", fmt.Errorf("marshal namespace: %w", err)
 	}
+
 	return string(b), nil
 }
 
@@ -76,10 +81,12 @@ func marshalServiceAccount(name, namespaceName string) (string, error) {
 			"labels":    ManagedByLabels(),
 		},
 	}
+
 	b, err := yaml.Marshal(serviceAccount)
 	if err != nil {
 		return "", fmt.Errorf("marshal service account: %w", err)
 	}
+
 	return string(b), nil
 }
 
@@ -107,10 +114,12 @@ func marshalRoleBinding(name, namespace, saNamespace, clusterRole string) (strin
 			},
 		},
 	}
+
 	b, err := yaml.Marshal(roleBinding)
 	if err != nil {
 		return "", fmt.Errorf("marshal role binding: %w", err)
 	}
+
 	return string(b), nil
 }
 
@@ -119,5 +128,6 @@ func joinDocs(docs []string) string {
 	for i, d := range docs {
 		trimmed[i] = strings.TrimRight(d, "\n")
 	}
+
 	return strings.Join(trimmed, "\n---\n") + "\n"
 }

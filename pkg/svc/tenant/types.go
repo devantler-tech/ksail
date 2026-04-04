@@ -29,9 +29,11 @@ func (t *Type) Set(value string) error {
 	for _, valid := range ValidTypes() {
 		if strings.EqualFold(value, string(valid)) {
 			*t = valid
+
 			return nil
 		}
 	}
+
 	return fmt.Errorf(
 		"%w: %s (valid options: %s)", ErrInvalidType, value, strings.Join(validTypeStrings(), ", "),
 	)
@@ -49,10 +51,12 @@ func (t *Type) Type() string {
 
 func validTypeStrings() []string {
 	types := ValidTypes()
+
 	result := make([]string, len(types))
 	for i, t := range types {
 		result[i] = string(t)
 	}
+
 	return result
 }
 
@@ -114,15 +118,19 @@ func (o *Options) ResolveDefaults() {
 	if len(o.Namespaces) == 0 {
 		o.Namespaces = []string{o.Name}
 	}
+
 	if o.ClusterRole == "" {
 		o.ClusterRole = DefaultClusterRole
 	}
+
 	if o.OutputDir == "" {
 		o.OutputDir = DefaultOutputDir
 	}
+
 	if o.SyncSource == "" {
 		o.SyncSource = DefaultSyncSource
 	}
+
 	if o.RepoVisibility == "" {
 		o.RepoVisibility = DefaultRepoVisibility
 	}
@@ -133,25 +141,31 @@ func (o *Options) Validate() error {
 	if o.Name == "" {
 		return ErrTenantNameRequired
 	}
+
 	if errs := validation.IsDNS1123Label(o.Name); len(errs) > 0 {
 		return fmt.Errorf("%w: %s (%s)", ErrInvalidTenantName, o.Name, strings.Join(errs, "; "))
 	}
+
 	if strings.Contains(o.Name, "..") || strings.ContainsAny(o.Name, `/\`) {
 		return fmt.Errorf("%w: %s (must not contain path separators or '..')",
 			ErrInvalidTenantName, o.Name)
 	}
+
 	if o.TenantType == "" {
 		return ErrTenantTypeRequired
 	}
+
 	if !isValidType(o.TenantType) {
 		return fmt.Errorf("%w: %q", ErrInvalidType, o.TenantType)
 	}
+
 	for _, ns := range o.Namespaces {
 		if errs := validation.IsDNS1123Label(ns); len(errs) > 0 {
 			return fmt.Errorf("%w: namespace %q (%s)",
 				ErrInvalidNamespace, ns, strings.Join(errs, "; "))
 		}
 	}
+
 	return nil
 }
 
@@ -161,6 +175,7 @@ func isValidType(t Type) bool {
 			return true
 		}
 	}
+
 	return false
 }
 

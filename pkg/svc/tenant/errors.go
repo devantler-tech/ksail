@@ -8,7 +8,9 @@ var (
 	// ErrTenantNameRequired is returned when the tenant name is empty.
 	ErrTenantNameRequired = errors.New("tenant name is required")
 	// ErrTenantTypeRequired is returned when the tenant type is not specified and cannot be auto-detected.
-	ErrTenantTypeRequired = errors.New("tenant type is required (use --type flag or configure gitOpsEngine in ksail.yaml)")
+	ErrTenantTypeRequired = errors.New(
+		"tenant type is required (use --type flag or configure gitOpsEngine in ksail.yaml)",
+	)
 	// ErrKustomizationNotFound is returned when no kustomization.yaml is found.
 	ErrKustomizationNotFound = errors.New("kustomization.yaml not found")
 	// ErrInvalidTenantName is returned when the tenant name is not a valid DNS-1123 label.
@@ -32,7 +34,9 @@ var (
 	// ErrOutsideKustomizationRoot is returned when a tenant path is outside the kustomization root.
 	ErrOutsideKustomizationRoot = errors.New("tenant directory is outside the kustomization root")
 	// ErrDeliveryNotImplemented is returned when --delivery pr is used (not yet implemented).
-	ErrDeliveryNotImplemented = errors.New("--delivery pr is not yet implemented; use --delivery commit (default)")
+	ErrDeliveryNotImplemented = errors.New(
+		"--delivery pr is not yet implemented; use --delivery commit (default)",
+	)
 	// ErrInvalidDelivery is returned when an invalid --delivery value is provided.
 	ErrInvalidDelivery = errors.New("invalid --delivery value")
 	// ErrInvalidSyncSource is returned when an invalid --sync-source value is provided.
@@ -43,7 +47,9 @@ var (
 			"please specify --type (flux, argocd, or kubectl)",
 	)
 	// ErrDeleteRepoGitProviderRequired is returned when --git-provider is required with --delete-repo.
-	ErrDeleteRepoGitProviderRequired = errors.New("--git-provider is required when --delete-repo is set")
+	ErrDeleteRepoGitProviderRequired = errors.New(
+		"--git-provider is required when --delete-repo is set",
+	)
 	// ErrDeleteRepoGitRepoRequired is returned when --git-repo is required with --delete-repo.
 	ErrDeleteRepoGitRepoRequired = errors.New("--git-repo is required when --delete-repo is set")
 )

@@ -25,7 +25,12 @@ type Provider interface {
 	// CreateRepo creates a new repository.
 	CreateRepo(ctx context.Context, owner, name string, visibility RepoVisibility) error
 	// PushFiles pushes files to a repository (creates initial commit or updates).
-	PushFiles(ctx context.Context, owner, name string, files map[string][]byte, commitMsg string) error
+	PushFiles(
+		ctx context.Context,
+		owner, name string,
+		files map[string][]byte,
+		commitMsg string,
+	) error
 	// DeleteRepo deletes a repository.
 	DeleteRepo(ctx context.Context, owner, name string) error
 }
@@ -49,6 +54,7 @@ func New(providerName, token string) (Provider, error) {
 	if token == "" {
 		return nil, ErrTokenRequired
 	}
+
 	switch strings.ToLower(providerName) {
 	case "github":
 		return newGitHubProvider(token), nil
@@ -60,11 +66,12 @@ func New(providerName, token string) (Provider, error) {
 // ResolveToken resolves the API token using the fallback chain:
 // 1. Explicit token parameter
 // 2. Environment variable (GITHUB_TOKEN, GITLAB_TOKEN, etc.)
-// 3. Empty string (let caller decide)
+// 3. Empty string (let caller decide).
 func ResolveToken(providerName, explicitToken string) string {
 	if explicitToken != "" {
 		return explicitToken
 	}
+
 	switch strings.ToLower(providerName) {
 	case "github":
 		return os.Getenv("GITHUB_TOKEN")
@@ -83,8 +90,13 @@ const gitRepoSplitParts = 3
 func ParseOwnerRepo(gitRepo string) (string, string, error) {
 	parts := strings.SplitN(gitRepo, "/", gitRepoSplitParts)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("%w: %q (expected owner/repo-name)", ErrInvalidGitRepoFormat, gitRepo)
+		return "", "", fmt.Errorf(
+			"%w: %q (expected owner/repo-name)",
+			ErrInvalidGitRepoFormat,
+			gitRepo,
+		)
 	}
+
 	return parts[0], parts[1], nil
 }
 
@@ -98,6 +110,10 @@ func ParseVisibility(value string) (RepoVisibility, error) {
 	case "public":
 		return VisibilityPublic, nil
 	default:
-		return "", fmt.Errorf("%w %q: must be Private, Internal, or Public", ErrInvalidRepoVisibility, value)
+		return "", fmt.Errorf(
+			"%w %q: must be Private, Internal, or Public",
+			ErrInvalidRepoVisibility,
+			value,
+		)
 	}
 }

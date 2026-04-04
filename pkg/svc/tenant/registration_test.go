@@ -13,17 +13,22 @@ import (
 
 func writeKustomizationFile(t *testing.T, dir, content string) string {
 	t.Helper()
+
 	path := filepath.Join(dir, "kustomization.yaml")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
 	return path
 }
 
 func readKustomizationResources(t *testing.T, path string) []string {
 	t.Helper()
+
 	data, err := os.ReadFile(path) //nolint:gosec // test path
 	require.NoError(t, err)
+
 	var raw map[string]any
 	require.NoError(t, yaml.Unmarshal(data, &raw))
+
 	return tenant.ExportGetResources(raw)
 }
 
@@ -73,11 +78,13 @@ resources:
 
 	resources := readKustomizationResources(t, kPath)
 	count := 0
+
 	for _, r := range resources {
 		if r == "team-alpha" {
 			count++
 		}
 	}
+
 	require.Equal(t, 1, count, "should not duplicate the entry")
 }
 
@@ -131,6 +138,7 @@ resources:
 
 	data, err := os.ReadFile(kPath) //nolint:gosec // test path
 	require.NoError(t, err)
+
 	var raw map[string]any
 	require.NoError(t, yaml.Unmarshal(data, &raw))
 
@@ -245,6 +253,7 @@ resources:
 
 func TestResolveKustomizationPath_ExplicitNotFound(t *testing.T) {
 	t.Parallel()
+
 	_, err := tenant.ExportResolveKustomizationPath(".", "/nonexistent/kustomization.yaml")
 	require.Error(t, err)
 }

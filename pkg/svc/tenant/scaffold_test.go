@@ -35,16 +35,19 @@ func TestScaffoldFiles(t *testing.T) {
 			require.Len(t, files, 2)
 		})
 
-		t.Run(fmt.Sprintf("%s README mentions %s", testCase.tenantType, testCase.readmeHas), func(t *testing.T) {
-			t.Parallel()
+		t.Run(
+			fmt.Sprintf("%s README mentions %s", testCase.tenantType, testCase.readmeHas),
+			func(t *testing.T) {
+				t.Parallel()
 
-			files := tenant.ScaffoldFiles(tenant.Options{
-				Name:       "my-tenant",
-				TenantType: testCase.tenantType,
-			})
+				files := tenant.ScaffoldFiles(tenant.Options{
+					Name:       "my-tenant",
+					TenantType: testCase.tenantType,
+				})
 
-			require.Contains(t, string(files["README.md"]), testCase.readmeHas)
-		})
+				require.Contains(t, string(files["README.md"]), testCase.readmeHas)
+			},
+		)
 	}
 }
 

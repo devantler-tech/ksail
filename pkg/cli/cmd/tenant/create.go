@@ -32,7 +32,8 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 	}
 
 	// Phase 1 flags
-	cmd.Flags().StringSliceP("namespace", "n", nil, "Namespaces to create (repeatable, default: tenant-name)")
+	cmd.Flags().
+		StringSliceP("namespace", "n", nil, "Namespaces to create (repeatable, default: tenant-name)")
 	cmd.Flags().String("cluster-role", "edit", "ClusterRole to bind to the tenant ServiceAccount")
 	cmd.Flags().StringP("output", "o", ".", "Output directory for platform manifests")
 	cmd.Flags().Bool("force", false, "Overwrite existing tenant directory")
@@ -44,11 +45,13 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 	cmd.Flags().String("git-provider", "", "Git provider: github, gitlab, gitea")
 	cmd.Flags().String("git-repo", "", "Tenant repo as owner/repo-name")
 	cmd.Flags().String("git-token", "", "Git provider API token")
-	cmd.Flags().String("repo-visibility", "Private", "Repo visibility: Private, Internal, or Public")
+	cmd.Flags().
+		String("repo-visibility", "Private", "Repo visibility: Private, Internal, or Public")
 
 	// Phase 2 flags
 	cmd.Flags().Bool("register", false, "Register tenant in kustomization.yaml")
-	cmd.Flags().String("kustomization-path", "", "Path to kustomization.yaml (fallback: auto-discover)")
+	cmd.Flags().
+		String("kustomization-path", "", "Path to kustomization.yaml (fallback: auto-discover)")
 	cmd.Flags().String("delivery", "commit", "How to deliver platform changes: commit or pr")
 	_ = cmd.Flags().MarkHidden("delivery") // PR delivery not yet implemented
 
@@ -68,6 +71,7 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("resolving output path: %w", err)
 	}
+
 	opts.OutputDir = outputDir
 
 	// Generate tenant files.
@@ -165,21 +169,28 @@ func resolveTenantType(cmd *cobra.Command, typeStr string, opts *tenant.Options)
 		if err != nil {
 			return fmt.Errorf("setting tenant type: %w", err)
 		}
+
 		return nil
 	}
+
 	var configFile string
+
 	cfgPath, err := flags.GetConfigPath(cmd)
 	if err == nil {
 		configFile = cfgPath
 	}
+
 	cfgManager := ksailconfigmanager.NewConfigManager(cmd.OutOrStdout(), configFile)
+
 	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
+
 	if !cfgManager.IsConfigFileFound() {
 		return fmt.Errorf("%w", tenant.ErrConfigNotFound)
 	}
+
 	switch cfg.Spec.Cluster.GitOpsEngine {
 	case v1alpha1.GitOpsEngineFlux:
 		opts.TenantType = tenant.TypeFlux
@@ -190,6 +201,7 @@ func resolveTenantType(cmd *cobra.Command, typeStr string, opts *tenant.Options)
 	default:
 		opts.TenantType = tenant.TypeKubectl
 	}
+
 	return nil
 }
 
@@ -200,8 +212,13 @@ func resolveSyncSource(syncSourceStr string, opts *tenant.Options) error {
 	case "git":
 		opts.SyncSource = tenant.SyncSourceGit
 	default:
-		return fmt.Errorf("%w %q: must be 'oci' or 'git'", tenant.ErrInvalidSyncSource, syncSourceStr)
+		return fmt.Errorf(
+			"%w %q: must be 'oci' or 'git'",
+			tenant.ErrInvalidSyncSource,
+			syncSourceStr,
+		)
 	}
+
 	return nil
 }
 
@@ -212,6 +229,7 @@ func scaffoldTenantRepo(cmd *cobra.Command, opts tenant.Options) error {
 			"Skipping repo scaffolding: no API token found "+
 				"(set --git-token or %s environment variable)",
 			strings.ToUpper(opts.GitProvider)+"_TOKEN")
+
 		return nil
 	}
 
@@ -238,7 +256,7 @@ func scaffoldTenantRepo(cmd *cobra.Command, opts tenant.Options) error {
 	}
 
 	scaffoldFiles := tenant.ScaffoldFiles(opts)
-	commitMsg := fmt.Sprintf("feat: initial scaffold for tenant %s", opts.Name)
+	commitMsg := "feat: initial scaffold for tenant " + opts.Name
 
 	err = provider.PushFiles(ctx, owner, repoName, scaffoldFiles, commitMsg)
 	if err != nil {
@@ -246,5 +264,6 @@ func scaffoldTenantRepo(cmd *cobra.Command, opts tenant.Options) error {
 	}
 
 	notify.Successf(cmd.OutOrStdout(), "Tenant repo %q scaffolded successfully", opts.GitRepo)
+
 	return nil
 }

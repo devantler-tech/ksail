@@ -12,6 +12,7 @@ const rbacCMHeader = "apiVersion: v1"
 
 func TestGenerateArgoCDManifests_ProjectSingleNamespace(t *testing.T) {
 	t.Parallel()
+
 	opts := tenant.Options{
 		Name:        "team-alpha",
 		Namespaces:  []string{"team-alpha"},
@@ -26,6 +27,7 @@ func TestGenerateArgoCDManifests_ProjectSingleNamespace(t *testing.T) {
 
 func TestGenerateArgoCDManifests_ProjectMultipleNamespaces(t *testing.T) {
 	t.Parallel()
+
 	opts := tenant.Options{
 		Name:        "team-beta",
 		Namespaces:  []string{"team-beta-dev", "team-beta-staging", "team-beta-prod"},
@@ -40,6 +42,7 @@ func TestGenerateArgoCDManifests_ProjectMultipleNamespaces(t *testing.T) {
 
 func TestGenerateArgoCDManifests_AppGitHub(t *testing.T) {
 	t.Parallel()
+
 	opts := tenant.Options{
 		Name:        "team-alpha",
 		Namespaces:  []string{"team-alpha"},
@@ -54,6 +57,7 @@ func TestGenerateArgoCDManifests_AppGitHub(t *testing.T) {
 
 func TestGenerateArgoCDManifests_AppGitLab(t *testing.T) {
 	t.Parallel()
+
 	opts := tenant.Options{
 		Name:        "team-gamma",
 		Namespaces:  []string{"team-gamma"},
@@ -68,6 +72,7 @@ func TestGenerateArgoCDManifests_AppGitLab(t *testing.T) {
 
 func TestGenerateArgoCDManifests_NoRBACConfigMap(t *testing.T) {
 	t.Parallel()
+
 	opts := tenant.Options{
 		Name:        "team-alpha",
 		Namespaces:  []string{"team-alpha"},
@@ -84,6 +89,7 @@ func TestGenerateArgoCDManifests_NoRBACConfigMap(t *testing.T) {
 
 func TestMergeArgoCDRBACPolicy_EmptyExisting(t *testing.T) {
 	t.Parallel()
+
 	result, err := tenant.MergeArgoCDRBACPolicy("", "team-alpha")
 	require.NoError(t, err)
 	snaps.MatchSnapshot(t, result)
@@ -91,6 +97,7 @@ func TestMergeArgoCDRBACPolicy_EmptyExisting(t *testing.T) {
 
 func TestMergeArgoCDRBACPolicy_ExistingSameTenant(t *testing.T) {
 	t.Parallel()
+
 	existing := rbacCMHeader + `
 kind: ConfigMap
 metadata:
@@ -113,6 +120,7 @@ data:
 
 func TestMergeArgoCDRBACPolicy_ExistingOtherTenant(t *testing.T) {
 	t.Parallel()
+
 	existing := rbacCMHeader + `
 kind: ConfigMap
 metadata:
@@ -135,6 +143,7 @@ data:
 
 func TestRemoveArgoCDRBACPolicy_RemovesTargetTenant(t *testing.T) {
 	t.Parallel()
+
 	existing := rbacCMHeader + `
 kind: ConfigMap
 metadata:
@@ -156,6 +165,7 @@ data:
 
 func TestMergeArgoCDRBACPolicy_SubstringTenantNames(t *testing.T) {
 	t.Parallel()
+
 	existing := rbacCMHeader + `
 kind: ConfigMap
 metadata:
@@ -178,6 +188,7 @@ data:
 
 func TestRemoveArgoCDRBACPolicy_SubstringTenantNames(t *testing.T) {
 	t.Parallel()
+
 	existing := rbacCMHeader + `
 kind: ConfigMap
 metadata:
@@ -201,6 +212,7 @@ data:
 
 func TestRemoveArgoCDRBACPolicy_PreservesOtherTenant(t *testing.T) {
 	t.Parallel()
+
 	existing := rbacCMHeader + `
 kind: ConfigMap
 metadata:

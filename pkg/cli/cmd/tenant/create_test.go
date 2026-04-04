@@ -59,7 +59,7 @@ func TestCreateCmd_FlagDefaults(t *testing.T) {
 	// --type default ""
 	typeVal, err := cmd.Flags().GetString("type")
 	require.NoError(t, err)
-	require.Equal(t, "", typeVal)
+	require.Empty(t, typeVal)
 
 	// --sync-source default "oci"
 	ss, err := cmd.Flags().GetString("sync-source")
@@ -215,7 +215,9 @@ func TestCreateCmd_InvalidDelivery(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"bad-delivery", "--type", "kubectl", "--delivery", "email", "--output", outDir})
+	cmd.SetArgs(
+		[]string{"bad-delivery", "--type", "kubectl", "--delivery", "email", "--output", outDir},
+	)
 
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -239,7 +241,9 @@ resources: []
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"registered-tenant", "--type", "kubectl", "--output", outDir, "--register"})
+	cmd.SetArgs(
+		[]string{"registered-tenant", "--type", "kubectl", "--output", outDir, "--register"},
+	)
 
 	err := cmd.Execute()
 	require.NoError(t, err)
@@ -273,7 +277,9 @@ func TestCreateCmd_MultiNamespace(t *testing.T) {
 
 	// Verify multi-namespace RBAC.
 	tenantDir := filepath.Join(outDir, "multi-ns")
-	nsContent, err := os.ReadFile(filepath.Join(tenantDir, "namespace.yaml")) //nolint:gosec // test path
+	nsContent, err := os.ReadFile(
+		filepath.Join(tenantDir, "namespace.yaml"),
+	) //nolint:gosec // test path
 	require.NoError(t, err)
 	require.Contains(t, string(nsContent), "ns1")
 	require.Contains(t, string(nsContent), "ns2")
@@ -300,7 +306,9 @@ func TestCreateCmd_CustomClusterRole(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify ClusterRole.
-	rbContent, err := os.ReadFile(filepath.Join(outDir, "custom-role", "rolebinding.yaml")) //nolint:gosec // test
+	rbContent, err := os.ReadFile(
+		filepath.Join(outDir, "custom-role", "rolebinding.yaml"),
+	) //nolint:gosec // test
 	require.NoError(t, err)
 	require.Contains(t, string(rbContent), "cluster-admin")
 }

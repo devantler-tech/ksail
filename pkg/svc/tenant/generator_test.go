@@ -122,6 +122,7 @@ func TestGenerate_ArgoCDType(t *testing.T) {
 	kPath := filepath.Join(tenantDir, "kustomization.yaml")
 	kustomizationContent, err := os.ReadFile(kPath) //nolint:gosec // test path
 	require.NoError(t, err)
+
 	content := string(kustomizationContent)
 	require.Contains(t, content, "project.yaml")
 	require.Contains(t, content, "app.yaml")
@@ -259,6 +260,7 @@ func TestGenerate_MultiNamespace(t *testing.T) {
 		fPath := filepath.Join(tenantDir, fileName)
 		content, err := os.ReadFile(fPath) //nolint:gosec // test path
 		require.NoError(t, err)
+
 		docs := strings.Split(string(content), "---\n")
 		require.Len(t, docs, 3,
 			"expected 3 documents in %s for 3 namespaces", fileName)
@@ -268,6 +270,7 @@ func TestGenerate_MultiNamespace(t *testing.T) {
 	saPath := filepath.Join(tenantDir, "serviceaccount.yaml")
 	saContent, err := os.ReadFile(saPath) //nolint:gosec // test path
 	require.NoError(t, err)
+
 	saDocs := strings.Split(string(saContent), "---\n")
 	require.Len(t, saDocs, 1,
 		"expected 1 document in serviceaccount.yaml")

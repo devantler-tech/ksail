@@ -15,8 +15,8 @@ import (
 // NewDeleteCmd creates the tenant delete subcommand.
 func NewDeleteCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "delete <tenant-name>",
-		Short:        "Delete a tenant",
+		Use:   "delete <tenant-name>",
+		Short: "Delete a tenant",
 		Long: `Remove tenant manifests, unregister from ` +
 			`kustomization.yaml, and optionally delete ` +
 			`the tenant Git repository.`,
@@ -32,7 +32,8 @@ func NewDeleteCmd(_ *di.Runtime) *cobra.Command {
 	cmd.Flags().String("kustomization-path", "", "Path to kustomization.yaml")
 	cmd.Flags().Bool("delete-repo", false, "Also delete the tenant Git repository")
 	cmd.Flags().String("git-provider", "", "Git provider (required with --delete-repo)")
-	cmd.Flags().String("git-repo", "", "Tenant repo as owner/repo-name (required with --delete-repo)")
+	cmd.Flags().
+		String("git-repo", "", "Tenant repo as owner/repo-name (required with --delete-repo)")
 	cmd.Flags().String("git-token", "", "Git provider API token")
 	cmd.Flags().StringP("output", "o", ".", "Directory containing tenant manifests")
 
@@ -74,6 +75,7 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 				"This will delete tenant %q and its manifest directory",
 				opts.Name)
 		}
+
 		_, _ = fmt.Fprint(cmd.OutOrStdout(),
 			`Type "yes" to confirm deletion: `)
 

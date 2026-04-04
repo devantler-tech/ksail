@@ -36,8 +36,13 @@ func Delete(opts DeleteOptions) error {
 	if opts.Name == "" {
 		return ErrTenantNameRequired
 	}
+
 	if strings.Contains(opts.Name, "..") || strings.ContainsAny(opts.Name, `/\`) {
-		return fmt.Errorf("%w: %q must not contain path separators or '..'", ErrInvalidTenantName, opts.Name)
+		return fmt.Errorf(
+			"%w: %q must not contain path separators or '..'",
+			ErrInvalidTenantName,
+			opts.Name,
+		)
 	}
 
 	tenantDir := filepath.Join(opts.OutputDir, opts.Name)
@@ -72,6 +77,7 @@ func deleteRepo(opts DeleteOptions) error {
 	if opts.GitProvider == "" {
 		return fmt.Errorf("%w", ErrDeleteRepoGitProviderRequired)
 	}
+
 	if opts.GitRepo == "" {
 		return fmt.Errorf("%w", ErrDeleteRepoGitRepoRequired)
 	}
@@ -82,6 +88,7 @@ func deleteRepo(opts DeleteOptions) error {
 	}
 
 	token := gitprovider.ResolveToken(opts.GitProvider, opts.GitToken)
+
 	provider, err := gitprovider.New(opts.GitProvider, token)
 	if err != nil {
 		return fmt.Errorf("create git provider: %w", err)

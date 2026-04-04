@@ -1,7 +1,6 @@
 package tenant_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant"
@@ -10,6 +9,7 @@ import (
 
 func TestTypeSet(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    string
@@ -28,7 +28,9 @@ func TestTypeSet(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			var tenantType tenant.Type
+
 			err := tenantType.Set(testCase.input)
 			require.NoError(t, err)
 			require.Equal(t, testCase.expected, tenantType)
@@ -38,14 +40,17 @@ func TestTypeSet(t *testing.T) {
 
 func TestTypeSetInvalid(t *testing.T) {
 	t.Parallel()
+
 	var tenantType tenant.Type
+
 	err := tenantType.Set("invalid")
 	require.Error(t, err)
-	require.True(t, errors.Is(err, tenant.ErrInvalidType))
+	require.ErrorIs(t, err, tenant.ErrInvalidType)
 }
 
 func TestValidTypes(t *testing.T) {
 	t.Parallel()
+
 	types := tenant.ValidTypes()
 	require.Len(t, types, 3)
 	require.Contains(t, types, tenant.TypeFlux)
@@ -55,6 +60,7 @@ func TestValidTypes(t *testing.T) {
 
 func TestOptionsResolveDefaults(t *testing.T) {
 	t.Parallel()
+
 	opts := tenant.Options{Name: "team-alpha"}
 	opts.ResolveDefaults()
 
@@ -67,6 +73,7 @@ func TestOptionsResolveDefaults(t *testing.T) {
 
 func TestOptionsResolveDefaultsPreservesExisting(t *testing.T) {
 	t.Parallel()
+
 	opts := tenant.Options{
 		Name:           "team-beta",
 		Namespaces:     []string{"ns1", "ns2"},
@@ -86,6 +93,7 @@ func TestOptionsResolveDefaultsPreservesExisting(t *testing.T) {
 
 func TestOptionsValidateEmptyName(t *testing.T) {
 	t.Parallel()
+
 	opts := tenant.Options{TenantType: tenant.TypeFlux}
 	err := opts.Validate()
 	require.ErrorIs(t, err, tenant.ErrTenantNameRequired)
@@ -93,6 +101,7 @@ func TestOptionsValidateEmptyName(t *testing.T) {
 
 func TestOptionsValidateEmptyType(t *testing.T) {
 	t.Parallel()
+
 	opts := tenant.Options{Name: "team-alpha"}
 	err := opts.Validate()
 	require.ErrorIs(t, err, tenant.ErrTenantTypeRequired)
@@ -100,6 +109,7 @@ func TestOptionsValidateEmptyType(t *testing.T) {
 
 func TestOptionsValidateSuccess(t *testing.T) {
 	t.Parallel()
+
 	opts := tenant.Options{
 		Name:       "team-alpha",
 		TenantType: tenant.TypeFlux,
@@ -110,6 +120,7 @@ func TestOptionsValidateSuccess(t *testing.T) {
 
 func TestOptionsValidateInvalidDNSName(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name string
 		val  string
@@ -123,6 +134,7 @@ func TestOptionsValidateInvalidDNSName(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			opts := tenant.Options{
 				Name:       testCase.val,
 				TenantType: tenant.TypeFlux,
@@ -136,6 +148,7 @@ func TestOptionsValidateInvalidDNSName(t *testing.T) {
 
 func TestOptionsValidatePathTraversalName(t *testing.T) {
 	t.Parallel()
+
 	opts := tenant.Options{
 		Name:       "../escape",
 		TenantType: tenant.TypeFlux,
@@ -146,6 +159,7 @@ func TestOptionsValidatePathTraversalName(t *testing.T) {
 
 func TestOptionsValidateInvalidNamespace(t *testing.T) {
 	t.Parallel()
+
 	opts := tenant.Options{
 		Name:       "valid-name",
 		TenantType: tenant.TypeFlux,
@@ -157,6 +171,7 @@ func TestOptionsValidateInvalidNamespace(t *testing.T) {
 
 func TestManagedByLabels(t *testing.T) {
 	t.Parallel()
+
 	labels := tenant.ManagedByLabels()
 	require.Equal(t, map[string]string{
 		"app.kubernetes.io/managed-by": "ksail",

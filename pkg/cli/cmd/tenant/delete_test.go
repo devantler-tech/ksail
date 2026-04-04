@@ -16,14 +16,17 @@ func TestDeleteCmd(t *testing.T) {
 
 	t.Run("has write permission annotation", func(t *testing.T) {
 		t.Parallel()
+
 		cmd := tenantcmd.NewDeleteCmd(nil)
 		require.Equal(t, "write", cmd.Annotations["ai.toolgen.permission"])
 	})
 
 	t.Run("requires exactly one arg", func(t *testing.T) {
 		t.Parallel()
+
 		cmd := tenantcmd.NewDeleteCmd(nil)
 		cmd.SetArgs([]string{})
+
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		cmd.SetErr(&buf)
@@ -58,6 +61,7 @@ func TestDeleteCmd(t *testing.T) {
 
 func assertDeleteFlagDefaults(t *testing.T) {
 	t.Parallel()
+
 	cmd := tenantcmd.NewDeleteCmd(nil)
 
 	forceVal, err := cmd.Flags().GetBool("force")

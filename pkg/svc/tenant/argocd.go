@@ -9,17 +9,17 @@ import (
 )
 
 const (
-	appProjectKind   = "AppProject"
-	k8sDefaultServer = "https://kubernetes.default.svc"
+	appProjectKind    = "AppProject"
+	k8sDefaultServer  = "https://kubernetes.default.svc"
 	rbacConfigMapName = "argocd-rbac-cm"
 )
 
 // appProject represents an ArgoCD AppProject CR.
 type appProject struct {
-	APIVersion string          `json:"apiVersion" yaml:"apiVersion"`
-	Kind       string          `json:"kind"       yaml:"kind"`
-	Metadata   argoCDMeta      `json:"metadata"   yaml:"metadata"`
-	Spec       appProjectSpec  `json:"spec"       yaml:"spec"`
+	APIVersion string         `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string         `json:"kind"       yaml:"kind"`
+	Metadata   argoCDMeta     `json:"metadata"   yaml:"metadata"`
+	Spec       appProjectSpec `json:"spec"       yaml:"spec"`
 }
 
 type argoCDMeta struct {
@@ -50,15 +50,15 @@ type argoCDApp struct {
 type argoCDAppSpec struct {
 	Project     string           `json:"project"     yaml:"project"`
 	Source      argoCDAppSource  `json:"source"      yaml:"source"`
-	Destination argoCDAppDest   `json:"destination"  yaml:"destination"`
+	Destination argoCDAppDest    `json:"destination" yaml:"destination"`
 	SyncPolicy  argoCDSyncPolicy `json:"syncPolicy"  yaml:"syncPolicy"`
 }
 
 type argoCDAppSource struct {
 	//nolint:tagliatelle // ArgoCD requires this exact casing
 	RepoURL        string `json:"repoURL"        yaml:"repoURL"`
-	TargetRevision string `json:"targetRevision"  yaml:"targetRevision"`
-	Path           string `json:"path"            yaml:"path"`
+	TargetRevision string `json:"targetRevision" yaml:"targetRevision"`
+	Path           string `json:"path"           yaml:"path"`
 }
 
 type argoCDAppDest struct {
@@ -96,9 +96,11 @@ func GenerateArgoCDManifests(opts Options) (map[string]string, error) {
 	if opts.GitProvider == "" {
 		return nil, fmt.Errorf("%w for ArgoCD tenants", ErrGitProviderRequired)
 	}
+
 	if opts.GitRepo == "" {
 		return nil, fmt.Errorf("%w for ArgoCD tenants", ErrGitRepoRequired)
 	}
+
 	if len(opts.Namespaces) == 0 {
 		return nil, fmt.Errorf("%w", ErrNamespaceRequired)
 	}
@@ -109,12 +111,14 @@ func GenerateArgoCDManifests(opts Options) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("generating ArgoCD AppProject: %w", err)
 	}
+
 	result["project.yaml"] = projectYAML
 
 	appYAML, err := generateArgoCDApp(opts)
 	if err != nil {
 		return nil, fmt.Errorf("generating ArgoCD Application: %w", err)
 	}
+
 	result["app.yaml"] = appYAML
 
 	return result, nil
@@ -141,7 +145,7 @@ func generateAppProject(opts Options) (string, error) {
 			Labels:    ManagedByLabels(),
 		},
 		Spec: appProjectSpec{
-			Description:  fmt.Sprintf("Tenant project for %s", opts.Name),
+			Description:  "Tenant project for " + opts.Name,
 			SourceRepos:  []string{repoURL},
 			Destinations: destinations,
 		},
@@ -215,6 +219,7 @@ func buildTenantPolicyCSV(tenantName string) string {
 		fmt.Sprintf("p, role:%s, projects, get, %s, allow", tenantName, tenantName),
 		fmt.Sprintf("g, %s, role:%s", tenantName, tenantName),
 	}
+
 	return strings.Join(lines, "\n") + "\n"
 }
 
@@ -238,14 +243,17 @@ func newRBACConfigMap(policyCSV string) rbacConfigMap {
 func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, error) {
 	if strings.TrimSpace(existingContent) == "" {
 		cm := newRBACConfigMap(buildTenantPolicyCSV(tenantName))
+
 		data, err := yaml.Marshal(cm)
 		if err != nil {
 			return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
 		}
+
 		return string(data), nil
 	}
 
 	var configMap rbacConfigMap
+
 	err := yaml.Unmarshal([]byte(existingContent), &configMap)
 	if err != nil {
 		return "", fmt.Errorf("parsing existing RBAC ConfigMap: %w", err)
@@ -264,13 +272,16 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 		if err != nil {
 			return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
 		}
+
 		return string(data), nil
 	}
 
 	tenantPolicy := buildTenantPolicyCSV(tenantName)
+
 	if existingPolicy != "" && !strings.HasSuffix(existingPolicy, "\n") {
 		existingPolicy += "\n"
 	}
+
 	configMap.Data["policy.csv"] = existingPolicy + tenantPolicy
 
 	data, err := yaml.Marshal(configMap)
@@ -285,6 +296,7 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 // Used by the delete command.
 func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, error) {
 	var configMap rbacConfigMap
+
 	err := yaml.Unmarshal([]byte(existingContent), &configMap)
 	if err != nil {
 		return "", fmt.Errorf("parsing existing RBAC ConfigMap: %w", err)
@@ -295,18 +307,21 @@ func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, 
 		if err != nil {
 			return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
 		}
+
 		return string(data), nil
 	}
 
 	existingPolicy := configMap.Data["policy.csv"]
 
 	lines := strings.Split(existingPolicy, "\n")
+
 	filtered := make([]string, 0, len(lines))
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if isTenantPolicyLine(trimmed, tenantName) {
 			continue
 		}
+
 		filtered = append(filtered, line)
 	}
 
@@ -314,6 +329,7 @@ func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, 
 	if result != "" {
 		result += "\n"
 	}
+
 	configMap.Data["policy.csv"] = result
 
 	data, err := yaml.Marshal(configMap)
@@ -327,11 +343,12 @@ func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, 
 // hasTenantPolicy checks if the given policy CSV already contains policies
 // for the exact tenant name, avoiding substring false positives.
 func hasTenantPolicy(policyCSV, tenantName string) bool {
-	for _, line := range strings.Split(policyCSV, "\n") {
+	for line := range strings.SplitSeq(policyCSV, "\n") {
 		if isTenantPolicyLine(strings.TrimSpace(line), tenantName) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -341,7 +358,9 @@ func isTenantPolicyLine(line, tenantName string) bool {
 	if line == "" {
 		return false
 	}
+
 	exactRole := fmt.Sprintf("role:%s,", tenantName)
 	exactGroup := fmt.Sprintf("g, %s, role:%s", tenantName, tenantName)
+
 	return strings.Contains(line, exactRole) || strings.TrimSpace(line) == exactGroup
 }

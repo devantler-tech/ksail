@@ -69,11 +69,12 @@ func resolveProviderHost(provider string) string {
 
 // GenerateFluxSyncManifests generates Flux-specific sync manifests.
 // Returns a map of filename -> YAML content.
-// Files: sync.yaml (multi-doc: source CR + Kustomization CR)
+// Files: sync.yaml (multi-doc: source CR + Kustomization CR).
 func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 	if len(opts.Namespaces) == 0 {
 		return nil, fmt.Errorf("%w", ErrNamespaceRequired)
 	}
+
 	primaryNS := opts.Namespaces[0]
 
 	source, err := buildFluxSource(opts, primaryNS)
@@ -106,6 +107,7 @@ func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshaling flux source: %w", err)
 	}
+
 	kustomizationYAML, err := yaml.Marshal(kustomization)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling flux kustomization: %w", err)
@@ -133,14 +135,18 @@ func buildFluxOCISource(opts Options, primaryNS string) (fluxSource, error) {
 	if opts.Registry == "" {
 		return fluxSource{}, fmt.Errorf("%w", ErrRegistryRequired)
 	}
+
 	if opts.GitRepo == "" {
 		return fluxSource{}, fmt.Errorf("%w for Flux OCI sync source", ErrGitRepoRequired)
 	}
+
 	owner, repo, err := gitprovider.ParseOwnerRepo(opts.GitRepo)
 	if err != nil {
 		return fluxSource{}, fmt.Errorf("parsing git repo for OCI source: %w", err)
 	}
+
 	registry := strings.TrimSuffix(opts.Registry, "/")
+
 	return fluxSource{
 		APIVersion: "source.toolkit.fluxcd.io/v1",
 		Kind:       "OCIRepository",
@@ -161,14 +167,18 @@ func buildFluxGitSource(opts Options, primaryNS string) (fluxSource, error) {
 	if opts.GitProvider == "" {
 		return fluxSource{}, fmt.Errorf("%w for Flux Git sync source", ErrGitProviderRequired)
 	}
+
 	if opts.GitRepo == "" {
 		return fluxSource{}, fmt.Errorf("%w for Flux Git sync source", ErrGitRepoRequired)
 	}
+
 	_, _, parseErr := gitprovider.ParseOwnerRepo(opts.GitRepo)
 	if parseErr != nil {
 		return fluxSource{}, fmt.Errorf("parsing git repo for Git source: %w", parseErr)
 	}
+
 	host := resolveProviderHost(opts.GitProvider)
+
 	return fluxSource{
 		APIVersion: "source.toolkit.fluxcd.io/v1",
 		Kind:       "GitRepository",
