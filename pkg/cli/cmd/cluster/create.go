@@ -213,6 +213,13 @@ func ensureLocalRegistriesReady(
 ) error {
 	provider := ctx.ClusterCfg.Spec.Cluster.Provider
 
+	// Cloud providers cannot use a Docker-based local registry — reject early with a clear error.
+	if provider.IsCloud() &&
+		ctx.ClusterCfg.Spec.Cluster.LocalRegistry.Enabled() &&
+		!ctx.ClusterCfg.Spec.Cluster.LocalRegistry.IsExternal() {
+		return localregistry.ErrCloudProviderRequiresExternalRegistry
+	}
+
 	if !provider.IsCloud() {
 		// Stage 1: Provision local registry (skipped for external registries)
 		err := localregistry.ExecuteStage(
