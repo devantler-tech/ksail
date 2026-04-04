@@ -10,7 +10,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
-	rtruntime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )
@@ -684,7 +683,7 @@ func TestNewImportCmd(t *testing.T) {
 func TestImportCommandHelp(t *testing.T) {
 	t.Parallel()
 
-	rt := rtruntime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer
@@ -709,7 +708,7 @@ func TestImportKeyBasic(t *testing.T) {
 	setupTestEnvironment(t, tmpDir)
 
 	// Execute import command with just the private key
-	rt := rtruntime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer
@@ -747,7 +746,7 @@ func TestImportKeyWithXDGConfigHome(t *testing.T) {
 	t.Setenv(xdgConfigHomeEnv, xdgConfigDir)
 
 	// Execute import command
-	rt := rtruntime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer
@@ -802,7 +801,7 @@ AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC
 	}
 
 	// Execute import command with a new key
-	rt := rtruntime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer
@@ -883,7 +882,7 @@ func TestImportInvalidKey(t *testing.T) {
 			}
 
 			// Execute import command with invalid key
-			rt := rtruntime.NewRuntime()
+			rt := di.NewRuntime()
 			cipherCmd := cipher.NewCipherCmd(rt)
 
 			var out bytes.Buffer
@@ -906,7 +905,7 @@ func TestImportInvalidKey(t *testing.T) {
 func TestImportRequiresPrivateKey(t *testing.T) {
 	t.Parallel()
 
-	rt := rtruntime.NewRuntime()
+	rt := di.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer

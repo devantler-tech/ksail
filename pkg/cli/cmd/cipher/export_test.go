@@ -175,7 +175,7 @@ func newEncryptOpts(
 ) (sopsclient.EncryptOpts, error) {
 	inputStore, outputStore, err := sopsclient.GetStores(filePath)
 	if err != nil {
-		return sopsclient.EncryptOpts{}, err
+		return sopsclient.EncryptOpts{}, fmt.Errorf("failed to get stores: %w", err)
 	}
 
 	return sopsclient.EncryptOpts{
@@ -199,7 +199,7 @@ func newDecryptOpts(
 ) (sopsclient.DecryptOpts, error) {
 	inputStore, outputStore, err := sopsclient.GetDecryptStores(filePath, false)
 	if err != nil {
-		return sopsclient.DecryptOpts{}, err
+		return sopsclient.DecryptOpts{}, fmt.Errorf("failed to get decrypt stores: %w", err)
 	}
 
 	return sopsclient.DecryptOpts{

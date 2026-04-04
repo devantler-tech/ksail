@@ -17,7 +17,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
-	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
@@ -30,7 +29,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
-	timermocks "github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
@@ -140,7 +138,7 @@ func BenchmarkSanitizeYAMLOutput_SinglePod(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		result, err := clusterpkg.ExportSanitizeYAMLOutput(podYAML)
+		result, err := cluster.ExportSanitizeYAMLOutput(podYAML)
 		if err != nil {
 			b.Fatalf("ExportSanitizeYAMLOutput: %v", err)
 		}
@@ -156,7 +154,7 @@ func BenchmarkSanitizeYAMLOutput_PodList(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		result, err := clusterpkg.ExportSanitizeYAMLOutput(podListYAML)
+		result, err := cluster.ExportSanitizeYAMLOutput(podListYAML)
 		if err != nil {
 			b.Fatalf("ExportSanitizeYAMLOutput: %v", err)
 		}
@@ -174,7 +172,7 @@ func BenchmarkSanitizeYAMLOutput_NonYAML(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		result, err := clusterpkg.ExportSanitizeYAMLOutput(input)
+		result, err := cluster.ExportSanitizeYAMLOutput(input)
 		if err != nil {
 			b.Fatalf("ExportSanitizeYAMLOutput: %v", err)
 		}
@@ -191,7 +189,7 @@ func BenchmarkCountYAMLDocuments_Single(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchCountYAMLDocsSink = clusterpkg.ExportCountYAMLDocuments(content)
+		benchCountYAMLDocsSink = cluster.ExportCountYAMLDocuments(content)
 	}
 }
 
@@ -214,7 +212,7 @@ func BenchmarkCountYAMLDocuments_List(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchCountYAMLDocsSink = clusterpkg.ExportCountYAMLDocuments(content)
+		benchCountYAMLDocsSink = cluster.ExportCountYAMLDocuments(content)
 	}
 }
 
@@ -235,7 +233,7 @@ func BenchmarkFilterExcludedTypes_NoExclusions(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchFilterExcludedSink = clusterpkg.ExportFilterExcludedTypes(types, exclude)
+		benchFilterExcludedSink = cluster.ExportFilterExcludedTypes(types, exclude)
 	}
 }
 
@@ -256,7 +254,7 @@ func BenchmarkFilterExcludedTypes_DefaultExclusions(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchFilterExcludedSink = clusterpkg.ExportFilterExcludedTypes(types, exclude)
+		benchFilterExcludedSink = cluster.ExportFilterExcludedTypes(types, exclude)
 	}
 }
 
@@ -274,7 +272,7 @@ func BenchmarkCreateTarball_Small(b *testing.B) {
 	for b.Loop() {
 		out := filepath.Join(outDir, "backup.tar.gz")
 
-		err := clusterpkg.ExportCreateTarball(srcDir, out, 6)
+		err := cluster.ExportCreateTarball(srcDir, out, 6)
 		if err != nil {
 			b.Fatalf("ExportCreateTarball: %v", err)
 		}
@@ -295,7 +293,7 @@ func BenchmarkCreateTarball_Medium(b *testing.B) {
 	for b.Loop() {
 		out := filepath.Join(outDir, "backup.tar.gz")
 
-		err := clusterpkg.ExportCreateTarball(srcDir, out, 6)
+		err := cluster.ExportCreateTarball(srcDir, out, 6)
 		if err != nil {
 			b.Fatalf("ExportCreateTarball: %v", err)
 		}
@@ -312,13 +310,13 @@ func setupBenchmarkFiles(b *testing.B, dir string, count, size int) {
 	for i := range count {
 		subDir := filepath.Join(dir, "resources", "type"+string(rune('a'+i%26)))
 
-		err := os.MkdirAll(subDir, clusterpkg.ExportDirPerm)
+		err := os.MkdirAll(subDir, cluster.ExportDirPerm)
 		if err != nil {
 			b.Fatalf("setup: mkdir: %v", err)
 		}
 
 		err = os.WriteFile(
-			filepath.Join(subDir, "resource.yaml"), payload, clusterpkg.ExportFilePerm,
+			filepath.Join(subDir, "resource.yaml"), payload, cluster.ExportFilePerm,
 		)
 		if err != nil {
 			b.Fatalf("setup: write file: %v", err)
@@ -1250,7 +1248,7 @@ func setupMockRegistryBackend(t *testing.T) {
 
 	// Mock the Docker client invoker to use a mock Docker API client.
 	// This calls the callback with a mock client so stages execute and print output.
-	t.Cleanup(clusterpkg.SetDockerClientInvokerForTests(
+	t.Cleanup(cluster.SetDockerClientInvokerForTests(
 		func(_ *cobra.Command, fn func(client.APIClient) error) error {
 			mockClient := newMockDockerClient(t)
 
@@ -1334,12 +1332,12 @@ func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 	setupMockRegistryBackend(t)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(fakeFactory{})
+	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
 	fake := &fakeInstaller{}
 
-	restore := clusterpkg.SetCertManagerInstallerFactoryForTests(
+	restore := cluster.SetCertManagerInstallerFactoryForTests(
 		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
 			return fake, nil
 		},
@@ -1348,7 +1346,7 @@ func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 
 	testRuntime := newTestRuntimeContainer(t)
 
-	cmd := clusterpkg.NewCreateCmd(testRuntime)
+	cmd := cluster.NewCreateCmd(testRuntime)
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -1377,12 +1375,12 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 	setupMockRegistryBackend(t)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(fakeFactory{})
+	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
 	factoryCalled := false
 
-	restore := clusterpkg.SetCertManagerInstallerFactoryForTests(
+	restore := cluster.SetCertManagerInstallerFactoryForTests(
 		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
 			factoryCalled = true
 
@@ -1391,7 +1389,7 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 	)
 	defer restore()
 
-	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
+	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -1422,7 +1420,7 @@ func setupGitOpsTestMocks(
 	ensureCalled := false
 
 	// Override cluster provisioner factory to use fake provisioner
-	t.Cleanup(clusterpkg.SetProvisionerFactoryForTests(fakeFactory{}))
+	t.Cleanup(cluster.SetProvisionerFactoryForTests(fakeFactory{}))
 
 	// Set up the appropriate installer and ensure mocks based on the GitOps engine
 	switch engine {
@@ -1435,7 +1433,7 @@ func setupGitOpsTestMocks(
 	}
 
 	// Mock registry service factory to avoid needing a real Docker client
-	t.Cleanup(clusterpkg.SetLocalRegistryServiceFactoryForTests(fakeRegistryServiceFactory))
+	t.Cleanup(cluster.SetLocalRegistryServiceFactoryForTests(fakeRegistryServiceFactory))
 
 	// Note: DockerClientInvoker is NOT overridden here - tests should call
 	// setupMockRegistryBackend() before setupGitOpsTestMocks() to configure
@@ -1446,21 +1444,21 @@ func setupGitOpsTestMocks(
 
 func setupArgoCDMocks(t *testing.T, fake **fakeInstaller, ensureCalled *bool) {
 	t.Helper()
-	t.Cleanup(clusterpkg.SetArgoCDInstallerFactoryForTests(
+	t.Cleanup(cluster.SetArgoCDInstallerFactoryForTests(
 		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
 			*fake = &fakeInstaller{}
 
 			return *fake, nil
 		},
 	))
-	t.Cleanup(clusterpkg.SetEnsureArgoCDResourcesForTests(
+	t.Cleanup(cluster.SetEnsureArgoCDResourcesForTests(
 		func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
 			*ensureCalled = true
 
 			return nil
 		},
 	))
-	t.Cleanup(clusterpkg.SetEnsureOCIArtifactForTests(
+	t.Cleanup(cluster.SetEnsureOCIArtifactForTests(
 		func(_ context.Context, _ *cobra.Command, _ *v1alpha1.Cluster, _ string, _ io.Writer) (bool, error) {
 			return true, nil
 		},
@@ -1469,26 +1467,26 @@ func setupArgoCDMocks(t *testing.T, fake **fakeInstaller, ensureCalled *bool) {
 
 func setupFluxMocks(t *testing.T, fake **fakeInstaller, ensureCalled *bool) {
 	t.Helper()
-	t.Cleanup(clusterpkg.SetFluxInstallerFactoryForTests(
+	t.Cleanup(cluster.SetFluxInstallerFactoryForTests(
 		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
 			*fake = &fakeInstaller{}
 
 			return *fake, nil
 		},
 	))
-	t.Cleanup(clusterpkg.SetSetupFluxInstanceForTests(
+	t.Cleanup(cluster.SetSetupFluxInstanceForTests(
 		func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string, _ string) error {
 			*ensureCalled = true
 
 			return nil
 		},
 	))
-	t.Cleanup(clusterpkg.SetWaitForFluxReadyForTests(
+	t.Cleanup(cluster.SetWaitForFluxReadyForTests(
 		func(_ context.Context, _ string) error {
 			return nil
 		},
 	))
-	t.Cleanup(clusterpkg.SetEnsureOCIArtifactForTests(
+	t.Cleanup(cluster.SetEnsureOCIArtifactForTests(
 		func(_ context.Context, _ *cobra.Command, _ *v1alpha1.Cluster, _ string, _ io.Writer) (bool, error) {
 			return true, nil
 		},
@@ -1519,7 +1517,7 @@ func TestCreate_GitOps_PrintsInstallStage(t *testing.T) {
 
 			testRuntime := newTestRuntimeContainer(t)
 
-			cmd := clusterpkg.NewCreateCmd(testRuntime)
+			cmd := cluster.NewCreateCmd(testRuntime)
 
 			var out bytes.Buffer
 			cmd.SetOut(&out)
@@ -1576,12 +1574,12 @@ spec:
 	)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(fakeFactory{})
+	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
 	fake := &fakeInstaller{}
 
-	restore := clusterpkg.SetCSIInstallerFactoryForTests(
+	restore := cluster.SetCSIInstallerFactoryForTests(
 		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
 			return fake, nil
 		},
@@ -1590,7 +1588,7 @@ spec:
 
 	setupMockRegistryBackend(t)
 
-	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
+	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -1618,10 +1616,10 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 	setupMockRegistryBackend(t)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(fakeFactory{})
+	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
-	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
+	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -1649,10 +1647,10 @@ func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 	setupMockRegistryBackend(t)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(fakeFactory{})
+	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
-	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
+	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -1702,12 +1700,12 @@ spec:
 	)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(fakeFactory{})
+	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
 	setupMockRegistryBackend(t)
 
-	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
+	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -1737,7 +1735,7 @@ func TestShouldPushOCIArtifact_FluxWithLocalRegistry(t *testing.T) {
 		},
 	}
 
-	result := clusterpkg.ExportShouldPushOCIArtifact(clusterCfg)
+	result := cluster.ExportShouldPushOCIArtifact(clusterCfg)
 	require.True(t, result, "Should push when Flux is enabled with local registry")
 }
 
@@ -1755,7 +1753,7 @@ func TestShouldPushOCIArtifact_ArgoCDWithLocalRegistry(t *testing.T) {
 		},
 	}
 
-	result := clusterpkg.ExportShouldPushOCIArtifact(clusterCfg)
+	result := cluster.ExportShouldPushOCIArtifact(clusterCfg)
 	require.True(t, result, "Should push when ArgoCD is enabled with local registry")
 }
 
@@ -1773,7 +1771,7 @@ func TestShouldPushOCIArtifact_NoLocalRegistryShouldNotPush(t *testing.T) {
 		},
 	}
 
-	result := clusterpkg.ExportShouldPushOCIArtifact(clusterCfg)
+	result := cluster.ExportShouldPushOCIArtifact(clusterCfg)
 	require.False(t, result, "Should not push when local registry is disabled")
 }
 
@@ -1791,7 +1789,7 @@ func TestShouldPushOCIArtifact_NoGitOpsEngineShouldNotPush(t *testing.T) {
 		},
 	}
 
-	result := clusterpkg.ExportShouldPushOCIArtifact(clusterCfg)
+	result := cluster.ExportShouldPushOCIArtifact(clusterCfg)
 	require.False(t, result, "Should not push when GitOps engine is none")
 }
 
@@ -1816,7 +1814,7 @@ func TestSetupK3dCSI_DisablesCSI(t *testing.T) {
 
 	k3dConfig := &v1alpha5.SimpleConfig{}
 
-	clusterpkg.ExportSetupK3dCSI(clusterCfg, k3dConfig)
+	cluster.ExportSetupK3dCSI(clusterCfg, k3dConfig)
 
 	// Verify the flag was added
 	found := false
@@ -1859,7 +1857,7 @@ func TestSetupK3dCSI_DoesNotDuplicateFlag(t *testing.T) {
 		},
 	}
 
-	clusterpkg.ExportSetupK3dCSI(clusterCfg, k3dConfig)
+	cluster.ExportSetupK3dCSI(clusterCfg, k3dConfig)
 
 	// Count occurrences of the flag
 	count := 0
@@ -1887,7 +1885,7 @@ func TestSetupK3dCSI_DoesNothingForNonK3s(t *testing.T) {
 
 	k3dConfig := &v1alpha5.SimpleConfig{}
 
-	clusterpkg.ExportSetupK3dCSI(clusterCfg, k3dConfig)
+	cluster.ExportSetupK3dCSI(clusterCfg, k3dConfig)
 
 	// Verify no flags were added
 	require.Empty(t, k3dConfig.Options.K3sOptions.ExtraArgs)
@@ -1919,7 +1917,7 @@ func TestSetupK3dCSI_DoesNothingWhenCSINotDisabled(t *testing.T) {
 
 			k3dConfig := &v1alpha5.SimpleConfig{}
 
-			clusterpkg.ExportSetupK3dCSI(clusterCfg, k3dConfig)
+			cluster.ExportSetupK3dCSI(clusterCfg, k3dConfig)
 
 			// Verify no flags were added
 			require.Empty(t, k3dConfig.Options.K3sOptions.ExtraArgs)
@@ -1942,7 +1940,7 @@ func TestResolveClusterNameFromContext_Vanilla(t *testing.T) {
 		KindConfig: kindConfig,
 	}
 
-	name := clusterpkg.ExportResolveClusterNameFromContext(ctx)
+	name := cluster.ExportResolveClusterNameFromContext(ctx)
 	require.Equal(t, "kind-cluster", name)
 }
 
@@ -1965,7 +1963,7 @@ func TestResolveClusterNameFromContext_K3s(t *testing.T) {
 		K3dConfig: k3dConfig,
 	}
 
-	name := clusterpkg.ExportResolveClusterNameFromContext(ctx)
+	name := cluster.ExportResolveClusterNameFromContext(ctx)
 	require.Equal(t, "k3s-cluster", name)
 }
 
@@ -1985,7 +1983,7 @@ func TestResolveClusterNameFromContext_FallbackToContext(t *testing.T) {
 		},
 	}
 
-	name := clusterpkg.ExportResolveClusterNameFromContext(ctx)
+	name := cluster.ExportResolveClusterNameFromContext(ctx)
 	require.Equal(t, "custom-context", name)
 }
 
@@ -2002,7 +2000,7 @@ func TestResolveClusterNameFromContext_FallbackToDefault(t *testing.T) {
 		},
 	}
 
-	name := clusterpkg.ExportResolveClusterNameFromContext(ctx)
+	name := cluster.ExportResolveClusterNameFromContext(ctx)
 	require.Equal(t, "ksail", name)
 }
 
@@ -2058,7 +2056,7 @@ func TestMatchesKindPattern(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := clusterpkg.ExportMatchesKindPattern(tt.containerName, tt.clusterName)
+			got := cluster.ExportMatchesKindPattern(tt.containerName, tt.clusterName)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -2086,7 +2084,7 @@ func TestIsNumericString(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := clusterpkg.ExportIsNumericString(tt.input)
+			got := cluster.ExportIsNumericString(tt.input)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -2141,7 +2139,7 @@ func TestIsCloudProviderKindContainer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := clusterpkg.ExportIsCloudProviderKindContainer(tt.containerName)
+			got := cluster.ExportIsCloudProviderKindContainer(tt.containerName)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -2204,7 +2202,7 @@ func TestIsKindClusterFromNodes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := clusterpkg.ExportIsKindClusterFromNodes(tt.nodes, tt.clusterName)
+			got := cluster.ExportIsKindClusterFromNodes(tt.nodes, tt.clusterName)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -2313,12 +2311,12 @@ func setupContextBasedTest(
 	kubeconfigPath := writeKubeconfigWithContext(t, workingDir, contextName)
 	t.Setenv("KUBECONFIG", kubeconfigPath)
 
-	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(
+	restoreFactory := cluster.SetProvisionerFactoryForTests(
 		fakeDeleteFactory{existsResult: existsResult, deleteErr: deleteErr},
 	)
 
 	// Override Docker client to skip cleanup (no Docker in tests)
-	restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
+	restoreDocker := cluster.SetDockerClientInvokerForTests(
 		func(_ *cobra.Command, _ func(client.APIClient) error) error {
 			return nil // Skip Docker operations in tests
 		},
@@ -2359,7 +2357,7 @@ func TestDelete_ContextBasedDetection_DeletesCluster(t *testing.T) {
 			testRuntime, cleanup := setupContextBasedTest(t, testCase.context, true, nil)
 			defer cleanup()
 
-			cmd := clusterpkg.NewDeleteCmd(testRuntime)
+			cmd := cluster.NewDeleteCmd(testRuntime)
 
 			var out bytes.Buffer
 			cmd.SetOut(&out)
@@ -2390,7 +2388,7 @@ func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
 	)
 	defer cleanup()
 
-	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd(testRuntime)
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -2414,7 +2412,7 @@ func TestDelete_ContextBasedDetection_UnknownContextPattern(t *testing.T) {
 	t.Setenv("KUBECONFIG", kubeconfigPath)
 
 	// Override Docker client to skip cleanup (no Docker in tests)
-	restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
+	restoreDocker := cluster.SetDockerClientInvokerForTests(
 		func(_ *cobra.Command, _ func(client.APIClient) error) error {
 			return nil // Skip Docker operations in tests
 		},
@@ -2423,7 +2421,7 @@ func TestDelete_ContextBasedDetection_UnknownContextPattern(t *testing.T) {
 
 	testRuntime := newDeleteTestRuntimeContainer(t)
 
-	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd(testRuntime)
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -2441,7 +2439,7 @@ func TestDelete_CommandFlags(t *testing.T) {
 	t.Parallel()
 
 	testRuntime := newDeleteTestRuntimeContainer(t)
-	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd(testRuntime)
 
 	// Verify expected new flags exist
 	nameFlag := cmd.Flags().Lookup("name")
@@ -2488,7 +2486,7 @@ func TestDelete_Confirmation_Accepted(t *testing.T) {
 	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return true })
 	defer restoreTTY()
 
-	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd(testRuntime)
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -2522,7 +2520,7 @@ func TestDelete_Confirmation_Denied(t *testing.T) {
 	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return true })
 	defer restoreTTY()
 
-	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd(testRuntime)
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -2552,7 +2550,7 @@ func TestDelete_ForceFlag_SkipsConfirmation(t *testing.T) {
 	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return true })
 	defer restoreTTY()
 
-	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd(testRuntime)
 	cmd.SetArgs([]string{"--force"})
 
 	var out bytes.Buffer
@@ -2582,7 +2580,7 @@ func TestDelete_NonTTY_SkipsConfirmation(t *testing.T) {
 	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return false })
 	defer restoreTTY()
 
-	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd(testRuntime)
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -2671,7 +2669,7 @@ func TestIsClusterContainer(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := clusterpkg.IsClusterContainer(testCase.containerName, testCase.clusterName)
+			result := cluster.IsClusterContainer(testCase.containerName, testCase.clusterName)
 			require.Equal(t, testCase.expected, result)
 		})
 	}
@@ -2709,7 +2707,7 @@ func newConfigManager(
 	t.Helper()
 	cmd.SetOut(writer)
 	cmd.SetErr(writer)
-	manager := ksailconfigmanager.NewCommandConfigManager(cmd, clusterpkg.InitFieldSelectors())
+	manager := ksailconfigmanager.NewCommandConfigManager(cmd, cluster.InitFieldSelectors())
 	// bind init-local flags like production code
 	cmd.Flags().StringP("output", "o", "", "Output directory for the project")
 	_ = manager.Viper.BindPFlag("output", cmd.Flags().Lookup("output"))
@@ -2769,7 +2767,7 @@ func TestHandleInitRunE_SuccessWithOutputFlag(t *testing.T) {
 
 	var err error
 
-	err = clusterpkg.HandleInitRunE(cmd, cfgManager, deps)
+	err = cluster.HandleInitRunE(cmd, cfgManager, deps)
 	if err != nil {
 		t.Fatalf("HandleInitRunE returned error: %v", err)
 	}
@@ -2803,7 +2801,7 @@ func TestHandleInitRunE_RespectsDistributionFlag(t *testing.T) {
 
 	deps := newInitDeps(t)
 
-	err := clusterpkg.HandleInitRunE(cmd, cfgManager, deps)
+	err := cluster.HandleInitRunE(cmd, cfgManager, deps)
 	if err != nil {
 		t.Fatalf("HandleInitRunE returned error: %v", err)
 	}
@@ -2833,7 +2831,7 @@ func TestHandleInitRunE_RespectsDistributionFlagTalos(t *testing.T) {
 
 	deps := newInitDeps(t)
 
-	err := clusterpkg.HandleInitRunE(cmd, cfgManager, deps)
+	err := cluster.HandleInitRunE(cmd, cfgManager, deps)
 	if err != nil {
 		t.Fatalf("HandleInitRunE returned error: %v", err)
 	}
@@ -2913,7 +2911,7 @@ func TestHandleInitRunE_UsesWorkingDirectoryWhenOutputUnset(t *testing.T) {
 
 	var err error
 
-	err = clusterpkg.HandleInitRunE(cmd, cfgManager, deps)
+	err = cluster.HandleInitRunE(cmd, cfgManager, deps)
 	if err != nil {
 		t.Fatalf("HandleInitRunE returned error: %v", err)
 	}
@@ -2942,7 +2940,7 @@ func TestHandleInitRunE_DefaultsLocalRegistryWithFlux(t *testing.T) {
 
 	deps := newInitDeps(t)
 
-	err := clusterpkg.HandleInitRunE(cmd, cfgManager, deps)
+	err := cluster.HandleInitRunE(cmd, cfgManager, deps)
 	if err != nil {
 		t.Fatalf("HandleInitRunE returned error: %v", err)
 	}
@@ -2976,7 +2974,7 @@ func TestHandleInitRunE_RespectsCertManagerFlag(t *testing.T) {
 
 	deps := newInitDeps(t)
 
-	err := clusterpkg.HandleInitRunE(cmd, cfgManager, deps)
+	err := cluster.HandleInitRunE(cmd, cfgManager, deps)
 	if err != nil {
 		t.Fatalf("HandleInitRunE returned error: %v", err)
 	}
@@ -3011,7 +3009,7 @@ func TestHandleInitRunE_IgnoresExistingConfigFile(t *testing.T) {
 
 	deps := newInitDeps(t)
 
-	err := clusterpkg.HandleInitRunE(cmd, cfgManager, deps)
+	err := cluster.HandleInitRunE(cmd, cfgManager, deps)
 	require.NoError(t, err)
 
 	//nolint:gosec // test file path is safe
@@ -3032,13 +3030,13 @@ func TestHandleInitRunE_IgnoresExistingConfigFile(t *testing.T) {
 	}
 }
 
-func newInitDeps(t *testing.T) clusterpkg.InitDeps {
+func newInitDeps(t *testing.T) cluster.InitDeps {
 	t.Helper()
-	tmr := timermocks.NewMockTimer(t)
+	tmr := timer.NewMockTimer(t)
 	tmr.EXPECT().Start().Return()
 	tmr.EXPECT().NewStage().Return()
 
-	return clusterpkg.InitDeps{Timer: tmr}
+	return cluster.InitDeps{Timer: tmr}
 }
 
 var (
@@ -3102,14 +3100,14 @@ func TestListCmd_NoClusterFound_DockerProvider(t *testing.T) {
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
 
-	deps := clusterpkg.ListDeps{
+	deps := cluster.ListDeps{
 		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
 			return fakeFactoryWithClusters{clusters: []string{}}
 		},
 	}
 
 	// Filter to Docker provider - no output for empty list
-	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
+	err := cluster.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
@@ -3125,14 +3123,14 @@ func TestListCmd_SingleClusterFound_DockerProvider(t *testing.T) {
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
 
-	deps := clusterpkg.ListDeps{
+	deps := cluster.ListDeps{
 		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
 			return fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
 		},
 	}
 
 	// Filter to Docker provider
-	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
+	err := cluster.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
@@ -3148,7 +3146,7 @@ func TestListCmd_MultipleClustersFound_DockerProvider(t *testing.T) {
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
 
-	deps := clusterpkg.ListDeps{
+	deps := cluster.ListDeps{
 		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
 			return fakeFactoryWithClusters{
 				clusters: []string{"cluster-1", "cluster-2", "cluster-3"},
@@ -3157,7 +3155,7 @@ func TestListCmd_MultipleClustersFound_DockerProvider(t *testing.T) {
 	}
 
 	// Filter to Docker provider
-	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
+	err := cluster.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
@@ -3176,7 +3174,7 @@ func TestListCmd_AllProviders(t *testing.T) {
 	cmd.SetContext(context.Background())
 
 	// Create a mock factory that returns test-cluster for all distributions
-	deps := clusterpkg.ListDeps{
+	deps := cluster.ListDeps{
 		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
 			return fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
 		},
@@ -3184,7 +3182,7 @@ func TestListCmd_AllProviders(t *testing.T) {
 
 	// No filter = list all providers (default behavior)
 	// Hetzner will be skipped since HCLOUD_TOKEN is cleared
-	err := clusterpkg.HandleListRunE(cmd, "", deps)
+	err := cluster.HandleListRunE(cmd, "", deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
@@ -3200,7 +3198,7 @@ func TestListCmd_ListError(t *testing.T) {
 	cmd.SetErr(&errBuf)
 	cmd.SetContext(context.Background())
 
-	deps := clusterpkg.ListDeps{
+	deps := cluster.ListDeps{
 		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
 			return fakeFactoryWithClusters{
 				listErr: fmt.Errorf("test error: %w", errTestListClusters),
@@ -3209,7 +3207,7 @@ func TestListCmd_ListError(t *testing.T) {
 	}
 
 	// List errors per distribution are silently skipped - command succeeds with no clusters found
-	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
+	err := cluster.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
 	require.NoError(t, err)
 
 	// Since all distributions fail, no clusters found
@@ -3223,13 +3221,13 @@ func TestHandleListRunE_Success(t *testing.T) {
 	cmd.SetErr(io.Discard)
 	cmd.SetContext(context.Background())
 
-	deps := clusterpkg.ListDeps{
+	deps := cluster.ListDeps{
 		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
 			return fakeFactoryWithClusters{clusters: []string{"test"}}
 		},
 	}
 
-	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
+	err := cluster.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
 	require.NoError(t, err)
 }
 
@@ -3243,14 +3241,14 @@ func TestListCmd_FactoryError(t *testing.T) {
 	cmd.SetErr(&errBuf)
 	cmd.SetContext(context.Background())
 
-	deps := clusterpkg.ListDeps{
+	deps := cluster.ListDeps{
 		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
 			return fakeFactoryWithErrors{}
 		},
 	}
 
 	// Factory errors per distribution are silently skipped - command succeeds with no clusters found
-	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
+	err := cluster.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
 	require.NoError(t, err)
 
 	// Since all distributions fail, no clusters found
@@ -3267,10 +3265,10 @@ func TestListCmd_InvalidProviderFilter(t *testing.T) {
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
 
-	deps := clusterpkg.ListDeps{}
+	deps := cluster.ListDeps{}
 
 	// Invalid provider filter is logged as warning, command still succeeds
-	err := clusterpkg.HandleListRunE(cmd, "InvalidProvider", deps)
+	err := cluster.HandleListRunE(cmd, "InvalidProvider", deps)
 	require.NoError(t, err)
 
 	// Output should show no clusters found since invalid provider returns nothing
@@ -3325,7 +3323,7 @@ func TestHandlerForField_KnownFields(t *testing.T) {
 		t.Run(field, func(t *testing.T) {
 			t.Parallel()
 
-			found := clusterpkg.ExportHandlerForField(cmd, clusterCfg, field)
+			found := cluster.ExportHandlerForField(cmd, clusterCfg, field)
 
 			assert.True(t, found, "expected a handler to be registered for field %q", field)
 		})
@@ -3350,7 +3348,7 @@ func TestHandlerForField_UnknownField(t *testing.T) {
 		t.Run(field, func(t *testing.T) {
 			t.Parallel()
 
-			found := clusterpkg.ExportHandlerForField(cmd, clusterCfg, field)
+			found := cluster.ExportHandlerForField(cmd, clusterCfg, field)
 
 			assert.False(t, found, "expected no handler for field %q", field)
 		})
@@ -3370,10 +3368,10 @@ func TestReconcileMetricsServer_DisabledReturnsError(t *testing.T) {
 		NewValue: string(v1alpha1.MetricsServerDisabled),
 	}
 
-	err := clusterpkg.ExportReconcileMetricsServer(cmd, clusterCfg, change)
+	err := cluster.ExportReconcileMetricsServer(cmd, clusterCfg, change)
 
 	require.Error(t, err)
-	require.ErrorIs(t, err, clusterpkg.ErrMetricsServerDisableUnsupported)
+	require.ErrorIs(t, err, cluster.ErrMetricsServerDisableUnsupported)
 }
 
 // TestReconcileCSI_NilFactory verifies that reconcileCSI returns an error when the CSI
@@ -3381,7 +3379,7 @@ func TestReconcileMetricsServer_DisabledReturnsError(t *testing.T) {
 //
 //nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcileCSI_NilFactory(t *testing.T) {
-	restore := clusterpkg.SetCSIInstallerFactoryForTests(nil)
+	restore := cluster.SetCSIInstallerFactoryForTests(nil)
 	t.Cleanup(restore)
 
 	cmd := newReconcileTestCmd()
@@ -3392,7 +3390,7 @@ func TestReconcileCSI_NilFactory(t *testing.T) {
 		NewValue: "hetznercsi",
 	}
 
-	err := clusterpkg.ExportReconcileCSI(cmd, clusterCfg, change)
+	err := cluster.ExportReconcileCSI(cmd, clusterCfg, change)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, setup.ErrCSIInstallerFactoryNil)
@@ -3405,7 +3403,7 @@ func TestReconcileCSI_NilFactory(t *testing.T) {
 //nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcileCSI_NilFactory_DisabledToDisabled(t *testing.T) {
 	// nil CSI factory — the nil-factory guard fires before the disabled no-op check
-	restore := clusterpkg.SetCSIInstallerFactoryForTests(nil)
+	restore := cluster.SetCSIInstallerFactoryForTests(nil)
 	t.Cleanup(restore)
 
 	cmd := newReconcileTestCmd()
@@ -3418,7 +3416,7 @@ func TestReconcileCSI_NilFactory_DisabledToDisabled(t *testing.T) {
 
 	// The nil-factory guard fires before the no-op check, so this returns an error.
 	// Document this known behaviour to prevent regressions.
-	err := clusterpkg.ExportReconcileCSI(cmd, clusterCfg, change)
+	err := cluster.ExportReconcileCSI(cmd, clusterCfg, change)
 	require.Error(t, err, "nil factory is checked before the disabled no-op path")
 	assert.ErrorIs(t, err, setup.ErrCSIInstallerFactoryNil)
 }
@@ -3430,7 +3428,7 @@ func TestReconcileCSI_NilFactory_DisabledToDisabled(t *testing.T) {
 //nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcileCertManager_DisabledFromDisabled_Noop(t *testing.T) {
 	// Factory must be non-nil to pass the nil guard; it will never actually be called.
-	restore := clusterpkg.SetCertManagerInstallerFactoryForTests(
+	restore := cluster.SetCertManagerInstallerFactoryForTests(
 		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
 			t.Fatal("factory should not be called for disabled→disabled transition") //nolint:revive
 			panic("unreachable")
@@ -3446,7 +3444,7 @@ func TestReconcileCertManager_DisabledFromDisabled_Noop(t *testing.T) {
 		NewValue: string(v1alpha1.CertManagerDisabled),
 	}
 
-	err := clusterpkg.ExportReconcileCertManager(cmd, clusterCfg, change)
+	err := cluster.ExportReconcileCertManager(cmd, clusterCfg, change)
 
 	require.NoError(t, err, "disabling when already disabled should be a no-op")
 }
@@ -3456,7 +3454,7 @@ func TestReconcileCertManager_DisabledFromDisabled_Noop(t *testing.T) {
 //
 //nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcileCertManager_DisabledFromEnabled_NilFactory(t *testing.T) {
-	restore := clusterpkg.SetCertManagerInstallerFactoryForTests(nil)
+	restore := cluster.SetCertManagerInstallerFactoryForTests(nil)
 	t.Cleanup(restore)
 
 	cmd := newReconcileTestCmd()
@@ -3467,7 +3465,7 @@ func TestReconcileCertManager_DisabledFromEnabled_NilFactory(t *testing.T) {
 		NewValue: string(v1alpha1.CertManagerDisabled),
 	}
 
-	err := clusterpkg.ExportReconcileCertManager(cmd, clusterCfg, change)
+	err := cluster.ExportReconcileCertManager(cmd, clusterCfg, change)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, setup.ErrCertManagerInstallerFactoryNil)
@@ -3478,7 +3476,7 @@ func TestReconcileCertManager_DisabledFromEnabled_NilFactory(t *testing.T) {
 //
 //nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcilePolicyEngine_NoneToNone_Noop(t *testing.T) {
-	restore := clusterpkg.SetPolicyEngineInstallerFactoryForTests(nil)
+	restore := cluster.SetPolicyEngineInstallerFactoryForTests(nil)
 	t.Cleanup(restore)
 
 	cmd := newReconcileTestCmd()
@@ -3489,7 +3487,7 @@ func TestReconcilePolicyEngine_NoneToNone_Noop(t *testing.T) {
 		NewValue: string(v1alpha1.PolicyEngineNone),
 	}
 
-	err := clusterpkg.ExportReconcilePolicyEngine(cmd, clusterCfg, change)
+	err := cluster.ExportReconcilePolicyEngine(cmd, clusterCfg, change)
 
 	require.NoError(t, err, "None→None should be a no-op")
 }
@@ -3499,7 +3497,7 @@ func TestReconcilePolicyEngine_NoneToNone_Noop(t *testing.T) {
 //
 //nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcilePolicyEngine_NoneFromEnabled_NilFactory(t *testing.T) {
-	restore := clusterpkg.SetPolicyEngineInstallerFactoryForTests(nil)
+	restore := cluster.SetPolicyEngineInstallerFactoryForTests(nil)
 	t.Cleanup(restore)
 
 	cmd := newReconcileTestCmd()
@@ -3510,7 +3508,7 @@ func TestReconcilePolicyEngine_NoneFromEnabled_NilFactory(t *testing.T) {
 		NewValue: string(v1alpha1.PolicyEngineNone),
 	}
 
-	err := clusterpkg.ExportReconcilePolicyEngine(cmd, clusterCfg, change)
+	err := cluster.ExportReconcilePolicyEngine(cmd, clusterCfg, change)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, setup.ErrPolicyEngineInstallerFactoryNil)
@@ -3528,7 +3526,7 @@ func TestReconcileGitOpsEngine_NoneToNone_Noop(t *testing.T) {
 		NewValue: string(v1alpha1.GitOpsEngineNone),
 	}
 
-	err := clusterpkg.ExportReconcileGitOpsEngine(cmd, clusterCfg, change)
+	err := cluster.ExportReconcileGitOpsEngine(cmd, clusterCfg, change)
 
 	require.NoError(t, err, "None→None should be a no-op")
 }
@@ -3545,7 +3543,7 @@ func TestReconcileGitOpsEngine_EmptyToEmpty_Noop(t *testing.T) {
 		NewValue: "",
 	}
 
-	err := clusterpkg.ExportReconcileGitOpsEngine(cmd, clusterCfg, change)
+	err := cluster.ExportReconcileGitOpsEngine(cmd, clusterCfg, change)
 
 	require.NoError(t, err, "empty→empty should be a no-op")
 }
@@ -3559,7 +3557,7 @@ func TestReconcileComponents_EmptyDiff(t *testing.T) {
 	diff := &clusterupdate.UpdateResult{}
 	result := &clusterupdate.UpdateResult{}
 
-	err := clusterpkg.ExportReconcileComponents(cmd, clusterCfg, diff, result)
+	err := cluster.ExportReconcileComponents(cmd, clusterCfg, diff, result)
 
 	require.NoError(t, err)
 	assert.Empty(t, result.AppliedChanges)
@@ -3583,7 +3581,7 @@ func TestReconcileComponents_UnknownField_Skipped(t *testing.T) {
 	}
 	result := &clusterupdate.UpdateResult{}
 
-	err := clusterpkg.ExportReconcileComponents(cmd, clusterCfg, diff, result)
+	err := cluster.ExportReconcileComponents(cmd, clusterCfg, diff, result)
 
 	require.NoError(t, err, "unknown fields should be skipped without error")
 	assert.Empty(t, result.AppliedChanges, "unknown field should not be recorded as applied")
@@ -3596,7 +3594,7 @@ func TestReconcileComponents_UnknownField_Skipped(t *testing.T) {
 //nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcileComponents_RecordsFailedChange(t *testing.T) {
 	// Null CSI factory so the reconcileCSI call will fail immediately.
-	restore := clusterpkg.SetCSIInstallerFactoryForTests(nil)
+	restore := cluster.SetCSIInstallerFactoryForTests(nil)
 	t.Cleanup(restore)
 
 	cmd := newReconcileTestCmd()
@@ -3619,7 +3617,7 @@ func TestReconcileComponents_RecordsFailedChange(t *testing.T) {
 	}
 	result := &clusterupdate.UpdateResult{}
 
-	err := clusterpkg.ExportReconcileComponents(cmd, clusterCfg, diff, result)
+	err := cluster.ExportReconcileComponents(cmd, clusterCfg, diff, result)
 
 	require.Error(t, err, "expected error from nil CSI factory")
 	require.Len(t, result.FailedChanges, 1)
@@ -3635,7 +3633,7 @@ func TestReconcileComponents_RecordsFailedChange(t *testing.T) {
 //nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
 func TestReconcileComponents_MixedKnownAndUnknown(t *testing.T) {
 	// Provide a working cert-manager factory that returns an installer that succeeds.
-	restore := clusterpkg.SetCertManagerInstallerFactoryForTests(
+	restore := cluster.SetCertManagerInstallerFactoryForTests(
 		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
 			// Never called in this test because we test a disabled→disabled no-op.
 			t.Fatal("factory should not be called for disabled→disabled transition") //nolint:revive
@@ -3662,7 +3660,7 @@ func TestReconcileComponents_MixedKnownAndUnknown(t *testing.T) {
 	}
 	result := &clusterupdate.UpdateResult{}
 
-	err := clusterpkg.ExportReconcileComponents(cmd, clusterCfg, diff, result)
+	err := cluster.ExportReconcileComponents(cmd, clusterCfg, diff, result)
 
 	require.NoError(t, err)
 	// The certManager no-op is a handler returning nil — it is counted as applied.
@@ -3683,22 +3681,22 @@ func TestRestoreErrorConstants(t *testing.T) {
 	}{
 		{
 			name:     "ErrInvalidResourcePolicy is defined",
-			sentinel: clusterpkg.ErrInvalidResourcePolicy,
+			sentinel: cluster.ErrInvalidResourcePolicy,
 			wantMsg:  "invalid existing-resource-policy",
 		},
 		{
 			name:     "ErrRestoreFailed is defined",
-			sentinel: clusterpkg.ErrRestoreFailed,
+			sentinel: cluster.ErrRestoreFailed,
 			wantMsg:  "resource restore failed",
 		},
 		{
 			name:     "ErrInvalidTarPath is defined",
-			sentinel: clusterpkg.ErrInvalidTarPath,
+			sentinel: cluster.ErrInvalidTarPath,
 			wantMsg:  "invalid tar entry path",
 		},
 		{
 			name:     "ErrSymlinkInArchive is defined",
-			sentinel: clusterpkg.ErrSymlinkInArchive,
+			sentinel: cluster.ErrSymlinkInArchive,
 			wantMsg:  "symbolic and hard links are not supported",
 		},
 	}
@@ -3719,10 +3717,10 @@ func TestRestoreErrors_AreDistinct(t *testing.T) {
 	t.Parallel()
 
 	allErrors := []error{
-		clusterpkg.ErrInvalidResourcePolicy,
-		clusterpkg.ErrRestoreFailed,
-		clusterpkg.ErrInvalidTarPath,
-		clusterpkg.ErrSymlinkInArchive,
+		cluster.ErrInvalidResourcePolicy,
+		cluster.ErrRestoreFailed,
+		cluster.ErrInvalidTarPath,
+		cluster.ErrSymlinkInArchive,
 	}
 
 	for index := range allErrors {
@@ -3748,19 +3746,19 @@ func TestRestoreErrors_CanBeWrapped(t *testing.T) {
 	}{
 		{
 			name:     "ErrInvalidResourcePolicy can be wrapped",
-			sentinel: clusterpkg.ErrInvalidResourcePolicy,
+			sentinel: cluster.ErrInvalidResourcePolicy,
 		},
 		{
 			name:     "ErrRestoreFailed can be wrapped",
-			sentinel: clusterpkg.ErrRestoreFailed,
+			sentinel: cluster.ErrRestoreFailed,
 		},
 		{
 			name:     "ErrInvalidTarPath can be wrapped",
-			sentinel: clusterpkg.ErrInvalidTarPath,
+			sentinel: cluster.ErrInvalidTarPath,
 		},
 		{
 			name:     "ErrSymlinkInArchive can be wrapped",
-			sentinel: clusterpkg.ErrSymlinkInArchive,
+			sentinel: cluster.ErrSymlinkInArchive,
 		},
 	}
 
@@ -3805,7 +3803,7 @@ func TestNewRestoreCmd_FlagsExistWithCorrectDefaults(t *testing.T) {
 		t.Run(flagTest.flagName, func(t *testing.T) {
 			t.Parallel()
 
-			restoreCmd := clusterpkg.NewRestoreCmd(nil)
+			restoreCmd := cluster.NewRestoreCmd(nil)
 			require.NotNil(t, restoreCmd)
 
 			flag := restoreCmd.Flags().Lookup(flagTest.flagName)
@@ -3825,7 +3823,7 @@ func TestNewRestoreCmd_FlagsExistWithCorrectDefaults(t *testing.T) {
 func TestNewRestoreCmd_InputFlagIsRequired(t *testing.T) {
 	t.Parallel()
 
-	restoreCmd := clusterpkg.NewRestoreCmd(nil)
+	restoreCmd := cluster.NewRestoreCmd(nil)
 	require.NotNil(t, restoreCmd)
 
 	restoreCmd.SetOut(io.Discard)
@@ -3859,7 +3857,7 @@ func TestRestoreCmd_InvalidResourcePolicy(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			restoreCmd := clusterpkg.NewRestoreCmd(nil)
+			restoreCmd := cluster.NewRestoreCmd(nil)
 			restoreCmd.SetOut(io.Discard)
 			restoreCmd.SetErr(io.Discard)
 			restoreCmd.SetArgs([]string{
@@ -3870,7 +3868,7 @@ func TestRestoreCmd_InvalidResourcePolicy(t *testing.T) {
 			err := restoreCmd.Execute()
 
 			require.Error(t, err)
-			assert.ErrorIs(t, err, clusterpkg.ErrInvalidResourcePolicy,
+			assert.ErrorIs(t, err, cluster.ErrInvalidResourcePolicy,
 				"expected ErrInvalidResourcePolicy, got: %v", err,
 			)
 		})
@@ -3897,7 +3895,7 @@ func TestRestoreCmd_ValidPoliciesPassValidation(t *testing.T) {
 
 			nonexistentArchive := filepath.Join(t.TempDir(), "nonexistent.tar.gz")
 
-			restoreCmd := clusterpkg.NewRestoreCmd(nil)
+			restoreCmd := cluster.NewRestoreCmd(nil)
 			restoreCmd.SetOut(io.Discard)
 			restoreCmd.SetErr(io.Discard)
 			restoreCmd.SetArgs([]string{
@@ -3911,7 +3909,7 @@ func TestRestoreCmd_ValidPoliciesPassValidation(t *testing.T) {
 				t, err,
 				"expected a later error (archive not found), not ErrInvalidResourcePolicy",
 			)
-			assert.NotErrorIs(t, err, clusterpkg.ErrInvalidResourcePolicy,
+			assert.NotErrorIs(t, err, cluster.ErrInvalidResourcePolicy,
 				"valid policy %q should not return ErrInvalidResourcePolicy", testCase.policy,
 			)
 		})
@@ -3922,7 +3920,7 @@ func TestRestoreCmd_ValidPoliciesPassValidation(t *testing.T) {
 func TestRestoreCmd_Metadata(t *testing.T) {
 	t.Parallel()
 
-	restoreCmd := clusterpkg.NewRestoreCmd(nil)
+	restoreCmd := cluster.NewRestoreCmd(nil)
 	require.NotNil(t, restoreCmd)
 
 	assert.Equal(t, "restore", restoreCmd.Use)
@@ -3977,7 +3975,7 @@ func TestDeriveBackupName_ExtensionStripping(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := clusterpkg.ExportDeriveBackupName(testCase.input)
+			result := cluster.ExportDeriveBackupName(testCase.input)
 			assert.Equal(t, testCase.expected, result)
 		})
 	}
@@ -4038,7 +4036,7 @@ func TestAllLinesContain_EdgeCases(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := clusterpkg.ExportAllLinesContain(testCase.output, testCase.substr)
+			result := cluster.ExportAllLinesContain(testCase.output, testCase.substr)
 			assert.Equal(t, testCase.expected, result)
 		})
 	}
@@ -4101,7 +4099,7 @@ func TestPrintRestoreHeader( //nolint:funlen // Table-driven test with multiple 
 			t.Parallel()
 
 			var buf bytes.Buffer
-			clusterpkg.ExportPrintRestoreHeader(
+			cluster.ExportPrintRestoreHeader(
 				&buf, testCase.inputPath, testCase.policy, testCase.dryRun,
 			)
 			output := buf.String()
@@ -4128,13 +4126,13 @@ func TestPrintRestoreMetadata( //nolint:funlen // Table-driven test with multipl
 
 	tests := []struct {
 		name      string
-		metadata  *clusterpkg.BackupMetadata
+		metadata  *cluster.BackupMetadata
 		wantLines []string
 		noLines   []string
 	}{
 		{
 			name: "full metadata with distribution and provider",
-			metadata: &clusterpkg.BackupMetadata{
+			metadata: &cluster.BackupMetadata{
 				Version:       "v1",
 				Timestamp:     time.Date(2026, 3, 15, 10, 0, 0, 0, time.UTC),
 				ClusterName:   "my-cluster",
@@ -4153,7 +4151,7 @@ func TestPrintRestoreMetadata( //nolint:funlen // Table-driven test with multipl
 		},
 		{
 			name: "metadata without optional distribution and provider",
-			metadata: &clusterpkg.BackupMetadata{
+			metadata: &cluster.BackupMetadata{
 				Version:       "v1",
 				Timestamp:     time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 				ClusterName:   "bare-cluster",
@@ -4168,7 +4166,7 @@ func TestPrintRestoreMetadata( //nolint:funlen // Table-driven test with multipl
 		},
 		{
 			name: "zero resource count is printed",
-			metadata: &clusterpkg.BackupMetadata{
+			metadata: &cluster.BackupMetadata{
 				Version:     "v1",
 				ClusterName: "empty-cluster",
 			},
@@ -4181,7 +4179,7 @@ func TestPrintRestoreMetadata( //nolint:funlen // Table-driven test with multipl
 			t.Parallel()
 
 			var buf bytes.Buffer
-			clusterpkg.ExportPrintRestoreMetadata(&buf, testCase.metadata)
+			cluster.ExportPrintRestoreMetadata(&buf, testCase.metadata)
 			output := buf.String()
 
 			for _, want := range testCase.wantLines {
@@ -4207,7 +4205,7 @@ func TestReadBackupMetadata( //nolint:funlen // Covers multiple distinct error a
 		t.Parallel()
 
 		tmpDir := t.TempDir()
-		_, err := clusterpkg.ExportReadBackupMetadata(tmpDir)
+		_, err := cluster.ExportReadBackupMetadata(tmpDir)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "backup metadata")
 	})
@@ -4220,7 +4218,7 @@ func TestReadBackupMetadata( //nolint:funlen // Covers multiple distinct error a
 		err := os.WriteFile(metaPath, []byte("{not valid json"), 0o600)
 		require.NoError(t, err)
 
-		_, err = clusterpkg.ExportReadBackupMetadata(tmpDir)
+		_, err = cluster.ExportReadBackupMetadata(tmpDir)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "parse backup metadata")
 	})
@@ -4229,7 +4227,7 @@ func TestReadBackupMetadata( //nolint:funlen // Covers multiple distinct error a
 		t.Parallel()
 
 		tmpDir := t.TempDir()
-		meta := &clusterpkg.BackupMetadata{
+		meta := &cluster.BackupMetadata{
 			Version:       "v1",
 			ClusterName:   "test",
 			ResourceCount: 7,
@@ -4242,7 +4240,7 @@ func TestReadBackupMetadata( //nolint:funlen // Covers multiple distinct error a
 		err = os.WriteFile(metaPath, data, 0o600)
 		require.NoError(t, err)
 
-		result, err := clusterpkg.ExportReadBackupMetadata(tmpDir)
+		result, err := cluster.ExportReadBackupMetadata(tmpDir)
 		require.NoError(t, err)
 		assert.Equal(t, "v1", result.Version)
 		assert.Equal(t, "test", result.ClusterName)
@@ -4257,7 +4255,7 @@ func TestReadBackupMetadata( //nolint:funlen // Covers multiple distinct error a
 		err := os.WriteFile(metaPath, []byte("{}"), 0o600)
 		require.NoError(t, err)
 
-		result, err := clusterpkg.ExportReadBackupMetadata(tmpDir)
+		result, err := cluster.ExportReadBackupMetadata(tmpDir)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Empty(t, result.Version)
@@ -4272,7 +4270,7 @@ func TestExtractBackupArchive_ErrorPaths(t *testing.T) {
 	t.Run("nonexistent archive returns error", func(t *testing.T) {
 		t.Parallel()
 
-		_, _, err := clusterpkg.ExportExtractBackupArchive(
+		_, _, err := cluster.ExportExtractBackupArchive(
 			filepath.Join(t.TempDir(), "does-not-exist.tar.gz"),
 		)
 		require.Error(t, err)
@@ -4287,7 +4285,7 @@ func TestExtractBackupArchive_ErrorPaths(t *testing.T) {
 		err := os.WriteFile(badFile, []byte("this is not gzip content"), 0o600)
 		require.NoError(t, err)
 
-		_, _, err = clusterpkg.ExportExtractBackupArchive(badFile)
+		_, _, err = cluster.ExportExtractBackupArchive(badFile)
 		require.Error(t, err)
 	})
 
@@ -4307,7 +4305,7 @@ func TestExtractBackupArchive_ErrorPaths(t *testing.T) {
 		require.NoError(t, gz.Close())
 		require.NoError(t, archiveFile.Close())
 
-		_, _, err = clusterpkg.ExportExtractBackupArchive(archivePath)
+		_, _, err = cluster.ExportExtractBackupArchive(archivePath)
 		require.Error(t, err)
 	})
 
@@ -4316,7 +4314,7 @@ func TestExtractBackupArchive_ErrorPaths(t *testing.T) {
 
 		archivePath := createArchiveWithoutMetadata(t)
 
-		_, _, err := clusterpkg.ExportExtractBackupArchive(archivePath)
+		_, _, err := cluster.ExportExtractBackupArchive(archivePath)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "backup metadata")
 	})
@@ -4365,7 +4363,7 @@ func TestExtractBackupArchive_HappyPath(t *testing.T) {
 
 	archivePath := createValidArchive(t)
 
-	tmpDir, meta, err := clusterpkg.ExportExtractBackupArchive(archivePath)
+	tmpDir, meta, err := cluster.ExportExtractBackupArchive(archivePath)
 	require.NoError(t, err)
 
 	defer func() { _ = os.RemoveAll(tmpDir) }()
@@ -4444,7 +4442,7 @@ func addTarEntry(t *testing.T, tarWriter *tar.Writer, name string, content []byt
 func TestBackupResourceTypes(t *testing.T) {
 	t.Parallel()
 
-	types := clusterpkg.ExportBackupResourceTypes()
+	types := cluster.ExportBackupResourceTypes()
 
 	require.NotEmpty(t, types, "backupResourceTypes must return a non-empty list")
 
@@ -4572,9 +4570,9 @@ func TestSwitchCmd_HappyPath(t *testing.T) {
 	))
 
 	cmd, buf := newSwitchTestCmd()
-	deps := clusterpkg.SwitchDeps{KubeconfigPath: kubeconfigPath}
+	deps := cluster.SwitchDeps{KubeconfigPath: kubeconfigPath}
 
-	err := clusterpkg.HandleSwitchRunE(cmd, "staging", deps)
+	err := cluster.HandleSwitchRunE(cmd, "staging", deps)
 	require.NoError(t, err)
 
 	assert.Contains(t, buf.String(),
@@ -4618,9 +4616,9 @@ users:
 	))
 
 	cmd, buf := newSwitchTestCmd()
-	deps := clusterpkg.SwitchDeps{KubeconfigPath: kubeconfigPath}
+	deps := cluster.SwitchDeps{KubeconfigPath: kubeconfigPath}
 
-	err := clusterpkg.HandleSwitchRunE(cmd, "prod", deps)
+	err := cluster.HandleSwitchRunE(cmd, "prod", deps)
 	require.NoError(t, err)
 
 	assert.Contains(t, buf.String(),
@@ -4664,9 +4662,9 @@ users:
 	))
 
 	cmd, buf := newSwitchTestCmd()
-	deps := clusterpkg.SwitchDeps{KubeconfigPath: kubeconfigPath}
+	deps := cluster.SwitchDeps{KubeconfigPath: kubeconfigPath}
 
-	err := clusterpkg.HandleSwitchRunE(cmd, "talos-cluster", deps)
+	err := cluster.HandleSwitchRunE(cmd, "talos-cluster", deps)
 	require.NoError(t, err)
 
 	assert.Contains(t, buf.String(),
@@ -4695,11 +4693,11 @@ func TestSwitchCmd_ContextNotFound(t *testing.T) {
 	))
 
 	cmd, _ := newSwitchTestCmd()
-	deps := clusterpkg.SwitchDeps{KubeconfigPath: kubeconfigPath}
+	deps := cluster.SwitchDeps{KubeconfigPath: kubeconfigPath}
 
-	err := clusterpkg.HandleSwitchRunE(cmd, "nonexistent", deps)
+	err := cluster.HandleSwitchRunE(cmd, "nonexistent", deps)
 	require.Error(t, err)
-	require.ErrorIs(t, err, clusterpkg.ErrContextNotFound)
+	require.ErrorIs(t, err, cluster.ErrContextNotFound)
 	assert.Contains(t, err.Error(), "nonexistent")
 	assert.Contains(t, err.Error(), "available contexts")
 }
@@ -4717,11 +4715,11 @@ func TestSwitchCmd_AmbiguousCluster(t *testing.T) {
 	))
 
 	cmd, _ := newSwitchTestCmd()
-	deps := clusterpkg.SwitchDeps{KubeconfigPath: kubeconfigPath}
+	deps := cluster.SwitchDeps{KubeconfigPath: kubeconfigPath}
 
-	err := clusterpkg.HandleSwitchRunE(cmd, "myapp", deps)
+	err := cluster.HandleSwitchRunE(cmd, "myapp", deps)
 	require.Error(t, err)
-	require.ErrorIs(t, err, clusterpkg.ErrAmbiguousCluster)
+	require.ErrorIs(t, err, cluster.ErrAmbiguousCluster)
 	assert.Contains(t, err.Error(), "k3d-myapp")
 	assert.Contains(t, err.Error(), "kind-myapp")
 }
@@ -4731,11 +4729,11 @@ func TestSwitchCmd_KubeconfigNotFound(t *testing.T) {
 
 	cmd, _ := newSwitchTestCmd()
 
-	deps := clusterpkg.SwitchDeps{
+	deps := cluster.SwitchDeps{
 		KubeconfigPath: "/nonexistent/path/kubeconfig",
 	}
 
-	err := clusterpkg.HandleSwitchRunE(cmd, "some-cluster", deps)
+	err := cluster.HandleSwitchRunE(cmd, "some-cluster", deps)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to read kubeconfig")
 }
@@ -4753,9 +4751,9 @@ func TestSwitchCmd_SameContext(t *testing.T) {
 	))
 
 	cmd, buf := newSwitchTestCmd()
-	deps := clusterpkg.SwitchDeps{KubeconfigPath: kubeconfigPath}
+	deps := cluster.SwitchDeps{KubeconfigPath: kubeconfigPath}
 
-	err := clusterpkg.HandleSwitchRunE(cmd, "dev", deps)
+	err := cluster.HandleSwitchRunE(cmd, "dev", deps)
 	require.NoError(t, err)
 
 	assert.Contains(t, buf.String(),
@@ -4776,7 +4774,7 @@ func TestSwitchCmd_InteractivePicker(t *testing.T) {
 
 	cmd, buf := newSwitchTestCmd()
 
-	deps := clusterpkg.SwitchDeps{
+	deps := cluster.SwitchDeps{
 		KubeconfigPath: kubeconfigPath,
 		PickCluster: func(_ string, items []string) (string, error) {
 			// Simulate user selecting "staging"
@@ -4786,15 +4784,15 @@ func TestSwitchCmd_InteractivePicker(t *testing.T) {
 				}
 			}
 
-			return "", fmt.Errorf("staging not in list: %w", clusterpkg.ErrNoClusters)
+			return "", fmt.Errorf("staging not in list: %w", cluster.ErrNoClusters)
 		},
 	}
 
-	clusterName, err := clusterpkg.ExportPickCluster(cmd, deps)
+	clusterName, err := cluster.ExportPickCluster(cmd, deps)
 	require.NoError(t, err)
 	assert.Equal(t, "staging", clusterName)
 
-	err = clusterpkg.HandleSwitchRunE(cmd, clusterName, deps)
+	err = cluster.HandleSwitchRunE(cmd, clusterName, deps)
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "Switched to cluster 'staging'")
 }
@@ -4829,47 +4827,47 @@ users:
 
 	cmd, _ := newSwitchTestCmd()
 
-	deps := clusterpkg.SwitchDeps{
+	deps := cluster.SwitchDeps{
 		KubeconfigPath: kubeconfigPath,
 	}
 
-	_, err := clusterpkg.ExportPickCluster(cmd, deps)
+	_, err := cluster.ExportPickCluster(cmd, deps)
 	require.Error(t, err)
-	require.ErrorIs(t, err, clusterpkg.ErrNoClusters)
+	require.ErrorIs(t, err, cluster.ErrNoClusters)
 }
 
 func TestFormatTTLLabel_NoTTL(t *testing.T) {
 	t.Parallel()
 
-	result := clusterpkg.ExportFormatTTLLabel(nil)
+	result := cluster.ExportFormatTTLLabel(nil)
 	assert.Empty(t, result)
 }
 
 func TestFormatRemainingDuration_HoursAndMinutes(t *testing.T) {
 	t.Parallel()
 
-	result := clusterpkg.ExportFormatRemainingDuration(1*time.Hour + 23*time.Minute)
+	result := cluster.ExportFormatRemainingDuration(1*time.Hour + 23*time.Minute)
 	assert.Equal(t, "1h 23m", result)
 }
 
 func TestFormatRemainingDuration_HoursOnly(t *testing.T) {
 	t.Parallel()
 
-	result := clusterpkg.ExportFormatRemainingDuration(2 * time.Hour)
+	result := cluster.ExportFormatRemainingDuration(2 * time.Hour)
 	assert.Equal(t, "2h", result)
 }
 
 func TestFormatRemainingDuration_MinutesOnly(t *testing.T) {
 	t.Parallel()
 
-	result := clusterpkg.ExportFormatRemainingDuration(45 * time.Minute)
+	result := cluster.ExportFormatRemainingDuration(45 * time.Minute)
 	assert.Equal(t, "45m", result)
 }
 
 func TestFormatRemainingDuration_SubMinute(t *testing.T) {
 	t.Parallel()
 
-	result := clusterpkg.ExportFormatRemainingDuration(59 * time.Second)
+	result := cluster.ExportFormatRemainingDuration(59 * time.Second)
 	assert.Equal(t, "<1m", result)
 }
 
@@ -4877,7 +4875,7 @@ func TestFormatRemainingDuration_TruncatesDown(t *testing.T) {
 	t.Parallel()
 
 	// 1h 23m 59s should truncate to 1h 23m, never round up to 1h 24m.
-	result := clusterpkg.ExportFormatRemainingDuration(
+	result := cluster.ExportFormatRemainingDuration(
 		1*time.Hour + 23*time.Minute + 59*time.Second,
 	)
 	assert.Equal(t, "1h 23m", result)
@@ -4893,7 +4891,7 @@ func TestMaybeWaitForTTL_EmptyFlag(t *testing.T) {
 
 	clusterCfg := &v1alpha1.Cluster{}
 
-	err := clusterpkg.ExportMaybeWaitForTTL(cmd, "test-cluster", clusterCfg)
+	err := cluster.ExportMaybeWaitForTTL(cmd, "test-cluster", clusterCfg)
 	require.NoError(t, err)
 }
 
@@ -4912,7 +4910,7 @@ func TestMaybeWaitForTTL_InvalidDuration(t *testing.T) {
 	clusterCfg := &v1alpha1.Cluster{}
 
 	// Invalid duration should not block or attempt deletion; returns nil.
-	err := clusterpkg.ExportMaybeWaitForTTL(cmd, "test-cluster", clusterCfg)
+	err := cluster.ExportMaybeWaitForTTL(cmd, "test-cluster", clusterCfg)
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "invalid --ttl value")
 }
@@ -4932,7 +4930,7 @@ func TestMaybeWaitForTTL_NonPositiveDuration(t *testing.T) {
 	clusterCfg := &v1alpha1.Cluster{}
 
 	// Non-positive duration should return immediately without blocking or TTL setup.
-	err := clusterpkg.ExportMaybeWaitForTTL(cmd, "test-cluster", clusterCfg)
+	err := cluster.ExportMaybeWaitForTTL(cmd, "test-cluster", clusterCfg)
 	require.NoError(t, err)
 	assert.Empty(t, buf.String(), "non-positive TTL should produce no output")
 }
@@ -5032,7 +5030,7 @@ func BenchmarkFormatDiffTable_SingleChange(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchFormatDiffTableSink = clusterpkg.ExportFormatDiffTable(diff, total)
+		benchFormatDiffTableSink = cluster.ExportFormatDiffTable(diff, total)
 	}
 }
 
@@ -5046,7 +5044,7 @@ func BenchmarkFormatDiffTable_SmallDiff(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchFormatDiffTableSink = clusterpkg.ExportFormatDiffTable(diff, total)
+		benchFormatDiffTableSink = cluster.ExportFormatDiffTable(diff, total)
 	}
 }
 
@@ -5060,7 +5058,7 @@ func BenchmarkFormatDiffTable_MixedCategories(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchFormatDiffTableSink = clusterpkg.ExportFormatDiffTable(diff, total)
+		benchFormatDiffTableSink = cluster.ExportFormatDiffTable(diff, total)
 	}
 }
 
@@ -5075,7 +5073,7 @@ func BenchmarkFormatDiffTable_LargeDiff(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchFormatDiffTableSink = clusterpkg.ExportFormatDiffTable(diff, total)
+		benchFormatDiffTableSink = cluster.ExportFormatDiffTable(diff, total)
 	}
 }
 
@@ -5107,7 +5105,7 @@ func BenchmarkFormatDiffTable_WideValues(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchFormatDiffTableSink = clusterpkg.ExportFormatDiffTable(result, total)
+		benchFormatDiffTableSink = cluster.ExportFormatDiffTable(result, total)
 	}
 }
 
@@ -5115,7 +5113,7 @@ func TestNewUpdateCmd(t *testing.T) {
 	t.Parallel()
 
 	runtimeContainer := &di.Runtime{}
-	cmd := clusterpkg.NewUpdateCmd(runtimeContainer)
+	cmd := cluster.NewUpdateCmd(runtimeContainer)
 
 	// Verify command basics
 	if cmd.Use != "update" {
@@ -5183,13 +5181,13 @@ func TestResolveForce(t *testing.T) {
 			t.Parallel()
 
 			runtimeContainer := &di.Runtime{}
-			cmd := clusterpkg.NewUpdateCmd(runtimeContainer)
+			cmd := cluster.NewUpdateCmd(runtimeContainer)
 
 			if testCase.yesValue != "" {
 				_ = cmd.Flags().Set("yes", testCase.yesValue)
 			}
 
-			result := clusterpkg.ExportResolveForce(testCase.forceValue, cmd.Flags().Lookup("yes"))
+			result := cluster.ExportResolveForce(testCase.forceValue, cmd.Flags().Lookup("yes"))
 			if result != testCase.expected {
 				t.Errorf("expected resolveForce(%v, yes=%q) = %v, got %v",
 					testCase.forceValue, testCase.yesValue, testCase.expected, result)
@@ -5282,7 +5280,7 @@ func TestDisplayChangesSummary_NoChanges(t *testing.T) {
 	cmd.SetOut(&buf)
 
 	diff := clusterupdate.NewEmptyUpdateResult()
-	clusterpkg.ExportDisplayChangesSummary(cmd, diff)
+	cluster.ExportDisplayChangesSummary(cmd, diff)
 
 	if buf.Len() != 0 {
 		t.Errorf("expected no output for empty diff, got %q", buf.String())
@@ -5313,7 +5311,7 @@ func TestDisplayChangesSummary_TableFormat(t *testing.T) {
 		Reason:   "distribution change requires recreation",
 	})
 
-	clusterpkg.ExportDisplayChangesSummary(cmd, diff)
+	cluster.ExportDisplayChangesSummary(cmd, diff)
 
 	output := buf.String()
 
@@ -5372,7 +5370,7 @@ func TestDisplayChangesSummary_SeverityOrder(t *testing.T) {
 		Category: clusterupdate.ChangeCategoryRecreateRequired,
 	})
 
-	clusterpkg.ExportDisplayChangesSummary(cmd, diff)
+	cluster.ExportDisplayChangesSummary(cmd, diff)
 
 	output := buf.String()
 
@@ -5399,7 +5397,7 @@ func TestNewUpdateCmd_HasOutputFlag(t *testing.T) {
 	t.Parallel()
 
 	runtimeContainer := &di.Runtime{}
-	cmd := clusterpkg.NewUpdateCmd(runtimeContainer)
+	cmd := cluster.NewUpdateCmd(runtimeContainer)
 
 	outputFlag := cmd.Flags().Lookup("output")
 	if outputFlag == nil {
@@ -5438,7 +5436,7 @@ func TestDisplayChangesSummary_JSONOutput(t *testing.T) {
 		Reason:   "distribution change requires recreation",
 	})
 
-	clusterpkg.ExportDisplayChangesSummary(cmd, diff)
+	cluster.ExportDisplayChangesSummary(cmd, diff)
 
 	output := buf.String()
 
@@ -5479,7 +5477,7 @@ func TestDisplayChangesSummary_JSONOutput_NoChanges(t *testing.T) {
 	cmd.Flags().String("output", "json", "")
 
 	diff := clusterupdate.NewEmptyUpdateResult()
-	clusterpkg.ExportDisplayChangesSummary(cmd, diff)
+	cluster.ExportDisplayChangesSummary(cmd, diff)
 
 	if buf.Len() != 0 {
 		t.Errorf("expected no output for empty diff, got %q", buf.String())
@@ -5512,14 +5510,14 @@ func TestDiffToJSON_Structure(t *testing.T) {
 		Reason:   "distribution change",
 	})
 
-	out := clusterpkg.ExportDiffToJSON(diff)
+	out := cluster.ExportDiffToJSON(diff)
 
 	assertDiffCounts(t, out)
 	assertInPlaceChange(t, out.InPlaceChanges[0])
 	assertCategories(t, out)
 }
 
-func assertDiffCounts(t *testing.T, out clusterpkg.DiffJSONOutput) {
+func assertDiffCounts(t *testing.T, out cluster.DiffJSONOutput) {
 	t.Helper()
 
 	if out.TotalChanges != 3 {
@@ -5543,7 +5541,7 @@ func assertDiffCounts(t *testing.T, out clusterpkg.DiffJSONOutput) {
 	}
 }
 
-func assertInPlaceChange(t *testing.T, inPlace clusterpkg.ChangeJSON) {
+func assertInPlaceChange(t *testing.T, inPlace cluster.ChangeJSON) {
 	t.Helper()
 
 	if inPlace.Field != "cluster.cni" {
@@ -5563,7 +5561,7 @@ func assertInPlaceChange(t *testing.T, inPlace clusterpkg.ChangeJSON) {
 	}
 }
 
-func assertCategories(t *testing.T, out clusterpkg.DiffJSONOutput) {
+func assertCategories(t *testing.T, out cluster.DiffJSONOutput) {
 	t.Helper()
 
 	if out.RecreateRequired[0].Category != "recreate-required" {
@@ -5584,7 +5582,7 @@ func TestDiffToJSON_RequiresConfirmation_OnlyInPlace(t *testing.T) {
 		Category: clusterupdate.ChangeCategoryInPlace,
 	})
 
-	out := clusterpkg.ExportDiffToJSON(diff)
+	out := cluster.ExportDiffToJSON(diff)
 
 	if out.RequiresConfirmation {
 		t.Error("expected RequiresConfirmation=false for in-place-only changes")

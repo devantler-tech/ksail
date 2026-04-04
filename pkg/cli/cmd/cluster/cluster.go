@@ -61,7 +61,6 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
-	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	omniclient "github.com/siderolabs/omni/client/pkg/client"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -3097,7 +3096,7 @@ func createEmptyDistributionConfig(
 		}
 	case v1alpha1.DistributionK3s:
 		return &clusterprovisioner.DistributionConfig{
-			K3d: &k3dv1alpha5.SimpleConfig{},
+			K3d: &v1alpha5.SimpleConfig{},
 		}
 	case v1alpha1.DistributionTalos:
 		return &clusterprovisioner.DistributionConfig{

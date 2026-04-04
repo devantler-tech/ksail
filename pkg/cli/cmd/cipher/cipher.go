@@ -128,10 +128,11 @@ func handleDecryptRunE(
 
 	inputStore, outputStore, err := sopsclient.GetDecryptStores(inputPath, readFromStdin)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get decrypt stores: %w", err)
 	}
 
 	var extractPath []any
+
 	if extract != "" {
 		extractPath, err = sopsclient.ParseExtractPath(extract)
 		if err != nil {
@@ -227,7 +228,7 @@ func handleEditRunE(
 ) error {
 	inputPath, inputStore, outputStore, err := sopsclient.CanonicalizeAndGetStores(args[0])
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get stores for edit: %w", err)
 	}
 
 	opts := sopsclient.EditOpts{
@@ -358,7 +359,7 @@ Example:
 func handleEncryptRunE(cmd *cobra.Command, args []string) error {
 	inputPath, inputStore, outputStore, err := sopsclient.CanonicalizeAndGetStores(args[0])
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get stores for encrypt: %w", err)
 	}
 
 	opts := sopsclient.EncryptOpts{
