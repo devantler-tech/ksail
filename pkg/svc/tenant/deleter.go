@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 // DeleteOptions holds configuration for tenant deletion.
@@ -37,11 +38,12 @@ func Delete(ctx context.Context, opts DeleteOptions) error {
 		return ErrTenantNameRequired
 	}
 
-	if strings.Contains(opts.Name, "..") || strings.ContainsAny(opts.Name, `/\`) {
+	if errs := validation.IsDNS1123Label(opts.Name); len(errs) > 0 {
 		return fmt.Errorf(
-			"%w: %q must not contain path separators or '..'",
+			"%w: %s (%s)",
 			ErrInvalidTenantName,
 			opts.Name,
+			strings.Join(errs, "; "),
 		)
 	}
 

@@ -246,23 +246,16 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 		return string(data), nil
 	}
 
-	var raw map[string]any
-
-	err := yaml.Unmarshal([]byte(existingContent), &raw)
+	raw, err := parseRBACConfigMap(existingContent)
 	if err != nil {
-		return "", fmt.Errorf("parsing existing RBAC ConfigMap: %w", err)
+		return "", err
 	}
 
 	dataMap := ensureDataMap(raw)
 	existingPolicy, _ := dataMap["policy.csv"].(string)
 
 	if hasTenantPolicy(existingPolicy, tenantName) {
-		data, err := yaml.Marshal(raw)
-		if err != nil {
-			return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
-		}
-
-		return string(data), nil
+		return marshalRawConfigMap(raw)
 	}
 
 	tenantPolicy := buildTenantPolicyCSV(tenantName)
@@ -273,34 +266,22 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 
 	dataMap["policy.csv"] = existingPolicy + tenantPolicy
 
-	data, err := yaml.Marshal(raw)
-	if err != nil {
-		return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
-	}
-
-	return string(data), nil
+	return marshalRawConfigMap(raw)
 }
 
 // RemoveArgoCDRBACPolicy removes a tenant's policy lines from argocd-rbac-cm content.
 // Uses map[string]any for round-trip fidelity to preserve unknown fields.
 func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, error) {
-	var raw map[string]any
-
-	err := yaml.Unmarshal([]byte(existingContent), &raw)
+	raw, err := parseRBACConfigMap(existingContent)
 	if err != nil {
-		return "", fmt.Errorf("parsing existing RBAC ConfigMap: %w", err)
+		return "", err
 	}
 
 	dataMap := ensureDataMap(raw)
 
 	existingPolicy, _ := dataMap["policy.csv"].(string)
 	if existingPolicy == "" {
-		data, err := yaml.Marshal(raw)
-		if err != nil {
-			return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
-		}
-
-		return string(data), nil
+		return marshalRawConfigMap(raw)
 	}
 
 	lines := strings.Split(existingPolicy, "\n")
@@ -322,6 +303,21 @@ func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, 
 
 	dataMap["policy.csv"] = result
 
+	return marshalRawConfigMap(raw)
+}
+
+func parseRBACConfigMap(content string) (map[string]any, error) {
+	var raw map[string]any
+
+	err := yaml.Unmarshal([]byte(content), &raw)
+	if err != nil {
+		return nil, fmt.Errorf("parsing existing RBAC ConfigMap: %w", err)
+	}
+
+	return raw, nil
+}
+
+func marshalRawConfigMap(raw map[string]any) (string, error) {
 	data, err := yaml.Marshal(raw)
 	if err != nil {
 		return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
@@ -330,8 +326,6 @@ func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, 
 	return string(data), nil
 }
 
-// hasTenantPolicy checks if the given policy CSV already contains policies
-// for the exact tenant name, avoiding substring false positives.
 // ensureDataMap extracts or initializes the "data" sub-map from a raw ConfigMap.
 func ensureDataMap(raw map[string]any) map[string]any {
 	dataVal, exists := raw["data"]
@@ -353,6 +347,8 @@ func ensureDataMap(raw map[string]any) map[string]any {
 	return dataMap
 }
 
+// hasTenantPolicy checks if the given policy CSV already contains policies
+// for the exact tenant name, avoiding substring false positives.
 func hasTenantPolicy(policyCSV, tenantName string) bool {
 	for line := range strings.SplitSeq(policyCSV, "\n") {
 		if isTenantPolicyLine(strings.TrimSpace(line), tenantName) {

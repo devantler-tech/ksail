@@ -41,20 +41,7 @@ func (g *gitHubProvider) CreateRepo(
 	owner, name string,
 	visibility RepoVisibility,
 ) error {
-	body := map[string]any{
-		"name":      name,
-		"auto_init": false,
-	}
-
-	switch visibility {
-	case VisibilityPublic:
-		body["private"] = false
-	case VisibilityInternal:
-		// Internal repos require the "visibility" field and only work for orgs.
-		body["visibility"] = "internal"
-	case VisibilityPrivate:
-		body["private"] = true
-	}
+	body := buildRepoBody(name, visibility)
 
 	// Try org first, fall back to user
 	url := fmt.Sprintf("%s/orgs/%s/repos", g.apiURL, owner)
@@ -67,44 +54,50 @@ func (g *gitHubProvider) CreateRepo(
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		// Owner is a user, not an org — verify the token user matches the owner.
-		authUser, verifyErr := g.getAuthenticatedUser(ctx)
-		if verifyErr != nil {
-			return fmt.Errorf("verifying authenticated user: %w", verifyErr)
-		}
-		if !strings.EqualFold(authUser, owner) {
-			return fmt.Errorf(
-				"%w: token belongs to %q but repo requested under %q",
-				ErrOwnerMismatch, authUser, owner,
-			)
-		}
-
-		// Internal visibility is not supported for users.
-		if visibility == VisibilityInternal {
-			body["private"] = true
-			delete(body, "visibility")
-		}
-
-		url = g.apiURL + "/user/repos"
-
-		resp2, userErr := g.doJSON(ctx, http.MethodPost, url, body)
-		if userErr != nil {
-			return fmt.Errorf("create user repo request: %w", userErr)
-		}
-
-		defer func() { _ = resp2.Body.Close() }()
-
-		if resp2.StatusCode == http.StatusUnprocessableEntity {
-			return fmt.Errorf("%w: %s/%s", ErrRepoAlreadyExists, owner, name)
-		}
-
-		if resp2.StatusCode >= http.StatusMultipleChoices {
-			return g.readError(resp2, "create repository")
-		}
-
-		return nil
+		return g.createUserRepo(ctx, owner, name, visibility, body)
 	}
 
+	return g.handleCreateResponse(resp, owner, name)
+}
+
+func (g *gitHubProvider) createUserRepo(
+	ctx context.Context,
+	owner, name string,
+	visibility RepoVisibility,
+	body map[string]any,
+) error {
+	authUser, verifyErr := g.getAuthenticatedUser(ctx)
+	if verifyErr != nil {
+		return fmt.Errorf("verifying authenticated user: %w", verifyErr)
+	}
+
+	if !strings.EqualFold(authUser, owner) {
+		return fmt.Errorf(
+			"%w: token belongs to %q but repo requested under %q",
+			ErrOwnerMismatch, authUser, owner,
+		)
+	}
+
+	if visibility == VisibilityInternal {
+		body["private"] = true
+		delete(body, "visibility")
+	}
+
+	url := g.apiURL + "/user/repos"
+
+	resp, userErr := g.doJSON(ctx, http.MethodPost, url, body)
+	if userErr != nil {
+		return fmt.Errorf("create user repo request: %w", userErr)
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	return g.handleCreateResponse(resp, owner, name)
+}
+
+func (g *gitHubProvider) handleCreateResponse(
+	resp *http.Response, owner, name string,
+) error {
 	if resp.StatusCode == http.StatusUnprocessableEntity {
 		return fmt.Errorf("%w: %s/%s", ErrRepoAlreadyExists, owner, name)
 	}
@@ -297,4 +290,22 @@ func (g *gitHubProvider) readError(resp *http.Response, action string) error {
 		resp.StatusCode,
 		string(body),
 	)
+}
+
+func buildRepoBody(name string, visibility RepoVisibility) map[string]any {
+	body := map[string]any{
+		"name":      name,
+		"auto_init": false,
+	}
+
+	switch visibility {
+	case VisibilityPublic:
+		body["private"] = false
+	case VisibilityInternal:
+		body["visibility"] = "internal"
+	case VisibilityPrivate:
+		body["private"] = true
+	}
+
+	return body
 }

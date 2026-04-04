@@ -189,7 +189,7 @@ func TestDelete_PathTraversalName(t *testing.T) {
 		OutputDir: tmpDir,
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "must not contain path separators")
+	require.ErrorIs(t, err, tenant.ErrInvalidTenantName)
 }
 
 func TestDelete_UnregisterWithExplicitKustomizationPath(t *testing.T) {
