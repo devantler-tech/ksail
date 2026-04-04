@@ -533,6 +533,38 @@ jobs:
         id: warm
         uses: ./.github/actions/warm-mirror-cache
 
+  tenant-test:
+    name: 🧪 Tenant Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes, build-artifact]
+    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && needs.changes.outputs.code == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        id: setup-go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 📦 Cache KSail Binary
+        uses: ./.github/actions/cache-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: /usr/local/bin/ksail
+          save: "false"
+
+      - name: 🧪 Run Tenant Tests
+        uses: ./.github/actions/ksail-tenant-test
+
   system-test:
     name: 🧪 System Test
     runs-on: ubuntu-latest
@@ -680,6 +712,7 @@ jobs:
         coverage,
         warm-helm-cache,
         system-test,
+        tenant-test,
         cleanup-hetzner,
         rate-limit-check,
         audit-docs,
@@ -703,6 +736,7 @@ jobs:
             ${{ needs.coverage.result }}
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.system-test.result }}
+            ${{ needs.tenant-test.result }}
             ${{ needs.cleanup-hetzner.result }}
             ${{ needs.rate-limit-check.result }}
             ${{ needs.audit-docs.result }}

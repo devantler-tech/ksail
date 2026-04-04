@@ -1,0 +1,320 @@
+package gitprovider
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"sort"
+	"strings"
+	"time"
+)
+
+const githubAPIURL = "https://api.github.com"
+
+const httpClientTimeout = 30 * time.Second
+
+const userAgent = "ksail"
+
+type gitHubProvider struct {
+	token  string
+	client *http.Client
+	apiURL string
+}
+
+func newGitHubProvider(token string) *gitHubProvider {
+	return &gitHubProvider{
+		token:  token,
+		client: &http.Client{Timeout: httpClientTimeout},
+		apiURL: githubAPIURL,
+	}
+}
+
+// CreateRepo creates a GitHub repository.
+// If owner is an org, creates under /orgs/{owner}/repos.
+// Otherwise falls back to /user/repos.
+func (g *gitHubProvider) CreateRepo(
+	ctx context.Context,
+	owner, name string,
+	visibility RepoVisibility,
+) error {
+	body := buildRepoBody(name, visibility)
+
+	// Try org first, fall back to user
+	url := fmt.Sprintf("%s/orgs/%s/repos", g.apiURL, owner)
+
+	resp, err := g.doJSON(ctx, http.MethodPost, url, body)
+	if err != nil {
+		return fmt.Errorf("create repo request: %w", err)
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return g.createUserRepo(ctx, owner, name, visibility, body)
+	}
+
+	return g.handleCreateResponse(resp, owner, name)
+}
+
+// PushFiles pushes files to a repository using the Contents API.
+// For existing files, it fetches the current SHA first to allow updates.
+func (g *gitHubProvider) PushFiles(
+	ctx context.Context,
+	owner, name string,
+	files map[string][]byte,
+	commitMsg string,
+) error {
+	// Sort filenames for deterministic ordering
+	paths := make([]string, 0, len(files))
+	for path := range files {
+		paths = append(paths, path)
+	}
+
+	sort.Strings(paths)
+
+	for _, path := range paths {
+		content := files[path]
+		encoded := base64.StdEncoding.EncodeToString(content)
+		body := map[string]any{
+			"message": commitMsg,
+			"content": encoded,
+		}
+
+		// Check if file already exists to get its SHA (required for updates).
+		sha, err := g.getFileSHA(ctx, owner, name, path)
+		if err != nil {
+			return fmt.Errorf("checking file %s: %w", path, err)
+		}
+
+		if sha != "" {
+			body["sha"] = sha
+		}
+
+		url := fmt.Sprintf(
+			"%s/repos/%s/%s/contents/%s",
+			g.apiURL, owner, name, path,
+		)
+
+		resp, err := g.doJSON(ctx, http.MethodPut, url, body)
+		if err != nil {
+			return fmt.Errorf("push file %s: %w", path, err)
+		}
+
+		if resp.StatusCode >= http.StatusMultipleChoices {
+			pushErr := g.readError(resp, "push file "+path)
+			_ = resp.Body.Close()
+
+			return pushErr
+		}
+
+		_ = resp.Body.Close()
+	}
+
+	return nil
+}
+
+// DeleteRepo deletes a GitHub repository.
+func (g *gitHubProvider) DeleteRepo(ctx context.Context, owner, name string) error {
+	url := fmt.Sprintf("%s/repos/%s/%s", g.apiURL, owner, name)
+
+	resp, err := g.doRequest(ctx, http.MethodDelete, url, nil)
+	if err != nil {
+		return fmt.Errorf("delete repo request: %w", err)
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		return g.readError(resp, "delete repository")
+	}
+
+	return nil
+}
+
+func (g *gitHubProvider) createUserRepo(
+	ctx context.Context,
+	owner, name string,
+	visibility RepoVisibility,
+	body map[string]any,
+) error {
+	authUser, verifyErr := g.getAuthenticatedUser(ctx)
+	if verifyErr != nil {
+		return fmt.Errorf("verifying authenticated user: %w", verifyErr)
+	}
+
+	if !strings.EqualFold(authUser, owner) {
+		return fmt.Errorf(
+			"%w: token belongs to %q but repo requested under %q",
+			ErrOwnerMismatch, authUser, owner,
+		)
+	}
+
+	if visibility == VisibilityInternal {
+		body["private"] = true
+		delete(body, "visibility")
+	}
+
+	url := g.apiURL + "/user/repos"
+
+	resp, userErr := g.doJSON(ctx, http.MethodPost, url, body)
+	if userErr != nil {
+		return fmt.Errorf("create user repo request: %w", userErr)
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	return g.handleCreateResponse(resp, owner, name)
+}
+
+func (g *gitHubProvider) handleCreateResponse(
+	resp *http.Response, owner, name string,
+) error {
+	if resp.StatusCode == http.StatusUnprocessableEntity {
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+
+		if strings.Contains(bodyStr, "name already exists") {
+			return fmt.Errorf("%w: %s/%s", ErrRepoAlreadyExists, owner, name)
+		}
+
+		return fmt.Errorf(
+			"%w during create repository (HTTP %d): %s",
+			ErrGitHubAPI, resp.StatusCode, bodyStr,
+		)
+	}
+
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		return g.readError(resp, "create repository")
+	}
+
+	return nil
+}
+
+func (g *gitHubProvider) getFileSHA(
+	ctx context.Context, owner, name, path string,
+) (string, error) {
+	url := fmt.Sprintf(
+		"%s/repos/%s/%s/contents/%s",
+		g.apiURL, owner, name, path,
+	)
+
+	resp, err := g.doRequest(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", nil
+	}
+
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		return "", g.readError(resp, "get file SHA")
+	}
+
+	var result struct {
+		SHA string `json:"sha"`
+	}
+
+	decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+	if decodeErr != nil {
+		return "", fmt.Errorf("decoding file info: %w", decodeErr)
+	}
+
+	return result.SHA, nil
+}
+
+func (g *gitHubProvider) getAuthenticatedUser(ctx context.Context) (string, error) {
+	url := g.apiURL + "/user"
+
+	resp, err := g.doRequest(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("get authenticated user: %w", err)
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		return "", g.readError(resp, "get authenticated user")
+	}
+
+	var result struct {
+		Login string `json:"login"`
+	}
+
+	decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+	if decodeErr != nil {
+		return "", fmt.Errorf("decoding user info: %w", decodeErr)
+	}
+
+	return result.Login, nil
+}
+
+func (g *gitHubProvider) doJSON(
+	ctx context.Context,
+	method, url string,
+	body any,
+) (*http.Response, error) {
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request body: %w", err)
+	}
+
+	return g.doRequest(ctx, method, url, bytes.NewReader(jsonBody))
+}
+
+func (g *gitHubProvider) doRequest(
+	ctx context.Context,
+	method, url string,
+	body io.Reader,
+) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+g.token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", userAgent)
+
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	return g.client.Do(req) //nolint:wrapcheck // callers wrap with action-specific context
+}
+
+func (g *gitHubProvider) readError(resp *http.Response, action string) error {
+	body, _ := io.ReadAll(resp.Body)
+
+	return fmt.Errorf(
+		"%w during %s (HTTP %d): %s",
+		ErrGitHubAPI,
+		action,
+		resp.StatusCode,
+		string(body),
+	)
+}
+
+func buildRepoBody(name string, visibility RepoVisibility) map[string]any {
+	body := map[string]any{
+		"name":      name,
+		"auto_init": false,
+	}
+
+	switch visibility {
+	case VisibilityPublic:
+		body["private"] = false
+	case VisibilityInternal:
+		body["visibility"] = "internal"
+	case VisibilityPrivate:
+		body["private"] = true
+	}
+
+	return body
+}

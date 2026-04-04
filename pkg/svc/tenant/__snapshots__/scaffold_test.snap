@@ -1,0 +1,42 @@
+
+[TestScaffoldFilesSnapshots/argocd - 1]
+# my-tenant
+
+ArgoCD-managed tenant. Resources in `k8s/` are automatically synced.
+
+---
+
+[TestScaffoldFilesSnapshots/argocd - 2]
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+
+---
+
+[TestScaffoldFilesSnapshots/flux - 1]
+# my-tenant
+
+Flux-managed tenant. Resources in `k8s/` are automatically reconciled.
+
+---
+
+[TestScaffoldFilesSnapshots/flux - 2]
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+
+---
+
+[TestScaffoldFilesSnapshots/kubectl - 1]
+# my-tenant
+
+Apply with: `kubectl apply -k k8s/`
+
+---
+
+[TestScaffoldFilesSnapshots/kubectl - 2]
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+
+---
