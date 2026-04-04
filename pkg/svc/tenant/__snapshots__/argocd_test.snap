@@ -1,0 +1,184 @@
+
+[TestGenerateArgoCDManifests_AppGitHub - 1]
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-alpha
+  namespace: argocd
+spec:
+  destination:
+    namespace: team-alpha
+    server: https://kubernetes.default.svc
+  project: team-alpha
+  source:
+    path: k8s
+    repoURL: https://github.com/org/team-alpha-app
+    targetRevision: HEAD
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+---
+
+[TestGenerateArgoCDManifests_AppGitLab - 1]
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-gamma
+  namespace: argocd
+spec:
+  destination:
+    namespace: team-gamma
+    server: https://kubernetes.default.svc
+  project: team-gamma
+  source:
+    path: k8s
+    repoURL: https://gitlab.com/org/team-gamma-app
+    targetRevision: HEAD
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+---
+
+[TestGenerateArgoCDManifests_ProjectMultipleNamespaces - 1]
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-beta
+  namespace: argocd
+spec:
+  description: Tenant project for team-beta
+  destinations:
+  - namespace: team-beta-dev
+    server: https://kubernetes.default.svc
+  - namespace: team-beta-staging
+    server: https://kubernetes.default.svc
+  - namespace: team-beta-prod
+    server: https://kubernetes.default.svc
+  sourceRepos:
+  - '*'
+
+---
+
+[TestGenerateArgoCDManifests_ProjectSingleNamespace - 1]
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-alpha
+  namespace: argocd
+spec:
+  description: Tenant project for team-alpha
+  destinations:
+  - namespace: team-alpha
+    server: https://kubernetes.default.svc
+  sourceRepos:
+  - '*'
+
+---
+
+[TestGenerateArgoCDManifests_RBACConfigMap - 1]
+apiVersion: v1
+data:
+  policy.csv: |
+    p, role:team-alpha, applications, *, team-alpha/*, allow
+    p, role:team-alpha, projects, get, team-alpha, allow
+    g, team-alpha, role:team-alpha
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: argocd-rbac-cm
+  namespace: argocd
+
+---
+
+[TestMergeArgoCDRBACPolicy_EmptyExisting - 1]
+apiVersion: v1
+data:
+  policy.csv: |
+    p, role:team-alpha, applications, *, team-alpha/*, allow
+    p, role:team-alpha, projects, get, team-alpha, allow
+    g, team-alpha, role:team-alpha
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: argocd-rbac-cm
+  namespace: argocd
+
+---
+
+[TestMergeArgoCDRBACPolicy_ExistingOtherTenant - 1]
+apiVersion: v1
+data:
+  policy.csv: |
+    p, role:team-alpha, applications, *, team-alpha/*, allow
+    p, role:team-alpha, projects, get, team-alpha, allow
+    g, team-alpha, role:team-alpha
+    p, role:team-beta, applications, *, team-beta/*, allow
+    p, role:team-beta, projects, get, team-beta, allow
+    g, team-beta, role:team-beta
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: argocd-rbac-cm
+  namespace: argocd
+
+---
+
+[TestMergeArgoCDRBACPolicy_ExistingSameTenant - 1]
+apiVersion: v1
+data:
+  policy.csv: |
+    p, role:team-alpha, applications, *, team-alpha/*, allow
+    p, role:team-alpha, projects, get, team-alpha, allow
+    g, team-alpha, role:team-alpha
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: argocd-rbac-cm
+  namespace: argocd
+
+---
+
+[TestRemoveArgoCDRBACPolicy_PreservesOtherTenant - 1]
+apiVersion: v1
+data:
+  policy.csv: |
+    p, role:team-beta, applications, *, team-beta/*, allow
+    p, role:team-beta, projects, get, team-beta, allow
+    g, team-beta, role:team-beta
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: argocd-rbac-cm
+  namespace: argocd
+
+---
+
+[TestRemoveArgoCDRBACPolicy_RemovesTargetTenant - 1]
+apiVersion: v1
+data:
+  policy.csv: ""
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: argocd-rbac-cm
+  namespace: argocd
+
+---
