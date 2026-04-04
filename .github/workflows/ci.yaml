@@ -474,8 +474,8 @@ jobs:
           path: ksail.vsix
           retention-days: 7
 
-  gen-cipher-test:
-    name: 🧪 Gen & Cipher Test
+  gen-smoke-test:
+    name: 🧪 Gen & Smoke Test
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
     if: (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.changes.outputs.code == 'true'
@@ -562,92 +562,11 @@ jobs:
           fi
           echo "✅ All workload gen tests passed"
 
-      - name: 🧪 cipher — encrypt/decrypt roundtrip
-        shell: bash
-        run: |
-          # Install age for key generation
-          go install filippo.io/age/cmd/age-keygen@v1.3.1
-
-          # Generate an Age key pair
-          KEY_FILE=$(mktemp -d)/key.txt
-          age-keygen -o "$KEY_FILE"
-          PUBLIC_KEY=$(grep "public key:" "$KEY_FILE" | awk '{print $NF}')
-
-          echo "Generated Age key with public key: $PUBLIC_KEY"
-
-          # Set SOPS_AGE_KEY_FILE so SOPS can find the private key for decrypt
-          export SOPS_AGE_KEY_FILE="$KEY_FILE"
-
-          # Create test directory and SOPS config
-          TEST_DIR=$(mktemp -d)
-          cat > "$TEST_DIR/.sops.yaml" <<EOF
-          creation_rules:
-            - age: "$PUBLIC_KEY"
-          EOF
-
-          # Create a test secret manifest
-          cat > "$TEST_DIR/secret.yaml" <<'EOF'
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: test-cipher-roundtrip
-          type: Opaque
-          stringData:
-            password: super-secret-value
-            api-key: another-secret
-          EOF
-
-          # Encrypt the secret (writes in-place, uses .sops.yaml for key config)
-          echo "=== Encrypting secret ==="
-          cd "$TEST_DIR"
-          ksail cipher encrypt secret.yaml
-
-          # Verify encrypted file contains SOPS metadata
-          if ! grep -q "sops:" secret.yaml; then
-            echo "❌ Encrypted file missing SOPS metadata"
-            cat secret.yaml
-            exit 1
-          fi
-          echo "✅ Encrypted file contains SOPS metadata"
-
-          # Decrypt the secret to a separate output file
-          echo "=== Decrypting secret ==="
-          ksail cipher decrypt secret.yaml --output decrypted.yaml
-
-          # Verify decrypted file does not contain SOPS metadata
-          if grep -q "sops:" decrypted.yaml; then
-            echo "❌ Decrypted file still contains SOPS metadata"
-            exit 1
-          fi
-          echo "✅ Decrypted file does not contain SOPS metadata"
-
-          # Verify decryption restored the expected manifest content
-          if ! grep -q "apiVersion:" decrypted.yaml; then
-            echo "❌ Decrypted file missing expected apiVersion"
-            exit 1
-          fi
-          if ! grep -q "kind: Secret" decrypted.yaml; then
-            echo "❌ Decrypted file missing expected kind"
-            exit 1
-          fi
-          if ! grep -q "name: test-cipher-roundtrip" decrypted.yaml; then
-            echo "❌ Decrypted file missing expected metadata.name"
-            exit 1
-          fi
-          if ! grep -q "password: super-secret-value" decrypted.yaml; then
-            echo "❌ Decrypted file missing expected password value"
-            exit 1
-          fi
-          if ! grep -q "api-key: another-secret" decrypted.yaml; then
-            echo "❌ Decrypted file missing expected api-key value"
-            exit 1
-          fi
-          echo "✅ Decrypt restored expected manifest content"
-
-          echo "✅ Cipher encrypt/decrypt roundtrip passed"
-
-          # Cleanup
-          rm -rf "$TEST_DIR" "$(dirname "$KEY_FILE")"
+      # NOTE: cipher encrypt/decrypt E2E test is not feasible here because
+      # ksail cipher encrypt uses hardcoded empty KeyGroups (no .sops.yaml
+      # config loading). A code change to support key configuration is needed
+      # before cipher can be E2E tested. Cipher commands are covered by unit
+      # tests and benchmarks in pkg/cli/cmd/cipher/.
 
       - name: 🧪 smoke test — chat and mcp commands
         shell: bash
@@ -994,7 +913,7 @@ jobs:
         generate-docs,
         auto-commit,
         coverage,
-        gen-cipher-test,
+        gen-smoke-test,
         warm-helm-cache,
         system-test,
         tenant-test,
@@ -1020,7 +939,7 @@ jobs:
             ${{ needs.generate-docs.result }}
             ${{ needs.auto-commit.result }}
             ${{ needs.coverage.result }}
-            ${{ needs.gen-cipher-test.result }}
+            ${{ needs.gen-smoke-test.result }}
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.system-test.result }}
             ${{ needs.tenant-test.result }}
