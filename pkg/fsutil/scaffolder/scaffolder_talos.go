@@ -27,6 +27,11 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 	// Enable image verification scaffolding when explicitly enabled for Talos.
 	enableImageVerification := s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled
 
+	// Mirror the conditions in generator.getDirectoriesWithPatches() exactly so
+	// .gitkeep notifications match the files the generator actually writes.
+	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
+		enableKubeletCertRotation || s.ClusterName != "" || enableImageVerification
+
 	config := &talosgenerator.Config{
 		PatchesDir:                TalosConfigDir,
 		MirrorRegistries:          s.MirrorRegistries,
@@ -52,6 +57,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		disableDefaultCNI,
 		enableKubeletCertRotation,
 		enableImageVerification,
+		clusterHasPatches,
 	)
 
 	return nil
@@ -61,11 +67,8 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 func (s *Scaffolder) notifyTalosGenerated(
 	workers int,
 	disableDefaultCNI, enableKubeletCertRotation, enableImageVerification bool,
+	clusterHasPatches bool,
 ) {
-	// Determine which directories have patches (no .gitkeep generated there)
-	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
-		enableKubeletCertRotation || s.ClusterName != ""
-
 	// Notify about .gitkeep files only for directories without patches
 	subdirs := []string{"cluster", "control-planes", "workers"}
 	for _, subdir := range subdirs {
