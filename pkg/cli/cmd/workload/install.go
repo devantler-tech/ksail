@@ -29,7 +29,11 @@ func NewInstallCmd(_ *di.Runtime) *cobra.Command {
 	flags := cmd.Flags()
 	flags.StringP("namespace", "n", "default", "namespace scope for the request")
 	flags.String("version", "", "chart version constraint (default: latest)")
-	flags.Duration("timeout", helm.DefaultTimeout, "time to wait for any individual Kubernetes operation")
+	flags.Duration(
+		"timeout",
+		helm.DefaultTimeout,
+		"time to wait for any individual Kubernetes operation",
+	)
 	flags.Bool("create-namespace", false, "create the release namespace if not present")
 	flags.Bool("wait", false, "wait until resources are ready")
 	flags.Bool("atomic", false, "if set, the installation deletes on failure")

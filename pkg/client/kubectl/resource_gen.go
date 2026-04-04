@@ -342,9 +342,10 @@ func (c *Client) executeCommand(cmd *cobra.Command, args []string) error {
 // kubectl's cmdutil.CheckErr. This is necessary because kubectl commands
 // use Run (not RunE) with CheckErr which calls os.Exit on any error.
 func executeSafeRun(cmd *cobra.Command, args []string) error {
-	if err := withSafeFatal(func() {
+	err := withSafeFatal(func() {
 		cmd.Run(cmd, args)
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("kubectl command execution failed: %w", err)
 	}
 
