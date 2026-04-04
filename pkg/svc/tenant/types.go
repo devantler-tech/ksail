@@ -140,6 +140,16 @@ func (o *Options) Validate() error {
 	if o.TenantType == "" {
 		return ErrTenantTypeRequired
 	}
+	validType := false
+	for _, vt := range ValidTenantTypes() {
+		if o.TenantType == vt {
+			validType = true
+			break
+		}
+	}
+	if !validType {
+		return fmt.Errorf("%w: %q", ErrInvalidTenantType, o.TenantType)
+	}
 	for _, ns := range o.Namespaces {
 		if errs := validation.IsDNS1123Label(ns); len(errs) > 0 {
 			return fmt.Errorf("%w: namespace %q (%s)", ErrInvalidNamespace, ns, strings.Join(errs, "; "))

@@ -33,6 +33,9 @@ type DeleteOptions struct {
 
 // Delete removes a tenant's manifests and optionally unregisters and deletes the repo.
 func Delete(opts DeleteOptions) error {
+	if opts.Name == "" {
+		return ErrTenantNameRequired
+	}
 	if strings.Contains(opts.Name, "..") || strings.ContainsAny(opts.Name, `/\`) {
 		return fmt.Errorf("%w: %q must not contain path separators or '..'", ErrInvalidTenantName, opts.Name)
 	}

@@ -159,6 +159,8 @@ func gitProviderHost(provider string) string {
 		return "github.com"
 	case "gitlab":
 		return "gitlab.com"
+	case "gitea":
+		return "gitea.com"
 	default:
 		return provider
 	}

@@ -19,7 +19,7 @@ import (
 // Directory layout: <opts.OutputDir>/<opts.Name>/
 //
 //	namespace.yaml, serviceaccount.yaml, rolebinding.yaml,
-//	kustomization.yaml, [sync.yaml], [project.yaml, app.yaml, argocd-rbac-cm.yaml]
+//	kustomization.yaml, [sync.yaml], [project.yaml, app.yaml]
 func Generate(opts Options) error {
 	opts.ResolveDefaults()
 	if err := opts.Validate(); err != nil {
@@ -99,7 +99,7 @@ func generateTypeSpecificManifests(opts Options, tenantDir string) ([]string, er
 	case TenantTypeKubectl:
 		return nil, nil
 	default:
-		return nil, nil
+		return nil, fmt.Errorf("%w: %q", ErrInvalidTenantType, opts.TenantType)
 	}
 }
 
