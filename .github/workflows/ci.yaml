@@ -590,7 +590,7 @@ jobs:
           - distribution: Talos
             provider: Docker
             init: true
-            args: "--name system-test-cluster --cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux --image-verification Enabled"
+            args: "--name system-test-cluster-with-image-verification --image-verification Enabled"
           - distribution: Talos
             provider: Hetzner
             init: true
