@@ -92,8 +92,6 @@ type Options struct {
 	Register bool
 	// KustomizationPath is the explicit path to kustomization.yaml.
 	KustomizationPath string
-	// Delivery is how to deliver platform changes: commit or pr.
-	Delivery string
 }
 
 const (
@@ -105,8 +103,6 @@ const (
 	DefaultSyncSource = SyncSourceOCI
 	// DefaultRepoVisibility is the default repository visibility.
 	DefaultRepoVisibility = "Private"
-	// DefaultDelivery is the default delivery mechanism.
-	DefaultDelivery = "commit"
 )
 
 // ResolveDefaults fills in default values for unset fields.
@@ -125,9 +121,6 @@ func (o *Options) ResolveDefaults() {
 	}
 	if o.RepoVisibility == "" {
 		o.RepoVisibility = DefaultRepoVisibility
-	}
-	if o.Delivery == "" {
-		o.Delivery = DefaultDelivery
 	}
 }
 

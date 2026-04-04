@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
 	"sigs.k8s.io/yaml"
 )
 
@@ -69,12 +70,21 @@ func resolveProviderHost(provider string) string {
 // Returns a map of filename -> YAML content.
 // Files: sync.yaml (multi-doc: source CR + Kustomization CR)
 func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
+	if len(opts.Namespaces) == 0 {
+		return nil, fmt.Errorf("at least one namespace is required")
+	}
 	primaryNS := opts.Namespaces[0]
 
 	var source fluxSource
 	switch opts.SyncSource {
 	case SyncSourceOCI:
-		owner, repo, err := parseOwnerRepo(opts.GitRepo)
+		if opts.Registry == "" {
+			return nil, fmt.Errorf("--registry is required for Flux OCI sync source")
+		}
+		if opts.GitRepo == "" {
+			return nil, fmt.Errorf("--git-repo is required for Flux OCI sync source")
+		}
+		owner, repo, err := gitprovider.ParseOwnerRepo(opts.GitRepo)
 		if err != nil {
 			return nil, fmt.Errorf("parsing git repo for OCI source: %w", err)
 		}
@@ -94,6 +104,9 @@ func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 			},
 		}
 	case SyncSourceGit:
+		if opts.GitProvider == "" {
+			return nil, fmt.Errorf("--git-provider is required for Flux Git sync source")
+		}
 		host := resolveProviderHost(opts.GitProvider)
 		source = fluxSource{
 			APIVersion: "source.toolkit.fluxcd.io/v1",
@@ -147,13 +160,4 @@ func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 	return map[string]string{
 		"sync.yaml": syncYAML,
 	}, nil
-}
-
-// parseOwnerRepo splits "owner/repo-name" into owner and repo.
-func parseOwnerRepo(gitRepo string) (string, string, error) {
-	parts := strings.SplitN(gitRepo, "/", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid git-repo format: %q (expected owner/repo-name)", gitRepo)
-	}
-	return parts[0], parts[1], nil
 }

@@ -63,7 +63,7 @@ func TestGenerateArgoCDManifests_AppGitLab(t *testing.T) {
 	snaps.MatchSnapshot(t, result["app.yaml"])
 }
 
-func TestGenerateArgoCDManifests_RBACConfigMap(t *testing.T) {
+func TestGenerateArgoCDManifests_NoRBACConfigMap(t *testing.T) {
 	t.Parallel()
 	opts := Options{
 		Name:        "team-alpha",
@@ -74,7 +74,9 @@ func TestGenerateArgoCDManifests_RBACConfigMap(t *testing.T) {
 	}
 	result, err := GenerateArgoCDManifests(opts)
 	require.NoError(t, err)
-	snaps.MatchSnapshot(t, result["argocd-rbac-cm.yaml"])
+	// argocd-rbac-cm.yaml should not be generated per-tenant.
+	_, exists := result["argocd-rbac-cm.yaml"]
+	require.False(t, exists, "argocd-rbac-cm.yaml should not be generated per-tenant")
 }
 
 func TestMergeArgoCDRBACPolicy_EmptyExisting(t *testing.T) {
@@ -147,6 +149,51 @@ data:
 	require.NoError(t, err)
 	require.NotContains(t, result, "role:team-alpha")
 	snaps.MatchSnapshot(t, result)
+}
+
+func TestMergeArgoCDRBACPolicy_SubstringTenantNames(t *testing.T) {
+	t.Parallel()
+	existing := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/managed-by: ksail
+data:
+  policy.csv: |
+    p, role:team, applications, *, team/*, allow
+    p, role:team, projects, get, team, allow
+    g, team, role:team
+`
+	// "team-alpha" must be added even though "team" is a substring of "team-alpha".
+	result, err := MergeArgoCDRBACPolicy(existing, "team-alpha")
+	require.NoError(t, err)
+	require.Contains(t, result, "role:team,")
+	require.Contains(t, result, "role:team-alpha,")
+}
+
+func TestRemoveArgoCDRBACPolicy_SubstringTenantNames(t *testing.T) {
+	t.Parallel()
+	existing := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+data:
+  policy.csv: |
+    p, role:team, applications, *, team/*, allow
+    p, role:team, projects, get, team, allow
+    g, team, role:team
+    p, role:team-alpha, applications, *, team-alpha/*, allow
+    p, role:team-alpha, projects, get, team-alpha, allow
+    g, team-alpha, role:team-alpha
+`
+	// Removing "team" should NOT remove "team-alpha" lines.
+	result, err := RemoveArgoCDRBACPolicy(existing, "team")
+	require.NoError(t, err)
+	require.NotContains(t, result, "role:team,")
+	require.Contains(t, result, "role:team-alpha,")
 }
 
 func TestRemoveArgoCDRBACPolicy_PreservesOtherTenant(t *testing.T) {

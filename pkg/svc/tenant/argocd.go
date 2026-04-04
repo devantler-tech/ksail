@@ -85,9 +85,23 @@ type rbacConfigMap struct {
 
 // GenerateArgoCDManifests generates ArgoCD-specific tenant manifests.
 // Returns a map of filename -> YAML content.
-// Files: project.yaml, app.yaml, argocd-rbac-cm.yaml
+// Files: project.yaml, app.yaml
+//
+// Note: ArgoCD RBAC ConfigMap (argocd-rbac-cm) is NOT generated per-tenant
+// to avoid kustomize conflicts when multiple tenants share the same namespace.
+// Use MergeArgoCDRBACPolicy to add tenant policies to a shared argocd-rbac-cm.
 func GenerateArgoCDManifests(opts Options) (map[string]string, error) {
-	result := make(map[string]string, 3)
+	if opts.GitProvider == "" {
+		return nil, fmt.Errorf("--git-provider is required for ArgoCD tenants")
+	}
+	if opts.GitRepo == "" {
+		return nil, fmt.Errorf("--git-repo is required for ArgoCD tenants")
+	}
+	if len(opts.Namespaces) == 0 {
+		return nil, fmt.Errorf("at least one namespace is required")
+	}
+
+	result := make(map[string]string, 2)
 
 	projectYAML, err := generateAppProject(opts)
 	if err != nil {
@@ -101,12 +115,6 @@ func GenerateArgoCDManifests(opts Options) (map[string]string, error) {
 	}
 	result["app.yaml"] = appYAML
 
-	rbacYAML, err := generateRBACConfigMap(opts)
-	if err != nil {
-		return nil, fmt.Errorf("generating ArgoCD RBAC ConfigMap: %w", err)
-	}
-	result["argocd-rbac-cm.yaml"] = rbacYAML
-
 	return result, nil
 }
 
@@ -119,6 +127,9 @@ func generateAppProject(opts Options) (string, error) {
 		}
 	}
 
+	host := gitProviderHost(opts.GitProvider)
+	repoURL := fmt.Sprintf("https://%s/%s", host, opts.GitRepo)
+
 	project := appProject{
 		APIVersion: gitops.ArgoCDApplicationAPIVersion,
 		Kind:       appProjectKind,
@@ -129,7 +140,7 @@ func generateAppProject(opts Options) (string, error) {
 		},
 		Spec: appProjectSpec{
 			Description:  fmt.Sprintf("Tenant project for %s", opts.Name),
-			SourceRepos:  []string{"*"},
+			SourceRepos:  []string{repoURL},
 			Destinations: destinations,
 		},
 	}
@@ -251,9 +262,10 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 	}
 
 	existingPolicy := cm.Data["policy.csv"]
-	roleKey := fmt.Sprintf("role:%s", tenantName)
 
-	if strings.Contains(existingPolicy, roleKey) {
+	// Use exact role boundary matching to avoid false positives when
+	// one tenant name is a substring of another (e.g., "team" vs "team-alpha").
+	if hasTenantPolicy(existingPolicy, tenantName) {
 		data, err := yaml.Marshal(cm)
 		if err != nil {
 			return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
@@ -292,14 +304,12 @@ func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, 
 	}
 
 	existingPolicy := cm.Data["policy.csv"]
-	roleKey := fmt.Sprintf("role:%s", tenantName)
-	groupPrefix := fmt.Sprintf("g, %s,", tenantName)
 
 	lines := strings.Split(existingPolicy, "\n")
 	filtered := make([]string, 0, len(lines))
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.Contains(trimmed, roleKey) || strings.HasPrefix(trimmed, groupPrefix) {
+		if isTenantPolicyLine(trimmed, tenantName) {
 			continue
 		}
 		filtered = append(filtered, line)
@@ -317,4 +327,26 @@ func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, 
 	}
 
 	return string(data), nil
+}
+
+// hasTenantPolicy checks if the given policy CSV already contains policies
+// for the exact tenant name, avoiding substring false positives.
+func hasTenantPolicy(policyCSV, tenantName string) bool {
+	for _, line := range strings.Split(policyCSV, "\n") {
+		if isTenantPolicyLine(strings.TrimSpace(line), tenantName) {
+			return true
+		}
+	}
+	return false
+}
+
+// isTenantPolicyLine checks if a single policy line belongs to the given tenant,
+// using exact field matching to avoid substring collisions.
+func isTenantPolicyLine(line, tenantName string) bool {
+	if line == "" {
+		return false
+	}
+	exactRole := fmt.Sprintf("role:%s,", tenantName)
+	exactGroup := fmt.Sprintf("g, %s, role:%s", tenantName, tenantName)
+	return strings.Contains(line, exactRole) || strings.TrimSpace(line) == exactGroup
 }

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 )
@@ -14,6 +15,15 @@ func writeKustomizationFile(t *testing.T, dir, content string) string {
 	path := filepath.Join(dir, "kustomization.yaml")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	return path
+}
+
+func readKustomizationResources(t *testing.T, path string) []string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var raw map[string]any
+	require.NoError(t, yaml.Unmarshal(data, &raw))
+	return getResources(raw)
 }
 
 func TestRegisterTenantAddsToExistingResources(t *testing.T) {
@@ -28,11 +38,9 @@ resources:
 	err := RegisterTenant("new-tenant", dir, kPath)
 	require.NoError(t, err)
 
-	var k kustomizationType
-	data, _ := os.ReadFile(kPath)
-	require.NoError(t, unmarshalYAML(data, &k))
-	require.Contains(t, k.Resources, "existing-tenant")
-	require.Contains(t, k.Resources, "new-tenant")
+	resources := readKustomizationResources(t, kPath)
+	require.Contains(t, resources, "existing-tenant")
+	require.Contains(t, resources, "new-tenant")
 }
 
 func TestRegisterTenantCreatesResourcesEntry(t *testing.T) {
@@ -46,10 +54,8 @@ resources: []
 	err := RegisterTenant("team-alpha", dir, kPath)
 	require.NoError(t, err)
 
-	var k kustomizationType
-	data, _ := os.ReadFile(kPath)
-	require.NoError(t, unmarshalYAML(data, &k))
-	require.Equal(t, []string{"team-alpha"}, k.Resources)
+	resources := readKustomizationResources(t, kPath)
+	require.Equal(t, []string{"team-alpha"}, resources)
 }
 
 func TestRegisterTenantIsIdempotent(t *testing.T) {
@@ -64,12 +70,9 @@ resources:
 	err := RegisterTenant("team-alpha", dir, kPath)
 	require.NoError(t, err)
 
-	var k kustomizationType
-	data, _ := os.ReadFile(kPath)
-	require.NoError(t, unmarshalYAML(data, &k))
-
+	resources := readKustomizationResources(t, kPath)
 	count := 0
-	for _, r := range k.Resources {
+	for _, r := range resources {
 		if r == "team-alpha" {
 			count++
 		}
@@ -90,11 +93,9 @@ resources:
 	err := UnregisterTenant("team-alpha", dir, kPath)
 	require.NoError(t, err)
 
-	var k kustomizationType
-	data, _ := os.ReadFile(kPath)
-	require.NoError(t, unmarshalYAML(data, &k))
-	require.NotContains(t, k.Resources, "team-alpha")
-	require.Contains(t, k.Resources, "team-beta")
+	resources := readKustomizationResources(t, kPath)
+	require.NotContains(t, resources, "team-alpha")
+	require.Contains(t, resources, "team-beta")
 }
 
 func TestUnregisterTenantSafeWhenNotPresent(t *testing.T) {
@@ -109,10 +110,35 @@ resources:
 	err := UnregisterTenant("nonexistent", dir, kPath)
 	require.NoError(t, err)
 
-	var k kustomizationType
-	data, _ := os.ReadFile(kPath)
-	require.NoError(t, unmarshalYAML(data, &k))
-	require.Equal(t, []string{"team-beta"}, k.Resources)
+	resources := readKustomizationResources(t, kPath)
+	require.Equal(t, []string{"team-beta"}, resources)
+}
+
+func TestRegisterTenantPreservesOtherFields(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	kPath := writeKustomizationFile(t, dir, `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: production
+namePrefix: prod-
+resources:
+- existing
+`)
+
+	err := RegisterTenant("new-tenant", dir, kPath)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(kPath)
+	require.NoError(t, err)
+	var raw map[string]any
+	require.NoError(t, yaml.Unmarshal(data, &raw))
+
+	// Other fields must be preserved.
+	require.Equal(t, "production", raw["namespace"])
+	require.Equal(t, "prod-", raw["namePrefix"])
+	resources := getResources(raw)
+	require.Contains(t, resources, "existing")
+	require.Contains(t, resources, "new-tenant")
 }
 
 func TestFindKustomizationWalksUp(t *testing.T) {
@@ -128,7 +154,11 @@ resources: []
 
 	found, err := FindKustomization(nested)
 	require.NoError(t, err)
-	require.Equal(t, filepath.Join(root, "kustomization.yaml"), found)
+
+	// EvalCanonicalPath resolves symlinks (e.g., /var → /private/var on macOS).
+	canonicalRoot, err := fsutil.EvalCanonicalPath(root)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(canonicalRoot, "kustomization.yaml"), found)
 }
 
 func TestFindKustomizationReturnsErrWhenNotFound(t *testing.T) {
@@ -139,9 +169,4 @@ func TestFindKustomizationReturnsErrWhenNotFound(t *testing.T) {
 
 	_, err := FindKustomization(nested)
 	require.ErrorIs(t, err, ErrKustomizationNotFound)
-}
-
-// unmarshalYAML is a test helper wrapping sigs.k8s.io/yaml.
-func unmarshalYAML(data []byte, v interface{}) error {
-	return yaml.Unmarshal(data, v)
 }

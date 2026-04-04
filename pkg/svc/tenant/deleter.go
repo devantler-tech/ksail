@@ -66,7 +66,8 @@ func Delete(opts DeleteOptions) error {
 			return fmt.Errorf("parse git-repo: %w", err)
 		}
 
-		provider, err := gitprovider.New(opts.GitProvider, opts.GitToken)
+		token := gitprovider.ResolveToken(opts.GitProvider, opts.GitToken)
+		provider, err := gitprovider.New(opts.GitProvider, token)
 		if err != nil {
 			return fmt.Errorf("create git provider: %w", err)
 		}

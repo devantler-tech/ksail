@@ -65,7 +65,7 @@ spec:
   - namespace: team-beta-prod
     server: https://kubernetes.default.svc
   sourceRepos:
-  - '*'
+  - https://github.com/org/team-beta-app
 
 ---
 
@@ -83,23 +83,7 @@ spec:
   - namespace: team-alpha
     server: https://kubernetes.default.svc
   sourceRepos:
-  - '*'
-
----
-
-[TestGenerateArgoCDManifests_RBACConfigMap - 1]
-apiVersion: v1
-data:
-  policy.csv: |
-    p, role:team-alpha, applications, *, team-alpha/*, allow
-    p, role:team-alpha, projects, get, team-alpha, allow
-    g, team-alpha, role:team-alpha
-kind: ConfigMap
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: ksail
-  name: argocd-rbac-cm
-  namespace: argocd
+  - https://github.com/org/team-alpha-app
 
 ---
 

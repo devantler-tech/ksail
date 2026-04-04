@@ -28,8 +28,14 @@ func Generate(opts Options) error {
 
 	tenantDir := filepath.Join(opts.OutputDir, opts.Name)
 
-	if _, err := os.Stat(tenantDir); err == nil && !opts.Force {
-		return fmt.Errorf("tenant directory %q already exists, use --force to overwrite", tenantDir)
+	if info, err := os.Stat(tenantDir); err == nil && info.IsDir() {
+		if !opts.Force {
+			return fmt.Errorf("tenant directory %q already exists, use --force to overwrite", tenantDir)
+		}
+		// Clean stale files from previous generation (may have been a different type).
+		if err := os.RemoveAll(tenantDir); err != nil {
+			return fmt.Errorf("removing existing tenant directory: %w", err)
+		}
 	}
 
 	if err := os.MkdirAll(tenantDir, 0o750); err != nil {
@@ -42,12 +48,9 @@ func Generate(opts Options) error {
 		return fmt.Errorf("generating RBAC manifests: %w", err)
 	}
 
-	var resources []string
-	for filename, content := range rbacFiles {
-		if _, err := fsutil.TryWriteFile(content, filepath.Join(tenantDir, filename), opts.Force); err != nil {
-			return fmt.Errorf("writing %s: %w", filename, err)
-		}
-		resources = append(resources, filename)
+	resources, err := writeManifests(tenantDir, rbacFiles, opts.Force)
+	if err != nil {
+		return err
 	}
 
 	// Generate type-specific manifests.
@@ -57,23 +60,21 @@ func Generate(opts Options) error {
 		if err != nil {
 			return fmt.Errorf("generating Flux manifests: %w", err)
 		}
-		for filename, content := range fluxFiles {
-			if _, err := fsutil.TryWriteFile(content, filepath.Join(tenantDir, filename), opts.Force); err != nil {
-				return fmt.Errorf("writing %s: %w", filename, err)
-			}
-			resources = append(resources, filename)
+		names, err := writeManifests(tenantDir, fluxFiles, opts.Force)
+		if err != nil {
+			return err
 		}
+		resources = append(resources, names...)
 	case TenantTypeArgoCD:
 		argoFiles, err := GenerateArgoCDManifests(opts)
 		if err != nil {
 			return fmt.Errorf("generating ArgoCD manifests: %w", err)
 		}
-		for filename, content := range argoFiles {
-			if _, err := fsutil.TryWriteFile(content, filepath.Join(tenantDir, filename), opts.Force); err != nil {
-				return fmt.Errorf("writing %s: %w", filename, err)
-			}
-			resources = append(resources, filename)
+		names, err := writeManifests(tenantDir, argoFiles, opts.Force)
+		if err != nil {
+			return err
 		}
+		resources = append(resources, names...)
 	case TenantTypeKubectl:
 		// No additional files needed.
 	}
@@ -93,4 +94,17 @@ func Generate(opts Options) error {
 	}
 
 	return nil
+}
+
+// writeManifests writes a map of filename->content to the given directory
+// and returns the list of filenames written.
+func writeManifests(dir string, files map[string]string, force bool) ([]string, error) {
+	names := make([]string, 0, len(files))
+	for filename, content := range files {
+		if _, err := fsutil.TryWriteFile(content, filepath.Join(dir, filename), force); err != nil {
+			return nil, fmt.Errorf("writing %s: %w", filename, err)
+		}
+		names = append(names, filename)
+	}
+	return names, nil
 }

@@ -110,9 +110,14 @@ func TestGenerateRBACManifestsMultiDocSeparator(t *testing.T) {
 	result, err := GenerateRBACManifests(opts)
 	require.NoError(t, err)
 
-	for _, filename := range []string{"namespace.yaml", "serviceaccount.yaml", "rolebinding.yaml"} {
+	// Namespaces and RoleBindings are multi-doc (one per namespace).
+	for _, filename := range []string{"namespace.yaml", "rolebinding.yaml"} {
 		content := result[filename]
 		docs := strings.Split(content, "---\n")
 		require.Len(t, docs, 2, "expected 2 documents in %s", filename)
 	}
+
+	// ServiceAccount is single (only in primary namespace).
+	saDocs := strings.Split(result["serviceaccount.yaml"], "---\n")
+	require.Len(t, saDocs, 1, "expected 1 document in serviceaccount.yaml")
 }

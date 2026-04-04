@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 )
 
 func TestDelete_RemovesTenantDirectory(t *testing.T) {
@@ -72,10 +73,11 @@ resources:
 	data, readErr := os.ReadFile(kPath)
 	require.NoError(t, readErr)
 
-	var k kustomizationType
-	require.NoError(t, unmarshalYAML(data, &k))
-	require.NotContains(t, k.Resources, "my-tenant")
-	require.Contains(t, k.Resources, "other-tenant")
+	var raw map[string]any
+	require.NoError(t, yaml.Unmarshal(data, &raw))
+	resources := getResources(raw)
+	require.NotContains(t, resources, "my-tenant")
+	require.Contains(t, resources, "other-tenant")
 }
 
 func TestDelete_ContinuesIfNoKustomizationFound(t *testing.T) {

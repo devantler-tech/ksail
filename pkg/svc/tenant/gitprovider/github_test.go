@@ -169,12 +169,19 @@ func TestGitHubProvider_PushFiles(t *testing.T) {
 	t.Parallel()
 	var pushedPaths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			// File doesn't exist yet — return 404
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		require.Equal(t, http.MethodPut, r.Method)
 		pushedPaths = append(pushedPaths, r.URL.Path)
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		require.Equal(t, "initial commit", body["message"])
 		require.NotEmpty(t, body["content"])
+		// No SHA expected for new files
+		require.Nil(t, body["sha"])
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"content":{"path":"test"}}`))
 	}))
@@ -194,10 +201,40 @@ func TestGitHubProvider_PushFiles(t *testing.T) {
 	require.Equal(t, "/repos/my-org/my-repo/contents/b.txt", pushedPaths[1])
 }
 
+func TestGitHubProvider_PushFiles_WithExistingSHA(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			// File exists — return SHA
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"sha":"abc123"}`))
+			return
+		}
+		require.Equal(t, http.MethodPut, r.Method)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "abc123", body["sha"])
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"content":{"path":"test"}}`))
+	}))
+	defer srv.Close()
+
+	p := &gitHubProvider{token: "test-token", client: srv.Client(), apiURL: srv.URL}
+	files := map[string][]byte{"file.txt": []byte("updated")}
+	err := p.PushFiles(context.Background(), "my-org", "my-repo", files, "update")
+	require.NoError(t, err)
+}
+
 func TestGitHubProvider_PushFiles_Error(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			// File doesn't exist
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"Internal error"}`))
 	}))
 	defer srv.Close()
 

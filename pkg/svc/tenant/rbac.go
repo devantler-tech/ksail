@@ -1,6 +1,7 @@
 package tenant
 
 import (
+	"fmt"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -12,8 +13,16 @@ import (
 // GenerateRBACManifests generates RBAC manifests for a tenant.
 // Returns a map of filename -> YAML content.
 // Files: namespace.yaml, serviceaccount.yaml, rolebinding.yaml
+//
+// A single ServiceAccount is created in the primary namespace (Namespaces[0]).
+// A RoleBinding is created in each namespace, referencing the primary-namespace SA.
 func GenerateRBACManifests(opts Options) (map[string]string, error) {
-	var namespaceDocs, saDocs, rbDocs []string
+	if len(opts.Namespaces) == 0 {
+		return nil, fmt.Errorf("at least one namespace is required")
+	}
+
+	primaryNS := opts.Namespaces[0]
+	var namespaceDocs, rbDocs []string
 
 	for _, ns := range opts.Namespaces {
 		nsYAML, err := marshalNamespace(ns)
@@ -22,22 +31,22 @@ func GenerateRBACManifests(opts Options) (map[string]string, error) {
 		}
 		namespaceDocs = append(namespaceDocs, nsYAML)
 
-		saYAML, err := marshalServiceAccount(opts.Name, ns)
-		if err != nil {
-			return nil, err
-		}
-		saDocs = append(saDocs, saYAML)
-
-		rbYAML, err := marshalRoleBinding(opts.Name, ns, opts.ClusterRole)
+		rbYAML, err := marshalRoleBinding(opts.Name, ns, primaryNS, opts.ClusterRole)
 		if err != nil {
 			return nil, err
 		}
 		rbDocs = append(rbDocs, rbYAML)
 	}
 
+	// Single ServiceAccount in primary namespace.
+	saYAML, err := marshalServiceAccount(opts.Name, primaryNS)
+	if err != nil {
+		return nil, err
+	}
+
 	return map[string]string{
 		"namespace.yaml":      joinDocs(namespaceDocs),
-		"serviceaccount.yaml": joinDocs(saDocs),
+		"serviceaccount.yaml": saYAML,
 		"rolebinding.yaml":    joinDocs(rbDocs),
 	}, nil
 }
@@ -79,7 +88,7 @@ func marshalServiceAccount(name, namespace string) (string, error) {
 	return string(b), nil
 }
 
-func marshalRoleBinding(name, namespace, clusterRole string) (string, error) {
+func marshalRoleBinding(name, namespace, saNamespace, clusterRole string) (string, error) {
 	rb := rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "rbac.authorization.k8s.io/v1",
@@ -99,7 +108,7 @@ func marshalRoleBinding(name, namespace, clusterRole string) (string, error) {
 			{
 				Kind:      "ServiceAccount",
 				Name:      name,
-				Namespace: namespace,
+				Namespace: saNamespace,
 			},
 		},
 	}

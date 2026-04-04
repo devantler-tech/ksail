@@ -86,11 +86,15 @@ func TestGenerate_ArgoCDType(t *testing.T) {
 
 	tenantDir := filepath.Join(dir, "team-argocd")
 
-	// RBAC + ArgoCD files must exist.
-	for _, f := range []string{"namespace.yaml", "serviceaccount.yaml", "rolebinding.yaml", "project.yaml", "app.yaml", "argocd-rbac-cm.yaml", "kustomization.yaml"} {
+	// RBAC + ArgoCD files must exist (argocd-rbac-cm.yaml is NOT generated per-tenant).
+	for _, f := range []string{"namespace.yaml", "serviceaccount.yaml", "rolebinding.yaml", "project.yaml", "app.yaml", "kustomization.yaml"} {
 		_, err := os.Stat(filepath.Join(tenantDir, f))
 		require.NoError(t, err, "expected %s to exist", f)
 	}
+
+	// argocd-rbac-cm.yaml should NOT be generated per-tenant.
+	_, err = os.Stat(filepath.Join(tenantDir, "argocd-rbac-cm.yaml"))
+	require.ErrorIs(t, err, os.ErrNotExist, "argocd-rbac-cm.yaml should not be generated per-tenant")
 
 	// Verify ArgoCD files are in kustomization resources.
 	kustomizationContent, err := os.ReadFile(filepath.Join(tenantDir, "kustomization.yaml"))
@@ -98,7 +102,6 @@ func TestGenerate_ArgoCDType(t *testing.T) {
 	content := string(kustomizationContent)
 	require.Contains(t, content, "project.yaml")
 	require.Contains(t, content, "app.yaml")
-	require.Contains(t, content, "argocd-rbac-cm.yaml")
 
 	snaps.MatchSnapshot(t, content)
 }
@@ -166,11 +169,17 @@ func TestGenerate_MultiNamespace(t *testing.T) {
 
 	tenantDir := filepath.Join(dir, "team-multi")
 
-	// Each RBAC file should contain multiple YAML documents.
-	for _, f := range []string{"namespace.yaml", "serviceaccount.yaml", "rolebinding.yaml"} {
+	// Namespace and RoleBinding should have 3 documents (one per namespace).
+	for _, f := range []string{"namespace.yaml", "rolebinding.yaml"} {
 		content, err := os.ReadFile(filepath.Join(tenantDir, f))
 		require.NoError(t, err)
 		docs := strings.Split(string(content), "---\n")
 		require.Len(t, docs, 3, "expected 3 documents in %s for 3 namespaces", f)
 	}
+
+	// ServiceAccount is single (only in primary namespace).
+	saContent, err := os.ReadFile(filepath.Join(tenantDir, "serviceaccount.yaml"))
+	require.NoError(t, err)
+	saDocs := strings.Split(string(saContent), "---\n")
+	require.Len(t, saDocs, 1, "expected 1 document in serviceaccount.yaml")
 }

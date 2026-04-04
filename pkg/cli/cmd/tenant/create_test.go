@@ -198,9 +198,7 @@ func TestCreateCmd_NoTypeNoConfig(t *testing.T) {
 	cmd.SetArgs([]string{"orphan-tenant", "--output", outDir})
 
 	err := cmd.Execute()
-	// The config manager loads defaults when no config file found,
-	// and default GitOpsEngine is "None", so it falls to kubectl.
-	if err != nil {
-		require.ErrorContains(t, err, "no --type specified")
-	}
+	// No ksail.yaml and no --type → should error asking for --type.
+	require.Error(t, err)
+	require.ErrorContains(t, err, "no --type specified")
 }

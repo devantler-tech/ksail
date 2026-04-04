@@ -39,7 +39,8 @@ runs:
         cd /tmp/tenant-test-kubectl
         ksail tenant create multi-ns-tenant --type kubectl -n ns1 -n ns2 --force --output .
         grep -c "kind: Namespace" multi-ns-tenant/namespace.yaml | grep -q "2"
-        grep -c "kind: ServiceAccount" multi-ns-tenant/serviceaccount.yaml | grep -q "2"
+        # Single ServiceAccount in primary namespace
+        grep -c "kind: ServiceAccount" multi-ns-tenant/serviceaccount.yaml | grep -q "1"
         grep -c "kind: RoleBinding" multi-ns-tenant/rolebinding.yaml | grep -q "2"
         echo "✅ kubectl tenant create (multi-namespace) passed"
 
@@ -98,15 +99,15 @@ runs:
         test -f my-argocd-tenant/kustomization.yaml
         test -f my-argocd-tenant/project.yaml
         test -f my-argocd-tenant/app.yaml
-        test -f my-argocd-tenant/argocd-rbac-cm.yaml
+        # argocd-rbac-cm.yaml is NOT generated per-tenant (avoids kustomize conflicts)
+        test ! -f my-argocd-tenant/argocd-rbac-cm.yaml
         grep -q "kind: AppProject" my-argocd-tenant/project.yaml
         grep -q "kind: Application" my-argocd-tenant/app.yaml
         grep -q "namespace: argocd" my-argocd-tenant/app.yaml
-        grep -q "argocd-rbac-cm" my-argocd-tenant/argocd-rbac-cm.yaml
-        grep -q "policy.csv" my-argocd-tenant/argocd-rbac-cm.yaml
+        # SourceRepos scoped to tenant repo URL
+        grep -q "myorg/my-argocd-tenant" my-argocd-tenant/project.yaml
         grep -q "project.yaml" my-argocd-tenant/kustomization.yaml
         grep -q "app.yaml" my-argocd-tenant/kustomization.yaml
-        grep -q "argocd-rbac-cm.yaml" my-argocd-tenant/kustomization.yaml
         echo "✅ argocd tenant create passed"
 
     - name: "🧪 ksail tenant create (argocd, multi-namespace)"

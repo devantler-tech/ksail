@@ -31,11 +31,19 @@ func newGitHubProvider(token string) *gitHubProvider {
 // If owner is an org, creates under /orgs/{owner}/repos.
 // Otherwise falls back to /user/repos.
 func (g *gitHubProvider) CreateRepo(ctx context.Context, owner, name string, visibility RepoVisibility) error {
-	private := visibility != VisibilityPublic
 	body := map[string]any{
 		"name":      name,
-		"private":   private,
 		"auto_init": false,
+	}
+
+	switch visibility {
+	case VisibilityPublic:
+		body["private"] = false
+	case VisibilityInternal:
+		// Internal repos require the "visibility" field and only work for orgs.
+		body["visibility"] = "internal"
+	default:
+		body["private"] = true
 	}
 
 	// Try org first, fall back to user
@@ -47,7 +55,11 @@ func (g *gitHubProvider) CreateRepo(ctx context.Context, owner, name string, vis
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		// Owner is a user, not an org
+		// Owner is a user, not an org — internal visibility is not supported for users.
+		if visibility == VisibilityInternal {
+			body["private"] = true
+			delete(body, "visibility")
+		}
 		url = fmt.Sprintf("%s/user/repos", g.apiURL)
 		resp2, err := g.doJSON(ctx, http.MethodPost, url, body)
 		if err != nil {
@@ -67,6 +79,7 @@ func (g *gitHubProvider) CreateRepo(ctx context.Context, owner, name string, vis
 }
 
 // PushFiles pushes files to a repository using the Contents API.
+// For existing files, it fetches the current SHA first to allow updates.
 func (g *gitHubProvider) PushFiles(ctx context.Context, owner, name string, files map[string][]byte, commitMsg string) error {
 	// Sort filenames for deterministic ordering
 	paths := make([]string, 0, len(files))
@@ -82,6 +95,16 @@ func (g *gitHubProvider) PushFiles(ctx context.Context, owner, name string, file
 			"message": commitMsg,
 			"content": encoded,
 		}
+
+		// Check if file already exists to get its SHA (required for updates).
+		sha, err := g.getFileSHA(ctx, owner, name, path)
+		if err != nil {
+			return fmt.Errorf("checking file %s: %w", path, err)
+		}
+		if sha != "" {
+			body["sha"] = sha
+		}
+
 		url := fmt.Sprintf("%s/repos/%s/%s/contents/%s", g.apiURL, owner, name, path)
 		resp, err := g.doJSON(ctx, http.MethodPut, url, body)
 		if err != nil {
@@ -89,10 +112,35 @@ func (g *gitHubProvider) PushFiles(ctx context.Context, owner, name string, file
 		}
 		resp.Body.Close()
 		if resp.StatusCode >= 300 {
-			return fmt.Errorf("push file %s: HTTP %d", path, resp.StatusCode)
+			return g.readError(resp, fmt.Sprintf("push file %s", path))
 		}
 	}
 	return nil
+}
+
+// getFileSHA returns the SHA of an existing file, or empty string if not found.
+func (g *gitHubProvider) getFileSHA(ctx context.Context, owner, name, path string) (string, error) {
+	url := fmt.Sprintf("%s/repos/%s/%s/contents/%s", g.apiURL, owner, name, path)
+	resp, err := g.doRequest(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", nil
+	}
+	if resp.StatusCode >= 300 {
+		return "", g.readError(resp, "get file SHA")
+	}
+
+	var result struct {
+		SHA string `json:"sha"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decoding file info: %w", err)
+	}
+	return result.SHA, nil
 }
 
 // DeleteRepo deletes a GitHub repository.

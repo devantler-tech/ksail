@@ -62,7 +62,6 @@ func TestOptionsResolveDefaults(t *testing.T) {
 	require.Equal(t, DefaultOutputDir, opts.OutputDir)
 	require.Equal(t, DefaultSyncSource, opts.SyncSource)
 	require.Equal(t, DefaultRepoVisibility, opts.RepoVisibility)
-	require.Equal(t, DefaultDelivery, opts.Delivery)
 }
 
 func TestOptionsResolveDefaultsPreservesExisting(t *testing.T) {
@@ -74,7 +73,6 @@ func TestOptionsResolveDefaultsPreservesExisting(t *testing.T) {
 		OutputDir:      "/custom",
 		SyncSource:     SyncSourceGit,
 		RepoVisibility: "Public",
-		Delivery:       "pr",
 	}
 	opts.ResolveDefaults()
 
@@ -83,7 +81,6 @@ func TestOptionsResolveDefaultsPreservesExisting(t *testing.T) {
 	require.Equal(t, "/custom", opts.OutputDir)
 	require.Equal(t, SyncSourceGit, opts.SyncSource)
 	require.Equal(t, "Public", opts.RepoVisibility)
-	require.Equal(t, "pr", opts.Delivery)
 }
 
 func TestOptionsValidateEmptyName(t *testing.T) {

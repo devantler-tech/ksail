@@ -6,15 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"sigs.k8s.io/yaml"
 )
-
-// kustomizationType represents a minimal kustomization.yaml structure.
-type kustomizationType struct {
-	APIVersion string   `json:"apiVersion"`
-	Kind       string   `json:"kind"`
-	Resources  []string `json:"resources"`
-}
 
 // RegisterTenant adds a tenant's directory path to a kustomization.yaml resources list.
 // If kustomizationPath is empty, auto-discovers by walking up from outputDir.
@@ -24,7 +18,7 @@ func RegisterTenant(tenantName, outputDir, kustomizationPath string) error {
 		return err
 	}
 
-	k, err := readKustomization(kPath)
+	raw, err := readKustomizationRaw(kPath)
 	if err != nil {
 		return err
 	}
@@ -34,14 +28,16 @@ func RegisterTenant(tenantName, outputDir, kustomizationPath string) error {
 		return err
 	}
 
-	for _, r := range k.Resources {
+	resources := getResources(raw)
+	for _, r := range resources {
 		if r == relPath {
 			return nil // already registered
 		}
 	}
 
-	k.Resources = append(k.Resources, relPath)
-	return writeKustomization(kPath, k)
+	resources = append(resources, relPath)
+	raw["resources"] = resources
+	return writeKustomizationRaw(kPath, raw)
 }
 
 // UnregisterTenant removes a tenant's directory path from a kustomization.yaml resources list.
@@ -51,7 +47,7 @@ func UnregisterTenant(tenantName, outputDir, kustomizationPath string) error {
 		return err
 	}
 
-	k, err := readKustomization(kPath)
+	raw, err := readKustomizationRaw(kPath)
 	if err != nil {
 		return err
 	}
@@ -61,21 +57,22 @@ func UnregisterTenant(tenantName, outputDir, kustomizationPath string) error {
 		return err
 	}
 
-	filtered := make([]string, 0, len(k.Resources))
-	for _, r := range k.Resources {
+	resources := getResources(raw)
+	filtered := make([]string, 0, len(resources))
+	for _, r := range resources {
 		if r != relPath {
 			filtered = append(filtered, r)
 		}
 	}
-	k.Resources = filtered
+	raw["resources"] = filtered
 
-	return writeKustomization(kPath, k)
+	return writeKustomizationRaw(kPath, raw)
 }
 
 // FindKustomization walks up from startDir looking for kustomization.yaml.
 // Returns the path to the first kustomization.yaml found, or error if none found.
 func FindKustomization(startDir string) (string, error) {
-	dir, err := filepath.Abs(startDir)
+	dir, err := fsutil.EvalCanonicalPath(startDir)
 	if err != nil {
 		return "", fmt.Errorf("resolve start dir: %w", err)
 	}
@@ -95,25 +92,38 @@ func FindKustomization(startDir string) (string, error) {
 
 func resolveKustomizationPath(outputDir, explicit string) (string, error) {
 	if explicit != "" {
-		return explicit, nil
+		canonical, err := fsutil.EvalCanonicalPath(explicit)
+		if err != nil {
+			return "", fmt.Errorf("resolving kustomization path: %w", err)
+		}
+		if _, err := os.Stat(canonical); err != nil {
+			return "", fmt.Errorf("kustomization file not found: %w", err)
+		}
+		return canonical, nil
 	}
 	return FindKustomization(outputDir)
 }
 
-func readKustomization(path string) (*kustomizationType, error) {
+// readKustomizationRaw reads a kustomization.yaml into a raw map,
+// preserving all fields (patches, images, namespace, generators, etc.).
+func readKustomizationRaw(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read kustomization: %w", err)
 	}
-	var k kustomizationType
-	if err := yaml.Unmarshal(data, &k); err != nil {
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("unmarshal kustomization: %w", err)
 	}
-	return &k, nil
+	if raw == nil {
+		raw = make(map[string]any)
+	}
+	return raw, nil
 }
 
-func writeKustomization(path string, k *kustomizationType) error {
-	data, err := yaml.Marshal(k)
+// writeKustomizationRaw writes a raw map back to kustomization.yaml.
+func writeKustomizationRaw(path string, raw map[string]any) error {
+	data, err := yaml.Marshal(raw)
 	if err != nil {
 		return fmt.Errorf("marshal kustomization: %w", err)
 	}
@@ -123,14 +133,33 @@ func writeKustomization(path string, k *kustomizationType) error {
 	return nil
 }
 
+// getResources extracts the resources list from a raw kustomization map.
+func getResources(raw map[string]any) []string {
+	res, ok := raw["resources"]
+	if !ok {
+		return nil
+	}
+	slice, ok := res.([]any)
+	if !ok {
+		return nil
+	}
+	result := make([]string, 0, len(slice))
+	for _, item := range slice {
+		if s, ok := item.(string); ok {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
 func computeRelativePath(kustomizationPath, outputDir, tenantName string) (string, error) {
 	kDir := filepath.Dir(kustomizationPath)
 
-	absKDir, err := filepath.Abs(kDir)
+	absKDir, err := fsutil.EvalCanonicalPath(kDir)
 	if err != nil {
 		return "", fmt.Errorf("resolve kustomization dir: %w", err)
 	}
-	absOutputDir, err := filepath.Abs(outputDir)
+	absOutputDir, err := fsutil.EvalCanonicalPath(outputDir)
 	if err != nil {
 		return "", fmt.Errorf("resolve output dir: %w", err)
 	}
@@ -140,6 +169,11 @@ func computeRelativePath(kustomizationPath, outputDir, tenantName string) (strin
 	rel, err := filepath.Rel(absKDir, tenantDir)
 	if err != nil {
 		return "", fmt.Errorf("compute relative path: %w", err)
+	}
+
+	// Reject paths that escape the kustomization root.
+	if strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("tenant directory %q is outside the kustomization root %q", tenantDir, absKDir)
 	}
 
 	// Normalize to forward slashes for YAML compatibility.

@@ -76,16 +76,16 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 	register, _ := cmd.Flags().GetBool("register")
 	opts.Register = register
 	opts.KustomizationPath, _ = cmd.Flags().GetString("kustomization-path")
-	opts.Delivery, _ = cmd.Flags().GetString("delivery")
+	delivery, _ := cmd.Flags().GetString("delivery")
 
-	// Validate delivery mode.
-	switch opts.Delivery {
+	// Validate delivery mode (CLI concern — not passed to service layer).
+	switch delivery {
 	case "commit":
 		// Default: write files locally.
 	case "pr":
 		return fmt.Errorf("--delivery pr is not yet implemented; use --delivery commit (default)")
 	default:
-		return fmt.Errorf("invalid --delivery value %q: must be 'commit' or 'pr'", opts.Delivery)
+		return fmt.Errorf("invalid --delivery value %q: must be 'commit' or 'pr'", delivery)
 	}
 
 	// Resolve tenant type.
@@ -96,17 +96,19 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 	} else {
 		cfgManager := ksailconfigmanager.NewConfigManager(cmd.OutOrStdout(), "")
 		cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
-		if err == nil {
-			switch cfg.Spec.Cluster.GitOpsEngine {
-			case v1alpha1.GitOpsEngineFlux:
-				opts.TenantType = tenant.TenantTypeFlux
-			case v1alpha1.GitOpsEngineArgoCD:
-				opts.TenantType = tenant.TenantTypeArgoCD
-			default:
-				opts.TenantType = tenant.TenantTypeKubectl
-			}
-		} else {
+		if err != nil {
+			return fmt.Errorf("loading config: %w", err)
+		}
+		if !cfgManager.IsConfigFileFound() {
 			return fmt.Errorf("no --type specified and no ksail.yaml found: please specify --type (flux, argocd, or kubectl)")
+		}
+		switch cfg.Spec.Cluster.GitOpsEngine {
+		case v1alpha1.GitOpsEngineFlux:
+			opts.TenantType = tenant.TenantTypeFlux
+		case v1alpha1.GitOpsEngineArgoCD:
+			opts.TenantType = tenant.TenantTypeArgoCD
+		default:
+			opts.TenantType = tenant.TenantTypeKubectl
 		}
 	}
 

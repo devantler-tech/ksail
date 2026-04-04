@@ -79,22 +79,6 @@ metadata:
     app.kubernetes.io/managed-by: ksail
   name: team-beta
   namespace: ns-dev
-/-/-/-/
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: ksail
-  name: team-beta
-  namespace: ns-staging
-/-/-/-/
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: ksail
-  name: team-beta
-  namespace: ns-prod
 
 ---
 
@@ -129,7 +113,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: team-beta
-  namespace: ns-staging
+  namespace: ns-dev
 /-/-/-/
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -145,7 +129,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: team-beta
-  namespace: ns-prod
+  namespace: ns-dev
 
 ---
 
