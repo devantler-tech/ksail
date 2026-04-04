@@ -72,5 +72,9 @@ func ExecuteSafely(ctx context.Context, cmd *cobra.Command) error {
 		return fatalErr
 	}
 
-	return execErr
+	if execErr != nil {
+		return fmt.Errorf("kubectl command failed: %w", execErr)
+	}
+
+	return nil
 }
