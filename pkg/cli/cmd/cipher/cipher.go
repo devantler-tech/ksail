@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	sopsclient "github.com/devantler-tech/ksail/v5/pkg/client/sops"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
+	sopsclient "github.com/devantler-tech/ksail/v5/pkg/client/sops"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
