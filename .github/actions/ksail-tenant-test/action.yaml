@@ -1,0 +1,177 @@
+name: KSail Tenant Test
+description: |
+  Runs end-to-end tests for ksail tenant create and delete commands,
+  verifying file generation for all three tenant types.
+
+runs:
+  using: composite
+  steps:
+    # --- kubectl tenant ---
+    - name: "🧪 ksail tenant create (kubectl type)"
+      shell: bash
+      run: |
+        mkdir -p /tmp/tenant-test-kubectl && cd /tmp/tenant-test-kubectl
+        ksail tenant create my-kubectl-tenant --type kubectl --output .
+        # Verify generated files
+        test -f my-kubectl-tenant/namespace.yaml
+        test -f my-kubectl-tenant/serviceaccount.yaml
+        test -f my-kubectl-tenant/rolebinding.yaml
+        test -f my-kubectl-tenant/kustomization.yaml
+        # Verify NO sync resources for kubectl type
+        test ! -f my-kubectl-tenant/sync.yaml
+        test ! -f my-kubectl-tenant/project.yaml
+        test ! -f my-kubectl-tenant/app.yaml
+        # Verify labels
+        grep -q "app.kubernetes.io/managed-by: ksail" my-kubectl-tenant/namespace.yaml
+        grep -q "app.kubernetes.io/managed-by: ksail" my-kubectl-tenant/serviceaccount.yaml
+        grep -q "app.kubernetes.io/managed-by: ksail" my-kubectl-tenant/rolebinding.yaml
+        # Verify RBAC content
+        grep -q "kind: Namespace" my-kubectl-tenant/namespace.yaml
+        grep -q "kind: ServiceAccount" my-kubectl-tenant/serviceaccount.yaml
+        grep -q "kind: RoleBinding" my-kubectl-tenant/rolebinding.yaml
+        grep -q "kind: ClusterRole" my-kubectl-tenant/rolebinding.yaml
+        grep -q 'name: edit' my-kubectl-tenant/rolebinding.yaml
+        echo "✅ kubectl tenant create passed"
+
+    - name: "🧪 ksail tenant create (kubectl, multi-namespace)"
+      shell: bash
+      run: |
+        cd /tmp/tenant-test-kubectl
+        ksail tenant create multi-ns-tenant --type kubectl -n ns1 -n ns2 --force --output .
+        grep -c "kind: Namespace" multi-ns-tenant/namespace.yaml | grep -q "2"
+        grep -c "kind: ServiceAccount" multi-ns-tenant/serviceaccount.yaml | grep -q "2"
+        grep -c "kind: RoleBinding" multi-ns-tenant/rolebinding.yaml | grep -q "2"
+        echo "✅ kubectl tenant create (multi-namespace) passed"
+
+    - name: "🧪 ksail tenant delete (kubectl type)"
+      shell: bash
+      run: |
+        cd /tmp/tenant-test-kubectl
+        ksail tenant delete my-kubectl-tenant --force --output .
+        test ! -d my-kubectl-tenant
+        echo "✅ kubectl tenant delete passed"
+
+    # --- Flux tenant ---
+    - name: "🧪 ksail tenant create (flux type, OCI)"
+      shell: bash
+      run: |
+        mkdir -p /tmp/tenant-test-flux && cd /tmp/tenant-test-flux
+        ksail tenant create my-flux-tenant --type flux --sync-source oci --registry oci://ghcr.io --git-repo myorg/my-flux-tenant --output .
+        test -f my-flux-tenant/namespace.yaml
+        test -f my-flux-tenant/serviceaccount.yaml
+        test -f my-flux-tenant/rolebinding.yaml
+        test -f my-flux-tenant/kustomization.yaml
+        test -f my-flux-tenant/sync.yaml
+        grep -q "kind: OCIRepository" my-flux-tenant/sync.yaml
+        grep -q "kind: Kustomization" my-flux-tenant/sync.yaml
+        grep -q "app.kubernetes.io/managed-by: ksail" my-flux-tenant/sync.yaml
+        grep -q "sync.yaml" my-flux-tenant/kustomization.yaml
+        echo "✅ flux tenant create (OCI) passed"
+
+    - name: "🧪 ksail tenant create (flux type, Git)"
+      shell: bash
+      run: |
+        cd /tmp/tenant-test-flux
+        ksail tenant create my-flux-git-tenant --type flux --sync-source git --git-provider github --git-repo myorg/my-flux-git-tenant --output . --force
+        test -f my-flux-git-tenant/sync.yaml
+        grep -q "kind: GitRepository" my-flux-git-tenant/sync.yaml
+        grep -q "github.com" my-flux-git-tenant/sync.yaml
+        echo "✅ flux tenant create (Git) passed"
+
+    - name: "🧪 ksail tenant delete (flux type)"
+      shell: bash
+      run: |
+        cd /tmp/tenant-test-flux
+        ksail tenant delete my-flux-tenant --force --output .
+        test ! -d my-flux-tenant
+        echo "✅ flux tenant delete passed"
+
+    # --- ArgoCD tenant ---
+    - name: "🧪 ksail tenant create (argocd type)"
+      shell: bash
+      run: |
+        mkdir -p /tmp/tenant-test-argocd && cd /tmp/tenant-test-argocd
+        ksail tenant create my-argocd-tenant --type argocd --git-provider github --git-repo myorg/my-argocd-tenant --output .
+        test -f my-argocd-tenant/namespace.yaml
+        test -f my-argocd-tenant/serviceaccount.yaml
+        test -f my-argocd-tenant/rolebinding.yaml
+        test -f my-argocd-tenant/kustomization.yaml
+        test -f my-argocd-tenant/project.yaml
+        test -f my-argocd-tenant/app.yaml
+        test -f my-argocd-tenant/argocd-rbac-cm.yaml
+        grep -q "kind: AppProject" my-argocd-tenant/project.yaml
+        grep -q "kind: Application" my-argocd-tenant/app.yaml
+        grep -q "namespace: argocd" my-argocd-tenant/app.yaml
+        grep -q "argocd-rbac-cm" my-argocd-tenant/argocd-rbac-cm.yaml
+        grep -q "policy.csv" my-argocd-tenant/argocd-rbac-cm.yaml
+        grep -q "project.yaml" my-argocd-tenant/kustomization.yaml
+        grep -q "app.yaml" my-argocd-tenant/kustomization.yaml
+        grep -q "argocd-rbac-cm.yaml" my-argocd-tenant/kustomization.yaml
+        echo "✅ argocd tenant create passed"
+
+    - name: "🧪 ksail tenant create (argocd, multi-namespace)"
+      shell: bash
+      run: |
+        cd /tmp/tenant-test-argocd
+        ksail tenant create multi-argocd --type argocd -n frontend -n backend --git-provider github --git-repo myorg/multi-argocd --output . --force
+        grep -c "namespace:" multi-argocd/project.yaml | grep -qE "[2-9]"
+        echo "✅ argocd tenant create (multi-namespace) passed"
+
+    - name: "🧪 ksail tenant delete (argocd type)"
+      shell: bash
+      run: |
+        cd /tmp/tenant-test-argocd
+        ksail tenant delete my-argocd-tenant --force --output .
+        test ! -d my-argocd-tenant
+        echo "✅ argocd tenant delete passed"
+
+    # --- Custom ClusterRole ---
+    - name: "🧪 ksail tenant create (custom cluster-role)"
+      shell: bash
+      run: |
+        mkdir -p /tmp/tenant-test-custom && cd /tmp/tenant-test-custom
+        ksail tenant create custom-role-tenant --type kubectl --cluster-role cluster-admin --output .
+        grep -q 'name: cluster-admin' custom-role-tenant/rolebinding.yaml
+        echo "✅ custom cluster-role passed"
+
+    # --- Force overwrite ---
+    - name: "🧪 ksail tenant create (force overwrite)"
+      shell: bash
+      run: |
+        cd /tmp/tenant-test-custom
+        ksail tenant create custom-role-tenant --type kubectl --cluster-role view --output . --force
+        grep -q 'name: view' custom-role-tenant/rolebinding.yaml
+        echo "✅ force overwrite passed"
+
+    # --- Registration ---
+    - name: "🧪 ksail tenant create + register"
+      shell: bash
+      run: |
+        mkdir -p /tmp/tenant-test-register && cd /tmp/tenant-test-register
+        cat > kustomization.yaml << 'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources: []
+        EOF
+        ksail tenant create registered-tenant --type kubectl --output . --register
+        grep -q "registered-tenant" kustomization.yaml
+        echo "✅ tenant registration passed"
+
+    - name: "🧪 ksail tenant delete + unregister"
+      shell: bash
+      run: |
+        cd /tmp/tenant-test-register
+        ksail tenant delete registered-tenant --force --output .
+        ! grep -q "registered-tenant" kustomization.yaml
+        echo "✅ tenant unregistration passed"
+
+    # --- Help output ---
+    - name: "🧪 ksail tenant --help"
+      shell: bash
+      run: |
+        ksail tenant --help | grep -q "create"
+        ksail tenant --help | grep -q "delete"
+        ksail tenant create --help | grep -q "\-\-type"
+        ksail tenant create --help | grep -q "\-\-namespace"
+        ksail tenant delete --help | grep -q "\-\-force"
+        echo "✅ help output tests passed"
