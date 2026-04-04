@@ -129,7 +129,7 @@ resources:
 	err := tenant.RegisterTenant("new-tenant", dir, kPath)
 	require.NoError(t, err)
 
-	data, err := os.ReadFile(kPath)
+	data, err := os.ReadFile(kPath) //nolint:gosec // test path
 	require.NoError(t, err)
 	var raw map[string]any
 	require.NoError(t, yaml.Unmarshal(data, &raw))

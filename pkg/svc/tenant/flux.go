@@ -164,8 +164,9 @@ func buildFluxGitSource(opts Options, primaryNS string) (fluxSource, error) {
 	if opts.GitRepo == "" {
 		return fluxSource{}, fmt.Errorf("%w for Flux Git sync source", ErrGitRepoRequired)
 	}
-	if _, _, err := gitprovider.ParseOwnerRepo(opts.GitRepo); err != nil {
-		return fluxSource{}, fmt.Errorf("parsing git repo for Git source: %w", err)
+	_, _, parseErr := gitprovider.ParseOwnerRepo(opts.GitRepo)
+	if parseErr != nil {
+		return fluxSource{}, fmt.Errorf("parsing git repo for Git source: %w", parseErr)
 	}
 	host := resolveProviderHost(opts.GitProvider)
 	return fluxSource{

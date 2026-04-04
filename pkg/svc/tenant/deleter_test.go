@@ -74,7 +74,7 @@ resources:
 	require.True(t, os.IsNotExist(statErr), "tenant directory should be removed")
 
 	// Kustomization should no longer reference my-tenant.
-	data, readErr := os.ReadFile(kPath)
+	data, readErr := os.ReadFile(kPath) //nolint:gosec // test path
 	require.NoError(t, readErr)
 
 	var raw map[string]any
@@ -212,7 +212,7 @@ resources:
 	_, statErr := os.Stat(tenantDir)
 	require.True(t, os.IsNotExist(statErr))
 
-	data, readErr := os.ReadFile(kPath)
+	data, readErr := os.ReadFile(kPath) //nolint:gosec // test path
 	require.NoError(t, readErr)
 
 	var raw map[string]any

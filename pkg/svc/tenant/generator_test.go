@@ -255,13 +255,13 @@ func TestGenerate_MultiNamespace(t *testing.T) {
 	tenantDir := filepath.Join(dir, "team-multi")
 
 	// Namespace and RoleBinding: 3 docs (one per namespace).
-	for _, f := range []string{"namespace.yaml", "rolebinding.yaml"} {
-		fPath := filepath.Join(tenantDir, f)
+	for _, fileName := range []string{"namespace.yaml", "rolebinding.yaml"} {
+		fPath := filepath.Join(tenantDir, fileName)
 		content, err := os.ReadFile(fPath) //nolint:gosec // test path
 		require.NoError(t, err)
 		docs := strings.Split(string(content), "---\n")
 		require.Len(t, docs, 3,
-			"expected 3 documents in %s for 3 namespaces", f)
+			"expected 3 documents in %s for 3 namespaces", fileName)
 	}
 
 	// ServiceAccount is single (only in primary namespace).

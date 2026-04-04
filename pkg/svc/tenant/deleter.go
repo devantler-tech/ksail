@@ -42,7 +42,8 @@ func Delete(opts DeleteOptions) error {
 
 	tenantDir := filepath.Join(opts.OutputDir, opts.Name)
 
-	if _, err := os.Stat(tenantDir); os.IsNotExist(err) {
+	_, statErr := os.Stat(tenantDir)
+	if os.IsNotExist(statErr) {
 		return fmt.Errorf("%w: %q", ErrTenantDirNotExist, tenantDir)
 	}
 
@@ -84,7 +85,8 @@ func deleteRepo(opts DeleteOptions) error {
 		return fmt.Errorf("create git provider: %w", err)
 	}
 
-	if err := provider.DeleteRepo(context.Background(), owner, repo); err != nil {
+	err = provider.DeleteRepo(context.Background(), owner, repo)
+	if err != nil {
 		return fmt.Errorf("delete git repo: %w", err)
 	}
 

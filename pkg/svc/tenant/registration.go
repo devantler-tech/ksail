@@ -10,6 +10,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+const kustomizationFilePermissions = 0o600
+
 // RegisterTenant adds a tenant's directory path to a kustomization.yaml resources list.
 // If kustomizationPath is empty, auto-discovers by walking up from outputDir.
 func RegisterTenant(tenantName, outputDir, kustomizationPath string) error {
@@ -123,7 +125,7 @@ func writeKustomizationRaw(path string, raw map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("marshal kustomization: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := os.WriteFile(path, data, kustomizationFilePermissions); err != nil {
 		return fmt.Errorf("write kustomization: %w", err)
 	}
 	return nil
