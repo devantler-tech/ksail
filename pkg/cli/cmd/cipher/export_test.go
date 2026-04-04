@@ -270,11 +270,16 @@ func BenchmarkEncrypt(b *testing.B) {
 
 	for _, scenario := range scenarios {
 		b.Run(scenario.name, func(b *testing.B) {
+			tmpDir := b.TempDir()
+			filePath := filepath.Join(tmpDir, "secret.yaml")
 			b.ResetTimer()
 
 			for b.Loop() {
 				b.StopTimer()
-				filePath := writeTempSecret(b, scenario.content)
+
+				if err := os.WriteFile(filePath, scenario.content, 0o600); err != nil {
+					b.Fatalf("Failed to write test file: %v", err)
+				}
 
 				opts, err := newEncryptOpts(filePath, keyGroups)
 				if err != nil {

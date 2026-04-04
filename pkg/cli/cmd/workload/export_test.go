@@ -51,7 +51,7 @@ func ExportNewDebounceState() *ExportDebounceState {
 	return &ExportDebounceState{}
 }
 
-// ExportSetDebounceState atomically sets the generation and lastFile fields.
+// ExportSetDebounceState sets the generation and lastFile fields under a mutex.
 func ExportSetDebounceState(state *ExportDebounceState, generation uint64, lastFile string) {
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
