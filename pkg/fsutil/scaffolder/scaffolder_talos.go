@@ -75,25 +75,23 @@ func (s *Scaffolder) notifyTalosGenerated(
 	// Notify about conditional patches using a slice to reduce complexity
 	patches := []struct {
 		condition bool
+		subdir    string
 		filename  string
 	}{
-		{workers == 0, "allow-scheduling-on-control-planes.yaml"},
-		{len(s.MirrorRegistries) > 0, "mirror-registries.yaml"},
-		{disableDefaultCNI, "disable-default-cni.yaml"},
-		{enableKubeletCertRotation, "kubelet-cert-rotation.yaml"},
-		{enableKubeletCertRotation, "kubelet-csr-approver.yaml"},
-		{s.ClusterName != "", "cluster-name.yaml"},
+		{workers == 0, "cluster", "allow-scheduling-on-control-planes.yaml"},
+		{len(s.MirrorRegistries) > 0, "cluster", "mirror-registries.yaml"},
+		{disableDefaultCNI, "cluster", "disable-default-cni.yaml"},
+		{enableKubeletCertRotation, "cluster", "kubelet-cert-rotation.yaml"},
+		{enableKubeletCertRotation, "cluster", "kubelet-csr-approver.yaml"},
+		{s.ClusterName != "", "cluster", "cluster-name.yaml"},
+		// Image verification config is written at the talos/ root level (not cluster/)
+		{enableImageVerification, "", "image-verification.yaml"},
 	}
 
 	for _, patch := range patches {
 		if patch.condition {
-			s.notifyTalosPatchCreated("cluster", patch.filename)
+			s.notifyTalosPatchCreated(patch.subdir, patch.filename)
 		}
-	}
-
-	// Image verification config is written at the talos/ root level (not cluster/)
-	if enableImageVerification {
-		s.notifyTalosPatchCreated("", "image-verification.yaml")
 	}
 }
 
