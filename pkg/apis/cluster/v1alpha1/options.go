@@ -30,6 +30,11 @@ type OptionsTalos struct {
 	// are not accessible from the host because Docker runs in a Linux VM.
 	// Ports are exposed on the first control-plane node (when multiple control-planes are configured).
 	ExtraPortMappings []PortMapping `json:"extraPortMappings,omitzero"`
+	// ImageVerification enables scaffolding of a Talos ImageVerificationConfig document
+	// during cluster init. When Enabled, generates an image-verification.yaml template
+	// in the Talos patches directory with commented-out examples for keyless (Cosign/OIDC)
+	// and public key verification rules. Requires Talos 1.13+.
+	ImageVerification ImageVerification `json:"imageVerification,omitzero"`
 }
 
 // PortMapping defines a mapping between a container port and a host port.

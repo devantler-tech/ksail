@@ -500,6 +500,7 @@ func TestGenerator_Generate_AllPatchesCombined(t *testing.T) {
 		DisableDefaultCNI:         true,
 		EnableKubeletCertRotation: true,
 		ClusterName:               "test-cluster",
+		EnableImageVerification:   true,
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -535,6 +536,10 @@ func TestGenerator_Generate_AllPatchesCombined(t *testing.T) {
 	// Check cluster name patch
 	_, err = os.Stat(filepath.Join(clusterDir, "cluster-name.yaml"))
 	require.NoError(t, err, "expected cluster-name.yaml")
+
+	// Check image verification config
+	_, err = os.Stat(filepath.Join(clusterDir, "image-verification.yaml"))
+	require.NoError(t, err, "expected image-verification.yaml")
 
 	// Verify .gitkeep was NOT created in cluster/ since we have patches there
 	gitkeepPath := filepath.Join(clusterDir, ".gitkeep")
@@ -618,4 +623,67 @@ func TestGenerator_Generate_OverwritesExistingPatchesWithForce(t *testing.T) {
 	assert.Contains(t, string(content), "cluster:")
 	assert.Contains(t, string(content), "cni:")
 	assert.Contains(t, string(content), "name: none")
+}
+
+func TestGenerator_Generate_ImageVerification(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+
+	config := &talosgenerator.Config{
+		PatchesDir:              "talos",
+		WorkerNodes:             1,
+		EnableImageVerification: true,
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	result, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
+
+	// Verify image-verification.yaml was created
+	patchPath := filepath.Join(tempDir, "talos", "cluster", "image-verification.yaml")
+	content, err := os.ReadFile(patchPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "apiVersion: v1alpha1")
+	assert.Contains(t, string(content), "kind: ImageVerificationConfig")
+	assert.Contains(t, string(content), "rules:")
+	assert.Contains(t, string(content), `image: "*"`)
+	assert.Contains(t, string(content), "skip: true")
+	// Verify commented examples are included
+	assert.Contains(t, string(content), "keyless:")
+	assert.Contains(t, string(content), "publicKey:")
+	assert.Contains(t, string(content), "deny: true")
+
+	// Verify .gitkeep was NOT created in cluster/ since we have a patch there
+	gitkeepPath := filepath.Join(tempDir, "talos", "cluster", ".gitkeep")
+	_, err = os.Stat(gitkeepPath)
+	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
+}
+
+func TestGenerator_Generate_NoImageVerificationPatchWhenFalse(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+
+	config := &talosgenerator.Config{
+		PatchesDir:              "talos",
+		WorkerNodes:             1,
+		EnableImageVerification: false,
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	_, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+
+	// Verify image-verification.yaml was NOT created
+	patchPath := filepath.Join(tempDir, "talos", "cluster", "image-verification.yaml")
+	_, err = os.Stat(patchPath)
+	assert.True(t, os.IsNotExist(err), "expected image-verification.yaml to not exist")
 }

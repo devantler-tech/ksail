@@ -24,6 +24,9 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 	// This is required for secure TLS communication between metrics-server and kubelets.
 	enableKubeletCertRotation := s.KSailConfig.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled
 
+	// Enable image verification scaffolding when explicitly enabled for Talos.
+	enableImageVerification := s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled
+
 	config := &talosgenerator.Config{
 		PatchesDir:                TalosConfigDir,
 		MirrorRegistries:          s.MirrorRegistries,
@@ -31,6 +34,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		DisableDefaultCNI:         disableDefaultCNI,
 		EnableKubeletCertRotation: enableKubeletCertRotation,
 		ClusterName:               s.ClusterName,
+		EnableImageVerification:   enableImageVerification,
 	}
 
 	opts := yamlgenerator.Options{
@@ -43,7 +47,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		return fmt.Errorf("%w: %w", ErrTalosConfigGeneration, err)
 	}
 
-	s.notifyTalosGenerated(workers, disableDefaultCNI, enableKubeletCertRotation)
+	s.notifyTalosGenerated(workers, disableDefaultCNI, enableKubeletCertRotation, enableImageVerification)
 
 	return nil
 }
@@ -51,11 +55,11 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 // notifyTalosGenerated sends notifications about generated Talos files.
 func (s *Scaffolder) notifyTalosGenerated(
 	workers int,
-	disableDefaultCNI, enableKubeletCertRotation bool,
+	disableDefaultCNI, enableKubeletCertRotation, enableImageVerification bool,
 ) {
 	// Determine which directories have patches (no .gitkeep generated there)
 	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
-		enableKubeletCertRotation || s.ClusterName != ""
+		enableKubeletCertRotation || s.ClusterName != "" || enableImageVerification
 
 	// Notify about .gitkeep files only for directories without patches
 	subdirs := []string{"cluster", "control-planes", "workers"}
@@ -79,6 +83,7 @@ func (s *Scaffolder) notifyTalosGenerated(
 		{enableKubeletCertRotation, "kubelet-cert-rotation.yaml"},
 		{enableKubeletCertRotation, "kubelet-csr-approver.yaml"},
 		{s.ClusterName != "", "cluster-name.yaml"},
+		{enableImageVerification, "image-verification.yaml"},
 	}
 
 	for _, patch := range patches {
