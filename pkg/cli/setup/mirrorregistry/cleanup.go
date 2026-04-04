@@ -1,17 +1,14 @@
 package mirrorregistry
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	dockerhelpers "github.com/devantler-tech/ksail/v5/pkg/cli/dockerutil"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/client"
@@ -32,56 +29,6 @@ func DefaultCleanupDependencies() CleanupDependencies {
 	return CleanupDependencies{
 		DockerInvoker:     dockerhelpers.WithDockerClient,
 		LocalRegistryDeps: localregistry.DefaultDependencies(),
-	}
-}
-
-// CleanupAll cleans up all registries (both mirror and local) during cluster deletion.
-// If preDiscovered is provided, it uses that list instead of discovering registries.
-// This is necessary for distributions like Talos where the network is destroyed
-// during cluster deletion.
-func CleanupAll(
-	cmd *cobra.Command,
-	_ *ksailconfigmanager.ConfigManager,
-	clusterCfg *v1alpha1.Cluster,
-	deps lifecycle.Deps,
-	clusterName string,
-	deleteVolumes bool,
-	cleanupDeps CleanupDependencies,
-	preDiscovered *DiscoveredRegistries,
-) {
-	var err error
-
-	if preDiscovered != nil && len(preDiscovered.Registries) > 0 {
-		// Use pre-discovered registries (for Talos where network is destroyed)
-		err = cleanupPreDiscoveredRegistries(
-			cmd,
-			deps,
-			preDiscovered.Registries,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	} else {
-		// Discover and cleanup registries by network (for Kind, K3d)
-		networkName := GetNetworkNameForDistribution(
-			clusterCfg.Spec.Cluster.Distribution,
-			clusterName,
-		)
-		err = cleanupRegistriesByNetwork(
-			cmd,
-			deps,
-			networkName,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	}
-
-	if err != nil {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ErrorType,
-			Content: fmt.Sprintf("failed to cleanup registries: %v", err),
-			Writer:  cmd.OutOrStdout(),
-		})
 	}
 }
 
@@ -139,61 +86,6 @@ func CleanupRegistriesByNetwork(
 	displayRegistryCleanupOutputWithTimer(cmd, tmr, registryNames)
 
 	return nil
-}
-
-// CleanupMirrorRegistries cleans up registries for Kind after cluster deletion.
-// K3d handles registry cleanup natively through its own configuration.
-func CleanupMirrorRegistries(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	clusterCfg *v1alpha1.Cluster,
-	deps lifecycle.Deps,
-	clusterName string,
-	deleteVolumes bool,
-	cleanupDeps CleanupDependencies,
-) error {
-	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionVanilla:
-		return cleanupKindMirrorRegistries(
-			cmd,
-			cfgManager,
-			clusterCfg,
-			deps,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	case v1alpha1.DistributionK3s:
-		return cleanupK3dMirrorRegistries(
-			cmd,
-			cfgManager,
-			deps,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	case v1alpha1.DistributionTalos:
-		return cleanupTalosMirrorRegistries(
-			cmd,
-			cfgManager,
-			deps,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-			clusterCfg.Spec.Cluster.Provider,
-		)
-	case v1alpha1.DistributionVCluster:
-		return cleanupVClusterMirrorRegistries(
-			cmd,
-			cfgManager,
-			deps,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	default:
-		return nil
-	}
 }
 
 // GetNetworkNameForDistribution returns the Docker network name for a given distribution.
@@ -301,56 +193,6 @@ func deleteRegistriesOnNetworkCore(
 	return registryNames, found, err
 }
 
-// cleanupPreDiscoveredRegistries deletes registries that were discovered before cluster deletion.
-func cleanupPreDiscoveredRegistries(
-	cmd *cobra.Command,
-	deps lifecycle.Deps,
-	registries []dockerclient.RegistryInfo,
-	deleteVolumes bool,
-	cleanupDeps CleanupDependencies,
-) error {
-	if len(registries) == 0 {
-		return nil
-	}
-
-	deletedNames, err := deleteRegistriesByInfoCore(cmd, registries, deleteVolumes, cleanupDeps)
-	if err != nil {
-		return err
-	}
-
-	displayRegistryCleanupOutputWithTimer(cmd, deps.Timer, deletedNames)
-
-	return nil
-}
-
-// cleanupRegistriesByNetwork discovers and cleans up all registry containers
-// (both local and mirror registries) by inspecting the Docker network.
-// This unified approach works for both scaffolded and non-scaffolded clusters.
-// Only registries belonging to the specified cluster (by name prefix) are deleted.
-func cleanupRegistriesByNetwork(
-	cmd *cobra.Command,
-	deps lifecycle.Deps,
-	networkName string,
-	clusterName string,
-	deleteVolumes bool,
-	cleanupDeps CleanupDependencies,
-) error {
-	registryNames, _, err := deleteRegistriesOnNetworkCore(
-		cmd,
-		networkName,
-		clusterName,
-		deleteVolumes,
-		cleanupDeps,
-	)
-	if err != nil {
-		return err
-	}
-
-	displayRegistryCleanupOutputWithTimer(cmd, deps.Timer, registryNames)
-
-	return nil
-}
-
 // displayRegistryCleanupOutputWithTimer shows the cleanup stage output for deleted registries.
 // This version uses timer.Timer directly instead of lifecycle.Deps.
 func displayRegistryCleanupOutputWithTimer(
@@ -390,128 +232,4 @@ func displayRegistryCleanupOutputWithTimer(
 		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
-}
-
-// cleanupRegistriesOrFallback either falls back to network-based discovery when
-// registryNames is empty or delegates to runMirrorRegistryCleanup with a
-// context-normalised wrapper around provisionerCleanup.
-func cleanupRegistriesOrFallback(
-	cmd *cobra.Command,
-	deps lifecycle.Deps,
-	registryNames []string,
-	networkName string,
-	clusterName string,
-	deleteVolumes bool,
-	cleanupDeps CleanupDependencies,
-	provisionerCleanup func(ctx context.Context, dockerClient client.APIClient) error,
-) error {
-	if len(registryNames) == 0 {
-		return cleanupRegistriesByNetwork(
-			cmd, deps, networkName, clusterName, deleteVolumes, cleanupDeps,
-		)
-	}
-
-	return runMirrorRegistryCleanup(
-		cmd,
-		deps,
-		registryNames,
-		func(dockerClient client.APIClient) error {
-			ctx := cmd.Context()
-			if ctx == nil {
-				ctx = context.Background()
-			}
-
-			return provisionerCleanup(ctx, dockerClient)
-		},
-		cleanupDeps,
-	)
-}
-
-func runMirrorRegistryCleanup(
-	cmd *cobra.Command,
-	deps lifecycle.Deps,
-	registryNames []string,
-	cleanup func(client.APIClient) error,
-	cleanupDeps CleanupDependencies,
-) error {
-	if len(registryNames) == 0 {
-		return nil
-	}
-
-	deps.Timer.NewStage()
-
-	cmd.Println()
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Delete mirror registry...",
-		Emoji:   "🗑️",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
-		return executeRegistryCleanup(cmd, dockerClient, registryNames, cleanup, deps.Timer)
-	})
-	if err != nil {
-		return fmt.Errorf("failed to delete mirror registries: %w", err)
-	}
-
-	return nil
-}
-
-func executeRegistryCleanup(
-	cmd *cobra.Command,
-	dockerClient client.APIClient,
-	registryNames []string,
-	cleanup func(client.APIClient) error,
-	tmr timer.Timer,
-) error {
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	registryMgr, _ := dockerclient.NewRegistryManager(dockerClient)
-
-	err := cleanup(dockerClient)
-	if err != nil {
-		return fmt.Errorf("failed to cleanup registries: %w", err)
-	}
-
-	notifyRegistryDeletions(ctx, cmd, registryNames, registryMgr)
-
-	outputTimer := flags.MaybeTimer(cmd, tmr)
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "mirror registries deleted",
-		Timer:   outputTimer,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	return nil
-}
-
-func notifyRegistryDeletions(
-	ctx context.Context,
-	cmd *cobra.Command,
-	registryNames []string,
-	registryMgr *dockerclient.RegistryManager,
-) {
-	for _, name := range registryNames {
-		content := "deleting '%s'"
-
-		if registryMgr != nil {
-			inUse, checkErr := registryMgr.IsRegistryInUse(ctx, name)
-			if checkErr == nil && inUse {
-				content = "skipping '%s' as it is in use"
-			}
-		}
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: content,
-			Writer:  cmd.OutOrStdout(),
-			Args:    []any{name},
-		})
-	}
 }
