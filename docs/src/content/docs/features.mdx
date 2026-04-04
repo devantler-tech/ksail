@@ -1,6 +1,6 @@
 ---
 title: Features
-description: KSail provides a unified CLI for Kubernetes development with built-in support for cluster provisioning, workload management, GitOps workflows, and secret encryption.
+description: KSail provides a unified CLI for Kubernetes development with built-in support for cluster provisioning, workload management, GitOps workflows, tenant management, and secret encryption.
 ---
 
 ## Cluster Provisioning
@@ -109,6 +109,45 @@ ksail workload reconcile
 | -------------------------- | -------------------------------------- |
 | `ksail workload push`      | Package and push manifests to registry |
 | `ksail workload reconcile` | Trigger GitOps sync and wait for full Flux Kustomization dependency chain |
+
+## Tenant Management
+
+Onboard teams to a shared Kubernetes cluster with RBAC isolation, GitOps sync resources, and optional repository scaffolding. `ksail tenant create` generates a tenant directory with a ServiceAccount, RBAC bindings, namespace(s), and GitOps sync manifests. `ksail tenant delete` removes tenant manifests and optionally deletes the remote Git repository.
+
+**Tenant types:**
+
+| Type      | Generated resources                                            |
+| --------- | -------------------------------------------------------------- |
+| `flux`    | Namespaces, ServiceAccount, RBAC bindings, OCIRepository/GitRepository + Kustomization |
+| `argocd`  | Namespaces, ServiceAccount, RBAC bindings, AppProject + Application |
+| `kubectl` | Namespaces, ServiceAccount, RBAC bindings only (no GitOps sync) |
+
+```bash
+# Create a Flux tenant with an OCI sync source
+ksail tenant create my-team \
+  --type flux \
+  --registry oci://ghcr.io/my-org \
+  --namespace my-team \
+  --output ./platform/tenants \
+  --register
+
+# Delete a tenant and its remote GitHub repository
+ksail tenant delete my-team \
+  --output ./platform/tenants \
+  --delete-repo \
+  --git-provider github \
+  --git-repo my-org/my-team \
+  --git-token "$GITHUB_TOKEN"
+```
+
+The tenant type is auto-detected from `gitOpsEngine` in `ksail.yaml` when `--type` is omitted. Pass `--register` to automatically add the tenant to the nearest `kustomization.yaml`. GitHub repository scaffolding (create repo, push initial files) requires `--git-provider github` and a `--git-token`.
+
+**Commands:** [`ksail tenant`](/cli-flags/tenant/tenant-root/)
+
+| Command               | Description                                       |
+| --------------------- | ------------------------------------------------- |
+| `ksail tenant create` | Generate RBAC and GitOps manifests for a tenant   |
+| `ksail tenant delete` | Remove tenant manifests and optionally its repo   |
 
 ## Registry Management
 

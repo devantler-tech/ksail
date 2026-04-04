@@ -21,6 +21,7 @@ Setting up and operating Kubernetes clusters often requires juggling multiple CL
 - 📥 **Mirror Registries** — Avoid rate limits, and store images once. Same mirrors used by different clusters.
 - 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
 - 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.
+- 🏢 **Multi-Tenancy** — Generate RBAC isolation, GitOps sync resources, and scaffold tenant repositories with `ksail tenant create/delete`.
 - ⚙️ **Customizable Stack** — Select your CNI, CSI, policy engine, cert-manager, and mirror registries.
 - 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
 - 💾 **Backup & Restore** — Export cluster resources to a compressed archive and restore to any cluster with provenance labels.
