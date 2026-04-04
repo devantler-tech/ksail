@@ -77,7 +77,11 @@ const tenantDirPermissions = 0o750
 
 func prepareTenantDir(tenantDir string, force bool) error {
 	info, statErr := os.Stat(tenantDir)
-	if statErr == nil {
+
+	switch {
+	case statErr != nil && !os.IsNotExist(statErr):
+		return fmt.Errorf("checking tenant directory: %w", statErr)
+	case statErr == nil:
 		if !info.IsDir() {
 			return fmt.Errorf(
 				"%w: %q exists but is not a directory",

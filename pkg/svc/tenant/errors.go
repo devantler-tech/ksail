@@ -17,6 +17,8 @@ var (
 	ErrInvalidTenantName = errors.New("invalid tenant name")
 	// ErrInvalidNamespace is returned when a namespace is not a valid DNS-1123 label.
 	ErrInvalidNamespace = errors.New("invalid namespace")
+	// ErrDuplicateNamespace is returned when duplicate namespaces are provided.
+	ErrDuplicateNamespace = errors.New("duplicate namespaces are not allowed")
 	// ErrNamespaceRequired is returned when no namespace is provided.
 	ErrNamespaceRequired = errors.New("at least one namespace is required")
 	// ErrGitProviderRequired is returned when --git-provider is required but not set.

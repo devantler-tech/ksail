@@ -101,9 +101,15 @@ func resolveKustomizationPath(outputDir, explicit string) (string, error) {
 			return "", fmt.Errorf("resolving kustomization path: %w", err)
 		}
 
-		_, statErr := os.Stat(canonical)
+		info, statErr := os.Stat(canonical)
 		if statErr != nil {
 			return "", fmt.Errorf("kustomization file not found: %w", statErr)
+		}
+
+		if info.IsDir() {
+			return "", fmt.Errorf(
+				"kustomization path %q is a directory, not a file", canonical,
+			)
 		}
 
 		return canonical, nil
@@ -134,14 +140,22 @@ func readKustomizationRaw(path string) (map[string]any, error) {
 	return raw, nil
 }
 
-// writeKustomizationRaw writes a raw map back to kustomization.yaml.
+// writeKustomizationRaw writes a raw map back to kustomization.yaml,
+// preserving the original file permissions when the file already exists.
 func writeKustomizationRaw(path string, raw map[string]any) error {
 	data, err := yaml.Marshal(raw)
 	if err != nil {
 		return fmt.Errorf("marshal kustomization: %w", err)
 	}
 
-	writeErr := os.WriteFile(path, data, kustomizationFilePermissions)
+	perm := os.FileMode(kustomizationFilePermissions)
+
+	info, statErr := os.Stat(path)
+	if statErr == nil {
+		perm = info.Mode().Perm()
+	}
+
+	writeErr := os.WriteFile(path, data, perm)
 	if writeErr != nil {
 		return fmt.Errorf("write kustomization: %w", writeErr)
 	}

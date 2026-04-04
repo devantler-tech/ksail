@@ -167,7 +167,24 @@ func (o *Options) Validate() error {
 		}
 	}
 
+	if hasDuplicateNamespaces(o.Namespaces) {
+		return fmt.Errorf("%w", ErrDuplicateNamespace)
+	}
+
 	return nil
+}
+
+func hasDuplicateNamespaces(namespaces []string) bool {
+	seen := make(map[string]bool, len(namespaces))
+	for _, ns := range namespaces {
+		if seen[ns] {
+			return true
+		}
+
+		seen[ns] = true
+	}
+
+	return false
 }
 
 func isValidType(t Type) bool {
