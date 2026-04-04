@@ -131,9 +131,11 @@ func resolveCreateOptions(cmd *cobra.Command, args []string) (tenant.Options, st
 		return tenant.Options{}, "", err
 	}
 
-	// Validate sync source.
-	if err := resolveSyncSource(syncSourceStr, &opts); err != nil {
-		return tenant.Options{}, "", err
+	// Validate sync source only for Flux tenants.
+	if opts.TenantType == tenant.TypeFlux {
+		if err := resolveSyncSource(syncSourceStr, &opts); err != nil {
+			return tenant.Options{}, "", err
+		}
 	}
 
 	return opts, outputStr, nil

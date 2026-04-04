@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
@@ -52,14 +51,12 @@ func GenerateRBACManifests(opts Options) (map[string]string, error) {
 }
 
 func marshalNamespace(name string) (string, error) {
-	namespace := corev1.Namespace{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Namespace",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   name,
-			Labels: ManagedByLabels(),
+	namespace := map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Namespace",
+		"metadata": map[string]any{
+			"name":   name,
+			"labels": ManagedByLabels(),
 		},
 	}
 	b, err := yaml.Marshal(namespace)
@@ -69,16 +66,14 @@ func marshalNamespace(name string) (string, error) {
 	return string(b), nil
 }
 
-func marshalServiceAccount(name, namespace string) (string, error) {
-	serviceAccount := corev1.ServiceAccount{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ServiceAccount",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    ManagedByLabels(),
+func marshalServiceAccount(name, namespaceName string) (string, error) {
+	serviceAccount := map[string]any{
+		"apiVersion": "v1",
+		"kind":       "ServiceAccount",
+		"metadata": map[string]any{
+			"name":      name,
+			"namespace": namespaceName,
+			"labels":    ManagedByLabels(),
 		},
 	}
 	b, err := yaml.Marshal(serviceAccount)

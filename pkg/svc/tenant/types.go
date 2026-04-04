@@ -13,7 +13,7 @@ type Type string
 const (
 	// TypeFlux generates RBAC + Flux sync manifests (OCIRepository/GitRepository + Kustomization).
 	TypeFlux Type = "flux"
-	// TypeArgoCD generates RBAC + ArgoCD manifests (AppProject + Application + argocd-rbac-cm).
+	// TypeArgoCD generates RBAC + ArgoCD manifests (AppProject + Application).
 	TypeArgoCD Type = "argocd"
 	// TypeKubectl generates RBAC manifests only (no GitOps sync resources).
 	TypeKubectl Type = "kubectl"

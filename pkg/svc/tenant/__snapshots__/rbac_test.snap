@@ -6,8 +6,6 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: ksail
   name: admin-tenant
-spec: {}
-status: {}
 
 ---
 
@@ -48,8 +46,6 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: ksail
   name: ns-dev
-spec: {}
-status: {}
 /-/-/-/
 apiVersion: v1
 kind: Namespace
@@ -57,8 +53,6 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: ksail
   name: ns-staging
-spec: {}
-status: {}
 /-/-/-/
 apiVersion: v1
 kind: Namespace
@@ -66,8 +60,6 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: ksail
   name: ns-prod
-spec: {}
-status: {}
 
 ---
 
@@ -140,8 +132,6 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: ksail
   name: team-alpha
-spec: {}
-status: {}
 
 ---
 
