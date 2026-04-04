@@ -8,7 +8,7 @@ The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workf
 
 1. Discovers packages that contain benchmark functions (avoids compiling the entire module)
 2. Runs benchmarks on the current branch
-3. Compares results against the stored baseline on the `gh-pages` branch
+3. Compares results against the stored baseline (persisted as a workflow artifact)
 4. **Fails the CI check** if a benchmark regresses beyond the configured threshold
 
 On pushes to `main`, benchmark results are stored as the new baseline. On pull requests, results are compared against the baseline without updating it.
@@ -24,13 +24,9 @@ The workflow uses threshold-based regression detection:
 
 When a regression is detected on a pull request, the action posts a comment identifying the affected benchmarks.
 
-## Historical Dashboard
+## Historical Results
 
-Benchmark trends are tracked on the `gh-pages` branch and published to the documentation site. The dashboard is available at:
-
-> <https://ksail.devantler.tech/benchmarks/dashboard/>
-
-It shows performance over time for all tracked benchmarks. The dashboard is updated on each push to `main` and deployed with the documentation site.
+Benchmark results are recorded in every [workflow run summary](https://github.com/devantler-tech/ksail/actions/workflows/benchmark-regression.yaml). Baseline data is persisted as a workflow artifact and compared on each subsequent run.
 
 ## Interpreting CI Failures
 

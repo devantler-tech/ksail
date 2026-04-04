@@ -49,9 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
-      contents: write
+      contents: read
+      actions: read
       pull-requests: write
-      deployments: write
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -93,14 +93,21 @@ jobs:
             | xargs go test -bench=. -benchmem -run='^$' -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
-      - name: 🔍 Check if gh-pages branch exists
+      - name: 📥 Download previous benchmark data
         if: steps.discover.outputs.skip == 'false'
-        id: check-gh-pages
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+          RUN_ID=$(gh run list \
+            --workflow=benchmark-regression.yaml \
+            --branch=main \
+            --status=success \
+            --limit=1 \
+            --json databaseId \
+            --jq '.[0].databaseId')
+          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
+            gh run download "$RUN_ID" --name benchmark-data --dir . || true
           fi
 
       - name: 📊 Store & compare benchmark results
@@ -109,12 +116,18 @@ jobs:
         with:
           tool: go
           output-file-path: ${{ runner.temp }}/bench.txt
+          external-data-json-path: ./benchmark-data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: ${{ github.event_name == 'push' }}
-          save-data-file: ${{ github.event_name == 'push' }}
-          skip-fetch-gh-pages: ${{ steps.check-gh-pages.outputs.exists == 'false' }}
           alert-threshold: "150%"
           fail-threshold: "200%"
           fail-on-alert: ${{ github.event_name == 'pull_request' }}
           comment-on-alert: ${{ github.event_name == 'pull_request' }}
           summary-always: true
+
+      - name: 📤 Upload benchmark data
+        if: steps.discover.outputs.skip == 'false' && github.event_name == 'push'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: benchmark-data
+          path: ./benchmark-data.json
+          retention-days: 90
