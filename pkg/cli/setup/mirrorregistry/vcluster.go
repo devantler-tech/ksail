@@ -138,5 +138,3 @@ func PrepareVClusterConfigWithMirrors(
 
 	return len(mirrorSpecs) > 0
 }
-
-

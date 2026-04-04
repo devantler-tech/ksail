@@ -277,5 +277,3 @@ func PrepareTalosConfigWithMirrors(
 
 	return true
 }
-
-

@@ -254,5 +254,3 @@ func configureK3dNativeLocalRegistry(
 		hostEndpoints[registryHost] = []string{registryEndpoint}
 	}
 }
-
-

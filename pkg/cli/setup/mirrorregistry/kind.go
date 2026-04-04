@@ -162,5 +162,3 @@ func PrepareKindConfigWithMirrors(
 func GetKindMirrorsDir(clusterCfg *v1alpha1.Cluster) string {
 	return kindconfigmanager.ResolveMirrorsDir(clusterCfg)
 }
-
-
