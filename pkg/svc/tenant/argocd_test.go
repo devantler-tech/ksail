@@ -79,7 +79,7 @@ func TestGenerateArgoCDManifests_RBACConfigMap(t *testing.T) {
 
 func TestMergeArgoCDRBACPolicy_EmptyExisting(t *testing.T) {
 	t.Parallel()
-	result, err := MergeArgoCDRBACPolicy("", "team-alpha", []string{"team-alpha"})
+	result, err := MergeArgoCDRBACPolicy("", "team-alpha")
 	require.NoError(t, err)
 	snaps.MatchSnapshot(t, result)
 }
@@ -99,7 +99,7 @@ data:
     p, role:team-alpha, projects, get, team-alpha, allow
     g, team-alpha, role:team-alpha
 `
-	result, err := MergeArgoCDRBACPolicy(existing, "team-alpha", []string{"team-alpha"})
+	result, err := MergeArgoCDRBACPolicy(existing, "team-alpha")
 	require.NoError(t, err)
 	require.Contains(t, result, "role:team-alpha")
 	// Should not duplicate the policy lines
@@ -121,7 +121,7 @@ data:
     p, role:team-alpha, projects, get, team-alpha, allow
     g, team-alpha, role:team-alpha
 `
-	result, err := MergeArgoCDRBACPolicy(existing, "team-beta", []string{"team-beta"})
+	result, err := MergeArgoCDRBACPolicy(existing, "team-beta")
 	require.NoError(t, err)
 	require.Contains(t, result, "role:team-alpha")
 	require.Contains(t, result, "role:team-beta")

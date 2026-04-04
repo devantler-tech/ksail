@@ -231,7 +231,7 @@ func generateRBACConfigMap(opts Options) (string, error) {
 
 // MergeArgoCDRBACPolicy intelligently merges tenant policies into existing argocd-rbac-cm content.
 // If existingContent is empty, creates a new ConfigMap.
-func MergeArgoCDRBACPolicy(existingContent string, tenantName string, namespaces []string) (string, error) {
+func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, error) {
 	if strings.TrimSpace(existingContent) == "" {
 		cm := newRBACConfigMap(buildTenantPolicyCSV(tenantName))
 		data, err := yaml.Marshal(cm)

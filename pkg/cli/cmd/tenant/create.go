@@ -78,6 +78,16 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 	opts.KustomizationPath, _ = cmd.Flags().GetString("kustomization-path")
 	opts.Delivery, _ = cmd.Flags().GetString("delivery")
 
+	// Validate delivery mode.
+	switch opts.Delivery {
+	case "commit":
+		// Default: write files locally.
+	case "pr":
+		return fmt.Errorf("--delivery pr is not yet implemented; use --delivery commit (default)")
+	default:
+		return fmt.Errorf("invalid --delivery value %q: must be 'commit' or 'pr'", opts.Delivery)
+	}
+
 	// Resolve tenant type.
 	if typeStr != "" {
 		if err := opts.TenantType.Set(typeStr); err != nil {
