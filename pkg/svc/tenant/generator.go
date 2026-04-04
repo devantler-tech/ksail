@@ -22,13 +22,15 @@ import (
 //	kustomization.yaml, [sync.yaml], [project.yaml, app.yaml]
 func Generate(opts Options) error {
 	opts.ResolveDefaults()
-	if err := opts.Validate(); err != nil {
+	err := opts.Validate()
+	if err != nil {
 		return err
 	}
 
 	tenantDir := filepath.Join(opts.OutputDir, opts.Name)
 
-	if err := prepareTenantDir(tenantDir, opts.Force); err != nil {
+	err = prepareTenantDir(tenantDir, opts.Force)
+	if err != nil {
 		return err
 	}
 
@@ -57,10 +59,11 @@ func Generate(opts Options) error {
 	kustomization := &ktypes.Kustomization{
 		Resources: resources,
 	}
-	if _, err := gen.Generate(kustomization, yamlgenerator.Options{
+	_, err = gen.Generate(kustomization, yamlgenerator.Options{
 		Output: filepath.Join(tenantDir, "kustomization.yaml"),
 		Force:  opts.Force,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("generating kustomization.yaml: %w", err)
 	}
 
