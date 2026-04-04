@@ -122,7 +122,8 @@ func TestChartVersion_ExpectedValue(t *testing.T) {
 	version := vcluster.ChartVersion()
 
 	// This test documents the current Dockerfile content.
-	// Dependabot cannot track this image (dependabot-core#13383); update manually.
+	// Dependabot is configured to update this image but may not track it (dependabot-core#13383);
+	// update manually if needed.
 	// FROM ghcr.io/loft-sh/vcluster-pro:0.33.1
 	assert.Equal(
 		t,
@@ -139,7 +140,8 @@ func TestDefaultKubernetesVersion_ExpectedValue(t *testing.T) {
 	version := vcluster.DefaultKubernetesVersion
 
 	// This test documents the current Dockerfile content.
-	// Dependabot cannot track this image (dependabot-core#13383); update manually.
+	// Dependabot is configured to update this image but may not track it (dependabot-core#13383);
+	// update manually if needed.
 	// FROM ghcr.io/loft-sh/kubernetes:v1.35.3
 	assert.Equal(
 		t,

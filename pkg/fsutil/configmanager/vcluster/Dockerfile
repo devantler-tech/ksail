@@ -1,5 +1,7 @@
 # This file is the source of truth for container image versions used in Go code.
-# Dependabot updates this file, and Go code reads from it via go:embed.
+# Dependabot is configured to update this file, but ghcr.io multi-arch images
+# may not be tracked (see dependabot-core#13383). Update manually if needed.
+# Go code reads from it via go:embed.
 #
 # Image mappings:
 # - ghcr.io/loft-sh/vcluster-pro → chartVersion() in images.go
