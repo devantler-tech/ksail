@@ -631,7 +631,7 @@ jobs:
       - name: 🧹 Cleanup all KSail test clusters from Omni
         uses: ./.github/actions/cleanup-omni
         with:
-          omni-service-account-key: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
+          omni-service-account-key: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }} # zizmor: ignore[secrets-outside-env] - passed as composite action input, same pattern as hcloud-token
           omni-endpoint: ${{ vars.OMNI_ENDPOINT }}
 
   rate-limit-check:
@@ -680,6 +680,7 @@ jobs:
         warm-helm-cache,
         system-test,
         cleanup-hetzner,
+        cleanup-omni,
         rate-limit-check,
         audit-docs,
         audit-vsce,
@@ -703,6 +704,7 @@ jobs:
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.system-test.result }}
             ${{ needs.cleanup-hetzner.result }}
+            ${{ needs.cleanup-omni.result }}
             ${{ needs.rate-limit-check.result }}
             ${{ needs.audit-docs.result }}
             ${{ needs.audit-vsce.result }}
