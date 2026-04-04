@@ -342,7 +342,11 @@ func (c *Client) executeCommand(cmd *cobra.Command, args []string) error {
 // executeSafeRun wraps cmd.Run in a panic/recover to catch os.Exit from
 // kubectl's cmdutil.CheckErr. This is necessary because kubectl commands
 // use Run (not RunE) with CheckErr which calls os.Exit on any error.
+// Uses the shared fatalMu mutex to serialize BehaviorOnFatal overrides.
 func executeSafeRun(cmd *cobra.Command, args []string) (retErr error) {
+	fatalMu.Lock()
+	defer fatalMu.Unlock()
+
 	cmdutil.BehaviorOnFatal(func(msg string, code int) {
 		panic(&kubectlFatalError{msg: msg, code: code})
 	})

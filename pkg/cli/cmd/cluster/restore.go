@@ -535,12 +535,11 @@ func restoreResourceFile(
 			return nil
 		}
 
-		errMsg := err.Error()
 		if stderr != "" {
-			errMsg = fmt.Sprintf("%s (output: %s)", errMsg, stderr)
+			return fmt.Errorf("kubectl failed: %w (output: %s)", err, stderr)
 		}
 
-		return fmt.Errorf("kubectl failed: %s", errMsg)
+		return fmt.Errorf("kubectl failed: %w", err)
 	}
 
 	return nil

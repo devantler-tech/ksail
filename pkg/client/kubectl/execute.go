@@ -3,10 +3,16 @@ package kubectl
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/spf13/cobra"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
+
+// fatalMu serializes all BehaviorOnFatal overrides. kubectl's fatal handler
+// is a package-level global, so concurrent overrides would race. Every call
+// site that touches BehaviorOnFatal must hold this lock.
+var fatalMu sync.Mutex
 
 // kubectlFatalError wraps errors from kubectl's CheckErr/BehaviorOnFatal
 // that would normally cause os.Exit.
@@ -26,7 +32,14 @@ func (e *kubectlFatalError) Error() string {
 // cmdutil.BehaviorOnFatal so errors are returned instead of terminating the
 // process. This is essential when KSail calls kubectl commands internally
 // (backup, restore, watch) and needs to handle errors gracefully.
+//
+// A package-level mutex serializes all BehaviorOnFatal overrides so this
+// function is safe to call from multiple goroutines (e.g., concurrent
+// backup exports via errgroup).
 func ExecuteSafely(ctx context.Context, cmd *cobra.Command) (retErr error) {
+	fatalMu.Lock()
+	defer fatalMu.Unlock()
+
 	cmdutil.BehaviorOnFatal(func(msg string, code int) {
 		panic(&kubectlFatalError{msg: msg, code: code})
 	})
