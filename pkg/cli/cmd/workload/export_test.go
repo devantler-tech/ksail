@@ -9,8 +9,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Test exports for validate_expansion.go.
-// These are only compiled during testing.
+// Test exports for unexported workload helpers used by external-package tests.
+// These seams cover validation/expansion helpers, debounce/watch behavior, and
+// source/Flux path resolution and formatting. They are only compiled during
+// testing and should be changed together with the tests that depend on them.
 
 var (
 	ExportExpandFluxSubstitutions = expandFluxSubstitutions //nolint:gochecknoglobals // test export
