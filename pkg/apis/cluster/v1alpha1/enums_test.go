@@ -954,16 +954,16 @@ func TestLoadBalancer_EffectiveValue(t *testing.T) {
 func TestImageVerification_Default(t *testing.T) {
 	t.Parallel()
 
-	var iv v1alpha1.ImageVerification
-	assert.Equal(t, v1alpha1.ImageVerificationDisabled, iv.Default())
+	var imageVerification v1alpha1.ImageVerification
+	assert.Equal(t, v1alpha1.ImageVerificationDisabled, imageVerification.Default())
 }
 
 func TestImageVerification_ValidValues(t *testing.T) {
 	t.Parallel()
 
-	var iv v1alpha1.ImageVerification
+	var imageVerification v1alpha1.ImageVerification
 
-	values := iv.ValidValues()
+	values := imageVerification.ValidValues()
 	assert.Contains(t, values, "Enabled")
 	assert.Contains(t, values, "Disabled")
 	assert.Len(t, values, 2)
@@ -991,15 +991,15 @@ func TestImageVerification_Set(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			var iv v1alpha1.ImageVerification
+			var imageVerification v1alpha1.ImageVerification
 
-			err := iv.Set(testCase.input)
+			err := imageVerification.Set(testCase.input)
 			if testCase.wantError {
 				require.Error(t, err)
 				require.ErrorIs(t, err, v1alpha1.ErrInvalidImageVerification)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, testCase.expected, iv)
+				assert.Equal(t, testCase.expected, imageVerification)
 			}
 		})
 	}
@@ -1008,7 +1008,7 @@ func TestImageVerification_Set(t *testing.T) {
 func TestImageVerification_StringAndType(t *testing.T) {
 	t.Parallel()
 
-	iv := v1alpha1.ImageVerificationEnabled
-	assert.Equal(t, "Enabled", iv.String())
-	assert.Equal(t, "ImageVerification", iv.Type())
+	imageVerification := v1alpha1.ImageVerificationEnabled
+	assert.Equal(t, "Enabled", imageVerification.String())
+	assert.Equal(t, "ImageVerification", imageVerification.Type())
 }
