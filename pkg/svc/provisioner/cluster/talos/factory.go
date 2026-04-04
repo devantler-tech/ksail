@@ -147,6 +147,8 @@ func configureInfraProvider(
 		}
 
 		infraProvider = omniProvider
+		// Store Omni options so the provisioner can route to Omni-specific logic
+		provisioner.WithOmniOptions(omniOpts)
 
 	default:
 		return fmt.Errorf("%w: %s (supported: %s, %s, %s)",
