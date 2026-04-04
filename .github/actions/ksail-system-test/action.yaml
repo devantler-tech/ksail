@@ -237,13 +237,19 @@ runs:
         OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         # Install a lightweight Helm chart to verify workload install works
+        install_succeeded=false
         for attempt in 1 2 3; do
           if ksail workload install ksail-install-test oci://ghcr.io/stefanprodan/charts/podinfo --wait --timeout=120s; then
+            install_succeeded=true
             break
           fi
           echo "⚠️ workload install attempt $attempt failed, retrying in 10s…"
           sleep 10
         done
+        if [ "$install_succeeded" != "true" ]; then
+          echo "❌ workload install failed after 3 attempts"
+          exit 1
+        fi
         echo "✅ workload install succeeded"
 
     - name: 🧪 ksail workload apply
@@ -257,13 +263,19 @@ runs:
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
         OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
+        apply_succeeded=false
         for attempt in 1 2 3; do
           if ksail workload apply -k "$OVERLAY_PATH" --wait --timeout="$TIMEOUT"; then
+            apply_succeeded=true
             break
           fi
           echo "⚠️ workload apply attempt $attempt failed, retrying in 10s…"
           sleep 10
         done
+        if [ "$apply_succeeded" != "true" ]; then
+          echo "❌ workload apply failed after 3 attempts"
+          exit 1
+        fi
 
     - name: 🧪 ksail workload watch
       id: workload-watch
@@ -417,13 +429,21 @@ runs:
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
         OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
+        start_succeeded=false
         for attempt in 1 2 3; do
           if timeout 600 ksail cluster start; then
+            start_succeeded=true
             break
           fi
-          echo "⚠️ cluster start attempt $attempt failed, retrying in 10s…"
-          sleep 10
+          if [ "$attempt" -lt 3 ]; then
+            echo "⚠️ cluster start attempt $attempt failed, retrying in 10s…"
+            sleep 10
+          fi
         done
+        if [ "$start_succeeded" != "true" ]; then
+          echo "❌ cluster start failed after 3 attempts"
+          exit 1
+        fi
 
     - name: 🧪 ksail cluster switch
       shell: bash

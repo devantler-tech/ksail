@@ -358,9 +358,9 @@ runs:
           echo "   System tests will fall back to direct registry pulls for these registries."
           echo "   This may cause slower tests and potential rate limiting."
           echo "   See issue #2075 for context."
+        else
+          echo "✅ All 4 required mirror cache volumes exported successfully"
         fi
-
-        echo "✅ All 4 required mirror cache volumes exported successfully"
 
     - name: 🧹 Cleanup containers
       if: always() && steps.check-cache.outputs.complete != 'true'

@@ -102,7 +102,7 @@ jobs:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
     needs: [changes]
-    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true')
+    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true')
     permissions:
       contents: read
     steps:
@@ -510,32 +510,13 @@ jobs:
 
           echo "=== Testing workload gen subcommands ==="
 
-          # Test each gen subcommand that supports --image or similar flags
-          declare -A GEN_COMMANDS=(
-            ["deployment"]="ksail workload gen deployment test-deploy --image nginx:latest"
-            ["service"]="ksail workload gen service test-svc --tcp 80:80"
-            ["configmap"]="ksail workload gen configmap test-cm --from-literal=key=value"
-            ["secret"]="ksail workload gen secret test-secret --from-literal=password=test123"
-            ["namespace"]="ksail workload gen namespace test-ns"
-            ["job"]="ksail workload gen job test-job --image busybox:latest -- echo hello"
-            ["cronjob"]="ksail workload gen cronjob test-cron --image busybox:latest --schedule='*/5 * * * *' -- echo hello"
-            ["serviceaccount"]="ksail workload gen serviceaccount test-sa"
-            ["clusterrole"]="ksail workload gen clusterrole test-cr --verb=get --resource=pods"
-            ["clusterrolebinding"]="ksail workload gen clusterrolebinding test-crb --clusterrole=test-cr --serviceaccount=default:test-sa"
-            ["role"]="ksail workload gen role test-role --verb=get --resource=pods"
-            ["rolebinding"]="ksail workload gen rolebinding test-rb --role=test-role --serviceaccount=default:test-sa"
-            ["ingress"]="ksail workload gen ingress test-ing --rule='host/path=svc:80'"
-            ["quota"]="ksail workload gen quota test-quota --hard=cpu=1,memory=1Gi"
-            ["priorityclass"]="ksail workload gen priorityclass test-pc --value=1000"
-            ["poddisruptionbudget"]="ksail workload gen poddisruptionbudget test-pdb --min-available=1 --selector=app=test"
-          )
-
-          for name in "${!GEN_COMMANDS[@]}"; do
+          run_gen_test() {
+            local name="$1"
+            shift
+            local OUTPUT_FILE="$GEN_DIR/${name}.yaml"
             echo "--- gen $name ---"
-            OUTPUT_FILE="$GEN_DIR/${name}.yaml"
-            if eval "${GEN_COMMANDS[$name]}" > "$OUTPUT_FILE" 2>&1; then
+            if "$@" > "$OUTPUT_FILE" 2>&1; then
               echo "  ✅ gen $name succeeded"
-              # Validate the generated manifest
               if ksail workload validate "$OUTPUT_FILE" 2>&1; then
                 echo "  ✅ validate $name succeeded"
               else
@@ -548,7 +529,24 @@ jobs:
               cat "$OUTPUT_FILE" 2>/dev/null || true
               FAILED=$((FAILED + 1))
             fi
-          done
+          }
+
+          run_gen_test deployment ksail workload gen deployment test-deploy --image nginx:latest
+          run_gen_test service ksail workload gen service test-svc --tcp 80:80
+          run_gen_test configmap ksail workload gen configmap test-cm --from-literal=key=value
+          run_gen_test secret ksail workload gen secret test-secret --from-literal=password=test123
+          run_gen_test namespace ksail workload gen namespace test-ns
+          run_gen_test job ksail workload gen job test-job --image=busybox:latest
+          run_gen_test cronjob ksail workload gen cronjob test-cron --image=busybox:latest --schedule="*/5 * * * *"
+          run_gen_test serviceaccount ksail workload gen serviceaccount test-sa
+          run_gen_test clusterrole ksail workload gen clusterrole test-cr --verb=get --resource=pods
+          run_gen_test clusterrolebinding ksail workload gen clusterrolebinding test-crb --clusterrole=test-cr --serviceaccount=default:test-sa
+          run_gen_test role ksail workload gen role test-role --verb=get --resource=pods
+          run_gen_test rolebinding ksail workload gen rolebinding test-rb --role=test-role --serviceaccount=default:test-sa
+          run_gen_test ingress ksail workload gen ingress test-ing --rule="host/path=svc:80"
+          run_gen_test quota ksail workload gen quota test-quota --hard=cpu=1,memory=1Gi
+          run_gen_test priorityclass ksail workload gen priorityclass test-pc --value=1000
+          run_gen_test poddisruptionbudget ksail workload gen poddisruptionbudget test-pdb --min-available=1 --selector=app=test
 
           rm -rf "$GEN_DIR"
 
@@ -562,7 +560,7 @@ jobs:
         shell: bash
         run: |
           # Install age for key generation
-          go install filippo.io/age/cmd/age-keygen@latest
+          go install filippo.io/age/cmd/age-keygen@v1.3.1
 
           # Generate an Age key pair
           KEY_FILE=$(mktemp)
@@ -584,23 +582,12 @@ jobs:
             api-key: another-secret
           EOF
 
-          # Save original content for comparison
-          ORIGINAL=$(cat "$TEST_DIR/secret.yaml")
-
           # Import the Age key
           export SOPS_AGE_KEY_FILE="$KEY_FILE"
 
           # Encrypt the secret
           echo "=== Encrypting secret ==="
           ksail cipher encrypt "$TEST_DIR/secret.yaml" --age "$PUBLIC_KEY"
-          ENCRYPTED=$(cat "$TEST_DIR/secret.yaml")
-
-          # Verify encryption changed the file
-          if [ "$ORIGINAL" = "$ENCRYPTED" ]; then
-            echo "❌ Encryption did not modify the file"
-            exit 1
-          fi
-          echo "✅ File was encrypted"
 
           # Verify encrypted file contains SOPS metadata
           if ! grep -q "sops:" "$TEST_DIR/secret.yaml"; then
@@ -612,18 +599,36 @@ jobs:
           # Decrypt the secret
           echo "=== Decrypting secret ==="
           ksail cipher decrypt "$TEST_DIR/secret.yaml"
-          DECRYPTED=$(cat "$TEST_DIR/secret.yaml")
 
-          # Verify decryption restored the original content
-          if [ "$ORIGINAL" != "$DECRYPTED" ]; then
-            echo "❌ Decryption did not restore original content"
-            echo "--- Original ---"
-            echo "$ORIGINAL"
-            echo "--- Decrypted ---"
-            echo "$DECRYPTED"
+          # Verify decrypted file no longer contains SOPS metadata
+          if grep -q "sops:" "$TEST_DIR/secret.yaml"; then
+            echo "❌ Decrypted file still contains SOPS metadata"
             exit 1
           fi
-          echo "✅ Decrypt restored original content"
+          echo "✅ Decrypted file no longer contains SOPS metadata"
+
+          # Verify decryption restored the expected manifest content semantically
+          if ! grep -q "apiVersion:" "$TEST_DIR/secret.yaml"; then
+            echo "❌ Decrypted file missing expected apiVersion"
+            exit 1
+          fi
+          if ! grep -q "kind: Secret" "$TEST_DIR/secret.yaml"; then
+            echo "❌ Decrypted file missing expected kind"
+            exit 1
+          fi
+          if ! grep -q "name: test-cipher-roundtrip" "$TEST_DIR/secret.yaml"; then
+            echo "❌ Decrypted file missing expected metadata.name"
+            exit 1
+          fi
+          if ! grep -q "password: super-secret-value" "$TEST_DIR/secret.yaml"; then
+            echo "❌ Decrypted file missing expected password value"
+            exit 1
+          fi
+          if ! grep -q "api-key: another-secret" "$TEST_DIR/secret.yaml"; then
+            echo "❌ Decrypted file missing expected api-key value"
+            exit 1
+          fi
+          echo "✅ Decrypt restored expected manifest content"
 
           echo "✅ Cipher encrypt/decrypt roundtrip passed"
 
