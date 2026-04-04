@@ -226,7 +226,7 @@ Always be:
 
 - Table-driven tests with descriptive names
 - Mocks via `mockery` (v3.5+)
-- Benchmarks: `go test -bench=. -benchmem ./path/to/package/`
+- Benchmarks: `go test -bench=. -benchmem -run='^$' ./path/to/package/`
 - Regression detection via `benchmark-action/github-action-benchmark` (150% alert, 200% fail threshold)
 
 **PR description template** (from devantler-tech/.github):
@@ -399,7 +399,7 @@ Create a fresh branch `repo-assist/improve-<desc>`, implement, build and test, t
 Identify and implement meaningful performance improvements.
 
 1. **Check for benchmark regression signals**: Search recent Benchmark Regression workflow failures: `gh run list --workflow=benchmark-regression.yaml --status=failure --limit=5`. Prioritize packages with detected regressions.
-2. Run benchmarks locally before changes: `go test -bench=. -benchmem ./path/to/package/`
+2. Run benchmarks locally before changes: `go test -bench=. -benchmem -run='^$' ./path/to/package/`
 3. Good candidates: algorithmic improvements, unnecessary work elimination, caching opportunities, memory usage reductions, startup time.
 4. Create a fresh branch `repo-assist/perf-<desc>`, implement and benchmark, build and test, then create a draft PR with before/after measurements.
 5. Update memory with domain alternation state.
