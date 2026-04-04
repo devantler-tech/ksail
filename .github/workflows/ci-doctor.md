@@ -59,7 +59,7 @@ tools:
   bash: true
 
 timeout-minutes: 60
-source: githubnext/agentics/workflows/ci-doctor.md@1f672aef974f4246124860fc532f82fe8a93a57e
+source: githubnext/agentics/workflows/ci-doctor.md@7c7feb61a52b662eb2089aa2945588b7a200d404
 ---
 
 # CI Doctor
