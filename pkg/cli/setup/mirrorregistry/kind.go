@@ -5,13 +5,10 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/kind"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
-	"github.com/spf13/cobra"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -164,45 +161,4 @@ func PrepareKindConfigWithMirrors(
 // Deprecated: Use kindconfigmanager.ResolveMirrorsDir instead.
 func GetKindMirrorsDir(clusterCfg *v1alpha1.Cluster) string {
 	return kindconfigmanager.ResolveMirrorsDir(clusterCfg)
-}
-
-func cleanupKindMirrorRegistries(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	clusterCfg *v1alpha1.Cluster,
-	deps lifecycle.Deps,
-	clusterName string,
-	deleteVolumes bool,
-	cleanupDeps CleanupDependencies,
-) error {
-	mirrorSpecs, registryNames, err := CollectMirrorSpecs(
-		cmd,
-		cfgManager,
-		GetKindMirrorsDir(clusterCfg),
-		clusterCfg.Spec.Cluster.Provider,
-	)
-	if err != nil {
-		return err
-	}
-
-	networkName := kindconfigmanager.DefaultNetworkName
-
-	return cleanupRegistriesOrFallback(
-		cmd,
-		deps,
-		registryNames,
-		networkName,
-		clusterName,
-		deleteVolumes,
-		cleanupDeps,
-		func(ctx context.Context, dockerClient client.APIClient) error {
-			return kindprovisioner.CleanupRegistries(
-				ctx,
-				mirrorSpecs,
-				clusterName,
-				dockerClient,
-				deleteVolumes,
-			)
-		},
-	)
 }

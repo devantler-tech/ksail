@@ -203,19 +203,6 @@ func WithClock(clock Clock) ProgressOption {
 	}
 }
 
-// WithMaxVisible sets the maximum number of task lines shown at once.
-// When set, a compact display mode is used: a summary line at the top
-// shows completed/failed counts, up to maxVisible active tasks are shown,
-// and a remaining count is shown at the bottom.
-// If WithConcurrency is not set, maxVisible also limits concurrency so
-// the number of running tasks stays within the visible window.
-// Default 0 means show all tasks (backward compatible).
-func WithMaxVisible(n int) ProgressOption {
-	return func(pg *ProgressGroup) {
-		pg.maxVisible = n
-	}
-}
-
 // WithConcurrency limits the number of tasks running in parallel.
 // Default 0 means unlimited concurrency.
 func WithConcurrency(n int) ProgressOption {

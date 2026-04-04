@@ -1,7 +1,6 @@
 package chat_test
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -501,68 +500,4 @@ func TestDeleteLocalSession_InvalidIDReturnsError(t *testing.T) {
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, chat.ErrSessionIDEmptyForTest)
-}
-
-// --- deleteOrphanedLocalSessions ---
-
-func TestDeleteOrphanedLocalSessions_RemovesOrphaned(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-
-	appDir := ".ksail-orphan-test"
-
-	// Save two sessions locally.
-	session1 := &chat.SessionMetadata{ID: "keep-session", Name: "Keep"}
-	err := chat.SaveSession(session1, appDir)
-	require.NoError(t, err)
-
-	session2 := &chat.SessionMetadata{ID: "orphan-session", Name: "Orphan"}
-	err = chat.SaveSession(session2, appDir)
-	require.NoError(t, err)
-
-	// Build a validIDs set with only session1 — session2 is orphaned.
-	validIDs := map[string]struct{}{"keep-session": {}}
-
-	// deleteOrphanedLocalSessions accepts a full directory path.
-	sessionsPath := filepath.Join(homeDir, appDir, "chat", "sessions")
-
-	err = chat.ExportDeleteOrphanedLocalSessions(sessionsPath, validIDs)
-	require.NoError(t, err)
-
-	// Orphaned session should be gone.
-	_, err = chat.LoadSession("orphan-session", appDir)
-	require.Error(t, err, "orphaned session should have been removed")
-
-	// Kept session should still exist.
-	kept, err := chat.LoadSession("keep-session", appDir)
-	require.NoError(t, err)
-	assert.Equal(t, "Keep", kept.Name)
-}
-
-func TestDeleteOrphanedLocalSessions_NonExistentDirIsNoop(t *testing.T) {
-	t.Parallel()
-
-	nonexistentDir := filepath.Join(t.TempDir(), "missing")
-	err := chat.ExportDeleteOrphanedLocalSessions(nonexistentDir, nil)
-
-	require.NoError(t, err)
-}
-
-func TestDeleteOrphanedLocalSessions_EmptyValidIDsDeletesAll(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-
-	appDir := ".ksail-delete-all-test"
-
-	session := &chat.SessionMetadata{ID: "to-be-deleted", Name: "Delete Me"}
-	err := chat.SaveSession(session, appDir)
-	require.NoError(t, err)
-
-	sessionsPath := filepath.Join(homeDir, appDir, "chat", "sessions")
-
-	err = chat.ExportDeleteOrphanedLocalSessions(sessionsPath, map[string]struct{}{})
-	require.NoError(t, err)
-
-	_, err = chat.LoadSession("to-be-deleted", appDir)
-	require.Error(t, err, "session should have been removed")
 }

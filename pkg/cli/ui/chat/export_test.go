@@ -167,9 +167,6 @@ var ExportIsValidSessionIDChar = isValidSessionIDChar
 // ExportDeleteLocalSession exposes deleteLocalSession for testing.
 var ExportDeleteLocalSession = deleteLocalSession
 
-// ExportDeleteOrphanedLocalSessions exposes deleteOrphanedLocalSessions for testing.
-var ExportDeleteOrphanedLocalSessions = deleteOrphanedLocalSessions
-
 // ErrSessionIDEmptyForTest exposes errSessionIDEmpty for testing.
 var ErrSessionIDEmptyForTest = errSessionIDEmpty
 
