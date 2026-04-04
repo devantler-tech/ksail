@@ -77,7 +77,14 @@ const tenantDirPermissions = 0o750
 
 func prepareTenantDir(tenantDir string, force bool) error {
 	info, statErr := os.Stat(tenantDir)
-	if statErr == nil && info.IsDir() {
+	if statErr == nil {
+		if !info.IsDir() {
+			return fmt.Errorf(
+				"%w: %q exists but is not a directory",
+				ErrTenantAlreadyExists, tenantDir,
+			)
+		}
+
 		if !force {
 			return fmt.Errorf(
 				"%w: %q, use --force to overwrite",

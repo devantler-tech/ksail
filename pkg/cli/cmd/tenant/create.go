@@ -1,7 +1,6 @@
 package tenant
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -98,8 +97,8 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Scaffold and push tenant repo if git provider, repo, and a valid token are available.
-	if opts.GitProvider != "" && opts.GitRepo != "" {
+	// Scaffold and push tenant repo (only supported for GitHub provider).
+	if strings.EqualFold(opts.GitProvider, "github") && opts.GitRepo != "" {
 		scaffoldErr := scaffoldTenantRepo(cmd, opts)
 		if scaffoldErr != nil {
 			return scaffoldErr
@@ -256,7 +255,7 @@ func scaffoldTenantRepo(cmd *cobra.Command, opts tenant.Options) error {
 		return fmt.Errorf("parsing repo visibility: %w", err)
 	}
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	err = provider.CreateRepo(ctx, owner, repoName, visibility)
 	if err != nil {

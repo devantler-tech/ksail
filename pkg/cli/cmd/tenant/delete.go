@@ -84,7 +84,7 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	err = tenant.Delete(opts)
+	err = tenant.Delete(cmd.Context(), opts)
 	if err != nil {
 		return fmt.Errorf("deleting tenant: %w", err)
 	}

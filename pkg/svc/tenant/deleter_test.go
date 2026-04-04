@@ -1,6 +1,7 @@
 package tenant_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,7 +22,7 @@ func TestDelete_RemovesTenantDirectory(t *testing.T) {
 		[]byte("test"), 0o600,
 	))
 
-	err := tenant.Delete(tenant.DeleteOptions{
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
 		Name:      "my-tenant",
 		OutputDir: tmpDir,
 	})
@@ -36,7 +37,7 @@ func TestDelete_ErrorForNonExistentDirectory(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	err := tenant.Delete(tenant.DeleteOptions{
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
 		Name:      "no-such-tenant",
 		OutputDir: tmpDir,
 	})
@@ -64,7 +65,7 @@ resources:
 	kPath := filepath.Join(tmpDir, "kustomization.yaml")
 	require.NoError(t, os.WriteFile(kPath, []byte(kustomContent), 0o600))
 
-	err := tenant.Delete(tenant.DeleteOptions{
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
 		Name:              "my-tenant",
 		OutputDir:         tmpDir,
 		Unregister:        true,
@@ -98,7 +99,7 @@ func TestDelete_ContinuesIfNoKustomizationFound(t *testing.T) {
 		os.WriteFile(filepath.Join(tenantDir, "namespace.yaml"), []byte("test"), 0o600),
 	)
 
-	err := tenant.Delete(tenant.DeleteOptions{
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
 		Name:       "my-tenant",
 		OutputDir:  tmpDir,
 		Unregister: true,
@@ -116,7 +117,7 @@ func TestDelete_DeleteRepoRequiresGitProvider(t *testing.T) {
 	tenantDir := filepath.Join(tmpDir, "my-tenant")
 	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
 
-	err := tenant.Delete(tenant.DeleteOptions{
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
 		Name:       "my-tenant",
 		OutputDir:  tmpDir,
 		DeleteRepo: true,
@@ -133,7 +134,7 @@ func TestDelete_DeleteRepoRequiresGitRepo(t *testing.T) {
 	tenantDir := filepath.Join(tmpDir, "my-tenant")
 	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
 
-	err := tenant.Delete(tenant.DeleteOptions{
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
 		Name:        "my-tenant",
 		OutputDir:   tmpDir,
 		DeleteRepo:  true,
@@ -150,7 +151,7 @@ func TestDelete_InvalidGitRepoFormat(t *testing.T) {
 	tenantDir := filepath.Join(tmpDir, "my-tenant")
 	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
 
-	err := tenant.Delete(tenant.DeleteOptions{
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
 		Name:        "my-tenant",
 		OutputDir:   tmpDir,
 		DeleteRepo:  true,
@@ -168,7 +169,7 @@ func TestDelete_UnsupportedGitProvider(t *testing.T) {
 	tenantDir := filepath.Join(tmpDir, "my-tenant")
 	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
 
-	err := tenant.Delete(tenant.DeleteOptions{
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
 		Name:        "my-tenant",
 		OutputDir:   tmpDir,
 		DeleteRepo:  true,
@@ -183,7 +184,7 @@ func TestDelete_PathTraversalName(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	err := tenant.Delete(tenant.DeleteOptions{
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
 		Name:      "../escape",
 		OutputDir: tmpDir,
 	})
@@ -210,7 +211,7 @@ resources:
 	kPath := filepath.Join(tmpDir, "kustomization.yaml")
 	require.NoError(t, os.WriteFile(kPath, []byte(kustomContent), 0o600))
 
-	err := tenant.Delete(tenant.DeleteOptions{
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
 		Name:              "my-tenant",
 		OutputDir:         tmpDir,
 		Unregister:        true,

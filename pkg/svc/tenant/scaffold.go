@@ -27,6 +27,10 @@ func ScaffoldFiles(opts Options) map[string][]byte {
 		readmeContent = fmt.Sprintf(
 			"# %s\n\nApply with: `kubectl apply -k k8s/`\n",
 			opts.Name)
+	default:
+		readmeContent = fmt.Sprintf(
+			"# %s\n\nKSail-managed tenant.\n",
+			opts.Name)
 	}
 
 	return map[string][]byte{

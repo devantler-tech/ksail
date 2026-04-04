@@ -233,6 +233,7 @@ func newRBACConfigMap(policyCSV string) rbacConfigMap {
 
 // MergeArgoCDRBACPolicy intelligently merges tenant policies into existing argocd-rbac-cm content.
 // If existingContent is empty, creates a new ConfigMap.
+// Uses map[string]any for round-trip fidelity to preserve unknown fields.
 func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, error) {
 	if strings.TrimSpace(existingContent) == "" {
 		cm := newRBACConfigMap(buildTenantPolicyCSV(tenantName))
@@ -245,23 +246,18 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 		return string(data), nil
 	}
 
-	var configMap rbacConfigMap
+	var raw map[string]any
 
-	err := yaml.Unmarshal([]byte(existingContent), &configMap)
+	err := yaml.Unmarshal([]byte(existingContent), &raw)
 	if err != nil {
 		return "", fmt.Errorf("parsing existing RBAC ConfigMap: %w", err)
 	}
 
-	if configMap.Data == nil {
-		configMap.Data = make(map[string]string)
-	}
+	dataMap := ensureDataMap(raw)
+	existingPolicy, _ := dataMap["policy.csv"].(string)
 
-	existingPolicy := configMap.Data["policy.csv"]
-
-	// Use exact role boundary matching to avoid false positives when
-	// one tenant name is a substring of another (e.g., "team" vs "team-alpha").
 	if hasTenantPolicy(existingPolicy, tenantName) {
-		data, err := yaml.Marshal(configMap)
+		data, err := yaml.Marshal(raw)
 		if err != nil {
 			return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
 		}
@@ -275,9 +271,9 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 		existingPolicy += "\n"
 	}
 
-	configMap.Data["policy.csv"] = existingPolicy + tenantPolicy
+	dataMap["policy.csv"] = existingPolicy + tenantPolicy
 
-	data, err := yaml.Marshal(configMap)
+	data, err := yaml.Marshal(raw)
 	if err != nil {
 		return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
 	}
@@ -286,25 +282,26 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 }
 
 // RemoveArgoCDRBACPolicy removes a tenant's policy lines from argocd-rbac-cm content.
-// Used by the delete command.
+// Uses map[string]any for round-trip fidelity to preserve unknown fields.
 func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, error) {
-	var configMap rbacConfigMap
+	var raw map[string]any
 
-	err := yaml.Unmarshal([]byte(existingContent), &configMap)
+	err := yaml.Unmarshal([]byte(existingContent), &raw)
 	if err != nil {
 		return "", fmt.Errorf("parsing existing RBAC ConfigMap: %w", err)
 	}
 
-	if configMap.Data == nil {
-		data, err := yaml.Marshal(configMap)
+	dataMap := ensureDataMap(raw)
+
+	existingPolicy, _ := dataMap["policy.csv"].(string)
+	if existingPolicy == "" {
+		data, err := yaml.Marshal(raw)
 		if err != nil {
 			return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
 		}
 
 		return string(data), nil
 	}
-
-	existingPolicy := configMap.Data["policy.csv"]
 
 	lines := strings.Split(existingPolicy, "\n")
 
@@ -323,9 +320,9 @@ func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, 
 		result += "\n"
 	}
 
-	configMap.Data["policy.csv"] = result
+	dataMap["policy.csv"] = result
 
-	data, err := yaml.Marshal(configMap)
+	data, err := yaml.Marshal(raw)
 	if err != nil {
 		return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
 	}
@@ -335,6 +332,27 @@ func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, 
 
 // hasTenantPolicy checks if the given policy CSV already contains policies
 // for the exact tenant name, avoiding substring false positives.
+// ensureDataMap extracts or initializes the "data" sub-map from a raw ConfigMap.
+func ensureDataMap(raw map[string]any) map[string]any {
+	dataVal, exists := raw["data"]
+	if !exists {
+		dataMap := make(map[string]any)
+		raw["data"] = dataMap
+
+		return dataMap
+	}
+
+	dataMap, isMap := dataVal.(map[string]any)
+	if !isMap {
+		dataMap = make(map[string]any)
+		raw["data"] = dataMap
+
+		return dataMap
+	}
+
+	return dataMap
+}
+
 func hasTenantPolicy(policyCSV, tenantName string) bool {
 	for line := range strings.SplitSeq(policyCSV, "\n") {
 		if isTenantPolicyLine(strings.TrimSpace(line), tenantName) {

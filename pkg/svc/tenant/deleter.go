@@ -32,7 +32,7 @@ type DeleteOptions struct {
 }
 
 // Delete removes a tenant's manifests and optionally unregisters and deletes the repo.
-func Delete(opts DeleteOptions) error {
+func Delete(ctx context.Context, opts DeleteOptions) error {
 	if opts.Name == "" {
 		return ErrTenantNameRequired
 	}
@@ -67,13 +67,13 @@ func Delete(opts DeleteOptions) error {
 	}
 
 	if opts.DeleteRepo {
-		return deleteRepo(opts)
+		return deleteRepo(ctx, opts)
 	}
 
 	return nil
 }
 
-func deleteRepo(opts DeleteOptions) error {
+func deleteRepo(ctx context.Context, opts DeleteOptions) error {
 	if opts.GitProvider == "" {
 		return fmt.Errorf("%w", ErrDeleteRepoGitProviderRequired)
 	}
@@ -94,7 +94,7 @@ func deleteRepo(opts DeleteOptions) error {
 		return fmt.Errorf("create git provider: %w", err)
 	}
 
-	err = provider.DeleteRepo(context.Background(), owner, repo)
+	err = provider.DeleteRepo(ctx, owner, repo)
 	if err != nil {
 		return fmt.Errorf("delete git repo: %w", err)
 	}
