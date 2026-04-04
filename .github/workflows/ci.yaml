@@ -579,7 +579,7 @@ jobs:
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
-          hcloud-token: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }}
+          hcloud-token: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }} # zizmor: ignore[secrets-outside-env] - passed as composite action input, same pattern as omni-service-account-key
           omni-service-account-key: ${{ matrix.provider == 'Omni' && secrets.OMNI_SERVICE_ACCOUNT_KEY || '' }} # zizmor: ignore[secrets-outside-env] - passed as composite action input, same pattern as hcloud-token
           omni-endpoint: ${{ matrix.provider == 'Omni' && vars.OMNI_ENDPOINT || '' }}
           ghcr-user: ${{ github.actor }}
@@ -601,7 +601,7 @@ jobs:
       - name: 🧹 Cleanup all KSail-owned Hetzner resources
         uses: ./.github/actions/cleanup-hetzner
         with:
-          hcloud-token: ${{ secrets.HCLOUD_TOKEN }}
+          hcloud-token: ${{ secrets.HCLOUD_TOKEN }} # zizmor: ignore[secrets-outside-env] - passed as composite action input, same pattern as omni-service-account-key
 
   cleanup-omni:
     name: 🧹 Cleanup Omni Resources
