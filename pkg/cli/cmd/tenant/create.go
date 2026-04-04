@@ -69,7 +69,8 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 	opts.OutputDir = outputDir
 
 	// Generate tenant files.
-	if err := tenant.Generate(opts); err != nil {
+	err = tenant.Generate(opts)
+	if err != nil {
 		return fmt.Errorf("generating tenant: %w", err)
 	}
 
@@ -149,7 +150,11 @@ func validateDelivery(delivery string) error {
 
 func resolveTenantType(cmd *cobra.Command, typeStr string, opts *tenant.Options) error {
 	if typeStr != "" {
-		return opts.TenantType.Set(typeStr)
+		err := opts.TenantType.Set(typeStr)
+		if err != nil {
+			return fmt.Errorf("setting tenant type: %w", err)
+		}
+		return nil
 	}
 	var configFile string
 	cfgPath, err := flags.GetConfigPath(cmd)
@@ -166,11 +171,11 @@ func resolveTenantType(cmd *cobra.Command, typeStr string, opts *tenant.Options)
 	}
 	switch cfg.Spec.Cluster.GitOpsEngine {
 	case v1alpha1.GitOpsEngineFlux:
-		opts.TenantType = tenant.TenantTypeFlux
+		opts.TenantType = tenant.TypeFlux
 	case v1alpha1.GitOpsEngineArgoCD:
-		opts.TenantType = tenant.TenantTypeArgoCD
+		opts.TenantType = tenant.TypeArgoCD
 	default:
-		opts.TenantType = tenant.TenantTypeKubectl
+		opts.TenantType = tenant.TypeKubectl
 	}
 	return nil
 }
@@ -207,19 +212,21 @@ func scaffoldTenantRepo(cmd *cobra.Command, opts tenant.Options) error {
 
 	visibility, err := gitprovider.ParseVisibility(opts.RepoVisibility)
 	if err != nil {
-		return err
+		return fmt.Errorf("parsing repo visibility: %w", err)
 	}
 
 	ctx := context.Background()
 
-	if err := provider.CreateRepo(ctx, owner, repoName, visibility); err != nil {
+	err = provider.CreateRepo(ctx, owner, repoName, visibility)
+	if err != nil {
 		return fmt.Errorf("creating tenant repo: %w", err)
 	}
 
 	scaffoldFiles := tenant.ScaffoldFiles(opts)
 	commitMsg := fmt.Sprintf("feat: initial scaffold for tenant %s", opts.Name)
 
-	if err := provider.PushFiles(ctx, owner, repoName, scaffoldFiles, commitMsg); err != nil {
+	err = provider.PushFiles(ctx, owner, repoName, scaffoldFiles, commitMsg)
+	if err != nil {
 		return fmt.Errorf("pushing scaffold files: %w", err)
 	}
 

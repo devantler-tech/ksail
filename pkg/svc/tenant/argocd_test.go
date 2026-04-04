@@ -1,78 +1,79 @@
-package tenant
+package tenant_test
 
 import (
 	"testing"
 
+	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGenerateArgoCDManifests_ProjectSingleNamespace(t *testing.T) {
 	t.Parallel()
-	opts := Options{
+	opts := tenant.Options{
 		Name:        "team-alpha",
 		Namespaces:  []string{"team-alpha"},
-		TenantType:  TenantTypeArgoCD,
+		TenantType:  tenant.TypeArgoCD,
 		GitProvider: "github",
 		GitRepo:     "org/team-alpha-app",
 	}
-	result, err := GenerateArgoCDManifests(opts)
+	result, err := tenant.GenerateArgoCDManifests(opts)
 	require.NoError(t, err)
 	snaps.MatchSnapshot(t, result["project.yaml"])
 }
 
 func TestGenerateArgoCDManifests_ProjectMultipleNamespaces(t *testing.T) {
 	t.Parallel()
-	opts := Options{
+	opts := tenant.Options{
 		Name:        "team-beta",
 		Namespaces:  []string{"team-beta-dev", "team-beta-staging", "team-beta-prod"},
-		TenantType:  TenantTypeArgoCD,
+		TenantType:  tenant.TypeArgoCD,
 		GitProvider: "github",
 		GitRepo:     "org/team-beta-app",
 	}
-	result, err := GenerateArgoCDManifests(opts)
+	result, err := tenant.GenerateArgoCDManifests(opts)
 	require.NoError(t, err)
 	snaps.MatchSnapshot(t, result["project.yaml"])
 }
 
 func TestGenerateArgoCDManifests_AppGitHub(t *testing.T) {
 	t.Parallel()
-	opts := Options{
+	opts := tenant.Options{
 		Name:        "team-alpha",
 		Namespaces:  []string{"team-alpha"},
-		TenantType:  TenantTypeArgoCD,
+		TenantType:  tenant.TypeArgoCD,
 		GitProvider: "github",
 		GitRepo:     "org/team-alpha-app",
 	}
-	result, err := GenerateArgoCDManifests(opts)
+	result, err := tenant.GenerateArgoCDManifests(opts)
 	require.NoError(t, err)
 	snaps.MatchSnapshot(t, result["app.yaml"])
 }
 
 func TestGenerateArgoCDManifests_AppGitLab(t *testing.T) {
 	t.Parallel()
-	opts := Options{
+	opts := tenant.Options{
 		Name:        "team-gamma",
 		Namespaces:  []string{"team-gamma"},
-		TenantType:  TenantTypeArgoCD,
+		TenantType:  tenant.TypeArgoCD,
 		GitProvider: "gitlab",
 		GitRepo:     "org/team-gamma-app",
 	}
-	result, err := GenerateArgoCDManifests(opts)
+	result, err := tenant.GenerateArgoCDManifests(opts)
 	require.NoError(t, err)
 	snaps.MatchSnapshot(t, result["app.yaml"])
 }
 
 func TestGenerateArgoCDManifests_NoRBACConfigMap(t *testing.T) {
 	t.Parallel()
-	opts := Options{
+	opts := tenant.Options{
 		Name:        "team-alpha",
 		Namespaces:  []string{"team-alpha"},
-		TenantType:  TenantTypeArgoCD,
+		TenantType:  tenant.TypeArgoCD,
 		GitProvider: "github",
 		GitRepo:     "org/team-alpha-app",
 	}
-	result, err := GenerateArgoCDManifests(opts)
+	result, err := tenant.GenerateArgoCDManifests(opts)
 	require.NoError(t, err)
 	// argocd-rbac-cm.yaml should not be generated per-tenant.
 	_, exists := result["argocd-rbac-cm.yaml"]
@@ -81,7 +82,7 @@ func TestGenerateArgoCDManifests_NoRBACConfigMap(t *testing.T) {
 
 func TestMergeArgoCDRBACPolicy_EmptyExisting(t *testing.T) {
 	t.Parallel()
-	result, err := MergeArgoCDRBACPolicy("", "team-alpha")
+	result, err := tenant.MergeArgoCDRBACPolicy("", "team-alpha")
 	require.NoError(t, err)
 	snaps.MatchSnapshot(t, result)
 }
@@ -101,7 +102,7 @@ data:
     p, role:team-alpha, projects, get, team-alpha, allow
     g, team-alpha, role:team-alpha
 `
-	result, err := MergeArgoCDRBACPolicy(existing, "team-alpha")
+	result, err := tenant.MergeArgoCDRBACPolicy(existing, "team-alpha")
 	require.NoError(t, err)
 	require.Contains(t, result, "role:team-alpha")
 	// Should not duplicate the policy lines
@@ -123,7 +124,7 @@ data:
     p, role:team-alpha, projects, get, team-alpha, allow
     g, team-alpha, role:team-alpha
 `
-	result, err := MergeArgoCDRBACPolicy(existing, "team-beta")
+	result, err := tenant.MergeArgoCDRBACPolicy(existing, "team-beta")
 	require.NoError(t, err)
 	require.Contains(t, result, "role:team-alpha")
 	require.Contains(t, result, "role:team-beta")
@@ -145,7 +146,7 @@ data:
     p, role:team-alpha, projects, get, team-alpha, allow
     g, team-alpha, role:team-alpha
 `
-	result, err := RemoveArgoCDRBACPolicy(existing, "team-alpha")
+	result, err := tenant.RemoveArgoCDRBACPolicy(existing, "team-alpha")
 	require.NoError(t, err)
 	require.NotContains(t, result, "role:team-alpha")
 	snaps.MatchSnapshot(t, result)
@@ -167,7 +168,7 @@ data:
     g, team, role:team
 `
 	// "team-alpha" must be added even though "team" is a substring of "team-alpha".
-	result, err := MergeArgoCDRBACPolicy(existing, "team-alpha")
+	result, err := tenant.MergeArgoCDRBACPolicy(existing, "team-alpha")
 	require.NoError(t, err)
 	require.Contains(t, result, "role:team,")
 	require.Contains(t, result, "role:team-alpha,")
@@ -190,7 +191,7 @@ data:
     g, team-alpha, role:team-alpha
 `
 	// Removing "team" should NOT remove "team-alpha" lines.
-	result, err := RemoveArgoCDRBACPolicy(existing, "team")
+	result, err := tenant.RemoveArgoCDRBACPolicy(existing, "team")
 	require.NoError(t, err)
 	require.NotContains(t, result, "role:team,")
 	require.Contains(t, result, "role:team-alpha,")
@@ -214,7 +215,7 @@ data:
     p, role:team-beta, projects, get, team-beta, allow
     g, team-beta, role:team-beta
 `
-	result, err := RemoveArgoCDRBACPolicy(existing, "team-alpha")
+	result, err := tenant.RemoveArgoCDRBACPolicy(existing, "team-alpha")
 	require.NoError(t, err)
 	require.NotContains(t, result, "role:team-alpha")
 	require.Contains(t, result, "role:team-beta")

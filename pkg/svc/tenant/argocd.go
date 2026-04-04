@@ -83,6 +83,8 @@ type rbacConfigMap struct {
 	Data       map[string]string `json:"data"       yaml:"data"`
 }
 
+const argoCDManifestCount = 2
+
 // GenerateArgoCDManifests generates ArgoCD-specific tenant manifests.
 // Returns a map of filename -> YAML content.
 // Files: project.yaml, app.yaml
@@ -101,7 +103,7 @@ func GenerateArgoCDManifests(opts Options) (map[string]string, error) {
 		return nil, fmt.Errorf("%w", ErrNamespaceRequired)
 	}
 
-	result := make(map[string]string, 2)
+	result := make(map[string]string, argoCDManifestCount)
 
 	projectYAML, err := generateAppProject(opts)
 	if err != nil {
@@ -243,21 +245,21 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 		return string(data), nil
 	}
 
-	var cm rbacConfigMap
-	if err := yaml.Unmarshal([]byte(existingContent), &cm); err != nil {
+	var configMap rbacConfigMap
+	if err := yaml.Unmarshal([]byte(existingContent), &configMap); err != nil {
 		return "", fmt.Errorf("parsing existing RBAC ConfigMap: %w", err)
 	}
 
-	if cm.Data == nil {
-		cm.Data = make(map[string]string)
+	if configMap.Data == nil {
+		configMap.Data = make(map[string]string)
 	}
 
-	existingPolicy := cm.Data["policy.csv"]
+	existingPolicy := configMap.Data["policy.csv"]
 
 	// Use exact role boundary matching to avoid false positives when
 	// one tenant name is a substring of another (e.g., "team" vs "team-alpha").
 	if hasTenantPolicy(existingPolicy, tenantName) {
-		data, err := yaml.Marshal(cm)
+		data, err := yaml.Marshal(configMap)
 		if err != nil {
 			return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
 		}
@@ -268,9 +270,9 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 	if existingPolicy != "" && !strings.HasSuffix(existingPolicy, "\n") {
 		existingPolicy += "\n"
 	}
-	cm.Data["policy.csv"] = existingPolicy + tenantPolicy
+	configMap.Data["policy.csv"] = existingPolicy + tenantPolicy
 
-	data, err := yaml.Marshal(cm)
+	data, err := yaml.Marshal(configMap)
 	if err != nil {
 		return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
 	}
@@ -281,20 +283,20 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 // RemoveArgoCDRBACPolicy removes a tenant's policy lines from argocd-rbac-cm content.
 // Used by the delete command.
 func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, error) {
-	var cm rbacConfigMap
-	if err := yaml.Unmarshal([]byte(existingContent), &cm); err != nil {
+	var configMap rbacConfigMap
+	if err := yaml.Unmarshal([]byte(existingContent), &configMap); err != nil {
 		return "", fmt.Errorf("parsing existing RBAC ConfigMap: %w", err)
 	}
 
-	if cm.Data == nil {
-		data, err := yaml.Marshal(cm)
+	if configMap.Data == nil {
+		data, err := yaml.Marshal(configMap)
 		if err != nil {
 			return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
 		}
 		return string(data), nil
 	}
 
-	existingPolicy := cm.Data["policy.csv"]
+	existingPolicy := configMap.Data["policy.csv"]
 
 	lines := strings.Split(existingPolicy, "\n")
 	filtered := make([]string, 0, len(lines))
@@ -310,9 +312,9 @@ func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, 
 	if result != "" {
 		result += "\n"
 	}
-	cm.Data["policy.csv"] = result
+	configMap.Data["policy.csv"] = result
 
-	data, err := yaml.Marshal(cm)
+	data, err := yaml.Marshal(configMap)
 	if err != nil {
 		return "", fmt.Errorf("marshaling RBAC ConfigMap: %w", err)
 	}

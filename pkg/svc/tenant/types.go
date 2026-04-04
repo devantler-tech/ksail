@@ -7,46 +7,48 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-// TenantType defines the type of tenant (determines which resources are generated).
-type TenantType string
+// Type defines the type of tenant (determines which resources are generated).
+type Type string
 
 const (
-	// TenantTypeFlux generates RBAC + Flux sync manifests (OCIRepository/GitRepository + Kustomization).
-	TenantTypeFlux TenantType = "flux"
-	// TenantTypeArgoCD generates RBAC + ArgoCD manifests (AppProject + Application + argocd-rbac-cm).
-	TenantTypeArgoCD TenantType = "argocd"
-	// TenantTypeKubectl generates RBAC manifests only (no GitOps sync resources).
-	TenantTypeKubectl TenantType = "kubectl"
+	// TypeFlux generates RBAC + Flux sync manifests (OCIRepository/GitRepository + Kustomization).
+	TypeFlux Type = "flux"
+	// TypeArgoCD generates RBAC + ArgoCD manifests (AppProject + Application + argocd-rbac-cm).
+	TypeArgoCD Type = "argocd"
+	// TypeKubectl generates RBAC manifests only (no GitOps sync resources).
+	TypeKubectl Type = "kubectl"
 )
 
-// ValidTenantTypes returns all valid tenant type values.
-func ValidTenantTypes() []TenantType {
-	return []TenantType{TenantTypeFlux, TenantTypeArgoCD, TenantTypeKubectl}
+// ValidTypes returns all valid tenant type values.
+func ValidTypes() []Type {
+	return []Type{TypeFlux, TypeArgoCD, TypeKubectl}
 }
 
-// Set implements pflag.Value for TenantType (case-insensitive).
-func (t *TenantType) Set(value string) error {
-	for _, valid := range ValidTenantTypes() {
+// Set implements pflag.Value for Type (case-insensitive).
+func (t *Type) Set(value string) error {
+	for _, valid := range ValidTypes() {
 		if strings.EqualFold(value, string(valid)) {
 			*t = valid
 			return nil
 		}
 	}
-	return fmt.Errorf("%w: %s (valid options: %s)", ErrInvalidTenantType, value, strings.Join(validTenantTypeStrings(), ", "))
+	return fmt.Errorf(
+		"%w: %s (valid options: %s)", ErrInvalidType, value, strings.Join(validTypeStrings(), ", "),
+	)
 }
 
-// String returns the string representation of the TenantType.
-func (t *TenantType) String() string {
+// String returns the string representation of the Type.
+func (t *Type) String() string {
 	return string(*t)
 }
 
 // Type returns the type name for pflag.
-func (t *TenantType) Type() string {
+func (t *Type) Type() string {
 	return "TenantType"
 }
 
-func validTenantTypeStrings() []string {
-	types := ValidTenantTypes()
+func validTypeStrings() []string {
+	types := ValidTypes()
 	result := make([]string, len(types))
 	for i, t := range types {
 		result[i] = string(t)
@@ -77,7 +79,7 @@ type Options struct {
 	// Force overwrites existing tenant directory.
 	Force bool
 	// TenantType is the tenant type: flux, argocd, or kubectl.
-	TenantType TenantType
+	TenantType Type
 	// SyncSource is the Flux source type: oci or git (Flux only).
 	SyncSource SyncSource
 	// Registry is the OCI registry URL for Flux OCI source.
@@ -141,14 +143,14 @@ func (o *Options) Validate() error {
 		return ErrTenantTypeRequired
 	}
 	validType := false
-	for _, vt := range ValidTenantTypes() {
+	for _, vt := range ValidTypes() {
 		if o.TenantType == vt {
 			validType = true
 			break
 		}
 	}
 	if !validType {
-		return fmt.Errorf("%w: %q", ErrInvalidTenantType, o.TenantType)
+		return fmt.Errorf("%w: %q", ErrInvalidType, o.TenantType)
 	}
 	for _, ns := range o.Namespaces {
 		if errs := validation.IsDNS1123Label(ns); len(errs) > 0 {

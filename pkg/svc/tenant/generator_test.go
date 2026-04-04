@@ -16,7 +16,7 @@ func TestGenerate_KubectlType(t *testing.T) {
 	dir := t.TempDir()
 	err := Generate(Options{
 		Name:       "team-kubectl",
-		TenantType: TenantTypeKubectl,
+		TenantType: TypeKubectl,
 		OutputDir:  dir,
 	})
 	require.NoError(t, err)
@@ -47,7 +47,7 @@ func TestGenerate_FluxType(t *testing.T) {
 	dir := t.TempDir()
 	err := Generate(Options{
 		Name:       "team-flux",
-		TenantType: TenantTypeFlux,
+		TenantType: TypeFlux,
 		OutputDir:  dir,
 		SyncSource: SyncSourceOCI,
 		Registry:   "oci://ghcr.io",
@@ -77,7 +77,7 @@ func TestGenerate_ArgoCDType(t *testing.T) {
 	dir := t.TempDir()
 	err := Generate(Options{
 		Name:        "team-argocd",
-		TenantType:  TenantTypeArgoCD,
+		TenantType:  TypeArgoCD,
 		OutputDir:   dir,
 		GitProvider: "github",
 		GitRepo:     "acme/team-argocd-app",
@@ -112,7 +112,7 @@ func TestGenerate_ForceOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	opts := Options{
 		Name:       "team-force",
-		TenantType: TenantTypeKubectl,
+		TenantType: TypeKubectl,
 		OutputDir:  dir,
 	}
 
@@ -139,7 +139,7 @@ func TestGenerate_EmptyTenantName(t *testing.T) {
 	t.Parallel()
 
 	err := Generate(Options{
-		TenantType: TenantTypeKubectl,
+		TenantType: TypeKubectl,
 		OutputDir:  t.TempDir(),
 	})
 	require.ErrorIs(t, err, ErrTenantNameRequired)
@@ -163,7 +163,7 @@ func TestGenerate_ForceRemovesStalePreviousFiles(t *testing.T) {
 	// First: create an ArgoCD tenant.
 	require.NoError(t, Generate(Options{
 		Name:        "team-switch",
-		TenantType:  TenantTypeArgoCD,
+		TenantType:  TypeArgoCD,
 		OutputDir:   dir,
 		GitProvider: "github",
 		GitRepo:     "acme/team-switch",
@@ -176,7 +176,7 @@ func TestGenerate_ForceRemovesStalePreviousFiles(t *testing.T) {
 	// Now force-regenerate as kubectl (should remove ArgoCD-specific files).
 	require.NoError(t, Generate(Options{
 		Name:       "team-switch",
-		TenantType: TenantTypeKubectl,
+		TenantType: TypeKubectl,
 		OutputDir:  dir,
 		Force:      true,
 	}))
@@ -193,7 +193,7 @@ func TestGenerate_FluxGitSource(t *testing.T) {
 	dir := t.TempDir()
 	err := Generate(Options{
 		Name:        "team-flux-git",
-		TenantType:  TenantTypeFlux,
+		TenantType:  TypeFlux,
 		OutputDir:   dir,
 		SyncSource:  SyncSourceGit,
 		GitProvider: "github",
@@ -215,7 +215,7 @@ func TestGenerate_MultiNamespace(t *testing.T) {
 	err := Generate(Options{
 		Name:       "team-multi",
 		Namespaces: []string{"ns-dev", "ns-staging", "ns-prod"},
-		TenantType: TenantTypeKubectl,
+		TenantType: TypeKubectl,
 		OutputDir:  dir,
 	})
 	require.NoError(t, err)

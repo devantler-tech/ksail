@@ -67,6 +67,8 @@ func Generate(opts Options) error {
 	return nil
 }
 
+const tenantDirPermissions = 0o750
+
 func prepareTenantDir(tenantDir string, force bool) error {
 	if info, err := os.Stat(tenantDir); err == nil && info.IsDir() {
 		if !force {
@@ -76,7 +78,7 @@ func prepareTenantDir(tenantDir string, force bool) error {
 			return fmt.Errorf("removing existing tenant directory: %w", err)
 		}
 	}
-	if err := os.MkdirAll(tenantDir, 0o750); err != nil {
+	if err := os.MkdirAll(tenantDir, tenantDirPermissions); err != nil {
 		return fmt.Errorf("creating tenant directory: %w", err)
 	}
 	return nil
@@ -84,22 +86,22 @@ func prepareTenantDir(tenantDir string, force bool) error {
 
 func generateTypeSpecificManifests(opts Options, tenantDir string) ([]string, error) {
 	switch opts.TenantType {
-	case TenantTypeFlux:
+	case TypeFlux:
 		fluxFiles, err := GenerateFluxSyncManifests(opts)
 		if err != nil {
 			return nil, fmt.Errorf("generating Flux manifests: %w", err)
 		}
 		return writeManifests(tenantDir, fluxFiles, opts.Force)
-	case TenantTypeArgoCD:
+	case TypeArgoCD:
 		argoFiles, err := GenerateArgoCDManifests(opts)
 		if err != nil {
 			return nil, fmt.Errorf("generating ArgoCD manifests: %w", err)
 		}
 		return writeManifests(tenantDir, argoFiles, opts.Force)
-	case TenantTypeKubectl:
+	case TypeKubectl:
 		return nil, nil
 	default:
-		return nil, fmt.Errorf("%w: %q", ErrInvalidTenantType, opts.TenantType)
+		return nil, fmt.Errorf("%w: %q", ErrInvalidType, opts.TenantType)
 	}
 }
 

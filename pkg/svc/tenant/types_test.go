@@ -7,49 +7,49 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTenantTypeSet(t *testing.T) {
+func TestTypeSet(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
-		expected TenantType
+		expected Type
 	}{
-		{"flux lowercase", "flux", TenantTypeFlux},
-		{"flux uppercase", "FLUX", TenantTypeFlux},
-		{"flux mixed case", "Flux", TenantTypeFlux},
-		{"argocd lowercase", "argocd", TenantTypeArgoCD},
-		{"argocd uppercase", "ARGOCD", TenantTypeArgoCD},
-		{"argocd mixed case", "ArgoCD", TenantTypeArgoCD},
-		{"kubectl lowercase", "kubectl", TenantTypeKubectl},
-		{"kubectl uppercase", "KUBECTL", TenantTypeKubectl},
-		{"kubectl mixed case", "Kubectl", TenantTypeKubectl},
+		{"flux lowercase", "flux", TypeFlux},
+		{"flux uppercase", "FLUX", TypeFlux},
+		{"flux mixed case", "Flux", TypeFlux},
+		{"argocd lowercase", "argocd", TypeArgoCD},
+		{"argocd uppercase", "ARGOCD", TypeArgoCD},
+		{"argocd mixed case", "ArgoCD", TypeArgoCD},
+		{"kubectl lowercase", "kubectl", TypeKubectl},
+		{"kubectl uppercase", "KUBECTL", TypeKubectl},
+		{"kubectl mixed case", "Kubectl", TypeKubectl},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			var tenantType TenantType
-			err := tenantType.Set(tt.input)
+			var tenantType Type
+			err := tenantType.Set(testCase.input)
 			require.NoError(t, err)
-			require.Equal(t, tt.expected, tenantType)
+			require.Equal(t, testCase.expected, tenantType)
 		})
 	}
 }
 
-func TestTenantTypeSetInvalid(t *testing.T) {
+func TestTypeSetInvalid(t *testing.T) {
 	t.Parallel()
-	var tenantType TenantType
+	var tenantType Type
 	err := tenantType.Set("invalid")
 	require.Error(t, err)
-	require.True(t, errors.Is(err, ErrInvalidTenantType))
+	require.True(t, errors.Is(err, ErrInvalidType))
 }
 
-func TestValidTenantTypes(t *testing.T) {
+func TestValidTypes(t *testing.T) {
 	t.Parallel()
-	types := ValidTenantTypes()
+	types := ValidTypes()
 	require.Len(t, types, 3)
-	require.Contains(t, types, TenantTypeFlux)
-	require.Contains(t, types, TenantTypeArgoCD)
-	require.Contains(t, types, TenantTypeKubectl)
+	require.Contains(t, types, TypeFlux)
+	require.Contains(t, types, TypeArgoCD)
+	require.Contains(t, types, TypeKubectl)
 }
 
 func TestOptionsResolveDefaults(t *testing.T) {
@@ -85,7 +85,7 @@ func TestOptionsResolveDefaultsPreservesExisting(t *testing.T) {
 
 func TestOptionsValidateEmptyName(t *testing.T) {
 	t.Parallel()
-	opts := Options{TenantType: TenantTypeFlux}
+	opts := Options{TenantType: TypeFlux}
 	err := opts.Validate()
 	require.ErrorIs(t, err, ErrTenantNameRequired)
 }
@@ -99,7 +99,7 @@ func TestOptionsValidateEmptyType(t *testing.T) {
 
 func TestOptionsValidateSuccess(t *testing.T) {
 	t.Parallel()
-	opts := Options{Name: "team-alpha", TenantType: TenantTypeFlux}
+	opts := Options{Name: "team-alpha", TenantType: TypeFlux}
 	err := opts.Validate()
 	require.NoError(t, err)
 }
@@ -116,11 +116,11 @@ func TestOptionsValidateInvalidDNSName(t *testing.T) {
 		{"ends with hyphen", "team-"},
 		{"too long", "a" + string(make([]byte, 63))},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			opts := Options{Name: tt.val, TenantType: TenantTypeFlux}
-			opts.Namespaces = []string{tt.val}
+			opts := Options{Name: testCase.val, TenantType: TypeFlux}
+			opts.Namespaces = []string{testCase.val}
 			err := opts.Validate()
 			require.Error(t, err)
 		})
@@ -129,14 +129,14 @@ func TestOptionsValidateInvalidDNSName(t *testing.T) {
 
 func TestOptionsValidatePathTraversalName(t *testing.T) {
 	t.Parallel()
-	opts := Options{Name: "../escape", TenantType: TenantTypeFlux}
+	opts := Options{Name: "../escape", TenantType: TypeFlux}
 	err := opts.Validate()
 	require.ErrorIs(t, err, ErrInvalidTenantName)
 }
 
 func TestOptionsValidateInvalidNamespace(t *testing.T) {
 	t.Parallel()
-	opts := Options{Name: "valid-name", TenantType: TenantTypeFlux, Namespaces: []string{"INVALID_NS"}}
+	opts := Options{Name: "valid-name", TenantType: TypeFlux, Namespaces: []string{"INVALID_NS"}}
 	err := opts.Validate()
 	require.ErrorIs(t, err, ErrInvalidNamespace)
 }

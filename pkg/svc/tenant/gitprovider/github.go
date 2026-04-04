@@ -71,13 +71,13 @@ func (g *gitHubProvider) CreateRepo(ctx context.Context, owner, name string, vis
 			return fmt.Errorf("create user repo request: %w", err)
 		}
 		defer func() { _ = resp2.Body.Close() }()
-		if resp2.StatusCode >= 300 {
+		if resp2.StatusCode >= http.StatusMultipleChoices {
 			return g.readError(resp2, "create repository")
 		}
 		return nil
 	}
 
-	if resp.StatusCode >= 300 {
+	if resp.StatusCode >= http.StatusMultipleChoices {
 		return g.readError(resp, "create repository")
 	}
 	return nil
@@ -115,7 +115,7 @@ func (g *gitHubProvider) PushFiles(ctx context.Context, owner, name string, file
 		if err != nil {
 			return fmt.Errorf("push file %s: %w", path, err)
 		}
-		if resp.StatusCode >= 300 {
+		if resp.StatusCode >= http.StatusMultipleChoices {
 			pushErr := g.readError(resp, fmt.Sprintf("push file %s", path))
 			_ = resp.Body.Close()
 			return pushErr
@@ -137,7 +137,7 @@ func (g *gitHubProvider) getFileSHA(ctx context.Context, owner, name, path strin
 	if resp.StatusCode == http.StatusNotFound {
 		return "", nil
 	}
-	if resp.StatusCode >= 300 {
+	if resp.StatusCode >= http.StatusMultipleChoices {
 		return "", g.readError(resp, "get file SHA")
 	}
 
@@ -158,7 +158,7 @@ func (g *gitHubProvider) DeleteRepo(ctx context.Context, owner, name string) err
 		return fmt.Errorf("delete repo request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 300 {
+	if resp.StatusCode >= http.StatusMultipleChoices {
 		return g.readError(resp, "delete repository")
 	}
 	return nil
@@ -183,7 +183,7 @@ func (g *gitHubProvider) doRequest(ctx context.Context, method, url string, body
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	return g.client.Do(req)
+	return g.client.Do(req) //nolint:wrapcheck // callers wrap with action-specific context
 }
 
 func (g *gitHubProvider) readError(resp *http.Response, action string) error {

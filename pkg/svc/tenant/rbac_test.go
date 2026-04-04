@@ -55,11 +55,11 @@ func TestGenerateRBACManifests(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result, err := GenerateRBACManifests(tt.opts)
+			result, err := GenerateRBACManifests(testCase.opts)
 			require.NoError(t, err)
 
 			require.Len(t, result, 3)
@@ -82,10 +82,10 @@ func TestGenerateRBACManifests(t *testing.T) {
 			}
 
 			// Verify ServiceAccount name matches tenant name
-			require.Contains(t, result["serviceaccount.yaml"], "name: "+tt.opts.Name)
+			require.Contains(t, result["serviceaccount.yaml"], "name: "+testCase.opts.Name)
 
 			// Verify RoleBinding references correct ClusterRole
-			require.Contains(t, result["rolebinding.yaml"], "name: "+tt.opts.ClusterRole)
+			require.Contains(t, result["rolebinding.yaml"], "name: "+testCase.opts.ClusterRole)
 
 			// Verify RoleBinding references ServiceAccount
 			require.Contains(t, result["rolebinding.yaml"], "kind: ServiceAccount")

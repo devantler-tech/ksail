@@ -77,9 +77,11 @@ func ResolveToken(providerName, explicitToken string) string {
 	}
 }
 
+const gitRepoSplitParts = 3
+
 // ParseOwnerRepo splits "owner/repo-name" into owner and repo.
-func ParseOwnerRepo(gitRepo string) (owner, repo string, err error) {
-	parts := strings.SplitN(gitRepo, "/", 3)
+func ParseOwnerRepo(gitRepo string) (string, string, error) {
+	parts := strings.SplitN(gitRepo, "/", gitRepoSplitParts)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", "", fmt.Errorf("%w: %q (expected owner/repo-name)", ErrInvalidGitRepoFormat, gitRepo)
 	}

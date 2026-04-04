@@ -3,8 +3,8 @@ package tenant
 import "errors"
 
 var (
-	// ErrInvalidTenantType is returned when an invalid tenant type is provided.
-	ErrInvalidTenantType = errors.New("invalid tenant type")
+	// ErrInvalidType is returned when an invalid tenant type is provided.
+	ErrInvalidType = errors.New("invalid tenant type")
 	// ErrTenantNameRequired is returned when the tenant name is empty.
 	ErrTenantNameRequired = errors.New("tenant name is required")
 	// ErrTenantTypeRequired is returned when the tenant type is not specified and cannot be auto-detected.

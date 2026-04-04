@@ -12,31 +12,31 @@ func TestScaffoldFiles(t *testing.T) {
 	t.Parallel()
 
 	types := []struct {
-		tenantType TenantType
+		tenantType Type
 		readmeHas  string
 	}{
-		{TenantTypeKubectl, "kubectl apply"},
-		{TenantTypeFlux, "Flux-managed"},
-		{TenantTypeArgoCD, "ArgoCD-managed"},
+		{TypeKubectl, "kubectl apply"},
+		{TypeFlux, "Flux-managed"},
+		{TypeArgoCD, "ArgoCD-managed"},
 	}
 
-	for _, tt := range types {
-		t.Run(fmt.Sprintf("%s has expected keys", tt.tenantType), func(t *testing.T) {
+	for _, testCase := range types {
+		t.Run(fmt.Sprintf("%s has expected keys", testCase.tenantType), func(t *testing.T) {
 			t.Parallel()
 
-			files := ScaffoldFiles(Options{Name: "my-tenant", TenantType: tt.tenantType})
+			files := ScaffoldFiles(Options{Name: "my-tenant", TenantType: testCase.tenantType})
 
 			require.Contains(t, files, "README.md")
 			require.Contains(t, files, "k8s/kustomization.yaml")
 			require.Len(t, files, 2)
 		})
 
-		t.Run(fmt.Sprintf("%s README mentions %s", tt.tenantType, tt.readmeHas), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s README mentions %s", testCase.tenantType, testCase.readmeHas), func(t *testing.T) {
 			t.Parallel()
 
-			files := ScaffoldFiles(Options{Name: "my-tenant", TenantType: tt.tenantType})
+			files := ScaffoldFiles(Options{Name: "my-tenant", TenantType: testCase.tenantType})
 
-			require.Contains(t, string(files["README.md"]), tt.readmeHas)
+			require.Contains(t, string(files["README.md"]), testCase.readmeHas)
 		})
 	}
 }
@@ -44,11 +44,11 @@ func TestScaffoldFiles(t *testing.T) {
 func TestScaffoldFilesKustomizationValid(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range []TenantType{TenantTypeKubectl, TenantTypeFlux, TenantTypeArgoCD} {
-		t.Run(string(tt), func(t *testing.T) {
+	for _, testCase := range []Type{TypeKubectl, TypeFlux, TypeArgoCD} {
+		t.Run(string(testCase), func(t *testing.T) {
 			t.Parallel()
 
-			files := ScaffoldFiles(Options{Name: "my-tenant", TenantType: tt})
+			files := ScaffoldFiles(Options{Name: "my-tenant", TenantType: testCase})
 			content := string(files["k8s/kustomization.yaml"])
 
 			require.Contains(t, content, "apiVersion:")
@@ -60,11 +60,11 @@ func TestScaffoldFilesKustomizationValid(t *testing.T) {
 func TestScaffoldFilesSnapshots(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range []TenantType{TenantTypeKubectl, TenantTypeFlux, TenantTypeArgoCD} {
-		t.Run(string(tt), func(t *testing.T) {
+	for _, testCase := range []Type{TypeKubectl, TypeFlux, TypeArgoCD} {
+		t.Run(string(testCase), func(t *testing.T) {
 			t.Parallel()
 
-			files := ScaffoldFiles(Options{Name: "my-tenant", TenantType: tt})
+			files := ScaffoldFiles(Options{Name: "my-tenant", TenantType: testCase})
 
 			snaps.MatchSnapshot(t, string(files["README.md"]))
 			snaps.MatchSnapshot(t, string(files["k8s/kustomization.yaml"]))

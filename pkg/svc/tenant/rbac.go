@@ -24,14 +24,14 @@ func GenerateRBACManifests(opts Options) (map[string]string, error) {
 	primaryNS := opts.Namespaces[0]
 	var namespaceDocs, rbDocs []string
 
-	for _, ns := range opts.Namespaces {
-		nsYAML, err := marshalNamespace(ns)
+	for _, namespace := range opts.Namespaces {
+		nsYAML, err := marshalNamespace(namespace)
 		if err != nil {
 			return nil, err
 		}
 		namespaceDocs = append(namespaceDocs, nsYAML)
 
-		rbYAML, err := marshalRoleBinding(opts.Name, ns, primaryNS, opts.ClusterRole)
+		rbYAML, err := marshalRoleBinding(opts.Name, namespace, primaryNS, opts.ClusterRole)
 		if err != nil {
 			return nil, err
 		}
@@ -52,7 +52,7 @@ func GenerateRBACManifests(opts Options) (map[string]string, error) {
 }
 
 func marshalNamespace(name string) (string, error) {
-	ns := corev1.Namespace{
+	namespace := corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Namespace",
@@ -62,15 +62,15 @@ func marshalNamespace(name string) (string, error) {
 			Labels: ManagedByLabels(),
 		},
 	}
-	b, err := yaml.Marshal(ns)
+	b, err := yaml.Marshal(namespace)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("marshal namespace: %w", err)
 	}
 	return string(b), nil
 }
 
 func marshalServiceAccount(name, namespace string) (string, error) {
-	sa := corev1.ServiceAccount{
+	serviceAccount := corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "ServiceAccount",
@@ -81,15 +81,15 @@ func marshalServiceAccount(name, namespace string) (string, error) {
 			Labels:    ManagedByLabels(),
 		},
 	}
-	b, err := yaml.Marshal(sa)
+	b, err := yaml.Marshal(serviceAccount)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("marshal service account: %w", err)
 	}
 	return string(b), nil
 }
 
 func marshalRoleBinding(name, namespace, saNamespace, clusterRole string) (string, error) {
-	rb := rbacv1.RoleBinding{
+	roleBinding := rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "rbac.authorization.k8s.io/v1",
 			Kind:       "RoleBinding",
@@ -112,9 +112,9 @@ func marshalRoleBinding(name, namespace, saNamespace, clusterRole string) (strin
 			},
 		},
 	}
-	b, err := yaml.Marshal(rb)
+	b, err := yaml.Marshal(roleBinding)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("marshal role binding: %w", err)
 	}
 	return string(b), nil
 }
