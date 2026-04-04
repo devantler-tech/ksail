@@ -13,6 +13,8 @@ var (
 	)
 	// ErrKustomizationNotFound is returned when no kustomization.yaml is found.
 	ErrKustomizationNotFound = errors.New("kustomization.yaml not found")
+	// ErrKustomizationIsDirectory is returned when the kustomization path points to a directory.
+	ErrKustomizationIsDirectory = errors.New("kustomization path is a directory, not a file")
 	// ErrInvalidTenantName is returned when the tenant name is not a valid DNS-1123 label.
 	ErrInvalidTenantName = errors.New("invalid tenant name")
 	// ErrInvalidNamespace is returned when a namespace is not a valid DNS-1123 label.

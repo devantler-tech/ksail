@@ -108,7 +108,7 @@ func resolveKustomizationPath(outputDir, explicit string) (string, error) {
 
 		if info.IsDir() {
 			return "", fmt.Errorf(
-				"kustomization path %q is a directory, not a file", canonical,
+				"%w: %q", ErrKustomizationIsDirectory, canonical,
 			)
 		}
 
