@@ -12,7 +12,7 @@ import (
 // fatalMu serializes all BehaviorOnFatal overrides. kubectl's fatal handler
 // is a package-level global, so concurrent overrides would race. Every call
 // site that touches BehaviorOnFatal must hold this lock.
-var fatalMu sync.Mutex
+var fatalMu sync.Mutex //nolint:gochecknoglobals // required: kubectl's BehaviorOnFatal is a process-global
 
 // kubectlFatalError wraps errors from kubectl's CheckErr/BehaviorOnFatal
 // that would normally cause os.Exit.
@@ -29,7 +29,7 @@ func (e *kubectlFatalError) Error() string {
 // instead of calling os.Exit. The panic is recovered and returned as an error.
 // A package-level mutex serializes all BehaviorOnFatal overrides since kubectl's
 // fatal handler is a global. This is safe to call from multiple goroutines.
-func withSafeFatal(fn func()) (retErr error) {
+func withSafeFatal(action func()) (retErr error) {
 	fatalMu.Lock()
 	defer fatalMu.Unlock()
 
@@ -50,7 +50,7 @@ func withSafeFatal(fn func()) (retErr error) {
 		}
 	}()
 
-	fn()
+	action()
 
 	return nil
 }
