@@ -277,7 +277,8 @@ func BenchmarkEncrypt(b *testing.B) {
 			for b.Loop() {
 				b.StopTimer()
 
-				if err := os.WriteFile(filePath, scenario.content, 0o600); err != nil {
+				err := os.WriteFile(filePath, scenario.content, 0o600)
+				if err != nil {
 					b.Fatalf("Failed to write test file: %v", err)
 				}
 
