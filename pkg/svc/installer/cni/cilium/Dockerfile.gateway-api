@@ -4,4 +4,4 @@
 # Image mappings:
 # - registry.k8s.io/gateway-api/admission-server → Gateway API CRDs version
 
-FROM registry.k8s.io/gateway-api/admission-server:v1.4.1
+FROM registry.k8s.io/gateway-api/admission-server:v1.5.1

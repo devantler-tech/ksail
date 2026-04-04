@@ -5,5 +5,5 @@
 # - ghcr.io/loft-sh/vcluster-pro → chartVersion() in images.go
 # - ghcr.io/loft-sh/kubernetes → kubernetesVersion() in images.go
 
-FROM ghcr.io/loft-sh/vcluster-pro:0.32.1
-FROM ghcr.io/loft-sh/kubernetes:v1.32.3
+FROM ghcr.io/loft-sh/vcluster-pro:0.33.1
+FROM ghcr.io/loft-sh/kubernetes:v1.35.3

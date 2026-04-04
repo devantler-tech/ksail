@@ -4,4 +4,4 @@
 # Image mappings:
 # - ghcr.io/kyverno/charts/kyverno → chart version (OCI chart artifact tag)
 
-FROM ghcr.io/kyverno/charts/kyverno:3.7.0
+FROM ghcr.io/kyverno/charts/kyverno:3.7.1
