@@ -582,7 +582,7 @@ jobs:
         init: [true, false]
         args:
           - ""
-          - "--name system-test-cluster --cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux"
+          - "--name system-test-cluster --cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux --image-verification Enabled"
           - "--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD"
           - "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
           - "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
@@ -590,7 +590,7 @@ jobs:
           - distribution: Talos
             provider: Hetzner
             init: true
-            args: "--name system-test-cluster-with-scaffolding"
+            args: "--name system-test-cluster-with-scaffolding --image-verification Enabled"
           - distribution: Talos
             provider: Hetzner
             init: false
@@ -598,7 +598,7 @@ jobs:
           - distribution: Talos
             provider: Omni
             init: true
-            args: "--name system-test-cluster-with-scaffolding"
+            args: "--name system-test-cluster-with-scaffolding --image-verification Enabled"
           - distribution: Talos
             provider: Omni
             init: false

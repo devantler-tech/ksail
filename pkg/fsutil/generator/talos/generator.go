@@ -154,10 +154,8 @@ func (g *Generator) getDirectoriesWithPatches(
 		dirs["cluster"] = true
 	}
 
-	// Image verification config goes to cluster/
-	if model.EnableImageVerification {
-		dirs["cluster"] = true
-	}
+	// Image verification config is written at the talos/ root level,
+	// not in cluster/, so it is NOT loaded as a machine-config patch.
 
 	return dirs
 }
@@ -496,16 +494,14 @@ func (g *Generator) generateClusterNamePatch(
 }
 
 // generateImageVerificationPatch creates a Talos ImageVerificationConfig document template.
-// This generates a separate config document (not a machine config patch) that enables
-// machine-wide container image signature verification, introduced in Talos 1.13.
-// The generated template includes a default skip-all rule (safe to apply without breaking
-// cluster creation) and commented-out examples for keyless (Cosign/OIDC) and public key verification.
+// The document is written beside the patch directories, not into cluster/, so patch loaders
+// do not treat it as a machine-config patch.
 // See: https://www.talos.dev/v1.13/talos-guides/configuration/image-verification/
 func (g *Generator) generateImageVerificationPatch(
 	rootPath string,
 	force bool,
 ) error {
-	patchPath := filepath.Join(rootPath, "cluster", imageVerificationFileName)
+	patchPath := filepath.Join(rootPath, imageVerificationFileName)
 
 	// Check if file already exists
 	_, statErr := os.Stat(patchPath)

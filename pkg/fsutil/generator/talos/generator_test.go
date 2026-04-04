@@ -537,8 +537,8 @@ func TestGenerator_Generate_AllPatchesCombined(t *testing.T) {
 	_, err = os.Stat(filepath.Join(clusterDir, "cluster-name.yaml"))
 	require.NoError(t, err, "expected cluster-name.yaml")
 
-	// Check image verification config
-	_, err = os.Stat(filepath.Join(clusterDir, "image-verification.yaml"))
+	// Check image verification config (written at root level, not in cluster/)
+	_, err = os.Stat(filepath.Join(tempDir, "talos", "image-verification.yaml"))
 	require.NoError(t, err, "expected image-verification.yaml")
 
 	// Verify .gitkeep was NOT created in cluster/ since we have patches there
@@ -644,8 +644,8 @@ func TestGenerator_Generate_ImageVerification(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
 
-	// Verify image-verification.yaml was created
-	patchPath := filepath.Join(tempDir, "talos", "cluster", "image-verification.yaml")
+	// Verify image-verification.yaml was created at root level (not in cluster/)
+	patchPath := filepath.Join(tempDir, "talos", "image-verification.yaml")
 	content, err := os.ReadFile(patchPath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "apiVersion: v1alpha1")
@@ -658,10 +658,10 @@ func TestGenerator_Generate_ImageVerification(t *testing.T) {
 	assert.Contains(t, string(content), "publicKey:")
 	assert.Contains(t, string(content), "deny: true")
 
-	// Verify .gitkeep was NOT created in cluster/ since we have a patch there
+	// Verify .gitkeep WAS created in cluster/ since image-verification is at root level
 	gitkeepPath := filepath.Join(tempDir, "talos", "cluster", ".gitkeep")
 	_, err = os.Stat(gitkeepPath)
-	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
+	require.NoError(t, err, "expected .gitkeep in cluster/ when image-verification is at root level")
 }
 
 func TestGenerator_Generate_NoImageVerificationPatchWhenFalse(t *testing.T) {
@@ -683,7 +683,7 @@ func TestGenerator_Generate_NoImageVerificationPatchWhenFalse(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify image-verification.yaml was NOT created
-	patchPath := filepath.Join(tempDir, "talos", "cluster", "image-verification.yaml")
+	patchPath := filepath.Join(tempDir, "talos", "image-verification.yaml")
 	_, err = os.Stat(patchPath)
 	assert.True(t, os.IsNotExist(err), "expected image-verification.yaml to not exist")
 }

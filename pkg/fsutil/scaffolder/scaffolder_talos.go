@@ -59,7 +59,7 @@ func (s *Scaffolder) notifyTalosGenerated(
 ) {
 	// Determine which directories have patches (no .gitkeep generated there)
 	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
-		enableKubeletCertRotation || s.ClusterName != "" || enableImageVerification
+		enableKubeletCertRotation || s.ClusterName != ""
 
 	// Notify about .gitkeep files only for directories without patches
 	subdirs := []string{"cluster", "control-planes", "workers"}
@@ -83,13 +83,23 @@ func (s *Scaffolder) notifyTalosGenerated(
 		{enableKubeletCertRotation, "kubelet-cert-rotation.yaml"},
 		{enableKubeletCertRotation, "kubelet-csr-approver.yaml"},
 		{s.ClusterName != "", "cluster-name.yaml"},
-		{enableImageVerification, "image-verification.yaml"},
 	}
 
 	for _, patch := range patches {
 		if patch.condition {
 			s.notifyTalosPatchCreated("cluster", patch.filename)
 		}
+	}
+
+	// Image verification config is written at the talos/ root level (not cluster/)
+	if enableImageVerification {
+		displayPath := filepath.Join(TalosConfigDir, "image-verification.yaml")
+		notify.WriteMessage(notify.Message{
+			Type:    notify.GenerateType,
+			Content: "created '%s'",
+			Args:    []any{displayPath},
+			Writer:  s.Writer,
+		})
 	}
 }
 
