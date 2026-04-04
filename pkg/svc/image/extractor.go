@@ -54,7 +54,7 @@ func extractImagesFromReader(reader io.Reader, seen map[string]struct{}) ([]stri
 		initialBufSize = 4 * 1024      // 4 KiB starting buffer
 		maxTokenSize   = 1024 * 1024   // 1 MiB maximum line length
 	)
-	scanner.Buffer(make([]byte, initialBufSize), maxTokenSize)
+	scanner.Buffer(make([]byte, 0, initialBufSize), maxTokenSize)
 
 	for scanner.Scan() {
 		line := scanner.Text()
