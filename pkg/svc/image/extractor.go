@@ -51,8 +51,8 @@ func extractImagesFromReader(reader io.Reader, seen map[string]struct{}) ([]stri
 	// Start with a 4 KiB buffer and let the scanner grow on demand instead of
 	// pre-allocating 64 KiB on every call regardless of manifest size.
 	const (
-		initialBufSize = 4 * 1024      // 4 KiB starting buffer
-		maxTokenSize   = 1024 * 1024   // 1 MiB maximum line length
+		initialBufSize = 4 * 1024    // 4 KiB starting buffer
+		maxTokenSize   = 1024 * 1024 // 1 MiB maximum line length
 	)
 	scanner.Buffer(make([]byte, 0, initialBufSize), maxTokenSize)
 
