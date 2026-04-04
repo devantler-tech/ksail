@@ -47,7 +47,12 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		return fmt.Errorf("%w: %w", ErrTalosConfigGeneration, err)
 	}
 
-	s.notifyTalosGenerated(workers, disableDefaultCNI, enableKubeletCertRotation, enableImageVerification)
+	s.notifyTalosGenerated(
+		workers,
+		disableDefaultCNI,
+		enableKubeletCertRotation,
+		enableImageVerification,
+	)
 
 	return nil
 }

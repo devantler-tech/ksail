@@ -661,7 +661,11 @@ func TestGenerator_Generate_ImageVerification(t *testing.T) {
 	// Verify .gitkeep WAS created in cluster/ since image-verification is at root level
 	gitkeepPath := filepath.Join(tempDir, "talos", "cluster", ".gitkeep")
 	_, err = os.Stat(gitkeepPath)
-	require.NoError(t, err, "expected .gitkeep in cluster/ when image-verification is at root level")
+	require.NoError(
+		t,
+		err,
+		"expected .gitkeep in cluster/ when image-verification is at root level",
+	)
 }
 
 func TestGenerator_Generate_NoImageVerificationPatchWhenFalse(t *testing.T) {
