@@ -110,6 +110,30 @@ ksail workload reconcile
 | `ksail workload push`      | Package and push manifests to registry |
 | `ksail workload reconcile` | Trigger GitOps sync and wait for full Flux Kustomization dependency chain |
 
+## Tenant Management
+
+Onboard tenants with RBAC isolation and optional GitOps sync resources. KSail generates namespace, ServiceAccount, and RoleBinding manifests, and can scaffold Flux or ArgoCD sync resources and a Git repository for each tenant.
+
+```bash
+# Auto-detect type from ksail.yaml gitOpsEngine
+ksail tenant create my-team
+
+# Explicit type with Flux OCI source and Git repo scaffolding
+ksail tenant create my-team --type flux --registry oci://ghcr.io --git-provider github --git-repo my-org/my-team-infra --register
+
+# Delete a tenant
+ksail tenant delete my-team --unregister
+```
+
+**Commands:** [`ksail tenant`](/cli-flags/tenant/tenant-root/)
+
+| Command                   | Description                                               |
+| ------------------------- | --------------------------------------------------------- |
+| `ksail tenant create`     | Generate RBAC and GitOps manifests for a new tenant       |
+| `ksail tenant delete`     | Remove tenant manifests and optionally delete the Git repo |
+
+**Guide:** [Tenant Management](/guides/tenant-management/)
+
 ## Registry Management
 
 Run local [OCI registries](/concepts/#oci-registries) for faster image pulls and GitOps integration. Docker-based clusters (Vanilla, K3s, Talos-on-Docker, VCluster) enable `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default; Talos on Hetzner requires explicit mirror configuration.
