@@ -50,12 +50,6 @@ nodes:
         protocol: TCP
   - role: worker
   - role: worker
-
-# Containerd configuration
-containerdConfigPatches:
-  - |-
-    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
-      endpoint = ["http://localhost:5000"]
 ````
 
 ### LoadBalancer Support
@@ -150,9 +144,9 @@ Set the node image in `kind.yaml` to pin a Kubernetes version. Check [Kind relea
 # kind.yaml (partial — nodes: section)
 nodes:
   - role: control-plane
-    image: kindest/node:v1.31.0
+    image: kindest/node:v1.35.1
   - role: worker
-    image: kindest/node:v1.31.0
+    image: kindest/node:v1.35.1
 ````
 
 ### Custom CNI
