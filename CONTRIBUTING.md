@@ -241,7 +241,7 @@ System tests run in GitHub’s **merge queue** (`merge_group` event) and do **no
 You can manually trigger system tests from any branch using `workflow_dispatch`:
 
 ```sh
-gh workflow run ci.yaml --ref your-branch --field run-system-tests=true
+gh workflow run ci.yaml --ref your-branch --field run_system_tests=true
 ```
 
 This is useful for validating infrastructure-sensitive changes before entering the merge queue.

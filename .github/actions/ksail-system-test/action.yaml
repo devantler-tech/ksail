@@ -316,18 +316,25 @@ runs:
         sleep 5
         # Modify the manifest (change replicas)
         sed -i 's/replicas: 1/replicas: 2/' "$WATCH_DIR/deployment.yaml"
-        # Wait for watcher to pick up the change
-        sleep 15
-        # Verify the change was applied
-        REPLICAS=$(ksail workload get deployment/ksail-watch-test -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "unknown")
+        # Wait for watcher to pick up the change (poll with timeout)
+        WATCH_SUCCESS=false
+        for i in $(seq 1 6); do
+          sleep 5
+          REPLICAS=$(ksail workload get deployment/ksail-watch-test -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "unknown")
+          if [ "$REPLICAS" = "2" ]; then
+            WATCH_SUCCESS=true
+            break
+          fi
+          echo "  Waiting for watch to apply change (attempt $i/6, replicas=$REPLICAS)..."
+        done
         kill $WATCH_PID 2>/dev/null || true
         # Clean up
         ksail workload delete deployment/ksail-watch-test --ignore-not-found
         rm -rf "$WATCH_DIR"
-        if [ "$REPLICAS" = "2" ]; then
+        if [ "$WATCH_SUCCESS" = "true" ]; then
           echo "✅ Workload watch correctly auto-applied changes"
         else
-          echo "⚠️ Workload watch test: expected 2 replicas, got $REPLICAS (non-blocking)"
+          echo "⚠️ Workload watch test: expected 2 replicas, got $REPLICAS (non-blocking — timing-dependent)"
         fi
 
     - name: 🧪 ksail workload push and reconcile
@@ -452,8 +459,18 @@ runs:
         OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
         OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
-        # Get current cluster name from ksail cluster list and switch to it
-        CLUSTER_NAME=$(ksail cluster list 2>/dev/null | grep -oE '[a-z0-9][-a-z0-9]*' | head -1 || true)
+        # Get current cluster name from ksail cluster list
+        # Output format: "provider: cluster1, cluster2, ..."
+        PROVIDER_NAME=$(printf '%s' "${{ inputs.provider }}" | tr '[:upper:]' '[:lower:]')
+        CLUSTER_NAME=$(
+          ksail cluster list 2>/dev/null \
+            | grep -i "^${PROVIDER_NAME}:" \
+            | head -1 \
+            | cut -d: -f2- \
+            | cut -d, -f1 \
+            | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
+            || true
+        )
         if [ -n "$CLUSTER_NAME" ]; then
           ksail cluster switch "$CLUSTER_NAME"
         else

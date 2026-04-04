@@ -7,7 +7,7 @@ on:
   merge_group:
   workflow_dispatch:
     inputs:
-      run-system-tests:
+      run_system_tests:
         description: "Run system tests (normally only runs in merge queue)"
         required: false
         type: boolean
@@ -515,9 +515,9 @@ jobs:
             shift
             local OUTPUT_FILE="$GEN_DIR/${name}.yaml"
             echo "--- gen $name ---"
-            if "$@" > "$OUTPUT_FILE" 2>&1; then
+            if "$@" > "$OUTPUT_FILE"; then
               echo "  ✅ gen $name succeeded"
-              if ksail workload validate "$OUTPUT_FILE" 2>&1; then
+              if ksail workload validate "$OUTPUT_FILE"; then
                 echo "  ✅ validate $name succeeded"
               else
                 echo "  ❌ validate $name FAILED"
@@ -563,8 +563,8 @@ jobs:
           go install filippo.io/age/cmd/age-keygen@v1.3.1
 
           # Generate an Age key pair
-          KEY_FILE=$(mktemp)
-          age-keygen -o "$KEY_FILE" 2>/dev/null
+          KEY_FILE=$(mktemp -d)/key.txt
+          age-keygen -o "$KEY_FILE"
           PUBLIC_KEY=$(grep "public key:" "$KEY_FILE" | awk '{print $NF}')
 
           echo "Generated Age key with public key: $PUBLIC_KEY"
@@ -650,7 +650,7 @@ jobs:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run-system-tests == true)
+    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     permissions:
       contents: read
     outputs:
@@ -683,7 +683,7 @@ jobs:
     name: 🔥 Warm Mirror Cache
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run-system-tests == true)
+    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     permissions:
       contents: read
     outputs:
@@ -749,7 +749,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
-    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run-system-tests == true)
+    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     permissions:
       contents: read
       packages: write
@@ -833,7 +833,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
-    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run-system-tests == true)
+    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     permissions:
       contents: read
     steps:
