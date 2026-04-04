@@ -121,7 +121,7 @@ func shouldSkipK3d(clusterCfg *v1alpha1.Cluster) bool {
 // isCloudProvider returns true if the cluster is using a cloud provider (not Docker).
 // Cloud providers run nodes on remote servers, not local Docker containers.
 func isCloudProvider(clusterCfg *v1alpha1.Cluster) bool {
-	return clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner
+	return clusterCfg.Spec.Cluster.Provider.IsCloud()
 }
 
 // wrapActionWithContext wraps an action that requires registryContext into a simpler handler.

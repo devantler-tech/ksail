@@ -212,43 +212,49 @@ func ensureLocalRegistriesReady(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	localDeps localregistry.Dependencies,
 ) error {
-	// Stage 1: Provision local registry (skipped for external registries)
-	err := localregistry.ExecuteStage(
-		cmd,
-		ctx,
-		deps,
-		localregistry.StageProvision,
-		localDeps,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to provision local registry: %w", err)
+	provider := ctx.ClusterCfg.Spec.Cluster.Provider
+
+	if !provider.IsCloud() {
+		// Stage 1: Provision local registry (skipped for external registries)
+		err := localregistry.ExecuteStage(
+			cmd,
+			ctx,
+			deps,
+			localregistry.StageProvision,
+			localDeps,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to provision local registry: %w", err)
+		}
 	}
 
-	// Stage 2: Verify registry access (for external registries with auth)
-	// This gives early feedback if credentials are missing or invalid
-	err = localregistry.VerifyRegistryAccess(cmd, ctx.ClusterCfg, deps)
+	// Stage 2: Verify registry access (for external registries with auth).
+	// Always runs — cloud providers use GHCR for OCI artifacts and need credential validation.
+	err := localregistry.VerifyRegistryAccess(cmd, ctx.ClusterCfg, deps)
 	if err != nil {
 		return fmt.Errorf("failed to verify registry access: %w", err)
 	}
 
-	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager)
+	if !provider.IsCloud() {
+		params := buildRegistryStageParams(cmd, ctx, deps, cfgManager)
 
-	// Stage 3: Create and configure registry containers (local + mirrors)
-	err = mirrorregistry.SetupRegistries(params)
-	if err != nil {
-		return fmt.Errorf("failed to setup registries: %w", err)
-	}
+		// Stage 3: Create and configure registry containers (local + mirrors)
+		err = mirrorregistry.SetupRegistries(params)
+		if err != nil {
+			return fmt.Errorf("failed to setup registries: %w", err)
+		}
 
-	// Stage 4: Create Docker network
-	err = mirrorregistry.CreateNetwork(params)
-	if err != nil {
-		return fmt.Errorf("failed to create docker network: %w", err)
-	}
+		// Stage 4: Create Docker network
+		err = mirrorregistry.CreateNetwork(params)
+		if err != nil {
+			return fmt.Errorf("failed to create docker network: %w", err)
+		}
 
-	// Stage 5: Connect registries to network (before cluster creation)
-	err = mirrorregistry.ConnectRegistriesToNetwork(params)
-	if err != nil {
-		return fmt.Errorf("failed to connect registries to network: %w", err)
+		// Stage 5: Connect registries to network (before cluster creation)
+		err = mirrorregistry.ConnectRegistriesToNetwork(params)
+		if err != nil {
+			return fmt.Errorf("failed to connect registries to network: %w", err)
+		}
 	}
 
 	return nil

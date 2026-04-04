@@ -75,9 +75,9 @@ func getConfigOrDefaultMirrors(
 }
 
 // getProviderDefaultMirrors returns default mirrors for providers that support local Docker mirrors.
-// Cloud providers (Hetzner) cannot access local Docker containers, so they get no defaults.
+// Cloud providers (Hetzner, Omni) cannot access local Docker containers, so they get no defaults.
 func getProviderDefaultMirrors(provider v1alpha1.Provider) []string {
-	if provider == v1alpha1.ProviderHetzner {
+	if provider.IsCloud() {
 		return []string{}
 	}
 

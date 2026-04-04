@@ -140,22 +140,27 @@ func runClusterCreationWorkflow(
 		return err
 	}
 
-	configureRegistryMirrorsInClusterWithWarning(
-		cmd,
-		ctx,
-		deps,
-		cfgManager,
-	)
+	// Post-creation Docker steps are only needed for local Docker clusters.
+	// Cloud providers (Omni, Hetzner) run nodes remotely and cannot access
+	// local Docker infrastructure.
+	if !ctx.ClusterCfg.Spec.Cluster.Provider.IsCloud() {
+		configureRegistryMirrorsInClusterWithWarning(
+			cmd,
+			ctx,
+			deps,
+			cfgManager,
+		)
 
-	err = localregistry.ExecuteStage(
-		cmd,
-		ctx,
-		deps,
-		localregistry.StageConnect,
-		localDeps,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to connect local registry: %w", err)
+		err = localregistry.ExecuteStage(
+			cmd,
+			ctx,
+			deps,
+			localregistry.StageConnect,
+			localDeps,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to connect local registry: %w", err)
+		}
 	}
 
 	err = localregistry.WaitForK3dLocalRegistryReady(
