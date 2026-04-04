@@ -115,8 +115,12 @@ func ResolveClusterInfo(
 	var omniOpts v1alpha1.OptionsOmni
 
 	if clusterName == "" {
-		resolveFromConfig(cmd, &clusterName, &provider, &kubeconfigPath, &omniOpts)
+		resolveFromConfig(cmd, &clusterName, &provider, &kubeconfigPath)
 	}
+
+	// Always try to load Omni options from config (even when name was provided
+	// via flag), so that minimal provisioners get the endpoint they need.
+	resolveOmniOptsFromConfig(cmd, &omniOpts)
 
 	// Fall back to kubeconfig context detection
 	if clusterName == "" {
@@ -151,7 +155,6 @@ func resolveFromConfig(
 	clusterName *string,
 	provider *v1alpha1.Provider,
 	kubeconfigPath *string,
-	omniOpts *v1alpha1.OptionsOmni,
 ) {
 	// Resolve --config flag without registering flags on the command.
 	var configFile string
@@ -179,13 +182,29 @@ func resolveFromConfig(
 	if *kubeconfigPath == "" && cfg.Spec.Cluster.Connection.Kubeconfig != "" {
 		*kubeconfigPath = cfg.Spec.Cluster.Connection.Kubeconfig
 	}
+}
 
-	// Extract Omni options from config for endpoint propagation
-	if cfg.Spec.Cluster.Omni.Endpoint != "" ||
-		cfg.Spec.Cluster.Omni.EndpointEnvVar != "" ||
-		cfg.Spec.Cluster.Omni.ServiceAccountKeyEnvVar != "" {
-		*omniOpts = cfg.Spec.Cluster.Omni
+// resolveOmniOptsFromConfig loads Omni-specific options from the ksail.yaml config.
+// Called independently of resolveFromConfig so Omni endpoint is available even
+// when the cluster name was already provided via flag.
+func resolveOmniOptsFromConfig(cmd *cobra.Command, omniOpts *v1alpha1.OptionsOmni) {
+	var configFile string
+
+	if cmd != nil {
+		cfgPath, err := flags.GetConfigPath(cmd)
+		if err == nil {
+			configFile = cfgPath
+		}
 	}
+
+	cfgManager := ksailconfigmanager.NewConfigManager(nil, configFile)
+
+	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
+	if err != nil || cfg == nil || !cfgManager.IsConfigFileFound() {
+		return
+	}
+
+	*omniOpts = cfg.Spec.Cluster.Omni
 }
 
 // clusterNameFromDistConfig extracts the cluster name from distribution-specific config.

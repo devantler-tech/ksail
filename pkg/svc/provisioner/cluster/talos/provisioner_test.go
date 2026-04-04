@@ -764,7 +764,7 @@ func TestProvisioner_Exists_OmniProvider(t *testing.T) {
 	// Should fail with an Omni/provider error, NOT ErrDockerNotAvailable
 	require.Error(t, err)
 	assert.False(t, exists)
-	assert.NotErrorIs(t, err, talosprovisioner.ErrDockerNotAvailable)
+	require.NotErrorIs(t, err, talosprovisioner.ErrDockerNotAvailable)
 	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
@@ -784,7 +784,7 @@ func TestProvisioner_Create_OmniProvider(t *testing.T) {
 
 	// Should fail with an Omni/provider error, NOT ErrDockerNotAvailable
 	require.Error(t, err)
-	assert.NotErrorIs(t, err, talosprovisioner.ErrDockerNotAvailable)
+	require.NotErrorIs(t, err, talosprovisioner.ErrDockerNotAvailable)
 	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
@@ -804,6 +804,6 @@ func TestProvisioner_Delete_OmniProvider(t *testing.T) {
 
 	// Should fail with an Omni/provider error, NOT ErrDockerNotAvailable
 	require.Error(t, err)
-	assert.NotErrorIs(t, err, talosprovisioner.ErrDockerNotAvailable)
+	require.NotErrorIs(t, err, talosprovisioner.ErrDockerNotAvailable)
 	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }

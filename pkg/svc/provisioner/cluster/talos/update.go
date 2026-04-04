@@ -405,7 +405,7 @@ func (p *Provisioner) getNodesByRole(
 		return p.getOmniNodesByRole(ctx, clusterName)
 	}
 
-	return nil, nil
+	return nil, fmt.Errorf("%w: no provider configured for node listing", ErrDockerNotAvailable)
 }
 
 // getHetznerNodesByRole gets node IPs and roles from Hetzner servers.
@@ -497,11 +497,13 @@ func (p *Provisioner) getDockerNodesByRole(
 // running cluster through the Kubernetes API and Docker/Hetzner/Omni providers.
 func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, error) {
 	var provider v1alpha1.Provider
-	if p.dockerClient != nil {
+
+	switch {
+	case p.dockerClient != nil:
 		provider = v1alpha1.ProviderDocker
-	} else if p.hetznerOpts != nil {
+	case p.hetznerOpts != nil:
 		provider = v1alpha1.ProviderHetzner
-	} else if p.omniOpts != nil {
+	case p.omniOpts != nil:
 		provider = v1alpha1.ProviderOmni
 	}
 
