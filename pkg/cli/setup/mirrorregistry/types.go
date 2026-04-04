@@ -22,11 +22,6 @@ func GetBackendFactory() BackendFactory {
 	return registry.GetBackendFactory()
 }
 
-// SetBackendFactoryForTests is an alias for registry.SetBackendFactoryForTests.
-func SetBackendFactoryForTests(factory BackendFactory) func() {
-	return registry.SetBackendFactoryForTests(factory)
-}
-
 // Stage message constants for registry operations.
 const (
 	// RegistryStageTitle is the title for the registry stage that creates and configures registries.

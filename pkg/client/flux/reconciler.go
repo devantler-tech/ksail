@@ -82,29 +82,10 @@ func NewReconciler(kubeconfigPath string) (*Reconciler, error) {
 	return r, nil
 }
 
-// NewReconcilerWithClient creates a Reconciler with a provided dynamic client (for testing).
-func NewReconcilerWithClient(dynamicClient dynamic.Interface) *Reconciler {
-	return reconciler.NewWithClient(dynamicClient, newFromBase)
-}
-
 // ReconcileOptions configures the reconciliation behavior.
 type ReconcileOptions struct {
 	// Timeout for waiting for OCIRepository readiness and Kustomization reconciliation.
 	Timeout time.Duration
-}
-
-// Reconcile triggers and waits for Flux kustomization reconciliation.
-// It first reconciles the OCIRepository to fetch the latest artifact,
-// then reconciles the Kustomization to apply the changes.
-func (r *Reconciler) Reconcile(ctx context.Context, opts ReconcileOptions) error {
-	// First reconcile the OCIRepository to fetch the latest artifact
-	err := r.reconcileOCIRepository(ctx, opts.Timeout)
-	if err != nil {
-		return err
-	}
-
-	// Then reconcile the Kustomization to apply the changes
-	return r.reconcileKustomization(ctx, opts.Timeout)
 }
 
 // TriggerOCIRepositoryReconciliation triggers OCIRepository reconciliation without waiting.
@@ -405,26 +386,6 @@ func kustomizationTimeoutError(lastStatus string) error {
 	}
 
 	return ErrReconcileTimeout
-}
-
-// reconcileOCIRepository triggers and waits for OCIRepository reconciliation.
-func (r *Reconciler) reconcileOCIRepository(ctx context.Context, timeout time.Duration) error {
-	err := r.TriggerOCIRepositoryReconciliation(ctx)
-	if err != nil {
-		return err
-	}
-
-	return r.WaitForOCIRepositoryReady(ctx, timeout)
-}
-
-// reconcileKustomization triggers and waits for Kustomization reconciliation.
-func (r *Reconciler) reconcileKustomization(ctx context.Context, timeout time.Duration) error {
-	err := r.TriggerKustomizationReconciliation(ctx)
-	if err != nil {
-		return err
-	}
-
-	return r.WaitForKustomizationReady(ctx, timeout)
 }
 
 // ociRepositoryClient returns a dynamic client for Flux OCIRepositories.

@@ -6,14 +6,10 @@ import (
 	"io"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
-	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
-	"github.com/spf13/cobra"
 )
 
 // TalosRegistryAction returns the action function for Talos registry creation.
@@ -282,76 +278,4 @@ func PrepareTalosConfigWithMirrors(
 	return true
 }
 
-func cleanupTalosMirrorRegistries(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	deps lifecycle.Deps,
-	clusterName string,
-	deleteVolumes bool,
-	cleanupDeps CleanupDependencies,
-	provider v1alpha1.Provider,
-) error {
-	// Collect mirror specs from Talos config (not kind/mirrors directory)
-	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cmd, cfgManager, provider)
 
-	// Talos uses the cluster name as the network name
-	networkName := clusterName
-
-	// If no registry specs found from config (non-scaffolded cluster),
-	// fall back to network-based discovery
-	if len(registryNames) == 0 {
-		return cleanupRegistriesByNetwork(
-			cmd,
-			deps,
-			networkName,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	}
-
-	return runMirrorRegistryCleanup(
-		cmd,
-		deps,
-		registryNames,
-		func(dockerAPIClient client.APIClient) error {
-			return executeTalosRegistryCleanup(
-				cmd, dockerAPIClient, mirrorSpecs, clusterName, deleteVolumes, networkName,
-			)
-		},
-		cleanupDeps,
-	)
-}
-
-func executeTalosRegistryCleanup(
-	cmd *cobra.Command,
-	dockerAPIClient client.APIClient,
-	mirrorSpecs []registry.MirrorSpec,
-	clusterName string,
-	deleteVolumes bool,
-	networkName string,
-) error {
-	registryInfos := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil, clusterName)
-	if len(registryInfos) == 0 {
-		return nil
-	}
-
-	registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerAPIClient)
-	if mgrErr != nil {
-		return fmt.Errorf("failed to create registry manager: %w", mgrErr)
-	}
-
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	err := registry.CleanupRegistries(
-		ctx, registryMgr, registryInfos, clusterName, deleteVolumes, networkName, nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to cleanup talos registries: %w", err)
-	}
-
-	return nil
-}

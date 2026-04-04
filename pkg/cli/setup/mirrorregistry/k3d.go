@@ -9,15 +9,12 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/k3d"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
-	"github.com/spf13/cobra"
 )
 
 // k3dRegistryActionFn is the function signature for K3d registry actions.
@@ -258,51 +255,4 @@ func configureK3dNativeLocalRegistry(
 	}
 }
 
-func cleanupK3dMirrorRegistries(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	deps lifecycle.Deps,
-	clusterName string,
-	deleteVolumes bool,
-	cleanupDeps CleanupDependencies,
-) error {
-	networkName := k3dconfigmanager.ResolveNetworkName(clusterName)
 
-	// Use cached distribution config from ConfigManager
-	k3dConfig := cfgManager.DistributionConfig.K3d
-	if k3dConfig == nil {
-		// No config found (non-scaffolded cluster), fall back to network-based discovery
-		return cleanupRegistriesByNetwork(
-			cmd,
-			deps,
-			networkName,
-			clusterName,
-			deleteVolumes,
-			cleanupDeps,
-		)
-	}
-
-	registriesInfo := k3dprovisioner.ExtractRegistriesFromConfig(k3dConfig, clusterName)
-
-	registryNames := registry.CollectRegistryNames(registriesInfo)
-
-	return cleanupRegistriesOrFallback(
-		cmd,
-		deps,
-		registryNames,
-		networkName,
-		clusterName,
-		deleteVolumes,
-		cleanupDeps,
-		func(ctx context.Context, dockerClient client.APIClient) error {
-			return k3dprovisioner.CleanupRegistries(
-				ctx,
-				k3dConfig,
-				clusterName,
-				dockerClient,
-				deleteVolumes,
-				cmd.ErrOrStderr(),
-			)
-		},
-	)
-}

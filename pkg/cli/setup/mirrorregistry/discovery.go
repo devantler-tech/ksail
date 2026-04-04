@@ -38,23 +38,6 @@ func filterRegistriesByClusterName(
 	return filtered
 }
 
-// DiscoverRegistries finds all registries connected to the cluster network.
-// This should be called BEFORE cluster deletion for distributions that destroy
-// the network during deletion (e.g., Talos).
-func DiscoverRegistries(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	clusterName string,
-	cleanupDeps CleanupDependencies,
-) *DiscoveredRegistries {
-	return DiscoverRegistriesByNetwork(
-		cmd,
-		clusterCfg.Spec.Cluster.Distribution,
-		clusterName,
-		cleanupDeps,
-	)
-}
-
 // DiscoverRegistriesByNetwork finds all registries connected to the cluster network.
 // This is a simplified version that doesn't require a cluster config object.
 // Registries are filtered to only include those belonging to the specified cluster.
