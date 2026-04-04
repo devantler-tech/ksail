@@ -252,13 +252,14 @@ func handleEditRunE(
 	var output []byte
 
 	// Check if file exists
-	_, err = os.Stat(inputPath)
-	if err == nil {
+	_, statErr := os.Stat(inputPath)
+	switch {
+	case statErr == nil:
 		output, err = sopsclient.Edit(opts)
-	} else if os.IsNotExist(err) {
+	case os.IsNotExist(statErr):
 		output, err = sopsclient.EditNewFile(opts, inputStore)
-	} else {
-		return fmt.Errorf("failed to stat input file: %w", err)
+	default:
+		return fmt.Errorf("failed to stat input file: %w", statErr)
 	}
 
 	if err != nil {
