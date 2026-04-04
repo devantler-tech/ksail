@@ -56,7 +56,7 @@ Example:
 			editCmd.SetArgs(args)
 
 			// Execute kubectl edit command
-			return editCmd.Execute()
+			return kubectl.ExecuteSafely(cmd.Context(), editCmd)
 		},
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: "write",

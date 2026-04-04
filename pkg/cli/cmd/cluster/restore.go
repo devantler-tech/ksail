@@ -526,7 +526,7 @@ func restoreResourceFile(
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 
-	err = cmd.ExecuteContext(ctx)
+	err = kubectl.ExecuteSafely(ctx, cmd)
 	if err != nil {
 		stderr := errBuf.String()
 
@@ -535,10 +535,12 @@ func restoreResourceFile(
 			return nil
 		}
 
-		return fmt.Errorf(
-			"kubectl failed: %w (output: %s)",
-			err, stderr,
-		)
+		errMsg := err.Error()
+		if stderr != "" {
+			errMsg = fmt.Sprintf("%s (output: %s)", errMsg, stderr)
+		}
+
+		return fmt.Errorf("kubectl failed: %s", errMsg)
 	}
 
 	return nil

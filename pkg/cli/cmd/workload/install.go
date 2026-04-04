@@ -39,12 +39,20 @@ func NewInstallCmd(_ *di.Runtime) *cobra.Command {
 				namespace = "default"
 			}
 
+			// Get timeout flag
+			timeout, _ := cmd.Flags().GetDuration("timeout")
+
 			// Create chart spec
 			spec := &helm.ChartSpec{
 				ReleaseName: releaseName,
 				ChartName:   chartName,
 				Namespace:   namespace,
-				Timeout:     helm.DefaultTimeout,
+				Timeout:     timeout,
+			}
+
+			// Get version flag
+			if version, _ := cmd.Flags().GetString("version"); version != "" {
+				spec.Version = version
 			}
 
 			// Get other flags
@@ -76,6 +84,8 @@ func NewInstallCmd(_ *di.Runtime) *cobra.Command {
 	// Add basic Helm install flags
 	flags := cmd.Flags()
 	flags.StringP("namespace", "n", "default", "namespace scope for the request")
+	flags.String("version", "", "chart version constraint (default: latest)")
+	flags.Duration("timeout", helm.DefaultTimeout, "time to wait for any individual Kubernetes operation")
 	flags.Bool("create-namespace", false, "create the release namespace if not present")
 	flags.Bool("wait", false, "wait until resources are ready")
 	flags.Bool("atomic", false, "if set, the installation deletes on failure")

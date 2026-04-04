@@ -598,7 +598,7 @@ func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error 
 	applyCmd.SetOut(cmd.OutOrStdout())
 	applyCmd.SetErr(cmd.ErrOrStderr())
 
-	err := applyCmd.ExecuteContext(ctx)
+	err := kubectl.ExecuteSafely(ctx, applyCmd)
 	if err != nil {
 		return fmt.Errorf("kubectl apply: %w", err)
 	}

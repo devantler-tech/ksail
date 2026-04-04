@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
+	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
 // CreateNamespaceCmd creates a Namespace manifest generator command using the client's IO streams.
@@ -318,7 +319,9 @@ func (c *Client) copyFlagValue(flag *pflag.Flag, targetCmd *cobra.Command) error
 	return nil
 }
 
-// executeCommand executes the kubectl command's Run or RunE function.
+// executeCommand executes the kubectl command's Run or RunE function safely.
+// kubectl commands use Run with cmdutil.CheckErr which calls os.Exit on error.
+// This method intercepts fatal errors via BehaviorOnFatal + panic/recover.
 func (c *Client) executeCommand(cmd *cobra.Command, args []string) error {
 	if cmd.RunE != nil {
 		err := cmd.RunE(cmd, args)
@@ -330,10 +333,33 @@ func (c *Client) executeCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	if cmd.Run != nil {
-		cmd.Run(cmd, args)
-
-		return nil
+		return executeSafeRun(cmd, args)
 	}
 
 	return ErrNoRunFunction
+}
+
+// executeSafeRun wraps cmd.Run in a panic/recover to catch os.Exit from
+// kubectl's cmdutil.CheckErr. This is necessary because kubectl commands
+// use Run (not RunE) with CheckErr which calls os.Exit on any error.
+func executeSafeRun(cmd *cobra.Command, args []string) (retErr error) {
+	cmdutil.BehaviorOnFatal(func(msg string, code int) {
+		panic(&kubectlFatalError{msg: msg, code: code})
+	})
+
+	defer func() {
+		cmdutil.DefaultBehaviorOnFatal()
+
+		if r := recover(); r != nil {
+			if e, ok := r.(*kubectlFatalError); ok {
+				retErr = fmt.Errorf("kubectl command execution failed: %w", e)
+			} else {
+				panic(r)
+			}
+		}
+	}()
+
+	cmd.Run(cmd, args)
+
+	return nil
 }
