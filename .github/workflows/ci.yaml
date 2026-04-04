@@ -102,7 +102,7 @@ jobs:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
     needs: [changes]
-    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true')
+    if: github.event_name == 'workflow_dispatch' || ((github.event_name == 'pull_request' || github.event_name == 'merge_group') && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true'))
     permissions:
       contents: read
     steps:
@@ -536,13 +536,13 @@ jobs:
             fi
           }
 
-          run_gen_test deployment ksail workload gen deployment test-deploy --image nginx:latest
+          run_gen_test deployment ksail workload gen deployment test-deploy --image nginx:1.27
           run_gen_test service ksail workload gen service clusterip test-svc --tcp=80:80
           run_gen_test configmap ksail workload gen configmap test-cm --from-literal=key=value
           run_gen_test secret ksail workload gen secret generic test-secret --from-literal=password=test123
           run_gen_test namespace ksail workload gen namespace test-ns
-          run_gen_test job ksail workload gen job test-job --image=busybox:latest
-          run_gen_test cronjob ksail workload gen cronjob test-cron --image=busybox:latest --schedule="*/5 * * * *"
+          run_gen_test job ksail workload gen job test-job --image=busybox:1.37
+          run_gen_test cronjob ksail workload gen cronjob test-cron --image=busybox:1.37 --schedule="*/5 * * * *"
           run_gen_test serviceaccount ksail workload gen serviceaccount test-sa
           # clusterrole and role require API server for resource group discovery (--resource flag),
           # even with --dry-run=client. Tested in system tests where a cluster is available.
@@ -805,7 +805,7 @@ jobs:
       - name: 🧪 Deploy test workload
         shell: bash
         run: |
-          ksail workload create deployment backup-test --image=traefik/whoami:latest
+          ksail workload create deployment backup-test --image=traefik/whoami:v1.10
           ksail workload wait --for=condition=Available deployment/backup-test --timeout=300s
 
       - name: 🧪 Backup cluster
