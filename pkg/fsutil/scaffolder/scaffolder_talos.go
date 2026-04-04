@@ -93,13 +93,7 @@ func (s *Scaffolder) notifyTalosGenerated(
 
 	// Image verification config is written at the talos/ root level (not cluster/)
 	if enableImageVerification {
-		displayPath := filepath.Join(TalosConfigDir, "image-verification.yaml")
-		notify.WriteMessage(notify.Message{
-			Type:    notify.GenerateType,
-			Content: "created '%s'",
-			Args:    []any{displayPath},
-			Writer:  s.Writer,
-		})
+		s.notifyTalosPatchCreated("", "image-verification.yaml")
 	}
 }
 
