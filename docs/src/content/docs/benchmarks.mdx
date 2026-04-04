@@ -1,0 +1,52 @@
+---
+title: Benchmarks
+description: KSail performance benchmarks and historical trends
+---
+
+import { LinkCard } from '@astrojs/starlight/components';
+
+KSail includes automated benchmark regression testing to detect performance changes in pull requests that modify Go code.
+
+<LinkCard
+  title="📊 Interactive Benchmark Dashboard"
+  description="View historical benchmark trends and performance comparisons"
+  href="/benchmarks/dashboard/"
+/>
+
+## How It Works
+
+The benchmark regression workflow runs on pushes to `main` and pull requests. It:
+
+1. Discovers packages that contain Go benchmark functions
+2. Runs benchmarks on the current branch
+3. Compares results against the stored baseline
+4. **Fails the CI check** if a benchmark regresses beyond the configured threshold
+
+On pushes to `main`, benchmark results are stored as the new baseline. On pull requests, results are compared against the baseline without updating it.
+
+## Regression Detection
+
+| Setting           | Value | Meaning                                                           |
+|-------------------|-------|-------------------------------------------------------------------|
+| `alert-threshold` | 150%  | Warns (PR comment) when a benchmark is ≥1.5× slower than baseline |
+| `fail-threshold`  | 200%  | Fails the CI check when a benchmark is ≥2× slower than baseline   |
+
+## Running Benchmarks Locally
+
+```bash
+# Run all benchmarks
+go test -bench=. -benchmem -run='^$' ./...
+
+# Run a specific package
+go test -bench=. -benchmem -run='^$' ./pkg/k8s/readiness/...
+```
+
+## Writing Effective Benchmarks
+
+- Call `b.ReportAllocs()` to track allocations
+- Use `b.ResetTimer()` after expensive setup
+- Use `for range b.N` loop syntax (Go 1.22+)
+- Use `b.TempDir()` for reproducible temp files
+- Use table-driven scenarios to cover multiple input sizes
+- Fail fast with `b.Fatalf` on unexpected errors
+- Avoid `time.Sleep()` inside benchmark loops — measure real CPU work, not timers

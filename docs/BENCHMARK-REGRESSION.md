@@ -26,7 +26,11 @@ When a regression is detected on a pull request, the action posts a comment iden
 
 ## Historical Dashboard
 
-Benchmark trends are tracked on the `gh-pages` branch and can be viewed at the repository's GitHub Pages URL. The dashboard shows performance over time for all tracked benchmarks.
+Benchmark trends are tracked on the `gh-pages` branch and published to the documentation site. The dashboard is available at:
+
+> <https://ksail.devantler.tech/benchmarks/dashboard/>
+
+It shows performance over time for all tracked benchmarks. The dashboard is updated on each push to `main` and deployed with the documentation site.
 
 ## Interpreting CI Failures
 

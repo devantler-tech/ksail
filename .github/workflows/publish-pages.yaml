@@ -43,6 +43,19 @@ jobs:
       - name: Build with Astro
         working-directory: docs
         run: npm run build
+      - name: Checkout gh-pages benchmark data
+        id: checkout-benchmark
+        continue-on-error: true
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: gh-pages
+          path: gh-pages-data
+          persist-credentials: false
+      - name: Include benchmark dashboard in docs
+        if: steps.checkout-benchmark.outcome == 'success'
+        run: |
+          mkdir -p docs/dist/benchmarks/dashboard
+          cp -r gh-pages-data/* docs/dist/benchmarks/dashboard/
       - name: Upload artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
