@@ -24,7 +24,7 @@ const (
 type Provider interface {
 	// CreateRepo creates a new repository.
 	CreateRepo(ctx context.Context, owner, name string, visibility RepoVisibility) error
-	// PushFiles pushes files to a repository (creates initial commit or updates).
+	// PushFiles pushes files to a repository (one commit per file via Contents API).
 	PushFiles(
 		ctx context.Context,
 		owner, name string,
@@ -46,6 +46,10 @@ var (
 	ErrInvalidRepoVisibility = errors.New("invalid repo-visibility")
 	// ErrGitHubAPI is returned when the GitHub API returns an error.
 	ErrGitHubAPI = errors.New("GitHub API error")
+	// ErrRepoAlreadyExists is returned when the repository already exists.
+	ErrRepoAlreadyExists = errors.New("repository already exists")
+	// ErrOwnerMismatch is returned when the token user does not match the requested owner.
+	ErrOwnerMismatch = errors.New("authenticated user does not match requested owner")
 )
 
 const (

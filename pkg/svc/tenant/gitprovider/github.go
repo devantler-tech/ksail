@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -66,7 +67,19 @@ func (g *gitHubProvider) CreateRepo(
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		// Owner is a user, not an org — internal visibility is not supported for users.
+		// Owner is a user, not an org — verify the token user matches the owner.
+		authUser, verifyErr := g.getAuthenticatedUser(ctx)
+		if verifyErr != nil {
+			return fmt.Errorf("verifying authenticated user: %w", verifyErr)
+		}
+		if !strings.EqualFold(authUser, owner) {
+			return fmt.Errorf(
+				"%w: token belongs to %q but repo requested under %q",
+				ErrOwnerMismatch, authUser, owner,
+			)
+		}
+
+		// Internal visibility is not supported for users.
 		if visibility == VisibilityInternal {
 			body["private"] = true
 			delete(body, "visibility")
@@ -74,18 +87,26 @@ func (g *gitHubProvider) CreateRepo(
 
 		url = g.apiURL + "/user/repos"
 
-		resp2, err := g.doJSON(ctx, http.MethodPost, url, body)
-		if err != nil {
-			return fmt.Errorf("create user repo request: %w", err)
+		resp2, userErr := g.doJSON(ctx, http.MethodPost, url, body)
+		if userErr != nil {
+			return fmt.Errorf("create user repo request: %w", userErr)
 		}
 
 		defer func() { _ = resp2.Body.Close() }()
+
+		if resp2.StatusCode == http.StatusUnprocessableEntity {
+			return fmt.Errorf("%w: %s/%s", ErrRepoAlreadyExists, owner, name)
+		}
 
 		if resp2.StatusCode >= http.StatusMultipleChoices {
 			return g.readError(resp2, "create repository")
 		}
 
 		return nil
+	}
+
+	if resp.StatusCode == http.StatusUnprocessableEntity {
+		return fmt.Errorf("%w: %s/%s", ErrRepoAlreadyExists, owner, name)
 	}
 
 	if resp.StatusCode >= http.StatusMultipleChoices {
@@ -204,6 +225,32 @@ func (g *gitHubProvider) getFileSHA(
 	}
 
 	return result.SHA, nil
+}
+
+func (g *gitHubProvider) getAuthenticatedUser(ctx context.Context) (string, error) {
+	url := g.apiURL + "/user"
+
+	resp, err := g.doRequest(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("get authenticated user: %w", err)
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		return "", g.readError(resp, "get authenticated user")
+	}
+
+	var result struct {
+		Login string `json:"login"`
+	}
+
+	decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+	if decodeErr != nil {
+		return "", fmt.Errorf("decoding user info: %w", decodeErr)
+	}
+
+	return result.Login, nil
 }
 
 func (g *gitHubProvider) doJSON(

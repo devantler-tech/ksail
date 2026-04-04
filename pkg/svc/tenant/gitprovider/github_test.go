@@ -129,6 +129,9 @@ func TestGitHubProvider_CreateRepo_UserFallback(t *testing.T) {
 			switch {
 			case request.Method == http.MethodPost && request.URL.Path == "/orgs/my-user/repos":
 				writer.WriteHeader(http.StatusNotFound)
+			case request.Method == http.MethodGet && request.URL.Path == "/user":
+				writer.WriteHeader(http.StatusOK)
+				_, _ = writer.Write([]byte(`{"login":"my-user"}`))
 			case request.Method == http.MethodPost && request.URL.Path == "/user/repos":
 				var body map[string]any
 				assert.NoError(t, json.NewDecoder(request.Body).Decode(&body))
@@ -170,7 +173,7 @@ func TestGitHubProvider_CreateRepo_Error(t *testing.T) {
 		gitprovider.VisibilityPrivate,
 	)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "Validation Failed")
+	require.ErrorIs(t, err, gitprovider.ErrRepoAlreadyExists)
 }
 
 func TestGitHubProvider_DeleteRepo(t *testing.T) {

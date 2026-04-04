@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -42,9 +43,16 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 			"(default: auto-detect from ksail.yaml gitOpsEngine)")
 	cmd.Flags().String("sync-source", "oci", "Flux source type: oci or git")
 	cmd.Flags().String("registry", "", "OCI registry URL for Flux OCI source (e.g., oci://ghcr.io)")
-	cmd.Flags().String("git-provider", "", "Git provider: github, gitlab, gitea")
+	cmd.Flags().String(
+		"git-provider", "",
+		"Git provider for manifest URLs: github, gitlab, gitea "+
+			"(repo scaffolding requires github)",
+	)
 	cmd.Flags().String("git-repo", "", "Tenant repo as owner/repo-name")
-	cmd.Flags().String("git-token", "", "Git provider API token")
+	cmd.Flags().String(
+		"git-token", "",
+		"GitHub API token for repo scaffolding (--git-provider=github)",
+	)
 	cmd.Flags().
 		String("repo-visibility", "Private", "Repo visibility: Private, Internal, or Public")
 
@@ -252,7 +260,15 @@ func scaffoldTenantRepo(cmd *cobra.Command, opts tenant.Options) error {
 
 	err = provider.CreateRepo(ctx, owner, repoName, visibility)
 	if err != nil {
-		return fmt.Errorf("creating tenant repo: %w", err)
+		if errors.Is(err, gitprovider.ErrRepoAlreadyExists) {
+			notify.Warningf(
+				cmd.OutOrStdout(),
+				"Repo %q already exists, pushing scaffold files to existing repo",
+				opts.GitRepo,
+			)
+		} else {
+			return fmt.Errorf("creating tenant repo: %w", err)
+		}
 	}
 
 	scaffoldFiles := tenant.ScaffoldFiles(opts)
