@@ -91,11 +91,7 @@ func (c *Client) CreatePriorityClassCmd() (*cobra.Command, error) {
 
 // newResourceCmd creates a gen command that wraps kubectl create with forced --dry-run=client -o yaml.
 func (c *Client) newResourceCmd(resourceType string) (*cobra.Command, error) {
-	// Hold fatalMu during command construction: kubectl's NewCmdCreate calls
-	// CheckErr which reads the global fatalErrHandler without synchronization.
-	fatalMu.Lock()
-	tempCreateCmd := c.CreateCreateCommand("")
-	fatalMu.Unlock()
+	tempCreateCmd := c.createCommandSafely("")
 
 	// Find the subcommand for this resource type
 	var resourceCmd *cobra.Command
@@ -218,12 +214,7 @@ func (c *Client) executeSubcommandGen(
 	args []string,
 ) error {
 	freshClient := c.createFreshClient(cmd)
-
-	// Hold fatalMu during command construction: kubectl's NewCmdCreate calls
-	// CheckErr which reads the global fatalErrHandler.
-	fatalMu.Lock()
-	createCmd := freshClient.CreateCreateCommand("")
-	fatalMu.Unlock()
+	createCmd := freshClient.createCommandSafely("")
 
 	// Find the parent resource command
 	parentCmd := freshClient.findResourceCommand(createCmd, parentType)
@@ -243,12 +234,7 @@ func (c *Client) executeSubcommandGen(
 // executeResourceGen executes kubectl create with forced --dry-run=client -o yaml flags.
 func (c *Client) executeResourceGen(resourceType string, cmd *cobra.Command, args []string) error {
 	freshClient := c.createFreshClient(cmd)
-
-	// Hold fatalMu during command construction: kubectl's NewCmdCreate calls
-	// CheckErr which reads the global fatalErrHandler.
-	fatalMu.Lock()
-	createCmd := freshClient.CreateCreateCommand("")
-	fatalMu.Unlock()
+	createCmd := freshClient.createCommandSafely("")
 
 	freshResourceCmd := freshClient.findResourceCommand(createCmd, resourceType)
 	if freshResourceCmd == nil {
@@ -267,6 +253,17 @@ func (c *Client) findResourceCommand(createCmd *cobra.Command, resourceType stri
 	}
 
 	return nil
+}
+
+// createCommandSafely wraps CreateCreateCommand with fatalMu to prevent
+// data races. kubectl's NewCmdCreate calls CheckErr which reads the global
+// fatalErrHandler without synchronization. Using defer ensures the mutex
+// is released even if CreateCreateCommand panics.
+func (c *Client) createCommandSafely(kubeconfig string) *cobra.Command {
+	fatalMu.Lock()
+	defer fatalMu.Unlock()
+
+	return c.CreateCreateCommand(kubeconfig)
 }
 
 // setForcedFlags sets the --dry-run=client and -o yaml flags.

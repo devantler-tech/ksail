@@ -39,13 +39,13 @@ func withSafeFatal(action func()) (retErr error) {
 	defer func() {
 		cmdutil.DefaultBehaviorOnFatal()
 
-		if r := recover(); r != nil {
-			if e, ok := r.(*kubectlFatalError); ok {
-				retErr = fmt.Errorf("%w", e)
+		if recovered := recover(); recovered != nil {
+			if fatalErr, ok := recovered.(*kubectlFatalError); ok {
+				retErr = fmt.Errorf("%w", fatalErr)
 			} else {
 				// Unlock before re-panicking to avoid deadlock.
 				fatalMu.Unlock()
-				panic(r)
+				panic(recovered)
 			}
 		}
 
