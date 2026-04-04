@@ -24,6 +24,7 @@ func NewTenantCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	}
 
 	cmd.AddCommand(NewCreateCmd(runtimeContainer))
+	cmd.AddCommand(NewDeleteCmd(runtimeContainer))
 
 	return cmd
 }

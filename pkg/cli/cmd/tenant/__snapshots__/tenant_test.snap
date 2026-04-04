@@ -9,6 +9,7 @@ Usage:
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
   create      Create a new tenant
+  delete      Delete a tenant
   help        Help about any command
 
 Flags:
