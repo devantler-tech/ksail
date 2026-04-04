@@ -164,6 +164,8 @@ func (p *Provisioner) scaleByProvider(
 	scaleRole := p.scaleDockerByRole
 	if p.hetznerOpts != nil {
 		scaleRole = p.scaleHetznerByRole
+	} else if p.omniOpts != nil {
+		return fmt.Errorf("%w: Omni manages node scaling externally", ErrNotImplemented)
 	}
 
 	if cpDelta != 0 {
@@ -395,7 +397,15 @@ func (p *Provisioner) getNodesByRole(
 		return p.getDockerNodesByRole(ctx, clusterName)
 	}
 
-	return p.getHetznerNodesByRole(ctx, clusterName)
+	if p.hetznerOpts != nil {
+		return p.getHetznerNodesByRole(ctx, clusterName)
+	}
+
+	if p.omniOpts != nil {
+		return p.getOmniNodesByRole(ctx, clusterName)
+	}
+
+	return nil, fmt.Errorf("%w: no provider configured for node listing", ErrDockerNotAvailable)
 }
 
 // getHetznerNodesByRole gets node IPs and roles from Hetzner servers.
@@ -484,13 +494,17 @@ func (p *Provisioner) getDockerNodesByRole(
 }
 
 // GetCurrentConfig retrieves the current cluster configuration by probing the
-// running cluster through the Kubernetes API and Docker/Hetzner providers.
+// running cluster through the Kubernetes API and Docker/Hetzner/Omni providers.
 func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, error) {
 	var provider v1alpha1.Provider
-	if p.dockerClient != nil {
+
+	switch {
+	case p.dockerClient != nil:
 		provider = v1alpha1.ProviderDocker
-	} else if p.infraProvider != nil {
+	case p.hetznerOpts != nil:
 		provider = v1alpha1.ProviderHetzner
+	case p.omniOpts != nil:
+		provider = v1alpha1.ProviderOmni
 	}
 
 	spec := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, provider)
@@ -544,8 +558,15 @@ func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int32, int32) {
 		}
 	}
 
-	if p.infraProvider != nil {
+	if p.hetznerOpts != nil {
 		nodes, err := p.getHetznerNodesByRole(ctx, clusterName)
+		if err == nil {
+			return countNodeRoles(nodes)
+		}
+	}
+
+	if p.omniOpts != nil {
+		nodes, err := p.getOmniNodesByRole(ctx, clusterName)
 		if err == nil {
 			return countNodeRoles(nodes)
 		}

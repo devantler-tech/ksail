@@ -92,6 +92,7 @@ type ResolvedClusterInfo struct {
 	ClusterName    string
 	Provider       v1alpha1.Provider
 	KubeconfigPath string
+	OmniOpts       v1alpha1.OptionsOmni
 }
 
 // ResolveClusterInfo resolves the cluster name, provider, and kubeconfig from flags, config, or kubeconfig.
@@ -110,10 +111,11 @@ func ResolveClusterInfo(
 	provider := providerFlag
 	kubeconfigPath := kubeconfigFlag
 
-	// Fill missing values from ksail.yaml config file
-	if clusterName == "" {
-		resolveFromConfig(cmd, &clusterName, &provider, &kubeconfigPath)
-	}
+	// Always load config to fill missing fields and extract Omni options.
+	// Even when --name is provided, we still need Omni endpoint from config.
+	var omniOpts v1alpha1.OptionsOmni
+
+	resolveFromConfig(cmd, &clusterName, &provider, &kubeconfigPath, &omniOpts)
 
 	// Fall back to kubeconfig context detection
 	if clusterName == "" {
@@ -137,18 +139,13 @@ func ResolveClusterInfo(
 		ClusterName:    clusterName,
 		Provider:       provider,
 		KubeconfigPath: resolvedPath,
+		OmniOpts:       omniOpts,
 	}, nil
 }
 
-// resolveFromConfig fills missing cluster info from the ksail.yaml config file.
-// When cmd is non-nil, the --config persistent flag is honored.
-func resolveFromConfig(
-	cmd *cobra.Command,
-	clusterName *string,
-	provider *v1alpha1.Provider,
-	kubeconfigPath *string,
-) {
-	// Resolve --config flag without registering flags on the command.
+// loadConfig loads the ksail.yaml config, honoring the --config flag when cmd is non-nil.
+// Returns nil if no config is found or loading fails.
+func loadConfig(cmd *cobra.Command) (*v1alpha1.Cluster, *clusterprovisioner.DistributionConfig) {
 	var configFile string
 
 	if cmd != nil {
@@ -162,10 +159,30 @@ func resolveFromConfig(
 
 	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
 	if err != nil || cfg == nil || !cfgManager.IsConfigFileFound() {
+		return nil, nil
+	}
+
+	return cfg, cfgManager.DistributionConfig
+}
+
+// resolveFromConfig fills missing cluster info and Omni options from the ksail.yaml config.
+// When cmd is non-nil, the --config persistent flag is honored.
+// Fields that already have values (from flags) are not overwritten.
+func resolveFromConfig(
+	cmd *cobra.Command,
+	clusterName *string,
+	provider *v1alpha1.Provider,
+	kubeconfigPath *string,
+	omniOpts *v1alpha1.OptionsOmni,
+) {
+	cfg, distCfg := loadConfig(cmd)
+	if cfg == nil {
 		return
 	}
 
-	*clusterName = clusterNameFromDistConfig(cfgManager.DistributionConfig)
+	if *clusterName == "" {
+		*clusterName = clusterNameFromDistConfig(distCfg)
+	}
 
 	if *provider == "" && cfg.Spec.Cluster.Provider != "" {
 		*provider = cfg.Spec.Cluster.Provider
@@ -174,6 +191,8 @@ func resolveFromConfig(
 	if *kubeconfigPath == "" && cfg.Spec.Cluster.Connection.Kubeconfig != "" {
 		*kubeconfigPath = cfg.Spec.Cluster.Connection.Kubeconfig
 	}
+
+	*omniOpts = cfg.Spec.Cluster.Omni
 }
 
 // clusterNameFromDistConfig extracts the cluster name from distribution-specific config.
@@ -261,7 +280,7 @@ func runSimpleLifecycleAction(
 		KubeconfigPath: resolved.KubeconfigPath,
 	}
 
-	provisioner, err := CreateMinimalProvisionerForProvider(clusterInfo)
+	provisioner, err := CreateMinimalProvisionerForProvider(clusterInfo, resolved.OmniOpts)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -305,6 +324,7 @@ func CreateMinimalProvisioner(
 // This is used when we only have --name and --provider flags without distribution info.
 func CreateMinimalProvisionerForProvider(
 	info *clusterdetector.Info,
+	omniOpts v1alpha1.OptionsOmni,
 ) (clusterprovisioner.Provisioner, error) {
 	switch info.Provider {
 	case v1alpha1.ProviderDocker, "":
@@ -328,7 +348,7 @@ func CreateMinimalProvisionerForProvider(
 			info.Provider,
 			v1alpha1.OptionsTalos{},
 			v1alpha1.OptionsHetzner{},
-			v1alpha1.OptionsOmni{},
+			omniOpts,
 			false,
 		)
 		if err != nil {

@@ -65,7 +65,7 @@ func autoDeleteCluster(
 		Provider:     clusterCfg.Spec.Cluster.Provider,
 	}
 
-	provisioner, err := createDeleteProvisioner(info)
+	provisioner, err := createDeleteProvisioner(info, clusterCfg.Spec.Cluster.Omni)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
 	}
