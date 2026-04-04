@@ -14,11 +14,19 @@ func ScaffoldFiles(opts Options) map[string][]byte {
 
 	switch opts.TenantType {
 	case TypeFlux:
-		readmeContent = fmt.Sprintf("# %s\n\nFlux-managed tenant. Resources in `k8s/` are automatically reconciled.\n", opts.Name)
+		readmeContent = fmt.Sprintf(
+			"# %s\n\nFlux-managed tenant. "+
+				"Resources in `k8s/` are automatically reconciled.\n",
+			opts.Name)
 	case TypeArgoCD:
-		readmeContent = fmt.Sprintf("# %s\n\nArgoCD-managed tenant. Resources in `k8s/` are automatically synced.\n", opts.Name)
-	default:
-		readmeContent = fmt.Sprintf("# %s\n\nApply with: `kubectl apply -k k8s/`\n", opts.Name)
+		readmeContent = fmt.Sprintf(
+			"# %s\n\nArgoCD-managed tenant. "+
+				"Resources in `k8s/` are automatically synced.\n",
+			opts.Name)
+	case TypeKubectl:
+		readmeContent = fmt.Sprintf(
+			"# %s\n\nApply with: `kubectl apply -k k8s/`\n",
+			opts.Name)
 	}
 
 	return map[string][]byte{

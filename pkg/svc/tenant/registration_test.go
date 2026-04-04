@@ -1,4 +1,4 @@
-package tenant
+package tenant_test
 
 import (
 	"os"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 )
@@ -13,17 +14,17 @@ import (
 func writeKustomizationFile(t *testing.T, dir, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, "kustomization.yaml")
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 	return path
 }
 
 func readKustomizationResources(t *testing.T, path string) []string {
 	t.Helper()
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // test path
 	require.NoError(t, err)
 	var raw map[string]any
 	require.NoError(t, yaml.Unmarshal(data, &raw))
-	return getResources(raw)
+	return tenant.ExportGetResources(raw)
 }
 
 func TestRegisterTenantAddsToExistingResources(t *testing.T) {
@@ -35,7 +36,7 @@ resources:
 - existing-tenant
 `)
 
-	err := RegisterTenant("new-tenant", dir, kPath)
+	err := tenant.RegisterTenant("new-tenant", dir, kPath)
 	require.NoError(t, err)
 
 	resources := readKustomizationResources(t, kPath)
@@ -51,7 +52,7 @@ kind: Kustomization
 resources: []
 `)
 
-	err := RegisterTenant("team-alpha", dir, kPath)
+	err := tenant.RegisterTenant("team-alpha", dir, kPath)
 	require.NoError(t, err)
 
 	resources := readKustomizationResources(t, kPath)
@@ -67,7 +68,7 @@ resources:
 - team-alpha
 `)
 
-	err := RegisterTenant("team-alpha", dir, kPath)
+	err := tenant.RegisterTenant("team-alpha", dir, kPath)
 	require.NoError(t, err)
 
 	resources := readKustomizationResources(t, kPath)
@@ -90,7 +91,7 @@ resources:
 - team-beta
 `)
 
-	err := UnregisterTenant("team-alpha", dir, kPath)
+	err := tenant.UnregisterTenant("team-alpha", dir, kPath)
 	require.NoError(t, err)
 
 	resources := readKustomizationResources(t, kPath)
@@ -107,7 +108,7 @@ resources:
 - team-beta
 `)
 
-	err := UnregisterTenant("nonexistent", dir, kPath)
+	err := tenant.UnregisterTenant("nonexistent", dir, kPath)
 	require.NoError(t, err)
 
 	resources := readKustomizationResources(t, kPath)
@@ -125,7 +126,7 @@ resources:
 - existing
 `)
 
-	err := RegisterTenant("new-tenant", dir, kPath)
+	err := tenant.RegisterTenant("new-tenant", dir, kPath)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(kPath)
@@ -136,7 +137,7 @@ resources:
 	// Other fields must be preserved.
 	require.Equal(t, "production", raw["namespace"])
 	require.Equal(t, "prod-", raw["namePrefix"])
-	resources := getResources(raw)
+	resources := tenant.ExportGetResources(raw)
 	require.Contains(t, resources, "existing")
 	require.Contains(t, resources, "new-tenant")
 }
@@ -150,9 +151,9 @@ resources: []
 `)
 
 	nested := filepath.Join(root, "a", "b", "c")
-	require.NoError(t, os.MkdirAll(nested, 0o755))
+	require.NoError(t, os.MkdirAll(nested, 0o750))
 
-	found, err := FindKustomization(nested)
+	found, err := tenant.FindKustomization(nested)
 	require.NoError(t, err)
 
 	// EvalCanonicalPath resolves symlinks (e.g., /var → /private/var on macOS).
@@ -165,10 +166,10 @@ func TestFindKustomizationReturnsErrWhenNotFound(t *testing.T) {
 	t.Parallel()
 	deep := t.TempDir()
 	nested := filepath.Join(deep, "x", "y", "z")
-	require.NoError(t, os.MkdirAll(nested, 0o755))
+	require.NoError(t, os.MkdirAll(nested, 0o750))
 
-	_, err := FindKustomization(nested)
-	require.ErrorIs(t, err, ErrKustomizationNotFound)
+	_, err := tenant.FindKustomization(nested)
+	require.ErrorIs(t, err, tenant.ErrKustomizationNotFound)
 }
 
 func TestRegisterTenantAutoDiscoversKustomization(t *testing.T) {
@@ -181,9 +182,9 @@ resources: []
 
 	// Tenant output dir is a subdirectory.
 	subDir := filepath.Join(root, "tenants")
-	require.NoError(t, os.MkdirAll(subDir, 0o755))
+	require.NoError(t, os.MkdirAll(subDir, 0o750))
 
-	err := RegisterTenant("team-discover", subDir, "")
+	err := tenant.RegisterTenant("team-discover", subDir, "")
 	require.NoError(t, err)
 
 	kPath := filepath.Join(root, "kustomization.yaml")
@@ -199,7 +200,7 @@ kind: Kustomization
 resources: []
 `)
 
-	err := RegisterTenant("explicit-tenant", dir, kPath)
+	err := tenant.RegisterTenant("explicit-tenant", dir, kPath)
 	require.NoError(t, err)
 
 	resources := readKustomizationResources(t, kPath)
@@ -217,7 +218,7 @@ resources: []
 	// outputDir is outside the kustomization root.
 	outsideDir := t.TempDir()
 
-	err := RegisterTenant("escape-tenant", outsideDir, kPath)
+	err := tenant.RegisterTenant("escape-tenant", outsideDir, kPath)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "outside the kustomization root")
 }
@@ -232,9 +233,9 @@ resources:
 `)
 
 	subDir := filepath.Join(root, "tenants")
-	require.NoError(t, os.MkdirAll(subDir, 0o755))
+	require.NoError(t, os.MkdirAll(subDir, 0o750))
 
-	err := UnregisterTenant("my-team", subDir, "")
+	err := tenant.UnregisterTenant("my-team", subDir, "")
 	require.NoError(t, err)
 
 	kPath := filepath.Join(root, "kustomization.yaml")
@@ -244,6 +245,6 @@ resources:
 
 func TestResolveKustomizationPath_ExplicitNotFound(t *testing.T) {
 	t.Parallel()
-	_, err := resolveKustomizationPath(".", "/nonexistent/kustomization.yaml")
+	_, err := tenant.ExportResolveKustomizationPath(".", "/nonexistent/kustomization.yaml")
 	require.Error(t, err)
 }

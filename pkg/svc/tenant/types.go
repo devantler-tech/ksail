@@ -137,27 +137,31 @@ func (o *Options) Validate() error {
 		return fmt.Errorf("%w: %s (%s)", ErrInvalidTenantName, o.Name, strings.Join(errs, "; "))
 	}
 	if strings.Contains(o.Name, "..") || strings.ContainsAny(o.Name, `/\`) {
-		return fmt.Errorf("%w: %s (must not contain path separators or '..')", ErrInvalidTenantName, o.Name)
+		return fmt.Errorf("%w: %s (must not contain path separators or '..')",
+			ErrInvalidTenantName, o.Name)
 	}
 	if o.TenantType == "" {
 		return ErrTenantTypeRequired
 	}
-	validType := false
-	for _, vt := range ValidTypes() {
-		if o.TenantType == vt {
-			validType = true
-			break
-		}
-	}
-	if !validType {
+	if !isValidType(o.TenantType) {
 		return fmt.Errorf("%w: %q", ErrInvalidType, o.TenantType)
 	}
 	for _, ns := range o.Namespaces {
 		if errs := validation.IsDNS1123Label(ns); len(errs) > 0 {
-			return fmt.Errorf("%w: namespace %q (%s)", ErrInvalidNamespace, ns, strings.Join(errs, "; "))
+			return fmt.Errorf("%w: namespace %q (%s)",
+				ErrInvalidNamespace, ns, strings.Join(errs, "; "))
 		}
 	}
 	return nil
+}
+
+func isValidType(t Type) bool {
+	for _, vt := range ValidTypes() {
+		if t == vt {
+			return true
+		}
+	}
+	return false
 }
 
 // ManagedByLabels returns the standard KSail managed-by labels.

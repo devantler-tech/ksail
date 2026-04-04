@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const rbacCMHeader = "apiVersion: v1"
+
 func TestGenerateArgoCDManifests_ProjectSingleNamespace(t *testing.T) {
 	t.Parallel()
 	opts := tenant.Options{
@@ -89,7 +91,7 @@ func TestMergeArgoCDRBACPolicy_EmptyExisting(t *testing.T) {
 
 func TestMergeArgoCDRBACPolicy_ExistingSameTenant(t *testing.T) {
 	t.Parallel()
-	existing := `apiVersion: v1
+	existing := rbacCMHeader + `
 kind: ConfigMap
 metadata:
   name: argocd-rbac-cm
@@ -111,7 +113,7 @@ data:
 
 func TestMergeArgoCDRBACPolicy_ExistingOtherTenant(t *testing.T) {
 	t.Parallel()
-	existing := `apiVersion: v1
+	existing := rbacCMHeader + `
 kind: ConfigMap
 metadata:
   name: argocd-rbac-cm
@@ -133,7 +135,7 @@ data:
 
 func TestRemoveArgoCDRBACPolicy_RemovesTargetTenant(t *testing.T) {
 	t.Parallel()
-	existing := `apiVersion: v1
+	existing := rbacCMHeader + `
 kind: ConfigMap
 metadata:
   name: argocd-rbac-cm
@@ -154,7 +156,7 @@ data:
 
 func TestMergeArgoCDRBACPolicy_SubstringTenantNames(t *testing.T) {
 	t.Parallel()
-	existing := `apiVersion: v1
+	existing := rbacCMHeader + `
 kind: ConfigMap
 metadata:
   name: argocd-rbac-cm
@@ -176,7 +178,7 @@ data:
 
 func TestRemoveArgoCDRBACPolicy_SubstringTenantNames(t *testing.T) {
 	t.Parallel()
-	existing := `apiVersion: v1
+	existing := rbacCMHeader + `
 kind: ConfigMap
 metadata:
   name: argocd-rbac-cm
@@ -199,7 +201,7 @@ data:
 
 func TestRemoveArgoCDRBACPolicy_PreservesOtherTenant(t *testing.T) {
 	t.Parallel()
-	existing := `apiVersion: v1
+	existing := rbacCMHeader + `
 kind: ConfigMap
 metadata:
   name: argocd-rbac-cm

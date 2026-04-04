@@ -38,7 +38,10 @@ var (
 	// ErrInvalidSyncSource is returned when an invalid --sync-source value is provided.
 	ErrInvalidSyncSource = errors.New("invalid --sync-source value")
 	// ErrConfigNotFound is returned when no --type is specified and no ksail.yaml is found.
-	ErrConfigNotFound = errors.New("no --type specified and no ksail.yaml found: please specify --type (flux, argocd, or kubectl)")
+	ErrConfigNotFound = errors.New(
+		"no --type specified and no ksail.yaml found: " +
+			"please specify --type (flux, argocd, or kubectl)",
+	)
 	// ErrDeleteRepoGitProviderRequired is returned when --git-provider is required with --delete-repo.
 	ErrDeleteRepoGitProviderRequired = errors.New("--git-provider is required when --delete-repo is set")
 	// ErrDeleteRepoGitRepoRequired is returned when --git-repo is required with --delete-repo.

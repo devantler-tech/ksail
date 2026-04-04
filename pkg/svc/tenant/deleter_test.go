@@ -16,7 +16,10 @@ func TestDelete_RemovesTenantDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	tenantDir := filepath.Join(tmpDir, "my-tenant")
 	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(tenantDir, "namespace.yaml"), []byte("test"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tenantDir, "namespace.yaml"),
+		[]byte("test"), 0o600,
+	))
 
 	err := tenant.Delete(tenant.DeleteOptions{
 		Name:      "my-tenant",
@@ -47,7 +50,7 @@ func TestDelete_WithUnregister(t *testing.T) {
 	tmpDir := t.TempDir()
 	tenantDir := filepath.Join(tmpDir, "my-tenant")
 	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(tenantDir, "namespace.yaml"), []byte("test"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tenantDir, "namespace.yaml"), []byte("test"), 0o600))
 
 	kustomContent := `apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -56,7 +59,7 @@ resources:
 - other-tenant
 `
 	kPath := filepath.Join(tmpDir, "kustomization.yaml")
-	require.NoError(t, os.WriteFile(kPath, []byte(kustomContent), 0o644))
+	require.NoError(t, os.WriteFile(kPath, []byte(kustomContent), 0o600))
 
 	err := tenant.Delete(tenant.DeleteOptions{
 		Name:              "my-tenant",
@@ -87,7 +90,7 @@ func TestDelete_ContinuesIfNoKustomizationFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	tenantDir := filepath.Join(tmpDir, "my-tenant")
 	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(tenantDir, "namespace.yaml"), []byte("test"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tenantDir, "namespace.yaml"), []byte("test"), 0o600))
 
 	err := tenant.Delete(tenant.DeleteOptions{
 		Name:       "my-tenant",
@@ -188,7 +191,7 @@ func TestDelete_UnregisterWithExplicitKustomizationPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	tenantDir := filepath.Join(tmpDir, "my-tenant")
 	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(tenantDir, "namespace.yaml"), []byte("test"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tenantDir, "namespace.yaml"), []byte("test"), 0o600))
 
 	kustomContent := `apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -196,7 +199,7 @@ resources:
 - my-tenant
 `
 	kPath := filepath.Join(tmpDir, "kustomization.yaml")
-	require.NoError(t, os.WriteFile(kPath, []byte(kustomContent), 0o644))
+	require.NoError(t, os.WriteFile(kPath, []byte(kustomContent), 0o600))
 
 	err := tenant.Delete(tenant.DeleteOptions{
 		Name:              "my-tenant",

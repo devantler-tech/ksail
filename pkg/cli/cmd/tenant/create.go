@@ -36,7 +36,9 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 	cmd.Flags().String("cluster-role", "edit", "ClusterRole to bind to the tenant ServiceAccount")
 	cmd.Flags().StringP("output", "o", ".", "Output directory for platform manifests")
 	cmd.Flags().Bool("force", false, "Overwrite existing tenant directory")
-	cmd.Flags().StringP("type", "t", "", "Tenant type: flux, argocd, or kubectl (default: auto-detect from ksail.yaml gitOpsEngine)")
+	cmd.Flags().StringP("type", "t", "",
+		"Tenant type: flux, argocd, or kubectl "+
+			"(default: auto-detect from ksail.yaml gitOpsEngine)")
 	cmd.Flags().String("sync-source", "oci", "Flux source type: oci or git")
 	cmd.Flags().String("registry", "", "OCI registry URL for Flux OCI source (e.g., oci://ghcr.io)")
 	cmd.Flags().String("git-provider", "", "Git provider: github, gitlab, gitea")
@@ -174,6 +176,8 @@ func resolveTenantType(cmd *cobra.Command, typeStr string, opts *tenant.Options)
 		opts.TenantType = tenant.TypeFlux
 	case v1alpha1.GitOpsEngineArgoCD:
 		opts.TenantType = tenant.TypeArgoCD
+	case v1alpha1.GitOpsEngineNone:
+		opts.TenantType = tenant.TypeKubectl
 	default:
 		opts.TenantType = tenant.TypeKubectl
 	}
@@ -195,7 +199,9 @@ func resolveSyncSource(syncSourceStr string, opts *tenant.Options) error {
 func scaffoldTenantRepo(cmd *cobra.Command, opts tenant.Options) error {
 	token := gitprovider.ResolveToken(opts.GitProvider, opts.GitToken)
 	if token == "" {
-		notify.Warningf(cmd.OutOrStdout(), "Skipping repo scaffolding: no API token found (set --git-token or %s environment variable)",
+		notify.Warningf(cmd.OutOrStdout(),
+			"Skipping repo scaffolding: no API token found "+
+				"(set --git-token or %s environment variable)",
 			strings.ToUpper(opts.GitProvider)+"_TOKEN")
 		return nil
 	}

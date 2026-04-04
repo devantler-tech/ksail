@@ -17,7 +17,9 @@ func NewDeleteCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "delete <tenant-name>",
 		Short:        "Delete a tenant",
-		Long:         `Remove tenant manifests, unregister from kustomization.yaml, and optionally delete the tenant Git repository.`,
+		Long: `Remove tenant manifests, unregister from ` +
+			`kustomization.yaml, and optionally delete ` +
+			`the tenant Git repository.`,
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		Annotations: map[string]string{
@@ -63,18 +65,25 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 
 	if !confirm.ShouldSkipPrompt(force) {
 		if opts.DeleteRepo && opts.GitRepo != "" {
-			notify.Warningf(cmd.OutOrStdout(), "This will delete tenant %q, its manifest directory, and the remote Git repository %q", opts.Name, opts.GitRepo)
+			notify.Warningf(cmd.OutOrStdout(),
+				"This will delete tenant %q, its manifest directory, "+
+					"and the remote Git repository %q",
+				opts.Name, opts.GitRepo)
 		} else {
-			notify.Warningf(cmd.OutOrStdout(), "This will delete tenant %q and its manifest directory", opts.Name)
+			notify.Warningf(cmd.OutOrStdout(),
+				"This will delete tenant %q and its manifest directory",
+				opts.Name)
 		}
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), `Type "yes" to confirm deletion: `)
+		_, _ = fmt.Fprint(cmd.OutOrStdout(),
+			`Type "yes" to confirm deletion: `)
 
 		if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
 			return confirm.ErrDeletionCancelled
 		}
 	}
 
-	if err := tenant.Delete(opts); err != nil {
+	err = tenant.Delete(opts)
+	if err != nil {
 		return fmt.Errorf("deleting tenant: %w", err)
 	}
 

@@ -31,56 +31,20 @@ func TestDeleteCmd(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("flag defaults", func(t *testing.T) {
-		t.Parallel()
-		cmd := tenantcmd.NewDeleteCmd(nil)
+	t.Run("flag defaults", assertDeleteFlagDefaults)
 
-		forceVal, err := cmd.Flags().GetBool("force")
-		require.NoError(t, err)
-		require.False(t, forceVal)
-
-		unregister, err := cmd.Flags().GetBool("unregister")
-		require.NoError(t, err)
-		require.True(t, unregister)
-
-		deleteRepo, err := cmd.Flags().GetBool("delete-repo")
-		require.NoError(t, err)
-		require.False(t, deleteRepo)
-
-		output, err := cmd.Flags().GetString("output")
-		require.NoError(t, err)
-		require.Equal(t, ".", output)
-	})
-
-	t.Run("deletes tenant directory", func(t *testing.T) {
-		t.Parallel()
-		tmpDir := t.TempDir()
-
-		// Create a tenant dir with a file
-		tenantDir := filepath.Join(tmpDir, "my-tenant")
-		require.NoError(t, os.MkdirAll(tenantDir, 0o750))
-		require.NoError(t, os.WriteFile(filepath.Join(tenantDir, "namespace.yaml"), []byte("test"), 0o644))
-
-		cmd := tenantcmd.NewDeleteCmd(&di.Runtime{})
-		cmd.SetArgs([]string{"my-tenant", "--output", tmpDir, "--force", "--unregister=false"})
-
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		cmd.SetErr(&buf)
-
-		err := cmd.Execute()
-		require.NoError(t, err)
-
-		_, statErr := os.Stat(tenantDir)
-		require.True(t, os.IsNotExist(statErr))
-	})
+	t.Run("deletes tenant directory", assertDeletesTenantDirectory)
 
 	t.Run("returns error for non-existent tenant", func(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
 		cmd := tenantcmd.NewDeleteCmd(&di.Runtime{})
-		cmd.SetArgs([]string{"no-such-tenant", "--output", tmpDir, "--force"})
+		cmd.SetArgs([]string{
+			"no-such-tenant",
+			"--output", tmpDir,
+			"--force",
+		})
 
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
@@ -90,4 +54,55 @@ func TestDeleteCmd(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "does not exist")
 	})
+}
+
+func assertDeleteFlagDefaults(t *testing.T) {
+	t.Parallel()
+	cmd := tenantcmd.NewDeleteCmd(nil)
+
+	forceVal, err := cmd.Flags().GetBool("force")
+	require.NoError(t, err)
+	require.False(t, forceVal)
+
+	unregister, err := cmd.Flags().GetBool("unregister")
+	require.NoError(t, err)
+	require.True(t, unregister)
+
+	deleteRepo, err := cmd.Flags().GetBool("delete-repo")
+	require.NoError(t, err)
+	require.False(t, deleteRepo)
+
+	output, err := cmd.Flags().GetString("output")
+	require.NoError(t, err)
+	require.Equal(t, ".", output)
+}
+
+func assertDeletesTenantDirectory(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	tenantDir := filepath.Join(tmpDir, "my-tenant")
+	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tenantDir, "namespace.yaml"),
+		[]byte("test"), 0o600,
+	))
+
+	cmd := tenantcmd.NewDeleteCmd(&di.Runtime{})
+	cmd.SetArgs([]string{
+		"my-tenant",
+		"--output", tmpDir,
+		"--force",
+		"--unregister=false",
+	})
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(tenantDir)
+	require.True(t, os.IsNotExist(statErr))
 }

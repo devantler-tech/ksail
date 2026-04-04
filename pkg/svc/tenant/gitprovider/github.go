@@ -47,7 +47,7 @@ func (g *gitHubProvider) CreateRepo(ctx context.Context, owner, name string, vis
 	case VisibilityInternal:
 		// Internal repos require the "visibility" field and only work for orgs.
 		body["visibility"] = "internal"
-	default:
+	case VisibilityPrivate:
 		body["private"] = true
 	}
 
@@ -85,7 +85,12 @@ func (g *gitHubProvider) CreateRepo(ctx context.Context, owner, name string, vis
 
 // PushFiles pushes files to a repository using the Contents API.
 // For existing files, it fetches the current SHA first to allow updates.
-func (g *gitHubProvider) PushFiles(ctx context.Context, owner, name string, files map[string][]byte, commitMsg string) error {
+func (g *gitHubProvider) PushFiles(
+	ctx context.Context,
+	owner, name string,
+	files map[string][]byte,
+	commitMsg string,
+) error {
 	// Sort filenames for deterministic ordering
 	paths := make([]string, 0, len(files))
 	for path := range files {
@@ -110,7 +115,10 @@ func (g *gitHubProvider) PushFiles(ctx context.Context, owner, name string, file
 			body["sha"] = sha
 		}
 
-		url := fmt.Sprintf("%s/repos/%s/%s/contents/%s", g.apiURL, owner, name, path)
+		url := fmt.Sprintf(
+			"%s/repos/%s/%s/contents/%s",
+			g.apiURL, owner, name, path,
+		)
 		resp, err := g.doJSON(ctx, http.MethodPut, url, body)
 		if err != nil {
 			return fmt.Errorf("push file %s: %w", path, err)
@@ -125,9 +133,28 @@ func (g *gitHubProvider) PushFiles(ctx context.Context, owner, name string, file
 	return nil
 }
 
+// DeleteRepo deletes a GitHub repository.
+func (g *gitHubProvider) DeleteRepo(ctx context.Context, owner, name string) error {
+	url := fmt.Sprintf("%s/repos/%s/%s", g.apiURL, owner, name)
+	resp, err := g.doRequest(ctx, http.MethodDelete, url, nil)
+	if err != nil {
+		return fmt.Errorf("delete repo request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		return g.readError(resp, "delete repository")
+	}
+	return nil
+}
+
 // getFileSHA returns the SHA of an existing file, or empty string if not found.
-func (g *gitHubProvider) getFileSHA(ctx context.Context, owner, name, path string) (string, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/contents/%s", g.apiURL, owner, name, path)
+func (g *gitHubProvider) getFileSHA(
+	ctx context.Context, owner, name, path string,
+) (string, error) {
+	url := fmt.Sprintf(
+		"%s/repos/%s/%s/contents/%s",
+		g.apiURL, owner, name, path,
+	)
 	resp, err := g.doRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
@@ -148,20 +175,6 @@ func (g *gitHubProvider) getFileSHA(ctx context.Context, owner, name, path strin
 		return "", fmt.Errorf("decoding file info: %w", err)
 	}
 	return result.SHA, nil
-}
-
-// DeleteRepo deletes a GitHub repository.
-func (g *gitHubProvider) DeleteRepo(ctx context.Context, owner, name string) error {
-	url := fmt.Sprintf("%s/repos/%s/%s", g.apiURL, owner, name)
-	resp, err := g.doRequest(ctx, http.MethodDelete, url, nil)
-	if err != nil {
-		return fmt.Errorf("delete repo request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= http.StatusMultipleChoices {
-		return g.readError(resp, "delete repository")
-	}
-	return nil
 }
 
 func (g *gitHubProvider) doJSON(ctx context.Context, method, url string, body any) (*http.Response, error) {

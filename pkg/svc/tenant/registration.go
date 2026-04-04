@@ -103,7 +103,7 @@ func resolveKustomizationPath(outputDir, explicit string) (string, error) {
 // readKustomizationRaw reads a kustomization.yaml into a raw map,
 // preserving all fields (patches, images, namespace, generators, etc.).
 func readKustomizationRaw(path string) (map[string]any, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is already canonicalized
 	if err != nil {
 		return nil, fmt.Errorf("read kustomization: %w", err)
 	}
@@ -123,7 +123,7 @@ func writeKustomizationRaw(path string, raw map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("marshal kustomization: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write kustomization: %w", err)
 	}
 	return nil

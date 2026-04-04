@@ -246,7 +246,8 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 	}
 
 	var configMap rbacConfigMap
-	if err := yaml.Unmarshal([]byte(existingContent), &configMap); err != nil {
+	err := yaml.Unmarshal([]byte(existingContent), &configMap)
+	if err != nil {
 		return "", fmt.Errorf("parsing existing RBAC ConfigMap: %w", err)
 	}
 
@@ -284,7 +285,8 @@ func MergeArgoCDRBACPolicy(existingContent string, tenantName string) (string, e
 // Used by the delete command.
 func RemoveArgoCDRBACPolicy(existingContent string, tenantName string) (string, error) {
 	var configMap rbacConfigMap
-	if err := yaml.Unmarshal([]byte(existingContent), &configMap); err != nil {
+	err := yaml.Unmarshal([]byte(existingContent), &configMap)
+	if err != nil {
 		return "", fmt.Errorf("parsing existing RBAC ConfigMap: %w", err)
 	}
 

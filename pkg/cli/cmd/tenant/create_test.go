@@ -121,7 +121,11 @@ func TestCreateCmd_FluxType(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"my-flux-tenant", "--type", "flux", "--registry", "oci://ghcr.io/test", "--git-repo", "owner/repo", "--output", outDir})
+	cmd.SetArgs([]string{
+		"my-flux-tenant", "--type", "flux",
+		"--registry", "oci://ghcr.io/test",
+		"--git-repo", "owner/repo", "--output", outDir,
+	})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
@@ -228,7 +232,7 @@ func TestCreateCmd_WithRegister(t *testing.T) {
 	require.NoError(t, os.WriteFile(kPath, []byte(`apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources: []
-`), 0o644))
+`), 0o600))
 
 	cmd := tenantpkg.NewCreateCmd(nil)
 
