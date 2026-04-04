@@ -1,0 +1,21 @@
+{
+  "last_run": "2026-04-04T07:39:21Z",
+  "last_run_id": "23974362725",
+  "tasks_run": [2, 3, 8, 13],
+  "issue_backlog_cursor": 3596,
+  "commented_issues": {
+    "3591": "2026-04-04T07:39:21Z",
+    "3592": "2026-04-04T07:39:21Z",
+    "3596": "2026-04-04T07:39:21Z"
+  },
+  "open_prs": {
+    "repo-assist/fix-omni-provider-routing": "fix: add Omni provider routing in Talos provisioner (overlaps with #3602)",
+    "repo-assist/perf-scanner-buffer-size": "perf: reduce scanner buffer pre-allocation in image extractor"
+  },
+  "domain_alternation": {
+    "last_domain": "performance",
+    "next_domain": "refactor"
+  },
+  "monthly_activity_issue": "2026-04",
+  "notes": "Maintainer PR #3602 consolidates #3593 #3594 and fixes #3591 #3592 #3596 - Repo Assist PR overlaps. Perf PR for scanner buffer is clean and independent."
+}
