@@ -44,7 +44,7 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 		Name: args[0],
 	}
 
-	opts.Force, _ = cmd.Flags().GetBool("force")
+	force, _ := cmd.Flags().GetBool("force")
 	opts.Unregister, _ = cmd.Flags().GetBool("unregister")
 	opts.KustomizationPath, _ = cmd.Flags().GetString("kustomization-path")
 	opts.DeleteRepo, _ = cmd.Flags().GetBool("delete-repo")
@@ -61,7 +61,7 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 
 	opts.OutputDir = outputDir
 
-	if !confirm.ShouldSkipPrompt(opts.Force) {
+	if !confirm.ShouldSkipPrompt(force) {
 		if opts.DeleteRepo && opts.GitRepo != "" {
 			notify.Warningf(cmd.OutOrStdout(), "This will delete tenant %q, its manifest directory, and the remote Git repository %q", opts.Name, opts.GitRepo)
 		} else {

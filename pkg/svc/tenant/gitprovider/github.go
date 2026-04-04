@@ -9,9 +9,14 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"time"
 )
 
 const githubAPIURL = "https://api.github.com"
+
+const httpClientTimeout = 30 * time.Second
+
+const userAgent = "ksail"
 
 type gitHubProvider struct {
 	token  string
@@ -22,7 +27,7 @@ type gitHubProvider struct {
 func newGitHubProvider(token string) *gitHubProvider {
 	return &gitHubProvider{
 		token:  token,
-		client: &http.Client{},
+		client: &http.Client{Timeout: httpClientTimeout},
 		apiURL: githubAPIURL,
 	}
 }
@@ -110,10 +115,12 @@ func (g *gitHubProvider) PushFiles(ctx context.Context, owner, name string, file
 		if err != nil {
 			return fmt.Errorf("push file %s: %w", path, err)
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode >= 300 {
-			return g.readError(resp, fmt.Sprintf("push file %s", path))
+			pushErr := g.readError(resp, fmt.Sprintf("push file %s", path))
+			resp.Body.Close()
+			return pushErr
 		}
+		resp.Body.Close()
 	}
 	return nil
 }
@@ -172,6 +179,7 @@ func (g *gitHubProvider) doRequest(ctx context.Context, method, url string, body
 	}
 	req.Header.Set("Authorization", "Bearer "+g.token)
 	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", userAgent)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

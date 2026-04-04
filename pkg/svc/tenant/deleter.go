@@ -17,8 +17,6 @@ type DeleteOptions struct {
 	Name string
 	// OutputDir is the directory containing tenant subdirectories.
 	OutputDir string
-	// Force allows deletion without extra checks.
-	Force bool
 	// Unregister removes the tenant from kustomization.yaml resources.
 	Unregister bool
 	// KustomizationPath is the explicit path to kustomization.yaml.

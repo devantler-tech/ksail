@@ -3,9 +3,11 @@ package tenant
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
@@ -46,6 +48,7 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 	cmd.Flags().Bool("register", false, "Register tenant in kustomization.yaml")
 	cmd.Flags().String("kustomization-path", "", "Path to kustomization.yaml (fallback: auto-discover)")
 	cmd.Flags().String("delivery", "commit", "How to deliver platform changes: commit or pr")
+	_ = cmd.Flags().MarkHidden("delivery") // PR delivery not yet implemented
 
 	cmd.RunE = handleCreateRunE
 
@@ -94,7 +97,12 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	} else {
-		cfgManager := ksailconfigmanager.NewConfigManager(cmd.OutOrStdout(), "")
+		var configFile string
+		cfgPath, err := flags.GetConfigPath(cmd)
+		if err == nil {
+			configFile = cfgPath
+		}
+		cfgManager := ksailconfigmanager.NewConfigManager(cmd.OutOrStdout(), configFile)
 		cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
 		if err != nil {
 			return fmt.Errorf("loading config: %w", err)
@@ -112,8 +120,16 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Resolve sync source.
-	opts.SyncSource = tenant.SyncSource(syncSourceStr)
+	// Validate sync source.
+	syncSourceLower := strings.ToLower(syncSourceStr)
+	switch syncSourceLower {
+	case "oci":
+		opts.SyncSource = tenant.SyncSourceOCI
+	case "git":
+		opts.SyncSource = tenant.SyncSourceGit
+	default:
+		return fmt.Errorf("invalid --sync-source %q: must be 'oci' or 'git'", syncSourceStr)
+	}
 
 	// Canonicalize output path.
 	outputDir, err := fsutil.EvalCanonicalPath(outputStr)
@@ -137,7 +153,10 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 	// Scaffold and push tenant repo if git provider, repo, and a valid token are available.
 	if opts.GitProvider != "" && opts.GitRepo != "" {
 		token := gitprovider.ResolveToken(opts.GitProvider, opts.GitToken)
-		if token != "" {
+		if token == "" {
+			notify.Warningf(cmd.OutOrStdout(), "Skipping repo scaffolding: no API token found (set --git-token or %s environment variable)",
+				strings.ToUpper(opts.GitProvider)+"_TOKEN")
+		} else {
 			provider, err := gitprovider.New(opts.GitProvider, token)
 			if err != nil {
 				return fmt.Errorf("creating git provider: %w", err)
