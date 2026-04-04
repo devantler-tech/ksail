@@ -12,7 +12,7 @@ import (
 // fatalMu serializes all BehaviorOnFatal overrides. kubectl's fatal handler
 // is a package-level global, so concurrent overrides would race. Every call
 // site that touches BehaviorOnFatal must hold this lock.
-var fatalMu sync.Mutex //nolint:gochecknoglobals // required: kubectl's BehaviorOnFatal is a process-global
+var fatalMu sync.RWMutex //nolint:gochecknoglobals // required: kubectl's BehaviorOnFatal is a process-global
 
 // kubectlFatalError wraps errors from kubectl's CheckErr/BehaviorOnFatal
 // that would normally cause os.Exit.

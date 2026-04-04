@@ -255,14 +255,10 @@ func (c *Client) findResourceCommand(createCmd *cobra.Command, resourceType stri
 	return nil
 }
 
-// createCommandSafely wraps CreateCreateCommand with fatalMu to prevent
-// data races. kubectl's NewCmdCreate calls CheckErr which reads the global
-// fatalErrHandler without synchronization. Using defer ensures the mutex
-// is released even if CreateCreateCommand panics.
+// createCommandSafely wraps CreateCreateCommand. The RLock inside
+// CreateCreateCommand prevents data races with withSafeFatal's writes
+// to kubectl's global fatalErrHandler.
 func (c *Client) createCommandSafely(kubeconfig string) *cobra.Command {
-	fatalMu.Lock()
-	defer fatalMu.Unlock()
-
 	return c.CreateCreateCommand(kubeconfig)
 }
 
