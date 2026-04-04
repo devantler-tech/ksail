@@ -223,7 +223,8 @@ func ensureLocalRegistriesReady(
 	provider := ctx.ClusterCfg.Spec.Cluster.Provider
 
 	// Cloud providers cannot use a Docker-based local registry — reject early with a clear error.
-	if err := validateRegistryForProvider(ctx); err != nil {
+	err := validateRegistryForProvider(ctx)
+	if err != nil {
 		return err
 	}
 
@@ -243,7 +244,7 @@ func ensureLocalRegistriesReady(
 
 	// Stage 2: Verify registry access (for external registries with auth).
 	// Always runs — cloud providers use GHCR for OCI artifacts and need credential validation.
-	err := localregistry.VerifyRegistryAccess(cmd, ctx.ClusterCfg, deps)
+	err = localregistry.VerifyRegistryAccess(cmd, ctx.ClusterCfg, deps)
 	if err != nil {
 		return fmt.Errorf("failed to verify registry access: %w", err)
 	}
