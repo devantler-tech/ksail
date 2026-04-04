@@ -162,7 +162,9 @@ func TestGitHubProvider_CreateRepo_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusUnprocessableEntity)
 		_, _ = writer.Write(
-			[]byte(`{"message":"Validation Failed","errors":[{"message":"name already exists on this account"}]}`),
+			[]byte(
+				`{"message":"Validation Failed","errors":[{"message":"name already exists on this account"}]}`,
+			),
 		)
 	}))
 	defer srv.Close()
