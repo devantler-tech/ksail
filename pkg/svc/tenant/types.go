@@ -42,6 +42,10 @@ func (t *Type) Set(value string) error {
 
 // String returns the string representation of the Type.
 func (t *Type) String() string {
+	if t == nil {
+		return ""
+	}
+
 	return string(*t)
 }
 

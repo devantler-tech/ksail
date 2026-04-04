@@ -161,7 +161,9 @@ func TestGitHubProvider_CreateRepo_Error(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusUnprocessableEntity)
-		_, _ = writer.Write([]byte(`{"message":"Validation Failed"}`))
+		_, _ = writer.Write(
+			[]byte(`{"message":"Validation Failed","errors":[{"message":"name already exists on this account"}]}`),
+		)
 	}))
 	defer srv.Close()
 
@@ -174,6 +176,27 @@ func TestGitHubProvider_CreateRepo_Error(t *testing.T) {
 	)
 	require.Error(t, err)
 	require.ErrorIs(t, err, gitprovider.ErrRepoAlreadyExists)
+}
+
+func TestGitHubProvider_CreateRepo_422_Other(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = writer.Write([]byte(`{"message":"Validation Failed"}`))
+	}))
+	defer srv.Close()
+
+	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
+	err := provider.CreateRepo(
+		context.Background(),
+		"my-org",
+		"my-repo",
+		gitprovider.VisibilityPrivate,
+	)
+	require.Error(t, err)
+	require.ErrorIs(t, err, gitprovider.ErrGitHubAPI)
+	require.NotErrorIs(t, err, gitprovider.ErrRepoAlreadyExists)
 }
 
 func TestGitHubProvider_DeleteRepo(t *testing.T) {

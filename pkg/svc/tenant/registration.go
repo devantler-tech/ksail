@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/yaml"
 )
 
@@ -30,6 +31,13 @@ func modifyKustomizationResources(
 	tenantName, outputDir, kustomizationPath string,
 	transform func(resources []string, relPath string) []string,
 ) error {
+	if errs := validation.IsDNS1123Label(tenantName); len(errs) > 0 {
+		return fmt.Errorf(
+			"%w: %s (%s)",
+			ErrInvalidTenantName, tenantName, strings.Join(errs, "; "),
+		)
+	}
+
 	kPath, err := resolveKustomizationPath(outputDir, kustomizationPath)
 	if err != nil {
 		return err

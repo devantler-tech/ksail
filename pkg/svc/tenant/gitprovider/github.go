@@ -174,7 +174,17 @@ func (g *gitHubProvider) handleCreateResponse(
 	resp *http.Response, owner, name string,
 ) error {
 	if resp.StatusCode == http.StatusUnprocessableEntity {
-		return fmt.Errorf("%w: %s/%s", ErrRepoAlreadyExists, owner, name)
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+
+		if strings.Contains(bodyStr, "name already exists") {
+			return fmt.Errorf("%w: %s/%s", ErrRepoAlreadyExists, owner, name)
+		}
+
+		return fmt.Errorf(
+			"%w during create repository (HTTP %d): %s",
+			ErrGitHubAPI, resp.StatusCode, bodyStr,
+		)
 	}
 
 	if resp.StatusCode >= http.StatusMultipleChoices {
