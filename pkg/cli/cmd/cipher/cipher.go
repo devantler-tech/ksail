@@ -1,19 +1,10 @@
 package cipher
 
 import (
-	"bufio"
-	"bytes"
-	"crypto/sha256"
-	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
-	"time"
 
-	"filippo.io/age"
+	sopsclient "github.com/devantler-tech/ksail/v5/pkg/client/sops"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
@@ -21,13 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
-	"github.com/getsops/sops/v3/cmd/sops/codes"
-	"github.com/getsops/sops/v3/cmd/sops/common"
 	"github.com/getsops/sops/v3/keyservice"
-	"github.com/getsops/sops/v3/stores/json"
-	"github.com/getsops/sops/v3/stores/yaml"
-	"github.com/getsops/sops/v3/version"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -63,124 +48,6 @@ SOPS supports multiple key management systems:
 	cmd.AddCommand(NewImportCmd())
 
 	return cmd
-}
-
-const notBinaryHint = "This is likely not an encrypted binary file."
-
-var errDumpingTree = errors.New("error dumping file")
-
-// decryptOpts contains all options needed for the decryption operation.
-type decryptOpts struct {
-	Cipher          sops.Cipher
-	InputStore      sops.Store
-	OutputStore     sops.Store
-	InputPath       string
-	ReadFromStdin   bool
-	IgnoreMAC       bool
-	Extract         []any
-	KeyServices     []keyservice.KeyServiceClient
-	DecryptionOrder []string
-}
-
-// decryptTree loads and decrypts a SOPS tree from the input file.
-// It handles loading the encrypted file and decrypting its contents.
-func decryptTree(opts decryptOpts) (*sops.Tree, error) {
-	tree, _, err := decryptTreeWithKey(opts)
-
-	return tree, err
-}
-
-// decryptTreeWithKey loads and decrypts a SOPS tree, returning both tree and data key.
-// This is useful when the caller needs the data key for re-encryption.
-func decryptTreeWithKey(opts decryptOpts) (*sops.Tree, []byte, error) {
-	tree, err := common.LoadEncryptedFileWithBugFixes(common.GenericDecryptOpts{
-		Cipher:        opts.Cipher,
-		InputStore:    opts.InputStore,
-		InputPath:     opts.InputPath,
-		ReadFromStdin: opts.ReadFromStdin,
-		IgnoreMAC:     opts.IgnoreMAC,
-		KeyServices:   opts.KeyServices,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load encrypted file: %w", err)
-	}
-
-	dataKey, err := common.DecryptTree(common.DecryptTreeOpts{
-		Cipher:          opts.Cipher,
-		IgnoreMac:       opts.IgnoreMAC,
-		Tree:            tree,
-		KeyServices:     opts.KeyServices,
-		DecryptionOrder: opts.DecryptionOrder,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to decrypt tree: %w", err)
-	}
-
-	return tree, dataKey, nil
-}
-
-// decrypt performs the core decryption logic for a file.
-// It loads the encrypted file, decrypts it, and handles extraction if specified.
-func decrypt(opts decryptOpts) ([]byte, error) {
-	tree, err := decryptTree(opts)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(opts.Extract) > 0 {
-		return extract(tree, opts.Extract, opts.OutputStore)
-	}
-
-	decryptedFile, err := opts.OutputStore.EmitPlainFile(tree.Branches)
-
-	return handleEmitError(err, decryptedFile)
-}
-
-// handleEmitError processes errors from EmitPlainFile operations.
-func handleEmitError(err error, data []byte) ([]byte, error) {
-	if errors.Is(err, json.BinaryStoreEmitPlainError) {
-		return nil, fmt.Errorf("%w: %s", err, notBinaryHint)
-	}
-
-	if err != nil {
-		return nil, common.NewExitError(
-			fmt.Sprintf("%s: %s", errDumpingTree.Error(), err),
-			codes.ErrorDumpingTree,
-		)
-	}
-
-	return data, nil
-}
-
-// extract retrieves a specific value or subtree from the decrypted tree.
-// It supports extracting nested keys using a path array.
-func extract(tree *sops.Tree, path []any, outputStore sops.Store) ([]byte, error) {
-	value, err := tree.Branches[0].Truncate(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to truncate tree: %w", err)
-	}
-
-	if newBranch, ok := value.(sops.TreeBranch); ok {
-		tree.Branches[0] = newBranch
-
-		decrypted, err := outputStore.EmitPlainFile(tree.Branches)
-
-		return handleEmitError(err, decrypted)
-	}
-
-	if str, ok := value.(string); ok {
-		return []byte(str), nil
-	}
-
-	bytes, err := outputStore.EmitValue(value)
-	if err != nil {
-		return nil, common.NewExitError(
-			fmt.Sprintf("error dumping tree: %s", err),
-			codes.ErrorDumpingTree,
-		)
-	}
-
-	return bytes, nil
 }
 
 // NewDecryptCmd creates and returns the decrypt command.
@@ -237,12 +104,7 @@ Example:
 	return cmd
 }
 
-const decryptedFilePermissions = 0o600
-
 // handleDecryptRunE is the main handler for the decrypt command.
-// It orchestrates the decryption workflow: determining file stores,
-// setting up decryption options, decrypting the file, and writing
-// the decrypted content to stdout or a file.
 func handleDecryptRunE(
 	cmd *cobra.Command,
 	args []string,
@@ -257,9 +119,6 @@ func handleDecryptRunE(
 	if !readFromStdin {
 		inputPath = args[0]
 
-		// Canonicalize user-supplied input path (resolve symlinks + absolute)
-		// so that the actual file being decrypted is predictable and
-		// symlink-escape attacks are prevented in CI pipelines.
 		canonPath, err := fsutil.EvalCanonicalPath(inputPath)
 		if err != nil {
 			return fmt.Errorf("resolve input path %q: %w", inputPath, err)
@@ -268,20 +127,20 @@ func handleDecryptRunE(
 		inputPath = canonPath
 	}
 
-	inputStore, outputStore, err := getDecryptStores(inputPath, readFromStdin)
+	inputStore, outputStore, err := sopsclient.GetDecryptStores(inputPath, readFromStdin)
 	if err != nil {
 		return err
 	}
 
 	var extractPath []any
 	if extract != "" {
-		extractPath, err = parseExtractPath(extract)
+		extractPath, err = sopsclient.ParseExtractPath(extract)
 		if err != nil {
 			return fmt.Errorf("failed to parse extract path: %w", err)
 		}
 	}
 
-	opts := decryptOpts{
+	opts := sopsclient.DecryptOpts{
 		Cipher:          aes.NewCipher(),
 		InputStore:      inputStore,
 		OutputStore:     outputStore,
@@ -293,7 +152,7 @@ func handleDecryptRunE(
 		DecryptionOrder: []string{},
 	}
 
-	decryptedData, err := decrypt(opts)
+	decryptedData, err := sopsclient.Decrypt(opts)
 	if err != nil {
 		return fmt.Errorf("decryption failed: %w", err)
 	}
@@ -304,14 +163,12 @@ func handleDecryptRunE(
 // writeDecryptedOutput writes decrypted data to either a file or stdout.
 func writeDecryptedOutput(cmd *cobra.Command, data []byte, outputPath string) error {
 	if outputPath != "" {
-		// Canonicalize user-supplied output path (resolve symlinks + absolute)
-		// so that the actual write destination is predictable.
 		canonOutput, err := fsutil.EvalCanonicalPath(outputPath)
 		if err != nil {
 			return fmt.Errorf("resolve output path %q: %w", outputPath, err)
 		}
 
-		err = os.WriteFile(canonOutput, data, decryptedFilePermissions)
+		err = os.WriteFile(canonOutput, data, sopsclient.DecryptedFilePermissions)
 		if err != nil {
 			return fmt.Errorf("failed to write decrypted file: %w", err)
 		}
@@ -334,525 +191,13 @@ func writeDecryptedOutput(cmd *cobra.Command, data []byte, outputPath string) er
 	return nil
 }
 
-// getDecryptStores returns the appropriate SOPS stores for decryption.
-// When reading from stdin, it defaults to YAML format.
-// For JSON format from stdin, users can pipe to a file first.
-func getDecryptStores(inputPath string, readFromStdin bool) (sops.Store, sops.Store, error) {
-	if readFromStdin {
-		// Default to YAML for stdin - most common format
-		return getStores("stdin.yaml")
-	}
-
-	return getStores(inputPath)
-}
-
-var errInvalidExtractPath = errors.New("invalid extract path format")
-
-// parseExtractPath converts a JSONPath-like extract string into a path array.
-// Example: '["data"]["password"]' -> []any{"data", "password"}.
-func parseExtractPath(extract string) ([]any, error) {
-	// Remove outer quotes if present
-	extract = strings.Trim(extract, "'\"")
-
-	// Parse the JSONPath format: ["key1"]["key2"]
-	var path []any
-
-	parts := strings.SplitSeq(extract, "][")
-
-	for part := range parts {
-		// Clean up the part
-		part = strings.TrimPrefix(part, "[")
-		part = strings.TrimSuffix(part, "]")
-		part = strings.Trim(part, "\"'")
-
-		if part != "" {
-			path = append(path, part)
-		}
-	}
-
-	if len(path) == 0 {
-		return nil, errInvalidExtractPath
-	}
-
-	return path, nil
-}
-
-// storeWithExample is an interface for stores that can emit example files.
-type storeWithExample interface {
-	sops.Store
-	EmitExample() []byte
-}
-
-// editOpts contains all options needed for the edit operation.
-type editOpts struct {
-	Cipher          sops.Cipher
-	InputStore      sops.Store
-	OutputStore     sops.Store
-	InputPath       string
-	IgnoreMAC       bool
-	KeyServices     []keyservice.KeyServiceClient
-	DecryptionOrder []string
-	ShowMasterKeys  bool
-}
-
-// editExampleOpts combines editOpts with encryption configuration
-// for creating and editing example files.
-type editExampleOpts struct {
-	editOpts
-
-	encryptConfig
-
-	InputStoreWithExample storeWithExample
-}
-
-// runEditorUntilOkOpts contains options for the editor loop.
-type runEditorUntilOkOpts struct {
-	TmpFileName    string
-	OriginalHash   []byte
-	InputStore     sops.Store
-	ShowMasterKeys bool
-	Tree           *sops.Tree
-	Logger         *logrus.Logger
-}
-
-const tmpFilePermissions = os.FileMode(0o600)
-
-var (
-	errInvalidEditor            = errors.New("invalid editor configuration")
-	errNoEditorAvailable        = errors.New("no editor available")
-	errStoreNoExampleGeneration = errors.New("store does not support example file generation")
-)
-
-// editExample creates and edits an example file when the target file doesn't exist.
-func editExample(opts editExampleOpts) ([]byte, error) {
-	fileBytes := opts.InputStoreWithExample.EmitExample()
-
-	branches, err := opts.InputStoreWithExample.LoadPlainFile(fileBytes)
-	if err != nil {
-		return nil, common.NewExitError(
-			fmt.Sprintf("Error unmarshalling file: %s", err),
-			codes.CouldNotReadInputFile,
-		)
-	}
-
-	tree, err := createSOPSTree(branches, opts.encryptConfig, opts.InputPath)
-	if err != nil {
-		return nil, err
-	}
-
-	// Generate a data key
-	dataKey, errs := tree.GenerateDataKeyWithKeyServices(opts.KeyServices)
-	if len(errs) > 0 {
-		return nil, common.NewExitError(
-			fmt.Sprintf("Error encrypting the data key with one or more master keys: %s", errs),
-			codes.CouldNotRetrieveKey,
-		)
-	}
-
-	return editTree(opts.editOpts, tree, dataKey)
-}
-
-// edit loads, decrypts, and allows editing of an existing encrypted file.
-func edit(opts editOpts) ([]byte, error) {
-	// Convert editOpts to decryptOpts for decryption
-	decOpts := decryptOpts{
-		Cipher:          opts.Cipher,
-		InputStore:      opts.InputStore,
-		OutputStore:     opts.OutputStore,
-		InputPath:       opts.InputPath,
-		ReadFromStdin:   false,
-		IgnoreMAC:       opts.IgnoreMAC,
-		KeyServices:     opts.KeyServices,
-		DecryptionOrder: opts.DecryptionOrder,
-	}
-
-	tree, dataKey, err := decryptTreeWithKey(decOpts)
-	if err != nil {
-		return nil, err
-	}
-
-	return editTree(opts, tree, dataKey)
-}
-
-// editTree handles the core edit workflow: write to temp file, launch editor, re-encrypt.
-func editTree(opts editOpts, tree *sops.Tree, dataKey []byte) ([]byte, error) {
-	tmpfileName, cleanupFn, err := createTempFileWithContent(opts, tree)
-	if err != nil {
-		return nil, err
-	}
-	defer cleanupFn()
-
-	origHash, err := hashFile(tmpfileName)
-	if err != nil {
-		return nil, common.NewExitError(
-			fmt.Sprintf("Could not hash file: %s", err),
-			codes.CouldNotReadInputFile,
-		)
-	}
-
-	logger := logrus.New()
-
-	err = runEditorUntilOk(runEditorUntilOkOpts{
-		InputStore:     opts.InputStore,
-		OriginalHash:   origHash,
-		TmpFileName:    tmpfileName,
-		ShowMasterKeys: opts.ShowMasterKeys,
-		Tree:           tree,
-		Logger:         logger,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return encryptAndEmit(opts, tree, dataKey)
-}
-
-// createTempFileWithContent creates a temporary file with the tree content.
-func createTempFileWithContent(opts editOpts, tree *sops.Tree) (string, func(), error) {
-	tmpdir, cleanup, err := createTempDir()
-	if err != nil {
-		return "", nil, err
-	}
-
-	tmpfileName, err := writeTempFile(tmpdir, opts, tree, cleanup)
-	if err != nil {
-		return "", nil, err
-	}
-
-	return tmpfileName, cleanup, nil
-}
-
-// createTempDir creates a temporary directory for editing.
-func createTempDir() (string, func(), error) {
-	tmpdir, err := os.MkdirTemp("", "")
-	if err != nil {
-		return "", nil, common.NewExitError(
-			fmt.Sprintf("Could not create temporary directory: %s", err),
-			codes.CouldNotWriteOutputFile,
-		)
-	}
-
-	cleanup := func() {
-		_ = os.RemoveAll(tmpdir)
-	}
-
-	return tmpdir, cleanup, nil
-}
-
-// writeTempFile writes the tree content to a temporary file.
-func writeTempFile(tmpdir string, opts editOpts, tree *sops.Tree, cleanup func()) (string, error) {
-	tmpfile, err := os.Create(filepath.Join(tmpdir, filepath.Base(opts.InputPath))) // #nosec G304
-	if err != nil {
-		cleanup()
-
-		return "", common.NewExitError(
-			fmt.Sprintf("Could not create temporary file: %s", err),
-			codes.CouldNotWriteOutputFile,
-		)
-	}
-
-	defer func() {
-		_ = tmpfile.Close()
-	}()
-
-	chmodErr := tmpfile.Chmod(tmpFilePermissions)
-	if chmodErr != nil {
-		cleanup()
-
-		return "", common.NewExitError(
-			fmt.Sprintf(
-				"Could not change permissions of temporary file to read-write for owner only: %s",
-				chmodErr,
-			),
-			codes.CouldNotWriteOutputFile,
-		)
-	}
-
-	out, err := emitTreeContent(opts, tree)
-	if err != nil {
-		cleanup()
-
-		return "", err
-	}
-
-	_, err = tmpfile.Write(out)
-	if err != nil {
-		cleanup()
-
-		return "", common.NewExitError(
-			fmt.Sprintf("Could not write output file: %s", err),
-			codes.CouldNotWriteOutputFile,
-		)
-	}
-
-	return tmpfile.Name(), nil
-}
-
-// emitTreeContent emits the tree content for editing.
-func emitTreeContent(opts editOpts, tree *sops.Tree) ([]byte, error) {
-	var out []byte
-
-	var err error
-
-	if opts.ShowMasterKeys {
-		out, err = opts.OutputStore.EmitEncryptedFile(*tree)
-	} else {
-		out, err = opts.OutputStore.EmitPlainFile(tree.Branches)
-	}
-
-	if err != nil {
-		return nil, common.NewExitError(
-			fmt.Sprintf("Could not marshal tree: %s", err),
-			codes.ErrorDumpingTree,
-		)
-	}
-
-	return out, nil
-}
-
-// encryptAndEmit encrypts the tree and emits the encrypted file.
-func encryptAndEmit(opts editOpts, tree *sops.Tree, dataKey []byte) ([]byte, error) {
-	return encryptTreeAndEmit(tree, dataKey, opts.Cipher, opts.OutputStore)
-}
-
-// runEditorUntilOk runs the editor in a loop until the file is valid or user cancels.
-func runEditorUntilOk(opts runEditorUntilOkOpts) error {
-	for {
-		err := runEditor(opts.TmpFileName)
-		if err != nil {
-			return common.NewExitError(
-				fmt.Sprintf("Could not run editor: %s", err),
-				codes.NoEditorFound,
-			)
-		}
-
-		valid, err := validateEditedFile(opts)
-		if err != nil {
-			return err
-		}
-
-		if valid {
-			break
-		}
-	}
-
-	return nil
-}
-
-// validateEditedFile validates the edited file and updates the tree.
-func validateEditedFile(opts runEditorUntilOkOpts) (bool, error) {
-	newHash, err := hashFile(opts.TmpFileName)
-	if err != nil {
-		return false, common.NewExitError(
-			fmt.Sprintf("Could not hash file: %s", err),
-			codes.CouldNotReadInputFile,
-		)
-	}
-
-	if bytes.Equal(newHash, opts.OriginalHash) {
-		return false, common.NewExitError(
-			"File has not changed, exiting.",
-			codes.FileHasNotBeenModified,
-		)
-	}
-
-	edited, err := os.ReadFile(opts.TmpFileName)
-	if err != nil {
-		return false, common.NewExitError(
-			fmt.Sprintf("Could not read edited file: %s", err),
-			codes.CouldNotReadInputFile,
-		)
-	}
-
-	return processEditedContent(opts, edited)
-}
-
-// processEditedContent processes the edited content and updates the tree.
-//
-//nolint:nilerr // Returns (false, nil) intentionally to continue editor loop on validation errors
-func processEditedContent(opts runEditorUntilOkOpts, edited []byte) (bool, error) {
-	newBranches, err := opts.InputStore.LoadPlainFile(edited)
-	if err != nil {
-		opts.Logger.WithField("error", err).Errorf(
-			"Could not load tree, probably due to invalid syntax. " +
-				"Press a key to return to the editor, or Ctrl+C to exit.",
-		)
-
-		_, _ = bufio.NewReader(os.Stdin).ReadByte()
-
-		return false, nil
-	}
-
-	if opts.ShowMasterKeys {
-		err := handleMasterKeysMode(opts, edited)
-		if err != nil {
-			return false, nil
-		}
-	}
-
-	opts.Tree.Branches = newBranches
-
-	return validateTreeMetadata(opts)
-}
-
-// handleMasterKeysMode handles the show master keys mode validation.
-func handleMasterKeysMode(opts runEditorUntilOkOpts, edited []byte) error {
-	loadedTree, err := opts.InputStore.LoadEncryptedFile(edited)
-	if err != nil {
-		opts.Logger.WithField("error", err).Errorf(
-			"SOPS metadata is invalid. Press a key to return to the editor, or Ctrl+C to exit.",
-		)
-
-		_, _ = bufio.NewReader(os.Stdin).ReadByte()
-
-		return fmt.Errorf("failed to load encrypted file: %w", err)
-	}
-
-	*opts.Tree = loadedTree
-
-	return nil
-}
-
-// validateTreeMetadata validates the tree metadata and updates version if needed.
-func validateTreeMetadata(opts runEditorUntilOkOpts) (bool, error) {
-	needVersionUpdated, err := version.AIsNewerThanB(version.Version, opts.Tree.Metadata.Version)
-	if err != nil {
-		return false, common.NewExitError(
-			fmt.Sprintf("Failed to compare document version %q with program version %q: %v",
-				opts.Tree.Metadata.Version, version.Version, err),
-			codes.FailedToCompareVersions,
-		)
-	}
-
-	if needVersionUpdated {
-		opts.Tree.Metadata.Version = version.Version
-	}
-
-	if opts.Tree.Metadata.MasterKeyCount() == 0 {
-		opts.Logger.Error(
-			"No master keys were provided, so sops can't encrypt the file. " +
-				"Press a key to return to the editor, or Ctrl+C to exit.",
-		)
-
-		_, _ = bufio.NewReader(os.Stdin).ReadByte()
-
-		return false, nil
-	}
-
-	return true, nil
-}
-
-// hashFile computes the SHA256 hash of a file.
-func hashFile(filePath string) ([]byte, error) {
-	var result []byte
-
-	file, err := os.Open(filePath) // #nosec G304
-	if err != nil {
-		return result, fmt.Errorf("failed to open file: %w", err)
-	}
-
-	defer func() {
-		_ = file.Close()
-	}()
-
-	hash := sha256.New()
-
-	_, copyErr := io.Copy(hash, file)
-	if copyErr != nil {
-		return result, fmt.Errorf("failed to hash file: %w", copyErr)
-	}
-
-	return hash.Sum(result), nil
-}
-
-// runEditor launches the editor specified by SOPS_EDITOR or EDITOR environment variables.
-// Falls back to vim, nano, or vi if no editor is configured.
-func runEditor(path string) error {
-	cmd, err := createEditorCommand(path)
-	if err != nil {
-		return err
-	}
-
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	runErr := cmd.Run()
-	if runErr != nil {
-		return fmt.Errorf("editor execution failed: %w", runErr)
-	}
-
-	return nil
-}
-
-// createEditorCommand creates the exec.Cmd for the editor.
-func createEditorCommand(path string) (*exec.Cmd, error) {
-	envVar := "SOPS_EDITOR"
-	editor := os.Getenv(envVar)
-
-	if editor == "" {
-		envVar = "EDITOR"
-		editor = os.Getenv(envVar)
-	}
-
-	if editor == "" {
-		editorPath, err := lookupAnyEditor("vim", "nano", "vi")
-		if err != nil {
-			return nil, err
-		}
-
-		//nolint:noctx // Interactive editor session doesn't benefit from context
-		return exec.Command(editorPath, path), nil // #nosec G204
-	}
-
-	parts, err := parseEditorCommand(editor, envVar)
-	if err != nil {
-		return nil, err
-	}
-
-	parts = append(parts, path)
-
-	//nolint:noctx,gosec // G204: editor command comes from user-configured environment; required for interactive editing
-	return exec.Command(
-		parts[0],
-		parts[1:]...), nil
-}
-
-// parseEditorCommand parses the editor command string.
-func parseEditorCommand(editor, envVar string) ([]string, error) {
-	parts := strings.Fields(editor)
-	if len(parts) == 0 {
-		return nil, fmt.Errorf("%w: $%s is empty", errInvalidEditor, envVar)
-	}
-
-	return parts, nil
-}
-
-// lookupAnyEditor searches for any of the specified editors in PATH.
-func lookupAnyEditor(editorNames ...string) (string, error) {
-	for _, editorName := range editorNames {
-		editorPath, err := exec.LookPath(editorName)
-		if err == nil {
-			return editorPath, nil
-		}
-	}
-
-	return "", fmt.Errorf(
-		"%w: sops attempts to use the editor defined in the SOPS_EDITOR "+
-			"or EDITOR environment variables, and if that's not set defaults to any of %s, "+
-			"but none of them could be found",
-		errNoEditorAvailable,
-		strings.Join(editorNames, ", "),
-	)
-}
-
 // NewEditCmd creates and returns the edit command.
 func NewEditCmd() *cobra.Command {
 	var ignoreMac bool
 
 	var showMasterKeys bool
 
-	var editor string
+	var editorStr string
 
 	cmd := &cobra.Command{
 		Use:          "edit <file>",
@@ -861,17 +206,76 @@ func NewEditCmd() *cobra.Command {
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return handleEditRunE(cmd, args, ignoreMac, showMasterKeys, editor)
+			return handleEditRunE(cmd, args, ignoreMac, showMasterKeys, editorStr)
 		},
 	}
 
-	configureEditFlags(cmd, &ignoreMac, &showMasterKeys, &editor)
+	configureEditFlags(cmd, &ignoreMac, &showMasterKeys, &editorStr)
 
 	cmd.Annotations = map[string]string{
 		annotations.AnnotationPermission: "write",
 	}
 
 	return cmd
+}
+
+// handleEditRunE is the main handler for the edit command.
+func handleEditRunE(
+	cmd *cobra.Command,
+	args []string,
+	ignoreMac, showMasterKeys bool,
+	editorFlag string,
+) error {
+	inputPath, inputStore, outputStore, err := sopsclient.CanonicalizeAndGetStores(args[0])
+	if err != nil {
+		return err
+	}
+
+	opts := sopsclient.EditOpts{
+		Cipher:          aes.NewCipher(),
+		InputStore:      inputStore,
+		OutputStore:     outputStore,
+		InputPath:       inputPath,
+		IgnoreMAC:       ignoreMac,
+		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+		DecryptionOrder: []string{},
+		ShowMasterKeys:  showMasterKeys,
+	}
+
+	// Set up editor environment variables before edit
+	cleanup := editor.SetupEditorEnv(cmd, editorFlag, "cipher")
+	defer cleanup()
+
+	var output []byte
+
+	// Check if file exists
+	_, err = os.Stat(inputPath)
+	fileExists := !os.IsNotExist(err)
+
+	if fileExists {
+		output, err = sopsclient.Edit(opts)
+	} else {
+		output, err = sopsclient.EditNewFile(opts, inputStore)
+	}
+
+	if err != nil {
+		return fmt.Errorf("edit failed: %w", err)
+	}
+
+	// Write the encrypted file
+	err = os.WriteFile(inputPath, output, sopsclient.EncryptedFilePermissions)
+	if err != nil {
+		return fmt.Errorf("failed to write encrypted file: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "edited %s",
+		Args:    []any{inputPath},
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
 }
 
 // editCommandLongDescription returns the long description for the edit command.
@@ -902,7 +306,7 @@ Example:
 }
 
 // configureEditFlags configures flags for the edit command.
-func configureEditFlags(cmd *cobra.Command, ignoreMac, showMasterKeys *bool, editor *string) {
+func configureEditFlags(cmd *cobra.Command, ignoreMac, showMasterKeys *bool, editorStr *string) {
 	cmd.Flags().BoolVar(
 		ignoreMac,
 		"ignore-mac",
@@ -916,275 +320,11 @@ func configureEditFlags(cmd *cobra.Command, ignoreMac, showMasterKeys *bool, edi
 		"show master keys in the editor",
 	)
 	cmd.Flags().StringVar(
-		editor,
+		editorStr,
 		"editor",
 		"",
 		"editor command to use (e.g., 'code --wait', 'vim', 'nano')",
 	)
-}
-
-// editNewFile handles editing a new file that doesn't exist yet.
-func editNewFile(opts editOpts, inputStore sops.Store) ([]byte, error) {
-	storeWithEx, ok := inputStore.(storeWithExample)
-	if !ok {
-		return nil, fmt.Errorf("%w", errStoreNoExampleGeneration)
-	}
-
-	encConfig := encryptConfig{
-		KeyGroups:      []sops.KeyGroup{},
-		GroupThreshold: 0,
-	}
-
-	return editExample(editExampleOpts{
-		editOpts:              opts,
-		encryptConfig:         encConfig,
-		InputStoreWithExample: storeWithEx,
-	})
-}
-
-// handleEditRunE is the main handler for the edit command.
-func handleEditRunE(
-	cmd *cobra.Command,
-	args []string,
-	ignoreMac, showMasterKeys bool,
-	editorFlag string,
-) error {
-	inputPath, inputStore, outputStore, err := canonicalizeAndGetStores(args[0])
-	if err != nil {
-		return err
-	}
-
-	opts := editOpts{
-		Cipher:          aes.NewCipher(),
-		InputStore:      inputStore,
-		OutputStore:     outputStore,
-		InputPath:       inputPath,
-		IgnoreMAC:       ignoreMac,
-		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-		DecryptionOrder: []string{},
-		ShowMasterKeys:  showMasterKeys,
-	}
-
-	// Set up editor environment variables before edit
-	cleanup := editor.SetupEditorEnv(cmd, editorFlag, "cipher")
-	defer cleanup()
-
-	var output []byte
-
-	// Check if file exists
-	_, err = os.Stat(inputPath)
-	fileExists := !os.IsNotExist(err)
-
-	if fileExists {
-		output, err = edit(opts)
-	} else {
-		output, err = editNewFile(opts, inputStore)
-	}
-
-	if err != nil {
-		return fmt.Errorf("edit failed: %w", err)
-	}
-
-	// Write the encrypted file
-	err = os.WriteFile(inputPath, output, encryptedFilePermissions)
-	if err != nil {
-		return fmt.Errorf("failed to write encrypted file: %w", err)
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "edited %s",
-		Args:    []any{inputPath},
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	return nil
-}
-
-// encryptConfig holds configuration options for SOPS encryption.
-// It defines patterns for which values should be encrypted/unencrypted,
-// key groups for encryption, and Shamir secret sharing threshold.
-type encryptConfig struct {
-	UnencryptedSuffix       string
-	EncryptedSuffix         string
-	UnencryptedRegex        string
-	EncryptedRegex          string
-	UnencryptedCommentRegex string
-	EncryptedCommentRegex   string
-	MACOnlyEncrypted        bool
-	KeyGroups               []sops.KeyGroup
-	GroupThreshold          int
-}
-
-// encryptOpts contains all options needed for the encryption operation.
-// It combines encryption configuration with runtime parameters like cipher,
-// stores, and key services.
-type encryptOpts struct {
-	encryptConfig
-
-	Cipher        sops.Cipher
-	InputStore    sops.Store
-	OutputStore   sops.Store
-	InputPath     string
-	ReadFromStdin bool
-	KeyServices   []keyservice.KeyServiceClient
-}
-
-// fileAlreadyEncryptedError indicates that a file already contains SOPS metadata
-// and cannot be re-encrypted without first decrypting it.
-type fileAlreadyEncryptedError struct{}
-
-func (err *fileAlreadyEncryptedError) Error() string {
-	return "file already encrypted"
-}
-
-// ensureNoMetadata checks whether a file already contains SOPS metadata.
-// This prevents re-encryption of already encrypted files, which would corrupt them.
-func ensureNoMetadata(opts encryptOpts, branch sops.TreeBranch) error {
-	if opts.OutputStore.HasSopsTopLevelKey(branch) {
-		return &fileAlreadyEncryptedError{}
-	}
-
-	return nil
-}
-
-// metadataFromEncryptionConfig creates SOPS metadata from the encryption configuration.
-// It converts the encryptConfig fields into a sops.Metadata structure that will be
-// stored in the encrypted file.
-func metadataFromEncryptionConfig(config encryptConfig) sops.Metadata {
-	return sops.Metadata{
-		KeyGroups:               config.KeyGroups,
-		UnencryptedSuffix:       config.UnencryptedSuffix,
-		EncryptedSuffix:         config.EncryptedSuffix,
-		UnencryptedRegex:        config.UnencryptedRegex,
-		EncryptedRegex:          config.EncryptedRegex,
-		UnencryptedCommentRegex: config.UnencryptedCommentRegex,
-		EncryptedCommentRegex:   config.EncryptedCommentRegex,
-		MACOnlyEncrypted:        config.MACOnlyEncrypted,
-		Version:                 version.Version,
-		ShamirThreshold:         config.GroupThreshold,
-	}
-}
-
-// createSOPSTree creates a SOPS tree with the given branches, metadata config, and input path.
-func createSOPSTree(
-	branches sops.TreeBranches,
-	config encryptConfig,
-	inputPath string,
-) (*sops.Tree, error) {
-	path, err := filepath.Abs(inputPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute path: %w", err)
-	}
-
-	tree := &sops.Tree{
-		Branches: branches,
-		Metadata: metadataFromEncryptionConfig(config),
-		FilePath: path,
-	}
-
-	return tree, nil
-}
-
-var errCouldNotGenerateDataKey = errors.New("could not generate data key")
-
-// encryptTreeAndEmit encrypts a tree and emits the encrypted file content.
-// This is a common helper shared by encrypt and edit operations.
-func encryptTreeAndEmit(
-	tree *sops.Tree,
-	dataKey []byte,
-	cipher sops.Cipher,
-	outputStore sops.Store,
-) ([]byte, error) {
-	err := common.EncryptTree(common.EncryptTreeOpts{
-		DataKey: dataKey,
-		Tree:    tree,
-		Cipher:  cipher,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt tree: %w", err)
-	}
-
-	encryptedFile, err := outputStore.EmitEncryptedFile(*tree)
-	if err != nil {
-		return nil, common.NewExitError(
-			fmt.Sprintf("could not marshal tree: %s", err),
-			codes.ErrorDumpingTree,
-		)
-	}
-
-	return encryptedFile, nil
-}
-
-// encrypt performs the core encryption logic for a file.
-// It loads the file, validates that it's not already encrypted, generates
-// encryption keys using the configured key services, encrypts the data,
-// and returns the encrypted file content.
-func encrypt(opts encryptOpts) ([]byte, error) {
-	fileBytes, err := loadFile(opts)
-	if err != nil {
-		return nil, err
-	}
-
-	branches, err := opts.InputStore.LoadPlainFile(fileBytes)
-	if err != nil {
-		return nil, common.NewExitError(
-			fmt.Sprintf("error unmarshalling file: %s", err),
-			codes.CouldNotReadInputFile,
-		)
-	}
-
-	if len(branches) < 1 {
-		return nil, common.NewExitError(
-			"file cannot be completely empty, it must contain at least one document",
-			codes.NeedAtLeastOneDocument,
-		)
-	}
-
-	err = ensureNoMetadata(opts, branches[0])
-	if err != nil {
-		return nil, common.NewExitError(err, codes.FileAlreadyEncrypted)
-	}
-
-	tree, err := createSOPSTree(branches, opts.encryptConfig, opts.InputPath)
-	if err != nil {
-		return nil, err
-	}
-
-	dataKey, errs := tree.GenerateDataKeyWithKeyServices(opts.KeyServices)
-	if len(errs) > 0 {
-		return nil, fmt.Errorf("%w: %s", errCouldNotGenerateDataKey, errs)
-	}
-
-	return encryptTreeAndEmit(tree, dataKey, opts.Cipher, opts.OutputStore)
-}
-
-// loadFile reads file content either from stdin or from a file path.
-// The source is determined by the ReadFromStdin option.
-func loadFile(opts encryptOpts) ([]byte, error) {
-	var fileBytes []byte
-
-	var err error
-
-	if opts.ReadFromStdin {
-		fileBytes, err = io.ReadAll(os.Stdin)
-		if err != nil {
-			return nil, common.NewExitError(
-				fmt.Sprintf("error reading from stdin: %s", err),
-				codes.CouldNotReadInputFile,
-			)
-		}
-	} else {
-		fileBytes, err = os.ReadFile(opts.InputPath)
-		if err != nil {
-			return nil, common.NewExitError(
-				fmt.Sprintf("error reading file: %s", err),
-				codes.CouldNotReadInputFile,
-			)
-		}
-	}
-
-	return fileBytes, nil
 }
 
 // NewEncryptCmd creates and returns the encrypt command.
@@ -1215,22 +355,15 @@ Example:
 	return cmd
 }
 
-const encryptedFilePermissions = 0o600
-
-var errUnsupportedFileFormat = errors.New("unsupported file format")
-
 // handleEncryptRunE is the main handler for the encrypt command.
-// It orchestrates the encryption workflow: determining file stores,
-// setting up encryption options, encrypting the file, and writing
-// the encrypted content back to disk.
 func handleEncryptRunE(cmd *cobra.Command, args []string) error {
-	inputPath, inputStore, outputStore, err := canonicalizeAndGetStores(args[0])
+	inputPath, inputStore, outputStore, err := sopsclient.CanonicalizeAndGetStores(args[0])
 	if err != nil {
 		return err
 	}
 
-	opts := encryptOpts{
-		encryptConfig: encryptConfig{
+	opts := sopsclient.EncryptOpts{
+		EncryptConfig: sopsclient.EncryptConfig{
 			KeyGroups:      []sops.KeyGroup{},
 			GroupThreshold: 0,
 		},
@@ -1242,12 +375,12 @@ func handleEncryptRunE(cmd *cobra.Command, args []string) error {
 		KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
 	}
 
-	encryptedData, err := encrypt(opts)
+	encryptedData, err := sopsclient.Encrypt(opts)
 	if err != nil {
 		return fmt.Errorf("encryption failed: %w", err)
 	}
 
-	err = os.WriteFile(inputPath, encryptedData, encryptedFilePermissions)
+	err = os.WriteFile(inputPath, encryptedData, sopsclient.EncryptedFilePermissions)
 	if err != nil {
 		return fmt.Errorf("failed to write encrypted file: %w", err)
 	}
@@ -1260,226 +393,6 @@ func handleEncryptRunE(cmd *cobra.Command, args []string) error {
 	})
 
 	return nil
-}
-
-// canonicalizeAndGetStores canonicalizes the input path via EvalCanonicalPath
-// and returns the resolved path along with appropriate SOPS stores.
-// This prevents symlink-escape attacks by ensuring the actual file path is predictable.
-func canonicalizeAndGetStores(inputPath string) (string, sops.Store, sops.Store, error) {
-	canonPath, err := fsutil.EvalCanonicalPath(inputPath)
-	if err != nil {
-		return "", nil, nil, fmt.Errorf("resolve input path %q: %w", inputPath, err)
-	}
-
-	inputStore, outputStore, err := getStores(canonPath)
-	if err != nil {
-		return "", nil, nil, err
-	}
-
-	return canonPath, inputStore, outputStore, nil
-}
-
-// getStores returns the appropriate SOPS stores (input and output) based on file extension.
-// It supports YAML (.yaml, .yml) and JSON (.json) file formats.
-func getStores(inputPath string) (sops.Store, sops.Store, error) {
-	ext := filepath.Ext(inputPath)
-
-	switch ext {
-	case ".yaml", ".yml":
-		return &yaml.Store{}, &yaml.Store{}, nil
-	case ".json":
-		return &json.Store{}, &json.Store{}, nil
-	default:
-		return nil, nil, fmt.Errorf(
-			"%w: %s (supported: .yaml, .yml, .json)",
-			errUnsupportedFileFormat,
-			ext,
-		)
-	}
-}
-
-var (
-	errInvalidAgeKey        = errors.New("invalid age key format")
-	errFailedToCreateDir    = errors.New("failed to create directory")
-	errFailedToWriteKey     = errors.New("failed to write key")
-	errFailedToDetermineAge = errors.New("failed to determine age key path")
-)
-
-const (
-	ageKeyFilePermissions = 0o600
-	ageKeyDirPermissions  = 0o700
-	ageKeyPrefix          = "AGE-SECRET-KEY-"
-	minAgeKeyLength       = 60
-)
-
-// getAgeKeyPath returns the platform-specific path for the age keys file.
-// It follows the SOPS convention:
-//   - First checks SOPS_AGE_KEY_FILE environment variable
-//   - Linux: $XDG_CONFIG_HOME/sops/age/keys.txt or $HOME/.config/sops/age/keys.txt
-//   - macOS: $XDG_CONFIG_HOME/sops/age/keys.txt or $HOME/Library/Application Support/sops/age/keys.txt
-//   - Windows: %AppData%\sops\age\keys.txt
-func getAgeKeyPath() (string, error) {
-	p, err := fsutil.SOPSAgeKeyPath()
-	if err != nil {
-		return "", fmt.Errorf("%w: %w", errFailedToDetermineAge, err)
-	}
-
-	return p, nil
-}
-
-// validateAgeKey performs basic validation on an age private key string.
-// The input must start with "AGE-SECRET-KEY-" and meet minimum length requirements.
-func validateAgeKey(privateKey string) error {
-	privateKey = strings.TrimSpace(privateKey)
-
-	if privateKey == "" {
-		return fmt.Errorf("%w: key is empty", errInvalidAgeKey)
-	}
-
-	if !strings.HasPrefix(privateKey, ageKeyPrefix) {
-		return fmt.Errorf("%w: key must start with %s", errInvalidAgeKey, ageKeyPrefix)
-	}
-
-	if len(privateKey) < minAgeKeyLength {
-		return fmt.Errorf(
-			"%w: key is too short (minimum %d characters)",
-			errInvalidAgeKey,
-			minAgeKeyLength,
-		)
-	}
-
-	return nil
-}
-
-// derivePublicKey derives the public key from an age private key.
-func derivePublicKey(privateKey string) (string, error) {
-	// Parse the private key to get the identity
-	identity, err := age.ParseX25519Identity(strings.TrimSpace(privateKey))
-	if err != nil {
-		return "", fmt.Errorf("failed to parse private key: %w", err)
-	}
-
-	// Get the recipient (public key) from the identity
-	recipient := identity.Recipient()
-
-	return recipient.String(), nil
-}
-
-// formatAgeKeyWithMetadata formats an age private key with metadata comments.
-func formatAgeKeyWithMetadata(privateKey, publicKey string) string {
-	var builder strings.Builder
-
-	// Add creation timestamp
-	builder.WriteString("# created: ")
-	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
-	builder.WriteString("\n")
-
-	// Add public key if provided
-	if publicKey != "" {
-		builder.WriteString("# public key: ")
-		builder.WriteString(publicKey)
-		builder.WriteString("\n")
-	}
-
-	// Add the private key
-	builder.WriteString(privateKey)
-
-	// Ensure trailing newline
-	if !strings.HasSuffix(privateKey, "\n") {
-		builder.WriteString("\n")
-	}
-
-	return builder.String()
-}
-
-// writeKeyToFile writes the formatted key to the target path, either creating a new file or appending to existing one.
-func writeKeyToFile(targetPath, formattedKey string) error {
-	_, statErr := os.Stat(targetPath)
-	if statErr != nil {
-		return handleNewFile(targetPath, formattedKey, statErr)
-	}
-
-	return appendToExistingFile(targetPath, formattedKey)
-}
-
-// handleNewFile creates a new file with the formatted key or returns an error if stat failed for other reasons.
-func handleNewFile(targetPath, formattedKey string, statErr error) error {
-	if errors.Is(statErr, os.ErrNotExist) {
-		// File does not exist yet; create it
-		err := os.WriteFile(targetPath, []byte(formattedKey), ageKeyFilePermissions)
-		if err != nil {
-			return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, err)
-		}
-
-		return nil
-	}
-
-	// Some other error accessing the file
-	return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, statErr)
-}
-
-// appendToExistingFile appends the formatted key to an existing file.
-func appendToExistingFile(targetPath, formattedKey string) error {
-	//#nosec G304 -- targetPath comes from getAgeKeyPath
-	file, openErr := os.OpenFile(
-		targetPath,
-		os.O_APPEND|os.O_WRONLY,
-		ageKeyFilePermissions,
-	)
-	if openErr != nil {
-		return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, openErr)
-	}
-
-	var err error
-
-	defer func() {
-		cerr := file.Close()
-		if cerr != nil && err == nil {
-			err = fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, cerr)
-		}
-	}()
-
-	_, err = file.WriteString("\n" + formattedKey)
-	if err != nil {
-		return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, err)
-	}
-
-	return nil
-}
-
-// importKey imports an age private key and automatically derives the public key.
-func importKey(privateKey string) error {
-	// Validate the private key
-	err := validateAgeKey(privateKey)
-	if err != nil {
-		return err
-	}
-
-	// Derive the public key from the private key
-	publicKey, err := derivePublicKey(privateKey)
-	if err != nil {
-		return fmt.Errorf("failed to derive public key: %w", err)
-	}
-
-	// Get target path
-	targetPath, err := getAgeKeyPath()
-	if err != nil {
-		return fmt.Errorf("%w: %w", errFailedToDetermineAge, err)
-	}
-
-	// Create directory if it doesn't exist
-	targetDir := filepath.Dir(targetPath)
-
-	err = os.MkdirAll(targetDir, ageKeyDirPermissions)
-	if err != nil {
-		return fmt.Errorf("%w: %s: %w", errFailedToCreateDir, targetDir, err)
-	}
-
-	// Format key with metadata
-	formattedKey := formatAgeKeyWithMetadata(privateKey, publicKey)
-
-	// Write or append key to file
-	return writeKeyToFile(targetPath, formattedKey)
 }
 
 // NewImportCmd creates and returns the import command.
@@ -1526,14 +439,14 @@ Examples:
 
 // handleImportRunE is the main handler for the import command.
 func handleImportRunE(cmd *cobra.Command, privateKey string) error {
-	err := importKey(privateKey)
+	err := sopsclient.ImportKey(privateKey)
 	if err != nil {
 		return fmt.Errorf("failed to import age key: %w", err)
 	}
 
-	targetPath, err := getAgeKeyPath()
+	targetPath, err := sopsclient.GetAgeKeyPath()
 	if err != nil {
-		return fmt.Errorf("%w: %w", errFailedToDetermineAge, err)
+		return fmt.Errorf("%w: %w", sopsclient.ErrFailedToDetermineAge, err)
 	}
 
 	notify.WriteMessage(notify.Message{
