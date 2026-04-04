@@ -981,9 +981,21 @@ func TestImageVerification_Set(t *testing.T) {
 		{name: "enabled_lowercase", input: "enabled", expected: v1alpha1.ImageVerificationEnabled},
 		{name: "enabled_mixed_case", input: "Enabled", expected: v1alpha1.ImageVerificationEnabled},
 		{name: "enabled_uppercase", input: "ENABLED", expected: v1alpha1.ImageVerificationEnabled},
-		{name: "disabled_lowercase", input: "disabled", expected: v1alpha1.ImageVerificationDisabled},
-		{name: "disabled_mixed_case", input: "Disabled", expected: v1alpha1.ImageVerificationDisabled},
-		{name: "disabled_uppercase", input: "DISABLED", expected: v1alpha1.ImageVerificationDisabled},
+		{
+			name:     "disabled_lowercase",
+			input:    "disabled",
+			expected: v1alpha1.ImageVerificationDisabled,
+		},
+		{
+			name:     "disabled_mixed_case",
+			input:    "Disabled",
+			expected: v1alpha1.ImageVerificationDisabled,
+		},
+		{
+			name:     "disabled_uppercase",
+			input:    "DISABLED",
+			expected: v1alpha1.ImageVerificationDisabled,
+		},
 		{name: "invalid_value", input: "invalid", wantError: true},
 	}
 
