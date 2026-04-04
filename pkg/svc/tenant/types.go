@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -170,13 +171,7 @@ func (o *Options) Validate() error {
 }
 
 func isValidType(t Type) bool {
-	for _, vt := range ValidTypes() {
-		if t == vt {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(ValidTypes(), t)
 }
 
 // ManagedByLabels returns the standard KSail managed-by labels.

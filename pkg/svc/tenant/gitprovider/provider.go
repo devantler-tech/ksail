@@ -75,7 +75,7 @@ func New(providerName, token string) (Provider, error) {
 // ResolveToken resolves the API token using the fallback chain:
 // 1. Explicit token parameter (--git-token flag)
 // 2. Environment variable (GITHUB_TOKEN, GITLAB_TOKEN, GITEA_TOKEN)
-// 3. Empty string (caller should skip or warn — no SDK/CLI fallback yet)
+// 3. Empty string (caller should skip or warn — no SDK/CLI fallback yet).
 func ResolveToken(providerName, explicitToken string) string {
 	if explicitToken != "" {
 		return explicitToken
