@@ -25,18 +25,11 @@ func (e *kubectlFatalError) Error() string {
 	return e.msg
 }
 
-// ExecuteSafely runs a kubectl cobra command without allowing os.Exit.
-//
-// kubectl commands use cmdutil.CheckErr in their Run handlers, which calls
-// os.Exit(1) on any error. This function overrides that behavior using
-// cmdutil.BehaviorOnFatal so errors are returned instead of terminating the
-// process. This is essential when KSail calls kubectl commands internally
-// (backup, restore, watch) and needs to handle errors gracefully.
-//
-// A package-level mutex serializes all BehaviorOnFatal overrides so this
-// function is safe to call from multiple goroutines (e.g., concurrent
-// backup exports via errgroup).
-func ExecuteSafely(ctx context.Context, cmd *cobra.Command) (retErr error) {
+// withSafeFatal runs fn with kubectl's BehaviorOnFatal overridden to panic
+// instead of calling os.Exit. The panic is recovered and returned as an error.
+// A package-level mutex serializes all BehaviorOnFatal overrides since kubectl's
+// fatal handler is a global. This is safe to call from multiple goroutines.
+func withSafeFatal(fn func()) (retErr error) {
 	fatalMu.Lock()
 	defer fatalMu.Unlock()
 
@@ -57,5 +50,24 @@ func ExecuteSafely(ctx context.Context, cmd *cobra.Command) (retErr error) {
 		}
 	}()
 
-	return cmd.ExecuteContext(ctx)
+	fn()
+
+	return nil
+}
+
+// ExecuteSafely runs a kubectl cobra command without allowing os.Exit.
+//
+// kubectl commands use cmdutil.CheckErr in their Run handlers, which calls
+// os.Exit(1) on any error. This function overrides that behavior using
+// cmdutil.BehaviorOnFatal so errors are returned instead of terminating the
+// process. This is essential when KSail calls kubectl commands internally
+// (backup, restore, watch) and needs to handle errors gracefully.
+func ExecuteSafely(ctx context.Context, cmd *cobra.Command) error {
+	if err := withSafeFatal(func() {
+		_ = cmd.ExecuteContext(ctx)
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }

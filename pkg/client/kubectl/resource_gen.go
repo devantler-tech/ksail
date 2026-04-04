@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
-	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
 // CreateNamespaceCmd creates a Namespace manifest generator command using the client's IO streams.
@@ -339,31 +338,15 @@ func (c *Client) executeCommand(cmd *cobra.Command, args []string) error {
 	return ErrNoRunFunction
 }
 
-// executeSafeRun wraps cmd.Run in a panic/recover to catch os.Exit from
+// executeSafeRun wraps cmd.Run in withSafeFatal to catch os.Exit from
 // kubectl's cmdutil.CheckErr. This is necessary because kubectl commands
 // use Run (not RunE) with CheckErr which calls os.Exit on any error.
-// Uses the shared fatalMu mutex to serialize BehaviorOnFatal overrides.
-func executeSafeRun(cmd *cobra.Command, args []string) (retErr error) {
-	fatalMu.Lock()
-	defer fatalMu.Unlock()
-
-	cmdutil.BehaviorOnFatal(func(msg string, code int) {
-		panic(&kubectlFatalError{msg: msg, code: code})
-	})
-
-	defer func() {
-		cmdutil.DefaultBehaviorOnFatal()
-
-		if r := recover(); r != nil {
-			if e, ok := r.(*kubectlFatalError); ok {
-				retErr = fmt.Errorf("kubectl command execution failed: %w", e)
-			} else {
-				panic(r)
-			}
-		}
-	}()
-
-	cmd.Run(cmd, args)
+func executeSafeRun(cmd *cobra.Command, args []string) error {
+	if err := withSafeFatal(func() {
+		cmd.Run(cmd, args)
+	}); err != nil {
+		return fmt.Errorf("kubectl command execution failed: %w", err)
+	}
 
 	return nil
 }
