@@ -79,3 +79,17 @@ func ParseOwnerRepo(gitRepo string) (owner, repo string, err error) {
 	}
 	return parts[0], parts[1], nil
 }
+
+// ParseVisibility validates and normalizes a repo visibility string (case-insensitive).
+func ParseVisibility(value string) (RepoVisibility, error) {
+	switch strings.ToLower(value) {
+	case "private":
+		return VisibilityPrivate, nil
+	case "internal":
+		return VisibilityInternal, nil
+	case "public":
+		return VisibilityPublic, nil
+	default:
+		return "", fmt.Errorf("invalid repo-visibility %q: must be Private, Internal, or Public", value)
+	}
+}

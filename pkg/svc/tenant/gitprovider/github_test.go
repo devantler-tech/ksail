@@ -244,3 +244,34 @@ func TestGitHubProvider_PushFiles_Error(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "push file file.txt")
 }
+
+func TestParseVisibility(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input    string
+		expected RepoVisibility
+		wantErr  bool
+	}{
+		{"Private", VisibilityPrivate, false},
+		{"private", VisibilityPrivate, false},
+		{"PRIVATE", VisibilityPrivate, false},
+		{"Internal", VisibilityInternal, false},
+		{"internal", VisibilityInternal, false},
+		{"Public", VisibilityPublic, false},
+		{"public", VisibilityPublic, false},
+		{"invalid", "", true},
+		{"", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			got, err := ParseVisibility(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expected, got)
+			}
+		})
+	}
+}

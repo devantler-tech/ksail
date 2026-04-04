@@ -24,6 +24,7 @@ spec:
   interval: 1m
   path: ./k8s
   prune: true
+  serviceAccountName: team-beta
   sourceRef:
     kind: GitRepository
     name: team-beta
@@ -56,6 +57,7 @@ spec:
   interval: 1m
   path: ./k8s
   prune: true
+  serviceAccountName: team-gamma
   sourceRef:
     kind: GitRepository
     name: team-gamma
@@ -88,6 +90,7 @@ spec:
   interval: 1m
   path: ./k8s
   prune: true
+  serviceAccountName: team-alpha
   sourceRef:
     kind: OCIRepository
     name: team-alpha

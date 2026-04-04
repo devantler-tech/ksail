@@ -1,7 +1,6 @@
 package tenant
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
@@ -63,11 +62,15 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 	opts.OutputDir = outputDir
 
 	if !confirm.ShouldSkipPrompt(opts.Force) {
-		notify.Warningf(cmd.OutOrStdout(), "This will delete tenant %q and its manifest directory", opts.Name)
+		if opts.DeleteRepo && opts.GitRepo != "" {
+			notify.Warningf(cmd.OutOrStdout(), "This will delete tenant %q, its manifest directory, and the remote Git repository %q", opts.Name, opts.GitRepo)
+		} else {
+			notify.Warningf(cmd.OutOrStdout(), "This will delete tenant %q and its manifest directory", opts.Name)
+		}
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), `Type "yes" to confirm deletion: `)
 
 		if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
-			return errors.New("deletion cancelled")
+			return confirm.ErrDeletionCancelled
 		}
 	}
 

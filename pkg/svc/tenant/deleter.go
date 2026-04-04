@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
 )
@@ -34,6 +35,10 @@ type DeleteOptions struct {
 
 // Delete removes a tenant's manifests and optionally unregisters and deletes the repo.
 func Delete(opts DeleteOptions) error {
+	if strings.Contains(opts.Name, "..") || strings.ContainsAny(opts.Name, `/\`) {
+		return fmt.Errorf("invalid tenant name %q: must not contain path separators or '..'", opts.Name)
+	}
+
 	tenantDir := filepath.Join(opts.OutputDir, opts.Name)
 
 	if _, err := os.Stat(tenantDir); os.IsNotExist(err) {

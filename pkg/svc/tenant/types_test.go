@@ -104,6 +104,43 @@ func TestOptionsValidateSuccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestOptionsValidateInvalidDNSName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		val  string
+	}{
+		{"uppercase", "Team-Alpha"},
+		{"underscores", "team_alpha"},
+		{"starts with hyphen", "-team"},
+		{"ends with hyphen", "team-"},
+		{"too long", "a" + string(make([]byte, 63))},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts := Options{Name: tt.val, TenantType: TenantTypeFlux}
+			opts.Namespaces = []string{tt.val}
+			err := opts.Validate()
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestOptionsValidatePathTraversalName(t *testing.T) {
+	t.Parallel()
+	opts := Options{Name: "../escape", TenantType: TenantTypeFlux}
+	err := opts.Validate()
+	require.ErrorIs(t, err, ErrInvalidTenantName)
+}
+
+func TestOptionsValidateInvalidNamespace(t *testing.T) {
+	t.Parallel()
+	opts := Options{Name: "valid-name", TenantType: TenantTypeFlux, Namespaces: []string{"INVALID_NS"}}
+	err := opts.Validate()
+	require.ErrorIs(t, err, ErrInvalidNamespace)
+}
+
 func TestManagedByLabels(t *testing.T) {
 	t.Parallel()
 	labels := ManagedByLabels()

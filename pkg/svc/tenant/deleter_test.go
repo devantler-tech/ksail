@@ -169,6 +169,18 @@ func TestDelete_UnsupportedGitProvider(t *testing.T) {
 	require.Contains(t, err.Error(), "create git provider")
 }
 
+func TestDelete_PathTraversalName(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	err := Delete(DeleteOptions{
+		Name:      "../escape",
+		OutputDir: tmpDir,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must not contain path separators")
+}
+
 func TestDelete_UnregisterWithExplicitKustomizationPath(t *testing.T) {
 	t.Parallel()
 

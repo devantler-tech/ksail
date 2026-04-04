@@ -38,11 +38,12 @@ type fluxKustomizationSourceRef struct {
 }
 
 type fluxKustomizationSpec struct {
-	Interval        string                     `json:"interval"`
-	SourceRef       fluxKustomizationSourceRef `json:"sourceRef"`
-	Path            string                     `json:"path"`
-	Prune           bool                       `json:"prune"`
-	TargetNamespace string                     `json:"targetNamespace"`
+	Interval           string                     `json:"interval"`
+	SourceRef          fluxKustomizationSourceRef `json:"sourceRef"`
+	Path               string                     `json:"path"`
+	Prune              bool                       `json:"prune"`
+	TargetNamespace    string                     `json:"targetNamespace"`
+	ServiceAccountName string                     `json:"serviceAccountName"`
 }
 
 type fluxKustomization struct {
@@ -107,6 +108,12 @@ func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 		if opts.GitProvider == "" {
 			return nil, fmt.Errorf("--git-provider is required for Flux Git sync source")
 		}
+		if opts.GitRepo == "" {
+			return nil, fmt.Errorf("--git-repo is required for Flux Git sync source")
+		}
+		if _, _, err := gitprovider.ParseOwnerRepo(opts.GitRepo); err != nil {
+			return nil, fmt.Errorf("parsing git repo for Git source: %w", err)
+		}
 		host := resolveProviderHost(opts.GitProvider)
 		source = fluxSource{
 			APIVersion: "source.toolkit.fluxcd.io/v1",
@@ -140,9 +147,10 @@ func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 				Kind: source.Kind,
 				Name: opts.Name,
 			},
-			Path:            "./k8s",
-			Prune:           true,
-			TargetNamespace: primaryNS,
+			Path:               "./k8s",
+			Prune:              true,
+			TargetNamespace:    primaryNS,
+			ServiceAccountName: opts.Name,
 		},
 	}
 

@@ -110,7 +110,7 @@ func (g *gitHubProvider) PushFiles(ctx context.Context, owner, name string, file
 		if err != nil {
 			return fmt.Errorf("push file %s: %w", path, err)
 		}
-		resp.Body.Close()
+		defer resp.Body.Close()
 		if resp.StatusCode >= 300 {
 			return g.readError(resp, fmt.Sprintf("push file %s", path))
 		}

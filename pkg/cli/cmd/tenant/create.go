@@ -148,9 +148,14 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("parsing git-repo: %w", err)
 			}
 
+			visibility, err := gitprovider.ParseVisibility(opts.RepoVisibility)
+			if err != nil {
+				return err
+			}
+
 			ctx := context.Background()
 
-			if err := provider.CreateRepo(ctx, owner, repoName, gitprovider.RepoVisibility(opts.RepoVisibility)); err != nil {
+			if err := provider.CreateRepo(ctx, owner, repoName, visibility); err != nil {
 				return fmt.Errorf("creating tenant repo: %w", err)
 			}
 
