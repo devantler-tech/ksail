@@ -13,35 +13,20 @@ import (
 // RegisterTenant adds a tenant's directory path to a kustomization.yaml resources list.
 // If kustomizationPath is empty, auto-discovers by walking up from outputDir.
 func RegisterTenant(tenantName, outputDir, kustomizationPath string) error {
-	kPath, err := resolveKustomizationPath(outputDir, kustomizationPath)
-	if err != nil {
-		return err
-	}
-
-	raw, err := readKustomizationRaw(kPath)
-	if err != nil {
-		return err
-	}
-
-	relPath, err := computeRelativePath(kPath, outputDir, tenantName)
-	if err != nil {
-		return err
-	}
-
-	resources := getResources(raw)
-	for _, r := range resources {
-		if r == relPath {
-			return nil // already registered
-		}
-	}
-
-	resources = append(resources, relPath)
-	raw["resources"] = resources
-	return writeKustomizationRaw(kPath, raw)
+	return modifyKustomizationResources(tenantName, outputDir, kustomizationPath, addResource)
 }
 
 // UnregisterTenant removes a tenant's directory path from a kustomization.yaml resources list.
 func UnregisterTenant(tenantName, outputDir, kustomizationPath string) error {
+	return modifyKustomizationResources(tenantName, outputDir, kustomizationPath, removeResource)
+}
+
+// modifyKustomizationResources resolves the kustomization path, reads its contents,
+// applies a resource transformation, and writes it back.
+func modifyKustomizationResources(
+	tenantName, outputDir, kustomizationPath string,
+	transform func(resources []string, relPath string) []string,
+) error {
 	kPath, err := resolveKustomizationPath(outputDir, kustomizationPath)
 	if err != nil {
 		return err
@@ -57,16 +42,27 @@ func UnregisterTenant(tenantName, outputDir, kustomizationPath string) error {
 		return err
 	}
 
-	resources := getResources(raw)
+	raw["resources"] = transform(getResources(raw), relPath)
+	return writeKustomizationRaw(kPath, raw)
+}
+
+func addResource(resources []string, relPath string) []string {
+	for _, r := range resources {
+		if r == relPath {
+			return resources // already registered
+		}
+	}
+	return append(resources, relPath)
+}
+
+func removeResource(resources []string, relPath string) []string {
 	filtered := make([]string, 0, len(resources))
 	for _, r := range resources {
 		if r != relPath {
 			filtered = append(filtered, r)
 		}
 	}
-	raw["resources"] = filtered
-
-	return writeKustomizationRaw(kPath, raw)
+	return filtered
 }
 
 // FindKustomization walks up from startDir looking for kustomization.yaml.
