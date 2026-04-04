@@ -1,4 +1,4 @@
-package cipher //nolint:testpackage // Benchmarks require access to internal encrypt/decrypt functions.
+package cipher
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 	"github.com/getsops/sops/v3/aes"
 	sopsage "github.com/getsops/sops/v3/age"
 	"github.com/getsops/sops/v3/keyservice"
-	"github.com/getsops/sops/v3/stores/yaml"
+	sopsclient "github.com/devantler-tech/ksail/v5/pkg/client/sops"
 )
 
 // Benchmark scenarios:
@@ -168,18 +168,18 @@ func writeTempSecret(b *testing.B, content []byte) string {
 	return filePath
 }
 
-// newEncryptOpts builds encryptOpts for the given file path with default settings.
+// newEncryptOpts builds sopsclient.EncryptOpts for the given file path with default settings.
 func newEncryptOpts(
 	filePath string,
 	keyGroups []sops.KeyGroup,
-) (encryptOpts, error) {
-	inputStore, outputStore, err := getStores(filePath)
+) (sopsclient.EncryptOpts, error) {
+	inputStore, outputStore, err := sopsclient.GetStores(filePath)
 	if err != nil {
-		return encryptOpts{}, err
+		return sopsclient.EncryptOpts{}, err
 	}
 
-	return encryptOpts{
-		encryptConfig: encryptConfig{
+	return sopsclient.EncryptOpts{
+		EncryptConfig: sopsclient.EncryptConfig{
 			KeyGroups:      keyGroups,
 			GroupThreshold: 0,
 		},
@@ -192,17 +192,17 @@ func newEncryptOpts(
 	}, nil
 }
 
-// newDecryptOpts builds decryptOpts for the given file path with default settings.
+// newDecryptOpts builds sopsclient.DecryptOpts for the given file path with default settings.
 func newDecryptOpts(
 	filePath string,
 	extract []any,
-) (decryptOpts, error) {
-	inputStore, outputStore, err := getDecryptStores(filePath, false)
+) (sopsclient.DecryptOpts, error) {
+	inputStore, outputStore, err := sopsclient.GetDecryptStores(filePath, false)
 	if err != nil {
-		return decryptOpts{}, err
+		return sopsclient.DecryptOpts{}, err
 	}
 
-	return decryptOpts{
+	return sopsclient.DecryptOpts{
 		Cipher:          aes.NewCipher(),
 		InputStore:      inputStore,
 		OutputStore:     outputStore,
@@ -222,19 +222,24 @@ func encryptToFile(b *testing.B, content []byte, keyGroups []sops.KeyGroup) stri
 
 	filePath := writeTempSecret(b, content)
 
-	opts := encryptOpts{
-		encryptConfig: encryptConfig{
+	inputStore, outputStore, err := sopsclient.GetStores(filePath)
+	if err != nil {
+		b.Fatalf("Failed to get stores for test file: %v", err)
+	}
+
+	opts := sopsclient.EncryptOpts{
+		EncryptConfig: sopsclient.EncryptConfig{
 			KeyGroups:      keyGroups,
 			GroupThreshold: 0,
 		},
 		Cipher:      aes.NewCipher(),
-		InputStore:  &yaml.Store{},
-		OutputStore: &yaml.Store{},
+		InputStore:  inputStore,
+		OutputStore: outputStore,
 		InputPath:   filePath,
 		KeyServices: []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
 	}
 
-	encryptedData, err := encrypt(opts)
+	encryptedData, err := sopsclient.Encrypt(opts)
 	if err != nil {
 		b.Fatalf("Failed to encrypt test file: %v", err)
 	}
@@ -277,7 +282,7 @@ func BenchmarkEncrypt(b *testing.B) {
 					b.Fatal(err)
 				}
 
-				_, err = encrypt(opts)
+				_, err = sopsclient.Encrypt(opts)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -316,7 +321,7 @@ func BenchmarkDecrypt(b *testing.B) {
 					b.Fatal(err)
 				}
 
-				_, err = decrypt(opts)
+				_, err = sopsclient.Decrypt(opts)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -344,7 +349,7 @@ func BenchmarkRoundtrip_Minimal(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		encryptedData, err := encrypt(encOpts)
+		encryptedData, err := sopsclient.Encrypt(encOpts)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -359,7 +364,7 @@ func BenchmarkRoundtrip_Minimal(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		_, err = decrypt(decOpts)
+		_, err = sopsclient.Decrypt(decOpts)
 		if err != nil {
 			b.Fatal(err)
 		}
