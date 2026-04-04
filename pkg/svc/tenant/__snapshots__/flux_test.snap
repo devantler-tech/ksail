@@ -1,0 +1,96 @@
+
+[TestGenerateFluxSyncManifests/git_source_with_gitlab_provider - 1]
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-gamma
+  namespace: team-gamma-ns
+spec:
+  interval: 1m
+  ref:
+    branch: main
+  url: https://gitlab.com/acme-org/team-gamma-config
+/-/-/-/
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-gamma
+  namespace: team-gamma-ns
+spec:
+  interval: 1m
+  path: ./k8s
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: team-gamma
+  targetNamespace: team-gamma-ns
+
+---
+
+[TestGenerateFluxSyncManifests/oci_source_with_registry_and_git-repo - 1]
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-alpha
+  namespace: team-alpha-ns
+spec:
+  interval: 1m
+  ref:
+    tag: latest
+  url: oci://ghcr.io/acme-org/team-alpha-manifests
+/-/-/-/
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-alpha
+  namespace: team-alpha-ns
+spec:
+  interval: 1m
+  path: ./k8s
+  prune: true
+  sourceRef:
+    kind: OCIRepository
+    name: team-alpha
+  targetNamespace: team-alpha-ns
+
+---
+
+[TestGenerateFluxSyncManifests/git_source_with_github_provider - 1]
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-beta
+  namespace: team-beta-ns
+spec:
+  interval: 1m
+  ref:
+    branch: main
+  url: https://github.com/acme-org/team-beta-config
+/-/-/-/
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-beta
+  namespace: team-beta-ns
+spec:
+  interval: 1m
+  path: ./k8s
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: team-beta
+  targetNamespace: team-beta-ns
+
+---
