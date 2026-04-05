@@ -1,5 +1,5 @@
 ---
-name: Publish MCP
+name: Publish - MCP
 on:
   push:
     tags:
