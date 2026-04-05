@@ -192,6 +192,14 @@ func (p *Provider) CreateCluster(ctx context.Context, templateReader io.Reader, 
 		return provider.ErrProviderUnavailable
 	}
 
+	if templateReader == nil {
+		return fmt.Errorf("templateReader must not be nil")
+	}
+
+	if out == nil {
+		out = io.Discard
+	}
+
 	st := p.client.Omni().State()
 
 	return operations.SyncTemplate(ctx, templateReader, out, st, operations.SyncOptions{})
