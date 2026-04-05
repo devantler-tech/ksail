@@ -140,14 +140,51 @@ func TestUpdateSkipsOmniInPlaceConfigApply(t *testing.T) {
 }
 
 // TestApplyNodeScalingChanges_NilSpecs verifies that nil specs short-circuit scaling without error.
+// The implementation short-circuits when either spec is nil, so all three nil combinations are tested.
 func TestApplyNodeScalingChanges_NilSpecs(t *testing.T) {
 	t.Parallel()
 
-	p := talosprovisioner.NewProvisioner(nil, nil)
-	result := clusterupdate.NewEmptyUpdateResult()
+	nonNilSpec := &v1alpha1.ClusterSpec{}
 
-	err := p.ApplyNodeScalingChangesForTest(context.Background(), "test", nil, nil, result)
-	require.NoError(t, err)
+	tests := []struct {
+		name    string
+		oldSpec *v1alpha1.ClusterSpec
+		newSpec *v1alpha1.ClusterSpec
+	}{
+		{
+			name:    "both specs nil",
+			oldSpec: nil,
+			newSpec: nil,
+		},
+		{
+			name:    "old spec nil",
+			oldSpec: nil,
+			newSpec: nonNilSpec,
+		},
+		{
+			name:    "new spec nil",
+			oldSpec: nonNilSpec,
+			newSpec: nil,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			p := talosprovisioner.NewProvisioner(nil, nil)
+			result := clusterupdate.NewEmptyUpdateResult()
+
+			err := p.ApplyNodeScalingChangesForTest(
+				context.Background(),
+				"test",
+				testCase.oldSpec,
+				testCase.newSpec,
+				result,
+			)
+			require.NoError(t, err)
+		})
+	}
 }
 
 // TestApplyNodeScalingChanges_NoDelta verifies that equal specs produce a no-op.
@@ -157,11 +194,15 @@ func TestApplyNodeScalingChanges_NoDelta(t *testing.T) {
 	p := talosprovisioner.NewProvisioner(nil, nil)
 	result := clusterupdate.NewEmptyUpdateResult()
 
-	spec := &v1alpha1.ClusterSpec{}
-	spec.Talos.ControlPlanes = 3
-	spec.Talos.Workers = 2
+	oldSpec := &v1alpha1.ClusterSpec{}
+	oldSpec.Talos.ControlPlanes = 3
+	oldSpec.Talos.Workers = 2
 
-	err := p.ApplyNodeScalingChangesForTest(context.Background(), "test", spec, spec, result)
+	newSpec := &v1alpha1.ClusterSpec{}
+	newSpec.Talos.ControlPlanes = 3
+	newSpec.Talos.Workers = 2
+
+	err := p.ApplyNodeScalingChangesForTest(context.Background(), "test", oldSpec, newSpec, result)
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.TotalChanges(), "no changes expected when deltas are zero")
 }
