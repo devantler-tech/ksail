@@ -148,6 +148,18 @@ func (p *Provisioner) applyNodeScalingChanges(
 		return ErrMinimumControlPlanes
 	}
 
+	if p.omniOpts != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Node scaling requested for Talos Omni cluster %q (CP %+d, Workers %+d) — skipping (managed externally by Omni)\n",
+			clusterName,
+			cpDelta,
+			workerDelta,
+		)
+
+		return nil
+	}
+
 	_, _ = fmt.Fprintf(p.logWriter, "  Node scaling for Talos cluster %q: CP %+d, Workers %+d\n",
 		clusterName, cpDelta, workerDelta)
 

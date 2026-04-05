@@ -1,8 +1,11 @@
 package talosprovisioner_test
 
 import (
+	"context"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
 )
 
@@ -68,5 +71,31 @@ func TestCountNodeRoles(t *testing.T) {
 				t.Errorf("countNodeRoles() worker = %d, want %d", worker, testCase.wantWorker)
 			}
 		})
+	}
+}
+
+func TestApplyNodeScalingChangesSkipsOmni(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithOmniOptions(v1alpha1.OptionsOmni{})
+	result := &clusterupdate.UpdateResult{}
+
+	oldSpec := &v1alpha1.ClusterSpec{}
+	oldSpec.Talos.ControlPlanes = 1
+	oldSpec.Talos.Workers = 1
+
+	newSpec := &v1alpha1.ClusterSpec{}
+	newSpec.Talos.ControlPlanes = 2
+	newSpec.Talos.Workers = 2
+
+	err := provisioner.ApplyNodeScalingChangesForTest(
+		context.Background(),
+		"demo",
+		oldSpec,
+		newSpec,
+		result,
+	)
+	if err != nil {
+		t.Fatalf("applyNodeScalingChanges() error = %v, want nil", err)
 	}
 }
