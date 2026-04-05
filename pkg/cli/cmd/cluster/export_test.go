@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -127,6 +128,33 @@ func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, totalChanges int) s
 // ExportStripParenthetical exports stripParenthetical for testing.
 func ExportStripParenthetical(s string) string {
 	return stripParenthetical(s)
+}
+
+// ExportListResult is a test-visible alias for listResult.
+type ExportListResult = listResult
+
+// ExportDisplayListResults exports displayListResults for testing.
+func ExportDisplayListResults(
+	writer io.Writer,
+	providers []v1alpha1.Provider,
+	results []ExportListResult,
+) {
+	displayListResults(writer, providers, results)
+}
+
+// ExportNewListResult creates a listResult with TTL info for testing.
+func ExportNewListResult(
+	provider v1alpha1.Provider,
+	distribution v1alpha1.Distribution,
+	clusterName string,
+	ttl *state.TTLInfo,
+) ExportListResult {
+	return listResult{
+		Provider:     provider,
+		Distribution: distribution,
+		ClusterName:  clusterName,
+		TTL:          ttl,
+	}
 }
 
 // ExportFormatRemainingDuration exports formatRemainingDuration for testing.

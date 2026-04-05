@@ -29,6 +29,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -4836,6 +4837,83 @@ users:
 	_, err := cluster.ExportPickCluster(cmd, deps)
 	require.Error(t, err)
 	require.ErrorIs(t, err, cluster.ErrNoClusters)
+}
+
+func TestDisplayListResults_WithTTL(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionVanilla,
+			"cluster-1",
+			nil,
+		),
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionK3s,
+			"dev-cluster",
+			// Use a large buffer to avoid minute-boundary flakiness.
+			&state.TTLInfo{ExpiresAt: time.Now().Add(2*time.Hour + 35*time.Minute + 30*time.Second)},
+		),
+	}
+
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
+
+	output := buf.String()
+	assert.Contains(t, output, "PROVIDER")
+	assert.Contains(t, output, "DISTRIBUTION")
+	assert.Contains(t, output, "CLUSTER")
+	assert.Contains(t, output, "TTL")
+	assert.Contains(t, output, "cluster-1")
+	assert.Contains(t, output, "dev-cluster")
+	assert.Contains(t, output, "2h 35m")
+}
+
+func TestDisplayListResults_WithExpiredTTL(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionTalos,
+			"expired-cluster",
+			&state.TTLInfo{ExpiresAt: time.Now().Add(-1 * time.Hour)},
+		),
+	}
+
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
+
+	output := buf.String()
+	assert.Contains(t, output, "TTL")
+	assert.Contains(t, output, "EXPIRED")
+	assert.Contains(t, output, "expired-cluster")
+}
+
+func TestDisplayListResults_NoTTLColumn(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionVanilla,
+			"my-cluster",
+			nil,
+		),
+	}
+
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
+
+	output := buf.String()
+	assert.Contains(t, output, "PROVIDER")
+	assert.Contains(t, output, "CLUSTER")
+	assert.NotContains(t, output, "TTL")
 }
 
 func TestStripParenthetical_NoSuffix(t *testing.T) {

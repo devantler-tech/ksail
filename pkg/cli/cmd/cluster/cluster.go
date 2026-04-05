@@ -3168,13 +3168,9 @@ func createEmptyDistributionConfig(
 	}
 }
 
-// displayListResults outputs the cluster list grouped by provider.
-// Output is formatted for clarity, especially for AI assistants that need
-// to parse the cluster names for subsequent commands.
-// Format: "<provider>: cluster1, cluster2" to clearly identify cluster names.
+// displayListResults outputs the cluster list as an aligned table.
+// Columns: PROVIDER, DISTRIBUTION, CLUSTER, and optionally TTL (when any cluster has one).
 // If no clusters exist, displays "No clusters found.".
-// Distribution labels and TTL info are shown on separate indented annotation
-// lines to keep printed cluster identifiers directly copy/paste-able.
 func displayListResults(
 	writer io.Writer,
 	providers []v1alpha1.Provider,
