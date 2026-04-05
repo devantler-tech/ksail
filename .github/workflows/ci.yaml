@@ -163,7 +163,10 @@ jobs:
     name: 🔄 Sync Module Dependencies
     runs-on: ubuntu-latest
     needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.code == 'true'
+    if: >-
+      github.event_name != 'merge_group'
+      && needs.changes.outputs.code == 'true'
+      && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
       contents: read
     steps:
@@ -204,7 +207,10 @@ jobs:
     name: 📝 Generate JSON Schema
     runs-on: ubuntu-latest
     needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.schema == 'true'
+    if: >-
+      github.event_name != 'merge_group'
+      && needs.changes.outputs.schema == 'true'
+      && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
       contents: read
     steps:
@@ -242,7 +248,10 @@ jobs:
     name: 📚 Generate Reference Docs
     runs-on: ubuntu-latest
     needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.cli == 'true'
+    if: >-
+      github.event_name != 'merge_group'
+      && needs.changes.outputs.cli == 'true'
+      && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
       contents: read
     steps:
@@ -392,7 +401,10 @@ jobs:
     name: 🔍 Audit Docs Dependencies
     runs-on: ubuntu-latest
     needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.docs-deps == 'true'
+    if: >-
+      github.event_name != 'merge_group'
+      && needs.changes.outputs.docs-deps == 'true'
+      && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
       contents: write
     steps:
@@ -413,7 +425,10 @@ jobs:
     name: 🔍 Audit VSCode Extension Dependencies
     runs-on: ubuntu-latest
     needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.vsce-deps == 'true'
+    if: >-
+      github.event_name != 'merge_group'
+      && needs.changes.outputs.vsce-deps == 'true'
+      && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
       contents: write
     steps:
