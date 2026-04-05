@@ -201,6 +201,43 @@ func TestGetMirrorRegistriesWithDefaults(t *testing.T) {
 			provider:       v1alpha1.ProviderHetzner,
 			expectedResult: []string{},
 		},
+		// Omni provider tests - defaults should be skipped (same as Hetzner)
+		{
+			name:           "Omni: no flag, no config -> empty (no defaults for cloud)",
+			flagValues:     nil,
+			flagChanged:    false,
+			configValues:   nil,
+			provider:       v1alpha1.ProviderOmni,
+			expectedResult: []string{},
+		},
+		{
+			name:        "Omni: no flag, with config -> config values",
+			flagValues:  nil,
+			flagChanged: false,
+			configValues: []string{
+				"ghcr.io=https://ghcr.io",
+			},
+			provider: v1alpha1.ProviderOmni,
+			expectedResult: []string{
+				"ghcr.io=https://ghcr.io",
+			},
+		},
+		{
+			name:           "Omni: flag with external mirror -> flag values",
+			flagValues:     []string{"ghcr.io=https://ghcr.io"},
+			flagChanged:    true,
+			configValues:   nil,
+			provider:       v1alpha1.ProviderOmni,
+			expectedResult: []string{"ghcr.io=https://ghcr.io"},
+		},
+		{
+			name:           "Omni: flag set to empty string -> disabled (empty)",
+			flagValues:     []string{""},
+			flagChanged:    true,
+			configValues:   nil,
+			provider:       v1alpha1.ProviderOmni,
+			expectedResult: []string{},
+		},
 	}
 
 	for _, testCase := range tests {

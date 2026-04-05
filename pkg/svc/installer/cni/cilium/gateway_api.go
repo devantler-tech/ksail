@@ -32,13 +32,17 @@ func gatewayAPICRDsVersion() string {
 	)
 }
 
-// gatewayAPICRDsURL returns the URL for the standard Gateway API CRDs bundle.
+// gatewayAPICRDsURL returns the URL for the experimental Gateway API CRDs bundle.
+// The experimental bundle is required because Cilium's gateway controller uses TLSRoute
+// (gateway.networking.k8s.io/v1alpha2), which is in the experimental channel and absent
+// from standard-install.yaml. Without it, Cilium 1.15+ crashes on startup when
+// gatewayAPI.enabled is true.
 func gatewayAPICRDsURL() string {
 	return "https://github.com/kubernetes-sigs/gateway-api/releases/download/v" +
-		gatewayAPICRDsVersion() + "/standard-install.yaml"
+		gatewayAPICRDsVersion() + "/experimental-install.yaml"
 }
 
-// installGatewayAPICRDs installs the standard Gateway API CRDs required by Cilium.
+// installGatewayAPICRDs installs the experimental Gateway API CRDs required by Cilium.
 // Cilium requires these CRDs to be pre-installed when gatewayAPI.enabled is true.
 // See: https://docs.cilium.io/en/v1.19/network/servicemesh/gateway-api/gateway-api/#prerequisites
 func (c *Installer) installGatewayAPICRDs(ctx context.Context) error {

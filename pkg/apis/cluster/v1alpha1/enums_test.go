@@ -357,6 +357,29 @@ func TestProvider_ValidValues(t *testing.T) {
 	assert.Len(t, values, 3)
 }
 
+func TestProvider_IsCloud(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		provider v1alpha1.Provider
+		expected bool
+	}{
+		{"docker", v1alpha1.ProviderDocker, false},
+		{"hetzner", v1alpha1.ProviderHetzner, true},
+		{"omni", v1alpha1.ProviderOmni, true},
+		{"empty", v1alpha1.Provider(""), false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, testCase.expected, testCase.provider.IsCloud())
+		})
+	}
+}
+
 func TestProvider_ValidateForDistribution_ValidCombinations(t *testing.T) {
 	t.Parallel()
 

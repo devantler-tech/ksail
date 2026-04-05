@@ -189,9 +189,8 @@ func buildRegistryStageParams(
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
+	localDeps localregistry.Dependencies,
 ) mirrorregistry.StageParams {
-	localDeps := getLocalRegistryDeps()
-
 	return mirrorregistry.StageParams{
 		Cmd:            cmd,
 		ClusterCfg:     ctx.ClusterCfg,
@@ -205,6 +204,17 @@ func buildRegistryStageParams(
 	}
 }
 
+func validateRegistryForProvider(ctx *localregistry.Context) error {
+	provider := ctx.ClusterCfg.Spec.Cluster.Provider
+
+	registry := ctx.ClusterCfg.Spec.Cluster.LocalRegistry
+	if provider.IsCloud() && registry.Enabled() && !registry.IsExternal() {
+		return localregistry.ErrCloudProviderRequiresExternalRegistry
+	}
+
+	return nil
+}
+
 func ensureLocalRegistriesReady(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
@@ -212,43 +222,56 @@ func ensureLocalRegistriesReady(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	localDeps localregistry.Dependencies,
 ) error {
-	// Stage 1: Provision local registry (skipped for external registries)
-	err := localregistry.ExecuteStage(
-		cmd,
-		ctx,
-		deps,
-		localregistry.StageProvision,
-		localDeps,
-	)
+	provider := ctx.ClusterCfg.Spec.Cluster.Provider
+
+	// Cloud providers cannot use a Docker-based local registry — reject early with a clear error.
+	err := validateRegistryForProvider(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to provision local registry: %w", err)
+		return err
 	}
 
-	// Stage 2: Verify registry access (for external registries with auth)
-	// This gives early feedback if credentials are missing or invalid
+	if !provider.IsCloud() {
+		// Stage 1: Provision local registry (skipped for external registries)
+		err := localregistry.ExecuteStage(
+			cmd,
+			ctx,
+			deps,
+			localregistry.StageProvision,
+			localDeps,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to provision local registry: %w", err)
+		}
+	}
+
+	// Stage 2: Verify registry access.
+	// Called unconditionally here, but VerifyRegistryAccess returns early unless an enabled
+	// external registry is configured, in which case it validates any required registry auth.
 	err = localregistry.VerifyRegistryAccess(cmd, ctx.ClusterCfg, deps)
 	if err != nil {
 		return fmt.Errorf("failed to verify registry access: %w", err)
 	}
 
-	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager)
+	if !provider.IsCloud() {
+		params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, localDeps)
 
-	// Stage 3: Create and configure registry containers (local + mirrors)
-	err = mirrorregistry.SetupRegistries(params)
-	if err != nil {
-		return fmt.Errorf("failed to setup registries: %w", err)
-	}
+		// Stage 3: Create and configure registry containers (local + mirrors)
+		err = mirrorregistry.SetupRegistries(params)
+		if err != nil {
+			return fmt.Errorf("failed to setup registries: %w", err)
+		}
 
-	// Stage 4: Create Docker network
-	err = mirrorregistry.CreateNetwork(params)
-	if err != nil {
-		return fmt.Errorf("failed to create docker network: %w", err)
-	}
+		// Stage 4: Create Docker network
+		err = mirrorregistry.CreateNetwork(params)
+		if err != nil {
+			return fmt.Errorf("failed to create docker network: %w", err)
+		}
 
-	// Stage 5: Connect registries to network (before cluster creation)
-	err = mirrorregistry.ConnectRegistriesToNetwork(params)
-	if err != nil {
-		return fmt.Errorf("failed to connect registries to network: %w", err)
+		// Stage 5: Connect registries to network (before cluster creation)
+		err = mirrorregistry.ConnectRegistriesToNetwork(params)
+		if err != nil {
+			return fmt.Errorf("failed to connect registries to network: %w", err)
+		}
 	}
 
 	return nil
@@ -274,8 +297,9 @@ func configureRegistryMirrorsInClusterWithWarning(
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
+	localDeps localregistry.Dependencies,
 ) {
-	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager)
+	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, localDeps)
 
 	// Configure containerd inside cluster nodes to use registry mirrors (Kind only)
 	err := mirrorregistry.ConfigureRegistryMirrorsInCluster(params)
