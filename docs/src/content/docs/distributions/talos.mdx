@@ -262,6 +262,50 @@ For cloud volumes, use the `hcloud-volumes` storage class installed automaticall
 
 Upgrade without cluster recreation: `talosctl -n <node-ip> upgrade --image ghcr.io/siderolabs/installer:v1.6.0`. See [Talos upgrade docs](https://www.talos.dev/latest/talos-guides/upgrading-talos/) for coordination details.
 
+### Image Verification (Talos 1.13+)
+
+Talos 1.13 introduced `ImageVerificationConfig`, which enforces machine-wide container image signature verification before any image is pulled. KSail can scaffold a starter configuration:
+
+```bash
+ksail cluster init \
+  --distribution Talos \
+  --image-verification Enabled
+```
+
+This generates `talos/cluster/image-verification.yaml` with a default skip-all rule and commented examples. The file is a valid Talos config document that KSail applies alongside your `MachineConfig` during cluster creation.
+
+```yaml
+apiVersion: v1alpha1
+kind: ImageVerificationConfig
+rules:
+  # Default: skip verification for all images.
+  # Remove or modify this rule, then add specific verification rules.
+  - image: "*"
+    skip: true
+  # Example: keyless (Cosign/OIDC) verification for registry.k8s.io images
+  # - image: "registry.k8s.io/*"
+  #   keyless:
+  #     issuer: "https://accounts.google.com"
+  #     subject: "krel-trust@k8s-releng-prod.iam.gserviceaccount.com"
+  # Example: public-key verification for a private registry
+  # - image: "my-registry.example.com/*"
+  #   publicKey:
+  #     certificate: |
+  #       -----BEGIN CERTIFICATE-----
+  #       <your PEM-encoded certificate here>
+  #       -----END CERTIFICATE-----
+  # Example: deny all images from an untrusted registry
+  # - image: "untrusted-registry.example.com/*"
+  #   deny: true
+```
+
+Edit the file to enforce your signature policy, then run `ksail cluster create`. Rules are evaluated in order; the first matching rule applies.
+
+> [!NOTE]
+> `--image-verification` is only available for the `Talos` distribution and requires Talos 1.13+. For earlier Talos versions, omit the flag or use `--image-verification Disabled`.
+
+See the [Talos image verification docs](https://www.talos.dev/v1.13/talos-guides/configuration/image-verification/) for the full rule schema.
+
 ### GitOps Integration
 
 Enable Flux or ArgoCD for declarative workload management—see [GitOps Workflows](/features/#gitops-workflows).
