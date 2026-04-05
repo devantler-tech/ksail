@@ -202,7 +202,7 @@ func TestGetOmniNodesByRole_NilClient(t *testing.T) {
 	assert.Nil(t, nodes)
 }
 
-func TestSaveOmniConfig_WithTildeExpansion(t *testing.T) {
+func TestSaveOmniConfig_WritesFile(t *testing.T) {
 	t.Parallel()
 
 	// Use a temp dir so tilde expansion is not needed, but verify saveOmniConfig

@@ -150,6 +150,10 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 
 	err := omniState.Destroy(ctx, cluster.Metadata())
 	if err != nil {
+		if state.IsNotFoundError(err) {
+			return nil
+		}
+
 		return fmt.Errorf("failed to delete cluster %s: %w", clusterName, err)
 	}
 
@@ -199,6 +203,10 @@ func (p *Provider) CreateCluster(
 
 	if templateReader == nil {
 		return ErrTemplateReaderRequired
+	}
+
+	if out == nil {
+		out = io.Discard
 	}
 
 	omniState := p.client.Omni().State()
