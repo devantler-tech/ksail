@@ -3,6 +3,7 @@ package talosprovisioner_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -201,24 +202,24 @@ func TestGetOmniNodesByRole_NilClient(t *testing.T) {
 	assert.Nil(t, nodes)
 }
 
-func TestSaveOmniKubeconfig_WithTildeExpansion(t *testing.T) {
+func TestSaveOmniConfig_WithTildeExpansion(t *testing.T) {
 	t.Parallel()
 
-	// Just verify that a path with tilde is accepted; the function will fail at
-	// GetKubeconfig (nil client) before it reaches the filesystem operations.
+	// Use a temp dir so tilde expansion is not needed, but verify saveOmniConfig
+	// actually writes the file and handles path expansion/canonicalization.
+	tmpDir := t.TempDir()
+	outPath := filepath.Join(tmpDir, "subdir", "test-kube.yaml")
+
 	configs := createTestTalosConfigs(t, "test-cluster")
 	provisioner := talosprovisioner.NewProvisioner(configs,
-		talosprovisioner.NewOptions().WithKubeconfigPath("~/test-kube.yaml"),
+		talosprovisioner.NewOptions().WithKubeconfigPath(outPath),
 	)
-	nilClientProv := omniprovider.NewProvider(nil)
 
-	err := provisioner.SaveOmniKubeconfigForTest(
-		context.Background(),
-		nilClientProv,
-		"test-cluster",
-	)
-	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
-	// file was never created
-	_, statErr := os.Stat(os.ExpandEnv("$HOME/test-kube.yaml"))
-	assert.True(t, os.IsNotExist(statErr))
+	dummyData := []byte("apiVersion: v1\nkind: Config\n")
+	err := provisioner.SaveOmniConfigForTest(dummyData, outPath, "Kubeconfig")
+	require.NoError(t, err)
+
+	written, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	assert.Equal(t, dummyData, written)
 }
