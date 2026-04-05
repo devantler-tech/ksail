@@ -48,7 +48,7 @@ Follow the conventions established in the existing benchmark files:
 
 - Call `b.ReportAllocs()` to track allocations
 - Use `b.ResetTimer()` after expensive setup
-- Use `for range b.N` loop syntax (Go 1.22+)
+- Use `for b.Loop()` loop syntax (Go 1.26+)
 - Use `b.TempDir()` for reproducible temp files
 - Use table-driven scenarios to cover multiple input sizes
 - Fail fast with `b.Fatalf` on unexpected errors
