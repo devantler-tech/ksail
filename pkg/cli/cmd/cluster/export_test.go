@@ -125,9 +125,14 @@ func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, totalChanges int) s
 	return formatDiffTable(diff, totalChanges)
 }
 
-// ExportFormatTTLLabel exports formatTTLLabel for testing.
-func ExportFormatTTLLabel(ttl *state.TTLInfo) string {
-	return formatTTLLabel(ttl)
+// ExportFormatAnnotationLabel exports formatAnnotationLabel for testing.
+func ExportFormatAnnotationLabel(dist v1alpha1.Distribution, ttl *state.TTLInfo) string {
+	return formatAnnotationLabel(dist, ttl)
+}
+
+// ExportStripParenthetical exports stripParenthetical for testing.
+func ExportStripParenthetical(s string) string {
+	return stripParenthetical(s)
 }
 
 // ExportFormatRemainingDuration exports formatRemainingDuration for testing.
