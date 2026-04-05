@@ -307,8 +307,14 @@ runs:
                 - name: test
                   image: traefik/whoami:v1.10
         EOF
+        cat > "$WATCH_DIR/kustomization.yaml" <<'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - deployment.yaml
+        EOF
         # Apply the initial manifest
-        ksail workload apply -f "$WATCH_DIR/deployment.yaml"
+        ksail workload apply -k "$WATCH_DIR"
         ksail workload wait --for=condition=Available deployment/ksail-watch-test --timeout=120s
         # Start watcher in background
         ksail workload watch --path "$WATCH_DIR" &
