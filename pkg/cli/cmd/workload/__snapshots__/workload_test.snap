@@ -167,7 +167,21 @@ Flags:
 ---
 
 [TestNewWorkloadCmdRunETriggersHelp - 1]
-Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, export, expose, gen, get, import, install, logs, push, rollout, scale, validate, wait, or watch for workloads.
+Manage workload operations including resource inspection, GitOps reconciliation, and lifecycle management.
+
+Read operations:
+  get       - List resources with optional -o json for structured output including status/conditions
+  describe  - Show detailed resource info including events, conditions, and error details
+  logs      - Print container logs (use --tail=N, --previous for crash diagnostics)
+  explain   - Show API documentation for a resource kind
+  images    - List container images required by cluster components
+  export    - Export container images to a tar archive
+  wait      - Wait for a specific condition on resources
+
+Write operations:
+  apply, create, delete, edit, exec, expose, import, install, push, reconcile, rollout, scale, watch
+
+GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check reconciliation status, health, and errors in a single call.
 
 Usage:
   workload [flags]
@@ -521,7 +535,7 @@ Global Flags:
 ---
 
 [TestWorkloadHelpSnapshots/describe - 1]
-Show details of a specific resource or group of resources.
+Show details of a specific resource or group of resources, including metadata, status conditions, events, and container info. Useful for diagnosing why a resource is not ready — check the Events and Conditions sections. For Flux resources (kustomization, helmrelease), shows reconciliation status and last error. For ArgoCD resources (application), shows sync status and health.
 
 Usage:
   ksail workload describe
@@ -840,7 +854,7 @@ Global Flags:
 ---
 
 [TestWorkloadHelpSnapshots/get - 1]
-Display one or many Kubernetes resources from your cluster.
+Display one or many Kubernetes resources from your cluster. Use -o json for structured output that includes status conditions and health. Use -o wide for additional columns. Use --all-namespaces or -A to query across all namespaces. Supports comma-separated resource types (e.g. deployments,services). For GitOps diagnostics, query Flux resources (kustomization, helmrelease, gitrepository, ocirepository) or ArgoCD resources (application) to check reconciliation status and errors.
 
 Usage:
   ksail workload get
@@ -1042,7 +1056,7 @@ Global Flags:
 ---
 
 [TestWorkloadHelpSnapshots/logs - 1]
-Print the logs for a container in a pod or specified resource. If the pod has only one container, the container name is optional.
+Print the logs for a container in a pod or specified resource. If the pod has only one container, the container name is optional. Use --tail=N to limit output to the last N lines. Use --previous to get logs from a previous container instance (useful for crash-loop diagnostics). Use --all-containers to get logs from all containers in a pod. For GitOps controller logs, query the controller pods directly (e.g. in flux-system or argocd namespace).
 
 Usage:
   ksail workload logs
@@ -1147,7 +1161,21 @@ Global Flags:
 ---
 
 [TestWorkloadHelpSnapshots/namespace - 1]
-Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, export, expose, gen, get, import, install, logs, push, rollout, scale, validate, wait, or watch for workloads.
+Manage workload operations including resource inspection, GitOps reconciliation, and lifecycle management.
+
+Read operations:
+  get       - List resources with optional -o json for structured output including status/conditions
+  describe  - Show detailed resource info including events, conditions, and error details
+  logs      - Print container logs (use --tail=N, --previous for crash diagnostics)
+  explain   - Show API documentation for a resource kind
+  images    - List container images required by cluster components
+  export    - Export container images to a tar archive
+  wait      - Wait for a specific condition on resources
+
+Write operations:
+  apply, create, delete, edit, exec, expose, import, install, push, reconcile, rollout, scale, watch
+
+GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check reconciliation status, health, and errors in a single call.
 
 Usage:
   ksail workload [flags]

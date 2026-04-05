@@ -2501,7 +2501,7 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 	cmd := client.CreateClusterInfoCommand(k8s.DefaultKubeconfigPath())
 
 	// Wrap RunE to resolve kubeconfig at runtime (honoring --config flag)
-	// and append TTL info after kubectl cluster-info output.
+	// and append KSail metadata after kubectl cluster-info output.
 	originalRunE := cmd.RunE
 	if originalRunE != nil {
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -2520,7 +2520,7 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 				return err
 			}
 
-			displayTTLInfo(cmd, kubeconfigPath)
+			displayKSailDetails(cmd, kubeconfigPath)
 
 			return nil
 		}
@@ -2529,21 +2529,49 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 	return cmd
 }
 
-// displayTTLInfo detects the current cluster from kubeconfig and prints TTL status if set.
-func displayTTLInfo(cmd *cobra.Command, kubeconfigPath string) {
+// displayKSailDetails appends KSail-specific cluster metadata after kubectl output.
+// This includes cluster identity (name, distribution, provider), TTL status,
+// and enabled component summary from persisted state. Each section fails gracefully.
+func displayKSailDetails(cmd *cobra.Command, kubeconfigPath string) {
 	info, err := clusterdetector.DetectInfo(kubeconfigPath, "")
 	if err != nil || info == nil {
-		return
-	}
-
-	ttlInfo, err := state.LoadClusterTTL(info.ClusterName)
-	if err != nil || ttlInfo == nil {
+		// If detection fails, skip KSail details because cluster identity could not be determined.
 		return
 	}
 
 	writer := cmd.OutOrStdout()
 
-	// Print blank line to separate from kubectl output.
+	// Blank line to separate from kubectl output.
+	_, _ = fmt.Fprintln(writer)
+
+	displayClusterIdentity(writer, info)
+	displayTTLInfo(writer, info.ClusterName)
+	displayComponents(writer, info.ClusterName)
+}
+
+// displayClusterIdentity prints the cluster name, distribution, provider, server URL, and kubeconfig path.
+func displayClusterIdentity(writer io.Writer, info *clusterdetector.Info) {
+	_, _ = fmt.Fprintln(writer, "KSail Cluster Details:")
+	_, _ = fmt.Fprintf(writer, "  Cluster:        %s\n", info.ClusterName)
+	_, _ = fmt.Fprintf(writer, "  Distribution:   %s\n", info.Distribution)
+	_, _ = fmt.Fprintf(writer, "  Provider:       %s\n", info.Provider)
+
+	if info.ServerURL != "" {
+		_, _ = fmt.Fprintf(writer, "  Server:         %s\n", info.ServerURL)
+	}
+
+	if info.KubeconfigPath != "" {
+		_, _ = fmt.Fprintf(writer, "  Kubeconfig:     %s\n", info.KubeconfigPath)
+	}
+}
+
+// displayTTLInfo prints TTL status if set.
+func displayTTLInfo(writer io.Writer, clusterName string) {
+	ttlInfo, err := state.LoadClusterTTL(clusterName)
+	if err != nil || ttlInfo == nil {
+		return
+	}
+
 	_, _ = fmt.Fprintln(writer)
 
 	remaining := ttlInfo.Remaining()
@@ -2557,6 +2585,56 @@ func displayTTLInfo(cmd *cobra.Command, kubeconfigPath string) {
 			formatRemainingDuration(remaining),
 			ttlInfo.Duration,
 		)
+	}
+}
+
+// displayComponents loads the persisted ClusterSpec and prints the enabled components summary.
+func displayComponents(writer io.Writer, clusterName string) {
+	spec, err := state.LoadClusterSpec(clusterName)
+	if err != nil {
+		return
+	}
+
+	_, _ = fmt.Fprintln(writer)
+	_, _ = fmt.Fprintln(writer, "  Components:")
+	_, _ = fmt.Fprintf(
+		writer,
+		"    GitOps Engine:  %s\n",
+		componentLabel(string(spec.GitOpsEngine)),
+	)
+	_, _ = fmt.Fprintf(writer, "    CNI:            %s\n", componentLabel(string(spec.CNI)))
+	_, _ = fmt.Fprintf(writer, "    CSI:            %s\n", componentLabel(string(spec.CSI)))
+	_, _ = fmt.Fprintf(
+		writer,
+		"    Metrics Server: %s\n",
+		componentLabel(string(spec.MetricsServer)),
+	)
+	_, _ = fmt.Fprintf(
+		writer,
+		"    Load Balancer:  %s\n",
+		componentLabel(string(spec.LoadBalancer)),
+	)
+	_, _ = fmt.Fprintf(writer, "    Cert Manager:   %s\n", componentLabel(string(spec.CertManager)))
+	_, _ = fmt.Fprintf(
+		writer,
+		"    Policy Engine:  %s\n",
+		componentLabel(string(spec.PolicyEngine)),
+	)
+}
+
+// componentLabel returns a display label for a component value.
+// Empty strings and "None" sentinel values are shown as "(none)".
+// "Disabled" sentinel values (used by CSI, MetricsServer, CertManager, etc.) are shown as "(disabled)".
+func componentLabel(value string) string {
+	switch value {
+	case "":
+		return "(none)"
+	case "None":
+		return "(none)"
+	case "Disabled":
+		return "(disabled)"
+	default:
+		return value
 	}
 }
 
@@ -2802,11 +2880,18 @@ func allProviders() []v1alpha1.Provider {
 	}
 }
 
-// listResult holds a cluster name with its provider for display purposes.
+// listResult holds a cluster name with its provider and distribution for display purposes.
 type listResult struct {
-	Provider    v1alpha1.Provider
-	ClusterName string
-	TTL         *state.TTLInfo // nil if no TTL has been set for this cluster
+	Provider     v1alpha1.Provider
+	Distribution v1alpha1.Distribution
+	ClusterName  string
+	TTL          *state.TTLInfo // nil if no TTL has been set for this cluster
+}
+
+// clusterWithDistribution pairs a cluster name with its distribution.
+type clusterWithDistribution struct {
+	Name         string
+	Distribution v1alpha1.Distribution
 }
 
 // ttlIndent is the indentation prefix for TTL annotation lines in list output.
@@ -2818,12 +2903,12 @@ By default, lists clusters from all distributions across all providers.
 Use --provider to filter results to a specific provider.
 
 Output Format:
-  <provider>: <cluster_name>[, <cluster_name>...]
+  <provider>: <cluster_name> (<distribution>)[, <cluster_name> (<distribution>)...]
 
-Each line groups clusters by provider. For example:
-  docker: dev-cluster, test-cluster
+Each line groups clusters by provider and shows the distribution. For example:
+  docker: dev-cluster (Vanilla), test-cluster (K3s)
 
-The provider name (docker or hetzner) and each cluster name from the
+The provider name (docker, hetzner, or omni) and each cluster name from the
 output can be used directly with other cluster commands:
   ksail cluster delete --name <cluster_name> --provider <provider>
   ksail cluster stop --name <cluster_name> --provider <provider>
@@ -2914,12 +2999,12 @@ func HandleListRunE(
 		}
 
 		for _, cluster := range clusters {
-			ttlInfo, ttlErr := state.LoadClusterTTL(cluster)
+			ttlInfo, ttlErr := state.LoadClusterTTL(cluster.Name)
 			if ttlErr != nil && !errors.Is(ttlErr, state.ErrTTLNotSet) {
 				notify.Warningf(
 					cmd.ErrOrStderr(),
 					"failed to load TTL for cluster %q: %v",
-					cluster,
+					cluster.Name,
 					ttlErr,
 				)
 			}
@@ -2930,9 +3015,10 @@ func HandleListRunE(
 			}
 
 			allResults = append(allResults, listResult{
-				Provider:    prov,
-				ClusterName: cluster,
-				TTL:         ttl,
+				Provider:     prov,
+				Distribution: cluster.Distribution,
+				ClusterName:  cluster.Name,
+				TTL:          ttl,
 			})
 		}
 	}
@@ -2957,7 +3043,7 @@ func getProviderClusters(
 	ctx context.Context,
 	deps ListDeps,
 	provider v1alpha1.Provider,
-) ([]string, error) {
+) ([]clusterWithDistribution, error) {
 	switch provider {
 	case v1alpha1.ProviderDocker:
 		return getDockerClusters(ctx, deps)
@@ -2971,13 +3057,8 @@ func getProviderClusters(
 }
 
 // getDockerClusters returns all Docker-based clusters across all distributions.
-// Results are deduplicated by cluster name because different distributions
-// (Kind, K3d, Talos, VCluster) each manage their own namespace and a cluster
-// name uniquely identifies a cluster within the Docker provider.
-func getDockerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
-	seen := make(map[string]struct{})
-
-	var allClusters []string
+func getDockerClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
+	var allClusters []clusterWithDistribution
 
 	for _, dist := range allDistributions() {
 		clusters, err := getDistributionClusters(ctx, deps, dist)
@@ -2986,11 +3067,11 @@ func getDockerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 			continue
 		}
 
-		for _, c := range clusters {
-			if _, ok := seen[c]; !ok {
-				seen[c] = struct{}{}
-				allClusters = append(allClusters, c)
-			}
+		for _, name := range clusters {
+			allClusters = append(allClusters, clusterWithDistribution{
+				Name:         name,
+				Distribution: dist,
+			})
 		}
 	}
 
@@ -2998,7 +3079,7 @@ func getDockerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 }
 
 // getHetznerClusters returns all Hetzner-based clusters.
-func getHetznerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
+func getHetznerClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
 	// Use injected provider if available (for testing)
 	if deps.HetznerProvider != nil {
 		clusters, err := deps.HetznerProvider.ListAllClusters(ctx)
@@ -3006,7 +3087,7 @@ func getHetznerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 			return nil, fmt.Errorf("failed to list Hetzner clusters: %w", err)
 		}
 
-		return clusters, nil
+		return toTalosClusters(clusters), nil
 	}
 
 	// Check for HCLOUD_TOKEN
@@ -3024,11 +3105,11 @@ func getHetznerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 		return nil, fmt.Errorf("failed to list Hetzner clusters: %w", err)
 	}
 
-	return clusters, nil
+	return toTalosClusters(clusters), nil
 }
 
 // getOmniClusters returns all Omni-based clusters.
-func getOmniClusters(ctx context.Context, deps ListDeps) ([]string, error) {
+func getOmniClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
 	// Use injected provider if available (for testing)
 	if deps.OmniProvider != nil {
 		clusters, err := deps.OmniProvider.ListAllClusters(ctx)
@@ -3036,7 +3117,7 @@ func getOmniClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 			return nil, fmt.Errorf("failed to list Omni clusters: %w", err)
 		}
 
-		return clusters, nil
+		return toTalosClusters(clusters), nil
 	}
 
 	// Check for OMNI_SERVICE_ACCOUNT_KEY
@@ -3068,7 +3149,21 @@ func getOmniClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 		return nil, fmt.Errorf("failed to list Omni clusters: %w", err)
 	}
 
-	return clusters, nil
+	return toTalosClusters(clusters), nil
+}
+
+// toTalosClusters wraps cluster names as Talos distribution clusters.
+// Hetzner and Omni providers only support Talos.
+func toTalosClusters(names []string) []clusterWithDistribution {
+	result := make([]clusterWithDistribution, 0, len(names))
+	for _, name := range names {
+		result = append(result, clusterWithDistribution{
+			Name:         name,
+			Distribution: v1alpha1.DistributionTalos,
+		})
+	}
+
+	return result
 }
 
 func getDistributionClusters(
@@ -3142,7 +3237,8 @@ func createEmptyDistributionConfig(
 // displayListResults outputs the cluster list grouped by provider.
 // Output is formatted for clarity, especially for AI assistants that need
 // to parse the cluster names for subsequent commands.
-// Format: "<provider>: cluster1, cluster2" to clearly identify cluster names.
+// Format: "<provider>: cluster1 (Distribution1), cluster2 (Distribution2)"
+// to clearly identify cluster names and their distributions.
 // If no clusters exist, displays "No clusters found.".
 // Clusters with a TTL set show remaining time on a separate indented line
 // to keep printed cluster identifiers directly copy/paste-able.
@@ -3157,38 +3253,45 @@ func displayListResults(
 		return
 	}
 
-	// Group clusters by provider, preserving TTL info for formatting.
+	// Group clusters by provider, preserving TTL and distribution info for formatting.
 	type clusterEntry struct {
-		name string
-		ttl  *state.TTLInfo
+		name         string
+		distribution v1alpha1.Distribution
+		ttl          *state.TTLInfo
 	}
 
 	providerClusters := make(map[v1alpha1.Provider][]clusterEntry)
 	for _, r := range results {
 		providerClusters[r.Provider] = append(providerClusters[r.Provider], clusterEntry{
-			name: r.ClusterName,
-			ttl:  r.TTL,
+			name:         r.ClusterName,
+			distribution: r.Distribution,
+			ttl:          r.TTL,
 		})
 	}
 
 	// Output in provider order for consistent output.
-	// Format explicitly labels cluster names for AI parsing.
+	// Format explicitly labels cluster names and distributions for AI parsing.
 	for _, prov := range providers {
 		entries, exists := providerClusters[prov]
 		if !exists || len(entries) == 0 {
 			continue
 		}
 
-		clusterNames := make([]string, 0, len(entries))
+		clusterLabels := make([]string, 0, len(entries))
 		for _, e := range entries {
-			clusterNames = append(clusterNames, e.name)
+			if e.distribution != "" {
+				clusterLabels = append(clusterLabels,
+					fmt.Sprintf("%s (%s)", e.name, e.distribution))
+			} else {
+				clusterLabels = append(clusterLabels, e.name)
+			}
 		}
 
 		_, _ = fmt.Fprintf(
 			writer,
 			"%s: %s\n",
 			strings.ToLower(string(prov)),
-			strings.Join(clusterNames, ", "),
+			strings.Join(clusterLabels, ", "),
 		)
 
 		// Print TTL annotations on separate indented lines.
