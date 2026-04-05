@@ -4748,19 +4748,19 @@ func resolveContextName(
 	}
 }
 
-// stripParenthetical removes a trailing " (<text>)" suffix from s.
-// Returns s unchanged if no such suffix is present.
-func stripParenthetical(s string) string {
-	idx := strings.LastIndex(s, " (")
+// stripParenthetical removes a trailing " (<text>)" suffix from input.
+// Returns input unchanged if no such suffix is present.
+func stripParenthetical(input string) string {
+	idx := strings.LastIndex(input, " (")
 	if idx < 0 {
-		return s
+		return input
 	}
 
-	if strings.HasSuffix(s, ")") {
-		return s[:idx]
+	if strings.HasSuffix(input, ")") {
+		return input[:idx]
 	}
 
-	return s
+	return input
 }
 
 // switchContext loads the kubeconfig, resolves the cluster name to a context, and sets current-context.

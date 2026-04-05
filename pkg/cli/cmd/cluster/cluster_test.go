@@ -28,6 +28,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/api/types/container"
@@ -4843,6 +4844,65 @@ func TestFormatAnnotationLabel_NoDistributionNoTTL(t *testing.T) {
 
 	result := cluster.ExportFormatAnnotationLabel("", nil)
 	assert.Empty(t, result)
+}
+
+func TestFormatAnnotationLabel_DistributionOnly(t *testing.T) {
+	t.Parallel()
+
+	result := cluster.ExportFormatAnnotationLabel(v1alpha1.DistributionVanilla, nil)
+	assert.Equal(t, "[Vanilla]", result)
+}
+
+func TestFormatAnnotationLabel_TTLOnly(t *testing.T) {
+	t.Parallel()
+
+	// Add extra seconds to ensure truncation to whole minutes yields expected result.
+	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(2*time.Hour + 30*time.Minute + 30*time.Second)}
+
+	result := cluster.ExportFormatAnnotationLabel("", ttl)
+	assert.Equal(t, "[TTL: 2h 30m]", result)
+}
+
+func TestFormatAnnotationLabel_DistributionAndTTL(t *testing.T) {
+	t.Parallel()
+
+	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(1*time.Hour + 30*time.Second)}
+
+	result := cluster.ExportFormatAnnotationLabel(v1alpha1.DistributionK3s, ttl)
+	assert.Equal(t, "[K3s, TTL: 1h]", result)
+}
+
+func TestFormatAnnotationLabel_ExpiredTTL(t *testing.T) {
+	t.Parallel()
+
+	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(-1 * time.Hour)}
+
+	result := cluster.ExportFormatAnnotationLabel(v1alpha1.DistributionTalos, ttl)
+	assert.Equal(t, "[Talos, TTL: EXPIRED]", result)
+}
+
+func TestStripParenthetical_NoSuffix(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "kind", cluster.ExportStripParenthetical("kind"))
+}
+
+func TestStripParenthetical_WithSuffix(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "kind", cluster.ExportStripParenthetical("kind (Vanilla)"))
+}
+
+func TestStripParenthetical_EmptyString(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "", cluster.ExportStripParenthetical(""))
+}
+
+func TestStripParenthetical_NoClosingParen(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "kind (Vanilla", cluster.ExportStripParenthetical("kind (Vanilla"))
 }
 
 func TestFormatRemainingDuration_HoursAndMinutes(t *testing.T) {
