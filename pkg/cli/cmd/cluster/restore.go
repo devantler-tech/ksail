@@ -544,7 +544,7 @@ func isEmptyYAML(path string) bool {
 		return false
 	}
 
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed != "" && trimmed != "---" {
 			return false
