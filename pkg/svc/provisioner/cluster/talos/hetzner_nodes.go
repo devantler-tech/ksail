@@ -170,12 +170,7 @@ func (p *Provisioner) waitForHetznerTalosAPI(
 		serverIP := server.PublicNet.IPv4.IP.String()
 		endpoint := fmt.Sprintf("%s:%d", serverIP, talosAPIPort)
 
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  Waiting for Talos API on %s (%s)...\n",
-			server.Name,
-			endpoint,
-		)
+		p.logf("  Waiting for Talos API on %s (%s)...\n", server.Name, endpoint)
 
 		err := retry.Constant(talosAPIWaitTimeout, retry.WithUnits(retryInterval)).
 			RetryWithContext(ctx, func(ctx context.Context) error {
@@ -211,7 +206,7 @@ func (p *Provisioner) waitForHetznerTalosAPI(
 			return fmt.Errorf("timeout waiting for Talos API on %s: %w", server.Name, err)
 		}
 
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Talos API reachable on %s\n", server.Name)
+		p.logf("  ✓ Talos API reachable on %s\n", server.Name)
 
 		return nil
 	})
@@ -318,18 +313,14 @@ func (p *Provisioner) waitForServersToBeReachable(
 	servers []*hcloud.Server,
 ) error {
 	return runParallelOnServers(ctx, servers, len(servers), func(server *hcloud.Server) error {
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  Waiting for %s to install, reboot, and become reachable...\n",
-			server.Name,
-		)
+		p.logf("  Waiting for %s to install, reboot, and become reachable...\n", server.Name)
 
 		err := p.waitForServerReachable(ctx, server)
 		if err != nil {
 			return err
 		}
 
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ %s is reachable after install\n", server.Name)
+		p.logf("  ✓ %s is reachable after install\n", server.Name)
 
 		return nil
 	})
@@ -387,18 +378,13 @@ func (p *Provisioner) detachISOsFromServers(
 
 	for _, server := range servers {
 		group.Go(func() error {
-			_, _ = fmt.Fprintf(p.logWriter, "  Detaching ISO from %s...\n", server.Name)
+			p.logf("  Detaching ISO from %s...\n", server.Name)
 
 			err := hetznerProv.DetachISO(ctx, server)
 			if err != nil {
-				_, _ = fmt.Fprintf(
-					p.logWriter,
-					"  Warning: Failed to detach ISO from %s: %v\n",
-					server.Name,
-					err,
-				)
+				p.logf("  Warning: Failed to detach ISO from %s: %v\n", server.Name, err)
 			} else {
-				_, _ = fmt.Fprintf(p.logWriter, "  ✓ ISO detached from %s\n", server.Name)
+				p.logf("  ✓ ISO detached from %s\n", server.Name)
 			}
 
 			return nil // errors logged but don't fail
@@ -416,7 +402,7 @@ func (p *Provisioner) applyConfigToNode(
 ) error {
 	serverIP := server.PublicNet.IPv4.IP.String()
 
-	_, _ = fmt.Fprintf(p.logWriter, "  Applying config to %s (%s)...\n", server.Name, serverIP)
+	p.logf("  Applying config to %s (%s)...\n", server.Name, serverIP)
 
 	// Get config bytes
 	cfgBytes, err := config.Bytes()
@@ -445,7 +431,7 @@ func (p *Provisioner) applyConfigToNode(
 		return fmt.Errorf("failed to apply configuration: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Config applied to %s\n", server.Name)
+	p.logf("  ✓ Config applied to %s\n", server.Name)
 
 	return nil
 }

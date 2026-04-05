@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -135,6 +136,7 @@ type Provisioner struct {
 	omniOpts           *v1alpha1.OptionsOmni
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
 	logWriter          io.Writer
+	logMu              sync.Mutex
 	componentDetector  *detector.ComponentDetector
 	// imagePullRetry controls retry behavior for Docker image pulls.
 	// Tests can override this via WithImagePullRetryConfig to use near-zero delays.
@@ -482,4 +484,13 @@ func (p *Provisioner) resolveClusterName(name string) string {
 	}
 
 	return talosconfigmanager.DefaultClusterName
+}
+
+// logf writes a formatted message to the log writer.
+// It is safe for concurrent use by multiple goroutines.
+func (p *Provisioner) logf(format string, args ...any) {
+	p.logMu.Lock()
+	defer p.logMu.Unlock()
+
+	_, _ = fmt.Fprintf(p.logWriter, format, args...)
 }
