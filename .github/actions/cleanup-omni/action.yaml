@@ -1,0 +1,46 @@
+name: Cleanup Omni Resources
+description: |
+  Deletes all KSail test clusters from Omni to ensure clean slate
+  for next CI run, even if individual test jobs fail to clean up after themselves.
+
+inputs: {}
+
+runs:
+  using: composite
+  steps:
+    - name: 🧹 Cleanup all KSail test clusters from Omni
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        echo "🧹 Starting Omni cleanup for KSail test clusters..."
+
+        if ! command -v ksail >/dev/null 2>&1; then
+          echo "❌ ksail is not installed or not available on PATH"
+          exit 1
+        fi
+
+        echo "🔎 Verifying Omni authentication/connectivity..."
+        ksail cluster list --provider Omni >/dev/null
+
+        # Delete known test clusters by name
+        for CLUSTER_NAME in "system-test-cluster-with-scaffolding" "system-test-cluster-without-scaffolding"; do
+          echo "🗑️  Deleting cluster: ${CLUSTER_NAME}"
+
+          DELETE_OUTPUT=""
+          if ! DELETE_OUTPUT="$(ksail cluster delete --name "${CLUSTER_NAME}" --provider Omni --force 2>&1)"; then
+            if printf '%s\n' "${DELETE_OUTPUT}" | grep -qiE 'not found|does not exist|already deleted'; then
+              echo "  ⚠️  Cluster ${CLUSTER_NAME} does not exist or was already deleted"
+              continue
+            fi
+
+            echo "❌ Failed to delete cluster ${CLUSTER_NAME}"
+            printf '%s\n' "${DELETE_OUTPUT}"
+            exit 1
+          fi
+
+          printf '%s\n' "${DELETE_OUTPUT}"
+          echo "  ✓ Deleted cluster ${CLUSTER_NAME}"
+        done
+
+        echo "✅ Omni cleanup complete!"
