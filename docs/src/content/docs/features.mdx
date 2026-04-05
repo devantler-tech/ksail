@@ -67,7 +67,7 @@ Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns:
 - **Export and import** container images
 - **Validate** manifests against schemas — see [Substitution Expansion in `workload validate`](/guides/workload-validate/) for Flux `${VAR}` expansion behavior
 - **Generate** resources — see [`ksail workload gen` reference](/cli-flags/workload/workload-gen/) for supported types
-- **Watch** directories for automatic live reconciliation scoped to the nearest kustomization file recognized by kubectl (`kustomization.yaml`, `kustomization.yml`, or `Kustomization`), falling back to `kubectl apply -f <dir> --recursive` when no kustomization boundary is found (use `--initial-apply` to sync the cluster at startup before entering the watch loop)
+- **Watch** directories for automatic live reconciliation — see the [`ksail workload watch` reference](/cli-flags/workload/workload-watch/) for the canonical behavior and supported options
 
 ```bash
 ksail workload apply -k k8s/
