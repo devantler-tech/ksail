@@ -234,34 +234,13 @@ func (p *Provider) WaitForClusterReady(
 	defer ticker.Stop()
 
 	for {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return fmt.Errorf("timed out waiting for cluster %q to become ready: %w", clusterName, ctxErr)
+		ready, err := isClusterRunningAndReady(ctx, omniState, clusterName)
+		if err != nil {
+			return err
 		}
 
-		status, err := safe.StateGet[*omnires.ClusterStatus](
-			ctx,
-			omniState,
-			omnires.NewClusterStatus(clusterName).Metadata(),
-		)
-		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-				return fmt.Errorf(
-					"timed out waiting for cluster %q to become ready: %w",
-					clusterName,
-					err,
-				)
-			}
-
-			if !state.IsNotFoundError(err) {
-				return fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
-			}
-		} else {
-			phase := status.TypedSpec().Value.GetPhase()
-			ready := status.TypedSpec().Value.GetReady()
-
-			if phase == specs.ClusterStatusSpec_RUNNING && ready {
-				return nil
-			}
+		if ready {
+			return nil
 		}
 
 		select {
@@ -274,6 +253,40 @@ func (p *Provider) WaitForClusterReady(
 		case <-ticker.C:
 		}
 	}
+}
+
+// isClusterRunningAndReady checks whether the Omni cluster has Phase==RUNNING and Ready==true.
+// It returns (false, nil) when the cluster resource is not yet found, allowing the caller to retry.
+func isClusterRunningAndReady(
+	ctx context.Context,
+	omniState state.State,
+	clusterName string,
+) (bool, error) {
+	status, err := safe.StateGet[*omnires.ClusterStatus](
+		ctx,
+		omniState,
+		omnires.NewClusterStatus(clusterName).Metadata(),
+	)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return false, fmt.Errorf(
+				"timed out waiting for cluster %q to become ready: %w",
+				clusterName,
+				err,
+			)
+		}
+
+		if state.IsNotFoundError(err) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
+	}
+
+	phase := status.TypedSpec().Value.GetPhase()
+	ready := status.TypedSpec().Value.GetReady()
+
+	return phase == specs.ClusterStatusSpec_RUNNING && ready, nil
 }
 
 // GetKubeconfig retrieves the kubeconfig for the given cluster from Omni.

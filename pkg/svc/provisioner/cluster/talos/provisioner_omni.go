@@ -62,7 +62,7 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	if p.options.KubeconfigPath != "" {
 		_, _ = fmt.Fprintf(p.logWriter, "  Fetching kubeconfig from Omni...\n")
 
-		_, err := p.saveOmniKubeconfig(ctx, omniProv, clusterName)
+		err = p.saveOmniKubeconfig(ctx, omniProv, clusterName)
 		if err != nil {
 			return fmt.Errorf("failed to save kubeconfig: %w", err)
 		}
@@ -72,7 +72,7 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	if p.options.TalosconfigPath != "" {
 		_, _ = fmt.Fprintf(p.logWriter, "  Fetching talosconfig from Omni...\n")
 
-		_, err := p.saveOmniTalosconfig(ctx, omniProv, clusterName)
+		err = p.saveOmniTalosconfig(ctx, omniProv, clusterName)
 		if err != nil {
 			return fmt.Errorf("failed to save talosconfig: %w", err)
 		}
@@ -160,78 +160,64 @@ func (p *Provisioner) resolveOmniVersions() (string, string) {
 	return talosVersion, kubernetesVersion
 }
 
+// saveOmniConfig is a shared helper that fetches config data from Omni, expands/canonicalizes the
+// output path, and writes the file. It logs the result using configLabel (e.g. "Kubeconfig").
+func (p *Provisioner) saveOmniConfig(
+	configData []byte,
+	rawPath string,
+	configLabel string,
+) error {
+	expandedPath, err := fsutil.ExpandHomePath(rawPath)
+	if err != nil {
+		return fmt.Errorf("failed to expand %s path: %w", configLabel, err)
+	}
+
+	err = os.MkdirAll(filepath.Dir(expandedPath), stateDirectoryPermissions)
+	if err != nil {
+		return fmt.Errorf("failed to create %s directory: %w", configLabel, err)
+	}
+
+	canonicalPath, err := fsutil.EvalCanonicalPath(expandedPath)
+	if err != nil {
+		return fmt.Errorf("failed to canonicalize %s path: %w", configLabel, err)
+	}
+
+	err = os.WriteFile(canonicalPath, configData, kubeconfigFileMode)
+	if err != nil {
+		return fmt.Errorf("failed to write %s: %w", configLabel, err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ %s saved to %s\n", configLabel, canonicalPath)
+
+	return nil
+}
+
 // saveOmniKubeconfig retrieves and saves the kubeconfig from Omni.
-// It returns the canonical path where the kubeconfig was written.
 func (p *Provisioner) saveOmniKubeconfig(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
 	clusterName string,
-) (string, error) {
+) error {
 	kubeconfigData, err := omniProv.GetKubeconfig(ctx, clusterName)
 	if err != nil {
-		return "", fmt.Errorf("failed to get kubeconfig from Omni: %w", err)
+		return fmt.Errorf("failed to get kubeconfig from Omni: %w", err)
 	}
 
-	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to expand kubeconfig path: %w", err)
-	}
-
-	err = os.MkdirAll(filepath.Dir(kubeconfigPath), stateDirectoryPermissions)
-	if err != nil {
-		return "", fmt.Errorf("failed to create kubeconfig directory: %w", err)
-	}
-
-	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to canonicalize kubeconfig path: %w", err)
-	}
-
-	err = os.WriteFile(kubeconfigPath, kubeconfigData, kubeconfigFileMode)
-	if err != nil {
-		return "", fmt.Errorf("failed to write kubeconfig: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "Kubeconfig saved to %s\n", kubeconfigPath)
-
-	return kubeconfigPath, nil
+	return p.saveOmniConfig(kubeconfigData, p.options.KubeconfigPath, "Kubeconfig")
 }
 
 // saveOmniTalosconfig retrieves and saves the talosconfig from Omni.
-// It returns the canonical path where the talosconfig was written.
 func (p *Provisioner) saveOmniTalosconfig(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
 	clusterName string,
-) (string, error) {
+) error {
 	talosconfigData, err := omniProv.GetTalosconfig(ctx, clusterName)
 	if err != nil {
-		return "", fmt.Errorf("failed to get talosconfig from Omni: %w", err)
+		return fmt.Errorf("failed to get talosconfig from Omni: %w", err)
 	}
 
-	talosconfigPath, err := fsutil.ExpandHomePath(p.options.TalosconfigPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to expand talosconfig path: %w", err)
-	}
-
-	err = os.MkdirAll(filepath.Dir(talosconfigPath), stateDirectoryPermissions)
-	if err != nil {
-		return "", fmt.Errorf("failed to create talosconfig directory: %w", err)
-	}
-
-	talosconfigPath, err = fsutil.EvalCanonicalPath(talosconfigPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to canonicalize talosconfig path: %w", err)
-	}
-
-	err = os.WriteFile(talosconfigPath, talosconfigData, kubeconfigFileMode)
-	if err != nil {
-		return "", fmt.Errorf("failed to write talosconfig: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "Talosconfig saved to %s\n", talosconfigPath)
-
-	return talosconfigPath, nil
+	return p.saveOmniConfig(talosconfigData, p.options.TalosconfigPath, "Talosconfig")
 }
 
 // deleteOmniCluster handles cluster deletion for Omni-managed Talos clusters.

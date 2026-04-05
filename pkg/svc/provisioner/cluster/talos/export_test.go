@@ -78,9 +78,7 @@ func (p *Provisioner) SaveOmniKubeconfigForTest(
 	omniProv *omniprovider.Provider,
 	clusterName string,
 ) error {
-	_, err := p.saveOmniKubeconfig(ctx, omniProv, clusterName)
-
-	return err
+	return p.saveOmniKubeconfig(ctx, omniProv, clusterName)
 }
 
 // SaveOmniTalosconfigForTest exposes saveOmniTalosconfig for unit testing.
@@ -89,9 +87,7 @@ func (p *Provisioner) SaveOmniTalosconfigForTest(
 	omniProv *omniprovider.Provider,
 	clusterName string,
 ) error {
-	_, err := p.saveOmniTalosconfig(ctx, omniProv, clusterName)
-
-	return err
+	return p.saveOmniTalosconfig(ctx, omniProv, clusterName)
 }
 
 // GetOmniNodesByRoleForTest exposes getOmniNodesByRole for unit testing.
