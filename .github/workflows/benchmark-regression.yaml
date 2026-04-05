@@ -50,7 +50,6 @@ jobs:
     timeout-minutes: 40
     permissions:
       contents: write
-      actions: read
       pull-requests: write
     steps:
       - name: 📄 Checkout
