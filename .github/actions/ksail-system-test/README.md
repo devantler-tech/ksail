@@ -5,35 +5,42 @@ A GitHub composite action that orchestrates a full end-to-end system test of KSa
 ## What It Tests
 
 ### Phase 1 — Setup
+
 - Provider credential validation (Hetzner/Omni)
 - Artifact tag generation for unique CI run identification
 - GHCR credential resolution for external registry tests
 
 ### Phase 2 — Offline Tests (no cluster needed)
+
 - **Gen & Smoke** (`ksail-test-gen-smoke`) — Generates and validates manifests for 15 resource types; smoke-tests `chat --help` and `mcp --help`
 - **Tenant** (`ksail-tenant-test`) — Tests tenant create/delete for kubectl, flux (OCI + Git), and argocd types; covers multi-namespace, custom ClusterRole, force overwrite, and register/unregister
 
 ### Phase 3 — Cluster Provisioning
+
 - **Cluster Init** (optional) — Initialize a new KSail project
 - **Manifest Validate** (when `init` is enabled) — Validate generated manifests before cluster creation
 - **Cluster Create** — Create and start a Kubernetes cluster
 - **Cluster Info / List** — Verify cluster status and listing
 
 ### Phase 4 — Online Tests (cluster running)
+
 - **Workload Lifecycle** (`ksail-test-workload`) — Full CRUD: create, get, describe, logs, scale, install (Helm), apply (kustomize), watch, push/reconcile (GitOps), delete
 - **API-dependent Gen** — `workload gen clusterrole` and `role` (require API server for resource group discovery)
 - **Backup & Restore** (`ksail-test-backup-restore`) — Deploy workload, backup cluster, delete workload, restore from backup, verify restoration
 - **Cluster Update** — Dry-run and actual update with regression detection
 
 ### Phase 5 — Debug
+
 - Automatic Kubernetes diagnostic output on failure
 
 ### Phase 6 — Lifecycle Tests
+
 - **Cluster Stop** — Stop the running cluster
 - **Cluster Start** — Start the stopped cluster (with retry)
 - **Cluster Switch** — Switch kubeconfig context
 
 ### Phase 7 — Cleanup
+
 - **Cluster Delete** — Clean up the cluster (always runs)
 
 ## Sub-Action Architecture
@@ -147,6 +154,7 @@ jobs:
 ## Failure Debugging
 
 When tests fail, debug output is provided at two levels:
+
 - **Sub-action debug**: Each sub-action (`ksail-test-workload`, `ksail-test-backup-restore`) includes its own `debug-kubernetes-failure` step scoped to its step outcomes
 - **Orchestrator debug**: The orchestrator captures cluster-level and online-gen failures
 
