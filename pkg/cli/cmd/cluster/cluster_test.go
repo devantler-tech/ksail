@@ -4856,20 +4856,21 @@ func TestFormatAnnotationLabel_DistributionOnly(t *testing.T) {
 func TestFormatAnnotationLabel_TTLOnly(t *testing.T) {
 	t.Parallel()
 
-	// Add extra seconds to ensure truncation to whole minutes yields expected result.
-	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(2*time.Hour + 30*time.Minute + 30*time.Second)}
+	// Add several minutes of buffer so slow CI runners do not cross a minute boundary.
+	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(2*time.Hour + 35*time.Minute + 30*time.Second)}
 
 	result := cluster.ExportFormatAnnotationLabel("", ttl)
-	assert.Equal(t, "[TTL: 2h 30m]", result)
+	assert.Equal(t, "[TTL: 2h 35m]", result)
 }
 
 func TestFormatAnnotationLabel_DistributionAndTTL(t *testing.T) {
 	t.Parallel()
 
-	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(1*time.Hour + 30*time.Second)}
+	// Add several minutes of buffer so slow CI runners do not cross a minute boundary.
+	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(1*time.Hour + 5*time.Minute + 30*time.Second)}
 
 	result := cluster.ExportFormatAnnotationLabel(v1alpha1.DistributionK3s, ttl)
-	assert.Equal(t, "[K3s, TTL: 1h]", result)
+	assert.Equal(t, "[K3s, TTL: 1h 5m]", result)
 }
 
 func TestFormatAnnotationLabel_ExpiredTTL(t *testing.T) {
