@@ -161,8 +161,8 @@ func writePatchesSection(buf *bytes.Buffer, patches []PatchInfo) {
 
 // writeInlineContent writes patch YAML content indented under inline:.
 func writeInlineContent(buf *bytes.Buffer, content []byte) {
-	lines := strings.Split(strings.TrimRight(string(content), "\n"), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(strings.TrimRight(string(content), "\n"), "\n")
+	for line := range lines {
 		if line == "" {
 			fmt.Fprintf(buf, "\n")
 		} else {

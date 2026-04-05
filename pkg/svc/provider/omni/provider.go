@@ -187,7 +187,11 @@ func (p *Provider) ClusterExists(ctx context.Context, clusterName string) (bool,
 // CreateCluster creates a cluster in Omni by syncing a cluster template.
 // The templateReader should contain a multi-document YAML cluster template
 // (Cluster + ControlPlane + Workers kinds) compatible with the Omni template format.
-func (p *Provider) CreateCluster(ctx context.Context, templateReader io.Reader, out io.Writer) error {
+func (p *Provider) CreateCluster(
+	ctx context.Context,
+	templateReader io.Reader,
+	out io.Writer,
+) error {
 	if p.client == nil {
 		return provider.ErrProviderUnavailable
 	}
@@ -207,7 +211,11 @@ const clusterReadyPollInterval = 10 * time.Second
 
 // WaitForClusterReady polls the ClusterStatus resource until the cluster is ready
 // (Phase == RUNNING and Ready == true) or the timeout expires.
-func (p *Provider) WaitForClusterReady(ctx context.Context, clusterName string, timeout time.Duration) error {
+func (p *Provider) WaitForClusterReady(
+	ctx context.Context,
+	clusterName string,
+	timeout time.Duration,
+) error {
 	if p.client == nil {
 		return provider.ErrProviderUnavailable
 	}
@@ -241,7 +249,11 @@ func (p *Provider) WaitForClusterReady(ctx context.Context, clusterName string, 
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for cluster %q to become ready: %w", clusterName, ctx.Err())
+			return fmt.Errorf(
+				"timed out waiting for cluster %q to become ready: %w",
+				clusterName,
+				ctx.Err(),
+			)
 		case <-ticker.C:
 		}
 	}

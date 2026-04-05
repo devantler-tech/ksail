@@ -130,7 +130,11 @@ func (p *Provisioner) syncAndWaitOmniCluster(
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster template synced\n")
-	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for cluster to become ready (timeout: %s)...\n", clusterReadinessTimeout)
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  Waiting for cluster to become ready (timeout: %s)...\n",
+		clusterReadinessTimeout,
+	)
 
 	err = omniProv.WaitForClusterReady(ctx, params.ClusterName, clusterReadinessTimeout)
 	if err != nil {
