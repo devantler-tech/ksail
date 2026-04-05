@@ -970,37 +970,6 @@ jobs:
           OMNI_SERVICE_ACCOUNT_KEY: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
           OMNI_ENDPOINT: ${{ vars.OMNI_ENDPOINT }}
 
-  rate-limit-check:
-    name: 📊 Rate Limit Status
-    runs-on: ubuntu-latest
-    if: github.event_name == 'merge_group'
-    permissions:
-      contents: read
-    steps:
-      - name: 📊 GitHub API rate limit
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "## GitHub API Rate Limit" >> "$GITHUB_STEP_SUMMARY"
-          curl -sf -H "Authorization: token $GH_TOKEN" \
-            https://api.github.com/rate_limit | \
-            jq -r '"| Resource | Remaining | Limit | Reset |", "|---|---|---|---|", (.resources | to_entries[] | "| \(.key) | \(.value.remaining) | \(.value.limit) | \(.value.reset | todate) |")' \
-            >> "$GITHUB_STEP_SUMMARY"
-      - name: 📊 Docker Hub rate limit
-        run: |
-          echo "## Docker Hub Rate Limit" >> "$GITHUB_STEP_SUMMARY"
-          TOKEN=$(curl -sf "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/alpine:pull" | jq -r .token)
-          HEADERS=$(curl -sf -I -H "Authorization: Bearer $TOKEN" \
-            https://registry-1.docker.io/v2/library/alpine/manifests/latest 2>&1)
-          REMAINING=$(echo "$HEADERS" | grep -i "ratelimit-remaining" | head -1 || true)
-          LIMIT=$(echo "$HEADERS" | grep -i "ratelimit-limit" | head -1 || true)
-          if [ -n "$REMAINING" ]; then
-            echo "- $LIMIT" >> "$GITHUB_STEP_SUMMARY"
-            echo "- $REMAINING" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "No rate limit headers — runner may be exempt" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
   status:
     name: CI - KSail
     runs-on: ubuntu-latest
@@ -1021,7 +990,6 @@ jobs:
         backup-restore-test,
         cleanup-hetzner,
         cleanup-omni,
-        rate-limit-check,
         audit-docs,
         audit-vsce,
         vscode-extension,
@@ -1049,7 +1017,6 @@ jobs:
             ${{ needs.backup-restore-test.result }}
             ${{ needs.cleanup-hetzner.result }}
             ${{ needs.cleanup-omni.result }}
-            ${{ needs.rate-limit-check.result }}
             ${{ needs.audit-docs.result }}
             ${{ needs.audit-vsce.result }}
             ${{ needs.vscode-extension.result }}
