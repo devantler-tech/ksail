@@ -94,12 +94,27 @@ jobs:
             | xargs go test -bench=. -benchmem -run='^$' -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
+      - name: 🔍 Filter sub-microsecond benchmarks
+        if: steps.discover.outputs.skip == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Create a filtered copy excluding benchmark lines with ns/op < 100
+          # to avoid false positives from CPU clock jitter on shared CI runners
+          # (see #3698). The original bench.txt is preserved for artifact upload
+          # and historical storage.
+          awk '/^Benchmark/ && /ns\/op/ {
+            for (i = 1; i <= NF; i++) {
+              if ($(i+1) == "ns/op" && $i + 0 < 100) next
+            }
+          } {print}' "$RUNNER_TEMP/bench.txt" > "$RUNNER_TEMP/bench-filtered.txt"
+
       - name: 📊 Compare benchmark results
         if: steps.discover.outputs.skip == 'false'
         uses: benchmark-action/github-action-benchmark@d48d326b4ca9ba73ca0cd0d59f108f9e02a381c7 # v1.20.4
         with:
           tool: go
-          output-file-path: ${{ runner.temp }}/bench.txt
+          output-file-path: ${{ runner.temp }}/bench-filtered.txt
           gh-pages-branch: benchmark-data
           benchmark-data-dir-path: dev/bench
           github-token: ${{ secrets.GITHUB_TOKEN }}
