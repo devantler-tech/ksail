@@ -191,7 +191,7 @@ func TestApplyNodeScalingChanges_NilSpecs(t *testing.T) {
 func TestApplyNodeScalingChanges_NoDelta(t *testing.T) {
 	t.Parallel()
 
-	p := talosprovisioner.NewProvisioner(nil, nil)
+	provisioner := talosprovisioner.NewProvisioner(nil, nil)
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	oldSpec := &v1alpha1.ClusterSpec{}
@@ -202,7 +202,13 @@ func TestApplyNodeScalingChanges_NoDelta(t *testing.T) {
 	newSpec.Talos.ControlPlanes = 3
 	newSpec.Talos.Workers = 2
 
-	err := p.ApplyNodeScalingChangesForTest(context.Background(), "test", oldSpec, newSpec, result)
+	err := provisioner.ApplyNodeScalingChangesForTest(
+		context.Background(),
+		"test",
+		oldSpec,
+		newSpec,
+		result,
+	)
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.TotalChanges(), "no changes expected when deltas are zero")
 }
@@ -214,7 +220,7 @@ func TestApplyNodeScalingChanges_NoDelta(t *testing.T) {
 func TestApplyNodeScalingChanges_OmniReturnsNotImplemented(t *testing.T) {
 	t.Parallel()
 
-	p := talosprovisioner.NewProvisioner(nil, nil).WithOmniOptions(v1alpha1.OptionsOmni{
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithOmniOptions(v1alpha1.OptionsOmni{
 		Endpoint: "https://example.omni.siderolabs.io",
 	})
 	result := clusterupdate.NewEmptyUpdateResult()
@@ -227,7 +233,13 @@ func TestApplyNodeScalingChanges_OmniReturnsNotImplemented(t *testing.T) {
 	newSpec.Talos.ControlPlanes = 3
 	newSpec.Talos.Workers = 2
 
-	err := p.ApplyNodeScalingChangesForTest(context.Background(), "test", oldSpec, newSpec, result)
+	err := provisioner.ApplyNodeScalingChangesForTest(
+		context.Background(),
+		"test",
+		oldSpec,
+		newSpec,
+		result,
+	)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, talosprovisioner.ErrNotImplemented)
 }
@@ -237,7 +249,7 @@ func TestApplyNodeScalingChanges_OmniReturnsNotImplemented(t *testing.T) {
 func TestApplyNodeScalingChanges_BelowMinimumControlPlanes(t *testing.T) {
 	t.Parallel()
 
-	p := talosprovisioner.NewProvisioner(nil, nil)
+	provisioner := talosprovisioner.NewProvisioner(nil, nil)
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	oldSpec := &v1alpha1.ClusterSpec{}
@@ -246,7 +258,13 @@ func TestApplyNodeScalingChanges_BelowMinimumControlPlanes(t *testing.T) {
 	newSpec := &v1alpha1.ClusterSpec{}
 	newSpec.Talos.ControlPlanes = 0
 
-	err := p.ApplyNodeScalingChangesForTest(context.Background(), "test", oldSpec, newSpec, result)
+	err := provisioner.ApplyNodeScalingChangesForTest(
+		context.Background(),
+		"test",
+		oldSpec,
+		newSpec,
+		result,
+	)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, talosprovisioner.ErrMinimumControlPlanes)
 }
