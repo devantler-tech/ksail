@@ -298,12 +298,63 @@ runs:
         CONFIG: ${{ inputs.config }}
       run: |
         set -euo pipefail
-        if [ "$INIT" = "true" ]; then
-          ksail ${CONFIG:+--config "$CONFIG"} cluster create
+
+        # Cloud providers may experience transient failures; retry with backoff
+        if [ "$PROVIDER" = "Docker" ]; then
+          MAX_ATTEMPTS=1
         else
-          # shellcheck disable=SC2086
-          ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+          MAX_ATTEMPTS=3
         fi
+
+        # Extract --name from ARGS for cleanup between retries
+        CLUSTER_NAME=""
+        # shellcheck disable=SC2086
+        set -- $ARGS
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --name)
+              if [ $# -gt 1 ]; then CLUSTER_NAME="$2"; fi
+              break ;;
+            --name=*)
+              CLUSTER_NAME="${1#--name=}"
+              break ;;
+            *) shift ;;
+          esac
+        done
+
+        create_succeeded=false
+        for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+          if [ "$INIT" = "true" ]; then
+            if ksail ${CONFIG:+--config "$CONFIG"} cluster create; then
+              create_succeeded=true
+              break
+            fi
+          else
+            # shellcheck disable=SC2086
+            if ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS; then
+              create_succeeded=true
+              break
+            fi
+          fi
+
+          if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+            BACKOFF=$((10 * (2 ** (attempt - 1))))
+            echo "⚠️ cluster create attempt $attempt/$MAX_ATTEMPTS failed, cleaning up before retry in ${BACKOFF}s…"
+            # Clean up partial state before retrying
+            if [ "$INIT" = "true" ]; then
+              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --force 2>/dev/null || true
+            elif [ -n "$CLUSTER_NAME" ]; then
+              ksail cluster delete --name "$CLUSTER_NAME" --provider "$PROVIDER" --force 2>/dev/null || true
+            fi
+            sleep "$BACKOFF"
+          fi
+        done
+
+        if [ "$create_succeeded" != "true" ]; then
+          echo "❌ cluster create failed after $MAX_ATTEMPTS attempt(s)"
+          exit 1
+        fi
+
         # Determine kubeconfig path: parse --kubeconfig from args, fall back to default
         KUBECONFIG_PATH="${HOME}/.kube/config"
         # shellcheck disable=SC2086
