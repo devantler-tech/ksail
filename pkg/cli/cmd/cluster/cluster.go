@@ -3274,13 +3274,14 @@ func printTable(writer io.Writer, rows []tableRow, hasTTL bool) {
 	}
 
 	for _, row := range rows {
-		printTableRow(writer, row, provW, distW, clusterW)
+		printTableRow(writer, row, provW, distW, clusterW, hasTTL)
 	}
 }
 
-// printTableRow writes a single data row, omitting trailing whitespace when no TTL is present.
-func printTableRow(writer io.Writer, row tableRow, provW, distW, clusterW int) {
-	if row.ttl != "" {
+// printTableRow writes a single data row. When the table has a TTL column,
+// the cluster field is padded for alignment even on rows without a TTL value.
+func printTableRow(writer io.Writer, row tableRow, provW, distW, clusterW int, hasTTLColumn bool) {
+	if hasTTLColumn {
 		_, _ = fmt.Fprintf(writer, "%-*s%-*s%-*s%s\n",
 			provW+tableColumnGap, row.provider,
 			distW+tableColumnGap, row.distribution,
