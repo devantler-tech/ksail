@@ -1,0 +1,230 @@
+name: KSail Workload Test
+description: |
+  Tests the full workload CRUD lifecycle on a running cluster:
+  create, get, describe, logs, scale, install, apply, watch,
+  push/reconcile, and delete.
+
+inputs:
+  test-workload-name:
+    description: Name for the test workload deployment
+    required: false
+    default: "whoami"
+  test-workload-image:
+    description: Image to use for workload create test
+    required: false
+    default: "traefik/whoami:v1.10"
+  workload-timeout:
+    description: |
+      Timeout for workload wait operations. Set to 10 minutes to handle
+      intermittent delays in CI environments (image pulls, resource contention).
+    required: false
+    default: "600s"
+  apply-overlay-path:
+    description: Path to kustomize overlay for workload apply test
+    required: false
+    default: ""
+  args:
+    description: Additional arguments passed to cluster init/create (used to detect --gitops-engine)
+    required: false
+    default: ""
+  gitops-path:
+    description: Path for GitOps push (only if --gitops-engine in args)
+    required: false
+    default: "k8s"
+  ghcr-user:
+    description: GitHub Container Registry username (for external registry auth)
+    required: false
+    default: ""
+  ghcr-token:
+    description: GitHub Container Registry token (for external registry auth)
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: 🧪 ksail workload create
+      id: workload-create
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+        WORKLOAD_IMAGE: ${{ inputs.test-workload-image }}
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        for attempt in 1 2 3; do
+          if ksail workload create deployment "$WORKLOAD_NAME" --image="$WORKLOAD_IMAGE"; then
+            break
+          fi
+          echo "⚠️ workload create attempt $attempt failed, retrying in 10s…"
+          sleep 10
+        done
+        ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
+
+    - name: 🧪 ksail workload get
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+      run: |
+        ksail workload get deployment/"$WORKLOAD_NAME"
+
+    - name: 🧪 ksail workload describe
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+      run: |
+        ksail workload describe deployment/"$WORKLOAD_NAME"
+
+    - name: 🧪 ksail workload logs
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+      run: |
+        ksail workload logs deployment/"$WORKLOAD_NAME" --tail=5
+
+    - name: 🧪 ksail workload scale
+      id: workload-scale
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        ksail workload scale deployment/"$WORKLOAD_NAME" --replicas=2
+        ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
+        ksail workload scale deployment/"$WORKLOAD_NAME" --replicas=1
+        ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
+
+    - name: 🧪 ksail workload install
+      id: workload-install
+      shell: bash
+      run: |
+        # Install a lightweight Helm chart to verify workload install works
+        install_succeeded=false
+        for attempt in 1 2 3; do
+          if ksail workload install ksail-install-test oci://ghcr.io/stefanprodan/charts/podinfo --version=6.7.1 --wait --timeout=120s; then
+            install_succeeded=true
+            break
+          fi
+          echo "⚠️ workload install attempt $attempt failed, retrying in 10s…"
+          if [ "$attempt" -lt 3 ]; then sleep 10; fi
+        done
+        if [ "$install_succeeded" != "true" ]; then
+          echo "❌ workload install failed after 3 attempts"
+          exit 1
+        fi
+        echo "✅ workload install succeeded"
+
+    - name: 🧪 ksail workload apply
+      id: workload-apply
+      if: inputs.apply-overlay-path != ''
+      shell: bash
+      env:
+        OVERLAY_PATH: ${{ inputs.apply-overlay-path }}
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        apply_succeeded=false
+        for attempt in 1 2 3; do
+          if ksail workload apply -k "$OVERLAY_PATH" --wait --timeout="$TIMEOUT"; then
+            apply_succeeded=true
+            break
+          fi
+          echo "⚠️ workload apply attempt $attempt failed, retrying in 10s…"
+          if [ "$attempt" -lt 3 ]; then sleep 10; fi
+        done
+        if [ "$apply_succeeded" != "true" ]; then
+          echo "❌ workload apply failed after 3 attempts"
+          exit 1
+        fi
+
+    - name: 🧪 ksail workload watch
+      id: workload-watch
+      if: inputs.apply-overlay-path != ''
+      shell: bash
+      run: |
+        # Create a temporary directory with a simple manifest
+        WATCH_DIR=$(mktemp -d)
+        cat > "$WATCH_DIR/deployment.yaml" <<'EOF'
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: ksail-watch-test
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: ksail-watch-test
+          template:
+            metadata:
+              labels:
+                app: ksail-watch-test
+            spec:
+              containers:
+                - name: test
+                  image: traefik/whoami:v1.10
+        EOF
+        cat > "$WATCH_DIR/kustomization.yaml" <<'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - deployment.yaml
+        EOF
+        # Apply the initial manifest
+        ksail workload apply -k "$WATCH_DIR"
+        ksail workload wait --for=condition=Available deployment/ksail-watch-test --timeout=120s
+        # Start watcher in background
+        ksail workload watch --path "$WATCH_DIR" &
+        WATCH_PID=$!
+        sleep 5
+        # Modify the manifest (change replicas)
+        sed -i 's/replicas: 1/replicas: 2/' "$WATCH_DIR/deployment.yaml"
+        # Wait for watcher to pick up the change (poll with timeout)
+        WATCH_SUCCESS=false
+        for i in $(seq 1 6); do
+          sleep 5
+          REPLICAS=$(ksail workload get deployment/ksail-watch-test -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "unknown")
+          if [ "$REPLICAS" = "2" ]; then
+            WATCH_SUCCESS=true
+            break
+          fi
+          echo "  Waiting for watch to apply change (attempt $i/6, replicas=$REPLICAS)..."
+        done
+        kill $WATCH_PID 2>/dev/null || true
+        # Clean up
+        ksail workload delete deployment/ksail-watch-test --ignore-not-found
+        rm -rf "$WATCH_DIR"
+        if [ "$WATCH_SUCCESS" = "true" ]; then
+          echo "✅ Workload watch correctly auto-applied changes"
+        else
+          echo "❌ Workload watch test failed: expected 2 replicas, got $REPLICAS"
+          exit 1
+        fi
+
+    - name: 🧪 ksail workload push and reconcile
+      id: workload-push-reconcile
+      if: contains(inputs.args, '--gitops-engine')
+      shell: bash
+      env:
+        GITOPS_PATH: ${{ inputs.gitops-path }}
+        GHCR_USER: ${{ inputs.ghcr-user }}
+        GHCR_TOKEN: ${{ inputs.ghcr-token }}
+      run: |
+        mkdir -p "$GITOPS_PATH"
+        if [ ! -f "$GITOPS_PATH/kustomization.yaml" ]; then
+          echo "apiVersion: kustomize.config.k8s.io/v1beta1" > "$GITOPS_PATH/kustomization.yaml"
+          echo "kind: Kustomization" >> "$GITOPS_PATH/kustomization.yaml"
+          echo "resources: []" >> "$GITOPS_PATH/kustomization.yaml"
+        fi
+        ksail workload push --path "$GITOPS_PATH/"
+        ksail workload reconcile
+
+    - name: 🧪 ksail workload delete
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+      run: |
+        ksail workload delete deployment/"$WORKLOAD_NAME" --ignore-not-found
+
+    - name: 🐞 Debug Kubernetes failure
+      if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-watch.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
+      uses: ./.github/actions/debug-kubernetes-failure
+      with:
+        kubectl-command: "ksail workload"

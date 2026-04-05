@@ -1,19 +1,54 @@
 # KSail System Test Action
 
-A GitHub composite action that runs a full end-to-end system test of KSail, testing cluster lifecycle and workload management capabilities.
+A GitHub composite action that orchestrates a full end-to-end system test of KSail. It delegates to focused sub-actions for modularity and maintainability.
 
 ## What It Tests
 
-1. **Cluster Init** (optional) - Initialize a new KSail project
-2. **Manifest Validate** (when `init` is enabled) - Validate generated manifests before cluster creation
-3. **Cluster Create** - Create and start a Kubernetes cluster
-4. **Cluster List** - Verify cluster appears in list
-5. **Workload Create** - Create a deployment imperatively
-6. **Workload Apply** (optional) - Apply a kustomize overlay
-7. **Workload Push & Reconcile** (GitOps only) - Test GitOps workflow
-8. **Cluster Stop** - Stop the running cluster
-9. **Cluster Start** - Start the stopped cluster
-10. **Cluster Delete** - Clean up the cluster
+### Phase 1 — Setup
+- Provider credential validation (Hetzner/Omni)
+- Artifact tag generation for unique CI run identification
+- GHCR credential resolution for external registry tests
+
+### Phase 2 — Offline Tests (no cluster needed)
+- **Gen & Smoke** (`ksail-test-gen-smoke`) — Generates and validates manifests for 15 resource types; smoke-tests `chat --help` and `mcp --help`
+- **Tenant** (`ksail-tenant-test`) — Tests tenant create/delete for kubectl, flux (OCI + Git), and argocd types; covers multi-namespace, custom ClusterRole, force overwrite, and register/unregister
+
+### Phase 3 — Cluster Provisioning
+- **Cluster Init** (optional) — Initialize a new KSail project
+- **Manifest Validate** (when `init` is enabled) — Validate generated manifests before cluster creation
+- **Cluster Create** — Create and start a Kubernetes cluster
+- **Cluster Info / List** — Verify cluster status and listing
+
+### Phase 4 — Online Tests (cluster running)
+- **Workload Lifecycle** (`ksail-test-workload`) — Full CRUD: create, get, describe, logs, scale, install (Helm), apply (kustomize), watch, push/reconcile (GitOps), delete
+- **API-dependent Gen** — `workload gen clusterrole` and `role` (require API server for resource group discovery)
+- **Backup & Restore** (`ksail-test-backup-restore`) — Deploy workload, backup cluster, delete workload, restore from backup, verify restoration
+- **Cluster Update** — Dry-run and actual update with regression detection
+
+### Phase 5 — Debug
+- Automatic Kubernetes diagnostic output on failure
+
+### Phase 6 — Lifecycle Tests
+- **Cluster Stop** — Stop the running cluster
+- **Cluster Start** — Start the stopped cluster (with retry)
+- **Cluster Switch** — Switch kubeconfig context
+
+### Phase 7 — Cleanup
+- **Cluster Delete** — Clean up the cluster (always runs)
+
+## Sub-Action Architecture
+
+```
+ksail-system-test (orchestrator)
+├── ksail-test-gen-smoke        # Offline: gen + validate + smoke
+├── ksail-tenant-test           # Offline: tenant create/delete
+├── ksail-cluster               # Provisioning: init + create
+├── ksail-test-workload         # Online: workload CRUD lifecycle
+├── ksail-test-backup-restore   # Online: backup/restore cycle
+└── debug-kubernetes-failure    # Debug: diagnostic output on failure
+```
+
+Adding a new test phase: create a new sub-action and add one `uses:` line to the orchestrator.
 
 ## Usage
 
@@ -75,45 +110,45 @@ jobs:
 
 ```yaml
 - uses: ./.github/actions/ksail-system-test
+  env:
+    HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
   with:
     distribution: Talos
     provider: Hetzner
     args: ""
-    hcloud-token: ${{ secrets.HCLOUD_TOKEN }}
 ```
 
-> **Note:** Only Talos distribution supports Hetzner provider.
+> **Note:** Only Talos distribution supports Hetzner and Omni providers.
 
 ## Inputs
 
-| Input                 | Description                                             | Required | Default                 |
-|-----------------------|---------------------------------------------------------|----------|-------------------------|
-| `distribution`        | Kubernetes distribution (Vanilla, K3s, Talos)           | Yes      | -                       |
-| `provider`            | Infrastructure provider (Docker, Hetzner)               | No       | `Docker`                |
-| `args`                | Additional arguments for cluster init/create            | No       | `""`                    |
-| `init`                | Run `ksail cluster init` before create                  | No       | `false`                 |
-| `test-workload-image` | Image for workload create test                          | No       | `traefik/whoami:latest` |
-| `test-workload-name`  | Name for test workload deployment                       | No       | `whoami`                |
-| `apply-overlay-path`  | Path to kustomize overlay for apply test                | No       | `""`                    |
-| `gitops-path`         | Path for GitOps push                                    | No       | `k8s`                   |
-| `workload-timeout`    | Timeout for workload wait operations                    | No       | `300s`                  |
-| `hcloud-token`        | Hetzner Cloud API token (required for Hetzner provider) | No       | `""`                    |
+| Input                 | Description                                             | Required | Default                |
+|-----------------------|---------------------------------------------------------|----------|------------------------|
+| `distribution`        | Kubernetes distribution (Vanilla, K3s, Talos, VCluster) | Yes      | -                      |
+| `provider`            | Infrastructure provider (Docker, Hetzner, Omni)         | No       | `Docker`               |
+| `args`                | Additional arguments for cluster init/create            | No       | `""`                   |
+| `init`                | Run `ksail cluster init` before create                  | No       | `false`                |
+| `test-workload-image` | Image for workload create test                          | No       | `traefik/whoami:v1.10` |
+| `test-workload-name`  | Name for test workload deployment                       | No       | `whoami`               |
+| `apply-overlay-path`  | Path to kustomize overlay for apply test                | No       | `""`                   |
+| `gitops-path`         | Path for GitOps push                                    | No       | `k8s`                  |
+| `workload-timeout`    | Timeout for workload wait operations                    | No       | `600s`                 |
+| `ghcr-user`           | GitHub Container Registry username                      | No       | `""`                   |
+| `ghcr-token`          | GitHub Container Registry token                         | No       | `""`                   |
 
 ## Prerequisites
 
 - **KSail binary** must be installed and in PATH
 - **Docker** must be running (for Docker provider)
-- **HCLOUD_TOKEN** must be set (for Hetzner provider)
+- **HCLOUD_TOKEN** env var must be set (for Hetzner provider)
+- **OMNI_SERVICE_ACCOUNT_KEY** and **OMNI_ENDPOINT** env vars must be set (for Omni provider)
 - Sufficient disk space (use `free-disk-space` action for CI runners)
 
 ## Failure Debugging
 
-When workload steps fail, the action automatically runs the `debug-kubernetes-failure` action to output:
-
-- Disk usage
-- Node status and conditions
-- Pod status
-- Recent cluster events
+When tests fail, debug output is provided at two levels:
+- **Sub-action debug**: Each sub-action (`ksail-test-workload`, `ksail-test-backup-restore`) includes its own `debug-kubernetes-failure` step scoped to its step outcomes
+- **Orchestrator debug**: The orchestrator captures cluster-level and online-gen failures
 
 ## Example Workflow
 
