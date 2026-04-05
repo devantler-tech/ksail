@@ -2922,8 +2922,9 @@ func NewWatchCmd() *cobra.Command {
 
 When files in the watched directory are created, modified, or deleted,
 the command debounces changes (~500ms) then scopes the apply to the
-nearest directory containing a kustomization.yaml file, walking up from
-the changed file to the watch root. If no kustomization.yaml boundary is
+nearest directory containing a kustomization file recognized by kubectl
+(kustomization.yaml, kustomization.yml, or Kustomization), walking up
+from the changed file to the watch root. If no kustomization boundary is
 found, or the boundary is the watch root, it applies the full root
 directory. This scoping ensures only the affected Kustomize layer is
 re-applied, making iteration faster in monorepo-style layouts.
@@ -3253,12 +3254,13 @@ func formatElapsed(d time.Duration) string {
 }
 
 // findKustomizationDir walks up from the changed path to find the nearest
-// directory containing a kustomization.yaml. Both changedFile and rootDir are
-// normalized to absolute paths before comparison so that mixed relative /
-// absolute inputs are handled correctly. If the nearest match is the root
-// watch directory or no match is found, rootDir is returned (triggering a full
-// reconcile). When changedFile is itself a directory the search starts there
-// instead of at its parent.
+// directory containing a kustomization file recognized by kubectl
+// (kustomization.yaml, kustomization.yml, or Kustomization). Both changedFile
+// and rootDir are normalized to absolute paths before comparison so that mixed
+// relative / absolute inputs are handled correctly. If the nearest match is
+// the root watch directory or no match is found, rootDir is returned
+// (triggering a full reconcile). When changedFile is itself a directory the
+// search starts there instead of at its parent.
 func findKustomizationDir(changedFile, rootDir string) string {
 	absRoot, err := filepath.Abs(rootDir)
 	if err != nil {
