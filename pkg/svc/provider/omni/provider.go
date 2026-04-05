@@ -2,7 +2,6 @@ package omni
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -273,14 +272,6 @@ func isClusterRunningAndReady(
 		omnires.NewClusterStatus(clusterName).Metadata(),
 	)
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-			return false, fmt.Errorf(
-				"timed out waiting for cluster %q to become ready: %w",
-				clusterName,
-				err,
-			)
-		}
-
 		if state.IsNotFoundError(err) {
 			return false, nil
 		}
