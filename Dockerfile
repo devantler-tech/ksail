@@ -1,6 +1,9 @@
 # Use distroless static image for minimal attack surface
 FROM gcr.io/distroless/static:nonroot
 
+# MCP Registry ownership verification
+LABEL io.modelcontextprotocol.server.name="io.github.devantler-tech/ksail"
+
 # GoReleaser v2 provides TARGETPLATFORM (e.g., linux/amd64, linux/arm64)
 ARG TARGETPLATFORM
 
