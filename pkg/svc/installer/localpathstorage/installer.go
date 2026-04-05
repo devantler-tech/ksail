@@ -153,7 +153,8 @@ func (l *Installer) applyManifest(ctx context.Context) error {
 
 	applyCmd.SetArgs(args)
 
-	if err := kubectl.ExecuteSafely(ctx, applyCmd); err != nil {
+	err := kubectl.ExecuteSafely(ctx, applyCmd)
+	if err != nil {
 		output := strings.TrimSpace(stdout.String() + stderr.String())
 		if output != "" {
 			return fmt.Errorf("kubectl apply failed: %w, output: %s", err, output)

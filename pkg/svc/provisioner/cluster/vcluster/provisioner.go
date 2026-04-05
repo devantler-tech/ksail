@@ -415,6 +415,7 @@ func dockerNetworkExists(ctx context.Context, networkName string) bool {
 	if err != nil {
 		return false
 	}
+
 	defer func() { _ = dockerClient.Close() }()
 
 	_, err = dockerClient.NetworkInspect(ctx, networkName, dockernetwork.InspectOptions{})
@@ -435,6 +436,7 @@ func removeDockerNetwork(
 
 		return
 	}
+
 	defer func() { _ = dockerClient.Close() }()
 
 	err = dockerClient.NetworkRemove(ctx, networkName)
@@ -602,6 +604,7 @@ func waitForDBus(ctx context.Context, containerName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %w", err)
 	}
+
 	defer func() { _ = dockerClient.Close() }()
 
 	deadline := time.Now().Add(dbusWaitTimeout)
@@ -614,17 +617,25 @@ func waitForDBus(ctx context.Context, containerName string) error {
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled while waiting for D-Bus: %w", ctx.Err())
 		case <-ticker.C:
-			execResp, execErr := dockerClient.ContainerExecCreate(ctx, containerName, dockercontainer.ExecOptions{
-				Cmd:          []string{"test", "-e", "/run/dbus/system_bus_socket"},
-				AttachStdout: true,
-				AttachStderr: true,
-				Tty:          false,
-			})
+			execResp, execErr := dockerClient.ContainerExecCreate(
+				ctx,
+				containerName,
+				dockercontainer.ExecOptions{
+					Cmd:          []string{"test", "-e", "/run/dbus/system_bus_socket"},
+					AttachStdout: true,
+					AttachStderr: true,
+					Tty:          false,
+				},
+			)
 			if execErr != nil {
 				continue
 			}
 
-			attachResp, attachErr := dockerClient.ContainerExecAttach(ctx, execResp.ID, dockercontainer.ExecAttachOptions{})
+			attachResp, attachErr := dockerClient.ContainerExecAttach(
+				ctx,
+				execResp.ID,
+				dockercontainer.ExecAttachOptions{},
+			)
 			if attachErr != nil {
 				continue
 			}
@@ -681,6 +692,7 @@ func rerunInstallScript(
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %w", err)
 	}
+
 	defer func() { _ = dockerClient.Close() }()
 
 	scriptURL := fmt.Sprintf(
@@ -696,16 +708,24 @@ func rerunInstallScript(
 		scriptURL, clusterName, joinToken,
 	)
 
-	execResp, err := dockerClient.ContainerExecCreate(ctx, containerName, dockercontainer.ExecOptions{
-		Cmd:          []string{"bash", "-c", installCmd},
-		AttachStdout: true,
-		AttachStderr: true,
-	})
+	execResp, err := dockerClient.ContainerExecCreate(
+		ctx,
+		containerName,
+		dockercontainer.ExecOptions{
+			Cmd:          []string{"bash", "-c", installCmd},
+			AttachStdout: true,
+			AttachStderr: true,
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("docker exec create failed: %w", err)
 	}
 
-	attachResp, err := dockerClient.ContainerExecAttach(ctx, execResp.ID, dockercontainer.ExecAttachOptions{})
+	attachResp, err := dockerClient.ContainerExecAttach(
+		ctx,
+		execResp.ID,
+		dockercontainer.ExecAttachOptions{},
+	)
 	if err != nil {
 		return fmt.Errorf("docker exec attach failed: %w", err)
 	}
