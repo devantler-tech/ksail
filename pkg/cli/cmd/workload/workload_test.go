@@ -2426,7 +2426,10 @@ func TestHasKustomizationFile(t *testing.T) {
 	t.Run("returns_false_for_nonexistent_dir", func(t *testing.T) {
 		t.Parallel()
 
-		require.False(t, workload.ExportHasKustomizationFile(filepath.Join(t.TempDir(), "nonexistent")))
+		require.False(
+			t,
+			workload.ExportHasKustomizationFile(filepath.Join(t.TempDir(), "nonexistent")),
+		)
 	})
 }
 

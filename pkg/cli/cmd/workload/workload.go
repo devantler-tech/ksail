@@ -3497,9 +3497,11 @@ func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error 
 
 	if hasKustomizationFile(dir) {
 		applyCmd.SetArgs([]string{"-k", dir})
+
 		mode = "-k"
 	} else {
 		applyCmd.SetArgs([]string{"-f", dir, "--recursive"})
+
 		mode = "-f --recursive"
 	}
 
