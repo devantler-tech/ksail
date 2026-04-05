@@ -2530,12 +2530,12 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 }
 
 // displayKSailDetails appends KSail-specific cluster metadata after kubectl output.
-// This includes cluster identity (name, distribution, provider, context), TTL status,
+// This includes cluster identity (name, distribution, provider), TTL status,
 // and enabled component summary from persisted state. Each section fails gracefully.
 func displayKSailDetails(cmd *cobra.Command, kubeconfigPath string) {
 	info, err := clusterdetector.DetectInfo(kubeconfigPath, "")
 	if err != nil || info == nil {
-		// If detection fails, fall back to TTL-only display (legacy behavior).
+		// If detection fails, skip KSail details because cluster identity could not be determined.
 		return
 	}
 
@@ -2549,7 +2549,7 @@ func displayKSailDetails(cmd *cobra.Command, kubeconfigPath string) {
 	displayComponents(writer, info.ClusterName)
 }
 
-// displayClusterIdentity prints the cluster name, distribution, provider, context, and server URL.
+// displayClusterIdentity prints the cluster name, distribution, provider, server URL, and kubeconfig path.
 func displayClusterIdentity(writer io.Writer, info *clusterdetector.Info) {
 	_, _ = fmt.Fprintln(writer, "KSail Cluster Details:")
 	_, _ = fmt.Fprintf(writer, "  Cluster:        %s\n", info.ClusterName)
@@ -2607,14 +2607,15 @@ func displayComponents(writer io.Writer, clusterName string) {
 }
 
 // componentLabel returns a display label for a component value.
-// Empty values and sentinel "None" / "Disabled" are shown as "(none)".
+// Empty strings and "None" sentinel values are shown as "(none)".
+// "Disabled" sentinel values (used by CSI, MetricsServer, CertManager, etc.) are shown as "(disabled)".
 func componentLabel(value string) string {
 	switch value {
 	case "":
 		return "(none)"
 	case "None":
 		return "(none)"
-	case string(v1alpha1.CertManagerDisabled):
+	case "Disabled":
 		return "(disabled)"
 	default:
 		return value
@@ -2891,7 +2892,7 @@ Output Format:
 Each line groups clusters by provider and shows the distribution. For example:
   docker: dev-cluster (Vanilla), test-cluster (K3s)
 
-The provider name (docker or hetzner) and each cluster name from the
+The provider name (docker, hetzner, or omni) and each cluster name from the
 output can be used directly with other cluster commands:
   ksail cluster delete --name <cluster_name> --provider <provider>
   ksail cluster stop --name <cluster_name> --provider <provider>
