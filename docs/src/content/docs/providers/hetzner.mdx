@@ -233,7 +233,7 @@ spec:
 
 **Placement group errors** — Hetzner limits spread placement groups to 10 servers per datacenter. Reduce your node count or set `placementGroupStrategy: "None"`. For best-effort HA, set `placementGroupFallbackToNone: true` to fall back automatically when spread placement fails.
 
-**`cloud provider requires an external registry`** — Hetzner Cloud servers cannot reach Docker-based local registries running on your machine. When `spec.localRegistry` is enabled, it must point to an internet-accessible registry (e.g., `ghcr.io/myorg`). KSail returns this error early if a non-external registry is configured.
+**`cloud provider requires an external registry`** — Hetzner Cloud servers cannot reach Docker-based local registries running on your machine. When `spec.cluster.localRegistry` is enabled, it must point to an internet-accessible registry (e.g., `ghcr.io/myorg`). KSail returns this error early if a non-external registry is configured.
 
 **`context deadline exceeded` or connection errors** — Verify `HCLOUD_TOKEN` is valid and has read/write permissions. Check connectivity with `curl -sI https://api.hetzner.cloud/v1/servers -H "Authorization: Bearer $HCLOUD_TOKEN"`.
 
