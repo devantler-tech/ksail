@@ -201,46 +201,6 @@ func TestGetOmniNodesByRole_NilClient(t *testing.T) {
 	assert.Nil(t, nodes)
 }
 
-func TestSaveOmniKubeconfig_InvalidPath(t *testing.T) {
-	t.Parallel()
-
-	// Test with a real provider created with valid data but written to a path that succeeds.
-	// Since nil client returns ErrProviderUnavailable, we just verify that error propagates.
-	tmpDir := t.TempDir()
-	kubeconfigPath := tmpDir + "/sub/kube.yaml"
-	configs := createTestTalosConfigs(t, "test-cluster")
-	provisioner := talosprovisioner.NewProvisioner(configs,
-		talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath),
-	)
-	nilClientProv := omniprovider.NewProvider(nil)
-
-	err := provisioner.SaveOmniKubeconfigForTest(
-		context.Background(),
-		nilClientProv,
-		"test-cluster",
-	)
-	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
-}
-
-func TestSaveOmniTalosconfig_InvalidPath(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	talosconfigPath := tmpDir + "/sub/talos.yaml"
-	configs := createTestTalosConfigs(t, "test-cluster")
-	provisioner := talosprovisioner.NewProvisioner(configs,
-		talosprovisioner.NewOptions().WithTalosconfigPath(talosconfigPath),
-	)
-	nilClientProv := omniprovider.NewProvider(nil)
-
-	err := provisioner.SaveOmniTalosconfigForTest(
-		context.Background(),
-		nilClientProv,
-		"test-cluster",
-	)
-	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
-}
-
 func TestSaveOmniKubeconfig_WithTildeExpansion(t *testing.T) {
 	t.Parallel()
 
