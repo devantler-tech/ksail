@@ -21,13 +21,21 @@ runs:
       env:
         TIMEOUT: ${{ inputs.workload-timeout }}
       run: |
+        create_succeeded=false
         for attempt in 1 2 3; do
           if ksail workload create deployment backup-test --image=traefik/whoami:v1.10; then
+            create_succeeded=true
             break
           fi
-          echo "⚠️ workload create attempt $attempt failed, retrying in 10s…"
-          sleep 10
+          if [ "$attempt" -lt 3 ]; then
+            echo "⚠️ workload create attempt $attempt failed, retrying in 10s…"
+            sleep 10
+          fi
         done
+        if [ "$create_succeeded" != "true" ]; then
+          echo "❌ ksail workload create failed after 3 attempts"
+          exit 1
+        fi
         ksail workload wait --for=condition=Available deployment/backup-test --timeout="$TIMEOUT"
 
     - name: 🧪 Backup cluster

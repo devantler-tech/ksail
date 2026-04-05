@@ -128,9 +128,9 @@ runs:
         if [[ "$ARGS" == *"--local-registry"* ]] && [[ "$ARGS" == *"ghcr.io"* ]] && [[ -n "$GHCR_USER" ]] && [[ -n "$GHCR_TOKEN" ]]; then
           # Replace 'ghcr.io/' with 'user:token@ghcr.io/'
           RESOLVED_ARGS="${ARGS//ghcr.io\//${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/}"
-          # Append unique tag to avoid collisions between parallel CI runs
-          # Format: user:token@ghcr.io/org/repo/path -> user:token@ghcr.io/org/repo/path:tag
-          RESOLVED_ARGS="${RESOLVED_ARGS}:${ARTIFACT_TAG}"
+          # Append unique tag only to the --local-registry value (not the entire args string)
+          # This is safe regardless of flag ordering
+          RESOLVED_ARGS=$(echo "$RESOLVED_ARGS" | sed -E 's/(--local-registry[[:space:]]+)([^[:space:]]+)/\1\2:'"${ARTIFACT_TAG}"'/')
         fi
         echo "args=$RESOLVED_ARGS" >> "$GITHUB_OUTPUT"
 

@@ -51,13 +51,21 @@ runs:
         WORKLOAD_IMAGE: ${{ inputs.test-workload-image }}
         TIMEOUT: ${{ inputs.workload-timeout }}
       run: |
+        create_succeeded=false
         for attempt in 1 2 3; do
           if ksail workload create deployment "$WORKLOAD_NAME" --image="$WORKLOAD_IMAGE"; then
+            create_succeeded=true
             break
           fi
-          echo "⚠️ workload create attempt $attempt failed, retrying in 10s…"
-          sleep 10
+          if [ "$attempt" -lt 3 ]; then
+            echo "⚠️ workload create attempt $attempt failed, retrying in 10s…"
+            sleep 10
+          fi
         done
+        if [ "$create_succeeded" != "true" ]; then
+          echo "❌ ksail workload create failed after 3 attempts for deployment/$WORKLOAD_NAME"
+          exit 1
+        fi
         ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
 
     - name: 🧪 ksail workload get
@@ -173,6 +181,7 @@ runs:
         # Start watcher in background
         ksail workload watch --path "$WATCH_DIR" &
         WATCH_PID=$!
+        trap 'kill $WATCH_PID 2>/dev/null || true; rm -rf "$WATCH_DIR"' EXIT
         sleep 5
         # Modify the manifest (change replicas)
         sed -i 's/replicas: 1/replicas: 2/' "$WATCH_DIR/deployment.yaml"
@@ -187,10 +196,11 @@ runs:
           fi
           echo "  Waiting for watch to apply change (attempt $i/6, replicas=$REPLICAS)..."
         done
+        # Cleanup handled by trap, but also explicitly clean up the workload
         kill $WATCH_PID 2>/dev/null || true
-        # Clean up
         ksail workload delete deployment/ksail-watch-test --ignore-not-found
         rm -rf "$WATCH_DIR"
+        trap - EXIT
         if [ "$WATCH_SUCCESS" = "true" ]; then
           echo "✅ Workload watch correctly auto-applied changes"
         else
