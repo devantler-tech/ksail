@@ -2431,6 +2431,15 @@ func TestHasKustomizationFile(t *testing.T) {
 			workload.ExportHasKustomizationFile(filepath.Join(t.TempDir(), "nonexistent")),
 		)
 	})
+
+	t.Run("returns_false_when_kustomization_yaml_is_a_directory", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(dir, "kustomization.yaml"), 0o700))
+
+		require.False(t, workload.ExportHasKustomizationFile(dir))
+	})
 }
 
 // normalizeHomePaths replaces the user's home directory in help output

@@ -3464,12 +3464,23 @@ func normalizeFluxPath(path string) string {
 	return path
 }
 
-// hasKustomizationFile reports whether dir contains a kustomization file
-// recognized by kubectl (kustomization.yaml, kustomization.yml, or Kustomization).
+// hasKustomizationFile reports whether dir contains a regular kustomization
+// file recognized by kubectl (kustomization.yaml, kustomization.yml, or
+// Kustomization). Non-ErrNotExist errors (e.g., permission denied) are treated
+// as a positive match so that transient stat failures do not silently switch
+// the apply mode from -k to -f --recursive.
 func hasKustomizationFile(dir string) bool {
 	for _, name := range []string{"kustomization.yaml", "kustomization.yml", "Kustomization"} {
-		_, err := os.Stat(filepath.Join(dir, name))
+		info, err := os.Stat(filepath.Join(dir, name))
 		if err == nil {
+			if info.Mode().IsRegular() {
+				return true
+			}
+
+			continue
+		}
+
+		if !errors.Is(err, os.ErrNotExist) {
 			return true
 		}
 	}
