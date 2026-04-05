@@ -138,15 +138,13 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 		return provider.ErrProviderUnavailable
 	}
 
-	omniState := p.client.Omni().State()
-
 	// Use TeardownAndDestroy to follow the COSI lifecycle:
 	// 1. Initiates teardown (transitions resource to PhaseTearingDown)
 	// 2. Blocks until all controllers remove their finalizers
 	// 3. Destroys the resource once finalizer list is empty
 	cluster := omnires.NewCluster(clusterName)
 
-	err := omniState.TeardownAndDestroy(ctx, cluster.Metadata())
+	err := p.client.Omni().State().TeardownAndDestroy(ctx, cluster.Metadata())
 	if err != nil {
 		if state.IsNotFoundError(err) {
 			return nil
