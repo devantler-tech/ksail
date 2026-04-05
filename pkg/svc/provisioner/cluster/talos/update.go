@@ -47,7 +47,10 @@ func (p *Provisioner) Update(
 	// Handle in-place config changes (NO_REBOOT mode).
 	// Only re-apply machine configs when the provisioner detected actual changes;
 	// component-level changes (e.g. loadBalancer) are handled by the reconciler.
-	if diff.TotalChanges() > 0 {
+	// Omni manages node configuration through its own API; the diff for Omni clusters
+	// only ever contains node-count fields (controlPlanes/workers) which are already
+	// handled (and skipped) above, so direct Talos machine config pushes are not needed.
+	if diff.TotalChanges() > 0 && p.omniOpts == nil {
 		cfgErr := p.applyInPlaceConfigChanges(ctx, clusterName, result)
 		if cfgErr != nil {
 			return result, fmt.Errorf("failed to apply in-place config changes: %w", cfgErr)
