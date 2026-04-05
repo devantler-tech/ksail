@@ -73,7 +73,7 @@ func (p *Provisioner) createHetznerNodes(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Creating %d %s node(s)...\n", opts.Count, opts.Role)
 
-	retryOpts := hetzner.ServerRetryOpts{LogWriter: p.logWriter}
+	retryOpts := hetzner.ServerRetryOpts{LogWriter: p.syncLogWriter()}
 
 	if p.hetznerOpts != nil {
 		retryOpts.FallbackLocations = p.hetznerOpts.FallbackLocations

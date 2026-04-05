@@ -324,7 +324,7 @@ func (p *Provisioner) hetznerServerType(role string) string {
 // hetznerRetryOpts builds retry options from Hetzner configuration.
 func (p *Provisioner) hetznerRetryOpts() hetzner.ServerRetryOpts {
 	opts := hetzner.ServerRetryOpts{
-		LogWriter: p.logWriter,
+		LogWriter: p.syncLogWriter(),
 	}
 
 	if p.hetznerOpts != nil {

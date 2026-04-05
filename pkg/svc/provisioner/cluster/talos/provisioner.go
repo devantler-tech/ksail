@@ -494,3 +494,22 @@ func (p *Provisioner) logf(format string, args ...any) {
 
 	_, _ = fmt.Fprintf(p.logWriter, format, args...)
 }
+
+// syncLogWriter returns an io.Writer that serializes all Write calls through p.logMu.
+// Use this whenever p.logWriter is passed to a component that will write from multiple goroutines.
+func (p *Provisioner) syncLogWriter() io.Writer {
+	return &syncWriter{mu: &p.logMu, w: p.logWriter}
+}
+
+// syncWriter wraps an io.Writer with a mutex to make Write goroutine-safe.
+type syncWriter struct {
+	mu *sync.Mutex
+	w  io.Writer
+}
+
+func (sw *syncWriter) Write(b []byte) (int, error) {
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
+
+	return sw.w.Write(b) //nolint:wrapcheck // transparent delegation
+}
