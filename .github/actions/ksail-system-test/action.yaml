@@ -3,6 +3,11 @@ description: |
   Runs a full end-to-end system test of KSail, testing cluster lifecycle
   and workload management capabilities.
 
+  Cloud provider credentials are read from environment variables, not action
+  inputs. Set these in the calling job before invoking this action:
+  - Hetzner provider: HCLOUD_TOKEN
+  - Omni provider: OMNI_SERVICE_ACCOUNT_KEY and OMNI_ENDPOINT
+
 inputs:
   distribution:
     description: Kubernetes distribution (Vanilla, K3s, Talos, VCluster)
@@ -41,18 +46,6 @@ inputs:
       intermittent delays in CI environments (image pulls, resource contention).
     required: false
     default: "600s"
-  hcloud-token:
-    description: Hetzner Cloud API token (required when provider is Hetzner)
-    required: false
-    default: ""
-  omni-service-account-key:
-    description: Omni service account key (required when provider is Omni)
-    required: false
-    default: ""
-  omni-endpoint:
-    description: Omni API endpoint URL (required when provider is Omni)
-    required: false
-    default: ""
   ghcr-user:
     description: GitHub Container Registry username (for external registry auth)
     required: false
@@ -65,19 +58,25 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: ✅ Validate Hetzner inputs
+      if: inputs.provider == 'Hetzner'
+      shell: bash
+      run: |
+        if [ -z "$HCLOUD_TOKEN" ]; then
+          echo "❌ ERROR: HCLOUD_TOKEN env var is required when provider is Hetzner" >&2
+          exit 1
+        fi
+
     - name: ✅ Validate Omni inputs
       if: inputs.provider == 'Omni'
       shell: bash
-      env:
-        OMNI_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_EP: ${{ inputs.omni-endpoint }}
       run: |
-        if [ -z "$OMNI_KEY" ]; then
-          echo "❌ ERROR: omni-service-account-key is required when provider is Omni" >&2
+        if [ -z "$OMNI_SERVICE_ACCOUNT_KEY" ]; then
+          echo "❌ ERROR: OMNI_SERVICE_ACCOUNT_KEY env var is required when provider is Omni" >&2
           exit 1
         fi
-        if [ -z "$OMNI_EP" ]; then
-          echo "❌ ERROR: omni-endpoint is required when provider is Omni" >&2
+        if [ -z "$OMNI_ENDPOINT" ]; then
+          echo "❌ ERROR: OMNI_ENDPOINT env var is required when provider is Omni" >&2
           exit 1
         fi
 
@@ -136,16 +135,9 @@ runs:
         install: "false"
         cache: "true"
         validate: ${{ inputs.init }}
-        hcloud-token: ${{ inputs.hcloud-token }}
-        omni-service-account-key: ${{ inputs.omni-service-account-key }}
-        omni-endpoint: ${{ inputs.omni-endpoint }}
 
     - name: 🧪 ksail cluster info
       shell: bash
-      env:
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail cluster info
 
@@ -156,10 +148,6 @@ runs:
 
     - name: 🧪 ksail cluster list
       shell: bash
-      env:
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail cluster list
 
@@ -170,9 +158,6 @@ runs:
         WORKLOAD_NAME: ${{ inputs.test-workload-name }}
         WORKLOAD_IMAGE: ${{ inputs.test-workload-image }}
         TIMEOUT: ${{ inputs.workload-timeout }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         for attempt in 1 2 3; do
           if ksail workload create deployment "$WORKLOAD_NAME" --image="$WORKLOAD_IMAGE"; then
@@ -187,9 +172,6 @@ runs:
       shell: bash
       env:
         WORKLOAD_NAME: ${{ inputs.test-workload-name }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail workload get deployment/"$WORKLOAD_NAME"
 
@@ -197,9 +179,6 @@ runs:
       shell: bash
       env:
         WORKLOAD_NAME: ${{ inputs.test-workload-name }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail workload describe deployment/"$WORKLOAD_NAME"
 
@@ -207,9 +186,6 @@ runs:
       shell: bash
       env:
         WORKLOAD_NAME: ${{ inputs.test-workload-name }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail workload logs deployment/"$WORKLOAD_NAME" --tail=5
 
@@ -219,9 +195,6 @@ runs:
       env:
         WORKLOAD_NAME: ${{ inputs.test-workload-name }}
         TIMEOUT: ${{ inputs.workload-timeout }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail workload scale deployment/"$WORKLOAD_NAME" --replicas=2
         ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
@@ -231,10 +204,6 @@ runs:
     - name: 🧪 ksail workload install
       id: workload-install
       shell: bash
-      env:
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         # Install a lightweight Helm chart to verify workload install works
         install_succeeded=false
@@ -244,7 +213,7 @@ runs:
             break
           fi
           echo "⚠️ workload install attempt $attempt failed, retrying in 10s…"
-          sleep 10
+          if [ "$attempt" -lt 3 ]; then sleep 10; fi
         done
         if [ "$install_succeeded" != "true" ]; then
           echo "❌ workload install failed after 3 attempts"
@@ -259,9 +228,6 @@ runs:
       env:
         OVERLAY_PATH: ${{ inputs.apply-overlay-path }}
         TIMEOUT: ${{ inputs.workload-timeout }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         apply_succeeded=false
         for attempt in 1 2 3; do
@@ -270,7 +236,7 @@ runs:
             break
           fi
           echo "⚠️ workload apply attempt $attempt failed, retrying in 10s…"
-          sleep 10
+          if [ "$attempt" -lt 3 ]; then sleep 10; fi
         done
         if [ "$apply_succeeded" != "true" ]; then
           echo "❌ workload apply failed after 3 attempts"
@@ -280,12 +246,7 @@ runs:
     - name: 🧪 ksail workload watch
       id: workload-watch
       if: inputs.apply-overlay-path != ''
-      continue-on-error: true
       shell: bash
-      env:
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         # Create a temporary directory with a simple manifest
         WATCH_DIR=$(mktemp -d)
@@ -308,8 +269,14 @@ runs:
                 - name: test
                   image: traefik/whoami:v1.10
         EOF
+        cat > "$WATCH_DIR/kustomization.yaml" <<'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - deployment.yaml
+        EOF
         # Apply the initial manifest
-        ksail workload apply -f "$WATCH_DIR/deployment.yaml"
+        ksail workload apply -k "$WATCH_DIR"
         ksail workload wait --for=condition=Available deployment/ksail-watch-test --timeout=120s
         # Start watcher in background
         ksail workload watch --path "$WATCH_DIR" &
@@ -345,9 +312,6 @@ runs:
       shell: bash
       env:
         GITOPS_PATH: ${{ inputs.gitops-path }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
         GHCR_USER: ${{ inputs.ghcr-user }}
         GHCR_TOKEN: ${{ inputs.ghcr-token }}
       run: |
@@ -364,9 +328,6 @@ runs:
       shell: bash
       env:
         WORKLOAD_NAME: ${{ inputs.test-workload-name }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail workload delete deployment/"$WORKLOAD_NAME" --ignore-not-found
 
@@ -377,9 +338,6 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         set -o pipefail
         # Strip init-only flags that cluster update does not accept
@@ -402,9 +360,6 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         set -o pipefail
         # Strip init-only flags that cluster update does not accept
@@ -421,26 +376,18 @@ runs:
         echo "✅ No unexpected changes detected"
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
+      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-watch.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
 
     - name: 🧪 ksail cluster stop
       shell: bash
-      env:
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail cluster stop
 
     - name: 🧪 ksail cluster start
       shell: bash
-      env:
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         start_succeeded=false
         for attempt in 1 2 3; do
@@ -461,9 +408,6 @@ runs:
     - name: 🧪 ksail cluster switch
       shell: bash
       env:
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
         PROVIDER: ${{ inputs.provider }}
       run: |
         # Get current cluster name from ksail cluster list
@@ -487,9 +431,5 @@ runs:
     - name: 🧪 ksail cluster delete
       if: always()
       shell: bash
-      env:
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         ksail cluster delete || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
