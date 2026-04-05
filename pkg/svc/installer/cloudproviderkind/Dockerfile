@@ -4,4 +4,4 @@
 # Image mappings:
 # - registry.k8s.io/cloud-provider-kind/cloud-controller-manager → CloudProviderKindImage
 
-FROM registry.k8s.io/cloud-provider-kind/cloud-controller-manager:v0.6.0
+FROM registry.k8s.io/cloud-provider-kind/cloud-controller-manager:v0.10.0

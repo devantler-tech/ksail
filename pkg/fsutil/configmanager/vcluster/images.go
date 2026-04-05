@@ -6,7 +6,8 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/image/parser"
 )
 
-// Embedded Dockerfile containing image references (updated by Dependabot).
+// Embedded Dockerfile containing image references (Dependabot is configured to update these,
+// but ghcr.io multi-arch images may not be tracked; see dependabot-core#13383).
 //
 //go:embed Dockerfile
 var dockerfile string

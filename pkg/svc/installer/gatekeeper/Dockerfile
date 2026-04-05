@@ -4,4 +4,4 @@
 # Image mappings:
 # - docker.io/openpolicyagent/gatekeeper → chart version (strip v prefix from tag)
 
-FROM docker.io/openpolicyagent/gatekeeper:v3.21.1
+FROM docker.io/openpolicyagent/gatekeeper:v3.22.0

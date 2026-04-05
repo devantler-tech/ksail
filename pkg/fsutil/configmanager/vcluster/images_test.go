@@ -31,7 +31,7 @@ func TestChartVersion_MatchesDockerfileFormat(t *testing.T) {
 	version := vcluster.ChartVersion()
 
 	// The chart version is extracted from the Dockerfile line:
-	// FROM ghcr.io/loft-sh/vcluster-pro:0.32.1
+	// FROM ghcr.io/loft-sh/vcluster-pro:0.33.1
 	// Expected format: semver with optional pre-release suffix
 	assert.Regexp(t,
 		`^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$`,
@@ -62,7 +62,7 @@ func TestDefaultKubernetesVersion_MatchesDockerfileFormat(t *testing.T) {
 	version := vcluster.DefaultKubernetesVersion
 
 	// The Kubernetes version is extracted from the Dockerfile line:
-	// FROM ghcr.io/loft-sh/kubernetes:v1.32.3
+	// FROM ghcr.io/loft-sh/kubernetes:v1.35.3
 	// Expected format: v-prefixed semver with optional suffix
 	assert.Regexp(
 		t,
@@ -122,13 +122,14 @@ func TestChartVersion_ExpectedValue(t *testing.T) {
 	version := vcluster.ChartVersion()
 
 	// This test documents the current Dockerfile content.
-	// The exact version may change with Dependabot updates.
-	// FROM ghcr.io/loft-sh/vcluster-pro:0.32.1
+	// Dependabot is configured to update this image but may not track it (dependabot-core#13383);
+	// update manually if needed.
+	// FROM ghcr.io/loft-sh/vcluster-pro:0.33.1
 	assert.Equal(
 		t,
-		"0.32.1",
+		"0.33.1",
 		version,
-		"ChartVersion should match current Dockerfile (update this test when Dependabot updates the version)",
+		"ChartVersion should match current Dockerfile (update this test when manually bumping the version)",
 	)
 }
 
@@ -139,12 +140,13 @@ func TestDefaultKubernetesVersion_ExpectedValue(t *testing.T) {
 	version := vcluster.DefaultKubernetesVersion
 
 	// This test documents the current Dockerfile content.
-	// The exact version may change with Dependabot updates.
-	// FROM ghcr.io/loft-sh/kubernetes:v1.32.3
+	// Dependabot is configured to update this image but may not track it (dependabot-core#13383);
+	// update manually if needed.
+	// FROM ghcr.io/loft-sh/kubernetes:v1.35.3
 	assert.Equal(
 		t,
-		"v1.32.3",
+		"v1.35.3",
 		version,
-		"DefaultKubernetesVersion should match current Dockerfile (update this test when Dependabot updates the version)",
+		"DefaultKubernetesVersion should match current Dockerfile (update this test when manually bumping the version)",
 	)
 }
