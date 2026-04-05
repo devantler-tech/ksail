@@ -3,10 +3,14 @@ package setup
 import "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 
 // NeedsInClusterConnectivityCheck exports needsInClusterConnectivityCheck for testing.
-var NeedsInClusterConnectivityCheck = needsInClusterConnectivityCheck //nolint:gochecknoglobals // Standard Go export_test.go pattern.
+//
+//nolint:gochecknoglobals // Standard Go export_test.go pattern.
+var NeedsInClusterConnectivityCheck = needsInClusterConnectivityCheck
 
 // APIServerStabilitySuccesses exports apiServerStabilitySuccesses for testing.
-var APIServerStabilitySuccesses = apiServerStabilitySuccesses //nolint:gochecknoglobals // Standard Go export_test.go pattern.
+//
+//nolint:gochecknoglobals // Standard Go export_test.go pattern.
+var APIServerStabilitySuccesses = apiServerStabilitySuccesses
 
 // Exported constants for test assertions.
 const (

@@ -458,7 +458,9 @@ func TestAPIServerStabilitySuccesses(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, testCase.expected, setup.APIServerStabilitySuccesses(testCase.distribution))
+			assert.Equal(
+				t, testCase.expected, setup.APIServerStabilitySuccesses(testCase.distribution),
+			)
 		})
 	}
 }

@@ -65,6 +65,8 @@ func apiServerStabilitySuccesses(dist v1alpha1.Distribution) int {
 	switch dist {
 	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s:
 		return apiServerStabilitySuccessesFast
+	case v1alpha1.DistributionTalos, v1alpha1.DistributionVCluster:
+		return apiServerStabilitySuccessesDefault
 	default:
 		return apiServerStabilitySuccessesDefault
 	}
@@ -402,6 +404,7 @@ func waitForClusterStability(
 	}
 
 	successes := apiServerStabilitySuccesses(clusterCfg.Spec.Cluster.Distribution)
+
 	err = readiness.WaitForAPIServerStable(
 		ctx, clientset, apiServerStabilityTimeout, successes,
 	)
