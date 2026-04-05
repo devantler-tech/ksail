@@ -8,10 +8,10 @@ The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workf
 
 1. Discovers packages that contain benchmark functions (avoids compiling the entire module)
 2. Runs benchmarks on the current branch
-3. Compares results against the stored baseline (persisted as a workflow artifact)
+3. Compares results against the stored baseline (persisted in the [`benchmark-data` branch](https://github.com/devantler-tech/ksail/tree/benchmark-data))
 4. **Fails the CI check** if a benchmark regresses beyond the configured threshold
 
-On pushes to `main`, benchmark results are stored as the new baseline. On pull requests, results are compared against the baseline without updating it.
+On pushes to `main`, benchmark results are auto-pushed to the `benchmark-data` branch as the new baseline. On pull requests, results are compared against the baseline without updating it.
 
 ## Regression Detection
 
@@ -26,7 +26,7 @@ When a regression is detected on a pull request, the action posts a comment iden
 
 ## Historical Results
 
-Benchmark results are recorded in every [workflow run summary](https://github.com/devantler-tech/ksail/actions/workflows/benchmark-regression.yaml). Baseline data is persisted as a workflow artifact and compared on each subsequent run.
+Benchmark results are recorded in every [workflow run summary](https://github.com/devantler-tech/ksail/actions/workflows/benchmark-regression.yaml). On pushes to `main`, the action auto-pushes updated results to the [`benchmark-data` branch](https://github.com/devantler-tech/ksail/tree/benchmark-data) (in `dev/bench/data.js`), following the [branch strategy recommended by `benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark#charts-on-github-pages-1). The docs site fetches this data at build time to render performance trend charts.
 
 ## Interpreting CI Failures
 
@@ -56,7 +56,7 @@ Follow the conventions established in the existing benchmark files:
 
 ## Troubleshooting
 
-**No baseline data yet:** The first push to `main` after enabling the workflow stores the initial baseline. PRs opened before that will skip the comparison.
+**No baseline data yet:** The first push to `main` after enabling the workflow auto-pushes the initial baseline to the `benchmark-data` branch. PRs opened before that will skip the comparison.
 
 **Benchmark times are inconsistent:** CI runners share hardware, so some variance is expected. The 200% fail threshold is intentionally generous to avoid false positives from runner noise.
 
