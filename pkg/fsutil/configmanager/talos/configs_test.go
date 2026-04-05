@@ -357,3 +357,74 @@ func loadConfigsWithCertRotationPatch(
 
 	return configs
 }
+
+func TestConfigs_KubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns the configured version", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "kube-version-test", "1.32.5", "10.5.0.0/24")
+
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+		require.NotNil(t, configs)
+
+		assert.Equal(t, "1.32.5", configs.KubernetesVersion())
+	})
+
+	t.Run("returns DefaultKubernetesVersion when empty string passed", func(t *testing.T) {
+		t.Parallel()
+
+		// NewConfigManager converts "" to DefaultKubernetesVersion before storing.
+		manager := talos.NewConfigManager("", "kube-version-default", "", "10.5.0.0/24")
+
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+		require.NotNil(t, configs)
+
+		assert.Equal(t, talos.DefaultKubernetesVersion, configs.KubernetesVersion())
+	})
+}
+
+func TestConfigs_Patches(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns nil when no patches configured", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "patches-nil-test", "1.11.2", "10.5.0.0/24")
+
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+		require.NotNil(t, configs)
+
+		assert.Nil(t, configs.Patches())
+	})
+
+	t.Run("returns copy that does not mutate internal state", func(t *testing.T) {
+		t.Parallel()
+
+		patchContent := []byte("machine:\n  network:\n    hostname: test\n")
+		manager := talos.NewConfigManager("", "patches-copy-test", "1.11.2", "10.5.0.0/24").
+			WithAdditionalPatches([]talos.Patch{
+				{
+					Path:    "test.yaml",
+					Scope:   talos.PatchScopeControlPlane,
+					Content: patchContent,
+				},
+			})
+
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+		require.NotNil(t, configs)
+
+		patches := configs.Patches()
+		require.Len(t, patches, 1)
+		assert.Equal(t, "test.yaml", patches[0].Path)
+
+		// Mutating the returned slice must not affect the internal state.
+		patches[0].Path = "mutated.yaml"
+		assert.Equal(t, "test.yaml", configs.Patches()[0].Path, "internal state was mutated")
+	})
+}

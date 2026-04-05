@@ -68,11 +68,11 @@ func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provide
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	st := p.client.Omni().State()
+	omniState := p.client.Omni().State()
 
 	machines, err := safe.StateListAll[*omnires.ClusterMachineStatus](
 		ctx,
-		st,
+		omniState,
 		state.WithLabelQuery(resource.LabelEqual(omnires.LabelCluster, clusterName)),
 	)
 	if err != nil {
@@ -109,9 +109,9 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	st := p.client.Omni().State()
+	omniState := p.client.Omni().State()
 
-	clusters, err := safe.StateListAll[*omnires.Cluster](ctx, st)
+	clusters, err := safe.StateListAll[*omnires.Cluster](ctx, omniState)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list clusters: %w", err)
 	}
@@ -142,12 +142,12 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 		return provider.ErrProviderUnavailable
 	}
 
-	st := p.client.Omni().State()
+	omniState := p.client.Omni().State()
 
 	// Delete the cluster resource which deallocates all machines
 	cluster := omnires.NewCluster(clusterName)
 
-	err := st.Destroy(ctx, cluster.Metadata())
+	err := omniState.Destroy(ctx, cluster.Metadata())
 	if err != nil {
 		return fmt.Errorf("failed to delete cluster %s: %w", clusterName, err)
 	}
@@ -168,11 +168,11 @@ func (p *Provider) ClusterExists(ctx context.Context, clusterName string) (bool,
 		return false, provider.ErrProviderUnavailable
 	}
 
-	st := p.client.Omni().State()
+	omniState := p.client.Omni().State()
 
 	cluster := omnires.NewCluster(clusterName)
 
-	_, err := safe.StateGet[*omnires.Cluster](ctx, st, cluster.Metadata())
+	_, err := safe.StateGet[*omnires.Cluster](ctx, omniState, cluster.Metadata())
 	if err != nil {
 		if state.IsNotFoundError(err) {
 			return false, nil
@@ -187,22 +187,23 @@ func (p *Provider) ClusterExists(ctx context.Context, clusterName string) (bool,
 // CreateCluster creates a cluster in Omni by syncing a cluster template.
 // The templateReader should contain a multi-document YAML cluster template
 // (Cluster + ControlPlane + Workers kinds) compatible with the Omni template format.
-func (p *Provider) CreateCluster(ctx context.Context, templateReader io.Reader, out io.Writer) error {
+func (p *Provider) CreateCluster(
+	ctx context.Context,
+	templateReader io.Reader,
+	out io.Writer,
+) error {
 	if p.client == nil {
 		return provider.ErrProviderUnavailable
 	}
 
-	if templateReader == nil {
-		return fmt.Errorf("templateReader must not be nil")
+	omniState := p.client.Omni().State()
+
+	err := operations.SyncTemplate(ctx, templateReader, out, omniState, operations.SyncOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to sync template to Omni: %w", err)
 	}
 
-	if out == nil {
-		out = io.Discard
-	}
-
-	st := p.client.Omni().State()
-
-	return operations.SyncTemplate(ctx, templateReader, out, st, operations.SyncOptions{})
+	return nil
 }
 
 // clusterReadyPollInterval is the interval between cluster readiness polls.
@@ -210,12 +211,16 @@ const clusterReadyPollInterval = 10 * time.Second
 
 // WaitForClusterReady polls the ClusterStatus resource until the cluster is ready
 // (Phase == RUNNING and Ready == true) or the timeout expires.
-func (p *Provider) WaitForClusterReady(ctx context.Context, clusterName string, timeout time.Duration) error {
+func (p *Provider) WaitForClusterReady(
+	ctx context.Context,
+	clusterName string,
+	timeout time.Duration,
+) error {
 	if p.client == nil {
 		return provider.ErrProviderUnavailable
 	}
 
-	st := p.client.Omni().State()
+	omniState := p.client.Omni().State()
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -224,25 +229,35 @@ func (p *Provider) WaitForClusterReady(ctx context.Context, clusterName string, 
 	defer ticker.Stop()
 
 	for {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return fmt.Errorf("timed out waiting for cluster %q to become ready: %w", clusterName, ctxErr)
+		}
+
 		status, err := safe.StateGet[*omnires.ClusterStatus](
 			ctx,
-			st,
+			omniState,
 			omnires.NewClusterStatus(clusterName).Metadata(),
 		)
-		if err == nil {
+		if err != nil {
+			if !state.IsNotFoundError(err) {
+				return fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
+			}
+		} else {
 			phase := status.TypedSpec().Value.GetPhase()
 			ready := status.TypedSpec().Value.GetReady()
 
 			if phase == specs.ClusterStatusSpec_RUNNING && ready {
 				return nil
 			}
-		} else if !state.IsNotFoundError(err) {
-			return fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
 		}
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for cluster %q to become ready: %w", clusterName, ctx.Err())
+			return fmt.Errorf(
+				"timed out waiting for cluster %q to become ready: %w",
+				clusterName,
+				ctx.Err(),
+			)
 		case <-ticker.C:
 		}
 	}
@@ -254,7 +269,12 @@ func (p *Provider) GetKubeconfig(ctx context.Context, clusterName string) ([]byt
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	return p.client.Management().WithCluster(clusterName).Kubeconfig(ctx)
+	data, err := p.client.Management().WithCluster(clusterName).Kubeconfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get kubeconfig from Omni: %w", err)
+	}
+
+	return data, nil
 }
 
 // GetTalosconfig retrieves the talosconfig for the given cluster from Omni.
@@ -263,7 +283,12 @@ func (p *Provider) GetTalosconfig(ctx context.Context, clusterName string) ([]by
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	return p.client.Management().WithCluster(clusterName).Talosconfig(ctx)
+	data, err := p.client.Management().WithCluster(clusterName).Talosconfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get talosconfig from Omni: %w", err)
+	}
+
+	return data, nil
 }
 
 // IsAvailable returns true if the provider is ready for use.

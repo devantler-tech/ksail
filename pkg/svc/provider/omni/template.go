@@ -2,12 +2,20 @@ package omni
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
 
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+)
+
+var (
+	// ErrTalosVersionRequired is returned when TalosVersion is not provided.
+	ErrTalosVersionRequired = errors.New("TalosVersion is required")
+	// ErrKubernetesVersionRequired is returned when KubernetesVersion is not provided.
+	ErrKubernetesVersionRequired = errors.New("KubernetesVersion is required")
 )
 
 // PatchScope indicates which nodes a patch should be applied to.
@@ -37,18 +45,12 @@ type TemplateParams struct {
 	// KubernetesVersion is the Kubernetes version (e.g., "1.32.0").
 	KubernetesVersion string
 	// ControlPlanes is the number of control-plane nodes.
-	ControlPlanes int32
+	ControlPlanes int
 	// Workers is the number of worker nodes.
-	Workers int32
+	Workers int
 	// Patches are the loaded Talos config patches from the distribution config directory.
 	Patches []PatchInfo
 }
-
-// ErrTalosVersionRequired is returned when the Talos version is not specified.
-var ErrTalosVersionRequired = fmt.Errorf("omni talosVersion is required for cluster creation")
-
-// ErrKubernetesVersionRequired is returned when the Kubernetes version is not specified.
-var ErrKubernetesVersionRequired = fmt.Errorf("omni kubernetesVersion is required for cluster creation")
 
 // BuildClusterTemplate builds a multi-document YAML cluster template
 // compatible with the Omni SDK's template format.
@@ -153,14 +155,17 @@ func writePatchesSection(buf *bytes.Buffer, patches []PatchInfo) {
 }
 
 // writeInlineContent writes patch YAML content indented under inline:.
+// Blank lines are skipped: they are cosmetic in YAML block mappings, and
+// emitting them without indentation can confuse strict YAML parsers that
+// treat an unindented line as terminating the current block.
 func writeInlineContent(buf *bytes.Buffer, content []byte) {
-	lines := strings.Split(strings.TrimRight(string(content), "\n"), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(strings.TrimRight(string(content), "\n"), "\n")
+	for line := range lines {
 		if line == "" {
-			fmt.Fprintf(buf, "      \n")
-		} else {
-			fmt.Fprintf(buf, "      %s\n", line)
+			continue
 		}
+
+		fmt.Fprintf(buf, "      %s\n", line)
 	}
 }
 

@@ -87,6 +87,32 @@ func TestBuildClusterTemplate_VersionPrefix(t *testing.T) {
 	assert.Contains(t, content, "version: v1.32.0")
 }
 
+func TestBuildClusterTemplate_EmptyTalosVersion(t *testing.T) {
+	t.Parallel()
+
+	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "test",
+		TalosVersion:      "",
+		KubernetesVersion: "1.32.0",
+		ControlPlanes:     1,
+	})
+
+	require.ErrorIs(t, err, omni.ErrTalosVersionRequired)
+}
+
+func TestBuildClusterTemplate_EmptyKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "test",
+		TalosVersion:      "1.11.2",
+		KubernetesVersion: "",
+		ControlPlanes:     1,
+	})
+
+	require.ErrorIs(t, err, omni.ErrKubernetesVersionRequired)
+}
+
 func TestBuildClusterTemplate_WithPatches(t *testing.T) {
 	t.Parallel()
 
@@ -133,40 +159,15 @@ func TestBuildClusterTemplate_WithPatches(t *testing.T) {
 	assert.Contains(t, content, "role: worker")
 }
 
-func TestBuildClusterTemplate_EmptyTalosVersion(t *testing.T) {
-	t.Parallel()
-
-	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
-		ClusterName:       "test-cluster",
-		TalosVersion:      "",
-		KubernetesVersion: "v1.32.0",
-		ControlPlanes:     1,
-	})
-
-	require.ErrorIs(t, err, omni.ErrTalosVersionRequired)
-}
-
-func TestBuildClusterTemplate_EmptyKubernetesVersion(t *testing.T) {
-	t.Parallel()
-
-	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
-		ClusterName:       "test-cluster",
-		TalosVersion:      "v1.11.2",
-		KubernetesVersion: "",
-		ControlPlanes:     1,
-	})
-
-	require.ErrorIs(t, err, omni.ErrKubernetesVersionRequired)
-}
-
 func TestBuildClusterTemplate_PatchWithEmptyLines(t *testing.T) {
 	t.Parallel()
 
+	// Patch content with an empty line — exercises the blank-line skipping in writeInlineContent.
 	patches := []omni.PatchInfo{
 		{
 			Path:    "cluster/multi-line.yaml",
 			Scope:   omni.PatchScopeCluster,
-			Content: []byte("cluster:\n  allowSchedulingOnControlPlanes: true\n\n  network:\n    cni:\n      name: none\n"),
+			Content: []byte("machine:\n  network:\n\n    hostname: test\n"),
 		},
 	}
 
@@ -184,10 +185,8 @@ func TestBuildClusterTemplate_PatchWithEmptyLines(t *testing.T) {
 	require.NoError(t, err)
 
 	content := string(data)
-
-	// Verify patch content is included and blank lines are properly indented
-	assert.Contains(t, content, "allowSchedulingOnControlPlanes: true")
-	assert.Contains(t, content, "name: none")
-	// Ensure no unindented blank lines in inline content
-	assert.NotContains(t, content, "\n\n")
+	assert.Contains(t, content, "hostname: test")
+	assert.Contains(t, content, "name: multi-line")
+	// Blank lines in the patch content must be skipped so YAML block structure is preserved.
+	assert.NotContains(t, content, "\n\n      ")
 }

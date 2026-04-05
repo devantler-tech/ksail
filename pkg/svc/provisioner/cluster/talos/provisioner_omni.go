@@ -43,79 +43,43 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	}
 
 	// Resolve Talos and Kubernetes versions from Omni options
-	talosVersion, kubernetesVersion, err := p.resolveOmniVersions()
-	if err != nil {
-		return err
-	}
+	talosVersion, kubernetesVersion := p.resolveOmniVersions()
 
-	// Load patches from distribution config directory if available
-	var patches []omniprovider.PatchInfo
-
-	if p.talosConfigs != nil {
-		for _, patch := range p.talosConfigs.Patches() {
-			patches = append(patches, omniprovider.PatchInfo{
-				Path:    patch.Path,
-				Scope:   patch.Scope,
-				Content: patch.Content,
-			})
-		}
-	}
-
-	// Build the cluster template
-	templateReader, err := omniprovider.BuildClusterTemplate(omniprovider.TemplateParams{
+	// Sync the cluster template to Omni and wait for readiness
+	err = p.syncAndWaitOmniCluster(ctx, omniProv, omniprovider.TemplateParams{
 		ClusterName:       clusterName,
 		TalosVersion:      talosVersion,
 		KubernetesVersion: kubernetesVersion,
-		ControlPlanes:     int32(p.options.ControlPlaneNodes),
-		Workers:           int32(p.options.WorkerNodes),
-		Patches:           patches,
+		ControlPlanes:     p.options.ControlPlaneNodes,
+		Workers:           p.options.WorkerNodes,
+		Patches:           p.buildOmniPatchInfos(),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to build cluster template: %w", err)
+		return err
 	}
-
-	// Sync the template to Omni (creates cluster resources)
-	_, _ = fmt.Fprintf(p.logWriter, "  Syncing cluster template to Omni...\n")
-
-	err = omniProv.CreateCluster(ctx, templateReader, p.logWriter)
-	if err != nil {
-		return fmt.Errorf("failed to create cluster in Omni: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster template synced\n")
-
-	// Wait for cluster to become ready
-	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for cluster to become ready (timeout: %s)...\n", clusterReadinessTimeout)
-
-	err = omniProv.WaitForClusterReady(ctx, clusterName, clusterReadinessTimeout)
-	if err != nil {
-		return fmt.Errorf("cluster created but not ready: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
 
 	// Save kubeconfig
 	if p.options.KubeconfigPath != "" {
 		_, _ = fmt.Fprintf(p.logWriter, "  Fetching kubeconfig from Omni...\n")
 
-		err = p.saveOmniKubeconfig(ctx, omniProv, clusterName)
+		kubeconfigPath, err := p.saveOmniKubeconfig(ctx, omniProv, clusterName)
 		if err != nil {
 			return fmt.Errorf("failed to save kubeconfig: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Kubeconfig saved to %s\n", p.options.KubeconfigPath)
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Kubeconfig saved to %s\n", kubeconfigPath)
 	}
 
 	// Save talosconfig
 	if p.options.TalosconfigPath != "" {
 		_, _ = fmt.Fprintf(p.logWriter, "  Fetching talosconfig from Omni...\n")
 
-		err = p.saveOmniTalosconfig(ctx, omniProv, clusterName)
+		talosconfigPath, err := p.saveOmniTalosconfig(ctx, omniProv, clusterName)
 		if err != nil {
 			return fmt.Errorf("failed to save talosconfig: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Talosconfig saved to %s\n", p.options.TalosconfigPath)
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Talosconfig saved to %s\n", talosconfigPath)
 	}
 
 	_, _ = fmt.Fprintf(
@@ -127,11 +91,67 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	return nil
 }
 
+// buildOmniPatchInfos converts talosConfigs patches into the PatchInfo format used by the Omni template builder.
+func (p *Provisioner) buildOmniPatchInfos() []omniprovider.PatchInfo {
+	if p.talosConfigs == nil {
+		return nil
+	}
+
+	rawPatches := p.talosConfigs.Patches()
+	patches := make([]omniprovider.PatchInfo, 0, len(rawPatches))
+
+	for _, patch := range rawPatches {
+		patches = append(patches, omniprovider.PatchInfo{
+			Path:    patch.Path,
+			Scope:   patch.Scope,
+			Content: patch.Content,
+		})
+	}
+
+	return patches
+}
+
+// syncAndWaitOmniCluster builds a cluster template, syncs it to Omni, and waits for readiness.
+func (p *Provisioner) syncAndWaitOmniCluster(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+	params omniprovider.TemplateParams,
+) error {
+	templateReader, err := omniprovider.BuildClusterTemplate(params)
+	if err != nil {
+		return fmt.Errorf("failed to build cluster template: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  Syncing cluster template to Omni...\n")
+
+	err = omniProv.CreateCluster(ctx, templateReader, p.logWriter)
+	if err != nil {
+		return fmt.Errorf("failed to create cluster in Omni: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster template synced\n")
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  Waiting for cluster to become ready (timeout: %s)...\n",
+		clusterReadinessTimeout,
+	)
+
+	err = omniProv.WaitForClusterReady(ctx, params.ClusterName, clusterReadinessTimeout)
+	if err != nil {
+		return fmt.Errorf("cluster created but not ready: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
+
+	return nil
+}
+
 // resolveOmniVersions determines the Talos and Kubernetes versions for the Omni cluster.
-// TalosVersion must be explicitly set in omniOpts (Omni manages its own Talos versions
-// independently from the local SDK version contract).
-// KubernetesVersion resolves with priority: omniOpts > talosConfigs defaults.
-func (p *Provisioner) resolveOmniVersions() (talosVersion, kubernetesVersion string, err error) {
+// TalosVersion comes from omniOpts only (required, no fallback).
+// KubernetesVersion falls back to talosConfigs.KubernetesVersion() if not set in omniOpts.
+func (p *Provisioner) resolveOmniVersions() (string, string) {
+	var talosVersion, kubernetesVersion string
+
 	if p.omniOpts != nil {
 		talosVersion = p.omniOpts.TalosVersion
 		kubernetesVersion = p.omniOpts.KubernetesVersion
@@ -141,83 +161,77 @@ func (p *Provisioner) resolveOmniVersions() (talosVersion, kubernetesVersion str
 		kubernetesVersion = p.talosConfigs.KubernetesVersion()
 	}
 
-	if talosVersion == "" {
-		return "", "", fmt.Errorf("%w: set spec.cluster.omni.talosVersion in ksail.yaml", omniprovider.ErrTalosVersionRequired)
-	}
-
-	if kubernetesVersion == "" {
-		return "", "", fmt.Errorf("%w: set spec.cluster.omni.kubernetesVersion in ksail.yaml", omniprovider.ErrKubernetesVersionRequired)
-	}
-
-	return talosVersion, kubernetesVersion, nil
+	return talosVersion, kubernetesVersion
 }
 
 // saveOmniKubeconfig retrieves and saves the kubeconfig from Omni.
+// It returns the canonical path where the kubeconfig was written.
 func (p *Provisioner) saveOmniKubeconfig(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
 	clusterName string,
-) error {
+) (string, error) {
 	kubeconfigData, err := omniProv.GetKubeconfig(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to get kubeconfig from Omni: %w", err)
+		return "", fmt.Errorf("failed to get kubeconfig from Omni: %w", err)
 	}
 
 	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
+		return "", fmt.Errorf("failed to expand kubeconfig path: %w", err)
 	}
 
-	if err = os.MkdirAll(filepath.Dir(kubeconfigPath), stateDirectoryPermissions); err != nil {
-		return fmt.Errorf("failed to create kubeconfig directory: %w", err)
+	err = os.MkdirAll(filepath.Dir(kubeconfigPath), stateDirectoryPermissions)
+	if err != nil {
+		return "", fmt.Errorf("failed to create kubeconfig directory: %w", err)
 	}
 
 	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to canonicalize kubeconfig path: %w", err)
+		return "", fmt.Errorf("failed to canonicalize kubeconfig path: %w", err)
 	}
 
-	if err = os.WriteFile(kubeconfigPath, kubeconfigData, kubeconfigFileMode); err != nil {
-		return fmt.Errorf("failed to write kubeconfig: %w", err)
+	err = os.WriteFile(kubeconfigPath, kubeconfigData, kubeconfigFileMode)
+	if err != nil {
+		return "", fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Kubeconfig saved to %s\n", kubeconfigPath)
-
-	return nil
+	return kubeconfigPath, nil
 }
 
 // saveOmniTalosconfig retrieves and saves the talosconfig from Omni.
+// It returns the canonical path where the talosconfig was written.
 func (p *Provisioner) saveOmniTalosconfig(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
 	clusterName string,
-) error {
+) (string, error) {
 	talosconfigData, err := omniProv.GetTalosconfig(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to get talosconfig from Omni: %w", err)
+		return "", fmt.Errorf("failed to get talosconfig from Omni: %w", err)
 	}
 
 	talosconfigPath, err := fsutil.ExpandHomePath(p.options.TalosconfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to expand talosconfig path: %w", err)
+		return "", fmt.Errorf("failed to expand talosconfig path: %w", err)
 	}
 
-	if err = os.MkdirAll(filepath.Dir(talosconfigPath), stateDirectoryPermissions); err != nil {
-		return fmt.Errorf("failed to create talosconfig directory: %w", err)
+	err = os.MkdirAll(filepath.Dir(talosconfigPath), stateDirectoryPermissions)
+	if err != nil {
+		return "", fmt.Errorf("failed to create talosconfig directory: %w", err)
 	}
 
 	talosconfigPath, err = fsutil.EvalCanonicalPath(talosconfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to canonicalize talosconfig path: %w", err)
+		return "", fmt.Errorf("failed to canonicalize talosconfig path: %w", err)
 	}
 
-	if err = os.WriteFile(talosconfigPath, talosconfigData, kubeconfigFileMode); err != nil {
-		return fmt.Errorf("failed to write talosconfig: %w", err)
+	err = os.WriteFile(talosconfigPath, talosconfigData, kubeconfigFileMode)
+	if err != nil {
+		return "", fmt.Errorf("failed to write talosconfig: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Talosconfig saved to %s\n", talosconfigPath)
-
-	return nil
+	return talosconfigPath, nil
 }
 
 // deleteOmniCluster handles cluster deletion for Omni-managed Talos clusters.
