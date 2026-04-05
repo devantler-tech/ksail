@@ -16,8 +16,21 @@ concurrency:
 permissions: {}
 
 jobs:
+  # Wait for sufficient GitHub API rate limit before proceeding
+  rate-limit-gate:
+    name: ⏳ Rate Limit Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/rate-limit-gate
+
   changes:
     name: 🔍 Detect Changes
+    needs: [rate-limit-gate]
     runs-on: ubuntu-latest
     permissions:
       contents: read
