@@ -219,7 +219,7 @@ func TestSaveOmniConfig_WithTildeExpansion(t *testing.T) {
 	err := provisioner.SaveOmniConfigForTest(dummyData, outPath, "Kubeconfig")
 	require.NoError(t, err)
 
-	written, err := os.ReadFile(outPath)
+	written, err := os.ReadFile(outPath) //nolint:gosec // test-controlled temp path
 	require.NoError(t, err)
 	assert.Equal(t, dummyData, written)
 }
