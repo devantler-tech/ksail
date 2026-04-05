@@ -344,7 +344,9 @@ runs:
             if [ "$INIT" = "true" ]; then
               ksail ${CONFIG:+--config "$CONFIG"} cluster delete --force 2>/dev/null || true
             elif [ -n "$CLUSTER_NAME" ]; then
-              ksail cluster delete --name "$CLUSTER_NAME" --provider "$PROVIDER" --force 2>/dev/null || true
+              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --name "$CLUSTER_NAME" --provider "$PROVIDER" --force 2>/dev/null || true
+            elif [ -n "$CONFIG" ]; then
+              ksail --config "$CONFIG" cluster delete --force 2>/dev/null || true
             fi
             sleep "$BACKOFF"
           fi
