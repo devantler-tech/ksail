@@ -2,13 +2,20 @@ package omni
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+)
+
+var (
+	// ErrTalosVersionRequired is returned when TalosVersion is not provided.
+	ErrTalosVersionRequired = errors.New("TalosVersion is required")
+	// ErrKubernetesVersionRequired is returned when KubernetesVersion is not provided.
+	ErrKubernetesVersionRequired = errors.New("KubernetesVersion is required")
 )
 
 // PatchScope indicates which nodes a patch should be applied to.
@@ -38,9 +45,9 @@ type TemplateParams struct {
 	// KubernetesVersion is the Kubernetes version (e.g., "1.32.0").
 	KubernetesVersion string
 	// ControlPlanes is the number of control-plane nodes.
-	ControlPlanes int32
+	ControlPlanes int
 	// Workers is the number of worker nodes.
-	Workers int32
+	Workers int
 	// Patches are the loaded Talos config patches from the distribution config directory.
 	Patches []PatchInfo
 }
@@ -49,6 +56,14 @@ type TemplateParams struct {
 // compatible with the Omni SDK's template format.
 // The template contains Cluster, ControlPlane, and Workers documents.
 func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
+	if params.TalosVersion == "" {
+		return nil, ErrTalosVersionRequired
+	}
+
+	if params.KubernetesVersion == "" {
+		return nil, ErrKubernetesVersionRequired
+	}
+
 	var buf bytes.Buffer
 
 	talosVersion := ensureVPrefix(params.TalosVersion)
@@ -101,7 +116,12 @@ func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
 }
 
 // ensureVPrefix ensures the version string starts with "v".
+// Returns an empty string if version is empty.
 func ensureVPrefix(version string) string {
+	if version == "" {
+		return ""
+	}
+
 	if !strings.HasPrefix(version, "v") {
 		return "v" + version
 	}
@@ -157,28 +177,4 @@ func patchName(path string) string {
 	ext := filepath.Ext(base)
 
 	return strings.TrimSuffix(base, ext)
-}
-
-// LoadPatchesFromDistributionConfig loads Talos config patches from a distribution config directory.
-// The directory should contain cluster/, control-planes/, and workers/ subdirectories.
-func LoadPatchesFromDistributionConfig(distributionConfigPath string) ([]talosconfigmanager.Patch, error) {
-	if distributionConfigPath == "" {
-		return nil, nil
-	}
-
-	// Check if the directory exists
-	info, err := os.Stat(distributionConfigPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-
-		return nil, fmt.Errorf("failed to access distribution config path: %w", err)
-	}
-
-	if !info.IsDir() {
-		return nil, fmt.Errorf("distribution config path is not a directory: %s", distributionConfigPath)
-	}
-
-	return talosconfigmanager.LoadPatches(distributionConfigPath)
 }

@@ -113,7 +113,7 @@ func TestClusterExists_NilClient(t *testing.T) {
 	exists, err := prov.ClusterExists(context.Background(), "test-cluster")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 	assert.False(t, exists)
 }
 
@@ -147,7 +147,7 @@ func TestGetKubeconfig_NilClient(t *testing.T) {
 	data, err := prov.GetKubeconfig(context.Background(), "test-cluster")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 	assert.Nil(t, data)
 }
 
@@ -159,7 +159,7 @@ func TestGetTalosconfig_NilClient(t *testing.T) {
 	data, err := prov.GetTalosconfig(context.Background(), "test-cluster")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 	assert.Nil(t, data)
 }
 

@@ -68,11 +68,11 @@ func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provide
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	st := p.client.Omni().State()
+	omniState := p.client.Omni().State()
 
 	machines, err := safe.StateListAll[*omnires.ClusterMachineStatus](
 		ctx,
-		st,
+		omniState,
 		state.WithLabelQuery(resource.LabelEqual(omnires.LabelCluster, clusterName)),
 	)
 	if err != nil {
@@ -109,9 +109,9 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	st := p.client.Omni().State()
+	omniState := p.client.Omni().State()
 
-	clusters, err := safe.StateListAll[*omnires.Cluster](ctx, st)
+	clusters, err := safe.StateListAll[*omnires.Cluster](ctx, omniState)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list clusters: %w", err)
 	}
@@ -142,12 +142,12 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 		return provider.ErrProviderUnavailable
 	}
 
-	st := p.client.Omni().State()
+	omniState := p.client.Omni().State()
 
 	// Delete the cluster resource which deallocates all machines
 	cluster := omnires.NewCluster(clusterName)
 
-	err := st.Destroy(ctx, cluster.Metadata())
+	err := omniState.Destroy(ctx, cluster.Metadata())
 	if err != nil {
 		return fmt.Errorf("failed to delete cluster %s: %w", clusterName, err)
 	}
@@ -168,11 +168,11 @@ func (p *Provider) ClusterExists(ctx context.Context, clusterName string) (bool,
 		return false, provider.ErrProviderUnavailable
 	}
 
-	st := p.client.Omni().State()
+	omniState := p.client.Omni().State()
 
 	cluster := omnires.NewCluster(clusterName)
 
-	_, err := safe.StateGet[*omnires.Cluster](ctx, st, cluster.Metadata())
+	_, err := safe.StateGet[*omnires.Cluster](ctx, omniState, cluster.Metadata())
 	if err != nil {
 		if state.IsNotFoundError(err) {
 			return false, nil
@@ -192,9 +192,14 @@ func (p *Provider) CreateCluster(ctx context.Context, templateReader io.Reader, 
 		return provider.ErrProviderUnavailable
 	}
 
-	st := p.client.Omni().State()
+	omniState := p.client.Omni().State()
 
-	return operations.SyncTemplate(ctx, templateReader, out, st, operations.SyncOptions{})
+	err := operations.SyncTemplate(ctx, templateReader, out, omniState, operations.SyncOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to sync template to Omni: %w", err)
+	}
+
+	return nil
 }
 
 // clusterReadyPollInterval is the interval between cluster readiness polls.
@@ -207,7 +212,7 @@ func (p *Provider) WaitForClusterReady(ctx context.Context, clusterName string, 
 		return provider.ErrProviderUnavailable
 	}
 
-	st := p.client.Omni().State()
+	omniState := p.client.Omni().State()
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -218,10 +223,14 @@ func (p *Provider) WaitForClusterReady(ctx context.Context, clusterName string, 
 	for {
 		status, err := safe.StateGet[*omnires.ClusterStatus](
 			ctx,
-			st,
+			omniState,
 			omnires.NewClusterStatus(clusterName).Metadata(),
 		)
-		if err == nil {
+		if err != nil {
+			if !state.IsNotFoundError(err) {
+				return fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
+			}
+		} else {
 			phase := status.TypedSpec().Value.GetPhase()
 			ready := status.TypedSpec().Value.GetReady()
 
@@ -244,7 +253,12 @@ func (p *Provider) GetKubeconfig(ctx context.Context, clusterName string) ([]byt
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	return p.client.Management().WithCluster(clusterName).Kubeconfig(ctx)
+	data, err := p.client.Management().WithCluster(clusterName).Kubeconfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get kubeconfig from Omni: %w", err)
+	}
+
+	return data, nil
 }
 
 // GetTalosconfig retrieves the talosconfig for the given cluster from Omni.
@@ -253,7 +267,12 @@ func (p *Provider) GetTalosconfig(ctx context.Context, clusterName string) ([]by
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	return p.client.Management().WithCluster(clusterName).Talosconfig(ctx)
+	data, err := p.client.Management().WithCluster(clusterName).Talosconfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get talosconfig from Omni: %w", err)
+	}
+
+	return data, nil
 }
 
 // IsAvailable returns true if the provider is ready for use.
