@@ -1771,10 +1771,11 @@ const (
 )
 
 // kustomizationFileNames lists all kustomization filenames recognized by kubectl.
-// Used by hasKustomizationFile and findKustomizationDir for consistent detection.
+// Used by hasKustomizationFile, findKustomizationDir, findKustomizations,
+// findYAMLFiles, and collectPatchPathsFromDir for consistent detection.
 //
 //nolint:gochecknoglobals // package-level constant slice; Go does not support const slices
-var kustomizationFileNames = []string{"kustomization.yaml", "kustomization.yml", "Kustomization"}
+var kustomizationFileNames = []string{kustomizationFileName, "kustomization.yml", "Kustomization"}
 
 // ErrBuildFailed is returned when a kustomize build or manifest validation fails.
 var ErrBuildFailed = errors.New("build failed")
@@ -1799,7 +1800,7 @@ If no path is provided, the path is resolved in order:
   3. The current directory (fallback when no ksail.yaml config file is found)
 
 The validation process:
-1. Validates individual YAML files (patch files referenced in kustomization.yaml via patches,
+1. Validates individual YAML files (patch files referenced in a kustomization file via patches,
    patchesStrategicMerge, or patchesJson6902 are excluded — they are not valid standalone
    Kubernetes resources and are validated as part of the kustomize build output instead)
 2. Validates kustomizations by building them with kustomize and validating the output
@@ -2229,21 +2230,33 @@ func walkFiles(rootPath string, match func(string, os.FileInfo) string) ([]strin
 	return results, nil
 }
 
-// findKustomizations finds all directories containing kustomization.yaml files.
+// findKustomizations finds all directories containing a kustomization file
+// recognized by kubectl (kustomization.yaml, kustomization.yml, or Kustomization).
 func findKustomizations(rootPath string) ([]string, error) {
 	return walkFiles(rootPath, func(path string, info os.FileInfo) string {
-		if info.Name() == kustomizationFileName {
-			return filepath.Dir(path)
+		for _, name := range kustomizationFileNames {
+			if info.Name() == name {
+				return filepath.Dir(path)
+			}
 		}
 
 		return ""
 	})
 }
 
-// findYAMLFiles finds all YAML files in a directory, excluding kustomization.yaml files.
+// findYAMLFiles finds all YAML files in a directory, excluding kustomization files
+// recognized by kubectl (kustomization.yaml, kustomization.yml, or Kustomization).
 func findYAMLFiles(rootPath string) ([]string, error) {
 	return walkFiles(rootPath, func(path string, _ os.FileInfo) string {
-		if isYAMLFile(path) && filepath.Base(path) != kustomizationFileName {
+		base := filepath.Base(path)
+
+		for _, name := range kustomizationFileNames {
+			if base == name {
+				return ""
+			}
+		}
+
+		if isYAMLFile(path) {
 			return path
 		}
 
@@ -2290,12 +2303,22 @@ func collectPatchPaths(rootDir string, kustomizationDirs []string) map[string]st
 	return patchPaths
 }
 
-// collectPatchPathsFromDir parses a single kustomization.yaml and adds the absolute
-// paths of referenced patch files to the provided set.
+// collectPatchPathsFromDir parses a kustomization file (trying all recognized names)
+// and adds the absolute paths of referenced patch files to the provided set.
 func collectPatchPathsFromDir(rootDir, kustDir string, patchPaths map[string]struct{}) {
-	kustFile := filepath.Join(kustDir, kustomizationFileName)
+	var data []byte
 
-	data, err := fsutil.ReadFileSafe(rootDir, kustFile)
+	var err error
+
+	for _, name := range kustomizationFileNames {
+		kustFile := filepath.Join(kustDir, name)
+
+		data, err = fsutil.ReadFileSafe(rootDir, kustFile)
+		if err == nil {
+			break
+		}
+	}
+
 	if err != nil {
 		return
 	}
