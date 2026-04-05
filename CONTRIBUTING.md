@@ -246,11 +246,11 @@ gh workflow run ci.yaml --ref your-branch --field run_system_tests=true
 
 This is useful for validating infrastructure-sensitive changes before entering the merge queue.
 
-**Lightweight tests on every PR:**
+**Lightweight tests on every PR with code changes:**
 
-The `gen-smoke-test` job runs on every PR and validates:
+The `gen-smoke-test` job runs on every PR that has Go source changes (`needs.changes.outputs.code == 'true'`) and validates:
 
-- All `workload gen` subcommands (manifest generation + schema validation)
+- Most `workload gen` subcommands (manifest generation + schema validation); `clusterrole` and `role` require live API-server discovery and are covered by system tests instead
 - Smoke tests for `chat --help` and `mcp --help`
 
 These tests do not require Docker or a cluster and complete in under a minute.

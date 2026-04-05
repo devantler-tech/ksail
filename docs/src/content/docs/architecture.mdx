@@ -116,11 +116,11 @@ Installed after Phase 1 completes and API server is stable:
 
 Between phases, KSail performs a **Cluster Stability Check** with three sequential steps:
 
-1. **API server stability** — requires 5 consecutive successful health checks within a 2-minute timeout
-2. **DaemonSet readiness** — verifies all kube-system DaemonSets are ready within a 3-minute timeout
-3. **In-cluster API connectivity** — creates a short-lived busybox pod that tests TCP connectivity to the API server ClusterIP (port 443) from within the cluster, with a 2-minute timeout
+1. **API server stability** — requires consecutive successful health checks within a 2-minute timeout. The threshold is distribution-aware: 3 checks for Vanilla and K3s (which stabilize faster after webhook registration), and 5 for Talos and VCluster.
+2. **DaemonSet readiness** — verifies all kube-system DaemonSets are ready within a 3-minute timeout. Runs after API server stability, as it does not retry transient transport errors.
+3. **In-cluster API connectivity** *(Cilium only)* — creates a short-lived busybox pod that tests TCP connectivity to the API server ClusterIP (port 443) from within the cluster, with a 2-minute timeout. Only performed for Cilium CNI, where eBPF dataplane programming may lag behind DaemonSet readiness. Skipped for the default (distribution-provided) CNI and Calico.
 
-This prevents GitOps engines from crashing with API server i/o timeout errors caused by infrastructure components temporarily destabilizing API server connectivity while registering webhooks and CRDs, or by incomplete CNI dataplane programming (e.g., Cilium's eBPF dataplane not yet fully programmed even after DaemonSet pods report Ready).
+This prevents GitOps engines from crashing with API server i/o timeout errors caused by infrastructure components temporarily destabilizing API server connectivity while registering webhooks and CRDs, or by incomplete CNI dataplane programming.
 
 ### Detection and Updates
 
