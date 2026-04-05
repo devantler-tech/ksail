@@ -1,0 +1,61 @@
+name: Rate Limit Gate
+description: |
+  Waits for sufficient GitHub API rate limit before proceeding.
+  Uses exponential backoff to poll the /rate_limit endpoint (which is
+  free and does not count against the quota).
+
+inputs:
+  min-remaining:
+    description: Minimum remaining API calls required to proceed
+    required: false
+    default: "100"
+  max-wait:
+    description: Maximum wait time in seconds before failing
+    required: false
+    default: "1800"
+
+runs:
+  using: composite
+  steps:
+    - name: ⏳ Wait for GitHub API rate limit
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        MIN_REMAINING: ${{ inputs.min-remaining }}
+        MAX_WAIT: ${{ inputs.max-wait }}
+      run: |
+        set -Eeuo pipefail
+
+        interval=30
+        max_interval=300
+        elapsed=0
+
+        while true; do
+          remaining=$(gh api /rate_limit --jq '.resources.core.remaining')
+
+          if [ "$remaining" -ge "$MIN_REMAINING" ]; then
+            echo "✅ GitHub API rate limit OK — $remaining remaining (minimum: $MIN_REMAINING)"
+            exit 0
+          fi
+
+          if [ "$elapsed" -ge "$MAX_WAIT" ]; then
+            reset_at=$(gh api /rate_limit --jq '.resources.core.reset | todate')
+            echo "::error::GitHub API rate limit exhausted ($remaining remaining, need $MIN_REMAINING). Waited ${elapsed}s (max ${MAX_WAIT}s). Resets at $reset_at."
+            exit 1
+          fi
+
+          # Cap sleep to remaining budget so we don't overshoot MAX_WAIT
+          budget=$((MAX_WAIT - elapsed))
+          sleep_time=$interval
+          if [ "$sleep_time" -gt "$budget" ]; then
+            sleep_time=$budget
+          fi
+
+          echo "⏳ Rate limit low ($remaining remaining, need $MIN_REMAINING) — retrying in ${sleep_time}s (elapsed: ${elapsed}s / ${MAX_WAIT}s)"
+          sleep "$sleep_time"
+          elapsed=$((elapsed + sleep_time))
+          interval=$((interval * 2))
+          if [ "$interval" -gt "$max_interval" ]; then
+            interval=$max_interval
+          fi
+        done
