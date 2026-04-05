@@ -163,6 +163,10 @@ func writeTempSecret(b *testing.B, content []byte) string {
 	err := os.WriteFile(filePath, content, 0o600)
 	if err != nil {
 		b.Fatalf("failed to write test file: %v", err)
+	}
+
+	return filePath
+}
 
 // newEncryptOpts builds sopsclient.EncryptOpts for the given file path with default settings.
 func newEncryptOpts(
@@ -273,6 +277,7 @@ func BenchmarkEncrypt(b *testing.B) {
 			b.StopTimer()
 
 			for b.Loop() {
+				err := os.WriteFile(filePath, scenario.content, 0o600)
 				if err != nil {
 					b.Fatalf("failed to write test file: %v", err)
 				}
@@ -343,6 +348,7 @@ func BenchmarkRoundtrip_Minimal(b *testing.B) {
 	b.StopTimer()
 
 	for b.Loop() {
+		filePath := writeTempSecret(b, content)
 
 		encOpts, err := newEncryptOpts(filePath, keyGroups)
 		if err != nil {
