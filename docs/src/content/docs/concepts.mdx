@@ -67,7 +67,7 @@ Manages Talos clusters through the [Sidero Omni](https://www.siderolabs.com/plat
 
 KSail-specific configuration:
 
-- **Gateway API** is enabled by default (`gatewayAPI.enabled: true`); standard [Gateway API CRDs](https://gateway-api.sigs.k8s.io/guides/) are pre-installed automatically
+- **Gateway API** is enabled by default (`gatewayAPI.enabled: true`); experimental [Gateway API CRDs](https://gateway-api.sigs.k8s.io/guides/) are pre-installed automatically
 - **Without a LoadBalancer** (Docker-based): host network mode (`gatewayAPI.hostNetwork.enabled: true`) routes traffic via the Docker bridge using port mappings
 - **With a LoadBalancer** (e.g. Cloud Provider KIND for Vanilla, MetalLB for Talos on Docker, or `hcloud-cloud-controller-manager` for Talos on Hetzner): host network mode is skipped; traffic flows via LoadBalancer external IPs
 
