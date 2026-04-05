@@ -98,17 +98,9 @@ All MCP tools return a structured JSON envelope, making responses easy to parse 
 
 ## Integration Examples
 
-For a complete setup guide with step-by-step instructions for each AI client — including PATH configuration, example prompts, and tool reference — see [Using KSail with AI Assistants](/guides/ai-mcp/).
+For step-by-step setup instructions for each AI client — including PATH configuration, example prompts, and a tool reference — see [Using KSail with AI Assistants](/guides/ai-mcp/).
 
-### Claude Desktop
-
-Add KSail to your Claude Desktop configuration:
-
-**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-
-**Linux:** `~/.config/Claude/claude_desktop_config.json`
+All clients use the same basic configuration pattern:
 
 ````json
 {
@@ -121,53 +113,7 @@ Add KSail to your Claude Desktop configuration:
 }
 ````
 
-After restarting Claude Desktop, the KSail tools will be available. Try:
-
-> "Create a Vanilla Kubernetes cluster with Cilium CNI"
-
-Claude will use the `cluster_write` tool (with `command: "init"` and `command: "create"`) to fulfill your request.
-
-### Cursor
-
-Add KSail to your Cursor MCP configuration. Create or edit `.cursor/mcp.json` in your project root (project-level) or `~/.cursor/mcp.json` (global):
-
-````json
-{
-  "mcpServers": {
-    "ksail": {
-      "command": "ksail",
-      "args": ["mcp"]
-    }
-  }
-}
-````
-
-After saving, restart Cursor or reload MCP configuration from Cursor Settings → MCP.
-
-### Windsurf
-
-Add KSail via **Windsurf Settings → MCP → Add MCP Server**:
-
-````json
-{
-  "mcpServers": {
-    "ksail": {
-      "command": "ksail",
-      "args": ["mcp"]
-    }
-  }
-}
-````
-
-### VSCode Extension
-
-The [KSail VSCode extension](/vscode-extension/) automatically registers the MCP server with VSCode's native MCP infrastructure.
-
-**No manual configuration needed** — the extension handles server registration, process lifecycle, and working directory setup.
-
-Once installed:
-1. Open a workspace with a `ksail.yaml` file (or run `KSail: Init Cluster` to create one)
-2. Use GitHub Copilot in agent mode — Copilot can now execute KSail commands directly
+The [KSail VSCode extension](/vscode-extension/) handles MCP registration automatically — no manual configuration needed.
 
 ### Custom MCP Client
 
