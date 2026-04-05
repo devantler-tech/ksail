@@ -1,0 +1,44 @@
+---
+name: Publish MCP
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to MCP Registry
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: 📑 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: 🏷️ Extract version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: 📝 Update server.json version
+        run: |
+          jq --arg v "${{ steps.get_version.outputs.version }}" \
+             --arg tag "${{ steps.get_version.outputs.version }}" \
+             '.version = $v | .packages[0].identifier = "ghcr.io/devantler-tech/ksail:" + $tag' \
+             server.json > server.json.tmp && mv server.json.tmp server.json
+
+      - name: 📥 Install mcp-publisher
+        run: |
+          curl -sL "https://github.com/modelcontextprotocol/registry/releases/download/latest/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: 🔐 Authenticate with MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: 📤 Publish to MCP Registry
+        run: ./mcp-publisher publish
