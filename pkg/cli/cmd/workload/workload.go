@@ -1770,6 +1770,10 @@ const (
 	validationConcurrency = 5
 )
 
+// kustomizationFileNames lists all kustomization filenames recognized by kubectl.
+// Used by hasKustomizationFile and findKustomizationDir for consistent detection.
+var kustomizationFileNames = []string{"kustomization.yaml", "kustomization.yml", "Kustomization"}
+
 // ErrBuildFailed is returned when a kustomize build or manifest validation fails.
 var ErrBuildFailed = errors.New("build failed")
 
@@ -3470,7 +3474,7 @@ func normalizeFluxPath(path string) string {
 // as a positive match so that transient stat failures do not silently switch
 // the apply mode from -k to -f --recursive.
 func hasKustomizationFile(dir string) bool {
-	for _, name := range []string{"kustomization.yaml", "kustomization.yml", "Kustomization"} {
+	for _, name := range kustomizationFileNames {
 		info, err := os.Stat(filepath.Join(dir, name))
 		if err == nil {
 			if info.Mode().IsRegular() {
