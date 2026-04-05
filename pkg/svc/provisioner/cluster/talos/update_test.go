@@ -75,13 +75,12 @@ func TestCountNodeRoles(t *testing.T) {
 	}
 }
 
-func TestApplyNodeScalingChangesSkipsOmni(t *testing.T) {
+func TestUpdateSkipsOmniNodeScaling(t *testing.T) {
 	t.Parallel()
 
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).
 		WithOmniOptions(v1alpha1.OptionsOmni{}).
 		WithLogWriter(io.Discard)
-	result := &clusterupdate.UpdateResult{}
 
 	oldSpec := &v1alpha1.ClusterSpec{}
 	oldSpec.Talos.ControlPlanes = 1
@@ -91,14 +90,14 @@ func TestApplyNodeScalingChangesSkipsOmni(t *testing.T) {
 	newSpec.Talos.ControlPlanes = 2
 	newSpec.Talos.Workers = 2
 
-	err := provisioner.ApplyNodeScalingChangesForTest(
+	_, err := provisioner.Update(
 		context.Background(),
 		"demo",
 		oldSpec,
 		newSpec,
-		result,
+		clusterupdate.UpdateOptions{},
 	)
 	if err != nil {
-		t.Fatalf("applyNodeScalingChanges() error = %v, want nil", err)
+		t.Fatalf("Update() error = %v, want nil", err)
 	}
 }
