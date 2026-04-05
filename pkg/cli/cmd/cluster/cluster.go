@@ -906,6 +906,7 @@ func sanitizeObject(obj *unstructured.Unstructured) {
 	annotations := obj.GetAnnotations()
 	if _, ok := annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
 		delete(annotations, "kubectl.kubernetes.io/last-applied-configuration")
+
 		if len(annotations) == 0 {
 			obj.SetAnnotations(nil)
 		} else {
