@@ -2595,31 +2595,24 @@ func displayComponents(writer io.Writer, clusterName string) {
 		return
 	}
 
+	type row struct{ label, value string }
+
+	rows := []row{
+		{"GitOps Engine:", componentLabel(string(spec.GitOpsEngine))},
+		{"CNI:", componentLabel(string(spec.CNI))},
+		{"CSI:", componentLabel(string(spec.CSI))},
+		{"Metrics Server:", componentLabel(string(spec.MetricsServer))},
+		{"Load Balancer:", componentLabel(string(spec.LoadBalancer))},
+		{"Cert Manager:", componentLabel(string(spec.CertManager))},
+		{"Policy Engine:", componentLabel(string(spec.PolicyEngine))},
+	}
+
 	_, _ = fmt.Fprintln(writer)
 	_, _ = fmt.Fprintln(writer, "  Components:")
-	_, _ = fmt.Fprintf(
-		writer,
-		"    GitOps Engine:  %s\n",
-		componentLabel(string(spec.GitOpsEngine)),
-	)
-	_, _ = fmt.Fprintf(writer, "    CNI:            %s\n", componentLabel(string(spec.CNI)))
-	_, _ = fmt.Fprintf(writer, "    CSI:            %s\n", componentLabel(string(spec.CSI)))
-	_, _ = fmt.Fprintf(
-		writer,
-		"    Metrics Server: %s\n",
-		componentLabel(string(spec.MetricsServer)),
-	)
-	_, _ = fmt.Fprintf(
-		writer,
-		"    Load Balancer:  %s\n",
-		componentLabel(string(spec.LoadBalancer)),
-	)
-	_, _ = fmt.Fprintf(writer, "    Cert Manager:   %s\n", componentLabel(string(spec.CertManager)))
-	_, _ = fmt.Fprintf(
-		writer,
-		"    Policy Engine:  %s\n",
-		componentLabel(string(spec.PolicyEngine)),
-	)
+
+	for _, r := range rows {
+		_, _ = fmt.Fprintf(writer, "    %-16s%s\n", r.label, r.value)
+	}
 }
 
 // componentLabel returns a display label for a component value.
