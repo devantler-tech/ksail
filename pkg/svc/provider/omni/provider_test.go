@@ -135,8 +135,8 @@ func TestDeleteNodes_ClusterExists_RemovesCluster(t *testing.T) {
 	err := prov.DeleteNodes(context.Background(), "test-cluster")
 
 	require.NoError(t, err)
+
 	_, getErr := testState.Get(context.Background(), cluster.Metadata())
 	require.Error(t, getErr)
 	assert.True(t, state.IsNotFoundError(getErr), "cluster should have been removed from state")
 }
-
