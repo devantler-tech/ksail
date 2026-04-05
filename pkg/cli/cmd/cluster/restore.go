@@ -501,6 +501,11 @@ func restoreResourceFile(
 
 	defer func() { _ = os.Remove(labeledPath) }()
 
+	// Skip files with no Kubernetes objects (empty backup category).
+	if isEmptyYAML(labeledPath) {
+		return nil
+	}
+
 	var outBuf, errBuf bytes.Buffer
 
 	client := kubectl.NewClient(genericiooptions.IOStreams{
@@ -526,22 +531,46 @@ func restoreResourceFile(
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 
-	err = cmd.ExecuteContext(ctx)
+	err = kubectl.ExecuteSafely(ctx, cmd)
+
+	return classifyRestoreError(err, errBuf.String(), flags)
+}
+
+// isEmptyYAML returns true if the file at path contains no Kubernetes
+// objects — only whitespace and YAML document separators.
+func isEmptyYAML(path string) bool {
+	data, err := os.ReadFile(path) //nolint:gosec // path from extracted temp dir
 	if err != nil {
-		stderr := errBuf.String()
-
-		if flags.existingResourcePolicy == resourcePolicyNone &&
-			allLinesContain(stderr, "already exists") {
-			return nil
-		}
-
-		return fmt.Errorf(
-			"kubectl failed: %w (output: %s)",
-			err, stderr,
-		)
+		return false
 	}
 
-	return nil
+	for line := range strings.SplitSeq(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && trimmed != "---" {
+			return false
+		}
+	}
+
+	return true
+}
+
+// classifyRestoreError returns nil for benign errors (already-existing
+// resources) and wraps real failures.
+func classifyRestoreError(err error, stderr string, flags *restoreFlags) error {
+	if err == nil {
+		return nil
+	}
+
+	if flags.existingResourcePolicy == resourcePolicyNone &&
+		allLinesContain(stderr, "already exists") {
+		return nil
+	}
+
+	if stderr != "" {
+		return fmt.Errorf("kubectl failed: %w (output: %s)", err, stderr)
+	}
+
+	return fmt.Errorf("kubectl failed: %w", err)
 }
 
 // injectRestoreLabels reads a YAML file, adds restore labels to each

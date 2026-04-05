@@ -504,7 +504,7 @@ func runKubectlGet(
 	getCmd.SilenceUsage = true
 	getCmd.SilenceErrors = true
 
-	err := getCmd.ExecuteContext(ctx)
+	err := kubectl.ExecuteSafely(ctx, getCmd)
 	if err != nil {
 		return outBuf.String(), errBuf.String(), fmt.Errorf(
 			"kubectl get %s: %w", resourceType, err,

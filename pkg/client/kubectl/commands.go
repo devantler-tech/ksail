@@ -25,6 +25,9 @@ import (
 
 // CreateApplyCommand creates a kubectl apply command with all its flags and behavior.
 func (c *Client) CreateApplyCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
 	factory, configFlags := c.createFactory(kubeConfigPath)
 	applyCmd := apply.NewCmdApply("ksail workload", factory, c.ioStreams)
 
@@ -41,6 +44,9 @@ func (c *Client) CreateApplyCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateCreateCommand creates a kubectl create command with all its flags and behavior.
 func (c *Client) CreateCreateCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
 	factory, configFlags := c.createFactory(kubeConfigPath)
 	createCmd := create.NewCmdCreate(factory, c.ioStreams)
 
@@ -57,6 +63,9 @@ func (c *Client) CreateCreateCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateEditCommand creates a kubectl edit command with all its flags and behavior.
 func (c *Client) CreateEditCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
 	factory, configFlags := c.createFactory(kubeConfigPath)
 	editCmd := edit.NewCmdEdit(factory, c.ioStreams)
 
@@ -73,6 +82,9 @@ func (c *Client) CreateEditCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateDeleteCommand creates a kubectl delete command with all its flags and behavior.
 func (c *Client) CreateDeleteCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
 	factory, configFlags := c.createFactory(kubeConfigPath)
 	deleteCmd := delete.NewCmdDelete(factory, c.ioStreams)
 
@@ -89,6 +101,9 @@ func (c *Client) CreateDeleteCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateDescribeCommand creates a kubectl describe command with all its flags and behavior.
 func (c *Client) CreateDescribeCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
 	factory, configFlags := c.createFactory(kubeConfigPath)
 	describeCmd := describe.NewCmdDescribe("ksail workload", factory, c.ioStreams)
 
@@ -105,6 +120,9 @@ func (c *Client) CreateDescribeCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateExplainCommand creates a kubectl explain command with all its flags and behavior.
 func (c *Client) CreateExplainCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
 	factory, configFlags := c.createFactory(kubeConfigPath)
 	explainCmd := explain.NewCmdExplain("ksail workload", factory, c.ioStreams)
 
@@ -121,6 +139,9 @@ func (c *Client) CreateExplainCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateGetCommand creates a kubectl get command with all its flags and behavior.
 func (c *Client) CreateGetCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
 	factory, configFlags := c.createFactory(kubeConfigPath)
 	getCmd := get.NewCmdGet("ksail workload", factory, c.ioStreams)
 
@@ -137,6 +158,9 @@ func (c *Client) CreateGetCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateLogsCommand creates a kubectl logs command with all its flags and behavior.
 func (c *Client) CreateLogsCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
 	factory, configFlags := c.createFactory(kubeConfigPath)
 	logsCmd := logs.NewCmdLogs(factory, c.ioStreams)
 
@@ -154,6 +178,9 @@ func (c *Client) CreateLogsCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateRolloutCommand creates a kubectl rollout command with all its flags and behavior.
 func (c *Client) CreateRolloutCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
 	factory, configFlags := c.createFactory(kubeConfigPath)
 	rolloutCmd := rollout.NewCmdRollout(factory, c.ioStreams)
 
@@ -170,6 +197,9 @@ func (c *Client) CreateRolloutCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateScaleCommand creates a kubectl scale command with all its flags and behavior.
 func (c *Client) CreateScaleCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
 	factory, configFlags := c.createFactory(kubeConfigPath)
 	scaleCmd := scale.NewCmdScale(factory, c.ioStreams)
 
@@ -186,6 +216,9 @@ func (c *Client) CreateScaleCommand(kubeConfigPath string) *cobra.Command {
 
 // CreateExposeCommand creates a kubectl expose command with all its flags and behavior.
 func (c *Client) CreateExposeCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
 	factory, configFlags := c.createFactory(kubeConfigPath)
 	exposeCmd := expose.NewCmdExposeService(factory, c.ioStreams)
 
@@ -239,6 +272,9 @@ func (c *Client) CreateClusterInfoCommand(kubeConfigPath string) *cobra.Command 
 
 // CreateExecCommand creates a kubectl exec command with all its flags and behavior.
 func (c *Client) CreateExecCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
 	factory, configFlags := c.createFactory(kubeConfigPath)
 	execCmd := exec.NewCmdExec(factory, c.ioStreams)
 
