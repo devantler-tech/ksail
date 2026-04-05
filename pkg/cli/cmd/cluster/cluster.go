@@ -897,7 +897,8 @@ func sanitizeObject(obj *unstructured.Unstructured) {
 
 	// Remove last-applied-configuration annotation — it can be very large
 	// (duplicates the entire resource body) and causes annotation-size-limit
-	// errors (>262144 bytes) on restore for ArgoCD CRDs and Helm Secrets.
+	// errors (>262144 bytes) on restore for resources with large specs
+	// such as ArgoCD CRDs or Helm-managed resources.
 	annotations := obj.GetAnnotations()
 	if _, ok := annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
 		delete(annotations, "kubectl.kubernetes.io/last-applied-configuration")
@@ -4098,8 +4099,8 @@ func restoreResourceFile(
 
 	args := []string{"-f", labeledPath}
 
-	useSSA := flags.existingResourcePolicy == resourcePolicyUpdate
-	if useSSA {
+	useServerSideApply := flags.existingResourcePolicy == resourcePolicyUpdate
+	if useServerSideApply {
 		// Server-side apply avoids the client-side
 		// last-applied-configuration annotation that can exceed the
 		// 262144-byte annotation limit for large resources (e.g.
@@ -4108,7 +4109,7 @@ func restoreResourceFile(
 	}
 
 	if flags.dryRun {
-		if useSSA {
+		if useServerSideApply {
 			args = append(args, "--dry-run=server")
 		} else {
 			args = append(args, "--dry-run=client")
