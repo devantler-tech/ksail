@@ -183,7 +183,7 @@ Displays Kubernetes control-plane and core service endpoints for the current con
 ksail cluster update
 ```
 
-Applies in-place changes to components (CNI, GitOps engine, cert-manager, etc.). Node scaling changes for Talos are applied in-place. See the [Update Behavior table](/support-matrix/#update-behavior) for details.
+Applies in-place changes to components (CNI, GitOps engine, cert-manager, etc.). Node scaling changes are **skipped** for Omni-managed clusters — Omni manages node lifecycle externally. Add or remove machines via the [Omni web UI](https://omni.siderolabs.com/) or Omni CLI instead. See the [Update Behavior table](/support-matrix/#update-behavior) for details.
 
 ## Troubleshooting
 
