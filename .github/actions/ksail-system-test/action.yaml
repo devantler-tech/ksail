@@ -3,6 +3,11 @@ description: |
   Runs a full end-to-end system test of KSail, testing cluster lifecycle
   and workload management capabilities.
 
+  Cloud provider credentials are read from environment variables, not action
+  inputs. Set these in the calling job before invoking this action:
+  - Hetzner provider: HCLOUD_TOKEN
+  - Omni provider: OMNI_SERVICE_ACCOUNT_KEY and OMNI_ENDPOINT
+
 inputs:
   distribution:
     description: Kubernetes distribution (Vanilla, K3s, Talos, VCluster)
