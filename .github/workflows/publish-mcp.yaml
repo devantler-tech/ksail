@@ -16,6 +16,8 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    env:
+      MCP_PUBLISHER_VERSION: "1.5.0"
     steps:
       - name: 📑 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -24,18 +26,23 @@ jobs:
 
       - name: 🏷️ Extract version from tag
         id: get_version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: 📝 Update server.json version
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+          IMAGE_TAG: ${{ steps.get_version.outputs.image_tag }}
         run: |
-          jq --arg v "${{ steps.get_version.outputs.version }}" \
-             --arg tag "${{ steps.get_version.outputs.version }}" \
+          jq --arg v "$VERSION" \
+             --arg tag "$IMAGE_TAG" \
              '.version = $v | .packages[0].identifier = "ghcr.io/devantler-tech/ksail:" + $tag' \
              server.json > server.json.tmp && mv server.json.tmp server.json
 
       - name: 📥 Install mcp-publisher
         run: |
-          curl -sL "https://github.com/modelcontextprotocol/registry/releases/download/latest/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          curl -sL "https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
 
       - name: 🔐 Authenticate with MCP Registry
         run: ./mcp-publisher login github-oidc
