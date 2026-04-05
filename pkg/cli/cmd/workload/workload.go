@@ -3280,10 +3280,7 @@ func findKustomizationDir(changedFile, rootDir string) string {
 	}
 
 	for {
-		kustomizationPath := filepath.Join(dir, kustomizationFileName)
-
-		_, statErr = os.Stat(kustomizationPath)
-		if statErr == nil {
+		if hasKustomizationFile(dir) {
 			return dir
 		}
 
@@ -3465,8 +3462,25 @@ func normalizeFluxPath(path string) string {
 	return path
 }
 
-// runKubectlApply executes kubectl apply -k against the provided directory,
+// hasKustomizationFile reports whether dir contains a kustomization file
+// recognized by kubectl (kustomization.yaml, kustomization.yml, or Kustomization).
+func hasKustomizationFile(dir string) bool {
+	for _, name := range []string{"kustomization.yaml", "kustomization.yml", "Kustomization"} {
+		_, err := os.Stat(filepath.Join(dir, name))
+		if err == nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+// runKubectlApply executes kubectl apply against the provided directory,
 // which may be the root watch directory or a scoped Kustomization subtree.
+// When the directory contains a kustomization file recognized by kubectl
+// (kustomization.yaml, kustomization.yml, or Kustomization), it applies
+// using -k (kustomize mode). Otherwise it falls back to -f with --recursive
+// to apply all manifest files in the directory tree.
 // The provided context is forwarded to the cobra command so that Ctrl+C
 // (which cancels ctx) also terminates an in-flight apply promptly.
 func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error {
@@ -3478,13 +3492,25 @@ func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error 
 	})
 
 	applyCmd := client.CreateApplyCommand(kubeconfigPath)
-	applyCmd.SetArgs([]string{"-k", dir})
+
+	var mode string
+
+	if hasKustomizationFile(dir) {
+		applyCmd.SetArgs([]string{"-k", dir})
+
+		mode = "-k"
+	} else {
+		applyCmd.SetArgs([]string{"-f", dir, "--recursive"})
+
+		mode = "-f --recursive"
+	}
+
 	applyCmd.SetOut(cmd.OutOrStdout())
 	applyCmd.SetErr(cmd.ErrOrStderr())
 
 	err := kubectl.ExecuteSafely(ctx, applyCmd)
 	if err != nil {
-		return fmt.Errorf("kubectl apply: %w", err)
+		return fmt.Errorf("kubectl apply (%s): %w", mode, err)
 	}
 
 	return nil

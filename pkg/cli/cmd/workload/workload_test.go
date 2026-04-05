@@ -2376,6 +2376,63 @@ func TestMatchFluxKustomizationsNormalizesLeadingDotSlash(t *testing.T) {
 	require.ElementsMatch(t, []string{"with-dotslash", "without-dotslash"}, got)
 }
 
+func TestHasKustomizationFile(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns_true_when_kustomization_yaml_exists", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dir, "kustomization.yaml"), []byte("resources: []"), 0o600,
+		))
+
+		require.True(t, workload.ExportHasKustomizationFile(dir))
+	})
+
+	t.Run("returns_true_when_kustomization_yml_exists", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dir, "kustomization.yml"), []byte("resources: []"), 0o600,
+		))
+
+		require.True(t, workload.ExportHasKustomizationFile(dir))
+	})
+
+	t.Run("returns_true_when_Kustomization_exists", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dir, "Kustomization"), []byte("resources: []"), 0o600,
+		))
+
+		require.True(t, workload.ExportHasKustomizationFile(dir))
+	})
+
+	t.Run("returns_false_when_no_kustomization", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dir, "deployment.yaml"), []byte("kind: Deployment"), 0o600,
+		))
+
+		require.False(t, workload.ExportHasKustomizationFile(dir))
+	})
+
+	t.Run("returns_false_for_nonexistent_dir", func(t *testing.T) {
+		t.Parallel()
+
+		require.False(
+			t,
+			workload.ExportHasKustomizationFile(filepath.Join(t.TempDir(), "nonexistent")),
+		)
+	})
+}
+
 // normalizeHomePaths replaces the user's home directory in help output
 // with a stable placeholder so snapshots are portable across machines and CI.
 func normalizeHomePaths(content string) string {
