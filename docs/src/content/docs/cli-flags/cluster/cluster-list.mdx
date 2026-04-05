@@ -12,20 +12,19 @@ By default, lists clusters from all distributions across all providers.
 Use --provider to filter results to a specific provider.
 
 Output Format:
-  <provider>: <cluster_name>[, <cluster_name>...]
+  PROVIDER   DISTRIBUTION   CLUSTER
+  docker     Vanilla        dev-cluster
+  docker     K3s            test-cluster
+  hetzner    Talos          prod-cluster
 
-Each line groups clusters by provider. For example:
-  docker: dev-cluster, test-cluster
+When any cluster has a TTL set, a TTL column is included:
+  PROVIDER   DISTRIBUTION   CLUSTER       TTL
+  docker     K3s            dev-cluster   2h 30m
 
-Distribution and TTL metadata are shown on separate indented lines:
-  docker: dev-cluster, test-cluster
-    dev-cluster [Vanilla]
-    test-cluster [K3s, TTL: 2h 30m]
-
-The provider name (docker or hetzner) and each cluster name from the
-output can be used directly with other cluster commands:
-  ksail cluster delete --name <cluster_name> --provider <provider>
-  ksail cluster stop --name <cluster_name> --provider <provider>
+The PROVIDER and CLUSTER values from the output can be used directly
+with other cluster commands:
+  ksail cluster delete --name <cluster> --provider <provider>
+  ksail cluster stop --name <cluster> --provider <provider>
 
 Examples:
   # List all clusters

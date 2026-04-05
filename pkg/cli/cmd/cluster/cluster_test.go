@@ -4839,47 +4839,81 @@ users:
 	require.ErrorIs(t, err, cluster.ErrNoClusters)
 }
 
-func TestFormatAnnotationLabel_NoDistributionNoTTL(t *testing.T) {
+func TestDisplayListResults_WithTTL(t *testing.T) {
 	t.Parallel()
 
-	result := cluster.ExportFormatAnnotationLabel("", nil)
-	assert.Empty(t, result)
+	var buf bytes.Buffer
+
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionVanilla,
+			"cluster-1",
+			nil,
+		),
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionK3s,
+			"dev-cluster",
+			// Use 5h buffer so minute-boundary drift on slow CI is irrelevant.
+			&state.TTLInfo{ExpiresAt: time.Now().Add(5*time.Hour + 30*time.Second)},
+		),
+	}
+
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
+
+	output := buf.String()
+	assert.Contains(t, output, "PROVIDER")
+	assert.Contains(t, output, "DISTRIBUTION")
+	assert.Contains(t, output, "CLUSTER")
+	assert.Contains(t, output, "TTL")
+	assert.Contains(t, output, "cluster-1")
+	assert.Contains(t, output, "dev-cluster")
+	assert.Regexp(t, `\d+h`, output)
 }
 
-func TestFormatAnnotationLabel_DistributionOnly(t *testing.T) {
+func TestDisplayListResults_WithExpiredTTL(t *testing.T) {
 	t.Parallel()
 
-	result := cluster.ExportFormatAnnotationLabel(v1alpha1.DistributionVanilla, nil)
-	assert.Equal(t, "[Vanilla]", result)
+	var buf bytes.Buffer
+
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionTalos,
+			"expired-cluster",
+			&state.TTLInfo{ExpiresAt: time.Now().Add(-1 * time.Hour)},
+		),
+	}
+
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
+
+	output := buf.String()
+	assert.Contains(t, output, "TTL")
+	assert.Contains(t, output, "EXPIRED")
+	assert.Contains(t, output, "expired-cluster")
 }
 
-func TestFormatAnnotationLabel_TTLOnly(t *testing.T) {
+func TestDisplayListResults_NoTTLColumn(t *testing.T) {
 	t.Parallel()
 
-	// Add several minutes of buffer so slow CI runners do not cross a minute boundary.
-	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(2*time.Hour + 35*time.Minute + 30*time.Second)}
+	var buf bytes.Buffer
 
-	result := cluster.ExportFormatAnnotationLabel("", ttl)
-	assert.Equal(t, "[TTL: 2h 35m]", result)
-}
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionVanilla,
+			"my-cluster",
+			nil,
+		),
+	}
 
-func TestFormatAnnotationLabel_DistributionAndTTL(t *testing.T) {
-	t.Parallel()
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
 
-	// Add several minutes of buffer so slow CI runners do not cross a minute boundary.
-	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(1*time.Hour + 5*time.Minute + 30*time.Second)}
-
-	result := cluster.ExportFormatAnnotationLabel(v1alpha1.DistributionK3s, ttl)
-	assert.Equal(t, "[K3s, TTL: 1h 5m]", result)
-}
-
-func TestFormatAnnotationLabel_ExpiredTTL(t *testing.T) {
-	t.Parallel()
-
-	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(-1 * time.Hour)}
-
-	result := cluster.ExportFormatAnnotationLabel(v1alpha1.DistributionTalos, ttl)
-	assert.Equal(t, "[Talos, TTL: EXPIRED]", result)
+	output := buf.String()
+	assert.Contains(t, output, "PROVIDER")
+	assert.Contains(t, output, "CLUSTER")
+	assert.NotContains(t, output, "TTL")
 }
 
 func TestStripParenthetical_NoSuffix(t *testing.T) {

@@ -125,14 +125,36 @@ func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, totalChanges int) s
 	return formatDiffTable(diff, totalChanges)
 }
 
-// ExportFormatAnnotationLabel exports formatAnnotationLabel for testing.
-func ExportFormatAnnotationLabel(dist v1alpha1.Distribution, ttl *state.TTLInfo) string {
-	return formatAnnotationLabel(dist, ttl)
-}
-
 // ExportStripParenthetical exports stripParenthetical for testing.
 func ExportStripParenthetical(s string) string {
 	return stripParenthetical(s)
+}
+
+// ExportListResult is a test-visible alias for listResult.
+type ExportListResult = listResult
+
+// ExportDisplayListResults exports displayListResults for testing.
+func ExportDisplayListResults(
+	writer io.Writer,
+	providers []v1alpha1.Provider,
+	results []ExportListResult,
+) {
+	displayListResults(writer, providers, results)
+}
+
+// ExportNewListResult creates a listResult with TTL info for testing.
+func ExportNewListResult(
+	provider v1alpha1.Provider,
+	distribution v1alpha1.Distribution,
+	clusterName string,
+	ttl *state.TTLInfo,
+) ExportListResult {
+	return listResult{
+		Provider:     provider,
+		Distribution: distribution,
+		ClusterName:  clusterName,
+		TTL:          ttl,
+	}
 }
 
 // ExportFormatRemainingDuration exports formatRemainingDuration for testing.

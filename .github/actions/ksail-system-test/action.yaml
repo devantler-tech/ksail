@@ -316,16 +316,14 @@ runs:
       env:
         PROVIDER: ${{ inputs.provider }}
       run: |
-        # Get current cluster name from ksail cluster list
-        # Output format: "provider: cluster1, cluster2, ..."
+        # Get current cluster name from ksail cluster list (table format)
+        # Output format:
+        #   PROVIDER   DISTRIBUTION   CLUSTER
+        #   docker     Vanilla        my-cluster
         PROVIDER_NAME=$(printf '%s' "$PROVIDER" | tr '[:upper:]' '[:lower:]')
         CLUSTER_NAME=$(
           ksail cluster list 2>/dev/null \
-            | grep -i "^${PROVIDER_NAME}:" \
-            | head -1 \
-            | cut -d: -f2- \
-            | cut -d, -f1 \
-            | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
+            | awk -v prov="$PROVIDER_NAME" 'NR>1 && $1==prov {print $3; exit}' \
             || true
         )
         if [ -n "$CLUSTER_NAME" ]; then
