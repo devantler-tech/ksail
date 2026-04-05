@@ -322,7 +322,7 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 			return false, err
 		}
 
-		exists, err := omniProv.NodesExist(ctx, clusterName)
+		exists, err := omniProv.ClusterExists(ctx, clusterName)
 		if err != nil {
 			return false, fmt.Errorf("failed to check if cluster exists: %w", err)
 		}

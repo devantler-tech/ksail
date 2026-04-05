@@ -3,6 +3,7 @@ package omni_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
@@ -102,4 +103,70 @@ func TestDeleteNodes_NilClient(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestClusterExists_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	exists, err := prov.ClusterExists(context.Background(), "test-cluster")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	assert.False(t, exists)
+}
+
+func TestCreateCluster_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	err := prov.CreateCluster(context.Background(), nil, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestWaitForClusterReady_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	err := prov.WaitForClusterReady(context.Background(), "test-cluster", time.Second)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestGetKubeconfig_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	data, err := prov.GetKubeconfig(context.Background(), "test-cluster")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	assert.Nil(t, data)
+}
+
+func TestGetTalosconfig_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	data, err := prov.GetTalosconfig(context.Background(), "test-cluster")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	assert.Nil(t, data)
+}
+
+func TestClient_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	assert.Nil(t, prov.Client())
 }
