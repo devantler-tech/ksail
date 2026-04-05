@@ -808,6 +808,10 @@ func sanitizeYAMLOutput(output string) (string, error) {
 		return sanitizeList(&obj)
 	}
 
+	if isHelmReleaseSecret(&obj) {
+		return "", nil
+	}
+
 	sanitizeObject(&obj)
 
 	result, err := sigsyaml.Marshal(obj.Object)
@@ -850,6 +854,11 @@ func sanitizeList(list *unstructured.Unstructured) (string, error) {
 		}
 
 		obj := &unstructured.Unstructured{Object: itemMap}
+
+		if isHelmReleaseSecret(obj) {
+			continue
+		}
+
 		sanitizeObject(obj)
 
 		data, marshalErr := sigsyaml.Marshal(obj.Object)
@@ -886,8 +895,36 @@ func sanitizeObject(obj *unstructured.Unstructured) {
 		obj.Object, "metadata", "generation",
 	)
 
+	// Remove last-applied-configuration annotation — it can be very large
+	// (duplicates the entire resource body) and causes annotation-size-limit
+	// errors (>262144 bytes) on restore for resources with large specs
+	// such as ArgoCD CRDs or Helm-managed resources.
+	annotations := obj.GetAnnotations()
+	if _, ok := annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
+		delete(annotations, "kubectl.kubernetes.io/last-applied-configuration")
+		if len(annotations) == 0 {
+			obj.SetAnnotations(nil)
+		} else {
+			obj.SetAnnotations(annotations)
+		}
+	}
+
 	// Remove status block
 	unstructured.RemoveNestedField(obj.Object, "status")
+}
+
+// isHelmReleaseSecret returns true if the object is a Helm release Secret
+// (type "helm.sh/release.v1"). These internal Helm state objects should not
+// be backed up as they are regenerated automatically when Helm releases are
+// reapplied.
+func isHelmReleaseSecret(obj *unstructured.Unstructured) bool {
+	if obj.GetKind() != "Secret" {
+		return false
+	}
+
+	secretType, _, _ := unstructured.NestedString(obj.Object, "type")
+
+	return secretType == "helm.sh/release.v1"
 }
 
 // NewClusterCmd creates the parent cluster command and wires lifecycle subcommands beneath it.
@@ -4061,14 +4098,22 @@ func restoreResourceFile(
 	}
 
 	args := []string{"-f", labeledPath}
-	if flags.existingResourcePolicy != resourcePolicyNone {
-		// Use server-side apply to avoid the 262144-byte annotation limit
-		// that client-side apply hits with large resources (e.g. ArgoCD CRDs).
+
+	useServerSideApply := flags.existingResourcePolicy == resourcePolicyUpdate
+	if useServerSideApply {
+		// Server-side apply avoids the client-side
+		// last-applied-configuration annotation that can exceed the
+		// 262144-byte annotation limit for large resources (e.g.
+		// ArgoCD CRDs, Helm release Secrets).
 		args = append(args, "--server-side", "--force-conflicts")
 	}
 
 	if flags.dryRun {
-		args = append(args, "--dry-run=server")
+		if useServerSideApply {
+			args = append(args, "--dry-run=server")
+		} else {
+			args = append(args, "--dry-run=client")
+		}
 	}
 
 	cmd.SetArgs(args)

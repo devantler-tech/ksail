@@ -16,6 +16,7 @@ import (
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // ExportShouldPushOCIArtifact exports ShouldPushOCIArtifact for testing.
@@ -97,6 +98,11 @@ func ExportSplitYAMLDocuments(content string) []string {
 // ExportInjectRestoreLabels exports injectRestoreLabels for testing.
 func ExportInjectRestoreLabels(filePath, backupName, restoreName string) (string, error) {
 	return injectRestoreLabels(filePath, backupName, restoreName)
+}
+
+// ExportIsHelmReleaseSecret exports isHelmReleaseSecret for testing.
+func ExportIsHelmReleaseSecret(obj *unstructured.Unstructured) bool {
+	return isHelmReleaseSecret(obj)
 }
 
 // ExportResolveForce exports resolveForce for testing.
