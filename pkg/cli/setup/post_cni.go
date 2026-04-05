@@ -21,7 +21,6 @@ import (
 	registryhelpers "github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -402,50 +401,38 @@ func waitForClusterStability(
 		return fmt.Errorf("create clientset for API server check: %w", err)
 	}
 
-	// Run API server stability and DaemonSet readiness checks in parallel.
-	// These checks are independent: API server stability checks HTTP responses,
-	// while DaemonSet readiness checks pod status. Running them concurrently
-	// saves 2-3 minutes compared to sequential execution.
-	g, gCtx := errgroup.WithContext(ctx)
+	successes := apiServerStabilitySuccesses(clusterCfg.Spec.Cluster.Distribution)
+	err = readiness.WaitForAPIServerStable(
+		ctx, clientset, apiServerStabilityTimeout, successes,
+	)
+	if err != nil {
+		return fmt.Errorf("wait for API server stability: %w", err)
+	}
 
-	g.Go(func() error {
-		successes := apiServerStabilitySuccesses(clusterCfg.Spec.Cluster.Distribution)
-		if apiErr := readiness.WaitForAPIServerStable(
-			gCtx, clientset, apiServerStabilityTimeout, successes,
-		); apiErr != nil {
-			return fmt.Errorf("wait for API server stability: %w", apiErr)
-		}
-
-		return nil
-	})
-
-	g.Go(func() error {
-		// Wait for all kube-system DaemonSets (including the CNI, e.g. Cilium)
-		// to be fully ready. This ensures the CNI dataplane has re-converged
-		// after infrastructure installations and that pod-to-service routing
-		// (e.g. to the API server ClusterIP) is functional. Without this check,
-		// GitOps operator pods can start before Cilium has programmed the eBPF
-		// rules for service routing, causing CrashLoopBackOff with i/o timeout
-		// errors when connecting to kubernetes.default.svc:443.
-		if dsErr := readiness.WaitForNamespaceDaemonSetsReady(
-			gCtx, clientset, "kube-system", daemonSetStabilityTimeout,
-		); dsErr != nil {
-			return fmt.Errorf("wait for kube-system DaemonSets to be ready: %w", dsErr)
-		}
-
-		return nil
-	})
-
-	if err = g.Wait(); err != nil {
-		return err
+	// Wait for all kube-system DaemonSets (including the CNI, e.g. Cilium)
+	// to be fully ready. This ensures the CNI dataplane has re-converged
+	// after infrastructure installations and that pod-to-service routing
+	// (e.g. to the API server ClusterIP) is functional. Without this check,
+	// GitOps operator pods can start before Cilium has programmed the eBPF
+	// rules for service routing, causing CrashLoopBackOff with i/o timeout
+	// errors when connecting to kubernetes.default.svc:443.
+	// Note: this runs sequentially after API server stability because
+	// WaitForNamespaceDaemonSetsReady does not retry transient transport errors
+	// (e.g. connection refused/reset); starting it before the API server is
+	// confirmed stable would cause spurious failures.
+	err = readiness.WaitForNamespaceDaemonSetsReady(
+		ctx, clientset, "kube-system", daemonSetStabilityTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("wait for kube-system DaemonSets to be ready: %w", err)
 	}
 
 	// Pre-flight in-cluster connectivity check: verify that the API server
 	// ClusterIP is actually reachable from a pod. This check is only needed
 	// for Cilium CNI where the eBPF dataplane may not have fully programmed
 	// pod-to-service routing paths even after DaemonSet pods report Ready.
-	// For non-Cilium CNIs (default Flannel, Calico) this race condition
-	// does not apply.
+	// For non-Cilium CNIs (default (distribution-provided) CNI or Calico) this
+	// race condition does not apply.
 	if needsInClusterConnectivityCheck(clusterCfg) {
 		err = readiness.WaitForInClusterAPIConnectivity(
 			ctx, clientset, inClusterConnectivityTimeout,
@@ -462,8 +449,8 @@ func waitForClusterStability(
 // check should be performed. The check was introduced to catch eBPF dataplane
 // race conditions specific to Cilium, where DaemonSet pods report Ready before
 // pod-to-service routing is fully programmed. For non-Cilium CNIs (e.g.,
-// Flannel, Calico) this race condition does not apply and the check is skipped,
-// saving up to 2 minutes of wall-clock time.
+// default (distribution-provided) CNI or Calico) this race condition does not
+// apply and the check is skipped, saving up to 2 minutes of wall-clock time.
 func needsInClusterConnectivityCheck(clusterCfg *v1alpha1.Cluster) bool {
 	return clusterCfg.Spec.Cluster.CNI == v1alpha1.CNICilium
 }
