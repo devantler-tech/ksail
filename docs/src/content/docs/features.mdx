@@ -150,6 +150,8 @@ The tenant type is auto-detected from `gitOpsEngine` in `ksail.yaml` when `--typ
 | `ksail tenant create` | Generate RBAC and GitOps manifests for a tenant   |
 | `ksail tenant delete` | Remove tenant manifests and optionally its repo   |
 
+**Guide:** [Tenant Management](/guides/tenant-management/)
+
 ## Registry Management
 
 Run local [OCI registries](/concepts/#oci-registries) for faster image pulls and GitOps integration. Docker-based clusters (Vanilla, K3s, Talos-on-Docker, VCluster) enable `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default; Talos on Hetzner requires explicit mirror configuration.
