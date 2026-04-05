@@ -126,16 +126,16 @@ func TestDeleteNodes_ClusterNotFound_ReturnsNil(t *testing.T) {
 func TestDeleteNodes_ClusterExists_RemovesCluster(t *testing.T) {
 	t.Parallel()
 
-	st := newInMemState()
-	prov := omni.NewProviderWithState(st)
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
 
 	cluster := omnires.NewCluster("test-cluster")
-	require.NoError(t, st.Create(context.Background(), cluster))
+	require.NoError(t, testState.Create(context.Background(), cluster))
 
 	err := prov.DeleteNodes(context.Background(), "test-cluster")
 
 	require.NoError(t, err)
-	_, getErr := st.Get(context.Background(), cluster.Metadata())
+	_, getErr := testState.Get(context.Background(), cluster.Metadata())
 	require.Error(t, getErr)
 	assert.True(t, state.IsNotFoundError(getErr), "cluster should have been removed from state")
 }
