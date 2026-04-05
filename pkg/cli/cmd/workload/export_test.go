@@ -118,3 +118,8 @@ func ExportNormalizeFluxPath(p string) string {
 func ExportFormatElapsed(d time.Duration) string {
 	return formatElapsed(d)
 }
+
+// ExportHasKustomizationFile exposes hasKustomizationFile for testing.
+func ExportHasKustomizationFile(dir string) bool {
+	return hasKustomizationFile(dir)
+}
