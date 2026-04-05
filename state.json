@@ -1,21 +1,25 @@
 {
-  "last_run": "2026-04-05T01:00:28Z",
-  "last_run_id": "23991186406",
-  "tasks_run": [12, 1, 2, 13],
-  "issue_backlog_cursor": 3625,
+  "last_run": "2026-04-05T12:25:05Z",
+  "last_run_id": "24001434089",
+  "tasks_run": [3, 2, 9, 13],
+  "issue_backlog_cursor": 3676,
   "commented_issues": {
     "3591": "2026-04-04T07:39:21Z",
     "3592": "2026-04-04T07:39:21Z",
     "3596": "2026-04-04T07:39:21Z",
     "3572": "2026-04-04T12:24:00Z",
     "2810": "2026-04-04T12:24:00Z",
-    "3625": "2026-04-05T01:00:28Z"
+    "3625": "2026-04-05T01:00:28Z",
+    "3673": "2026-04-05T12:25:00Z",
+    "3675": "2026-04-05T12:25:00Z"
   },
   "open_prs": {
-    "repo-assist/perf-scanner-buffer-size": "#3604: perf: reduce scanner buffer pre-allocation in image extractor"
+    "repo-assist/perf-scanner-buffer-size": "#3604: perf: reduce scanner buffer pre-allocation in image extractor",
+    "repo-assist/fix-issue-3676-omni-teardown-destroy": "fix(omni): use TeardownAndDestroy to handle COSI finalizers on cluster delete",
+    "repo-assist/test-omni-node-scaling-behavior": "test(talos): add unit tests for applyNodeScalingChanges edge cases"
   },
   "domain_alternation": {
-    "last_domain": "performance",
+    "last_domain": "test",
     "next_domain": "refactor"
   },
   "monthly_activity_issue": "2026-04",
@@ -45,5 +49,5 @@
     "3410": ["go", "backlog"],
     "3409": ["go", "backlog"]
   },
-  "notes": "PR #3634 fixes bug #3625 (Omni Docker registry skip). Many Copilot PRs open for CI optimization (#3660-3663). Tenant issues #3409-3415 are standalone features (no parent needed yet). daily-docs PR may still be pending - check if daily-docs.lock.yml needs gh aw compile."
+  "notes": "4 new Omni bugs filed by devantler: #3673 (create), #3674 (cluster name), #3675 (update/scaling), #3676 (delete/finalizers). PR created for #3676 fix using TeardownAndDestroy. #3673 and #3674 are complex; #3675 fix is to warn instead of error for Omni in applyNodeScalingChanges. Many Copilot PRs open for CI optimization (#3660-3663). Tenant issues #3409-3415 standalone."
 }
