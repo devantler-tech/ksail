@@ -224,7 +224,7 @@ func encryptToFile(b *testing.B, content []byte, keyGroups []sops.KeyGroup) stri
 
 	inputStore, outputStore, err := sopsclient.GetStores(filePath)
 	if err != nil {
-		b.Fatalf("Failed to get stores for test file: %v", err)
+		b.Fatalf("failed to get stores for test file: %v", err)
 	}
 
 	opts := sopsclient.EncryptOpts{
