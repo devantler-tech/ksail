@@ -133,7 +133,6 @@ runs:
 
     - name: 🧪 ksail cluster info
       shell: bash
-      env:
       run: |
         ksail cluster info
 
@@ -144,7 +143,6 @@ runs:
 
     - name: 🧪 ksail cluster list
       shell: bash
-      env:
       run: |
         ksail cluster list
 
@@ -201,7 +199,6 @@ runs:
     - name: 🧪 ksail workload install
       id: workload-install
       shell: bash
-      env:
       run: |
         # Install a lightweight Helm chart to verify workload install works
         install_succeeded=false
@@ -246,7 +243,6 @@ runs:
       if: inputs.apply-overlay-path != ''
       continue-on-error: true
       shell: bash
-      env:
       run: |
         # Create a temporary directory with a simple manifest
         WATCH_DIR=$(mktemp -d)
@@ -377,13 +373,11 @@ runs:
 
     - name: 🧪 ksail cluster stop
       shell: bash
-      env:
       run: |
         ksail cluster stop
 
     - name: 🧪 ksail cluster start
       shell: bash
-      env:
       run: |
         start_succeeded=false
         for attempt in 1 2 3; do
@@ -427,6 +421,5 @@ runs:
     - name: 🧪 ksail cluster delete
       if: always()
       shell: bash
-      env:
       run: |
         ksail cluster delete || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
