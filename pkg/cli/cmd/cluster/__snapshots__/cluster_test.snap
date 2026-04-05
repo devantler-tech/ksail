@@ -380,12 +380,12 @@ Type "yes" to confirm deletion:
 ---
 
 [TestListCmd_AllProviders - 1]
-docker: test-cluster
+docker: test-cluster (Vanilla), test-cluster (K3s), test-cluster (Talos), test-cluster (VCluster)
 
 ---
 
 [TestListCmd_MultipleClustersFound_DockerProvider - 1]
-docker: cluster-1, cluster-2, cluster-3
+docker: cluster-1 (Vanilla), cluster-2 (Vanilla), cluster-3 (Vanilla), cluster-1 (K3s), cluster-2 (K3s), cluster-3 (K3s), cluster-1 (Talos), cluster-2 (Talos), cluster-3 (Talos), cluster-1 (VCluster), cluster-2 (VCluster), cluster-3 (VCluster)
 
 ---
 
@@ -395,6 +395,6 @@ No clusters found.
 ---
 
 [TestListCmd_SingleClusterFound_DockerProvider - 1]
-docker: test-cluster
+docker: test-cluster (Vanilla), test-cluster (K3s), test-cluster (Talos), test-cluster (VCluster)
 
 ---
