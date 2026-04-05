@@ -420,8 +420,7 @@ func dockerNetworkExists(ctx context.Context, networkName string) bool {
 }
 
 // removeDockerNetwork attempts to remove a Docker network. Errors are logged
-// including the Docker CLI stderr output (e.g. "has active endpoints") so
-// operators can diagnose why the network couldn't be removed.
+// so operators can diagnose why the network couldn't be removed.
 func removeDockerNetwork(
 	ctx context.Context,
 	networkName string,
@@ -613,7 +612,10 @@ func waitForDBus(ctx context.Context, containerName string) error {
 			return fmt.Errorf("context cancelled while waiting for D-Bus: %w", ctx.Err())
 		case <-ticker.C:
 			execResp, execErr := dockerClient.ContainerExecCreate(ctx, containerName, dockercontainer.ExecOptions{
-				Cmd: []string{"test", "-e", "/run/dbus/system_bus_socket"},
+				Cmd:          []string{"test", "-e", "/run/dbus/system_bus_socket"},
+				AttachStdout: true,
+				AttachStderr: true,
+				Tty:          false,
 			})
 			if execErr != nil {
 				continue

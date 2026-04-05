@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -136,9 +137,11 @@ func (l *Installer) installLocalPathProvisioner(ctx context.Context) error {
 
 // applyManifest applies the local-path-provisioner manifest using the kubectl SDK.
 func (l *Installer) applyManifest(ctx context.Context) error {
+	var stdout, stderr strings.Builder
+
 	kubectlClient := kubectl.NewClient(genericiooptions.IOStreams{
-		Out:    io.Discard,
-		ErrOut: io.Discard,
+		Out:    &stdout,
+		ErrOut: &stderr,
 	})
 
 	applyCmd := kubectlClient.CreateApplyCommand(l.kubeconfig)
@@ -151,6 +154,11 @@ func (l *Installer) applyManifest(ctx context.Context) error {
 	applyCmd.SetArgs(args)
 
 	if err := kubectl.ExecuteSafely(ctx, applyCmd); err != nil {
+		output := strings.TrimSpace(stdout.String() + stderr.String())
+		if output != "" {
+			return fmt.Errorf("kubectl apply failed: %w, output: %s", err, output)
+		}
+
 		return fmt.Errorf("kubectl apply failed: %w", err)
 	}
 
