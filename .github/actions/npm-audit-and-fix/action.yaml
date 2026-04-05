@@ -30,8 +30,8 @@ outputs:
     description: Whether the audit passed without vulnerabilities ('true' or 'false').
     value: ${{ steps.final-result.outputs.passed }}
   changes-committed:
-    description: Whether changes were committed ('true' or 'false').
-    value: ${{ steps.fix.outputs.changes_made }}
+    description: Whether changes were committed and pushed ('true' or 'false').
+    value: ${{ steps.set-committed.outputs.committed }}
 
 runs:
   using: composite
@@ -39,7 +39,7 @@ runs:
     - name: 🔑 Generate GitHub App Token
       uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
       id: generate-token
-      if: ${{ inputs.app-private-key != '' }}
+      if: ${{ inputs.app-id != '' && inputs.app-private-key != '' }}
       with:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.app-private-key }}
@@ -86,6 +86,7 @@ runs:
       continue-on-error: true
 
     - name: 📤 Commit and push fixes
+      id: commit
       if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group' && steps.generate-token.outputs.token != ''
       uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
       with:
@@ -93,6 +94,19 @@ runs:
         commit_user_name: ${{ inputs.commit-user-name }}
         commit_user_email: ${{ inputs.commit-user-name }}@users.noreply.github.com
         file_pattern: "${{ inputs.working-directory }}/package*.json"
+
+    - name: 📊 Set changes-committed output
+      id: set-committed
+      shell: bash
+      env:
+        COMMIT_OUTCOME: ${{ steps.commit.outcome }}
+        CHANGES_DETECTED: ${{ steps.commit.outputs.changes_detected }}
+      run: |
+        if [ "$COMMIT_OUTCOME" = "success" ] && [ "$CHANGES_DETECTED" = "true" ]; then
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "committed=false" >> "$GITHUB_OUTPUT"
+        fi
 
     - name: 🔍 Re-audit after fix
       id: reaudit
