@@ -4,9 +4,6 @@ description: |
   for next CI run, even if individual test jobs fail to clean up after themselves.
 
 inputs:
-  hcloud-token:
-    description: Hetzner Cloud API token
-    required: true
   label-selector:
     description: Label selector for resources to delete
     required: false
@@ -21,7 +18,6 @@ runs:
     - name: 🧹 Cleanup all KSail-owned Hetzner resources
       shell: bash
       env:
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         LABEL_SELECTOR: ${{ inputs.label-selector }}
       run: |
         echo "🧹 Starting Hetzner Cloud cleanup for KSail-owned resources..."
