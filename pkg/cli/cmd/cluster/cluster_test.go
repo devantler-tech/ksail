@@ -4838,10 +4838,10 @@ users:
 	require.ErrorIs(t, err, cluster.ErrNoClusters)
 }
 
-func TestFormatTTLLabel_NoTTL(t *testing.T) {
+func TestFormatAnnotationLabel_NoDistributionNoTTL(t *testing.T) {
 	t.Parallel()
 
-	result := cluster.ExportFormatTTLLabel(nil)
+	result := cluster.ExportFormatAnnotationLabel("", nil)
 	assert.Empty(t, result)
 }
 

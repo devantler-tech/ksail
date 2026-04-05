@@ -2802,11 +2802,18 @@ func allProviders() []v1alpha1.Provider {
 	}
 }
 
-// listResult holds a cluster name with its provider for display purposes.
+// listResult holds a cluster name with its provider and distribution for display purposes.
 type listResult struct {
-	Provider    v1alpha1.Provider
-	ClusterName string
-	TTL         *state.TTLInfo // nil if no TTL has been set for this cluster
+	Provider     v1alpha1.Provider
+	Distribution v1alpha1.Distribution
+	ClusterName  string
+	TTL          *state.TTLInfo // nil if no TTL has been set for this cluster
+}
+
+// clusterWithDistribution pairs a cluster name with its distribution.
+type clusterWithDistribution struct {
+	Name         string
+	Distribution v1alpha1.Distribution
 }
 
 // ttlIndent is the indentation prefix for TTL annotation lines in list output.
@@ -2822,6 +2829,11 @@ Output Format:
 
 Each line groups clusters by provider. For example:
   docker: dev-cluster, test-cluster
+
+Distribution and TTL metadata are shown on separate indented lines:
+  docker: dev-cluster, test-cluster
+    dev-cluster [Vanilla]
+    test-cluster [K3s, TTL: 2h 30m]
 
 The provider name (docker or hetzner) and each cluster name from the
 output can be used directly with other cluster commands:
@@ -2914,12 +2926,12 @@ func HandleListRunE(
 		}
 
 		for _, cluster := range clusters {
-			ttlInfo, ttlErr := state.LoadClusterTTL(cluster)
+			ttlInfo, ttlErr := state.LoadClusterTTL(cluster.Name)
 			if ttlErr != nil && !errors.Is(ttlErr, state.ErrTTLNotSet) {
 				notify.Warningf(
 					cmd.ErrOrStderr(),
 					"failed to load TTL for cluster %q: %v",
-					cluster,
+					cluster.Name,
 					ttlErr,
 				)
 			}
@@ -2930,9 +2942,10 @@ func HandleListRunE(
 			}
 
 			allResults = append(allResults, listResult{
-				Provider:    prov,
-				ClusterName: cluster,
-				TTL:         ttl,
+				Provider:     prov,
+				Distribution: cluster.Distribution,
+				ClusterName:  cluster.Name,
+				TTL:          ttl,
 			})
 		}
 	}
@@ -2957,7 +2970,7 @@ func getProviderClusters(
 	ctx context.Context,
 	deps ListDeps,
 	provider v1alpha1.Provider,
-) ([]string, error) {
+) ([]clusterWithDistribution, error) {
 	switch provider {
 	case v1alpha1.ProviderDocker:
 		return getDockerClusters(ctx, deps)
@@ -2974,10 +2987,10 @@ func getProviderClusters(
 // Results are deduplicated by cluster name because different distributions
 // (Kind, K3d, Talos, VCluster) each manage their own namespace and a cluster
 // name uniquely identifies a cluster within the Docker provider.
-func getDockerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
+func getDockerClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
 	seen := make(map[string]struct{})
 
-	var allClusters []string
+	var allClusters []clusterWithDistribution
 
 	for _, dist := range allDistributions() {
 		clusters, err := getDistributionClusters(ctx, deps, dist)
@@ -2989,7 +3002,10 @@ func getDockerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 		for _, c := range clusters {
 			if _, ok := seen[c]; !ok {
 				seen[c] = struct{}{}
-				allClusters = append(allClusters, c)
+				allClusters = append(allClusters, clusterWithDistribution{
+					Name:         c,
+					Distribution: dist,
+				})
 			}
 		}
 	}
@@ -2998,7 +3014,7 @@ func getDockerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 }
 
 // getHetznerClusters returns all Hetzner-based clusters.
-func getHetznerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
+func getHetznerClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
 	// Use injected provider if available (for testing)
 	if deps.HetznerProvider != nil {
 		clusters, err := deps.HetznerProvider.ListAllClusters(ctx)
@@ -3006,7 +3022,7 @@ func getHetznerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 			return nil, fmt.Errorf("failed to list Hetzner clusters: %w", err)
 		}
 
-		return clusters, nil
+		return toTalosClusters(clusters), nil
 	}
 
 	// Check for HCLOUD_TOKEN
@@ -3024,11 +3040,11 @@ func getHetznerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 		return nil, fmt.Errorf("failed to list Hetzner clusters: %w", err)
 	}
 
-	return clusters, nil
+	return toTalosClusters(clusters), nil
 }
 
 // getOmniClusters returns all Omni-based clusters.
-func getOmniClusters(ctx context.Context, deps ListDeps) ([]string, error) {
+func getOmniClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
 	// Use injected provider if available (for testing)
 	if deps.OmniProvider != nil {
 		clusters, err := deps.OmniProvider.ListAllClusters(ctx)
@@ -3036,7 +3052,7 @@ func getOmniClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 			return nil, fmt.Errorf("failed to list Omni clusters: %w", err)
 		}
 
-		return clusters, nil
+		return toTalosClusters(clusters), nil
 	}
 
 	// Check for OMNI_SERVICE_ACCOUNT_KEY
@@ -3068,7 +3084,21 @@ func getOmniClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 		return nil, fmt.Errorf("failed to list Omni clusters: %w", err)
 	}
 
-	return clusters, nil
+	return toTalosClusters(clusters), nil
+}
+
+// toTalosClusters wraps cluster names as Talos distribution clusters.
+// Hetzner and Omni providers only support Talos.
+func toTalosClusters(names []string) []clusterWithDistribution {
+	result := make([]clusterWithDistribution, 0, len(names))
+	for _, name := range names {
+		result = append(result, clusterWithDistribution{
+			Name:         name,
+			Distribution: v1alpha1.DistributionTalos,
+		})
+	}
+
+	return result
 }
 
 func getDistributionClusters(
@@ -3144,8 +3174,8 @@ func createEmptyDistributionConfig(
 // to parse the cluster names for subsequent commands.
 // Format: "<provider>: cluster1, cluster2" to clearly identify cluster names.
 // If no clusters exist, displays "No clusters found.".
-// Clusters with a TTL set show remaining time on a separate indented line
-// to keep printed cluster identifiers directly copy/paste-able.
+// Distribution labels and TTL info are shown on separate indented annotation
+// lines to keep printed cluster identifiers directly copy/paste-able.
 func displayListResults(
 	writer io.Writer,
 	providers []v1alpha1.Provider,
@@ -3157,17 +3187,19 @@ func displayListResults(
 		return
 	}
 
-	// Group clusters by provider, preserving TTL info for formatting.
+	// Group clusters by provider, preserving distribution and TTL info for formatting.
 	type clusterEntry struct {
-		name string
-		ttl  *state.TTLInfo
+		name         string
+		distribution v1alpha1.Distribution
+		ttl          *state.TTLInfo
 	}
 
 	providerClusters := make(map[v1alpha1.Provider][]clusterEntry)
 	for _, r := range results {
 		providerClusters[r.Provider] = append(providerClusters[r.Provider], clusterEntry{
-			name: r.ClusterName,
-			ttl:  r.TTL,
+			name:         r.ClusterName,
+			distribution: r.Distribution,
+			ttl:          r.TTL,
 		})
 	}
 
@@ -3191,30 +3223,40 @@ func displayListResults(
 			strings.Join(clusterNames, ", "),
 		)
 
-		// Print TTL annotations on separate indented lines.
+		// Print annotation lines with distribution and TTL on separate indented lines.
 		for _, e := range entries {
-			ttlLabel := formatTTLLabel(e.ttl)
-			if ttlLabel != "" {
-				_, _ = fmt.Fprintf(writer, "%s%s %s\n", ttlIndent, e.name, ttlLabel)
+			label := formatAnnotationLabel(e.distribution, e.ttl)
+			if label != "" {
+				_, _ = fmt.Fprintf(writer, "%s%s %s\n", ttlIndent, e.name, label)
 			}
 		}
 	}
 }
 
-// formatTTLLabel returns a TTL annotation string for a cluster entry.
-// Returns "" when no TTL is set, "[TTL: EXPIRED]" when expired,
-// or "[TTL: Xh Ym]" with remaining time.
-func formatTTLLabel(ttl *state.TTLInfo) string {
-	if ttl == nil {
+// formatAnnotationLabel builds a combined annotation label from distribution and TTL info.
+// Returns "" when there is nothing to annotate.
+// Examples: "[Vanilla]", "[TTL: 2h 30m]", "[Vanilla, TTL: 2h 30m]", "[TTL: EXPIRED]".
+func formatAnnotationLabel(dist v1alpha1.Distribution, ttl *state.TTLInfo) string {
+	var parts []string
+
+	if dist != "" {
+		parts = append(parts, string(dist))
+	}
+
+	if ttl != nil {
+		remaining := ttl.Remaining()
+		if remaining <= 0 {
+			parts = append(parts, "TTL: EXPIRED")
+		} else {
+			parts = append(parts, "TTL: "+formatRemainingDuration(remaining))
+		}
+	}
+
+	if len(parts) == 0 {
 		return ""
 	}
 
-	remaining := ttl.Remaining()
-	if remaining <= 0 {
-		return "[TTL: EXPIRED]"
-	}
-
-	return "[TTL: " + formatRemainingDuration(remaining) + "]"
+	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 // minutesPerHour is the number of minutes in one hour.
@@ -4657,14 +4699,20 @@ func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 
 // resolveContextName finds the matching kubeconfig context for a cluster name
 // by checking all known distribution context-name prefixes.
+// Parenthetical suffixes (e.g., " (Vanilla)") are stripped defensively so that
+// cluster names containing distribution hints still resolve correctly.
 func resolveContextName(
 	config *clientcmdapi.Config,
 	clusterName string,
 ) (string, error) {
+	// Strip trailing parenthetical suffix (e.g., " (Vanilla)") that may be
+	// present if the name was copied from enriched list output.
+	cleanName := stripParenthetical(clusterName)
+
 	var matches []string
 
 	for _, dist := range v1alpha1.ValidDistributions() {
-		candidate := dist.ContextName(clusterName)
+		candidate := dist.ContextName(cleanName)
 
 		if _, exists := config.Contexts[candidate]; exists {
 			matches = append(matches, candidate)
@@ -4698,6 +4746,21 @@ func resolveContextName(
 			strings.Join(matches, ", "),
 		)
 	}
+}
+
+// stripParenthetical removes a trailing " (<text>)" suffix from s.
+// Returns s unchanged if no such suffix is present.
+func stripParenthetical(s string) string {
+	idx := strings.LastIndex(s, " (")
+	if idx < 0 {
+		return s
+	}
+
+	if strings.HasSuffix(s, ")") {
+		return s[:idx]
+	}
+
+	return s
 }
 
 // switchContext loads the kubeconfig, resolves the cluster name to a context, and sets current-context.
