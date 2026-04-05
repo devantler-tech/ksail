@@ -687,10 +687,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    env:
-      HCLOUD_TOKEN: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }}
-      OMNI_SERVICE_ACCOUNT_KEY: ${{ matrix.provider == 'Omni' && secrets.OMNI_SERVICE_ACCOUNT_KEY || '' }}
-      OMNI_ENDPOINT: ${{ matrix.provider == 'Omni' && vars.OMNI_ENDPOINT || '' }}
     strategy:
       fail-fast: true
       max-parallel: 15
@@ -758,6 +754,10 @@ jobs:
 
       - name: 🧪 Run KSail System Test
         uses: ./.github/actions/ksail-system-test
+        env:
+          HCLOUD_TOKEN: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }}
+          OMNI_SERVICE_ACCOUNT_KEY: ${{ matrix.provider == 'Omni' && secrets.OMNI_SERVICE_ACCOUNT_KEY || '' }}
+          OMNI_ENDPOINT: ${{ matrix.provider == 'Omni' && vars.OMNI_ENDPOINT || '' }}
         with:
           distribution: ${{ matrix.distribution }}
           provider: ${{ matrix.provider }}
@@ -866,8 +866,6 @@ jobs:
     environment: ci
     permissions:
       contents: read
-    env:
-      HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -876,6 +874,8 @@ jobs:
 
       - name: 🧹 Cleanup all KSail-owned Hetzner resources
         uses: ./.github/actions/cleanup-hetzner
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
 
   cleanup-omni:
     name: 🧹 Cleanup Omni Resources
@@ -885,9 +885,6 @@ jobs:
     environment: ci
     permissions:
       contents: read
-    env:
-      OMNI_SERVICE_ACCOUNT_KEY: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
-      OMNI_ENDPOINT: ${{ vars.OMNI_ENDPOINT }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -911,6 +908,9 @@ jobs:
 
       - name: 🧹 Cleanup all KSail test clusters from Omni
         uses: ./.github/actions/cleanup-omni
+        env:
+          OMNI_SERVICE_ACCOUNT_KEY: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
+          OMNI_ENDPOINT: ${{ vars.OMNI_ENDPOINT }}
 
   rate-limit-check:
     name: 📊 Rate Limit Status
