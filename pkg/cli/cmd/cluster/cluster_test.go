@@ -42,6 +42,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -615,6 +616,150 @@ func TestSanitizeYAMLOutput_nonYAML(t *testing.T) {
 
 	if !strings.Contains(result, "not valid yaml") {
 		t.Error("should return original content for non-YAML input")
+	}
+}
+
+func TestSanitizeYAMLOutput_stripsLastAppliedConfiguration(t *testing.T) {
+	t.Parallel()
+
+	input := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test-cm\n" +
+		"  annotations:\n    kubectl.kubernetes.io/last-applied-configuration: " +
+		"'{\"apiVersion\":\"v1\",\"kind\":\"ConfigMap\"}'\n" +
+		"    custom-annotation: keep-me\n" +
+		"data:\n  key: value"
+
+	result, err := cluster.ExportSanitizeYAMLOutput(input)
+	if err != nil {
+		t.Fatalf("sanitizeYAMLOutput() error = %v", err)
+	}
+
+	if strings.Contains(result, "last-applied-configuration") {
+		t.Error("should have stripped kubectl.kubernetes.io/last-applied-configuration")
+	}
+
+	if !strings.Contains(result, "custom-annotation") {
+		t.Error("should preserve other annotations")
+	}
+}
+
+func TestSanitizeYAMLOutput_filtersHelmReleaseSecrets(t *testing.T) {
+	t.Parallel()
+
+	input := `apiVersion: v1
+kind: SecretList
+metadata: {}
+items:
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: sh.helm.release.v1.argocd.v1
+    namespace: argocd
+  type: helm.sh/release.v1
+  data:
+    release: dGVzdA==
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: my-app-secret
+    namespace: default
+  type: Opaque
+  data:
+    password: cGFzc3dvcmQ=`
+
+	result, err := cluster.ExportSanitizeYAMLOutput(input)
+	if err != nil {
+		t.Fatalf("sanitizeYAMLOutput() error = %v", err)
+	}
+
+	if strings.Contains(result, "sh.helm.release.v1") {
+		t.Error("should have filtered out Helm release secret")
+	}
+
+	if !strings.Contains(result, "my-app-secret") {
+		t.Error("should preserve non-Helm secrets")
+	}
+}
+
+func TestSanitizeYAMLOutput_filtersSingleHelmReleaseSecret(t *testing.T) {
+	t.Parallel()
+
+	input := `apiVersion: v1
+kind: Secret
+metadata:
+  name: sh.helm.release.v1.argocd.v1
+  namespace: argocd
+type: helm.sh/release.v1
+data:
+  release: dGVzdA==`
+
+	result, err := cluster.ExportSanitizeYAMLOutput(input)
+	if err != nil {
+		t.Fatalf("sanitizeYAMLOutput() error = %v", err)
+	}
+
+	if result != "" {
+		t.Errorf("single Helm release Secret should be filtered to empty, got: %q", result)
+	}
+}
+
+func TestIsHelmReleaseSecret(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		kind     string
+		objType  string
+		expected bool
+	}{
+		{
+			name:     "helm release secret",
+			kind:     "Secret",
+			objType:  "helm.sh/release.v1",
+			expected: true,
+		},
+		{
+			name:     "opaque secret",
+			kind:     "Secret",
+			objType:  "Opaque",
+			expected: false,
+		},
+		{
+			name:     "non-secret resource",
+			kind:     "ConfigMap",
+			objType:  "",
+			expected: false,
+		},
+		{
+			name:     "secret without type",
+			kind:     "Secret",
+			objType:  "",
+			expected: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			obj := &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "v1",
+					"kind":       test.kind,
+					"metadata":   map[string]any{"name": "test"},
+				},
+			}
+			if test.objType != "" {
+				obj.Object["type"] = test.objType
+			}
+
+			result := cluster.ExportIsHelmReleaseSecret(obj)
+			if result != test.expected {
+				t.Errorf(
+					"isHelmReleaseSecret() = %v, want %v",
+					result, test.expected,
+				)
+			}
+		})
 	}
 }
 
