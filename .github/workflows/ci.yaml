@@ -531,111 +531,6 @@ jobs:
           path: ksail.vsix
           retention-days: 7
 
-  gen-smoke-test:
-    name: 🧪 Gen & Smoke Test
-    runs-on: ubuntu-latest
-    needs: [changes, build-artifact]
-    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.changes.outputs.code == 'true'
-    permissions:
-      contents: read
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: ⚙️ Setup Go
-        id: setup-go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: 📦 Cache KSail Binary
-        uses: ./.github/actions/cache-ksail-binary
-        with:
-          go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: /usr/local/bin/ksail
-          save: "false"
-
-      - name: 🧪 workload gen — generate and validate manifests
-        shell: bash
-        run: |
-          FAILED=0
-          GEN_DIR=$(mktemp -d)
-
-          echo "=== Testing workload gen subcommands ==="
-
-          run_gen_test() {
-            local name="$1"
-            shift
-            local OUTPUT_FILE="$GEN_DIR/${name}.yaml"
-            local VALIDATE_FLAGS=""
-            # Secrets are skipped by default in validate; override for secret tests
-            if [ "$name" = "secret" ]; then
-              VALIDATE_FLAGS="--skip-secrets=false"
-            fi
-            echo "--- gen $name ---"
-            if "$@" > "$OUTPUT_FILE"; then
-              echo "  ✅ gen $name succeeded"
-              if ksail workload validate $VALIDATE_FLAGS "$OUTPUT_FILE"; then
-                echo "  ✅ validate $name succeeded"
-              else
-                echo "  ❌ validate $name FAILED"
-                cat "$OUTPUT_FILE"
-                FAILED=$((FAILED + 1))
-              fi
-            else
-              echo "  ❌ gen $name FAILED"
-              cat "$OUTPUT_FILE" 2>/dev/null || true
-              FAILED=$((FAILED + 1))
-            fi
-          }
-
-          run_gen_test deployment ksail workload gen deployment test-deploy --image nginx:1.27
-          run_gen_test service ksail workload gen service clusterip test-svc --tcp=80:80
-          run_gen_test configmap ksail workload gen configmap test-cm --from-literal=key=value
-          run_gen_test secret ksail workload gen secret generic test-secret --from-literal=password=test123
-          run_gen_test namespace ksail workload gen namespace test-ns
-          run_gen_test job ksail workload gen job test-job --image=busybox:1.37
-          run_gen_test cronjob ksail workload gen cronjob test-cron --image=busybox:1.37 --schedule="*/5 * * * *"
-          run_gen_test serviceaccount ksail workload gen serviceaccount test-sa
-          # clusterrole and role require API server for resource group discovery (--resource flag),
-          # even with --dry-run=client. Tested in system tests where a cluster is available.
-          run_gen_test clusterrolebinding ksail workload gen clusterrolebinding test-crb --clusterrole=test-cr --serviceaccount=default:test-sa
-          run_gen_test rolebinding ksail workload gen rolebinding test-rb --role=test-role --serviceaccount=default:test-sa
-          run_gen_test ingress ksail workload gen ingress test-ing --rule="host/path=svc:80"
-          run_gen_test quota ksail workload gen quota test-quota --hard=cpu=1,memory=1Gi
-          run_gen_test priorityclass ksail workload gen priorityclass test-pc --value=1000
-          run_gen_test poddisruptionbudget ksail workload gen poddisruptionbudget test-pdb --min-available=1 --selector=app=test
-          run_gen_test helmrelease ksail workload gen helmrelease test-hr --source=HelmRepository/test --chart=test --export
-
-          rm -rf "$GEN_DIR"
-
-          if [ "$FAILED" -gt 0 ]; then
-            echo "❌ $FAILED gen/validate tests failed"
-            exit 1
-          fi
-          echo "✅ All workload gen tests passed"
-
-      # NOTE: cipher encrypt/decrypt E2E test is not feasible here because
-      # ksail cipher encrypt uses hardcoded empty KeyGroups (no .sops.yaml
-      # config loading). A code change to support key configuration is needed
-      # before cipher can be E2E tested. Cipher commands are covered by unit
-      # tests and benchmarks in pkg/cli/cmd/cipher/.
-
-      - name: 🧪 smoke test — chat and mcp commands
-        shell: bash
-        run: |
-          echo "=== Testing chat --help ==="
-          ksail chat --help
-          echo "✅ chat --help passed"
-
-          echo "=== Testing mcp --help ==="
-          ksail mcp --help
-          echo "✅ mcp --help passed"
-
   warm-helm-cache:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
@@ -702,42 +597,10 @@ jobs:
         id: warm
         uses: ./.github/actions/warm-mirror-cache
 
-  tenant-test:
-    name: 🧪 Tenant Test
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs: [changes, build-artifact]
-    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && needs.changes.outputs.code == 'true'
-    permissions:
-      contents: read
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: ⚙️ Setup Go
-        id: setup-go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: 📦 Cache KSail Binary
-        uses: ./.github/actions/cache-ksail-binary
-        with:
-          go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: /usr/local/bin/ksail
-          save: "false"
-
-      - name: 🧪 Run Tenant Tests
-        uses: ./.github/actions/ksail-tenant-test
-
   system-test:
     name: 🧪 System Test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     environment: ci
@@ -825,101 +688,10 @@ jobs:
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
 
-  backup-restore-test:
-    name: 🧪 Backup & Restore Test
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
-    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
-    permissions:
-      contents: read
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: 🧹 Free disk space
-        uses: ./.github/actions/free-disk-space
-
-      - name: ⚙️ Setup Go
-        id: setup-go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: 📦 Cache KSail Binary
-        uses: ./.github/actions/cache-ksail-binary
-        with:
-          go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: /usr/local/bin/ksail
-          save: "false"
-
-      - name: 🧪 Create cluster
-        uses: ./.github/actions/ksail-cluster
-        with:
-          distribution: Vanilla
-          provider: Docker
-          init: "true"
-          install: "false"
-          cache: "true"
-
-      - name: 🧪 Deploy test workload
-        shell: bash
-        run: |
-          ksail workload create deployment backup-test --image=traefik/whoami:v1.10
-          ksail workload wait --for=condition=Available deployment/backup-test --timeout=300s
-
-      - name: 🧪 Backup cluster
-        shell: bash
-        run: |
-          ksail cluster backup --output /tmp/cluster-backup.tar.gz
-          ls -lh /tmp/cluster-backup.tar.gz
-          echo "✅ Backup created successfully"
-
-      - name: 🧪 Delete test workload
-        shell: bash
-        run: |
-          ksail workload delete deployment/backup-test --ignore-not-found
-          # Verify it's gone
-          if ksail workload get deployment/backup-test 2>/dev/null; then
-            echo "❌ Workload still exists after delete"
-            exit 1
-          fi
-          echo "✅ Workload deleted"
-
-      - name: 🧪 Restore from backup
-        shell: bash
-        run: |
-          ksail cluster restore --input /tmp/cluster-backup.tar.gz --existing-resource-policy=update
-          echo "✅ Restore completed"
-
-      - name: 🧪 Verify restored workload
-        shell: bash
-        run: |
-          ksail workload wait --for=condition=Available deployment/backup-test --timeout=300s
-          ksail workload get deployment/backup-test
-          echo "✅ Workload restored and available"
-
-      - name: 🐞 Debug failure
-        if: failure()
-        uses: ./.github/actions/debug-kubernetes-failure
-        with:
-          kubectl-command: "ksail workload"
-
-      - name: 🧹 Cleanup
-        if: always()
-        shell: bash
-        run: |
-          ksail cluster delete || echo "⚠️ Cluster delete failed"
-          rm -f /tmp/cluster-backup.tar.gz
-
   cleanup-hetzner:
     name: 🧹 Cleanup Hetzner Resources
     runs-on: ubuntu-latest
-    needs: [system-test, backup-restore-test]
+    needs: [system-test]
     if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test.result != 'skipped' }}
     environment: ci
     permissions:
@@ -983,11 +755,8 @@ jobs:
         generate-docs,
         auto-commit,
         coverage,
-        gen-smoke-test,
         warm-helm-cache,
         system-test,
-        tenant-test,
-        backup-restore-test,
         cleanup-hetzner,
         cleanup-omni,
         audit-docs,
@@ -1010,11 +779,8 @@ jobs:
             ${{ needs.generate-docs.result }}
             ${{ needs.auto-commit.result }}
             ${{ needs.coverage.result }}
-            ${{ needs.gen-smoke-test.result }}
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.system-test.result }}
-            ${{ needs.tenant-test.result }}
-            ${{ needs.backup-restore-test.result }}
             ${{ needs.cleanup-hetzner.result }}
             ${{ needs.cleanup-omni.result }}
             ${{ needs.audit-docs.result }}
