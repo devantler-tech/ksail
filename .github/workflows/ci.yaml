@@ -173,7 +173,6 @@ jobs:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
 
       - name: ⚙️ Setup Go
@@ -203,6 +202,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
+      - name: ❌ Fail if generated files are out of date (fork PR)
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name != github.repository
+        shell: bash
+        run: |
+          if [ -s /tmp/sync-modules.patch ]; then
+            echo "::error::Generated files are out of date. Please run 'go mod tidy' locally and commit the results."
+            echo ""
+            cat /tmp/sync-modules.patch
+            exit 1
+          fi
+
   generate-schema:
     name: 📝 Generate JSON Schema
     runs-on: ubuntu-latest
@@ -217,7 +229,6 @@ jobs:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
 
       - name: ⚙️ Setup Go
@@ -244,6 +255,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
+      - name: ❌ Fail if generated files are out of date (fork PR)
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name != github.repository
+        shell: bash
+        run: |
+          if [ -s /tmp/generate-schema.patch ]; then
+            echo "::error::Generated files are out of date. Please run 'go generate ./schemas/...' locally and commit the results."
+            echo ""
+            cat /tmp/generate-schema.patch
+            exit 1
+          fi
+
   generate-docs:
     name: 📚 Generate Reference Docs
     runs-on: ubuntu-latest
@@ -258,7 +282,6 @@ jobs:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
 
       - name: ⚙️ Setup Go
@@ -285,6 +308,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
+      - name: ❌ Fail if generated files are out of date (fork PR)
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name != github.repository
+        shell: bash
+        run: |
+          if [ -s /tmp/generate-docs.patch ]; then
+            echo "::error::Generated files are out of date. Please run 'go generate ./docs/...' locally and commit the results."
+            echo ""
+            cat /tmp/generate-docs.patch
+            exit 1
+          fi
+
   auto-commit:
     name: 📤 Auto-Commit Generated Changes
     runs-on: ubuntu-latest
@@ -292,6 +328,7 @@ jobs:
     if: >-
       always()
       && github.event_name != 'merge_group'
+      && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
       && (needs.sync-modules.result == 'success'
         || needs.generate-schema.result == 'success'
         || needs.generate-docs.result == 'success')

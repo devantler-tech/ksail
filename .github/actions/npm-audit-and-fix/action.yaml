@@ -8,10 +8,10 @@ inputs:
     required: true
   app-id:
     description: GitHub App ID for generating commit token.
-    required: true
+    required: false
   app-private-key:
     description: GitHub App private key for generating commit token.
-    required: true
+    required: false
   commit-message:
     description: Commit message for fixed vulnerabilities.
     required: false
@@ -39,6 +39,7 @@ runs:
     - name: 🔑 Generate GitHub App Token
       uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
       id: generate-token
+      if: ${{ inputs.app-private-key != '' }}
       with:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.app-private-key }}
@@ -46,8 +47,8 @@ runs:
     - name: 📄 Checkout
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
-        persist-credentials: true
-        token: ${{ steps.generate-token.outputs.token }}
+        persist-credentials: ${{ steps.generate-token.outputs.token != '' }}
+        token: ${{ steps.generate-token.outputs.token || github.token }}
 
     - name: ⚙️ Setup Node.js
       uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
@@ -85,7 +86,7 @@ runs:
       continue-on-error: true
 
     - name: 📤 Commit and push fixes
-      if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group'
+      if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group' && steps.generate-token.outputs.token != ''
       uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
       with:
         commit_message: ${{ inputs.commit-message }}
