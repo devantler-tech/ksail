@@ -213,11 +213,11 @@ func TestApplyNodeScalingChanges_NoDelta(t *testing.T) {
 	assert.Equal(t, 0, result.TotalChanges(), "no changes expected when deltas are zero")
 }
 
-// TestApplyNodeScalingChanges_OmniReturnsNotImplemented verifies that the Omni
-// provider path returns ErrNotImplemented when node scaling is requested.
-// This documents the known limitation that Omni manages node scaling externally.
-// See: https://github.com/devantler-tech/ksail/issues/3675
-func TestApplyNodeScalingChanges_OmniReturnsNotImplemented(t *testing.T) {
+// TestApplyNodeScalingChanges_OmniScalingIsSkipped verifies that the Omni
+// provider path silently skips node scaling without error.
+// Omni manages node scaling externally, so KSail just logs and returns nil.
+// This was changed in https://github.com/devantler-tech/ksail/pull/3689.
+func TestApplyNodeScalingChanges_OmniScalingIsSkipped(t *testing.T) {
 	t.Parallel()
 
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).
@@ -242,8 +242,13 @@ func TestApplyNodeScalingChanges_OmniReturnsNotImplemented(t *testing.T) {
 		newSpec,
 		result,
 	)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, talosprovisioner.ErrNotImplemented)
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		0,
+		result.TotalChanges(),
+		"no changes expected: Omni manages scaling externally",
+	)
 }
 
 // TestApplyNodeScalingChanges_BelowMinimumControlPlanes verifies that scaling
