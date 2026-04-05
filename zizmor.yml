@@ -5,13 +5,15 @@ rules:
     # verifying the SHA for github/gh-aw-actions referenced in
     # agentics-maintenance.yml. The ignore list cannot prevent this crash
     # because the API call is made before the ignore filter is applied.
-    # TODO: Replace with a narrow ignore list once the upstream crash is fixed.
+    # TODO: Replace with a narrow ignore list after upgrading from zizmor
+    # v1.23.1 to a release that no longer fatally exits on GitHub API 403s.
     disable: true
   known-vulnerable-actions:
     # Temporary workaround: same root cause as impostor-commit above. The
     # advisory API (api.github.com/advisories?ecosystem=actions) returns 403
     # for the org-level workflow token, causing a fatal crash in zizmor v1.23.1.
-    # TODO: Replace with a narrow ignore list once the upstream crash is fixed.
+    # TODO: Replace with a narrow ignore list after upgrading from zizmor
+    # v1.23.1 to a release that no longer fatally exits on GitHub API 403s.
     disable: true
   template-injection:
     ignore:
