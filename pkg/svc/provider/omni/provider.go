@@ -140,11 +140,18 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 
 	st := p.client.Omni().State()
 
-	// Delete the cluster resource which deallocates all machines
+	// Use TeardownAndDestroy to follow the COSI lifecycle:
+	// 1. Initiates teardown (transitions resource to PhaseTearingDown)
+	// 2. Blocks until all controllers remove their finalizers
+	// 3. Destroys the resource once finalizer list is empty
 	cluster := omnires.NewCluster(clusterName)
 
-	err := st.Destroy(ctx, cluster.Metadata())
+	err := st.TeardownAndDestroy(ctx, cluster.Metadata())
 	if err != nil {
+		if state.IsNotFoundError(err) {
+			return nil
+		}
+
 		return fmt.Errorf("failed to delete cluster %s: %w", clusterName, err)
 	}
 
