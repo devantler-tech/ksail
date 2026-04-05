@@ -15,7 +15,7 @@ If no path is provided, the path is resolved in order:
   3. The current directory (fallback when no ksail.yaml config file is found)
 
 The validation process:
-1. Validates individual YAML files (patch files referenced in kustomization.yaml via patches,
+1. Validates individual YAML files (patch files referenced in a kustomization file via patches,
    patchesStrategicMerge, or patchesJson6902 are excluded — they are not valid standalone
    Kubernetes resources and are validated as part of the kustomize build output instead)
 2. Validates kustomizations by building them with kustomize and validating the output

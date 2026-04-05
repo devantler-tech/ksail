@@ -130,10 +130,124 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  mcp-publish:
+    name: 📤 Publish to MCP Registry
+    runs-on: ubuntu-latest
+    needs: [goreleaser]
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: 📑 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: 🏷️ Extract version from tag
+        id: get_version
+        run: |
+          echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: 📝 Update server.json version
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+          IMAGE_TAG: ${{ steps.get_version.outputs.image_tag }}
+        run: |
+          jq --arg v "$VERSION" \
+             --arg tag "$IMAGE_TAG" \
+             '.version = $v | .packages[0].identifier = "ghcr.io/devantler-tech/ksail:" + $tag' \
+             server.json > server.json.tmp && mv server.json.tmp server.json
+
+      - name: 📥 Install mcp-publisher
+        run: |
+          curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.5.0/mcp-publisher_linux_amd64.tar.gz"
+          curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.5.0/registry_1.5.0_checksums.txt"
+          grep "mcp-publisher_linux_amd64.tar.gz$" registry_1.5.0_checksums.txt | sha256sum --check
+          tar -xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
+          rm mcp-publisher_linux_amd64.tar.gz registry_1.5.0_checksums.txt
+
+      - name: 🔐 Authenticate with MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: 📤 Publish to MCP Registry
+        run: ./mcp-publisher publish
+
+  pages-build:
+    name: 📄 Build Pages
+    runs-on: ubuntu-latest
+    needs: [goreleaser]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: 📑 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0 # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: docs/package-lock.json
+
+      - name: ⚙️ Setup Pages
+        id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: 📦 Install dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: 📥 Download benchmark data
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p docs/public
+          if gh api "repos/{owner}/{repo}/contents/dev/bench/data.js?ref=benchmark-data" \
+            -H "Accept: application/vnd.github.raw+json" > /tmp/data.js 2>/tmp/api_error.txt; then
+            node -e "
+              const s = require('fs').readFileSync('/tmp/data.js', 'utf8');
+              const match = s.match(/^window\.BENCHMARK_DATA\s*=\s*([\s\S]+?);\s*\$/);
+              if (!match) { process.stderr.write('Unexpected data.js format\n'); process.exit(1); }
+              JSON.parse(match[1]);
+              require('fs').writeFileSync('docs/public/benchmark-data.json', match[1]);
+            "
+            echo "Downloaded benchmark data from benchmark-data branch"
+          else
+            cat /tmp/api_error.txt >&2 || true
+            echo "No benchmark data available yet"
+          fi
+
+      - name: 🏗️ Build with Astro
+        working-directory: docs
+        run: npm run build
+
+      - name: 📤 Upload artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: docs/dist
+
+  pages-deploy:
+    name: 🚀 Deploy Pages
+    runs-on: ubuntu-latest
+    needs: [pages-build]
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: 🚀 Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
   publish-release:
     name: 📢 Publish Release
     runs-on: ubuntu-latest
-    needs: [goreleaser, vscode-extension]
+    needs: [goreleaser, vscode-extension, mcp-publish, pages-deploy]
     permissions:
       contents: write
     steps:

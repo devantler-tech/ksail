@@ -1,0 +1,94 @@
+name: KSail Backup & Restore Test
+description: |
+  Tests the cluster backup and restore lifecycle on a running cluster.
+  Deploys a test workload, backs up the cluster, deletes the workload,
+  restores from backup, and verifies the workload is restored.
+
+  Does NOT create or delete the cluster — the orchestrator handles that.
+
+inputs:
+  workload-timeout:
+    description: Timeout for workload wait operations
+    required: false
+    default: "600s"
+
+runs:
+  using: composite
+  steps:
+    - name: 🧪 Deploy backup test workload
+      id: deploy
+      shell: bash
+      env:
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        create_succeeded=false
+        for attempt in 1 2 3; do
+          if ksail workload create deployment backup-test --image=traefik/whoami:v1.10; then
+            create_succeeded=true
+            break
+          fi
+          if [ "$attempt" -lt 3 ]; then
+            echo "⚠️ workload create attempt $attempt failed, retrying in 10s…"
+            sleep 10
+          fi
+        done
+        if [ "$create_succeeded" != "true" ]; then
+          echo "❌ ksail workload create failed after 3 attempts"
+          exit 1
+        fi
+        ksail workload wait --for=condition=Available deployment/backup-test --timeout="$TIMEOUT"
+
+    - name: 🧪 Backup cluster
+      id: backup
+      shell: bash
+      run: |
+        ksail cluster backup --output /tmp/cluster-backup.tar.gz
+        ls -lh /tmp/cluster-backup.tar.gz
+        echo "✅ Backup created successfully"
+
+    - name: 🧪 Delete test workload
+      id: delete
+      shell: bash
+      run: |
+        ksail workload delete deployment/backup-test --ignore-not-found
+        # Verify it's gone
+        if ksail workload get deployment/backup-test 2>/dev/null; then
+          echo "❌ Workload still exists after delete"
+          exit 1
+        fi
+        echo "✅ Workload deleted"
+
+    - name: 🧪 Restore from backup
+      id: restore
+      shell: bash
+      run: |
+        ksail cluster restore --input /tmp/cluster-backup.tar.gz --existing-resource-policy=update
+        echo "✅ Restore completed"
+
+    - name: 🧪 Verify restored workload
+      id: verify
+      shell: bash
+      env:
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        ksail workload wait --for=condition=Available deployment/backup-test --timeout="$TIMEOUT"
+        ksail workload get deployment/backup-test
+        echo "✅ Workload restored and available"
+
+    - name: 🧪 Cleanup backup test workload
+      if: always()
+      shell: bash
+      run: |
+        ksail workload delete deployment/backup-test --ignore-not-found 2>/dev/null || true
+
+    - name: 🐞 Debug failure
+      if: failure() && (steps.deploy.outcome == 'failure' || steps.backup.outcome == 'failure' || steps.restore.outcome == 'failure' || steps.verify.outcome == 'failure')
+      uses: ./.github/actions/debug-kubernetes-failure
+      with:
+        kubectl-command: "ksail workload"
+
+    - name: 🧹 Cleanup temp file
+      if: always()
+      shell: bash
+      run: |
+        rm -f /tmp/cluster-backup.tar.gz

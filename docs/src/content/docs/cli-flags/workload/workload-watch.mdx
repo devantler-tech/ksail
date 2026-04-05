@@ -10,8 +10,9 @@ Watch a directory for file changes and automatically apply workloads.
 
 When files in the watched directory are created, modified, or deleted,
 the command debounces changes (~500ms) then scopes the apply to the
-nearest directory containing a kustomization.yaml file, walking up from
-the changed file to the watch root. If no kustomization.yaml boundary is
+nearest directory containing a kustomization file recognized by kubectl
+(kustomization.yaml, kustomization.yml, or Kustomization), walking up
+from the changed file to the watch root. If no kustomization boundary is
 found, or the boundary is the watch root, it applies the full root
 directory. This scoping ensures only the affected Kustomize layer is
 re-applied, making iteration faster in monorepo-style layouts.

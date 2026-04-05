@@ -342,7 +342,7 @@ runs:
       run: ksail ${CONFIG:+--config "$CONFIG"} workload reconcile
 
     - name: 📦 Export mirror volumes
-      if: inputs.cache == 'true' && inputs.provider == 'Docker'
+      if: inputs.cache == 'true' && inputs.provider == 'Docker' && steps.restore-mirror.outputs.cache-hit != 'true'
       shell: bash
       run: |
         echo "📦 Exporting mirror registry volumes for caching..."
@@ -362,7 +362,7 @@ runs:
         done
 
     - name: 💾 Save mirror cache
-      if: inputs.cache == 'true' && inputs.provider == 'Docker'
+      if: inputs.cache == 'true' && inputs.provider == 'Docker' && steps.restore-mirror.outputs.cache-hit != 'true'
       uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: /tmp/ksail-mirror-cache
