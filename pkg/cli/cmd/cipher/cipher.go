@@ -1,8 +1,18 @@
 package cipher
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
+	sopsclient "github.com/devantler-tech/ksail/v5/pkg/client/sops"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/getsops/sops/v3"
+	"github.com/getsops/sops/v3/aes"
+	"github.com/getsops/sops/v3/keyservice"
 	"github.com/spf13/cobra"
 )
 
@@ -37,4 +47,418 @@ SOPS supports multiple key management systems:
 	cmd.AddCommand(NewImportCmd())
 
 	return cmd
+}
+
+// NewDecryptCmd creates and returns the decrypt command.
+func NewDecryptCmd() *cobra.Command {
+	var (
+		extract   string
+		ignoreMac bool
+		output    string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "decrypt [file]",
+		Short: "Decrypt a file with SOPS",
+		Long: `Decrypt a file using SOPS (Secrets OPerationS).
+
+If no file is given, input is read from stdin.
+
+SOPS supports multiple key management systems:
+  - age recipients
+  - PGP fingerprints
+  - AWS KMS
+  - GCP KMS
+  - Azure Key Vault
+  - HashiCorp Vault
+
+Example:
+  ksail cipher decrypt secrets.yaml
+  ksail cipher decrypt secrets.yaml --extract '["data"]["password"]'
+  ksail cipher decrypt secrets.yaml --output plaintext.yaml
+  ksail cipher decrypt secrets.yaml --ignore-mac
+  cat secrets.enc.yaml | ksail cipher decrypt`,
+		SilenceUsage: true,
+		Args:         cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return handleDecryptRunE(cmd, args, extract, ignoreMac, output)
+		},
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
+		},
+	}
+
+	cmd.Flags().StringVarP(
+		&extract,
+		"extract",
+		"e",
+		"",
+		"extract a specific key from the decrypted file (JSONPath format)",
+	)
+	cmd.Flags().BoolVar(
+		&ignoreMac,
+		"ignore-mac",
+		false,
+		"ignore Message Authentication Code (MAC) check",
+	)
+	cmd.Flags().StringVarP(&output, "output", "o", "", "output file path (default: stdout)")
+
+	return cmd
+}
+
+// handleDecryptRunE is the main handler for the decrypt command.
+func handleDecryptRunE(
+	cmd *cobra.Command,
+	args []string,
+	extract string,
+	ignoreMac bool,
+	output string,
+) error {
+	var inputPath string
+
+	readFromStdin := len(args) == 0
+
+	if !readFromStdin {
+		inputPath = args[0]
+
+		canonPath, err := fsutil.EvalCanonicalPath(inputPath)
+		if err != nil {
+			return fmt.Errorf("resolve input path %q: %w", inputPath, err)
+		}
+
+		inputPath = canonPath
+	}
+
+	inputStore, outputStore, err := sopsclient.GetDecryptStores(inputPath, readFromStdin)
+	if err != nil {
+		return fmt.Errorf("failed to get decrypt stores: %w", err)
+	}
+
+	var extractPath []any
+
+	if extract != "" {
+		extractPath, err = sopsclient.ParseExtractPath(extract)
+		if err != nil {
+			return fmt.Errorf("failed to parse extract path: %w", err)
+		}
+	}
+
+	opts := sopsclient.DecryptOpts{
+		Cipher:          aes.NewCipher(),
+		InputStore:      inputStore,
+		OutputStore:     outputStore,
+		InputPath:       inputPath,
+		ReadFromStdin:   readFromStdin,
+		IgnoreMAC:       ignoreMac,
+		Extract:         extractPath,
+		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+		DecryptionOrder: []string{},
+	}
+
+	decryptedData, err := sopsclient.Decrypt(opts)
+	if err != nil {
+		return fmt.Errorf("decryption failed: %w", err)
+	}
+
+	return writeDecryptedOutput(cmd, decryptedData, output)
+}
+
+// writeDecryptedOutput writes decrypted data to either a file or stdout.
+func writeDecryptedOutput(cmd *cobra.Command, data []byte, outputPath string) error {
+	if outputPath != "" {
+		canonOutput, err := fsutil.EvalCanonicalPath(outputPath)
+		if err != nil {
+			return fmt.Errorf("resolve output path %q: %w", outputPath, err)
+		}
+
+		err = os.WriteFile(canonOutput, data, sopsclient.DecryptedFilePermissions)
+		if err != nil {
+			return fmt.Errorf("failed to write decrypted file: %w", err)
+		}
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.SuccessType,
+			Content: "decrypted to %s",
+			Args:    []any{canonOutput},
+			Writer:  cmd.OutOrStdout(),
+		})
+
+		return nil
+	}
+
+	_, err := cmd.OutOrStdout().Write(data)
+	if err != nil {
+		return fmt.Errorf("failed to write output: %w", err)
+	}
+
+	return nil
+}
+
+// NewEditCmd creates and returns the edit command.
+func NewEditCmd() *cobra.Command {
+	var ignoreMac bool
+
+	var showMasterKeys bool
+
+	var editorStr string
+
+	cmd := &cobra.Command{
+		Use:          "edit <file>",
+		Short:        "Edit an encrypted file with SOPS",
+		Long:         editCommandLongDescription(),
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return handleEditRunE(cmd, args, ignoreMac, showMasterKeys, editorStr)
+		},
+	}
+
+	configureEditFlags(cmd, &ignoreMac, &showMasterKeys, &editorStr)
+
+	cmd.Annotations = map[string]string{
+		annotations.AnnotationPermission: "write",
+	}
+
+	return cmd
+}
+
+// handleEditRunE is the main handler for the edit command.
+func handleEditRunE(
+	cmd *cobra.Command,
+	args []string,
+	ignoreMac, showMasterKeys bool,
+	editorFlag string,
+) error {
+	inputPath, inputStore, outputStore, err := sopsclient.CanonicalizeAndGetStores(args[0])
+	if err != nil {
+		return fmt.Errorf("failed to get stores for edit: %w", err)
+	}
+
+	opts := sopsclient.EditOpts{
+		Cipher:          aes.NewCipher(),
+		InputStore:      inputStore,
+		OutputStore:     outputStore,
+		InputPath:       inputPath,
+		IgnoreMAC:       ignoreMac,
+		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+		DecryptionOrder: []string{},
+		ShowMasterKeys:  showMasterKeys,
+	}
+
+	// Set up editor environment variables before edit
+	cleanup := editor.SetupEditorEnv(cmd, editorFlag, "cipher")
+	defer cleanup()
+
+	var output []byte
+
+	// Check if file exists
+	_, statErr := os.Stat(inputPath)
+	switch {
+	case statErr == nil:
+		output, err = sopsclient.Edit(opts)
+	case os.IsNotExist(statErr):
+		output, err = sopsclient.EditNewFile(opts, inputStore)
+	default:
+		return fmt.Errorf("failed to stat input file: %w", statErr)
+	}
+
+	if err != nil {
+		return fmt.Errorf("edit failed: %w", err)
+	}
+
+	// Write the encrypted file
+	err = os.WriteFile(inputPath, output, sopsclient.EncryptedFilePermissions)
+	if err != nil {
+		return fmt.Errorf("failed to write encrypted file: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "edited %s",
+		Args:    []any{inputPath},
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// editCommandLongDescription returns the long description for the edit command.
+func editCommandLongDescription() string {
+	return `Edit an encrypted file using SOPS (Secrets OPerationS).
+
+If the file exists and is encrypted, it will be decrypted for editing.
+If the file does not exist, an example file will be created.
+
+The editor is determined by (in order of precedence):
+  1. --editor flag
+  2. spec.editor from ksail.yaml config
+  3. SOPS_EDITOR or EDITOR environment variables
+  4. Fallback to vim, nano, or vi
+
+SOPS supports multiple key management systems:
+  - age recipients
+  - PGP fingerprints
+  - AWS KMS
+  - GCP KMS
+  - Azure Key Vault
+  - HashiCorp Vault
+
+Example:
+  ksail cipher edit secrets.yaml
+  ksail cipher edit --editor "code --wait" secrets.yaml
+  SOPS_EDITOR="code --wait" ksail cipher edit secrets.yaml`
+}
+
+// configureEditFlags configures flags for the edit command.
+func configureEditFlags(cmd *cobra.Command, ignoreMac, showMasterKeys *bool, editorStr *string) {
+	cmd.Flags().BoolVar(
+		ignoreMac,
+		"ignore-mac",
+		false,
+		"ignore Message Authentication Code during decryption",
+	)
+	cmd.Flags().BoolVar(
+		showMasterKeys,
+		"show-master-keys",
+		false,
+		"show master keys in the editor",
+	)
+	cmd.Flags().StringVar(
+		editorStr,
+		"editor",
+		"",
+		"editor command to use (e.g., 'code --wait', 'vim', 'nano')",
+	)
+}
+
+// NewEncryptCmd creates and returns the encrypt command.
+func NewEncryptCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "encrypt <file>",
+		Short: "Encrypt a file with SOPS",
+		Long: `Encrypt a file using SOPS (Secrets OPerationS).
+
+SOPS supports multiple key management systems:
+  - age recipients
+  - PGP fingerprints
+  - AWS KMS
+  - GCP KMS
+  - Azure Key Vault
+  - HashiCorp Vault
+
+Example:
+  ksail cipher encrypt secrets.yaml`,
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1),
+		RunE:         handleEncryptRunE,
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
+		},
+	}
+
+	return cmd
+}
+
+// handleEncryptRunE is the main handler for the encrypt command.
+func handleEncryptRunE(cmd *cobra.Command, args []string) error {
+	inputPath, inputStore, outputStore, err := sopsclient.CanonicalizeAndGetStores(args[0])
+	if err != nil {
+		return fmt.Errorf("failed to get stores for encrypt: %w", err)
+	}
+
+	opts := sopsclient.EncryptOpts{
+		EncryptConfig: sopsclient.EncryptConfig{
+			KeyGroups:      []sops.KeyGroup{},
+			GroupThreshold: 0,
+		},
+		Cipher:        aes.NewCipher(),
+		InputStore:    inputStore,
+		OutputStore:   outputStore,
+		InputPath:     inputPath,
+		ReadFromStdin: false,
+		KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+	}
+
+	encryptedData, err := sopsclient.Encrypt(opts)
+	if err != nil {
+		return fmt.Errorf("encryption failed: %w", err)
+	}
+
+	err = os.WriteFile(inputPath, encryptedData, sopsclient.EncryptedFilePermissions)
+	if err != nil {
+		return fmt.Errorf("failed to write encrypted file: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "encrypted %s",
+		Args:    []any{inputPath},
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// NewImportCmd creates and returns the import command.
+func NewImportCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "import PRIVATE_KEY",
+		Short: "Import an age key to the system's SOPS key location",
+		Long: `Import an age private key to the system's default SOPS age key location.
+
+The private key must be provided as a command argument and must include the full
+key with the AGE-SECRET-KEY- prefix.
+
+The public key will be automatically derived from the private key.
+
+The command will automatically add metadata including:
+  - Creation timestamp
+  - Public key (derived from private key)
+
+Key file location (checked in order):
+  1. SOPS_AGE_KEY_FILE environment variable
+  2. $XDG_CONFIG_HOME/sops/age/keys.txt (if XDG_CONFIG_HOME is set)
+  3. Platform-specific defaults:
+     Linux:   $HOME/.config/sops/age/keys.txt
+     macOS:   $HOME/Library/Application Support/sops/age/keys.txt
+     Windows: %AppData%\sops\age\keys.txt
+
+The private key must be in age format (starting with "AGE-SECRET-KEY-").
+
+Examples:
+  # Import a private key (public key will be derived automatically)
+  ksail cipher import AGE-SECRET-KEY-1ABCDEF...`,
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return handleImportRunE(cmd, args[0])
+		},
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
+		},
+	}
+
+	return cmd
+}
+
+// handleImportRunE is the main handler for the import command.
+func handleImportRunE(cmd *cobra.Command, privateKey string) error {
+	err := sopsclient.ImportKey(privateKey)
+	if err != nil {
+		return fmt.Errorf("failed to import age key: %w", err)
+	}
+
+	targetPath, err := sopsclient.GetAgeKeyPath()
+	if err != nil {
+		return fmt.Errorf("%w: %w", sopsclient.ErrFailedToDetermineAge, err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "imported age key to %s",
+		Args:    []any{targetPath},
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
 }
