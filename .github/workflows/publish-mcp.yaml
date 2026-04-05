@@ -16,8 +16,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    env:
-      MCP_PUBLISHER_VERSION: "1.5.0"
     steps:
       - name: 📑 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -42,7 +40,7 @@ jobs:
 
       - name: 📥 Install mcp-publisher
         run: |
-          curl -sL "https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          curl -sL "https://github.com/modelcontextprotocol/registry/releases/download/v1.5.0/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
 
       - name: 🔐 Authenticate with MCP Registry
         run: ./mcp-publisher login github-oidc
