@@ -4,11 +4,19 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cosi-project/runtime/pkg/state"
+	"github.com/cosi-project/runtime/pkg/state/impl/inmem"
+	"github.com/cosi-project/runtime/pkg/state/impl/namespaced"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
+	omnires "github.com/siderolabs/omni/client/pkg/omni/resources/omni"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func newInMemState() state.State {
+	return state.WrapCore(namespaced.NewState(inmem.Build))
+}
 
 func TestNewProvider(t *testing.T) {
 	t.Parallel()
@@ -103,3 +111,32 @@ func TestDeleteNodes_NilClient(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
+
+func TestDeleteNodes_ClusterNotFound_ReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProviderWithState(newInMemState())
+
+	// The cluster does not exist in state; DeleteNodes must treat NotFound as success.
+	err := prov.DeleteNodes(context.Background(), "nonexistent-cluster")
+
+	require.NoError(t, err)
+}
+
+func TestDeleteNodes_ClusterExists_RemovesCluster(t *testing.T) {
+	t.Parallel()
+
+	st := newInMemState()
+	prov := omni.NewProviderWithState(st)
+
+	cluster := omnires.NewCluster("test-cluster")
+	require.NoError(t, st.Create(context.Background(), cluster))
+
+	err := prov.DeleteNodes(context.Background(), "test-cluster")
+
+	require.NoError(t, err)
+	_, getErr := st.Get(context.Background(), cluster.Metadata())
+	require.Error(t, getErr)
+	assert.True(t, state.IsNotFoundError(getErr), "cluster should have been removed from state")
+}
+
