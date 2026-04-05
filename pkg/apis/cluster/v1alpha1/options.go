@@ -121,4 +121,14 @@ type OptionsOmni struct {
 	// base64-encoded Omni service account key.
 	// Defaults to "OMNI_SERVICE_ACCOUNT_KEY".
 	ServiceAccountKeyEnvVar string `default:"OMNI_SERVICE_ACCOUNT_KEY" json:"serviceAccountKeyEnvVar,omitzero"`
+	// TalosVersion is the Talos version to use for the cluster in Omni.
+	// Accepts values with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
+	// Generated templates normalize the value to include the "v" prefix.
+	// This determines the Talos Linux version that Omni will deploy to machines.
+	TalosVersion string `json:"talosVersion,omitzero"`
+	// KubernetesVersion is the Kubernetes version to use for the cluster in Omni.
+	// Accepts values with or without the "v" prefix (e.g., "v1.32.0" or "1.32.0").
+	// Generated templates normalize the value to include the "v" prefix.
+	// This determines the Kubernetes version that Omni will deploy.
+	KubernetesVersion string `json:"kubernetesVersion,omitzero"`
 }

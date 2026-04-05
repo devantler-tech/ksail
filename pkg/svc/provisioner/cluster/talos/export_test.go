@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	omniprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
@@ -50,4 +51,49 @@ func CreateOmniProviderForTest(opts v1alpha1.OptionsOmni) error {
 	_, err := createOmniProvider(opts)
 
 	return err
+}
+
+// ResolveOmniVersionsForTest exposes resolveOmniVersions for unit testing.
+func (p *Provisioner) ResolveOmniVersionsForTest() (string, string) {
+	return p.resolveOmniVersions()
+}
+
+// BuildOmniPatchInfosForTest exposes buildOmniPatchInfos for unit testing.
+func (p *Provisioner) BuildOmniPatchInfosForTest() []omniprovider.PatchInfo {
+	return p.buildOmniPatchInfos()
+}
+
+// SyncAndWaitOmniClusterForTest exposes syncAndWaitOmniCluster for unit testing.
+func (p *Provisioner) SyncAndWaitOmniClusterForTest(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+	params omniprovider.TemplateParams,
+) error {
+	return p.syncAndWaitOmniCluster(ctx, omniProv, params)
+}
+
+// SaveOmniKubeconfigForTest exposes saveOmniKubeconfig for unit testing.
+func (p *Provisioner) SaveOmniKubeconfigForTest(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+	clusterName string,
+) error {
+	return p.saveOmniKubeconfig(ctx, omniProv, clusterName)
+}
+
+// SaveOmniTalosconfigForTest exposes saveOmniTalosconfig for unit testing.
+func (p *Provisioner) SaveOmniTalosconfigForTest(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+	clusterName string,
+) error {
+	return p.saveOmniTalosconfig(ctx, omniProv, clusterName)
+}
+
+// GetOmniNodesByRoleForTest exposes getOmniNodesByRole for unit testing.
+func (p *Provisioner) GetOmniNodesByRoleForTest(
+	ctx context.Context,
+	clusterName string,
+) ([]NodeWithRoleForTest, error) {
+	return p.getOmniNodesByRole(ctx, clusterName)
 }

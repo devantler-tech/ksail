@@ -250,6 +250,12 @@
                 },
                 "serviceAccountKeyEnvVar": {
                   "type": "string"
+                },
+                "talosVersion": {
+                  "type": "string"
+                },
+                "kubernetesVersion": {
+                  "type": "string"
                 }
               },
               "additionalProperties": false,
