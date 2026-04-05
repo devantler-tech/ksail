@@ -844,8 +844,8 @@ func NewInstallCmd(_ *di.Runtime) *cobra.Command {
 		Short: "Install Helm charts",
 		Long: "Install Helm charts to provision workloads through KSail. " +
 			"This command provides native Helm chart installation capabilities.",
-		Args:  cobra.ExactArgs(requiredInstallArgs),
-		RunE:  runInstall,
+		Args: cobra.ExactArgs(requiredInstallArgs),
+		RunE: runInstall,
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: "write",
 		},

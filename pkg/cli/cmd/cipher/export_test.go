@@ -272,6 +272,7 @@ func BenchmarkEncrypt(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			tmpDir := b.TempDir()
 			filePath := filepath.Join(tmpDir, "secret.yaml")
+
 			b.ResetTimer()
 
 			for b.Loop() {
