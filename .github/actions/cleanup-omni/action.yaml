@@ -1,6 +1,6 @@
 name: Cleanup Omni Resources
 description: |
-  Deletes all KSail test clusters from Omni to ensure clean slate
+  Deletes the known KSail system-test clusters from Omni to ensure clean slate
   for next CI run, even if individual test jobs fail to clean up after themselves.
 
 inputs: {}
@@ -8,22 +8,33 @@ inputs: {}
 runs:
   using: composite
   steps:
-    - name: 🧹 Cleanup all KSail test clusters from Omni
+    - name: 🧹 Cleanup known KSail system-test clusters from Omni
       shell: bash
       run: |
         set -euo pipefail
 
-        echo "🧹 Starting Omni cleanup for KSail test clusters..."
+        echo "🧹 Starting Omni cleanup for KSail system-test clusters..."
+
+        MISSING_OMNI_ENV_VARS=()
+        if [[ -z "${OMNI_SERVICE_ACCOUNT_KEY:-}" ]]; then
+          MISSING_OMNI_ENV_VARS+=("OMNI_SERVICE_ACCOUNT_KEY")
+        fi
+        if [[ -z "${OMNI_ENDPOINT:-}" ]]; then
+          MISSING_OMNI_ENV_VARS+=("OMNI_ENDPOINT")
+        fi
+
+        if (( ${#MISSING_OMNI_ENV_VARS[@]} > 0 )); then
+          echo "❌ Missing required Omni environment variable(s): ${MISSING_OMNI_ENV_VARS[*]}"
+          echo "   Set OMNI_SERVICE_ACCOUNT_KEY and OMNI_ENDPOINT before running cleanup."
+          exit 1
+        fi
 
         if ! command -v ksail >/dev/null 2>&1; then
           echo "❌ ksail is not installed or not available on PATH"
           exit 1
         fi
 
-        echo "🔎 Verifying Omni authentication/connectivity..."
-        ksail cluster list --provider Omni >/dev/null
-
-        # Delete known test clusters by name
+        # Delete the two known system-test cluster names used by CI
         for CLUSTER_NAME in "system-test-cluster-with-scaffolding" "system-test-cluster-without-scaffolding"; do
           echo "🗑️  Deleting cluster: ${CLUSTER_NAME}"
 

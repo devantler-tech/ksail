@@ -9,7 +9,7 @@ inputs:
     description: "KSail distribution to provision (Vanilla, K3s, Talos, VCluster)"
     default: "Vanilla"
   provider:
-    description: "Infrastructure provider (Docker, Hetzner, Omni). Omni requires omni-service-account-key and omni-endpoint."
+    description: "Infrastructure provider (Docker, Hetzner, Omni). Cloud providers require credentials via env vars: HCLOUD_TOKEN for Hetzner, OMNI_SERVICE_ACCOUNT_KEY and OMNI_ENDPOINT for Omni."
     default: "Docker"
   args:
     description: "Additional CLI arguments passed to cluster init (and create when init is skipped)"
@@ -86,6 +86,15 @@ runs:
         sudo install "$tmpdir/ksail" /usr/local/bin/ksail
         rm -rf "$tmpdir"
         ksail --version
+
+    - name: ✅ Validate Hetzner inputs
+      if: inputs.provider == 'Hetzner'
+      shell: bash
+      run: |
+        if [ -z "$HCLOUD_TOKEN" ]; then
+          echo "❌ ERROR: HCLOUD_TOKEN env var is required when provider is Hetzner" >&2
+          exit 1
+        fi
 
     - name: ✅ Validate Omni inputs
       if: inputs.provider == 'Omni'

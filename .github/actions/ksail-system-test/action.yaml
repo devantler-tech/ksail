@@ -53,6 +53,15 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: ✅ Validate Hetzner inputs
+      if: inputs.provider == 'Hetzner'
+      shell: bash
+      run: |
+        if [ -z "$HCLOUD_TOKEN" ]; then
+          echo "❌ ERROR: HCLOUD_TOKEN env var is required when provider is Hetzner" >&2
+          exit 1
+        fi
+
     - name: ✅ Validate Omni inputs
       if: inputs.provider == 'Omni'
       shell: bash
