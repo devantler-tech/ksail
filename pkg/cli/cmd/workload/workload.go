@@ -2234,10 +2234,8 @@ func walkFiles(rootPath string, match func(string, os.FileInfo) string) ([]strin
 // recognized by kubectl (kustomization.yaml, kustomization.yml, or Kustomization).
 func findKustomizations(rootPath string) ([]string, error) {
 	return walkFiles(rootPath, func(path string, info os.FileInfo) string {
-		for _, name := range kustomizationFileNames {
-			if info.Name() == name {
-				return filepath.Dir(path)
-			}
+		if slices.Contains(kustomizationFileNames, info.Name()) {
+			return filepath.Dir(path)
 		}
 
 		return ""
@@ -2250,10 +2248,8 @@ func findYAMLFiles(rootPath string) ([]string, error) {
 	return walkFiles(rootPath, func(path string, _ os.FileInfo) string {
 		base := filepath.Base(path)
 
-		for _, name := range kustomizationFileNames {
-			if base == name {
-				return ""
-			}
+		if slices.Contains(kustomizationFileNames, base) {
+			return ""
 		}
 
 		if isYAMLFile(path) {
