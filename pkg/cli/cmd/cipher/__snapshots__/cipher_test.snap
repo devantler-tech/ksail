@@ -28,3 +28,126 @@ Flags:
 Use "cipher [command] --help" for more information about a command.
 
 ---
+
+[TestDecryptCommandHelp - 1]
+Decrypt a file using SOPS (Secrets OPerationS).
+
+If no file is given, input is read from stdin.
+
+SOPS supports multiple key management systems:
+  - age recipients
+  - PGP fingerprints
+  - AWS KMS
+  - GCP KMS
+  - Azure Key Vault
+  - HashiCorp Vault
+
+Example:
+  ksail cipher decrypt secrets.yaml
+  ksail cipher decrypt secrets.yaml --extract '["data"]["password"]'
+  ksail cipher decrypt secrets.yaml --output plaintext.yaml
+  ksail cipher decrypt secrets.yaml --ignore-mac
+  cat secrets.enc.yaml | ksail cipher decrypt
+
+Usage:
+  cipher decrypt [file] [flags]
+
+Flags:
+  -e, --extract string   extract a specific key from the decrypted file (JSONPath format)
+  -h, --help             help for decrypt
+      --ignore-mac       ignore Message Authentication Code (MAC) check
+  -o, --output string    output file path (default: stdout)
+
+---
+
+[TestEditCommandHelp - 1]
+Edit an encrypted file using SOPS (Secrets OPerationS).
+
+If the file exists and is encrypted, it will be decrypted for editing.
+If the file does not exist, an example file will be created.
+
+The editor is determined by (in order of precedence):
+  1. --editor flag
+  2. spec.editor from ksail.yaml config
+  3. SOPS_EDITOR or EDITOR environment variables
+  4. Fallback to vim, nano, or vi
+
+SOPS supports multiple key management systems:
+  - age recipients
+  - PGP fingerprints
+  - AWS KMS
+  - GCP KMS
+  - Azure Key Vault
+  - HashiCorp Vault
+
+Example:
+  ksail cipher edit secrets.yaml
+  ksail cipher edit --editor "code --wait" secrets.yaml
+  SOPS_EDITOR="code --wait" ksail cipher edit secrets.yaml
+
+Usage:
+  cipher edit <file> [flags]
+
+Flags:
+      --editor string      editor command to use (e.g., 'code --wait', 'vim', 'nano')
+  -h, --help               help for edit
+      --ignore-mac         ignore Message Authentication Code during decryption
+      --show-master-keys   show master keys in the editor
+
+---
+
+[TestEncryptCommandHelp - 1]
+Encrypt a file using SOPS (Secrets OPerationS).
+
+SOPS supports multiple key management systems:
+  - age recipients
+  - PGP fingerprints
+  - AWS KMS
+  - GCP KMS
+  - Azure Key Vault
+  - HashiCorp Vault
+
+Example:
+  ksail cipher encrypt secrets.yaml
+
+Usage:
+  cipher encrypt <file> [flags]
+
+Flags:
+  -h, --help   help for encrypt
+
+---
+
+[TestImportCommandHelp - 1]
+Import an age private key to the system's default SOPS age key location.
+
+The private key must be provided as a command argument and must include the full
+key with the AGE-SECRET-KEY- prefix.
+
+The public key will be automatically derived from the private key.
+
+The command will automatically add metadata including:
+  - Creation timestamp
+  - Public key (derived from private key)
+
+Key file location (checked in order):
+  1. SOPS_AGE_KEY_FILE environment variable
+  2. $XDG_CONFIG_HOME/sops/age/keys.txt (if XDG_CONFIG_HOME is set)
+  3. Platform-specific defaults:
+     Linux:   $HOME/.config/sops/age/keys.txt
+     macOS:   $HOME/Library/Application Support/sops/age/keys.txt
+     Windows: %AppData%\sops\age\keys.txt
+
+The private key must be in age format (starting with "AGE-SECRET-KEY-").
+
+Examples:
+  # Import a private key (public key will be derived automatically)
+  ksail cipher import AGE-SECRET-KEY-1ABCDEF...
+
+Usage:
+  cipher import PRIVATE_KEY [flags]
+
+Flags:
+  -h, --help   help for import
+
+---

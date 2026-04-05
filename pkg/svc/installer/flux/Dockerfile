@@ -4,4 +4,4 @@
 # Image mappings:
 # - ghcr.io/controlplaneio-fluxcd/charts/flux-operator → chart version (OCI chart artifact tag)
 
-FROM ghcr.io/controlplaneio-fluxcd/charts/flux-operator:0.41.1
+FROM ghcr.io/controlplaneio-fluxcd/charts/flux-operator:0.45.1

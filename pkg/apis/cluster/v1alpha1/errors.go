@@ -26,6 +26,9 @@ var ErrInvalidCertManager = errors.New("invalid cert-manager")
 // ErrInvalidPolicyEngine is returned when an invalid policy engine is specified.
 var ErrInvalidPolicyEngine = errors.New("invalid policy engine")
 
+// ErrInvalidImageVerification is returned when an invalid image verification option is specified.
+var ErrInvalidImageVerification = errors.New("invalid image verification")
+
 // ErrInvalidProvider is returned when an invalid provider is specified.
 var ErrInvalidProvider = errors.New("invalid provider")
 

@@ -9,7 +9,7 @@ inputs:
     description: "KSail distribution to provision (Vanilla, K3s, Talos, VCluster)"
     default: "Vanilla"
   provider:
-    description: "Infrastructure provider (Docker, Hetzner, Omni). Omni requires omni-service-account-key and omni-endpoint."
+    description: "Infrastructure provider (Docker, Hetzner, Omni). Cloud providers require credentials via env vars: HCLOUD_TOKEN for Hetzner, OMNI_SERVICE_ACCOUNT_KEY and OMNI_ENDPOINT for Omni."
     default: "Docker"
   args:
     description: "Additional CLI arguments passed to cluster init (and create when init is skipped)"
@@ -26,15 +26,6 @@ inputs:
   cache:
     description: "Enable caching of Helm charts and mirror registry volumes between CI runs"
     default: "true"
-  hcloud-token:
-    description: "Hetzner Cloud API token (required when provider is Hetzner)"
-    default: ""
-  omni-service-account-key:
-    description: "Omni service account key (required when provider is Omni)"
-    default: ""
-  omni-endpoint:
-    description: "Omni API endpoint URL (required when provider is Omni)"
-    default: ""
   sops-age-key:
     description: "SOPS Age private key for decrypting secrets (imports key locally; KSail creates the in-cluster secret during Flux setup)"
     default: ""
@@ -96,19 +87,25 @@ runs:
         rm -rf "$tmpdir"
         ksail --version
 
+    - name: ✅ Validate Hetzner inputs
+      if: inputs.provider == 'Hetzner'
+      shell: bash
+      run: |
+        if [ -z "$HCLOUD_TOKEN" ]; then
+          echo "❌ ERROR: HCLOUD_TOKEN env var is required when provider is Hetzner" >&2
+          exit 1
+        fi
+
     - name: ✅ Validate Omni inputs
       if: inputs.provider == 'Omni'
       shell: bash
-      env:
-        OMNI_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_EP: ${{ inputs.omni-endpoint }}
       run: |
-        if [ -z "$OMNI_KEY" ]; then
-          echo "❌ ERROR: omni-service-account-key is required when provider is Omni" >&2
+        if [ -z "$OMNI_SERVICE_ACCOUNT_KEY" ]; then
+          echo "❌ ERROR: OMNI_SERVICE_ACCOUNT_KEY env var is required when provider is Omni" >&2
           exit 1
         fi
-        if [ -z "$OMNI_EP" ]; then
-          echo "❌ ERROR: omni-endpoint is required when provider is Omni" >&2
+        if [ -z "$OMNI_ENDPOINT" ]; then
+          echo "❌ ERROR: OMNI_ENDPOINT env var is required when provider is Omni" >&2
           exit 1
         fi
 
@@ -278,7 +275,6 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         CONFIG: ${{ inputs.config }}
       run: |
         # shellcheck disable=SC2086
@@ -299,9 +295,6 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
         CONFIG: ${{ inputs.config }}
       run: |
         set -euo pipefail
@@ -380,8 +373,5 @@ runs:
       if: always() && inputs.delete == 'true'
       shell: bash
       env:
-        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
         CONFIG: ${{ inputs.config }}
       run: ksail ${CONFIG:+--config "$CONFIG"} cluster delete || echo "⚠️ Cluster may not have been created"

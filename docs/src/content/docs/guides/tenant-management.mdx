@@ -40,8 +40,8 @@ The command writes manifests to `<output>/<tenant-name>/`:
 platform/tenants/my-team/
 ├── kustomization.yaml
 ├── namespace.yaml
-├── service-account.yaml
-├── role-binding.yaml
+├── serviceaccount.yaml
+├── rolebinding.yaml
 └── (flux or argocd sync resources if applicable)
 ```
 
@@ -115,9 +115,15 @@ ksail tenant delete my-team --unregister=false
 
 ## Applying Tenant Manifests
 
-After generating manifests, apply them to the cluster:
+After generating manifests, apply them to the cluster using the workflow that matches how the tenant was created:
 
 ```bash
+# If you created the tenant without --register,
+# apply the generated tenant directory directly
+ksail workload apply -k platform/tenants/my-team/
+
+# If you created the tenant with --register, or platform/tenants/kustomization.yaml
+# already includes the tenant directory, apply the parent directory
 ksail workload apply -k platform/tenants/
 ```
 

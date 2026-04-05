@@ -98,6 +98,14 @@ func ValidCertManagers() []CertManager {
 	}
 }
 
+// ValidImageVerifications returns supported image verification values.
+func ValidImageVerifications() []ImageVerification {
+	return []ImageVerification{
+		ImageVerificationEnabled,
+		ImageVerificationDisabled,
+	}
+}
+
 // ValidPolicyEngines returns supported policy engine values.
 func ValidPolicyEngines() []PolicyEngine {
 	return []PolicyEngine{

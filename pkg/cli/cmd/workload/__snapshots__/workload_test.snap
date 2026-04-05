@@ -1,4 +1,171 @@
 
+[TestImagesCmdShowsHelp - 1]
+List container images required by the configured cluster components.
+
+The image list is derived from the ksail.yaml configuration and includes
+images for all enabled components (GitOps engine, CNI, policy engine, etc.).
+
+This command is useful for:
+  - Pre-pulling images before cluster creation
+  - Creating offline image archives
+  - Understanding infrastructure image requirements
+  - CI/CD caching strategies
+
+Output formats:
+  - plain: One image per line (default, suitable for scripting)
+  - json: JSON array of image strings
+
+Examples:
+  # List all images for current ksail.yaml config
+  ksail workload images
+
+  # List images as JSON array
+  ksail workload images --output=json
+
+  # Pipe to docker pull
+  ksail workload images | xargs -n1 docker pull
+
+  # Save to file for CI caching
+  ksail workload images > required-images.txt
+
+Usage:
+  images [flags]
+
+Flags:
+      --cert-manager CertManager       Cert-Manager configuration (Enabled: install, Disabled: skip)
+      --cni CNI                        Container Network Interface (CNI) to use
+      --csi CSI                        Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI)
+  -d, --distribution Distribution      Kubernetes distribution to use
+  -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
+  -h, --help                           help for images
+      --load-balancer LoadBalancer     LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)
+      --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
+  -o, --output string                  Output format: plain, json (default "plain")
+      --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
+      --provider Provider              Infrastructure provider backend (e.g., Docker)
+
+---
+
+[TestPushCmdShowsValidateFlagInHelp - 1]
+Build and push local workloads as an OCI artifact to a registry.
+
+The OCI reference format is: oci://<host>:<port>/<repository>[/<variant>]:<ref>
+
+Examples:
+  # Push to auto-detected local registry with defaults
+  ksail workload push
+
+  # Push specific directory to auto-detected registry
+  ksail workload push --path=./manifests
+
+  # Push to explicit registry endpoint
+  ksail workload push oci://localhost:5050/k8s:dev
+
+  # Push to external registry with credentials
+  ksail workload push --registry='$USER:$TOKEN@ghcr.io/org/repo'
+
+  # Push using KSAIL_REGISTRY environment variable
+  KSAIL_REGISTRY='ghcr.io/org/repo' ksail workload push
+
+  # Push with variant (subdirectory in repository)
+  ksail workload push oci://localhost:5050/my-app/base:v1.0.0 --path=./k8s
+
+All parts of the OCI reference are optional and will be inferred:
+  - host:port: Auto-detected from running local-registry container
+  - repository: Derived from source directory name
+  - ref: Defaults to "dev"
+
+Usage:
+  push [oci://<host>:<port>/<repository>[/<variant>]:<ref>] [flags]
+
+Flags:
+  -h, --help              help for push
+      --path string       Source directory containing manifests to push
+      --registry string   Registry to push to (format: [user:pass@]host[:port][/path]), can also be set via KSAIL_REGISTRY env var
+      --validate          Validate manifests before pushing
+
+---
+
+[TestValidateCmdShowsHelp - 1]
+Validate Kubernetes manifest files and kustomizations using kubeconform.
+
+This command validates individual YAML files and kustomizations in the specified path.
+If no path is provided, the path is resolved in order:
+  1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
+  2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
+  3. The current directory (fallback when no ksail.yaml config file is found)
+
+The validation process:
+1. Validates individual YAML files (patch files referenced in kustomization.yaml via patches,
+   patchesStrategicMerge, or patchesJson6902 are excluded — they are not valid standalone
+   Kubernetes resources and are validated as part of the kustomize build output instead)
+2. Validates kustomizations by building them with kustomize and validating the output
+
+    Flux variable substitutions are resolved before validation using type-aware placeholders:
+  - ${VAR} (bare, no default): when a JSON schema type is available, substitutes a typed
+    placeholder derived from the schema for the field ("placeholder" for strings, 0 for
+    integers, true for booleans); when no schema type is available, it falls back to the
+    string value "placeholder"
+  - ${VAR:-default} / ${VAR:=default}: when a schema type is available, uses the default
+    value parsed according to the field schema type (e.g., "3" → int 3 for integer fields);
+    when no schema type is available, the default is parsed using YAML-native type inference
+  - Mixed text (e.g., "prefix.${VAR}"): substitutes "placeholder" in string context
+
+Schema lookups use a local disk cache and require no network access. When no cached
+JSON schema is available, placeholders fall back to strings with YAML-native parsing.
+
+By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.
+
+Usage:
+  validate [PATH] [flags]
+
+Flags:
+  -h, --help                     help for validate
+      --ignore-missing-schemas   Ignore resources with missing schemas (default true)
+      --skip-secrets             Skip validation of Kubernetes Secrets (default true)
+      --strict                   Enable strict validation mode
+
+---
+
+[TestWatchCmdShowsHelp - 1]
+Watch a directory for file changes and automatically apply workloads.
+
+When files in the watched directory are created, modified, or deleted,
+the command debounces changes (~500ms) then scopes the apply to the
+nearest directory containing a kustomization.yaml file, walking up from
+the changed file to the watch root. If no kustomization.yaml boundary is
+found, or the boundary is the watch root, it applies the full root
+directory. This scoping ensures only the affected Kustomize layer is
+re-applied, making iteration faster in monorepo-style layouts.
+
+Each reconcile prints a timestamped status line showing the changed file,
+the outcome (success or failure), and the elapsed time for the apply.
+Press Ctrl+C to stop the watcher.
+
+Use --initial-apply to synchronize the cluster with the current state of
+the watch directory before entering the watch loop. This is useful after
+editing manifests offline or when starting a fresh session.
+
+Examples:
+  # Watch the default k8s/ directory
+  ksail workload watch
+
+  # Watch and apply once on startup before entering the loop
+  ksail workload watch --initial-apply
+
+  # Watch a custom directory
+  ksail workload watch --path=./manifests
+
+Usage:
+  watch [flags]
+
+Flags:
+  -h, --help            help for watch
+      --initial-apply   Apply all workloads once immediately on startup before entering the watch loop
+      --path string     Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
+
+---
+
 [TestNewWorkloadCmdRunETriggersHelp - 1]
 Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, export, expose, gen, get, import, install, logs, push, rollout, scale, validate, wait, or watch for workloads.
 
@@ -864,6 +1031,8 @@ Flags:
       --create-namespace   create the release namespace if not present
   -h, --help               help for install
   -n, --namespace string   namespace scope for the request (default "default")
+      --timeout duration   time to wait for any individual Kubernetes operation (default 5m0s)
+      --version string     chart version constraint (default: latest)
       --wait               wait until resources are ready
 
 Global Flags:

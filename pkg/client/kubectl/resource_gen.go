@@ -91,8 +91,7 @@ func (c *Client) CreatePriorityClassCmd() (*cobra.Command, error) {
 
 // newResourceCmd creates a gen command that wraps kubectl create with forced --dry-run=client -o yaml.
 func (c *Client) newResourceCmd(resourceType string) (*cobra.Command, error) {
-	// Use empty string for kubeconfig since --dry-run=client doesn't need cluster access
-	tempCreateCmd := c.CreateCreateCommand("")
+	tempCreateCmd := c.createCommandSafely("")
 
 	// Find the subcommand for this resource type
 	var resourceCmd *cobra.Command
@@ -215,7 +214,7 @@ func (c *Client) executeSubcommandGen(
 	args []string,
 ) error {
 	freshClient := c.createFreshClient(cmd)
-	createCmd := freshClient.CreateCreateCommand("")
+	createCmd := freshClient.createCommandSafely("")
 
 	// Find the parent resource command
 	parentCmd := freshClient.findResourceCommand(createCmd, parentType)
@@ -235,7 +234,7 @@ func (c *Client) executeSubcommandGen(
 // executeResourceGen executes kubectl create with forced --dry-run=client -o yaml flags.
 func (c *Client) executeResourceGen(resourceType string, cmd *cobra.Command, args []string) error {
 	freshClient := c.createFreshClient(cmd)
-	createCmd := freshClient.CreateCreateCommand("")
+	createCmd := freshClient.createCommandSafely("")
 
 	freshResourceCmd := freshClient.findResourceCommand(createCmd, resourceType)
 	if freshResourceCmd == nil {
@@ -254,6 +253,13 @@ func (c *Client) findResourceCommand(createCmd *cobra.Command, resourceType stri
 	}
 
 	return nil
+}
+
+// createCommandSafely wraps CreateCreateCommand. The RLock inside
+// CreateCreateCommand prevents data races with withSafeFatal's writes
+// to kubectl's global fatalErrHandler.
+func (c *Client) createCommandSafely(kubeconfig string) *cobra.Command {
+	return c.CreateCreateCommand(kubeconfig)
 }
 
 // setForcedFlags sets the --dry-run=client and -o yaml flags.
@@ -318,7 +324,9 @@ func (c *Client) copyFlagValue(flag *pflag.Flag, targetCmd *cobra.Command) error
 	return nil
 }
 
-// executeCommand executes the kubectl command's Run or RunE function.
+// executeCommand executes the kubectl command's Run or RunE function safely.
+// kubectl commands use Run with cmdutil.CheckErr which calls os.Exit on error.
+// This method intercepts fatal errors via BehaviorOnFatal + panic/recover.
 func (c *Client) executeCommand(cmd *cobra.Command, args []string) error {
 	if cmd.RunE != nil {
 		err := cmd.RunE(cmd, args)
@@ -330,10 +338,22 @@ func (c *Client) executeCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	if cmd.Run != nil {
-		cmd.Run(cmd, args)
-
-		return nil
+		return executeSafeRun(cmd, args)
 	}
 
 	return ErrNoRunFunction
+}
+
+// executeSafeRun wraps cmd.Run in withSafeFatal to catch os.Exit from
+// kubectl's cmdutil.CheckErr. This is necessary because kubectl commands
+// use Run (not RunE) with CheckErr which calls os.Exit on any error.
+func executeSafeRun(cmd *cobra.Command, args []string) error {
+	err := withSafeFatal(func() {
+		cmd.Run(cmd, args)
+	})
+	if err != nil {
+		return fmt.Errorf("kubectl command execution failed: %w", err)
+	}
+
+	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -50,7 +51,8 @@ const (
 	// kubeconfigFileMode is the file mode for kubeconfig files.
 	kubeconfigFileMode = 0o600
 	// clusterReadinessTimeout is the timeout for waiting for the cluster to become ready.
-	// This matches the upstream talosctl default of 20 minutes.
+	// This is shared across all Talos providers (Docker, Hetzner, Omni) and matches
+	// the upstream talosctl default of 20 minutes to accommodate slower cloud bring-up.
 	clusterReadinessTimeout = 20 * time.Minute
 	// talosAPIWaitTimeout is the timeout for waiting for Talos API to be reachable.
 	talosAPIWaitTimeout = 5 * time.Minute
@@ -135,6 +137,7 @@ type Provisioner struct {
 	omniOpts           *v1alpha1.OptionsOmni
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
 	logWriter          io.Writer
+	logMu              sync.Mutex
 	componentDetector  *detector.ComponentDetector
 	// imagePullRetry controls retry behavior for Docker image pulls.
 	// Tests can override this via WithImagePullRetryConfig to use near-zero delays.
@@ -482,4 +485,32 @@ func (p *Provisioner) resolveClusterName(name string) string {
 	}
 
 	return talosconfigmanager.DefaultClusterName
+}
+
+// logf writes a formatted message to the log writer.
+// It is safe for concurrent use by multiple goroutines.
+func (p *Provisioner) logf(format string, args ...any) {
+	p.logMu.Lock()
+	defer p.logMu.Unlock()
+
+	_, _ = fmt.Fprintf(p.logWriter, format, args...)
+}
+
+// syncLogWriter returns an io.Writer that serializes all Write calls through p.logMu.
+// Use this whenever p.logWriter is passed to a component that will write from multiple goroutines.
+func (p *Provisioner) syncLogWriter() io.Writer {
+	return &syncWriter{mu: &p.logMu, w: p.logWriter}
+}
+
+// syncWriter wraps an io.Writer with a mutex to make Write goroutine-safe.
+type syncWriter struct {
+	mu *sync.Mutex
+	w  io.Writer
+}
+
+func (sw *syncWriter) Write(b []byte) (int, error) {
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
+
+	return sw.w.Write(b) //nolint:wrapcheck // transparent delegation
 }

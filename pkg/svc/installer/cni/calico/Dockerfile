@@ -4,4 +4,4 @@
 # Image mappings:
 # - docker.io/calico/node → chart version (calico/node tag matches chart version)
 
-FROM docker.io/calico/node:v3.31.3
+FROM docker.io/calico/node:v3.31.4

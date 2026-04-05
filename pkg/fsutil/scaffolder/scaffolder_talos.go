@@ -24,6 +24,14 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 	// This is required for secure TLS communication between metrics-server and kubelets.
 	enableKubeletCertRotation := s.KSailConfig.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled
 
+	// Enable image verification scaffolding when explicitly enabled for Talos.
+	enableImageVerification := s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled
+
+	// Mirror the conditions in generator.getDirectoriesWithPatches() exactly so
+	// .gitkeep notifications match the files the generator actually writes.
+	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
+		enableKubeletCertRotation || s.ClusterName != "" || enableImageVerification
+
 	config := &talosgenerator.Config{
 		PatchesDir:                TalosConfigDir,
 		MirrorRegistries:          s.MirrorRegistries,
@@ -31,6 +39,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		DisableDefaultCNI:         disableDefaultCNI,
 		EnableKubeletCertRotation: enableKubeletCertRotation,
 		ClusterName:               s.ClusterName,
+		EnableImageVerification:   enableImageVerification,
 	}
 
 	opts := yamlgenerator.Options{
@@ -43,7 +52,13 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		return fmt.Errorf("%w: %w", ErrTalosConfigGeneration, err)
 	}
 
-	s.notifyTalosGenerated(workers, disableDefaultCNI, enableKubeletCertRotation)
+	s.notifyTalosGenerated(
+		workers,
+		disableDefaultCNI,
+		enableKubeletCertRotation,
+		enableImageVerification,
+		clusterHasPatches,
+	)
 
 	return nil
 }
@@ -51,12 +66,9 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 // notifyTalosGenerated sends notifications about generated Talos files.
 func (s *Scaffolder) notifyTalosGenerated(
 	workers int,
-	disableDefaultCNI, enableKubeletCertRotation bool,
+	disableDefaultCNI, enableKubeletCertRotation, enableImageVerification bool,
+	clusterHasPatches bool,
 ) {
-	// Determine which directories have patches (no .gitkeep generated there)
-	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
-		enableKubeletCertRotation || s.ClusterName != ""
-
 	// Notify about .gitkeep files only for directories without patches
 	subdirs := []string{"cluster", "control-planes", "workers"}
 	for _, subdir := range subdirs {
@@ -71,19 +83,21 @@ func (s *Scaffolder) notifyTalosGenerated(
 	// Notify about conditional patches using a slice to reduce complexity
 	patches := []struct {
 		condition bool
+		subdir    string
 		filename  string
 	}{
-		{workers == 0, "allow-scheduling-on-control-planes.yaml"},
-		{len(s.MirrorRegistries) > 0, "mirror-registries.yaml"},
-		{disableDefaultCNI, "disable-default-cni.yaml"},
-		{enableKubeletCertRotation, "kubelet-cert-rotation.yaml"},
-		{enableKubeletCertRotation, "kubelet-csr-approver.yaml"},
-		{s.ClusterName != "", "cluster-name.yaml"},
+		{workers == 0, "cluster", "allow-scheduling-on-control-planes.yaml"},
+		{len(s.MirrorRegistries) > 0, "cluster", "mirror-registries.yaml"},
+		{disableDefaultCNI, "cluster", "disable-default-cni.yaml"},
+		{enableKubeletCertRotation, "cluster", "kubelet-cert-rotation.yaml"},
+		{enableKubeletCertRotation, "cluster", "kubelet-csr-approver.yaml"},
+		{s.ClusterName != "", "cluster", "cluster-name.yaml"},
+		{enableImageVerification, "cluster", "image-verification.yaml"},
 	}
 
 	for _, patch := range patches {
 		if patch.condition {
-			s.notifyTalosPatchCreated("cluster", patch.filename)
+			s.notifyTalosPatchCreated(patch.subdir, patch.filename)
 		}
 	}
 }

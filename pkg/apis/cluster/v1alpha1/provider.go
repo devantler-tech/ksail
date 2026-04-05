@@ -71,6 +71,12 @@ func supportedProviders(distribution Distribution) []Provider {
 	}
 }
 
+// IsCloud returns true if the provider is a cloud provider (Hetzner or Omni).
+// Cloud providers run nodes on remote servers and cannot access local Docker infrastructure.
+func (p *Provider) IsCloud() bool {
+	return *p == ProviderHetzner || *p == ProviderOmni
+}
+
 // ValidateForDistribution validates that the provider is valid for the given distribution.
 // Returns nil if the combination is valid, or an error describing the invalid combination.
 func (p *Provider) ValidateForDistribution(distribution Distribution) error {

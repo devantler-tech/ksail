@@ -357,6 +357,29 @@ func TestProvider_ValidValues(t *testing.T) {
 	assert.Len(t, values, 3)
 }
 
+func TestProvider_IsCloud(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		provider v1alpha1.Provider
+		expected bool
+	}{
+		{"docker", v1alpha1.ProviderDocker, false},
+		{"hetzner", v1alpha1.ProviderHetzner, true},
+		{"omni", v1alpha1.ProviderOmni, true},
+		{"empty", v1alpha1.Provider(""), false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, testCase.expected, testCase.provider.IsCloud())
+		})
+	}
+}
+
 func TestProvider_ValidateForDistribution_ValidCombinations(t *testing.T) {
 	t.Parallel()
 
@@ -949,4 +972,78 @@ func TestLoadBalancer_EffectiveValue(t *testing.T) {
 			assert.Equal(t, testCase.expected, result)
 		})
 	}
+}
+
+func TestImageVerification_Default(t *testing.T) {
+	t.Parallel()
+
+	var imageVerification v1alpha1.ImageVerification
+	assert.Equal(t, v1alpha1.ImageVerificationDisabled, imageVerification.Default())
+}
+
+func TestImageVerification_ValidValues(t *testing.T) {
+	t.Parallel()
+
+	var imageVerification v1alpha1.ImageVerification
+
+	values := imageVerification.ValidValues()
+	assert.Contains(t, values, "Enabled")
+	assert.Contains(t, values, "Disabled")
+	assert.Len(t, values, 2)
+}
+
+func TestImageVerification_Set(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		input     string
+		expected  v1alpha1.ImageVerification
+		wantError bool
+	}{
+		{name: "enabled_lowercase", input: "enabled", expected: v1alpha1.ImageVerificationEnabled},
+		{name: "enabled_mixed_case", input: "Enabled", expected: v1alpha1.ImageVerificationEnabled},
+		{name: "enabled_uppercase", input: "ENABLED", expected: v1alpha1.ImageVerificationEnabled},
+		{
+			name:     "disabled_lowercase",
+			input:    "disabled",
+			expected: v1alpha1.ImageVerificationDisabled,
+		},
+		{
+			name:     "disabled_mixed_case",
+			input:    "Disabled",
+			expected: v1alpha1.ImageVerificationDisabled,
+		},
+		{
+			name:     "disabled_uppercase",
+			input:    "DISABLED",
+			expected: v1alpha1.ImageVerificationDisabled,
+		},
+		{name: "invalid_value", input: "invalid", wantError: true},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var imageVerification v1alpha1.ImageVerification
+
+			err := imageVerification.Set(testCase.input)
+			if testCase.wantError {
+				require.Error(t, err)
+				require.ErrorIs(t, err, v1alpha1.ErrInvalidImageVerification)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.expected, imageVerification)
+			}
+		})
+	}
+}
+
+func TestImageVerification_StringAndType(t *testing.T) {
+	t.Parallel()
+
+	imageVerification := v1alpha1.ImageVerificationEnabled
+	assert.Equal(t, "Enabled", imageVerification.String())
+	assert.Equal(t, "ImageVerification", imageVerification.Type())
 }
