@@ -2,6 +2,7 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -77,7 +78,9 @@ func TestCountNodeRoles(t *testing.T) {
 func TestApplyNodeScalingChangesSkipsOmni(t *testing.T) {
 	t.Parallel()
 
-	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithOmniOptions(v1alpha1.OptionsOmni{})
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithOmniOptions(v1alpha1.OptionsOmni{}).
+		WithLogWriter(io.Discard)
 	result := &clusterupdate.UpdateResult{}
 
 	oldSpec := &v1alpha1.ClusterSpec{}

@@ -2,7 +2,6 @@ package talosprovisioner
 
 import (
 	"context"
-	"io"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
@@ -60,9 +59,5 @@ func (p *Provisioner) ApplyNodeScalingChangesForTest(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *clusterupdate.UpdateResult,
 ) error {
-	if p.logWriter == nil {
-		p.logWriter = io.Discard
-	}
-
 	return p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
 }
