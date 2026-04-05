@@ -7,7 +7,7 @@ import { Steps } from "@astrojs/starlight/components";
 
 KSail clusters using the **Cilium** CNI option come Gateway API–ready out of the box. When you select `cni: Cilium`, KSail automatically:
 
-1. **Installs Gateway API CRDs** (standard channel, v1.4.1) before the Cilium Helm chart.
+1. **Installs Gateway API CRDs** (experimental channel, v1.4.1) before the Cilium Helm chart.
 2. **Enables Cilium's Gateway API controller** (`gatewayAPI.enabled: true`) in the Helm values.
 3. **Creates a `GatewayClass`** named `cilium` via the Cilium controller.
 
