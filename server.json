@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.devantler-tech/ksail",
   "title": "KSail",
-  "description": "Kubernetes SDK for local GitOps development. Exposes cluster lifecycle, workload management, and secret operations as MCP tools.",
+  "description": "SDK for creating, managing, and operating Kubernetes clusters and workloads with ease.",
   "repository": {
     "url": "https://github.com/devantler-tech/ksail",
     "source": "github"
