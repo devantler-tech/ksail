@@ -303,7 +303,7 @@ jobs:
         id: generate-token
         with:
           app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] - GitHub App token generation, no environment scoping available for app installations
 
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -395,7 +395,7 @@ jobs:
       - name: 📄 Upload coverage to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ secrets.CODECOV_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
 
   audit-docs:
     name: 🔍 Audit Docs Dependencies
@@ -418,7 +418,7 @@ jobs:
         with:
           working-directory: docs
           app-id: ${{ vars.APP_ID }}
-          app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-private-key: ${{ secrets.APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] - GitHub App token generation, no environment scoping available for app installations
           commit-message: "chore(docs): fix npm audit vulnerabilities"
 
   audit-vsce:
@@ -442,7 +442,7 @@ jobs:
         with:
           working-directory: vsce
           app-id: ${{ vars.APP_ID }}
-          app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-private-key: ${{ secrets.APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] - GitHub App token generation, no environment scoping available for app installations
           commit-message: "chore(vsce): fix npm audit vulnerabilities"
 
   vscode-extension:
@@ -750,7 +750,7 @@ jobs:
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
 
       - name: ⚙️ Setup Go
         id: setup-go
@@ -775,7 +775,7 @@ jobs:
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
-          hcloud-token: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }}
+          hcloud-token: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }} # zizmor: ignore[secrets-outside-env] - passed as composite action input, same pattern as omni-service-account-key
           omni-service-account-key: ${{ matrix.provider == 'Omni' && secrets.OMNI_SERVICE_ACCOUNT_KEY || '' }} # zizmor: ignore[secrets-outside-env] - passed as composite action input, same pattern as hcloud-token
           omni-endpoint: ${{ matrix.provider == 'Omni' && vars.OMNI_ENDPOINT || '' }}
           ghcr-user: ${{ github.actor }}
@@ -888,7 +888,7 @@ jobs:
       - name: 🧹 Cleanup all KSail-owned Hetzner resources
         uses: ./.github/actions/cleanup-hetzner
         with:
-          hcloud-token: ${{ secrets.HCLOUD_TOKEN }}
+          hcloud-token: ${{ secrets.HCLOUD_TOKEN }} # zizmor: ignore[secrets-outside-env] - passed as composite action input, no environment scoping available
 
   rate-limit-check:
     name: 📊 Rate Limit Status
