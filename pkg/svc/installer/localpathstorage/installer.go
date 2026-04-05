@@ -140,6 +140,7 @@ func (l *Installer) applyManifest(ctx context.Context) error {
 	var stdout, stderr strings.Builder
 
 	kubectlClient := kubectl.NewClient(genericiooptions.IOStreams{
+		In:     strings.NewReader(""),
 		Out:    &stdout,
 		ErrOut: &stderr,
 	})
