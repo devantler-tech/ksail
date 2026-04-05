@@ -42,7 +42,7 @@ jobs:
         run: |
           curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.5.0/mcp-publisher_linux_amd64.tar.gz"
           curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.5.0/registry_1.5.0_checksums.txt"
-          grep "mcp-publisher_linux_amd64.tar.gz" registry_1.5.0_checksums.txt | sha256sum --check
+          grep "mcp-publisher_linux_amd64.tar.gz$" registry_1.5.0_checksums.txt | sha256sum --check
           tar -xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
           rm mcp-publisher_linux_amd64.tar.gz registry_1.5.0_checksums.txt
 

@@ -50,8 +50,9 @@ jobs:
     timeout-minutes: 40
     permissions:
       contents: read
-      actions: read
       pull-requests: write
+    outputs:
+      skip: ${{ steps.discover.outputs.skip }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -93,44 +94,62 @@ jobs:
             | xargs go test -bench=. -benchmem -run='^$' -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
-      - name: 📥 Download previous benchmark data
-        if: steps.discover.outputs.skip == 'false'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          RUN_ID=$(gh run list \
-            --workflow=benchmark-regression.yaml \
-            --branch=main \
-            --status=success \
-            --limit=1 \
-            --json databaseId \
-            --jq '.[0].databaseId')
-          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
-            echo "Downloading baseline from run $RUN_ID"
-            gh run download "$RUN_ID" --name benchmark-data --dir . || echo "No benchmark artifact found — first run will create the baseline"
-          else
-            echo "No previous successful run found — first run will create the baseline"
-          fi
-
-      - name: 📊 Store & compare benchmark results
+      - name: 📊 Compare benchmark results
         if: steps.discover.outputs.skip == 'false'
         uses: benchmark-action/github-action-benchmark@d48d326b4ca9ba73ca0cd0d59f108f9e02a381c7 # v1.20.4
         with:
           tool: go
           output-file-path: ${{ runner.temp }}/bench.txt
-          external-data-json-path: ./benchmark-data.json
+          gh-pages-branch: benchmark-data
+          benchmark-data-dir-path: dev/bench
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
           alert-threshold: "150%"
           fail-threshold: "200%"
           fail-on-alert: ${{ github.event_name == 'pull_request' }}
           comment-on-alert: ${{ github.event_name == 'pull_request' }}
           summary-always: true
 
-      - name: 📤 Upload benchmark data
+      - name: 📤 Upload benchmark results
         if: steps.discover.outputs.skip == 'false' && github.event_name == 'push'
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
-          name: benchmark-data
-          path: ./benchmark-data.json
-          retention-days: 90
+          name: bench-results
+          path: ${{ runner.temp }}/bench.txt
+          retention-days: 1
+
+  benchmark-store:
+    name: 📤 Store Benchmark Data
+    needs: [changes, benchmark]
+    if: >-
+      github.event_name == 'push'
+      && needs.changes.outputs.code == 'true'
+      && needs.benchmark.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: 📥 Download benchmark results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bench-results
+          path: ${{ runner.temp }}
+
+      - name: 📊 Store benchmark data
+        uses: benchmark-action/github-action-benchmark@d48d326b4ca9ba73ca0cd0d59f108f9e02a381c7 # v1.20.4
+        with:
+          tool: go
+          output-file-path: ${{ runner.temp }}/bench.txt
+          gh-pages-branch: benchmark-data
+          benchmark-data-dir-path: dev/bench
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          fail-on-alert: false
+          comment-on-alert: false
+          summary-always: false
