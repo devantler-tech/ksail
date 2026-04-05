@@ -45,7 +45,7 @@ A GitHub composite action that orchestrates a full end-to-end system test of KSa
 
 ## Sub-Action Architecture
 
-```
+```text
 ksail-system-test (orchestrator)
 ├── ksail-test-gen-smoke        # Offline: gen + validate + smoke
 ├── ksail-tenant-test           # Offline: tenant create/delete
