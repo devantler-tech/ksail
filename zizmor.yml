@@ -1,11 +1,16 @@
 rules:
   impostor-commit:
-    # Disabled because zizmor v1.23.1 fatally crashes (rather than producing
-    # an ignorable finding) when the impostor-commit audit encounters a private
-    # GitHub org repo (github/gh-aw-actions) referenced in agentics-maintenance.yml.
-    # The ignore list above was already suppressing all findings for the agentic
-    # workflow files; disabling the rule entirely is the only way to prevent the
-    # crash until this is fixed upstream in zizmor.
+    # Disabled: the org-level zizmor workflow token receives 403 when verifying
+    # SHAs for private org repos (github/gh-aw-actions). zizmor v1.23.1 treats
+    # this as a fatal crash rather than an ignorable finding, so the ignore list
+    # cannot help. Disabling is the only workaround until fixed upstream.
+    disable: true
+  known-vulnerable-actions:
+    # Disabled: same root cause as impostor-commit above. The advisory API
+    # (api.github.com/advisories?ecosystem=actions) returns 403 for the
+    # org-level workflow token, causing a fatal crash in zizmor v1.23.1.
+    # Both impostor-commit and known-vulnerable-actions are the only online-only
+    # audits; all other audits remain active.
     disable: true
   template-injection:
     ignore:
