@@ -4,17 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	dockerengine "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	vclusterconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/vcluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kernelmod"
+	dockercontainer "github.com/docker/docker/api/types/container"
+	dockernetwork "github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/pkg/stdcopy"
 	loftlog "github.com/loft-sh/log"
 	"github.com/loft-sh/vcluster/pkg/cli"
 	cliconfig "github.com/loft-sh/vcluster/pkg/cli/config"
@@ -126,6 +130,9 @@ var errDBusTimeout = errors.New("D-Bus socket did not appear within timeout")
 // errEmptyJoinToken is returned when the SDK's persisted join token
 // file exists but is empty.
 var errEmptyJoinToken = errors.New("join token file is empty")
+
+// errDockerExecFailed is returned when a Docker exec command exits with a non-zero exit code.
+var errDockerExecFailed = errors.New("docker exec failed")
 
 // Provisioner implements the cluster provisioner interface for vCluster's Docker
 // driver (Vind). Create and Delete use the vCluster Go SDK directly, while
@@ -404,48 +411,37 @@ func waitForNetworkRemoval(
 // dockerNetworkExists checks whether a Docker network with the given name
 // exists. Returns false if the network is not found or if Docker is unavailable.
 func dockerNetworkExists(ctx context.Context, networkName string) bool {
-	cmd := exec.CommandContext( //nolint:gosec // G204: fixed args, only networkName varies
-		ctx,
-		"docker",
-		"network",
-		"inspect",
-		networkName,
-	)
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	dockerClient, err := dockerengine.GetDockerClient()
+	if err != nil {
+		return false
+	}
 
-	return cmd.Run() == nil
+	defer func() { _ = dockerClient.Close() }()
+
+	_, err = dockerClient.NetworkInspect(ctx, networkName, dockernetwork.InspectOptions{})
+
+	return err == nil
 }
 
 // removeDockerNetwork attempts to remove a Docker network. Errors are logged
-// including the Docker CLI stderr output (e.g. "has active endpoints") so
-// operators can diagnose why the network couldn't be removed.
+// so operators can diagnose why the network couldn't be removed.
 func removeDockerNetwork(
 	ctx context.Context,
 	networkName string,
 	logger loftlog.Logger,
 ) {
-	cmd := exec.CommandContext( //nolint:gosec // G204: fixed args, only networkName varies
-		ctx,
-		"docker",
-		"network",
-		"rm",
-		networkName,
-	)
-	cmd.Stdout = nil
-
-	var stderr strings.Builder
-
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
+	dockerClient, err := dockerengine.GetDockerClient()
 	if err != nil {
-		stderrMsg := strings.TrimSpace(stderr.String())
-		if stderrMsg != "" {
-			logger.Warnf("failed to remove Docker network %q: %v (%s)", networkName, err, stderrMsg)
-		} else {
-			logger.Warnf("failed to remove Docker network %q: %v", networkName, err)
-		}
+		logger.Warnf("failed to create Docker client for network removal %q: %v", networkName, err)
+
+		return
+	}
+
+	defer func() { _ = dockerClient.Close() }()
+
+	err = dockerClient.NetworkRemove(ctx, networkName)
+	if err != nil {
+		logger.Warnf("failed to remove Docker network %q: %v", networkName, err)
 	}
 }
 
@@ -604,6 +600,13 @@ func recoverFromDBusError(
 // indicating that systemd has initialized far enough for systemctl to work.
 // Uses a ticker with select to ensure immediate response to context cancellation.
 func waitForDBus(ctx context.Context, containerName string) error {
+	dockerClient, err := dockerengine.GetDockerClient()
+	if err != nil {
+		return fmt.Errorf("failed to create Docker client: %w", err)
+	}
+
+	defer func() { _ = dockerClient.Close() }()
+
 	deadline := time.Now().Add(dbusWaitTimeout)
 
 	ticker := time.NewTicker(dbusWaitInterval)
@@ -614,10 +617,38 @@ func waitForDBus(ctx context.Context, containerName string) error {
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled while waiting for D-Bus: %w", ctx.Err())
 		case <-ticker.C:
-			cmd := exec.CommandContext(ctx, "docker", "exec", containerName, //nolint:gosec // G204
-				"test", "-e", "/run/dbus/system_bus_socket")
+			execResp, execErr := dockerClient.ContainerExecCreate(
+				ctx,
+				containerName,
+				dockercontainer.ExecOptions{
+					Cmd:          []string{"test", "-e", "/run/dbus/system_bus_socket"},
+					AttachStdout: true,
+					AttachStderr: true,
+					Tty:          false,
+				},
+			)
+			if execErr != nil {
+				continue
+			}
 
-			if cmd.Run() == nil {
+			attachResp, attachErr := dockerClient.ContainerExecAttach(
+				ctx,
+				execResp.ID,
+				dockercontainer.ExecAttachOptions{},
+			)
+			if attachErr != nil {
+				continue
+			}
+
+			_, _ = io.Copy(io.Discard, attachResp.Reader)
+			attachResp.Close()
+
+			inspectResp, inspectErr := dockerClient.ContainerExecInspect(ctx, execResp.ID)
+			if inspectErr != nil {
+				continue
+			}
+
+			if inspectResp.ExitCode == 0 {
 				return nil
 			}
 		}
@@ -657,6 +688,13 @@ func rerunInstallScript(
 	clusterName string,
 	joinToken string,
 ) error {
+	dockerClient, err := dockerengine.GetDockerClient()
+	if err != nil {
+		return fmt.Errorf("failed to create Docker client: %w", err)
+	}
+
+	defer func() { _ = dockerClient.Close() }()
+
 	scriptURL := fmt.Sprintf(
 		"https://github.com/loft-sh/vcluster/releases/download/v%s/install-standalone.sh",
 		vclusterconfigmanager.ChartVersion(),
@@ -670,15 +708,38 @@ func rerunInstallScript(
 		scriptURL, clusterName, joinToken,
 	)
 
-	cmd := exec.CommandContext( //nolint:gosec // args are internally controlled constants.
-		ctx, "docker", "exec", containerName, "bash", "-c", installCmd,
+	execResp, err := dockerClient.ContainerExecCreate(
+		ctx,
+		containerName,
+		dockercontainer.ExecOptions{
+			Cmd:          []string{"bash", "-c", installCmd},
+			AttachStdout: true,
+			AttachStderr: true,
+		},
 	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("docker exec failed: %w", err)
+		return fmt.Errorf("docker exec create failed: %w", err)
+	}
+
+	attachResp, err := dockerClient.ContainerExecAttach(
+		ctx,
+		execResp.ID,
+		dockercontainer.ExecAttachOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("docker exec attach failed: %w", err)
+	}
+	defer attachResp.Close()
+
+	_, _ = stdcopy.StdCopy(os.Stdout, os.Stderr, attachResp.Reader)
+
+	inspectResp, err := dockerClient.ContainerExecInspect(ctx, execResp.ID)
+	if err != nil {
+		return fmt.Errorf("docker exec inspect failed: %w", err)
+	}
+
+	if inspectResp.ExitCode != 0 {
+		return fmt.Errorf("%w: exit code %d", errDockerExecFailed, inspectResp.ExitCode)
 	}
 
 	return nil

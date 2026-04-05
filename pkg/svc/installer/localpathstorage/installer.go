@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
 
 // ErrManifestFetchFailed is returned when the manifest cannot be fetched from the remote URL.
@@ -133,23 +135,33 @@ func (l *Installer) installLocalPathProvisioner(ctx context.Context) error {
 	return nil
 }
 
-// applyManifest applies the local-path-provisioner manifest using kubectl.
+// applyManifest applies the local-path-provisioner manifest using the kubectl SDK.
 func (l *Installer) applyManifest(ctx context.Context) error {
-	args := []string{"apply", "-f", localPathProvisionerManifestURL}
+	var stdout, stderr strings.Builder
 
-	if l.kubeconfig != "" {
-		args = append([]string{"--kubeconfig", l.kubeconfig}, args...)
-	}
+	kubectlClient := kubectl.NewClient(genericiooptions.IOStreams{
+		In:     strings.NewReader(""),
+		Out:    &stdout,
+		ErrOut: &stderr,
+	})
 
+	applyCmd := kubectlClient.CreateApplyCommand(l.kubeconfig)
+
+	args := []string{"-f", localPathProvisionerManifestURL}
 	if l.context != "" {
-		args = append([]string{"--context", l.context}, args...)
+		args = append(args, "--context", l.context)
 	}
 
-	cmd := exec.CommandContext(ctx, "kubectl", args...)
+	applyCmd.SetArgs(args)
 
-	output, err := cmd.CombinedOutput()
+	err := kubectl.ExecuteSafely(ctx, applyCmd)
 	if err != nil {
-		return fmt.Errorf("kubectl apply failed: %w, output: %s", err, string(output))
+		output := strings.TrimSpace(stdout.String() + stderr.String())
+		if output != "" {
+			return fmt.Errorf("kubectl apply failed: %w, output: %s", err, output)
+		}
+
+		return fmt.Errorf("kubectl apply failed: %w", err)
 	}
 
 	return nil
