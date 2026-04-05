@@ -4061,8 +4061,14 @@ func restoreResourceFile(
 	}
 
 	args := []string{"-f", labeledPath}
+	if flags.existingResourcePolicy != resourcePolicyNone {
+		// Use server-side apply to avoid the 262144-byte annotation limit
+		// that client-side apply hits with large resources (e.g. ArgoCD CRDs).
+		args = append(args, "--server-side", "--force-conflicts")
+	}
+
 	if flags.dryRun {
-		args = append(args, "--dry-run=client")
+		args = append(args, "--dry-run=server")
 	}
 
 	cmd.SetArgs(args)
