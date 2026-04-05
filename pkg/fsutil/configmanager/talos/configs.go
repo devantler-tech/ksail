@@ -231,9 +231,9 @@ func (c *Configs) KubernetesVersion() string {
 	return DefaultKubernetesVersion
 }
 
-// Patches returns the patches used to build this config.
+// Patches returns a copy of the patches used to build this config.
 func (c *Configs) Patches() []Patch {
-	return c.patches
+	return slices.Clone(c.patches)
 }
 
 // IsCNIDisabled returns true if the default CNI is disabled (set to "none").

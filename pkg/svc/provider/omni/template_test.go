@@ -132,3 +132,62 @@ func TestBuildClusterTemplate_WithPatches(t *testing.T) {
 	assert.Contains(t, content, "name: labels")
 	assert.Contains(t, content, "role: worker")
 }
+
+func TestBuildClusterTemplate_EmptyTalosVersion(t *testing.T) {
+	t.Parallel()
+
+	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "test-cluster",
+		TalosVersion:      "",
+		KubernetesVersion: "v1.32.0",
+		ControlPlanes:     1,
+	})
+
+	require.ErrorIs(t, err, omni.ErrTalosVersionRequired)
+}
+
+func TestBuildClusterTemplate_EmptyKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "test-cluster",
+		TalosVersion:      "v1.11.2",
+		KubernetesVersion: "",
+		ControlPlanes:     1,
+	})
+
+	require.ErrorIs(t, err, omni.ErrKubernetesVersionRequired)
+}
+
+func TestBuildClusterTemplate_PatchWithEmptyLines(t *testing.T) {
+	t.Parallel()
+
+	patches := []omni.PatchInfo{
+		{
+			Path:    "cluster/multi-line.yaml",
+			Scope:   omni.PatchScopeCluster,
+			Content: []byte("cluster:\n  allowSchedulingOnControlPlanes: true\n\n  network:\n    cni:\n      name: none\n"),
+		},
+	}
+
+	reader, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "test-cluster",
+		TalosVersion:      "v1.11.2",
+		KubernetesVersion: "v1.32.0",
+		ControlPlanes:     1,
+		Patches:           patches,
+	})
+
+	require.NoError(t, err)
+
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+
+	content := string(data)
+
+	// Verify patch content is included and blank lines are properly indented
+	assert.Contains(t, content, "allowSchedulingOnControlPlanes: true")
+	assert.Contains(t, content, "name: none")
+	// Ensure no unindented blank lines in inline content
+	assert.NotContains(t, content, "\n\n")
+}

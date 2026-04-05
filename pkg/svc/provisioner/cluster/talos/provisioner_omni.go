@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	omniprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 )
@@ -42,7 +43,10 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	}
 
 	// Resolve Talos and Kubernetes versions from Omni options
-	talosVersion, kubernetesVersion := p.resolveOmniVersions()
+	talosVersion, kubernetesVersion, err := p.resolveOmniVersions()
+	if err != nil {
+		return err
+	}
 
 	// Load patches from distribution config directory if available
 	var patches []omniprovider.PatchInfo
@@ -124,8 +128,10 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 }
 
 // resolveOmniVersions determines the Talos and Kubernetes versions for the Omni cluster.
-// Priority: omniOpts > talosConfigs defaults.
-func (p *Provisioner) resolveOmniVersions() (talosVersion, kubernetesVersion string) {
+// TalosVersion must be explicitly set in omniOpts (Omni manages its own Talos versions
+// independently from the local SDK version contract).
+// KubernetesVersion resolves with priority: omniOpts > talosConfigs defaults.
+func (p *Provisioner) resolveOmniVersions() (talosVersion, kubernetesVersion string, err error) {
 	if p.omniOpts != nil {
 		talosVersion = p.omniOpts.TalosVersion
 		kubernetesVersion = p.omniOpts.KubernetesVersion
@@ -135,7 +141,15 @@ func (p *Provisioner) resolveOmniVersions() (talosVersion, kubernetesVersion str
 		kubernetesVersion = p.talosConfigs.KubernetesVersion()
 	}
 
-	return talosVersion, kubernetesVersion
+	if talosVersion == "" {
+		return "", "", fmt.Errorf("%w: set spec.cluster.omni.talosVersion in ksail.yaml", omniprovider.ErrTalosVersionRequired)
+	}
+
+	if kubernetesVersion == "" {
+		return "", "", fmt.Errorf("%w: set spec.cluster.omni.kubernetesVersion in ksail.yaml", omniprovider.ErrKubernetesVersionRequired)
+	}
+
+	return talosVersion, kubernetesVersion, nil
 }
 
 // saveOmniKubeconfig retrieves and saves the kubeconfig from Omni.
@@ -149,13 +163,25 @@ func (p *Provisioner) saveOmniKubeconfig(
 		return fmt.Errorf("failed to get kubeconfig from Omni: %w", err)
 	}
 
-	if err = os.MkdirAll(filepath.Dir(p.options.KubeconfigPath), stateDirectoryPermissions); err != nil {
+	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
+	}
+
+	if err = os.MkdirAll(filepath.Dir(kubeconfigPath), stateDirectoryPermissions); err != nil {
 		return fmt.Errorf("failed to create kubeconfig directory: %w", err)
 	}
 
-	if err = os.WriteFile(p.options.KubeconfigPath, kubeconfigData, kubeconfigFileMode); err != nil {
+	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to canonicalize kubeconfig path: %w", err)
+	}
+
+	if err = os.WriteFile(kubeconfigPath, kubeconfigData, kubeconfigFileMode); err != nil {
 		return fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Kubeconfig saved to %s\n", kubeconfigPath)
 
 	return nil
 }
@@ -171,13 +197,25 @@ func (p *Provisioner) saveOmniTalosconfig(
 		return fmt.Errorf("failed to get talosconfig from Omni: %w", err)
 	}
 
-	if err = os.MkdirAll(filepath.Dir(p.options.TalosconfigPath), stateDirectoryPermissions); err != nil {
+	talosconfigPath, err := fsutil.ExpandHomePath(p.options.TalosconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to expand talosconfig path: %w", err)
+	}
+
+	if err = os.MkdirAll(filepath.Dir(talosconfigPath), stateDirectoryPermissions); err != nil {
 		return fmt.Errorf("failed to create talosconfig directory: %w", err)
 	}
 
-	if err = os.WriteFile(p.options.TalosconfigPath, talosconfigData, kubeconfigFileMode); err != nil {
+	talosconfigPath, err = fsutil.EvalCanonicalPath(talosconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to canonicalize talosconfig path: %w", err)
+	}
+
+	if err = os.WriteFile(talosconfigPath, talosconfigData, kubeconfigFileMode); err != nil {
 		return fmt.Errorf("failed to write talosconfig: %w", err)
 	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Talosconfig saved to %s\n", talosconfigPath)
 
 	return nil
 }

@@ -45,10 +45,24 @@ type TemplateParams struct {
 	Patches []PatchInfo
 }
 
+// ErrTalosVersionRequired is returned when the Talos version is not specified.
+var ErrTalosVersionRequired = fmt.Errorf("omni talosVersion is required for cluster creation")
+
+// ErrKubernetesVersionRequired is returned when the Kubernetes version is not specified.
+var ErrKubernetesVersionRequired = fmt.Errorf("omni kubernetesVersion is required for cluster creation")
+
 // BuildClusterTemplate builds a multi-document YAML cluster template
 // compatible with the Omni SDK's template format.
 // The template contains Cluster, ControlPlane, and Workers documents.
 func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
+	if params.TalosVersion == "" {
+		return nil, ErrTalosVersionRequired
+	}
+
+	if params.KubernetesVersion == "" {
+		return nil, ErrKubernetesVersionRequired
+	}
+
 	var buf bytes.Buffer
 
 	talosVersion := ensureVPrefix(params.TalosVersion)
@@ -144,7 +158,7 @@ func writeInlineContent(buf *bytes.Buffer, content []byte) {
 	lines := strings.Split(strings.TrimRight(string(content), "\n"), "\n")
 	for _, line := range lines {
 		if line == "" {
-			fmt.Fprintf(buf, "\n")
+			fmt.Fprintf(buf, "      \n")
 		} else {
 			fmt.Fprintf(buf, "      %s\n", line)
 		}
@@ -159,9 +173,9 @@ func patchName(path string) string {
 	return strings.TrimSuffix(base, ext)
 }
 
-// LoadPatchesFromDistributionConfig loads Talos config patches from a distribution config directory.
+// loadPatchesFromDistributionConfig loads Talos config patches from a distribution config directory.
 // The directory should contain cluster/, control-planes/, and workers/ subdirectories.
-func LoadPatchesFromDistributionConfig(distributionConfigPath string) ([]talosconfigmanager.Patch, error) {
+func loadPatchesFromDistributionConfig(distributionConfigPath string) ([]talosconfigmanager.Patch, error) {
 	if distributionConfigPath == "" {
 		return nil, nil
 	}

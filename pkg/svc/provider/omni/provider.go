@@ -228,6 +228,8 @@ func (p *Provider) WaitForClusterReady(ctx context.Context, clusterName string, 
 			if phase == specs.ClusterStatusSpec_RUNNING && ready {
 				return nil
 			}
+		} else if !state.IsNotFoundError(err) {
+			return fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
 		}
 
 		select {
