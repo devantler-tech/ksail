@@ -200,5 +200,7 @@ spec:
 
 **Cluster creation hangs or reports no nodes** — No machines are registered and available in your Omni instance. Log in to the [Omni web UI](https://omni.siderolabs.com/), navigate to **Machines**, and verify machines are registered and not already allocated. See [Omni docs: Register a Machine](https://omni.siderolabs.com/docs/how-to-guides/how-to-register-a-machine/).
 
+**`cloud provider requires an external registry`** — Omni-managed nodes cannot reach Docker-based local registries running on your machine. When `spec.localRegistry` is enabled, it must point to an internet-accessible registry (e.g., `ghcr.io/myorg`). KSail returns this error early if a non-external registry is configured.
+
 **`context deadline exceeded` or connection errors** — Verify the endpoint URL is correct and includes the port (`:443`). Check connectivity with `curl -I https://<account>.omni.siderolabs.io:443` and ensure no firewall blocks outbound HTTPS.
 
