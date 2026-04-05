@@ -244,7 +244,7 @@ runs:
             break
           fi
           echo "⚠️ workload install attempt $attempt failed, retrying in 10s…"
-          sleep 10
+          [ "$attempt" -lt 3 ] && sleep 10
         done
         if [ "$install_succeeded" != "true" ]; then
           echo "❌ workload install failed after 3 attempts"
@@ -270,7 +270,7 @@ runs:
             break
           fi
           echo "⚠️ workload apply attempt $attempt failed, retrying in 10s…"
-          sleep 10
+          [ "$attempt" -lt 3 ] && sleep 10
         done
         if [ "$apply_succeeded" != "true" ]; then
           echo "❌ workload apply failed after 3 attempts"
@@ -280,7 +280,6 @@ runs:
     - name: 🧪 ksail workload watch
       id: workload-watch
       if: inputs.apply-overlay-path != ''
-      continue-on-error: true
       shell: bash
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
@@ -421,7 +420,7 @@ runs:
         echo "✅ No unexpected changes detected"
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
+      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-watch.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
