@@ -86,13 +86,6 @@ func WaitForFluxInstanceReady(ctx context.Context, restConfig any) error {
 	return mgr.waitForReady(ctx)
 }
 
-// ExportNewFluxResourcesClient returns the current newFluxResourcesClient function for testing.
-func ExportNewFluxResourcesClient() func(*rest.Config) (any, error) {
-	return func(rc *rest.Config) (any, error) {
-		return newFluxResourcesClient(rc)
-	}
-}
-
 // SetNewFluxResourcesClient allows tests to replace newFluxResourcesClient with a mock.
 func SetNewFluxResourcesClient(fn func(*rest.Config) (any, error)) func() {
 	original := newFluxResourcesClient

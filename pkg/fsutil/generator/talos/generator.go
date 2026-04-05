@@ -28,6 +28,8 @@ const (
 	kubeletCSRApproverFileName = "kubelet-csr-approver.yaml"
 	// clusterNameFileName is the name of the cluster name patch file.
 	clusterNameFileName = "cluster-name.yaml"
+	// imageVerificationFileName is the name of the image verification config document file.
+	imageVerificationFileName = "image-verification.yaml"
 )
 
 // KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
@@ -65,6 +67,11 @@ type Config struct {
 	// When set, generates a cluster-name.yaml patch to set cluster.clusterName.
 	// This name is used for the kubeconfig context (admin@<name>).
 	ClusterName string
+	// EnableImageVerification indicates whether to generate an ImageVerificationConfig template.
+	// When true, generates an image-verification.yaml document with a default skip-all rule
+	// and commented examples for keyless (Cosign/OIDC) and public key verification.
+	// This requires Talos 1.13+.
+	EnableImageVerification bool
 }
 
 // Generator generates the Talos directory structure.
@@ -147,6 +154,14 @@ func (g *Generator) getDirectoriesWithPatches(
 		dirs["cluster"] = true
 	}
 
+	// Image verification config document goes to cluster/ —
+	// Talos configpatcher.LoadPatch correctly recognizes it as an ImageVerificationConfig
+	// document and StrategicMerge appends it to the config bundle (it does NOT overwrite
+	// the MachineConfig since it has a different kind).
+	if model.EnableImageVerification {
+		dirs["cluster"] = true
+	}
+
 	return dirs
 }
 
@@ -200,6 +215,14 @@ func (g *Generator) generateConditionalPatches(
 	// Generate cluster-name patch when custom cluster name is specified
 	if model.ClusterName != "" {
 		err := g.generateClusterNamePatch(rootPath, model.ClusterName, force)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Generate image verification config document when enabled
+	if model.EnableImageVerification {
+		err := g.generateImageVerificationPatch(rootPath, force)
 		if err != nil {
 			return err
 		}
@@ -470,6 +493,59 @@ func (g *Generator) generateClusterNamePatch(
 	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create cluster-name patch: %w", err)
+	}
+
+	return nil
+}
+
+// generateImageVerificationPatch creates a Talos ImageVerificationConfig document.
+// The document is placed in cluster/ alongside other patches. Talos configpatcher recognizes
+// it as a registered config document (kind: ImageVerificationConfig) and StrategicMerge
+// appends it to the config bundle — it does NOT overwrite the MachineConfig.
+// See: https://docs.siderolabs.com/talos/v1.13/security/verifying-image-signatures
+func (g *Generator) generateImageVerificationPatch(
+	rootPath string,
+	force bool,
+) error {
+	patchPath := filepath.Join(rootPath, "cluster", imageVerificationFileName)
+
+	// Check if file already exists
+	_, statErr := os.Stat(patchPath)
+	if statErr == nil && !force {
+		return nil
+	}
+
+	patchContent := `# Talos ImageVerificationConfig (Talos 1.13+)
+# This document enables machine-wide container image signature verification.
+# Rules are evaluated in order; the first matching rule applies.
+# See: https://www.talos.dev/v1.13/talos-guides/configuration/image-verification/
+apiVersion: v1alpha1
+kind: ImageVerificationConfig
+rules:
+  # Default: skip verification for all images.
+  # Remove or modify this rule and add specific verification rules below.
+  - image: "*"
+    skip: true
+  # Example: Verify registry.k8s.io images using keyless (Cosign/OIDC) verification
+  # - image: "registry.k8s.io/*"
+  #   keyless:
+  #     issuer: "https://accounts.google.com"
+  #     subject: "krel-trust@k8s-releng-prod.iam.gserviceaccount.com"
+  # Example: Verify images from a private registry using a public key
+  # - image: "my-registry.example.com/*"
+  #   publicKey:
+  #     certificate: |
+  #       -----BEGIN CERTIFICATE-----
+  #       <your PEM-encoded certificate here>
+  #       -----END CERTIFICATE-----
+  # Example: Deny all images from an untrusted registry
+  # - image: "untrusted-registry.example.com/*"
+  #   deny: true
+`
+
+	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create image-verification config: %w", err)
 	}
 
 	return nil

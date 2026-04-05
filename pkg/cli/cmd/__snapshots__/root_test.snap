@@ -20,6 +20,7 @@ Available Commands:
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   mcp         Start an MCP server
+  tenant      Manage tenant lifecycle
   workload    Manage workload operations
 
 Flags:
@@ -46,6 +47,7 @@ Available Commands:
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   mcp         Start an MCP server
+  tenant      Manage tenant lifecycle
   workload    Manage workload operations
 
 Flags:

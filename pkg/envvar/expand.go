@@ -91,8 +91,3 @@ func resolveDefault(match string, groups []string) string {
 func ExpandBytes(data []byte) []byte {
 	return []byte(Expand(string(data)))
 }
-
-// ExpandBytesWithLookup expands placeholders in byte slice content using the provided lookup function.
-func ExpandBytesWithLookup(data []byte, lookup func(string) (string, bool)) []byte {
-	return []byte(ExpandWithLookup(string(data), lookup))
-}

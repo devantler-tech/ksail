@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -269,4 +271,15 @@ func ExportReadBackupMetadata(tmpDir string) (*BackupMetadata, error) {
 // ExportBackupResourceTypes exposes backupResourceTypes for testing.
 func ExportBackupResourceTypes() []string {
 	return backupResourceTypes()
+}
+
+// ExportEnsureLocalRegistriesReady exports ensureLocalRegistriesReady for testing.
+func ExportEnsureLocalRegistriesReady(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	deps lifecycle.Deps,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	localDeps localregistry.Dependencies,
+) error {
+	return ensureLocalRegistriesReady(cmd, ctx, deps, cfgManager, localDeps)
 }

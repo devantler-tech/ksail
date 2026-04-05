@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -40,6 +41,23 @@ jobs:
       - name: Install dependencies
         working-directory: docs
         run: npm ci
+      - name: Download benchmark data
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_ID=$(gh run list \
+            --workflow=benchmark-regression.yaml \
+            --branch=main \
+            --status=success \
+            --limit=1 \
+            --json databaseId \
+            --jq '.[0].databaseId')
+          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
+            gh run download "$RUN_ID" --name benchmark-data --dir docs/public || echo "No benchmark artifact found"
+          else
+            echo "No benchmark data available yet"
+          fi
       - name: Build with Astro
         working-directory: docs
         run: npm run build

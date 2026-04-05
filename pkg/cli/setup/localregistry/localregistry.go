@@ -1,10 +1,8 @@
 package localregistry
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -240,110 +238,6 @@ func VerifyRegistryAccess(
 	})
 
 	return nil
-}
-
-// Cleanup cleans up the local registry during cluster deletion.
-// This function checks if the local registry container exists and removes it if present,
-// regardless of the config setting. This ensures orphaned containers are cleaned up
-// even when the config file is missing or has default values.
-func Cleanup(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	clusterCfg *v1alpha1.Cluster,
-	deps lifecycle.Deps,
-	deleteVolumes bool,
-	localDeps Dependencies,
-) error {
-	// K3d uses native registry management via Registries.Create.
-	// K3d automatically creates, connects, and manages the registry container
-	// as part of cluster creation, so we skip KSail's manual registry handling.
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3s {
-		return nil
-	}
-
-	// Use cached distribution config from ConfigManager
-	distConfig := cfgManager.DistributionConfig
-
-	return runRegistryAction(
-		cmd,
-		clusterCfg,
-		deps,
-		distConfig.Kind,
-		distConfig.K3d,
-		distConfig.Talos,
-		distConfig.VCluster,
-		CleanupStageInfo(),
-		func(execCtx context.Context, svc registry.Service, regCtx registryContext) error {
-			registryName := registry.BuildLocalRegistryName(regCtx.clusterName)
-			// Use base name for volume to share across clusters
-			volumeName := registry.LocalRegistryBaseName
-
-			if deleteVolumes {
-				status, statusErr := svc.Status(execCtx, registry.StatusOptions{Name: registryName})
-				if statusErr == nil && strings.TrimSpace(status.VolumeName) != "" {
-					volumeName = status.VolumeName
-				}
-			}
-
-			stopOpts := registry.StopOptions{
-				Name:         registryName,
-				ClusterName:  regCtx.clusterName,
-				NetworkName:  regCtx.networkName,
-				DeleteVolume: deleteVolumes,
-				VolumeName:   volumeName,
-			}
-
-			err := svc.Stop(execCtx, stopOpts)
-			if err != nil {
-				return fmt.Errorf("stop local registry: %w", err)
-			}
-
-			return nil
-		},
-		localDeps,
-		false, true, // checkLocalRegistry=false, isCleanup=true
-	)
-}
-
-// Disconnect disconnects the local registry from the cluster network without deleting it.
-// This is used for Talos to allow the cluster network to be removed during deletion
-// without "active endpoints" errors. The container cleanup happens after cluster deletion.
-func Disconnect(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	clusterCfg *v1alpha1.Cluster,
-	_ lifecycle.Deps,
-	clusterName string,
-	localDeps Dependencies,
-) error {
-	// K3d uses native registry management, skip for K3d
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3s {
-		return nil
-	}
-
-	// Only disconnect for Talos - Kind uses a shared "kind" network
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
-		return nil
-	}
-
-	distConfig := cfgManager.DistributionConfig
-
-	regCtx := newRegistryContext(
-		clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.Talos, distConfig.VCluster,
-	)
-	registryName := registry.BuildLocalRegistryName(regCtx.clusterName)
-
-	// Use the cluster name as the network name for Talos
-	networkName := clusterName
-
-	return localDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
-		registryMgr, err := dockerclient.NewRegistryManager(dockerClient)
-		if err != nil {
-			return fmt.Errorf("create registry manager: %w", err)
-		}
-
-		return registryMgr.DisconnectFromNetwork(cmd.Context(), registryName, networkName)
-	})
 }
 
 // WaitForK3dLocalRegistryReady waits for the K3d-managed local registry to be ready.

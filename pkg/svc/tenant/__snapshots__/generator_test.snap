@@ -1,0 +1,33 @@
+
+[TestGenerate_ArgoCDType - 1]
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- app.yaml
+- namespace.yaml
+- project.yaml
+- rolebinding.yaml
+- serviceaccount.yaml
+
+---
+
+[TestGenerate_FluxType - 1]
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- namespace.yaml
+- rolebinding.yaml
+- serviceaccount.yaml
+- sync.yaml
+
+---
+
+[TestGenerate_KubectlType - 1]
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- namespace.yaml
+- rolebinding.yaml
+- serviceaccount.yaml
+
+---

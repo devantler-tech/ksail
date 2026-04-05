@@ -1031,6 +1031,8 @@ Flags:
       --create-namespace   create the release namespace if not present
   -h, --help               help for install
   -n, --namespace string   namespace scope for the request (default "default")
+      --timeout duration   time to wait for any individual Kubernetes operation (default 5m0s)
+      --version string     chart version constraint (default: latest)
       --wait               wait until resources are ready
 
 Global Flags:

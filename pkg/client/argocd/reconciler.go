@@ -55,29 +55,12 @@ func NewReconciler(kubeconfigPath string) (*Reconciler, error) {
 	return r, nil
 }
 
-// NewReconcilerWithClient creates a Reconciler with a provided dynamic client (for testing).
-func NewReconcilerWithClient(dynamicClient dynamic.Interface) *Reconciler {
-	return reconciler.NewWithClient(dynamicClient, newFromBase)
-}
-
 // ReconcileOptions configures the reconciliation behavior.
 type ReconcileOptions struct {
 	// Timeout for waiting for application sync.
 	Timeout time.Duration
 	// HardRefresh requests ArgoCD to refresh caches.
 	HardRefresh bool
-}
-
-// Reconcile triggers and waits for ArgoCD application sync.
-func (r *Reconciler) Reconcile(ctx context.Context, opts ReconcileOptions) error {
-	// First trigger the refresh
-	err := r.TriggerRefresh(ctx, opts.HardRefresh)
-	if err != nil {
-		return err
-	}
-
-	// Then wait for the application to be synced
-	return r.WaitForApplicationReady(ctx, opts.Timeout)
 }
 
 // TriggerRefresh triggers an ArgoCD application refresh.
