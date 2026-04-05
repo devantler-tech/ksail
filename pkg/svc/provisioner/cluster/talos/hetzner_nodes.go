@@ -142,6 +142,24 @@ func (p *Provisioner) collectCreatedHetznerServers(
 	return servers, nil
 }
 
+// hetznerNodesForRole returns the Hetzner provider and existing servers for the given cluster role.
+func (p *Provisioner) hetznerNodesForRole(
+	ctx context.Context,
+	clusterName, role string,
+) (*hetzner.Provider, []*hcloud.Server, error) {
+	hzProvider, err := p.hetznerProvider()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	existing, err := p.listHetznerNodesByRole(ctx, hzProvider, clusterName, role)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list %s nodes: %w", role, err)
+	}
+
+	return hzProvider, existing, nil
+}
+
 // waitForHetznerTalosAPI waits for the Talos API to be reachable on all Hetzner servers.
 // Nodes booted from ISO are in maintenance mode and expose the Talos API on port 50000.
 func (p *Provisioner) waitForHetznerTalosAPI(

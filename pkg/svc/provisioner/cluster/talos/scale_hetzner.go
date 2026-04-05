@@ -37,14 +37,9 @@ func (p *Provisioner) addHetznerNodes(
 	count int,
 	result *clusterupdate.UpdateResult,
 ) error {
-	hzProvider, err := p.hetznerProvider()
+	hzProvider, existing, err := p.hetznerNodesForRole(ctx, clusterName, role)
 	if err != nil {
 		return err
-	}
-
-	existing, err := p.listHetznerNodesByRole(ctx, hzProvider, clusterName, role)
-	if err != nil {
-		return fmt.Errorf("failed to list existing %s nodes: %w", role, err)
 	}
 
 	nextIndex := nextHetznerNodeIndex(existing, clusterName, role)
@@ -61,19 +56,16 @@ func (p *Provisioner) addHetznerNodes(
 		return err
 	}
 
-	servers := make([]*hcloud.Server, 0, count)
-
+	// Record all creation failures before processing so recordFailedChange is sequential.
 	for _, res := range creationResults {
 		if res.err != nil {
 			recordFailedChange(result, role, res.name, res.err)
-
-			return fmt.Errorf("failed to create %s node %s: %w", role, res.name, res.err)
 		}
+	}
 
-		servers = append(servers, res.server)
-
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ %s node %s created (IP: %s)\n",
-			role, res.name, res.server.PublicNet.IPv4.IP.String())
+	servers, err := p.collectCreatedHetznerServers(creationResults, role)
+	if err != nil {
+		return err
 	}
 
 	err = p.configureNewHetznerNodes(ctx, servers, role, result)
@@ -208,14 +200,9 @@ func (p *Provisioner) removeHetznerNodes(
 	count int,
 	result *clusterupdate.UpdateResult,
 ) error {
-	hzProvider, err := p.hetznerProvider()
+	hzProvider, existing, err := p.hetznerNodesForRole(ctx, clusterName, role)
 	if err != nil {
 		return err
-	}
-
-	existing, err := p.listHetznerNodesByRole(ctx, hzProvider, clusterName, role)
-	if err != nil {
-		return fmt.Errorf("failed to list %s nodes: %w", role, err)
 	}
 
 	if count > len(existing) {
