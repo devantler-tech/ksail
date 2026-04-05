@@ -213,7 +213,7 @@ VSCode users can set breakpoints and press F5 with a `.vscode/launch.json` confi
 
 ### GitHub Actions Workflows
 
-- **`ci.yaml`** — Builds, generates schemas and docs, runs unit and system tests, and validates docs and the VS Code extension (runs on every PR and push to main)
+- **`ci.yaml`** — Builds and caches the KSail binary, generates schemas/reference docs, audits docs/vsce dependencies, packages the VS Code extension, and runs system tests (for example via merge queue and `workflow_dispatch`)
 - **`update-skills.yaml`** — Upgrades GitHub Copilot skills daily; opens a PR when updates are available
 - **`test-pages.yaml`** — Validates documentation builds on docs changes
 - **`publish-pages.yaml`** — Deploys documentation to GitHub Pages on main branch pushes
