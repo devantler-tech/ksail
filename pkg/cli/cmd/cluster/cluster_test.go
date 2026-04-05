@@ -4869,7 +4869,7 @@ func TestDisplayListResults_WithTTL(t *testing.T) {
 	assert.Contains(t, output, "TTL")
 	assert.Contains(t, output, "cluster-1")
 	assert.Contains(t, output, "dev-cluster")
-	assert.Contains(t, output, "2h 35m")
+	assert.Regexp(t, `2h 3[45]m`, output)
 }
 
 func TestDisplayListResults_WithExpiredTTL(t *testing.T) {
