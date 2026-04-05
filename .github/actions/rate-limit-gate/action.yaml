@@ -31,8 +31,7 @@ runs:
         elapsed=0
 
         while true; do
-          remaining=$(curl -sf -H "Authorization: token $GH_TOKEN" \
-            https://api.github.com/rate_limit | jq '.resources.core.remaining')
+          remaining=$(gh api /rate_limit --jq '.resources.core.remaining')
 
           if [ "$remaining" -ge "$MIN_REMAINING" ]; then
             echo "✅ GitHub API rate limit OK — $remaining remaining (minimum: $MIN_REMAINING)"
@@ -40,15 +39,21 @@ runs:
           fi
 
           if [ "$elapsed" -ge "$MAX_WAIT" ]; then
-            reset_at=$(curl -sf -H "Authorization: token $GH_TOKEN" \
-              https://api.github.com/rate_limit | jq -r '.resources.core.reset | todate')
+            reset_at=$(gh api /rate_limit --jq '.resources.core.reset | todate')
             echo "::error::GitHub API rate limit exhausted ($remaining remaining, need $MIN_REMAINING). Waited ${elapsed}s (max ${MAX_WAIT}s). Resets at $reset_at."
             exit 1
           fi
 
-          echo "⏳ Rate limit low ($remaining remaining, need $MIN_REMAINING) — retrying in ${interval}s (elapsed: ${elapsed}s / ${MAX_WAIT}s)"
-          sleep "$interval"
-          elapsed=$((elapsed + interval))
+          # Cap sleep to remaining budget so we don't overshoot MAX_WAIT
+          budget=$((MAX_WAIT - elapsed))
+          sleep_time=$interval
+          if [ "$sleep_time" -gt "$budget" ]; then
+            sleep_time=$budget
+          fi
+
+          echo "⏳ Rate limit low ($remaining remaining, need $MIN_REMAINING) — retrying in ${sleep_time}s (elapsed: ${elapsed}s / ${MAX_WAIT}s)"
+          sleep "$sleep_time"
+          elapsed=$((elapsed + sleep_time))
           interval=$((interval * 2))
           if [ "$interval" -gt "$max_interval" ]; then
             interval=$max_interval
