@@ -274,9 +274,10 @@ func BenchmarkEncrypt(b *testing.B) {
 			filePath := filepath.Join(tmpDir, "secret.yaml")
 
 			b.ResetTimer()
-			b.StopTimer()
 
 			for b.Loop() {
+				b.StopTimer()
+
 				err := os.WriteFile(filePath, scenario.content, 0o600)
 				if err != nil {
 					b.Fatalf("failed to write test file: %v", err)
@@ -345,9 +346,10 @@ func BenchmarkRoundtrip_Minimal(b *testing.B) {
 	keyGroups := defaultKeyGroups(b)
 
 	b.ResetTimer()
-	b.StopTimer()
 
 	for b.Loop() {
+		b.StopTimer()
+
 		filePath := writeTempSecret(b, content)
 
 		encOpts, err := newEncryptOpts(filePath, keyGroups)
