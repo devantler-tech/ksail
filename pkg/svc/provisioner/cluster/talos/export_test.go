@@ -51,4 +51,3 @@ func CreateOmniProviderForTest(opts v1alpha1.OptionsOmni) error {
 
 	return err
 }
-
