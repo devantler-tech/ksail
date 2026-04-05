@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -171,28 +170,4 @@ func patchName(path string) string {
 	ext := filepath.Ext(base)
 
 	return strings.TrimSuffix(base, ext)
-}
-
-// loadPatchesFromDistributionConfig loads Talos config patches from a distribution config directory.
-// The directory should contain cluster/, control-planes/, and workers/ subdirectories.
-func loadPatchesFromDistributionConfig(distributionConfigPath string) ([]talosconfigmanager.Patch, error) {
-	if distributionConfigPath == "" {
-		return nil, nil
-	}
-
-	// Check if the directory exists
-	info, err := os.Stat(distributionConfigPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-
-		return nil, fmt.Errorf("failed to access distribution config path: %w", err)
-	}
-
-	if !info.IsDir() {
-		return nil, fmt.Errorf("distribution config path is not a directory: %s", distributionConfigPath)
-	}
-
-	return talosconfigmanager.LoadPatches(distributionConfigPath)
 }
