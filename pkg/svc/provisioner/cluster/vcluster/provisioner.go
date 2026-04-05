@@ -131,6 +131,9 @@ var errDBusTimeout = errors.New("D-Bus socket did not appear within timeout")
 // file exists but is empty.
 var errEmptyJoinToken = errors.New("join token file is empty")
 
+// errDockerExecFailed is returned when a Docker exec command exits with a non-zero exit code.
+var errDockerExecFailed = errors.New("docker exec failed")
+
 // Provisioner implements the cluster provisioner interface for vCluster's Docker
 // driver (Vind). Create and Delete use the vCluster Go SDK directly, while
 // Start/Stop/List/Exists delegate to the Docker infrastructure provider.
@@ -412,7 +415,7 @@ func dockerNetworkExists(ctx context.Context, networkName string) bool {
 	if err != nil {
 		return false
 	}
-	defer dockerClient.Close()
+	defer func() { _ = dockerClient.Close() }()
 
 	_, err = dockerClient.NetworkInspect(ctx, networkName, dockernetwork.InspectOptions{})
 
@@ -432,7 +435,7 @@ func removeDockerNetwork(
 
 		return
 	}
-	defer dockerClient.Close()
+	defer func() { _ = dockerClient.Close() }()
 
 	err = dockerClient.NetworkRemove(ctx, networkName)
 	if err != nil {
@@ -599,7 +602,7 @@ func waitForDBus(ctx context.Context, containerName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %w", err)
 	}
-	defer dockerClient.Close()
+	defer func() { _ = dockerClient.Close() }()
 
 	deadline := time.Now().Add(dbusWaitTimeout)
 
@@ -678,7 +681,7 @@ func rerunInstallScript(
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %w", err)
 	}
-	defer dockerClient.Close()
+	defer func() { _ = dockerClient.Close() }()
 
 	scriptURL := fmt.Sprintf(
 		"https://github.com/loft-sh/vcluster/releases/download/v%s/install-standalone.sh",
@@ -716,7 +719,7 @@ func rerunInstallScript(
 	}
 
 	if inspectResp.ExitCode != 0 {
-		return fmt.Errorf("docker exec failed with exit code %d", inspectResp.ExitCode)
+		return fmt.Errorf("%w: exit code %d", errDockerExecFailed, inspectResp.ExitCode)
 	}
 
 	return nil
