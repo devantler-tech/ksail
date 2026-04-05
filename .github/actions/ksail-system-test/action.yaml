@@ -214,8 +214,10 @@ runs:
         OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         set -o pipefail
+        # Strip init-only flags that cluster update does not accept
+        UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
-        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS | tee /tmp/update-dry-run-output.txt
+        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS | tee /tmp/update-dry-run-output.txt
         # Fail early if the dry run detects unexpected changes.
         # The cluster was just created with the same config, so zero changes are expected.
         if ! grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" /tmp/update-dry-run-output.txt; then
@@ -237,8 +239,10 @@ runs:
         OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         set -o pipefail
+        # Strip init-only flags that cluster update does not accept
+        UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
-        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS | tee /tmp/update-output.txt
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS | tee /tmp/update-output.txt
         # Fail early if the update detects unexpected changes.
         # The cluster was just created with the same config, so zero changes are expected.
         if ! grep -q "No changes detected" /tmp/update-output.txt; then

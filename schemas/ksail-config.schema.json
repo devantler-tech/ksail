@@ -182,6 +182,13 @@
                     "type": "object"
                   },
                   "type": "array"
+                },
+                "imageVerification": {
+                  "type": "string",
+                  "enum": [
+                    "Enabled",
+                    "Disabled"
+                  ]
                 }
               },
               "additionalProperties": false,
