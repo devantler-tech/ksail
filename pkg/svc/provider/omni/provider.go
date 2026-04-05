@@ -2,6 +2,7 @@ package omni
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -196,6 +197,10 @@ func (p *Provider) CreateCluster(
 		return provider.ErrProviderUnavailable
 	}
 
+	if templateReader == nil {
+		return ErrTemplateReaderRequired
+	}
+
 	omniState := p.client.Omni().State()
 
 	err := operations.SyncTemplate(ctx, templateReader, out, omniState, operations.SyncOptions{})
@@ -239,6 +244,14 @@ func (p *Provider) WaitForClusterReady(
 			omnires.NewClusterStatus(clusterName).Metadata(),
 		)
 		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return fmt.Errorf(
+					"timed out waiting for cluster %q to become ready: %w",
+					clusterName,
+					err,
+				)
+			}
+
 			if !state.IsNotFoundError(err) {
 				return fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
 			}

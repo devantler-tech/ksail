@@ -8,4 +8,6 @@ var (
 	ErrEndpointRequired = errors.New("omni endpoint is required")
 	// ErrServiceAccountKeyRequired is returned when the Omni service account key is not set.
 	ErrServiceAccountKeyRequired = errors.New("omni service account key is not set")
+	// ErrTemplateReaderRequired is returned when templateReader is nil.
+	ErrTemplateReaderRequired = errors.New("templateReader must not be nil")
 )

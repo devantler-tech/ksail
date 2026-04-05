@@ -62,24 +62,20 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	if p.options.KubeconfigPath != "" {
 		_, _ = fmt.Fprintf(p.logWriter, "  Fetching kubeconfig from Omni...\n")
 
-		kubeconfigPath, err := p.saveOmniKubeconfig(ctx, omniProv, clusterName)
+		_, err := p.saveOmniKubeconfig(ctx, omniProv, clusterName)
 		if err != nil {
 			return fmt.Errorf("failed to save kubeconfig: %w", err)
 		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Kubeconfig saved to %s\n", kubeconfigPath)
 	}
 
 	// Save talosconfig
 	if p.options.TalosconfigPath != "" {
 		_, _ = fmt.Fprintf(p.logWriter, "  Fetching talosconfig from Omni...\n")
 
-		talosconfigPath, err := p.saveOmniTalosconfig(ctx, omniProv, clusterName)
+		_, err := p.saveOmniTalosconfig(ctx, omniProv, clusterName)
 		if err != nil {
 			return fmt.Errorf("failed to save talosconfig: %w", err)
 		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Talosconfig saved to %s\n", talosconfigPath)
 	}
 
 	_, _ = fmt.Fprintf(
@@ -196,6 +192,8 @@ func (p *Provisioner) saveOmniKubeconfig(
 		return "", fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
 
+	_, _ = fmt.Fprintf(p.logWriter, "Kubeconfig saved to %s\n", kubeconfigPath)
+
 	return kubeconfigPath, nil
 }
 
@@ -230,6 +228,8 @@ func (p *Provisioner) saveOmniTalosconfig(
 	if err != nil {
 		return "", fmt.Errorf("failed to write talosconfig: %w", err)
 	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Talosconfig saved to %s\n", talosconfigPath)
 
 	return talosconfigPath, nil
 }

@@ -44,7 +44,7 @@ func TestStartNodes_NilClient(t *testing.T) {
 	err := prov.StartNodes(context.Background(), "test-cluster")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
 func TestStopNodes_NilClient(t *testing.T) {
@@ -55,7 +55,7 @@ func TestStopNodes_NilClient(t *testing.T) {
 	err := prov.StopNodes(context.Background(), "test-cluster")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
 func TestListNodes_NilClient(t *testing.T) {
@@ -102,7 +102,7 @@ func TestDeleteNodes_NilClient(t *testing.T) {
 	err := prov.DeleteNodes(context.Background(), "test-cluster")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
 func TestClusterExists_NilClient(t *testing.T) {
@@ -125,7 +125,7 @@ func TestCreateCluster_NilClient(t *testing.T) {
 	err := prov.CreateCluster(context.Background(), nil, nil)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
 func TestWaitForClusterReady_NilClient(t *testing.T) {
@@ -136,7 +136,7 @@ func TestWaitForClusterReady_NilClient(t *testing.T) {
 	err := prov.WaitForClusterReady(context.Background(), "test-cluster", time.Second)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
 func TestGetKubeconfig_NilClient(t *testing.T) {
