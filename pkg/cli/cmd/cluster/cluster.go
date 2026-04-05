@@ -924,7 +924,7 @@ func isHelmReleaseSecret(obj *unstructured.Unstructured) bool {
 
 	secretType, _, _ := unstructured.NestedString(obj.Object, "type")
 
-	return secretType == "helm.sh/release.v1"
+	return secretType == "helm.sh/release.v1" //nolint:gosec // Kubernetes Secret type identifier, not credentials
 }
 
 // NewClusterCmd creates the parent cluster command and wires lifecycle subcommands beneath it.
