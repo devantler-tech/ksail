@@ -358,11 +358,8 @@ jobs:
     name: 📊 Code Coverage
     runs-on: ubuntu-latest
     needs: [changes]
-    # Only run on push to main, skip if no code files changed
-    if: |
-      github.event_name == 'push'
-      && github.ref == 'refs/heads/main'
-      && needs.changes.outputs.code == 'true'
+    # Run on PRs and merge-queue events (for patch coverage), plus push to main (for overall coverage)
+    if: needs.changes.outputs.code == 'true'
     permissions:
       contents: write
     steps:

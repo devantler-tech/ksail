@@ -116,12 +116,7 @@ func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
 }
 
 // ensureVPrefix ensures the version string starts with "v".
-// Returns an empty string if version is empty.
 func ensureVPrefix(version string) string {
-	if version == "" {
-		return ""
-	}
-
 	if !strings.HasPrefix(version, "v") {
 		return "v" + version
 	}

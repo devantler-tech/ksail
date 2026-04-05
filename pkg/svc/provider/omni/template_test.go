@@ -87,6 +87,32 @@ func TestBuildClusterTemplate_VersionPrefix(t *testing.T) {
 	assert.Contains(t, content, "version: v1.32.0")
 }
 
+func TestBuildClusterTemplate_EmptyTalosVersion(t *testing.T) {
+	t.Parallel()
+
+	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "test",
+		TalosVersion:      "",
+		KubernetesVersion: "1.32.0",
+		ControlPlanes:     1,
+	})
+
+	require.ErrorIs(t, err, omni.ErrTalosVersionRequired)
+}
+
+func TestBuildClusterTemplate_EmptyKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "test",
+		TalosVersion:      "1.11.2",
+		KubernetesVersion: "",
+		ControlPlanes:     1,
+	})
+
+	require.ErrorIs(t, err, omni.ErrKubernetesVersionRequired)
+}
+
 func TestBuildClusterTemplate_WithPatches(t *testing.T) {
 	t.Parallel()
 
@@ -131,4 +157,34 @@ func TestBuildClusterTemplate_WithPatches(t *testing.T) {
 	assert.Contains(t, content, "hostname: cp")
 	assert.Contains(t, content, "name: labels")
 	assert.Contains(t, content, "role: worker")
+}
+
+func TestBuildClusterTemplate_PatchWithEmptyLines(t *testing.T) {
+	t.Parallel()
+
+	// Patch content with an empty line — exercises the empty-line branch in writeInlineContent.
+	patches := []omni.PatchInfo{
+		{
+			Path:  "cluster/multi-line.yaml",
+			Scope: omni.PatchScopeCluster,
+			Content: []byte("machine:\n  network:\n\n    hostname: test\n"),
+		},
+	}
+
+	reader, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "test-cluster",
+		TalosVersion:      "v1.11.2",
+		KubernetesVersion: "v1.32.0",
+		ControlPlanes:     1,
+		Patches:           patches,
+	})
+
+	require.NoError(t, err)
+
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+
+	content := string(data)
+	assert.Contains(t, content, "hostname: test")
+	assert.Contains(t, content, "name: multi-line")
 }
