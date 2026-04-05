@@ -51,3 +51,13 @@ func CreateOmniProviderForTest(opts v1alpha1.OptionsOmni) error {
 
 	return err
 }
+
+// ApplyNodeScalingChangesForTest exposes applyNodeScalingChanges for unit testing.
+func (p *Provisioner) ApplyNodeScalingChangesForTest(
+	ctx context.Context,
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
+}
