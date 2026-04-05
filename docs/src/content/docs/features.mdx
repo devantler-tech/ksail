@@ -118,7 +118,7 @@ Onboard teams to a shared Kubernetes cluster with RBAC isolation, GitOps sync re
 
 | Type      | Generated resources                                            |
 | --------- | -------------------------------------------------------------- |
-| `flux`    | Namespaces, ServiceAccount, RBAC bindings, OCIRepository/GitRepository + Kustomization |
+| `flux`    | Namespaces, ServiceAccount, RBAC bindings, OCIRepository or GitRepository + Kustomization |
 | `argocd`  | Namespaces, ServiceAccount, RBAC bindings, AppProject + Application |
 | `kubectl` | Namespaces, ServiceAccount, RBAC bindings only (no GitOps sync) |
 
@@ -141,7 +141,7 @@ ksail tenant delete my-team \
   --git-token "$GITHUB_TOKEN"
 ```
 
-The tenant type is auto-detected from `gitOpsEngine` in `ksail.yaml` when `--type` is omitted. Pass `--register` to automatically add the tenant to the nearest `kustomization.yaml`. GitHub repository scaffolding (create repo, push initial files) requires `--git-provider github`, `--git-repo`, and `--git-token`. Flux OCI sync sources also require `--git-repo` even when you are not scaffolding a repository, because it is used to build the `OCIRepository` URL.
+The tenant type is auto-detected from `gitOpsEngine` in `ksail.yaml` when `--type` is omitted. Pass `--register` to automatically add the tenant to the nearest `kustomization.yaml`. GitHub repository scaffolding (create repo, push initial files) uses `--git-provider github` and `--git-repo`, and requires authentication via `--git-token` or the `GITHUB_TOKEN` environment variable. If no token is provided, `ksail tenant create` still succeeds but skips GitHub repository scaffolding with a warning. Flux OCI sync sources also require `--git-repo` even when you are not scaffolding a repository, because it is used to build the `OCIRepository` URL.
 
 **Commands:** [`ksail tenant`](/cli-flags/tenant/tenant-root/)
 
