@@ -42,77 +42,40 @@ func (p *Provisioner) addHetznerNodes(
 		return err
 	}
 
-	// Discover existing nodes to determine the next index
 	existing, err := p.listHetznerNodesByRole(ctx, hzProvider, clusterName, role)
 	if err != nil {
 		return fmt.Errorf("failed to list existing %s nodes: %w", role, err)
 	}
 
 	nextIndex := nextHetznerNodeIndex(existing, clusterName, role)
-	serverType := p.hetznerServerType(role)
 
-	// Ensure infrastructure exists (network, firewall, etc.)
 	infra, err := p.ensureHetznerInfra(ctx, hzProvider, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to ensure Hetzner infrastructure: %w", err)
 	}
 
-	retryOpts := p.hetznerRetryOpts()
-
-	type serverResult struct {
-		server *hcloud.Server
-		err    error
-	}
-
-	results := make([]serverResult, count)
-
-	group, _ := errgroup.WithContext(ctx)
-	group.SetLimit(maxConcurrentHetznerOps)
-
-	for i := range count {
-		nodeIndex := nextIndex + i
-
-		group.Go(func() error {
-			nodeName := fmt.Sprintf("%s-%s-%d", clusterName, role, nodeIndex)
-
-			server, createErr := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
-				Name:             nodeName,
-				ServerType:       serverType,
-				ISOID:            p.talosOpts.ISO,
-				Location:         p.hetznerOpts.Location,
-				Labels:           hetzner.NodeLabels(clusterName, role, nodeIndex),
-				NetworkID:        infra.NetworkID,
-				PlacementGroupID: infra.PlacementGroupID,
-				SSHKeyID:         infra.SSHKeyID,
-				FirewallIDs:      []int64{infra.FirewallID},
-			}, retryOpts)
-
-			results[i] = serverResult{server: server, err: createErr}
-
-			return nil // errors collected in results
-		})
-	}
-
-	if waitErr := group.Wait(); waitErr != nil {
-		return fmt.Errorf("unexpected error during Hetzner node creation: %w", waitErr)
+	creationResults, err := p.launchHetznerScaleCreation(
+		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), nextIndex, count,
+	)
+	if err != nil {
+		return err
 	}
 
 	servers := make([]*hcloud.Server, 0, count)
 
-	for _, res := range results {
+	for _, res := range creationResults {
 		if res.err != nil {
-			recordFailedChange(result, role, "", res.err)
+			recordFailedChange(result, role, res.name, res.err)
 
-			return fmt.Errorf("failed to create %s server: %w", role, res.err)
+			return fmt.Errorf("failed to create %s node %s: %w", role, res.name, res.err)
 		}
 
 		servers = append(servers, res.server)
 
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Created %s server %s (IP: %s)\n",
-			role, res.server.Name, res.server.PublicNet.IPv4.IP.String())
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ %s node %s created (IP: %s)\n",
+			role, res.name, res.server.PublicNet.IPv4.IP.String())
 	}
 
-	// Wait for Talos API and apply configuration
 	err = p.configureNewHetznerNodes(ctx, servers, role, result)
 	if err != nil {
 		return err
@@ -123,6 +86,57 @@ func (p *Provisioner) addHetznerNodes(
 	}
 
 	return nil
+}
+
+// launchHetznerScaleCreation creates count Hetzner servers starting at nextIndex, in parallel.
+// Results are returned indexed — goroutines always return nil so group.Wait() only fails on
+// unexpected errgroup-level errors.
+func (p *Provisioner) launchHetznerScaleCreation(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName, role string,
+	infra HetznerInfra,
+	retryOpts hetzner.ServerRetryOpts,
+	nextIndex, count int,
+) ([]hetznerNodeCreationResult, error) {
+	results := make([]hetznerNodeCreationResult, count)
+
+	group, _ := errgroup.WithContext(ctx)
+	group.SetLimit(maxConcurrentHetznerOps)
+
+	for nodeIdx := range count {
+		group.Go(func() error {
+			nodeNumber := nextIndex + nodeIdx
+			nodeName := fmt.Sprintf("%s-%s-%d", clusterName, role, nodeNumber)
+
+			server, createErr := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
+				Name:             nodeName,
+				ServerType:       p.hetznerServerType(role),
+				ISOID:            p.talosOpts.ISO,
+				Location:         p.hetznerOpts.Location,
+				Labels:           hetzner.NodeLabels(clusterName, role, nodeNumber),
+				NetworkID:        infra.NetworkID,
+				PlacementGroupID: infra.PlacementGroupID,
+				SSHKeyID:         infra.SSHKeyID,
+				FirewallIDs:      []int64{infra.FirewallID},
+			}, retryOpts)
+
+			results[nodeIdx] = hetznerNodeCreationResult{
+				name:   nodeName,
+				server: server,
+				err:    createErr,
+			}
+
+			return nil // errors collected in results
+		})
+	}
+
+	waitErr := group.Wait()
+	if waitErr != nil {
+		return nil, fmt.Errorf("unexpected error during Hetzner scale-up: %w", waitErr)
+	}
+
+	return results, nil
 }
 
 // configureNewHetznerNodes waits for Talos API on new servers and applies config.
@@ -136,7 +150,6 @@ func (p *Provisioner) configureNewHetznerNodes(
 		return nil
 	}
 
-	// Wait for Talos API on all new nodes (already parallelized)
 	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for Talos API on %d new %s node(s)...\n",
 		len(servers), role)
 
@@ -145,29 +158,46 @@ func (p *Provisioner) configureNewHetznerNodes(
 		return fmt.Errorf("failed waiting for Talos API on new nodes: %w", err)
 	}
 
-	// Apply configuration to new nodes in parallel
 	config := p.configForRole(role)
 	if config == nil {
 		return fmt.Errorf("%w: %s", ErrNoConfigForRole, role)
 	}
 
+	// Collect per-node apply results so recordFailedChange is called sequentially after
+	// the parallel apply completes, avoiding concurrent appends to result.FailedChanges.
+	type applyResult struct {
+		serverName string
+		err        error
+	}
+
+	applyResults := make([]applyResult, len(servers))
+
 	group, _ := errgroup.WithContext(ctx)
 	group.SetLimit(maxConcurrentHetznerOps)
 
-	for _, server := range servers {
+	for idx, server := range servers {
 		group.Go(func() error {
 			applyErr := p.applyConfigToNode(ctx, server, config)
-			if applyErr != nil {
-				recordFailedChange(result, role, server.Name, applyErr)
+			applyResults[idx] = applyResult{serverName: server.Name, err: applyErr}
 
-				return fmt.Errorf("failed to apply config to %s: %w", server.Name, applyErr)
-			}
-
-			return nil
+			return nil // errors collected in applyResults
 		})
 	}
 
-	return group.Wait()
+	waitErr := group.Wait()
+	if waitErr != nil {
+		return fmt.Errorf("unexpected error during config apply: %w", waitErr)
+	}
+
+	for _, res := range applyResults {
+		if res.err != nil {
+			recordFailedChange(result, role, res.serverName, res.err)
+
+			return fmt.Errorf("failed to apply config to %s: %w", res.serverName, res.err)
+		}
+	}
+
+	return nil
 }
 
 // removeHetznerNodes removes Hetzner servers for a given role (highest-index first).

@@ -22,6 +22,34 @@ import (
 // A value of 3 balances throughput and API rate-limit headroom.
 const maxConcurrentHetznerOps = 3
 
+// hetznerNodeCreationResult holds the outcome of a single Hetzner server creation attempt.
+type hetznerNodeCreationResult struct {
+	name   string
+	server *hcloud.Server
+	err    error
+}
+
+// runParallelOnServers runs fn for each server concurrently, bounded by limit concurrent ops.
+// Errors from fn should be self-describing (include server name etc.) — this helper adds no
+// extra context. Callers in the same package may return its result directly without wrapcheck.
+func runParallelOnServers(
+	ctx context.Context,
+	servers []*hcloud.Server,
+	limit int,
+	operation func(*hcloud.Server) error,
+) error {
+	group, _ := errgroup.WithContext(ctx)
+	group.SetLimit(limit)
+
+	for _, server := range servers {
+		group.Go(func() error {
+			return operation(server)
+		})
+	}
+
+	return group.Wait() //nolint:wrapcheck // errors are wrapped by operation
+}
+
 // createHetznerNodes creates a batch of Hetzner servers for a given role (control-plane or worker).
 //
 // Parameters:
@@ -45,22 +73,14 @@ func (p *Provisioner) createHetznerNodes(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Creating %d %s node(s)...\n", opts.Count, opts.Role)
 
-	// Build retry options from Hetzner config
-	retryOpts := hetzner.ServerRetryOpts{
-		LogWriter: p.logWriter,
-	}
+	retryOpts := hetzner.ServerRetryOpts{LogWriter: p.logWriter}
 
 	if p.hetznerOpts != nil {
 		retryOpts.FallbackLocations = p.hetznerOpts.FallbackLocations
 		retryOpts.AllowPlacementFallback = p.hetznerOpts.PlacementGroupFallbackToNone
 	}
 
-	type serverResult struct {
-		server *hcloud.Server
-		err    error
-	}
-
-	results := make([]serverResult, opts.Count)
+	results := make([]hetznerNodeCreationResult, opts.Count)
 
 	group, _ := errgroup.WithContext(ctx)
 	group.SetLimit(maxConcurrentHetznerOps)
@@ -81,21 +101,31 @@ func (p *Provisioner) createHetznerNodes(
 				FirewallIDs:      []int64{infra.FirewallID},
 			}, retryOpts)
 
-			results[nodeIndex] = serverResult{server: server, err: err}
+			results[nodeIndex] = hetznerNodeCreationResult{name: nodeName, server: server, err: err}
 
 			return nil // errors collected in results
 		})
 	}
 
-	if waitErr := group.Wait(); waitErr != nil {
+	waitErr := group.Wait()
+	if waitErr != nil {
 		return nil, fmt.Errorf("unexpected error during Hetzner node creation: %w", waitErr)
 	}
 
-	servers := make([]*hcloud.Server, 0, opts.Count)
+	return p.collectCreatedHetznerServers(results, opts.Role)
+}
+
+// collectCreatedHetznerServers processes creation results sequentially, logging each success
+// and returning the first failure with the node name included in the error.
+func (p *Provisioner) collectCreatedHetznerServers(
+	results []hetznerNodeCreationResult,
+	role string,
+) ([]*hcloud.Server, error) {
+	servers := make([]*hcloud.Server, 0, len(results))
 
 	for _, res := range results {
 		if res.err != nil {
-			return nil, fmt.Errorf("failed to create %s node: %w", opts.Role, res.err)
+			return nil, fmt.Errorf("failed to create %s node %s: %w", role, res.name, res.err)
 		}
 
 		servers = append(servers, res.server)
@@ -103,8 +133,8 @@ func (p *Provisioner) createHetznerNodes(
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"  ✓ %s node %s created (IP: %s)\n",
-			opts.Role,
-			res.server.Name,
+			role,
+			res.name,
 			res.server.PublicNet.IPv4.IP.String(),
 		)
 	}
@@ -118,67 +148,58 @@ func (p *Provisioner) waitForHetznerTalosAPI(
 	ctx context.Context,
 	servers []*hcloud.Server,
 ) error {
-	group, _ := errgroup.WithContext(ctx)
-	group.SetLimit(len(servers))
+	return runParallelOnServers(ctx, servers, len(servers), func(server *hcloud.Server) error {
+		serverIP := server.PublicNet.IPv4.IP.String()
+		endpoint := fmt.Sprintf("%s:%d", serverIP, talosAPIPort)
 
-	for _, server := range servers {
-		group.Go(func() error {
-			serverIP := server.PublicNet.IPv4.IP.String()
-			endpoint := fmt.Sprintf("%s:%d", serverIP, talosAPIPort)
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Waiting for Talos API on %s (%s)...\n",
+			server.Name,
+			endpoint,
+		)
 
-			_, _ = fmt.Fprintf(
-				p.logWriter,
-				"  Waiting for Talos API on %s (%s)...\n",
-				server.Name,
-				endpoint,
-			)
+		err := retry.Constant(talosAPIWaitTimeout, retry.WithUnits(retryInterval)).
+			RetryWithContext(ctx, func(ctx context.Context) error {
+				// Try to establish a TLS connection to verify the Talos API is responding.
+				// In maintenance mode the node has no certificate yet, so TLS verification
+				// must be skipped. Most APIs return "not implemented" which is expected.
+				retryClient, connErr := talosclient.New(ctx,
+					talosclient.WithEndpoints(serverIP),
+					talosclient.WithTLSConfig(&tls.Config{
+						InsecureSkipVerify: true, //nolint:gosec // Maintenance mode: no cert yet
+					}),
+				)
+				if connErr != nil {
+					return retry.ExpectedError(connErr)
+				}
 
-			err := retry.Constant(talosAPIWaitTimeout, retry.WithUnits(retryInterval)).
-				RetryWithContext(ctx, func(ctx context.Context) error {
-					// Try to establish a TLS connection to verify the Talos API is responding
-					// In maintenance mode, we can only verify the connection works - most APIs
-					// return "not implemented in maintenance mode" which is expected
-					retryClient, connErr := talosclient.New(ctx,
-						talosclient.WithEndpoints(serverIP),
-						talosclient.WithTLSConfig(&tls.Config{
-							InsecureSkipVerify: true, //nolint:gosec // Maintenance mode requires insecure connection
-						}),
-					)
-					if connErr != nil {
-						return retry.ExpectedError(connErr)
+				defer retryClient.Close() //nolint:errcheck
+
+				// "Unimplemented" response means the API is reachable in maintenance mode —
+				// the node is ready for config application.
+				_, versionErr := retryClient.Version(ctx)
+				if versionErr != nil {
+					if strings.Contains(versionErr.Error(), "Unimplemented") {
+						return nil
 					}
 
-					defer retryClient.Close() //nolint:errcheck
+					return retry.ExpectedError(versionErr)
+				}
 
-					// Try to get version - in maintenance mode this may return "not implemented"
-					// but that error indicates the API is reachable and responding
-					_, versionErr := retryClient.Version(ctx)
-					if versionErr != nil {
-						// "Unimplemented" means the API is reachable but in maintenance mode
-						// This is actually a success - the node is ready for config application
-						if strings.Contains(versionErr.Error(), "Unimplemented") {
-							return nil
-						}
+				return nil
+			})
+		if err != nil {
+			return fmt.Errorf("timeout waiting for Talos API on %s: %w", server.Name, err)
+		}
 
-						return retry.ExpectedError(versionErr)
-					}
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Talos API reachable on %s\n", server.Name)
 
-					return nil
-				})
-			if err != nil {
-				return fmt.Errorf("timeout waiting for Talos API on %s: %w", server.Name, err)
-			}
-
-			_, _ = fmt.Fprintf(p.logWriter, "  ✓ Talos API reachable on %s\n", server.Name)
-
-			return nil
-		})
-	}
-
-	return group.Wait()
+		return nil
+	})
 }
 
-// applyHetznerConfigs applies machine configuration to all Hetzner nodes.
+// applyHetznerConfigs applies machine configuration to all Hetzner nodes in parallel.
 // It uses the insecure Talos client to connect to nodes in maintenance mode.
 func (p *Provisioner) applyHetznerConfigs(
 	ctx context.Context,
@@ -187,7 +208,6 @@ func (p *Provisioner) applyHetznerConfigs(
 	workerServers []*hcloud.Server,
 	configBundle *bundle.Bundle,
 ) error {
-	// Get control-plane and worker configs
 	cpConfig := configBundle.ControlPlane()
 	workerConfig := configBundle.Worker()
 
@@ -220,7 +240,12 @@ func (p *Provisioner) applyHetznerConfigs(
 		})
 	}
 
-	return group.Wait()
+	err := group.Wait()
+	if err != nil {
+		return fmt.Errorf("applying configs to Hetzner nodes: %w", err)
+	}
+
+	return nil
 }
 
 // detachISOsAndReboot handles the post-config-apply phase of Hetzner Talos installation.
@@ -274,29 +299,22 @@ func (p *Provisioner) waitForServersToBeReachable(
 	ctx context.Context,
 	servers []*hcloud.Server,
 ) error {
-	group, _ := errgroup.WithContext(ctx)
-	group.SetLimit(len(servers))
+	return runParallelOnServers(ctx, servers, len(servers), func(server *hcloud.Server) error {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Waiting for %s to install, reboot, and become reachable...\n",
+			server.Name,
+		)
 
-	for _, server := range servers {
-		group.Go(func() error {
-			_, _ = fmt.Fprintf(
-				p.logWriter,
-				"  Waiting for %s to install, reboot, and become reachable...\n",
-				server.Name,
-			)
+		err := p.waitForServerReachable(ctx, server)
+		if err != nil {
+			return err
+		}
 
-			err := p.waitForServerReachable(ctx, server)
-			if err != nil {
-				return err
-			}
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ %s is reachable after install\n", server.Name)
 
-			_, _ = fmt.Fprintf(p.logWriter, "  ✓ %s is reachable after install\n", server.Name)
-
-			return nil
-		})
-	}
-
-	return group.Wait()
+		return nil
+	})
 }
 
 // waitForServerReachable polls a single server until a TCP connection succeeds on the Talos API port.
