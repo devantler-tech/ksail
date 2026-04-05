@@ -2816,8 +2816,8 @@ type clusterWithDistribution struct {
 	Distribution v1alpha1.Distribution
 }
 
-// ttlIndent is the indentation prefix for TTL annotation lines in list output.
-const ttlIndent = "  "
+// tableColumnGap is the minimum gap between columns in table output.
+const tableColumnGap = 3
 
 const listLongDesc = `List all Kubernetes clusters managed by KSail.
 
@@ -2825,20 +2825,19 @@ By default, lists clusters from all distributions across all providers.
 Use --provider to filter results to a specific provider.
 
 Output Format:
-  <provider>: <cluster_name>[, <cluster_name>...]
+  PROVIDER   DISTRIBUTION   CLUSTER
+  docker     Vanilla        dev-cluster
+  docker     K3s            test-cluster
+  hetzner    Talos          prod-cluster
 
-Each line groups clusters by provider. For example:
-  docker: dev-cluster, test-cluster
+When any cluster has a TTL set, a TTL column is included:
+  PROVIDER   DISTRIBUTION   CLUSTER       TTL
+  docker     K3s            dev-cluster   2h 30m
 
-Distribution and TTL metadata are shown on separate indented lines:
-  docker: dev-cluster, test-cluster
-    dev-cluster [Vanilla]
-    test-cluster [K3s, TTL: 2h 30m]
-
-The provider name (docker or hetzner) and each cluster name from the
-output can be used directly with other cluster commands:
-  ksail cluster delete --name <cluster_name> --provider <provider>
-  ksail cluster stop --name <cluster_name> --provider <provider>
+The PROVIDER and CLUSTER values from the output can be used directly
+with other cluster commands:
+  ksail cluster delete --name <cluster> --provider <provider>
+  ksail cluster stop --name <cluster> --provider <provider>
 
 Examples:
   # List all clusters
@@ -3187,76 +3186,96 @@ func displayListResults(
 		return
 	}
 
-	// Group clusters by provider, preserving distribution and TTL info for formatting.
-	type clusterEntry struct {
-		name         string
-		distribution v1alpha1.Distribution
-		ttl          *state.TTLInfo
+	// Build ordered rows following provider order for consistent output.
+	type tableRow struct {
+		provider     string
+		distribution string
+		cluster      string
+		ttl          string
 	}
 
-	providerClusters := make(map[v1alpha1.Provider][]clusterEntry)
-	for _, r := range results {
-		providerClusters[r.Provider] = append(providerClusters[r.Provider], clusterEntry{
-			name:         r.ClusterName,
-			distribution: r.Distribution,
-			ttl:          r.TTL,
-		})
-	}
+	hasTTL := false
 
-	// Output in provider order for consistent output.
-	// Format explicitly labels cluster names for AI parsing.
+	var rows []tableRow
+
 	for _, prov := range providers {
-		entries, exists := providerClusters[prov]
-		if !exists || len(entries) == 0 {
-			continue
+		for _, r := range results {
+			if r.Provider != prov {
+				continue
+			}
+
+			ttlStr := ""
+			if r.TTL != nil {
+				hasTTL = true
+
+				remaining := r.TTL.Remaining()
+				if remaining <= 0 {
+					ttlStr = "EXPIRED"
+				} else {
+					ttlStr = formatRemainingDuration(remaining)
+				}
+			}
+
+			rows = append(rows, tableRow{
+				provider:     strings.ToLower(string(r.Provider)),
+				distribution: string(r.Distribution),
+				cluster:      r.ClusterName,
+				ttl:          ttlStr,
+			})
+		}
+	}
+
+	// Calculate column widths.
+	provW := len("PROVIDER")
+	distW := len("DISTRIBUTION")
+	clusterW := len("CLUSTER")
+
+	for _, row := range rows {
+		if len(row.provider) > provW {
+			provW = len(row.provider)
 		}
 
-		clusterNames := make([]string, 0, len(entries))
-		for _, e := range entries {
-			clusterNames = append(clusterNames, e.name)
+		if len(row.distribution) > distW {
+			distW = len(row.distribution)
 		}
 
-		_, _ = fmt.Fprintf(
-			writer,
-			"%s: %s\n",
-			strings.ToLower(string(prov)),
-			strings.Join(clusterNames, ", "),
+		if len(row.cluster) > clusterW {
+			clusterW = len(row.cluster)
+		}
+	}
+
+	// Print header and rows.
+	if hasTTL {
+		_, _ = fmt.Fprintf(writer, "%-*s%-*s%-*s%s\n",
+			provW+tableColumnGap, "PROVIDER",
+			distW+tableColumnGap, "DISTRIBUTION",
+			clusterW+tableColumnGap, "CLUSTER",
+			"TTL",
 		)
 
-		// Print annotation lines with distribution and TTL on separate indented lines.
-		for _, e := range entries {
-			label := formatAnnotationLabel(e.distribution, e.ttl)
-			if label != "" {
-				_, _ = fmt.Fprintf(writer, "%s%s %s\n", ttlIndent, e.name, label)
-			}
+		for _, row := range rows {
+			_, _ = fmt.Fprintf(writer, "%-*s%-*s%-*s%s\n",
+				provW+tableColumnGap, row.provider,
+				distW+tableColumnGap, row.distribution,
+				clusterW+tableColumnGap, row.cluster,
+				row.ttl,
+			)
+		}
+	} else {
+		_, _ = fmt.Fprintf(writer, "%-*s%-*s%s\n",
+			provW+tableColumnGap, "PROVIDER",
+			distW+tableColumnGap, "DISTRIBUTION",
+			"CLUSTER",
+		)
+
+		for _, row := range rows {
+			_, _ = fmt.Fprintf(writer, "%-*s%-*s%s\n",
+				provW+tableColumnGap, row.provider,
+				distW+tableColumnGap, row.distribution,
+				row.cluster,
+			)
 		}
 	}
-}
-
-// formatAnnotationLabel builds a combined annotation label from distribution and TTL info.
-// Returns "" when there is nothing to annotate.
-// Examples: "[Vanilla]", "[TTL: 2h 30m]", "[Vanilla, TTL: 2h 30m]", "[TTL: EXPIRED]".
-func formatAnnotationLabel(dist v1alpha1.Distribution, ttl *state.TTLInfo) string {
-	var parts []string
-
-	if dist != "" {
-		parts = append(parts, string(dist))
-	}
-
-	if ttl != nil {
-		remaining := ttl.Remaining()
-		if remaining <= 0 {
-			parts = append(parts, "TTL: EXPIRED")
-		} else {
-			parts = append(parts, "TTL: "+formatRemainingDuration(remaining))
-		}
-	}
-
-	if len(parts) == 0 {
-		return ""
-	}
-
-	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 // minutesPerHour is the number of minutes in one hour.

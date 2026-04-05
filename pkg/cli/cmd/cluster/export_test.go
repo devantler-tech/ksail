@@ -12,7 +12,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -123,11 +122,6 @@ const ExportOutputFormatText = outputFormatText
 // ExportFormatDiffTable exports formatDiffTable for benchmarking.
 func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, totalChanges int) string {
 	return formatDiffTable(diff, totalChanges)
-}
-
-// ExportFormatAnnotationLabel exports formatAnnotationLabel for testing.
-func ExportFormatAnnotationLabel(dist v1alpha1.Distribution, ttl *state.TTLInfo) string {
-	return formatAnnotationLabel(dist, ttl)
 }
 
 // ExportStripParenthetical exports stripParenthetical for testing.

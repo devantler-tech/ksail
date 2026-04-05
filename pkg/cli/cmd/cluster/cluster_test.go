@@ -29,7 +29,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -4837,49 +4836,6 @@ users:
 	_, err := cluster.ExportPickCluster(cmd, deps)
 	require.Error(t, err)
 	require.ErrorIs(t, err, cluster.ErrNoClusters)
-}
-
-func TestFormatAnnotationLabel_NoDistributionNoTTL(t *testing.T) {
-	t.Parallel()
-
-	result := cluster.ExportFormatAnnotationLabel("", nil)
-	assert.Empty(t, result)
-}
-
-func TestFormatAnnotationLabel_DistributionOnly(t *testing.T) {
-	t.Parallel()
-
-	result := cluster.ExportFormatAnnotationLabel(v1alpha1.DistributionVanilla, nil)
-	assert.Equal(t, "[Vanilla]", result)
-}
-
-func TestFormatAnnotationLabel_TTLOnly(t *testing.T) {
-	t.Parallel()
-
-	// Add several minutes of buffer so slow CI runners do not cross a minute boundary.
-	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(2*time.Hour + 35*time.Minute + 30*time.Second)}
-
-	result := cluster.ExportFormatAnnotationLabel("", ttl)
-	assert.Equal(t, "[TTL: 2h 35m]", result)
-}
-
-func TestFormatAnnotationLabel_DistributionAndTTL(t *testing.T) {
-	t.Parallel()
-
-	// Add several minutes of buffer so slow CI runners do not cross a minute boundary.
-	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(1*time.Hour + 5*time.Minute + 30*time.Second)}
-
-	result := cluster.ExportFormatAnnotationLabel(v1alpha1.DistributionK3s, ttl)
-	assert.Equal(t, "[K3s, TTL: 1h 5m]", result)
-}
-
-func TestFormatAnnotationLabel_ExpiredTTL(t *testing.T) {
-	t.Parallel()
-
-	ttl := &state.TTLInfo{ExpiresAt: time.Now().Add(-1 * time.Hour)}
-
-	result := cluster.ExportFormatAnnotationLabel(v1alpha1.DistributionTalos, ttl)
-	assert.Equal(t, "[Talos, TTL: EXPIRED]", result)
 }
 
 func TestStripParenthetical_NoSuffix(t *testing.T) {
