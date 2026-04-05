@@ -516,6 +516,10 @@ func executeGetAndSave(
 		return 0, fmt.Errorf("failed to sanitize output: %w", err)
 	}
 
+	if len(sanitized) == 0 {
+		return 0, nil
+	}
+
 	err = os.WriteFile(outputPath, []byte(sanitized), filePerm)
 	if err != nil {
 		return 0, fmt.Errorf("failed to write resource file: %w", err)
