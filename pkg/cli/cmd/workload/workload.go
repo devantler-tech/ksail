@@ -1772,7 +1772,9 @@ const (
 
 // kustomizationFileNames lists all kustomization filenames recognized by kubectl.
 // Used by hasKustomizationFile and findKustomizationDir for consistent detection.
-var kustomizationFileNames = []string{"kustomization.yaml", "kustomization.yml", "Kustomization"} //nolint:gochecknoglobals // package-level constant slice; Go does not support const slices
+//
+//nolint:gochecknoglobals // package-level constant slice; Go does not support const slices
+var kustomizationFileNames = []string{"kustomization.yaml", "kustomization.yml", "Kustomization"}
 
 // ErrBuildFailed is returned when a kustomize build or manifest validation fails.
 var ErrBuildFailed = errors.New("build failed")

@@ -2376,7 +2376,8 @@ func TestMatchFluxKustomizationsNormalizesLeadingDotSlash(t *testing.T) {
 	require.ElementsMatch(t, []string{"with-dotslash", "without-dotslash"}, got)
 }
 
-func TestHasKustomizationFile(t *testing.T) { //nolint:funlen // six focused subtests; splitting further would reduce readability
+//nolint:funlen // six focused subtests; splitting further would reduce readability
+func TestHasKustomizationFile(t *testing.T) {
 	t.Parallel()
 
 	t.Run("returns_true_when_kustomization_yaml_exists", func(t *testing.T) {
