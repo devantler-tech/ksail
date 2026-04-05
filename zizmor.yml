@@ -51,3 +51,10 @@ rules:
       - daily-workflow-maintenance.lock.yml
       - repo-assist.lock.yml
       - weekly-strategy.lock.yml
+  secrets-outside-env:
+    ignore:
+      - ci-doctor.lock.yml
+      - daily-docs.lock.yml
+      - daily-workflow-maintenance.lock.yml
+      - repo-assist.lock.yml
+      - weekly-strategy.lock.yml

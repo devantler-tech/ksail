@@ -213,7 +213,7 @@ runs:
             break
           fi
           echo "⚠️ workload install attempt $attempt failed, retrying in 10s…"
-          sleep 10
+          if [ "$attempt" -lt 3 ]; then sleep 10; fi
         done
         if [ "$install_succeeded" != "true" ]; then
           echo "❌ workload install failed after 3 attempts"
@@ -236,7 +236,7 @@ runs:
             break
           fi
           echo "⚠️ workload apply attempt $attempt failed, retrying in 10s…"
-          sleep 10
+          if [ "$attempt" -lt 3 ]; then sleep 10; fi
         done
         if [ "$apply_succeeded" != "true" ]; then
           echo "❌ workload apply failed after 3 attempts"
@@ -246,7 +246,6 @@ runs:
     - name: 🧪 ksail workload watch
       id: workload-watch
       if: inputs.apply-overlay-path != ''
-      continue-on-error: true
       shell: bash
       run: |
         # Create a temporary directory with a simple manifest
@@ -270,8 +269,14 @@ runs:
                 - name: test
                   image: traefik/whoami:v1.10
         EOF
+        cat > "$WATCH_DIR/kustomization.yaml" <<'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - deployment.yaml
+        EOF
         # Apply the initial manifest
-        ksail workload apply -f "$WATCH_DIR/deployment.yaml"
+        ksail workload apply -k "$WATCH_DIR"
         ksail workload wait --for=condition=Available deployment/ksail-watch-test --timeout=120s
         # Start watcher in background
         ksail workload watch --path "$WATCH_DIR" &
@@ -371,7 +376,7 @@ runs:
         echo "✅ No unexpected changes detected"
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
+      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-watch.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
