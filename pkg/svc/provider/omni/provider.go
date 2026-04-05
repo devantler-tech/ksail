@@ -20,12 +20,18 @@ import (
 // Provider implements provider.Provider for Sidero Omni managed Talos clusters.
 type Provider struct {
 	client *omniclient.Client
+	st     state.State
 }
 
 // NewProvider creates a new Omni provider with the given client.
 func NewProvider(client *omniclient.Client) *Provider {
+	if client == nil {
+		return &Provider{}
+	}
+
 	return &Provider{
 		client: client,
+		st:     client.Omni().State(),
 	}
 }
 
@@ -65,15 +71,13 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 
 // ListNodes returns all machines allocated to the given cluster in Omni.
 func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provider.NodeInfo, error) {
-	if p.client == nil {
+	if p.st == nil {
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	omniState := p.client.Omni().State()
-
 	machines, err := safe.StateListAll[*omnires.ClusterMachineStatus](
 		ctx,
-		omniState,
+		p.st,
 		state.WithLabelQuery(resource.LabelEqual(omnires.LabelCluster, clusterName)),
 	)
 	if err != nil {
@@ -106,13 +110,11 @@ func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provide
 
 // ListAllClusters returns the names of all clusters managed in Omni.
 func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
-	if p.client == nil {
+	if p.st == nil {
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	omniState := p.client.Omni().State()
-
-	clusters, err := safe.StateListAll[*omnires.Cluster](ctx, omniState)
+	clusters, err := safe.StateListAll[*omnires.Cluster](ctx, p.st)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list clusters: %w", err)
 	}
@@ -139,16 +141,17 @@ func (p *Provider) NodesExist(ctx context.Context, clusterName string) (bool, er
 // DeleteNodes removes all machines for the given cluster by deleting the cluster in Omni.
 // This deallocates machines from the cluster but does not destroy the physical machines.
 func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
-	if p.client == nil {
+	if p.st == nil {
 		return provider.ErrProviderUnavailable
 	}
 
-	omniState := p.client.Omni().State()
-
-	// Delete the cluster resource which deallocates all machines
+	// Use TeardownAndDestroy to follow the COSI lifecycle:
+	// 1. Initiates teardown (transitions resource to PhaseTearingDown)
+	// 2. Blocks until all controllers remove their finalizers
+	// 3. Destroys the resource once finalizer list is empty
 	cluster := omnires.NewCluster(clusterName)
 
-	err := omniState.Destroy(ctx, cluster.Metadata())
+	err := p.st.TeardownAndDestroy(ctx, cluster.Metadata())
 	if err != nil {
 		if state.IsNotFoundError(err) {
 			return nil
@@ -169,15 +172,13 @@ func (p *Provider) Client() *omniclient.Client {
 // This checks for the Cluster resource itself, not nodes — a newly created cluster
 // may not have nodes allocated yet.
 func (p *Provider) ClusterExists(ctx context.Context, clusterName string) (bool, error) {
-	if p.client == nil {
+	if p.st == nil {
 		return false, provider.ErrProviderUnavailable
 	}
 
-	omniState := p.client.Omni().State()
-
 	cluster := omnires.NewCluster(clusterName)
 
-	_, err := safe.StateGet[*omnires.Cluster](ctx, omniState, cluster.Metadata())
+	_, err := safe.StateGet[*omnires.Cluster](ctx, p.st, cluster.Metadata())
 	if err != nil {
 		if state.IsNotFoundError(err) {
 			return false, nil
@@ -197,7 +198,7 @@ func (p *Provider) CreateCluster(
 	templateReader io.Reader,
 	out io.Writer,
 ) error {
-	if p.client == nil {
+	if p.st == nil {
 		return provider.ErrProviderUnavailable
 	}
 
@@ -209,9 +210,7 @@ func (p *Provider) CreateCluster(
 		out = io.Discard
 	}
 
-	omniState := p.client.Omni().State()
-
-	err := operations.SyncTemplate(ctx, templateReader, out, omniState, operations.SyncOptions{})
+	err := operations.SyncTemplate(ctx, templateReader, out, p.st, operations.SyncOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to sync template to Omni: %w", err)
 	}
@@ -229,11 +228,9 @@ func (p *Provider) WaitForClusterReady(
 	clusterName string,
 	timeout time.Duration,
 ) error {
-	if p.client == nil {
+	if p.st == nil {
 		return provider.ErrProviderUnavailable
 	}
-
-	omniState := p.client.Omni().State()
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -242,7 +239,7 @@ func (p *Provider) WaitForClusterReady(
 	defer ticker.Stop()
 
 	for {
-		ready, err := isClusterRunningAndReady(ctx, omniState, clusterName)
+		ready, err := isClusterRunningAndReady(ctx, p.st, clusterName)
 		if err != nil {
 			return err
 		}
@@ -327,5 +324,5 @@ func (p *Provider) GetTalosconfig(ctx context.Context, clusterName string) ([]by
 
 // IsAvailable returns true if the provider is ready for use.
 func (p *Provider) IsAvailable() bool {
-	return p.client != nil
+	return p.client != nil && p.st != nil
 }

@@ -1,0 +1,400 @@
+
+[TestCreate_CSIEnabled_InstallsOnKind - 1]
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► creating 'test-quay.io' for 'https://quay.io'
+► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+► connecting 'test-quay.io' to 'kind'
+► connecting 'test-registry.k8s.io' to 'kind'
+✔ registries connected to docker network
+
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
+
+📦 Installing infrastructure components...
+► csi installing
+✔ csi installed
+✔ 1 installed
+---
+
+[TestCreate_DefaultCSI_DoesNotInstall - 1]
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► creating 'test-quay.io' for 'https://quay.io'
+► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+► connecting 'test-quay.io' to 'kind'
+► connecting 'test-registry.k8s.io' to 'kind'
+✔ registries connected to docker network
+
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
+---
+
+[TestCreate_DefaultCertManager_DoesNotInstall - 1]
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► creating 'test-quay.io' for 'https://quay.io'
+► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+► connecting 'test-quay.io' to 'kind'
+► connecting 'test-registry.k8s.io' to 'kind'
+✔ registries connected to docker network
+
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
+---
+
+[TestCreate_EnabledCertManager_PrintsInstallStage - 1]
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► creating 'test-quay.io' for 'https://quay.io'
+► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+► connecting 'test-quay.io' to 'kind'
+► connecting 'test-registry.k8s.io' to 'kind'
+✔ registries connected to docker network
+
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
+
+📦 Installing infrastructure components...
+► cert-manager installing
+✔ cert-manager installed
+✔ 1 installed
+---
+
+[TestCreate_GitOps_PrintsInstallStage/ArgoCD - 1]
+🗄️ Create local registry...
+► creating local registry
+✔ local registry created
+
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► creating 'test-quay.io' for 'https://quay.io'
+► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+► connecting 'test-quay.io' to 'kind'
+► connecting 'test-registry.k8s.io' to 'kind'
+✔ registries connected to docker network
+
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
+
+🔌 Attach local registry...
+► attaching local registry to cluster
+✔ local registry attached to cluster
+
+📦 Installing GitOps engines...
+► argocd installing
+✔ argocd installed
+✔ 1 installed
+
+⚙️ Configuring components...
+► configuring argocd resources
+ℹ Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443
+✔ components configured
+---
+
+[TestCreate_GitOps_PrintsInstallStage/Flux - 1]
+🗄️ Create local registry...
+► creating local registry
+✔ local registry created
+
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► creating 'test-quay.io' for 'https://quay.io'
+► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+► connecting 'test-quay.io' to 'kind'
+► connecting 'test-registry.k8s.io' to 'kind'
+✔ registries connected to docker network
+
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
+
+🔌 Attach local registry...
+► attaching local registry to cluster
+✔ local registry attached to cluster
+
+📦 Installing GitOps engines...
+► flux installing
+✔ flux installed
+✔ 1 installed
+
+⚙️ Configuring components...
+► applying custom resources
+► waiting for flux to be ready
+✔ components configured
+---
+
+[TestCreate_LocalRegistryDisabled_SkipsRegistryStages - 1]
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► creating 'test-quay.io' for 'https://quay.io'
+► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+► connecting 'test-quay.io' to 'kind'
+► connecting 'test-registry.k8s.io' to 'kind'
+✔ registries connected to docker network
+
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
+---
+
+[TestCreate_Minimal_PrintsOnlyClusterLifecycle - 1]
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► creating 'test-quay.io' for 'https://quay.io'
+► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+► connecting 'test-quay.io' to 'kind'
+► connecting 'test-registry.k8s.io' to 'kind'
+✔ registries connected to docker network
+
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
+---
+
+[TestDelete_Confirmation_Accepted - 1]
+⚠ The following resources will be deleted:
+    Cluster:  my-cluster
+    Provider: Docker
+Type "yes" to confirm deletion: 
+🗑️ Delete cluster...
+► deleting cluster 'my-cluster' on Docker
+✔ cluster deleted
+---
+
+[TestDelete_Confirmation_Denied - 1]
+⚠ The following resources will be deleted:
+    Cluster:  my-cluster
+    Provider: Docker
+Type "yes" to confirm deletion: 
+---
+
+[TestDelete_ContextBasedDetection_ClusterNotFound - 1]
+🗑️ Delete cluster...
+► deleting cluster 'nonexistent' on Docker
+---
+
+[TestDelete_ContextBasedDetection_DeletesCluster/K3d_context_pattern - 1]
+🗑️ Delete cluster...
+► deleting cluster 'dev-cluster' on Docker
+✔ cluster deleted
+---
+
+[TestDelete_ContextBasedDetection_DeletesCluster/Kind_context_pattern - 1]
+🗑️ Delete cluster...
+► deleting cluster 'my-cluster' on Docker
+✔ cluster deleted
+---
+
+[TestDelete_ContextBasedDetection_DeletesCluster/Talos_context_pattern - 1]
+🗑️ Delete cluster...
+► deleting cluster 'talos-homelab' on Docker
+✔ cluster deleted
+---
+
+[TestDelete_ForceFlag_SkipsConfirmation - 1]
+🗑️ Delete cluster...
+► deleting cluster 'my-cluster' on Docker
+✔ cluster deleted
+---
+
+[TestDelete_NonTTY_SkipsConfirmation - 1]
+🗑️ Delete cluster...
+► deleting cluster 'my-cluster' on Docker
+✔ cluster deleted
+---
+
+[TestHandleInitRunE_SuccessWithOutputFlag - 1]
+📂 Initialize project...
+✚ created 'ksail.yaml'
+✚ created 'kind.yaml'
+✚ created 'kind/mirrors/docker.io/hosts.toml'
+✚ created 'kind/mirrors/ghcr.io/hosts.toml'
+✚ created 'kind/mirrors/quay.io/hosts.toml'
+✚ created 'kind/mirrors/registry.k8s.io/hosts.toml'
+✚ created 'k8s/kustomization.yaml'
+✔ initialized project
+
+---
+
+[TestHandleInitRunE_UsesWorkingDirectoryWhenOutputUnset - 1]
+📂 Initialize project...
+✚ created 'ksail.yaml'
+✚ created 'kind.yaml'
+✚ created 'kind/mirrors/docker.io/hosts.toml'
+✚ created 'kind/mirrors/ghcr.io/hosts.toml'
+✚ created 'kind/mirrors/quay.io/hosts.toml'
+✚ created 'kind/mirrors/registry.k8s.io/hosts.toml'
+✚ created 'k8s/kustomization.yaml'
+✔ initialized project
+
+---
+
+[TestListCmd_AllProviders - 1]
+docker: test-cluster
+
+---
+
+[TestListCmd_MultipleClustersFound_DockerProvider - 1]
+docker: cluster-1, cluster-2, cluster-3
+
+---
+
+[TestListCmd_NoClusterFound_DockerProvider - 1]
+No clusters found.
+
+---
+
+[TestListCmd_SingleClusterFound_DockerProvider - 1]
+docker: test-cluster
+
+---

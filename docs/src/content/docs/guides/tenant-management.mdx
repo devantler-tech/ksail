@@ -1,0 +1,140 @@
+---
+title: Tenant Management
+description: Onboard and offboard tenants with RBAC isolation and GitOps sync resources using ksail tenant create and ksail tenant delete.
+---
+
+KSail can generate multi-tenancy manifests for platform teams that need to onboard workload teams onto a shared cluster. Each tenant gets namespace isolation, RBAC, and optional GitOps sync resources.
+
+## Tenant Types
+
+| Type      | RBAC | GitOps sync resources | Requires GitOps engine |
+|-----------|------|-----------------------|------------------------|
+| `flux`    | ✓    | OCIRepository / GitRepository + Kustomization | Flux     |
+| `argocd`  | ✓    | AppProject + Application                       | ArgoCD   |
+| `kubectl` | ✓    | None                                           | No       |
+
+The `--type` flag defaults to auto-detect from `ksail.yaml` `gitOpsEngine`.
+
+## Create a Tenant
+
+```bash
+# Auto-detect type (reads gitOpsEngine from ksail.yaml)
+ksail tenant create my-team
+
+# Explicit type
+ksail tenant create my-team --type flux
+
+# Custom namespace(s) — default is the tenant name
+ksail tenant create my-team --namespace my-team --namespace my-team-staging
+
+# Custom ClusterRole — default is 'edit'
+ksail tenant create my-team --cluster-role view
+
+# Output to a specific directory
+ksail tenant create my-team --output platform/tenants/
+```
+
+The command writes manifests to `<output>/<tenant-name>/`:
+
+```text
+platform/tenants/my-team/
+├── kustomization.yaml
+├── namespace.yaml
+├── serviceaccount.yaml
+├── rolebinding.yaml
+└── (flux or argocd sync resources if applicable)
+```
+
+### Register in kustomization.yaml
+
+Add `--register` to automatically append the tenant to the nearest `kustomization.yaml`:
+
+```bash
+ksail tenant create my-team --register
+```
+
+### Flux Tenants
+
+For Flux tenants, specify the sync source type and registry or Git repo:
+
+```bash
+# OCI source (default)
+ksail tenant create my-team --type flux \
+  --sync-source oci \
+  --registry oci://ghcr.io/my-org
+
+# Git source
+ksail tenant create my-team --type flux \
+  --sync-source git \
+  --git-provider github \
+  --git-repo my-org/my-team-infra
+```
+
+To scaffold a new Git repository for the tenant (requires `--git-provider github`):
+
+```bash
+ksail tenant create my-team --type flux \
+  --git-provider github \
+  --git-repo my-org/my-team-infra \
+  --git-token "${GITHUB_TOKEN}"
+```
+
+### ArgoCD Tenants
+
+ArgoCD tenants generate an AppProject, Application, and argocd-rbac-cm ConfigMap entry:
+
+```bash
+ksail tenant create my-team --type argocd \
+  --git-provider github \
+  --git-repo my-org/my-team-infra
+```
+
+### kubectl Tenants
+
+kubectl tenants generate RBAC only (no sync resources):
+
+```bash
+ksail tenant create my-team --type kubectl
+```
+
+## Delete a Tenant
+
+```bash
+# Remove manifests and unregister from kustomization.yaml (default)
+ksail tenant delete my-team
+
+# Also delete the tenant Git repository
+ksail tenant delete my-team --delete-repo \
+  --git-provider github \
+  --git-repo my-org/my-team-infra \
+  --git-token "${GITHUB_TOKEN}"
+
+# Keep kustomization.yaml entry
+ksail tenant delete my-team --unregister=false
+```
+
+## Applying Tenant Manifests
+
+After generating manifests, apply them to the cluster using the workflow that matches how the tenant was created:
+
+```bash
+# If you created the tenant without --register,
+# apply the generated tenant directory directly
+ksail workload apply -k platform/tenants/my-team/
+
+# If you created the tenant with --register, or platform/tenants/kustomization.yaml
+# already includes the tenant directory, apply the parent directory
+ksail workload apply -k platform/tenants/
+```
+
+Or if using GitOps, push and reconcile:
+
+```bash
+ksail workload push
+ksail workload reconcile
+```
+
+## CLI Reference
+
+- [`ksail tenant create`](/cli-flags/tenant/tenant-create/) — all flags and defaults
+- [`ksail tenant delete`](/cli-flags/tenant/tenant-delete/) — all flags and defaults

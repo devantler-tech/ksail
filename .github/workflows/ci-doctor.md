@@ -47,7 +47,7 @@ safe-outputs:
     report-as-issue: false
   create-issue:
     title-prefix: "${{ github.workflow }} - "
-    close-older-issues: true
+    close-older-issues: false
     labels: [automation, ci]
   add-comment:
 

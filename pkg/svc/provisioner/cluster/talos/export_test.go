@@ -106,3 +106,13 @@ func (p *Provisioner) GetOmniNodesByRoleForTest(
 ) ([]NodeWithRoleForTest, error) {
 	return p.getOmniNodesByRole(ctx, clusterName)
 }
+
+// ApplyNodeScalingChangesForTest exposes applyNodeScalingChanges for unit testing.
+func (p *Provisioner) ApplyNodeScalingChangesForTest(
+	ctx context.Context,
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
+}
