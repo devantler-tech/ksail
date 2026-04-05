@@ -3250,11 +3250,21 @@ func displayListResults(
 		)
 
 		for _, row := range rows {
-			_, _ = fmt.Fprintf(writer, "%-*s%-*s%-*s%s\n",
+			if row.ttl != "" {
+				_, _ = fmt.Fprintf(writer, "%-*s%-*s%-*s%s\n",
+					provW+tableColumnGap, row.provider,
+					distW+tableColumnGap, row.distribution,
+					clusterW+tableColumnGap, row.cluster,
+					row.ttl,
+				)
+
+				continue
+			}
+
+			_, _ = fmt.Fprintf(writer, "%-*s%-*s%s\n",
 				provW+tableColumnGap, row.provider,
 				distW+tableColumnGap, row.distribution,
-				clusterW+tableColumnGap, row.cluster,
-				row.ttl,
+				row.cluster,
 			)
 		}
 	} else {
