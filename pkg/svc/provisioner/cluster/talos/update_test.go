@@ -172,7 +172,7 @@ func TestApplyNodeScalingChanges_NilSpecs(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			p := talosprovisioner.NewProvisioner(nil, nil)
+			p := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
 			result := clusterupdate.NewEmptyUpdateResult()
 
 			err := p.ApplyNodeScalingChangesForTest(
@@ -191,7 +191,7 @@ func TestApplyNodeScalingChanges_NilSpecs(t *testing.T) {
 func TestApplyNodeScalingChanges_NoDelta(t *testing.T) {
 	t.Parallel()
 
-	provisioner := talosprovisioner.NewProvisioner(nil, nil)
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	oldSpec := &v1alpha1.ClusterSpec{}
@@ -220,9 +220,11 @@ func TestApplyNodeScalingChanges_NoDelta(t *testing.T) {
 func TestApplyNodeScalingChanges_OmniReturnsNotImplemented(t *testing.T) {
 	t.Parallel()
 
-	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithOmniOptions(v1alpha1.OptionsOmni{
-		Endpoint: "https://example.omni.siderolabs.io",
-	})
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithLogWriter(io.Discard).
+		WithOmniOptions(v1alpha1.OptionsOmni{
+			Endpoint: "https://example.omni.siderolabs.io",
+		})
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	oldSpec := &v1alpha1.ClusterSpec{}
@@ -249,7 +251,7 @@ func TestApplyNodeScalingChanges_OmniReturnsNotImplemented(t *testing.T) {
 func TestApplyNodeScalingChanges_BelowMinimumControlPlanes(t *testing.T) {
 	t.Parallel()
 
-	provisioner := talosprovisioner.NewProvisioner(nil, nil)
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	oldSpec := &v1alpha1.ClusterSpec{}
