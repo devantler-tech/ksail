@@ -129,6 +129,7 @@ users:
 	assert.Equal(t, v1alpha1.DistributionVanilla, info.Distribution)
 	assert.Equal(t, v1alpha1.ProviderDocker, info.Provider)
 	assert.Equal(t, "test-cluster", info.ClusterName)
+	assert.Equal(t, "kind-test-cluster", info.Context)
 	assert.Equal(t, "https://127.0.0.1:6443", info.ServerURL)
 }
 
@@ -162,6 +163,7 @@ users:
 	assert.Equal(t, v1alpha1.DistributionTalos, info.Distribution)
 	assert.Equal(t, v1alpha1.ProviderDocker, info.Provider)
 	assert.Equal(t, "local-talos", info.ClusterName)
+	assert.Equal(t, "admin@local-talos", info.Context)
 }
 
 // TestDetectInfo_ExplicitContext tests detection with an explicit context specified.
@@ -199,6 +201,7 @@ users:
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionVanilla, info.Distribution)
 	assert.Equal(t, "other", info.ClusterName)
+	assert.Equal(t, "kind-other", info.Context)
 	assert.Equal(t, "https://127.0.0.1:7443", info.ServerURL)
 }
 

@@ -2549,12 +2549,17 @@ func displayKSailDetails(cmd *cobra.Command, kubeconfigPath string) {
 	displayComponents(writer, info.ClusterName)
 }
 
-// displayClusterIdentity prints the cluster name, distribution, provider, server URL, and kubeconfig path.
+// displayClusterIdentity prints the cluster name, distribution, provider, kubeconfig context,
+// server URL, and kubeconfig path.
 func displayClusterIdentity(writer io.Writer, info *clusterdetector.Info) {
 	_, _ = fmt.Fprintln(writer, "KSail Cluster Details:")
 	_, _ = fmt.Fprintf(writer, "  Cluster:        %s\n", info.ClusterName)
 	_, _ = fmt.Fprintf(writer, "  Distribution:   %s\n", info.Distribution)
 	_, _ = fmt.Fprintf(writer, "  Provider:       %s\n", info.Provider)
+
+	if info.Context != "" {
+		_, _ = fmt.Fprintf(writer, "  Context:        %s\n", info.Context)
+	}
 
 	if info.ServerURL != "" {
 		_, _ = fmt.Fprintf(writer, "  Server:         %s\n", info.ServerURL)

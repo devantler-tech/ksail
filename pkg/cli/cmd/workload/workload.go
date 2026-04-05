@@ -3549,10 +3549,9 @@ func NewWorkloadCmd(runtimeContainer *di.Runtime) *cobra.Command {
 			"  logs      - Print container logs (use --tail=N, --previous for crash diagnostics)\n" +
 			"  explain   - Show API documentation for a resource kind\n" +
 			"  images    - List container images required by cluster components\n" +
-			"  export    - Export container images to a tar archive\n" +
 			"  wait      - Wait for a specific condition on resources\n\n" +
 			"Write operations:\n" +
-			"  apply, create, delete, edit, exec, expose, import, install, push, " +
+			"  apply, create, delete, edit, exec, export, expose, import, install, push, " +
 			"reconcile, rollout, scale, watch\n\n" +
 			"GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, " +
 			"ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check " +

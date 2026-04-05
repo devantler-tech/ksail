@@ -14,11 +14,10 @@ Read operations:
   logs      - Print container logs (use --tail=N, --previous for crash diagnostics)
   explain   - Show API documentation for a resource kind
   images    - List container images required by cluster components
-  export    - Export container images to a tar archive
   wait      - Wait for a specific condition on resources
 
 Write operations:
-  apply, create, delete, edit, exec, expose, import, install, push, reconcile, rollout, scale, watch
+  apply, create, delete, edit, exec, export, expose, import, install, push, reconcile, rollout, scale, watch
 
 GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check reconciliation status, health, and errors in a single call.
 

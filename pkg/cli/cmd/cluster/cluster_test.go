@@ -5712,6 +5712,7 @@ func TestDisplayClusterIdentity_AllFields(t *testing.T) {
 		ClusterName:    "my-cluster",
 		Distribution:   v1alpha1.DistributionVanilla,
 		Provider:       v1alpha1.ProviderDocker,
+		Context:        "kind-my-cluster",
 		ServerURL:      "https://127.0.0.1:6443",
 		KubeconfigPath: "/home/user/.kube/config",
 	}
@@ -5723,6 +5724,7 @@ func TestDisplayClusterIdentity_AllFields(t *testing.T) {
 	assert.Contains(t, out, "my-cluster")
 	assert.Contains(t, out, string(v1alpha1.DistributionVanilla))
 	assert.Contains(t, out, string(v1alpha1.ProviderDocker))
+	assert.Contains(t, out, "kind-my-cluster")
 	assert.Contains(t, out, "https://127.0.0.1:6443")
 	assert.Contains(t, out, "/home/user/.kube/config")
 }
@@ -5742,6 +5744,7 @@ func TestDisplayClusterIdentity_OptionalFieldsOmitted(t *testing.T) {
 
 	out := buf.String()
 	assert.Contains(t, out, "bare-cluster")
+	assert.NotContains(t, out, "Context:")
 	assert.NotContains(t, out, "Server:")
 	assert.NotContains(t, out, "Kubeconfig:")
 }

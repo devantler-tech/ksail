@@ -46,6 +46,59 @@ Flags:
 
 ---
 
+[TestNewWorkloadCmdRunETriggersHelp - 1]
+Manage workload operations including resource inspection, GitOps reconciliation, and lifecycle management.
+
+Read operations:
+  get       - List resources with optional -o json for structured output including status/conditions
+  describe  - Show detailed resource info including events, conditions, and error details
+  logs      - Print container logs (use --tail=N, --previous for crash diagnostics)
+  explain   - Show API documentation for a resource kind
+  images    - List container images required by cluster components
+  wait      - Wait for a specific condition on resources
+
+Write operations:
+  apply, create, delete, edit, exec, export, expose, import, install, push, reconcile, rollout, scale, watch
+
+GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check reconciliation status, health, and errors in a single call.
+
+Usage:
+  workload [flags]
+  workload [command]
+
+Available Commands:
+  apply       Apply manifests
+  completion  Generate the autocompletion script for the specified shell
+  create      Create resources
+  delete      Delete resources
+  describe    Describe resources
+  edit        Edit a resource
+  exec        Execute a command in a container
+  explain     Get documentation for a resource
+  export      Export container images from the cluster
+  expose      Expose a resource as a service
+  gen         Generate Kubernetes resource manifests
+  get         Get resources
+  help        Help about any command
+  images      List container images required by cluster components
+  import      Import container images to the cluster
+  install     Install Helm charts
+  logs        Print container logs
+  push        Package and push an OCI artifact to a registry
+  reconcile   Trigger reconciliation for GitOps workloads
+  rollout     Manage the rollout of a resource
+  scale       Scale resources
+  validate    Validate Kubernetes manifests and kustomizations
+  wait        Wait for a specific condition on one or many resources
+  watch       Watch for file changes and auto-apply workloads
+
+Flags:
+  -h, --help   help for workload
+
+Use "workload [command] --help" for more information about a command.
+
+---
+
 [TestPushCmdShowsValidateFlagInHelp - 1]
 Build and push local workloads as an OCI artifact to a registry.
 
@@ -163,60 +216,6 @@ Flags:
   -h, --help            help for watch
       --initial-apply   Apply all workloads once immediately on startup before entering the watch loop
       --path string     Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
-
----
-
-[TestNewWorkloadCmdRunETriggersHelp - 1]
-Manage workload operations including resource inspection, GitOps reconciliation, and lifecycle management.
-
-Read operations:
-  get       - List resources with optional -o json for structured output including status/conditions
-  describe  - Show detailed resource info including events, conditions, and error details
-  logs      - Print container logs (use --tail=N, --previous for crash diagnostics)
-  explain   - Show API documentation for a resource kind
-  images    - List container images required by cluster components
-  export    - Export container images to a tar archive
-  wait      - Wait for a specific condition on resources
-
-Write operations:
-  apply, create, delete, edit, exec, expose, import, install, push, reconcile, rollout, scale, watch
-
-GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check reconciliation status, health, and errors in a single call.
-
-Usage:
-  workload [flags]
-  workload [command]
-
-Available Commands:
-  apply       Apply manifests
-  completion  Generate the autocompletion script for the specified shell
-  create      Create resources
-  delete      Delete resources
-  describe    Describe resources
-  edit        Edit a resource
-  exec        Execute a command in a container
-  explain     Get documentation for a resource
-  export      Export container images from the cluster
-  expose      Expose a resource as a service
-  gen         Generate Kubernetes resource manifests
-  get         Get resources
-  help        Help about any command
-  images      List container images required by cluster components
-  import      Import container images to the cluster
-  install     Install Helm charts
-  logs        Print container logs
-  push        Package and push an OCI artifact to a registry
-  reconcile   Trigger reconciliation for GitOps workloads
-  rollout     Manage the rollout of a resource
-  scale       Scale resources
-  validate    Validate Kubernetes manifests and kustomizations
-  wait        Wait for a specific condition on one or many resources
-  watch       Watch for file changes and auto-apply workloads
-
-Flags:
-  -h, --help   help for workload
-
-Use "workload [command] --help" for more information about a command.
 
 ---
 
@@ -1169,11 +1168,10 @@ Read operations:
   logs      - Print container logs (use --tail=N, --previous for crash diagnostics)
   explain   - Show API documentation for a resource kind
   images    - List container images required by cluster components
-  export    - Export container images to a tar archive
   wait      - Wait for a specific condition on resources
 
 Write operations:
-  apply, create, delete, edit, exec, expose, import, install, push, reconcile, rollout, scale, watch
+  apply, create, delete, edit, exec, export, expose, import, install, push, reconcile, rollout, scale, watch
 
 GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check reconciliation status, health, and errors in a single call.
 
