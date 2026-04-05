@@ -530,6 +530,15 @@ func restoreResourceFile(
 	if err != nil {
 		stderr := errBuf.String()
 
+		// Empty YAML files (no resources of this type in the backup) are not
+		// an error — just skip silently.
+		if strings.Contains(err.Error(), "no objects passed to apply") ||
+			strings.Contains(err.Error(), "no objects passed to create") ||
+			strings.Contains(stderr, "no objects passed to apply") ||
+			strings.Contains(stderr, "no objects passed to create") {
+			return nil
+		}
+
 		if flags.existingResourcePolicy == resourcePolicyNone &&
 			allLinesContain(stderr, "already exists") {
 			return nil
