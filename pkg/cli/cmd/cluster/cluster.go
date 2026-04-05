@@ -3168,6 +3168,14 @@ func createEmptyDistributionConfig(
 	}
 }
 
+// tableRow holds pre-formatted strings for a single row in the cluster list table.
+type tableRow struct {
+	provider     string
+	distribution string
+	cluster      string
+	ttl          string
+}
+
 // displayListResults outputs the cluster list as an aligned table.
 // Columns: PROVIDER, DISTRIBUTION, CLUSTER, and optionally TTL (when any cluster has one).
 // If no clusters exist, displays "No clusters found.".
@@ -3182,46 +3190,56 @@ func displayListResults(
 		return
 	}
 
-	// Build ordered rows following provider order for consistent output.
-	type tableRow struct {
-		provider     string
-		distribution string
-		cluster      string
-		ttl          string
-	}
+	rows, hasTTL := buildTableRows(providers, results)
+	printTable(writer, rows, hasTTL)
+}
 
+// buildTableRows converts listResults into ordered tableRows following provider order.
+// Returns the rows and whether any row has a TTL value.
+func buildTableRows(providers []v1alpha1.Provider, results []listResult) ([]tableRow, bool) {
 	hasTTL := false
 
 	var rows []tableRow
 
 	for _, prov := range providers {
-		for _, r := range results {
-			if r.Provider != prov {
+		for _, result := range results {
+			if result.Provider != prov {
 				continue
 			}
 
-			ttlStr := ""
-			if r.TTL != nil {
+			ttlStr := formatTTLValue(result.TTL)
+			if ttlStr != "" {
 				hasTTL = true
-
-				remaining := r.TTL.Remaining()
-				if remaining <= 0 {
-					ttlStr = "EXPIRED"
-				} else {
-					ttlStr = formatRemainingDuration(remaining)
-				}
 			}
 
 			rows = append(rows, tableRow{
-				provider:     strings.ToLower(string(r.Provider)),
-				distribution: string(r.Distribution),
-				cluster:      r.ClusterName,
+				provider:     strings.ToLower(string(result.Provider)),
+				distribution: string(result.Distribution),
+				cluster:      result.ClusterName,
 				ttl:          ttlStr,
 			})
 		}
 	}
 
-	// Calculate column widths.
+	return rows, hasTTL
+}
+
+// formatTTLValue returns the human-readable TTL string for display, or "" if no TTL is set.
+func formatTTLValue(ttl *state.TTLInfo) string {
+	if ttl == nil {
+		return ""
+	}
+
+	remaining := ttl.Remaining()
+	if remaining <= 0 {
+		return "EXPIRED"
+	}
+
+	return formatRemainingDuration(remaining)
+}
+
+// printTable writes an aligned table of cluster rows to the writer.
+func printTable(writer io.Writer, rows []tableRow, hasTTL bool) {
 	provW := len("PROVIDER")
 	distW := len("DISTRIBUTION")
 	clusterW := len("CLUSTER")
@@ -3240,7 +3258,6 @@ func displayListResults(
 		}
 	}
 
-	// Print header and rows.
 	if hasTTL {
 		_, _ = fmt.Fprintf(writer, "%-*s%-*s%-*s%s\n",
 			provW+tableColumnGap, "PROVIDER",
@@ -3248,40 +3265,37 @@ func displayListResults(
 			clusterW+tableColumnGap, "CLUSTER",
 			"TTL",
 		)
-
-		for _, row := range rows {
-			if row.ttl != "" {
-				_, _ = fmt.Fprintf(writer, "%-*s%-*s%-*s%s\n",
-					provW+tableColumnGap, row.provider,
-					distW+tableColumnGap, row.distribution,
-					clusterW+tableColumnGap, row.cluster,
-					row.ttl,
-				)
-
-				continue
-			}
-
-			_, _ = fmt.Fprintf(writer, "%-*s%-*s%s\n",
-				provW+tableColumnGap, row.provider,
-				distW+tableColumnGap, row.distribution,
-				row.cluster,
-			)
-		}
 	} else {
 		_, _ = fmt.Fprintf(writer, "%-*s%-*s%s\n",
 			provW+tableColumnGap, "PROVIDER",
 			distW+tableColumnGap, "DISTRIBUTION",
 			"CLUSTER",
 		)
-
-		for _, row := range rows {
-			_, _ = fmt.Fprintf(writer, "%-*s%-*s%s\n",
-				provW+tableColumnGap, row.provider,
-				distW+tableColumnGap, row.distribution,
-				row.cluster,
-			)
-		}
 	}
+
+	for _, row := range rows {
+		printTableRow(writer, row, provW, distW, clusterW)
+	}
+}
+
+// printTableRow writes a single data row, omitting trailing whitespace when no TTL is present.
+func printTableRow(writer io.Writer, row tableRow, provW, distW, clusterW int) {
+	if row.ttl != "" {
+		_, _ = fmt.Fprintf(writer, "%-*s%-*s%-*s%s\n",
+			provW+tableColumnGap, row.provider,
+			distW+tableColumnGap, row.distribution,
+			clusterW+tableColumnGap, row.cluster,
+			row.ttl,
+		)
+
+		return
+	}
+
+	_, _ = fmt.Fprintf(writer, "%-*s%-*s%s\n",
+		provW+tableColumnGap, row.provider,
+		distW+tableColumnGap, row.distribution,
+		row.cluster,
+	)
 }
 
 // minutesPerHour is the number of minutes in one hour.
