@@ -247,7 +247,7 @@ Example:
 			editCmd.SetArgs(args)
 
 			// Execute kubectl edit command
-			return editCmd.Execute()
+			return kubectl.ExecuteSafely(cmd.Context(), editCmd)
 		},
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: "write",
@@ -844,68 +844,71 @@ func NewInstallCmd(_ *di.Runtime) *cobra.Command {
 		Short: "Install Helm charts",
 		Long: "Install Helm charts to provision workloads through KSail. " +
 			"This command provides native Helm chart installation capabilities.",
-		Args: cobra.ExactArgs(requiredInstallArgs),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			releaseName := args[0]
-			chartName := args[1]
-
-			// Resolve kubeconfig lazily so --config flag is honored.
-			kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
-
-			// Create helm client
-			client, err := helm.NewClient(kubeconfigPath, "")
-			if err != nil {
-				return fmt.Errorf("create helm client: %w", err)
-			}
-
-			// Get namespace from flag or use default
-			namespace, _ := cmd.Flags().GetString("namespace")
-			if namespace == "" {
-				namespace = "default"
-			}
-
-			// Create chart spec
-			spec := &helm.ChartSpec{
-				ReleaseName: releaseName,
-				ChartName:   chartName,
-				Namespace:   namespace,
-				Timeout:     helm.DefaultTimeout,
-			}
-
-			// Get other flags
-			if createNamespace, _ := cmd.Flags().GetBool("create-namespace"); createNamespace {
-				spec.CreateNamespace = true
-			}
-
-			if wait, _ := cmd.Flags().GetBool("wait"); wait {
-				spec.Wait = true
-			}
-
-			if atomic, _ := cmd.Flags().GetBool("atomic"); atomic {
-				spec.Atomic = true
-			}
-
-			// Install chart
-			_, err = client.InstallChart(cmd.Context(), spec)
-			if err != nil {
-				return fmt.Errorf("install chart %q: %w", chartName, err)
-			}
-
-			return nil
-		},
+		Args:  cobra.ExactArgs(requiredInstallArgs),
+		RunE:  runInstall,
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: "write",
 		},
 	}
 
-	// Add basic Helm install flags
 	flags := cmd.Flags()
 	flags.StringP("namespace", "n", "default", "namespace scope for the request")
+	flags.String("version", "", "chart version constraint (default: latest)")
+	flags.Duration(
+		"timeout",
+		helm.DefaultTimeout,
+		"time to wait for any individual Kubernetes operation",
+	)
 	flags.Bool("create-namespace", false, "create the release namespace if not present")
 	flags.Bool("wait", false, "wait until resources are ready")
 	flags.Bool("atomic", false, "if set, the installation deletes on failure")
 
 	return cmd
+}
+
+func runInstall(cmd *cobra.Command, args []string) error {
+	releaseName := args[0]
+	chartName := args[1]
+
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
+
+	client, err := helm.NewClient(kubeconfigPath, "")
+	if err != nil {
+		return fmt.Errorf("create helm client: %w", err)
+	}
+
+	spec := buildChartSpec(cmd, releaseName, chartName)
+
+	_, err = client.InstallChart(cmd.Context(), spec)
+	if err != nil {
+		return fmt.Errorf("install chart %q: %w", chartName, err)
+	}
+
+	return nil
+}
+
+func buildChartSpec(cmd *cobra.Command, releaseName, chartName string) *helm.ChartSpec {
+	namespace, _ := cmd.Flags().GetString("namespace")
+	if namespace == "" {
+		namespace = "default"
+	}
+
+	timeout, _ := cmd.Flags().GetDuration("timeout")
+	version, _ := cmd.Flags().GetString("version")
+	createNamespace, _ := cmd.Flags().GetBool("create-namespace")
+	wait, _ := cmd.Flags().GetBool("wait")
+	atomic, _ := cmd.Flags().GetBool("atomic")
+
+	return &helm.ChartSpec{
+		ReleaseName:     releaseName,
+		ChartName:       chartName,
+		Namespace:       namespace,
+		Timeout:         timeout,
+		Version:         version,
+		CreateNamespace: createNamespace,
+		Wait:            wait,
+		Atomic:          atomic,
+	}
 }
 
 // kubectlCommandCreator is a function that creates a kubectl command given a client and kubeconfig path.
@@ -3479,7 +3482,7 @@ func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error 
 	applyCmd.SetOut(cmd.OutOrStdout())
 	applyCmd.SetErr(cmd.ErrOrStderr())
 
-	err := applyCmd.ExecuteContext(ctx)
+	err := kubectl.ExecuteSafely(ctx, applyCmd)
 	if err != nil {
 		return fmt.Errorf("kubectl apply: %w", err)
 	}

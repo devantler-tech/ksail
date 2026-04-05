@@ -17,6 +17,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
@@ -37,6 +38,7 @@ import (
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -5586,5 +5588,71 @@ func TestDiffToJSON_RequiresConfirmation_OnlyInPlace(t *testing.T) {
 
 	if out.RequiresConfirmation {
 		t.Error("expected RequiresConfirmation=false for in-place-only changes")
+	}
+}
+
+// TestEnsureLocalRegistriesReady_CloudProviders verifies that Docker infrastructure
+// (local registry container, mirror registry containers, Docker network) is skipped
+// for cloud providers (Omni, Hetzner). Cloud providers run nodes on remote servers
+// and cannot access local Docker infrastructure.
+func TestEnsureLocalRegistriesReady_CloudProviders(t *testing.T) {
+	t.Parallel()
+
+	cloudProviders := []v1alpha1.Provider{
+		v1alpha1.ProviderOmni,
+		v1alpha1.ProviderHetzner,
+	}
+
+	for _, provider := range cloudProviders {
+		t.Run(string(provider), func(t *testing.T) {
+			t.Parallel()
+
+			// Set up a docker invoker that errors on any call.
+			// If Docker infra stages are incorrectly executed for cloud providers,
+			// this invoker will cause the test to fail.
+			errDockerInvoker := func(_ *cobra.Command, _ func(client.APIClient) error) error {
+				t.Errorf("Docker should not be called for cloud provider %s", provider)
+
+				return nil
+			}
+
+			localDeps := localregistry.NewDependencies(
+				localregistry.WithDockerInvoker(errDockerInvoker),
+			)
+
+			cmd := &cobra.Command{Use: "test"}
+			cmd.Flags().StringSlice("mirror-registry", []string{}, "")
+			cmd.SetContext(context.Background())
+
+			ctx := &localregistry.Context{
+				ClusterCfg: &v1alpha1.Cluster{
+					Spec: v1alpha1.Spec{
+						Cluster: v1alpha1.ClusterSpec{
+							Distribution: v1alpha1.DistributionTalos,
+							Provider:     provider,
+						},
+					},
+				},
+			}
+
+			v := viper.New()
+			cfgManager := &ksailconfigmanager.ConfigManager{Viper: v}
+
+			deps := lifecycle.Deps{Timer: timer.New()}
+
+			err := cluster.ExportEnsureLocalRegistriesReady(
+				cmd,
+				ctx,
+				deps,
+				cfgManager,
+				localDeps,
+			)
+			require.NoError(
+				t,
+				err,
+				"ensureLocalRegistriesReady should succeed for cloud provider %s without Docker",
+				provider,
+			)
+		})
 	}
 }

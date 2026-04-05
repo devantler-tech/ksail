@@ -553,7 +553,7 @@ func runKubectlGet(
 	getCmd.SilenceUsage = true
 	getCmd.SilenceErrors = true
 
-	err := getCmd.ExecuteContext(ctx)
+	err := kubectl.ExecuteSafely(ctx, getCmd)
 	if err != nil {
 		return outBuf.String(), errBuf.String(), fmt.Errorf(
 			"kubectl get %s: %w", resourceType, err,
@@ -1199,9 +1199,8 @@ func buildRegistryStageParams(
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
+	localDeps localregistry.Dependencies,
 ) mirrorregistry.StageParams {
-	localDeps := getLocalRegistryDeps()
-
 	return mirrorregistry.StageParams{
 		Cmd:            cmd,
 		ClusterCfg:     ctx.ClusterCfg,
@@ -1215,6 +1214,17 @@ func buildRegistryStageParams(
 	}
 }
 
+func validateRegistryForProvider(ctx *localregistry.Context) error {
+	provider := ctx.ClusterCfg.Spec.Cluster.Provider
+
+	registry := ctx.ClusterCfg.Spec.Cluster.LocalRegistry
+	if provider.IsCloud() && registry.Enabled() && !registry.IsExternal() {
+		return localregistry.ErrCloudProviderRequiresExternalRegistry
+	}
+
+	return nil
+}
+
 func ensureLocalRegistriesReady(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
@@ -1222,43 +1232,56 @@ func ensureLocalRegistriesReady(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	localDeps localregistry.Dependencies,
 ) error {
-	// Stage 1: Provision local registry (skipped for external registries)
-	err := localregistry.ExecuteStage(
-		cmd,
-		ctx,
-		deps,
-		localregistry.StageProvision,
-		localDeps,
-	)
+	provider := ctx.ClusterCfg.Spec.Cluster.Provider
+
+	// Cloud providers cannot use a Docker-based local registry — reject early with a clear error.
+	err := validateRegistryForProvider(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to provision local registry: %w", err)
+		return err
 	}
 
-	// Stage 2: Verify registry access (for external registries with auth)
-	// This gives early feedback if credentials are missing or invalid
+	if !provider.IsCloud() {
+		// Stage 1: Provision local registry (skipped for external registries)
+		err := localregistry.ExecuteStage(
+			cmd,
+			ctx,
+			deps,
+			localregistry.StageProvision,
+			localDeps,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to provision local registry: %w", err)
+		}
+	}
+
+	// Stage 2: Verify registry access.
+	// Called unconditionally here, but VerifyRegistryAccess returns early unless an enabled
+	// external registry is configured, in which case it validates any required registry auth.
 	err = localregistry.VerifyRegistryAccess(cmd, ctx.ClusterCfg, deps)
 	if err != nil {
 		return fmt.Errorf("failed to verify registry access: %w", err)
 	}
 
-	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager)
+	if !provider.IsCloud() {
+		params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, localDeps)
 
-	// Stage 3: Create and configure registry containers (local + mirrors)
-	err = mirrorregistry.SetupRegistries(params)
-	if err != nil {
-		return fmt.Errorf("failed to setup registries: %w", err)
-	}
+		// Stage 3: Create and configure registry containers (local + mirrors)
+		err = mirrorregistry.SetupRegistries(params)
+		if err != nil {
+			return fmt.Errorf("failed to setup registries: %w", err)
+		}
 
-	// Stage 4: Create Docker network
-	err = mirrorregistry.CreateNetwork(params)
-	if err != nil {
-		return fmt.Errorf("failed to create docker network: %w", err)
-	}
+		// Stage 4: Create Docker network
+		err = mirrorregistry.CreateNetwork(params)
+		if err != nil {
+			return fmt.Errorf("failed to create docker network: %w", err)
+		}
 
-	// Stage 5: Connect registries to network (before cluster creation)
-	err = mirrorregistry.ConnectRegistriesToNetwork(params)
-	if err != nil {
-		return fmt.Errorf("failed to connect registries to network: %w", err)
+		// Stage 5: Connect registries to network (before cluster creation)
+		err = mirrorregistry.ConnectRegistriesToNetwork(params)
+		if err != nil {
+			return fmt.Errorf("failed to connect registries to network: %w", err)
+		}
 	}
 
 	return nil
@@ -1284,8 +1307,9 @@ func configureRegistryMirrorsInClusterWithWarning(
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
+	localDeps localregistry.Dependencies,
 ) {
-	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager)
+	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, localDeps)
 
 	// Configure containerd inside cluster nodes to use registry mirrors (Kind only)
 	err := mirrorregistry.ConfigureRegistryMirrorsInCluster(params)
@@ -2583,6 +2607,8 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	// Unified node count selectors for all distributions
 	selectors = append(selectors, ksailconfigmanager.ControlPlanesFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.WorkersFieldSelector())
+	// Talos-specific selectors
+	selectors = append(selectors, ksailconfigmanager.ImageVerificationFieldSelector())
 
 	return selectors
 }
@@ -4013,6 +4039,11 @@ func restoreResourceFile(
 
 	defer func() { _ = os.Remove(labeledPath) }()
 
+	// Skip files with no Kubernetes objects (empty backup category).
+	if isEmptyYAML(labeledPath) {
+		return nil
+	}
+
 	var outBuf, errBuf bytes.Buffer
 
 	client := kubectl.NewClient(genericiooptions.IOStreams{
@@ -4038,22 +4069,46 @@ func restoreResourceFile(
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 
-	err = cmd.ExecuteContext(ctx)
+	err = kubectl.ExecuteSafely(ctx, cmd)
+
+	return classifyRestoreError(err, errBuf.String(), flags)
+}
+
+// isEmptyYAML returns true if the file at path contains no Kubernetes
+// objects — only whitespace and YAML document separators.
+func isEmptyYAML(path string) bool {
+	data, err := os.ReadFile(path) //nolint:gosec // path from extracted temp dir
 	if err != nil {
-		stderr := errBuf.String()
-
-		if flags.existingResourcePolicy == resourcePolicyNone &&
-			allLinesContain(stderr, "already exists") {
-			return nil
-		}
-
-		return fmt.Errorf(
-			"kubectl failed: %w (output: %s)",
-			err, stderr,
-		)
+		return false
 	}
 
-	return nil
+	for line := range strings.SplitSeq(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && trimmed != "---" {
+			return false
+		}
+	}
+
+	return true
+}
+
+// classifyRestoreError returns nil for benign errors (already-existing
+// resources) and wraps real failures.
+func classifyRestoreError(err error, stderr string, flags *restoreFlags) error {
+	if err == nil {
+		return nil
+	}
+
+	if flags.existingResourcePolicy == resourcePolicyNone &&
+		allLinesContain(stderr, "already exists") {
+		return nil
+	}
+
+	if stderr != "" {
+		return fmt.Errorf("kubectl failed: %w (output: %s)", err, stderr)
+	}
+
+	return fmt.Errorf("kubectl failed: %w", err)
 }
 
 // injectRestoreLabels reads a YAML file, adds restore labels to each
@@ -4325,22 +4380,28 @@ func runClusterCreationWorkflow(
 		return err
 	}
 
-	configureRegistryMirrorsInClusterWithWarning(
-		cmd,
-		ctx,
-		deps,
-		cfgManager,
-	)
+	// Post-creation Docker steps are only needed for local Docker clusters.
+	// Cloud providers (Omni, Hetzner) run nodes remotely and cannot access
+	// local Docker infrastructure.
+	if !ctx.ClusterCfg.Spec.Cluster.Provider.IsCloud() {
+		configureRegistryMirrorsInClusterWithWarning(
+			cmd,
+			ctx,
+			deps,
+			cfgManager,
+			localDeps,
+		)
 
-	err = localregistry.ExecuteStage(
-		cmd,
-		ctx,
-		deps,
-		localregistry.StageConnect,
-		localDeps,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to connect local registry: %w", err)
+		err = localregistry.ExecuteStage(
+			cmd,
+			ctx,
+			deps,
+			localregistry.StageConnect,
+			localDeps,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to connect local registry: %w", err)
+		}
 	}
 
 	err = localregistry.WaitForK3dLocalRegistryReady(
