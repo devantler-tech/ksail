@@ -50,7 +50,8 @@ const (
 	// kubeconfigFileMode is the file mode for kubeconfig files.
 	kubeconfigFileMode = 0o600
 	// clusterReadinessTimeout is the timeout for waiting for the cluster to become ready.
-	// This matches the upstream talosctl default of 20 minutes.
+	// This is shared across all Talos providers (Docker, Hetzner, Omni) and matches
+	// the upstream talosctl default of 20 minutes to accommodate slower cloud bring-up.
 	clusterReadinessTimeout = 20 * time.Minute
 	// talosAPIWaitTimeout is the timeout for waiting for Talos API to be reachable.
 	talosAPIWaitTimeout = 5 * time.Minute
