@@ -2,6 +2,7 @@ package omni
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -260,7 +261,8 @@ func (p *Provider) WaitForClusterReady(
 }
 
 // isClusterRunningAndReady checks whether the Omni cluster has Phase==RUNNING and Ready==true.
-// It returns (false, nil) when the cluster resource is not yet found, allowing the caller to retry.
+// It returns (false, nil) when the cluster resource is not yet found or when the context
+// is cancelled/expired, allowing the caller to retry or handle the context via ctx.Done().
 func isClusterRunningAndReady(
 	ctx context.Context,
 	omniState state.State,
@@ -272,7 +274,9 @@ func isClusterRunningAndReady(
 		omnires.NewClusterStatus(clusterName).Metadata(),
 	)
 	if err != nil {
-		if state.IsNotFoundError(err) {
+		if state.IsNotFoundError(err) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, context.Canceled) {
 			return false, nil
 		}
 
