@@ -916,6 +916,7 @@ jobs:
           permission-discussions: write
           permission-issues: write
           permission-pull-requests: write
+          permission-workflows: write
       - name: Download agent output artifact
         id: download-agent-output
         continue-on-error: true
@@ -1263,6 +1264,7 @@ jobs:
           permission-discussions: write
           permission-issues: write
           permission-pull-requests: write
+          permission-workflows: write
       - name: Checkout repository
         if: (!cancelled()) && needs.agent.result != 'skipped' && contains(needs.agent.outputs.output_types, 'create_pull_request')
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
