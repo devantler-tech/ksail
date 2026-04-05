@@ -275,26 +275,30 @@ ksail cluster init \
 This generates `talos/cluster/image-verification.yaml` with a default skip-all rule and commented examples. The file is a valid Talos config document that KSail applies alongside your `MachineConfig` during cluster creation.
 
 ```yaml
+# Talos ImageVerificationConfig (Talos 1.13+)
+# This document enables machine-wide container image signature verification.
+# Rules are evaluated in order; the first matching rule applies.
+# See: https://www.talos.dev/v1.13/talos-guides/configuration/image-verification/
 apiVersion: v1alpha1
 kind: ImageVerificationConfig
 rules:
   # Default: skip verification for all images.
-  # Remove or modify this rule, then add specific verification rules.
+  # Remove or modify this rule and add specific verification rules below.
   - image: "*"
     skip: true
-  # Example: keyless (Cosign/OIDC) verification for registry.k8s.io images
+  # Example: Verify registry.k8s.io images using keyless (Cosign/OIDC) verification
   # - image: "registry.k8s.io/*"
   #   keyless:
   #     issuer: "https://accounts.google.com"
   #     subject: "krel-trust@k8s-releng-prod.iam.gserviceaccount.com"
-  # Example: public-key verification for a private registry
+  # Example: Verify images from a private registry using a public key
   # - image: "my-registry.example.com/*"
   #   publicKey:
   #     certificate: |
   #       -----BEGIN CERTIFICATE-----
   #       <your PEM-encoded certificate here>
   #       -----END CERTIFICATE-----
-  # Example: deny all images from an untrusted registry
+  # Example: Deny all images from an untrusted registry
   # - image: "untrusted-registry.example.com/*"
   #   deny: true
 ```
