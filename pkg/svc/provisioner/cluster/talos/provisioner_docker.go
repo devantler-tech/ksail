@@ -2,7 +2,6 @@ package talosprovisioner
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -62,7 +61,8 @@ func (p *Provisioner) createDockerCluster(ctx context.Context, clusterName strin
 		return fmt.Errorf("failed to ensure talos image: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Image ready [%s]\n", time.Since(imagePullStart).Truncate(time.Second))
+	_, _ = fmt.Fprintf(p.logWriter, "Image ready [%s]\n",
+		time.Since(imagePullStart).Truncate(time.Second))
 
 	// Provision cluster and save configurations
 	sdkCreateStart := time.Now()
@@ -72,14 +72,16 @@ func (p *Provisioner) createDockerCluster(ctx context.Context, clusterName strin
 		return err
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "SDK cluster creation completed [%s]\n", time.Since(sdkCreateStart).Truncate(time.Second))
+	_, _ = fmt.Fprintf(p.logWriter, "SDK cluster creation completed [%s]\n",
+		time.Since(sdkCreateStart).Truncate(time.Second))
 
 	err = p.saveClusterConfigs(ctx, cluster, configBundle)
 	if err != nil {
 		return err
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Total provisioning time [%s]\n", time.Since(provisionStart).Truncate(time.Second))
+	_, _ = fmt.Fprintf(p.logWriter, "Total provisioning time [%s]\n",
+		time.Since(provisionStart).Truncate(time.Second))
 
 	return nil
 }
@@ -403,19 +405,21 @@ func (p *Provisioner) bootstrapAndWaitForReady(
 		return fmt.Errorf("bootstrap failed: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Bootstrap completed [%s]\n", time.Since(bootstrapStart).Truncate(time.Second))
+	_, _ = fmt.Fprintf(p.logWriter, "Bootstrap completed [%s]\n",
+		time.Since(bootstrapStart).Truncate(time.Second))
 
 	// Wait for cluster to be ready (Talos API, etcd, Kubernetes API via external endpoint).
 	// Since clusterAccess has ForceEndpoint set to the mapped localhost port,
 	// K8s checks in DefaultClusterChecks() validate host connectivity.
 	readinessStart := time.Now()
 
-	err = p.runClusterChecks(ctx, clusterAccess, clusterReadinessTimeout)
+	err = p.runClusterChecks(ctx, clusterAccess, dockerClusterCreateTimeout)
 	if err != nil {
 		return err
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Cluster is ready [%s]\n", time.Since(readinessStart).Truncate(time.Second))
+	_, _ = fmt.Fprintf(p.logWriter, "Cluster is ready [%s]\n",
+		time.Since(readinessStart).Truncate(time.Second))
 
 	return nil
 }
@@ -483,49 +487,24 @@ func (p *Provisioner) provisionCluster(
 }
 
 // saveClusterConfigs saves talosconfig and kubeconfig if paths are configured.
-// When both paths are configured, talosconfig is saved concurrently with the
-// bootstrap+kubeconfig flow since they are independent operations.
+// Both saves run sequentially to avoid concurrent writes to p.logWriter and to
+// prevent a data race on configBundle.TalosConfig(), which setupClusterEndpoints
+// modifies in place during bootstrapAndSaveKubeconfig.
 func (p *Provisioner) saveClusterConfigs(
 	ctx context.Context,
 	cluster provision.Cluster,
 	configBundle *bundle.Bundle,
 ) error {
-	needTalosconfig := p.options.TalosconfigPath != ""
-	needKubeconfig := p.options.KubeconfigPath != ""
-
-	// When both are needed, run talosconfig save concurrently with bootstrap+kubeconfig.
-	// saveTalosconfig is a fast filesystem operation (expand path, mkdir, write) that
-	// completes in milliseconds, so context cancellation is not needed.
-	if needTalosconfig && needKubeconfig {
-		talosconfigErrCh := make(chan error, 1)
-
-		go func() {
-			talosconfigErrCh <- p.saveTalosconfig(configBundle)
-		}()
-
-		kubeconfigErr := p.bootstrapAndSaveKubeconfig(ctx, cluster, configBundle)
-		talosconfigErr := <-talosconfigErrCh
-
-		if talosconfigErr != nil || kubeconfigErr != nil {
-			return errors.Join(
-				fmt.Errorf("failed to save cluster configs: %w",
-					errors.Join(talosconfigErr, kubeconfigErr)),
-			)
-		}
-
-		return nil
-	}
-
-	// Save talosconfig if path is configured
-	if needTalosconfig {
+	// Save talosconfig before bootstrapping so it is persisted even if bootstrap fails.
+	if p.options.TalosconfigPath != "" {
 		saveErr := p.saveTalosconfig(configBundle)
 		if saveErr != nil {
 			return fmt.Errorf("failed to save talosconfig: %w", saveErr)
 		}
 	}
 
-	// Bootstrap the cluster and retrieve kubeconfig
-	if needKubeconfig {
+	// Bootstrap the cluster and retrieve kubeconfig.
+	if p.options.KubeconfigPath != "" {
 		saveErr := p.bootstrapAndSaveKubeconfig(ctx, cluster, configBundle)
 		if saveErr != nil {
 			return fmt.Errorf("failed to save kubeconfig: %w", saveErr)

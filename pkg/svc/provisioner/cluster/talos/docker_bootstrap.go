@@ -12,6 +12,10 @@ import (
 )
 
 const (
+	// dockerClusterCreateTimeout defines how long to wait for a Docker cluster to become
+	// ready during initial creation. Docker clusters typically become ready in 5-7 minutes;
+	// 10 minutes provides sufficient margin while failing faster than the cloud default.
+	dockerClusterCreateTimeout = 10 * time.Minute
 	// dockerClusterReadinessTimeout defines how long to wait for Docker cluster to become ready
 	// after a start operation. Since the cluster is already bootstrapped, it should come up
 	// faster than a fresh create.
