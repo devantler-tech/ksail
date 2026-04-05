@@ -18,9 +18,9 @@ Use `--ttl` to create an **ephemeral cluster** that auto-destroys after a set du
 # Create a cluster that auto-destroys after 1 hour
 ksail cluster create --ttl 1h
 
-# TTL annotations appear in ksail cluster list output:
+# Distribution and TTL annotations appear in ksail cluster list output:
 # docker: my-cluster
-#   my-cluster [TTL: 59m]
+#   my-cluster [Vanilla, TTL: 59m]
 #
 # ksail cluster info also shows remaining TTL time for the current cluster.
 ```
