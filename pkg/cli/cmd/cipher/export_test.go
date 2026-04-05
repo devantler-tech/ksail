@@ -133,21 +133,21 @@ func defaultKeyGroups(b *testing.B) []sops.KeyGroup {
 
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {
-		b.Fatalf("Failed to generate age identity: %v", err)
+		b.Fatalf("failed to generate age identity: %v", err)
 	}
 
 	keyFile := filepath.Join(b.TempDir(), "keys.txt")
 
 	err = os.WriteFile(keyFile, []byte(identity.String()+"\n"), 0o600)
 	if err != nil {
-		b.Fatalf("Failed to write age key file: %v", err)
+		b.Fatalf("failed to write age key file: %v", err)
 	}
 
 	b.Setenv("SOPS_AGE_KEY_FILE", keyFile)
 
 	masterKey, err := sopsage.MasterKeyFromRecipient(identity.Recipient().String())
 	if err != nil {
-		b.Fatalf("Failed to create age master key: %v", err)
+		b.Fatalf("failed to create age master key: %v", err)
 	}
 
 	return []sops.KeyGroup{{masterKey}}
@@ -162,11 +162,7 @@ func writeTempSecret(b *testing.B, content []byte) string {
 
 	err := os.WriteFile(filePath, content, 0o600)
 	if err != nil {
-		b.Fatalf("Failed to write test file: %v", err)
-	}
-
-	return filePath
-}
+		b.Fatalf("failed to write test file: %v", err)
 
 // newEncryptOpts builds sopsclient.EncryptOpts for the given file path with default settings.
 func newEncryptOpts(
@@ -241,12 +237,12 @@ func encryptToFile(b *testing.B, content []byte, keyGroups []sops.KeyGroup) stri
 
 	encryptedData, err := sopsclient.Encrypt(opts)
 	if err != nil {
-		b.Fatalf("Failed to encrypt test file: %v", err)
+		b.Fatalf("failed to encrypt test file: %v", err)
 	}
 
 	err = os.WriteFile(filePath, encryptedData, 0o600)
 	if err != nil {
-		b.Fatalf("Failed to write encrypted file: %v", err)
+		b.Fatalf("failed to write encrypted file: %v", err)
 	}
 
 	return filePath
@@ -274,13 +270,11 @@ func BenchmarkEncrypt(b *testing.B) {
 			filePath := filepath.Join(tmpDir, "secret.yaml")
 
 			b.ResetTimer()
+			b.StopTimer()
 
 			for b.Loop() {
-				b.StopTimer()
-
-				err := os.WriteFile(filePath, scenario.content, 0o600)
 				if err != nil {
-					b.Fatalf("Failed to write test file: %v", err)
+					b.Fatalf("failed to write test file: %v", err)
 				}
 
 				opts, err := newEncryptOpts(filePath, keyGroups)
@@ -346,10 +340,9 @@ func BenchmarkRoundtrip_Minimal(b *testing.B) {
 	keyGroups := defaultKeyGroups(b)
 
 	b.ResetTimer()
+	b.StopTimer()
 
 	for b.Loop() {
-		b.StopTimer()
-		filePath := writeTempSecret(b, content)
 
 		encOpts, err := newEncryptOpts(filePath, keyGroups)
 		if err != nil {

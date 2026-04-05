@@ -77,7 +77,7 @@ Example:
   ksail cipher decrypt secrets.yaml --extract '["data"]["password"]'
   ksail cipher decrypt secrets.yaml --output plaintext.yaml
   ksail cipher decrypt secrets.yaml --ignore-mac
-  cat secrets.yaml | ksail cipher decrypt`,
+  cat secrets.enc.yaml | ksail cipher decrypt`,
 		SilenceUsage: true,
 		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
