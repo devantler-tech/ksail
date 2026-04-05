@@ -3,22 +3,13 @@ description: |
   Deletes all KSail test clusters from Omni to ensure clean slate
   for next CI run, even if individual test jobs fail to clean up after themselves.
 
-inputs:
-  omni-service-account-key:
-    description: Omni service account key
-    required: true
-  omni-endpoint:
-    description: Omni API endpoint URL
-    required: true
+inputs: {}
 
 runs:
   using: composite
   steps:
     - name: 🧹 Cleanup all KSail test clusters from Omni
       shell: bash
-      env:
-        OMNI_SERVICE_ACCOUNT_KEY: ${{ inputs.omni-service-account-key }}
-        OMNI_ENDPOINT: ${{ inputs.omni-endpoint }}
       run: |
         set -euo pipefail
 
