@@ -149,7 +149,7 @@ If no path is provided, the path is resolved in order:
   3. The current directory (fallback when no ksail.yaml config file is found)
 
 The validation process:
-1. Validates individual YAML files (patch files referenced in kustomization.yaml via patches,
+1. Validates individual YAML files (patch files referenced in a kustomization file via patches,
    patchesStrategicMerge, or patchesJson6902 are excluded — they are not valid standalone
    Kubernetes resources and are validated as part of the kustomize build output instead)
 2. Validates kustomizations by building them with kustomize and validating the output
@@ -185,8 +185,9 @@ Watch a directory for file changes and automatically apply workloads.
 
 When files in the watched directory are created, modified, or deleted,
 the command debounces changes (~500ms) then scopes the apply to the
-nearest directory containing a kustomization.yaml file, walking up from
-the changed file to the watch root. If no kustomization.yaml boundary is
+nearest directory containing a kustomization file recognized by kubectl
+(kustomization.yaml, kustomization.yml, or Kustomization), walking up
+from the changed file to the watch root. If no kustomization boundary is
 found, or the boundary is the watch root, it applies the full root
 directory. This scoping ensures only the affected Kustomize layer is
 re-applied, making iteration faster in monorepo-style layouts.
@@ -1453,8 +1454,9 @@ Watch a directory for file changes and automatically apply workloads.
 
 When files in the watched directory are created, modified, or deleted,
 the command debounces changes (~500ms) then scopes the apply to the
-nearest directory containing a kustomization.yaml file, walking up from
-the changed file to the watch root. If no kustomization.yaml boundary is
+nearest directory containing a kustomization file recognized by kubectl
+(kustomization.yaml, kustomization.yml, or Kustomization), walking up
+from the changed file to the watch root. If no kustomization boundary is
 found, or the boundary is the watch root, it applies the full root
 directory. This scoping ensures only the affected Kustomize layer is
 re-applied, making iteration faster in monorepo-style layouts.

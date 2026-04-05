@@ -58,7 +58,16 @@ ksail cluster update --dry-run --output json | jq .recreateRequired
 
 ## Workload Management
 
-Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns. Apply [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML; create, edit, delete, and inspect resources; debug with logs, exec, describe, and explain; expose services; export and import container images; validate manifests against schemas (see [Substitution Expansion in `workload validate`](/guides/workload-validate/) for Flux `${VAR}` expansion behavior); generate resources (see [`ksail workload gen` reference](/cli-flags/workload/workload-gen/) for the full list of supported resource types); and watch directories for automatic live reconciliation scoped to the nearest directory containing a `kustomization.yaml` (use `--initial-apply` to sync the cluster at startup before entering the watch loop).
+Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns:
+
+- **Apply** [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML
+- **Manage** resources: create, edit, and delete
+- **Inspect and debug** with get, describe, logs, exec, and explain
+- **Expose** services
+- **Export and import** container images
+- **Validate** manifests against schemas — see [Substitution Expansion in `workload validate`](/guides/workload-validate/) for Flux `${VAR}` expansion behavior
+- **Generate** resources — see [`ksail workload gen` reference](/cli-flags/workload/workload-gen/) for supported types
+- **Watch** directories for automatic live reconciliation scoped to the nearest `kustomization.yaml` (use `--initial-apply` to sync the cluster at startup before entering the watch loop)
 
 ```bash
 ksail workload apply -k k8s/
@@ -141,7 +150,10 @@ ksail tenant delete my-team \
   --git-token "$GITHUB_TOKEN"
 ```
 
-The tenant type is auto-detected from `gitOpsEngine` in `ksail.yaml` when `--type` is omitted. Pass `--register` to automatically add the tenant to the nearest `kustomization.yaml`. GitHub repository scaffolding (create repo, push initial files) uses `--git-provider github` and `--git-repo`, and requires authentication via `--git-token` or the `GITHUB_TOKEN` environment variable. If no token is provided, `ksail tenant create` still succeeds but skips GitHub repository scaffolding with a warning. Flux OCI sync sources also require `--git-repo` even when you are not scaffolding a repository, because it is used to build the `OCIRepository` URL.
+- **Auto-detection:** Tenant type is auto-detected from `gitOpsEngine` in `ksail.yaml` when `--type` is omitted.
+- **Registration:** Pass `--register` to automatically add the tenant to the nearest `kustomization.yaml`.
+- **GitHub scaffolding:** Use `--git-provider github` and `--git-repo` with `--git-token` or `GITHUB_TOKEN` to create a repo and push initial files. Omitting the token skips scaffolding with a warning but otherwise succeeds.
+- **Flux OCI:** `--git-repo` is required for Flux OCI sync sources even without scaffolding — it builds the `OCIRepository` URL.
 
 **Commands:** [`ksail tenant`](/cli-flags/tenant/tenant-root/)
 
@@ -149,6 +161,8 @@ The tenant type is auto-detected from `gitOpsEngine` in `ksail.yaml` when `--typ
 | --------------------- | ------------------------------------------------- |
 | `ksail tenant create` | Generate RBAC and GitOps manifests for a tenant   |
 | `ksail tenant delete` | Remove tenant manifests and optionally its repo   |
+
+**Guide:** [Tenant Management](/guides/tenant-management/)
 
 ## Registry Management
 

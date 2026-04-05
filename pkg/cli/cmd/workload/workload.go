@@ -1770,6 +1770,13 @@ const (
 	validationConcurrency = 5
 )
 
+// kustomizationFileNames lists all kustomization filenames recognized by kubectl.
+// Used by hasKustomizationFile, findKustomizationDir, findKustomizations,
+// findYAMLFiles, and collectPatchPathsFromDir for consistent detection.
+//
+//nolint:gochecknoglobals // package-level constant slice; Go does not support const slices
+var kustomizationFileNames = []string{kustomizationFileName, "kustomization.yml", "Kustomization"}
+
 // ErrBuildFailed is returned when a kustomize build or manifest validation fails.
 var ErrBuildFailed = errors.New("build failed")
 
@@ -1793,7 +1800,7 @@ If no path is provided, the path is resolved in order:
   3. The current directory (fallback when no ksail.yaml config file is found)
 
 The validation process:
-1. Validates individual YAML files (patch files referenced in kustomization.yaml via patches,
+1. Validates individual YAML files (patch files referenced in a kustomization file via patches,
    patchesStrategicMerge, or patchesJson6902 are excluded — they are not valid standalone
    Kubernetes resources and are validated as part of the kustomize build output instead)
 2. Validates kustomizations by building them with kustomize and validating the output
@@ -2223,10 +2230,11 @@ func walkFiles(rootPath string, match func(string, os.FileInfo) string) ([]strin
 	return results, nil
 }
 
-// findKustomizations finds all directories containing kustomization.yaml files.
+// findKustomizations finds all directories containing a kustomization file
+// recognized by kubectl (kustomization.yaml, kustomization.yml, or Kustomization).
 func findKustomizations(rootPath string) ([]string, error) {
 	return walkFiles(rootPath, func(path string, info os.FileInfo) string {
-		if info.Name() == kustomizationFileName {
+		if slices.Contains(kustomizationFileNames, info.Name()) {
 			return filepath.Dir(path)
 		}
 
@@ -2234,10 +2242,17 @@ func findKustomizations(rootPath string) ([]string, error) {
 	})
 }
 
-// findYAMLFiles finds all YAML files in a directory, excluding kustomization.yaml files.
+// findYAMLFiles finds all YAML files in a directory, excluding kustomization files
+// recognized by kubectl (kustomization.yaml, kustomization.yml, or Kustomization).
 func findYAMLFiles(rootPath string) ([]string, error) {
 	return walkFiles(rootPath, func(path string, _ os.FileInfo) string {
-		if isYAMLFile(path) && filepath.Base(path) != kustomizationFileName {
+		base := filepath.Base(path)
+
+		if slices.Contains(kustomizationFileNames, base) {
+			return ""
+		}
+
+		if isYAMLFile(path) {
 			return path
 		}
 
@@ -2284,12 +2299,22 @@ func collectPatchPaths(rootDir string, kustomizationDirs []string) map[string]st
 	return patchPaths
 }
 
-// collectPatchPathsFromDir parses a single kustomization.yaml and adds the absolute
-// paths of referenced patch files to the provided set.
+// collectPatchPathsFromDir parses a kustomization file (trying all recognized names)
+// and adds the absolute paths of referenced patch files to the provided set.
 func collectPatchPathsFromDir(rootDir, kustDir string, patchPaths map[string]struct{}) {
-	kustFile := filepath.Join(kustDir, kustomizationFileName)
+	var data []byte
 
-	data, err := fsutil.ReadFileSafe(rootDir, kustFile)
+	var err error
+
+	for _, name := range kustomizationFileNames {
+		kustFile := filepath.Join(kustDir, name)
+
+		data, err = fsutil.ReadFileSafe(rootDir, kustFile)
+		if err == nil {
+			break
+		}
+	}
+
 	if err != nil {
 		return
 	}
@@ -2922,8 +2947,9 @@ func NewWatchCmd() *cobra.Command {
 
 When files in the watched directory are created, modified, or deleted,
 the command debounces changes (~500ms) then scopes the apply to the
-nearest directory containing a kustomization.yaml file, walking up from
-the changed file to the watch root. If no kustomization.yaml boundary is
+nearest directory containing a kustomization file recognized by kubectl
+(kustomization.yaml, kustomization.yml, or Kustomization), walking up
+from the changed file to the watch root. If no kustomization boundary is
 found, or the boundary is the watch root, it applies the full root
 directory. This scoping ensures only the affected Kustomize layer is
 re-applied, making iteration faster in monorepo-style layouts.
@@ -3253,12 +3279,13 @@ func formatElapsed(d time.Duration) string {
 }
 
 // findKustomizationDir walks up from the changed path to find the nearest
-// directory containing a kustomization.yaml. Both changedFile and rootDir are
-// normalized to absolute paths before comparison so that mixed relative /
-// absolute inputs are handled correctly. If the nearest match is the root
-// watch directory or no match is found, rootDir is returned (triggering a full
-// reconcile). When changedFile is itself a directory the search starts there
-// instead of at its parent.
+// directory containing a kustomization file recognized by kubectl
+// (kustomization.yaml, kustomization.yml, or Kustomization). Both changedFile
+// and rootDir are normalized to absolute paths before comparison so that mixed
+// relative / absolute inputs are handled correctly. If the nearest match is
+// the root watch directory or no match is found, rootDir is returned
+// (triggering a full reconcile). When changedFile is itself a directory the
+// search starts there instead of at its parent.
 func findKustomizationDir(changedFile, rootDir string) string {
 	absRoot, err := filepath.Abs(rootDir)
 	if err != nil {
@@ -3280,10 +3307,7 @@ func findKustomizationDir(changedFile, rootDir string) string {
 	}
 
 	for {
-		kustomizationPath := filepath.Join(dir, kustomizationFileName)
-
-		_, statErr = os.Stat(kustomizationPath)
-		if statErr == nil {
+		if hasKustomizationFile(dir) {
 			return dir
 		}
 
@@ -3465,8 +3489,36 @@ func normalizeFluxPath(path string) string {
 	return path
 }
 
-// runKubectlApply executes kubectl apply -k against the provided directory,
+// hasKustomizationFile reports whether dir contains a regular kustomization
+// file recognized by kubectl (kustomization.yaml, kustomization.yml, or
+// Kustomization). Non-ErrNotExist errors (e.g., permission denied) are treated
+// as a positive match so that transient stat failures do not silently switch
+// the apply mode from -k to -f --recursive.
+func hasKustomizationFile(dir string) bool {
+	for _, name := range kustomizationFileNames {
+		info, err := os.Stat(filepath.Join(dir, name))
+		if err == nil {
+			if info.Mode().IsRegular() {
+				return true
+			}
+
+			continue
+		}
+
+		if !errors.Is(err, os.ErrNotExist) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// runKubectlApply executes kubectl apply against the provided directory,
 // which may be the root watch directory or a scoped Kustomization subtree.
+// When the directory contains a kustomization file recognized by kubectl
+// (kustomization.yaml, kustomization.yml, or Kustomization), it applies
+// using -k (kustomize mode). Otherwise it falls back to -f with --recursive
+// to apply all manifest files in the directory tree.
 // The provided context is forwarded to the cobra command so that Ctrl+C
 // (which cancels ctx) also terminates an in-flight apply promptly.
 func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error {
@@ -3478,13 +3530,25 @@ func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error 
 	})
 
 	applyCmd := client.CreateApplyCommand(kubeconfigPath)
-	applyCmd.SetArgs([]string{"-k", dir})
+
+	var mode string
+
+	if hasKustomizationFile(dir) {
+		applyCmd.SetArgs([]string{"-k", dir})
+
+		mode = "-k"
+	} else {
+		applyCmd.SetArgs([]string{"-f", dir, "--recursive"})
+
+		mode = "-f --recursive"
+	}
+
 	applyCmd.SetOut(cmd.OutOrStdout())
 	applyCmd.SetErr(cmd.ErrOrStderr())
 
 	err := kubectl.ExecuteSafely(ctx, applyCmd)
 	if err != nil {
-		return fmt.Errorf("kubectl apply: %w", err)
+		return fmt.Errorf("kubectl apply (%s): %w", mode, err)
 	}
 
 	return nil
