@@ -2597,13 +2597,29 @@ func displayComponents(writer io.Writer, clusterName string) {
 
 	_, _ = fmt.Fprintln(writer)
 	_, _ = fmt.Fprintln(writer, "  Components:")
-	_, _ = fmt.Fprintf(writer, "    GitOps Engine:  %s\n", componentLabel(string(spec.GitOpsEngine)))
+	_, _ = fmt.Fprintf(
+		writer,
+		"    GitOps Engine:  %s\n",
+		componentLabel(string(spec.GitOpsEngine)),
+	)
 	_, _ = fmt.Fprintf(writer, "    CNI:            %s\n", componentLabel(string(spec.CNI)))
 	_, _ = fmt.Fprintf(writer, "    CSI:            %s\n", componentLabel(string(spec.CSI)))
-	_, _ = fmt.Fprintf(writer, "    Metrics Server: %s\n", componentLabel(string(spec.MetricsServer)))
-	_, _ = fmt.Fprintf(writer, "    Load Balancer:  %s\n", componentLabel(string(spec.LoadBalancer)))
+	_, _ = fmt.Fprintf(
+		writer,
+		"    Metrics Server: %s\n",
+		componentLabel(string(spec.MetricsServer)),
+	)
+	_, _ = fmt.Fprintf(
+		writer,
+		"    Load Balancer:  %s\n",
+		componentLabel(string(spec.LoadBalancer)),
+	)
 	_, _ = fmt.Fprintf(writer, "    Cert Manager:   %s\n", componentLabel(string(spec.CertManager)))
-	_, _ = fmt.Fprintf(writer, "    Policy Engine:  %s\n", componentLabel(string(spec.PolicyEngine)))
+	_, _ = fmt.Fprintf(
+		writer,
+		"    Policy Engine:  %s\n",
+		componentLabel(string(spec.PolicyEngine)),
+	)
 }
 
 // componentLabel returns a display label for a component value.
