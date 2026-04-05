@@ -23,7 +23,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -46,16 +45,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          RUN_ID=$(gh run list \
-            --workflow=benchmark-regression.yaml \
-            --branch=main \
-            --status=success \
-            --limit=1 \
-            --json databaseId \
-            --jq '.[0].databaseId')
-          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
-            gh run download "$RUN_ID" --name benchmark-data --dir docs/public || echo "No benchmark artifact found"
+          mkdir -p docs/public
+          if gh api "repos/{owner}/{repo}/contents/dev/bench/data.js?ref=benchmark-data" \
+            -H "Accept: application/vnd.github.raw+json" > /tmp/data.js 2>/tmp/api_error.txt; then
+            node -e "
+              const s = require('fs').readFileSync('/tmp/data.js', 'utf8');
+              const match = s.match(/^window\.BENCHMARK_DATA\s*=\s*([\s\S]+?);\s*\$/);
+              if (!match) { process.stderr.write('Unexpected data.js format\n'); process.exit(1); }
+              JSON.parse(match[1]);
+              require('fs').writeFileSync('docs/public/benchmark-data.json', match[1]);
+            "
+            echo "Downloaded benchmark data from benchmark-data branch"
           else
+            cat /tmp/api_error.txt >&2 || true
             echo "No benchmark data available yet"
           fi
       - name: Build with Astro
