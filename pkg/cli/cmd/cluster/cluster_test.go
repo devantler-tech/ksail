@@ -28,8 +28,8 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -4897,7 +4897,7 @@ func TestStripParenthetical_WithSuffix(t *testing.T) {
 func TestStripParenthetical_EmptyString(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "", cluster.ExportStripParenthetical(""))
+	assert.Empty(t, cluster.ExportStripParenthetical(""))
 }
 
 func TestStripParenthetical_NoClosingParen(t *testing.T) {
