@@ -2522,9 +2522,7 @@ func TestDetectChangedFileDetectsModifiedFile(t *testing.T) {
 
 	snap := workload.ExportBuildFileSnapshot(dir)
 
-	// Ensure mod time differs (some filesystems have 1s granularity).
-	time.Sleep(50 * time.Millisecond)
-
+	// Force a distinct mod time explicitly (some filesystems have 1s granularity).
 	now := time.Now().Add(2 * time.Second)
 	require.NoError(t, os.Chtimes(filePath, now, now))
 

@@ -3682,13 +3682,16 @@ func scanForModifiedFiles(dir string, snapshot fileSnapshot) string {
 
 // scanForDeletedFiles checks all snapshot entries and removes any whose
 // file no longer exists. Returns the first deleted path found, or "".
+// scanForDeletedFiles checks all snapshot entries and removes any whose
+// file no longer exists or is no longer a regular file. Returns the first
+// changed path found, or "".
 func scanForDeletedFiles(snapshot fileSnapshot) string {
 	var changed string
 
 	for path := range snapshot {
-		_, statErr := os.Stat(path)
+		info, statErr := os.Lstat(path)
 
-		if errors.Is(statErr, os.ErrNotExist) {
+		if statErr != nil || !info.Mode().IsRegular() {
 			delete(snapshot, path)
 
 			if changed == "" {
