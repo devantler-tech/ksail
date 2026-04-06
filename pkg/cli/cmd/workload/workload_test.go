@@ -2443,6 +2443,155 @@ func TestHasKustomizationFile(t *testing.T) {
 	})
 }
 
+func TestBuildFileSnapshot(t *testing.T) {
+	t.Parallel()
+
+	t.Run("captures_file_modification_times", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		fileA := filepath.Join(dir, "a.yaml")
+		fileB := filepath.Join(dir, "b.yaml")
+
+		require.NoError(t, os.WriteFile(fileA, []byte("a"), 0o600))
+		require.NoError(t, os.WriteFile(fileB, []byte("b"), 0o600))
+
+		snap := workload.ExportBuildFileSnapshot(dir)
+
+		require.Len(t, snap, 2)
+		require.Contains(t, snap, fileA)
+		require.Contains(t, snap, fileB)
+	})
+
+	t.Run("skips_directories", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		subDir := filepath.Join(dir, "sub")
+		require.NoError(t, os.Mkdir(subDir, 0o750))
+
+		snap := workload.ExportBuildFileSnapshot(dir)
+
+		require.Empty(t, snap)
+	})
+
+	t.Run("includes_nested_files", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		subDir := filepath.Join(dir, "sub")
+		require.NoError(t, os.Mkdir(subDir, 0o750))
+
+		nested := filepath.Join(subDir, "deploy.yaml")
+		require.NoError(t, os.WriteFile(nested, []byte("kind: Deployment"), 0o600))
+
+		snap := workload.ExportBuildFileSnapshot(dir)
+
+		require.Len(t, snap, 1)
+		require.Contains(t, snap, nested)
+	})
+
+	t.Run("empty_directory_returns_empty_snapshot", func(t *testing.T) {
+		t.Parallel()
+
+		snap := workload.ExportBuildFileSnapshot(t.TempDir())
+
+		require.Empty(t, snap)
+	})
+}
+
+func TestDetectChangedFileReturnsEmptyWhenNoChanges(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "a.yaml")
+	require.NoError(t, os.WriteFile(filePath, []byte("a"), 0o600))
+
+	snap := workload.ExportBuildFileSnapshot(dir)
+	changed := workload.ExportDetectChangedFile(dir, snap)
+
+	require.Empty(t, changed)
+}
+
+func TestDetectChangedFileDetectsModifiedFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "a.yaml")
+	require.NoError(t, os.WriteFile(filePath, []byte("a"), 0o600))
+
+	snap := workload.ExportBuildFileSnapshot(dir)
+
+	// Force a distinct mod time explicitly (some filesystems have 1s granularity).
+	now := time.Now().Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(filePath, now, now))
+
+	changed := workload.ExportDetectChangedFile(dir, snap)
+
+	require.Equal(t, filePath, changed)
+}
+
+func TestDetectChangedFileDetectsNewFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	existingFile := filepath.Join(dir, "a.yaml")
+	require.NoError(t, os.WriteFile(existingFile, []byte("a"), 0o600))
+
+	snap := workload.ExportBuildFileSnapshot(dir)
+
+	newFile := filepath.Join(dir, "b.yaml")
+	require.NoError(t, os.WriteFile(newFile, []byte("b"), 0o600))
+
+	changed := workload.ExportDetectChangedFile(dir, snap)
+
+	require.Equal(t, newFile, changed)
+}
+
+func TestDetectChangedFileDetectsDeletedFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "a.yaml")
+	require.NoError(t, os.WriteFile(filePath, []byte("a"), 0o600))
+
+	snap := workload.ExportBuildFileSnapshot(dir)
+
+	require.NoError(t, os.Remove(filePath))
+
+	changed := workload.ExportDetectChangedFile(dir, snap)
+
+	require.Equal(t, filePath, changed)
+	require.NotContains(t, snap, filePath)
+}
+
+func TestDetectChangedFileUpdatesSnapshotInPlace(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "a.yaml")
+	require.NoError(t, os.WriteFile(filePath, []byte("a"), 0o600))
+
+	snap := workload.ExportBuildFileSnapshot(dir)
+
+	// Modify the file.
+	now := time.Now().Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(filePath, now, now))
+
+	_ = workload.ExportDetectChangedFile(dir, snap)
+
+	// Second scan should find no changes since snapshot was updated.
+	changed := workload.ExportDetectChangedFile(dir, snap)
+
+	require.Empty(t, changed)
+}
+
+func TestPollInterval(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, 3*time.Second, workload.ExportPollInterval)
+}
+
 // normalizeHomePaths replaces the user's home directory in help output
 // with a stable placeholder so snapshots are portable across machines and CI.
 func normalizeHomePaths(content string) string {

@@ -123,3 +123,19 @@ func ExportFormatElapsed(d time.Duration) string {
 func ExportHasKustomizationFile(dir string) bool {
 	return hasKustomizationFile(dir)
 }
+
+// ExportPollInterval exposes the pollInterval constant for testing.
+const ExportPollInterval = pollInterval
+
+// ExportFileSnapshot is an exported type alias for the unexported fileSnapshot.
+type ExportFileSnapshot = fileSnapshot
+
+// ExportBuildFileSnapshot exposes buildFileSnapshot for testing.
+func ExportBuildFileSnapshot(dir string) ExportFileSnapshot {
+	return buildFileSnapshot(dir)
+}
+
+// ExportDetectChangedFile exposes detectChangedFile for testing.
+func ExportDetectChangedFile(dir string, snapshot ExportFileSnapshot) string {
+	return detectChangedFile(dir, snapshot)
+}

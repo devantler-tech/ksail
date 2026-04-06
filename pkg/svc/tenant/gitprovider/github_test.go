@@ -19,15 +19,34 @@ func TestResolveToken_ExplicitToken(t *testing.T) {
 	require.Equal(t, "my-explicit-token", got)
 }
 
-func TestResolveToken_EnvVarFallback(t *testing.T) {
-	t.Setenv("GITHUB_TOKEN", "env-token-value")
+//nolint:paralleltest // mutates package-level resolveGitHubToken
+func TestResolveToken_ExplicitTokenOverridesSDK(t *testing.T) {
+	restore := gitprovider.ExportSetResolveGitHubTokenForTest(func() string {
+		return "sdk-token-should-be-ignored"
+	})
+	defer restore()
 
-	got := gitprovider.ResolveToken("github", "")
-	require.Equal(t, "env-token-value", got)
+	got := gitprovider.ResolveToken("github", "explicit-wins")
+	require.Equal(t, "explicit-wins", got)
 }
 
-func TestResolveToken_NoToken(t *testing.T) {
-	t.Setenv("GITHUB_TOKEN", "")
+//nolint:paralleltest // mutates package-level resolveGitHubToken
+func TestResolveToken_GitHubSDKFallback(t *testing.T) {
+	restore := gitprovider.ExportSetResolveGitHubTokenForTest(func() string {
+		return "sdk-resolved-token"
+	})
+	defer restore()
+
+	got := gitprovider.ResolveToken("github", "")
+	require.Equal(t, "sdk-resolved-token", got)
+}
+
+//nolint:paralleltest // mutates package-level resolveGitHubToken
+func TestResolveToken_GitHubSDKReturnsEmpty(t *testing.T) {
+	restore := gitprovider.ExportSetResolveGitHubTokenForTest(func() string {
+		return ""
+	})
+	defer restore()
 
 	got := gitprovider.ResolveToken("github", "")
 	require.Empty(t, got)
