@@ -15,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/siderolabs/omni/client/api/omni/specs"
 	omniclient "github.com/siderolabs/omni/client/pkg/client"
+	"github.com/siderolabs/omni/client/pkg/client/management"
 	omnires "github.com/siderolabs/omni/client/pkg/omni/resources/omni"
 	"github.com/siderolabs/omni/client/pkg/template/operations"
 )
@@ -308,12 +309,19 @@ func isClusterRunningAndReady(
 }
 
 // GetKubeconfig retrieves the kubeconfig for the given cluster from Omni.
+// It requests a service-account kubeconfig with a static token, which works
+// in non-interactive environments (CI, automation) without requiring oidc-login.
 func (p *Provider) GetKubeconfig(ctx context.Context, clusterName string) ([]byte, error) {
 	if p.client == nil {
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	data, err := p.client.Management().WithCluster(clusterName).Kubeconfig(ctx)
+	const kubeconfigTTL = time.Hour
+
+	data, err := p.client.Management().WithCluster(clusterName).Kubeconfig(
+		ctx,
+		management.WithServiceAccount(kubeconfigTTL, "ksail", "system:masters"),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubeconfig from Omni: %w", err)
 	}
