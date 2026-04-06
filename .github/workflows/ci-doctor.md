@@ -9,6 +9,7 @@ on:
   bots:
     - "github-merge-queue[bot]"
     - "github-actions[bot]"
+    - "ksail-bot[bot]"
 
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   workflow_run:
