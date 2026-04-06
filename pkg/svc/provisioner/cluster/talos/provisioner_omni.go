@@ -146,8 +146,9 @@ func (p *Provisioner) syncAndWaitOmniCluster(
 }
 
 // resolveOmniVersions determines the Talos and Kubernetes versions for the Omni cluster.
-// TalosVersion comes from omniOpts, falling back to querying Omni for the latest available version.
-// KubernetesVersion falls back to the latest compatible version from Omni, then talosConfigs.
+// TalosVersion comes from omniOpts; when not set, Omni is queried for the latest available version.
+// KubernetesVersion comes from omniOpts, then from Omni's compatible versions (only when Omni is
+// queried for TalosVersion), and finally from talosConfigs.
 func (p *Provisioner) resolveOmniVersions(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,

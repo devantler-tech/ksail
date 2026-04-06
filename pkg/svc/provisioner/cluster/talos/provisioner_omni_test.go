@@ -26,16 +26,16 @@ func newInMemStateForOmniTest() state.State {
 func newOmniProviderWithVersions(t *testing.T, versions ...string) *omniprovider.Provider {
 	t.Helper()
 
-	st := newInMemStateForOmniTest()
+	testState := newInMemStateForOmniTest()
 
 	for _, v := range versions {
 		tv := omnires.NewTalosVersion(v)
 		tv.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.31.0", "1.32.0"}
 
-		require.NoError(t, st.Create(context.Background(), tv))
+		require.NoError(t, testState.Create(context.Background(), tv))
 	}
 
-	return omniprovider.NewProviderWithState(st)
+	return omniprovider.NewProviderWithState(testState)
 }
 
 func TestResolveOmniVersions_NoOpts(t *testing.T) {

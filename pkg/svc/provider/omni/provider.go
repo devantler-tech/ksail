@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
+	"github.com/blang/semver/v4"
 	"github.com/cosi-project/runtime/pkg/resource"
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/cosi-project/runtime/pkg/state"
@@ -257,10 +259,19 @@ func (p *Provider) WaitForClusterReady(
 
 		select {
 		case <-ctx.Done():
+			ctxErr := ctx.Err()
+			if errors.Is(ctxErr, context.Canceled) {
+				return fmt.Errorf(
+					"cancelled waiting for cluster %q to become ready: %w",
+					clusterName,
+					ctxErr,
+				)
+			}
+
 			return fmt.Errorf(
 				"timed out waiting for cluster %q to become ready: %w",
 				clusterName,
-				ctx.Err(),
+				ctxErr,
 			)
 		case <-ticker.C:
 		}
@@ -337,7 +348,9 @@ func (p *Provider) LatestTalosVersion(ctx context.Context) (string, []string, er
 	}
 
 	var latestID string
+	var latestSemver semver.Version
 	var latestK8s []string
+	found := false
 
 	for ver := range versions.All() {
 		if ver.TypedSpec().Value.GetDeprecated() {
@@ -345,13 +358,21 @@ func (p *Provider) LatestTalosVersion(ctx context.Context) (string, []string, er
 		}
 
 		id := ver.Metadata().ID()
-		if latestID == "" || id > latestID {
+
+		parsed, parseErr := semver.Parse(strings.TrimPrefix(id, "v"))
+		if parseErr != nil {
+			continue
+		}
+
+		if !found || parsed.GT(latestSemver) {
 			latestID = id
+			latestSemver = parsed
 			latestK8s = ver.TypedSpec().Value.GetCompatibleKubernetesVersions()
+			found = true
 		}
 	}
 
-	if latestID == "" {
+	if !found {
 		return "", nil, ErrNoTalosVersions
 	}
 
