@@ -2947,6 +2947,7 @@ func NewWatchCmd() *cobra.Command {
 	var (
 		pathFlag     string
 		initialApply bool
+		debugFlag    bool
 	)
 
 	cmd := &cobra.Command{
@@ -2997,15 +2998,20 @@ Examples:
 		"Apply all workloads once immediately on startup before entering the watch loop",
 	)
 
+	cmd.Flags().BoolVar(
+		&debugFlag, "debug", false,
+		"Show diagnostic output for file events and polling (useful for troubleshooting watch behavior)",
+	)
+
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return runWatch(cmd, pathFlag, initialApply)
+		return runWatch(cmd, pathFlag, initialApply, debugFlag)
 	}
 
 	return cmd
 }
 
 // runWatch starts the file watcher loop.
-func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool) error {
+func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool) error {
 	// The root-level error executor captures stderr into a buffer for error
 	// aggregation.  For long-running commands like watch the buffer is never
 	// flushed, making all feedback invisible.  Override with real stderr so
@@ -3054,7 +3060,7 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool) error {
 	cmd.PrintErrf("  watching: %s\n", absDir)
 	cmd.PrintErrf("  press Ctrl+C to stop\n\n")
 
-	return watchLoop(cmd.Context(), cmd, absDir, initialApply, fluxReconciler)
+	return watchLoop(cmd.Context(), cmd, absDir, initialApply, fluxReconciler, debug)
 }
 
 // watchLoop sets up the fsnotify watcher and runs the debounced apply loop.
@@ -3068,6 +3074,7 @@ func watchLoop(
 	dir string,
 	initialApply bool,
 	fluxReconciler *flux.Reconciler,
+	debug bool,
 ) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -3091,7 +3098,7 @@ func watchLoop(
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- eventLoop(sigCtx, cmd, watcher, dir, fluxReconciler)
+		errCh <- eventLoop(sigCtx, cmd, watcher, dir, fluxReconciler, debug)
 	}()
 
 	if initialApply {
@@ -3114,6 +3121,7 @@ func eventLoop(
 	watcher *fsnotify.Watcher,
 	dir string,
 	fluxReconciler *flux.Reconciler,
+	debug bool,
 ) error {
 	state := &debounceState{}
 
@@ -3128,11 +3136,11 @@ func eventLoop(
 	// catch events missed by fsnotify (CI runners, atomic-save editors).
 	// Runs independently from the fsnotify debounce state so that fsnotify
 	// events cannot invalidate polling-detected changes.
-	go pollForChanges(ctx, dir, applyCh)
+	go pollForChanges(ctx, dir, applyCh, debug)
 
 	defer cancelPendingDebounce(state)
 
-	return dispatchEvents(ctx, cmd, watcher, state, applyCh)
+	return dispatchEvents(ctx, cmd, watcher, state, applyCh, debug)
 }
 
 // applyWorker runs applies one at a time, stopping when ctx is cancelled.
@@ -3169,6 +3177,7 @@ func dispatchEvents(
 	watcher *fsnotify.Watcher,
 	state *debounceState,
 	applyCh chan string,
+	debug bool,
 ) error {
 	for {
 		select {
@@ -3182,7 +3191,7 @@ func dispatchEvents(
 				return nil
 			}
 
-			handleFileEvent(event, watcher, cmd, state, applyCh)
+			handleFileEvent(event, watcher, cmd, state, applyCh, debug)
 
 		case watchErr, ok := <-watcher.Errors:
 			if !ok {
@@ -3202,12 +3211,15 @@ func handleFileEvent(
 	cmd *cobra.Command,
 	state *debounceState,
 	applyCh chan string,
+	debug bool,
 ) {
 	if !isRelevantEvent(event) {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "  fsnotify: %s %s\n", event.Op, event.Name)
+	if debug {
+		fmt.Fprintf(os.Stderr, "  fsnotify: %s %s\n", event.Op, event.Name)
+	}
 
 	// If a new directory was created, watch it too.
 	if event.Has(fsnotify.Create) {
@@ -3724,9 +3736,9 @@ func scanForDeletedFiles(snapshot fileSnapshot) string {
 // and a blocking send ensures the change is reliably delivered to the
 // apply worker — it cannot be silently dropped by a generation mismatch
 // or a non-blocking channel send.
-func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
+func pollForChanges(ctx context.Context, dir string, applyCh chan string, debug bool) {
 	snapshot := buildFileSnapshot(dir)
-	logPollSnapshot(dir, snapshot)
+	logPollSnapshot(dir, snapshot, debug)
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -3736,14 +3748,16 @@ func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Fprintf(os.Stderr, "  poll: stopped after %d ticks\n", tickCount)
+			if debug {
+				fmt.Fprintf(os.Stderr, "  poll: stopped after %d ticks\n", tickCount)
+			}
 
 			return
 		case <-ticker.C:
 			tickCount++
 
 			if tickCount%5 == 1 {
-				logPollTick(tickCount, dir, snapshot)
+				logPollTick(tickCount, dir, snapshot, debug)
 			}
 
 			changed := detectChangedFile(dir, snapshot)
@@ -3751,12 +3765,16 @@ func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 				continue
 			}
 
-			fmt.Fprintf(os.Stderr, "  poll: change on tick %d: %s\n", tickCount, changed)
+			if debug {
+				fmt.Fprintf(os.Stderr, "  poll: change on tick %d: %s\n", tickCount, changed)
+			}
 
 			// Blocking send: guaranteed delivery to the apply worker.
 			select {
 			case applyCh <- changed:
-				fmt.Fprintf(os.Stderr, "  poll: enqueued for apply\n")
+				if debug {
+					fmt.Fprintf(os.Stderr, "  poll: enqueued for apply\n")
+				}
 			case <-ctx.Done():
 				return
 			}
@@ -3765,7 +3783,11 @@ func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 }
 
 // logPollSnapshot logs the initial snapshot contents (temporary diagnostics).
-func logPollSnapshot(dir string, snapshot fileSnapshot) {
+func logPollSnapshot(dir string, snapshot fileSnapshot, debug bool) {
+	if !debug {
+		return
+	}
+
 	fmt.Fprintf(os.Stderr, "  poll: started, %d files in snapshot\n", len(snapshot))
 
 	for path, modTime := range snapshot {
@@ -3775,7 +3797,11 @@ func logPollSnapshot(dir string, snapshot fileSnapshot) {
 }
 
 // logPollTick logs file modTimes vs snapshot on periodic ticks (temporary diagnostics).
-func logPollTick(tick int, dir string, snapshot fileSnapshot) {
+func logPollTick(tick int, dir string, snapshot fileSnapshot, debug bool) {
+	if !debug {
+		return
+	}
+
 	fmt.Fprintf(os.Stderr, "  poll: tick %d, scanning %s\n", tick, dir)
 
 	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {

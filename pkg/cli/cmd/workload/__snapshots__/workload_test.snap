@@ -214,6 +214,7 @@ Usage:
   watch [flags]
 
 Flags:
+      --debug           Show diagnostic output for file events and polling (useful for troubleshooting watch behavior)
   -h, --help            help for watch
       --initial-apply   Apply all workloads once immediately on startup before entering the watch loop
       --path string     Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
@@ -1483,6 +1484,7 @@ Usage:
   ksail workload watch [flags]
 
 Flags:
+      --debug           Show diagnostic output for file events and polling (useful for troubleshooting watch behavior)
   -h, --help            help for watch
       --initial-apply   Apply all workloads once immediately on startup before entering the watch loop
       --path string     Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
