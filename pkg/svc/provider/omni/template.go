@@ -168,7 +168,7 @@ func writeWorkersDocument(buf *bytes.Buffer, params TemplateParams) {
 
 	var workerMachines []string
 	if len(params.Machines) > 0 && params.ControlPlanes < len(params.Machines) {
-		workerMachines = params.Machines[params.ControlPlanes:]
+		workerMachines = params.Machines[params.ControlPlanes : params.ControlPlanes+params.Workers]
 	}
 
 	writeMachineAllocation(buf, params.MachineClass, params.Workers, workerMachines)

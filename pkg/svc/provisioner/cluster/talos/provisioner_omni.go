@@ -104,7 +104,7 @@ func (p *Provisioner) buildOmniPatchInfos() []omniprovider.PatchInfo {
 	patches := make([]omniprovider.PatchInfo, 0, len(rawPatches))
 
 	for _, patch := range rawPatches {
-		if patch.Path == "cluster-name" {
+		if filepath.Base(patch.Path) == "cluster-name.yaml" {
 			continue
 		}
 
@@ -208,8 +208,8 @@ func (p *Provisioner) omniMachines() []string {
 	return nil
 }
 
-// saveOmniConfig is a shared helper that fetches config data from Omni, expands/canonicalizes the
-// output path, and writes the file. It logs the result using configLabel (e.g. "Kubeconfig").
+// saveOmniConfig writes already-fetched config data to disk. It expands/canonicalizes the
+// output path, creates parent directories, and writes the file. It logs the result using configLabel (e.g. "Kubeconfig").
 func (p *Provisioner) saveOmniConfig(
 	configData []byte,
 	rawPath string,
