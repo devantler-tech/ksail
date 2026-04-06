@@ -78,7 +78,8 @@ type TemplateParams struct {
 //   - MachineClass: dynamic allocation from a named class (size from ControlPlanes/Workers)
 //   - Machines: static allocation by UUID (first N = control planes, rest = workers)
 func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
-	if err := validateTemplateParams(params); err != nil {
+	err := validateTemplateParams(params)
+	if err != nil {
 		return nil, err
 	}
 
