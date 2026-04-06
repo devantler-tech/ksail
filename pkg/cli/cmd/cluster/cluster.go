@@ -3064,6 +3064,7 @@ func getProviderClusters(
 // name uniquely identifies a cluster within the Docker provider.
 func getDockerClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
 	seen := make(map[string]struct{})
+
 	var allClusters []clusterWithDistribution
 
 	for _, dist := range allDistributions() {
