@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	omniprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 )
@@ -143,7 +145,7 @@ func (p *Provisioner) syncAndWaitOmniCluster(
 }
 
 // resolveOmniVersions determines the Talos and Kubernetes versions for the Omni cluster.
-// TalosVersion comes from omniOpts only (required, no fallback).
+// TalosVersion comes from omniOpts, falling back to the embedded default Talos image tag.
 // KubernetesVersion falls back to talosConfigs.KubernetesVersion() if not set in omniOpts.
 func (p *Provisioner) resolveOmniVersions() (string, string) {
 	var talosVersion, kubernetesVersion string
@@ -153,11 +155,27 @@ func (p *Provisioner) resolveOmniVersions() (string, string) {
 		kubernetesVersion = p.omniOpts.KubernetesVersion
 	}
 
+	// Fall back to the version tag from the embedded default Talos image.
+	if talosVersion == "" {
+		talosVersion = talosVersionFromDefaultImage()
+	}
+
 	if kubernetesVersion == "" && p.talosConfigs != nil {
 		kubernetesVersion = p.talosConfigs.KubernetesVersion()
 	}
 
 	return talosVersion, kubernetesVersion
+}
+
+// talosVersionFromDefaultImage extracts the version tag from the embedded
+// default Talos container image (e.g. "ghcr.io/siderolabs/talos:v1.13.0" → "v1.13.0").
+func talosVersionFromDefaultImage() string {
+	image := talosconfigmanager.DefaultTalosImage
+	if idx := strings.LastIndex(image, ":"); idx >= 0 {
+		return image[idx+1:]
+	}
+
+	return ""
 }
 
 // saveOmniConfig is a shared helper that fetches config data from Omni, expands/canonicalizes the
