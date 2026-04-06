@@ -32,6 +32,14 @@ var (
 	ErrControlPlanesRequired = errors.New(
 		"at least one control plane node is required",
 	)
+	// ErrWorkersNegative is returned when Workers is negative.
+	ErrWorkersNegative = errors.New(
+		"workers count must not be negative",
+	)
+	// ErrClusterNameRequired is returned when ClusterName is empty or whitespace.
+	ErrClusterNameRequired = errors.New(
+		"cluster name is required",
+	)
 )
 
 // PatchScope indicates which nodes a patch should be applied to.
@@ -101,6 +109,10 @@ func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
 
 // validateTemplateParams checks that all required fields are set and allocation is valid.
 func validateTemplateParams(params TemplateParams) error {
+	if strings.TrimSpace(params.ClusterName) == "" {
+		return ErrClusterNameRequired
+	}
+
 	if params.TalosVersion == "" {
 		return ErrTalosVersionRequired
 	}
@@ -111,6 +123,10 @@ func validateTemplateParams(params TemplateParams) error {
 
 	if params.ControlPlanes < 1 {
 		return ErrControlPlanesRequired
+	}
+
+	if params.Workers < 0 {
+		return ErrWorkersNegative
 	}
 
 	if params.MachineClass != "" && len(params.Machines) > 0 {

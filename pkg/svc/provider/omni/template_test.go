@@ -206,6 +206,49 @@ func TestBuildClusterTemplate_ZeroControlPlanes(t *testing.T) {
 	require.ErrorIs(t, err, omni.ErrControlPlanesRequired)
 }
 
+func TestBuildClusterTemplate_NegativeWorkers(t *testing.T) {
+	t.Parallel()
+
+	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "test",
+		TalosVersion:      "1.11.2",
+		KubernetesVersion: "1.32.0",
+		ControlPlanes:     1,
+		Workers:           -1,
+		MachineClass:      "my-class",
+	})
+
+	require.ErrorIs(t, err, omni.ErrWorkersNegative)
+}
+
+func TestBuildClusterTemplate_EmptyClusterName(t *testing.T) {
+	t.Parallel()
+
+	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "",
+		TalosVersion:      "1.11.2",
+		KubernetesVersion: "1.32.0",
+		ControlPlanes:     1,
+		MachineClass:      "my-class",
+	})
+
+	require.ErrorIs(t, err, omni.ErrClusterNameRequired)
+}
+
+func TestBuildClusterTemplate_WhitespaceClusterName(t *testing.T) {
+	t.Parallel()
+
+	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "   ",
+		TalosVersion:      "1.11.2",
+		KubernetesVersion: "1.32.0",
+		ControlPlanes:     1,
+		MachineClass:      "my-class",
+	})
+
+	require.ErrorIs(t, err, omni.ErrClusterNameRequired)
+}
+
 func TestBuildClusterTemplate_InsufficientMachines(t *testing.T) {
 	t.Parallel()
 

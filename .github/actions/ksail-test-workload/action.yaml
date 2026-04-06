@@ -199,8 +199,9 @@ runs:
           sleep 1
         done
         if [ "$WATCHER_READY" != "true" ]; then
-          echo "⚠️ Watcher did not become ready within 120s"
+          echo "❌ Watcher did not become ready within 120s"
           cat "$WATCH_LOG" || true
+          exit 1
         fi
         # Modify the manifest (change replicas)
         sed -i 's/replicas: 1/replicas: 2/' "$WATCH_DIR/deployment.yaml"
