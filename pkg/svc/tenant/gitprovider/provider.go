@@ -80,6 +80,8 @@ func New(providerName, token string) (Provider, error) {
 
 // resolveGitHubToken resolves a GitHub token using the go-gh SDK.
 // It checks GH_TOKEN/GITHUB_TOKEN env vars and ~/.config/gh/hosts.yml.
+//
+//nolint:gochecknoglobals // dependency injection for tests
 var resolveGitHubToken = func() string {
 	token, _ := ghauth.TokenFromEnvOrConfig("github.com")
 	return token
