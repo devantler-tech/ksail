@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775429035531,
+  "lastUpdate": 1775478879365,
   "repoUrl": "https://github.com/devantler-tech/ksail",
   "entries": {
     "Benchmark": [
@@ -4416,6 +4416,4422 @@ window.BENCHMARK_DATA = {
             "value": 1,
             "unit": "allocs/op",
             "extra": "4404445 times\n4 procs"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "ned@devantler.tech",
+            "name": "Nikolai Emil Damm",
+            "username": "devantler"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c3d55418cfb136e0fca174c08bf9008ddca6ac59",
+          "message": "feat(tenant): add go-gh SDK auth fallback for GitHub token resolution (#3739)\n\n* feat(tenant): add go-gh SDK auth fallback for GitHub token resolution\n\nReplace manual os.Getenv(\"GITHUB_TOKEN\") with go-gh SDK's\nauth.TokenFromEnvOrConfig which checks GH_TOKEN, GITHUB_TOKEN env\nvars and ~/.config/gh/hosts.yml config files. This completes the\n3-step authentication fallback chain specified in #3409:\n\n1. Explicit --git-token flag (highest priority)\n2. go-gh SDK auto-detection (env vars + config files)\n3. Empty string (skip scaffolding with warning)\n\nAdd injectable resolveGitHubToken function variable for test\nisolation, and update tests to use the test seam.\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n\n* fix: add go-gh to depguard allowlist and remove parallel from SDK tests\n\nAddress review feedback:\n- Add github.com/cli to .golangci.yml depguard allowlist so go-gh\n  import is accepted by the linter.\n- Remove t.Parallel() from tests that mutate the package-level\n  resolveGitHubToken variable to prevent data races.\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n\n* fix: add gochecknoglobals nolint for resolveGitHubToken\n\nThe package-level function variable is needed for test dependency\ninjection, matching the pattern used elsewhere in the codebase\n(e.g., pkg/cli/ui/confirm, pkg/cli/cmd/tenant).\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n\n* chore: apply golangci-lint fixes\n\n* fix: use platform-neutral wording in go-gh token comment\n\nReplace hardcoded ~/.config/gh/hosts.yml path with generic\n'GitHub CLI config' since go-gh resolves the config directory\nin a platform-dependent way (GH_CONFIG_DIR, XDG_CONFIG_HOME, etc.).\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n\n* fix: add nolint:paralleltest to ArgoCD test using t.Setenv\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n\n* chore: apply golangci-lint fixes\n\n---------\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\nCo-authored-by: devantler <26203420+devantler@users.noreply.github.com>",
+          "timestamp": "2026-04-06T14:22:26+02:00",
+          "tree_id": "0f24f74906ede2ca8a72d447e08cddefa82b090a",
+          "url": "https://github.com/devantler-tech/ksail/commit/c3d55418cfb136e0fca174c08bf9008ddca6ac59"
+        },
+        "date": 1775478878615,
+        "tool": "go",
+        "benches": [
+          {
+            "name": "BenchmarkCluster_MarshalYAML/Minimal (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 88964,
+            "unit": "ns/op\t    8322 B/op\t     212 allocs/op",
+            "extra": "13575 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/Minimal (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 88964,
+            "unit": "ns/op",
+            "extra": "13575 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/Minimal (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 8322,
+            "unit": "B/op",
+            "extra": "13575 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/Minimal (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 212,
+            "unit": "allocs/op",
+            "extra": "13575 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/WithBasicConfig (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 87142,
+            "unit": "ns/op\t    8320 B/op\t     212 allocs/op",
+            "extra": "13278 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/WithBasicConfig (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 87142,
+            "unit": "ns/op",
+            "extra": "13278 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/WithBasicConfig (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 8320,
+            "unit": "B/op",
+            "extra": "13278 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/WithBasicConfig (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 212,
+            "unit": "allocs/op",
+            "extra": "13278 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/WithCNI (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 93449,
+            "unit": "ns/op\t    8912 B/op\t     215 allocs/op",
+            "extra": "13440 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/WithCNI (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 93449,
+            "unit": "ns/op",
+            "extra": "13440 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/WithCNI (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 8912,
+            "unit": "B/op",
+            "extra": "13440 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/WithCNI (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 215,
+            "unit": "allocs/op",
+            "extra": "13440 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/WithGitOps (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 89608,
+            "unit": "ns/op\t    9232 B/op\t     218 allocs/op",
+            "extra": "13173 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/WithGitOps (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 89608,
+            "unit": "ns/op",
+            "extra": "13173 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/WithGitOps (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 9232,
+            "unit": "B/op",
+            "extra": "13173 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/WithGitOps (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 218,
+            "unit": "allocs/op",
+            "extra": "13173 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/FullProductionCluster (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 97211,
+            "unit": "ns/op\t   11256 B/op\t     242 allocs/op",
+            "extra": "12566 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/FullProductionCluster (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 97211,
+            "unit": "ns/op",
+            "extra": "12566 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/FullProductionCluster (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 11256,
+            "unit": "B/op",
+            "extra": "12566 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalYAML/FullProductionCluster (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 242,
+            "unit": "allocs/op",
+            "extra": "12566 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalJSON/Minimal (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 91066,
+            "unit": "ns/op\t    8530 B/op\t     218 allocs/op",
+            "extra": "13450 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalJSON/Minimal (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 91066,
+            "unit": "ns/op",
+            "extra": "13450 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalJSON/Minimal (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 8530,
+            "unit": "B/op",
+            "extra": "13450 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalJSON/Minimal (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 218,
+            "unit": "allocs/op",
+            "extra": "13450 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalJSON/WithBasicConfig (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 96045,
+            "unit": "ns/op\t    8530 B/op\t     218 allocs/op",
+            "extra": "12482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalJSON/WithBasicConfig (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 96045,
+            "unit": "ns/op",
+            "extra": "12482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalJSON/WithBasicConfig (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 8530,
+            "unit": "B/op",
+            "extra": "12482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalJSON/WithBasicConfig (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 218,
+            "unit": "allocs/op",
+            "extra": "12482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalJSON/FullProductionCluster (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 120662,
+            "unit": "ns/op\t   14215 B/op\t     313 allocs/op",
+            "extra": "10000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalJSON/FullProductionCluster (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 120662,
+            "unit": "ns/op",
+            "extra": "10000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalJSON/FullProductionCluster (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 14215,
+            "unit": "B/op",
+            "extra": "10000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCluster_MarshalJSON/FullProductionCluster (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 313,
+            "unit": "allocs/op",
+            "extra": "10000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLEncode/Minimal (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 109813,
+            "unit": "ns/op\t   15256 B/op\t     240 allocs/op",
+            "extra": "10000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLEncode/Minimal (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 109813,
+            "unit": "ns/op",
+            "extra": "10000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLEncode/Minimal (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 15256,
+            "unit": "B/op",
+            "extra": "10000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLEncode/Minimal (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 240,
+            "unit": "allocs/op",
+            "extra": "10000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLEncode/FullProductionCluster (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 147421,
+            "unit": "ns/op\t   26384 B/op\t     285 allocs/op",
+            "extra": "9309 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLEncode/FullProductionCluster (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 147421,
+            "unit": "ns/op",
+            "extra": "9309 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLEncode/FullProductionCluster (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 26384,
+            "unit": "B/op",
+            "extra": "9309 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLEncode/FullProductionCluster (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 285,
+            "unit": "allocs/op",
+            "extra": "9309 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSONEncode (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 98966,
+            "unit": "ns/op\t    9766 B/op\t     236 allocs/op",
+            "extra": "12129 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSONEncode (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 98966,
+            "unit": "ns/op",
+            "extra": "12129 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSONEncode (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 9766,
+            "unit": "B/op",
+            "extra": "12129 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSONEncode (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 236,
+            "unit": "allocs/op",
+            "extra": "12129 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPruneClusterDefaults/MostlyDefaults (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 52699,
+            "unit": "ns/op\t    4464 B/op\t     136 allocs/op",
+            "extra": "23881 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPruneClusterDefaults/MostlyDefaults (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 52699,
+            "unit": "ns/op",
+            "extra": "23881 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPruneClusterDefaults/MostlyDefaults (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 4464,
+            "unit": "B/op",
+            "extra": "23881 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPruneClusterDefaults/MostlyDefaults (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 136,
+            "unit": "allocs/op",
+            "extra": "23881 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPruneClusterDefaults/MixedDefaultsAndCustom (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 49271,
+            "unit": "ns/op\t    4464 B/op\t     136 allocs/op",
+            "extra": "24506 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPruneClusterDefaults/MixedDefaultsAndCustom (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 49271,
+            "unit": "ns/op",
+            "extra": "24506 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPruneClusterDefaults/MixedDefaultsAndCustom (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 4464,
+            "unit": "B/op",
+            "extra": "24506 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPruneClusterDefaults/MixedDefaultsAndCustom (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 136,
+            "unit": "allocs/op",
+            "extra": "24506 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPruneClusterDefaults/AllCustomValues (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1)",
+            "value": 44683,
+            "unit": "ns/op\t    4464 B/op\t     136 allocs/op",
+            "extra": "29432 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPruneClusterDefaults/AllCustomValues (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - ns/op",
+            "value": 44683,
+            "unit": "ns/op",
+            "extra": "29432 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPruneClusterDefaults/AllCustomValues (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - B/op",
+            "value": 4464,
+            "unit": "B/op",
+            "extra": "29432 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPruneClusterDefaults/AllCustomValues (github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1) - allocs/op",
+            "value": 136,
+            "unit": "allocs/op",
+            "extra": "29432 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Minimal (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher)",
+            "value": 780521,
+            "unit": "ns/op\t  126199 B/op\t     636 allocs/op",
+            "extra": "1374 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Minimal (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - ns/op",
+            "value": 780521,
+            "unit": "ns/op",
+            "extra": "1374 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Minimal (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - B/op",
+            "value": 126199,
+            "unit": "B/op",
+            "extra": "1374 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Minimal (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - allocs/op",
+            "value": 636,
+            "unit": "allocs/op",
+            "extra": "1374 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Small (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher)",
+            "value": 1353839,
+            "unit": "ns/op\t  399044 B/op\t    1889 allocs/op",
+            "extra": "1018 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Small (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - ns/op",
+            "value": 1353839,
+            "unit": "ns/op",
+            "extra": "1018 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Small (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - B/op",
+            "value": 399044,
+            "unit": "B/op",
+            "extra": "1018 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Small (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - allocs/op",
+            "value": 1889,
+            "unit": "allocs/op",
+            "extra": "1018 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Medium (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher)",
+            "value": 2483506,
+            "unit": "ns/op\t  902613 B/op\t    4068 allocs/op",
+            "extra": "465 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Medium (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - ns/op",
+            "value": 2483506,
+            "unit": "ns/op",
+            "extra": "465 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Medium (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - B/op",
+            "value": 902613,
+            "unit": "B/op",
+            "extra": "465 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Medium (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - allocs/op",
+            "value": 4068,
+            "unit": "allocs/op",
+            "extra": "465 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Large (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher)",
+            "value": 10033022,
+            "unit": "ns/op\t 3303116 B/op\t   14856 allocs/op",
+            "extra": "116 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Large (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - ns/op",
+            "value": 10033022,
+            "unit": "ns/op",
+            "extra": "116 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Large (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - B/op",
+            "value": 3303116,
+            "unit": "B/op",
+            "extra": "116 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Large (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - allocs/op",
+            "value": 14856,
+            "unit": "allocs/op",
+            "extra": "116 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Nested (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher)",
+            "value": 2380186,
+            "unit": "ns/op\t  801737 B/op\t    3722 allocs/op",
+            "extra": "466 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Nested (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - ns/op",
+            "value": 2380186,
+            "unit": "ns/op",
+            "extra": "466 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Nested (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - B/op",
+            "value": 801737,
+            "unit": "B/op",
+            "extra": "466 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEncrypt/Nested (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - allocs/op",
+            "value": 3722,
+            "unit": "allocs/op",
+            "extra": "466 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Minimal (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher)",
+            "value": 1215078,
+            "unit": "ns/op\t  240425 B/op\t     670 allocs/op",
+            "extra": "883 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Minimal (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - ns/op",
+            "value": 1215078,
+            "unit": "ns/op",
+            "extra": "883 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Minimal (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - B/op",
+            "value": 240425,
+            "unit": "B/op",
+            "extra": "883 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Minimal (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - allocs/op",
+            "value": 670,
+            "unit": "allocs/op",
+            "extra": "883 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Small (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher)",
+            "value": 1817273,
+            "unit": "ns/op\t  500700 B/op\t    1886 allocs/op",
+            "extra": "715 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Small (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - ns/op",
+            "value": 1817273,
+            "unit": "ns/op",
+            "extra": "715 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Small (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - B/op",
+            "value": 500700,
+            "unit": "B/op",
+            "extra": "715 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Small (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - allocs/op",
+            "value": 1886,
+            "unit": "allocs/op",
+            "extra": "715 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Medium (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher)",
+            "value": 3465284,
+            "unit": "ns/op\t  976795 B/op\t    4026 allocs/op",
+            "extra": "344 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Medium (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - ns/op",
+            "value": 3465284,
+            "unit": "ns/op",
+            "extra": "344 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Medium (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - B/op",
+            "value": 976795,
+            "unit": "B/op",
+            "extra": "344 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Medium (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - allocs/op",
+            "value": 4026,
+            "unit": "allocs/op",
+            "extra": "344 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Large (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher)",
+            "value": 10621534,
+            "unit": "ns/op\t 3384113 B/op\t   14653 allocs/op",
+            "extra": "100 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Large (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - ns/op",
+            "value": 10621534,
+            "unit": "ns/op",
+            "extra": "100 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Large (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - B/op",
+            "value": 3384113,
+            "unit": "B/op",
+            "extra": "100 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Large (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - allocs/op",
+            "value": 14653,
+            "unit": "allocs/op",
+            "extra": "100 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Nested (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher)",
+            "value": 2798842,
+            "unit": "ns/op\t  923079 B/op\t    3660 allocs/op",
+            "extra": "454 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Nested (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - ns/op",
+            "value": 2798842,
+            "unit": "ns/op",
+            "extra": "454 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Nested (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - B/op",
+            "value": 923079,
+            "unit": "B/op",
+            "extra": "454 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/Nested (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - allocs/op",
+            "value": 3660,
+            "unit": "allocs/op",
+            "extra": "454 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/WithExtract (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher)",
+            "value": 2236625,
+            "unit": "ns/op\t  318057 B/op\t    1822 allocs/op",
+            "extra": "598 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/WithExtract (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - ns/op",
+            "value": 2236625,
+            "unit": "ns/op",
+            "extra": "598 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/WithExtract (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - B/op",
+            "value": 318057,
+            "unit": "B/op",
+            "extra": "598 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDecrypt/WithExtract (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - allocs/op",
+            "value": 1822,
+            "unit": "allocs/op",
+            "extra": "598 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRoundtrip_Minimal (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher)",
+            "value": 1703653,
+            "unit": "ns/op\t  368373 B/op\t    1310 allocs/op",
+            "extra": "600 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRoundtrip_Minimal (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - ns/op",
+            "value": 1703653,
+            "unit": "ns/op",
+            "extra": "600 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRoundtrip_Minimal (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - B/op",
+            "value": 368373,
+            "unit": "B/op",
+            "extra": "600 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRoundtrip_Minimal (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher) - allocs/op",
+            "value": 1310,
+            "unit": "allocs/op",
+            "extra": "600 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkSanitizeYAMLOutput_SinglePod (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 139484,
+            "unit": "ns/op\t  117527 B/op\t     939 allocs/op",
+            "extra": "8272 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkSanitizeYAMLOutput_SinglePod (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 139484,
+            "unit": "ns/op",
+            "extra": "8272 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkSanitizeYAMLOutput_SinglePod (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 117527,
+            "unit": "B/op",
+            "extra": "8272 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkSanitizeYAMLOutput_SinglePod (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 939,
+            "unit": "allocs/op",
+            "extra": "8272 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkSanitizeYAMLOutput_PodList (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 228671,
+            "unit": "ns/op\t  186740 B/op\t    1637 allocs/op",
+            "extra": "4964 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkSanitizeYAMLOutput_PodList (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 228671,
+            "unit": "ns/op",
+            "extra": "4964 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkSanitizeYAMLOutput_PodList (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 186740,
+            "unit": "B/op",
+            "extra": "4964 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkSanitizeYAMLOutput_PodList (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 1637,
+            "unit": "allocs/op",
+            "extra": "4964 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkSanitizeYAMLOutput_NonYAML (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 5249,
+            "unit": "ns/op\t    5568 B/op\t      45 allocs/op",
+            "extra": "224032 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkSanitizeYAMLOutput_NonYAML (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 5249,
+            "unit": "ns/op",
+            "extra": "224032 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkSanitizeYAMLOutput_NonYAML (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 5568,
+            "unit": "B/op",
+            "extra": "224032 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkSanitizeYAMLOutput_NonYAML (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 45,
+            "unit": "allocs/op",
+            "extra": "224032 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCountYAMLDocuments_Single (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 53.71,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "22114952 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCountYAMLDocuments_Single (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 53.71,
+            "unit": "ns/op",
+            "extra": "22114952 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCountYAMLDocuments_Single (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "22114952 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCountYAMLDocuments_Single (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "22114952 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCountYAMLDocuments_List (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 626.8,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1911262 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCountYAMLDocuments_List (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 626.8,
+            "unit": "ns/op",
+            "extra": "1911262 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCountYAMLDocuments_List (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1911262 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCountYAMLDocuments_List (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1911262 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFilterExcludedTypes_NoExclusions (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 624.1,
+            "unit": "ns/op\t    1008 B/op\t       5 allocs/op",
+            "extra": "1952024 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFilterExcludedTypes_NoExclusions (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 624.1,
+            "unit": "ns/op",
+            "extra": "1952024 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFilterExcludedTypes_NoExclusions (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 1008,
+            "unit": "B/op",
+            "extra": "1952024 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFilterExcludedTypes_NoExclusions (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "1952024 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFilterExcludedTypes_DefaultExclusions (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 851.6,
+            "unit": "ns/op\t    1007 B/op\t       5 allocs/op",
+            "extra": "1411857 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFilterExcludedTypes_DefaultExclusions (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 851.6,
+            "unit": "ns/op",
+            "extra": "1411857 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFilterExcludedTypes_DefaultExclusions (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 1007,
+            "unit": "B/op",
+            "extra": "1411857 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFilterExcludedTypes_DefaultExclusions (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "1411857 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateTarball_Small (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 482305,
+            "unit": "ns/op\t  921428 B/op\t     172 allocs/op",
+            "extra": "2589 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateTarball_Small (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 482305,
+            "unit": "ns/op",
+            "extra": "2589 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateTarball_Small (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 921428,
+            "unit": "B/op",
+            "extra": "2589 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateTarball_Small (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 172,
+            "unit": "allocs/op",
+            "extra": "2589 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateTarball_Medium (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 1563166,
+            "unit": "ns/op\t 1510847 B/op\t     770 allocs/op",
+            "extra": "825 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateTarball_Medium (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 1563166,
+            "unit": "ns/op",
+            "extra": "825 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateTarball_Medium (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 1510847,
+            "unit": "B/op",
+            "extra": "825 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateTarball_Medium (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 770,
+            "unit": "allocs/op",
+            "extra": "825 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_SingleChange (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 1542,
+            "unit": "ns/op\t     616 B/op\t      16 allocs/op",
+            "extra": "916954 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_SingleChange (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 1542,
+            "unit": "ns/op",
+            "extra": "916954 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_SingleChange (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 616,
+            "unit": "B/op",
+            "extra": "916954 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_SingleChange (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 16,
+            "unit": "allocs/op",
+            "extra": "916954 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_SmallDiff (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 2569,
+            "unit": "ns/op\t    1128 B/op\t      26 allocs/op",
+            "extra": "429049 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_SmallDiff (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 2569,
+            "unit": "ns/op",
+            "extra": "429049 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_SmallDiff (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 1128,
+            "unit": "B/op",
+            "extra": "429049 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_SmallDiff (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 26,
+            "unit": "allocs/op",
+            "extra": "429049 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_MixedCategories (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 3795,
+            "unit": "ns/op\t    2064 B/op\t      36 allocs/op",
+            "extra": "350660 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_MixedCategories (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 3795,
+            "unit": "ns/op",
+            "extra": "350660 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_MixedCategories (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 2064,
+            "unit": "B/op",
+            "extra": "350660 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_MixedCategories (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 36,
+            "unit": "allocs/op",
+            "extra": "350660 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_LargeDiff (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 6311,
+            "unit": "ns/op\t    3120 B/op\t      60 allocs/op",
+            "extra": "197305 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_LargeDiff (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 6311,
+            "unit": "ns/op",
+            "extra": "197305 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_LargeDiff (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 3120,
+            "unit": "B/op",
+            "extra": "197305 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_LargeDiff (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 60,
+            "unit": "allocs/op",
+            "extra": "197305 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_WideValues (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster)",
+            "value": 2431,
+            "unit": "ns/op\t    1352 B/op\t      21 allocs/op",
+            "extra": "479426 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_WideValues (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - ns/op",
+            "value": 2431,
+            "unit": "ns/op",
+            "extra": "479426 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_WideValues (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - B/op",
+            "value": 1352,
+            "unit": "B/op",
+            "extra": "479426 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatDiffTable_WideValues (github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster) - allocs/op",
+            "value": 21,
+            "unit": "allocs/op",
+            "extra": "479426 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 2.752,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "430468152 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 2.752,
+            "unit": "ns/op",
+            "extra": "430468152 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "430468152 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "430468152 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/WithApplicationName (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 2.199,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "545878159 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/WithApplicationName (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 2.199,
+            "unit": "ns/op",
+            "extra": "545878159 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/WithApplicationName (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "545878159 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/WithApplicationName (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "545878159 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/WithAuth (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 2.804,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "427815148 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/WithAuth (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 2.804,
+            "unit": "ns/op",
+            "extra": "427815148 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/WithAuth (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "427815148 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/WithAuth (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "427815148 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/Production (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 2.197,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "546922509 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/Production (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 2.197,
+            "unit": "ns/op",
+            "extra": "546922509 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/Production (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "546922509 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkEnsureOptions/Production (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "546922509 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUpdateTargetRevisionOptions/MinimalUpdate (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 1.562,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "770239056 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUpdateTargetRevisionOptions/MinimalUpdate (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 1.562,
+            "unit": "ns/op",
+            "extra": "770239056 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUpdateTargetRevisionOptions/MinimalUpdate (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "770239056 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUpdateTargetRevisionOptions/MinimalUpdate (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "770239056 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUpdateTargetRevisionOptions/WithHardRefresh (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 1.565,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "767863174 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUpdateTargetRevisionOptions/WithHardRefresh (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 1.565,
+            "unit": "ns/op",
+            "extra": "767863174 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUpdateTargetRevisionOptions/WithHardRefresh (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "767863174 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUpdateTargetRevisionOptions/WithHardRefresh (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "767863174 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/FirstTimeCreate (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 3649286,
+            "unit": "ns/op\t 2258131 B/op\t    5500 allocs/op",
+            "extra": "330 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/FirstTimeCreate (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 3649286,
+            "unit": "ns/op",
+            "extra": "330 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/FirstTimeCreate (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 2258131,
+            "unit": "B/op",
+            "extra": "330 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/FirstTimeCreate (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 5500,
+            "unit": "allocs/op",
+            "extra": "330 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/UpdateExisting (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 2003307,
+            "unit": "ns/op\t 1167178 B/op\t    3217 allocs/op",
+            "extra": "628 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/UpdateExisting (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 2003307,
+            "unit": "ns/op",
+            "extra": "628 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/UpdateExisting (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 1167178,
+            "unit": "B/op",
+            "extra": "628 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/UpdateExisting (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 3217,
+            "unit": "allocs/op",
+            "extra": "628 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/WithAuthentication (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 3722355,
+            "unit": "ns/op\t 2258527 B/op\t    5519 allocs/op",
+            "extra": "312 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/WithAuthentication (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 3722355,
+            "unit": "ns/op",
+            "extra": "312 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/WithAuthentication (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 2258527,
+            "unit": "B/op",
+            "extra": "312 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/WithAuthentication (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 5519,
+            "unit": "allocs/op",
+            "extra": "312 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/ProductionConfig (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 3659273,
+            "unit": "ns/op\t 2258530 B/op\t    5518 allocs/op",
+            "extra": "326 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/ProductionConfig (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 3659273,
+            "unit": "ns/op",
+            "extra": "326 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/ProductionConfig (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 2258530,
+            "unit": "B/op",
+            "extra": "326 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerEnsure/ProductionConfig (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 5518,
+            "unit": "allocs/op",
+            "extra": "326 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerUpdateTargetRevision/TargetRevisionOnly (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 15823,
+            "unit": "ns/op\t    9443 B/op\t      76 allocs/op",
+            "extra": "77144 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerUpdateTargetRevision/TargetRevisionOnly (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 15823,
+            "unit": "ns/op",
+            "extra": "77144 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerUpdateTargetRevision/TargetRevisionOnly (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 9443,
+            "unit": "B/op",
+            "extra": "77144 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerUpdateTargetRevision/TargetRevisionOnly (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 76,
+            "unit": "allocs/op",
+            "extra": "77144 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerUpdateTargetRevision/WithHardRefresh (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 17778,
+            "unit": "ns/op\t   11140 B/op\t      87 allocs/op",
+            "extra": "67738 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerUpdateTargetRevision/WithHardRefresh (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 17778,
+            "unit": "ns/op",
+            "extra": "67738 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerUpdateTargetRevision/WithHardRefresh (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 11140,
+            "unit": "B/op",
+            "extra": "67738 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerUpdateTargetRevision/WithHardRefresh (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 87,
+            "unit": "allocs/op",
+            "extra": "67738 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerUpdateTargetRevision/HardRefreshOnly (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 17470,
+            "unit": "ns/op\t   11123 B/op\t      86 allocs/op",
+            "extra": "68360 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerUpdateTargetRevision/HardRefreshOnly (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 17470,
+            "unit": "ns/op",
+            "extra": "68360 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerUpdateTargetRevision/HardRefreshOnly (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 11123,
+            "unit": "B/op",
+            "extra": "68360 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkManagerUpdateTargetRevision/HardRefreshOnly (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 86,
+            "unit": "allocs/op",
+            "extra": "68360 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewManager (github.com/devantler-tech/ksail/v5/pkg/client/argocd)",
+            "value": 35.06,
+            "unit": "ns/op\t      32 B/op\t       1 allocs/op",
+            "extra": "32619733 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewManager (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - ns/op",
+            "value": 35.06,
+            "unit": "ns/op",
+            "extra": "32619733 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewManager (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - B/op",
+            "value": 32,
+            "unit": "B/op",
+            "extra": "32619733 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewManager (github.com/devantler-tech/ksail/v5/pkg/client/argocd) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "32619733 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetDockerClient (github.com/devantler-tech/ksail/v5/pkg/client/docker)",
+            "value": 1419,
+            "unit": "ns/op\t    1784 B/op\t      23 allocs/op",
+            "extra": "802246 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetDockerClient (github.com/devantler-tech/ksail/v5/pkg/client/docker) - ns/op",
+            "value": 1419,
+            "unit": "ns/op",
+            "extra": "802246 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetDockerClient (github.com/devantler-tech/ksail/v5/pkg/client/docker) - B/op",
+            "value": 1784,
+            "unit": "B/op",
+            "extra": "802246 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetDockerClient (github.com/devantler-tech/ksail/v5/pkg/client/docker) - allocs/op",
+            "value": 23,
+            "unit": "allocs/op",
+            "extra": "802246 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetConcreteDockerClient (github.com/devantler-tech/ksail/v5/pkg/client/docker)",
+            "value": 1410,
+            "unit": "ns/op\t    1784 B/op\t      23 allocs/op",
+            "extra": "821864 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetConcreteDockerClient (github.com/devantler-tech/ksail/v5/pkg/client/docker) - ns/op",
+            "value": 1410,
+            "unit": "ns/op",
+            "extra": "821864 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetConcreteDockerClient (github.com/devantler-tech/ksail/v5/pkg/client/docker) - B/op",
+            "value": 1784,
+            "unit": "B/op",
+            "extra": "821864 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetConcreteDockerClient (github.com/devantler-tech/ksail/v5/pkg/client/docker) - allocs/op",
+            "value": 23,
+            "unit": "allocs/op",
+            "extra": "821864 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewRegistryManager (github.com/devantler-tech/ksail/v5/pkg/client/docker)",
+            "value": 23.92,
+            "unit": "ns/op\t      16 B/op\t       1 allocs/op",
+            "extra": "50137344 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewRegistryManager (github.com/devantler-tech/ksail/v5/pkg/client/docker) - ns/op",
+            "value": 23.92,
+            "unit": "ns/op",
+            "extra": "50137344 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewRegistryManager (github.com/devantler-tech/ksail/v5/pkg/client/docker) - B/op",
+            "value": 16,
+            "unit": "B/op",
+            "extra": "50137344 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewRegistryManager (github.com/devantler-tech/ksail/v5/pkg/client/docker) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "50137344 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewRegistryManagerNilClient (github.com/devantler-tech/ksail/v5/pkg/client/docker)",
+            "value": 1.248,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "958936224 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewRegistryManagerNilClient (github.com/devantler-tech/ksail/v5/pkg/client/docker) - ns/op",
+            "value": 1.248,
+            "unit": "ns/op",
+            "extra": "958936224 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewRegistryManagerNilClient (github.com/devantler-tech/ksail/v5/pkg/client/docker) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "958936224 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewRegistryManagerNilClient (github.com/devantler-tech/ksail/v5/pkg/client/docker) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "958936224 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildContainerConfig_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker)",
+            "value": 595.8,
+            "unit": "ns/op\t    1136 B/op\t      10 allocs/op",
+            "extra": "2019177 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildContainerConfig_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker) - ns/op",
+            "value": 595.8,
+            "unit": "ns/op",
+            "extra": "2019177 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildContainerConfig_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker) - B/op",
+            "value": 1136,
+            "unit": "B/op",
+            "extra": "2019177 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildContainerConfig_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker) - allocs/op",
+            "value": 10,
+            "unit": "allocs/op",
+            "extra": "2019177 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildContainerConfig_Production (github.com/devantler-tech/ksail/v5/pkg/client/docker)",
+            "value": 1046,
+            "unit": "ns/op\t    1336 B/op\t      20 allocs/op",
+            "extra": "1000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildContainerConfig_Production (github.com/devantler-tech/ksail/v5/pkg/client/docker) - ns/op",
+            "value": 1046,
+            "unit": "ns/op",
+            "extra": "1000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildContainerConfig_Production (github.com/devantler-tech/ksail/v5/pkg/client/docker) - B/op",
+            "value": 1336,
+            "unit": "B/op",
+            "extra": "1000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildContainerConfig_Production (github.com/devantler-tech/ksail/v5/pkg/client/docker) - allocs/op",
+            "value": 20,
+            "unit": "allocs/op",
+            "extra": "1000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildHostConfig_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker)",
+            "value": 299.3,
+            "unit": "ns/op\t    1312 B/op\t       3 allocs/op",
+            "extra": "3947436 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildHostConfig_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker) - ns/op",
+            "value": 299.3,
+            "unit": "ns/op",
+            "extra": "3947436 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildHostConfig_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker) - B/op",
+            "value": 1312,
+            "unit": "B/op",
+            "extra": "3947436 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildHostConfig_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker) - allocs/op",
+            "value": 3,
+            "unit": "allocs/op",
+            "extra": "3947436 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildNetworkConfig_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker)",
+            "value": 3.021,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "388362908 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildNetworkConfig_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker) - ns/op",
+            "value": 3.021,
+            "unit": "ns/op",
+            "extra": "388362908 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildNetworkConfig_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "388362908 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildNetworkConfig_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "388362908 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkResolveVolumeName_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker)",
+            "value": 8.419,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "142509175 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkResolveVolumeName_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker) - ns/op",
+            "value": 8.419,
+            "unit": "ns/op",
+            "extra": "142509175 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkResolveVolumeName_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "142509175 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkResolveVolumeName_Minimal (github.com/devantler-tech/ksail/v5/pkg/client/docker) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "142509175 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildProxyCredentialsEnv_WithCredentials (github.com/devantler-tech/ksail/v5/pkg/client/docker)",
+            "value": 326.8,
+            "unit": "ns/op\t     160 B/op\t       9 allocs/op",
+            "extra": "3652906 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildProxyCredentialsEnv_WithCredentials (github.com/devantler-tech/ksail/v5/pkg/client/docker) - ns/op",
+            "value": 326.8,
+            "unit": "ns/op",
+            "extra": "3652906 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildProxyCredentialsEnv_WithCredentials (github.com/devantler-tech/ksail/v5/pkg/client/docker) - B/op",
+            "value": 160,
+            "unit": "B/op",
+            "extra": "3652906 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildProxyCredentialsEnv_WithCredentials (github.com/devantler-tech/ksail/v5/pkg/client/docker) - allocs/op",
+            "value": 9,
+            "unit": "allocs/op",
+            "extra": "3652906 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildProxyCredentialsEnv_NoCredentials (github.com/devantler-tech/ksail/v5/pkg/client/docker)",
+            "value": 5.923,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "202518525 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildProxyCredentialsEnv_NoCredentials (github.com/devantler-tech/ksail/v5/pkg/client/docker) - ns/op",
+            "value": 5.923,
+            "unit": "ns/op",
+            "extra": "202518525 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildProxyCredentialsEnv_NoCredentials (github.com/devantler-tech/ksail/v5/pkg/client/docker) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "202518525 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuildProxyCredentialsEnv_NoCredentials (github.com/devantler-tech/ksail/v5/pkg/client/docker) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "202518525 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkClient_CreateCreateCommand (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 21015,
+            "unit": "ns/op\t   29984 B/op\t     170 allocs/op",
+            "extra": "56730 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkClient_CreateCreateCommand (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 21015,
+            "unit": "ns/op",
+            "extra": "56730 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkClient_CreateCreateCommand (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 29984,
+            "unit": "B/op",
+            "extra": "56730 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkClient_CreateCreateCommand (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 170,
+            "unit": "allocs/op",
+            "extra": "56730 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGitRepository_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 34.17,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "34998733 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGitRepository_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 34.17,
+            "unit": "ns/op",
+            "extra": "34998733 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGitRepository_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "34998733 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGitRepository_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "34998733 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGitRepository_Creation/WithReference (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 89.57,
+            "unit": "ns/op\t      80 B/op\t       1 allocs/op",
+            "extra": "13293014 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGitRepository_Creation/WithReference (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 89.57,
+            "unit": "ns/op",
+            "extra": "13293014 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGitRepository_Creation/WithReference (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 80,
+            "unit": "B/op",
+            "extra": "13293014 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGitRepository_Creation/WithReference (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "13293014 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGitRepository_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 447.2,
+            "unit": "ns/op\t     440 B/op\t       5 allocs/op",
+            "extra": "2689094 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGitRepository_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 447.2,
+            "unit": "ns/op",
+            "extra": "2689094 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGitRepository_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 440,
+            "unit": "B/op",
+            "extra": "2689094 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGitRepository_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "2689094 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRepository_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 26.91,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "44282852 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRepository_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 26.91,
+            "unit": "ns/op",
+            "extra": "44282852 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRepository_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "44282852 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRepository_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "44282852 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRepository_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 391.6,
+            "unit": "ns/op\t     360 B/op\t       4 allocs/op",
+            "extra": "2673056 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRepository_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 391.6,
+            "unit": "ns/op",
+            "extra": "2673056 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRepository_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 360,
+            "unit": "B/op",
+            "extra": "2673056 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRepository_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 4,
+            "unit": "allocs/op",
+            "extra": "2673056 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkOCIRepository_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 29.95,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "39966532 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkOCIRepository_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 29.95,
+            "unit": "ns/op",
+            "extra": "39966532 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkOCIRepository_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "39966532 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkOCIRepository_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "39966532 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkOCIRepository_Creation/WithReference (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 78.62,
+            "unit": "ns/op\t      64 B/op\t       1 allocs/op",
+            "extra": "14580703 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkOCIRepository_Creation/WithReference (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 78.62,
+            "unit": "ns/op",
+            "extra": "14580703 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkOCIRepository_Creation/WithReference (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 64,
+            "unit": "B/op",
+            "extra": "14580703 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkOCIRepository_Creation/WithReference (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "14580703 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkOCIRepository_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 410.5,
+            "unit": "ns/op\t     424 B/op\t       5 allocs/op",
+            "extra": "2960932 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkOCIRepository_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 410.5,
+            "unit": "ns/op",
+            "extra": "2960932 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkOCIRepository_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 424,
+            "unit": "B/op",
+            "extra": "2960932 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkOCIRepository_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "2960932 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkKustomization_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 47.39,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "25384167 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkKustomization_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 47.39,
+            "unit": "ns/op",
+            "extra": "25384167 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkKustomization_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "25384167 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkKustomization_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "25384167 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkKustomization_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 348.7,
+            "unit": "ns/op\t     344 B/op\t       3 allocs/op",
+            "extra": "3447978 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkKustomization_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 348.7,
+            "unit": "ns/op",
+            "extra": "3447978 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkKustomization_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 344,
+            "unit": "B/op",
+            "extra": "3447978 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkKustomization_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 3,
+            "unit": "allocs/op",
+            "extra": "3447978 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRelease_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 156.5,
+            "unit": "ns/op\t     176 B/op\t       1 allocs/op",
+            "extra": "7683802 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRelease_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 156.5,
+            "unit": "ns/op",
+            "extra": "7683802 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRelease_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 176,
+            "unit": "B/op",
+            "extra": "7683802 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRelease_Creation/Minimal (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "7683802 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRelease_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 599,
+            "unit": "ns/op\t     672 B/op\t       7 allocs/op",
+            "extra": "1994670 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRelease_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 599,
+            "unit": "ns/op",
+            "extra": "1994670 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRelease_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 672,
+            "unit": "B/op",
+            "extra": "1994670 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkHelmRelease_Creation/Production (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 7,
+            "unit": "allocs/op",
+            "extra": "1994670 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/GitRepository (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 481.5,
+            "unit": "ns/op\t    1280 B/op\t       2 allocs/op",
+            "extra": "2507293 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/GitRepository (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 481.5,
+            "unit": "ns/op",
+            "extra": "2507293 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/GitRepository (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 1280,
+            "unit": "B/op",
+            "extra": "2507293 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/GitRepository (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 2,
+            "unit": "allocs/op",
+            "extra": "2507293 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/HelmRepository (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 352.5,
+            "unit": "ns/op\t     896 B/op\t       2 allocs/op",
+            "extra": "3395371 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/HelmRepository (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 352.5,
+            "unit": "ns/op",
+            "extra": "3395371 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/HelmRepository (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 896,
+            "unit": "B/op",
+            "extra": "3395371 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/HelmRepository (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 2,
+            "unit": "allocs/op",
+            "extra": "3395371 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/OCIRepository (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 371.6,
+            "unit": "ns/op\t     960 B/op\t       2 allocs/op",
+            "extra": "3269203 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/OCIRepository (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 371.6,
+            "unit": "ns/op",
+            "extra": "3269203 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/OCIRepository (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 960,
+            "unit": "B/op",
+            "extra": "3269203 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/OCIRepository (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 2,
+            "unit": "allocs/op",
+            "extra": "3269203 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/Kustomization (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 608.7,
+            "unit": "ns/op\t    1792 B/op\t       2 allocs/op",
+            "extra": "2009308 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/Kustomization (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 608.7,
+            "unit": "ns/op",
+            "extra": "2009308 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/Kustomization (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 1792,
+            "unit": "B/op",
+            "extra": "2009308 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/Kustomization (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 2,
+            "unit": "allocs/op",
+            "extra": "2009308 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/HelmRelease (github.com/devantler-tech/ksail/v5/pkg/client/flux)",
+            "value": 716,
+            "unit": "ns/op\t    1968 B/op\t       3 allocs/op",
+            "extra": "1700251 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/HelmRelease (github.com/devantler-tech/ksail/v5/pkg/client/flux) - ns/op",
+            "value": 716,
+            "unit": "ns/op",
+            "extra": "1700251 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/HelmRelease (github.com/devantler-tech/ksail/v5/pkg/client/flux) - B/op",
+            "value": 1968,
+            "unit": "B/op",
+            "extra": "1700251 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCopySpec/HelmRelease (github.com/devantler-tech/ksail/v5/pkg/client/flux) - allocs/op",
+            "value": 3,
+            "unit": "allocs/op",
+            "extra": "1700251 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkChartSpec/Basic (github.com/devantler-tech/ksail/v5/pkg/client/helm)",
+            "value": 0.3146,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkChartSpec/Basic (github.com/devantler-tech/ksail/v5/pkg/client/helm) - ns/op",
+            "value": 0.3146,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkChartSpec/Basic (github.com/devantler-tech/ksail/v5/pkg/client/helm) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkChartSpec/Basic (github.com/devantler-tech/ksail/v5/pkg/client/helm) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkChartSpec/WithAllFields (github.com/devantler-tech/ksail/v5/pkg/client/helm)",
+            "value": 108.5,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "11066757 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkChartSpec/WithAllFields (github.com/devantler-tech/ksail/v5/pkg/client/helm) - ns/op",
+            "value": 108.5,
+            "unit": "ns/op",
+            "extra": "11066757 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkChartSpec/WithAllFields (github.com/devantler-tech/ksail/v5/pkg/client/helm) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "11066757 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkChartSpec/WithAllFields (github.com/devantler-tech/ksail/v5/pkg/client/helm) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "11066757 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRepositoryEntry/Basic (github.com/devantler-tech/ksail/v5/pkg/client/helm)",
+            "value": 0.3127,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRepositoryEntry/Basic (github.com/devantler-tech/ksail/v5/pkg/client/helm) - ns/op",
+            "value": 0.3127,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRepositoryEntry/Basic (github.com/devantler-tech/ksail/v5/pkg/client/helm) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRepositoryEntry/Basic (github.com/devantler-tech/ksail/v5/pkg/client/helm) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRepositoryEntry/WithAuth (github.com/devantler-tech/ksail/v5/pkg/client/helm)",
+            "value": 0.6244,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRepositoryEntry/WithAuth (github.com/devantler-tech/ksail/v5/pkg/client/helm) - ns/op",
+            "value": 0.6244,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRepositoryEntry/WithAuth (github.com/devantler-tech/ksail/v5/pkg/client/helm) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRepositoryEntry/WithAuth (github.com/devantler-tech/ksail/v5/pkg/client/helm) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkReleaseInfo (github.com/devantler-tech/ksail/v5/pkg/client/helm)",
+            "value": 0.6252,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkReleaseInfo (github.com/devantler-tech/ksail/v5/pkg/client/helm) - ns/op",
+            "value": 0.6252,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkReleaseInfo (github.com/devantler-tech/ksail/v5/pkg/client/helm) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkReleaseInfo (github.com/devantler-tech/ksail/v5/pkg/client/helm) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkChartSpecWithLargeValues (github.com/devantler-tech/ksail/v5/pkg/client/helm)",
+            "value": 0.3123,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkChartSpecWithLargeValues (github.com/devantler-tech/ksail/v5/pkg/client/helm) - ns/op",
+            "value": 0.3123,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkChartSpecWithLargeValues (github.com/devantler-tech/ksail/v5/pkg/client/helm) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkChartSpecWithLargeValues (github.com/devantler-tech/ksail/v5/pkg/client/helm) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateClient (github.com/devantler-tech/ksail/v5/pkg/client/kubectl)",
+            "value": 40.74,
+            "unit": "ns/op\t      48 B/op\t       1 allocs/op",
+            "extra": "29044600 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateClient (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - ns/op",
+            "value": 40.74,
+            "unit": "ns/op",
+            "extra": "29044600 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateClient (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - B/op",
+            "value": 48,
+            "unit": "B/op",
+            "extra": "29044600 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateClient (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "29044600 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateApplyCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl)",
+            "value": 50543,
+            "unit": "ns/op\t   61919 B/op\t     311 allocs/op",
+            "extra": "25125 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateApplyCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - ns/op",
+            "value": 50543,
+            "unit": "ns/op",
+            "extra": "25125 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateApplyCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - B/op",
+            "value": 61919,
+            "unit": "B/op",
+            "extra": "25125 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateApplyCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - allocs/op",
+            "value": 311,
+            "unit": "allocs/op",
+            "extra": "25125 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateGetCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl)",
+            "value": 37912,
+            "unit": "ns/op\t   44444 B/op\t     205 allocs/op",
+            "extra": "55640 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateGetCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - ns/op",
+            "value": 37912,
+            "unit": "ns/op",
+            "extra": "55640 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateGetCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - B/op",
+            "value": 44444,
+            "unit": "B/op",
+            "extra": "55640 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateGetCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - allocs/op",
+            "value": 205,
+            "unit": "allocs/op",
+            "extra": "55640 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateDeleteCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl)",
+            "value": 18294,
+            "unit": "ns/op\t   27382 B/op\t     121 allocs/op",
+            "extra": "92719 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateDeleteCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - ns/op",
+            "value": 18294,
+            "unit": "ns/op",
+            "extra": "92719 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateDeleteCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - B/op",
+            "value": 27382,
+            "unit": "B/op",
+            "extra": "92719 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateDeleteCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - allocs/op",
+            "value": 121,
+            "unit": "allocs/op",
+            "extra": "92719 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateDescribeCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl)",
+            "value": 19690,
+            "unit": "ns/op\t   30120 B/op\t     142 allocs/op",
+            "extra": "91978 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateDescribeCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - ns/op",
+            "value": 19690,
+            "unit": "ns/op",
+            "extra": "91978 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateDescribeCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - B/op",
+            "value": 30120,
+            "unit": "B/op",
+            "extra": "91978 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateDescribeCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - allocs/op",
+            "value": 142,
+            "unit": "allocs/op",
+            "extra": "91978 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateLogsCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl)",
+            "value": 25355,
+            "unit": "ns/op\t   31656 B/op\t     144 allocs/op",
+            "extra": "63937 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateLogsCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - ns/op",
+            "value": 25355,
+            "unit": "ns/op",
+            "extra": "63937 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateLogsCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - B/op",
+            "value": 31656,
+            "unit": "B/op",
+            "extra": "63937 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateLogsCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - allocs/op",
+            "value": 144,
+            "unit": "allocs/op",
+            "extra": "63937 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateWaitCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl)",
+            "value": 10681,
+            "unit": "ns/op\t   12768 B/op\t      92 allocs/op",
+            "extra": "149108 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateWaitCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - ns/op",
+            "value": 10681,
+            "unit": "ns/op",
+            "extra": "149108 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateWaitCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - B/op",
+            "value": 12768,
+            "unit": "B/op",
+            "extra": "149108 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateWaitCommand (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - allocs/op",
+            "value": 92,
+            "unit": "allocs/op",
+            "extra": "149108 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateNamespaceCmd (github.com/devantler-tech/ksail/v5/pkg/client/kubectl)",
+            "value": 239962,
+            "unit": "ns/op\t  280872 B/op\t    1561 allocs/op",
+            "extra": "6950 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateNamespaceCmd (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - ns/op",
+            "value": 239962,
+            "unit": "ns/op",
+            "extra": "6950 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateNamespaceCmd (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - B/op",
+            "value": 280872,
+            "unit": "B/op",
+            "extra": "6950 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateNamespaceCmd (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - allocs/op",
+            "value": 1561,
+            "unit": "allocs/op",
+            "extra": "6950 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateDeploymentCmd (github.com/devantler-tech/ksail/v5/pkg/client/kubectl)",
+            "value": 276260,
+            "unit": "ns/op\t  281536 B/op\t    1565 allocs/op",
+            "extra": "6110 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateDeploymentCmd (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - ns/op",
+            "value": 276260,
+            "unit": "ns/op",
+            "extra": "6110 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateDeploymentCmd (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - B/op",
+            "value": 281536,
+            "unit": "B/op",
+            "extra": "6110 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateDeploymentCmd (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - allocs/op",
+            "value": 1565,
+            "unit": "allocs/op",
+            "extra": "6110 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateServiceCmd (github.com/devantler-tech/ksail/v5/pkg/client/kubectl)",
+            "value": 217518,
+            "unit": "ns/op\t  290048 B/op\t    1631 allocs/op",
+            "extra": "6010 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateServiceCmd (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - ns/op",
+            "value": 217518,
+            "unit": "ns/op",
+            "extra": "6010 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateServiceCmd (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - B/op",
+            "value": 290048,
+            "unit": "B/op",
+            "extra": "6010 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCreateServiceCmd (github.com/devantler-tech/ksail/v5/pkg/client/kubectl) - allocs/op",
+            "value": 1631,
+            "unit": "allocs/op",
+            "extra": "6010 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_SmallKustomization (github.com/devantler-tech/ksail/v5/pkg/client/kustomize)",
+            "value": 325820,
+            "unit": "ns/op\t  212657 B/op\t    1609 allocs/op",
+            "extra": "3350 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_SmallKustomization (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - ns/op",
+            "value": 325820,
+            "unit": "ns/op",
+            "extra": "3350 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_SmallKustomization (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - B/op",
+            "value": 212657,
+            "unit": "B/op",
+            "extra": "3350 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_SmallKustomization (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - allocs/op",
+            "value": 1609,
+            "unit": "allocs/op",
+            "extra": "3350 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_MediumKustomization (github.com/devantler-tech/ksail/v5/pkg/client/kustomize)",
+            "value": 968017,
+            "unit": "ns/op\t  708901 B/op\t    6075 allocs/op",
+            "extra": "1236 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_MediumKustomization (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - ns/op",
+            "value": 968017,
+            "unit": "ns/op",
+            "extra": "1236 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_MediumKustomization (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - B/op",
+            "value": 708901,
+            "unit": "B/op",
+            "extra": "1236 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_MediumKustomization (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - allocs/op",
+            "value": 6075,
+            "unit": "allocs/op",
+            "extra": "1236 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_WithLabels (github.com/devantler-tech/ksail/v5/pkg/client/kustomize)",
+            "value": 1675546,
+            "unit": "ns/op\t 1146855 B/op\t   10293 allocs/op",
+            "extra": "726 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_WithLabels (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - ns/op",
+            "value": 1675546,
+            "unit": "ns/op",
+            "extra": "726 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_WithLabels (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - B/op",
+            "value": 1146855,
+            "unit": "B/op",
+            "extra": "726 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_WithLabels (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - allocs/op",
+            "value": 10293,
+            "unit": "allocs/op",
+            "extra": "726 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_LargeKustomization (github.com/devantler-tech/ksail/v5/pkg/client/kustomize)",
+            "value": 3123336,
+            "unit": "ns/op\t 2282878 B/op\t   18279 allocs/op",
+            "extra": "396 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_LargeKustomization (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - ns/op",
+            "value": 3123336,
+            "unit": "ns/op",
+            "extra": "396 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_LargeKustomization (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - B/op",
+            "value": 2282878,
+            "unit": "B/op",
+            "extra": "396 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_LargeKustomization (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - allocs/op",
+            "value": 18279,
+            "unit": "allocs/op",
+            "extra": "396 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_WithNamePrefix (github.com/devantler-tech/ksail/v5/pkg/client/kustomize)",
+            "value": 698901,
+            "unit": "ns/op\t  477575 B/op\t    4400 allocs/op",
+            "extra": "1573 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_WithNamePrefix (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - ns/op",
+            "value": 698901,
+            "unit": "ns/op",
+            "extra": "1573 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_WithNamePrefix (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - B/op",
+            "value": 477575,
+            "unit": "B/op",
+            "extra": "1573 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkBuild_WithNamePrefix (github.com/devantler-tech/ksail/v5/pkg/client/kustomize) - allocs/op",
+            "value": 4400,
+            "unit": "allocs/op",
+            "extra": "1573 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkInitializeViper (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail)",
+            "value": 23304,
+            "unit": "ns/op\t    6576 B/op\t      77 allocs/op",
+            "extra": "50862 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkInitializeViper (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - ns/op",
+            "value": 23304,
+            "unit": "ns/op",
+            "extra": "50862 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkInitializeViper (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - B/op",
+            "value": 6576,
+            "unit": "B/op",
+            "extra": "50862 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkInitializeViper (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - allocs/op",
+            "value": 77,
+            "unit": "allocs/op",
+            "extra": "50862 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewConfigManager_WithSelectors (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail)",
+            "value": 23358,
+            "unit": "ns/op\t    6576 B/op\t      77 allocs/op",
+            "extra": "51201 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewConfigManager_WithSelectors (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - ns/op",
+            "value": 23358,
+            "unit": "ns/op",
+            "extra": "51201 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewConfigManager_WithSelectors (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - B/op",
+            "value": 6576,
+            "unit": "B/op",
+            "extra": "51201 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNewConfigManager_WithSelectors (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - allocs/op",
+            "value": 77,
+            "unit": "allocs/op",
+            "extra": "51201 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_NoConfigFile (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail)",
+            "value": 75850,
+            "unit": "ns/op\t   21825 B/op\t     463 allocs/op",
+            "extra": "15770 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_NoConfigFile (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - ns/op",
+            "value": 75850,
+            "unit": "ns/op",
+            "extra": "15770 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_NoConfigFile (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - B/op",
+            "value": 21825,
+            "unit": "B/op",
+            "extra": "15770 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_NoConfigFile (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - allocs/op",
+            "value": 463,
+            "unit": "allocs/op",
+            "extra": "15770 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_WithConfigFile (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail)",
+            "value": 215809,
+            "unit": "ns/op\t   70918 B/op\t    1070 allocs/op",
+            "extra": "5739 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_WithConfigFile (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - ns/op",
+            "value": 215809,
+            "unit": "ns/op",
+            "extra": "5739 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_WithConfigFile (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - B/op",
+            "value": 70918,
+            "unit": "B/op",
+            "extra": "5739 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_WithConfigFile (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - allocs/op",
+            "value": 1070,
+            "unit": "allocs/op",
+            "extra": "5739 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_WithConfigFile_DeepTree (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail)",
+            "value": 186629,
+            "unit": "ns/op\t   63348 B/op\t     971 allocs/op",
+            "extra": "6670 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_WithConfigFile_DeepTree (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - ns/op",
+            "value": 186629,
+            "unit": "ns/op",
+            "extra": "6670 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_WithConfigFile_DeepTree (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - B/op",
+            "value": 63348,
+            "unit": "B/op",
+            "extra": "6670 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_WithConfigFile_DeepTree (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - allocs/op",
+            "value": 971,
+            "unit": "allocs/op",
+            "extra": "6670 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_Cached (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail)",
+            "value": 3.431,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "349358196 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_Cached (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - ns/op",
+            "value": 3.431,
+            "unit": "ns/op",
+            "extra": "349358196 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_Cached (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "349358196 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoad_Cached (github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "349358196 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 10169,
+            "unit": "ns/op\t   14771 B/op\t      81 allocs/op",
+            "extra": "101774 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 10169,
+            "unit": "ns/op",
+            "extra": "101774 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 14771,
+            "unit": "B/op",
+            "extra": "101774 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 81,
+            "unit": "allocs/op",
+            "extra": "101774 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/nested (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 21480,
+            "unit": "ns/op\t   28967 B/op\t     149 allocs/op",
+            "extra": "57862 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/nested (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 21480,
+            "unit": "ns/op",
+            "extra": "57862 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/nested (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 28967,
+            "unit": "B/op",
+            "extra": "57862 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/nested (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 149,
+            "unit": "allocs/op",
+            "extra": "57862 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 33417,
+            "unit": "ns/op\t   43300 B/op\t     234 allocs/op",
+            "extra": "35538 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 33417,
+            "unit": "ns/op",
+            "extra": "35538 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 43300,
+            "unit": "B/op",
+            "extra": "35538 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 234,
+            "unit": "allocs/op",
+            "extra": "35538 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/map (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 23150,
+            "unit": "ns/op\t   29831 B/op\t     175 allocs/op",
+            "extra": "51254 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/map (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 23150,
+            "unit": "ns/op",
+            "extra": "51254 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/map (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 29831,
+            "unit": "B/op",
+            "extra": "51254 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/map (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 175,
+            "unit": "allocs/op",
+            "extra": "51254 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/large-slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 604072,
+            "unit": "ns/op\t  710566 B/op\t    3934 allocs/op",
+            "extra": "1978 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/large-slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 604072,
+            "unit": "ns/op",
+            "extra": "1978 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/large-slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 710566,
+            "unit": "B/op",
+            "extra": "1978 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Marshal_Nested/large-slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 3934,
+            "unit": "allocs/op",
+            "extra": "1978 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 7983,
+            "unit": "ns/op\t    7505 B/op\t      73 allocs/op",
+            "extra": "147270 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 7983,
+            "unit": "ns/op",
+            "extra": "147270 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 7505,
+            "unit": "B/op",
+            "extra": "147270 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 73,
+            "unit": "allocs/op",
+            "extra": "147270 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/nested (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 12132,
+            "unit": "ns/op\t    9377 B/op\t     114 allocs/op",
+            "extra": "98140 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/nested (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 12132,
+            "unit": "ns/op",
+            "extra": "98140 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/nested (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 9377,
+            "unit": "B/op",
+            "extra": "98140 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/nested (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 114,
+            "unit": "allocs/op",
+            "extra": "98140 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 23038,
+            "unit": "ns/op\t   13754 B/op\t     208 allocs/op",
+            "extra": "51687 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 23038,
+            "unit": "ns/op",
+            "extra": "51687 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 13754,
+            "unit": "B/op",
+            "extra": "51687 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 208,
+            "unit": "allocs/op",
+            "extra": "51687 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/map (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 14001,
+            "unit": "ns/op\t   10290 B/op\t     137 allocs/op",
+            "extra": "86038 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/map (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 14001,
+            "unit": "ns/op",
+            "extra": "86038 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/map (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 10290,
+            "unit": "B/op",
+            "extra": "86038 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/map (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 137,
+            "unit": "allocs/op",
+            "extra": "86038 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/large-slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 463580,
+            "unit": "ns/op\t  208686 B/op\t    3906 allocs/op",
+            "extra": "2517 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/large-slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 463580,
+            "unit": "ns/op",
+            "extra": "2517 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/large-slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 208686,
+            "unit": "B/op",
+            "extra": "2517 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_Unmarshal_Nested/large-slice (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 3906,
+            "unit": "allocs/op",
+            "extra": "2517 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_UnmarshalString/simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 8065,
+            "unit": "ns/op\t    7529 B/op\t      74 allocs/op",
+            "extra": "146320 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_UnmarshalString/simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 8065,
+            "unit": "ns/op",
+            "extra": "146320 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_UnmarshalString/simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 7529,
+            "unit": "B/op",
+            "extra": "146320 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_UnmarshalString/simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 74,
+            "unit": "allocs/op",
+            "extra": "146320 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_UnmarshalString/multiline (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 8520,
+            "unit": "ns/op\t    7609 B/op\t      74 allocs/op",
+            "extra": "143677 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_UnmarshalString/multiline (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 8520,
+            "unit": "ns/op",
+            "extra": "143677 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_UnmarshalString/multiline (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 7609,
+            "unit": "B/op",
+            "extra": "143677 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_UnmarshalString/multiline (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 74,
+            "unit": "allocs/op",
+            "extra": "143677 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_UnmarshalString/whitespace (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 8136,
+            "unit": "ns/op\t    7553 B/op\t      76 allocs/op",
+            "extra": "134938 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_UnmarshalString/whitespace (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 8136,
+            "unit": "ns/op",
+            "extra": "134938 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_UnmarshalString/whitespace (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 7553,
+            "unit": "B/op",
+            "extra": "134938 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_UnmarshalString/whitespace (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 76,
+            "unit": "allocs/op",
+            "extra": "134938 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip/simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 18830,
+            "unit": "ns/op\t   22292 B/op\t     155 allocs/op",
+            "extra": "63950 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip/simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 18830,
+            "unit": "ns/op",
+            "extra": "63950 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip/simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 22292,
+            "unit": "B/op",
+            "extra": "63950 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip/simple (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 155,
+            "unit": "allocs/op",
+            "extra": "63950 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip/empty (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 18421,
+            "unit": "ns/op\t   22124 B/op\t     143 allocs/op",
+            "extra": "65090 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip/empty (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 18421,
+            "unit": "ns/op",
+            "extra": "65090 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip/empty (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 22124,
+            "unit": "B/op",
+            "extra": "65090 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip/empty (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 143,
+            "unit": "allocs/op",
+            "extra": "65090 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip/large-value (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 19751,
+            "unit": "ns/op\t   22404 B/op\t     158 allocs/op",
+            "extra": "60339 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip/large-value (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 19751,
+            "unit": "ns/op",
+            "extra": "60339 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip/large-value (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 22404,
+            "unit": "B/op",
+            "extra": "60339 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip/large-value (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 158,
+            "unit": "allocs/op",
+            "extra": "60339 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip_Nested (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller)",
+            "value": 86049,
+            "unit": "ns/op\t   98839 B/op\t     611 allocs/op",
+            "extra": "13938 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip_Nested (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - ns/op",
+            "value": 86049,
+            "unit": "ns/op",
+            "extra": "13938 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip_Nested (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - B/op",
+            "value": 98839,
+            "unit": "B/op",
+            "extra": "13938 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkYAMLMarshaller_RoundTrip_Nested (github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller) - allocs/op",
+            "value": 611,
+            "unit": "allocs/op",
+            "extra": "13938 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/1_resource (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness)",
+            "value": 4504,
+            "unit": "ns/op\t    4897 B/op\t      32 allocs/op",
+            "extra": "252854 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/1_resource (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - ns/op",
+            "value": 4504,
+            "unit": "ns/op",
+            "extra": "252854 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/1_resource (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - B/op",
+            "value": 4897,
+            "unit": "B/op",
+            "extra": "252854 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/1_resource (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - allocs/op",
+            "value": 32,
+            "unit": "allocs/op",
+            "extra": "252854 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/5_resources (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness)",
+            "value": 24416,
+            "unit": "ns/op\t   24496 B/op\t     160 allocs/op",
+            "extra": "49582 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/5_resources (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - ns/op",
+            "value": 24416,
+            "unit": "ns/op",
+            "extra": "49582 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/5_resources (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - B/op",
+            "value": 24496,
+            "unit": "B/op",
+            "extra": "49582 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/5_resources (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - allocs/op",
+            "value": 160,
+            "unit": "allocs/op",
+            "extra": "49582 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/10_resources (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness)",
+            "value": 52798,
+            "unit": "ns/op\t   48954 B/op\t     320 allocs/op",
+            "extra": "20602 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/10_resources (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - ns/op",
+            "value": 52798,
+            "unit": "ns/op",
+            "extra": "20602 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/10_resources (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - B/op",
+            "value": 48954,
+            "unit": "B/op",
+            "extra": "20602 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/10_resources (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - allocs/op",
+            "value": 320,
+            "unit": "allocs/op",
+            "extra": "20602 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/20_resources (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness)",
+            "value": 92180,
+            "unit": "ns/op\t   97915 B/op\t     640 allocs/op",
+            "extra": "12903 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/20_resources (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - ns/op",
+            "value": 92180,
+            "unit": "ns/op",
+            "extra": "12903 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/20_resources (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - B/op",
+            "value": 97915,
+            "unit": "B/op",
+            "extra": "12903 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_Sequential/20_resources (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - allocs/op",
+            "value": 640,
+            "unit": "allocs/op",
+            "extra": "12903 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_MixedTypes/2d_2ds (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness)",
+            "value": 18537,
+            "unit": "ns/op\t   19600 B/op\t     128 allocs/op",
+            "extra": "61491 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_MixedTypes/2d_2ds (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - ns/op",
+            "value": 18537,
+            "unit": "ns/op",
+            "extra": "61491 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_MixedTypes/2d_2ds (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - B/op",
+            "value": 19600,
+            "unit": "B/op",
+            "extra": "61491 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_MixedTypes/2d_2ds (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - allocs/op",
+            "value": 128,
+            "unit": "allocs/op",
+            "extra": "61491 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_MixedTypes/5d_5ds (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness)",
+            "value": 45904,
+            "unit": "ns/op\t   48945 B/op\t     320 allocs/op",
+            "extra": "26166 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_MixedTypes/5d_5ds (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - ns/op",
+            "value": 45904,
+            "unit": "ns/op",
+            "extra": "26166 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_MixedTypes/5d_5ds (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - B/op",
+            "value": 48945,
+            "unit": "B/op",
+            "extra": "26166 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_MixedTypes/5d_5ds (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - allocs/op",
+            "value": 320,
+            "unit": "allocs/op",
+            "extra": "26166 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_MixedTypes/10d_10ds (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness)",
+            "value": 92621,
+            "unit": "ns/op\t   97905 B/op\t     640 allocs/op",
+            "extra": "12979 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_MixedTypes/10d_10ds (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - ns/op",
+            "value": 92621,
+            "unit": "ns/op",
+            "extra": "12979 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_MixedTypes/10d_10ds (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - B/op",
+            "value": 97905,
+            "unit": "B/op",
+            "extra": "12979 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_MixedTypes/10d_10ds (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - allocs/op",
+            "value": 640,
+            "unit": "allocs/op",
+            "extra": "12979 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_RealWorldCNI (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness)",
+            "value": 14682,
+            "unit": "ns/op\t   14697 B/op\t      96 allocs/op",
+            "extra": "82762 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_RealWorldCNI (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - ns/op",
+            "value": 14682,
+            "unit": "ns/op",
+            "extra": "82762 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_RealWorldCNI (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - B/op",
+            "value": 14697,
+            "unit": "B/op",
+            "extra": "82762 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWaitForMultipleResources_RealWorldCNI (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - allocs/op",
+            "value": 96,
+            "unit": "allocs/op",
+            "extra": "82762 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPollForReadiness_SingleCheck (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness)",
+            "value": 977.9,
+            "unit": "ns/op\t     688 B/op\t      11 allocs/op",
+            "extra": "1224361 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPollForReadiness_SingleCheck (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - ns/op",
+            "value": 977.9,
+            "unit": "ns/op",
+            "extra": "1224361 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPollForReadiness_SingleCheck (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - B/op",
+            "value": 688,
+            "unit": "B/op",
+            "extra": "1224361 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPollForReadiness_SingleCheck (github.com/devantler-tech/ksail/v5/pkg/k8s/readiness) - allocs/op",
+            "value": 11,
+            "unit": "allocs/op",
+            "extra": "1224361 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_SingleLine (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 134.1,
+            "unit": "ns/op\t      32 B/op\t       2 allocs/op",
+            "extra": "8964112 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_SingleLine (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 134.1,
+            "unit": "ns/op",
+            "extra": "8964112 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_SingleLine (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 32,
+            "unit": "B/op",
+            "extra": "8964112 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_SingleLine (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 2,
+            "unit": "allocs/op",
+            "extra": "8964112 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_WithArgs (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 332.3,
+            "unit": "ns/op\t     112 B/op\t       4 allocs/op",
+            "extra": "3624786 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_WithArgs (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 332.3,
+            "unit": "ns/op",
+            "extra": "3624786 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_WithArgs (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 112,
+            "unit": "B/op",
+            "extra": "3624786 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_WithArgs (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 4,
+            "unit": "allocs/op",
+            "extra": "3624786 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_Multiline (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 402.4,
+            "unit": "ns/op\t     208 B/op\t       7 allocs/op",
+            "extra": "2772738 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_Multiline (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 402.4,
+            "unit": "ns/op",
+            "extra": "2772738 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_Multiline (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 208,
+            "unit": "B/op",
+            "extra": "2772738 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_Multiline (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 7,
+            "unit": "allocs/op",
+            "extra": "2772738 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_WithTimer (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 408.3,
+            "unit": "ns/op\t      68 B/op\t       6 allocs/op",
+            "extra": "2929791 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_WithTimer (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 408.3,
+            "unit": "ns/op",
+            "extra": "2929791 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_WithTimer (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 68,
+            "unit": "B/op",
+            "extra": "2929791 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_WithTimer (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "2929791 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_AllTypes (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 1014,
+            "unit": "ns/op\t     224 B/op\t      14 allocs/op",
+            "extra": "1000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_AllTypes (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 1014,
+            "unit": "ns/op",
+            "extra": "1000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_AllTypes (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 224,
+            "unit": "B/op",
+            "extra": "1000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkWriteMessage_AllTypes (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 14,
+            "unit": "allocs/op",
+            "extra": "1000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_Sequential (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 46760,
+            "unit": "ns/op\t    2104 B/op\t      34 allocs/op",
+            "extra": "25053 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_Sequential (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 46760,
+            "unit": "ns/op",
+            "extra": "25053 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_Sequential (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 2104,
+            "unit": "B/op",
+            "extra": "25053 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_Sequential (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 34,
+            "unit": "allocs/op",
+            "extra": "25053 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_Parallel_Fast (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 26524,
+            "unit": "ns/op\t    3537 B/op\t      80 allocs/op",
+            "extra": "44730 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_Parallel_Fast (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 26524,
+            "unit": "ns/op",
+            "extra": "44730 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_Parallel_Fast (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 3537,
+            "unit": "B/op",
+            "extra": "44730 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_Parallel_Fast (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 80,
+            "unit": "allocs/op",
+            "extra": "44730 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_Parallel_Slow (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 103345,
+            "unit": "ns/op\t    2785 B/op\t      58 allocs/op",
+            "extra": "10000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_Parallel_Slow (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 103345,
+            "unit": "ns/op",
+            "extra": "10000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_Parallel_Slow (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 2785,
+            "unit": "B/op",
+            "extra": "10000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_Parallel_Slow (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 58,
+            "unit": "allocs/op",
+            "extra": "10000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_ManyTasks (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 187679,
+            "unit": "ns/op\t   13604 B/op\t     249 allocs/op",
+            "extra": "6277 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_ManyTasks (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 187679,
+            "unit": "ns/op",
+            "extra": "6277 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_ManyTasks (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 13604,
+            "unit": "B/op",
+            "extra": "6277 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_ManyTasks (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 249,
+            "unit": "allocs/op",
+            "extra": "6277 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_WithTimer (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 35693,
+            "unit": "ns/op\t    3008 B/op\t      71 allocs/op",
+            "extra": "33772 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_WithTimer (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 35693,
+            "unit": "ns/op",
+            "extra": "33772 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_WithTimer (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 3008,
+            "unit": "B/op",
+            "extra": "33772 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_WithTimer (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 71,
+            "unit": "allocs/op",
+            "extra": "33772 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_CI_Mode (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 33303,
+            "unit": "ns/op\t    2784 B/op\t      58 allocs/op",
+            "extra": "35661 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_CI_Mode (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 33303,
+            "unit": "ns/op",
+            "extra": "35661 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_CI_Mode (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 2784,
+            "unit": "B/op",
+            "extra": "35661 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_CI_Mode (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 58,
+            "unit": "allocs/op",
+            "extra": "35661 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_CustomLabels (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 27121,
+            "unit": "ns/op\t    2409 B/op\t      46 allocs/op",
+            "extra": "44288 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_CustomLabels (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 27121,
+            "unit": "ns/op",
+            "extra": "44288 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_CustomLabels (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 2409,
+            "unit": "B/op",
+            "extra": "44288 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_CustomLabels (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 46,
+            "unit": "allocs/op",
+            "extra": "44288 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_SingleTask (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 14657,
+            "unit": "ns/op\t    2096 B/op\t      34 allocs/op",
+            "extra": "78210 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_SingleTask (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 14657,
+            "unit": "ns/op",
+            "extra": "78210 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_SingleTask (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 2096,
+            "unit": "B/op",
+            "extra": "78210 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_SingleTask (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 34,
+            "unit": "allocs/op",
+            "extra": "78210 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_NoOp (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 14018,
+            "unit": "ns/op\t    2784 B/op\t      58 allocs/op",
+            "extra": "85352 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_NoOp (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 14018,
+            "unit": "ns/op",
+            "extra": "85352 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_NoOp (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 2784,
+            "unit": "B/op",
+            "extra": "85352 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_NoOp (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 58,
+            "unit": "allocs/op",
+            "extra": "85352 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_VaryingTaskDurations (github.com/devantler-tech/ksail/v5/pkg/notify)",
+            "value": 88465,
+            "unit": "ns/op\t    3032 B/op\t      68 allocs/op",
+            "extra": "13480 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_VaryingTaskDurations (github.com/devantler-tech/ksail/v5/pkg/notify) - ns/op",
+            "value": 88465,
+            "unit": "ns/op",
+            "extra": "13480 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_VaryingTaskDurations (github.com/devantler-tech/ksail/v5/pkg/notify) - B/op",
+            "value": 3032,
+            "unit": "B/op",
+            "extra": "13480 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkProgressGroup_VaryingTaskDurations (github.com/devantler-tech/ksail/v5/pkg/notify) - allocs/op",
+            "value": 68,
+            "unit": "allocs/op",
+            "extra": "13480 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_NoChanges (github.com/devantler-tech/ksail/v5/pkg/svc/diff)",
+            "value": 354,
+            "unit": "ns/op\t     832 B/op\t       5 allocs/op",
+            "extra": "3388236 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_NoChanges (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - ns/op",
+            "value": 354,
+            "unit": "ns/op",
+            "extra": "3388236 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_NoChanges (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - B/op",
+            "value": 832,
+            "unit": "B/op",
+            "extra": "3388236 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_NoChanges (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "3388236 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_AllInPlaceChanges (github.com/devantler-tech/ksail/v5/pkg/svc/diff)",
+            "value": 786.8,
+            "unit": "ns/op\t    1984 B/op\t       9 allocs/op",
+            "extra": "1680457 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_AllInPlaceChanges (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - ns/op",
+            "value": 786.8,
+            "unit": "ns/op",
+            "extra": "1680457 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_AllInPlaceChanges (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - B/op",
+            "value": 1984,
+            "unit": "B/op",
+            "extra": "1680457 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_AllInPlaceChanges (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - allocs/op",
+            "value": 9,
+            "unit": "allocs/op",
+            "extra": "1680457 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_RecreateRequired (github.com/devantler-tech/ksail/v5/pkg/svc/diff)",
+            "value": 397.1,
+            "unit": "ns/op\t     912 B/op\t       6 allocs/op",
+            "extra": "3049720 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_RecreateRequired (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - ns/op",
+            "value": 397.1,
+            "unit": "ns/op",
+            "extra": "3049720 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_RecreateRequired (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - B/op",
+            "value": 912,
+            "unit": "B/op",
+            "extra": "3049720 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_RecreateRequired (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "3049720 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_MixedCategories (github.com/devantler-tech/ksail/v5/pkg/svc/diff)",
+            "value": 571.2,
+            "unit": "ns/op\t    1280 B/op\t       9 allocs/op",
+            "extra": "2112904 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_MixedCategories (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - ns/op",
+            "value": 571.2,
+            "unit": "ns/op",
+            "extra": "2112904 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_MixedCategories (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - B/op",
+            "value": 1280,
+            "unit": "B/op",
+            "extra": "2112904 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_MixedCategories (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - allocs/op",
+            "value": 9,
+            "unit": "allocs/op",
+            "extra": "2112904 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_TalosOptions (github.com/devantler-tech/ksail/v5/pkg/svc/diff)",
+            "value": 670.2,
+            "unit": "ns/op\t    1360 B/op\t      10 allocs/op",
+            "extra": "1785705 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_TalosOptions (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - ns/op",
+            "value": 670.2,
+            "unit": "ns/op",
+            "extra": "1785705 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_TalosOptions (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - B/op",
+            "value": 1360,
+            "unit": "B/op",
+            "extra": "1785705 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_TalosOptions (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - allocs/op",
+            "value": 10,
+            "unit": "allocs/op",
+            "extra": "1785705 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_HetznerOptions (github.com/devantler-tech/ksail/v5/pkg/svc/diff)",
+            "value": 734.4,
+            "unit": "ns/op\t    1456 B/op\t      10 allocs/op",
+            "extra": "1636881 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_HetznerOptions (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - ns/op",
+            "value": 734.4,
+            "unit": "ns/op",
+            "extra": "1636881 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_HetznerOptions (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - B/op",
+            "value": 1456,
+            "unit": "B/op",
+            "extra": "1636881 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_HetznerOptions (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - allocs/op",
+            "value": 10,
+            "unit": "allocs/op",
+            "extra": "1636881 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_NilSpec (github.com/devantler-tech/ksail/v5/pkg/svc/diff)",
+            "value": 50.54,
+            "unit": "ns/op\t     144 B/op\t       1 allocs/op",
+            "extra": "23030306 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_NilSpec (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - ns/op",
+            "value": 50.54,
+            "unit": "ns/op",
+            "extra": "23030306 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_NilSpec (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - B/op",
+            "value": 144,
+            "unit": "B/op",
+            "extra": "23030306 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkComputeDiff_NilSpec (github.com/devantler-tech/ksail/v5/pkg/svc/diff) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "23030306 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromManifest/Small/3images (github.com/devantler-tech/ksail/v5/pkg/svc/image)",
+            "value": 6453,
+            "unit": "ns/op\t    4763 B/op\t      26 allocs/op",
+            "extra": "185288 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromManifest/Small/3images (github.com/devantler-tech/ksail/v5/pkg/svc/image) - ns/op",
+            "value": 6453,
+            "unit": "ns/op",
+            "extra": "185288 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromManifest/Small/3images (github.com/devantler-tech/ksail/v5/pkg/svc/image) - B/op",
+            "value": 4763,
+            "unit": "B/op",
+            "extra": "185288 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromManifest/Small/3images (github.com/devantler-tech/ksail/v5/pkg/svc/image) - allocs/op",
+            "value": 26,
+            "unit": "allocs/op",
+            "extra": "185288 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromManifest/Medium/5images (github.com/devantler-tech/ksail/v5/pkg/svc/image)",
+            "value": 14505,
+            "unit": "ns/op\t    5470 B/op\t      52 allocs/op",
+            "extra": "82724 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromManifest/Medium/5images (github.com/devantler-tech/ksail/v5/pkg/svc/image) - ns/op",
+            "value": 14505,
+            "unit": "ns/op",
+            "extra": "82724 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromManifest/Medium/5images (github.com/devantler-tech/ksail/v5/pkg/svc/image) - B/op",
+            "value": 5470,
+            "unit": "B/op",
+            "extra": "82724 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromManifest/Medium/5images (github.com/devantler-tech/ksail/v5/pkg/svc/image) - allocs/op",
+            "value": 52,
+            "unit": "allocs/op",
+            "extra": "82724 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromManifest/Large/40images (github.com/devantler-tech/ksail/v5/pkg/svc/image)",
+            "value": 167423,
+            "unit": "ns/op\t   17726 B/op\t     483 allocs/op",
+            "extra": "7290 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromManifest/Large/40images (github.com/devantler-tech/ksail/v5/pkg/svc/image) - ns/op",
+            "value": 167423,
+            "unit": "ns/op",
+            "extra": "7290 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromManifest/Large/40images (github.com/devantler-tech/ksail/v5/pkg/svc/image) - B/op",
+            "value": 17726,
+            "unit": "B/op",
+            "extra": "7290 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromManifest/Large/40images (github.com/devantler-tech/ksail/v5/pkg/svc/image) - allocs/op",
+            "value": 483,
+            "unit": "allocs/op",
+            "extra": "7290 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromMultipleManifests/TwoManifests (github.com/devantler-tech/ksail/v5/pkg/svc/image)",
+            "value": 22214,
+            "unit": "ns/op\t   10265 B/op\t      79 allocs/op",
+            "extra": "56312 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromMultipleManifests/TwoManifests (github.com/devantler-tech/ksail/v5/pkg/svc/image) - ns/op",
+            "value": 22214,
+            "unit": "ns/op",
+            "extra": "56312 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromMultipleManifests/TwoManifests (github.com/devantler-tech/ksail/v5/pkg/svc/image) - B/op",
+            "value": 10265,
+            "unit": "B/op",
+            "extra": "56312 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromMultipleManifests/TwoManifests (github.com/devantler-tech/ksail/v5/pkg/svc/image) - allocs/op",
+            "value": 79,
+            "unit": "allocs/op",
+            "extra": "56312 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromMultipleManifests/TenManifests (github.com/devantler-tech/ksail/v5/pkg/svc/image)",
+            "value": 64094,
+            "unit": "ns/op\t   47122 B/op\t     252 allocs/op",
+            "extra": "18686 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromMultipleManifests/TenManifests (github.com/devantler-tech/ksail/v5/pkg/svc/image) - ns/op",
+            "value": 64094,
+            "unit": "ns/op",
+            "extra": "18686 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromMultipleManifests/TenManifests (github.com/devantler-tech/ksail/v5/pkg/svc/image) - B/op",
+            "value": 47122,
+            "unit": "B/op",
+            "extra": "18686 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractImagesFromMultipleManifests/TenManifests (github.com/devantler-tech/ksail/v5/pkg/svc/image) - allocs/op",
+            "value": 252,
+            "unit": "allocs/op",
+            "extra": "18686 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/Simple (github.com/devantler-tech/ksail/v5/pkg/svc/image)",
+            "value": 148.2,
+            "unit": "ns/op\t      72 B/op\t       3 allocs/op",
+            "extra": "8005016 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/Simple (github.com/devantler-tech/ksail/v5/pkg/svc/image) - ns/op",
+            "value": 148.2,
+            "unit": "ns/op",
+            "extra": "8005016 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/Simple (github.com/devantler-tech/ksail/v5/pkg/svc/image) - B/op",
+            "value": 72,
+            "unit": "B/op",
+            "extra": "8005016 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/Simple (github.com/devantler-tech/ksail/v5/pkg/svc/image) - allocs/op",
+            "value": 3,
+            "unit": "allocs/op",
+            "extra": "8005016 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/WithTag (github.com/devantler-tech/ksail/v5/pkg/svc/image)",
+            "value": 123.4,
+            "unit": "ns/op\t      48 B/op\t       2 allocs/op",
+            "extra": "9710907 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/WithTag (github.com/devantler-tech/ksail/v5/pkg/svc/image) - ns/op",
+            "value": 123.4,
+            "unit": "ns/op",
+            "extra": "9710907 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/WithTag (github.com/devantler-tech/ksail/v5/pkg/svc/image) - B/op",
+            "value": 48,
+            "unit": "B/op",
+            "extra": "9710907 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/WithTag (github.com/devantler-tech/ksail/v5/pkg/svc/image) - allocs/op",
+            "value": 2,
+            "unit": "allocs/op",
+            "extra": "9710907 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/DockerHubNamespaced (github.com/devantler-tech/ksail/v5/pkg/svc/image)",
+            "value": 140.1,
+            "unit": "ns/op\t      64 B/op\t       2 allocs/op",
+            "extra": "8535066 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/DockerHubNamespaced (github.com/devantler-tech/ksail/v5/pkg/svc/image) - ns/op",
+            "value": 140.1,
+            "unit": "ns/op",
+            "extra": "8535066 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/DockerHubNamespaced (github.com/devantler-tech/ksail/v5/pkg/svc/image) - B/op",
+            "value": 64,
+            "unit": "B/op",
+            "extra": "8535066 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/DockerHubNamespaced (github.com/devantler-tech/ksail/v5/pkg/svc/image) - allocs/op",
+            "value": 2,
+            "unit": "allocs/op",
+            "extra": "8535066 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/GHCR (github.com/devantler-tech/ksail/v5/pkg/svc/image)",
+            "value": 106.3,
+            "unit": "ns/op\t      48 B/op\t       1 allocs/op",
+            "extra": "11315138 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/GHCR (github.com/devantler-tech/ksail/v5/pkg/svc/image) - ns/op",
+            "value": 106.3,
+            "unit": "ns/op",
+            "extra": "11315138 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/GHCR (github.com/devantler-tech/ksail/v5/pkg/svc/image) - B/op",
+            "value": 48,
+            "unit": "B/op",
+            "extra": "11315138 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/GHCR (github.com/devantler-tech/ksail/v5/pkg/svc/image) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "11315138 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/RegistryK8s (github.com/devantler-tech/ksail/v5/pkg/svc/image)",
+            "value": 104.2,
+            "unit": "ns/op\t      48 B/op\t       1 allocs/op",
+            "extra": "11531119 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/RegistryK8s (github.com/devantler-tech/ksail/v5/pkg/svc/image) - ns/op",
+            "value": 104.2,
+            "unit": "ns/op",
+            "extra": "11531119 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/RegistryK8s (github.com/devantler-tech/ksail/v5/pkg/svc/image) - B/op",
+            "value": 48,
+            "unit": "B/op",
+            "extra": "11531119 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/RegistryK8s (github.com/devantler-tech/ksail/v5/pkg/svc/image) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "11531119 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/Localhost (github.com/devantler-tech/ksail/v5/pkg/svc/image)",
+            "value": 88.38,
+            "unit": "ns/op\t      32 B/op\t       1 allocs/op",
+            "extra": "13401604 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/Localhost (github.com/devantler-tech/ksail/v5/pkg/svc/image) - ns/op",
+            "value": 88.38,
+            "unit": "ns/op",
+            "extra": "13401604 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/Localhost (github.com/devantler-tech/ksail/v5/pkg/svc/image) - B/op",
+            "value": 32,
+            "unit": "B/op",
+            "extra": "13401604 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/Localhost (github.com/devantler-tech/ksail/v5/pkg/svc/image) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "13401604 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/Digest (github.com/devantler-tech/ksail/v5/pkg/svc/image)",
+            "value": 128.7,
+            "unit": "ns/op\t     112 B/op\t       2 allocs/op",
+            "extra": "9408438 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/Digest (github.com/devantler-tech/ksail/v5/pkg/svc/image) - ns/op",
+            "value": 128.7,
+            "unit": "ns/op",
+            "extra": "9408438 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/Digest (github.com/devantler-tech/ksail/v5/pkg/svc/image) - B/op",
+            "value": 112,
+            "unit": "B/op",
+            "extra": "9408438 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkNormalizeImageRef/Digest (github.com/devantler-tech/ksail/v5/pkg/svc/image) - allocs/op",
+            "value": 2,
+            "unit": "allocs/op",
+            "extra": "9408438 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseOCIURL_LocalhostWithPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 104.7,
+            "unit": "ns/op\t     112 B/op\t       1 allocs/op",
+            "extra": "11409148 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseOCIURL_LocalhostWithPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 104.7,
+            "unit": "ns/op",
+            "extra": "11409148 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseOCIURL_LocalhostWithPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 112,
+            "unit": "B/op",
+            "extra": "11409148 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseOCIURL_LocalhostWithPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "11409148 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseOCIURL_ExternalRegistry (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 79.08,
+            "unit": "ns/op\t     112 B/op\t       1 allocs/op",
+            "extra": "14741384 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseOCIURL_ExternalRegistry (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 79.08,
+            "unit": "ns/op",
+            "extra": "14741384 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseOCIURL_ExternalRegistry (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 112,
+            "unit": "B/op",
+            "extra": "14741384 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseOCIURL_ExternalRegistry (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "14741384 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseOCIURL_Empty (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 3.746,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "318807984 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseOCIURL_Empty (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 3.746,
+            "unit": "ns/op",
+            "extra": "318807984 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseOCIURL_Empty (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "318807984 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseOCIURL_Empty (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "318807984 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseHostPort_WithPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 20.56,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "57809928 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseHostPort_WithPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 20.56,
+            "unit": "ns/op",
+            "extra": "57809928 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseHostPort_WithPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "57809928 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseHostPort_WithPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "57809928 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseHostPort_ExternalNoPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 7.584,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "158250781 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseHostPort_ExternalNoPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 7.584,
+            "unit": "ns/op",
+            "extra": "158250781 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseHostPort_ExternalNoPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "158250781 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseHostPort_ExternalNoPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "158250781 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseRegistryFlag_Simple (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 112.9,
+            "unit": "ns/op\t     112 B/op\t       1 allocs/op",
+            "extra": "10570842 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseRegistryFlag_Simple (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 112.9,
+            "unit": "ns/op",
+            "extra": "10570842 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseRegistryFlag_Simple (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 112,
+            "unit": "B/op",
+            "extra": "10570842 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseRegistryFlag_Simple (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "10570842 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseRegistryFlag_WithCredentials (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 110,
+            "unit": "ns/op\t     112 B/op\t       1 allocs/op",
+            "extra": "10828483 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseRegistryFlag_WithCredentials (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 110,
+            "unit": "ns/op",
+            "extra": "10828483 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseRegistryFlag_WithCredentials (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 112,
+            "unit": "B/op",
+            "extra": "10828483 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkParseRegistryFlag_WithCredentials (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "10828483 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatRegistryURL_WithPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 85.79,
+            "unit": "ns/op\t      80 B/op\t       2 allocs/op",
+            "extra": "13947944 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatRegistryURL_WithPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 85.79,
+            "unit": "ns/op",
+            "extra": "13947944 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatRegistryURL_WithPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 80,
+            "unit": "B/op",
+            "extra": "13947944 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatRegistryURL_WithPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 2,
+            "unit": "allocs/op",
+            "extra": "13947944 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatRegistryURL_WithoutPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 65.22,
+            "unit": "ns/op\t      48 B/op\t       1 allocs/op",
+            "extra": "22131452 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatRegistryURL_WithoutPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 65.22,
+            "unit": "ns/op",
+            "extra": "22131452 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatRegistryURL_WithoutPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 48,
+            "unit": "B/op",
+            "extra": "22131452 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFormatRegistryURL_WithoutPort (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "22131452 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromViper_Set (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 222,
+            "unit": "ns/op\t     144 B/op\t       3 allocs/op",
+            "extra": "5440689 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromViper_Set (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 222,
+            "unit": "ns/op",
+            "extra": "5440689 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromViper_Set (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 144,
+            "unit": "B/op",
+            "extra": "5440689 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromViper_Set (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 3,
+            "unit": "allocs/op",
+            "extra": "5440689 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromViper_Empty (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 128.7,
+            "unit": "ns/op\t      32 B/op\t       2 allocs/op",
+            "extra": "9322356 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromViper_Empty (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 128.7,
+            "unit": "ns/op",
+            "extra": "9322356 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromViper_Empty (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 32,
+            "unit": "B/op",
+            "extra": "9322356 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromViper_Empty (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 2,
+            "unit": "allocs/op",
+            "extra": "9322356 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromConfig_LocalRegistry (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 302.2,
+            "unit": "ns/op\t     112 B/op\t       1 allocs/op",
+            "extra": "3983764 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromConfig_LocalRegistry (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 302.2,
+            "unit": "ns/op",
+            "extra": "3983764 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromConfig_LocalRegistry (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 112,
+            "unit": "B/op",
+            "extra": "3983764 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromConfig_LocalRegistry (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "3983764 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromConfig_ExternalRegistry (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver)",
+            "value": 314,
+            "unit": "ns/op\t     112 B/op\t       1 allocs/op",
+            "extra": "3850306 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromConfig_ExternalRegistry (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - ns/op",
+            "value": 314,
+            "unit": "ns/op",
+            "extra": "3850306 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromConfig_ExternalRegistry (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - B/op",
+            "value": 112,
+            "unit": "B/op",
+            "extra": "3850306 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDetectRegistryFromConfig_ExternalRegistry (github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "3850306 times\n4 procs"
           }
         ]
       }
