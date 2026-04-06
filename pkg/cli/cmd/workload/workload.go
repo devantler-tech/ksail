@@ -3641,12 +3641,13 @@ func buildFileSnapshot(dir string) fileSnapshot {
 // updates the snapshot in place. Returns "" if no changes are detected.
 func detectChangedFile(dir string, snapshot fileSnapshot) string {
 	changed := scanForModifiedFiles(dir, snapshot)
+	deleted := scanForDeletedFiles(snapshot)
 
-	if changed == "" {
-		changed = scanForDeletedFiles(snapshot)
+	if changed != "" {
+		return changed
 	}
 
-	return changed
+	return deleted
 }
 
 // scanForModifiedFiles walks the directory tree and returns the first file
@@ -3681,10 +3682,8 @@ func scanForModifiedFiles(dir string, snapshot fileSnapshot) string {
 }
 
 // scanForDeletedFiles checks all snapshot entries and removes any whose
-// file no longer exists. Returns the first deleted path found, or "".
-// scanForDeletedFiles checks all snapshot entries and removes any whose
-// file no longer exists or is no longer a regular file. Returns the first
-// changed path found, or "".
+// path is missing or is no longer a regular file. Returns the first
+// deleted path found, or "".
 func scanForDeletedFiles(snapshot fileSnapshot) string {
 	var changed string
 
