@@ -142,6 +142,7 @@ func TestCreateCmd_FluxType(t *testing.T) {
 	require.NoError(t, err)
 }
 
+//nolint:paralleltest // uses t.Setenv to isolate from real gh credentials
 func TestCreateCmd_ArgoCDType(t *testing.T) {
 	// Not parallel: uses t.Setenv to isolate from real gh credentials.
 	t.Setenv("GH_TOKEN", "")
