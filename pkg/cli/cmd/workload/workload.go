@@ -3618,18 +3618,14 @@ func tryAddDirectory(watcher *fsnotify.Watcher, path string, cmd *cobra.Command)
 func buildFileSnapshot(dir string) fileSnapshot {
 	snap := make(fileSnapshot)
 
-	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() {
+			return nil //nolint:nilerr // skip inaccessible entries
 		}
 
 		info, statErr := d.Info()
-		if statErr != nil {
-			return nil
-		}
-
-		if !info.Mode().IsRegular() {
-			return nil
+		if statErr != nil || !info.Mode().IsRegular() {
+			return nil //nolint:nilerr // skip non-regular entries and stat errors
 		}
 
 		snap[path] = info.ModTime()
@@ -3644,20 +3640,29 @@ func buildFileSnapshot(dir string) fileSnapshot {
 // differs from the snapshot. Returns the first changed file path found and
 // updates the snapshot in place. Returns "" if no changes are detected.
 func detectChangedFile(dir string, snapshot fileSnapshot) string {
+	changed := scanForModifiedFiles(dir, snapshot)
+
+	if changed == "" {
+		changed = scanForDeletedFiles(snapshot)
+	}
+
+	return changed
+}
+
+// scanForModifiedFiles walks the directory tree and returns the first file
+// whose modification time differs from the snapshot. Updates the snapshot
+// in place for all changed files encountered during the walk.
+func scanForModifiedFiles(dir string, snapshot fileSnapshot) string {
 	var changed string
 
-	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() {
+			return nil //nolint:nilerr // skip inaccessible entries
 		}
 
 		info, statErr := d.Info()
-		if statErr != nil {
-			return nil
-		}
-
-		if !info.Mode().IsRegular() {
-			return nil
+		if statErr != nil || !info.Mode().IsRegular() {
+			return nil //nolint:nilerr // skip non-regular entries and stat errors
 		}
 
 		modTime := info.ModTime()
@@ -3672,9 +3677,18 @@ func detectChangedFile(dir string, snapshot fileSnapshot) string {
 		return nil
 	})
 
-	// Detect deleted files.
+	return changed
+}
+
+// scanForDeletedFiles checks all snapshot entries and removes any whose
+// file no longer exists. Returns the first deleted path found, or "".
+func scanForDeletedFiles(snapshot fileSnapshot) string {
+	var changed string
+
 	for path := range snapshot {
-		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		_, statErr := os.Stat(path)
+
+		if errors.Is(statErr, os.ErrNotExist) {
 			delete(snapshot, path)
 
 			if changed == "" {

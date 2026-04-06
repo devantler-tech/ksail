@@ -2450,16 +2450,16 @@ func TestBuildFileSnapshot(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		f1 := filepath.Join(dir, "a.yaml")
-		f2 := filepath.Join(dir, "b.yaml")
-		require.NoError(t, os.WriteFile(f1, []byte("a"), 0o600))
-		require.NoError(t, os.WriteFile(f2, []byte("b"), 0o600))
+		fileA := filepath.Join(dir, "a.yaml")
+		fileB := filepath.Join(dir, "b.yaml")
+		require.NoError(t, os.WriteFile(fileA, []byte("a"), 0o600))
+		require.NoError(t, os.WriteFile(fileB, []byte("b"), 0o600))
 
 		snap := workload.ExportBuildFileSnapshot(dir)
 
 		require.Len(t, snap, 2)
-		require.Contains(t, snap, f1)
-		require.Contains(t, snap, f2)
+		require.Contains(t, snap, fileA)
+		require.Contains(t, snap, fileB)
 	})
 
 	t.Run("skips_directories", func(t *testing.T) {
@@ -2499,94 +2499,90 @@ func TestBuildFileSnapshot(t *testing.T) {
 	})
 }
 
-func TestDetectChangedFile(t *testing.T) {
+func TestDetectChangedFileReturnsEmptyWhenNoChanges(t *testing.T) {
 	t.Parallel()
 
-	t.Run("returns_empty_when_no_changes", func(t *testing.T) {
-		t.Parallel()
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "a.yaml")
+	require.NoError(t, os.WriteFile(filePath, []byte("a"), 0o600))
 
-		dir := t.TempDir()
-		f := filepath.Join(dir, "a.yaml")
-		require.NoError(t, os.WriteFile(f, []byte("a"), 0o600))
+	snap := workload.ExportBuildFileSnapshot(dir)
+	changed := workload.ExportDetectChangedFile(dir, snap)
 
-		snap := workload.ExportBuildFileSnapshot(dir)
-		changed := workload.ExportDetectChangedFile(dir, snap)
+	require.Empty(t, changed)
+}
 
-		require.Empty(t, changed)
-	})
+func TestDetectChangedFileDetectsModifiedFile(t *testing.T) {
+	t.Parallel()
 
-	t.Run("detects_modified_file", func(t *testing.T) {
-		t.Parallel()
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "a.yaml")
+	require.NoError(t, os.WriteFile(filePath, []byte("a"), 0o600))
 
-		dir := t.TempDir()
-		f := filepath.Join(dir, "a.yaml")
-		require.NoError(t, os.WriteFile(f, []byte("a"), 0o600))
+	snap := workload.ExportBuildFileSnapshot(dir)
 
-		snap := workload.ExportBuildFileSnapshot(dir)
+	// Ensure mod time differs (some filesystems have 1s granularity).
+	time.Sleep(50 * time.Millisecond)
+	now := time.Now().Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(filePath, now, now))
 
-		// Ensure mod time differs (some filesystems have 1s granularity).
-		time.Sleep(50 * time.Millisecond)
-		now := time.Now().Add(2 * time.Second)
-		require.NoError(t, os.Chtimes(f, now, now))
+	changed := workload.ExportDetectChangedFile(dir, snap)
 
-		changed := workload.ExportDetectChangedFile(dir, snap)
+	require.Equal(t, filePath, changed)
+}
 
-		require.Equal(t, f, changed)
-	})
+func TestDetectChangedFileDetectsNewFile(t *testing.T) {
+	t.Parallel()
 
-	t.Run("detects_new_file", func(t *testing.T) {
-		t.Parallel()
+	dir := t.TempDir()
+	existingFile := filepath.Join(dir, "a.yaml")
+	require.NoError(t, os.WriteFile(existingFile, []byte("a"), 0o600))
 
-		dir := t.TempDir()
-		f1 := filepath.Join(dir, "a.yaml")
-		require.NoError(t, os.WriteFile(f1, []byte("a"), 0o600))
+	snap := workload.ExportBuildFileSnapshot(dir)
 
-		snap := workload.ExportBuildFileSnapshot(dir)
+	newFile := filepath.Join(dir, "b.yaml")
+	require.NoError(t, os.WriteFile(newFile, []byte("b"), 0o600))
 
-		f2 := filepath.Join(dir, "b.yaml")
-		require.NoError(t, os.WriteFile(f2, []byte("b"), 0o600))
+	changed := workload.ExportDetectChangedFile(dir, snap)
 
-		changed := workload.ExportDetectChangedFile(dir, snap)
+	require.Equal(t, newFile, changed)
+}
 
-		require.Equal(t, f2, changed)
-	})
+func TestDetectChangedFileDetectsDeletedFile(t *testing.T) {
+	t.Parallel()
 
-	t.Run("detects_deleted_file", func(t *testing.T) {
-		t.Parallel()
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "a.yaml")
+	require.NoError(t, os.WriteFile(filePath, []byte("a"), 0o600))
 
-		dir := t.TempDir()
-		f := filepath.Join(dir, "a.yaml")
-		require.NoError(t, os.WriteFile(f, []byte("a"), 0o600))
+	snap := workload.ExportBuildFileSnapshot(dir)
+	require.NoError(t, os.Remove(filePath))
 
-		snap := workload.ExportBuildFileSnapshot(dir)
-		require.NoError(t, os.Remove(f))
+	changed := workload.ExportDetectChangedFile(dir, snap)
 
-		changed := workload.ExportDetectChangedFile(dir, snap)
+	require.Equal(t, filePath, changed)
+	require.NotContains(t, snap, filePath)
+}
 
-		require.Equal(t, f, changed)
-		require.NotContains(t, snap, f)
-	})
+func TestDetectChangedFileUpdatesSnapshotInPlace(t *testing.T) {
+	t.Parallel()
 
-	t.Run("updates_snapshot_in_place", func(t *testing.T) {
-		t.Parallel()
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "a.yaml")
+	require.NoError(t, os.WriteFile(filePath, []byte("a"), 0o600))
 
-		dir := t.TempDir()
-		f := filepath.Join(dir, "a.yaml")
-		require.NoError(t, os.WriteFile(f, []byte("a"), 0o600))
+	snap := workload.ExportBuildFileSnapshot(dir)
 
-		snap := workload.ExportBuildFileSnapshot(dir)
+	// Modify the file.
+	now := time.Now().Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(filePath, now, now))
 
-		// Modify the file.
-		now := time.Now().Add(2 * time.Second)
-		require.NoError(t, os.Chtimes(f, now, now))
+	_ = workload.ExportDetectChangedFile(dir, snap)
 
-		_ = workload.ExportDetectChangedFile(dir, snap)
+	// Second scan should find no changes since snapshot was updated.
+	changed := workload.ExportDetectChangedFile(dir, snap)
 
-		// Second scan should find no changes since snapshot was updated.
-		changed := workload.ExportDetectChangedFile(dir, snap)
-
-		require.Empty(t, changed)
-	})
+	require.Empty(t, changed)
 }
 
 func TestPollInterval(t *testing.T) {
