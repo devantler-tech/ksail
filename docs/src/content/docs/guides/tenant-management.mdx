@@ -74,6 +74,7 @@ To scaffold a new Git repository for the tenant (requires `--git-provider github
 
 ```bash
 ksail tenant create my-team --type flux \
+  --sync-source git \
   --git-provider github \
   --git-repo my-org/my-team-infra
 ```
@@ -83,6 +84,8 @@ KSail resolves the GitHub token automatically using the following fallback chain
 1. `--git-token` flag (highest priority)
 2. `GH_TOKEN` or `GITHUB_TOKEN` environment variable
 3. GitHub CLI config (e.g., from `gh auth login`)
+
+If no token can be resolved through any of these sources, the command fails with an error.
 
 Pass `--git-token` explicitly only when you need to override the auto-detected token:
 
@@ -117,7 +120,8 @@ ksail tenant create my-team --type kubectl
 # Remove manifests and unregister from kustomization.yaml (default)
 ksail tenant delete my-team
 
-# Also delete the tenant Git repository (token resolved automatically)
+# Also delete the tenant Git repository (token resolved automatically;
+# requires a valid token from the fallback chain above)
 ksail tenant delete my-team --delete-repo \
   --git-provider github \
   --git-repo my-org/my-team-infra
