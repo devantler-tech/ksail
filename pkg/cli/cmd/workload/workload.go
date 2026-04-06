@@ -3006,6 +3006,13 @@ Examples:
 
 // runWatch starts the file watcher loop.
 func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool) error {
+	// The root-level error executor captures stderr into a buffer for error
+	// aggregation.  For long-running commands like watch the buffer is never
+	// flushed, making all feedback invisible.  Override with real stderr so
+	// that watcher diagnostics (change detected, apply results) appear in the
+	// terminal and in CI logs.
+	cmd.SetErr(os.Stderr)
+
 	cmdCtx, err := initCommandContext(cmd)
 	if err != nil {
 		return err
