@@ -113,6 +113,15 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 // triggering an apply. This prevents redundant reconciles during batch saves.
 const debounceInterval = 500 * time.Millisecond
 
+// pollInterval is the time between file modification time scans. Acts as a
+// safety net for environments where inotify may miss events (CI runners under
+// high I/O load, editors using atomic save via create+rename, etc.).
+const pollInterval = 3 * time.Second
+
+// fileSnapshot maps file paths to their last-known modification time.
+// Used by the polling fallback to detect changes missed by fsnotify.
+type fileSnapshot map[string]time.Time
+
 // debounceState holds the mutable state shared between the event loop and
 // debounce timer callbacks.
 type debounceState struct {
@@ -3108,6 +3117,10 @@ func eventLoop(
 	// Single worker: runs applies one at a time, stops when ctx is cancelled.
 	go applyWorker(ctx, cmd, dir, applyCh, fluxReconciler)
 
+	// Polling fallback: periodically scan for modification time changes to
+	// catch events missed by fsnotify (CI runners, atomic-save editors).
+	go pollForChanges(ctx, dir, state, applyCh)
+
 	defer cancelPendingDebounce(state)
 
 	return dispatchEvents(ctx, cmd, watcher, state, applyCh)
@@ -3596,6 +3609,118 @@ func tryAddDirectory(watcher *fsnotify.Watcher, path string, cmd *cobra.Command)
 		addErr := addRecursive(watcher, path)
 		if addErr != nil {
 			cmd.PrintErrf("⚠️  failed to watch new directory %s: %v\n", path, addErr)
+		}
+	}
+}
+
+// buildFileSnapshot walks the directory tree and records modification times
+// for all regular files.
+func buildFileSnapshot(dir string) fileSnapshot {
+	snap := make(fileSnapshot)
+
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() {
+			return nil //nolint:nilerr // skip inaccessible entries
+		}
+
+		info, statErr := d.Info()
+		if statErr != nil || !info.Mode().IsRegular() {
+			return nil //nolint:nilerr // skip non-regular entries and stat errors
+		}
+
+		snap[path] = info.ModTime()
+
+		return nil
+	})
+
+	return snap
+}
+
+// detectChangedFile scans the directory for a file whose modification time
+// differs from the snapshot. Returns the first changed file path found and
+// updates the snapshot in place. Returns "" if no changes are detected.
+func detectChangedFile(dir string, snapshot fileSnapshot) string {
+	changed := scanForModifiedFiles(dir, snapshot)
+	deleted := scanForDeletedFiles(snapshot)
+
+	if changed != "" {
+		return changed
+	}
+
+	return deleted
+}
+
+// scanForModifiedFiles walks the directory tree and returns the first file
+// whose modification time differs from the snapshot. Updates the snapshot
+// in place for all changed files encountered during the walk.
+func scanForModifiedFiles(dir string, snapshot fileSnapshot) string {
+	var changed string
+
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() {
+			return nil //nolint:nilerr // skip inaccessible entries
+		}
+
+		info, statErr := d.Info()
+		if statErr != nil || !info.Mode().IsRegular() {
+			return nil //nolint:nilerr // skip non-regular entries and stat errors
+		}
+
+		modTime := info.ModTime()
+		if prev, ok := snapshot[path]; !ok || !modTime.Equal(prev) {
+			snapshot[path] = modTime
+
+			if changed == "" {
+				changed = path
+			}
+		}
+
+		return nil
+	})
+
+	return changed
+}
+
+// scanForDeletedFiles checks all snapshot entries and removes any whose
+// path is missing or is no longer a regular file. Returns the first
+// deleted path found, or "".
+func scanForDeletedFiles(snapshot fileSnapshot) string {
+	var changed string
+
+	for path := range snapshot {
+		info, statErr := os.Lstat(path)
+
+		if statErr != nil || !info.Mode().IsRegular() {
+			delete(snapshot, path)
+
+			if changed == "" {
+				changed = path
+			}
+		}
+	}
+
+	return changed
+}
+
+// pollForChanges periodically scans the watched directory for modified files
+// and triggers applies via scheduleApply. This provides a fallback for
+// environments where fsnotify events may be lost (CI runners, atomic-save
+// editors using create+rename).
+func pollForChanges(ctx context.Context, dir string, state *debounceState, applyCh chan string) {
+	snapshot := buildFileSnapshot(dir)
+	ticker := time.NewTicker(pollInterval)
+
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			changed := detectChangedFile(dir, snapshot)
+			if changed != "" {
+				scheduleApply(state, changed, applyCh)
+			}
 		}
 	}
 }
