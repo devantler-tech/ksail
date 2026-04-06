@@ -55,6 +55,7 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      benchmark: ${{ steps.filter.outputs.benchmark }}
       system-test: ${{ steps.filter.outputs.system-test }}
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
@@ -77,6 +78,10 @@ jobs:
               - 'go.mod'
               - 'go.sum'
               - '.github/actions/**'
+            benchmark:
+              - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
             system-test:
               - '**/*.go'
               - '!**/*_test.go'
@@ -568,7 +573,7 @@ jobs:
     needs: [changes]
     if: >-
       (github.event_name == 'push' || github.event_name == 'pull_request')
-      && needs.changes.outputs.code == 'true'
+      && needs.changes.outputs.benchmark == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -661,7 +666,7 @@ jobs:
     needs: [changes, benchmark]
     if: >-
       github.event_name == 'push'
-      && needs.changes.outputs.code == 'true'
+      && needs.changes.outputs.benchmark == 'true'
       && needs.benchmark.outputs.skip == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 10
