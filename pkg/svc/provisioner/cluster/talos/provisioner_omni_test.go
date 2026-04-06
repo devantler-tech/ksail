@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -24,12 +25,7 @@ func TestResolveOmniVersions_NoOpts(t *testing.T) {
 
 	// Falls back to the default Talos image tag
 	assert.NotEmpty(t, talosVersion)
-	assert.Equal(
-		t,
-		'v', talosVersion[0],
-		"expected version to start with 'v', got: %s",
-		talosVersion,
-	)
+	assert.True(t, strings.HasPrefix(talosVersion, "v"), "expected version to start with 'v', got: %s", talosVersion)
 }
 
 func TestResolveOmniVersions_WithOmniOpts(t *testing.T) {
