@@ -35,7 +35,7 @@ ksail cluster delete
 
 - Use `ksail workload gen` to generate example manifests
 - Use `ksail workload explain <resource>` to learn about Kubernetes resources
-- Use `ksail workload watch` to watch for file changes and auto-apply; it scopes `kubectl apply` to the nearest directory containing a `kustomization.yaml` for faster iteration; add `--initial-apply` to sync the cluster at startup before entering the loop
+- Use `ksail workload watch` to watch for file changes and auto-apply; it scopes `kubectl apply` to the nearest directory containing a kustomization file recognized by kubectl (`kustomization.yaml`, `kustomization.yml`, or `Kustomization`) for faster iteration, falling back to `kubectl apply -f <dir> --recursive` when no kustomization boundary is found; add `--initial-apply` to sync the cluster at startup before entering the loop
 - Use `ksail cluster connect` to open K9s for interactive exploration
 
 ## Iterating on Applications

@@ -18,9 +18,10 @@ Use `--ttl` to create an **ephemeral cluster** that auto-destroys after a set du
 # Create a cluster that auto-destroys after 1 hour
 ksail cluster create --ttl 1h
 
-# TTL annotations appear in ksail cluster list output:
-# docker: my-cluster
-#   my-cluster [TTL: 59m]
+# When any cluster has a TTL set, ksail cluster list includes a TTL column
+# alongside provider, distribution, and cluster:
+# PROVIDER   DISTRIBUTION   CLUSTER      TTL
+# docker     Vanilla        my-cluster   59m
 #
 # ksail cluster info also shows remaining TTL time for the current cluster.
 ```
@@ -67,7 +68,7 @@ Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns:
 - **Export and import** container images
 - **Validate** manifests against schemas — see [Substitution Expansion in `workload validate`](/guides/workload-validate/) for Flux `${VAR}` expansion behavior
 - **Generate** resources — see [`ksail workload gen` reference](/cli-flags/workload/workload-gen/) for supported types
-- **Watch** directories for automatic live reconciliation scoped to the nearest `kustomization.yaml` (use `--initial-apply` to sync the cluster at startup before entering the watch loop)
+- **Watch** directories for automatic live reconciliation — see the [`ksail workload watch` reference](/cli-flags/workload/workload-watch/) for the canonical behavior and supported options
 
 ```bash
 ksail workload apply -k k8s/

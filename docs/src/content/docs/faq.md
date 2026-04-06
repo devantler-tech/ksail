@@ -69,7 +69,7 @@ ksail cluster create --ttl 1h
 # Supported duration formats: 30m, 1h, 2h30m
 ```
 
-TTL annotations are shown on a separate indented line in `ksail cluster list` output (e.g. `[TTL: 59m]` or `[TTL: EXPIRED]`). `ksail cluster info` also shows remaining TTL time for the current cluster context. See [`ksail cluster create` flags](/cli-flags/cluster/cluster-create/) for details. For usage patterns and tips, see [Ephemeral Clusters](/guides/ephemeral-clusters/).
+TTL is shown as a column in `ksail cluster list` output when any cluster has a TTL set (e.g., `59m` or `EXPIRED`). `ksail cluster info` also shows remaining TTL time for the current cluster context. See [`ksail cluster create` flags](/cli-flags/cluster/cluster-create/) for details. For usage patterns and tips, see [Ephemeral Clusters](/guides/ephemeral-clusters/).
 
 ### How do I switch between clusters?
 

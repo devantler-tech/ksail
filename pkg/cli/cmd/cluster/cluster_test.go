@@ -4840,11 +4840,105 @@ users:
 	require.ErrorIs(t, err, cluster.ErrNoClusters)
 }
 
-func TestFormatTTLLabel_NoTTL(t *testing.T) {
+func TestDisplayListResults_WithTTL(t *testing.T) {
 	t.Parallel()
 
-	result := cluster.ExportFormatTTLLabel(nil)
-	assert.Empty(t, result)
+	var buf bytes.Buffer
+
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionVanilla,
+			"cluster-1",
+			nil,
+		),
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionK3s,
+			"dev-cluster",
+			// Use 5h buffer so minute-boundary drift on slow CI is irrelevant.
+			&state.TTLInfo{ExpiresAt: time.Now().Add(5*time.Hour + 30*time.Second)},
+		),
+	}
+
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
+
+	output := buf.String()
+	assert.Contains(t, output, "PROVIDER")
+	assert.Contains(t, output, "DISTRIBUTION")
+	assert.Contains(t, output, "CLUSTER")
+	assert.Contains(t, output, "TTL")
+	assert.Contains(t, output, "cluster-1")
+	assert.Contains(t, output, "dev-cluster")
+	assert.Regexp(t, `\d+h`, output)
+}
+
+func TestDisplayListResults_WithExpiredTTL(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionTalos,
+			"expired-cluster",
+			&state.TTLInfo{ExpiresAt: time.Now().Add(-1 * time.Hour)},
+		),
+	}
+
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
+
+	output := buf.String()
+	assert.Contains(t, output, "TTL")
+	assert.Contains(t, output, "EXPIRED")
+	assert.Contains(t, output, "expired-cluster")
+}
+
+func TestDisplayListResults_NoTTLColumn(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionVanilla,
+			"my-cluster",
+			nil,
+		),
+	}
+
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
+
+	output := buf.String()
+	assert.Contains(t, output, "PROVIDER")
+	assert.Contains(t, output, "CLUSTER")
+	assert.NotContains(t, output, "TTL")
+}
+
+func TestStripParenthetical_NoSuffix(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "kind", cluster.ExportStripParenthetical("kind"))
+}
+
+func TestStripParenthetical_WithSuffix(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "kind", cluster.ExportStripParenthetical("kind (Vanilla)"))
+}
+
+func TestStripParenthetical_EmptyString(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, cluster.ExportStripParenthetical(""))
+}
+
+func TestStripParenthetical_NoClosingParen(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "kind (Vanilla", cluster.ExportStripParenthetical("kind (Vanilla"))
 }
 
 func TestFormatRemainingDuration_HoursAndMinutes(t *testing.T) {
