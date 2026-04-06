@@ -3628,6 +3628,10 @@ func buildFileSnapshot(dir string) fileSnapshot {
 			return nil
 		}
 
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+
 		snap[path] = info.ModTime()
 
 		return nil
@@ -3649,6 +3653,10 @@ func detectChangedFile(dir string, snapshot fileSnapshot) string {
 
 		info, statErr := d.Info()
 		if statErr != nil {
+			return nil
+		}
+
+		if !info.Mode().IsRegular() {
 			return nil
 		}
 
