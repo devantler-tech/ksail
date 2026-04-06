@@ -586,6 +586,12 @@ jobs:
           output-path: /usr/local/bin/ksail
           save: "false"
 
+      - name: 📥 Restore Helm Cache
+        uses: ./.github/actions/restore-helm-cache
+
+      - name: 📥 Restore Mirror Cache
+        uses: ./.github/actions/restore-mirror-cache
+
       - name: 🧪 Run KSail System Test
         uses: ./.github/actions/ksail-system-test
         env:
