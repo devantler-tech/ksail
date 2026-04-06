@@ -15,7 +15,6 @@ on:
     workflows:
       - "CI - KSail"
       - "CD"
-      - "Test - Pages"
       - "Publish - Pages"
       - "Release"
       - "Benchmark Regression"
