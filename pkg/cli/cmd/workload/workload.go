@@ -3625,7 +3625,8 @@ func tryAddDirectory(watcher *fsnotify.Watcher, path string, cmd *cobra.Command)
 }
 
 // buildFileSnapshot walks the directory tree and records modification times
-// for all regular files.
+// for all regular files. Uses os.Stat instead of d.Info() to avoid stale
+// cached stat data when files are replaced via rename (e.g. sed -i).
 func buildFileSnapshot(dir string) fileSnapshot {
 	snap := make(fileSnapshot)
 
@@ -3634,7 +3635,7 @@ func buildFileSnapshot(dir string) fileSnapshot {
 			return nil //nolint:nilerr // skip inaccessible entries
 		}
 
-		info, statErr := d.Info()
+		info, statErr := os.Stat(path)
 		if statErr != nil || !info.Mode().IsRegular() {
 			return nil //nolint:nilerr // skip non-regular entries and stat errors
 		}
@@ -3672,7 +3673,7 @@ func scanForModifiedFiles(dir string, snapshot fileSnapshot) string {
 			return nil //nolint:nilerr // skip inaccessible entries
 		}
 
-		info, statErr := d.Info()
+		info, statErr := os.Stat(path)
 		if statErr != nil || !info.Mode().IsRegular() {
 			return nil //nolint:nilerr // skip non-regular entries and stat errors
 		}
@@ -3782,7 +3783,7 @@ func logPollTick(tick int, dir string, snapshot fileSnapshot) {
 			return nil //nolint:nilerr // skip inaccessible entries and directories
 		}
 
-		info, statErr := d.Info()
+		info, statErr := os.Stat(path)
 		if statErr != nil {
 			return nil //nolint:nilerr // skip files that can't be stat'd
 		}
