@@ -3726,6 +3726,9 @@ func scanForDeletedFiles(snapshot fileSnapshot) string {
 // or a non-blocking channel send.
 func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 	snapshot := buildFileSnapshot(dir)
+
+	// Stable ready signal used by CI tests to know the snapshot is built.
+	fmt.Fprintf(os.Stderr, "  poll: started, %d files in snapshot\n", len(snapshot))
 	logPollSnapshot(dir, snapshot)
 
 	ticker := time.NewTicker(pollInterval)
@@ -3766,8 +3769,6 @@ func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 
 // logPollSnapshot logs the initial snapshot contents (temporary diagnostics).
 func logPollSnapshot(dir string, snapshot fileSnapshot) {
-	fmt.Fprintf(os.Stderr, "  poll: started, %d files in snapshot\n", len(snapshot))
-
 	for path, modTime := range snapshot {
 		rel, _ := filepath.Rel(dir, path)
 		fmt.Fprintf(os.Stderr, "  poll:   %s (mod=%s)\n", rel, modTime.Format(time.RFC3339Nano))
