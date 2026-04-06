@@ -129,6 +129,11 @@ func validateTemplateParams(params TemplateParams) error {
 		return ErrWorkersNegative
 	}
 
+	return validateMachineAllocation(params)
+}
+
+// validateMachineAllocation checks that the machine allocation strategy is valid.
+func validateMachineAllocation(params TemplateParams) error {
 	if params.MachineClass != "" && len(params.Machines) > 0 {
 		return ErrMachineAllocationConflict
 	}
