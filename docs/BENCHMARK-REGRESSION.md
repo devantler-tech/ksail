@@ -17,10 +17,10 @@ On pushes to `main`, benchmark results are auto-pushed to the `benchmark-data` b
 
 The workflow uses threshold-based regression detection:
 
-| Setting           | Value | Meaning                                                                                              |
-|-------------------|-------|------------------------------------------------------------------------------------------------------|
+| Setting           | Value | Meaning                                                                                                   |
+|-------------------|-------|-----------------------------------------------------------------------------------------------------------|
 | `alert-threshold` | 150%  | Marks benchmarks as regressed in the PR comment and fails pull request CI when ≥1.5× slower than baseline |
-| `fail-threshold`  | 200%  | Fails CI on non-PR runs such as pushes to `main` when a benchmark is ≥2× slower than baseline      |
+| `fail-threshold`  | 200%  | Fails CI on non-PR runs such as pushes to `main` when a benchmark is ≥2× slower than baseline             |
 
 On pull requests where benchmarks run and benchmark functions are discovered, the action posts a comment with the full benchmark comparison. If the alert threshold is exceeded, the regressed benchmarks are highlighted in the comment.
 
