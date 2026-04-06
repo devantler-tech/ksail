@@ -79,7 +79,7 @@ func New(providerName, token string) (Provider, error) {
 }
 
 // resolveGitHubToken resolves a GitHub token using the go-gh SDK.
-// It checks GH_TOKEN/GITHUB_TOKEN env vars and ~/.config/gh/hosts.yml.
+// It checks GH_TOKEN/GITHUB_TOKEN env vars and the GitHub CLI config (hosts.yml).
 //
 //nolint:gochecknoglobals // dependency injection for tests
 var resolveGitHubToken = func() string {
@@ -91,7 +91,7 @@ var resolveGitHubToken = func() string {
 // ResolveToken resolves the API token using the fallback chain:
 // 1. Explicit token parameter (--git-token flag)
 // 2. Provider SDK auto-detection:
-//   - GitHub: go-gh SDK (checks GH_TOKEN, GITHUB_TOKEN env vars and ~/.config/gh/hosts.yml)
+//   - GitHub: go-gh SDK (checks GH_TOKEN, GITHUB_TOKEN env vars and GitHub CLI config)
 //   - GitLab: GITLAB_TOKEN env var
 //   - Gitea: GITEA_TOKEN env var
 func ResolveToken(providerName, explicitToken string) string {
