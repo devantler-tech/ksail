@@ -93,6 +93,8 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 }
 
 // buildOmniPatchInfos converts talosConfigs patches into the PatchInfo format used by the Omni template builder.
+// The "cluster-name" patch is excluded because Omni manages the cluster name through its
+// Cluster document and rejects config patches that override cluster.clusterName.
 func (p *Provisioner) buildOmniPatchInfos() []omniprovider.PatchInfo {
 	if p.talosConfigs == nil {
 		return nil
@@ -102,6 +104,10 @@ func (p *Provisioner) buildOmniPatchInfos() []omniprovider.PatchInfo {
 	patches := make([]omniprovider.PatchInfo, 0, len(rawPatches))
 
 	for _, patch := range rawPatches {
+		if patch.Path == "cluster-name" {
+			continue
+		}
+
 		patches = append(patches, omniprovider.PatchInfo{
 			Path:    patch.Path,
 			Scope:   patch.Scope,
