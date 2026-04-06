@@ -35,6 +35,13 @@ func NewProvider(client *omniclient.Client) *Provider {
 	}
 }
 
+// NewProviderWithState creates a Provider with an injected COSI state.
+// This is primarily useful for testing and dependency injection scenarios
+// where a real Omni client is not available.
+func NewProviderWithState(st state.State) *Provider {
+	return &Provider{st: st}
+}
+
 // StartNodes is a no-op for Omni. Omni manages the machine lifecycle
 // and nodes are automatically started when allocated to a cluster.
 // It validates that the cluster has nodes and returns provider.ErrNoNodes
@@ -315,6 +322,40 @@ func (p *Provider) GetTalosconfig(ctx context.Context, clusterName string) ([]by
 	}
 
 	return data, nil
+}
+
+// LatestTalosVersion queries Omni for the latest non-deprecated TalosVersion resource.
+// It returns the version ID (e.g. "1.12.4") and its list of compatible Kubernetes versions.
+func (p *Provider) LatestTalosVersion(ctx context.Context) (string, []string, error) {
+	if p.st == nil {
+		return "", nil, provider.ErrProviderUnavailable
+	}
+
+	versions, err := safe.StateListAll[*omnires.TalosVersion](ctx, p.st)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to list Talos versions from Omni: %w", err)
+	}
+
+	var latestID string
+	var latestK8s []string
+
+	for ver := range versions.All() {
+		if ver.TypedSpec().Value.GetDeprecated() {
+			continue
+		}
+
+		id := ver.Metadata().ID()
+		if latestID == "" || id > latestID {
+			latestID = id
+			latestK8s = ver.TypedSpec().Value.GetCompatibleKubernetesVersions()
+		}
+	}
+
+	if latestID == "" {
+		return "", nil, ErrNoTalosVersions
+	}
+
+	return latestID, latestK8s, nil
 }
 
 // IsAvailable returns true if the provider is ready for use.

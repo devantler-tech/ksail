@@ -54,8 +54,11 @@ func CreateOmniProviderForTest(opts v1alpha1.OptionsOmni) error {
 }
 
 // ResolveOmniVersionsForTest exposes resolveOmniVersions for unit testing.
-func (p *Provisioner) ResolveOmniVersionsForTest() (string, string) {
-	return p.resolveOmniVersions()
+func (p *Provisioner) ResolveOmniVersionsForTest(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+) (string, string, error) {
+	return p.resolveOmniVersions(ctx, omniProv)
 }
 
 // BuildOmniPatchInfosForTest exposes buildOmniPatchInfos for unit testing.

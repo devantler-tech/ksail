@@ -4,33 +4,53 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
+	"github.com/cosi-project/runtime/pkg/state"
+	"github.com/cosi-project/runtime/pkg/state/impl/inmem"
+	"github.com/cosi-project/runtime/pkg/state/impl/namespaced"
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	omniprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
+	omnires "github.com/siderolabs/omni/client/pkg/omni/resources/omni"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func newInMemStateForOmniTest() state.State {
+	return state.WrapCore(namespaced.NewState(inmem.Build))
+}
+
+// newOmniProviderWithVersions creates a test provider with TalosVersion resources seeded in state.
+func newOmniProviderWithVersions(t *testing.T, versions ...string) *omniprovider.Provider {
+	t.Helper()
+
+	st := newInMemStateForOmniTest()
+
+	for _, v := range versions {
+		tv := omnires.NewTalosVersion(v)
+		tv.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.31.0", "1.32.0"}
+
+		require.NoError(t, st.Create(context.Background(), tv))
+	}
+
+	return omniprovider.NewProviderWithState(st)
+}
 
 func TestResolveOmniVersions_NoOpts(t *testing.T) {
 	t.Parallel()
 
 	configs := createTestTalosConfigs(t, "test-cluster")
 	provisioner := talosprovisioner.NewProvisioner(configs, nil)
+	prov := newOmniProviderWithVersions(t, "1.11.2", "1.12.4")
 
-	talosVersion, _ := provisioner.ResolveOmniVersionsForTest()
+	talosVersion, kubernetesVersion, err := provisioner.ResolveOmniVersionsForTest(context.Background(), prov)
 
-	// Falls back to the default Talos image tag
-	assert.NotEmpty(t, talosVersion)
-	assert.True(
-		t,
-		strings.HasPrefix(talosVersion, "v"),
-		"expected version to start with 'v', got: %s",
-		talosVersion,
-	)
+	require.NoError(t, err)
+	// Should pick the latest available version from Omni
+	assert.Equal(t, "1.12.4", talosVersion)
+	assert.Equal(t, "1.32.0", kubernetesVersion)
 }
 
 func TestResolveOmniVersions_WithOmniOpts(t *testing.T) {
@@ -43,8 +63,11 @@ func TestResolveOmniVersions_WithOmniOpts(t *testing.T) {
 			KubernetesVersion: "v1.32.0",
 		})
 
-	talosVersion, kubernetesVersion := provisioner.ResolveOmniVersionsForTest()
+	// Provider doesn't matter when opts already set
+	prov := omniprovider.NewProvider(nil)
+	talosVersion, kubernetesVersion, err := provisioner.ResolveOmniVersionsForTest(context.Background(), prov)
 
+	require.NoError(t, err)
 	assert.Equal(t, "v1.11.2", talosVersion)
 	assert.Equal(t, "v1.32.0", kubernetesVersion)
 }
@@ -59,11 +82,27 @@ func TestResolveOmniVersions_KubernetesVersionFallsBackToConfigs(t *testing.T) {
 			// KubernetesVersion intentionally empty — should fall back to talosConfigs
 		})
 
-	talosVersion, kubernetesVersion := provisioner.ResolveOmniVersionsForTest()
+	prov := omniprovider.NewProvider(nil)
+	talosVersion, kubernetesVersion, err := provisioner.ResolveOmniVersionsForTest(context.Background(), prov)
 
+	require.NoError(t, err)
 	assert.Equal(t, "v1.11.2", talosVersion)
 	// Should have resolved from talosConfigs (non-empty)
 	assert.NotEmpty(t, kubernetesVersion)
+}
+
+func TestResolveOmniVersions_NilClientReturnsError(t *testing.T) {
+	t.Parallel()
+
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil)
+	// No TalosVersion opts and nil provider → should fail querying Omni
+	prov := omniprovider.NewProvider(nil)
+
+	_, _, err := provisioner.ResolveOmniVersionsForTest(context.Background(), prov)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
 func TestBuildOmniPatchInfos_NilConfigs(t *testing.T) {

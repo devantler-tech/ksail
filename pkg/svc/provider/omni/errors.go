@@ -10,4 +10,6 @@ var (
 	ErrServiceAccountKeyRequired = errors.New("omni service account key is not set")
 	// ErrTemplateReaderRequired is returned when templateReader is nil.
 	ErrTemplateReaderRequired = errors.New("templateReader must not be nil")
+	// ErrNoTalosVersions is returned when no Talos versions are available in Omni.
+	ErrNoTalosVersions = errors.New("no Talos versions available in Omni")
 )

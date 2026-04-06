@@ -190,6 +190,74 @@ func TestDeleteNodes_ClusterNotFound_ReturnsNil(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestLatestTalosVersion_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	_, _, err := prov.LatestTalosVersion(context.Background())
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestLatestTalosVersion_NoVersions(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProviderWithState(newInMemState())
+
+	_, _, err := prov.LatestTalosVersion(context.Background())
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, omni.ErrNoTalosVersions)
+}
+
+func TestLatestTalosVersion_ReturnsLatest(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Seed multiple versions
+	for _, v := range []string{"1.11.2", "1.12.4", "1.10.0"} {
+		tv := omnires.NewTalosVersion(v)
+		tv.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.31.0", "1.32.0"}
+
+		require.NoError(t, testState.Create(context.Background(), tv))
+	}
+
+	version, k8sVersions, err := prov.LatestTalosVersion(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, "1.12.4", version)
+	assert.Equal(t, []string{"1.31.0", "1.32.0"}, k8sVersions)
+}
+
+func TestLatestTalosVersion_SkipsDeprecated(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Add a higher version that is deprecated
+	tvOld := omnires.NewTalosVersion("1.11.2")
+	tvOld.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.31.0"}
+
+	require.NoError(t, testState.Create(context.Background(), tvOld))
+
+	tvNew := omnires.NewTalosVersion("1.12.4")
+	tvNew.TypedSpec().Value.Deprecated = true
+	tvNew.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.32.0"}
+
+	require.NoError(t, testState.Create(context.Background(), tvNew))
+
+	version, k8sVersions, err := prov.LatestTalosVersion(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, "1.11.2", version)
+	assert.Equal(t, []string{"1.31.0"}, k8sVersions)
+}
+
 func TestDeleteNodes_ClusterExists_RemovesCluster(t *testing.T) {
 	t.Parallel()
 
