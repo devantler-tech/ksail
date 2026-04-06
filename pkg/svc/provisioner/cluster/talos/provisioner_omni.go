@@ -55,6 +55,7 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		KubernetesVersion: kubernetesVersion,
 		ControlPlanes:     p.options.ControlPlaneNodes,
 		Workers:           p.options.WorkerNodes,
+		MachineClassName:  p.omniMachineClassName(),
 		Patches:           p.buildOmniPatchInfos(),
 	})
 	if err != nil {
@@ -180,6 +181,16 @@ func (p *Provisioner) resolveOmniVersions(
 	}
 
 	return talosVersion, kubernetesVersion, nil
+}
+
+// omniMachineClassName returns the Omni machine class name from options,
+// falling back to the default "any".
+func (p *Provisioner) omniMachineClassName() string {
+	if p.omniOpts != nil && p.omniOpts.MachineClassName != "" {
+		return p.omniOpts.MachineClassName
+	}
+
+	return "any"
 }
 
 // saveOmniConfig is a shared helper that fetches config data from Omni, expands/canonicalizes the

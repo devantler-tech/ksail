@@ -256,6 +256,9 @@
                 },
                 "kubernetesVersion": {
                   "type": "string"
+                },
+                "machineClassName": {
+                  "type": "string"
                 }
               },
               "additionalProperties": false,

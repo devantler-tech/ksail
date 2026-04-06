@@ -48,6 +48,8 @@ type TemplateParams struct {
 	ControlPlanes int
 	// Workers is the number of worker nodes.
 	Workers int
+	// MachineClassName is the Omni machine class for node allocation.
+	MachineClassName string
 	// Patches are the loaded Talos config patches from the distribution config directory.
 	Patches []PatchInfo
 }
@@ -87,8 +89,13 @@ func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
 	fmt.Fprintf(&buf, "---\nkind: ControlPlane\n")
 
 	// Add machine class for control planes
+	machineClass := params.MachineClassName
+	if machineClass == "" {
+		machineClass = "any"
+	}
+
 	fmt.Fprintf(&buf, "machineClass:\n")
-	fmt.Fprintf(&buf, "  name: any\n")
+	fmt.Fprintf(&buf, "  name: %s\n", machineClass)
 	fmt.Fprintf(&buf, "  size: %d\n", params.ControlPlanes)
 
 	// Add control-plane-scoped patches
@@ -102,7 +109,7 @@ func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
 		fmt.Fprintf(&buf, "---\nkind: Workers\n")
 
 		fmt.Fprintf(&buf, "machineClass:\n")
-		fmt.Fprintf(&buf, "  name: any\n")
+		fmt.Fprintf(&buf, "  name: %s\n", machineClass)
 		fmt.Fprintf(&buf, "  size: %d\n", params.Workers)
 
 		// Add worker-scoped patches

@@ -131,4 +131,10 @@ type OptionsOmni struct {
 	// Generated templates normalize the value to include the "v" prefix.
 	// This determines the Kubernetes version that Omni will deploy.
 	KubernetesVersion string `json:"kubernetesVersion,omitzero"`
+	// MachineClassName is the Omni machine class to use for allocating nodes.
+	// Machine classes are user-defined in the Omni dashboard and match machines
+	// by labels (e.g., CPU, region, role). The specified class must exist in
+	// the Omni account before cluster creation.
+	// Defaults to "any".
+	MachineClassName string `default:"any" json:"machineClassName,omitzero"`
 }
