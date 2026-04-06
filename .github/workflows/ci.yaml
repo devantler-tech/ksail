@@ -60,6 +60,7 @@ jobs:
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
       vsce: ${{ steps.filter.outputs.vsce }}
+      docs: ${{ steps.filter.outputs.docs }}
       docs-deps: ${{ steps.filter.outputs.docs-deps }}
       vsce-deps: ${{ steps.filter.outputs.vsce-deps }}
     steps:
@@ -110,6 +111,10 @@ jobs:
               - 'docs/gen_docs_prose.go'
             vsce:
               - 'vsce/**'
+              - '.github/workflows/ci.yaml'
+            docs:
+              - 'docs/**'
+              - '!docs/*.go'
               - '.github/workflows/ci.yaml'
             docs-deps:
               - 'docs/package*.json'
@@ -366,6 +371,35 @@ jobs:
           app-id: ${{ vars.APP_ID }}
           app-private-key: ${{ secrets.APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] - GitHub App token generation, no environment scoping available for app installations
           commit-message: "chore(vsce): fix npm audit vulnerabilities"
+
+  build-docs:
+    name: 📚 Build Documentation
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.docs == 'true'
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: docs/package-lock.json
+
+      - name: 📦 Install dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: 🏗️ Build with Astro
+        working-directory: docs
+        run: npm run build
 
   vscode-extension:
     name: 🧩 VSCode Extension
@@ -768,6 +802,7 @@ jobs:
         cleanup-omni,
         audit-docs,
         audit-vsce,
+        build-docs,
         vscode-extension,
         benchmark,
         benchmark-store,
@@ -792,6 +827,7 @@ jobs:
             ${{ needs.cleanup-omni.result }}
             ${{ needs.audit-docs.result }}
             ${{ needs.audit-vsce.result }}
+            ${{ needs.build-docs.result }}
             ${{ needs.vscode-extension.result }}
             ${{ needs.benchmark.result }}
             ${{ needs.benchmark-store.result }}
