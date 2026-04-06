@@ -56,15 +56,3 @@ var ErrLocalRegistryNotSupported = errors.New(
 	"cloud provider requires an external registry\n" +
 		"- use --local-registry with an internet-accessible registry (e.g., ghcr.io/myorg)",
 )
-
-// ErrOmniMachineAllocationRequired is returned when neither machineClass nor machines is configured
-// for the Omni provider.
-var ErrOmniMachineAllocationRequired = errors.New(
-	"omni provider requires machine allocation: set either 'machineClass' or 'machines' in spec.cluster.omni",
-)
-
-// ErrOmniMachineAllocationConflict is returned when both machineClass and machines are configured
-// for the Omni provider (they are mutually exclusive per upstream Omni).
-var ErrOmniMachineAllocationConflict = errors.New(
-	"omni provider: 'machineClass' and 'machines' are mutually exclusive — set one or the other in spec.cluster.omni",
-)
