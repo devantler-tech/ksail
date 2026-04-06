@@ -3748,6 +3748,37 @@ func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 		case <-ticker.C:
 			tickCount++
 
+			// On every 5th tick, print current file modTimes vs snapshot
+			// to diagnose whether the filesystem is reporting changes.
+			if tickCount%5 == 1 {
+				fmt.Fprintf(os.Stderr, "  poll: tick %d, scanning %s\n", tickCount, dir)
+
+				_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+					if walkErr != nil || d.IsDir() {
+						return nil
+					}
+
+					info, statErr := d.Info()
+					if statErr != nil {
+						return nil //nolint:nilerr
+					}
+
+					rel, _ := filepath.Rel(dir, path)
+					cur := info.ModTime()
+					prev, ok := snapshot[path]
+
+					if !ok {
+						fmt.Fprintf(os.Stderr, "  poll:   %s NEW (mod=%s)\n", rel, cur.Format(time.RFC3339Nano))
+					} else if !cur.Equal(prev) {
+						fmt.Fprintf(os.Stderr, "  poll:   %s CHANGED (snap=%s cur=%s)\n", rel, prev.Format(time.RFC3339Nano), cur.Format(time.RFC3339Nano))
+					} else {
+						fmt.Fprintf(os.Stderr, "  poll:   %s unchanged (mod=%s)\n", rel, cur.Format(time.RFC3339Nano))
+					}
+
+					return nil
+				})
+			}
+
 			changed := detectChangedFile(dir, snapshot)
 			if changed != "" {
 				fmt.Fprintf(
