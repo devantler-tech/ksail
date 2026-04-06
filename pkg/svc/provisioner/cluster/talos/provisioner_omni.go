@@ -208,8 +208,8 @@ func (p *Provisioner) omniMachines() []string {
 	return nil
 }
 
-// saveOmniConfig writes already-fetched config data to disk. It expands/canonicalizes the
-// output path, creates parent directories, and writes the file. It logs the result using configLabel (e.g. "Kubeconfig").
+// saveOmniConfig writes already-fetched config data to disk. It expands/canonicalizes
+// the output path, creates parent dirs, and writes the file using configLabel for logs.
 func (p *Provisioner) saveOmniConfig(
 	configData []byte,
 	rawPath string,
