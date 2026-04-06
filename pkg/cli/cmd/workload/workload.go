@@ -3207,6 +3207,8 @@ func handleFileEvent(
 		return
 	}
 
+	fmt.Fprintf(os.Stderr, "  fsnotify: %s %s\n", event.Op, event.Name)
+
 	// If a new directory was created, watch it too.
 	if event.Has(fsnotify.Create) {
 		tryAddDirectory(watcher, event.Name, cmd)
@@ -3723,17 +3725,33 @@ func scanForDeletedFiles(snapshot fileSnapshot) string {
 // or a non-blocking channel send.
 func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 	snapshot := buildFileSnapshot(dir)
+
+	fmt.Fprintf(os.Stderr, "  poll: started, %d files in snapshot\n", len(snapshot))
+
+	for path, modTime := range snapshot {
+		rel, _ := filepath.Rel(dir, path)
+		fmt.Fprintf(os.Stderr, "  poll:   %s (mod=%s)\n", rel, modTime.Format(time.RFC3339Nano))
+	}
+
 	ticker := time.NewTicker(pollInterval)
 
 	defer ticker.Stop()
 
+	tickCount := 0
+
 	for {
 		select {
 		case <-ctx.Done():
+			fmt.Fprintf(os.Stderr, "  poll: stopped after %d ticks\n", tickCount)
+
 			return
 		case <-ticker.C:
+			tickCount++
+
 			changed := detectChangedFile(dir, snapshot)
 			if changed != "" {
+				fmt.Fprintf(os.Stderr, "  poll: change detected on tick %d: %s\n", tickCount, changed)
+
 				// Blocking send: guaranteed delivery to the apply worker.
 				// If the worker is busy, we wait — the next poll resumes
 				// after the send completes. The snapshot was already updated
@@ -3741,6 +3759,7 @@ func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 				// blocking send ensures the apply will always run.
 				select {
 				case applyCh <- changed:
+					fmt.Fprintf(os.Stderr, "  poll: enqueued for apply\n")
 				case <-ctx.Done():
 					return
 				}
