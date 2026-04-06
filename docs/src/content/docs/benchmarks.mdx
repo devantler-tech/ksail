@@ -13,10 +13,12 @@ KSail includes automated benchmark regression testing to detect performance chan
 
 ## Regression Detection
 
-| Setting           | Value | Meaning                                                           |
-|-------------------|-------|-------------------------------------------------------------------|
-| `alert-threshold` | 150%  | Warns (PR comment) when a benchmark is ≥1.5× slower than baseline |
-| `fail-threshold`  | 200%  | Fails the CI check when a benchmark is ≥2× slower than baseline   |
+| Setting           | Value | Meaning                                                                                              |
+|-------------------|-------|------------------------------------------------------------------------------------------------------|
+| `alert-threshold` | 150%  | Marks benchmarks as regressed in the PR comment and fails pull request CI when ≥1.5× slower than baseline |
+| `fail-threshold`  | 200%  | Fails CI on non-PR runs such as pushes to `main` when a benchmark is ≥2× slower than baseline      |
+
+On pull requests where benchmarks run and benchmark functions are discovered, a comment is posted with the full benchmark comparison. If the alert threshold is exceeded, the regressed benchmarks are highlighted in the comment.
 
 Benchmark results are also recorded in every [CI workflow run summary](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml). On pushes to `main`, results are auto-pushed to the [`benchmark-data` branch](https://github.com/devantler-tech/ksail/tree/benchmark-data).
 
