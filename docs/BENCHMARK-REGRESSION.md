@@ -4,7 +4,7 @@ KSail includes automated benchmark regression testing to detect performance chan
 
 ## How It Works
 
-The [benchmark-regression](../.github/workflows/benchmark-regression.yaml) workflow runs on pushes to `main`, pull requests, and in the merge queue. It uses [`benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark) for regression detection and historical tracking.
+The benchmark jobs in the [CI workflow](../.github/workflows/ci.yaml) run on pushes to `main` and pull requests. They use [`benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark) for regression detection and historical tracking.
 
 1. Discovers packages that contain benchmark functions (avoids compiling the entire module)
 2. Runs benchmarks on the current branch
@@ -26,7 +26,7 @@ When a regression is detected on a pull request, the action posts a comment iden
 
 ## Historical Results
 
-Benchmark results are recorded in every [workflow run summary](https://github.com/devantler-tech/ksail/actions/workflows/benchmark-regression.yaml). On pushes to `main`, the action auto-pushes updated results to the [`benchmark-data` branch](https://github.com/devantler-tech/ksail/tree/benchmark-data) (in `dev/bench/data.js`), following the [branch strategy recommended by `benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark#charts-on-github-pages-1). The docs site fetches this data at build time to render performance trend charts.
+Benchmark results are recorded in every [CI workflow run summary](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml). On pushes to `main`, the action auto-pushes updated results to the [`benchmark-data` branch](https://github.com/devantler-tech/ksail/tree/benchmark-data) (in `dev/bench/data.js`), following the [branch strategy recommended by `benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark#charts-on-github-pages-1). The docs site fetches this data at build time to render performance trend charts.
 
 ## Interpreting CI Failures
 
