@@ -380,6 +380,8 @@ func (p *Provider) LatestTalosVersion(ctx context.Context) (string, []string, er
 }
 
 // IsAvailable returns true if the provider is ready for use.
+// Only COSI state is required — client-dependent methods (GetKubeconfig,
+// GetTalosconfig, Client) nil-guard on the client field independently.
 func (p *Provider) IsAvailable() bool {
-	return p.client != nil && p.st != nil
+	return p.st != nil
 }
