@@ -84,6 +84,7 @@ func New(providerName, token string) (Provider, error) {
 //nolint:gochecknoglobals // dependency injection for tests
 var resolveGitHubToken = func() string {
 	token, _ := ghauth.TokenFromEnvOrConfig("github.com")
+
 	return token
 }
 
