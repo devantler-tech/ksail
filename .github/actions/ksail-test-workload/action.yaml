@@ -150,9 +150,9 @@ runs:
       run: |
         # Use a directory on the main filesystem (not tmpfs) to avoid inotify
         # event loss from sed -i's create+rename under CI load (see #3729).
-        WATCH_DIR="${GITHUB_WORKSPACE:-.}/.watch-test-$$"
+        WATCH_ROOT="${GITHUB_WORKSPACE:-.}"
+        WATCH_DIR="$(mktemp -d -p "$WATCH_ROOT" .watch-test-XXXXXX)"
         WATCH_LOG="${WATCH_DIR}.log"
-        mkdir -p "$WATCH_DIR"
         cat > "$WATCH_DIR/deployment.yaml" <<'EOF'
         apiVersion: apps/v1
         kind: Deployment
