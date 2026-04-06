@@ -2452,6 +2452,7 @@ func TestBuildFileSnapshot(t *testing.T) {
 		dir := t.TempDir()
 		fileA := filepath.Join(dir, "a.yaml")
 		fileB := filepath.Join(dir, "b.yaml")
+
 		require.NoError(t, os.WriteFile(fileA, []byte("a"), 0o600))
 		require.NoError(t, os.WriteFile(fileB, []byte("b"), 0o600))
 
@@ -2523,6 +2524,7 @@ func TestDetectChangedFileDetectsModifiedFile(t *testing.T) {
 
 	// Ensure mod time differs (some filesystems have 1s granularity).
 	time.Sleep(50 * time.Millisecond)
+
 	now := time.Now().Add(2 * time.Second)
 	require.NoError(t, os.Chtimes(filePath, now, now))
 
@@ -2556,6 +2558,7 @@ func TestDetectChangedFileDetectsDeletedFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(filePath, []byte("a"), 0o600))
 
 	snap := workload.ExportBuildFileSnapshot(dir)
+
 	require.NoError(t, os.Remove(filePath))
 
 	changed := workload.ExportDetectChangedFile(dir, snap)
