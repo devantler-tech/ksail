@@ -2501,7 +2501,7 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 	cmd := client.CreateClusterInfoCommand(k8s.DefaultKubeconfigPath())
 
 	// Wrap RunE to resolve kubeconfig at runtime (honoring --config flag)
-	// and append TTL info after kubectl cluster-info output.
+	// and append KSail metadata after kubectl cluster-info output.
 	originalRunE := cmd.RunE
 	if originalRunE != nil {
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -2520,7 +2520,7 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 				return err
 			}
 
-			displayTTLInfo(cmd, kubeconfigPath)
+			displayKSailDetails(cmd, kubeconfigPath)
 
 			return nil
 		}
@@ -2529,21 +2529,54 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 	return cmd
 }
 
-// displayTTLInfo detects the current cluster from kubeconfig and prints TTL status if set.
-func displayTTLInfo(cmd *cobra.Command, kubeconfigPath string) {
+// displayKSailDetails appends KSail-specific cluster metadata after kubectl output.
+// This includes cluster identity (name, distribution, provider), TTL status,
+// and enabled component summary from persisted state. Each section fails gracefully.
+func displayKSailDetails(cmd *cobra.Command, kubeconfigPath string) {
 	info, err := clusterdetector.DetectInfo(kubeconfigPath, "")
 	if err != nil || info == nil {
-		return
-	}
-
-	ttlInfo, err := state.LoadClusterTTL(info.ClusterName)
-	if err != nil || ttlInfo == nil {
+		// If detection fails, skip KSail details because cluster identity could not be determined.
 		return
 	}
 
 	writer := cmd.OutOrStdout()
 
-	// Print blank line to separate from kubectl output.
+	// Blank line to separate from kubectl output.
+	_, _ = fmt.Fprintln(writer)
+
+	displayClusterIdentity(writer, info)
+	displayTTLInfo(writer, info.ClusterName)
+	displayComponents(writer, info.ClusterName)
+}
+
+// displayClusterIdentity prints the cluster name, distribution, provider, kubeconfig context,
+// server URL, and kubeconfig path.
+func displayClusterIdentity(writer io.Writer, info *clusterdetector.Info) {
+	_, _ = fmt.Fprintln(writer, "KSail Cluster Details:")
+	_, _ = fmt.Fprintf(writer, "  Cluster:        %s\n", info.ClusterName)
+	_, _ = fmt.Fprintf(writer, "  Distribution:   %s\n", info.Distribution)
+	_, _ = fmt.Fprintf(writer, "  Provider:       %s\n", info.Provider)
+
+	if info.Context != "" {
+		_, _ = fmt.Fprintf(writer, "  Context:        %s\n", info.Context)
+	}
+
+	if info.ServerURL != "" {
+		_, _ = fmt.Fprintf(writer, "  Server:         %s\n", info.ServerURL)
+	}
+
+	if info.KubeconfigPath != "" {
+		_, _ = fmt.Fprintf(writer, "  Kubeconfig:     %s\n", info.KubeconfigPath)
+	}
+}
+
+// displayTTLInfo prints TTL status if set.
+func displayTTLInfo(writer io.Writer, clusterName string) {
+	ttlInfo, err := state.LoadClusterTTL(clusterName)
+	if err != nil || ttlInfo == nil {
+		return
+	}
+
 	_, _ = fmt.Fprintln(writer)
 
 	remaining := ttlInfo.Remaining()
@@ -2557,6 +2590,49 @@ func displayTTLInfo(cmd *cobra.Command, kubeconfigPath string) {
 			formatRemainingDuration(remaining),
 			ttlInfo.Duration,
 		)
+	}
+}
+
+// displayComponents loads the persisted ClusterSpec and prints the enabled components summary.
+func displayComponents(writer io.Writer, clusterName string) {
+	spec, err := state.LoadClusterSpec(clusterName)
+	if err != nil {
+		return
+	}
+
+	type row struct{ label, value string }
+
+	rows := []row{
+		{"GitOps Engine:", componentLabel(string(spec.GitOpsEngine))},
+		{"CNI:", componentLabel(string(spec.CNI))},
+		{"CSI:", componentLabel(string(spec.CSI))},
+		{"Metrics Server:", componentLabel(string(spec.MetricsServer))},
+		{"Load Balancer:", componentLabel(string(spec.LoadBalancer))},
+		{"Cert Manager:", componentLabel(string(spec.CertManager))},
+		{"Policy Engine:", componentLabel(string(spec.PolicyEngine))},
+	}
+
+	_, _ = fmt.Fprintln(writer)
+	_, _ = fmt.Fprintln(writer, "  Components:")
+
+	for _, r := range rows {
+		_, _ = fmt.Fprintf(writer, "    %-16s%s\n", r.label, r.value)
+	}
+}
+
+// componentLabel returns a display label for a component value.
+// Empty strings and "None" sentinel values are shown as "(none)".
+// "Disabled" sentinel values (used by CSI, MetricsServer, CertManager, etc.) are shown as "(disabled)".
+func componentLabel(value string) string {
+	switch value {
+	case "":
+		return "(none)"
+	case "None":
+		return "(none)"
+	case "Disabled":
+		return "(disabled)"
+	default:
+		return value
 	}
 }
 

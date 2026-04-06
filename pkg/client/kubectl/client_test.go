@@ -359,7 +359,13 @@ func TestCreateGetCommand(t *testing.T) {
 		func(c *kubectl.Client, path string) *cobra.Command { return c.CreateGetCommand(path) },
 		"get",
 		"Get resources",
-		"Display one or many Kubernetes resources from your cluster.",
+		"Display one or many Kubernetes resources from your cluster. "+
+			"Use -o json for structured output that includes status conditions and health. "+
+			"Use -o wide for additional columns. "+
+			"Use --all-namespaces or -A to query across all namespaces. "+
+			"Supports comma-separated resource types (e.g. deployments,services). "+
+			"For GitOps diagnostics, query Flux resources (kustomization, helmrelease, gitrepository, ocirepository) "+
+			"or ArgoCD resources (application) to check reconciliation status and errors.",
 	)
 }
 
@@ -437,7 +443,12 @@ func TestCreateLogsCommand(t *testing.T) {
 		"logs",
 		"Print container logs",
 		"Print the logs for a container in a pod or specified resource. "+
-			"If the pod has only one container, the container name is optional.",
+			"If the pod has only one container, the container name is optional. "+
+			"Use --tail=N to limit output to the last N lines. "+
+			"Use --previous to get logs from a previous container instance (useful for crash-loop diagnostics). "+
+			"Use --all-containers to get logs from all containers in a pod. "+
+			"For GitOps controller logs, query the controller pods directly "+
+			"(e.g. in flux-system or argocd namespace).",
 	)
 }
 
@@ -511,7 +522,13 @@ func TestCreateDescribeCommand(t *testing.T) {
 		func(c *kubectl.Client, path string) *cobra.Command { return c.CreateDescribeCommand(path) },
 		"describe",
 		"Describe resources",
-		"Show details of a specific resource or group of resources.",
+		"Show details of a specific resource or group of resources, "+
+			"including metadata, status conditions, events, and container info. "+
+			"Useful for diagnosing why a resource is not ready — check the Events "+
+			"and Conditions sections. "+
+			"For Flux resources (kustomization, helmrelease), shows reconciliation "+
+			"status and last error. "+
+			"For ArgoCD resources (application), shows sync status and health.",
 	)
 }
 
