@@ -25,7 +25,12 @@ func TestResolveOmniVersions_NoOpts(t *testing.T) {
 
 	// Falls back to the default Talos image tag
 	assert.NotEmpty(t, talosVersion)
-	assert.True(t, strings.HasPrefix(talosVersion, "v"), "expected version to start with 'v', got: %s", talosVersion)
+	assert.True(
+		t,
+		strings.HasPrefix(talosVersion, "v"),
+		"expected version to start with 'v', got: %s",
+		talosVersion,
+	)
 }
 
 func TestResolveOmniVersions_WithOmniOpts(t *testing.T) {
