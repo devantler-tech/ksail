@@ -3725,16 +3725,9 @@ func scanForDeletedFiles(snapshot fileSnapshot) string {
 // or a non-blocking channel send.
 func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 	snapshot := buildFileSnapshot(dir)
-
-	fmt.Fprintf(os.Stderr, "  poll: started, %d files in snapshot\n", len(snapshot))
-
-	for path, modTime := range snapshot {
-		rel, _ := filepath.Rel(dir, path)
-		fmt.Fprintf(os.Stderr, "  poll:   %s (mod=%s)\n", rel, modTime.Format(time.RFC3339Nano))
-	}
+	logPollSnapshot(dir, snapshot)
 
 	ticker := time.NewTicker(pollInterval)
-
 	defer ticker.Stop()
 
 	tickCount := 0
@@ -3748,60 +3741,69 @@ func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 		case <-ticker.C:
 			tickCount++
 
-			// On every 5th tick, print current file modTimes vs snapshot
-			// to diagnose whether the filesystem is reporting changes.
 			if tickCount%5 == 1 {
-				fmt.Fprintf(os.Stderr, "  poll: tick %d, scanning %s\n", tickCount, dir)
-
-				_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
-					if walkErr != nil || d.IsDir() {
-						return nil
-					}
-
-					info, statErr := d.Info()
-					if statErr != nil {
-						return nil //nolint:nilerr
-					}
-
-					rel, _ := filepath.Rel(dir, path)
-					cur := info.ModTime()
-					prev, ok := snapshot[path]
-
-					if !ok {
-						fmt.Fprintf(os.Stderr, "  poll:   %s NEW (mod=%s)\n", rel, cur.Format(time.RFC3339Nano))
-					} else if !cur.Equal(prev) {
-						fmt.Fprintf(os.Stderr, "  poll:   %s CHANGED (snap=%s cur=%s)\n", rel, prev.Format(time.RFC3339Nano), cur.Format(time.RFC3339Nano))
-					} else {
-						fmt.Fprintf(os.Stderr, "  poll:   %s unchanged (mod=%s)\n", rel, cur.Format(time.RFC3339Nano))
-					}
-
-					return nil
-				})
+				logPollTick(tickCount, dir, snapshot)
 			}
 
 			changed := detectChangedFile(dir, snapshot)
-			if changed != "" {
-				fmt.Fprintf(
-					os.Stderr,
-					"  poll: change detected on tick %d: %s\n",
-					tickCount,
-					changed,
-				)
+			if changed == "" {
+				continue
+			}
 
-				// Blocking send: guaranteed delivery to the apply worker.
-				// If the worker is busy, we wait — the next poll resumes
-				// after the send completes. The snapshot was already updated
-				// by detectChangedFile, but that is safe here because the
-				// blocking send ensures the apply will always run.
-				select {
-				case applyCh <- changed:
-					fmt.Fprintf(os.Stderr, "  poll: enqueued for apply\n")
-				case <-ctx.Done():
-					return
-				}
+			fmt.Fprintf(os.Stderr, "  poll: change on tick %d: %s\n", tickCount, changed)
+
+			// Blocking send: guaranteed delivery to the apply worker.
+			select {
+			case applyCh <- changed:
+				fmt.Fprintf(os.Stderr, "  poll: enqueued for apply\n")
+			case <-ctx.Done():
+				return
 			}
 		}
 	}
+}
+
+// logPollSnapshot logs the initial snapshot contents (temporary diagnostics).
+func logPollSnapshot(dir string, snapshot fileSnapshot) {
+	fmt.Fprintf(os.Stderr, "  poll: started, %d files in snapshot\n", len(snapshot))
+
+	for path, modTime := range snapshot {
+		rel, _ := filepath.Rel(dir, path)
+		fmt.Fprintf(os.Stderr, "  poll:   %s (mod=%s)\n", rel, modTime.Format(time.RFC3339Nano))
+	}
+}
+
+// logPollTick logs file modTimes vs snapshot on periodic ticks (temporary diagnostics).
+func logPollTick(tick int, dir string, snapshot fileSnapshot) {
+	fmt.Fprintf(os.Stderr, "  poll: tick %d, scanning %s\n", tick, dir)
+
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() {
+			return nil //nolint:nilerr // skip inaccessible entries and directories
+		}
+
+		info, statErr := d.Info()
+		if statErr != nil {
+			return nil //nolint:nilerr // skip files that can't be stat'd
+		}
+
+		rel, _ := filepath.Rel(dir, path)
+		cur := info.ModTime()
+		prev, inSnap := snapshot[path]
+
+		switch {
+		case !inSnap:
+			fmt.Fprintf(os.Stderr, "  poll:   %s NEW mod=%s\n", rel, cur.Format(time.RFC3339Nano))
+		case !cur.Equal(prev):
+			fmt.Fprintf(os.Stderr, "  poll:   %s CHANGED snap=%s cur=%s\n",
+				rel, prev.Format(time.RFC3339Nano), cur.Format(time.RFC3339Nano))
+		default:
+			fmt.Fprintf(os.Stderr, "  poll:   %s unchanged mod=%s\n",
+				rel, cur.Format(time.RFC3339Nano))
+		}
+
+		return nil
+	})
 }
 
 // NewWorkloadCmd creates and returns the workload command group namespace.
