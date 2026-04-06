@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildClusterTemplate_Basic(t *testing.T) {
+func TestBuildClusterTemplate_MachineClass(t *testing.T) {
 	t.Parallel()
 
 	reader, err := omni.BuildClusterTemplate(omni.TemplateParams{
@@ -18,6 +18,7 @@ func TestBuildClusterTemplate_Basic(t *testing.T) {
 		KubernetesVersion: "1.32.0",
 		ControlPlanes:     3,
 		Workers:           2,
+		MachineClass:      "my-class",
 	})
 
 	require.NoError(t, err)
@@ -33,13 +34,59 @@ func TestBuildClusterTemplate_Basic(t *testing.T) {
 	assert.Contains(t, content, "version: v1.11.2")
 	assert.Contains(t, content, "version: v1.32.0")
 
-	// Verify ControlPlane document
+	// Verify ControlPlane with machineClass
 	assert.Contains(t, content, "kind: ControlPlane")
+	assert.Contains(t, content, "name: my-class")
 	assert.Contains(t, content, "size: 3")
 
-	// Verify Workers document
+	// Verify Workers with machineClass
 	assert.Contains(t, content, "kind: Workers")
 	assert.Contains(t, content, "size: 2")
+
+	// Should not contain machines list
+	assert.NotContains(t, content, "machines:")
+}
+
+func TestBuildClusterTemplate_Machines(t *testing.T) {
+	t.Parallel()
+
+	machines := []string{
+		"cp-uuid-1",
+		"cp-uuid-2",
+		"cp-uuid-3",
+		"worker-uuid-1",
+		"worker-uuid-2",
+	}
+
+	reader, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "static-cluster",
+		TalosVersion:      "1.11.2",
+		KubernetesVersion: "1.32.0",
+		ControlPlanes:     3,
+		Workers:           2,
+		Machines:          machines,
+	})
+
+	require.NoError(t, err)
+
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+
+	content := string(data)
+
+	// Verify ControlPlane uses machines list (first 3)
+	assert.Contains(t, content, "kind: ControlPlane")
+	assert.Contains(t, content, "- cp-uuid-1")
+	assert.Contains(t, content, "- cp-uuid-2")
+	assert.Contains(t, content, "- cp-uuid-3")
+
+	// Verify Workers uses machines list (remaining 2)
+	assert.Contains(t, content, "kind: Workers")
+	assert.Contains(t, content, "- worker-uuid-1")
+	assert.Contains(t, content, "- worker-uuid-2")
+
+	// Should not contain machineClass
+	assert.NotContains(t, content, "machineClass:")
 }
 
 func TestBuildClusterTemplate_NoWorkers(t *testing.T) {
@@ -51,6 +98,7 @@ func TestBuildClusterTemplate_NoWorkers(t *testing.T) {
 		KubernetesVersion: "v1.32.0",
 		ControlPlanes:     1,
 		Workers:           0,
+		MachineClass:      "my-class",
 	})
 
 	require.NoError(t, err)
@@ -73,6 +121,7 @@ func TestBuildClusterTemplate_VersionPrefix(t *testing.T) {
 		TalosVersion:      "v1.11.2", // Already has v prefix
 		KubernetesVersion: "1.32.0",  // No v prefix
 		ControlPlanes:     1,
+		MachineClass:      "my-class",
 	})
 
 	require.NoError(t, err)
@@ -95,6 +144,7 @@ func TestBuildClusterTemplate_EmptyTalosVersion(t *testing.T) {
 		TalosVersion:      "",
 		KubernetesVersion: "1.32.0",
 		ControlPlanes:     1,
+		MachineClass:      "my-class",
 	})
 
 	require.ErrorIs(t, err, omni.ErrTalosVersionRequired)
@@ -108,9 +158,38 @@ func TestBuildClusterTemplate_EmptyKubernetesVersion(t *testing.T) {
 		TalosVersion:      "1.11.2",
 		KubernetesVersion: "",
 		ControlPlanes:     1,
+		MachineClass:      "my-class",
 	})
 
 	require.ErrorIs(t, err, omni.ErrKubernetesVersionRequired)
+}
+
+func TestBuildClusterTemplate_NeitherMachineClassNorMachines(t *testing.T) {
+	t.Parallel()
+
+	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "test",
+		TalosVersion:      "1.11.2",
+		KubernetesVersion: "1.32.0",
+		ControlPlanes:     1,
+	})
+
+	require.ErrorIs(t, err, omni.ErrMachineAllocationRequired)
+}
+
+func TestBuildClusterTemplate_BothMachineClassAndMachines(t *testing.T) {
+	t.Parallel()
+
+	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "test",
+		TalosVersion:      "1.11.2",
+		KubernetesVersion: "1.32.0",
+		ControlPlanes:     1,
+		MachineClass:      "my-class",
+		Machines:          []string{"uuid-1"},
+	})
+
+	require.ErrorIs(t, err, omni.ErrMachineAllocationConflict)
 }
 
 func TestBuildClusterTemplate_WithPatches(t *testing.T) {
@@ -140,6 +219,7 @@ func TestBuildClusterTemplate_WithPatches(t *testing.T) {
 		KubernetesVersion: "v1.32.0",
 		ControlPlanes:     1,
 		Workers:           1,
+		MachineClass:      "my-class",
 		Patches:           patches,
 	})
 
@@ -176,6 +256,7 @@ func TestBuildClusterTemplate_PatchWithEmptyLines(t *testing.T) {
 		TalosVersion:      "v1.11.2",
 		KubernetesVersion: "v1.32.0",
 		ControlPlanes:     1,
+		MachineClass:      "my-class",
 		Patches:           patches,
 	})
 

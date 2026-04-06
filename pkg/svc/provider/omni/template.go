@@ -16,6 +16,14 @@ var (
 	ErrTalosVersionRequired = errors.New("TalosVersion is required")
 	// ErrKubernetesVersionRequired is returned when KubernetesVersion is not provided.
 	ErrKubernetesVersionRequired = errors.New("KubernetesVersion is required")
+	// ErrMachineAllocationRequired is returned when neither MachineClass nor Machines is set.
+	ErrMachineAllocationRequired = errors.New(
+		"either MachineClass or Machines must be set (Omni requires one for node allocation)",
+	)
+	// ErrMachineAllocationConflict is returned when both MachineClass and Machines are set.
+	ErrMachineAllocationConflict = errors.New(
+		"MachineClass and Machines are mutually exclusive (set one or the other)",
+	)
 )
 
 // PatchScope indicates which nodes a patch should be applied to.
@@ -48,8 +56,12 @@ type TemplateParams struct {
 	ControlPlanes int
 	// Workers is the number of worker nodes.
 	Workers int
-	// MachineClassName is the Omni machine class for node allocation.
-	MachineClassName string
+	// MachineClass is the Omni machine class name for dynamic allocation.
+	// Mutually exclusive with Machines.
+	MachineClass string
+	// Machines is a list of machine UUIDs for static allocation.
+	// Mutually exclusive with MachineClass.
+	Machines []string
 	// Patches are the loaded Talos config patches from the distribution config directory.
 	Patches []PatchInfo
 }
@@ -57,6 +69,10 @@ type TemplateParams struct {
 // BuildClusterTemplate builds a multi-document YAML cluster template
 // compatible with the Omni SDK's template format.
 // The template contains Cluster, ControlPlane, and Workers documents.
+//
+// Machine allocation follows upstream Omni semantics:
+//   - MachineClass: dynamic allocation from a named class (size from ControlPlanes/Workers)
+//   - Machines: static allocation by UUID (first N = control planes, rest = workers)
 func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
 	if params.TalosVersion == "" {
 		return nil, ErrTalosVersionRequired
@@ -64,6 +80,14 @@ func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
 
 	if params.KubernetesVersion == "" {
 		return nil, ErrKubernetesVersionRequired
+	}
+
+	if params.MachineClass != "" && len(params.Machines) > 0 {
+		return nil, ErrMachineAllocationConflict
+	}
+
+	if params.MachineClass == "" && len(params.Machines) == 0 {
+		return nil, ErrMachineAllocationRequired
 	}
 
 	var buf bytes.Buffer
@@ -88,15 +112,20 @@ func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
 	// Write ControlPlane document
 	fmt.Fprintf(&buf, "---\nkind: ControlPlane\n")
 
-	// Add machine class for control planes
-	machineClass := params.MachineClassName
-	if machineClass == "" {
-		machineClass = "any"
-	}
+	if params.MachineClass != "" {
+		// Dynamic allocation: machineClass with name and size
+		fmt.Fprintf(&buf, "machineClass:\n")
+		fmt.Fprintf(&buf, "  name: %s\n", params.MachineClass)
+		fmt.Fprintf(&buf, "  size: %d\n", params.ControlPlanes)
+	} else {
+		// Static allocation: list of machine UUIDs
+		cpMachines := params.Machines
+		if params.ControlPlanes < len(cpMachines) {
+			cpMachines = cpMachines[:params.ControlPlanes]
+		}
 
-	fmt.Fprintf(&buf, "machineClass:\n")
-	fmt.Fprintf(&buf, "  name: %s\n", machineClass)
-	fmt.Fprintf(&buf, "  size: %d\n", params.ControlPlanes)
+		writeMachinesList(&buf, cpMachines)
+	}
 
 	// Add control-plane-scoped patches
 	cpPatches := filterPatchesByScope(params.Patches, PatchScopeControlPlane)
@@ -108,9 +137,21 @@ func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
 	if params.Workers > 0 {
 		fmt.Fprintf(&buf, "---\nkind: Workers\n")
 
-		fmt.Fprintf(&buf, "machineClass:\n")
-		fmt.Fprintf(&buf, "  name: %s\n", machineClass)
-		fmt.Fprintf(&buf, "  size: %d\n", params.Workers)
+		if params.MachineClass != "" {
+			fmt.Fprintf(&buf, "machineClass:\n")
+			fmt.Fprintf(&buf, "  name: %s\n", params.MachineClass)
+			fmt.Fprintf(&buf, "  size: %d\n", params.Workers)
+		} else {
+			// Worker machines are the remaining after control planes
+			workerMachines := params.Machines
+			if params.ControlPlanes < len(workerMachines) {
+				workerMachines = workerMachines[params.ControlPlanes:]
+			} else {
+				workerMachines = nil
+			}
+
+			writeMachinesList(&buf, workerMachines)
+		}
 
 		// Add worker-scoped patches
 		workerPatches := filterPatchesByScope(params.Patches, PatchScopeWorker)
@@ -158,6 +199,15 @@ func writePatchesSection(buf *bytes.Buffer, patches []PatchInfo) {
 		fmt.Fprintf(buf, "    inline:\n")
 
 		writeInlineContent(buf, patch.Content)
+	}
+}
+
+// writeMachinesList writes a machines: list to the YAML buffer.
+func writeMachinesList(buf *bytes.Buffer, machines []string) {
+	fmt.Fprintf(buf, "machines:\n")
+
+	for _, m := range machines {
+		fmt.Fprintf(buf, "  - %s\n", m)
 	}
 }
 

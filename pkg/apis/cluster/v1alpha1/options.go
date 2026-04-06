@@ -131,10 +131,16 @@ type OptionsOmni struct {
 	// Generated templates normalize the value to include the "v" prefix.
 	// This determines the Kubernetes version that Omni will deploy.
 	KubernetesVersion string `json:"kubernetesVersion,omitzero"`
-	// MachineClassName is the Omni machine class to use for allocating nodes.
+	// MachineClass is the Omni machine class name to use for dynamic node allocation.
 	// Machine classes are user-defined in the Omni dashboard and match machines
 	// by labels (e.g., CPU, region, role). The specified class must exist in
-	// the Omni account before cluster creation.
-	// Defaults to "any".
-	MachineClassName string `default:"any" json:"machineClassName,omitzero"`
+	// the Omni account before cluster creation. The number of machines allocated
+	// is derived from the controlPlanes and workers count in the cluster spec.
+	// Mutually exclusive with Machines — set one or the other.
+	MachineClass string `json:"machineClass,omitzero"`
+	// Machines is a list of Omni machine UUIDs to use for static node allocation.
+	// The first N machines are assigned as control planes (where N = controlPlanes count),
+	// and the remaining machines are assigned as workers.
+	// Mutually exclusive with MachineClass — set one or the other.
+	Machines []string `json:"machines,omitzero"`
 }

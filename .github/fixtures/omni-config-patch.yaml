@@ -1,0 +1,4 @@
+spec:
+  cluster:
+    omni:
+      machineClass: ksail

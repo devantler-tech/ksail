@@ -62,6 +62,12 @@ inputs:
     description: GitHub Container Registry token (for external registry auth)
     required: false
     default: ""
+  config-patch:
+    description: |
+      Path to a YAML config fragment to merge into ksail.yaml after init.
+      Passed through to the ksail-cluster sub-action.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -155,6 +161,7 @@ runs:
         install: "false"
         cache: "true"
         validate: ${{ inputs.init }}
+        config-patch: ${{ inputs.config-patch }}
 
     - name: 🧪 ksail cluster info
       shell: bash
@@ -339,5 +346,18 @@ runs:
     - name: 🧪 ksail cluster delete
       if: always()
       shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ inputs.args }}
       run: |
-        ksail cluster delete || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
+        # Extract --name value from args for reliable cleanup even when no kubeconfig exists
+        # shellcheck disable=SC2086
+        CLUSTER_NAME=$(echo $ARGS | grep -oP '(?<=--name\s)\S+' || true)
+        if [ -n "$CLUSTER_NAME" ]; then
+          ksail cluster delete --distribution "$DISTRIBUTION" --provider "$PROVIDER" --name "$CLUSTER_NAME" --force \
+            || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
+        else
+          ksail cluster delete \
+            || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
+        fi

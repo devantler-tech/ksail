@@ -197,6 +197,7 @@ func TestSyncAndWaitOmniCluster_NilClientProviderFails(t *testing.T) {
 			TalosVersion:      "v1.11.2",
 			KubernetesVersion: "v1.32.0",
 			ControlPlanes:     1,
+			MachineClass:      "test-class",
 		},
 	)
 

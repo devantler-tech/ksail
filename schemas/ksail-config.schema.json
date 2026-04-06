@@ -257,8 +257,14 @@
                 "kubernetesVersion": {
                   "type": "string"
                 },
-                "machineClassName": {
+                "machineClass": {
                   "type": "string"
+                },
+                "machines": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
                 }
               },
               "additionalProperties": false,

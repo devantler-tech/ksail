@@ -513,10 +513,12 @@ jobs:
             provider: Omni
             init: true
             args: "--name system-test-cluster-with-scaffolding --image-verification Enabled"
+            config-patch: ".github/fixtures/omni-config-patch.yaml"
           - distribution: Talos
             provider: Omni
             init: false
             args: "--name system-test-cluster-without-scaffolding"
+            config-patch: ".github/fixtures/omni-config-patch.yaml"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -560,6 +562,7 @@ jobs:
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
+          config-patch: ${{ matrix.config-patch || '' }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
