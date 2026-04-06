@@ -26,8 +26,7 @@ func TestResolveOmniVersions_NoOpts(t *testing.T) {
 	assert.NotEmpty(t, talosVersion)
 	assert.Equal(
 		t,
-		talosVersion[0],
-		'v',
+		'v', talosVersion[0],
 		"expected version to start with 'v', got: %s",
 		talosVersion,
 	)
