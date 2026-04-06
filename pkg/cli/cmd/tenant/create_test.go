@@ -143,7 +143,10 @@ func TestCreateCmd_FluxType(t *testing.T) {
 }
 
 func TestCreateCmd_ArgoCDType(t *testing.T) {
-	t.Parallel()
+	// Not parallel: uses t.Setenv to isolate from real gh credentials.
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_CONFIG_DIR", t.TempDir())
 
 	outDir := t.TempDir()
 
