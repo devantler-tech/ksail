@@ -31,7 +31,7 @@ Before you begin developing, ensure you have the following installed:
 - [mockery (v3.5+)](https://vektra.github.io/mockery/v3.5/installation/)
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://github.com/oxsecurity/megalinter/tree/main/mega-linter-runner#installation)
-- [Node.js (v22+)](https://nodejs.org/en/download/) — Required for building documentation (matches CI)
+- [Node.js (v24+)](https://nodejs.org/en/download/) — Required for building documentation (matches CI)
 
 ### Lint
 
