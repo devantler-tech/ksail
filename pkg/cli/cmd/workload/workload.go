@@ -3750,7 +3750,12 @@ func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 
 			changed := detectChangedFile(dir, snapshot)
 			if changed != "" {
-				fmt.Fprintf(os.Stderr, "  poll: change detected on tick %d: %s\n", tickCount, changed)
+				fmt.Fprintf(
+					os.Stderr,
+					"  poll: change detected on tick %d: %s\n",
+					tickCount,
+					changed,
+				)
 
 				// Blocking send: guaranteed delivery to the apply worker.
 				// If the worker is busy, we wait — the next poll resumes
