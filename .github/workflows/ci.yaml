@@ -543,7 +543,7 @@ jobs:
           - distribution: Talos
             provider: Hetzner
             init: true
-            args: "--name system-test-cluster-with-scaffolding --image-verification Enabled"
+            args: "--name system-test-cluster-with-scaffolding"
           - distribution: Talos
             provider: Hetzner
             init: false
@@ -551,7 +551,7 @@ jobs:
           - distribution: Talos
             provider: Omni
             init: true
-            args: "--name system-test-cluster-with-scaffolding --image-verification Enabled"
+            args: "--name system-test-cluster-with-scaffolding"
           - distribution: Talos
             provider: Omni
             init: false

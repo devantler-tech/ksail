@@ -93,18 +93,26 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 }
 
 // buildOmniPatchInfos converts talosConfigs patches into the PatchInfo format used by the Omni template builder.
-// The "cluster-name" patch is excluded because Omni manages the cluster name through its
-// Cluster document and rejects config patches that override cluster.clusterName.
+// Patches that are incompatible with Omni are excluded:
+//   - cluster-name.yaml: Omni manages cluster names via its Cluster document
+//   - image-verification.yaml: ImageVerificationConfig is a Talos 1.13+ document
+//     type not recognized by the Omni SDK
 func (p *Provisioner) buildOmniPatchInfos() []omniprovider.PatchInfo {
 	if p.talosConfigs == nil {
 		return nil
+	}
+
+	// Patches that Omni cannot process as config patches.
+	omniIncompatible := map[string]bool{
+		"cluster-name.yaml":       true,
+		"image-verification.yaml": true,
 	}
 
 	rawPatches := p.talosConfigs.Patches()
 	patches := make([]omniprovider.PatchInfo, 0, len(rawPatches))
 
 	for _, patch := range rawPatches {
-		if filepath.Base(patch.Path) == "cluster-name.yaml" {
+		if omniIncompatible[filepath.Base(patch.Path)] {
 			continue
 		}
 
