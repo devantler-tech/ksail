@@ -24,6 +24,10 @@ var (
 	ErrMachineAllocationConflict = errors.New(
 		"MachineClass and Machines are mutually exclusive (set one or the other)",
 	)
+	// ErrInsufficientMachines is returned when the Machines list is too short for the requested node counts.
+	ErrInsufficientMachines = errors.New(
+		"not enough machines for the requested control plane and worker node counts",
+	)
 )
 
 // PatchScope indicates which nodes a patch should be applied to.
@@ -88,6 +92,18 @@ func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
 
 	if params.MachineClass == "" && len(params.Machines) == 0 {
 		return nil, ErrMachineAllocationRequired
+	}
+
+	// Validate that static machine list has enough entries for the requested topology
+	if len(params.Machines) > 0 {
+		required := params.ControlPlanes + params.Workers
+		if len(params.Machines) < required {
+			return nil, fmt.Errorf(
+				"%w: need %d (controlPlanes=%d + workers=%d), got %d",
+				ErrInsufficientMachines,
+				required, params.ControlPlanes, params.Workers, len(params.Machines),
+			)
+		}
 	}
 
 	var buf bytes.Buffer
