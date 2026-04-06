@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	ghauth "github.com/cli/go-gh/v2/pkg/auth"
 )
 
 // RepoVisibility defines the visibility of a Git repository.
@@ -76,10 +78,19 @@ func New(providerName, token string) (Provider, error) {
 	}
 }
 
+// resolveGitHubToken resolves a GitHub token using the go-gh SDK.
+// It checks GH_TOKEN/GITHUB_TOKEN env vars and ~/.config/gh/hosts.yml.
+var resolveGitHubToken = func() string {
+	token, _ := ghauth.TokenFromEnvOrConfig("github.com")
+	return token
+}
+
 // ResolveToken resolves the API token using the fallback chain:
 // 1. Explicit token parameter (--git-token flag)
-// 2. Environment variable (GITHUB_TOKEN, GITLAB_TOKEN, GITEA_TOKEN)
-// 3. Empty string (caller should skip or warn — no SDK/CLI fallback yet).
+// 2. Provider SDK auto-detection:
+//   - GitHub: go-gh SDK (checks GH_TOKEN, GITHUB_TOKEN env vars and ~/.config/gh/hosts.yml)
+//   - GitLab: GITLAB_TOKEN env var
+//   - Gitea: GITEA_TOKEN env var
 func ResolveToken(providerName, explicitToken string) string {
 	if explicitToken != "" {
 		return explicitToken
@@ -87,7 +98,7 @@ func ResolveToken(providerName, explicitToken string) string {
 
 	switch strings.ToLower(providerName) {
 	case providerGitHub:
-		return os.Getenv("GITHUB_TOKEN")
+		return resolveGitHubToken()
 	case providerGitLab:
 		return os.Getenv("GITLAB_TOKEN")
 	case providerGitea:
