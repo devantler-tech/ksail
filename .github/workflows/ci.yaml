@@ -567,6 +567,7 @@ jobs:
   cleanup-hetzner:
     name: 🧹 Cleanup Hetzner Resources
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [system-test]
     if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test.result != 'skipped' }}
     environment: ci
@@ -586,6 +587,7 @@ jobs:
   cleanup-omni:
     name: 🧹 Cleanup Omni Resources
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [system-test]
     if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test.result != 'skipped' }}
     environment: ci
