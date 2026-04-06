@@ -85,7 +85,7 @@ KSail resolves the GitHub token automatically using the following fallback chain
 2. `GH_TOKEN` or `GITHUB_TOKEN` environment variable
 3. GitHub CLI config (e.g., from `gh auth login`)
 
-If no token can be resolved through any of these sources, the command fails with an error.
+If no token can be resolved through any of these sources, repo scaffolding is skipped with a warning and the command succeeds. To require a token (e.g., in CI), pass `--git-token` explicitly — an empty value causes an immediate error.
 
 Pass `--git-token` explicitly only when you need to override the auto-detected token:
 
