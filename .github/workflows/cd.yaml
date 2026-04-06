@@ -202,25 +202,20 @@ jobs:
         run: npm ci
 
       - name: 📥 Download benchmark data
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p docs/public
-          if gh api "repos/{owner}/{repo}/contents/dev/bench/data.js?ref=benchmark-data" \
-            -H "Accept: application/vnd.github.raw+json" > /tmp/data.js 2>/tmp/api_error.txt; then
-            node -e "
-              const s = require('fs').readFileSync('/tmp/data.js', 'utf8');
-              const match = s.match(/^window\.BENCHMARK_DATA\s*=\s*([\s\S]+?);\s*\$/);
-              if (!match) { process.stderr.write('Unexpected data.js format\n'); process.exit(1); }
-              JSON.parse(match[1]);
-              require('fs').writeFileSync('docs/public/benchmark-data.json', match[1]);
-            "
-            echo "Downloaded benchmark data from benchmark-data branch"
-          else
-            cat /tmp/api_error.txt >&2 || true
-            echo "No benchmark data available yet"
-          fi
+          gh api "repos/{owner}/{repo}/contents/dev/bench/data.js?ref=benchmark-data" \
+            -H "Accept: application/vnd.github.raw+json" > /tmp/data.js
+          node -e "
+            const s = require('fs').readFileSync('/tmp/data.js', 'utf8');
+            const match = s.match(/^window\.BENCHMARK_DATA\s*=\s*([\s\S]+?);?\s*\$/);
+            if (!match) { process.stderr.write('Unexpected data.js format\n'); process.exit(1); }
+            JSON.parse(match[1]);
+            require('fs').writeFileSync('docs/public/benchmark-data.json', match[1]);
+          "
+          echo "Downloaded benchmark data from benchmark-data branch"
 
       - name: 🏗️ Build with Astro
         working-directory: docs
