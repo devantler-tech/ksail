@@ -19,9 +19,8 @@ func TestResolveToken_ExplicitToken(t *testing.T) {
 	require.Equal(t, "my-explicit-token", got)
 }
 
+//nolint:paralleltest // mutates package-level resolveGitHubToken
 func TestResolveToken_ExplicitTokenOverridesSDK(t *testing.T) {
-	t.Parallel()
-
 	restore := gitprovider.ExportSetResolveGitHubTokenForTest(func() string {
 		return "sdk-token-should-be-ignored"
 	})
@@ -31,9 +30,8 @@ func TestResolveToken_ExplicitTokenOverridesSDK(t *testing.T) {
 	require.Equal(t, "explicit-wins", got)
 }
 
+//nolint:paralleltest // mutates package-level resolveGitHubToken
 func TestResolveToken_GitHubSDKFallback(t *testing.T) {
-	t.Parallel()
-
 	restore := gitprovider.ExportSetResolveGitHubTokenForTest(func() string {
 		return "sdk-resolved-token"
 	})
@@ -43,9 +41,8 @@ func TestResolveToken_GitHubSDKFallback(t *testing.T) {
 	require.Equal(t, "sdk-resolved-token", got)
 }
 
+//nolint:paralleltest // mutates package-level resolveGitHubToken
 func TestResolveToken_GitHubSDKReturnsEmpty(t *testing.T) {
-	t.Parallel()
-
 	restore := gitprovider.ExportSetResolveGitHubTokenForTest(func() string {
 		return ""
 	})

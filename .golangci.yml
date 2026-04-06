@@ -76,6 +76,7 @@ linters:
             - github.com/atotto
             - github.com/devantler-tech
             - github.com/charmbracelet
+            - github.com/cli
             - github.com/derailed/k9s
             - github.com/fluxcd
             - github.com/getsops/sops
