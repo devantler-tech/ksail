@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/blang/semver/v4"
+	msemver "github.com/Masterminds/semver/v3"
 	"github.com/cosi-project/runtime/pkg/resource"
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/cosi-project/runtime/pkg/state"
@@ -348,31 +348,31 @@ func (p *Provider) LatestTalosVersion(ctx context.Context) (string, []string, er
 	}
 
 	var latestID string
-	var latestSemver semver.Version
+
+	var latestSemver *msemver.Version
+
 	var latestK8s []string
-	found := false
 
 	for ver := range versions.All() {
 		if ver.TypedSpec().Value.GetDeprecated() {
 			continue
 		}
 
-		id := ver.Metadata().ID()
+		versionID := ver.Metadata().ID()
 
-		parsed, parseErr := semver.Parse(strings.TrimPrefix(id, "v"))
+		parsed, parseErr := msemver.NewVersion(strings.TrimPrefix(versionID, "v"))
 		if parseErr != nil {
 			continue
 		}
 
-		if !found || parsed.GT(latestSemver) {
-			latestID = id
+		if latestSemver == nil || parsed.GreaterThan(latestSemver) {
+			latestID = versionID
 			latestSemver = parsed
 			latestK8s = ver.TypedSpec().Value.GetCompatibleKubernetesVersions()
-			found = true
 		}
 	}
 
-	if !found {
+	if latestSemver == nil {
 		return "", nil, ErrNoTalosVersions
 	}
 

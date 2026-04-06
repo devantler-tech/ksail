@@ -45,7 +45,10 @@ func TestResolveOmniVersions_NoOpts(t *testing.T) {
 	provisioner := talosprovisioner.NewProvisioner(configs, nil)
 	prov := newOmniProviderWithVersions(t, "1.11.2", "1.12.4")
 
-	talosVersion, kubernetesVersion, err := provisioner.ResolveOmniVersionsForTest(context.Background(), prov)
+	talosVersion, kubernetesVersion, err := provisioner.ResolveOmniVersionsForTest(
+		context.Background(),
+		prov,
+	)
 
 	require.NoError(t, err)
 	// Should pick the latest available version from Omni
@@ -65,7 +68,10 @@ func TestResolveOmniVersions_WithOmniOpts(t *testing.T) {
 
 	// Provider doesn't matter when opts already set
 	prov := omniprovider.NewProvider(nil)
-	talosVersion, kubernetesVersion, err := provisioner.ResolveOmniVersionsForTest(context.Background(), prov)
+	talosVersion, kubernetesVersion, err := provisioner.ResolveOmniVersionsForTest(
+		context.Background(),
+		prov,
+	)
 
 	require.NoError(t, err)
 	assert.Equal(t, "v1.11.2", talosVersion)
@@ -83,7 +89,10 @@ func TestResolveOmniVersions_KubernetesVersionFallsBackToConfigs(t *testing.T) {
 		})
 
 	prov := omniprovider.NewProvider(nil)
-	talosVersion, kubernetesVersion, err := provisioner.ResolveOmniVersionsForTest(context.Background(), prov)
+	talosVersion, kubernetesVersion, err := provisioner.ResolveOmniVersionsForTest(
+		context.Background(),
+		prov,
+	)
 
 	require.NoError(t, err)
 	assert.Equal(t, "v1.11.2", talosVersion)
