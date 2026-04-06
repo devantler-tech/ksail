@@ -673,7 +673,7 @@ jobs:
 
       - name: 📊 Compare benchmark results
         if: steps.discover.outputs.skip == 'false'
-        uses: benchmark-action/github-action-benchmark@d48d326b4ca9ba73ca0cd0d59f108f9e02a381c7 # v1.20.4
+        uses: benchmark-action/github-action-benchmark@a60cea5bc7b49e15c1f58f411161f99e0df48372 # v1.22.0
         with:
           tool: go
           output-file-path: ${{ runner.temp }}/bench-filtered.txt
@@ -684,7 +684,7 @@ jobs:
           alert-threshold: "150%"
           fail-threshold: "200%"
           fail-on-alert: ${{ github.event_name == 'pull_request' }}
-          comment-on-alert: ${{ github.event_name == 'pull_request' }}
+          comment-always: ${{ github.event_name == 'pull_request' }}
           summary-always: true
 
       - name: 📤 Upload benchmark results
@@ -719,7 +719,7 @@ jobs:
           path: ${{ runner.temp }}
 
       - name: 📊 Store benchmark data
-        uses: benchmark-action/github-action-benchmark@d48d326b4ca9ba73ca0cd0d59f108f9e02a381c7 # v1.20.4
+        uses: benchmark-action/github-action-benchmark@a60cea5bc7b49e15c1f58f411161f99e0df48372 # v1.22.0
         with:
           tool: go
           output-file-path: ${{ runner.temp }}/bench.txt
