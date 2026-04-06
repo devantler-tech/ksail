@@ -3119,7 +3119,9 @@ func eventLoop(
 
 	// Polling fallback: periodically scan for modification time changes to
 	// catch events missed by fsnotify (CI runners, atomic-save editors).
-	go pollForChanges(ctx, dir, state, applyCh)
+	// Runs independently from the fsnotify debounce state so that fsnotify
+	// events cannot invalidate polling-detected changes.
+	go pollForChanges(ctx, dir, applyCh)
 
 	defer cancelPendingDebounce(state)
 
@@ -3703,10 +3705,16 @@ func scanForDeletedFiles(snapshot fileSnapshot) string {
 }
 
 // pollForChanges periodically scans the watched directory for modified files
-// and triggers applies via scheduleApply. This provides a fallback for
+// and enqueues applies directly on applyCh. This provides a fallback for
 // environments where fsnotify events may be lost (CI runners, atomic-save
 // editors using create+rename).
-func pollForChanges(ctx context.Context, dir string, state *debounceState, applyCh chan string) {
+//
+// Unlike the fsnotify path, polling bypasses the shared debounce state
+// entirely. The polling interval (3s) already provides natural debouncing,
+// and a blocking send ensures the change is reliably delivered to the
+// apply worker — it cannot be silently dropped by a generation mismatch
+// or a non-blocking channel send.
+func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 	snapshot := buildFileSnapshot(dir)
 	ticker := time.NewTicker(pollInterval)
 
@@ -3719,7 +3727,16 @@ func pollForChanges(ctx context.Context, dir string, state *debounceState, apply
 		case <-ticker.C:
 			changed := detectChangedFile(dir, snapshot)
 			if changed != "" {
-				scheduleApply(state, changed, applyCh)
+				// Blocking send: guaranteed delivery to the apply worker.
+				// If the worker is busy, we wait — the next poll resumes
+				// after the send completes. The snapshot was already updated
+				// by detectChangedFile, but that is safe here because the
+				// blocking send ensures the apply will always run.
+				select {
+				case applyCh <- changed:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}
