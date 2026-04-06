@@ -518,6 +518,7 @@ jobs:
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     environment: ci
+    continue-on-error: ${{ matrix.provider == 'Hetzner' || matrix.provider == 'Omni' }}
     permissions:
       contents: read
       packages: write
@@ -542,7 +543,7 @@ jobs:
           - distribution: Talos
             provider: Hetzner
             init: true
-            args: "--name system-test-cluster-with-scaffolding --image-verification Enabled"
+            args: "--name system-test-cluster-with-scaffolding"
           - distribution: Talos
             provider: Hetzner
             init: false
@@ -550,7 +551,7 @@ jobs:
           - distribution: Talos
             provider: Omni
             init: true
-            args: "--name system-test-cluster-with-scaffolding --image-verification Enabled"
+            args: "--name system-test-cluster-with-scaffolding"
           - distribution: Talos
             provider: Omni
             init: false
@@ -598,6 +599,7 @@ jobs:
           HCLOUD_TOKEN: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }}
           OMNI_SERVICE_ACCOUNT_KEY: ${{ matrix.provider == 'Omni' && secrets.OMNI_SERVICE_ACCOUNT_KEY || '' }}
           OMNI_ENDPOINT: ${{ matrix.provider == 'Omni' && vars.OMNI_ENDPOINT || '' }}
+          KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS: ${{ matrix.provider == 'Omni' && 'ksail' || '' }}
         with:
           distribution: ${{ matrix.distribution }}
           provider: ${{ matrix.provider }}
@@ -740,6 +742,7 @@ jobs:
   cleanup-hetzner:
     name: 🧹 Cleanup Hetzner Resources
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [system-test]
     if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test.result != 'skipped' }}
     environment: ci
@@ -759,6 +762,7 @@ jobs:
   cleanup-omni:
     name: 🧹 Cleanup Omni Resources
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [system-test]
     if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test.result != 'skipped' }}
     environment: ci

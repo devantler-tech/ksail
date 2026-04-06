@@ -3006,6 +3006,13 @@ Examples:
 
 // runWatch starts the file watcher loop.
 func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool) error {
+	// The root-level error executor captures stderr into a buffer for error
+	// aggregation.  For long-running commands like watch the buffer is never
+	// flushed, making all feedback invisible.  Override with real stderr so
+	// that watcher diagnostics (change detected, apply results) appear in the
+	// terminal and in CI logs.
+	cmd.SetErr(os.Stderr)
+
 	cmdCtx, err := initCommandContext(cmd)
 	if err != nil {
 		return err
@@ -3119,7 +3126,9 @@ func eventLoop(
 
 	// Polling fallback: periodically scan for modification time changes to
 	// catch events missed by fsnotify (CI runners, atomic-save editors).
-	go pollForChanges(ctx, dir, state, applyCh)
+	// Runs independently from the fsnotify debounce state so that fsnotify
+	// events cannot invalidate polling-detected changes.
+	go pollForChanges(ctx, dir, applyCh)
 
 	defer cancelPendingDebounce(state)
 
@@ -3197,6 +3206,8 @@ func handleFileEvent(
 	if !isRelevantEvent(event) {
 		return
 	}
+
+	fmt.Fprintf(os.Stderr, "  fsnotify: %s %s\n", event.Op, event.Name)
 
 	// If a new directory was created, watch it too.
 	if event.Has(fsnotify.Create) {
@@ -3614,7 +3625,8 @@ func tryAddDirectory(watcher *fsnotify.Watcher, path string, cmd *cobra.Command)
 }
 
 // buildFileSnapshot walks the directory tree and records modification times
-// for all regular files.
+// for all regular files. Uses os.Stat instead of d.Info() to avoid stale
+// cached stat data when files are replaced via rename (e.g. sed -i).
 func buildFileSnapshot(dir string) fileSnapshot {
 	snap := make(fileSnapshot)
 
@@ -3623,7 +3635,7 @@ func buildFileSnapshot(dir string) fileSnapshot {
 			return nil //nolint:nilerr // skip inaccessible entries
 		}
 
-		info, statErr := d.Info()
+		info, statErr := os.Stat(path)
 		if statErr != nil || !info.Mode().IsRegular() {
 			return nil //nolint:nilerr // skip non-regular entries and stat errors
 		}
@@ -3661,7 +3673,7 @@ func scanForModifiedFiles(dir string, snapshot fileSnapshot) string {
 			return nil //nolint:nilerr // skip inaccessible entries
 		}
 
-		info, statErr := d.Info()
+		info, statErr := os.Stat(path)
 		if statErr != nil || !info.Mode().IsRegular() {
 			return nil //nolint:nilerr // skip non-regular entries and stat errors
 		}
@@ -3703,26 +3715,97 @@ func scanForDeletedFiles(snapshot fileSnapshot) string {
 }
 
 // pollForChanges periodically scans the watched directory for modified files
-// and triggers applies via scheduleApply. This provides a fallback for
+// and enqueues applies directly on applyCh. This provides a fallback for
 // environments where fsnotify events may be lost (CI runners, atomic-save
 // editors using create+rename).
-func pollForChanges(ctx context.Context, dir string, state *debounceState, applyCh chan string) {
+//
+// Unlike the fsnotify path, polling bypasses the shared debounce state
+// entirely. The polling interval (3s) already provides natural debouncing,
+// and a blocking send ensures the change is reliably delivered to the
+// apply worker — it cannot be silently dropped by a generation mismatch
+// or a non-blocking channel send.
+func pollForChanges(ctx context.Context, dir string, applyCh chan string) {
 	snapshot := buildFileSnapshot(dir)
-	ticker := time.NewTicker(pollInterval)
 
+	// Stable ready signal used by CI tests to know the snapshot is built.
+	fmt.Fprintf(os.Stderr, "  poll: started, %d files in snapshot\n", len(snapshot))
+	logPollSnapshot(dir, snapshot)
+
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
+
+	tickCount := 0
 
 	for {
 		select {
 		case <-ctx.Done():
+			fmt.Fprintf(os.Stderr, "  poll: stopped after %d ticks\n", tickCount)
+
 			return
 		case <-ticker.C:
+			tickCount++
+
+			if tickCount%5 == 1 {
+				logPollTick(tickCount, dir, snapshot)
+			}
+
 			changed := detectChangedFile(dir, snapshot)
-			if changed != "" {
-				scheduleApply(state, changed, applyCh)
+			if changed == "" {
+				continue
+			}
+
+			fmt.Fprintf(os.Stderr, "  poll: change on tick %d: %s\n", tickCount, changed)
+
+			// Blocking send: guaranteed delivery to the apply worker.
+			select {
+			case applyCh <- changed:
+				fmt.Fprintf(os.Stderr, "  poll: enqueued for apply\n")
+			case <-ctx.Done():
+				return
 			}
 		}
 	}
+}
+
+// logPollSnapshot logs the initial snapshot contents (temporary diagnostics).
+func logPollSnapshot(dir string, snapshot fileSnapshot) {
+	for path, modTime := range snapshot {
+		rel, _ := filepath.Rel(dir, path)
+		fmt.Fprintf(os.Stderr, "  poll:   %s (mod=%s)\n", rel, modTime.Format(time.RFC3339Nano))
+	}
+}
+
+// logPollTick logs file modTimes vs snapshot on periodic ticks (temporary diagnostics).
+func logPollTick(tick int, dir string, snapshot fileSnapshot) {
+	fmt.Fprintf(os.Stderr, "  poll: tick %d, scanning %s\n", tick, dir)
+
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() {
+			return nil //nolint:nilerr // skip inaccessible entries and directories
+		}
+
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			return nil //nolint:nilerr // skip files that can't be stat'd
+		}
+
+		rel, _ := filepath.Rel(dir, path)
+		cur := info.ModTime()
+		prev, inSnap := snapshot[path]
+
+		switch {
+		case !inSnap:
+			fmt.Fprintf(os.Stderr, "  poll:   %s NEW mod=%s\n", rel, cur.Format(time.RFC3339Nano))
+		case !cur.Equal(prev):
+			fmt.Fprintf(os.Stderr, "  poll:   %s CHANGED snap=%s cur=%s\n",
+				rel, prev.Format(time.RFC3339Nano), cur.Format(time.RFC3339Nano))
+		default:
+			fmt.Fprintf(os.Stderr, "  poll:   %s unchanged mod=%s\n",
+				rel, cur.Format(time.RFC3339Nano))
+		}
+
+		return nil
+	})
 }
 
 // NewWorkloadCmd creates and returns the workload command group namespace.

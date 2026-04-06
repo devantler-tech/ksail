@@ -221,6 +221,29 @@ func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
 	)
 }
 
+// KubernetesVersion returns the Kubernetes version used for this config.
+// Falls back to DefaultKubernetesVersion if not set.
+func (c *Configs) KubernetesVersion() string {
+	if c.kubernetesVersion != "" {
+		return c.kubernetesVersion
+	}
+
+	return DefaultKubernetesVersion
+}
+
+// Patches returns a copy of the patches used to build this config.
+// A copy is returned to prevent callers from mutating the internal state.
+func (c *Configs) Patches() []Patch {
+	if c.patches == nil {
+		return nil
+	}
+
+	result := make([]Patch, len(c.patches))
+	copy(result, c.patches)
+
+	return result
+}
+
 // IsCNIDisabled returns true if the default CNI is disabled (set to "none").
 // This is used to determine whether to skip CNI-dependent checks during bootstrap.
 func (c *Configs) IsCNIDisabled() bool {

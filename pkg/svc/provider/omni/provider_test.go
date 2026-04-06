@@ -3,6 +3,7 @@ package omni_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/cosi-project/runtime/pkg/state/impl/inmem"
@@ -51,7 +52,7 @@ func TestStartNodes_NilClient(t *testing.T) {
 	err := prov.StartNodes(context.Background(), "test-cluster")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
 func TestStopNodes_NilClient(t *testing.T) {
@@ -62,7 +63,7 @@ func TestStopNodes_NilClient(t *testing.T) {
 	err := prov.StopNodes(context.Background(), "test-cluster")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
 func TestListNodes_NilClient(t *testing.T) {
@@ -109,7 +110,73 @@ func TestDeleteNodes_NilClient(t *testing.T) {
 	err := prov.DeleteNodes(context.Background(), "test-cluster")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestClusterExists_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	exists, err := prov.ClusterExists(context.Background(), "test-cluster")
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	assert.False(t, exists)
+}
+
+func TestCreateCluster_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	err := prov.CreateCluster(context.Background(), nil, nil)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestWaitForClusterReady_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	err := prov.WaitForClusterReady(context.Background(), "test-cluster", time.Second)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestGetKubeconfig_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	data, err := prov.GetKubeconfig(context.Background(), "test-cluster")
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	assert.Nil(t, data)
+}
+
+func TestGetTalosconfig_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	data, err := prov.GetTalosconfig(context.Background(), "test-cluster")
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	assert.Nil(t, data)
+}
+
+func TestClient_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	assert.Nil(t, prov.Client())
 }
 
 func TestDeleteNodes_ClusterNotFound_ReturnsNil(t *testing.T) {
@@ -121,6 +188,74 @@ func TestDeleteNodes_ClusterNotFound_ReturnsNil(t *testing.T) {
 	err := prov.DeleteNodes(context.Background(), "nonexistent-cluster")
 
 	require.NoError(t, err)
+}
+
+func TestLatestTalosVersion_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	_, _, err := prov.LatestTalosVersion(context.Background())
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestLatestTalosVersion_NoVersions(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProviderWithState(newInMemState())
+
+	_, _, err := prov.LatestTalosVersion(context.Background())
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, omni.ErrNoTalosVersions)
+}
+
+func TestLatestTalosVersion_ReturnsLatest(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Seed multiple versions
+	for _, v := range []string{"1.11.2", "1.12.4", "1.10.0"} {
+		tv := omnires.NewTalosVersion(v)
+		tv.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.31.0", "1.32.0"}
+
+		require.NoError(t, testState.Create(context.Background(), tv))
+	}
+
+	version, k8sVersions, err := prov.LatestTalosVersion(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, "1.12.4", version)
+	assert.Equal(t, []string{"1.31.0", "1.32.0"}, k8sVersions)
+}
+
+func TestLatestTalosVersion_SkipsDeprecated(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Add a higher version that is deprecated
+	tvOld := omnires.NewTalosVersion("1.11.2")
+	tvOld.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.31.0"}
+
+	require.NoError(t, testState.Create(context.Background(), tvOld))
+
+	tvNew := omnires.NewTalosVersion("1.12.4")
+	tvNew.TypedSpec().Value.Deprecated = true
+	tvNew.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.32.0"}
+
+	require.NoError(t, testState.Create(context.Background(), tvNew))
+
+	version, k8sVersions, err := prov.LatestTalosVersion(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, "1.11.2", version)
+	assert.Equal(t, []string{"1.31.0"}, k8sVersions)
 }
 
 func TestDeleteNodes_ClusterExists_RemovesCluster(t *testing.T) {

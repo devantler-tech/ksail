@@ -250,6 +250,21 @@
                 },
                 "serviceAccountKeyEnvVar": {
                   "type": "string"
+                },
+                "talosVersion": {
+                  "type": "string"
+                },
+                "kubernetesVersion": {
+                  "type": "string"
+                },
+                "machineClass": {
+                  "type": "string"
+                },
+                "machines": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
                 }
               },
               "additionalProperties": false,

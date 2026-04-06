@@ -97,6 +97,10 @@ func configureViperEnvironment(viperInstance *viper.Viper) {
 		"KSAIL_SPEC_CONNECTION_KUBECONFIG",
 	)
 	_ = viperInstance.BindEnv("spec.cluster.connection.timeout", "KSAIL_SPEC_CONNECTION_TIMEOUT")
+	_ = viperInstance.BindEnv(
+		"spec.cluster.omni.machineclass",
+		"KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS",
+	)
 }
 
 // addParentDirectoriesToViperPaths adds parent directories containing ksail.yaml to Viper's search paths.

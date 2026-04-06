@@ -289,17 +289,36 @@ runs:
 
     - name: 🧪 ksail cluster stop
       shell: bash
+      env:
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
       run: |
-        ksail cluster stop
+        CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
+        if [ -n "$CLUSTER_NAME" ]; then
+          ksail cluster stop --provider "$PROVIDER" --name "$CLUSTER_NAME"
+        else
+          ksail cluster stop
+        fi
 
     - name: 🧪 ksail cluster start
       shell: bash
+      env:
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
       run: |
+        CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
         start_succeeded=false
         for attempt in 1 2 3; do
-          if timeout 600 ksail cluster start; then
-            start_succeeded=true
-            break
+          if [ -n "$CLUSTER_NAME" ]; then
+            if timeout 600 ksail cluster start --provider "$PROVIDER" --name "$CLUSTER_NAME"; then
+              start_succeeded=true
+              break
+            fi
+          else
+            if timeout 600 ksail cluster start; then
+              start_succeeded=true
+              break
+            fi
           fi
           if [ "$attempt" -lt 3 ]; then
             echo "⚠️ cluster start attempt $attempt failed, retrying in 10s…"
@@ -315,17 +334,20 @@ runs:
       shell: bash
       env:
         PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
       run: |
-        # Get current cluster name from ksail cluster list (table format)
-        # Output format:
-        #   PROVIDER   DISTRIBUTION   CLUSTER
-        #   docker     Vanilla        my-cluster
-        PROVIDER_NAME=$(printf '%s' "$PROVIDER" | tr '[:upper:]' '[:lower:]')
-        CLUSTER_NAME=$(
-          ksail cluster list 2>/dev/null \
-            | awk -v prov="$PROVIDER_NAME" 'NR>1 && $1==prov {print $3; exit}' \
-            || true
-        )
+        # Prefer the explicit --name from ARGS (avoids picking up stale
+        # clusters from other concurrent test runs, especially on Omni).
+        CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
+        if [ -z "$CLUSTER_NAME" ]; then
+          # Fall back to discovering from ksail cluster list
+          PROVIDER_NAME=$(printf '%s' "$PROVIDER" | tr '[:upper:]' '[:lower:]')
+          CLUSTER_NAME=$(
+            ksail cluster list 2>/dev/null \
+              | awk -v prov="$PROVIDER_NAME" 'NR>1 && $1==prov {print $3; exit}' \
+              || true
+          )
+        fi
         if [ -n "$CLUSTER_NAME" ]; then
           ksail cluster switch "$CLUSTER_NAME"
         else
