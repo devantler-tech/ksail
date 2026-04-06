@@ -92,7 +92,7 @@ jobs:
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0 # zizmor: ignore[cache-poisoning]
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: 🏷️ Extract version from tag
         id: get_version
@@ -189,7 +189,7 @@ jobs:
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0 # zizmor: ignore[cache-poisoning]
         with:
-          node-version: "22"
+          node-version: "24"
           cache: "npm"
           cache-dependency-path: docs/package-lock.json
 
@@ -202,24 +202,30 @@ jobs:
         run: npm ci
 
       - name: 📥 Download benchmark data
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p docs/public
           if gh api "repos/{owner}/{repo}/contents/dev/bench/data.js?ref=benchmark-data" \
-            -H "Accept: application/vnd.github.raw+json" > /tmp/data.js 2>/tmp/api_error.txt; then
+            -H "Accept: application/vnd.github.raw+json" > /tmp/data.js 2>/tmp/benchmark-data.err; then
             node -e "
               const s = require('fs').readFileSync('/tmp/data.js', 'utf8');
-              const match = s.match(/^window\.BENCHMARK_DATA\s*=\s*([\s\S]+?);\s*\$/);
+              const match = s.match(/^window\.BENCHMARK_DATA\s*=\s*([\s\S]+?);?\s*\$/);
               if (!match) { process.stderr.write('Unexpected data.js format\n'); process.exit(1); }
               JSON.parse(match[1]);
               require('fs').writeFileSync('docs/public/benchmark-data.json', match[1]);
             "
             echo "Downloaded benchmark data from benchmark-data branch"
           else
-            cat /tmp/api_error.txt >&2 || true
-            echo "No benchmark data available yet"
+            status=$?
+            if grep -Eqi '(^|[^0-9])404([^0-9]|$)|not[ -]?found' /tmp/benchmark-data.err; then
+              echo "No benchmark data found on benchmark-data branch; continuing without benchmark-data.json"
+              rm -f docs/public/benchmark-data.json
+            else
+              echo "Failed to download benchmark data" >&2
+              cat /tmp/benchmark-data.err >&2
+              exit "$status"
+            fi
           fi
 
       - name: 🏗️ Build with Astro

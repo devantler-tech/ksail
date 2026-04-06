@@ -20,7 +20,7 @@ KSail is a Go-based CLI application that provides a unified SDK for spinning up 
 
 ```bash
 # Node.js for documentation builds
-# CI uses Node.js 22 (see .github/workflows/test-pages.yaml)
+# CI uses Node.js 24 (see .github/workflows/ci.yaml)
 cd /path/to/repo/docs
 npm ci
 ```

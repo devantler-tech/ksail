@@ -398,7 +398,7 @@ Create a fresh branch `repo-assist/improve-<desc>`, implement, build and test, t
 
 Identify and implement meaningful performance improvements.
 
-1. **Check for benchmark regression signals**: Search recent Benchmark Regression workflow failures: `gh run list --workflow=benchmark-regression.yaml --status=failure --limit=5`. Prioritize packages with detected regressions.
+1. **Check for benchmark regression signals**: Search recent CI workflow failures for benchmark jobs: `gh run list --workflow=ci.yaml --status=failure --limit=5`. Prioritize packages with detected regressions.
 2. Run benchmarks locally before changes: `go test -bench=. -benchmem -run='^$' ./path/to/package/`
 3. Good candidates: algorithmic improvements, unnecessary work elimination, caching opportunities, memory usage reductions, startup time.
 4. Create a fresh branch `repo-assist/perf-<desc>`, implement and benchmark, build and test, then create a draft PR with before/after measurements.

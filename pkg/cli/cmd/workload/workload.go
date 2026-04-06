@@ -3605,9 +3605,21 @@ func NewWorkloadCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "workload",
 		Short: "Manage workload operations",
-		Long: "Group workload commands under a single namespace to reconcile, apply, create, delete, " +
-			"describe, edit, exec, explain, export, expose, gen, get, import, install, logs, push, " +
-			"rollout, scale, validate, wait, or watch for workloads.",
+		Long: "Manage workload operations including resource inspection, " +
+			"GitOps reconciliation, and lifecycle management.\n\n" +
+			"Read operations:\n" +
+			"  get       - List resources with optional -o json for structured output including status/conditions\n" +
+			"  describe  - Show detailed resource info including events, conditions, and error details\n" +
+			"  logs      - Print container logs (use --tail=N, --previous for crash diagnostics)\n" +
+			"  explain   - Show API documentation for a resource kind\n" +
+			"  images    - List container images required by cluster components\n" +
+			"  wait      - Wait for a specific condition on resources\n\n" +
+			"Write operations:\n" +
+			"  apply, create, delete, edit, exec, export, expose, import, install, push, " +
+			"reconcile, rollout, scale, watch\n\n" +
+			"GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, " +
+			"ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check " +
+			"reconciliation status, health, and errors in a single call.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()

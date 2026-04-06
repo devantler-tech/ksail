@@ -51,6 +51,7 @@ type Info struct {
 	Distribution   v1alpha1.Distribution
 	Provider       v1alpha1.Provider
 	ClusterName    string
+	Context        string
 	ServerURL      string
 	KubeconfigPath string
 }
@@ -116,6 +117,7 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 		Distribution:   distribution,
 		Provider:       provider,
 		ClusterName:    clusterName,
+		Context:        contextName,
 		ServerURL:      cluster.Server,
 		KubeconfigPath: kubeconfigPath,
 	}, nil

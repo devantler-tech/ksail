@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -131,9 +132,36 @@ func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, totalChanges int) s
 	return formatDiffTable(diff, totalChanges)
 }
 
-// ExportFormatTTLLabel exports formatTTLLabel for testing.
-func ExportFormatTTLLabel(ttl *state.TTLInfo) string {
-	return formatTTLLabel(ttl)
+// ExportStripParenthetical exports stripParenthetical for testing.
+func ExportStripParenthetical(s string) string {
+	return stripParenthetical(s)
+}
+
+// ExportListResult is a test-visible alias for listResult.
+type ExportListResult = listResult
+
+// ExportDisplayListResults exports displayListResults for testing.
+func ExportDisplayListResults(
+	writer io.Writer,
+	providers []v1alpha1.Provider,
+	results []ExportListResult,
+) {
+	displayListResults(writer, providers, results)
+}
+
+// ExportNewListResult creates a listResult with TTL info for testing.
+func ExportNewListResult(
+	provider v1alpha1.Provider,
+	distribution v1alpha1.Distribution,
+	clusterName string,
+	ttl *state.TTLInfo,
+) ExportListResult {
+	return listResult{
+		Provider:     provider,
+		Distribution: distribution,
+		ClusterName:  clusterName,
+		TTL:          ttl,
+	}
 }
 
 // ExportFormatRemainingDuration exports formatRemainingDuration for testing.
@@ -288,4 +316,42 @@ func ExportEnsureLocalRegistriesReady(
 	localDeps localregistry.Dependencies,
 ) error {
 	return ensureLocalRegistriesReady(cmd, ctx, deps, cfgManager, localDeps)
+}
+
+// ExportComponentLabel exports componentLabel for testing.
+func ExportComponentLabel(value string) string {
+	return componentLabel(value)
+}
+
+// ClusterWithDistributionInfo is an exported view of clusterWithDistribution for testing.
+type ClusterWithDistributionInfo struct {
+	Name         string
+	Distribution v1alpha1.Distribution
+}
+
+// ExportToTalosClusters exports toTalosClusters for testing.
+func ExportToTalosClusters(names []string) []ClusterWithDistributionInfo {
+	raw := toTalosClusters(names)
+
+	out := make([]ClusterWithDistributionInfo, len(raw))
+	for i, r := range raw {
+		out[i] = ClusterWithDistributionInfo(r)
+	}
+
+	return out
+}
+
+// ExportDisplayClusterIdentity exports displayClusterIdentity for testing.
+func ExportDisplayClusterIdentity(writer io.Writer, info *clusterdetector.Info) {
+	displayClusterIdentity(writer, info)
+}
+
+// ExportDisplayTTLInfo exports displayTTLInfo for testing.
+func ExportDisplayTTLInfo(writer io.Writer, clusterName string) {
+	displayTTLInfo(writer, clusterName)
+}
+
+// ExportDisplayComponents exports displayComponents for testing.
+func ExportDisplayComponents(writer io.Writer, clusterName string) {
+	displayComponents(writer, clusterName)
 }

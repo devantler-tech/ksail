@@ -380,12 +380,16 @@ Type "yes" to confirm deletion:
 ---
 
 [TestListCmd_AllProviders - 1]
-docker: test-cluster
+PROVIDER   DISTRIBUTION   CLUSTER
+docker     Vanilla        test-cluster
 
 ---
 
 [TestListCmd_MultipleClustersFound_DockerProvider - 1]
-docker: cluster-1, cluster-2, cluster-3
+PROVIDER   DISTRIBUTION   CLUSTER
+docker     Vanilla        cluster-1
+docker     Vanilla        cluster-2
+docker     Vanilla        cluster-3
 
 ---
 
@@ -395,6 +399,7 @@ No clusters found.
 ---
 
 [TestListCmd_SingleClusterFound_DockerProvider - 1]
-docker: test-cluster
+PROVIDER   DISTRIBUTION   CLUSTER
+docker     Vanilla        test-cluster
 
 ---

@@ -24,11 +24,13 @@ import (
 	dockerpkg "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -4983,11 +4985,105 @@ users:
 	require.ErrorIs(t, err, cluster.ErrNoClusters)
 }
 
-func TestFormatTTLLabel_NoTTL(t *testing.T) {
+func TestDisplayListResults_WithTTL(t *testing.T) {
 	t.Parallel()
 
-	result := cluster.ExportFormatTTLLabel(nil)
-	assert.Empty(t, result)
+	var buf bytes.Buffer
+
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionVanilla,
+			"cluster-1",
+			nil,
+		),
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionK3s,
+			"dev-cluster",
+			// Use 5h buffer so minute-boundary drift on slow CI is irrelevant.
+			&state.TTLInfo{ExpiresAt: time.Now().Add(5*time.Hour + 30*time.Second)},
+		),
+	}
+
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
+
+	output := buf.String()
+	assert.Contains(t, output, "PROVIDER")
+	assert.Contains(t, output, "DISTRIBUTION")
+	assert.Contains(t, output, "CLUSTER")
+	assert.Contains(t, output, "TTL")
+	assert.Contains(t, output, "cluster-1")
+	assert.Contains(t, output, "dev-cluster")
+	assert.Regexp(t, `\d+h`, output)
+}
+
+func TestDisplayListResults_WithExpiredTTL(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionTalos,
+			"expired-cluster",
+			&state.TTLInfo{ExpiresAt: time.Now().Add(-1 * time.Hour)},
+		),
+	}
+
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
+
+	output := buf.String()
+	assert.Contains(t, output, "TTL")
+	assert.Contains(t, output, "EXPIRED")
+	assert.Contains(t, output, "expired-cluster")
+}
+
+func TestDisplayListResults_NoTTLColumn(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	results := []cluster.ExportListResult{
+		cluster.ExportNewListResult(
+			v1alpha1.ProviderDocker,
+			v1alpha1.DistributionVanilla,
+			"my-cluster",
+			nil,
+		),
+	}
+
+	cluster.ExportDisplayListResults(&buf, []v1alpha1.Provider{v1alpha1.ProviderDocker}, results)
+
+	output := buf.String()
+	assert.Contains(t, output, "PROVIDER")
+	assert.Contains(t, output, "CLUSTER")
+	assert.NotContains(t, output, "TTL")
+}
+
+func TestStripParenthetical_NoSuffix(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "kind", cluster.ExportStripParenthetical("kind"))
+}
+
+func TestStripParenthetical_WithSuffix(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "kind", cluster.ExportStripParenthetical("kind (Vanilla)"))
+}
+
+func TestStripParenthetical_EmptyString(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, cluster.ExportStripParenthetical(""))
+}
+
+func TestStripParenthetical_NoClosingParen(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "kind (Vanilla", cluster.ExportStripParenthetical("kind (Vanilla"))
 }
 
 func TestFormatRemainingDuration_HoursAndMinutes(t *testing.T) {
@@ -5800,4 +5896,187 @@ func TestEnsureLocalRegistriesReady_CloudProviders(t *testing.T) {
 			)
 		})
 	}
+}
+
+func TestComponentLabel_Empty(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "(none)", cluster.ExportComponentLabel(""))
+}
+
+func TestComponentLabel_None(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "(none)", cluster.ExportComponentLabel("None"))
+}
+
+func TestComponentLabel_Disabled(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "(disabled)", cluster.ExportComponentLabel("Disabled"))
+}
+
+func TestComponentLabel_ActiveValue(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "Cilium", cluster.ExportComponentLabel("Cilium"))
+}
+
+func TestToTalosClusters_Empty(t *testing.T) {
+	t.Parallel()
+
+	result := cluster.ExportToTalosClusters(nil)
+	assert.Empty(t, result)
+}
+
+func TestToTalosClusters_MultipleNames(t *testing.T) {
+	t.Parallel()
+
+	names := []string{"cluster-a", "cluster-b"}
+	result := cluster.ExportToTalosClusters(names)
+
+	require.Len(t, result, 2)
+	assert.Equal(t, "cluster-a", result[0].Name)
+	assert.Equal(t, v1alpha1.DistributionTalos, result[0].Distribution)
+	assert.Equal(t, "cluster-b", result[1].Name)
+	assert.Equal(t, v1alpha1.DistributionTalos, result[1].Distribution)
+}
+
+func TestDisplayClusterIdentity_AllFields(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	info := &clusterdetector.Info{
+		ClusterName:    "my-cluster",
+		Distribution:   v1alpha1.DistributionVanilla,
+		Provider:       v1alpha1.ProviderDocker,
+		Context:        "kind-my-cluster",
+		ServerURL:      "https://127.0.0.1:6443",
+		KubeconfigPath: "/home/user/.kube/config",
+	}
+
+	cluster.ExportDisplayClusterIdentity(&buf, info)
+
+	out := buf.String()
+	assert.Contains(t, out, "KSail Cluster Details:")
+	assert.Contains(t, out, "my-cluster")
+	assert.Contains(t, out, string(v1alpha1.DistributionVanilla))
+	assert.Contains(t, out, string(v1alpha1.ProviderDocker))
+	assert.Contains(t, out, "kind-my-cluster")
+	assert.Contains(t, out, "https://127.0.0.1:6443")
+	assert.Contains(t, out, "/home/user/.kube/config")
+}
+
+func TestDisplayClusterIdentity_OptionalFieldsOmitted(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	info := &clusterdetector.Info{
+		ClusterName:  "bare-cluster",
+		Distribution: v1alpha1.DistributionVanilla,
+		Provider:     v1alpha1.ProviderDocker,
+	}
+
+	cluster.ExportDisplayClusterIdentity(&buf, info)
+
+	out := buf.String()
+	assert.Contains(t, out, "bare-cluster")
+	assert.NotContains(t, out, "Context:")
+	assert.NotContains(t, out, "Server:")
+	assert.NotContains(t, out, "Kubeconfig:")
+}
+
+func TestDisplayTTLInfo_NoTTL(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	// Using a nonexistent cluster name: no state file → silent return.
+	cluster.ExportDisplayTTLInfo(&buf, "nonexistent-cluster-ttl-test")
+	assert.Empty(t, buf.String())
+}
+
+func TestDisplayTTLInfo_WithActiveTTL(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "display-ttl-active-test"
+
+	err := state.SaveClusterTTL(clusterName, 2*time.Hour)
+	require.NoError(t, err)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	var buf bytes.Buffer
+
+	cluster.ExportDisplayTTLInfo(&buf, clusterName)
+
+	out := buf.String()
+	assert.Contains(t, out, "cluster TTL")
+	assert.Contains(t, out, "remaining")
+}
+
+func TestDisplayTTLInfo_WithExpiredTTL(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "display-ttl-expired-test"
+
+	// Save a TTL of 1ms so it is already expired by the time we read it.
+	err := state.SaveClusterTTL(clusterName, time.Millisecond)
+	require.NoError(t, err)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	// Wait long enough for the TTL to lapse.
+	time.Sleep(10 * time.Millisecond)
+
+	var buf bytes.Buffer
+
+	cluster.ExportDisplayTTLInfo(&buf, clusterName)
+
+	out := buf.String()
+	assert.Contains(t, out, "EXPIRED")
+}
+
+func TestDisplayComponents_NoState(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	// No saved spec → displayComponents returns silently.
+	cluster.ExportDisplayComponents(&buf, "nonexistent-cluster-components-test")
+	assert.Empty(t, buf.String())
+}
+
+func TestDisplayComponents_WithState(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "display-components-test"
+
+	spec := &v1alpha1.ClusterSpec{
+		GitOpsEngine:  v1alpha1.GitOpsEngineFlux,
+		CNI:           v1alpha1.CNICilium,
+		CSI:           v1alpha1.CSIDisabled,
+		MetricsServer: v1alpha1.MetricsServerDisabled,
+		LoadBalancer:  v1alpha1.LoadBalancerDisabled,
+		CertManager:   v1alpha1.CertManagerDisabled,
+		PolicyEngine:  v1alpha1.PolicyEngineNone,
+	}
+
+	err := state.SaveClusterSpec(clusterName, spec)
+	require.NoError(t, err)
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	var buf bytes.Buffer
+
+	cluster.ExportDisplayComponents(&buf, clusterName)
+
+	out := buf.String()
+	assert.Contains(t, out, "Components:")
+	assert.Contains(t, out, string(v1alpha1.GitOpsEngineFlux))
+	assert.Contains(t, out, string(v1alpha1.CNICilium))
+	assert.Contains(t, out, "(disabled)")
+	assert.Contains(t, out, "(none)")
 }

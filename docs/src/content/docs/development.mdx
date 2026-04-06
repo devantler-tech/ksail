@@ -7,7 +7,7 @@ description: Guide for setting up KSail development environment and contributing
 
 **Required:** [Go 1.26.0+](https://go.dev/dl/) (`go version` ≥ 1.26.0), [Docker](https://docs.docker.com/get-started/) (`docker ps` without errors), [Git](https://git-scm.com/).
 
-**Optional:** Node.js 22 (docs), golangci-lint, VSCode with Go extension.
+**Optional:** Node.js 24 (docs), golangci-lint, VSCode with Go extension.
 
 ## Development Setup
 
@@ -213,15 +213,14 @@ VSCode users can set breakpoints and press F5 with a `.vscode/launch.json` confi
 
 ### GitHub Actions Workflows
 
-- **`ci.yaml`** — Builds, runs unit and system tests, uploads coverage (runs on every PR and push to main)
+- **`ci.yaml`** — Builds and caches the KSail binary, generates schemas/reference docs, validates documentation builds, audits docs/vsce dependencies, packages the VS Code extension, runs system tests, and runs benchmark regression tests (for example via merge queue and `workflow_dispatch`)
 - **`update-skills.yaml`** — Upgrades GitHub Copilot skills daily; opens a PR when updates are available
-- **`test-pages.yaml`** — Validates documentation builds on docs changes
-- **`publish-pages.yaml`** — Deploys documentation to GitHub Pages on main branch pushes
-- **`release.yaml`** — Builds release binaries and publishes to GitHub Releases
+- **`release.yaml`** — Creates the next semantic version tag on pushes to main
+- **`cd.yaml`** — Triggered on version tag pushes; runs GoReleaser, publishes the MCP registry entry, deploys documentation to GitHub Pages, publishes the VSCode extension, and opens a Homebrew tap PR
 
 ### Agentic Workflows
 
-Five AI-powered daily workflows run on schedules (triggerable via `gh aw`): `daily-code-quality` (refactoring/performance), `daily-plan` (issue triage), `daily-builder` (feature implementation), `daily-workflow-maintenance` (CI updates), and `daily-docs` (documentation sync).
+Five AI-powered workflows run on schedules or triggers (manageable via `gh aw`): `repo-assist` (issue triage, code quality, and repository maintenance — every 12h), `daily-workflow-maintenance` (CI/CD updates and optimization — daily), `daily-docs` (documentation sync and bloat reduction — daily/on push), `weekly-strategy` (roadmap planning and project promotion — weekly), and `ci-doctor` (CI failure investigation — on CI failure).
 
 ## Release Process
 
@@ -229,7 +228,7 @@ Releases are automated via `.goreleaser.yaml`, `.github/workflows/release.yaml` 
 
 1. **Prepare:** Bump the version, update changelog, and open a PR targeting `main`.
 2. **Merge triggers tagging:** Push to `main` runs `.github/workflows/release.yaml`, which validates the release configuration and creates/pushes the version tag (for example, `v5.x.x`). The same tagging workflow can also be run manually via `workflow_dispatch` on `release.yaml` to create and push a release tag without a new `main` commit.
-3. **Tag-triggered CD:** Any push of a version tag like `v5.x.x` (whether created by `release.yaml` or manually via `git tag -a v5.x.x -m "v5.x.x" && git push origin v5.x.x`) triggers `.github/workflows/cd.yaml`, which builds binaries for all platforms, generates checksums, creates the GitHub Release, publishes the VSCode extension to the marketplace, and opens a PR to update the Homebrew cask in [`devantler-tech/homebrew-tap`](https://github.com/devantler-tech/homebrew-tap).
+3. **Tag-triggered CD:** Any push of a version tag like `v5.x.x` (whether created by `release.yaml` or manually via `git tag -a v5.x.x -m "v5.x.x" && git push origin v5.x.x`) triggers `.github/workflows/cd.yaml`, which builds binaries for all platforms, generates checksums, creates the GitHub Release, publishes the MCP registry entry (after GoReleaser confirms the OCI image is available), deploys documentation to GitHub Pages, publishes the VSCode extension to the marketplace, and opens a PR to update the Homebrew cask in [`devantler-tech/homebrew-tap`](https://github.com/devantler-tech/homebrew-tap).
 
 ## Getting Help
 
