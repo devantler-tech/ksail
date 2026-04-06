@@ -192,6 +192,20 @@ func TestBuildClusterTemplate_BothMachineClassAndMachines(t *testing.T) {
 	require.ErrorIs(t, err, omni.ErrMachineAllocationConflict)
 }
 
+func TestBuildClusterTemplate_ZeroControlPlanes(t *testing.T) {
+	t.Parallel()
+
+	_, err := omni.BuildClusterTemplate(omni.TemplateParams{
+		ClusterName:       "test",
+		TalosVersion:      "1.11.2",
+		KubernetesVersion: "1.32.0",
+		ControlPlanes:     0,
+		MachineClass:      "my-class",
+	})
+
+	require.ErrorIs(t, err, omni.ErrControlPlanesRequired)
+}
+
 func TestBuildClusterTemplate_InsufficientMachines(t *testing.T) {
 	t.Parallel()
 

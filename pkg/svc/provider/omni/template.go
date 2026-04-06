@@ -28,6 +28,10 @@ var (
 	ErrInsufficientMachines = errors.New(
 		"not enough machines for the requested control plane and worker node counts",
 	)
+	// ErrControlPlanesRequired is returned when ControlPlanes is less than 1.
+	ErrControlPlanesRequired = errors.New(
+		"at least one control plane node is required",
+	)
 )
 
 // PatchScope indicates which nodes a patch should be applied to.
@@ -103,6 +107,10 @@ func validateTemplateParams(params TemplateParams) error {
 
 	if params.KubernetesVersion == "" {
 		return ErrKubernetesVersionRequired
+	}
+
+	if params.ControlPlanes < 1 {
+		return ErrControlPlanesRequired
 	}
 
 	if params.MachineClass != "" && len(params.Machines) > 0 {
