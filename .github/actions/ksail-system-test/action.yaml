@@ -345,8 +345,7 @@ runs:
         ARGS: ${{ inputs.args }}
       run: |
         # Extract --name value from args for reliable cleanup even when no kubeconfig exists
-        # shellcheck disable=SC2086
-        CLUSTER_NAME=$(echo $ARGS | grep -oP '(?<=--name\s)\S+' || true)
+        CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
         if [ -n "$CLUSTER_NAME" ]; then
           ksail cluster delete --distribution "$DISTRIBUTION" --provider "$PROVIDER" --name "$CLUSTER_NAME" --force \
             || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"

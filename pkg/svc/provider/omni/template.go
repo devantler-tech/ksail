@@ -78,27 +78,44 @@ type TemplateParams struct {
 //   - MachineClass: dynamic allocation from a named class (size from ControlPlanes/Workers)
 //   - Machines: static allocation by UUID (first N = control planes, rest = workers)
 func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
+	if err := validateTemplateParams(params); err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+
+	writeClusterDocument(&buf, params)
+	writeControlPlaneDocument(&buf, params)
+
+	if params.Workers > 0 {
+		writeWorkersDocument(&buf, params)
+	}
+
+	return &buf, nil
+}
+
+// validateTemplateParams checks that all required fields are set and allocation is valid.
+func validateTemplateParams(params TemplateParams) error {
 	if params.TalosVersion == "" {
-		return nil, ErrTalosVersionRequired
+		return ErrTalosVersionRequired
 	}
 
 	if params.KubernetesVersion == "" {
-		return nil, ErrKubernetesVersionRequired
+		return ErrKubernetesVersionRequired
 	}
 
 	if params.MachineClass != "" && len(params.Machines) > 0 {
-		return nil, ErrMachineAllocationConflict
+		return ErrMachineAllocationConflict
 	}
 
 	if params.MachineClass == "" && len(params.Machines) == 0 {
-		return nil, ErrMachineAllocationRequired
+		return ErrMachineAllocationRequired
 	}
 
-	// Validate that static machine list has enough entries for the requested topology
 	if len(params.Machines) > 0 {
 		required := params.ControlPlanes + params.Workers
 		if len(params.Machines) < required {
-			return nil, fmt.Errorf(
+			return fmt.Errorf(
 				"%w: need %d (controlPlanes=%d + workers=%d), got %d",
 				ErrInsufficientMachines,
 				required, params.ControlPlanes, params.Workers, len(params.Machines),
@@ -106,77 +123,70 @@ func BuildClusterTemplate(params TemplateParams) (io.Reader, error) {
 		}
 	}
 
-	var buf bytes.Buffer
+	return nil
+}
 
+// writeClusterDocument writes the Cluster YAML document.
+func writeClusterDocument(buf *bytes.Buffer, params TemplateParams) {
 	talosVersion := ensureVPrefix(params.TalosVersion)
 	k8sVersion := ensureVPrefix(params.KubernetesVersion)
 
-	// Write Cluster document
-	fmt.Fprintf(&buf, "kind: Cluster\n")
-	fmt.Fprintf(&buf, "name: %s\n", params.ClusterName)
-	fmt.Fprintf(&buf, "kubernetes:\n")
-	fmt.Fprintf(&buf, "  version: %s\n", k8sVersion)
-	fmt.Fprintf(&buf, "talos:\n")
-	fmt.Fprintf(&buf, "  version: %s\n", talosVersion)
+	fmt.Fprintf(buf, "kind: Cluster\n")
+	fmt.Fprintf(buf, "name: %s\n", params.ClusterName)
+	fmt.Fprintf(buf, "kubernetes:\n")
+	fmt.Fprintf(buf, "  version: %s\n", k8sVersion)
+	fmt.Fprintf(buf, "talos:\n")
+	fmt.Fprintf(buf, "  version: %s\n", talosVersion)
 
-	// Add cluster-scoped patches
 	clusterPatches := filterPatchesByScope(params.Patches, PatchScopeCluster)
 	if len(clusterPatches) > 0 {
-		writePatchesSection(&buf, clusterPatches)
+		writePatchesSection(buf, clusterPatches)
+	}
+}
+
+// writeControlPlaneDocument writes the ControlPlane YAML document.
+func writeControlPlaneDocument(buf *bytes.Buffer, params TemplateParams) {
+	fmt.Fprintf(buf, "---\nkind: ControlPlane\n")
+
+	var cpMachines []string
+	if len(params.Machines) > 0 {
+		cpMachines = params.Machines[:min(params.ControlPlanes, len(params.Machines))]
 	}
 
-	// Write ControlPlane document
-	fmt.Fprintf(&buf, "---\nkind: ControlPlane\n")
+	writeMachineAllocation(buf, params.MachineClass, params.ControlPlanes, cpMachines)
 
-	if params.MachineClass != "" {
-		// Dynamic allocation: machineClass with name and size
-		fmt.Fprintf(&buf, "machineClass:\n")
-		fmt.Fprintf(&buf, "  name: %s\n", params.MachineClass)
-		fmt.Fprintf(&buf, "  size: %d\n", params.ControlPlanes)
-	} else {
-		// Static allocation: list of machine UUIDs
-		cpMachines := params.Machines
-		if params.ControlPlanes < len(cpMachines) {
-			cpMachines = cpMachines[:params.ControlPlanes]
-		}
-
-		writeMachinesList(&buf, cpMachines)
-	}
-
-	// Add control-plane-scoped patches
 	cpPatches := filterPatchesByScope(params.Patches, PatchScopeControlPlane)
 	if len(cpPatches) > 0 {
-		writePatchesSection(&buf, cpPatches)
+		writePatchesSection(buf, cpPatches)
+	}
+}
+
+// writeWorkersDocument writes the Workers YAML document.
+func writeWorkersDocument(buf *bytes.Buffer, params TemplateParams) {
+	fmt.Fprintf(buf, "---\nkind: Workers\n")
+
+	var workerMachines []string
+	if len(params.Machines) > 0 && params.ControlPlanes < len(params.Machines) {
+		workerMachines = params.Machines[params.ControlPlanes:]
 	}
 
-	// Write Workers document (only if workers > 0)
-	if params.Workers > 0 {
-		fmt.Fprintf(&buf, "---\nkind: Workers\n")
+	writeMachineAllocation(buf, params.MachineClass, params.Workers, workerMachines)
 
-		if params.MachineClass != "" {
-			fmt.Fprintf(&buf, "machineClass:\n")
-			fmt.Fprintf(&buf, "  name: %s\n", params.MachineClass)
-			fmt.Fprintf(&buf, "  size: %d\n", params.Workers)
-		} else {
-			// Worker machines are the remaining after control planes
-			workerMachines := params.Machines
-			if params.ControlPlanes < len(workerMachines) {
-				workerMachines = workerMachines[params.ControlPlanes:]
-			} else {
-				workerMachines = nil
-			}
-
-			writeMachinesList(&buf, workerMachines)
-		}
-
-		// Add worker-scoped patches
-		workerPatches := filterPatchesByScope(params.Patches, PatchScopeWorker)
-		if len(workerPatches) > 0 {
-			writePatchesSection(&buf, workerPatches)
-		}
+	workerPatches := filterPatchesByScope(params.Patches, PatchScopeWorker)
+	if len(workerPatches) > 0 {
+		writePatchesSection(buf, workerPatches)
 	}
+}
 
-	return &buf, nil
+// writeMachineAllocation writes either machineClass or machines list to the buffer.
+func writeMachineAllocation(buf *bytes.Buffer, machineClass string, size int, machines []string) {
+	if machineClass != "" {
+		fmt.Fprintf(buf, "machineClass:\n")
+		fmt.Fprintf(buf, "  name: %s\n", machineClass)
+		fmt.Fprintf(buf, "  size: %d\n", size)
+	} else {
+		writeMachinesList(buf, machines)
+	}
 }
 
 // ensureVPrefix ensures the version string starts with "v".
