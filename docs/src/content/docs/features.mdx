@@ -18,7 +18,8 @@ Use `--ttl` to create an **ephemeral cluster** that auto-destroys after a set du
 # Create a cluster that auto-destroys after 1 hour
 ksail cluster create --ttl 1h
 
-# ksail cluster list shows a table with provider, distribution, cluster, and (when set) TTL:
+# When any cluster has a TTL set, ksail cluster list includes a TTL column
+# alongside provider, distribution, and cluster:
 # PROVIDER   DISTRIBUTION   CLUSTER      TTL
 # docker     Vanilla        my-cluster   59m
 #
