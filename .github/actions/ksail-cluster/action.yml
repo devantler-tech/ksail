@@ -5,12 +5,6 @@ inputs:
   config:
     description: "Path to a KSail config file (e.g. 'ksail.staging.yaml'). When set, --config is passed to all ksail commands."
     default: ""
-  config-patch:
-    description: |
-      Path to a YAML config fragment to merge into the generated ksail.yaml after init.
-      Useful for setting provider-specific options (e.g., omni.machineClass) that init
-      does not scaffold. Only applied when init is 'true'. Uses yq deep merge.
-    default: ""
   distribution:
     description: "KSail distribution to provision (Vanilla, K3s, Talos, VCluster)"
     default: "Vanilla"
@@ -285,26 +279,6 @@ runs:
       run: |
         # shellcheck disable=SC2086
         ksail ${CONFIG:+--config "$CONFIG"} cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
-
-    - name: 🔧 Apply config patch
-      if: inputs.config-patch != ''
-      shell: bash
-      env:
-        CONFIG_PATCH: ${{ inputs.config-patch }}
-        CONFIG: ${{ inputs.config }}
-        INIT: ${{ inputs.init }}
-      run: |
-        TARGET="${CONFIG:-ksail.yaml}"
-        if [ "$INIT" = "true" ] && [ -f "$TARGET" ]; then
-          echo "Merging config patch '$CONFIG_PATCH' into '$TARGET'..."
-          yq eval-all 'select(fileIndex == 0) *d select(fileIndex == 1)' "$TARGET" "$CONFIG_PATCH" > "$TARGET.tmp"
-          mv "$TARGET.tmp" "$TARGET"
-        else
-          echo "Creating config from patch '$CONFIG_PATCH'..."
-          cp "$CONFIG_PATCH" "$TARGET"
-        fi
-        echo "Config:"
-        cat "$TARGET"
 
     - name: 🧹 Validate manifests
       if: inputs.validate == 'true'

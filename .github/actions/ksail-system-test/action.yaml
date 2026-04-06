@@ -62,12 +62,6 @@ inputs:
     description: GitHub Container Registry token (for external registry auth)
     required: false
     default: ""
-  config-patch:
-    description: |
-      Path to a YAML config fragment to merge into ksail.yaml after init.
-      Passed through to the ksail-cluster sub-action.
-    required: false
-    default: ""
 
 runs:
   using: composite
@@ -161,7 +155,6 @@ runs:
         install: "false"
         cache: "true"
         validate: ${{ inputs.init }}
-        config-patch: ${{ inputs.config-patch }}
 
     - name: 🧪 ksail cluster info
       shell: bash

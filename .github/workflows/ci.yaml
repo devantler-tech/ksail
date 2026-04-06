@@ -513,12 +513,10 @@ jobs:
             provider: Omni
             init: true
             args: "--name system-test-cluster-with-scaffolding --image-verification Enabled"
-            config-patch: ".github/fixtures/omni-config-patch.yaml"
           - distribution: Talos
             provider: Omni
             init: false
             args: "--name system-test-cluster-without-scaffolding"
-            config-patch: ".github/fixtures/omni-config-patch.yaml"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -556,13 +554,13 @@ jobs:
           HCLOUD_TOKEN: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }}
           OMNI_SERVICE_ACCOUNT_KEY: ${{ matrix.provider == 'Omni' && secrets.OMNI_SERVICE_ACCOUNT_KEY || '' }}
           OMNI_ENDPOINT: ${{ matrix.provider == 'Omni' && vars.OMNI_ENDPOINT || '' }}
+          KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS: ${{ matrix.provider == 'Omni' && 'ksail' || '' }}
         with:
           distribution: ${{ matrix.distribution }}
           provider: ${{ matrix.provider }}
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
-          config-patch: ${{ matrix.config-patch || '' }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
