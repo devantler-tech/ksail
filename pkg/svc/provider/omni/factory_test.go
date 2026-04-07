@@ -68,7 +68,10 @@ func TestNewProviderFromOptions_DefaultEnvVarNames(t *testing.T) {
 }
 
 func TestNewProviderFromOptions_EnvVarResolution(t *testing.T) {
+	t.Parallel()
+
 	t.Run("CustomEnvVarNames", func(t *testing.T) {
+		t.Parallel()
 
 		opts := v1alpha1.OptionsOmni{
 			EndpointEnvVar:          "TEST_KSAIL_CUSTOM_ENDPOINT",
@@ -80,18 +83,20 @@ func TestNewProviderFromOptions_EnvVarResolution(t *testing.T) {
 		require.ErrorIs(t, err, omni.ErrEndpointRequired)
 		assert.Contains(t, err.Error(), "TEST_KSAIL_CUSTOM_ENDPOINT")
 	})
+}
 
-	t.Run("EnvVarTakesPrecedenceOverConfig", func(t *testing.T) {
-		t.Setenv("TEST_KSAIL_OMNI_EP_PREC", "https://env-endpoint.example.com")
+// TestNewProviderFromOptions_EnvVarPrecedence is a separate, non-parallel test
+// because t.Setenv is incompatible with t.Parallel on the parent.
+func TestNewProviderFromOptions_EnvVarPrecedence(t *testing.T) {
+	t.Setenv("TEST_KSAIL_OMNI_EP_PREC", "https://env-endpoint.example.com")
 
-		opts := v1alpha1.OptionsOmni{
-			EndpointEnvVar:          "TEST_KSAIL_OMNI_EP_PREC",
-			Endpoint:                "https://config-endpoint.example.com",
-			ServiceAccountKeyEnvVar: "TEST_KSAIL_OMNI_KEY_PREC_MISSING",
-		}
+	opts := v1alpha1.OptionsOmni{
+		EndpointEnvVar:          "TEST_KSAIL_OMNI_EP_PREC",
+		Endpoint:                "https://config-endpoint.example.com",
+		ServiceAccountKeyEnvVar: "TEST_KSAIL_OMNI_KEY_PREC_MISSING",
+	}
 
-		_, err := omni.NewProviderFromOptions(opts)
+	_, err := omni.NewProviderFromOptions(opts)
 
-		require.ErrorIs(t, err, omni.ErrServiceAccountKeyRequired)
-	})
+	require.ErrorIs(t, err, omni.ErrServiceAccountKeyRequired)
 }

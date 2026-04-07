@@ -208,7 +208,7 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 
 	if bytesWritten != len(data) {
 		_ = tmp.Close()
-		return fmt.Errorf("write data: short write: wrote %d of %d bytes", bytesWritten, len(data))
+		return fmt.Errorf("write data: %w: wrote %d of %d bytes", errShortWrite, bytesWritten, len(data))
 	}
 
 	closeErr := tmp.Close()
