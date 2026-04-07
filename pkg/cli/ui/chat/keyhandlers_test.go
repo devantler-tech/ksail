@@ -111,67 +111,7 @@ func TestExitConfirm_EscCloses(t *testing.T) {
 	}
 }
 
-// TestToggleYolo_FlipsMode tests that Ctrl+Y toggles YOLO mode.
-func TestToggleYolo_FlipsMode(t *testing.T) {
-	t.Parallel()
 
-	model := chat.NewModel(newTestParams())
-	yoloRef := chat.NewYoloModeRef(false)
-	chat.ExportSetYoloModeRef(model, yoloRef)
-	chat.ExportSetYoloMode(model, false)
-
-	var updatedModel tea.Model = model
-
-	// Toggle on
-	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlY})
-
-	chatModel, assertionOK := updatedModel.(*chat.Model)
-	if !assertionOK {
-		t.Fatal("expected *chat.Model type assertion to succeed")
-	}
-
-	if !chat.ExportGetYoloMode(chatModel) {
-		t.Error("expected YOLO mode to be enabled after Ctrl+Y")
-	}
-
-	if !yoloRef.IsEnabled() {
-		t.Error("expected YoloModeRef to be enabled after Ctrl+Y")
-	}
-
-	// Toggle off
-	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlY})
-
-	chatModel, assertionOK = updatedModel.(*chat.Model)
-	if !assertionOK {
-		t.Fatal("expected *chat.Model type assertion to succeed")
-	}
-
-	if chat.ExportGetYoloMode(chatModel) {
-		t.Error("expected YOLO mode to be disabled after second Ctrl+Y")
-	}
-}
-
-// TestToggleYolo_IgnoredWhileStreaming tests that Ctrl+Y is ignored during streaming.
-func TestToggleYolo_IgnoredWhileStreaming(t *testing.T) {
-	t.Parallel()
-
-	model := chat.NewModel(newTestParams())
-	chat.ExportSetStreaming(model, true)
-	chat.ExportSetYoloMode(model, false)
-
-	var updatedModel tea.Model = model
-
-	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyCtrlY})
-
-	chatModel, ok := updatedModel.(*chat.Model)
-	if !ok {
-		t.Fatal("expected *chat.Model type assertion to succeed")
-	}
-
-	if chat.ExportGetYoloMode(chatModel) {
-		t.Error("expected YOLO mode to remain disabled when streaming")
-	}
-}
 
 // TestHistoryUp_NavigatesHistory tests up arrow navigates prompt history.
 func TestHistoryUp_NavigatesHistory(t *testing.T) {

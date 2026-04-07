@@ -47,60 +47,70 @@ const (
 type ChatMode int //nolint:revive // ChatMode is clearer than Mode given existing ModeRef type in this package.
 
 const (
-	// AgentMode allows full tool execution with permission prompts for write operations.
-	AgentMode ChatMode = iota
+	// InteractiveMode allows full tool execution with permission prompts for write operations.
+	InteractiveMode ChatMode = iota
 	// PlanMode blocks all tool execution; the model describes what it would do.
 	PlanMode
+	// AutopilotMode allows end-to-end execution without interruption (auto-approves all operations).
+	AutopilotMode
 )
 
 // String returns a human-readable label for the chat mode.
 func (m ChatMode) String() string {
 	switch m {
-	case AgentMode:
-		return "agent"
+	case InteractiveMode:
+		return "interactive"
 	case PlanMode:
 		return "plan"
+	case AutopilotMode:
+		return "autopilot"
 	default:
-		return "agent"
+		return "interactive"
 	}
 }
 
 // Icon returns the TUI icon for the chat mode.
 func (m ChatMode) Icon() string {
 	switch m {
-	case AgentMode:
+	case InteractiveMode:
 		return "</>"
 	case PlanMode:
 		return "\u2261" // ≡
+	case AutopilotMode:
+		return "\u26a1" // ⚡
 	default:
 		return "</>"
 	}
 }
 
-// Label returns the icon and text label for the chat mode (e.g. "</> agent").
+// Label returns the icon and text label for the chat mode (e.g. "</> interactive").
 func (m ChatMode) Label() string {
 	return m.Icon() + " " + m.String()
 }
 
-// Next cycles to the next chat mode: Agent -> Plan -> Agent.
+// Next cycles to the next chat mode: Interactive -> Plan -> Autopilot -> Interactive.
 func (m ChatMode) Next() ChatMode {
 	switch m {
-	case AgentMode:
+	case InteractiveMode:
 		return PlanMode
 	case PlanMode:
-		return AgentMode
+		return AutopilotMode
+	case AutopilotMode:
+		return InteractiveMode
 	default:
-		return AgentMode
+		return InteractiveMode
 	}
 }
 
 // ToSDKMode maps the KSail chat mode to the corresponding Copilot SDK RPC mode.
 func (m ChatMode) ToSDKMode() rpc.Mode {
 	switch m {
+	case InteractiveMode:
+		return rpc.ModeInteractive
 	case PlanMode:
 		return rpc.ModePlan
-	case AgentMode:
-		return rpc.ModeInteractive
+	case AutopilotMode:
+		return rpc.ModeAutopilot
 	default:
 		return rpc.ModeInteractive
 	}
@@ -167,15 +177,6 @@ func (r *ChatModeRef) SetMode(mode ChatMode) {
 	defer r.mu.Unlock()
 
 	r.mode = mode
-}
-
-// YoloModeRef is a thread-safe reference to the YOLO mode state.
-// When enabled, write operations are auto-approved without prompting the user.
-type YoloModeRef = ModeRef
-
-// NewYoloModeRef creates a new YoloModeRef with the given initial state.
-func NewYoloModeRef(initial bool) *YoloModeRef {
-	return NewModeRef(initial)
 }
 
 // message represents a single message in the chat history.
@@ -309,13 +310,9 @@ type Model struct {
 	// Markdown renderer (cached to avoid terminal queries)
 	renderer *glamour.TermRenderer
 
-	// Mode selection (agent executes tools, plan describes only, ask is read-only)
+	// Mode selection (interactive executes tools with prompts, plan describes only, autopilot auto-approves)
 	chatMode    ChatMode     // current chat mode
 	chatModeRef *ChatModeRef // shared reference for tool handlers to check current mode
-
-	// YOLO mode (auto-approve write operations without prompting)
-	yoloMode    bool         // true = auto-approve, false = prompt for confirmation
-	yoloModeRef *YoloModeRef // shared reference for tool handlers to check YOLO state
 
 	// Prompt queuing and steering
 	queuedPrompts   []pendingPrompt // FIFO queue for prompts to process after current turn
@@ -391,9 +388,8 @@ func NewModel(params Params) *Model {
 		historyIndex:     -1,
 		availableModels:  params.Models,
 		currentModel:     params.CurrentModel,
-		chatMode:         AgentMode,          // Default to agent mode
-		chatModeRef:      params.ChatModeRef, // Store reference for tool handlers
-		yoloModeRef:      params.YoloModeRef, // Store reference for YOLO mode
+		chatMode:         InteractiveMode,     // Default to interactive mode
+		chatModeRef:      params.ChatModeRef,  // Store reference for tool handlers
 		queuedPrompts:    nil,
 		steeringPrompts:  nil,
 	}
@@ -777,7 +773,7 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		switch chatMode {
 		case PlanMode:
 			prompt = planModePrefix + userMessage
-		case AgentMode:
+		case InteractiveMode, AutopilotMode:
 			// No prefix needed
 		}
 
@@ -812,11 +808,6 @@ func Run(ctx context.Context, params Params) error {
 	// Ensure chatModeRef is initialized with the model's initial state
 	if params.ChatModeRef != nil {
 		params.ChatModeRef.SetMode(model.chatMode)
-	}
-
-	// Ensure yoloModeRef is initialized with the model's initial state
-	if params.YoloModeRef != nil {
-		params.YoloModeRef.SetEnabled(model.yoloMode)
 	}
 
 	program := tea.NewProgram(

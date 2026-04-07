@@ -16,9 +16,10 @@ func TestChatMode_String(t *testing.T) {
 		mode     chat.ChatMode
 		expected string
 	}{
-		{name: "agent mode string", mode: chat.AgentMode, expected: "agent"},
+		{name: "interactive mode string", mode: chat.InteractiveMode, expected: "interactive"},
 		{name: "plan mode string", mode: chat.PlanMode, expected: "plan"},
-		{name: "unknown mode defaults to agent", mode: chat.ChatMode(99), expected: "agent"},
+		{name: "autopilot mode string", mode: chat.AutopilotMode, expected: "autopilot"},
+		{name: "unknown mode defaults to interactive", mode: chat.ChatMode(99), expected: "interactive"},
 	}
 
 	for _, testCase := range tests {
@@ -46,9 +47,10 @@ func TestChatMode_Icon(t *testing.T) {
 		mode     chat.ChatMode
 		expected string
 	}{
-		{name: "agent mode icon", mode: chat.AgentMode, expected: "</>"},
-		{name: "plan mode icon", mode: chat.PlanMode, expected: "\u2261"},
-		{name: "unknown mode defaults to agent icon", mode: chat.ChatMode(99), expected: "</>"},
+		{name: "interactive mode icon", mode: chat.InteractiveMode, expected: "</>"},
+		{name: "plan mode icon", mode: chat.PlanMode, expected: "≡"},
+		{name: "autopilot mode icon", mode: chat.AutopilotMode, expected: "⚡"},
+		{name: "unknown mode defaults to interactive icon", mode: chat.ChatMode(99), expected: "</>"},
 	}
 
 	for _, testCase := range tests {
@@ -71,8 +73,9 @@ func TestChatMode_Label(t *testing.T) {
 		mode     chat.ChatMode
 		expected string
 	}{
-		{name: "agent mode label", mode: chat.AgentMode, expected: "</> agent"},
-		{name: "plan mode label", mode: chat.PlanMode, expected: "\u2261 plan"},
+		{name: "interactive mode label", mode: chat.InteractiveMode, expected: "</> interactive"},
+		{name: "plan mode label", mode: chat.PlanMode, expected: "≡ plan"},
+		{name: "autopilot mode label", mode: chat.AutopilotMode, expected: "⚡ autopilot"},
 	}
 
 	for _, testCase := range tests {
@@ -91,7 +94,7 @@ func TestChatMode_Label(t *testing.T) {
 	}
 }
 
-// TestChatMode_Next tests the Next method cycles correctly: Agent → Plan → Agent.
+// TestChatMode_Next tests the Next method cycles correctly through all modes.
 func TestChatMode_Next(t *testing.T) {
 	t.Parallel()
 
@@ -100,9 +103,10 @@ func TestChatMode_Next(t *testing.T) {
 		mode     chat.ChatMode
 		expected chat.ChatMode
 	}{
-		{name: "agent cycles to plan", mode: chat.AgentMode, expected: chat.PlanMode},
-		{name: "plan cycles to agent", mode: chat.PlanMode, expected: chat.AgentMode},
-		{name: "unknown defaults to agent", mode: chat.ChatMode(99), expected: chat.AgentMode},
+		{name: "interactive cycles to plan", mode: chat.InteractiveMode, expected: chat.PlanMode},
+		{name: "plan cycles to autopilot", mode: chat.PlanMode, expected: chat.AutopilotMode},
+		{name: "autopilot cycles to interactive", mode: chat.AutopilotMode, expected: chat.InteractiveMode},
+		{name: "unknown defaults to interactive", mode: chat.ChatMode(99), expected: chat.InteractiveMode},
 	}
 
 	for _, testCase := range tests {
@@ -116,22 +120,25 @@ func TestChatMode_Next(t *testing.T) {
 	}
 }
 
-// TestChatMode_NextFullCycle verifies a complete Agent → Plan → Agent cycle.
+// TestChatMode_NextFullCycle verifies a complete cycle through all three modes.
 func TestChatMode_NextFullCycle(t *testing.T) {
 	t.Parallel()
 
-	mode := chat.AgentMode
+	mode := chat.InteractiveMode
 
-	// Agent → Plan
 	mode = mode.Next()
 	if mode != chat.PlanMode {
 		t.Fatalf("Expected PlanMode after first Next(), got %v", mode)
 	}
 
-	// Plan → Agent
 	mode = mode.Next()
-	if mode != chat.AgentMode {
-		t.Fatalf("Expected AgentMode after second Next(), got %v", mode)
+	if mode != chat.AutopilotMode {
+		t.Fatalf("Expected AutopilotMode after second Next(), got %v", mode)
+	}
+
+	mode = mode.Next()
+	if mode != chat.InteractiveMode {
+		t.Fatalf("Expected InteractiveMode after third Next(), got %v", mode)
 	}
 }
 
@@ -144,8 +151,9 @@ func TestChatMode_ToSDKMode(t *testing.T) {
 		mode     chat.ChatMode
 		expected rpc.Mode
 	}{
-		{name: "agent maps to interactive", mode: chat.AgentMode, expected: rpc.ModeInteractive},
+		{name: "interactive maps to interactive", mode: chat.InteractiveMode, expected: rpc.ModeInteractive},
 		{name: "plan maps to plan", mode: chat.PlanMode, expected: rpc.ModePlan},
+		{name: "autopilot maps to autopilot", mode: chat.AutopilotMode, expected: rpc.ModeAutopilot},
 		{
 			name:     "unknown defaults to interactive",
 			mode:     chat.ChatMode(99),

@@ -118,11 +118,6 @@ var ExportSetChatMode = func(m *Model, mode ChatMode) {
 	m.chatMode = mode
 }
 
-// ExportSetYoloMode sets Model.yoloMode for testing.
-var ExportSetYoloMode = func(m *Model, enabled bool) {
-	m.yoloMode = enabled
-}
-
 // ExportSetLastUsageModel sets Model.lastUsageModel for testing.
 var ExportSetLastUsageModel = func(m *Model, model string) {
 	m.lastUsageModel = model
@@ -298,16 +293,6 @@ const ToolStatusRunning = int(toolRunning)
 
 // ToolStatusComplete exposes the toolSuccess constant for testing.
 const ToolStatusComplete = int(toolSuccess)
-
-// ExportSetYoloModeRef sets Model.yoloModeRef for testing.
-var ExportSetYoloModeRef = func(m *Model, ref *YoloModeRef) {
-	m.yoloModeRef = ref
-}
-
-// ExportGetYoloMode returns Model.yoloMode for testing.
-var ExportGetYoloMode = func(m *Model) bool {
-	return m.yoloMode
-}
 
 // ExportResolvedAutoModel exposes resolvedAutoModel for testing.
 var ExportResolvedAutoModel = func(m *Model) string {

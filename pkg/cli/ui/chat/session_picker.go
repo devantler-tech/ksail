@@ -324,10 +324,10 @@ func (m *Model) startNewSession() error {
 
 	// Clear all state for new session
 	m.messages = []message{}
-	m.chatMode = AgentMode // New chats start in agent mode by default
+	m.chatMode = InteractiveMode // New chats start in interactive mode by default
 	// Update the shared reference so tool handlers see the change
 	if m.chatModeRef != nil {
-		m.chatModeRef.SetMode(AgentMode)
+		m.chatModeRef.SetMode(InteractiveMode)
 	}
 
 	m.resetStreamingState()
@@ -343,7 +343,7 @@ func (m *Model) loadSession(metadata *SessionMetadata) {
 	if metadata.ChatMode != nil {
 		m.chatMode = *metadata.ChatMode
 	} else {
-		m.chatMode = AgentMode
+		m.chatMode = InteractiveMode
 	}
 	// Update the shared reference so tool handlers see the change
 	if m.chatModeRef != nil {
@@ -474,8 +474,8 @@ func (m *Model) sessionEventsToMessages(
 				if userMsgIndex < len(metadata.Messages) {
 					msg.chatMode = metadata.Messages[userMsgIndex].ChatMode
 				} else {
-					// Default chatMode to AgentMode for messages without metadata
-					msg.chatMode = AgentMode
+					// Default chatMode to InteractiveMode for messages without metadata
+					msg.chatMode = InteractiveMode
 				}
 
 				userMsgIndex++
