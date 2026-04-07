@@ -321,7 +321,7 @@ func TestStatusBar_StreamingShowsSpinner(t *testing.T) {
 		t.Error("expected non-empty status text during streaming")
 	}
 
-	if !strings.Contains(output, "agent") {
+	if !strings.Contains(output, "interactive") {
 		t.Error("expected mode label in status text during streaming")
 	}
 }

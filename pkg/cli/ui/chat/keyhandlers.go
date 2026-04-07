@@ -100,8 +100,6 @@ func (m *Model) handleChatShortcutKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleToggleMode()
 	case "ctrl+t":
 		return m.handleToggleAllTools()
-	case "ctrl+y":
-		return m.handleToggleYolo()
 	case "ctrl+r":
 		return m.handleCopyOutput()
 	}
@@ -325,7 +323,7 @@ func (m *Model) handleNewChat() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleToggleMode cycles through chat modes: Agent -> Plan -> Agent.
+// handleToggleMode cycles through chat modes: Interactive -> Plan -> Autopilot -> Interactive.
 func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 	// Prevent mode toggling while streaming to avoid mode mismatch between
 	// message submission and tool execution time
@@ -457,24 +455,6 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	m.justCompleted = false
 
 	return m, tea.Batch(m.spinner.Tick, m.sendMessageCmd(content))
-}
-
-// handleToggleYolo toggles YOLO mode (auto-approve write operations).
-func (m *Model) handleToggleYolo() (tea.Model, tea.Cmd) {
-	// Prevent toggling while streaming to avoid state mismatch
-	if m.isStreaming {
-		return m, nil
-	}
-
-	m.yoloMode = !m.yoloMode
-	// Update the shared reference so tool handlers see the change
-	if m.yoloModeRef != nil {
-		m.yoloModeRef.SetEnabled(m.yoloMode)
-	}
-
-	m.updateViewportContent()
-
-	return m, nil
 }
 
 // handleCopyOutput copies the latest assistant message to clipboard.

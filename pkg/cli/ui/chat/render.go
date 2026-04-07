@@ -65,12 +65,6 @@ func (m *Model) buildStatusText() string {
 	modeStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiCyan))
 	statusParts = append(statusParts, modeStyle.Render(m.chatMode.Label()))
 
-	// Auto-approve indicator
-	if m.yoloMode {
-		yoloStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow)).Bold(true)
-		statusParts = append(statusParts, yoloStyle.Render("auto-approve"))
-	}
-
 	// Model name — show "auto → resolved" when in auto mode, otherwise the explicit model
 	statusParts = append(statusParts, m.buildModelStatusText())
 

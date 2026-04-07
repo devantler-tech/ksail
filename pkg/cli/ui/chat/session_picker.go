@@ -324,10 +324,10 @@ func (m *Model) startNewSession() error {
 
 	// Clear all state for new session
 	m.messages = []message{}
-	m.chatMode = AgentMode // New chats start in agent mode by default
+	m.chatMode = InteractiveMode // New chats start in interactive mode by default
 	// Update the shared reference so tool handlers see the change
 	if m.chatModeRef != nil {
-		m.chatModeRef.SetMode(AgentMode)
+		m.chatModeRef.SetMode(InteractiveMode)
 	}
 
 	m.resetStreamingState()
@@ -339,11 +339,11 @@ func (m *Model) startNewSession() error {
 // loadSession loads a chat session into the model using the Copilot SDK.
 func (m *Model) loadSession(metadata *SessionMetadata) {
 	m.currentSessionID = metadata.ID
-	// Restore mode from session (nil = agent mode default)
+	// Restore mode from session (nil = interactive mode default)
 	if metadata.ChatMode != nil {
 		m.chatMode = *metadata.ChatMode
 	} else {
-		m.chatMode = AgentMode
+		m.chatMode = InteractiveMode
 	}
 	// Update the shared reference so tool handlers see the change
 	if m.chatModeRef != nil {
@@ -434,7 +434,7 @@ func (m *Model) resetStreamingState() {
 }
 
 // sessionEventsToMessages converts Copilot SessionEvents to internal messages.
-// It also restores per-message metadata (like agentMode) from the session metadata.
+// It also restores per-message metadata (like chatMode) from the session metadata.
 func (m *Model) sessionEventsToMessages(
 	events []copilot.SessionEvent,
 	metadata *SessionMetadata,
@@ -474,8 +474,8 @@ func (m *Model) sessionEventsToMessages(
 				if userMsgIndex < len(metadata.Messages) {
 					msg.chatMode = metadata.Messages[userMsgIndex].ChatMode
 				} else {
-					// Default chatMode to AgentMode for messages without metadata
-					msg.chatMode = AgentMode
+					// Default chatMode to InteractiveMode for messages without metadata
+					msg.chatMode = InteractiveMode
 				}
 
 				userMsgIndex++
