@@ -69,7 +69,6 @@ func TestNewProviderFromOptions_DefaultEnvVarNames(t *testing.T) {
 
 func TestNewProviderFromOptions_EnvVarResolution(t *testing.T) {
 	t.Run("CustomEnvVarNames", func(t *testing.T) {
-		t.Parallel()
 
 		opts := v1alpha1.OptionsOmni{
 			EndpointEnvVar:          "TEST_KSAIL_CUSTOM_ENDPOINT",

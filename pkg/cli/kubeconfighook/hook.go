@@ -47,29 +47,8 @@ const (
 // On refresh failure, a warning is logged but the error is not propagated —
 // the command proceeds with the existing kubeconfig.
 func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
-	cfgManager := kubeconfig.NewSilentConfigManager(cmd)
-
-	cfg, loadErr := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
-	if loadErr != nil || cfg == nil || !cfgManager.IsConfigFileFound() {
-		return
-	}
-
-	if cfg.Spec.Cluster.Provider != v1alpha1.ProviderOmni {
-		return
-	}
-
-	kubeconfigPath, pathErr := kubeconfig.GetKubeconfigPathFromConfig(cfg)
-	if pathErr != nil {
-		return
-	}
-
-	canonicalPath, canonErr := fsutil.EvalCanonicalPath(kubeconfigPath)
-	if canonErr != nil {
-		return
-	}
-
-	_, statErr := os.Stat(canonicalPath)
-	if os.IsNotExist(statErr) {
+	cfg, distCfg, canonicalPath := resolveOmniKubeconfigPath(cmd)
+	if cfg == nil {
 		return
 	}
 
@@ -77,7 +56,7 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 		return
 	}
 
-	clusterName := resolveClusterName(cfgManager.DistributionConfig, canonicalPath)
+	clusterName := resolveClusterName(distCfg, canonicalPath)
 	if clusterName == "" {
 		return
 	}
@@ -86,6 +65,42 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 	if refreshErr != nil {
 		notify.Warningf(cmd.OutOrStderr(), "failed to refresh Omni kubeconfig: %v", refreshErr)
 	}
+}
+
+// resolveOmniKubeconfigPath loads the KSail config, verifies the provider is
+// Omni, and returns the canonicalized kubeconfig path together with the
+// cluster config and distribution config. Returns nils when a refresh is not
+// applicable (non-Omni provider, missing config, missing kubeconfig file).
+func resolveOmniKubeconfigPath(
+	cmd *cobra.Command,
+) (*v1alpha1.Cluster, *clusterprovisioner.DistributionConfig, string) {
+	cfgManager := kubeconfig.NewSilentConfigManager(cmd)
+
+	cfg, loadErr := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
+	if loadErr != nil || cfg == nil || !cfgManager.IsConfigFileFound() {
+		return nil, nil, ""
+	}
+
+	if cfg.Spec.Cluster.Provider != v1alpha1.ProviderOmni {
+		return nil, nil, ""
+	}
+
+	kubeconfigPath, pathErr := kubeconfig.GetKubeconfigPathFromConfig(cfg)
+	if pathErr != nil {
+		return nil, nil, ""
+	}
+
+	canonicalPath, canonErr := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if canonErr != nil {
+		return nil, nil, ""
+	}
+
+	_, statErr := os.Stat(canonicalPath)
+	if os.IsNotExist(statErr) {
+		return nil, nil, ""
+	}
+
+	return cfg, cfgManager.DistributionConfig, canonicalPath
 }
 
 // resolveClusterName determines the Omni cluster name from available sources.

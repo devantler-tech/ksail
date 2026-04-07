@@ -30,9 +30,11 @@ func makeJWT(t *testing.T, exp int64) string {
 	return header + "." + payload + "." + sig
 }
 
-// writeKubeconfig writes a kubeconfig file with the given context, user, and token.
-func writeKubeconfig(t *testing.T, dir, contextName, token string) string {
+// writeKubeconfig writes a kubeconfig file with a fixed context and the given token.
+func writeKubeconfig(t *testing.T, dir, token string) string {
 	t.Helper()
+
+	const contextName = "my-cluster"
 
 	kubeconfigPath := filepath.Join(dir, "kubeconfig")
 
@@ -64,7 +66,7 @@ func TestIsTokenExpired_TimeBased(t *testing.T) {
 		dir := t.TempDir()
 		expiredAt := time.Now().Add(-1 * time.Hour).Unix()
 		token := makeJWT(t, expiredAt)
-		path := writeKubeconfig(t, dir, "my-cluster", token)
+		path := writeKubeconfig(t, dir, token)
 
 		assert.True(t, kubeconfighook.IsTokenExpired(path))
 	})
@@ -75,7 +77,7 @@ func TestIsTokenExpired_TimeBased(t *testing.T) {
 		dir := t.TempDir()
 		expiresAt := time.Now().Add(24 * time.Hour).Unix()
 		token := makeJWT(t, expiresAt)
-		path := writeKubeconfig(t, dir, "my-cluster", token)
+		path := writeKubeconfig(t, dir, token)
 
 		assert.False(t, kubeconfighook.IsTokenExpired(path))
 	})
@@ -86,7 +88,7 @@ func TestIsTokenExpired_TimeBased(t *testing.T) {
 		dir := t.TempDir()
 		expiresAt := time.Now().Add(2 * time.Minute).Unix()
 		token := makeJWT(t, expiresAt)
-		path := writeKubeconfig(t, dir, "my-cluster", token)
+		path := writeKubeconfig(t, dir, token)
 
 		assert.True(t, kubeconfighook.IsTokenExpired(path))
 	})
@@ -97,7 +99,7 @@ func TestIsTokenExpired_TimeBased(t *testing.T) {
 		dir := t.TempDir()
 		expiresAt := time.Now().Add(10 * time.Minute).Unix()
 		token := makeJWT(t, expiresAt)
-		path := writeKubeconfig(t, dir, "my-cluster", token)
+		path := writeKubeconfig(t, dir, token)
 
 		assert.False(t, kubeconfighook.IsTokenExpired(path))
 	})
@@ -110,7 +112,7 @@ func TestIsTokenExpired_EdgeCases(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		path := writeKubeconfig(t, dir, "my-cluster", "plain-bearer-token")
+		path := writeKubeconfig(t, dir, "plain-bearer-token")
 
 		assert.False(t, kubeconfighook.IsTokenExpired(path))
 	})
@@ -119,7 +121,7 @@ func TestIsTokenExpired_EdgeCases(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		path := writeKubeconfig(t, dir, "my-cluster", "header.payload")
+		path := writeKubeconfig(t, dir, "header.payload")
 
 		assert.False(t, kubeconfighook.IsTokenExpired(path))
 	})
@@ -128,7 +130,7 @@ func TestIsTokenExpired_EdgeCases(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		path := writeKubeconfig(t, dir, "my-cluster", "")
+		path := writeKubeconfig(t, dir, "")
 
 		assert.False(t, kubeconfighook.IsTokenExpired(path))
 	})
