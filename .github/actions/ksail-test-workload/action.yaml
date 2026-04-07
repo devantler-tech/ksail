@@ -185,7 +185,24 @@ runs:
         ksail workload watch --path "$WATCH_DIR" > "$WATCH_LOG" 2>&1 &
         WATCH_PID=$!
         trap 'kill $WATCH_PID 2>/dev/null || true; rm -rf "$WATCH_DIR" "$WATCH_LOG"' EXIT
-        sleep 10
+        # Wait for the watcher to finish initialization and build its file
+        # snapshot before modifying files.  A fixed sleep is unreliable because
+        # watcher startup time varies with cluster state (config loading, Flux
+        # reconciler creation).  Poll the log for the "poll: started" marker
+        # that is emitted right after the snapshot is built.
+        WATCHER_READY=false
+        for i in $(seq 1 120); do
+          if grep -q "poll: started" "$WATCH_LOG" 2>/dev/null; then
+            WATCHER_READY=true
+            break
+          fi
+          sleep 1
+        done
+        if [ "$WATCHER_READY" != "true" ]; then
+          echo "❌ Watcher did not become ready within 120s"
+          cat "$WATCH_LOG" || true
+          exit 1
+        fi
         # Modify the manifest (change replicas)
         sed -i 's/replicas: 1/replicas: 2/' "$WATCH_DIR/deployment.yaml"
         # Wait for watcher to pick up the change (poll with timeout)

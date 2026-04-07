@@ -4930,6 +4930,18 @@ func resolveContextName(
 		}
 	}
 
+	// Fallback: if no distribution-prefix match was found, look for contexts
+	// that contain the cluster name as a substring. This handles providers like
+	// Omni whose kubeconfig context format (<org>-<cluster>-<sa>) doesn't
+	// follow the standard distribution prefix conventions.
+	if len(matches) == 0 {
+		for ctxName := range config.Contexts {
+			if strings.Contains(ctxName, cleanName) {
+				matches = append(matches, ctxName)
+			}
+		}
+	}
+
 	switch len(matches) {
 	case 0:
 		available := make([]string, 0, len(config.Contexts))

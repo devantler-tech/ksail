@@ -311,12 +311,14 @@ func isClusterRunningAndReady(
 // GetKubeconfig retrieves the kubeconfig for the given cluster from Omni.
 // It requests a service-account kubeconfig with a static token, which works
 // in non-interactive environments (CI, automation) without requiring oidc-login.
+// The token has a 24-hour TTL; for long-lived access, re-run create/update
+// to refresh the kubeconfig.
 func (p *Provider) GetKubeconfig(ctx context.Context, clusterName string) ([]byte, error) {
 	if p.client == nil {
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	const kubeconfigTTL = time.Hour
+	const kubeconfigTTL = 24 * time.Hour
 
 	data, err := p.client.Management().WithCluster(clusterName).Kubeconfig(
 		ctx,
