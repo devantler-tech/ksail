@@ -397,20 +397,16 @@ func (p *Provider) IsAvailable() bool {
 }
 
 // ListAvailableMachines queries Omni for machines that are available (not allocated
-// to any cluster) and returns up to count machine UUIDs.
+// to any cluster) and returns exactly count machine UUIDs on success.
 // Returns ErrInsufficientAvailableMachines when fewer than count machines are available.
-// Returns an error if count is negative, and an empty slice if count is zero.
+// Returns a validation error if count is negative, and an empty slice if count is zero.
 func (p *Provider) ListAvailableMachines(ctx context.Context, count int) ([]string, error) {
 	if p.st == nil {
 		return nil, provider.ErrProviderUnavailable
 	}
 
 	if count < 0 {
-		return nil, fmt.Errorf(
-			"%w: count must not be negative (%d)",
-			ErrInsufficientAvailableMachines,
-			count,
-		)
+		return nil, fmt.Errorf("count must not be negative (%d)", count)
 	}
 
 	if count == 0 {

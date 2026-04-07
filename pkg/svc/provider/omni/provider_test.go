@@ -391,7 +391,9 @@ func TestListAvailableMachines_NegativeCount(t *testing.T) {
 	machines, err := prov.ListAvailableMachines(context.Background(), -1)
 
 	require.Error(t, err)
-	require.ErrorIs(t, err, omni.ErrInsufficientAvailableMachines)
+	// Negative count is an input validation error, not an availability error.
+	assert.NotErrorIs(t, err, omni.ErrInsufficientAvailableMachines)
+	assert.Contains(t, err.Error(), "must not be negative")
 	assert.Nil(t, machines)
 }
 
