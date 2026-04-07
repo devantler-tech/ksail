@@ -11,7 +11,7 @@ const minMatchCount = 2
 // fromDirectiveRe matches all FROM directives in a Dockerfile, including
 // multi-stage builds and optional flags (e.g. --platform).
 //
-//nolint:gochecknoglobals // Package-level to avoid recompilation on each ParseAllImagesFromDockerfile call.
+
 var fromDirectiveRe = regexp.MustCompile(`(?m)^FROM\s+(?:--\S+\s+)*([^\s]+)`)
 
 // ParseImageFromDockerfile extracts a container image reference from a Dockerfile using the provided regex pattern.
