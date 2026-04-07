@@ -137,10 +137,14 @@ type OptionsOmni struct {
 	// the Omni account before cluster creation. The number of machines allocated
 	// is derived from the controlPlanes and workers count in the cluster spec.
 	// Mutually exclusive with Machines — set one or the other.
+	// When neither MachineClass nor Machines is set, KSail automatically discovers
+	// available (unallocated) machines in Omni and uses them for node allocation.
 	MachineClass string `json:"machineClass,omitzero"`
 	// Machines is a list of Omni machine UUIDs to use for static node allocation.
 	// The first N machines are assigned as control planes (where N = controlPlanes count),
 	// and the remaining machines are assigned as workers.
 	// Mutually exclusive with MachineClass — set one or the other.
+	// When neither MachineClass nor Machines is set, KSail automatically discovers
+	// available (unallocated) machines in Omni and uses them for node allocation.
 	Machines []string `json:"machines,omitzero"`
 }

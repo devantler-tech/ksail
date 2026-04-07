@@ -110,6 +110,14 @@ func (p *Provisioner) GetOmniNodesByRoleForTest(
 	return p.getOmniNodesByRole(ctx, clusterName)
 }
 
+// ResolveOmniMachinesForTest exposes resolveOmniMachines for unit testing.
+func (p *Provisioner) ResolveOmniMachinesForTest(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+) ([]string, error) {
+	return p.resolveOmniMachines(ctx, omniProv)
+}
+
 // ApplyNodeScalingChangesForTest exposes applyNodeScalingChanges for unit testing.
 func (p *Provisioner) ApplyNodeScalingChangesForTest(
 	ctx context.Context,
