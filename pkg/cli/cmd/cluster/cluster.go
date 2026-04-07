@@ -4837,12 +4837,28 @@ func NewSwitchCmd(_ *di.Runtime) *cobra.Command {
 // SwitchDeps captures injectable dependencies for the switch command.
 type SwitchDeps struct {
 	// KubeconfigPath overrides the kubeconfig path resolution.
-	// If empty, the path is resolved from ksail.yaml or the default.
+	// If empty, the path is resolved from KUBECONFIG env, ksail.yaml, or the default.
 	KubeconfigPath string
 
 	// PickCluster overrides the interactive picker for testing.
 	// If nil, the default bubbletea picker is used.
 	PickCluster func(title string, items []string) (string, error)
+}
+
+// resolveSwitchKubeconfig returns the kubeconfig path for switch operations.
+// It uses the injected path from deps when provided, otherwise delegates to
+// resolveKubeconfigForSwitch (which checks KUBECONFIG env, ksail.yaml, and the default).
+func resolveSwitchKubeconfig(cmd *cobra.Command, deps SwitchDeps) (string, error) {
+	if deps.KubeconfigPath != "" {
+		return deps.KubeconfigPath, nil
+	}
+
+	path, err := resolveKubeconfigForSwitch(cmd)
+	if err != nil {
+		return "", fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
+
+	return path, nil
 }
 
 // HandleSwitchRunE handles the switch command.
@@ -4852,14 +4868,9 @@ func HandleSwitchRunE(
 	clusterName string,
 	deps SwitchDeps,
 ) error {
-	kubeconfigPath := deps.KubeconfigPath
-	if kubeconfigPath == "" {
-		var err error
-
-		kubeconfigPath, err = resolveKubeconfigForSwitch(cmd)
-		if err != nil {
-			return fmt.Errorf("resolve kubeconfig path: %w", err)
-		}
+	kubeconfigPath, err := resolveSwitchKubeconfig(cmd, deps)
+	if err != nil {
+		return err
 	}
 
 	contextName, err := switchContext(kubeconfigPath, clusterName)
@@ -4880,14 +4891,9 @@ func HandleSwitchRunE(
 // pickCluster resolves the kubeconfig, lists available cluster names, and
 // presents an interactive picker for the user to select one.
 func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
-	kubeconfigPath := deps.KubeconfigPath
-	if kubeconfigPath == "" {
-		var err error
-
-		kubeconfigPath, err = resolveKubeconfigForSwitch(cmd)
-		if err != nil {
-			return "", fmt.Errorf("resolve kubeconfig path: %w", err)
-		}
+	kubeconfigPath, err := resolveSwitchKubeconfig(cmd, deps)
+	if err != nil {
+		return "", err
 	}
 
 	names := clusterNamesFromPath(kubeconfigPath)

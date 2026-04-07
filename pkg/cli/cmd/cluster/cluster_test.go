@@ -4985,6 +4985,67 @@ users:
 	require.ErrorIs(t, err, cluster.ErrNoClusters)
 }
 
+func TestSwitchCmd_FallbackKubeconfigFromEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+
+	require.NoError(t, os.WriteFile(
+		kubeconfigPath,
+		[]byte(testKubeconfigTwoContexts),
+		0o600,
+	))
+
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+
+	cmd, buf := newSwitchTestCmd()
+	deps := cluster.SwitchDeps{}
+
+	err := cluster.HandleSwitchRunE(cmd, "staging", deps)
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "Switched to cluster 'staging'")
+}
+
+func TestSwitchCmd_FallbackKubeconfigFromEnv_PickCluster(t *testing.T) {
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+
+	require.NoError(t, os.WriteFile(
+		kubeconfigPath,
+		[]byte(testKubeconfigTwoContexts),
+		0o600,
+	))
+
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+
+	cmd, _ := newSwitchTestCmd()
+	deps := cluster.SwitchDeps{
+		PickCluster: func(_ string, items []string) (string, error) {
+			for _, item := range items {
+				if item == "staging" {
+					return item, nil
+				}
+			}
+
+			return "", fmt.Errorf("staging not in list: %w", cluster.ErrNoClusters)
+		},
+	}
+
+	clusterName, err := cluster.ExportPickCluster(cmd, deps)
+	require.NoError(t, err)
+	assert.Equal(t, "staging", clusterName)
+}
+
+func TestSwitchCmd_FallbackKubeconfigInvalid(t *testing.T) {
+	t.Setenv("KUBECONFIG", "/nonexistent/invalid/kubeconfig")
+
+	cmd, _ := newSwitchTestCmd()
+	deps := cluster.SwitchDeps{}
+
+	err := cluster.HandleSwitchRunE(cmd, "staging", deps)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to read kubeconfig")
+}
+
 func TestDisplayListResults_WithTTL(t *testing.T) {
 	t.Parallel()
 
