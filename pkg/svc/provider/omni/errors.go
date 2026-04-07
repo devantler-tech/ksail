@@ -17,4 +17,7 @@ var (
 	ErrInsufficientAvailableMachines = errors.New(
 		"not enough available machines in Omni for the requested node count",
 	)
+	// ErrNegativeMachineCount is returned when a negative machine count is passed
+	// to ListAvailableMachines.
+	ErrNegativeMachineCount = errors.New("machine count must not be negative")
 )

@@ -406,7 +406,7 @@ func (p *Provider) ListAvailableMachines(ctx context.Context, count int) ([]stri
 	}
 
 	if count < 0 {
-		return nil, fmt.Errorf("count must not be negative (%d)", count)
+		return nil, fmt.Errorf("%w: %d", ErrNegativeMachineCount, count)
 	}
 
 	if count == 0 {
