@@ -18,7 +18,11 @@ func TestStatusBar_ModeDisplay(t *testing.T) {
 		mode     chat.ChatMode
 		expected string
 	}{
-		{name: "interactive mode in status", mode: chat.InteractiveMode, expected: "</> interactive"},
+		{
+			name:     "interactive mode in status",
+			mode:     chat.InteractiveMode,
+			expected: "</> interactive",
+		},
 		{name: "plan mode in status", mode: chat.PlanMode, expected: "\u2261 plan"},
 	}
 

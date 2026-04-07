@@ -19,7 +19,11 @@ func TestChatMode_String(t *testing.T) {
 		{name: "interactive mode string", mode: chat.InteractiveMode, expected: "interactive"},
 		{name: "plan mode string", mode: chat.PlanMode, expected: "plan"},
 		{name: "autopilot mode string", mode: chat.AutopilotMode, expected: "autopilot"},
-		{name: "unknown mode defaults to interactive", mode: chat.ChatMode(99), expected: "interactive"},
+		{
+			name:     "unknown mode defaults to interactive",
+			mode:     chat.ChatMode(99),
+			expected: "interactive",
+		},
 	}
 
 	for _, testCase := range tests {
@@ -50,7 +54,11 @@ func TestChatMode_Icon(t *testing.T) {
 		{name: "interactive mode icon", mode: chat.InteractiveMode, expected: "</>"},
 		{name: "plan mode icon", mode: chat.PlanMode, expected: "≡"},
 		{name: "autopilot mode icon", mode: chat.AutopilotMode, expected: "⚡"},
-		{name: "unknown mode defaults to interactive icon", mode: chat.ChatMode(99), expected: "</>"},
+		{
+			name:     "unknown mode defaults to interactive icon",
+			mode:     chat.ChatMode(99),
+			expected: "</>",
+		},
 	}
 
 	for _, testCase := range tests {
@@ -105,8 +113,16 @@ func TestChatMode_Next(t *testing.T) {
 	}{
 		{name: "interactive cycles to plan", mode: chat.InteractiveMode, expected: chat.PlanMode},
 		{name: "plan cycles to autopilot", mode: chat.PlanMode, expected: chat.AutopilotMode},
-		{name: "autopilot cycles to interactive", mode: chat.AutopilotMode, expected: chat.InteractiveMode},
-		{name: "unknown defaults to interactive", mode: chat.ChatMode(99), expected: chat.InteractiveMode},
+		{
+			name:     "autopilot cycles to interactive",
+			mode:     chat.AutopilotMode,
+			expected: chat.InteractiveMode,
+		},
+		{
+			name:     "unknown defaults to interactive",
+			mode:     chat.ChatMode(99),
+			expected: chat.InteractiveMode,
+		},
 	}
 
 	for _, testCase := range tests {
@@ -151,9 +167,17 @@ func TestChatMode_ToSDKMode(t *testing.T) {
 		mode     chat.ChatMode
 		expected rpc.Mode
 	}{
-		{name: "interactive maps to interactive", mode: chat.InteractiveMode, expected: rpc.ModeInteractive},
+		{
+			name:     "interactive maps to interactive",
+			mode:     chat.InteractiveMode,
+			expected: rpc.ModeInteractive,
+		},
 		{name: "plan maps to plan", mode: chat.PlanMode, expected: rpc.ModePlan},
-		{name: "autopilot maps to autopilot", mode: chat.AutopilotMode, expected: rpc.ModeAutopilot},
+		{
+			name:     "autopilot maps to autopilot",
+			mode:     chat.AutopilotMode,
+			expected: rpc.ModeAutopilot,
+		},
 		{
 			name:     "unknown defaults to interactive",
 			mode:     chat.ChatMode(99),

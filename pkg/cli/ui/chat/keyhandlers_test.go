@@ -111,8 +111,6 @@ func TestExitConfirm_EscCloses(t *testing.T) {
 	}
 }
 
-
-
 // TestHistoryUp_NavigatesHistory tests up arrow navigates prompt history.
 func TestHistoryUp_NavigatesHistory(t *testing.T) {
 	t.Parallel()

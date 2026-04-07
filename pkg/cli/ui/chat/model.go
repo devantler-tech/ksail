@@ -388,8 +388,8 @@ func NewModel(params Params) *Model {
 		historyIndex:     -1,
 		availableModels:  params.Models,
 		currentModel:     params.CurrentModel,
-		chatMode:         InteractiveMode,     // Default to interactive mode
-		chatModeRef:      params.ChatModeRef,  // Store reference for tool handlers
+		chatMode:         InteractiveMode,    // Default to interactive mode
+		chatModeRef:      params.ChatModeRef, // Store reference for tool handlers
 		queuedPrompts:    nil,
 		steeringPrompts:  nil,
 	}
