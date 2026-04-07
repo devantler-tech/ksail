@@ -56,13 +56,23 @@ Approximate baseline on a typical CI runner — `ns/op` (time/op) varies by hard
 
 | Benchmark                     | ns/op | B/op | allocs/op |
 |-------------------------------|------:|-----:|----------:|
-| ComputeDiff_NoChanges         |   987 |  480 |         8 |
-| ComputeDiff_AllInPlaceChanges |  3808 | 2080 |        30 |
-| ComputeDiff_RecreateRequired  |  1596 |  752 |        12 |
-| ComputeDiff_MixedCategories   |  2509 | 1312 |        20 |
-| ComputeDiff_TalosOptions      |  2528 | 1312 |        20 |
-| ComputeDiff_HetznerOptions    |  2547 | 1312 |        20 |
-| ComputeDiff_NilSpec           |   202 |   48 |         2 |
+| ComputeDiff_NoChanges         |   367 |  832 |         5 |
+| ComputeDiff_AllInPlaceChanges |   794 | 1984 |         9 |
+| ComputeDiff_RecreateRequired  |   399 |  912 |         6 |
+| ComputeDiff_MixedCategories   |   572 | 1280 |         9 |
+| ComputeDiff_TalosOptions      |   665 | 1360 |        10 |
+| ComputeDiff_HetznerOptions    |   622 | 1072 |         9 |
+| ComputeDiff_NilSpec           |    51 |  144 |         1 |
+
+## Optimization History
+
+### 2026-04-07: Eliminate per-call allocations for static field-rule tables
+
+`talosFieldRules` and `hetznerFieldRules` were previously plain functions that
+returned a freshly allocated `[]fieldRule` slice on every `ComputeDiff` call.
+Converting them to package-level variables eliminates these allocations entirely.
+
+The `allocs/op` counts above have been updated to reflect this change.
 
 ## Performance Notes
 

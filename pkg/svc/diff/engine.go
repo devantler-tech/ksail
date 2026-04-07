@@ -271,31 +271,32 @@ func (e *Engine) checkTalosOptionsChange(
 		return
 	}
 
-	e.applyFieldRules(oldSpec, newSpec, result, talosFieldRules())
+	e.applyFieldRules(oldSpec, newSpec, result, talosFieldRules)
 }
 
-// talosFieldRules returns the Talos-specific scalar field diff rules.
-func talosFieldRules() []fieldRule {
-	return []fieldRule{
-		{
-			field:    "cluster.talos.controlPlanes",
-			category: clusterupdate.ChangeCategoryInPlace,
-			reason:   "Talos supports adding/removing control-plane nodes via provider",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.ControlPlanes)) },
-		},
-		{
-			field:    "cluster.talos.workers",
-			category: clusterupdate.ChangeCategoryInPlace,
-			reason:   "Talos supports adding/removing worker nodes via provider",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.Workers)) },
-		},
-		{
-			field:    "cluster.talos.iso",
-			category: clusterupdate.ChangeCategoryInPlace,
-			reason:   "ISO change only affects newly provisioned nodes",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.FormatInt(s.Talos.ISO, 10) },
-		},
-	}
+// talosFieldRules is the table of Talos-specific scalar field diff rules.
+// Defined as a package-level variable to avoid reallocating the slice on each ComputeDiff call.
+//
+//nolint:gochecknoglobals // Immutable field-rule table; avoids per-call heap allocation.
+var talosFieldRules = []fieldRule{
+	{
+		field:    "cluster.talos.controlPlanes",
+		category: clusterupdate.ChangeCategoryInPlace,
+		reason:   "Talos supports adding/removing control-plane nodes via provider",
+		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.ControlPlanes)) },
+	},
+	{
+		field:    "cluster.talos.workers",
+		category: clusterupdate.ChangeCategoryInPlace,
+		reason:   "Talos supports adding/removing worker nodes via provider",
+		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.Workers)) },
+	},
+	{
+		field:    "cluster.talos.iso",
+		category: clusterupdate.ChangeCategoryInPlace,
+		reason:   "ISO change only affects newly provisioned nodes",
+		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.FormatInt(s.Talos.ISO, 10) },
+	},
 }
 
 // checkHetznerOptionsChange checks Hetzner-specific option changes.
@@ -307,51 +308,52 @@ func (e *Engine) checkHetznerOptionsChange(
 		return
 	}
 
-	e.applyFieldRules(oldSpec, newSpec, result, hetznerFieldRules())
+	e.applyFieldRules(oldSpec, newSpec, result, hetznerFieldRules)
 }
 
-// hetznerFieldRules returns the Hetzner-specific scalar field diff rules.
-func hetznerFieldRules() []fieldRule {
-	return []fieldRule{
-		{
-			field:      "cluster.hetzner.controlPlaneServerType",
-			category:   clusterupdate.ChangeCategoryRecreateRequired,
-			reason:     "existing control-plane servers cannot change VM type",
-			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.ControlPlaneServerType },
-			defaultVal: v1alpha1.DefaultHetznerServerType,
-		},
-		{
-			field:      "cluster.hetzner.workerServerType",
-			category:   clusterupdate.ChangeCategoryInPlace,
-			reason:     "new worker servers will use the new type; existing workers unchanged",
-			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.WorkerServerType },
-			defaultVal: v1alpha1.DefaultHetznerServerType,
-		},
-		{
-			field:      "cluster.hetzner.location",
-			category:   clusterupdate.ChangeCategoryRecreateRequired,
-			reason:     "datacenter location cannot be changed for existing servers",
-			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.Location },
-			defaultVal: v1alpha1.DefaultHetznerLocation,
-		},
-		{
-			field:    "cluster.hetzner.networkName",
-			category: clusterupdate.ChangeCategoryRecreateRequired,
-			reason:   "cannot migrate servers between networks",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkName },
-		},
-		{
-			field:      "cluster.hetzner.networkCidr",
-			category:   clusterupdate.ChangeCategoryRecreateRequired,
-			reason:     "network CIDR change requires PKI regeneration",
-			getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkCIDR },
-			defaultVal: v1alpha1.DefaultHetznerNetworkCIDR,
-		},
-		{
-			field:    "cluster.hetzner.sshKeyName",
-			category: clusterupdate.ChangeCategoryInPlace,
-			reason:   "SSH key change only affects newly provisioned servers",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.SSHKeyName },
-		},
-	}
+// hetznerFieldRules is the table of Hetzner-specific scalar field diff rules.
+// Defined as a package-level variable to avoid reallocating the slice on each ComputeDiff call.
+//
+//nolint:gochecknoglobals // Immutable field-rule table; avoids per-call heap allocation.
+var hetznerFieldRules = []fieldRule{
+	{
+		field:      "cluster.hetzner.controlPlaneServerType",
+		category:   clusterupdate.ChangeCategoryRecreateRequired,
+		reason:     "existing control-plane servers cannot change VM type",
+		getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.ControlPlaneServerType },
+		defaultVal: v1alpha1.DefaultHetznerServerType,
+	},
+	{
+		field:      "cluster.hetzner.workerServerType",
+		category:   clusterupdate.ChangeCategoryInPlace,
+		reason:     "new worker servers will use the new type; existing workers unchanged",
+		getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.WorkerServerType },
+		defaultVal: v1alpha1.DefaultHetznerServerType,
+	},
+	{
+		field:      "cluster.hetzner.location",
+		category:   clusterupdate.ChangeCategoryRecreateRequired,
+		reason:     "datacenter location cannot be changed for existing servers",
+		getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.Location },
+		defaultVal: v1alpha1.DefaultHetznerLocation,
+	},
+	{
+		field:    "cluster.hetzner.networkName",
+		category: clusterupdate.ChangeCategoryRecreateRequired,
+		reason:   "cannot migrate servers between networks",
+		getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkName },
+	},
+	{
+		field:      "cluster.hetzner.networkCidr",
+		category:   clusterupdate.ChangeCategoryRecreateRequired,
+		reason:     "network CIDR change requires PKI regeneration",
+		getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkCIDR },
+		defaultVal: v1alpha1.DefaultHetznerNetworkCIDR,
+	},
+	{
+		field:    "cluster.hetzner.sshKeyName",
+		category: clusterupdate.ChangeCategoryInPlace,
+		reason:   "SSH key change only affects newly provisioned servers",
+		getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.SSHKeyName },
+	},
 }

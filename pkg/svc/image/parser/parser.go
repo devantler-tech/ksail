@@ -8,6 +8,12 @@ import (
 // minMatchCount is the minimum number of regex matches required to extract the image reference.
 const minMatchCount = 2
 
+// fromDirectiveRe matches all FROM directives in a Dockerfile, including
+// multi-stage builds and optional flags (e.g. --platform).
+//
+//nolint:gochecknoglobals // Package-level to avoid recompilation on each ParseAllImagesFromDockerfile call.
+var fromDirectiveRe = regexp.MustCompile(`(?m)^FROM\s+(?:--\S+\s+)*([^\s]+)`)
+
 // ParseImageFromDockerfile extracts a container image reference from a Dockerfile using the provided regex pattern.
 // This ensures Go code stays in sync with Dependabot updates automatically.
 // Panics if the Dockerfile cannot be parsed - this catches embedding/format issues at init time.
@@ -34,8 +40,7 @@ func ParseImageFromDockerfile(dockerfileContent, pattern, imageName string) stri
 // useful for Dockerfiles that track multiple related images (e.g., Flux distribution
 // controller images).
 func ParseAllImagesFromDockerfile(dockerfileContent string) []string {
-	re := regexp.MustCompile(`(?m)^FROM\s+(?:--\S+\s+)*([^\s]+)`)
-	matches := re.FindAllStringSubmatch(dockerfileContent, -1)
+	matches := fromDirectiveRe.FindAllStringSubmatch(dockerfileContent, -1)
 
 	images := make([]string, 0, len(matches))
 
