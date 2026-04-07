@@ -30,21 +30,6 @@ ksail cluster create --ttl 1h
 
 **Commands:** [`ksail cluster`](/cli-flags/cluster/cluster-root/)
 
-| Command                 | Description                 |
-| ----------------------- | --------------------------- |
-| `ksail cluster init`    | Initialize a new project    |
-| `ksail cluster create`  | Create a cluster            |
-| `ksail cluster update`  | Update a cluster            |
-| `ksail cluster delete`  | Delete a cluster            |
-| `ksail cluster start`   | Start a stopped cluster     |
-| `ksail cluster stop`    | Stop a running cluster      |
-| `ksail cluster info`    | Show cluster information    |
-| `ksail cluster list`    | List clusters               |
-| `ksail cluster connect` | Connect to cluster with K9s      |
-| `ksail cluster switch`  | Switch active kubeconfig context |
-| `ksail cluster backup`  | Backup cluster resources         |
-| `ksail cluster restore` | Restore cluster resources        |
-
 **Updating clusters:** `ksail cluster update` applies changes from `ksail.yaml` to a running cluster. Changes are classified as in-place (no disruption), reboot-required, or recreate-required. Use `--dry-run` to preview changes without applying them. Use `--output json` for a machine-readable diff in CI pipelines or [MCP tools](/mcp/):
 
 ```bash
@@ -78,29 +63,6 @@ ksail workload gen deployment my-app --image=nginx --port=80
 ```
 
 **Commands:** [`ksail workload`](/cli-flags/workload/workload-root/)
-
-| Command                    | Description                              |
-| -------------------------- | ---------------------------------------- |
-| `ksail workload apply`     | Apply manifests to cluster               |
-| `ksail workload create`    | Create resources imperatively            |
-| `ksail workload edit`      | Edit a resource in-place                 |
-| `ksail workload get`       | Get resources                            |
-| `ksail workload describe`  | Describe resources in detail             |
-| `ksail workload explain`   | Get API documentation for a resource     |
-| `ksail workload delete`    | Delete Kubernetes resources              |
-| `ksail workload logs`      | View container logs                      |
-| `ksail workload exec`      | Execute command in container             |
-| `ksail workload expose`    | Expose a resource as a service           |
-| `ksail workload gen`       | Generate Kubernetes manifests            |
-| `ksail workload validate`  | Validate manifests against schemas       |
-| `ksail workload install`   | Install Helm charts                      |
-| `ksail workload scale`     | Scale deployments                        |
-| `ksail workload rollout`   | Manage rollouts                          |
-| `ksail workload wait`      | Wait for conditions                      |
-| `ksail workload images`    | List required container images           |
-| `ksail workload export`    | Export container images to a tar archive |
-| `ksail workload import`    | Import container images from a tar archive |
-| `ksail workload watch`     | Watch directory and auto-apply on change |
 
 ## GitOps Workflows
 
@@ -157,11 +119,6 @@ ksail tenant delete my-team \
 - **Flux OCI:** `--git-repo` is required for Flux OCI sync sources even without scaffolding — it builds the `OCIRepository` URL.
 
 **Commands:** [`ksail tenant`](/cli-flags/tenant/tenant-root/)
-
-| Command               | Description                                       |
-| --------------------- | ------------------------------------------------- |
-| `ksail tenant create` | Generate RBAC and GitOps manifests for a tenant   |
-| `ksail tenant delete` | Remove tenant manifests and optionally its repo   |
 
 **Guide:** [Tenant Management](/guides/tenant-management/)
 
