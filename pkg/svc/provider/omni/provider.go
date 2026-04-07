@@ -406,7 +406,11 @@ func (p *Provider) ListAvailableMachines(ctx context.Context, count int) ([]stri
 	}
 
 	if count < 0 {
-		return nil, fmt.Errorf("%w: count must not be negative (%d)", ErrInsufficientAvailableMachines, count)
+		return nil, fmt.Errorf(
+			"%w: count must not be negative (%d)",
+			ErrInsufficientAvailableMachines,
+			count,
+		)
 	}
 
 	if count == 0 {
