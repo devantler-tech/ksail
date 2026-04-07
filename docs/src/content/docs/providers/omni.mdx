@@ -251,5 +251,5 @@ spec:
 
 **`not enough available machines in Omni for the requested node count`** — Auto-discovery found fewer available (unallocated) machines than the cluster requires. Log in to the [Omni web UI](https://omni.siderolabs.com/), navigate to **Machines**, and verify enough machines are registered and not already allocated to another cluster. Alternatively, set `machineClass` or `machines` explicitly to control allocation.
 
-**`machineClass and machines are mutually exclusive`** — Both `spec.cluster.omni.machineClass` and `spec.cluster.omni.machines` are set in `ksail.yaml`. Remove one: use `machineClass` for dynamic allocation, `machines` for static allocation, or omit both for auto-discovery.
+**`MachineClass and Machines are mutually exclusive (set one or the other)`** — Both `spec.cluster.omni.machineClass` and `spec.cluster.omni.machines` are set in `ksail.yaml`. Remove one: use `machineClass` for dynamic allocation, `machines` for static allocation, or omit both for auto-discovery.
 
