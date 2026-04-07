@@ -221,6 +221,7 @@ func TestConnectivityCheckPodSpec(t *testing.T) {
 			require.Equal(t, corev1.RestartPolicyNever, pod.Spec.RestartPolicy)
 			require.Len(t, pod.Spec.Containers, 1)
 			require.Equal(t, "busybox:stable", pod.Spec.Containers[0].Image)
+			require.Equal(t, corev1.PullIfNotPresent, pod.Spec.Containers[0].ImagePullPolicy)
 			require.Contains(t, pod.Spec.Containers[0].Command[2], "nc -w 5 "+testClusterIP+" 443")
 			require.Len(t, pod.Spec.Tolerations, 1)
 			require.Equal(t, corev1.TolerationOpExists, pod.Spec.Tolerations[0].Operator)
@@ -237,6 +238,100 @@ func TestConnectivityCheckPodSpec(t *testing.T) {
 
 	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 15*time.Second)
 	require.NoError(t, err)
+}
+
+func TestWaitForInClusterAPIConnectivity_ImagePullBackOff(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(newKubernetesService())
+
+	// Simulate ImagePullBackOff: pod stays Pending with container waiting reason.
+	clientset.PrependReactor(
+		"create",
+		"pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			createAction, isCreateAction := action.(k8stesting.CreateAction)
+			if !isCreateAction {
+				return false, nil, nil
+			}
+
+			pod, isPod := createAction.GetObject().(*corev1.Pod)
+			if !isPod {
+				return false, nil, nil
+			}
+
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+				Name:  "check",
+				Image: "busybox:stable",
+				State: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{
+						Reason:  "ImagePullBackOff",
+						Message: "Back-off pulling image \"busybox:stable\"",
+					},
+				},
+			}}
+
+			return false, nil, nil
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 5*time.Second)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "image pull failed")
+	require.Contains(t, err.Error(), "ImagePullBackOff")
+	require.Contains(t, err.Error(), "busybox:stable")
+}
+
+func TestWaitForInClusterAPIConnectivity_ErrImagePull(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(newKubernetesService())
+
+	// Simulate ErrImagePull: pod stays Pending with container waiting reason.
+	clientset.PrependReactor(
+		"create",
+		"pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			createAction, isCreateAction := action.(k8stesting.CreateAction)
+			if !isCreateAction {
+				return false, nil, nil
+			}
+
+			pod, isPod := createAction.GetObject().(*corev1.Pod)
+			if !isPod {
+				return false, nil, nil
+			}
+
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+				Name:  "check",
+				Image: "busybox:stable",
+				State: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{
+						Reason:  "ErrImagePull",
+						Message: "failed to pull image \"busybox:stable\"",
+					},
+				},
+			}}
+
+			return false, nil, nil
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 5*time.Second)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "image pull failed")
+	require.Contains(t, err.Error(), "ErrImagePull")
+	require.Contains(t, err.Error(), "busybox:stable")
 }
 
 // connectivityPodName mirrors the constant from the production code so test
