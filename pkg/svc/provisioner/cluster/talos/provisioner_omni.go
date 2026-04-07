@@ -70,24 +70,10 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		return err
 	}
 
-	// Save kubeconfig
-	if p.options.KubeconfigPath != "" {
-		_, _ = fmt.Fprintf(p.logWriter, "  Fetching kubeconfig from Omni...\n")
-
-		err = p.saveOmniKubeconfig(ctx, omniProv, clusterName)
-		if err != nil {
-			return fmt.Errorf("failed to save kubeconfig: %w", err)
-		}
-	}
-
-	// Save talosconfig
-	if p.options.TalosconfigPath != "" {
-		_, _ = fmt.Fprintf(p.logWriter, "  Fetching talosconfig from Omni...\n")
-
-		err = p.saveOmniTalosconfig(ctx, omniProv, clusterName)
-		if err != nil {
-			return fmt.Errorf("failed to save talosconfig: %w", err)
-		}
+	// Save kubeconfig and talosconfig
+	err = p.saveOmniConfigs(ctx, omniProv, clusterName)
+	if err != nil {
+		return err
 	}
 
 	_, _ = fmt.Fprintf(
@@ -95,6 +81,33 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		"\nSuccessfully created Talos cluster %q via Omni\n",
 		clusterName,
 	)
+
+	return nil
+}
+
+// saveOmniConfigs fetches and saves kubeconfig and talosconfig from Omni when configured.
+func (p *Provisioner) saveOmniConfigs(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+	clusterName string,
+) error {
+	if p.options.KubeconfigPath != "" {
+		_, _ = fmt.Fprintf(p.logWriter, "  Fetching kubeconfig from Omni...\n")
+
+		err := p.saveOmniKubeconfig(ctx, omniProv, clusterName)
+		if err != nil {
+			return fmt.Errorf("failed to save kubeconfig: %w", err)
+		}
+	}
+
+	if p.options.TalosconfigPath != "" {
+		_, _ = fmt.Fprintf(p.logWriter, "  Fetching talosconfig from Omni...\n")
+
+		err := p.saveOmniTalosconfig(ctx, omniProv, clusterName)
+		if err != nil {
+			return fmt.Errorf("failed to save talosconfig: %w", err)
+		}
+	}
 
 	return nil
 }
