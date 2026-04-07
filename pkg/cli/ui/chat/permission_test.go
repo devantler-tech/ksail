@@ -369,6 +369,7 @@ func TestPermissionModal_AllowAlwaysSwitchesToAutopilot(t *testing.T) {
 
 	// Press 'a' to allow always
 	var updatedModel tea.Model = model
+
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 
 	chatModel, ok := updatedModel.(*chat.Model)
