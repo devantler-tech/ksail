@@ -48,6 +48,13 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		return fmt.Errorf("failed to resolve versions: %w", err)
 	}
 
+	// Resolve machine allocation: auto-discover available machines when neither
+	// machineClass nor machines is configured.
+	machines, err := p.resolveOmniMachines(ctx, omniProv)
+	if err != nil {
+		return fmt.Errorf("failed to resolve machines: %w", err)
+	}
+
 	// Sync the cluster template to Omni and wait for readiness
 	err = p.syncAndWaitOmniCluster(ctx, omniProv, omniprovider.TemplateParams{
 		ClusterName:       clusterName,
@@ -56,31 +63,17 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		ControlPlanes:     p.options.ControlPlaneNodes,
 		Workers:           p.options.WorkerNodes,
 		MachineClass:      p.omniMachineClass(),
-		Machines:          p.omniMachines(),
+		Machines:          machines,
 		Patches:           p.buildOmniPatchInfos(),
 	})
 	if err != nil {
 		return err
 	}
 
-	// Save kubeconfig
-	if p.options.KubeconfigPath != "" {
-		_, _ = fmt.Fprintf(p.logWriter, "  Fetching kubeconfig from Omni...\n")
-
-		err = p.saveOmniKubeconfig(ctx, omniProv, clusterName)
-		if err != nil {
-			return fmt.Errorf("failed to save kubeconfig: %w", err)
-		}
-	}
-
-	// Save talosconfig
-	if p.options.TalosconfigPath != "" {
-		_, _ = fmt.Fprintf(p.logWriter, "  Fetching talosconfig from Omni...\n")
-
-		err = p.saveOmniTalosconfig(ctx, omniProv, clusterName)
-		if err != nil {
-			return fmt.Errorf("failed to save talosconfig: %w", err)
-		}
+	// Save kubeconfig and talosconfig
+	err = p.saveOmniConfigs(ctx, omniProv, clusterName)
+	if err != nil {
+		return err
 	}
 
 	_, _ = fmt.Fprintf(
@@ -88,6 +81,33 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		"\nSuccessfully created Talos cluster %q via Omni\n",
 		clusterName,
 	)
+
+	return nil
+}
+
+// saveOmniConfigs fetches and saves kubeconfig and talosconfig from Omni when configured.
+func (p *Provisioner) saveOmniConfigs(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+	clusterName string,
+) error {
+	if p.options.KubeconfigPath != "" {
+		_, _ = fmt.Fprintf(p.logWriter, "  Fetching kubeconfig from Omni...\n")
+
+		err := p.saveOmniKubeconfig(ctx, omniProv, clusterName)
+		if err != nil {
+			return fmt.Errorf("failed to save kubeconfig: %w", err)
+		}
+	}
+
+	if p.options.TalosconfigPath != "" {
+		_, _ = fmt.Fprintf(p.logWriter, "  Fetching talosconfig from Omni...\n")
+
+		err := p.saveOmniTalosconfig(ctx, omniProv, clusterName)
+		if err != nil {
+			return fmt.Errorf("failed to save talosconfig: %w", err)
+		}
+	}
 
 	return nil
 }
@@ -214,6 +234,50 @@ func (p *Provisioner) omniMachines() []string {
 	}
 
 	return nil
+}
+
+// resolveOmniMachines returns the machine UUIDs to use for Omni cluster creation.
+// If both machineClass and machines are set, an error is returned (they are mutually
+// exclusive). If machines are explicitly configured, those are returned. If a machineClass
+// is set, nil is returned (Omni will use the class for dynamic allocation). When neither
+// is configured, Omni is queried for available (unallocated) machines and the required
+// number of UUIDs is returned.
+func (p *Provisioner) resolveOmniMachines(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+) ([]string, error) {
+	machineClass := p.omniMachineClass()
+	machines := p.omniMachines()
+
+	if machineClass != "" && len(machines) > 0 {
+		return nil, omniprovider.ErrMachineAllocationConflict
+	}
+
+	if len(machines) > 0 {
+		return machines, nil
+	}
+
+	if machineClass != "" {
+		return nil, nil
+	}
+
+	// Neither machineClass nor machines set — auto-discover available machines.
+	required := p.options.ControlPlaneNodes + p.options.WorkerNodes
+
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  No machineClass or machines configured; discovering %d available machine(s) in Omni...\n",
+		required,
+	)
+
+	resolved, err := omniProv.ListAvailableMachines(ctx, required)
+	if err != nil {
+		return nil, fmt.Errorf("auto-discover available machines: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Discovered %d available machine(s)\n", len(resolved))
+
+	return resolved, nil
 }
 
 // saveOmniConfig writes already-fetched config data to disk. It expands/canonicalizes
