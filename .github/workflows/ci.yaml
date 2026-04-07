@@ -518,7 +518,7 @@ jobs:
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     environment: ci
-    continue-on-error: ${{ matrix.provider == 'Hetzner' || matrix.provider == 'Omni' }}
+    continue-on-error: ${{ matrix.provider == 'Hetzner' }}
     permissions:
       contents: read
       packages: write

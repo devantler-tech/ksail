@@ -289,7 +289,13 @@ To test the Omni provider locally, you need:
 
 **Note:** Omni requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account and does not run locally. Omni manages the Talos machine lifecycle; `StartNodes` and `StopNodes` are no-ops in the Omni provider.
 
-**Note:** Omni system tests are not part of the default CI workflows. This section only applies to running Omni provider tests locally: those tests are not triggered unless both the `OMNI_SERVICE_ACCOUNT_KEY` and Omni endpoint are configured.
+**CI integration:** Omni system tests run as part of the `system-test` matrix in `.github/workflows/ci.yaml` alongside Docker and Hetzner tests. They execute a full cluster lifecycle (`create` → `update` → `delete`) against a live Omni endpoint. Omni test failures **block merge** (they are not optional). The following secrets and variables must be configured in the repository for CI:
+
+- **`secrets.OMNI_SERVICE_ACCOUNT_KEY`** – Repository secret containing the Omni service account key.
+- **`vars.OMNI_ENDPOINT`** – Repository variable containing the Omni instance URL.
+- **`KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS`** – Set to `ksail` in the workflow; specifies the Omni machine class used for test nodes.
+
+**Note:** CI includes a safety-net cleanup job (`cleanup-omni`) that runs after system tests and tears down any KSail test clusters remaining in Omni. This is implemented as a GitHub Action at `.github/actions/cleanup-omni/action.yaml` and is not intended for local execution.
 
 #### Scheduled Workflows
 
