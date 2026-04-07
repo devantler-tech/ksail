@@ -799,9 +799,9 @@ replace (
 	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
 
 	// loft-sh/log uses tablewriter v0.0.5 API which is incompatible with v1.x
-	// required by k9s, grype, and syft. This local fork patches table/table.go
-	// for the v1.x API.
-	github.com/loft-sh/log => ./patches/loft-sh-log
+	// required by k9s, grype, and syft. This replace can be removed once
+	// https://github.com/loft-sh/log/pull/3 is merged and tagged.
+	github.com/loft-sh/log => github.com/devantler/log v0.0.0-20260407144227-16cc61ebdb79
 )
 
 tool (
