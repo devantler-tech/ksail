@@ -68,7 +68,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@182c89382b76125ac25e7116e09ad0c02673b72e # v0.67.0
+        uses: github/gh-aw-actions/setup@03e31e064a68e8d5ad890c92f303cfb5a3536006 # v0.67.2
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
@@ -113,7 +113,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@182c89382b76125ac25e7116e09ad0c02673b72e # v0.67.0
+        uses: github/gh-aw-actions/setup@03e31e064a68e8d5ad890c92f303cfb5a3536006 # v0.67.2
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
@@ -128,7 +128,7 @@ jobs:
             await main();
 
       - name: Install gh-aw
-        uses: github/gh-aw-actions/setup-cli@182c89382b76125ac25e7116e09ad0c02673b72e # v0.67.0
+        uses: github/gh-aw-actions/setup-cli@03e31e064a68e8d5ad890c92f303cfb5a3536006 # v0.67.2
         with:
           version: v0.67.0
 
@@ -164,7 +164,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@182c89382b76125ac25e7116e09ad0c02673b72e # v0.67.0
+        uses: github/gh-aw-actions/setup@03e31e064a68e8d5ad890c92f303cfb5a3536006 # v0.67.2
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
@@ -204,7 +204,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@182c89382b76125ac25e7116e09ad0c02673b72e # v0.67.0
+        uses: github/gh-aw-actions/setup@03e31e064a68e8d5ad890c92f303cfb5a3536006 # v0.67.2
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
@@ -219,7 +219,7 @@ jobs:
             await main();
 
       - name: Install gh-aw
-        uses: github/gh-aw-actions/setup-cli@182c89382b76125ac25e7116e09ad0c02673b72e # v0.67.0
+        uses: github/gh-aw-actions/setup-cli@03e31e064a68e8d5ad890c92f303cfb5a3536006 # v0.67.2
         with:
           version: v0.67.0
 
