@@ -202,7 +202,7 @@ type permissionResponse struct {
 // after queuing don't affect the prompt's execution.
 type pendingPrompt struct {
 	content         string   // the prompt text
-	chatMode        ChatMode // agent/plan mode when queued
+	chatMode        ChatMode // chat mode when queued (interactive/plan/autopilot)
 	model           string   // model ID when queued
 	reasoningEffort string   // reasoning effort when queued (if applicable)
 	seq             uint64   // insertion sequence number for global ordering
@@ -959,7 +959,7 @@ func (m *Model) dropNextPendingPrompt() {
 // server of the mode change so it can enforce mode-specific behavior
 // (e.g., blocking tools in plan mode).
 func (m *Model) applyMode(mode ChatMode) error {
-	if m.session != nil {
+	if m.session != nil && m.session.RPC != nil {
 		_, err := m.session.RPC.Mode.Set(m.ctx, &rpc.SessionModeSetParams{
 			Mode: mode.ToSDKMode(),
 		})

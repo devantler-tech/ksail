@@ -355,3 +355,44 @@ func TestPermissionModal_AllowThisOperation(t *testing.T) {
 		t.Error("expected 'Allow this operation?' prompt in permission modal")
 	}
 }
+
+// TestPermissionModal_AllowAlwaysSwitchesToAutopilot tests that pressing 'a' on the
+// permission prompt switches to Autopilot mode and approves the request.
+func TestPermissionModal_AllowAlwaysSwitchesToAutopilot(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetChatMode(model, chat.InteractiveMode)
+
+	responseChan := make(chan bool, 1)
+	chat.ExportSetPendingPermission(model, "Terminal", "echo hello", "", responseChan)
+
+	// Press 'a' to allow always
+	var updatedModel tea.Model = model
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+
+	chatModel, ok := updatedModel.(*chat.Model)
+	if !ok {
+		t.Fatal("expected *chat.Model type assertion to succeed")
+	}
+
+	// Verify mode switched to Autopilot
+	if chat.ExportGetChatMode(chatModel) != chat.AutopilotMode {
+		t.Errorf("expected AutopilotMode after 'a', got %v", chat.ExportGetChatMode(chatModel))
+	}
+
+	// Verify the permission was approved
+	select {
+	case approved := <-responseChan:
+		if !approved {
+			t.Error("expected permission to be approved after 'a'")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for permission response")
+	}
+
+	// Verify pending permission was cleared
+	if chat.ExportHasPendingPermission(chatModel) {
+		t.Error("expected pending permission to be cleared after 'a'")
+	}
+}

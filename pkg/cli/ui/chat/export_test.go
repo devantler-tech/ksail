@@ -118,6 +118,11 @@ var ExportSetChatMode = func(m *Model, mode ChatMode) {
 	m.chatMode = mode
 }
 
+// ExportGetChatMode returns Model.chatMode for testing.
+var ExportGetChatMode = func(m *Model) ChatMode {
+	return m.chatMode
+}
+
 // ExportSetLastUsageModel sets Model.lastUsageModel for testing.
 var ExportSetLastUsageModel = func(m *Model, model string) {
 	m.lastUsageModel = model

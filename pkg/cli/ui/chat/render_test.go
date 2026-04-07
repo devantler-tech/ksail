@@ -24,6 +24,7 @@ func TestStatusBar_ModeDisplay(t *testing.T) {
 			expected: "</> interactive",
 		},
 		{name: "plan mode in status", mode: chat.PlanMode, expected: "\u2261 plan"},
+		{name: "autopilot mode in status", mode: chat.AutopilotMode, expected: "⚡ autopilot"},
 	}
 
 	for _, testCase := range tests {

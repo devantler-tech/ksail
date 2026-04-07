@@ -434,7 +434,7 @@ func (m *Model) resetStreamingState() {
 }
 
 // sessionEventsToMessages converts Copilot SessionEvents to internal messages.
-// It also restores per-message metadata (like agentMode) from the session metadata.
+// It also restores per-message metadata (like chatMode) from the session metadata.
 func (m *Model) sessionEventsToMessages(
 	events []copilot.SessionEvent,
 	metadata *SessionMetadata,
