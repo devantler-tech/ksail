@@ -186,7 +186,8 @@ func pollConnectivityPod(
 	case corev1.PodFailed:
 		return false, true, nil
 	case corev1.PodPending:
-		if pullErr := checkPendingPodImagePull(pod); pullErr != nil {
+		pullErr := checkPendingPodImagePull(pod)
+		if pullErr != nil {
 			return false, true, pullErr
 		}
 	case corev1.PodRunning, corev1.PodUnknown:
