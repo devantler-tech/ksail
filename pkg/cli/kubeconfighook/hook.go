@@ -5,16 +5,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	omniprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -50,38 +49,35 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 		return
 	}
 
-	if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
 		return
 	}
 
-	if !IsTokenExpired(kubeconfigPath) {
+	if _, err := os.Stat(canonicalPath); os.IsNotExist(err) {
 		return
 	}
 
-	clusterName := resolveClusterName(cfg, distCfg, kubeconfigPath)
+	if !IsTokenExpired(canonicalPath) {
+		return
+	}
+
+	clusterName := resolveClusterName(distCfg, canonicalPath)
 	if clusterName == "" {
 		return
 	}
 
-	err = refreshKubeconfig(cmd.Context(), cfg.Spec.Cluster.Omni, clusterName, kubeconfigPath)
+	err = refreshKubeconfig(cmd.Context(), cfg.Spec.Cluster.Omni, clusterName, canonicalPath)
 	if err != nil {
 		notify.Warningf(cmd.OutOrStderr(), "failed to refresh Omni kubeconfig: %v", err)
 	}
 }
 
 // loadConfigSilently loads the KSail config without producing output.
-// Returns nil for both values if no config is found or loading fails.
+// Uses [kubeconfig.NewSilentConfigManager] for flag resolution to avoid
+// duplicating that boilerplate.
 func loadConfigSilently(cmd *cobra.Command) (*v1alpha1.Cluster, *clusterprovisioner.DistributionConfig) {
-	var configFile string
-
-	if cmd != nil {
-		cfgPath, err := flags.GetConfigPath(cmd)
-		if err == nil {
-			configFile = cfgPath
-		}
-	}
-
-	cfgManager := ksailconfigmanager.NewConfigManager(io.Discard, configFile)
+	cfgManager := kubeconfig.NewSilentConfigManager(cmd)
 
 	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
 	if err != nil || cfg == nil || !cfgManager.IsConfigFileFound() {
@@ -94,7 +90,6 @@ func loadConfigSilently(cmd *cobra.Command) (*v1alpha1.Cluster, *clusterprovisio
 // resolveClusterName determines the Omni cluster name from available sources.
 // Priority: distribution config → kubeconfig current context.
 func resolveClusterName(
-	_ *v1alpha1.Cluster,
 	distCfg *clusterprovisioner.DistributionConfig,
 	kubeconfigPath string,
 ) string {
@@ -134,6 +129,8 @@ func clusterNameFromKubeconfig(kubeconfigPath string) string {
 }
 
 // refreshKubeconfig creates an Omni client and fetches a fresh kubeconfig.
+// The write is atomic (temp file + rename) to prevent corruption if the
+// process is interrupted.
 func refreshKubeconfig(
 	ctx context.Context,
 	omniOpts v1alpha1.OptionsOmni,
@@ -156,10 +153,46 @@ func refreshKubeconfig(
 		return fmt.Errorf("fetch kubeconfig: %w", err)
 	}
 
-	// kubeconfigPath is already expanded by GetKubeconfigPathFromConfig.
-	//nolint:gosec // kubeconfig must be user-readable
-	if err := os.WriteFile(kubeconfigPath, data, 0o600); err != nil {
+	if err := atomicWriteFile(kubeconfigPath, data, 0o600); err != nil {
 		return fmt.Errorf("write kubeconfig: %w", err)
+	}
+
+	return nil
+}
+
+// atomicWriteFile writes data to a temp file in the same directory and
+// renames it to the target path, ensuring an all-or-nothing write.
+func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+
+	tmp, err := os.CreateTemp(dir, ".kubeconfig-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+
+	tmpPath := tmp.Name()
+
+	defer func() {
+		// Clean up temp file on any failure path.
+		_ = os.Remove(tmpPath)
+	}()
+
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("set permissions: %w", err)
+	}
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write data: %w", err)
+	}
+
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("rename temp file: %w", err)
 	}
 
 	return nil

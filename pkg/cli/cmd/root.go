@@ -46,8 +46,9 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	)
 
 	// Transparently refresh expired Omni kubeconfig tokens before any command.
-	// Workload commands have their own PersistentPreRunE (which overrides this one),
-	// so they wire the hook separately via wrapWithKubeconfigResolution.
+	// Cobra does not chain PersistentPreRunE: when a child command defines its own
+	// (e.g. workload via wrapWithKubeconfigResolution), the child's hook replaces
+	// this one. Workload commands wire the hook separately in their own hook.
 	cmd.PersistentPreRunE = func(child *cobra.Command, _ []string) error {
 		kubeconfighook.MaybeRefreshOmniKubeconfig(child)
 		return nil

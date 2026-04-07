@@ -233,14 +233,14 @@ func TestResolveClusterName(t *testing.T) {
 		dir := t.TempDir()
 		path := writeKubeconfig(t, dir, "omni-cluster", "some-token")
 
-		name := resolveClusterName(nil, nil, path)
+		name := resolveClusterName(nil, path)
 		assert.Equal(t, "omni-cluster", name)
 	})
 
 	t.Run("EmptyWhenNoSources", func(t *testing.T) {
 		t.Parallel()
 
-		name := resolveClusterName(nil, nil, "/nonexistent/kubeconfig")
+		name := resolveClusterName(nil, "/nonexistent/kubeconfig")
 		assert.Empty(t, name)
 	})
 }

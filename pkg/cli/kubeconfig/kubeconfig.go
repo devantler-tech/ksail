@@ -50,7 +50,23 @@ func GetKubeconfigPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
 // rather than propagating the error. This makes it suitable for scenarios where a best-effort
 // path is acceptable.
 func GetKubeconfigPathSilently(cmd *cobra.Command) string {
-	// Resolve --config flag without registering additional flags on cmd.
+	cfgManager := NewSilentConfigManager(cmd)
+
+	kubeconfigPath, err := getKubeconfigPath(cfgManager)
+	if err != nil {
+		// If we can't load config, use default kubeconfig
+		return k8s.DefaultKubeconfigPath()
+	}
+
+	return kubeconfigPath
+}
+
+// NewSilentConfigManager creates a config manager from the command's --config
+// flag with all output suppressed via [io.Discard].
+//
+// This is a shared helper used by both [GetKubeconfigPathSilently] and the
+// kubeconfighook package to avoid duplicating flag-resolution boilerplate.
+func NewSilentConfigManager(cmd *cobra.Command) *ksailconfigmanager.ConfigManager {
 	var configFile string
 
 	if cmd != nil {
@@ -60,15 +76,7 @@ func GetKubeconfigPathSilently(cmd *cobra.Command) string {
 		}
 	}
 
-	cfgManager := ksailconfigmanager.NewConfigManager(io.Discard, configFile)
-
-	kubeconfigPath, err := getKubeconfigPath(cfgManager)
-	if err != nil {
-		// If we can't load config, use default kubeconfig
-		return k8s.DefaultKubeconfigPath()
-	}
-
-	return kubeconfigPath
+	return ksailconfigmanager.NewConfigManager(io.Discard, configFile)
 }
 
 // getKubeconfigPath loads the KSail configuration using the provided manager
