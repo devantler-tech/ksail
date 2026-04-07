@@ -150,47 +150,50 @@ func waitForConnectivityPodCompletion(
 		case <-podCtx.Done():
 			return false, nil // per-attempt timeout; retry on next poll
 		case <-ticker.C:
-			ready, err := pollConnectivityPod(podCtx, clientset)
-			if err != nil || ready {
-				return ready, err
+			succeeded, done, err := pollConnectivityPod(podCtx, clientset)
+			if done || err != nil {
+				return succeeded, err
 			}
 		}
 	}
 }
 
 // pollConnectivityPod fetches the connectivity check pod and evaluates its
-// status. Returns (true, nil) on success, (false, nil) to keep polling,
-// or (false, error) on non-recoverable errors.
+// status. Returns:
+//   - (true, true, nil) — pod succeeded; connectivity confirmed
+//   - (false, true, nil) — pod reached terminal failure; caller should exit
+//     and let the outer PollForReadiness retry
+//   - (false, true, err) — non-recoverable error; caller should propagate
+//   - (false, false, nil) — pod still in progress; caller should keep polling
 func pollConnectivityPod(
 	ctx context.Context,
 	clientset kubernetes.Interface,
-) (bool, error) {
+) (succeeded bool, done bool, err error) {
 	pod, getErr := clientset.CoreV1().Pods(connectivityPodNS).Get(
 		ctx, connectivityPodName, metav1.GetOptions{},
 	)
 	if getErr != nil {
 		if isTransientPodError(getErr) {
-			return false, nil
+			return false, true, nil
 		}
 
-		return false, fmt.Errorf("get connectivity check pod: %w", getErr)
+		return false, true, fmt.Errorf("get connectivity check pod: %w", getErr)
 	}
 
 	switch pod.Status.Phase {
 	case corev1.PodSucceeded:
-		return true, nil
+		return true, true, nil
 	case corev1.PodFailed:
-		return false, nil
+		return false, true, nil
 	case corev1.PodPending:
-		err := checkPendingPodImagePull(pod)
-		if err != nil {
-			return false, err
+		if pullErr := checkPendingPodImagePull(pod); pullErr != nil {
+			return false, true, pullErr
 		}
 	case corev1.PodRunning, corev1.PodUnknown:
 		// Still Running or Unknown — keep waiting.
 	}
 
-	return false, nil
+	return false, false, nil
 }
 
 // isTransientPodError returns true for Kubernetes API errors that are expected
