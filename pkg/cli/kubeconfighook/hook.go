@@ -80,6 +80,15 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 func resolveOmniKubeconfigPath(
 	cmd *cobra.Command,
 ) (*v1alpha1.Cluster, *clusterprovisioner.DistributionConfig, string) {
+	// If the user explicitly passed --kubeconfig, they are managing the
+	// kubeconfig themselves — skip auto-refresh.
+	if cmd != nil {
+		kubeconfigFlag := cmd.Flags().Lookup("kubeconfig")
+		if kubeconfigFlag != nil && cmd.Flags().Changed("kubeconfig") {
+			return nil, nil, ""
+		}
+	}
+
 	cfgManager := kubeconfig.NewSilentConfigManager(cmd)
 
 	cfg, loadErr := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
