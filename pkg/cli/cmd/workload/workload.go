@@ -2943,17 +2943,8 @@ func NewWaitCmd() *cobra.Command {
 var errNotDirectory = errors.New("watch path is not a directory")
 
 // NewWatchCmd creates the workload watch command.
-func NewWatchCmd() *cobra.Command {
-	var (
-		pathFlag     string
-		initialApply bool
-		debugFlag    bool
-	)
-
-	cmd := &cobra.Command{
-		Use:   "watch",
-		Short: "Watch for file changes and auto-apply workloads",
-		Long: `Watch a directory for file changes and automatically apply workloads.
+// watchCmdLong is the long description for the watch subcommand.
+const watchCmdLong = `Watch a directory for file changes and automatically apply workloads.
 
 When files in the watched directory are created, modified, or deleted,
 the command debounces changes (~500ms) then scopes the apply to the
@@ -2980,7 +2971,19 @@ Examples:
   ksail workload watch --initial-apply
 
   # Watch a custom directory
-  ksail workload watch --path=./manifests`,
+  ksail workload watch --path=./manifests`
+
+func NewWatchCmd() *cobra.Command {
+	var (
+		pathFlag     string
+		initialApply bool
+		debugFlag    bool
+	)
+
+	cmd := &cobra.Command{
+		Use:          "watch",
+		Short:        "Watch for file changes and auto-apply workloads",
+		Long:         watchCmdLong,
 		SilenceUsage: true,
 		Args:         cobra.NoArgs,
 		Annotations: map[string]string{
@@ -3741,7 +3744,6 @@ func pollForChanges(ctx context.Context, dir string, applyCh chan string, debug 
 
 	logPollSnapshot(dir, snapshot, debug)
 
-
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
@@ -3762,25 +3764,42 @@ func pollForChanges(ctx context.Context, dir string, applyCh chan string, debug 
 				logPollTick(tickCount, dir, snapshot, debug)
 			}
 
-			changed := detectChangedFile(dir, snapshot)
-			if changed == "" {
-				continue
-			}
-
-			if debug {
-				fmt.Fprintf(os.Stderr, "  poll: change on tick %d: %s\n", tickCount, changed)
-			}
-
-			// Blocking send: guaranteed delivery to the apply worker.
-			select {
-			case applyCh <- changed:
-				if debug {
-					fmt.Fprintf(os.Stderr, "  poll: enqueued for apply\n")
-				}
-			case <-ctx.Done():
+			if !pollHandleChange(ctx, dir, snapshot, applyCh, tickCount, debug) {
 				return
 			}
 		}
+	}
+}
+
+// pollHandleChange detects and enqueues a changed file for the apply worker.
+// Returns false if the context was cancelled during the blocking send.
+func pollHandleChange(
+	ctx context.Context,
+	dir string,
+	snapshot fileSnapshot,
+	applyCh chan string,
+	tickCount int,
+	debug bool,
+) bool {
+	changed := detectChangedFile(dir, snapshot)
+	if changed == "" {
+		return true
+	}
+
+	if debug {
+		fmt.Fprintf(os.Stderr, "  poll: change on tick %d: %s\n", tickCount, changed)
+	}
+
+	// Blocking send: guaranteed delivery to the apply worker.
+	select {
+	case applyCh <- changed:
+		if debug {
+			fmt.Fprintf(os.Stderr, "  poll: enqueued for apply\n")
+		}
+
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 
