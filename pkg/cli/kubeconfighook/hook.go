@@ -198,6 +198,18 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 
 	renameErr := os.Rename(tmpPath, path)
 	if renameErr != nil {
+		// On Windows, os.Rename may fail when the destination exists.
+		// Mirror the pattern in pkg/cli/cmd/cluster/cluster.go: remove
+		// the target and retry.
+		_, statErr := os.Stat(path)
+		if statErr == nil {
+			_ = os.Remove(path)
+
+			renameErr = os.Rename(tmpPath, path)
+		}
+	}
+
+	if renameErr != nil {
 		return fmt.Errorf("rename temp file: %w", renameErr)
 	}
 
