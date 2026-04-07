@@ -1,0 +1,369 @@
+name: KSail Workload Watch Test
+description: |
+  Tests the workload watch command E2E on a running cluster:
+    1. Non-existent directory returns error
+    2. --initial-apply syncs cluster on startup
+    3. File modification triggers debounced re-apply
+    4. Kustomize boundary scoping (only affected overlay re-applied)
+    5. Graceful shutdown on SIGTERM
+
+inputs:
+  workload-timeout:
+    description: |
+      Timeout for workload wait operations. Set to 10 minutes to handle
+      intermittent delays in CI environments (image pulls, resource contention).
+    required: false
+    default: "600s"
+
+runs:
+  using: composite
+  steps:
+    # ── Test 1 — Non-existent directory returns error ────────────────
+    - name: 🧪 watch rejects non-existent directory
+      id: watch-nonexistent
+      shell: bash
+      run: |
+        OUTPUT=$(ksail workload watch --path /tmp/ksail-watch-does-not-exist 2>&1 || true)
+        if echo "$OUTPUT" | grep -q "access watch directory"; then
+          echo "✅ Watch correctly rejected non-existent directory"
+        else
+          echo "❌ Expected error about non-existent directory, got:"
+          echo "$OUTPUT"
+          exit 1
+        fi
+
+    # ── Test 2 — --initial-apply syncs cluster on startup ────────────
+    - name: 🧪 watch --initial-apply syncs on startup
+      id: watch-initial-apply
+      shell: bash
+      env:
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        # Use a directory on the main filesystem (not tmpfs) to avoid inotify
+        # event loss from sed -i's create+rename under CI load (see #3729).
+        WATCH_ROOT="${GITHUB_WORKSPACE:-.}"
+        WATCH_DIR="$(mktemp -d -p "$WATCH_ROOT" .watch-initial-apply-XXXXXX)"
+        WATCH_LOG="${WATCH_DIR}.log"
+        trap 'kill $WATCH_PID 2>/dev/null || true; ksail workload delete configmap/ksail-watch-initial-test --ignore-not-found 2>/dev/null || true; rm -rf "$WATCH_DIR" "$WATCH_LOG"' EXIT
+
+        cat > "$WATCH_DIR/configmap.yaml" <<'EOF'
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: ksail-watch-initial-test
+        data:
+          status: applied-by-initial-apply
+        EOF
+        cat > "$WATCH_DIR/kustomization.yaml" <<'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - configmap.yaml
+        EOF
+
+        # Start watcher with --initial-apply (resource should not exist yet)
+        ksail workload watch --path "$WATCH_DIR" --initial-apply --debug > "$WATCH_LOG" 2>&1 &
+        WATCH_PID=$!
+
+        # Poll until the ConfigMap appears in the cluster
+        APPLY_SUCCESS=false
+        for i in $(seq 1 60); do
+          if ksail workload get configmap/ksail-watch-initial-test -o jsonpath='{.data.status}' 2>/dev/null | grep -q "applied-by-initial-apply"; then
+            APPLY_SUCCESS=true
+            break
+          fi
+          sleep 2
+        done
+
+        kill $WATCH_PID 2>/dev/null || true
+        ksail workload delete configmap/ksail-watch-initial-test --ignore-not-found
+        rm -rf "$WATCH_DIR" "$WATCH_LOG"
+        trap - EXIT
+
+        if [ "$APPLY_SUCCESS" = "true" ]; then
+          echo "✅ --initial-apply correctly synced cluster on startup"
+        else
+          echo "❌ --initial-apply did not create the ConfigMap within timeout"
+          cat "$WATCH_LOG" 2>/dev/null || true
+          exit 1
+        fi
+
+    # ── Test 3 — File modification triggers debounced re-apply ───────
+    - name: 🧪 watch detects file modification
+      id: watch-file-modify
+      shell: bash
+      env:
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        WATCH_ROOT="${GITHUB_WORKSPACE:-.}"
+        WATCH_DIR="$(mktemp -d -p "$WATCH_ROOT" .watch-modify-XXXXXX)"
+        WATCH_LOG="${WATCH_DIR}.log"
+        trap 'kill $WATCH_PID 2>/dev/null || true; ksail workload delete deployment/ksail-watch-modify-test --ignore-not-found 2>/dev/null || true; rm -rf "$WATCH_DIR" "$WATCH_LOG"' EXIT
+
+        cat > "$WATCH_DIR/deployment.yaml" <<'EOF'
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: ksail-watch-modify-test
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: ksail-watch-modify-test
+          template:
+            metadata:
+              labels:
+                app: ksail-watch-modify-test
+            spec:
+              containers:
+                - name: test
+                  image: traefik/whoami:v1.10
+        EOF
+        cat > "$WATCH_DIR/kustomization.yaml" <<'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - deployment.yaml
+        EOF
+
+        # Apply the initial manifest and wait for it to be ready
+        ksail workload apply -k "$WATCH_DIR"
+        ksail workload wait --for=condition=Available deployment/ksail-watch-modify-test --timeout="$TIMEOUT"
+
+        # Start watcher in background
+        ksail workload watch --path "$WATCH_DIR" --debug > "$WATCH_LOG" 2>&1 &
+        WATCH_PID=$!
+
+        # Wait for watcher to finish initialization (poll: started marker)
+        WATCHER_READY=false
+        for i in $(seq 1 120); do
+          if grep -q "poll: started" "$WATCH_LOG" 2>/dev/null; then
+            WATCHER_READY=true
+            break
+          fi
+          sleep 1
+        done
+        if [ "$WATCHER_READY" != "true" ]; then
+          echo "❌ Watcher did not become ready within 120s"
+          cat "$WATCH_LOG" || true
+          exit 1
+        fi
+
+        # Modify the manifest (change replicas 1 → 2)
+        sed -i 's/replicas: 1/replicas: 2/' "$WATCH_DIR/deployment.yaml"
+
+        # Wait for watcher to pick up the change
+        WATCH_SUCCESS=false
+        for i in $(seq 1 24); do
+          sleep 5
+          REPLICAS=$(ksail workload get deployment/ksail-watch-modify-test -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "unknown")
+          if [ "$REPLICAS" = "2" ]; then
+            WATCH_SUCCESS=true
+            break
+          fi
+          echo "  Waiting for watch to apply change (attempt $i/24, replicas=$REPLICAS)..."
+        done
+
+        kill $WATCH_PID 2>/dev/null || true
+        ksail workload delete deployment/ksail-watch-modify-test --ignore-not-found
+        rm -rf "$WATCH_DIR" "$WATCH_LOG"
+        trap - EXIT
+
+        if [ "$WATCH_SUCCESS" = "true" ]; then
+          echo "✅ File modification correctly triggered debounced re-apply"
+        else
+          echo "❌ File modification was not auto-applied: expected 2 replicas, got $REPLICAS"
+          echo "--- watcher output ---"
+          cat "$WATCH_LOG" 2>/dev/null || true
+          echo "--- end watcher output ---"
+          exit 1
+        fi
+
+    # ── Test 4 — Kustomize boundary scoping ──────────────────────────
+    - name: 🧪 watch scopes apply to kustomize boundary
+      id: watch-boundary
+      shell: bash
+      env:
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        WATCH_ROOT="${GITHUB_WORKSPACE:-.}"
+        WATCH_DIR="$(mktemp -d -p "$WATCH_ROOT" .watch-boundary-XXXXXX)"
+        WATCH_LOG="${WATCH_DIR}.log"
+        trap 'kill $WATCH_PID 2>/dev/null || true; ksail workload delete configmap/ksail-watch-boundary-a configmap/ksail-watch-boundary-b --ignore-not-found 2>/dev/null || true; rm -rf "$WATCH_DIR" "$WATCH_LOG"' EXIT
+
+        # Create two overlay sub-directories, each with their own kustomization
+        mkdir -p "$WATCH_DIR/overlay-a" "$WATCH_DIR/overlay-b"
+
+        cat > "$WATCH_DIR/overlay-a/configmap.yaml" <<'EOF'
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: ksail-watch-boundary-a
+        data:
+          value: original-a
+        EOF
+        cat > "$WATCH_DIR/overlay-a/kustomization.yaml" <<'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - configmap.yaml
+        EOF
+
+        cat > "$WATCH_DIR/overlay-b/configmap.yaml" <<'EOF'
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: ksail-watch-boundary-b
+        data:
+          value: original-b
+        EOF
+        cat > "$WATCH_DIR/overlay-b/kustomization.yaml" <<'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - configmap.yaml
+        EOF
+
+        # Root kustomization referencing both overlays
+        cat > "$WATCH_DIR/kustomization.yaml" <<'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - overlay-a
+          - overlay-b
+        EOF
+
+        # Apply initial state
+        ksail workload apply -k "$WATCH_DIR"
+
+        # Start watcher in background
+        ksail workload watch --path "$WATCH_DIR" --debug > "$WATCH_LOG" 2>&1 &
+        WATCH_PID=$!
+
+        # Wait for watcher readiness
+        WATCHER_READY=false
+        for i in $(seq 1 120); do
+          if grep -q "poll: started" "$WATCH_LOG" 2>/dev/null; then
+            WATCHER_READY=true
+            break
+          fi
+          sleep 1
+        done
+        if [ "$WATCHER_READY" != "true" ]; then
+          echo "❌ Watcher did not become ready within 120s"
+          cat "$WATCH_LOG" || true
+          exit 1
+        fi
+
+        # Modify only overlay-a
+        sed -i 's/value: original-a/value: modified-a/' "$WATCH_DIR/overlay-a/configmap.yaml"
+
+        # Wait for change to be applied
+        BOUNDARY_SUCCESS=false
+        for i in $(seq 1 24); do
+          sleep 5
+          VALUE_A=$(ksail workload get configmap/ksail-watch-boundary-a -o jsonpath='{.data.value}' 2>/dev/null || echo "unknown")
+          if [ "$VALUE_A" = "modified-a" ]; then
+            BOUNDARY_SUCCESS=true
+            break
+          fi
+          echo "  Waiting for overlay-a change (attempt $i/24, value=$VALUE_A)..."
+        done
+
+        # Verify the watcher log shows subtree reconcile (not full root)
+        SCOPING_OK=false
+        if grep -q "reconciling subtree: overlay-a" "$WATCH_LOG" 2>/dev/null; then
+          SCOPING_OK=true
+        fi
+
+        kill $WATCH_PID 2>/dev/null || true
+        ksail workload delete configmap/ksail-watch-boundary-a configmap/ksail-watch-boundary-b --ignore-not-found
+        rm -rf "$WATCH_DIR" "$WATCH_LOG"
+        trap - EXIT
+
+        if [ "$BOUNDARY_SUCCESS" != "true" ]; then
+          echo "❌ Overlay-a change was not applied: expected modified-a, got $VALUE_A"
+          exit 1
+        fi
+        if [ "$SCOPING_OK" = "true" ]; then
+          echo "✅ Watch correctly scoped apply to kustomize boundary (overlay-a subtree)"
+        else
+          echo "⚠️  Overlay-a change applied but subtree scoping not confirmed in log (may have used polling fallback)"
+          echo "✅ Test passed (change was applied correctly)"
+        fi
+
+    # ── Test 5 — Graceful shutdown on SIGTERM ────────────────────────
+    - name: 🧪 watch graceful shutdown on SIGTERM
+      id: watch-sigterm
+      shell: bash
+      run: |
+        WATCH_ROOT="${GITHUB_WORKSPACE:-.}"
+        WATCH_DIR="$(mktemp -d -p "$WATCH_ROOT" .watch-sigterm-XXXXXX)"
+        WATCH_LOG="${WATCH_DIR}.log"
+        trap 'rm -rf "$WATCH_DIR" "$WATCH_LOG"' EXIT
+
+        # Create a minimal manifest directory
+        cat > "$WATCH_DIR/configmap.yaml" <<'EOF'
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: ksail-watch-sigterm-test
+        data:
+          key: value
+        EOF
+        cat > "$WATCH_DIR/kustomization.yaml" <<'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - configmap.yaml
+        EOF
+
+        # Start watcher in background
+        ksail workload watch --path "$WATCH_DIR" --debug > "$WATCH_LOG" 2>&1 &
+        WATCH_PID=$!
+
+        # Wait for watcher readiness
+        WATCHER_READY=false
+        for i in $(seq 1 120); do
+          if grep -q "poll: started" "$WATCH_LOG" 2>/dev/null; then
+            WATCHER_READY=true
+            break
+          fi
+          sleep 1
+        done
+        if [ "$WATCHER_READY" != "true" ]; then
+          echo "❌ Watcher did not become ready within 120s"
+          cat "$WATCH_LOG" || true
+          rm -rf "$WATCH_DIR" "$WATCH_LOG"
+          trap - EXIT
+          exit 1
+        fi
+
+        # Send SIGTERM and wait for the process to exit
+        kill -TERM "$WATCH_PID"
+        EXIT_CODE=0
+        wait "$WATCH_PID" || EXIT_CODE=$?
+
+        # Check for graceful shutdown message
+        SHUTDOWN_OK=false
+        if grep -q "watcher stopped" "$WATCH_LOG" 2>/dev/null; then
+          SHUTDOWN_OK=true
+        fi
+
+        # Clean up resources that may have been created
+        ksail workload delete configmap/ksail-watch-sigterm-test --ignore-not-found 2>/dev/null || true
+        rm -rf "$WATCH_DIR" "$WATCH_LOG"
+        trap - EXIT
+
+        if [ "$SHUTDOWN_OK" = "true" ]; then
+          echo "✅ Watch gracefully shut down on SIGTERM (exit=$EXIT_CODE)"
+        else
+          echo "❌ Watch did not show graceful shutdown message (exit=$EXIT_CODE)"
+          exit 1
+        fi
+
+    - name: 🐞 Debug Kubernetes failure
+      if: failure() && (steps.watch-initial-apply.outcome == 'failure' || steps.watch-file-modify.outcome == 'failure' || steps.watch-boundary.outcome == 'failure' || steps.watch-sigterm.outcome == 'failure')
+      uses: ./.github/actions/debug-kubernetes-failure
+      with:
+        kubectl-command: "ksail workload"

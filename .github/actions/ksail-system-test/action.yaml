@@ -186,6 +186,12 @@ runs:
         ghcr-token: ${{ inputs.ghcr-token }}
         gitops-path: ${{ inputs.gitops-path }}
 
+    - name: 🧪 Workload Watch Tests
+      id: workload-watch-tests
+      uses: ./.github/actions/ksail-test-workload-watch
+      with:
+        workload-timeout: ${{ inputs.workload-timeout }}
+
     - name: 🧪 workload gen — API-dependent (clusterrole, role)
       id: online-gen
       shell: bash
@@ -280,7 +286,7 @@ runs:
     # ── Phase 5 — Debug ──────────────────────────────────────────────
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
+      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-watch-tests.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
