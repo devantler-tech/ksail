@@ -73,14 +73,14 @@ func TestModeToolExecution(t *testing.T) {
 	}
 }
 
-// TestModeToggle verifies that mode toggling cycles correctly between Agent and Plan.
+// TestModeToggle verifies that mode toggling cycles correctly: Interactive → Plan → Autopilot → Interactive.
 func TestModeToggle(t *testing.T) {
 	t.Parallel()
 
-	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode)
+	chatModeRef := chatui.NewChatModeRef(chatui.InteractiveMode)
 
-	if chatModeRef.Mode() != chatui.AgentMode {
-		t.Error("Expected initial mode to be AgentMode")
+	if chatModeRef.Mode() != chatui.InteractiveMode {
+		t.Error("Expected initial mode to be InteractiveMode")
 	}
 
 	chatModeRef.SetMode(chatModeRef.Mode().Next())
@@ -91,8 +91,14 @@ func TestModeToggle(t *testing.T) {
 
 	chatModeRef.SetMode(chatModeRef.Mode().Next())
 
-	if chatModeRef.Mode() != chatui.AgentMode {
-		t.Errorf("Expected AgentMode after second toggle, got %v", chatModeRef.Mode())
+	if chatModeRef.Mode() != chatui.AutopilotMode {
+		t.Errorf("Expected AutopilotMode after second toggle, got %v", chatModeRef.Mode())
+	}
+
+	chatModeRef.SetMode(chatModeRef.Mode().Next())
+
+	if chatModeRef.Mode() != chatui.InteractiveMode {
+		t.Errorf("Expected InteractiveMode after third toggle, got %v", chatModeRef.Mode())
 	}
 }
 

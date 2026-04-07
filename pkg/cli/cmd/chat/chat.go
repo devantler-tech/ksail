@@ -1353,24 +1353,23 @@ func setupChatTools(
 	eventChan chan tea.Msg,
 	outputChan chan toolgen.OutputChunk,
 	sessionLog *toolgen.SessionLogRef,
-) (*chatui.ChatModeRef, *chatui.YoloModeRef, error) {
+) (*chatui.ChatModeRef, error) {
 	tools, toolMetadata := chatsvc.GetKSailToolMetadata(rootCmd, outputChan, sessionLog)
-	chatModeRef := chatui.NewChatModeRef(chatui.AgentMode)
-	yoloModeRef := chatui.NewYoloModeRef(false)
+	chatModeRef := chatui.NewChatModeRef(chatui.InteractiveMode)
 	tools = WrapToolsWithForceInjection(tools, toolMetadata)
 	sessionConfig.Tools = tools
-	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan, yoloModeRef)
+	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan, chatModeRef)
 
 	allowedRoot, err := os.Getwd()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to determine working directory for sandboxing: %w", err)
+		return nil, fmt.Errorf("failed to determine working directory for sandboxing: %w", err)
 	}
 
 	sessionConfig.Hooks = &copilot.SessionHooks{
 		OnPreToolUse: BuildPreToolUseHook(allowedRoot),
 	}
 
-	return chatModeRef, yoloModeRef, nil
+	return chatModeRef, nil
 }
 
 // buildTUIOnEventHandler creates an OnEvent handler for the TUI that dispatches
@@ -1436,7 +1435,7 @@ func runTUIChat(
 	// Register OnEvent handler to catch session-level events during creation and between turns
 	sessionConfig.OnEvent = buildTUIOnEventHandler(eventChan)
 
-	chatModeRef, yoloModeRef, err := setupChatTools( //nolint:contextcheck
+	chatModeRef, err := setupChatTools( //nolint:contextcheck
 		sessionConfig, rootCmd, eventChan, outputChan, sessionLog,
 	)
 	if err != nil {
@@ -1478,7 +1477,6 @@ func runTUIChat(
 		Timeout:       timeout,
 		EventChan:     eventChan,
 		ChatModeRef:   chatModeRef,
-		YoloModeRef:   yoloModeRef,
 		Theme:         chatui.DefaultThemeConfig(),
 		ToolDisplay:   chatui.DefaultToolDisplayConfig(),
 	})

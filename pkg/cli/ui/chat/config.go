@@ -116,9 +116,6 @@ type Params struct {
 	// ChatModeRef is an optional reference to synchronize chat mode state with tool handlers.
 	ChatModeRef *ChatModeRef
 
-	// YoloModeRef is an optional reference to synchronize YOLO mode state with tool handlers.
-	YoloModeRef *YoloModeRef
-
 	// Theme configures colors, logo, labels, and other visual aspects.
 	// Zero value applies DefaultThemeConfig().
 	Theme ThemeConfig

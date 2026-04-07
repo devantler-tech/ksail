@@ -105,7 +105,6 @@ func (m *Model) helpOverlayParts() []string {
 		m.styles.helpKey.Render(keyArrows) + " history",
 		m.styles.helpKey.Render(keyPageNav) + " scroll",
 		m.styles.helpKey.Render("Tab") + " mode",
-		m.styles.helpKey.Render("^Y") + " auto-approve",
 		m.styles.helpKey.Render("^T") + " tools",
 		m.styles.helpKey.Render("^R") + " copy",
 		m.styles.helpKey.Render("^H") + " sessions",
@@ -335,14 +334,6 @@ func (m *Model) getDefaultHelpParts() []string {
 	}
 
 	parts = append(parts, m.styles.helpKey.Render("Tab")+" "+m.chatMode.Label())
-
-	// Add auto-approve mode hint
-	autoApproveHint := "auto-approve"
-	if m.yoloMode {
-		autoApproveHint = "auto-approve ✓"
-	}
-
-	parts = append(parts, m.styles.helpKey.Render("^Y")+" "+autoApproveHint)
 
 	// Conditionally add tools hint
 	if len(m.toolOrder) > 0 || m.hasToolsInMessages() {

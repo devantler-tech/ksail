@@ -18,8 +18,13 @@ func TestStatusBar_ModeDisplay(t *testing.T) {
 		mode     chat.ChatMode
 		expected string
 	}{
-		{name: "agent mode in status", mode: chat.AgentMode, expected: "</> agent"},
+		{
+			name:     "interactive mode in status",
+			mode:     chat.InteractiveMode,
+			expected: "</> interactive",
+		},
 		{name: "plan mode in status", mode: chat.PlanMode, expected: "\u2261 plan"},
+		{name: "autopilot mode in status", mode: chat.AutopilotMode, expected: "⚡ autopilot"},
 	}
 
 	for _, testCase := range tests {
@@ -37,46 +42,6 @@ func TestStatusBar_ModeDisplay(t *testing.T) {
 				t.Errorf("expected %q in status text, got: %q", testCase.expected, statusText)
 			}
 		})
-	}
-}
-
-// TestStatusBar_YoloMode tests that YOLO mode changes the status bar indicator.
-func TestStatusBar_YoloMode(t *testing.T) {
-	t.Parallel()
-
-	// Render with YOLO mode enabled — status text must contain "auto-approve".
-	yoloModel := chat.NewModel(newTestParams())
-	chat.ExportSetYoloMode(yoloModel, true)
-	yoloStatus := chat.ExportBuildStatusText(yoloModel)
-
-	if !strings.Contains(yoloStatus, "auto-approve") {
-		t.Errorf("expected 'auto-approve' in status text when YOLO is enabled, got: %q", yoloStatus)
-	}
-
-	// Render with YOLO mode disabled — status text must NOT contain "auto-approve".
-	nonYoloModel := chat.NewModel(newTestParams())
-	chat.ExportSetYoloMode(nonYoloModel, false)
-	nonYoloStatus := chat.ExportBuildStatusText(nonYoloModel)
-
-	if strings.Contains(nonYoloStatus, "auto-approve") {
-		t.Errorf(
-			"expected no 'auto-approve' in status text when YOLO is disabled, got: %q",
-			nonYoloStatus,
-		)
-	}
-}
-
-// TestStatusBar_NoYoloMode tests that the YOLO indicator is absent from the status bar when disabled.
-func TestStatusBar_NoYoloMode(t *testing.T) {
-	t.Parallel()
-
-	model := chat.NewModel(newTestParams())
-	chat.ExportSetYoloMode(model, false)
-
-	// Verify it renders without error
-	output := model.View()
-	if output == "" {
-		t.Error("expected non-empty view")
 	}
 }
 

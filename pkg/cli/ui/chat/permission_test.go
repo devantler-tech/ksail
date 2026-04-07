@@ -184,14 +184,14 @@ func TestPermissionKey_DenyWithEsc(t *testing.T) {
 	}
 }
 
-// TestPermissionHandler_YoloAutoApproves tests that YOLO mode auto-approves permissions.
-func TestPermissionHandler_YoloAutoApproves(t *testing.T) {
+// TestPermissionHandler_AutopilotAutoApproves tests that Autopilot mode auto-approves permissions.
+func TestPermissionHandler_AutopilotAutoApproves(t *testing.T) {
 	t.Parallel()
 
-	yoloRef := chat.NewYoloModeRef(true) // YOLO enabled
+	chatModeRef := chat.NewChatModeRef(chat.AutopilotMode) // Autopilot enabled
 	eventChan := make(chan tea.Msg, 10)
 
-	handler := chat.CreateTUIPermissionHandler(eventChan, yoloRef)
+	handler := chat.CreateTUIPermissionHandler(eventChan, chatModeRef)
 
 	result, err := handler(
 		copilot.PermissionRequest{
@@ -205,19 +205,19 @@ func TestPermissionHandler_YoloAutoApproves(t *testing.T) {
 	}
 
 	if result.Kind != copilot.PermissionRequestResultKindApproved {
-		t.Errorf("expected 'approved' in YOLO mode, got %q", result.Kind)
+		t.Errorf("expected 'approved' in Autopilot mode, got %q", result.Kind)
 	}
 }
 
-// TestPermissionHandler_NonYoloSendsToChannel tests that non-YOLO mode sends to event channel
+// TestPermissionHandler_InteractiveSendsToChannel tests that Interactive mode sends to event channel
 // and correctly returns the result when the TUI approves the request.
-func TestPermissionHandler_NonYoloSendsToChannel(t *testing.T) {
+func TestPermissionHandler_InteractiveSendsToChannel(t *testing.T) {
 	t.Parallel()
 
-	yoloRef := chat.NewYoloModeRef(false) // YOLO disabled
+	chatModeRef := chat.NewChatModeRef(chat.InteractiveMode) // Interactive mode
 	eventChan := make(chan tea.Msg, 10)
 
-	handler := chat.CreateTUIPermissionHandler(eventChan, yoloRef)
+	handler := chat.CreateTUIPermissionHandler(eventChan, chatModeRef)
 
 	// Run handler in goroutine since it blocks waiting for response
 	resultChan := make(chan copilot.PermissionRequestResult, 1)
@@ -276,9 +276,9 @@ func TestPermissionHandler_NonYoloSendsToChannel(t *testing.T) {
 	}
 }
 
-// TestPermissionHandler_NilYoloRef tests that nil yoloModeRef sends to event channel
+// TestPermissionHandler_NilChatModeRef tests that nil chatModeRef sends to event channel
 // and correctly returns "denied-interactively-by-user" when the TUI denies the request.
-func TestPermissionHandler_NilYoloRef(t *testing.T) {
+func TestPermissionHandler_NilChatModeRef(t *testing.T) {
 	t.Parallel()
 
 	eventChan := make(chan tea.Msg, 10)
@@ -309,7 +309,7 @@ func TestPermissionHandler_NilYoloRef(t *testing.T) {
 	}
 
 	if msg == nil {
-		t.Fatal("expected permission request to be sent to event channel with nil yoloRef")
+		t.Fatal("expected permission request to be sent to event channel with nil chatModeRef")
 	}
 
 	// Feed the message through a TUI model, then press 'esc' to deny
@@ -353,5 +353,47 @@ func TestPermissionModal_AllowThisOperation(t *testing.T) {
 
 	if !strings.Contains(output, "Allow this operation?") {
 		t.Error("expected 'Allow this operation?' prompt in permission modal")
+	}
+}
+
+// TestPermissionModal_AllowAlwaysSwitchesToAutopilot tests that pressing 'a' on the
+// permission prompt switches to Autopilot mode and approves the request.
+func TestPermissionModal_AllowAlwaysSwitchesToAutopilot(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetChatMode(model, chat.InteractiveMode)
+
+	responseChan := make(chan bool, 1)
+	chat.ExportSetPendingPermission(model, "Terminal", "echo hello", "", responseChan)
+
+	// Press 'a' to allow always
+	var updatedModel tea.Model = model
+
+	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+
+	chatModel, ok := updatedModel.(*chat.Model)
+	if !ok {
+		t.Fatal("expected *chat.Model type assertion to succeed")
+	}
+
+	// Verify mode switched to Autopilot
+	if chat.ExportGetChatMode(chatModel) != chat.AutopilotMode {
+		t.Errorf("expected AutopilotMode after 'a', got %v", chat.ExportGetChatMode(chatModel))
+	}
+
+	// Verify the permission was approved
+	select {
+	case approved := <-responseChan:
+		if !approved {
+			t.Error("expected permission to be approved after 'a'")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for permission response")
+	}
+
+	// Verify pending permission was cleared
+	if chat.ExportHasPendingPermission(chatModel) {
+		t.Error("expected pending permission to be cleared after 'a'")
 	}
 }

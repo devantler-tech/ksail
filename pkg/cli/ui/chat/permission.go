@@ -62,13 +62,14 @@ func (m *Model) allowPermission() (tea.Model, tea.Cmd) {
 	return m, m.waitForEvent()
 }
 
-// allowAlwaysPermission approves the pending permission request and activates YOLO mode
+// allowAlwaysPermission approves the pending permission request and switches to Autopilot mode
 // so all future permission requests are auto-approved for the rest of the session.
 func (m *Model) allowAlwaysPermission() (tea.Model, tea.Cmd) {
-	m.yoloMode = true
-
-	if m.yoloModeRef != nil {
-		m.yoloModeRef.SetEnabled(true)
+	err := m.applyMode(AutopilotMode)
+	if err != nil {
+		m.err = err
+	} else {
+		m.chatMode = AutopilotMode
 	}
 
 	return m.allowPermission()
@@ -185,10 +186,10 @@ func (d *permissionDeduplicator) markApproved(toolCallID string) {
 // It sends permission requests to the provided event channel and waits for a response.
 // This allows the TUI to display permission prompts and collect user input.
 // Read and URL operations are auto-approved to avoid excessive prompting.
-// When yoloModeRef is provided and YOLO mode is enabled, permissions are auto-approved.
+// When chatModeRef is provided and Autopilot mode is enabled, permissions are auto-approved.
 func CreateTUIPermissionHandler(
 	eventChan chan<- tea.Msg,
-	yoloModeRef *YoloModeRef,
+	chatModeRef *ChatModeRef,
 ) copilot.PermissionHandlerFunc {
 	dedup := newPermissionDeduplicator()
 
@@ -196,8 +197,8 @@ func CreateTUIPermissionHandler(
 		request copilot.PermissionRequest,
 		_ copilot.PermissionInvocation,
 	) (copilot.PermissionRequestResult, error) {
-		// In YOLO mode, auto-approve all SDK permission requests
-		if yoloModeRef != nil && yoloModeRef.IsEnabled() {
+		// In Autopilot mode, auto-approve all SDK permission requests
+		if chatModeRef != nil && chatModeRef.Mode() == AutopilotMode {
 			return copilot.PermissionRequestResult{
 				Kind: copilot.PermissionRequestResultKindApproved,
 			}, nil

@@ -42,7 +42,7 @@ var (
 // MessageMetadata represents metadata for a single message in a session.
 type MessageMetadata struct {
 	// ChatMode stores the chat mode when the message was sent.
-	// 0 = agent, 1 = plan, 2 = ask.
+	// 0 = interactive, 1 = plan, 2 = autopilot.
 	ChatMode ChatMode `json:"chatMode"`
 }
 
@@ -52,7 +52,7 @@ type SessionMetadata struct {
 	ID       string    `json:"id"`
 	Name     string    `json:"name"`
 	Model    string    `json:"model,omitempty"`
-	ChatMode *ChatMode `json:"chatMode,omitempty"` // nil = agent mode (default)
+	ChatMode *ChatMode `json:"chatMode,omitempty"` // nil = interactive mode (default)
 	// Messages stores per-message metadata (chatMode for each user message).
 	Messages    []MessageMetadata        `json:"messages,omitempty"`
 	SDKMetadata *copilot.SessionMetadata `json:"-"` // SDK metadata (not persisted)

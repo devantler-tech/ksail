@@ -29,9 +29,6 @@ type KeyMap struct {
 	// Output
 	CopyOutput key.Binding
 
-	// YOLO mode
-	ToggleYolo key.Binding
-
 	// Modals
 	OpenSessions key.Binding
 	OpenModel    key.Binding
@@ -97,7 +94,6 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		// Column 2: Mode & Tools
 		{
 			k.ToggleMode,
-			k.ToggleYolo,
 			k.ExpandTools,
 			k.CopyOutput,
 			k.ToggleHelp,
@@ -174,7 +170,7 @@ func setActionKeys(keyMap *KeyMap) {
 	)
 	keyMap.ToggleMode = key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("Tab", "cycle mode (agent/plan)"),
+		key.WithHelp("Tab", "cycle mode (interactive/plan/autopilot)"),
 	)
 	keyMap.ToggleHelp = key.NewBinding(
 		key.WithKeys("f1"),
@@ -190,10 +186,6 @@ func setToolAndOutputKeys(keyMap *KeyMap) {
 	keyMap.CopyOutput = key.NewBinding(
 		key.WithKeys("ctrl+r"),
 		key.WithHelp("Ctrl+R", "copy latest output"),
-	)
-	keyMap.ToggleYolo = key.NewBinding(
-		key.WithKeys("ctrl+y"),
-		key.WithHelp("Ctrl+Y", "toggle auto-approve (YOLO)"),
 	)
 }
 
