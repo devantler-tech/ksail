@@ -107,7 +107,7 @@ runs:
         TIMEOUT: ${{ inputs.workload-timeout }}
       run: |
         ksail cluster restore --input /tmp/cluster-backup.tar.gz --dry-run
-        # Verify no side effects — workload must still exist unchanged
+        # Verify no side effects — workload must still be available
         ksail workload wait --for=condition=Available deployment/backup-test --timeout="$TIMEOUT"
         echo "✅ Dry-run restore completed without side effects"
 
@@ -164,7 +164,7 @@ runs:
       id: path-traversal
       shell: bash
       run: |
-        python3 -c "
+        python3 << 'PYEOF'
         import tarfile, io, json
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode='w:gz') as tar:
@@ -178,9 +178,15 @@ runs:
             tar.addfile(info, io.BytesIO(content))
         with open('/tmp/traversal-backup.tar.gz', 'wb') as f:
             f.write(buf.getvalue())
-        "
+        PYEOF
         if ksail cluster restore --input /tmp/traversal-backup.tar.gz 2>/tmp/traversal-stderr.txt; then
           echo "❌ Expected restore to reject path traversal archive"
+          rm -f /tmp/traversal-backup.tar.gz /tmp/traversal-stderr.txt
+          exit 1
+        fi
+        if ! grep -q "invalid tar entry path" /tmp/traversal-stderr.txt; then
+          echo "❌ Expected 'invalid tar entry path' error, got:"
+          cat /tmp/traversal-stderr.txt
           rm -f /tmp/traversal-backup.tar.gz /tmp/traversal-stderr.txt
           exit 1
         fi
@@ -191,7 +197,7 @@ runs:
       id: symlink-rejection
       shell: bash
       run: |
-        python3 -c "
+        python3 << 'PYEOF'
         import tarfile, io, json
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode='w:gz') as tar:
@@ -205,9 +211,15 @@ runs:
             tar.addfile(info)
         with open('/tmp/symlink-backup.tar.gz', 'wb') as f:
             f.write(buf.getvalue())
-        "
+        PYEOF
         if ksail cluster restore --input /tmp/symlink-backup.tar.gz 2>/tmp/symlink-stderr.txt; then
           echo "❌ Expected restore to reject archive containing symlink"
+          rm -f /tmp/symlink-backup.tar.gz /tmp/symlink-stderr.txt
+          exit 1
+        fi
+        if ! grep -q "symbolic and hard links are not supported" /tmp/symlink-stderr.txt; then
+          echo "❌ Expected symlink rejection error, got:"
+          cat /tmp/symlink-stderr.txt
           rm -f /tmp/symlink-backup.tar.gz /tmp/symlink-stderr.txt
           exit 1
         fi
@@ -221,7 +233,7 @@ runs:
         ksail workload delete deployment/backup-test --ignore-not-found 2>/dev/null || true
 
     - name: 🐞 Debug failure
-      if: failure() && (steps.deploy.outcome == 'failure' || steps.backup.outcome == 'failure' || steps.validate-archive.outcome == 'failure' || steps.validate-metadata.outcome == 'failure' || steps.backup-ns.outcome == 'failure' || steps.backup-compression.outcome == 'failure' || steps.dry-run-restore.outcome == 'failure' || steps.restore.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.restore-policy-none.outcome == 'failure')
+      if: failure() && (steps.deploy.outcome == 'failure' || steps.backup.outcome == 'failure' || steps.validate-archive.outcome == 'failure' || steps.validate-metadata.outcome == 'failure' || steps.backup-ns.outcome == 'failure' || steps.backup-compression.outcome == 'failure' || steps.dry-run-restore.outcome == 'failure' || steps.restore.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.restore-policy-none.outcome == 'failure' || steps.invalid-archive.outcome == 'failure' || steps.path-traversal.outcome == 'failure' || steps.symlink-rejection.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
