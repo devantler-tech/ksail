@@ -24,6 +24,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfighook"
 	"github.com/devantler-tech/ksail/v5/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
@@ -951,6 +952,10 @@ func wrapWithKubeconfigResolution(cmd *cobra.Command) {
 	origPersistentPreRun := cmd.PersistentPreRun
 
 	cmd.PersistentPreRunE = func(child *cobra.Command, args []string) error {
+		// Refresh expired Omni kubeconfig tokens before resolving the path,
+		// so path resolution picks up the freshly written kubeconfig.
+		kubeconfighook.MaybeRefreshOmniKubeconfig(child)
+
 		resolvedPath := kubeconfig.GetKubeconfigPathSilently(child)
 
 		kubeconfigFlag := child.Flags().Lookup("kubeconfig")

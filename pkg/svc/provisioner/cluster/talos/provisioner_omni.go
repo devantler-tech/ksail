@@ -254,7 +254,11 @@ func (p *Provisioner) saveOmniKubeconfig(
 	omniProv *omniprovider.Provider,
 	clusterName string,
 ) error {
-	kubeconfigData, err := omniProv.GetKubeconfig(ctx, clusterName)
+	kubeconfigData, err := omniProv.GetKubeconfig(
+		ctx,
+		clusterName,
+		omniprovider.DefaultKubeconfigTTL,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to get kubeconfig from Omni: %w", err)
 	}
