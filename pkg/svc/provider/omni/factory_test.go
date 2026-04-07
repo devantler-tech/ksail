@@ -50,16 +50,21 @@ func TestNewProviderFromOptions_ErrorCases(t *testing.T) {
 
 		require.ErrorIs(t, err, omni.ErrServiceAccountKeyRequired)
 	})
+}
 
-	t.Run("DefaultEnvVarNames", func(t *testing.T) {
-		t.Parallel()
+// TestNewProviderFromOptions_DefaultEnvVarNames is a separate, non-parallel
+// test so that t.Setenv can clear the default env vars. This prevents ambient
+// environment state (e.g. OMNI_ENDPOINT set on a developer machine) from
+// causing a false failure.
+func TestNewProviderFromOptions_DefaultEnvVarNames(t *testing.T) {
+	t.Setenv("OMNI_ENDPOINT", "")
+	t.Setenv("OMNI_SERVICE_ACCOUNT_KEY", "")
 
-		opts := v1alpha1.OptionsOmni{}
+	opts := v1alpha1.OptionsOmni{}
 
-		_, err := omni.NewProviderFromOptions(opts)
+	_, err := omni.NewProviderFromOptions(opts)
 
-		require.ErrorIs(t, err, omni.ErrEndpointRequired)
-	})
+	require.ErrorIs(t, err, omni.ErrEndpointRequired)
 }
 
 func TestNewProviderFromOptions_EnvVarResolution(t *testing.T) {

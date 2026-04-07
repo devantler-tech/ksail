@@ -29,11 +29,10 @@ const (
 	// kubeconfigFileMode is the file mode for kubeconfig files.
 	kubeconfigFileMode = 0o600
 
-	// jwtMinParts is the minimum number of dot-separated parts in a JWT token.
-	jwtMinParts = 2
-
-	// jwtMaxParts is the maximum number of dot-separated parts in a JWT token.
-	jwtMaxParts = 3
+	// jwtParts is the expected number of dot-separated segments in a JWT
+	// (header.payload.signature). Requiring exactly 3 prevents non-JWT
+	// bearer tokens that happen to contain a dot from being parsed.
+	jwtParts = 3
 )
 
 // MaybeRefreshOmniKubeconfig checks whether the current kubeconfig's service-account
@@ -240,8 +239,8 @@ func IsTokenExpired(kubeconfigPath string) bool {
 // locally-stored kubeconfig — the token's authenticity is verified by the
 // API server, not by this function.
 func jwtExpiry(token string) (time.Time, error) {
-	parts := strings.SplitN(token, ".", jwtMaxParts)
-	if len(parts) < jwtMinParts {
+	parts := strings.SplitN(token, ".", jwtParts)
+	if len(parts) < jwtParts {
 		return time.Time{}, errNotJWT
 	}
 

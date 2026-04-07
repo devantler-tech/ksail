@@ -952,10 +952,11 @@ func wrapWithKubeconfigResolution(cmd *cobra.Command) {
 	origPersistentPreRun := cmd.PersistentPreRun
 
 	cmd.PersistentPreRunE = func(child *cobra.Command, args []string) error {
-		resolvedPath := kubeconfig.GetKubeconfigPathSilently(child)
-
-		// Refresh expired Omni kubeconfig tokens before the command runs.
+		// Refresh expired Omni kubeconfig tokens before resolving the path,
+		// so path resolution picks up the freshly written kubeconfig.
 		kubeconfighook.MaybeRefreshOmniKubeconfig(child)
+
+		resolvedPath := kubeconfig.GetKubeconfigPathSilently(child)
 
 		kubeconfigFlag := child.Flags().Lookup("kubeconfig")
 		if kubeconfigFlag != nil && !child.Flags().Changed("kubeconfig") {
