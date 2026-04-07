@@ -259,6 +259,19 @@ func installComponentsInPhases(
 	// so they must be fully ready before GitOps engines start.
 	infraTasks := buildInfrastructureTasks(clusterCfg, factories, reqs)
 	if len(infraTasks) > 0 {
+		// Pre-flight stability check: ensure the API server is stable and
+		// pod-to-service routing is functional before deploying infrastructure
+		// components. Without this, pods like metrics-server can panic on
+		// startup with "i/o timeout" when the CNI (e.g., Cilium) eBPF
+		// dataplane hasn't fully programmed ClusterIP routing yet.
+		stabilityErr := waitForClusterStability(ctx, clusterCfg)
+		if stabilityErr != nil {
+			return fmt.Errorf(
+				"cluster not stable before infrastructure installation: %w",
+				stabilityErr,
+			)
+		}
+
 		infraGroup := notify.NewProgressGroup(
 			"Installing infrastructure components",
 			"📦",

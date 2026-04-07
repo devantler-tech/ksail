@@ -5,10 +5,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	omniprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
+)
+
+const (
+	// omniAPIServerReadinessTimeout is the timeout for verifying the API server
+	// is reachable through the Omni proxy after WaitForClusterReady returns.
+	// The Omni proxy may report the cluster as ready before it is operational
+	// for kubectl connections, so this absorbs the propagation delay.
+	omniAPIServerReadinessTimeout = 2 * time.Minute
 )
 
 // omniProvider extracts the Omni provider from the infra provider.
@@ -74,6 +86,23 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	err = p.saveOmniConfigs(ctx, omniProv, clusterName)
 	if err != nil {
 		return err
+	}
+
+	// Verify the API server is reachable through the Omni proxy.
+	// WaitForClusterReady polls ClusterStatus until Phase==RUNNING && Ready,
+	// but the Omni SaaS proxy may not yet be forwarding kubectl connections
+	// at that point. This readiness probe absorbs the proxy propagation delay
+	// so downstream commands (e.g., ksail cluster info) don't fail with
+	// "proxy error".
+	if p.options.KubeconfigPath != "" {
+		_, _ = fmt.Fprintf(p.logWriter, "  Verifying API server reachability through Omni proxy...\n")
+
+		err = p.waitForOmniAPIServerReady(ctx, clusterName)
+		if err != nil {
+			return fmt.Errorf("API server not reachable through Omni proxy: %w", err)
+		}
+
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ API server reachable\n")
 	}
 
 	_, _ = fmt.Fprintf(
@@ -342,6 +371,21 @@ func (p *Provisioner) saveOmniTalosconfig(
 	}
 
 	return p.saveOmniConfig(talosconfigData, p.options.TalosconfigPath, "Talosconfig")
+}
+
+// waitForOmniAPIServerReady verifies that the Kubernetes API server is reachable
+// through the Omni proxy using the saved kubeconfig. The Omni cluster may
+// report RUNNING/Ready before the proxy is operational for kubectl connections.
+func (p *Provisioner) waitForOmniAPIServerReady(ctx context.Context, clusterName string) error {
+	dist := v1alpha1.DistributionTalos
+	contextName := dist.ContextName(clusterName)
+
+	clientset, err := k8s.NewClientset(p.options.KubeconfigPath, contextName)
+	if err != nil {
+		return fmt.Errorf("create clientset for Omni API readiness check: %w", err)
+	}
+
+	return readiness.WaitForAPIServerReady(ctx, clientset, omniAPIServerReadinessTimeout)
 }
 
 // deleteOmniCluster handles cluster deletion for Omni-managed Talos clusters.
