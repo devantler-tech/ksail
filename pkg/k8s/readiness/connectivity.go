@@ -150,35 +150,46 @@ func waitForConnectivityPodCompletion(
 		case <-podCtx.Done():
 			return false, nil // per-attempt timeout; retry on next poll
 		case <-ticker.C:
-			pod, getErr := clientset.CoreV1().Pods(connectivityPodNS).Get(
-				podCtx, connectivityPodName, metav1.GetOptions{},
-			)
-			if getErr != nil {
-				if isTransientPodError(getErr) {
-					return false, nil
-				}
-
-				return false, fmt.Errorf("get connectivity check pod: %w", getErr)
-			}
-
-			switch pod.Status.Phase {
-			case corev1.PodSucceeded:
-				return true, nil
-			case corev1.PodFailed:
-				return false, nil
-			case corev1.PodPending:
-				// Detect image pull failures early: when the pod is stuck
-				// in Pending because the container image cannot be pulled,
-				// retrying won't help and waiting until the deadline would
-				// produce a misleading "API server not reachable" error.
-				if err := checkPendingPodImagePull(pod); err != nil {
-					return false, err
-				}
-			case corev1.PodRunning, corev1.PodUnknown:
-				// Still Running or Unknown — keep waiting.
+			ready, err := pollConnectivityPod(podCtx, clientset)
+			if err != nil || ready {
+				return ready, err
 			}
 		}
 	}
+}
+
+// pollConnectivityPod fetches the connectivity check pod and evaluates its
+// status. Returns (true, nil) on success, (false, nil) to keep polling,
+// or (false, error) on non-recoverable errors.
+func pollConnectivityPod(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+) (bool, error) {
+	pod, getErr := clientset.CoreV1().Pods(connectivityPodNS).Get(
+		ctx, connectivityPodName, metav1.GetOptions{},
+	)
+	if getErr != nil {
+		if isTransientPodError(getErr) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("get connectivity check pod: %w", getErr)
+	}
+
+	switch pod.Status.Phase {
+	case corev1.PodSucceeded:
+		return true, nil
+	case corev1.PodFailed:
+		return false, nil
+	case corev1.PodPending:
+		if err := checkPendingPodImagePull(pod); err != nil {
+			return false, err
+		}
+	case corev1.PodRunning, corev1.PodUnknown:
+		// Still Running or Unknown — keep waiting.
+	}
+
+	return false, nil
 }
 
 // isTransientPodError returns true for Kubernetes API errors that are expected
