@@ -373,6 +373,24 @@ func TestResolveOmniMachines_NilOmniOpts(t *testing.T) {
 	assert.Len(t, machines, 1)
 }
 
+func TestResolveOmniMachines_BothSet_ReturnsConflict(t *testing.T) {
+	t.Parallel()
+
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithOmniOptions(v1alpha1.OptionsOmni{
+			MachineClass: "my-class",
+			Machines:     []string{"uuid-1"},
+		})
+
+	prov := omniprovider.NewProvider(nil)
+	machines, err := provisioner.ResolveOmniMachinesForTest(context.Background(), prov)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, omniprovider.ErrMachineAllocationConflict)
+	assert.Nil(t, machines)
+}
+
 func TestSaveOmniConfig_WritesFile(t *testing.T) {
 	t.Parallel()
 

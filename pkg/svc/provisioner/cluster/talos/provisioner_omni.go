@@ -224,20 +224,28 @@ func (p *Provisioner) omniMachines() []string {
 }
 
 // resolveOmniMachines returns the machine UUIDs to use for Omni cluster creation.
-// If machines are explicitly configured, those are returned. If a machineClass is set,
-// nil is returned (Omni will use the class for dynamic allocation). When neither is
-// configured, Omni is queried for available (unallocated) machines and the required
+// If both machineClass and machines are set, an error is returned (they are mutually
+// exclusive). If machines are explicitly configured, those are returned. If a machineClass
+// is set, nil is returned (Omni will use the class for dynamic allocation). When neither
+// is configured, Omni is queried for available (unallocated) machines and the required
 // number of UUIDs is returned.
 func (p *Provisioner) resolveOmniMachines(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
 ) ([]string, error) {
-	if p.omniMachineClass() != "" {
-		return nil, nil
+	machineClass := p.omniMachineClass()
+	machines := p.omniMachines()
+
+	if machineClass != "" && len(machines) > 0 {
+		return nil, omniprovider.ErrMachineAllocationConflict
 	}
 
-	if machines := p.omniMachines(); len(machines) > 0 {
+	if len(machines) > 0 {
 		return machines, nil
+	}
+
+	if machineClass != "" {
+		return nil, nil
 	}
 
 	// Neither machineClass nor machines set — auto-discover available machines.
@@ -249,14 +257,14 @@ func (p *Provisioner) resolveOmniMachines(
 		required,
 	)
 
-	machines, err := omniProv.ListAvailableMachines(ctx, required)
+	resolved, err := omniProv.ListAvailableMachines(ctx, required)
 	if err != nil {
 		return nil, fmt.Errorf("auto-discover available machines: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Discovered %d available machine(s)\n", len(machines))
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Discovered %d available machine(s)\n", len(resolved))
 
-	return machines, nil
+	return resolved, nil
 }
 
 // saveOmniConfig writes already-fetched config data to disk. It expands/canonicalizes

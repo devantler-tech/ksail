@@ -382,3 +382,26 @@ func TestListAvailableMachines_SkipsUnavailable(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"uuid-available"}, machines)
 }
+
+func TestListAvailableMachines_NegativeCount(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProviderWithState(newInMemState())
+
+	machines, err := prov.ListAvailableMachines(context.Background(), -1)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, omni.ErrInsufficientAvailableMachines)
+	assert.Nil(t, machines)
+}
+
+func TestListAvailableMachines_ZeroCount(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProviderWithState(newInMemState())
+
+	machines, err := prov.ListAvailableMachines(context.Background(), 0)
+
+	require.NoError(t, err)
+	assert.Empty(t, machines)
+}
