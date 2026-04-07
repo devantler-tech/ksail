@@ -182,7 +182,7 @@ runs:
         ksail workload apply -k "$WATCH_DIR"
         ksail workload wait --for=condition=Available deployment/ksail-watch-test --timeout=120s
         # Start watcher in background, capturing output for debugging
-        ksail workload watch --path "$WATCH_DIR" > "$WATCH_LOG" 2>&1 &
+        ksail workload watch --path "$WATCH_DIR" --debug > "$WATCH_LOG" 2>&1 &
         WATCH_PID=$!
         trap 'kill $WATCH_PID 2>/dev/null || true; rm -rf "$WATCH_DIR" "$WATCH_LOG"' EXIT
         # Wait for the watcher to finish initialization and build its file
