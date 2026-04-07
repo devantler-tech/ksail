@@ -275,3 +275,110 @@ func TestDeleteNodes_ClusterExists_RemovesCluster(t *testing.T) {
 	require.Error(t, getErr)
 	assert.True(t, state.IsNotFoundError(getErr), "cluster should have been removed from state")
 }
+
+func TestListAvailableMachines_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	machines, err := prov.ListAvailableMachines(context.Background(), 1)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	assert.Nil(t, machines)
+}
+
+func TestListAvailableMachines_NoMachines(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProviderWithState(newInMemState())
+
+	machines, err := prov.ListAvailableMachines(context.Background(), 1)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, omni.ErrInsufficientAvailableMachines)
+	assert.Nil(t, machines)
+}
+
+func TestListAvailableMachines_SufficientMachines(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Seed 3 available machines
+	for _, id := range []string{"uuid-1", "uuid-2", "uuid-3"} {
+		ms := omnires.NewMachineStatus(id)
+		ms.Metadata().Labels().Set(omnires.MachineStatusLabelAvailable, "")
+
+		require.NoError(t, testState.Create(context.Background(), ms))
+	}
+
+	machines, err := prov.ListAvailableMachines(context.Background(), 2)
+
+	require.NoError(t, err)
+	assert.Len(t, machines, 2)
+}
+
+func TestListAvailableMachines_ExactCount(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Seed exactly 3 available machines
+	for _, id := range []string{"uuid-1", "uuid-2", "uuid-3"} {
+		ms := omnires.NewMachineStatus(id)
+		ms.Metadata().Labels().Set(omnires.MachineStatusLabelAvailable, "")
+
+		require.NoError(t, testState.Create(context.Background(), ms))
+	}
+
+	machines, err := prov.ListAvailableMachines(context.Background(), 3)
+
+	require.NoError(t, err)
+	assert.Len(t, machines, 3)
+}
+
+func TestListAvailableMachines_InsufficientMachines(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Seed only 1 available machine
+	ms := omnires.NewMachineStatus("uuid-1")
+	ms.Metadata().Labels().Set(omnires.MachineStatusLabelAvailable, "")
+
+	require.NoError(t, testState.Create(context.Background(), ms))
+
+	machines, err := prov.ListAvailableMachines(context.Background(), 3)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, omni.ErrInsufficientAvailableMachines)
+	assert.Contains(t, err.Error(), "need 3")
+	assert.Contains(t, err.Error(), "got 1")
+	assert.Nil(t, machines)
+}
+
+func TestListAvailableMachines_SkipsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Seed 1 available and 1 unavailable machine
+	available := omnires.NewMachineStatus("uuid-available")
+	available.Metadata().Labels().Set(omnires.MachineStatusLabelAvailable, "")
+
+	require.NoError(t, testState.Create(context.Background(), available))
+
+	unavailable := omnires.NewMachineStatus("uuid-allocated")
+	// No available label — this machine is already in a cluster.
+	require.NoError(t, testState.Create(context.Background(), unavailable))
+
+	machines, err := prov.ListAvailableMachines(context.Background(), 1)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"uuid-available"}, machines)
+}

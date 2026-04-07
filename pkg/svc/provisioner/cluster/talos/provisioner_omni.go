@@ -48,6 +48,13 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		return fmt.Errorf("failed to resolve versions: %w", err)
 	}
 
+	// Resolve machine allocation: auto-discover available machines when neither
+	// machineClass nor machines is configured.
+	machines, err := p.resolveOmniMachines(ctx, omniProv)
+	if err != nil {
+		return fmt.Errorf("failed to resolve machines: %w", err)
+	}
+
 	// Sync the cluster template to Omni and wait for readiness
 	err = p.syncAndWaitOmniCluster(ctx, omniProv, omniprovider.TemplateParams{
 		ClusterName:       clusterName,
@@ -56,7 +63,7 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		ControlPlanes:     p.options.ControlPlaneNodes,
 		Workers:           p.options.WorkerNodes,
 		MachineClass:      p.omniMachineClass(),
-		Machines:          p.omniMachines(),
+		Machines:          machines,
 		Patches:           p.buildOmniPatchInfos(),
 	})
 	if err != nil {
@@ -214,6 +221,42 @@ func (p *Provisioner) omniMachines() []string {
 	}
 
 	return nil
+}
+
+// resolveOmniMachines returns the machine UUIDs to use for Omni cluster creation.
+// If machines are explicitly configured, those are returned. If a machineClass is set,
+// nil is returned (Omni will use the class for dynamic allocation). When neither is
+// configured, Omni is queried for available (unallocated) machines and the required
+// number of UUIDs is returned.
+func (p *Provisioner) resolveOmniMachines(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+) ([]string, error) {
+	if p.omniMachineClass() != "" {
+		return nil, nil
+	}
+
+	if machines := p.omniMachines(); len(machines) > 0 {
+		return machines, nil
+	}
+
+	// Neither machineClass nor machines set — auto-discover available machines.
+	required := p.options.ControlPlaneNodes + p.options.WorkerNodes
+
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  No machineClass or machines configured; discovering %d available machine(s) in Omni...\n",
+		required,
+	)
+
+	machines, err := omniProv.ListAvailableMachines(ctx, required)
+	if err != nil {
+		return nil, fmt.Errorf("auto-discover available machines: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Discovered %d available machine(s)\n", len(machines))
+
+	return machines, nil
 }
 
 // saveOmniConfig writes already-fetched config data to disk. It expands/canonicalizes

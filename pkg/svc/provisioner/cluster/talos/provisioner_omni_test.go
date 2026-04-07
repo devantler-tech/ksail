@@ -259,6 +259,120 @@ func TestGetOmniNodesByRole_NilClient(t *testing.T) {
 	assert.Nil(t, nodes)
 }
 
+func TestResolveOmniMachines_MachineClassSet(t *testing.T) {
+	t.Parallel()
+
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithOmniOptions(v1alpha1.OptionsOmni{
+			MachineClass: "my-class",
+		})
+
+	// Provider doesn't matter when machineClass is set
+	prov := omniprovider.NewProvider(nil)
+	machines, err := provisioner.ResolveOmniMachinesForTest(context.Background(), prov)
+
+	require.NoError(t, err)
+	assert.Nil(t, machines)
+}
+
+func TestResolveOmniMachines_MachinesSet(t *testing.T) {
+	t.Parallel()
+
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithOmniOptions(v1alpha1.OptionsOmni{
+			Machines: []string{"uuid-1", "uuid-2"},
+		})
+
+	// Provider doesn't matter when machines are explicitly set
+	prov := omniprovider.NewProvider(nil)
+	machines, err := provisioner.ResolveOmniMachinesForTest(context.Background(), prov)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"uuid-1", "uuid-2"}, machines)
+}
+
+func TestResolveOmniMachines_NeitherSet_AutoDiscovers(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemStateForOmniTest()
+
+	// Seed 2 available machines
+	for _, id := range []string{"avail-1", "avail-2"} {
+		ms := omnires.NewMachineStatus(id)
+		ms.Metadata().Labels().Set(omnires.MachineStatusLabelAvailable, "")
+
+		require.NoError(t, testState.Create(context.Background(), ms))
+	}
+
+	prov := omniprovider.NewProviderWithState(testState)
+
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs,
+		talosprovisioner.NewOptions().
+			WithControlPlaneNodes(1).
+			WithWorkerNodes(1),
+	).WithOmniOptions(v1alpha1.OptionsOmni{})
+
+	machines, err := provisioner.ResolveOmniMachinesForTest(context.Background(), prov)
+
+	require.NoError(t, err)
+	assert.Len(t, machines, 2)
+}
+
+func TestResolveOmniMachines_NeitherSet_InsufficientAvailable(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemStateForOmniTest()
+
+	// Seed only 1 available machine but need 3
+	ms := omnires.NewMachineStatus("avail-1")
+	ms.Metadata().Labels().Set(omnires.MachineStatusLabelAvailable, "")
+
+	require.NoError(t, testState.Create(context.Background(), ms))
+
+	prov := omniprovider.NewProviderWithState(testState)
+
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs,
+		talosprovisioner.NewOptions().
+			WithControlPlaneNodes(1).
+			WithWorkerNodes(2),
+	).WithOmniOptions(v1alpha1.OptionsOmni{})
+
+	machines, err := provisioner.ResolveOmniMachinesForTest(context.Background(), prov)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, omniprovider.ErrInsufficientAvailableMachines)
+	assert.Nil(t, machines)
+}
+
+func TestResolveOmniMachines_NilOmniOpts(t *testing.T) {
+	t.Parallel()
+
+	configs := createTestTalosConfigs(t, "test-cluster")
+	// No WithOmniOptions — omniOpts is nil
+	provisioner := talosprovisioner.NewProvisioner(configs,
+		talosprovisioner.NewOptions().
+			WithControlPlaneNodes(1),
+	)
+
+	testState := newInMemStateForOmniTest()
+
+	ms := omnires.NewMachineStatus("avail-1")
+	ms.Metadata().Labels().Set(omnires.MachineStatusLabelAvailable, "")
+
+	require.NoError(t, testState.Create(context.Background(), ms))
+
+	prov := omniprovider.NewProviderWithState(testState)
+
+	machines, err := provisioner.ResolveOmniMachinesForTest(context.Background(), prov)
+
+	require.NoError(t, err)
+	assert.Len(t, machines, 1)
+}
+
 func TestSaveOmniConfig_WritesFile(t *testing.T) {
 	t.Parallel()
 

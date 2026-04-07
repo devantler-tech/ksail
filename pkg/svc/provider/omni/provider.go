@@ -395,3 +395,41 @@ func (p *Provider) LatestTalosVersion(ctx context.Context) (string, []string, er
 func (p *Provider) IsAvailable() bool {
 	return p.st != nil
 }
+
+// ListAvailableMachines queries Omni for machines that are available (not allocated
+// to any cluster) and returns up to count machine UUIDs.
+// Returns ErrInsufficientAvailableMachines when fewer than count machines are available.
+func (p *Provider) ListAvailableMachines(ctx context.Context, count int) ([]string, error) {
+	if p.st == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	machines, err := safe.StateListAll[*omnires.MachineStatus](
+		ctx,
+		p.st,
+		state.WithLabelQuery(resource.LabelExists(omnires.MachineStatusLabelAvailable)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list available machines: %w", err)
+	}
+
+	ids := make([]string, 0, min(count, machines.Len()))
+
+	for machine := range machines.All() {
+		if len(ids) >= count {
+			break
+		}
+
+		ids = append(ids, machine.Metadata().ID())
+	}
+
+	if len(ids) < count {
+		return nil, fmt.Errorf(
+			"%w: need %d, got %d",
+			ErrInsufficientAvailableMachines,
+			count, len(ids),
+		)
+	}
+
+	return ids, nil
+}

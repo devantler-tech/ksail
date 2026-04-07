@@ -12,4 +12,9 @@ var (
 	ErrTemplateReaderRequired = errors.New("templateReader must not be nil")
 	// ErrNoTalosVersions is returned when no Talos versions are available in Omni.
 	ErrNoTalosVersions = errors.New("no Talos versions available in Omni")
+	// ErrInsufficientAvailableMachines is returned when Omni does not have enough
+	// available (unallocated) machines to satisfy the requested node count.
+	ErrInsufficientAvailableMachines = errors.New(
+		"not enough available machines in Omni for the requested node count",
+	)
 )
