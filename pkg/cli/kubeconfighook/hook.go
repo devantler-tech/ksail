@@ -122,9 +122,9 @@ func isKubeconfigFlagExplicit(cmd *cobra.Command) bool {
 		return false
 	}
 
-	kubeconfigFlag := cmd.Flags().Lookup("kubeconfig")
+	kubeconfigFlag := cmd.Flag("kubeconfig")
 
-	return kubeconfigFlag != nil && cmd.Flags().Changed("kubeconfig")
+	return kubeconfigFlag != nil && kubeconfigFlag.Changed
 }
 
 // resolveClusterName determines the Omni cluster name from available sources.
