@@ -2942,7 +2942,6 @@ func NewWaitCmd() *cobra.Command {
 
 var errNotDirectory = errors.New("watch path is not a directory")
 
-// NewWatchCmd creates the workload watch command.
 // watchCmdLong is the long description for the watch subcommand.
 const watchCmdLong = `Watch a directory for file changes and automatically apply workloads.
 
@@ -2973,6 +2972,7 @@ Examples:
   # Watch a custom directory
   ksail workload watch --path=./manifests`
 
+// NewWatchCmd creates the workload watch command.
 func NewWatchCmd() *cobra.Command {
 	var (
 		pathFlag     string
