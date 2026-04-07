@@ -240,98 +240,76 @@ func TestConnectivityCheckPodSpec(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestWaitForInClusterAPIConnectivity_ImagePullBackOff(t *testing.T) {
+func TestWaitForInClusterAPIConnectivity_ImagePullFailure(t *testing.T) {
 	t.Parallel()
 
-	clientset := fake.NewClientset(newKubernetesService())
-
-	// Simulate ImagePullBackOff: pod stays Pending with container waiting reason.
-	clientset.PrependReactor(
-		"create",
-		"pods",
-		func(action k8stesting.Action) (bool, runtime.Object, error) {
-			createAction, isCreateAction := action.(k8stesting.CreateAction)
-			if !isCreateAction {
-				return false, nil, nil
-			}
-
-			pod, isPod := createAction.GetObject().(*corev1.Pod)
-			if !isPod {
-				return false, nil, nil
-			}
-
-			pod.Status.Phase = corev1.PodPending
-			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
-				Name:  "check",
-				Image: "busybox:stable",
-				State: corev1.ContainerState{
-					Waiting: &corev1.ContainerStateWaiting{
-						Reason:  "ImagePullBackOff",
-						Message: "Back-off pulling image \"busybox:stable\"",
-					},
-				},
-			}}
-
-			return false, nil, nil
+	testCases := []struct {
+		name    string
+		reason  string
+		message string
+	}{
+		{
+			name:    "ImagePullBackOff",
+			reason:  "ImagePullBackOff",
+			message: "Back-off pulling image \"busybox:stable\"",
 		},
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 5*time.Second)
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "image pull failed")
-	require.Contains(t, err.Error(), "ImagePullBackOff")
-	require.Contains(t, err.Error(), "busybox:stable")
-}
-
-func TestWaitForInClusterAPIConnectivity_ErrImagePull(t *testing.T) {
-	t.Parallel()
-
-	clientset := fake.NewClientset(newKubernetesService())
-
-	// Simulate ErrImagePull: pod stays Pending with container waiting reason.
-	clientset.PrependReactor(
-		"create",
-		"pods",
-		func(action k8stesting.Action) (bool, runtime.Object, error) {
-			createAction, isCreateAction := action.(k8stesting.CreateAction)
-			if !isCreateAction {
-				return false, nil, nil
-			}
-
-			pod, isPod := createAction.GetObject().(*corev1.Pod)
-			if !isPod {
-				return false, nil, nil
-			}
-
-			pod.Status.Phase = corev1.PodPending
-			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
-				Name:  "check",
-				Image: "busybox:stable",
-				State: corev1.ContainerState{
-					Waiting: &corev1.ContainerStateWaiting{
-						Reason:  "ErrImagePull",
-						Message: "failed to pull image \"busybox:stable\"",
-					},
-				},
-			}}
-
-			return false, nil, nil
+		{
+			name:    "ErrImagePull",
+			reason:  "ErrImagePull",
+			message: "failed to pull image \"busybox:stable\"",
 		},
-	)
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 5*time.Second)
+			clientset := fake.NewClientset(newKubernetesService())
 
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "image pull failed")
-	require.Contains(t, err.Error(), "ErrImagePull")
-	require.Contains(t, err.Error(), "busybox:stable")
+			clientset.PrependReactor(
+				"create",
+				"pods",
+				func(action k8stesting.Action) (bool, runtime.Object, error) {
+					createAction, isCreateAction := action.(k8stesting.CreateAction)
+					if !isCreateAction {
+						return false, nil, nil
+					}
+
+					pod, isPod := createAction.GetObject().(*corev1.Pod)
+					if !isPod {
+						return false, nil, nil
+					}
+
+					pod.Status.Phase = corev1.PodPending
+					pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+						Name:  "check",
+						Image: "busybox:stable",
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{
+								Reason:  tc.reason,
+								Message: tc.message,
+							},
+						},
+					}}
+
+					return false, nil, nil
+				},
+			)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 5*time.Second)
+
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "image pull failed")
+			require.Contains(t, err.Error(), tc.reason)
+			require.Contains(t, err.Error(), tc.message)
+			require.Contains(t, err.Error(), "busybox:stable")
+			// Should NOT contain the misleading "not reachable" message.
+			require.NotContains(t, err.Error(), "not reachable from pods")
+		})
+	}
 }
 
 // connectivityPodName mirrors the constant from the production code so test
