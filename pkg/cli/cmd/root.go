@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/tenant"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfighook"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/asciiart"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/errorhandler"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
@@ -43,6 +44,14 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 		"",
 		"Path to config file (default: ksail.yaml found via directory traversal)",
 	)
+
+	// Transparently refresh expired Omni kubeconfig tokens before any command.
+	// Workload commands have their own PersistentPreRunE (which overrides this one),
+	// so they wire the hook separately via wrapWithKubeconfigResolution.
+	cmd.PersistentPreRunE = func(child *cobra.Command, _ []string) error {
+		kubeconfighook.MaybeRefreshOmniKubeconfig(child)
+		return nil
+	}
 
 	// Add all subcommands
 	cmd.AddCommand(cluster.NewClusterCmd(runtimeContainer))

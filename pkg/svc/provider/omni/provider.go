@@ -308,21 +308,31 @@ func isClusterRunningAndReady(
 	return phase == specs.ClusterStatusSpec_RUNNING && ready, nil
 }
 
+// DefaultKubeconfigTTL is the default time-to-live for Omni service-account
+// kubeconfig tokens. Tokens are automatically refreshed by the CLI's
+// PersistentPreRunE hook when they expire; the 30-day default keeps
+// refresh frequency low while remaining safe for most workflows.
+const DefaultKubeconfigTTL = 30 * 24 * time.Hour
+
 // GetKubeconfig retrieves the kubeconfig for the given cluster from Omni.
 // It requests a service-account kubeconfig with a static token, which works
 // in non-interactive environments (CI, automation) without requiring oidc-login.
-// The token has a 24-hour TTL; for long-lived access, re-run create/update
-// to refresh the kubeconfig.
-func (p *Provider) GetKubeconfig(ctx context.Context, clusterName string) ([]byte, error) {
+//
+// If ttl is <= 0, DefaultKubeconfigTTL (30 days) is used.
+// The CLI's PersistentPreRunE hook transparently refreshes the kubeconfig
+// before any command when the token has expired.
+func (p *Provider) GetKubeconfig(ctx context.Context, clusterName string, ttl time.Duration) ([]byte, error) {
 	if p.client == nil {
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	const kubeconfigTTL = 24 * time.Hour
+	if ttl <= 0 {
+		ttl = DefaultKubeconfigTTL
+	}
 
 	data, err := p.client.Management().WithCluster(clusterName).Kubeconfig(
 		ctx,
-		management.WithServiceAccount(kubeconfigTTL, "ksail", "system:masters"),
+		management.WithServiceAccount(ttl, "ksail", "system:masters"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubeconfig from Omni: %w", err)

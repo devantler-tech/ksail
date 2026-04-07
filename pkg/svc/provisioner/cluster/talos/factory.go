@@ -14,7 +14,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	omniclient "github.com/siderolabs/omni/client/pkg/client"
 )
 
 // ErrUnsupportedProvider re-exports the shared error for backward compatibility.
@@ -219,61 +218,8 @@ func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner 
 	return opts
 }
 
-// Omni default values - keep in sync with OptionsOmni struct tags.
-const (
-	// defaultOmniEndpointEnvVar is the default environment variable
-	// name for the Omni API endpoint URL.
-	defaultOmniEndpointEnvVar = "OMNI_ENDPOINT"
-	// defaultOmniServiceAccountKeyEnvVar is the default environment variable
-	// name for the Omni service account key used for API authentication.
-	defaultOmniServiceAccountKeyEnvVar = "OMNI_SERVICE_ACCOUNT_KEY"
-)
-
 // createOmniProvider creates an Omni provider from the given options.
+// Delegates to the shared omni.NewProviderFromOptions for credential resolution.
 func createOmniProvider(opts v1alpha1.OptionsOmni) (*omni.Provider, error) {
-	// Determine the endpoint: env var takes precedence over config
-	endpointEnvVar := opts.EndpointEnvVar
-	if endpointEnvVar == "" {
-		endpointEnvVar = defaultOmniEndpointEnvVar
-	}
-
-	endpoint := os.Getenv(endpointEnvVar)
-	if endpoint == "" {
-		endpoint = opts.Endpoint
-	}
-
-	if endpoint == "" {
-		return nil, fmt.Errorf(
-			"%w: set via environment variable %s or spec.cluster.omni.endpoint in config",
-			omni.ErrEndpointRequired,
-			endpointEnvVar,
-		)
-	}
-
-	// Determine the service account key environment variable name
-	keyEnvVar := opts.ServiceAccountKeyEnvVar
-	if keyEnvVar == "" {
-		keyEnvVar = defaultOmniServiceAccountKeyEnvVar
-	}
-
-	// Get the service account key from the environment
-	serviceAccountKey := os.Getenv(keyEnvVar)
-	if serviceAccountKey == "" {
-		return nil, fmt.Errorf(
-			"%w: environment variable %s is not set",
-			omni.ErrServiceAccountKeyRequired,
-			keyEnvVar,
-		)
-	}
-
-	// Create the Omni client and provider
-	client, err := omniclient.New(
-		endpoint,
-		omniclient.WithServiceAccount(serviceAccountKey),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Omni client: %w", err)
-	}
-
-	return omni.NewProvider(client), nil
+	return omni.NewProviderFromOptions(opts)
 }

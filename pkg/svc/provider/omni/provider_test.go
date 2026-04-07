@@ -152,7 +152,7 @@ func TestGetKubeconfig_NilClient(t *testing.T) {
 
 	prov := omni.NewProvider(nil)
 
-	data, err := prov.GetKubeconfig(context.Background(), "test-cluster")
+	data, err := prov.GetKubeconfig(context.Background(), "test-cluster", 0)
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
