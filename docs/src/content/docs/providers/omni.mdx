@@ -20,7 +20,7 @@ The Omni provider is ideal when you:
 ## Prerequisites
 
 1. **Sidero Omni account** — Sign up at [siderolabs.com](https://www.siderolabs.com/platform/saas-for-kubernetes/)
-2. **Registered machines** — At least one machine must be registered and available in your Omni instance (see [Omni docs: Register a Machine](https://omni.siderolabs.com/docs/how-to-guides/how-to-register-a-machine/))
+2. **Registered machines** — At least one machine must be registered in your Omni instance and available for allocation (see [Omni docs: Register a Machine](https://omni.siderolabs.com/docs/how-to-guides/how-to-register-a-machine/)). Machines can be allocated dynamically via a machine class or statically by UUID list.
 3. **Service account key** — Create one in the Omni web UI under **Settings → Service Accounts**; the key is a base64-encoded string
 4. **Omni API endpoint** — Your account-specific URL, typically `https://<account>.omni.siderolabs.io:443`
 5. **Docker** — Required locally for `ksail` CLI operations
@@ -56,8 +56,22 @@ spec:
     omni:
       # Required: your Omni API endpoint
       endpoint: "https://<account>.omni.siderolabs.io:443"
-      # Optional: override the default env var name (default: OMNI_SERVICE_ACCOUNT_KEY)
+      # Optional: pin the Talos version to deploy.
+      # If omitted, KSail resolves the latest available version from Omni.
+      talosVersion: "v1.9.5"
+      # Optional: pin the Kubernetes version to deploy.
+      # If omitted, KSail resolves a compatible version from Omni or Talos config defaults.
+      kubernetesVersion: "v1.32.3"
+      # Choose ONE allocation strategy:
+      # Dynamic: allocate machines from a named machine class
+      machineClass: "my-machine-class"
+      # Static: allocate specific machines by UUID
+      # machines:
+      #   - "uuid-of-machine-1"
+      #   - "uuid-of-machine-2"
+      # Optional: override default env var names
       # serviceAccountKeyEnvVar: "MY_CUSTOM_OMNI_KEY"
+      # endpointEnvVar: "MY_CUSTOM_OMNI_ENDPOINT"
     talos:
       controlPlanes: 1
       workers: 2
@@ -65,8 +79,13 @@ spec:
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `omni.endpoint` | string | _(required)_ | Omni API endpoint URL |
+| `omni.endpoint` | string | — | Omni API endpoint URL. Overridden by the env var in `endpointEnvVar`. |
+| `omni.endpointEnvVar` | string | `OMNI_ENDPOINT` | Environment variable containing the Omni API endpoint URL. Takes precedence over `endpoint`. |
 | `omni.serviceAccountKeyEnvVar` | string | `OMNI_SERVICE_ACCOUNT_KEY` | Environment variable containing the service account key |
+| `omni.talosVersion` | string | Omni latest | Talos Linux version to deploy (e.g., `v1.9.5` or `1.9.5`). If omitted, KSail resolves the latest available version from Omni. The `v` prefix is added automatically if omitted. |
+| `omni.kubernetesVersion` | string | Auto-resolved | Kubernetes version to deploy (e.g., `v1.32.3` or `1.32.3`). If omitted, KSail resolves a compatible version from Omni or Talos config defaults. The `v` prefix is added automatically if omitted. |
+| `omni.machineClass` | string | — | Omni machine class name for dynamic node allocation. The class must exist in your Omni account. Mutually exclusive with `machines`. |
+| `omni.machines` | list of strings | — | List of Omni machine UUIDs for static allocation. The first N are assigned as control planes. Mutually exclusive with `machineClass`. |
 
 ## Quick Start
 
@@ -87,15 +106,20 @@ ksail cluster init \
 
 This creates `ksail.yaml` and a `talos/` directory for Talos configuration patches.
 
-### Step 3: Add the Omni Endpoint
+### Step 3: Configure Omni Options
 
-The scaffolder does not generate the `omni:` block automatically. Open `ksail.yaml` and add the endpoint:
+The scaffolder does not generate the `omni:` block automatically. Open `ksail.yaml` and add the Omni endpoint and machine allocation. You may also pin `talosVersion` and `kubernetesVersion` explicitly; if omitted, KSail resolves them from Omni automatically:
 
 ```yaml
 spec:
   cluster:
     omni:
       endpoint: "https://<account>.omni.siderolabs.io:443"
+      # Optional: pin versions (auto-resolved from Omni if omitted)
+      # talosVersion: "v1.9.5"
+      # kubernetesVersion: "v1.32.3"
+      # Choose one: machine class (dynamic) or machines list (static)
+      machineClass: "my-machine-class"
 ```
 
 ### Step 4: Create Cluster
@@ -187,9 +211,21 @@ Applies in-place changes to components (CNI, GitOps engine, cert-manager, etc.).
 
 ## Troubleshooting
 
+**`failed to determine Talos version`** — KSail could not auto-resolve the Talos version from Omni (for example the Omni API was unreachable or returned no versions). Set `talosVersion` and `kubernetesVersion` explicitly to bypass version discovery:
+
+```yaml
+spec:
+  cluster:
+    omni:
+      talosVersion: "v1.9.5"
+      kubernetesVersion: "v1.32.3"
+```
+
+**`TalosVersion is required`** or **`KubernetesVersion is required`** — Version resolution produced an empty value. This typically means the Omni query returned no results and no fallback was available. Set both fields explicitly as shown above.
+
 **`omni service account key is not set`** — The env var is missing or empty. Run `echo $OMNI_SERVICE_ACCOUNT_KEY` to check. Re-export if needed. If you use a custom variable name, verify it matches `spec.cluster.omni.serviceAccountKeyEnvVar` in `ksail.yaml`.
 
-**`omni endpoint is required`** — `spec.cluster.omni.endpoint` is missing from `ksail.yaml`. Add it:
+**`omni endpoint is required`** — `spec.cluster.omni.endpoint` is missing from `ksail.yaml` and the `OMNI_ENDPOINT` env var is not set. Add it:
 
 ```yaml
 spec:
