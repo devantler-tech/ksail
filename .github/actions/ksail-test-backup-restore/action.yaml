@@ -1,10 +1,12 @@
 name: KSail Backup & Restore Test
 description: |
   Tests the cluster backup and restore lifecycle on a running cluster.
-  Deploys a test workload, backs up the cluster, tests dry-run restore,
-  deletes the workload, restores from backup, verifies the workload is
-  restored, tests skip-existing policy, and validates security guards
-  (invalid archive, path traversal, symlink rejection).
+  Deploys a test workload, backs up the cluster, validates archive
+  structure and metadata, tests namespace-filtered and compression-level
+  backups, tests dry-run restore, deletes the workload, restores from
+  backup, verifies the workload is restored, tests skip-existing policy,
+  and validates security guards (invalid archive, path traversal,
+  symlink rejection).
 
   Does NOT create or delete the cluster — the orchestrator handles that.
 
@@ -47,6 +49,56 @@ runs:
         ksail cluster backup --output /tmp/cluster-backup.tar.gz
         ls -lh /tmp/cluster-backup.tar.gz
         echo "✅ Backup created successfully"
+
+    - name: 🧪 Validate archive structure
+      id: validate-archive
+      shell: bash
+      run: |
+        LISTING=$(tar tzf /tmp/cluster-backup.tar.gz)
+        if ! echo "$LISTING" | grep -q 'backup-metadata.json'; then
+          echo "❌ Archive missing backup-metadata.json"
+          exit 1
+        fi
+        if ! echo "$LISTING" | grep -q '\.yaml$'; then
+          echo "❌ Archive contains no .yaml files"
+          exit 1
+        fi
+        echo "✅ Archive structure is valid"
+
+    - name: 🧪 Validate backup metadata
+      id: validate-metadata
+      shell: bash
+      run: |
+        METADATA=$(tar xzf /tmp/cluster-backup.tar.gz -O backup-metadata.json)
+        for field in clusterName version ksailVersion; do
+          VALUE=$(echo "$METADATA" | jq -r ".$field")
+          if [ -z "$VALUE" ] || [ "$VALUE" = "null" ]; then
+            echo "❌ Metadata field '$field' is missing or empty"
+            exit 1
+          fi
+        done
+        COUNT=$(echo "$METADATA" | jq '.resourceCount')
+        if [ "$COUNT" -le 0 ] 2>/dev/null; then
+          echo "❌ resourceCount should be > 0, got $COUNT"
+          exit 1
+        fi
+        echo "✅ Backup metadata is valid"
+
+    - name: 🧪 Namespace-filtered backup
+      id: backup-ns
+      shell: bash
+      run: |
+        ksail cluster backup --output /tmp/backup-ns.tar.gz --namespaces default
+        tar tzf /tmp/backup-ns.tar.gz | grep -q 'backup-metadata.json'
+        echo "✅ Namespace-filtered backup is valid"
+
+    - name: 🧪 Compression level backup
+      id: backup-compression
+      shell: bash
+      run: |
+        ksail cluster backup --output /tmp/backup-fast.tar.gz --compression 1
+        tar tzf /tmp/backup-fast.tar.gz > /dev/null
+        echo "✅ Compression-level backup is valid"
 
     - name: 🧪 Dry-run restore (no changes applied)
       id: dry-run-restore
@@ -169,7 +221,7 @@ runs:
         ksail workload delete deployment/backup-test --ignore-not-found 2>/dev/null || true
 
     - name: 🐞 Debug failure
-      if: failure() && (steps.deploy.outcome == 'failure' || steps.backup.outcome == 'failure' || steps.dry-run-restore.outcome == 'failure' || steps.restore.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.restore-policy-none.outcome == 'failure')
+      if: failure() && (steps.deploy.outcome == 'failure' || steps.backup.outcome == 'failure' || steps.validate-archive.outcome == 'failure' || steps.validate-metadata.outcome == 'failure' || steps.backup-ns.outcome == 'failure' || steps.backup-compression.outcome == 'failure' || steps.dry-run-restore.outcome == 'failure' || steps.restore.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.restore-policy-none.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
@@ -180,5 +232,6 @@ runs:
       run: |
         rm -f /tmp/cluster-backup.tar.gz /tmp/invalid-backup.tar.gz \
               /tmp/traversal-backup.tar.gz /tmp/symlink-backup.tar.gz \
+              /tmp/backup-ns.tar.gz /tmp/backup-fast.tar.gz \
               /tmp/invalid-archive-stderr.txt /tmp/traversal-stderr.txt \
               /tmp/symlink-stderr.txt
