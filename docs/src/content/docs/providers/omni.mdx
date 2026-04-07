@@ -56,8 +56,11 @@ spec:
     omni:
       # Required: your Omni API endpoint
       endpoint: "https://<account>.omni.siderolabs.io:443"
-      # Required: Talos and Kubernetes versions to deploy
+      # Optional: pin the Talos version to deploy.
+      # If omitted, KSail resolves the latest available version from Omni.
       talosVersion: "v1.9.5"
+      # Optional: pin the Kubernetes version to deploy.
+      # If omitted, KSail resolves a compatible version from Omni or Talos config defaults.
       kubernetesVersion: "v1.32.3"
       # Choose ONE allocation strategy:
       # Dynamic: allocate machines from a named machine class
@@ -79,8 +82,8 @@ spec:
 | `omni.endpoint` | string | — | Omni API endpoint URL. Overridden by the env var in `endpointEnvVar`. |
 | `omni.endpointEnvVar` | string | `OMNI_ENDPOINT` | Environment variable containing the Omni API endpoint URL. Takes precedence over `endpoint`. |
 | `omni.serviceAccountKeyEnvVar` | string | `OMNI_SERVICE_ACCOUNT_KEY` | Environment variable containing the service account key |
-| `omni.talosVersion` | string | _(required)_ | Talos Linux version to deploy (e.g., `v1.9.5` or `1.9.5`). The `v` prefix is added automatically if omitted. |
-| `omni.kubernetesVersion` | string | _(required)_ | Kubernetes version to deploy (e.g., `v1.32.3` or `1.32.3`). The `v` prefix is added automatically if omitted. |
+| `omni.talosVersion` | string | Omni latest | Talos Linux version to deploy (e.g., `v1.9.5` or `1.9.5`). If omitted, KSail resolves the latest available version from Omni. The `v` prefix is added automatically if omitted. |
+| `omni.kubernetesVersion` | string | Auto-resolved | Kubernetes version to deploy (e.g., `v1.32.3` or `1.32.3`). If omitted, KSail resolves a compatible version from Omni or Talos config defaults. The `v` prefix is added automatically if omitted. |
 | `omni.machineClass` | string | — | Omni machine class name for dynamic node allocation. The class must exist in your Omni account. Mutually exclusive with `machines`. |
 | `omni.machines` | list of strings | — | List of Omni machine UUIDs for static allocation. The first N are assigned as control planes. Mutually exclusive with `machineClass`. |
 
@@ -105,15 +108,16 @@ This creates `ksail.yaml` and a `talos/` directory for Talos configuration patch
 
 ### Step 3: Configure Omni Options
 
-The scaffolder does not generate the `omni:` block automatically. Open `ksail.yaml` and add the endpoint, versions, and machine allocation:
+The scaffolder does not generate the `omni:` block automatically. Open `ksail.yaml` and add the Omni endpoint and machine allocation. You may also pin `talosVersion` and `kubernetesVersion` explicitly; if omitted, KSail resolves them from Omni automatically:
 
 ```yaml
 spec:
   cluster:
     omni:
       endpoint: "https://<account>.omni.siderolabs.io:443"
-      talosVersion: "v1.9.5"
-      kubernetesVersion: "v1.32.3"
+      # Optional: pin versions (auto-resolved from Omni if omitted)
+      # talosVersion: "v1.9.5"
+      # kubernetesVersion: "v1.32.3"
       # Choose one: machine class (dynamic) or machines list (static)
       machineClass: "my-machine-class"
 ```
@@ -207,7 +211,7 @@ Applies in-place changes to components (CNI, GitOps engine, cert-manager, etc.).
 
 ## Troubleshooting
 
-**`talos version is required`** or **`kubernetes version is required`** — `spec.cluster.omni.talosVersion` or `spec.cluster.omni.kubernetesVersion` is missing from `ksail.yaml`. Add both fields:
+**`failed to determine Talos version`** — KSail could not auto-resolve the Talos version from Omni (for example the Omni API was unreachable or returned no versions). Set `talosVersion` and `kubernetesVersion` explicitly to bypass version discovery:
 
 ```yaml
 spec:
@@ -216,6 +220,8 @@ spec:
       talosVersion: "v1.9.5"
       kubernetesVersion: "v1.32.3"
 ```
+
+**`TalosVersion is required`** or **`KubernetesVersion is required`** — Version resolution produced an empty value. This typically means the Omni query returned no results and no fallback was available. Set both fields explicitly as shown above.
 
 **`omni service account key is not set`** — The env var is missing or empty. Run `echo $OMNI_SERVICE_ACCOUNT_KEY` to check. Re-export if needed. If you use a custom variable name, verify it matches `spec.cluster.omni.serviceAccountKeyEnvVar` in `ksail.yaml`.
 
