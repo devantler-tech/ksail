@@ -4837,7 +4837,7 @@ func NewSwitchCmd(_ *di.Runtime) *cobra.Command {
 // SwitchDeps captures injectable dependencies for the switch command.
 type SwitchDeps struct {
 	// KubeconfigPath overrides the kubeconfig path resolution.
-	// If empty, the path is resolved from ksail.yaml or the default.
+	// If empty, the path is resolved from KUBECONFIG env, ksail.yaml, or the default.
 	KubeconfigPath string
 
 	// PickCluster overrides the interactive picker for testing.
