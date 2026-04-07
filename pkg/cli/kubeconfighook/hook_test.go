@@ -126,6 +126,15 @@ func TestIsTokenExpired_EdgeCases(t *testing.T) {
 		assert.False(t, kubeconfighook.IsTokenExpired(path))
 	})
 
+	t.Run("FourSegmentToken", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		path := writeKubeconfig(t, dir, "a.b.c.d")
+
+		assert.False(t, kubeconfighook.IsTokenExpired(path))
+	})
+
 	t.Run("NoToken", func(t *testing.T) {
 		t.Parallel()
 

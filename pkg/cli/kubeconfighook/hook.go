@@ -200,10 +200,15 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("set permissions: %w", chmodErr)
 	}
 
-	_, writeErr := tmp.Write(data)
+	bytesWritten, writeErr := tmp.Write(data)
 	if writeErr != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("write data: %w", writeErr)
+	}
+
+	if bytesWritten != len(data) {
+		_ = tmp.Close()
+		return fmt.Errorf("write data: short write: wrote %d of %d bytes", bytesWritten, len(data))
 	}
 
 	closeErr := tmp.Close()
@@ -266,8 +271,8 @@ func IsTokenExpired(kubeconfigPath string) bool {
 // locally-stored kubeconfig — the token's authenticity is verified by the
 // API server, not by this function.
 func jwtExpiry(token string) (time.Time, error) {
-	parts := strings.SplitN(token, ".", jwtParts)
-	if len(parts) < jwtParts {
+	parts := strings.Split(token, ".")
+	if len(parts) != jwtParts {
 		return time.Time{}, errNotJWT
 	}
 
