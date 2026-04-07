@@ -48,18 +48,24 @@ const (
 // On refresh failure, a warning is logged but the error is not propagated —
 // the command proceeds with the existing kubeconfig.
 func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
-	cfg, distCfg := loadConfigSilently(cmd)
-	if cfg == nil || cfg.Spec.Cluster.Provider != v1alpha1.ProviderOmni {
+	cfgManager := kubeconfig.NewSilentConfigManager(cmd)
+
+	cfg, loadErr := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
+	if loadErr != nil || cfg == nil || !cfgManager.IsConfigFileFound() {
 		return
 	}
 
-	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(cfg)
-	if err != nil {
+	if cfg.Spec.Cluster.Provider != v1alpha1.ProviderOmni {
 		return
 	}
 
-	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
-	if err != nil {
+	kubeconfigPath, pathErr := kubeconfig.GetKubeconfigPathFromConfig(cfg)
+	if pathErr != nil {
+		return
+	}
+
+	canonicalPath, canonErr := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if canonErr != nil {
 		return
 	}
 
@@ -72,7 +78,7 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 		return
 	}
 
-	clusterName := resolveClusterName(distCfg, canonicalPath)
+	clusterName := resolveClusterName(cfgManager.DistributionConfig, canonicalPath)
 	if clusterName == "" {
 		return
 	}
@@ -81,20 +87,6 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 	if refreshErr != nil {
 		notify.Warningf(cmd.OutOrStderr(), "failed to refresh Omni kubeconfig: %v", refreshErr)
 	}
-}
-
-// loadConfigSilently loads the KSail config without producing output.
-// Uses [kubeconfig.NewSilentConfigManager] for flag resolution to avoid
-// duplicating that boilerplate.
-func loadConfigSilently(cmd *cobra.Command) (*v1alpha1.Cluster, *clusterprovisioner.DistributionConfig) {
-	cfgManager := kubeconfig.NewSilentConfigManager(cmd)
-
-	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
-	if err != nil || cfg == nil || !cfgManager.IsConfigFileFound() {
-		return nil, nil
-	}
-
-	return cfg, cfgManager.DistributionConfig
 }
 
 // resolveClusterName determines the Omni cluster name from available sources.
