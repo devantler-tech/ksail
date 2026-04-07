@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -230,10 +231,11 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	}
 
 	renameErr := os.Rename(tmpPath, path)
-	if renameErr != nil {
-		// On Windows, os.Rename may fail when the destination exists.
-		// Mirror the pattern in pkg/cli/cmd/cluster/cluster.go: remove
-		// the target and retry.
+	if renameErr != nil && runtime.GOOS == "windows" {
+		// On Windows, os.Rename may fail when the destination already
+		// exists. Remove the target and retry only on Windows to avoid
+		// accidentally deleting a valid kubeconfig on Unix where rename
+		// is atomic and failures indicate a different problem.
 		_, statErr := os.Stat(path)
 		if statErr == nil {
 			_ = os.Remove(path)
