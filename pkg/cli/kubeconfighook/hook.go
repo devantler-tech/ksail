@@ -61,7 +61,12 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 		return
 	}
 
-	refreshErr := refreshKubeconfig(cmd.Context(), cfg.Spec.Cluster.Omni, clusterName, canonicalPath)
+	refreshErr := refreshKubeconfig(
+		cmd.Context(),
+		cfg.Spec.Cluster.Omni,
+		clusterName,
+		canonicalPath,
+	)
 	if refreshErr != nil {
 		notify.Warningf(cmd.OutOrStderr(), "failed to refresh Omni kubeconfig: %v", refreshErr)
 	}
@@ -197,18 +202,26 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	chmodErr := os.Chmod(tmpPath, perm)
 	if chmodErr != nil {
 		_ = tmp.Close()
+
 		return fmt.Errorf("set permissions: %w", chmodErr)
 	}
 
 	bytesWritten, writeErr := tmp.Write(data)
 	if writeErr != nil {
 		_ = tmp.Close()
+
 		return fmt.Errorf("write data: %w", writeErr)
 	}
 
 	if bytesWritten != len(data) {
 		_ = tmp.Close()
-		return fmt.Errorf("write data: %w: wrote %d of %d bytes", errShortWrite, bytesWritten, len(data))
+
+		return fmt.Errorf(
+			"write data: %w: wrote %d of %d bytes",
+			errShortWrite,
+			bytesWritten,
+			len(data),
+		)
 	}
 
 	closeErr := tmp.Close()

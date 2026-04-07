@@ -321,7 +321,11 @@ const DefaultKubeconfigTTL = 30 * 24 * time.Hour
 // If ttl is <= 0, DefaultKubeconfigTTL (30 days) is used.
 // The CLI's PersistentPreRunE hook transparently refreshes the kubeconfig
 // before any command when the token has expired.
-func (p *Provider) GetKubeconfig(ctx context.Context, clusterName string, ttl time.Duration) ([]byte, error) {
+func (p *Provider) GetKubeconfig(
+	ctx context.Context,
+	clusterName string,
+	ttl time.Duration,
+) ([]byte, error) {
 	if p.client == nil {
 		return nil, provider.ErrProviderUnavailable
 	}

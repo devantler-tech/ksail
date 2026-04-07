@@ -51,6 +51,7 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	// this one. Workload commands wire the hook separately in their own hook.
 	cmd.PersistentPreRunE = func(child *cobra.Command, _ []string) error {
 		kubeconfighook.MaybeRefreshOmniKubeconfig(child)
+
 		return nil
 	}
 
