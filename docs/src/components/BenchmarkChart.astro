@@ -176,7 +176,6 @@
       hierarchy[p.pkg][p.stem][p.metric].push(p);
     }
 
-    const theme = detectTheme();
     const sortedPkgs = Object.keys(hierarchy).sort();
 
     // Build TOC
@@ -293,12 +292,13 @@
               });
 
             if (activeChart) activeChart.destroy();
-            activeChart = createChart(canvas, datasets, metric, theme);
+            activeChart = createChart(canvas, datasets, metric, detectTheme());
           }
 
           for (const metric of METRICS) {
             if (!metricsData[metric]) continue;
             const tab = document.createElement("button");
+            tab.type = "button";
             tab.className = "benchmark-tab";
             tab.textContent = metric;
             tab.addEventListener("click", () => {
