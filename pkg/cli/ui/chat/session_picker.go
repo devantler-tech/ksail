@@ -339,7 +339,7 @@ func (m *Model) startNewSession() error {
 // loadSession loads a chat session into the model using the Copilot SDK.
 func (m *Model) loadSession(metadata *SessionMetadata) {
 	m.currentSessionID = metadata.ID
-	// Restore mode from session (nil = agent mode default)
+	// Restore mode from session (nil = interactive mode default)
 	if metadata.ChatMode != nil {
 		m.chatMode = *metadata.ChatMode
 	} else {

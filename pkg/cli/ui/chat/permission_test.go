@@ -278,7 +278,7 @@ func TestPermissionHandler_InteractiveSendsToChannel(t *testing.T) {
 
 // TestPermissionHandler_NilChatModeRef tests that nil chatModeRef sends to event channel
 // and correctly returns "denied-interactively-by-user" when the TUI denies the request.
-func TestPermissionHandler_NilYoloRef(t *testing.T) {
+func TestPermissionHandler_NilChatModeRef(t *testing.T) {
 	t.Parallel()
 
 	eventChan := make(chan tea.Msg, 10)
