@@ -79,6 +79,8 @@ ksail workload get pods -A | grep -v Running
 ksail cluster delete && ksail cluster create
 ```
 
+If the error mentions `connectivity check pod image pull failed` with `ImagePullBackOff` or `ErrImagePull`, the connectivity check pod could not pull its `busybox:stable` image. This is typically a transient Docker Hub rate-limit or network issue — not an actual API server connectivity failure. Verify Docker Hub reachability (`curl -I https://registry-1.docker.io/v2/`) and retry with `ksail cluster delete && ksail cluster create`. If a docker.io mirror registry is configured, ensure it is healthy and reachable from within the cluster.
+
 ### Flux/ArgoCD Not Reconciling
 
 If changes don't appear after `ksail workload reconcile`, check status and logs:

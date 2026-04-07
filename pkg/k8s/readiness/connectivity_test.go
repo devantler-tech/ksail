@@ -221,6 +221,7 @@ func TestConnectivityCheckPodSpec(t *testing.T) {
 			require.Equal(t, corev1.RestartPolicyNever, pod.Spec.RestartPolicy)
 			require.Len(t, pod.Spec.Containers, 1)
 			require.Equal(t, "busybox:stable", pod.Spec.Containers[0].Image)
+			require.Equal(t, corev1.PullIfNotPresent, pod.Spec.Containers[0].ImagePullPolicy)
 			require.Contains(t, pod.Spec.Containers[0].Command[2], "nc -w 5 "+testClusterIP+" 443")
 			require.Len(t, pod.Spec.Tolerations, 1)
 			require.Equal(t, corev1.TolerationOpExists, pod.Spec.Tolerations[0].Operator)
@@ -237,6 +238,86 @@ func TestConnectivityCheckPodSpec(t *testing.T) {
 
 	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 15*time.Second)
 	require.NoError(t, err)
+}
+
+func TestWaitForInClusterAPIConnectivity_ImagePullFailure(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name    string
+		reason  string
+		message string
+	}{
+		{
+			name:    "ImagePullBackOff",
+			reason:  "ImagePullBackOff",
+			message: "Back-off pulling image \"busybox:stable\"",
+		},
+		{
+			name:    "ErrImagePull",
+			reason:  "ErrImagePull",
+			message: "failed to pull image \"busybox:stable\"",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			clientset := newClientsetWithImagePullFailure(testCase.reason, testCase.message)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 5*time.Second)
+
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "image pull failed")
+			require.Contains(t, err.Error(), testCase.reason)
+			require.Contains(t, err.Error(), testCase.message)
+			require.Contains(t, err.Error(), "busybox:stable")
+			// Should NOT contain the misleading "not reachable" message.
+			require.NotContains(t, err.Error(), "not reachable from pods")
+		})
+	}
+}
+
+// newClientsetWithImagePullFailure returns a fake clientset pre-configured to
+// simulate an image pull failure on pod creation.
+func newClientsetWithImagePullFailure(reason, message string) *fake.Clientset {
+	clientset := fake.NewClientset(newKubernetesService())
+
+	clientset.PrependReactor(
+		"create",
+		"pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			createAction, isCreateAction := action.(k8stesting.CreateAction)
+			if !isCreateAction {
+				return false, nil, nil
+			}
+
+			pod, isPod := createAction.GetObject().(*corev1.Pod)
+			if !isPod {
+				return false, nil, nil
+			}
+
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+				Name:  "check",
+				Image: "busybox:stable",
+				State: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{
+						Reason:  reason,
+						Message: message,
+					},
+				},
+			}}
+
+			return false, nil, nil
+		},
+	)
+
+	return clientset
 }
 
 // connectivityPodName mirrors the constant from the production code so test

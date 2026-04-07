@@ -13,6 +13,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// errImagePullFailure is returned when the connectivity check pod cannot
+// pull its container image, which is distinct from actual API connectivity
+// failures and requires different remediation.
+var errImagePullFailure = errors.New("connectivity check pod image pull failed")
+
 const (
 	connectivityPodName  = "ksail-api-connectivity-check"
 	connectivityPodNS    = "default"
@@ -82,6 +87,15 @@ func WaitForInClusterAPIConnectivity(
 		return runConnectivityTestPod(pollCtx, clientset, apiServerIP)
 	})
 	if pollErr != nil {
+		// If the underlying cause is an image pull failure, surface that
+		// directly without the misleading "API server not reachable" wrapper.
+		if errors.Is(pollErr, errImagePullFailure) {
+			return fmt.Errorf(
+				"in-cluster API connectivity pre-flight check aborted: %w",
+				pollErr,
+			)
+		}
+
 		return fmt.Errorf(
 			"in-cluster API connectivity check failed: "+
 				"API server ClusterIP %s:443 not reachable from pods: %w",
@@ -136,27 +150,51 @@ func waitForConnectivityPodCompletion(
 		case <-podCtx.Done():
 			return false, nil // per-attempt timeout; retry on next poll
 		case <-ticker.C:
-			pod, getErr := clientset.CoreV1().Pods(connectivityPodNS).Get(
-				podCtx, connectivityPodName, metav1.GetOptions{},
-			)
-			if getErr != nil {
-				if isTransientPodError(getErr) {
-					return false, nil
-				}
-
-				return false, fmt.Errorf("get connectivity check pod: %w", getErr)
-			}
-
-			switch pod.Status.Phase {
-			case corev1.PodSucceeded:
-				return true, nil
-			case corev1.PodFailed:
-				return false, nil
-			case corev1.PodPending, corev1.PodRunning, corev1.PodUnknown:
-				// Still Pending, Running, or Unknown — keep waiting.
+			succeeded, done, err := pollConnectivityPod(podCtx, clientset)
+			if done || err != nil {
+				return succeeded, err
 			}
 		}
 	}
+}
+
+// pollConnectivityPod fetches the connectivity check pod and evaluates its
+// status. Returns:
+//   - (true, true, nil) — pod succeeded; connectivity confirmed
+//   - (false, true, nil) — pod reached terminal failure; caller should exit
+//     and let the outer PollForReadiness retry
+//   - (false, true, err) — non-recoverable error; caller should propagate
+//   - (false, false, nil) — pod still in progress; caller should keep polling
+func pollConnectivityPod(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+) (bool, bool, error) {
+	pod, getErr := clientset.CoreV1().Pods(connectivityPodNS).Get(
+		ctx, connectivityPodName, metav1.GetOptions{},
+	)
+	if getErr != nil {
+		if isTransientPodError(getErr) {
+			return false, true, nil
+		}
+
+		return false, true, fmt.Errorf("get connectivity check pod: %w", getErr)
+	}
+
+	switch pod.Status.Phase {
+	case corev1.PodSucceeded:
+		return true, true, nil
+	case corev1.PodFailed:
+		return false, true, nil
+	case corev1.PodPending:
+		pullErr := checkPendingPodImagePull(pod)
+		if pullErr != nil {
+			return false, true, pullErr
+		}
+	case corev1.PodRunning, corev1.PodUnknown:
+		// Still Running or Unknown — keep waiting.
+	}
+
+	return false, false, nil
 }
 
 // isTransientPodError returns true for Kubernetes API errors that are expected
@@ -174,6 +212,54 @@ func isTransientPodError(err error) bool {
 		apierrors.IsNotFound(err)
 }
 
+// checkPendingPodImagePull checks a Pending pod for image pull failures and
+// returns a descriptive error if one is detected. Returns nil if the pod is
+// still pulling normally.
+func checkPendingPodImagePull(pod *corev1.Pod) error {
+	reason, message, failed := containerImagePullFailure(pod)
+	if !failed {
+		return nil
+	}
+
+	if message != "" {
+		return fmt.Errorf(
+			"%w: %s: %s (image %q)",
+			errImagePullFailure, reason, message, connectivityPodImage,
+		)
+	}
+
+	return fmt.Errorf(
+		"%w: %s (image %q)",
+		errImagePullFailure, reason, connectivityPodImage,
+	)
+}
+
+// containerImagePullFailure inspects a pod's container statuses for image pull
+// failures. Returns the waiting reason, message, and true if an image pull
+// failure is detected, or ("", "", false) if no image pull failure is found.
+func containerImagePullFailure(pod *corev1.Pod) (string, string, bool) {
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.State.Waiting != nil && isImagePullFailureReason(cs.State.Waiting.Reason) {
+			return cs.State.Waiting.Reason, cs.State.Waiting.Message, true
+		}
+	}
+
+	return "", "", false
+}
+
+// isImagePullFailureReason returns true if the given container waiting reason
+// indicates that the container image could not be pulled. These are
+// non-recoverable within the scope of a single pod attempt and should be
+// surfaced immediately.
+func isImagePullFailureReason(reason string) bool {
+	switch reason {
+	case "ImagePullBackOff", "ErrImagePull", "ImageInspectError", "ErrImageNeverPull":
+		return true
+	default:
+		return false
+	}
+}
+
 // connectivityCheckPod builds the spec for the short-lived connectivity test pod.
 func connectivityCheckPod(apiServerIP string) *corev1.Pod {
 	gracePeriod := int64(0)
@@ -185,8 +271,9 @@ func connectivityCheckPod(apiServerIP string) *corev1.Pod {
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{
-				Name:  "check",
-				Image: connectivityPodImage,
+				Name:            "check",
+				Image:           connectivityPodImage,
+				ImagePullPolicy: corev1.PullIfNotPresent,
 				Command: []string{
 					"sh", "-c",
 					fmt.Sprintf("nc -w 5 %s 443 </dev/null", apiServerIP),
