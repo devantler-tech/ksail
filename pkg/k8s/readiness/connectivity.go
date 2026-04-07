@@ -168,7 +168,7 @@ func waitForConnectivityPodCompletion(
 func pollConnectivityPod(
 	ctx context.Context,
 	clientset kubernetes.Interface,
-) (succeeded bool, done bool, err error) {
+) (bool, bool, error) {
 	pod, getErr := clientset.CoreV1().Pods(connectivityPodNS).Get(
 		ctx, connectivityPodName, metav1.GetOptions{},
 	)
