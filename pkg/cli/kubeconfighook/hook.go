@@ -21,11 +21,20 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// expiryBuffer is subtracted from the token's exp claim so that refresh
-// happens a short while before the token actually expires. This avoids
-// race conditions where the token expires between the check and the
-// actual API call.
-const expiryBuffer = 5 * time.Minute
+const (
+	// expiryBuffer is subtracted from the token's exp claim so that refresh
+	// happens a short while before the token actually expires.
+	expiryBuffer = 5 * time.Minute
+
+	// kubeconfigFileMode is the file mode for kubeconfig files.
+	kubeconfigFileMode = 0o600
+
+	// jwtMinParts is the minimum number of dot-separated parts in a JWT token.
+	jwtMinParts = 2
+
+	// jwtMaxParts is the maximum number of dot-separated parts in a JWT token.
+	jwtMaxParts = 3
+)
 
 // MaybeRefreshOmniKubeconfig checks whether the current kubeconfig's service-account
 // token is expired for Omni-managed clusters and transparently refreshes it.
@@ -54,7 +63,8 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 		return
 	}
 
-	if _, err := os.Stat(canonicalPath); os.IsNotExist(err) {
+	_, statErr := os.Stat(canonicalPath)
+	if os.IsNotExist(statErr) {
 		return
 	}
 
@@ -67,9 +77,9 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 		return
 	}
 
-	err = refreshKubeconfig(cmd.Context(), cfg.Spec.Cluster.Omni, clusterName, canonicalPath)
-	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(), "failed to refresh Omni kubeconfig: %v", err)
+	refreshErr := refreshKubeconfig(cmd.Context(), cfg.Spec.Cluster.Omni, clusterName, canonicalPath)
+	if refreshErr != nil {
+		notify.Warningf(cmd.OutOrStderr(), "failed to refresh Omni kubeconfig: %v", refreshErr)
 	}
 }
 
@@ -153,8 +163,9 @@ func refreshKubeconfig(
 		return fmt.Errorf("fetch kubeconfig: %w", err)
 	}
 
-	if err := atomicWriteFile(kubeconfigPath, data, 0o600); err != nil {
-		return fmt.Errorf("write kubeconfig: %w", err)
+	writeErr := atomicWriteFile(kubeconfigPath, data, kubeconfigFileMode)
+	if writeErr != nil {
+		return fmt.Errorf("write kubeconfig: %w", writeErr)
 	}
 
 	return nil
@@ -177,22 +188,26 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 		_ = os.Remove(tmpPath)
 	}()
 
-	if err := os.Chmod(tmpPath, perm); err != nil {
+	chmodErr := os.Chmod(tmpPath, perm)
+	if chmodErr != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("set permissions: %w", err)
+		return fmt.Errorf("set permissions: %w", chmodErr)
 	}
 
-	if _, err := tmp.Write(data); err != nil {
+	_, writeErr := tmp.Write(data)
+	if writeErr != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("write data: %w", err)
+		return fmt.Errorf("write data: %w", writeErr)
 	}
 
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close temp file: %w", err)
+	closeErr := tmp.Close()
+	if closeErr != nil {
+		return fmt.Errorf("close temp file: %w", closeErr)
 	}
 
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("rename temp file: %w", err)
+	renameErr := os.Rename(tmpPath, path)
+	if renameErr != nil {
+		return fmt.Errorf("rename temp file: %w", renameErr)
 	}
 
 	return nil
@@ -210,13 +225,13 @@ func IsTokenExpired(kubeconfigPath string) bool {
 		return false
 	}
 
-	ctx, ok := cfg.Contexts[cfg.CurrentContext]
-	if !ok {
+	currentCtx, contextExists := cfg.Contexts[cfg.CurrentContext]
+	if !contextExists {
 		return false
 	}
 
-	authInfo, ok := cfg.AuthInfos[ctx.AuthInfo]
-	if !ok || authInfo.Token == "" {
+	authInfo, authExists := cfg.AuthInfos[currentCtx.AuthInfo]
+	if !authExists || authInfo.Token == "" {
 		return false
 	}
 
@@ -233,8 +248,8 @@ func IsTokenExpired(kubeconfigPath string) bool {
 // locally-stored kubeconfig — the token's authenticity is verified by the
 // API server, not by this function.
 func jwtExpiry(token string) (time.Time, error) {
-	parts := strings.SplitN(token, ".", 3)
-	if len(parts) < 2 {
+	parts := strings.SplitN(token, ".", jwtMaxParts)
+	if len(parts) < jwtMinParts {
 		return time.Time{}, errNotJWT
 	}
 
@@ -247,8 +262,9 @@ func jwtExpiry(token string) (time.Time, error) {
 		Exp int64 `json:"exp"`
 	}
 
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return time.Time{}, fmt.Errorf("unmarshal JWT claims: %w", err)
+	unmarshalErr := json.Unmarshal(payload, &claims)
+	if unmarshalErr != nil {
+		return time.Time{}, fmt.Errorf("unmarshal JWT claims: %w", unmarshalErr)
 	}
 
 	if claims.Exp == 0 {

@@ -221,5 +221,10 @@ func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner 
 // createOmniProvider creates an Omni provider from the given options.
 // Delegates to the shared omni.NewProviderFromOptions for credential resolution.
 func createOmniProvider(opts v1alpha1.OptionsOmni) (*omni.Provider, error) {
-	return omni.NewProviderFromOptions(opts)
+	prov, err := omni.NewProviderFromOptions(opts)
+	if err != nil {
+		return nil, fmt.Errorf("create Omni provider: %w", err)
+	}
+
+	return prov, nil
 }
