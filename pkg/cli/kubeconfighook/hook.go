@@ -82,11 +82,8 @@ func resolveOmniKubeconfigPath(
 ) (*v1alpha1.Cluster, *clusterprovisioner.DistributionConfig, string) {
 	// If the user explicitly passed --kubeconfig, they are managing the
 	// kubeconfig themselves — skip auto-refresh.
-	if cmd != nil {
-		kubeconfigFlag := cmd.Flags().Lookup("kubeconfig")
-		if kubeconfigFlag != nil && cmd.Flags().Changed("kubeconfig") {
-			return nil, nil, ""
-		}
+	if isKubeconfigFlagExplicit(cmd) {
+		return nil, nil, ""
 	}
 
 	cfgManager := kubeconfig.NewSilentConfigManager(cmd)
@@ -116,6 +113,18 @@ func resolveOmniKubeconfigPath(
 	}
 
 	return cfg, cfgManager.DistributionConfig, canonicalPath
+}
+
+// isKubeconfigFlagExplicit returns true when the command has a --kubeconfig
+// flag and the user explicitly set it on the command line.
+func isKubeconfigFlagExplicit(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+
+	kubeconfigFlag := cmd.Flags().Lookup("kubeconfig")
+
+	return kubeconfigFlag != nil && cmd.Flags().Changed("kubeconfig")
 }
 
 // resolveClusterName determines the Omni cluster name from available sources.
