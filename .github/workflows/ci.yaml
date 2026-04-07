@@ -692,7 +692,7 @@ jobs:
           alert-threshold: "150%"
           fail-threshold: "200%"
           fail-on-alert: ${{ github.event_name == 'pull_request' }}
-          comment-always: ${{ github.event_name == 'pull_request' }}
+          comment-on-alert: ${{ github.event_name == 'pull_request' }}
           summary-always: true
 
       - name: 📤 Upload benchmark results
