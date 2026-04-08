@@ -2,8 +2,11 @@ package tenant
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/detector/gitops"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
 	"sigs.k8s.io/yaml"
@@ -13,6 +16,11 @@ const (
 	appProjectKind    = "AppProject"
 	k8sDefaultServer  = "https://kubernetes.default.svc"
 	rbacConfigMapName = "argocd-rbac-cm"
+
+	// DefaultArgoCDRBACCMFilename is the default filename when creating a new argocd-rbac-cm file.
+	DefaultArgoCDRBACCMFilename = "argocd-rbac-cm.yaml"
+
+	rbacCMFilePermissions = 0o600
 )
 
 // appProject represents an ArgoCD AppProject CR.
@@ -370,4 +378,158 @@ func isTenantPolicyLine(line, tenantName string) bool {
 	exactGroup := fmt.Sprintf("g, %s, role:%s", tenantName, tenantName)
 
 	return strings.Contains(line, exactRole) || strings.TrimSpace(line) == exactGroup
+}
+
+// FindArgoCDRBACCM scans YAML files in the given directory for a ConfigMap
+// named "argocd-rbac-cm" (apiVersion: v1, kind: ConfigMap).
+// Returns the file path if found, or empty string if not found.
+// Supports multi-document YAML files separated by "---".
+func FindArgoCDRBACCM(dir string) (string, error) {
+	canonDir, err := fsutil.EvalCanonicalPath(dir)
+	if err != nil {
+		return "", fmt.Errorf("resolving directory %s: %w", dir, err)
+	}
+
+	entries, err := os.ReadDir(canonDir)
+	if err != nil {
+		return "", fmt.Errorf("reading directory %s: %w", canonDir, err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue
+		}
+
+		filePath := filepath.Join(canonDir, name)
+
+		data, readErr := fsutil.ReadFileSafe(canonDir, filePath)
+		if readErr != nil {
+			return "", fmt.Errorf("reading %s: %w", filePath, readErr)
+		}
+
+		if containsArgoCDRBACCM(data) {
+			return filePath, nil
+		}
+	}
+
+	return "", nil
+}
+
+// containsArgoCDRBACCM checks whether YAML data (possibly multi-document)
+// contains an argocd-rbac-cm ConfigMap.
+func containsArgoCDRBACCM(data []byte) bool {
+	content := string(data)
+	if strings.HasPrefix(content, "---") {
+		content = "\n" + content
+	}
+
+	for part := range strings.SplitSeq(content, "\n---") {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+
+		var raw map[string]any
+
+		err := yaml.Unmarshal([]byte(trimmed), &raw)
+		if err != nil {
+			continue
+		}
+
+		if isArgoCDRBACConfigMap(raw) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isArgoCDRBACConfigMap(raw map[string]any) bool {
+	apiVersion, _ := raw["apiVersion"].(string)
+	kind, _ := raw["kind"].(string)
+
+	meta, _ := raw["metadata"].(map[string]any)
+	name, _ := meta["name"].(string)
+
+	return apiVersion == "v1" && kind == "ConfigMap" && name == rbacConfigMapName
+}
+
+// MergeArgoCDRBACPolicyFile reads an existing argocd-rbac-cm file (or creates a new one)
+// and merges the tenant's RBAC policy into it.
+func MergeArgoCDRBACPolicyFile(rbacCMPath, tenantName string) error {
+	canonPath, err := fsutil.EvalCanonicalPath(rbacCMPath)
+	if err != nil {
+		return fmt.Errorf("resolving canonical path for %s: %w", rbacCMPath, err)
+	}
+
+	existingContent := ""
+
+	data, readErr := os.ReadFile(canonPath) //nolint:gosec // canonicalized above
+	if readErr == nil {
+		existingContent = string(data)
+	} else if !os.IsNotExist(readErr) {
+		return fmt.Errorf("reading %s: %w", canonPath, readErr)
+	}
+
+	merged, err := MergeArgoCDRBACPolicy(existingContent, tenantName)
+	if err != nil {
+		return fmt.Errorf("merging RBAC policy: %w", err)
+	}
+
+	return writeRBACCMFile(canonPath, merged)
+}
+
+// RemoveArgoCDRBACPolicyFile reads an existing argocd-rbac-cm file and removes
+// the tenant's RBAC policy from it. No-op if the file does not exist.
+func RemoveArgoCDRBACPolicyFile(rbacCMPath, tenantName string) error {
+	canonPath, err := fsutil.EvalCanonicalPath(rbacCMPath)
+	if err != nil {
+		return fmt.Errorf("resolving canonical path for %s: %w", rbacCMPath, err)
+	}
+
+	data, readErr := os.ReadFile(canonPath) //nolint:gosec // canonicalized above
+	if os.IsNotExist(readErr) {
+		return nil
+	}
+
+	if readErr != nil {
+		return fmt.Errorf("reading %s: %w", canonPath, readErr)
+	}
+
+	result, err := RemoveArgoCDRBACPolicy(string(data), tenantName)
+	if err != nil {
+		return fmt.Errorf("removing RBAC policy: %w", err)
+	}
+
+	return writeRBACCMFile(canonPath, result)
+}
+
+// writeRBACCMFile writes content to an argocd-rbac-cm file, preserving
+// existing file permissions when the file already exists.
+// The path is canonicalized to prevent symlink-based path traversal.
+func writeRBACCMFile(path, content string) error {
+	safePath, err := fsutil.EvalCanonicalPath(path)
+	if err != nil {
+		return fmt.Errorf("resolving canonical path for %s: %w", path, err)
+	}
+
+	perm := os.FileMode(rbacCMFilePermissions)
+
+	info, statErr := os.Stat(safePath)
+	if statErr == nil {
+		perm = info.Mode().Perm()
+	}
+
+	//nolint:gosec // safePath is canonicalized via fsutil.EvalCanonicalPath
+	err = os.WriteFile(safePath, []byte(content), perm)
+	if err != nil {
+		return fmt.Errorf("writing %s: %w", safePath, err)
+	}
+
+	return nil
 }

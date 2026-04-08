@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
@@ -89,7 +90,36 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("deleting tenant: %w", err)
 	}
 
+	// Best-effort: remove tenant's ArgoCD RBAC policy from argocd-rbac-cm.
+	if opts.Unregister {
+		removeArgoCDRBACPolicy(cmd, opts)
+	}
+
 	notify.Successf(cmd.OutOrStdout(), "Tenant %q deleted successfully", opts.Name)
 
 	return nil
+}
+
+// removeArgoCDRBACPolicy is a best-effort cleanup of ArgoCD RBAC policies.
+// Path resolution and discovery failures are silently skipped (expected when
+// no kustomization.yaml or argocd-rbac-cm file exists). Write/parse failures
+// emit a warning but do not block tenant deletion.
+func removeArgoCDRBACPolicy(cmd *cobra.Command, opts tenant.DeleteOptions) {
+	kPath, err := tenant.ResolveKustomizationPath(opts.OutputDir, opts.KustomizationPath)
+	if err != nil {
+		return
+	}
+
+	kDir := filepath.Dir(kPath)
+
+	rbacCMPath, err := tenant.FindArgoCDRBACCM(kDir)
+	if err != nil || rbacCMPath == "" {
+		return
+	}
+
+	err = tenant.RemoveArgoCDRBACPolicyFile(rbacCMPath, opts.Name)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStdout(),
+			"failed to remove ArgoCD RBAC policy for tenant %q: %v", opts.Name, err)
+	}
 }
