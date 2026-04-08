@@ -223,7 +223,10 @@ func processConfigMapDoc(originalDoc, trimmedDoc []byte, tenantName string) ([]b
 	docStr := string(originalDoc)
 
 	prefix := ""
-	if idx := strings.IndexFunc(docStr, func(r rune) bool { return r != '\n' && r != '\r' }); idx > 0 {
+	if idx := strings.IndexFunc(
+		docStr,
+		func(r rune) bool { return r != '\n' && r != '\r' },
+	); idx > 0 {
 		prefix = docStr[:idx]
 	}
 
@@ -314,7 +317,8 @@ func isRBACConfigMapDoc(data []byte) bool {
 		} `yaml:"metadata"`
 	}
 
-	if err := yaml.Unmarshal(data, &resource); err != nil {
+	err := yaml.Unmarshal(data, &resource)
+	if err != nil {
 		return false
 	}
 
