@@ -580,7 +580,11 @@ func handleRotateRunE(
 // collectRotateTargets resolves the target path into a list of encrypted files.
 // Returns nil (not empty) when no files are found and a message has been printed.
 // The bool return indicates whether the target was a directory.
-func collectRotateTargets(canonPath string, recursive bool, writer io.Writer) ([]string, bool, error) {
+func collectRotateTargets(
+	canonPath string,
+	recursive bool,
+	writer io.Writer,
+) ([]string, bool, error) {
 	info, err := os.Stat(canonPath)
 	if err != nil {
 		return nil, false, fmt.Errorf("stat %q: %w", canonPath, err)
@@ -600,7 +604,7 @@ func collectRotateTargets(canonPath string, recursive bool, writer io.Writer) ([
 				Writer:  writer,
 			})
 
-			return nil, true, nil //nolint:nilnil // nil signals "nothing to do, message printed"
+			return nil, true, nil
 		}
 
 		return files, true, nil
@@ -619,7 +623,7 @@ func collectRotateTargets(canonPath string, recursive bool, writer io.Writer) ([
 			Writer:  writer,
 		})
 
-		return nil, false, nil //nolint:nilnil // nil signals "nothing to do, message printed"
+		return nil, false, nil
 	}
 
 	return []string{canonPath}, false, nil
