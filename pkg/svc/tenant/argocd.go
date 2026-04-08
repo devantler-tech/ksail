@@ -455,13 +455,18 @@ func isArgoCDRBACConfigMap(raw map[string]any) bool {
 // MergeArgoCDRBACPolicyFile reads an existing argocd-rbac-cm file (or creates a new one)
 // and merges the tenant's RBAC policy into it.
 func MergeArgoCDRBACPolicyFile(rbacCMPath, tenantName string) error {
+	canonPath, err := fsutil.EvalCanonicalPath(rbacCMPath)
+	if err != nil {
+		return fmt.Errorf("resolving canonical path for %s: %w", rbacCMPath, err)
+	}
+
 	existingContent := ""
 
-	data, err := os.ReadFile(rbacCMPath) //nolint:gosec // path is caller-controlled
-	if err == nil {
+	data, readErr := os.ReadFile(canonPath) //nolint:gosec // canonicalized above
+	if readErr == nil {
 		existingContent = string(data)
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("reading %s: %w", rbacCMPath, err)
+	} else if !os.IsNotExist(readErr) {
+		return fmt.Errorf("reading %s: %w", canonPath, readErr)
 	}
 
 	merged, err := MergeArgoCDRBACPolicy(existingContent, tenantName)
@@ -469,19 +474,24 @@ func MergeArgoCDRBACPolicyFile(rbacCMPath, tenantName string) error {
 		return fmt.Errorf("merging RBAC policy: %w", err)
 	}
 
-	return writeRBACCMFile(rbacCMPath, merged)
+	return writeRBACCMFile(canonPath, merged)
 }
 
 // RemoveArgoCDRBACPolicyFile reads an existing argocd-rbac-cm file and removes
 // the tenant's RBAC policy from it. No-op if the file does not exist.
 func RemoveArgoCDRBACPolicyFile(rbacCMPath, tenantName string) error {
-	data, err := os.ReadFile(rbacCMPath) //nolint:gosec // path is caller-controlled
-	if os.IsNotExist(err) {
+	canonPath, err := fsutil.EvalCanonicalPath(rbacCMPath)
+	if err != nil {
+		return fmt.Errorf("resolving canonical path for %s: %w", rbacCMPath, err)
+	}
+
+	data, readErr := os.ReadFile(canonPath) //nolint:gosec // canonicalized above
+	if os.IsNotExist(readErr) {
 		return nil
 	}
 
-	if err != nil {
-		return fmt.Errorf("reading %s: %w", rbacCMPath, err)
+	if readErr != nil {
+		return fmt.Errorf("reading %s: %w", canonPath, readErr)
 	}
 
 	result, err := RemoveArgoCDRBACPolicy(string(data), tenantName)
@@ -489,7 +499,7 @@ func RemoveArgoCDRBACPolicyFile(rbacCMPath, tenantName string) error {
 		return fmt.Errorf("removing RBAC policy: %w", err)
 	}
 
-	return writeRBACCMFile(rbacCMPath, result)
+	return writeRBACCMFile(canonPath, result)
 }
 
 // writeRBACCMFile writes content to an argocd-rbac-cm file, preserving

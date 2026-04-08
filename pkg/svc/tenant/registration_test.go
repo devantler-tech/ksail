@@ -257,3 +257,63 @@ func TestResolveKustomizationPath_ExplicitNotFound(t *testing.T) {
 	_, err := tenant.ExportResolveKustomizationPath(".", "/nonexistent/kustomization.yaml")
 	require.Error(t, err)
 }
+
+// --- RegisterResource tests ---
+
+func TestRegisterResource_AddsToExisting(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	kPath := writeKustomizationFile(t, dir, `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- tenants/team-alpha
+`)
+
+	err := tenant.RegisterResource(kPath, "argocd-rbac-cm.yaml")
+	require.NoError(t, err)
+
+	resources := readKustomizationResources(t, kPath)
+	require.Contains(t, resources, "argocd-rbac-cm.yaml")
+	require.Contains(t, resources, "tenants/team-alpha")
+}
+
+func TestRegisterResource_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	kPath := writeKustomizationFile(t, dir, `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- argocd-rbac-cm.yaml
+- tenants/team-alpha
+`)
+
+	err := tenant.RegisterResource(kPath, "argocd-rbac-cm.yaml")
+	require.NoError(t, err)
+
+	resources := readKustomizationResources(t, kPath)
+	count := 0
+	for _, r := range resources {
+		if r == "argocd-rbac-cm.yaml" {
+			count++
+		}
+	}
+
+	require.Equal(t, 1, count, "resource should not be duplicated")
+}
+
+func TestRegisterResource_CreatesResourcesEntry(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	kPath := writeKustomizationFile(t, dir, `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+`)
+
+	err := tenant.RegisterResource(kPath, "argocd-rbac-cm.yaml")
+	require.NoError(t, err)
+
+	resources := readKustomizationResources(t, kPath)
+	require.Contains(t, resources, "argocd-rbac-cm.yaml")
+}

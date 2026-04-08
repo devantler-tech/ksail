@@ -101,7 +101,9 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 }
 
 // removeArgoCDRBACPolicy is a best-effort cleanup of ArgoCD RBAC policies.
-// It warns on failures but does not block tenant deletion.
+// Path resolution and discovery failures are silently skipped (expected when
+// no kustomization.yaml or argocd-rbac-cm file exists). Write/parse failures
+// emit a warning but do not block tenant deletion.
 func removeArgoCDRBACPolicy(cmd *cobra.Command, opts tenant.DeleteOptions) {
 	kPath, err := tenant.ResolveKustomizationPath(opts.OutputDir, opts.KustomizationPath)
 	if err != nil {
