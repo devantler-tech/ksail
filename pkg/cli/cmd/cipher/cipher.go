@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	errRotationFailed   = errors.New("rotation failed")
+	errRotationFailed    = errors.New("rotation failed")
 	errRotationCancelled = errors.New("rotation cancelled")
 )
 
