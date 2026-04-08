@@ -221,7 +221,7 @@ func detectFromServerURL(
 	host, err := extractHostFromURL(serverURL)
 	if err != nil {
 		return "", "", fmt.Errorf(
-			"%w: %s (server URL also unrecognizable: %v)",
+			"%w: %s (server URL also unrecognizable: %w)",
 			ErrUnknownContextPattern, kubeconfigClusterName, err,
 		)
 	}
