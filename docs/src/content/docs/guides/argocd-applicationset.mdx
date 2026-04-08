@@ -17,7 +17,7 @@ ksail cluster init --gitops-engine ArgoCD
 ksail cluster create
 ```
 
-This scaffolds a `ksail.yaml` with `gitOpsEngine: ArgoCD` and creates the cluster with:
+This scaffolds a `ksail.yaml` with `spec.cluster.gitOpsEngine: ArgoCD` and creates the cluster with:
 
 - ArgoCD installed via Helm
 - A bootstrap `Application` CR named `ksail` pointing to the local OCI registry
@@ -118,7 +118,7 @@ spec:
 This generates three Applications (`frontend`, `backend`, `monitoring`), each deployed to its own namespace.
 
 > [!TIP]
-> When using the local OCI registry, match the `repoURL` and `revision` to what KSail configures in the bootstrap Application. You can inspect the bootstrap Application with:
+> When using the local OCI registry, match the `repoURL` and `targetRevision` to what KSail configures in the bootstrap Application. You can inspect the bootstrap Application with:
 >
 > ```bash
 > ksail workload get application ksail -n argocd -o yaml
@@ -160,7 +160,7 @@ Each `config.json` contains environment-specific parameters:
 {
   "env": "dev",
   "namespace": "app-dev",
-  "replicas": "1"
+  "replicas": 1
 }
 ```
 
@@ -245,7 +245,7 @@ spec:
 
 ## Tips
 
-- **Inspect the bootstrap Application** to get the correct `repoURL` and `revision` values for your ApplicationSet templates:
+- **Inspect the bootstrap Application** to get the correct `repoURL` and `targetRevision` values for your ApplicationSet templates:
 
   ```bash
   ksail workload get application ksail -n argocd -o yaml
