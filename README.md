@@ -45,7 +45,7 @@ That's it — zero to a running cluster in under a minute.
 
 Most Kubernetes workflows look like this:
 
-```
+```text
 kind/k3d/minikube + kubectl + helm + kustomize + flux/argocd + sops + k9s + kubeconform + ...
 ```
 
