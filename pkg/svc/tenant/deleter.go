@@ -35,17 +35,8 @@ type DeleteOptions struct {
 
 // Delete removes a tenant's manifests and optionally unregisters and deletes the repo.
 func Delete(ctx context.Context, opts DeleteOptions) error {
-	if opts.Name == "" {
-		return ErrTenantNameRequired
-	}
-
-	if errs := validation.IsDNS1123Label(opts.Name); len(errs) > 0 {
-		return fmt.Errorf(
-			"%w: %s (%s)",
-			ErrInvalidTenantName,
-			opts.Name,
-			strings.Join(errs, "; "),
-		)
+	if err := validateDeleteOpts(opts); err != nil {
+		return err
 	}
 
 	tenantDir := filepath.Join(opts.OutputDir, opts.Name)
@@ -81,6 +72,23 @@ func Delete(ctx context.Context, opts DeleteOptions) error {
 
 	if opts.DeleteRepo {
 		return deleteRepo(ctx, opts)
+	}
+
+	return nil
+}
+
+func validateDeleteOpts(opts DeleteOptions) error {
+	if opts.Name == "" {
+		return ErrTenantNameRequired
+	}
+
+	if errs := validation.IsDNS1123Label(opts.Name); len(errs) > 0 {
+		return fmt.Errorf(
+			"%w: %s (%s)",
+			ErrInvalidTenantName,
+			opts.Name,
+			strings.Join(errs, "; "),
+		)
 	}
 
 	return nil
@@ -128,11 +136,15 @@ func isArgoCDTenant(tenantDir string) bool {
 // cleanupArgoCDRBAC removes the tenant's policy lines from the argocd-rbac-cm ConfigMap.
 // The ConfigMap is discovered by scanning YAML files in outputDir for a Kubernetes ConfigMap
 // with metadata.name "argocd-rbac-cm" (content-based, not filename-based).
-// Skips silently if no matching file is found.
+// Skips silently if no matching file is found; propagates real I/O errors.
 func cleanupArgoCDRBAC(outputDir, tenantName string) error {
 	rbacPath, err := findRBACConfigMapFile(outputDir)
 	if err != nil {
-		return nil //nolint:nilerr // no RBAC CM file found is not an error
+		if errors.Is(err, ErrRBACConfigMapNotFound) {
+			return nil
+		}
+
+		return err
 	}
 
 	content, err := os.ReadFile(rbacPath) //nolint:gosec // path is from trusted directory scan
@@ -151,6 +163,8 @@ func cleanupArgoCDRBAC(outputDir, tenantName string) error {
 	if statErr == nil {
 		perm = info.Mode().Perm()
 	}
+
+	rbacPath = filepath.Clean(rbacPath)
 
 	writeErr := os.WriteFile(rbacPath, []byte(updated), perm)
 	if writeErr != nil {
@@ -186,7 +200,7 @@ func findRBACConfigMapFile(dir string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no argocd-rbac-cm ConfigMap found in %q", dir)
+	return "", fmt.Errorf("%w in %q", ErrRBACConfigMapNotFound, dir)
 }
 
 func isYAMLFile(name string) bool {

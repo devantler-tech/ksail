@@ -328,10 +328,10 @@ func TestDelete_ArgoCDTenantWithoutRBACFileContinues(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	tenantDir := createArgoCDTenantDir(t, tmpDir, "team-alpha")
+	tenantDir := createArgoCDTenantDir(t, tmpDir, "team-gamma")
 
 	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
-		Name:       "team-alpha",
+		Name:       "team-gamma",
 		OutputDir:  tmpDir,
 		Unregister: false,
 	})
