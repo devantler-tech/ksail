@@ -25,7 +25,7 @@ func ScaffoldFiles(opts Options) map[string][]byte {
 			opts.Name)
 	case TypeKubectl:
 		readmeContent = fmt.Sprintf(
-			"# %s\n\nApply with: `kubectl apply -k k8s/`\n",
+			"# %s\n\n## Apply\n\n```\nkubectl apply -k k8s/\n```\n",
 			opts.Name)
 	default:
 		readmeContent = fmt.Sprintf(

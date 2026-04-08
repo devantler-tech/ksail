@@ -108,11 +108,27 @@ ksail tenant create my-team --type argocd \
 
 ### kubectl Tenants
 
-kubectl tenants generate RBAC only (no sync resources):
+kubectl tenants generate RBAC-only platform manifests (no GitOps sync resources). When `--git-provider github` and `--git-repo` are provided, kubectl tenants also get a scaffolded tenant repository — just without GitOps-specific resources:
 
 ```bash
 ksail tenant create my-team --type kubectl
+
+# With repo scaffolding
+ksail tenant create my-team --type kubectl \
+  --git-provider github \
+  --git-repo my-org/my-team-manifests
 ```
+
+The scaffolded repo contains a plain kustomize setup for manual workflows:
+
+```text
+/
+├── README.md
+└── k8s/
+    └── kustomization.yaml
+```
+
+The tenant applies their manifests with `kubectl apply -k k8s/`.
 
 ## Delete a Tenant
 
