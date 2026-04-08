@@ -100,7 +100,7 @@ func (p *Provisioner) verifyOmniAPIServerReachable(ctx context.Context, clusterN
 			"  Verifying API server reachability through Omni proxy...\n",
 		)
 
-		err := p.waitForOmniAPIServerReady(ctx, clusterName)
+		err := p.waitForOmniAPIServerReady(ctx)
 		if err != nil {
 			return fmt.Errorf("API server not reachable through Omni proxy: %w", err)
 		}
@@ -379,7 +379,7 @@ func (p *Provisioner) saveOmniTalosconfig(
 // waitForOmniAPIServerReady verifies that the Kubernetes API server is reachable
 // through the Omni proxy using the saved kubeconfig. The Omni cluster may
 // report RUNNING/Ready before the proxy is operational for kubectl connections.
-func (p *Provisioner) waitForOmniAPIServerReady(ctx context.Context, clusterName string) error {
+func (p *Provisioner) waitForOmniAPIServerReady(ctx context.Context) error {
 	// Expand ~ and canonicalize the kubeconfig path to match what
 	// saveOmniConfig wrote (which also calls ExpandHomePath + EvalCanonicalPath).
 	expandedPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
