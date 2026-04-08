@@ -104,7 +104,18 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 	// Detect distribution from context name
 	distribution, clusterName, err := DetectDistributionFromContext(contextName)
 	if err != nil {
-		return nil, err
+		// Context name didn't match any known pattern. Fall back to server
+		// URL-based detection for cloud providers with distinctive hostnames.
+		if !errors.Is(err, ErrUnknownContextPattern) {
+			return nil, err
+		}
+
+		distribution, clusterName, err = detectFromServerURL(
+			cluster.Server, kubeContext.Cluster,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Detect provider from server endpoint
@@ -181,6 +192,43 @@ func DetectDistributionFromContext(contextName string) (v1alpha1.Distribution, s
 	return "", "", fmt.Errorf("%w: %s", ErrUnknownContextPattern, contextName)
 }
 
+// detectFromServerURL infers distribution and cluster name from the server URL
+// when the kubeconfig context name doesn't match any known pattern. This handles
+// cloud providers with distinctive hostnames, such as Sidero Omni whose
+// Kubernetes API proxy URLs end in .omni.siderolabs.io.
+func detectFromServerURL(
+	serverURL string,
+	kubeconfigClusterName string,
+) (v1alpha1.Distribution, string, error) {
+	host, err := extractHostFromURL(serverURL)
+	if err != nil {
+		return "", "", fmt.Errorf(
+			"%w: %s (server URL also unrecognizable: %w)",
+			ErrUnknownContextPattern, kubeconfigClusterName, err,
+		)
+	}
+
+	// Omni endpoints → Talos (Omni only supports Talos)
+	if isOmniEndpoint(host) {
+		// Use the kubeconfig cluster name as the cluster name since
+		// context name is a service-account identifier for Omni.
+		clusterName := kubeconfigClusterName
+		if clusterName == "" {
+			return "", "", fmt.Errorf(
+				"%w: Omni endpoint detected but cluster name is empty",
+				ErrEmptyClusterName,
+			)
+		}
+
+		return v1alpha1.DistributionTalos, clusterName, nil
+	}
+
+	return "", "", fmt.Errorf(
+		"%w: server URL %s does not match any known cloud provider pattern",
+		ErrUnknownContextPattern, serverURL,
+	)
+}
+
 // detectProviderFromEndpoint determines the provider based on the server endpoint URL.
 // For localhost endpoints, returns ProviderDocker.
 // For public IPs, queries cloud provider APIs to verify ownership.
@@ -200,6 +248,11 @@ func detectProviderFromEndpoint(
 	host, err := extractHostFromURL(serverURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse server URL: %w", err)
+	}
+
+	// Check if it's a Sidero Omni endpoint → Omni
+	if isOmniEndpoint(host) {
+		return v1alpha1.ProviderOmni, nil
 	}
 
 	// Check if it's a localhost endpoint → Docker
@@ -224,6 +277,16 @@ func extractHostFromURL(serverURL string) (string, error) {
 	}
 
 	return host, nil
+}
+
+// omniHostSuffix is the DNS suffix for Sidero Omni SaaS endpoints.
+// Omni Kubernetes API proxy URLs follow the pattern:
+// https://<account>.kubernetes.<region>.omni.siderolabs.io
+const omniHostSuffix = ".omni.siderolabs.io"
+
+// isOmniEndpoint checks if the host is a Sidero Omni endpoint.
+func isOmniEndpoint(host string) bool {
+	return strings.HasSuffix(strings.ToLower(host), omniHostSuffix)
 }
 
 // isLocalhost checks if the host is a localhost address.

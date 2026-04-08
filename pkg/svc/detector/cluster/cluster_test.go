@@ -338,6 +338,65 @@ func TestDetectCloudProvider_NoCredentials(t *testing.T) {
 	assert.ErrorIs(t, err, cluster.ErrNoCloudCredentials)
 }
 
+// TestIsOmniEndpoint tests the Omni endpoint hostname detection.
+func TestIsOmniEndpoint(t *testing.T) {
+	tests := []struct {
+		name string
+		host string
+		want bool
+	}{
+		{name: "omni_kubernetes_proxy", host: "devantler.kubernetes.na-west-1.omni.siderolabs.io", want: true},
+		{name: "omni_api_endpoint", host: "devantler.omni.siderolabs.io", want: true},
+		{name: "omni_uppercase", host: "Devantler.Kubernetes.NA-West-1.Omni.Siderolabs.IO", want: true},
+		{name: "localhost", host: "localhost", want: false},
+		{name: "loopback_ip", host: "127.0.0.1", want: false},
+		{name: "public_ip", host: "1.2.3.4", want: false},
+		{name: "other_hostname", host: "my-cluster.example.com", want: false},
+		{name: "partial_match", host: "siderolabs.io", want: false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := cluster.IsOmniEndpoint(testCase.host)
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
+
+// TestDetectFromServerURL tests the server URL-based fallback detection.
+func TestDetectFromServerURL(t *testing.T) {
+	t.Run("omni_endpoint_returns_talos", func(t *testing.T) {
+		dist, name, err := cluster.DetectFromServerURL(
+			"https://devantler.kubernetes.na-west-1.omni.siderolabs.io",
+			"my-cluster",
+		)
+
+		require.NoError(t, err)
+		assert.Equal(t, v1alpha1.DistributionTalos, dist)
+		assert.Equal(t, "my-cluster", name)
+	})
+
+	t.Run("omni_with_empty_cluster_name_errors", func(t *testing.T) {
+		_, _, err := cluster.DetectFromServerURL(
+			"https://devantler.kubernetes.na-west-1.omni.siderolabs.io",
+			"",
+		)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, cluster.ErrEmptyClusterName)
+	})
+
+	t.Run("non_omni_url_errors", func(t *testing.T) {
+		_, _, err := cluster.DetectFromServerURL(
+			"https://my-cluster.example.com:6443",
+			"my-cluster",
+		)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, cluster.ErrUnknownContextPattern)
+	})
+}
+
 // TestDetectProviderFromEndpoint tests provider detection for all distribution+endpoint combinations.
 //
 //nolint:funlen // Test function with comprehensive test cases
@@ -374,6 +433,13 @@ func TestDetectProviderFromEndpoint(t *testing.T) {
 			distribution: v1alpha1.DistributionTalos,
 			serverURL:    "https://127.0.0.1:6443",
 			wantProvider: v1alpha1.ProviderDocker,
+		},
+		{
+			name:         "talos_omni_endpoint",
+			distribution: v1alpha1.DistributionTalos,
+			serverURL:    "https://devantler.kubernetes.na-west-1.omni.siderolabs.io",
+			clusterName:  "my-cluster",
+			wantProvider: v1alpha1.ProviderOmni,
 		},
 		{
 			name:         "talos_public_ip_no_credentials",
@@ -471,6 +537,42 @@ users:
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, cluster.ErrNoCloudCredentials)
+}
+
+// TestDetectInfo_OmniCluster tests detection from a kubeconfig with an Omni cluster.
+// Omni-generated kubeconfigs use service-account context names that don't match
+// the admin@<name> pattern, so detection falls back to server URL analysis.
+func TestDetectInfo_OmniCluster(t *testing.T) {
+	kubeconfigContent := `apiVersion: v1
+kind: Config
+current-context: devantler-service-account@omni
+clusters:
+- cluster:
+    server: https://devantler.kubernetes.na-west-1.omni.siderolabs.io
+  name: my-omni-cluster
+contexts:
+- context:
+    cluster: my-omni-cluster
+    user: devantler-service-account@omni
+  name: devantler-service-account@omni
+users:
+- name: devantler-service-account@omni
+  user:
+    client-certificate-data: ""
+`
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
+	require.NoError(t, err)
+
+	info, err := cluster.DetectInfo(kubeconfigPath, "")
+
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.DistributionTalos, info.Distribution)
+	assert.Equal(t, v1alpha1.ProviderOmni, info.Provider)
+	assert.Equal(t, "my-omni-cluster", info.ClusterName)
+	assert.Equal(t, "devantler-service-account@omni", info.Context)
+	assert.Equal(t, "https://devantler.kubernetes.na-west-1.omni.siderolabs.io", info.ServerURL)
 }
 
 // TestResolveKubeconfigPath tests kubeconfig path resolution.
