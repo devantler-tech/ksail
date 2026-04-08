@@ -59,7 +59,7 @@ func findEncryptedFilesRecursive(rootDir string) ([]string, error) {
 
 		if entry.IsDir() {
 			base := entry.Name()
-			if strings.HasPrefix(base, ".") && base != "." {
+			if path != rootDir && strings.HasPrefix(base, ".") && base != "." {
 				return filepath.SkipDir
 			}
 
