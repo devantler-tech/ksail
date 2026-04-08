@@ -69,9 +69,16 @@ ksail workload get pods -n flux-system
 kubectl get crd <crd-name> -o jsonpath='{.status.conditions[?(@.type=="Established")].status}'
 ```
 
-### Flux/ArgoCD CrashLoopBackOff After Component Installation
+### Cluster Stability Check Failures
 
-Infrastructure components (MetalLB, Kyverno, cert-manager) can temporarily disrupt API server connectivity while registering webhooks/CRDs, causing `CrashLoopBackOff` with `dial tcp 10.96.0.1:443: i/o timeout` errors. CNI components (e.g. Cilium) can also cause this if their eBPF dataplane hasn't finished programming pod-to-service routing when GitOps engines start. KSail performs a three-step cluster stability check before installing GitOps engines: (1) 5 consecutive successful API server health checks, (2) all kube-system DaemonSets ready, and (3) a short-lived busybox pod confirms TCP connectivity to the API server ClusterIP. If you see `cluster not stable after infrastructure installation` or `in-cluster API connectivity check failed`, check resources and optionally recreate with fewer components:
+KSail performs cluster stability checks at two points during installation to prevent race conditions:
+
+- **Before infrastructure components** (Cilium CNI only): Ensures the Cilium eBPF dataplane has finished programming pod-to-service routing before deploying components like metrics-server that depend on ClusterIP connectivity.
+- **Before GitOps engines**: Ensures API server connectivity has recovered after infrastructure components (MetalLB, Kyverno, cert-manager) register webhooks and CRDs.
+
+Each check performs up to three steps: (1) 5 consecutive successful API server health checks, (2) all kube-system DaemonSets ready, and (3) a short-lived busybox pod confirms TCP connectivity to the API server ClusterIP (Cilium CNI only).
+
+If you see `cluster not stable before infrastructure installation`, `cluster not stable after infrastructure installation`, or `in-cluster API connectivity check failed`, check resources and optionally recreate with fewer components:
 
 ```bash
 ksail workload get nodes
