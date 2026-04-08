@@ -297,6 +297,33 @@ func TestFindArgoCDRBACCM_IgnoresNonYAML(t *testing.T) {
 	require.Empty(t, found)
 }
 
+func TestFindArgoCDRBACCM_MultiDocYAML(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// Multi-document YAML with argocd-rbac-cm as the second document.
+	content := `apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+data:
+  policy.csv: ""
+`
+	err := os.WriteFile(filepath.Join(dir, "argocd-resources.yaml"), []byte(content), 0o600)
+	require.NoError(t, err)
+
+	found, err := tenant.FindArgoCDRBACCM(dir)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(dir, "argocd-resources.yaml"), found)
+}
+
 // --- MergeArgoCDRBACPolicyFile tests ---
 
 func TestMergeArgoCDRBACPolicyFile_NewFile(t *testing.T) {

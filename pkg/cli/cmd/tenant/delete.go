@@ -92,7 +92,7 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 
 	// Best-effort: remove tenant's ArgoCD RBAC policy from argocd-rbac-cm.
 	if opts.Unregister {
-		removeArgoCDRBACPolicy(opts)
+		removeArgoCDRBACPolicy(cmd, opts)
 	}
 
 	notify.Successf(cmd.OutOrStdout(), "Tenant %q deleted successfully", opts.Name)
@@ -101,8 +101,8 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 }
 
 // removeArgoCDRBACPolicy is a best-effort cleanup of ArgoCD RBAC policies.
-// It silently succeeds if the argocd-rbac-cm file is not found or the tenant has no policy.
-func removeArgoCDRBACPolicy(opts tenant.DeleteOptions) {
+// It warns on failures but does not block tenant deletion.
+func removeArgoCDRBACPolicy(cmd *cobra.Command, opts tenant.DeleteOptions) {
 	kPath, err := tenant.ResolveKustomizationPath(opts.OutputDir, opts.KustomizationPath)
 	if err != nil {
 		return
@@ -115,5 +115,8 @@ func removeArgoCDRBACPolicy(opts tenant.DeleteOptions) {
 		return
 	}
 
-	_ = tenant.RemoveArgoCDRBACPolicyFile(rbacCMPath, opts.Name)
+	if err := tenant.RemoveArgoCDRBACPolicyFile(rbacCMPath, opts.Name); err != nil {
+		notify.Warningf(cmd.OutOrStdout(),
+			"failed to remove ArgoCD RBAC policy for tenant %q: %v", opts.Name, err)
+	}
 }

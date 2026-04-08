@@ -382,6 +382,7 @@ func isTenantPolicyLine(line, tenantName string) bool {
 // FindArgoCDRBACCM scans YAML files in the given directory for a ConfigMap
 // named "argocd-rbac-cm" (apiVersion: v1, kind: ConfigMap).
 // Returns the file path if found, or empty string if not found.
+// Supports multi-document YAML files separated by "---".
 func FindArgoCDRBACCM(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -402,20 +403,42 @@ func FindArgoCDRBACCM(dir string) (string, error) {
 
 		data, readErr := os.ReadFile(filePath) //nolint:gosec // directory is already validated
 		if readErr != nil {
-			continue
+			return "", fmt.Errorf("reading %s: %w", filePath, readErr)
 		}
 
-		var raw map[string]any
-		if unmarshalErr := yaml.Unmarshal(data, &raw); unmarshalErr != nil {
-			continue
-		}
-
-		if isArgoCDRBACConfigMap(raw) {
+		if containsArgoCDRBACCM(data) {
 			return filePath, nil
 		}
 	}
 
 	return "", nil
+}
+
+// containsArgoCDRBACCM checks whether YAML data (possibly multi-document)
+// contains an argocd-rbac-cm ConfigMap.
+func containsArgoCDRBACCM(data []byte) bool {
+	content := string(data)
+	if strings.HasPrefix(content, "---") {
+		content = "\n" + content
+	}
+
+	for _, part := range strings.Split(content, "\n---") {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+
+		var raw map[string]any
+		if err := yaml.Unmarshal([]byte(trimmed), &raw); err != nil {
+			continue
+		}
+
+		if isArgoCDRBACConfigMap(raw) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func isArgoCDRBACConfigMap(raw map[string]any) bool {
