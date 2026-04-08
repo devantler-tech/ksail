@@ -218,6 +218,13 @@ ksail cluster update
 
 Applies in-place changes to components (CNI, GitOps engine, cert-manager, etc.). Node scaling changes are **skipped** for Omni-managed clusters — Omni manages node lifecycle externally. Add or remove machines via the [Omni web UI](https://omni.siderolabs.com/) or Omni CLI instead. See the [Update Behavior table](/support-matrix/#update-behavior) for details.
 
+### Kubeconfig Tokens
+
+KSail automatically refreshes your Omni kubeconfig token before it expires. Tokens have a **30-day TTL** and are renewed transparently before any CLI command runs (when the token has 5 minutes or less remaining). No manual action is required.
+
+> [!NOTE]
+> Auto-refresh is skipped when you pass `--kubeconfig` explicitly. In that case, you are managing the kubeconfig yourself and KSail will not modify it.
+
 ## Troubleshooting
 
 **`failed to determine Talos version`** — KSail could not auto-resolve the Talos version from Omni (for example the Omni API was unreachable or returned no versions). Set `talosVersion` and `kubernetesVersion` explicitly to bypass version discovery:
