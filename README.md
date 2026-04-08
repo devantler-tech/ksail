@@ -19,7 +19,7 @@ KSail is a tool that bundles common Kubernetes tooling into a single binary. It 
 # macOS / Linux (Homebrew)
 brew install --cask devantler-tech/tap/ksail
 
-# Go (1.26.0+)
+# Go (1.26.1+)
 go install github.com/devantler-tech/ksail/v5@latest
 ```
 
