@@ -56,21 +56,24 @@ type Info struct {
 	KubeconfigPath string
 }
 
-// DetectInfo detects the distribution and provider from the kubeconfig context.
-// It reads the kubeconfig, determines the distribution from the context name pattern,
-// and detects the provider by analyzing the server endpoint.
-func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
-	// Resolve kubeconfig path (handles empty path, ~ expansion, and relative paths)
+// kubeContext holds the resolved kubeconfig fields needed by DetectInfo.
+type kubeContext struct {
+	kubeconfigPath string
+	contextName    string
+	clusterRef     string
+	serverURL      string
+}
+
+// loadKubeContext resolves the kubeconfig path, loads the file, and extracts
+// the context name, cluster reference, and server URL.
+func loadKubeContext(kubeconfigPath, contextName string) (*kubeContext, error) {
 	resolvedPath, err := ResolveKubeconfigPath(kubeconfigPath)
 	if err != nil {
 		return nil, err
 	}
 
-	kubeconfigPath = resolvedPath
-
-	// Load kubeconfig
 	//nolint:gosec // G304: Intentional file reading from user-provided kubeconfig path
-	configBytes, err := os.ReadFile(kubeconfigPath)
+	configBytes, err := os.ReadFile(resolvedPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kubeconfig: %w", err)
 	}
@@ -80,7 +83,6 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
 	}
 
-	// Resolve context name
 	if contextName == "" {
 		if config.CurrentContext == "" {
 			return nil, ErrNoCurrentContext
@@ -89,20 +91,35 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 		contextName = config.CurrentContext
 	}
 
-	// Get context
-	kubeContext, exists := config.Contexts[contextName]
+	ctx, exists := config.Contexts[contextName]
 	if !exists {
 		return nil, fmt.Errorf("%w: %s", ErrContextNotFound, contextName)
 	}
 
-	// Get cluster
-	cluster, exists := config.Clusters[kubeContext.Cluster]
+	cluster, exists := config.Clusters[ctx.Cluster]
 	if !exists {
-		return nil, fmt.Errorf("%w: %s", ErrClusterNotFound, kubeContext.Cluster)
+		return nil, fmt.Errorf("%w: %s", ErrClusterNotFound, ctx.Cluster)
+	}
+
+	return &kubeContext{
+		kubeconfigPath: resolvedPath,
+		contextName:    contextName,
+		clusterRef:     ctx.Cluster,
+		serverURL:      cluster.Server,
+	}, nil
+}
+
+// DetectInfo detects the distribution and provider from the kubeconfig context.
+// It reads the kubeconfig, determines the distribution from the context name pattern,
+// and detects the provider by analyzing the server endpoint.
+func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
+	kc, err := loadKubeContext(kubeconfigPath, contextName)
+	if err != nil {
+		return nil, err
 	}
 
 	// Detect distribution from context name
-	distribution, clusterName, err := DetectDistributionFromContext(contextName)
+	distribution, clusterName, err := DetectDistributionFromContext(kc.contextName)
 	if err != nil {
 		// Context name didn't match any known pattern. Fall back to server
 		// URL-based detection for cloud providers with distinctive hostnames.
@@ -110,16 +127,14 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 			return nil, err
 		}
 
-		distribution, clusterName, err = detectFromServerURL(
-			cluster.Server, kubeContext.Cluster,
-		)
+		distribution, clusterName, err = detectFromServerURL(kc.serverURL, kc.clusterRef)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	// Detect provider from server endpoint
-	provider, err := detectProviderFromEndpoint(distribution, cluster.Server, clusterName)
+	provider, err := detectProviderFromEndpoint(distribution, kc.serverURL, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -128,9 +143,9 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 		Distribution:   distribution,
 		Provider:       provider,
 		ClusterName:    clusterName,
-		Context:        contextName,
-		ServerURL:      cluster.Server,
-		KubeconfigPath: kubeconfigPath,
+		Context:        kc.contextName,
+		ServerURL:      kc.serverURL,
+		KubeconfigPath: kc.kubeconfigPath,
 	}, nil
 }
 
