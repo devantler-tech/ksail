@@ -435,6 +435,7 @@ func containsArgoCDRBACCM(data []byte) bool {
 		}
 
 		var raw map[string]any
+
 		err := yaml.Unmarshal([]byte(trimmed), &raw)
 		if err != nil {
 			continue
