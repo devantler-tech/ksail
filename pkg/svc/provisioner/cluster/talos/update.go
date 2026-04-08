@@ -534,13 +534,14 @@ func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSp
 		Workers:       workers,
 	}
 
-	// Build provider spec if we have Hetzner options configured
+	// Build provider spec if we have Hetzner options configured.
+	// Hetzner fields (server types, location, network, SSH key) cannot be
+	// introspected from the running cluster, so we echo the desired config
+	// as the baseline — identical to the approach used for NetworkCIDR.
 	var providerSpec *v1alpha1.ProviderSpec
 	if p.hetznerOpts != nil {
 		providerSpec = &v1alpha1.ProviderSpec{
-			Hetzner: v1alpha1.OptionsHetzner{
-				NetworkCIDR: p.hetznerOpts.NetworkCIDR,
-			},
+			Hetzner: *p.hetznerOpts,
 		}
 	}
 
