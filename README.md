@@ -1,4 +1,7 @@
 <!-- mcp-name: io.github.devantler-tech/ksail -->
+[![GitHub Stars](https://img.shields.io/github/stars/devantler-tech/ksail?style=flat)](https://github.com/devantler-tech/ksail/stargazers)
+[![Latest Release](https://img.shields.io/github/v/release/devantler-tech/ksail)](https://github.com/devantler-tech/ksail/releases/latest)
+[![Go Report Card](https://goreportcard.com/badge/github.com/devantler-tech/ksail/v5)](https://goreportcard.com/report/github.com/devantler-tech/ksail/v5)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/license/apache-2-0)
 [![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v5.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v5)
 [![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://app.codecov.io/gh/devantler-tech/ksail)
@@ -9,6 +12,57 @@
 ![ksail](./docs/src/assets/ksail-cli-dark.png)
 
 KSail is a tool that bundles common Kubernetes tooling into a single binary. It provides a VSCode Extension, CLI, AI-Enabled Chat TUI or MCP interface to create clusters, deploy workloads, and operate cloud-native stacks across different distributions and providers.
+
+## Quick Install
+
+```bash
+# macOS / Linux (Homebrew)
+brew install --cask devantler-tech/tap/ksail
+
+# Go (1.26.0+)
+go install github.com/devantler-tech/ksail/v5@latest
+```
+
+> See the [Installation Guide](https://ksail.devantler.tech/installation/) for binary downloads and more options.
+
+## Quick Start
+
+```bash
+# 1. Create a project and spin up a cluster (only requires Docker)
+ksail cluster init --name my-app
+ksail cluster create
+
+# 2. Deploy workloads
+ksail workload apply -k ./k8s
+
+# 3. Connect to your cluster with K9s
+ksail cluster connect
+```
+
+That's it — zero to a running cluster in under a minute.
+
+## What KSail Replaces
+
+Most Kubernetes workflows look like this:
+
+```
+kind/k3d/minikube + kubectl + helm + kustomize + flux/argocd + sops + k9s + kubeconform + ...
+```
+
+KSail embeds all of it into **one binary**:
+
+| Category | Embedded Tools |
+|---|---|
+| Cluster Provisioning | Kind, K3d, Talos, VCluster (Vind) |
+| Container Orchestration | kubectl, Helm, Kustomize |
+| GitOps Engines | Flux, ArgoCD |
+| Secrets Management | SOPS with Age encryption |
+| Manifest Validation | Kubeconform |
+| Cluster Operations | K9s, backup & restore |
+| AI Integration | Chat assistant (Copilot SDK), MCP server, VSCode extension |
+| Infrastructure Providers | Docker (local), Hetzner Cloud, Sidero Omni |
+
+**Only Docker is required** — no other tools to install, configure, or keep in sync.
 
 ## Why KSail?
 
@@ -51,7 +105,7 @@ Supported distributions run on different infrastructure providers:
 
 ### Installation
 
-See the [Installation Guide](https://ksail.devantler.tech/installation/) for detailed installation instructions.
+See the [Installation Guide](https://ksail.devantler.tech/installation/) for detailed installation instructions including binary downloads and platform-specific options.
 
 ## Usage
 
@@ -146,9 +200,18 @@ ksail cluster create
 
 Browse the documentation at <https://ksail.devantler.tech> (GitHub Pages)
 
+## Community & Support
+
+- 💬 **[GitHub Discussions](https://github.com/devantler-tech/ksail/discussions)** — Ask questions, share ideas, and connect with other users
+- 🐛 **[Issue Tracker](https://github.com/devantler-tech/ksail/issues)** — Report bugs or request features
+- 📖 **[Documentation](https://ksail.devantler.tech)** — Guides, CLI reference, and architecture docs
+- ⭐ **[Star the repo](https://github.com/devantler-tech/ksail)** — Help others discover KSail
+
 ## Contributing
 
 Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our development process, coding standards, and how to submit pull requests.
+
+Looking for a place to start? Check out issues labeled [`good first issue`](https://github.com/devantler-tech/ksail/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
 
 ## Related Projects
 
