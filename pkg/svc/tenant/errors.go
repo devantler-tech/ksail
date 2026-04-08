@@ -56,4 +56,6 @@ var (
 	)
 	// ErrDeleteRepoGitRepoRequired is returned when --git-repo is required with --delete-repo.
 	ErrDeleteRepoGitRepoRequired = errors.New("--git-repo is required when --delete-repo is set")
+	// ErrRBACConfigMapNotFound is returned when no argocd-rbac-cm ConfigMap file is found.
+	ErrRBACConfigMapNotFound = errors.New("no argocd-rbac-cm ConfigMap found")
 )

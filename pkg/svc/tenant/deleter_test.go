@@ -230,3 +230,214 @@ resources:
 	resources := tenant.ExportGetResources(raw)
 	require.NotContains(t, resources, "my-tenant")
 }
+
+// --- ArgoCD RBAC cleanup tests ---
+
+const rbacCMContent = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/managed-by: ksail
+data:
+  policy.csv: |
+    p, role:team-alpha, applications, *, team-alpha/*, allow
+    p, role:team-alpha, projects, get, team-alpha, allow
+    g, team-alpha, role:team-alpha
+`
+
+const rbacCMTwoTenants = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+data:
+  policy.csv: |
+    p, role:team-alpha, applications, *, team-alpha/*, allow
+    p, role:team-alpha, projects, get, team-alpha, allow
+    g, team-alpha, role:team-alpha
+    p, role:team-beta, applications, *, team-beta/*, allow
+    p, role:team-beta, projects, get, team-beta, allow
+    g, team-beta, role:team-beta
+`
+
+func createArgoCDTenantDir(t *testing.T, base, name string) string {
+	t.Helper()
+
+	dir := filepath.Join(base, name)
+	require.NoError(t, os.MkdirAll(dir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "project.yaml"),
+		[]byte("apiVersion: argoproj.io/v1alpha1\nkind: AppProject\n"),
+		0o600,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "namespace.yaml"),
+		[]byte("test"),
+		0o600,
+	))
+
+	return dir
+}
+
+func TestDelete_ArgoCDTenantRemovesRBACPolicy(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	createArgoCDTenantDir(t, tmpDir, "team-alpha")
+
+	rbacPath := filepath.Join(tmpDir, "rbac.yaml")
+	require.NoError(t, os.WriteFile(rbacPath, []byte(rbacCMContent), 0o600))
+
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
+		Name:       "team-alpha",
+		OutputDir:  tmpDir,
+		Unregister: false,
+	})
+	require.NoError(t, err)
+
+	data, readErr := os.ReadFile(rbacPath) //nolint:gosec // test path
+	require.NoError(t, readErr)
+	require.NotContains(t, string(data), "role:team-alpha")
+}
+
+func TestDelete_ArgoCDTenantPreservesOtherTenantPolicy(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	createArgoCDTenantDir(t, tmpDir, "team-alpha")
+
+	rbacPath := filepath.Join(tmpDir, "shared-rbac.yml")
+	require.NoError(t, os.WriteFile(rbacPath, []byte(rbacCMTwoTenants), 0o600))
+
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
+		Name:       "team-alpha",
+		OutputDir:  tmpDir,
+		Unregister: false,
+	})
+	require.NoError(t, err)
+
+	data, readErr := os.ReadFile(rbacPath) //nolint:gosec // test path
+	require.NoError(t, readErr)
+	require.NotContains(t, string(data), "role:team-alpha")
+	require.Contains(t, string(data), "role:team-beta")
+}
+
+func TestDelete_ArgoCDTenantWithoutRBACFileContinues(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	tenantDir := createArgoCDTenantDir(t, tmpDir, "team-gamma")
+
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
+		Name:       "team-gamma",
+		OutputDir:  tmpDir,
+		Unregister: false,
+	})
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(tenantDir)
+	require.True(t, os.IsNotExist(statErr), "tenant directory should be removed")
+}
+
+func TestDelete_NonArgoCDTenantDoesNotModifyRBACFile(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Non-ArgoCD tenant (no project.yaml).
+	tenantDir := filepath.Join(tmpDir, "my-tenant")
+	require.NoError(t, os.MkdirAll(tenantDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tenantDir, "namespace.yaml"),
+		[]byte("test"), 0o600,
+	))
+
+	rbacPath := filepath.Join(tmpDir, "rbac-config.yaml")
+	require.NoError(t, os.WriteFile(rbacPath, []byte(rbacCMContent), 0o600))
+
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
+		Name:       "my-tenant",
+		OutputDir:  tmpDir,
+		Unregister: false,
+	})
+	require.NoError(t, err)
+
+	data, readErr := os.ReadFile(rbacPath) //nolint:gosec // test path
+	require.NoError(t, readErr)
+	require.Contains(t, string(data), "role:team-alpha",
+		"RBAC file should not be modified for non-ArgoCD tenants")
+}
+
+func TestDelete_ArgoCDTenantFindsRBACByContent(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	createArgoCDTenantDir(t, tmpDir, "team-alpha")
+
+	// Use an unusual filename to prove content-based discovery.
+	rbacPath := filepath.Join(tmpDir, "my-custom-rbac-policies.yaml")
+	require.NoError(t, os.WriteFile(rbacPath, []byte(rbacCMContent), 0o600))
+
+	// Also place a non-matching YAML file to ensure it's skipped.
+	otherPath := filepath.Join(tmpDir, "aaa-first-file.yaml")
+	require.NoError(t, os.WriteFile(otherPath, []byte("apiVersion: v1\nkind: Namespace\n"), 0o600))
+
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
+		Name:       "team-alpha",
+		OutputDir:  tmpDir,
+		Unregister: false,
+	})
+	require.NoError(t, err)
+
+	data, readErr := os.ReadFile(rbacPath) //nolint:gosec // test path
+	require.NoError(t, readErr)
+	require.NotContains(t, string(data), "role:team-alpha")
+}
+
+func TestDelete_ArgoCDTenantFindsRBACInMultiDocYAML(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	createArgoCDTenantDir(t, tmpDir, "team-alpha")
+
+	// Multi-document YAML: argocd-rbac-cm is the second document.
+	multiDoc := "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: argocd\n---\n" + rbacCMContent
+	rbacPath := filepath.Join(tmpDir, "argocd-resources.yaml")
+	require.NoError(t, os.WriteFile(rbacPath, []byte(multiDoc), 0o600))
+
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
+		Name:       "team-alpha",
+		OutputDir:  tmpDir,
+		Unregister: false,
+	})
+	require.NoError(t, err)
+
+	data, readErr := os.ReadFile(rbacPath) //nolint:gosec // test path
+	require.NoError(t, readErr)
+	require.NotContains(t, string(data), "role:team-alpha")
+}
+
+func TestDelete_ArgoCDTenantFindsRBACInLeadingSeparatorYAML(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	createArgoCDTenantDir(t, tmpDir, "team-alpha")
+
+	// YAML file starts with --- (common Kubernetes manifest pattern).
+	leadingDoc := "---\n" + rbacCMContent
+	rbacPath := filepath.Join(tmpDir, "rbac.yaml")
+	require.NoError(t, os.WriteFile(rbacPath, []byte(leadingDoc), 0o600))
+
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
+		Name:       "team-alpha",
+		OutputDir:  tmpDir,
+		Unregister: false,
+	})
+	require.NoError(t, err)
+
+	data, readErr := os.ReadFile(rbacPath) //nolint:gosec // test path
+	require.NoError(t, readErr)
+	require.NotContains(t, string(data), "role:team-alpha")
+}
