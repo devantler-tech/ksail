@@ -2,6 +2,7 @@ package readiness_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -192,6 +193,73 @@ func TestWaitForInClusterAPIConnectivity_PermanentGetError(t *testing.T) {
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "get connectivity check pod")
+}
+
+// TestWaitForInClusterAPIConnectivity_ContextErrorIsTransient verifies that
+// context errors (e.g., from client-go rate limiter saturation when the
+// per-attempt context expires) are treated as transient. The polling loop
+// should continue retrying instead of aborting with a fatal error.
+func TestWaitForInClusterAPIConnectivity_ContextErrorIsTransient(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(newKubernetesService())
+
+	// First Get returns a context deadline error (simulating rate limiter
+	// timeout from a per-attempt context expiration). Subsequent Gets
+	// return a Succeeded pod, proving that polling continued.
+	getCallCount := 0
+
+	clientset.PrependReactor(
+		"create",
+		"pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			createAction, isCreateAction := action.(k8stesting.CreateAction)
+			if !isCreateAction {
+				return false, nil, nil
+			}
+
+			pod, isPod := createAction.GetObject().(*corev1.Pod)
+			if !isPod {
+				return false, nil, nil
+			}
+
+			pod.Status.Phase = corev1.PodSucceeded
+
+			return false, nil, nil
+		},
+	)
+
+	clientset.PrependReactor(
+		"get",
+		"pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			getAction, isGetAction := action.(k8stesting.GetAction)
+			if !isGetAction || getAction.GetName() != connectivityPodName {
+				return false, nil, nil
+			}
+
+			getCallCount++
+			if getCallCount <= 2 {
+				// Simulate the client-go rate limiter error:
+				// "client rate limiter Wait returned an error: context deadline exceeded"
+				return true, nil, fmt.Errorf(
+					"client rate limiter Wait returned an error: %w",
+					context.DeadlineExceeded,
+				)
+			}
+
+			// After the transient errors, let the default reactor handle it
+			// (returns the Succeeded pod).
+			return false, nil, nil
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 15*time.Second)
+
+	require.NoError(t, err, "context errors should be treated as transient; polling should continue and succeed")
 }
 
 func TestConnectivityCheckPodSpec(t *testing.T) {
