@@ -35,7 +35,8 @@ type DeleteOptions struct {
 
 // Delete removes a tenant's manifests and optionally unregisters and deletes the repo.
 func Delete(ctx context.Context, opts DeleteOptions) error {
-	if err := validateDeleteOpts(opts); err != nil {
+	err := validateDeleteOpts(opts)
+	if err != nil {
 		return err
 	}
 
@@ -225,7 +226,8 @@ func isRBACConfigMap(path string) bool {
 		} `yaml:"metadata"`
 	}
 
-	if unmarshalErr := yaml.Unmarshal(data, &resource); unmarshalErr != nil {
+	unmarshalErr := yaml.Unmarshal(data, &resource)
+	if unmarshalErr != nil {
 		return false
 	}
 
