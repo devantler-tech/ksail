@@ -253,57 +253,95 @@ func installComponentsInPhases(
 	writer := cmd.OutOrStdout()
 	labels := notify.InstallingLabels()
 
-	// Phase 1: Infrastructure components (metrics-server, load-balancer,
-	// kubelet-csr-approver, CSI, cert-manager, policy-engine).
-	// Policy engines register webhooks that can interfere with API requests,
-	// so they must be fully ready before GitOps engines start.
 	infraTasks := buildInfrastructureTasks(clusterCfg, factories, reqs)
 	if len(infraTasks) > 0 {
-		infraGroup := notify.NewProgressGroup(
-			"Installing infrastructure components",
-			"📦",
-			writer,
-			notify.WithLabels(labels),
-			notify.WithTimer(tmr),
-		)
-
-		err := infraGroup.Run(ctx, infraTasks...)
+		err := runInfraPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks)
 		if err != nil {
-			return fmt.Errorf("failed to install infrastructure components: %w", err)
+			return err
 		}
 	}
 
-	// Phase 2: GitOps engines (ArgoCD, Flux).
-	// Installed after infrastructure so policy-engine webhooks are stable
-	// and won't cause intermittent kstatus watch timeouts.
 	gitopsTasks := buildGitOpsTasks(clusterCfg, factories, reqs)
 	if len(gitopsTasks) > 0 {
-		// Wait for API server to stabilize after infrastructure installations.
-		// Infrastructure components register webhooks and CRDs that can
-		// temporarily destabilize API server connectivity, causing GitOps
-		// operators to enter CrashLoopBackOff with API timeout errors.
-		if len(infraTasks) > 0 {
-			stabilityErr := waitForClusterStability(ctx, clusterCfg)
-			if stabilityErr != nil {
-				return fmt.Errorf(
-					"cluster not stable after infrastructure installation: %w",
-					stabilityErr,
-				)
-			}
-		}
-
-		gitopsGroup := notify.NewProgressGroup(
-			"Installing GitOps engines",
-			"📦",
-			writer,
-			notify.WithLabels(labels),
-			notify.WithTimer(tmr),
-		)
-
-		err := gitopsGroup.Run(ctx, gitopsTasks...)
+		err := runGitOpsPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks, gitopsTasks)
 		if err != nil {
-			return fmt.Errorf("failed to install GitOps engines: %w", err)
+			return err
 		}
+	}
+
+	return nil
+}
+
+// runInfraPhase installs Phase 1 infrastructure components (metrics-server,
+// load-balancer, kubelet-csr-approver, CSI, cert-manager, policy-engine).
+// For Cilium CNI, a pre-flight stability check ensures the eBPF dataplane
+// has programmed pod-to-service routing before components are deployed.
+func runInfraPhase(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	writer io.Writer,
+	labels notify.ProgressLabels,
+	tmr timer.Timer,
+	infraTasks []notify.ProgressTask,
+) error {
+	if needsInClusterConnectivityCheck(clusterCfg) {
+		err := waitForClusterStability(ctx, clusterCfg)
+		if err != nil {
+			return fmt.Errorf(
+				"cluster not stable before infrastructure installation: %w", err,
+			)
+		}
+	}
+
+	infraGroup := notify.NewProgressGroup(
+		"Installing infrastructure components",
+		"📦",
+		writer,
+		notify.WithLabels(labels),
+		notify.WithTimer(tmr),
+	)
+
+	err := infraGroup.Run(ctx, infraTasks...)
+	if err != nil {
+		return fmt.Errorf("failed to install infrastructure components: %w", err)
+	}
+
+	return nil
+}
+
+// runGitOpsPhase installs Phase 2 GitOps engines (ArgoCD, Flux) after
+// infrastructure components are ready. If infrastructure was installed,
+// a stability check ensures API server connectivity has recovered from
+// webhook/CRD registrations before GitOps operators start.
+func runGitOpsPhase(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	writer io.Writer,
+	labels notify.ProgressLabels,
+	tmr timer.Timer,
+	infraTasks []notify.ProgressTask,
+	gitopsTasks []notify.ProgressTask,
+) error {
+	if len(infraTasks) > 0 {
+		err := waitForClusterStability(ctx, clusterCfg)
+		if err != nil {
+			return fmt.Errorf(
+				"cluster not stable after infrastructure installation: %w", err,
+			)
+		}
+	}
+
+	gitopsGroup := notify.NewProgressGroup(
+		"Installing GitOps engines",
+		"📦",
+		writer,
+		notify.WithLabels(labels),
+		notify.WithTimer(tmr),
+	)
+
+	err := gitopsGroup.Run(ctx, gitopsTasks...)
+	if err != nil {
+		return fmt.Errorf("failed to install GitOps engines: %w", err)
 	}
 
 	return nil
@@ -383,10 +421,11 @@ func buildGitOpsTasks(
 
 // waitForClusterStability waits for the Kubernetes API server to respond
 // consistently and for kube-system DaemonSets (including the CNI) to be fully
-// ready before starting GitOps engine installations. This prevents operators
-// like Flux from entering CrashLoopBackOff due to transient API server
-// connectivity issues or incomplete CNI dataplane programming after
-// infrastructure components are installed.
+// ready. It is used both as a pre-flight check before Phase 1 infrastructure
+// installations (to prevent metrics-server panics from incomplete Cilium eBPF
+// dataplane programming) and as a gate between Phase 1 and Phase 2 (to prevent
+// GitOps operators from entering CrashLoopBackOff due to transient API server
+// connectivity issues after infrastructure components register webhooks).
 func waitForClusterStability(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,

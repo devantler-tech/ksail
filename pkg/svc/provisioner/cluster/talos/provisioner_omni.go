@@ -5,10 +5,21 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	omniprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
+)
+
+const (
+	// omniAPIServerReadinessTimeout is the timeout for verifying the API server
+	// is reachable through the Omni proxy after WaitForClusterReady returns.
+	// The Omni proxy may report the cluster as ready before it is operational
+	// for kubectl connections, so this absorbs the propagation delay.
+	omniAPIServerReadinessTimeout = 2 * time.Minute
 )
 
 // omniProvider extracts the Omni provider from the infra provider.
@@ -32,7 +43,6 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 
 	_, _ = fmt.Fprintf(p.logWriter, "Creating Talos cluster %q via Omni...\n", clusterName)
 
-	// Check if cluster already exists
 	exists, err := omniProv.ClusterExists(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to check if cluster exists in Omni: %w", err)
@@ -42,7 +52,6 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
 	}
 
-	// Resolve Talos and Kubernetes versions from Omni options
 	talosVersion, kubernetesVersion, err := p.resolveOmniVersions(ctx, omniProv)
 	if err != nil {
 		return fmt.Errorf("failed to resolve versions: %w", err)
@@ -55,7 +64,6 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		return fmt.Errorf("failed to resolve machines: %w", err)
 	}
 
-	// Sync the cluster template to Omni and wait for readiness
 	err = p.syncAndWaitOmniCluster(ctx, omniProv, omniprovider.TemplateParams{
 		ClusterName:       clusterName,
 		TalosVersion:      talosVersion,
@@ -74,6 +82,30 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	err = p.saveOmniConfigs(ctx, omniProv, clusterName)
 	if err != nil {
 		return err
+	}
+
+	return p.verifyOmniAPIServerReachable(ctx, clusterName)
+}
+
+// verifyOmniAPIServerReachable checks that the API server is reachable through
+// the Omni proxy. WaitForClusterReady polls ClusterStatus until
+// Phase==RUNNING && Ready, but the Omni SaaS proxy may not yet be forwarding
+// kubectl connections at that point. This probe absorbs the proxy propagation
+// delay so downstream commands (e.g., ksail cluster info) don't fail with
+// "proxy error".
+func (p *Provisioner) verifyOmniAPIServerReachable(ctx context.Context, clusterName string) error {
+	if p.options.KubeconfigPath != "" {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Verifying API server reachability through Omni proxy...\n",
+		)
+
+		err := p.waitForOmniAPIServerReady(ctx)
+		if err != nil {
+			return fmt.Errorf("API server not reachable through Omni proxy: %w", err)
+		}
+
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ API server reachable\n")
 	}
 
 	_, _ = fmt.Fprintf(
@@ -342,6 +374,38 @@ func (p *Provisioner) saveOmniTalosconfig(
 	}
 
 	return p.saveOmniConfig(talosconfigData, p.options.TalosconfigPath, "Talosconfig")
+}
+
+// waitForOmniAPIServerReady verifies that the Kubernetes API server is reachable
+// through the Omni proxy using the saved kubeconfig. The Omni cluster may
+// report RUNNING/Ready before the proxy is operational for kubectl connections.
+func (p *Provisioner) waitForOmniAPIServerReady(ctx context.Context) error {
+	// Expand ~ and canonicalize the kubeconfig path to match what
+	// saveOmniConfig wrote (which also calls ExpandHomePath + EvalCanonicalPath).
+	expandedPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("expand kubeconfig path for readiness check: %w", err)
+	}
+
+	kubeconfigPath, err := fsutil.EvalCanonicalPath(expandedPath)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path for readiness check: %w", err)
+	}
+
+	// Use empty context to pick the kubeconfig's current-context, because
+	// Omni-generated kubeconfigs use a service-account context name that
+	// differs from the talosctl "admin@<name>" convention.
+	clientset, err := k8s.NewClientset(kubeconfigPath, "")
+	if err != nil {
+		return fmt.Errorf("create clientset for Omni API readiness check: %w", err)
+	}
+
+	err = readiness.WaitForAPIServerReady(ctx, clientset, omniAPIServerReadinessTimeout)
+	if err != nil {
+		return fmt.Errorf("wait for Omni API server readiness: %w", err)
+	}
+
+	return nil
 }
 
 // deleteOmniCluster handles cluster deletion for Omni-managed Talos clusters.
