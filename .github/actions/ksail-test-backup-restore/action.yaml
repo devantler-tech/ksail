@@ -59,7 +59,7 @@ runs:
           echo "❌ Archive missing backup-metadata.json"
           exit 1
         fi
-        if ! echo "$LISTING" | grep -q '\.yaml$'; then
+        if ! echo "$LISTING" | grep -q '[.]yaml$'; then
           echo "❌ Archive contains no .yaml files"
           exit 1
         fi
@@ -77,9 +77,8 @@ runs:
             exit 1
           fi
         done
-        COUNT=$(echo "$METADATA" | jq '.resourceCount')
-        if [ "$COUNT" -le 0 ] 2>/dev/null; then
-          echo "❌ resourceCount should be > 0, got $COUNT"
+        if ! COUNT=$(echo "$METADATA" | jq -re '.resourceCount | tonumber | select(. > 0)'); then
+          echo "❌ resourceCount should be an integer > 0"
           exit 1
         fi
         echo "✅ Backup metadata is valid"
