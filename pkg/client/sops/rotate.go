@@ -35,13 +35,12 @@ type RotateOpts struct {
 var (
 	ErrNoEncryptedFiles   = errors.New("no SOPS-encrypted files found")
 	ErrUnsupportedKeyType = errors.New("unsupported key type")
-	ErrGenerateDataKey    = errors.New("generating new data key")
 )
 
 // FindEncryptedFiles discovers SOPS-encrypted YAML/JSON files in rootDir.
 // When recursive is true, subdirectories are scanned; otherwise only
 // direct children of rootDir are checked. Hidden directories (starting
-// with ".") are always skipped.
+// with ".") and symlinks are always skipped.
 func FindEncryptedFiles(rootDir string, recursive bool) ([]string, error) {
 	if recursive {
 		return findEncryptedFilesRecursive(rootDir)
@@ -53,17 +52,21 @@ func FindEncryptedFiles(rootDir string, recursive bool) ([]string, error) {
 func findEncryptedFilesRecursive(rootDir string) ([]string, error) {
 	var files []string
 
-	err := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(rootDir, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 
-		if d.IsDir() {
-			base := d.Name()
+		if entry.IsDir() {
+			base := entry.Name()
 			if strings.HasPrefix(base, ".") && base != "." {
 				return filepath.SkipDir
 			}
 
+			return nil
+		}
+
+		if entry.Type()&fs.ModeSymlink != 0 {
 			return nil
 		}
 
@@ -100,7 +103,7 @@ func findEncryptedFilesFlat(rootDir string) ([]string, error) {
 	var files []string
 
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 {
 			continue
 		}
 
@@ -142,11 +145,13 @@ func IsFileEncrypted(path string) (bool, error) {
 
 	store, _, storeErr := GetStores(path)
 	if storeErr != nil {
+		//nolint:nilerr // unsupported format is not an I/O error; treat as "not encrypted"
 		return false, nil
 	}
 
 	branches, loadErr := store.LoadPlainFile(data)
 	if loadErr != nil {
+		//nolint:nilerr // unparseable content is not an I/O error; treat as "not encrypted"
 		return false, nil
 	}
 
@@ -199,7 +204,7 @@ func RotateFile(path string, opts RotateOpts) error {
 	// Generate a new data key (core of rotate operation)
 	dataKey, errs := tree.GenerateDataKeyWithKeyServices(opts.KeyServices)
 	if len(errs) > 0 {
-		return fmt.Errorf("%w for %q: %v", ErrGenerateDataKey, absPath, errs)
+		return fmt.Errorf("%w for %q: %v", ErrCouldNotGenerateDataKey, absPath, errs)
 	}
 
 	output, err := EncryptTreeAndEmit(tree, dataKey, aes.NewCipher(), outputStore)
@@ -231,11 +236,11 @@ func modifyKeyGroups(metadata *sops.Metadata, opts RotateOpts) {
 }
 
 // removeKeyFromGroups removes keys matching the given string representation
-// from all key groups.
+// from all key groups, filtering out any resulting empty groups.
 func removeKeyFromGroups(keyGroups []sops.KeyGroup, keyToRemove string) []sops.KeyGroup {
-	result := make([]sops.KeyGroup, len(keyGroups))
+	result := make([]sops.KeyGroup, 0, len(keyGroups))
 
-	for i, group := range keyGroups {
+	for _, group := range keyGroups {
 		newGroup := make(sops.KeyGroup, 0, len(group))
 
 		for _, key := range group {
@@ -244,7 +249,9 @@ func removeKeyFromGroups(keyGroups []sops.KeyGroup, keyToRemove string) []sops.K
 			}
 		}
 
-		result[i] = newGroup
+		if len(newGroup) > 0 {
+			result = append(result, newGroup)
+		}
 	}
 
 	return result
@@ -255,7 +262,12 @@ func removeKeyFromGroups(keyGroups []sops.KeyGroup, keyToRemove string) []sops.K
 // (age1...); additional key types (PGP, KMS, etc.) can be added here.
 func ParseKeyType(publicKey string) (keys.MasterKey, error) {
 	if strings.HasPrefix(publicKey, "age1") {
-		return sopsage.MasterKeyFromRecipient(publicKey)
+		key, err := sopsage.MasterKeyFromRecipient(publicKey)
+		if err != nil {
+			return nil, fmt.Errorf("parsing age key: %w", err)
+		}
+
+		return key, nil
 	}
 
 	return nil, fmt.Errorf("%w: %q (supported: age1...)", ErrUnsupportedKeyType, publicKey)

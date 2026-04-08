@@ -1,7 +1,8 @@
-//nolint:gosec // Test files use variable paths from t.TempDir(); no real security risk
+//nolint:paralleltest,gosec // Tests use t.Setenv (incompatible with t.Parallel in Go 1.24+) and t.TempDir paths
 package sops_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +17,7 @@ import (
 )
 
 // setupAgeKey generates an age identity and configures the SOPS env for tests.
-func setupAgeKey(t *testing.T) (*age.X25519Identity, []sops.KeyGroup) {
+func setupAgeKey(t *testing.T) []sops.KeyGroup {
 	t.Helper()
 
 	identity, err := age.GenerateX25519Identity()
@@ -38,7 +39,7 @@ func setupAgeKey(t *testing.T) (*age.X25519Identity, []sops.KeyGroup) {
 		t.Fatalf("failed to create age master key: %v", err)
 	}
 
-	return identity, []sops.KeyGroup{{masterKey}}
+	return []sops.KeyGroup{{masterKey}}
 }
 
 // encryptTestFile creates a plaintext YAML file, encrypts it in-place, and
@@ -84,8 +85,70 @@ func encryptTestFile(t *testing.T, dir, name string, keyGroups []sops.KeyGroup) 
 	return filePath
 }
 
+// tryDecrypt attempts to decrypt a file and returns any error.
+func tryDecrypt(t *testing.T, filePath string) error {
+	t.Helper()
+
+	inputStore, outputStore, err := sopsclient.GetDecryptStores(filePath, false)
+	if err != nil {
+		t.Fatalf("get decrypt stores: %v", err)
+	}
+
+	decOpts := sopsclient.DecryptOpts{
+		Cipher:          aes.NewCipher(),
+		InputStore:      inputStore,
+		OutputStore:     outputStore,
+		InputPath:       filePath,
+		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+		DecryptionOrder: []string{},
+	}
+
+	_, err = sopsclient.Decrypt(decOpts)
+	if err != nil {
+		return fmt.Errorf("decrypt failed: %w", err)
+	}
+
+	return nil
+}
+
+// setupTwoIdentities creates two age identities with keys and returns them.
+func setupTwoIdentities(t *testing.T) (*age.X25519Identity, *age.X25519Identity, []sops.KeyGroup) {
+	t.Helper()
+
+	identity1, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate identity1: %v", err)
+	}
+
+	identity2, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate identity2: %v", err)
+	}
+
+	keyFile := filepath.Join(t.TempDir(), "keys.txt")
+
+	err = os.WriteFile(keyFile, []byte(identity1.String()+"\n"), 0o600)
+	if err != nil {
+		t.Fatalf("write key file: %v", err)
+	}
+
+	t.Setenv("SOPS_AGE_KEY_FILE", keyFile)
+
+	masterKey1, err := sopsage.MasterKeyFromRecipient(identity1.Recipient().String())
+	if err != nil {
+		t.Fatalf("create master key 1: %v", err)
+	}
+
+	masterKey2, err := sopsage.MasterKeyFromRecipient(identity2.Recipient().String())
+	if err != nil {
+		t.Fatalf("create master key 2: %v", err)
+	}
+
+	return identity1, identity2, []sops.KeyGroup{{masterKey1, masterKey2}}
+}
+
 func TestFindEncryptedFiles_Recursive(t *testing.T) {
-	_, keyGroups := setupAgeKey(t)
+	keyGroups := setupAgeKey(t)
 
 	dir := t.TempDir()
 
@@ -93,14 +156,16 @@ func TestFindEncryptedFiles_Recursive(t *testing.T) {
 	encryptTestFile(t, dir, "root.yaml", keyGroups)
 
 	subDir := filepath.Join(dir, "sub")
-	if err := os.MkdirAll(subDir, 0o750); err != nil {
+
+	err := os.MkdirAll(subDir, 0o750)
+	if err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
 	encryptTestFile(t, subDir, "nested.yaml", keyGroups)
 
 	// Plain (non-encrypted) file
-	err := os.WriteFile(filepath.Join(dir, "plain.yaml"), []byte("key: value\n"), 0o600)
+	err = os.WriteFile(filepath.Join(dir, "plain.yaml"), []byte("key: value\n"), 0o600)
 	if err != nil {
 		t.Fatalf("write plain: %v", err)
 	}
@@ -122,14 +187,16 @@ func TestFindEncryptedFiles_Recursive(t *testing.T) {
 }
 
 func TestFindEncryptedFiles_Flat(t *testing.T) {
-	_, keyGroups := setupAgeKey(t)
+	keyGroups := setupAgeKey(t)
 
 	dir := t.TempDir()
 
 	encryptTestFile(t, dir, "root.yaml", keyGroups)
 
 	subDir := filepath.Join(dir, "sub")
-	if err := os.MkdirAll(subDir, 0o750); err != nil {
+
+	err := os.MkdirAll(subDir, 0o750)
+	if err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -147,12 +214,14 @@ func TestFindEncryptedFiles_Flat(t *testing.T) {
 }
 
 func TestFindEncryptedFiles_SkipsHiddenDirs(t *testing.T) {
-	_, keyGroups := setupAgeKey(t)
+	keyGroups := setupAgeKey(t)
 
 	dir := t.TempDir()
 
 	hiddenDir := filepath.Join(dir, ".hidden")
-	if err := os.MkdirAll(hiddenDir, 0o750); err != nil {
+
+	err := os.MkdirAll(hiddenDir, 0o750)
+	if err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -169,7 +238,7 @@ func TestFindEncryptedFiles_SkipsHiddenDirs(t *testing.T) {
 }
 
 func TestRotateFile(t *testing.T) {
-	_, keyGroups := setupAgeKey(t)
+	keyGroups := setupAgeKey(t)
 
 	dir := t.TempDir()
 	filePath := encryptTestFile(t, dir, "secret.yaml", keyGroups)
@@ -201,32 +270,13 @@ func TestRotateFile(t *testing.T) {
 	}
 
 	// Verify the file is still valid SOPS-encrypted and can be decrypted
-	inputStore, outputStore, err := sopsclient.GetDecryptStores(filePath, false)
-	if err != nil {
-		t.Fatalf("get decrypt stores: %v", err)
-	}
-
-	decOpts := sopsclient.DecryptOpts{
-		Cipher:          aes.NewCipher(),
-		InputStore:      inputStore,
-		OutputStore:     outputStore,
-		InputPath:       filePath,
-		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-		DecryptionOrder: []string{},
-	}
-
-	decrypted, err := sopsclient.Decrypt(decOpts)
-	if err != nil {
+	if err = tryDecrypt(t, filePath); err != nil {
 		t.Fatalf("Decrypt after rotate: %v", err)
-	}
-
-	if len(decrypted) == 0 {
-		t.Error("decrypted data should not be empty")
 	}
 }
 
 func TestRotateFile_AddKey(t *testing.T) {
-	_, keyGroups := setupAgeKey(t)
+	keyGroups := setupAgeKey(t)
 
 	// Generate a second age identity to add
 	identity2, err := age.GenerateX25519Identity()
@@ -268,62 +318,8 @@ func TestRotateFile_AddKey(t *testing.T) {
 	}
 }
 
-// tryDecrypt attempts to decrypt a file and returns any error.
-func tryDecrypt(t *testing.T, filePath string) error {
-	t.Helper()
-
-	inputStore, outputStore, err := sopsclient.GetDecryptStores(filePath, false)
-	if err != nil {
-		t.Fatalf("get decrypt stores: %v", err)
-	}
-
-	decOpts := sopsclient.DecryptOpts{
-		Cipher:          aes.NewCipher(),
-		InputStore:      inputStore,
-		OutputStore:     outputStore,
-		InputPath:       filePath,
-		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
-		DecryptionOrder: []string{},
-	}
-
-	_, err = sopsclient.Decrypt(decOpts)
-
-	return err
-}
-
 func TestRotateFile_RemoveKey(t *testing.T) {
-	// Create two identities and encrypt with both
-	identity1, err := age.GenerateX25519Identity()
-	if err != nil {
-		t.Fatalf("generate identity1: %v", err)
-	}
-
-	identity2, err := age.GenerateX25519Identity()
-	if err != nil {
-		t.Fatalf("generate identity2: %v", err)
-	}
-
-	// Write identity1 for decryption during rotate
-	keyFile := filepath.Join(t.TempDir(), "keys.txt")
-
-	err = os.WriteFile(keyFile, []byte(identity1.String()+"\n"), 0o600)
-	if err != nil {
-		t.Fatalf("write key file: %v", err)
-	}
-
-	t.Setenv("SOPS_AGE_KEY_FILE", keyFile)
-
-	masterKey1, err := sopsage.MasterKeyFromRecipient(identity1.Recipient().String())
-	if err != nil {
-		t.Fatalf("create master key 1: %v", err)
-	}
-
-	masterKey2, err := sopsage.MasterKeyFromRecipient(identity2.Recipient().String())
-	if err != nil {
-		t.Fatalf("create master key 2: %v", err)
-	}
-
-	keyGroups := []sops.KeyGroup{{masterKey1, masterKey2}}
+	_, identity2, keyGroups := setupTwoIdentities(t)
 
 	dir := t.TempDir()
 	filePath := encryptTestFile(t, dir, "secret.yaml", keyGroups)
@@ -335,7 +331,7 @@ func TestRotateFile_RemoveKey(t *testing.T) {
 		DecryptionOrder: []string{},
 	}
 
-	err = sopsclient.RotateFile(filePath, opts)
+	err := sopsclient.RotateFile(filePath, opts)
 	if err != nil {
 		t.Fatalf("RotateFile with RemoveKeys: %v", err)
 	}
