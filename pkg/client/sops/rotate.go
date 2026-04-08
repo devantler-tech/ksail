@@ -42,11 +42,16 @@ var ErrUnsupportedKeyType = errors.New("unsupported key type")
 // still scanned when explicitly provided, even if it is hidden. Symlinks
 // are always skipped.
 func FindEncryptedFiles(rootDir string, recursive bool) ([]string, error) {
-	if recursive {
-		return findEncryptedFilesRecursive(rootDir)
+	canonicalRootDir, err := fsutil.EvalCanonicalPath(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalizing directory %q: %w", rootDir, err)
 	}
 
-	return findEncryptedFilesFlat(rootDir)
+	if recursive {
+		return findEncryptedFilesRecursive(canonicalRootDir)
+	}
+
+	return findEncryptedFilesFlat(canonicalRootDir)
 }
 
 // isHiddenDir reports whether a directory entry is hidden (name starts with ".").
