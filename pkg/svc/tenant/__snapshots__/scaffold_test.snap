@@ -30,7 +30,11 @@ resources: []
 [TestScaffoldFilesSnapshots/kubectl - 1]
 # my-tenant
 
-Apply with: `kubectl apply -k k8s/`
+## Apply
+
+```
+kubectl apply -k k8s/
+```
 
 ---
 
