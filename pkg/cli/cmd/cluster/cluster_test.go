@@ -6141,3 +6141,83 @@ func TestDisplayComponents_WithState(t *testing.T) {
 	assert.Contains(t, out, "(disabled)")
 	assert.Contains(t, out, "(none)")
 }
+
+// TestClassifyRestoreError_FallbackToErrMsg verifies that classifyRestoreError
+// falls back to err.Error() when stderr is empty, so "already exists" errors
+// routed through BehaviorOnFatal (not stderr) are correctly suppressed.
+func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		err       error
+		stderr    string
+		policy    string
+		expectNil bool
+	}{
+		{
+			name:      "nil error returns nil",
+			err:       nil,
+			stderr:    "",
+			policy:    "none",
+			expectNil: true,
+		},
+		{
+			name:      "already exists in stderr with policy none",
+			err:       errors.New("exit status 1"),
+			stderr:    "Error from server (AlreadyExists): resource already exists",
+			policy:    "none",
+			expectNil: true,
+		},
+		{
+			name:      "already exists in err.Error() with empty stderr",
+			err:       errors.New("Error from server (AlreadyExists): daemonsets.apps \"svclb-traefik\" already exists"),
+			stderr:    "",
+			policy:    "none",
+			expectNil: true,
+		},
+		{
+			name:      "multiple already exists lines in err.Error()",
+			err:       errors.New("daemonsets.apps \"svclb-traefik\" already exists\njobs.batch \"helm-install-traefik\" already exists"),
+			stderr:    "",
+			policy:    "none",
+			expectNil: true,
+		},
+		{
+			name:      "mixed error in err.Error() with empty stderr",
+			err:       errors.New("daemonsets.apps \"svclb-traefik\" already exists\nconnection refused"),
+			stderr:    "",
+			policy:    "none",
+			expectNil: false,
+		},
+		{
+			name:      "real error with empty stderr",
+			err:       errors.New("connection refused"),
+			stderr:    "",
+			policy:    "none",
+			expectNil: false,
+		},
+		{
+			name:      "already exists with policy update does not suppress",
+			err:       errors.New("already exists"),
+			stderr:    "",
+			policy:    "update",
+			expectNil: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := cluster.ExportClassifyRestoreError(
+				testCase.err, testCase.stderr, testCase.policy,
+			)
+			if testCase.expectNil {
+				assert.NoError(t, result)
+			} else {
+				assert.Error(t, result)
+			}
+		})
+	}
+}

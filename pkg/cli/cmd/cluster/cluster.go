@@ -4352,9 +4352,18 @@ func classifyRestoreError(err error, stderr string, flags *restoreFlags) error {
 		return nil
 	}
 
-	if flags.existingResourcePolicy == resourcePolicyNone &&
-		allLinesContain(stderr, "already exists") {
-		return nil
+	if flags.existingResourcePolicy == resourcePolicyNone {
+		// Some resource types (e.g. DaemonSet, Job) route
+		// "AlreadyExists" through BehaviorOnFatal instead of stderr.
+		// Fall back to err.Error() when stderr is empty.
+		source := stderr
+		if source == "" {
+			source = err.Error()
+		}
+
+		if allLinesContain(source, "already exists") {
+			return nil
+		}
 	}
 
 	if stderr != "" {
