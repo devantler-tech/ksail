@@ -6146,7 +6146,7 @@ func TestDisplayComponents_WithState(t *testing.T) {
 // falls back to err.Error() when stderr is empty, so "already exists" errors
 // routed through BehaviorOnFatal (not stderr) are correctly suppressed.
 //
-//nolint:funlen // Table-driven test with comprehensive cases
+//nolint:funlen,err113 // Table-driven test with comprehensive cases; test errors are intentionally dynamic
 func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
 	t.Parallel()
 
