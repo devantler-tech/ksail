@@ -270,7 +270,8 @@ func TestRotateFile(t *testing.T) {
 	}
 
 	// Verify the file is still valid SOPS-encrypted and can be decrypted
-	if err = tryDecrypt(t, filePath); err != nil {
+	err = tryDecrypt(t, filePath)
+	if err != nil {
 		t.Fatalf("Decrypt after rotate: %v", err)
 	}
 }
@@ -313,7 +314,8 @@ func TestRotateFile_AddKey(t *testing.T) {
 
 	t.Setenv("SOPS_AGE_KEY_FILE", keyFile2)
 
-	if err = tryDecrypt(t, filePath); err != nil {
+	err = tryDecrypt(t, filePath)
+	if err != nil {
 		t.Fatalf("Decrypt with new key: %v", err)
 	}
 }
@@ -337,7 +339,8 @@ func TestRotateFile_RemoveKey(t *testing.T) {
 	}
 
 	// Verify the file can still be decrypted with identity1
-	if err = tryDecrypt(t, filePath); err != nil {
+	err = tryDecrypt(t, filePath)
+	if err != nil {
 		t.Fatalf("Decrypt with remaining key: %v", err)
 	}
 
@@ -351,7 +354,8 @@ func TestRotateFile_RemoveKey(t *testing.T) {
 
 	t.Setenv("SOPS_AGE_KEY_FILE", removedKeyFile)
 
-	if err = tryDecrypt(t, filePath); err == nil {
+	err = tryDecrypt(t, filePath)
+	if err == nil {
 		t.Fatal("expected decryption with removed key to fail, but it succeeded")
 	}
 }
