@@ -113,13 +113,13 @@ func loadKubeContext(kubeconfigPath, contextName string) (*kubeContext, error) {
 // It reads the kubeconfig, determines the distribution from the context name pattern,
 // and detects the provider by analyzing the server endpoint.
 func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
-	kc, err := loadKubeContext(kubeconfigPath, contextName)
+	resolved, err := loadKubeContext(kubeconfigPath, contextName)
 	if err != nil {
 		return nil, err
 	}
 
 	// Detect distribution from context name
-	distribution, clusterName, err := DetectDistributionFromContext(kc.contextName)
+	distribution, clusterName, err := DetectDistributionFromContext(resolved.contextName)
 	if err != nil {
 		// Context name didn't match any known pattern. Fall back to server
 		// URL-based detection for cloud providers with distinctive hostnames.
@@ -127,14 +127,14 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 			return nil, err
 		}
 
-		distribution, clusterName, err = detectFromServerURL(kc.serverURL, kc.clusterRef)
+		distribution, clusterName, err = detectFromServerURL(resolved.serverURL, resolved.clusterRef)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	// Detect provider from server endpoint
-	provider, err := detectProviderFromEndpoint(distribution, kc.serverURL, clusterName)
+	provider, err := detectProviderFromEndpoint(distribution, resolved.serverURL, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -143,9 +143,9 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 		Distribution:   distribution,
 		Provider:       provider,
 		ClusterName:    clusterName,
-		Context:        kc.contextName,
-		ServerURL:      kc.serverURL,
-		KubeconfigPath: kc.kubeconfigPath,
+		Context:        resolved.contextName,
+		ServerURL:      resolved.serverURL,
+		KubeconfigPath: resolved.kubeconfigPath,
 	}, nil
 }
 
