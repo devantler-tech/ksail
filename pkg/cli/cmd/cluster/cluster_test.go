@@ -6177,6 +6177,13 @@ func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
 			expectNil: true,
 		},
 		{
+			name:      "already exists in err.Error() with whitespace-only stderr",
+			err:       errors.New("Error from server (AlreadyExists): daemonsets.apps \"svclb-traefik\" already exists"),
+			stderr:    "\n",
+			policy:    "none",
+			expectNil: true,
+		},
+		{
 			name:      "multiple already exists lines in err.Error()",
 			err:       errors.New("daemonsets.apps \"svclb-traefik\" already exists\njobs.batch \"helm-install-traefik\" already exists"),
 			stderr:    "",
