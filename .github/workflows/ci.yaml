@@ -35,6 +35,7 @@ jobs:
   rate-limit-gate:
     name: ⏳ Rate Limit Gate
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -50,6 +51,7 @@ jobs:
     name: 🔍 Detect Changes
     needs: [rate-limit-gate]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: read
@@ -126,6 +128,7 @@ jobs:
   build-artifact:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [changes]
     if: github.event_name == 'workflow_dispatch' || ((github.event_name == 'pull_request' || github.event_name == 'merge_group') && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true'))
     permissions:
@@ -152,6 +155,7 @@ jobs:
   generate-schema:
     name: 📝 Generate JSON Schema
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [changes]
     if: github.event_name != 'merge_group' && needs.changes.outputs.schema == 'true'
     permissions:
@@ -203,6 +207,7 @@ jobs:
   generate-docs:
     name: 📚 Generate Reference Docs
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [changes]
     if: github.event_name != 'merge_group' && needs.changes.outputs.cli == 'true'
     permissions:
@@ -255,6 +260,7 @@ jobs:
   auto-commit:
     name: 📤 Auto-Commit Generated Changes
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [changes, generate-schema, generate-docs]
     if: >-
       always()
@@ -333,6 +339,7 @@ jobs:
   audit-docs:
     name: 🔍 Audit Docs Dependencies
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [changes]
     if: github.event_name != 'merge_group' && needs.changes.outputs.docs-deps == 'true'
     permissions:
@@ -354,6 +361,7 @@ jobs:
   audit-vsce:
     name: 🔍 Audit VSCode Extension Dependencies
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [changes]
     if: github.event_name != 'merge_group' && needs.changes.outputs.vsce-deps == 'true'
     permissions:
@@ -404,6 +412,7 @@ jobs:
   vscode-extension:
     name: 🧩 VSCode Extension
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [changes]
     if: github.event_name != 'merge_group' && needs.changes.outputs.vsce == 'true'
     permissions:
@@ -448,6 +457,7 @@ jobs:
   warm-helm-cache:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [changes, build-artifact]
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     permissions:
@@ -481,6 +491,7 @@ jobs:
   warm-mirror-cache:
     name: 🔥 Warm Mirror Cache
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [changes, build-artifact]
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     permissions:
@@ -798,6 +809,7 @@ jobs:
   status:
     name: CI - KSail
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
       [
         rate-limit-gate,
