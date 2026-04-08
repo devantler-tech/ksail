@@ -280,4 +280,4 @@ Before finishing, verify:
 1. You called exactly one safe output tool (`noop`, `create-issue`, or `add-comment`)
 2. If you created an issue, it follows the Investigation Issue Template above
 3. If you found a duplicate, you added a comment to the existing issue instead of creating a new one
-4. Investigation data was saved to `/tmp/memory/investigations/` for future reference
+4. If you performed an investigation, investigation data was saved to `/tmp/memory/investigations/` for future reference
