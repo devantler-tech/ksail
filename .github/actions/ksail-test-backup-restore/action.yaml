@@ -55,7 +55,7 @@ runs:
       shell: bash
       run: |
         LISTING=$(tar tzf /tmp/cluster-backup.tar.gz)
-        if ! echo "$LISTING" | grep -q 'backup-metadata.json'; then
+        if ! echo "$LISTING" | grep -Fq 'backup-metadata.json'; then
           echo "❌ Archive missing backup-metadata.json"
           exit 1
         fi
@@ -89,7 +89,10 @@ runs:
       run: |
         ksail cluster backup --output /tmp/backup-ns.tar.gz --namespaces default
         LISTING=$(tar tzf /tmp/backup-ns.tar.gz)
-        echo "$LISTING" | grep -q 'backup-metadata.json'
+        if ! echo "$LISTING" | grep -Fq 'backup-metadata.json'; then
+          echo "❌ Namespace-filtered archive missing backup-metadata.json"
+          exit 1
+        fi
         echo "✅ Namespace-filtered backup is valid"
 
     - name: 🧪 Compression level backup
