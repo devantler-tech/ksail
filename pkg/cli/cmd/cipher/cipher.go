@@ -611,6 +611,11 @@ func collectRotateTargets(
 		return files, true, nil
 	}
 
+	// For explicitly-targeted single files, validate format before checking encryption.
+	if _, _, storeErr := sopsclient.GetStores(canonPath); storeErr != nil {
+		return nil, false, fmt.Errorf("unsupported file format for %q: %w", canonPath, storeErr)
+	}
+
 	encrypted, encErr := sopsclient.IsFileEncrypted(canonPath)
 	if encErr != nil {
 		return nil, false, fmt.Errorf("checking file %q: %w", canonPath, encErr)
