@@ -6152,12 +6152,20 @@ func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
 
 	// Sentinel errors used as test inputs for classifyRestoreError.
 	var (
-		errExitStatus1          = errors.New("exit status 1")
-		errDaemonSetExists      = errors.New("Error from server (AlreadyExists): daemonsets.apps \"svclb-traefik\" already exists")
-		errMultipleAlreadyExist = errors.New("daemonsets.apps \"svclb-traefik\" already exists\njobs.batch \"helm-install-traefik\" already exists")
-		errMixedExistsAndOther  = errors.New("daemonsets.apps \"svclb-traefik\" already exists\nconnection refused")
-		errConnectionRefused    = errors.New("connection refused")
-		errAlreadyExists        = errors.New("already exists")
+		errExitStatus1     = errors.New("exit status 1")
+		errDaemonSetExists = errors.New(
+			"Error from server (AlreadyExists): daemonsets.apps \"svclb-traefik\" already exists",
+		)
+		errMultipleAlreadyExist = errors.New(
+			"daemonsets.apps \"svclb-traefik\" already exists\n" +
+				"jobs.batch \"helm-install-traefik\" already exists",
+		)
+		errMixedExistsAndOther = errors.New(
+			"daemonsets.apps \"svclb-traefik\" already exists\n" +
+				"connection refused",
+		)
+		errConnectionRefused = errors.New("connection refused")
+		errAlreadyExists     = errors.New("already exists")
 	)
 
 	tests := []struct {
