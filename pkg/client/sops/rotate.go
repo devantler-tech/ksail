@@ -147,7 +147,9 @@ func IsFileEncrypted(path string) (bool, error) {
 		return false, fmt.Errorf("canonicalizing path %q: %w", path, pathErr)
 	}
 
-	data, err := os.ReadFile(canonPath) //nolint:gosec // path canonicalized above via EvalCanonicalPath
+	data, err := os.ReadFile(
+		canonPath,
+	) //nolint:gosec // path canonicalized above via EvalCanonicalPath
 	if err != nil {
 		return false, fmt.Errorf("reading file %q: %w", canonPath, err)
 	}
