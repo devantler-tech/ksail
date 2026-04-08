@@ -255,14 +255,16 @@ func installComponentsInPhases(
 
 	infraTasks := buildInfrastructureTasks(clusterCfg, factories, reqs)
 	if len(infraTasks) > 0 {
-		if err := runInfraPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks); err != nil {
+		err := runInfraPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks)
+		if err != nil {
 			return err
 		}
 	}
 
 	gitopsTasks := buildGitOpsTasks(clusterCfg, factories, reqs)
 	if len(gitopsTasks) > 0 {
-		if err := runGitOpsPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks, gitopsTasks); err != nil {
+		err := runGitOpsPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks, gitopsTasks)
+		if err != nil {
 			return err
 		}
 	}
@@ -283,7 +285,8 @@ func runInfraPhase(
 	infraTasks []notify.ProgressTask,
 ) error {
 	if needsInClusterConnectivityCheck(clusterCfg) {
-		if err := waitForClusterStability(ctx, clusterCfg); err != nil {
+		err := waitForClusterStability(ctx, clusterCfg)
+		if err != nil {
 			return fmt.Errorf(
 				"cluster not stable before infrastructure installation: %w", err,
 			)
@@ -298,7 +301,8 @@ func runInfraPhase(
 		notify.WithTimer(tmr),
 	)
 
-	if err := infraGroup.Run(ctx, infraTasks...); err != nil {
+	err := infraGroup.Run(ctx, infraTasks...)
+	if err != nil {
 		return fmt.Errorf("failed to install infrastructure components: %w", err)
 	}
 
@@ -319,7 +323,8 @@ func runGitOpsPhase(
 	gitopsTasks []notify.ProgressTask,
 ) error {
 	if len(infraTasks) > 0 {
-		if err := waitForClusterStability(ctx, clusterCfg); err != nil {
+		err := waitForClusterStability(ctx, clusterCfg)
+		if err != nil {
 			return fmt.Errorf(
 				"cluster not stable after infrastructure installation: %w", err,
 			)
@@ -334,7 +339,8 @@ func runGitOpsPhase(
 		notify.WithTimer(tmr),
 	)
 
-	if err := gitopsGroup.Run(ctx, gitopsTasks...); err != nil {
+	err := gitopsGroup.Run(ctx, gitopsTasks...)
+	if err != nil {
 		return fmt.Errorf("failed to install GitOps engines: %w", err)
 	}
 

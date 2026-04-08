@@ -48,6 +48,7 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	if err != nil {
 		return fmt.Errorf("failed to check if cluster exists in Omni: %w", err)
 	}
+
 	if exists {
 		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
 	}
@@ -95,7 +96,10 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 // "proxy error".
 func (p *Provisioner) verifyOmniAPIServerReachable(ctx context.Context, clusterName string) error {
 	if p.options.KubeconfigPath != "" {
-		_, _ = fmt.Fprintf(p.logWriter, "  Verifying API server reachability through Omni proxy...\n")
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Verifying API server reachability through Omni proxy...\n",
+		)
 
 		err := p.waitForOmniAPIServerReady(ctx, clusterName)
 		if err != nil {
