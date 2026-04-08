@@ -82,6 +82,8 @@ ksail workload reconcile
 | `ksail workload push`      | Package and push manifests to registry |
 | `ksail workload reconcile` | Trigger GitOps sync and wait for full Flux Kustomization dependency chain |
 
+**Guide:** [ArgoCD ApplicationSet](/guides/argocd-applicationset/)
+
 ## Tenant Management
 
 Onboard teams to a shared Kubernetes cluster with RBAC isolation, GitOps sync resources, and optional repository scaffolding. `ksail tenant create` generates a tenant directory with a ServiceAccount, RBAC bindings, namespace(s), and GitOps sync manifests. `ksail tenant delete` removes tenant manifests and optionally deletes the remote Git repository.
