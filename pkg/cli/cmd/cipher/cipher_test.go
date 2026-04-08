@@ -1006,7 +1006,7 @@ func TestRotateCommandRequiresArg(t *testing.T) {
 	}
 }
 
-func TestRotateCommandDryRunNonExistentPath(t *testing.T) {
+func TestRotateCommandNonExistentPath(t *testing.T) {
 	t.Parallel()
 
 	rt := di.NewRuntime()
@@ -1023,7 +1023,7 @@ func TestRotateCommandDryRunNonExistentPath(t *testing.T) {
 	}
 }
 
-func TestRotateCommandDryRunEmptyDir(t *testing.T) {
+func TestRotateCommandEmptyDir(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
