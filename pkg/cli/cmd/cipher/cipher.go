@@ -556,53 +556,17 @@ func handleRotateRunE(
 		return fmt.Errorf("resolve target path %q: %w", target, err)
 	}
 
-	// Parse keys to add/remove
 	opts, err := buildRotateOpts(newKey, oldKey)
 	if err != nil {
 		return err
 	}
 
-	// Determine if target is a file or directory
-	info, err := os.Stat(canonPath)
+	files, err := collectRotateTargets(canonPath, recursive, writer)
 	if err != nil {
-		return fmt.Errorf("stat %q: %w", canonPath, err)
+		return err
 	}
 
-	var files []string
-
-	if info.IsDir() {
-		files, err = sopsclient.FindEncryptedFiles(canonPath, recursive)
-		if err != nil {
-			return fmt.Errorf("finding encrypted files: %w", err)
-		}
-	} else {
-		encrypted, encErr := sopsclient.IsFileEncrypted(canonPath)
-		if encErr != nil {
-			return fmt.Errorf("checking file %q: %w", canonPath, encErr)
-		}
-
-		if !encrypted {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.InfoType,
-				Content: "file %s is not SOPS-encrypted, skipping",
-				Args:    []any{canonPath},
-				Writer:  writer,
-			})
-
-			return nil
-		}
-
-		files = []string{canonPath}
-	}
-
-	if len(files) == 0 {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: "no SOPS-encrypted files found in %s",
-			Args:    []any{canonPath},
-			Writer:  writer,
-		})
-
+	if files == nil {
 		return nil
 	}
 
@@ -611,6 +575,53 @@ func handleRotateRunE(
 	}
 
 	return handleRotateApply(writer, files, opts)
+}
+
+// collectRotateTargets resolves the target path into a list of encrypted files.
+// Returns nil (not empty) when no files are found and a message has been printed.
+func collectRotateTargets(canonPath string, recursive bool, writer io.Writer) ([]string, error) {
+	info, err := os.Stat(canonPath)
+	if err != nil {
+		return nil, fmt.Errorf("stat %q: %w", canonPath, err)
+	}
+
+	if info.IsDir() {
+		files, findErr := sopsclient.FindEncryptedFiles(canonPath, recursive)
+		if findErr != nil {
+			return nil, fmt.Errorf("finding encrypted files: %w", findErr)
+		}
+
+		if len(files) == 0 {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.InfoType,
+				Content: "no SOPS-encrypted files found in %s",
+				Args:    []any{canonPath},
+				Writer:  writer,
+			})
+
+			return nil, nil //nolint:nilnil // nil signals "nothing to do, message printed"
+		}
+
+		return files, nil
+	}
+
+	encrypted, encErr := sopsclient.IsFileEncrypted(canonPath)
+	if encErr != nil {
+		return nil, fmt.Errorf("checking file %q: %w", canonPath, encErr)
+	}
+
+	if !encrypted {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: "file %s is not SOPS-encrypted, skipping",
+			Args:    []any{canonPath},
+			Writer:  writer,
+		})
+
+		return nil, nil //nolint:nilnil // nil signals "nothing to do, message printed"
+	}
+
+	return []string{canonPath}, nil
 }
 
 // buildRotateOpts constructs RotateOpts from CLI flag values.
