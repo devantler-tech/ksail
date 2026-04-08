@@ -508,7 +508,7 @@ func writeRBACCMFile(path, content string) error {
 		perm = info.Mode().Perm()
 	}
 
-	err = os.WriteFile(safePath, []byte(content), perm)
+	err = os.WriteFile(safePath, []byte(content), perm) //nolint:gosec // safePath is canonicalized via fsutil.EvalCanonicalPath
 	if err != nil {
 		return fmt.Errorf("writing %s: %w", safePath, err)
 	}

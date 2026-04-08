@@ -440,7 +440,7 @@ data:
 	err = tenant.RemoveArgoCDRBACPolicyFile(rbacCMPath, "team-alpha")
 	require.NoError(t, err)
 
-	data, err := os.ReadFile(rbacCMPath)
+	data, err := os.ReadFile(rbacCMPath) //nolint:gosec // test-only path from t.TempDir()
 	require.NoError(t, err)
 	require.NotContains(t, string(data), "role:team-alpha")
 	require.Contains(t, string(data), "role:team-beta")
