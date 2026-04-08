@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
@@ -718,7 +719,7 @@ func handleRotateApply(writer io.Writer, files []string, opts sopsclient.RotateO
 	}
 
 	if len(rotateErrors) > 0 {
-		return fmt.Errorf("%w for %d file(s)", errRotationFailed, len(rotateErrors))
+		return fmt.Errorf("%w for %d file(s): %s", errRotationFailed, len(rotateErrors), strings.Join(rotateErrors, ", "))
 	}
 
 	notify.WriteMessage(notify.Message{

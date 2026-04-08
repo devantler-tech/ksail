@@ -32,11 +32,8 @@ type RotateOpts struct {
 	IgnoreMAC bool
 }
 
-// Exported error variables for rotation operations.
-var (
-	ErrNoEncryptedFiles   = errors.New("no SOPS-encrypted files found")
-	ErrUnsupportedKeyType = errors.New("unsupported key type")
-)
+// ErrUnsupportedKeyType is returned when a key string cannot be auto-detected.
+var ErrUnsupportedKeyType = errors.New("unsupported key type")
 
 // FindEncryptedFiles discovers SOPS-encrypted YAML/JSON files in rootDir.
 // When recursive is true, subdirectories are scanned; otherwise only
