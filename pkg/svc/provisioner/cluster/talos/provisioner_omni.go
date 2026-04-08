@@ -44,17 +44,14 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 
 	_, _ = fmt.Fprintf(p.logWriter, "Creating Talos cluster %q via Omni...\n", clusterName)
 
-	// Check if cluster already exists
 	exists, err := omniProv.ClusterExists(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to check if cluster exists in Omni: %w", err)
 	}
-
 	if exists {
 		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
 	}
 
-	// Resolve Talos and Kubernetes versions from Omni options
 	talosVersion, kubernetesVersion, err := p.resolveOmniVersions(ctx, omniProv)
 	if err != nil {
 		return fmt.Errorf("failed to resolve versions: %w", err)
@@ -67,7 +64,6 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		return fmt.Errorf("failed to resolve machines: %w", err)
 	}
 
-	// Sync the cluster template to Omni and wait for readiness
 	err = p.syncAndWaitOmniCluster(ctx, omniProv, omniprovider.TemplateParams{
 		ClusterName:       clusterName,
 		TalosVersion:      talosVersion,
@@ -88,16 +84,20 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		return err
 	}
 
-	// Verify the API server is reachable through the Omni proxy.
-	// WaitForClusterReady polls ClusterStatus until Phase==RUNNING && Ready,
-	// but the Omni SaaS proxy may not yet be forwarding kubectl connections
-	// at that point. This readiness probe absorbs the proxy propagation delay
-	// so downstream commands (e.g., ksail cluster info) don't fail with
-	// "proxy error".
+	return p.verifyOmniAPIServerReachable(ctx, clusterName)
+}
+
+// verifyOmniAPIServerReachable checks that the API server is reachable through
+// the Omni proxy. WaitForClusterReady polls ClusterStatus until
+// Phase==RUNNING && Ready, but the Omni SaaS proxy may not yet be forwarding
+// kubectl connections at that point. This probe absorbs the proxy propagation
+// delay so downstream commands (e.g., ksail cluster info) don't fail with
+// "proxy error".
+func (p *Provisioner) verifyOmniAPIServerReachable(ctx context.Context, clusterName string) error {
 	if p.options.KubeconfigPath != "" {
 		_, _ = fmt.Fprintf(p.logWriter, "  Verifying API server reachability through Omni proxy...\n")
 
-		err = p.waitForOmniAPIServerReady(ctx, clusterName)
+		err := p.waitForOmniAPIServerReady(ctx, clusterName)
 		if err != nil {
 			return fmt.Errorf("API server not reachable through Omni proxy: %w", err)
 		}
@@ -377,15 +377,26 @@ func (p *Provisioner) saveOmniTalosconfig(
 // through the Omni proxy using the saved kubeconfig. The Omni cluster may
 // report RUNNING/Ready before the proxy is operational for kubectl connections.
 func (p *Provisioner) waitForOmniAPIServerReady(ctx context.Context, clusterName string) error {
+	// Canonicalize kubeconfig path to match what saveOmniConfig wrote,
+	// in case the original path contained ~ or was otherwise non-canonical.
+	kubeconfigPath, err := fsutil.EvalCanonicalPath(p.options.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path for readiness check: %w", err)
+	}
+
 	dist := v1alpha1.DistributionTalos
 	contextName := dist.ContextName(clusterName)
 
-	clientset, err := k8s.NewClientset(p.options.KubeconfigPath, contextName)
+	clientset, err := k8s.NewClientset(kubeconfigPath, contextName)
 	if err != nil {
 		return fmt.Errorf("create clientset for Omni API readiness check: %w", err)
 	}
 
-	return readiness.WaitForAPIServerReady(ctx, clientset, omniAPIServerReadinessTimeout)
+	if err := readiness.WaitForAPIServerReady(ctx, clientset, omniAPIServerReadinessTimeout); err != nil {
+		return fmt.Errorf("wait for Omni API server readiness: %w", err)
+	}
+
+	return nil
 }
 
 // deleteOmniCluster handles cluster deletion for Omni-managed Talos clusters.
