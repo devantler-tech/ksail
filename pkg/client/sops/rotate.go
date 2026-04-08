@@ -49,6 +49,11 @@ func FindEncryptedFiles(rootDir string, recursive bool) ([]string, error) {
 	return findEncryptedFilesFlat(rootDir)
 }
 
+// isHiddenDir reports whether a directory entry is hidden (name starts with ".").
+func isHiddenDir(name string) bool {
+	return strings.HasPrefix(name, ".") && name != "."
+}
+
 func findEncryptedFilesRecursive(rootDir string) ([]string, error) {
 	var files []string
 
@@ -58,8 +63,7 @@ func findEncryptedFilesRecursive(rootDir string) ([]string, error) {
 		}
 
 		if entry.IsDir() {
-			base := entry.Name()
-			if path != rootDir && strings.HasPrefix(base, ".") && base != "." {
+			if path != rootDir && isHiddenDir(entry.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -70,20 +74,14 @@ func findEncryptedFilesRecursive(rootDir string) ([]string, error) {
 			return nil
 		}
 
-		if !isSupportedExtension(path) {
-			return nil
-		}
-
-		encrypted, checkErr := IsFileEncrypted(path)
+		encrypted, checkErr := checkFileForEncryption(path)
 		if checkErr != nil {
 			return checkErr
 		}
 
-		if !encrypted {
-			return nil
+		if encrypted {
+			files = append(files, path)
 		}
-
-		files = append(files, path)
 
 		return nil
 	})
@@ -108,20 +106,15 @@ func findEncryptedFilesFlat(rootDir string) ([]string, error) {
 		}
 
 		path := filepath.Join(rootDir, entry.Name())
-		if !isSupportedExtension(path) {
-			continue
-		}
 
-		encrypted, checkErr := IsFileEncrypted(path)
+		encrypted, checkErr := checkFileForEncryption(path)
 		if checkErr != nil {
 			return nil, fmt.Errorf("checking file %q: %w", path, checkErr)
 		}
 
-		if !encrypted {
-			continue
+		if encrypted {
+			files = append(files, path)
 		}
-
-		files = append(files, path)
 	}
 
 	return files, nil
@@ -131,6 +124,16 @@ func isSupportedExtension(path string) bool {
 	ext := filepath.Ext(path)
 
 	return ext == ".yaml" || ext == ".yml" || ext == ".json"
+}
+
+// checkFileForEncryption returns true if the file has a supported extension
+// and contains SOPS metadata.
+func checkFileForEncryption(path string) (bool, error) {
+	if !isSupportedExtension(path) {
+		return false, nil
+	}
+
+	return IsFileEncrypted(path)
 }
 
 // IsFileEncrypted checks whether a file contains SOPS metadata by
