@@ -147,6 +147,46 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 	}
 }
 
+// appendChange appends a single diff change to the appropriate category slice in result.
+// Both applyFieldRules and applyProviderFieldRules delegate to this helper to
+// avoid duplicating the default-value substitution and category dispatch logic.
+func appendChange(
+	result *clusterupdate.UpdateResult,
+	field, oldVal, newVal, defaultVal, reason string,
+	category clusterupdate.ChangeCategory,
+) {
+	if defaultVal != "" {
+		if oldVal == "" {
+			oldVal = defaultVal
+		}
+
+		if newVal == "" {
+			newVal = defaultVal
+		}
+	}
+
+	if oldVal == newVal {
+		return
+	}
+
+	change := clusterupdate.Change{
+		Field:    field,
+		OldValue: oldVal,
+		NewValue: newVal,
+		Category: category,
+		Reason:   reason,
+	}
+
+	switch category {
+	case clusterupdate.ChangeCategoryRecreateRequired:
+		result.RecreateRequired = append(result.RecreateRequired, change)
+	case clusterupdate.ChangeCategoryInPlace:
+		result.InPlaceChanges = append(result.InPlaceChanges, change)
+	case clusterupdate.ChangeCategoryRebootRequired:
+		result.RebootRequired = append(result.RebootRequired, change)
+	}
+}
+
 // applyFieldRules evaluates each field rule and appends changes to the result.
 func (e *Engine) applyFieldRules(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
@@ -154,39 +194,9 @@ func (e *Engine) applyFieldRules(
 	rules []fieldRule,
 ) {
 	for _, rule := range rules {
-		oldVal := rule.getVal(oldSpec)
-		newVal := rule.getVal(newSpec)
-
-		if rule.defaultVal != "" {
-			if oldVal == "" {
-				oldVal = rule.defaultVal
-			}
-
-			if newVal == "" {
-				newVal = rule.defaultVal
-			}
-		}
-
-		if oldVal == newVal {
-			continue
-		}
-
-		change := clusterupdate.Change{
-			Field:    rule.field,
-			OldValue: oldVal,
-			NewValue: newVal,
-			Category: rule.category,
-			Reason:   rule.reason,
-		}
-
-		switch rule.category {
-		case clusterupdate.ChangeCategoryRecreateRequired:
-			result.RecreateRequired = append(result.RecreateRequired, change)
-		case clusterupdate.ChangeCategoryInPlace:
-			result.InPlaceChanges = append(result.InPlaceChanges, change)
-		case clusterupdate.ChangeCategoryRebootRequired:
-			result.RebootRequired = append(result.RebootRequired, change)
-		}
+		appendChange(result, rule.field,
+			rule.getVal(oldSpec), rule.getVal(newSpec),
+			rule.defaultVal, rule.reason, rule.category)
 	}
 }
 
@@ -381,38 +391,8 @@ func (e *Engine) applyProviderFieldRules(
 	rules []providerFieldRule,
 ) {
 	for _, rule := range rules {
-		oldVal := rule.getVal(oldProvider)
-		newVal := rule.getVal(newProvider)
-
-		if rule.defaultVal != "" {
-			if oldVal == "" {
-				oldVal = rule.defaultVal
-			}
-
-			if newVal == "" {
-				newVal = rule.defaultVal
-			}
-		}
-
-		if oldVal == newVal {
-			continue
-		}
-
-		change := clusterupdate.Change{
-			Field:    rule.field,
-			OldValue: oldVal,
-			NewValue: newVal,
-			Category: rule.category,
-			Reason:   rule.reason,
-		}
-
-		switch rule.category {
-		case clusterupdate.ChangeCategoryRecreateRequired:
-			result.RecreateRequired = append(result.RecreateRequired, change)
-		case clusterupdate.ChangeCategoryInPlace:
-			result.InPlaceChanges = append(result.InPlaceChanges, change)
-		case clusterupdate.ChangeCategoryRebootRequired:
-			result.RebootRequired = append(result.RebootRequired, change)
-		}
+		appendChange(result, rule.field,
+			rule.getVal(oldProvider), rule.getVal(newProvider),
+			rule.defaultVal, rule.reason, rule.category)
 	}
 }
