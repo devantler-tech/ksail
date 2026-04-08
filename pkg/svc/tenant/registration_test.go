@@ -294,6 +294,7 @@ resources:
 
 	resources := readKustomizationResources(t, kPath)
 	count := 0
+
 	for _, r := range resources {
 		if r == "argocd-rbac-cm.yaml" {
 			count++

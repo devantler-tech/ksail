@@ -428,14 +428,15 @@ func containsArgoCDRBACCM(data []byte) bool {
 		content = "\n" + content
 	}
 
-	for _, part := range strings.Split(content, "\n---") {
+	for part := range strings.SplitSeq(content, "\n---") {
 		trimmed := strings.TrimSpace(part)
 		if trimmed == "" {
 			continue
 		}
 
 		var raw map[string]any
-		if err := yaml.Unmarshal([]byte(trimmed), &raw); err != nil {
+		err := yaml.Unmarshal([]byte(trimmed), &raw)
+		if err != nil {
 			continue
 		}
 

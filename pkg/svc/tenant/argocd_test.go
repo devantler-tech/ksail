@@ -409,6 +409,7 @@ data:
 
 	// Count occurrences of "role:team-alpha," — should appear exactly twice (two p lines).
 	count := 0
+
 	needle := "role:team-alpha,"
 	for i := 0; i <= len(content)-len(needle); i++ {
 		if content[i:i+len(needle)] == needle {
