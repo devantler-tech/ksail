@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
@@ -393,10 +392,10 @@ func (p *Provisioner) waitForOmniAPIServerReady(ctx context.Context, clusterName
 		return fmt.Errorf("canonicalize kubeconfig path for readiness check: %w", err)
 	}
 
-	dist := v1alpha1.DistributionTalos
-	contextName := dist.ContextName(clusterName)
-
-	clientset, err := k8s.NewClientset(kubeconfigPath, contextName)
+	// Use empty context to pick the kubeconfig's current-context, because
+	// Omni-generated kubeconfigs use a service-account context name that
+	// differs from the talosctl "admin@<name>" convention.
+	clientset, err := k8s.NewClientset(kubeconfigPath, "")
 	if err != nil {
 		return fmt.Errorf("create clientset for Omni API readiness check: %w", err)
 	}
