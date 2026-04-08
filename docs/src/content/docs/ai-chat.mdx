@@ -52,15 +52,19 @@ The chat assistant supports multiple authentication methods via environment vari
 
 ## Chat Modes
 
-Press **Tab** to cycle between two modes:
+Press **Tab** to cycle between three modes:
 
-### Agent Mode (`</>`)
+### Interactive Mode (`</>`)
 
 Executes both read and write operations. Write operations (create, modify, delete) require explicit confirmation. Use for cluster operations, deploying workloads, and configuration changes.
 
 ### Plan Mode (`≡`)
 
 Blocks all tool execution and provides step-by-step explanations without making changes. Use for learning workflows or reviewing potential changes before execution.
+
+### Autopilot Mode (`⚡`)
+
+Executes all operations — read and write — without interruption. All permission prompts are automatically approved. Use for trusted, repetitive, or fully understood workflows where continuous approval is not needed.
 
 ## Advanced Features
 
@@ -93,8 +97,7 @@ Chat sessions support unlimited conversation length through automatic background
 - **PgUp/PgDn** — Scroll conversation viewport
 
 ### Modes & Settings
-- **Tab** — Cycle chat mode (Agent → Plan → Agent)
-- **Ctrl+Y** — Toggle auto-approve mode (bypasses all future permission prompts for the session)
+- **Tab** — Cycle chat mode (Interactive → Plan → Autopilot → Interactive)
 - **Ctrl+T** — Expand/collapse tool execution details
 - **Ctrl+O** — Change AI model (lazy-loaded picker)
 - **Ctrl+E** — Change reasoning effort level
@@ -104,7 +107,7 @@ Chat sessions support unlimited conversation length through automatic background
 ### Permission Prompts
 When an operation requires approval, an inline permission modal appears:
 - **y** — Allow this operation once
-- **a** — Allow always (enables auto-approve for all future operations in this session)
+- **a** — Allow always (switches to Autopilot mode; operations are auto-approved while Autopilot is enabled)
 - **n / Esc** — Deny
 
 Read and URL operations are auto-approved without a prompt.
@@ -126,13 +129,13 @@ Read and URL operations are auto-approved without a prompt.
 When available, the footer displays real-time quota information showing used/total requests, remaining percentage, and reset date (may be hidden on narrow terminals). Example: `45/100 reqs · 55% · resets Feb 15`. For unlimited premium quota, shows `∞ reqs` instead of numeric total.
 ## Mode Comparison
 
-| Feature | Agent Mode | Plan Mode |
-|---------|-----------|-----------|
-| **Icon** | `</>` | `≡` |
-| **Read Tools** | ✅ Auto | ❌ None |
-| **Write Tools** | ✅ With approval | ❌ None |
-| **Makes Changes** | Yes (approved) | No |
-| **Best For** | Execution | Learning |
+| Feature | Interactive Mode | Plan Mode | Autopilot Mode |
+|---------|-----------------|-----------|----------------|
+| **Icon** | `</>` | `≡` | `⚡` |
+| **Read Tools** | ✅ Auto | ❌ None | ✅ Auto |
+| **Write Tools** | ✅ With approval | ❌ None | ✅ Auto |
+| **Makes Changes** | Yes (approved) | No | Yes (unattended) |
+| **Best For** | Execution | Learning | Trusted workflows |
 
 ## Configuration
 
@@ -149,7 +152,7 @@ If not set, the assistant uses the model specified via `--model` flag or default
 
 ## Common Workflows
 
-Use **Plan mode** (`≡`) to learn workflows and review potential changes, and **Agent mode** (`</>`) to execute operations with approval. Press **Tab** to switch modes as needed.
+Use **Plan mode** (`≡`) to learn workflows and review potential changes, **Interactive mode** (`</>`) to execute operations with approval, and **Autopilot mode** (`⚡`) for trusted workflows that should run unattended. Press **Tab** to switch modes as needed.
 
 ## Session Management
 
@@ -163,7 +166,7 @@ Press **Ctrl+N** to start a fresh conversation. Previous sessions are automatica
 
 ## Tips
 
-Start with Plan mode for learning and reviewing workflows, then enable auto-approve (`Ctrl+Y`) for trusted operations in Agent mode. Adjust reasoning effort (`Ctrl+E`) based on task complexity, use `--model auto` to optimize costs, and filter session history (`Ctrl+H` then `/`) to find past conversations.
+Start with Plan mode for learning and reviewing workflows, then switch to Interactive mode for execution with approval or Autopilot mode for trusted unattended operations. Adjust reasoning effort (`Ctrl+E`) based on task complexity, use `--model auto` to optimize costs, and filter session history (`Ctrl+H` then `/`) to find past conversations.
 
 ## Troubleshooting
 
