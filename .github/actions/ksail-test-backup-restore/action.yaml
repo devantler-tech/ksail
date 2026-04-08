@@ -144,12 +144,24 @@ runs:
       id: restore-policy-none
       shell: bash
       run: |
-        # policy=none uses kubectl create, which may fail for resources
-        # with immutable fields (e.g. Service clusterIPs). We only verify
-        # the command doesn't crash unexpectedly — partial restore errors
-        # for already-existing resources are expected.
-        ksail cluster restore --input /tmp/cluster-backup.tar.gz --existing-resource-policy=none 2>&1 || true
-        echo "✅ Restore with policy=none completed (existing resources skipped or partially failed as expected)"
+        # policy=none uses kubectl create — resources that already exist
+        # are expected to produce "already exists" or "already allocated"
+        # errors. Capture output and validate the failure is expected.
+        set +e
+        ksail cluster restore --input /tmp/cluster-backup.tar.gz --existing-resource-policy=none 2>/tmp/restore-none-stderr.txt
+        RC=$?
+        set -e
+        if [ "$RC" -eq 0 ]; then
+          echo "✅ Restore with policy=none succeeded (no conflicts)"
+        elif grep -qE "already exists|already allocated" /tmp/restore-none-stderr.txt; then
+          echo "✅ Restore with policy=none failed with expected conflicts (exit $RC)"
+        else
+          echo "❌ Restore with policy=none failed with unexpected error (exit $RC):"
+          cat /tmp/restore-none-stderr.txt
+          rm -f /tmp/restore-none-stderr.txt
+          exit 1
+        fi
+        rm -f /tmp/restore-none-stderr.txt
 
     - name: 🧪 Invalid archive rejected
       id: invalid-archive
@@ -250,4 +262,4 @@ runs:
               /tmp/traversal-backup.tar.gz /tmp/symlink-backup.tar.gz \
               /tmp/backup-ns.tar.gz /tmp/backup-fast.tar.gz \
               /tmp/invalid-archive-stderr.txt /tmp/traversal-stderr.txt \
-              /tmp/symlink-stderr.txt
+              /tmp/symlink-stderr.txt /tmp/restore-none-stderr.txt
