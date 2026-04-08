@@ -124,7 +124,7 @@ func TestCreateCmd_FluxType(t *testing.T) {
 	cmd.SetArgs([]string{
 		"my-flux-tenant", "--type", "flux",
 		"--registry", "oci://ghcr.io/test",
-		"--git-repo", "owner/repo", "--output", outDir,
+		"--tenant-repo", "owner/repo", "--output", outDir,
 	})
 
 	err := cmd.Execute()
@@ -159,7 +159,7 @@ func TestCreateCmd_ArgoCDType(t *testing.T) {
 		"my-argocd-tenant",
 		"--type", "argocd",
 		"--git-provider", "github",
-		"--git-repo", "owner/repo",
+		"--tenant-repo", "owner/repo",
 		"--output", outDir,
 	})
 
@@ -191,7 +191,7 @@ func TestCreateCmd_InvalidType(t *testing.T) {
 	require.ErrorContains(t, err, "invalid tenant type")
 }
 
-func TestCreateCmd_DeliveryPRNotImplemented(t *testing.T) {
+func TestCreateCmd_DeliveryPRAccepted(t *testing.T) {
 	t.Parallel()
 
 	outDir := t.TempDir()
@@ -204,8 +204,11 @@ func TestCreateCmd_DeliveryPRNotImplemented(t *testing.T) {
 	cmd.SetArgs([]string{"pr-tenant", "--type", "kubectl", "--delivery", "pr", "--output", outDir})
 
 	err := cmd.Execute()
-	require.Error(t, err)
-	require.ErrorContains(t, err, "not yet implemented")
+	// PR delivery is accepted but may fail at runtime (no git provider configured) —
+	// the important thing is that it no longer returns "not implemented".
+	if err != nil {
+		require.NotContains(t, err.Error(), "not yet implemented")
+	}
 }
 
 func TestCreateCmd_InvalidDelivery(t *testing.T) {

@@ -34,7 +34,7 @@ func NewDeleteCmd(_ *di.Runtime) *cobra.Command {
 	cmd.Flags().Bool("delete-repo", false, "Also delete the tenant Git repository")
 	cmd.Flags().String("git-provider", "", "Git provider (required with --delete-repo)")
 	cmd.Flags().
-		String("git-repo", "", "Tenant repo as owner/repo-name (required with --delete-repo)")
+		String("tenant-repo", "", "Tenant repo as owner/repo-name (required with --delete-repo)")
 	cmd.Flags().String("git-token", "", "Git provider API token")
 	cmd.Flags().StringP("output", "o", ".", "Directory containing tenant manifests")
 
@@ -53,7 +53,7 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 	opts.KustomizationPath, _ = cmd.Flags().GetString("kustomization-path")
 	opts.DeleteRepo, _ = cmd.Flags().GetBool("delete-repo")
 	opts.GitProvider, _ = cmd.Flags().GetString("git-provider")
-	opts.GitRepo, _ = cmd.Flags().GetString("git-repo")
+	opts.TenantRepo, _ = cmd.Flags().GetString("tenant-repo")
 	opts.GitToken, _ = cmd.Flags().GetString("git-token")
 
 	outputStr, _ := cmd.Flags().GetString("output")
@@ -66,11 +66,11 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 	opts.OutputDir = outputDir
 
 	if !confirm.ShouldSkipPrompt(force) {
-		if opts.DeleteRepo && opts.GitRepo != "" {
+		if opts.DeleteRepo && opts.TenantRepo != "" {
 			notify.Warningf(cmd.OutOrStdout(),
 				"This will delete tenant %q, its manifest directory, "+
 					"and the remote Git repository %q",
-				opts.Name, opts.GitRepo)
+				opts.Name, opts.TenantRepo)
 		} else {
 			notify.Warningf(cmd.OutOrStdout(),
 				"This will delete tenant %q and its manifest directory",

@@ -1,36 +1,26 @@
 package gitprovider
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"strings"
-	"time"
+
+	"github.com/google/go-github/v72/github"
 )
-
-const githubAPIURL = "https://api.github.com"
-
-const httpClientTimeout = 30 * time.Second
 
 const userAgent = "ksail"
 
 type gitHubProvider struct {
-	token  string
-	client *http.Client
-	apiURL string
+	client *github.Client
 }
 
 func newGitHubProvider(token string) *gitHubProvider {
-	return &gitHubProvider{
-		token:  token,
-		client: &http.Client{Timeout: httpClientTimeout},
-		apiURL: githubAPIURL,
-	}
+	client := github.NewClient(nil).WithAuthToken(token)
+	client.UserAgent = userAgent
+
+	return &gitHubProvider{client: client}
 }
 
 // CreateRepo creates a GitHub repository.
@@ -41,34 +31,120 @@ func (g *gitHubProvider) CreateRepo(
 	owner, name string,
 	visibility RepoVisibility,
 ) error {
-	body := buildRepoBody(name, visibility)
+	isPrivate, visStr := resolveVisibility(visibility)
 
-	// Try org first, fall back to user
-	url := fmt.Sprintf("%s/orgs/%s/repos", g.apiURL, owner)
-
-	resp, err := g.doJSON(ctx, http.MethodPost, url, body)
-	if err != nil {
-		return fmt.Errorf("create repo request: %w", err)
+	repo := &github.Repository{
+		Name:       github.Ptr(name),
+		Private:    github.Ptr(isPrivate),
+		AutoInit:   github.Ptr(false),
+		Visibility: github.Ptr(visStr),
 	}
 
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return g.createUserRepo(ctx, owner, name, visibility, body)
+	// Try org endpoint first.
+	_, resp, err := g.client.Repositories.Create(ctx, owner, repo)
+	if err == nil {
+		return nil
 	}
 
-	return g.handleCreateResponse(resp, owner, name)
+	if resp != nil && resp.StatusCode == http.StatusNotFound {
+		return g.createUserRepo(ctx, owner, name, visibility, repo)
+	}
+
+	return g.classifyCreateError(err, owner, name)
 }
 
-// PushFiles pushes files to a repository using the Contents API.
-// For existing files, it fetches the current SHA first to allow updates.
+// PushFiles pushes files to a repository's default branch using the Contents API.
 func (g *gitHubProvider) PushFiles(
 	ctx context.Context,
 	owner, name string,
 	files map[string][]byte,
 	commitMsg string,
 ) error {
-	// Sort filenames for deterministic ordering
+	return g.pushFilesInternal(ctx, owner, name, "", files, commitMsg)
+}
+
+// PushFilesToBranch pushes files to a specific branch using the Contents API.
+func (g *gitHubProvider) PushFilesToBranch(
+	ctx context.Context,
+	owner, repo, branch string,
+	files map[string][]byte,
+	commitMsg string,
+) error {
+	return g.pushFilesInternal(ctx, owner, repo, branch, files, commitMsg)
+}
+
+// DeleteRepo deletes a GitHub repository.
+func (g *gitHubProvider) DeleteRepo(ctx context.Context, owner, name string) error {
+	_, err := g.client.Repositories.Delete(ctx, owner, name)
+	if err != nil {
+		return fmt.Errorf("%w during delete repository: %v", ErrGitHubAPI, err) //nolint:errorlint // wrapping sentinel
+	}
+
+	return nil
+}
+
+// GetDefaultBranch returns the default branch name of a repository.
+func (g *gitHubProvider) GetDefaultBranch(ctx context.Context, owner, repo string) (string, error) {
+	r, _, err := g.client.Repositories.Get(ctx, owner, repo)
+	if err != nil {
+		return "", fmt.Errorf("get repository: %w", err)
+	}
+
+	return r.GetDefaultBranch(), nil
+}
+
+// CreateBranch creates a new branch from the given base branch.
+func (g *gitHubProvider) CreateBranch(
+	ctx context.Context,
+	owner, repo, branchName, baseBranch string,
+) error {
+	baseRef, _, err := g.client.Git.GetRef(ctx, owner, repo, "refs/heads/"+baseBranch)
+	if err != nil {
+		return fmt.Errorf("get base branch %q: %w", baseBranch, err)
+	}
+
+	newRef := &github.Reference{
+		Ref:    github.Ptr("refs/heads/" + branchName),
+		Object: &github.GitObject{SHA: baseRef.Object.SHA},
+	}
+
+	_, resp, err := g.client.Git.CreateRef(ctx, owner, repo, newRef)
+	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusUnprocessableEntity {
+			return fmt.Errorf("%w: %s", ErrBranchAlreadyExists, branchName)
+		}
+
+		return fmt.Errorf("create branch %q: %w", branchName, err)
+	}
+
+	return nil
+}
+
+// CreatePullRequest creates a pull request and returns the PR URL.
+func (g *gitHubProvider) CreatePullRequest(
+	ctx context.Context,
+	owner, repo string,
+	opts PROptions,
+) (string, error) {
+	pr, _, err := g.client.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
+		Title: github.Ptr(opts.Title),
+		Body:  github.Ptr(opts.Body),
+		Head:  github.Ptr(opts.Head),
+		Base:  github.Ptr(opts.Base),
+	})
+	if err != nil {
+		return "", fmt.Errorf("create pull request: %w", err)
+	}
+
+	return pr.GetHTMLURL(), nil
+}
+
+func (g *gitHubProvider) pushFilesInternal(
+	ctx context.Context,
+	owner, repo, branch string,
+	files map[string][]byte,
+	commitMsg string,
+) error {
 	paths := make([]string, 0, len(files))
 	for path := range files {
 		paths = append(paths, path)
@@ -78,243 +154,116 @@ func (g *gitHubProvider) PushFiles(
 
 	for _, path := range paths {
 		content := files[path]
-		encoded := base64.StdEncoding.EncodeToString(content)
-		body := map[string]any{
-			"message": commitMsg,
-			"content": encoded,
+
+		opts := &github.RepositoryContentFileOptions{
+			Message: github.Ptr(commitMsg),
+			Content: content,
+		}
+
+		if branch != "" {
+			opts.Branch = github.Ptr(branch)
 		}
 
 		// Check if file already exists to get its SHA (required for updates).
-		sha, err := g.getFileSHA(ctx, owner, name, path)
+		sha, err := g.getFileSHA(ctx, owner, repo, path, branch)
 		if err != nil {
 			return fmt.Errorf("checking file %s: %w", path, err)
 		}
 
 		if sha != "" {
-			body["sha"] = sha
+			opts.SHA = github.Ptr(sha)
 		}
 
-		url := fmt.Sprintf(
-			"%s/repos/%s/%s/contents/%s",
-			g.apiURL, owner, name, path,
-		)
-
-		resp, err := g.doJSON(ctx, http.MethodPut, url, body)
+		_, _, err = g.client.Repositories.CreateFile(ctx, owner, repo, path, opts)
 		if err != nil {
 			return fmt.Errorf("push file %s: %w", path, err)
 		}
-
-		if resp.StatusCode >= http.StatusMultipleChoices {
-			pushErr := g.readError(resp, "push file "+path)
-			_ = resp.Body.Close()
-
-			return pushErr
-		}
-
-		_ = resp.Body.Close()
-	}
-
-	return nil
-}
-
-// DeleteRepo deletes a GitHub repository.
-func (g *gitHubProvider) DeleteRepo(ctx context.Context, owner, name string) error {
-	url := fmt.Sprintf("%s/repos/%s/%s", g.apiURL, owner, name)
-
-	resp, err := g.doRequest(ctx, http.MethodDelete, url, nil)
-	if err != nil {
-		return fmt.Errorf("delete repo request: %w", err)
-	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= http.StatusMultipleChoices {
-		return g.readError(resp, "delete repository")
-	}
-
-	return nil
-}
-
-func (g *gitHubProvider) createUserRepo(
-	ctx context.Context,
-	owner, name string,
-	visibility RepoVisibility,
-	body map[string]any,
-) error {
-	authUser, verifyErr := g.getAuthenticatedUser(ctx)
-	if verifyErr != nil {
-		return fmt.Errorf("verifying authenticated user: %w", verifyErr)
-	}
-
-	if !strings.EqualFold(authUser, owner) {
-		return fmt.Errorf(
-			"%w: token belongs to %q but repo requested under %q",
-			ErrOwnerMismatch, authUser, owner,
-		)
-	}
-
-	if visibility == VisibilityInternal {
-		body["private"] = true
-		delete(body, "visibility")
-	}
-
-	url := g.apiURL + "/user/repos"
-
-	resp, userErr := g.doJSON(ctx, http.MethodPost, url, body)
-	if userErr != nil {
-		return fmt.Errorf("create user repo request: %w", userErr)
-	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	return g.handleCreateResponse(resp, owner, name)
-}
-
-func (g *gitHubProvider) handleCreateResponse(
-	resp *http.Response, owner, name string,
-) error {
-	if resp.StatusCode == http.StatusUnprocessableEntity {
-		body, _ := io.ReadAll(resp.Body)
-		bodyStr := string(body)
-
-		if strings.Contains(bodyStr, "name already exists") {
-			return fmt.Errorf("%w: %s/%s", ErrRepoAlreadyExists, owner, name)
-		}
-
-		return fmt.Errorf(
-			"%w during create repository (HTTP %d): %s",
-			ErrGitHubAPI, resp.StatusCode, bodyStr,
-		)
-	}
-
-	if resp.StatusCode >= http.StatusMultipleChoices {
-		return g.readError(resp, "create repository")
 	}
 
 	return nil
 }
 
 func (g *gitHubProvider) getFileSHA(
-	ctx context.Context, owner, name, path string,
+	ctx context.Context, owner, repo, path, branch string,
 ) (string, error) {
-	url := fmt.Sprintf(
-		"%s/repos/%s/%s/contents/%s",
-		g.apiURL, owner, name, path,
-	)
-
-	resp, err := g.doRequest(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
+	getOpts := &github.RepositoryContentGetOptions{}
+	if branch != "" {
+		getOpts.Ref = branch
 	}
 
-	defer func() { _ = resp.Body.Close() }()
+	fileContent, _, resp, err := g.client.Repositories.GetContents(
+		ctx, owner, repo, path, getOpts,
+	)
+	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return "", nil
+		}
 
-	if resp.StatusCode == http.StatusNotFound {
+		return "", fmt.Errorf("get file contents: %w", err)
+	}
+
+	if fileContent == nil {
 		return "", nil
 	}
 
-	if resp.StatusCode >= http.StatusMultipleChoices {
-		return "", g.readError(resp, "get file SHA")
-	}
-
-	var result struct {
-		SHA string `json:"sha"`
-	}
-
-	decodeErr := json.NewDecoder(resp.Body).Decode(&result)
-	if decodeErr != nil {
-		return "", fmt.Errorf("decoding file info: %w", decodeErr)
-	}
-
-	return result.SHA, nil
+	return fileContent.GetSHA(), nil
 }
 
-func (g *gitHubProvider) getAuthenticatedUser(ctx context.Context) (string, error) {
-	url := g.apiURL + "/user"
-
-	resp, err := g.doRequest(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", fmt.Errorf("get authenticated user: %w", err)
-	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= http.StatusMultipleChoices {
-		return "", g.readError(resp, "get authenticated user")
-	}
-
-	var result struct {
-		Login string `json:"login"`
-	}
-
-	decodeErr := json.NewDecoder(resp.Body).Decode(&result)
-	if decodeErr != nil {
-		return "", fmt.Errorf("decoding user info: %w", decodeErr)
-	}
-
-	return result.Login, nil
-}
-
-func (g *gitHubProvider) doJSON(
+func (g *gitHubProvider) createUserRepo(
 	ctx context.Context,
-	method, url string,
-	body any,
-) (*http.Response, error) {
-	jsonBody, err := json.Marshal(body)
+	owner, name string,
+	visibility RepoVisibility,
+	repo *github.Repository,
+) error {
+	// Verify the authenticated user matches the requested owner.
+	user, _, err := g.client.Users.Get(ctx, "")
 	if err != nil {
-		return nil, fmt.Errorf("marshal request body: %w", err)
+		return fmt.Errorf("verifying authenticated user: %w", err)
 	}
 
-	return g.doRequest(ctx, method, url, bytes.NewReader(jsonBody))
-}
+	if !strings.EqualFold(user.GetLogin(), owner) {
+		return fmt.Errorf(
+			"%w: token belongs to %q but repo requested under %q",
+			ErrOwnerMismatch, user.GetLogin(), owner,
+		)
+	}
 
-func (g *gitHubProvider) doRequest(
-	ctx context.Context,
-	method, url string,
-	body io.Reader,
-) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	// Internal visibility is not supported for user repos; fall back to private.
+	if visibility == VisibilityInternal {
+		repo.Private = github.Ptr(true)
+		repo.Visibility = nil
+	}
+
+	// Create under authenticated user (empty string = user endpoint).
+	_, _, err = g.client.Repositories.Create(ctx, "", repo)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return g.classifyCreateError(err, owner, name)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+g.token)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", userAgent)
-
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	return g.client.Do(req) //nolint:wrapcheck // callers wrap with action-specific context
+	return nil
 }
 
-func (g *gitHubProvider) readError(resp *http.Response, action string) error {
-	body, _ := io.ReadAll(resp.Body)
+func (g *gitHubProvider) classifyCreateError(
+	err error, owner, name string,
+) error {
+	errStr := err.Error()
 
-	return fmt.Errorf(
-		"%w during %s (HTTP %d): %s",
-		ErrGitHubAPI,
-		action,
-		resp.StatusCode,
-		string(body),
-	)
-}
-
-func buildRepoBody(name string, visibility RepoVisibility) map[string]any {
-	body := map[string]any{
-		"name":      name,
-		"auto_init": false,
+	if strings.Contains(errStr, "name already exists") {
+		return fmt.Errorf("%w: %s/%s", ErrRepoAlreadyExists, owner, name)
 	}
 
+	return fmt.Errorf("%w during create repository: %v", ErrGitHubAPI, err) //nolint:errorlint // wrapping sentinel
+}
+
+func resolveVisibility(visibility RepoVisibility) (bool, string) {
 	switch visibility {
 	case VisibilityPublic:
-		body["private"] = false
+		return false, "public"
 	case VisibilityInternal:
-		body["visibility"] = "internal"
+		return false, "internal"
 	case VisibilityPrivate:
-		body["private"] = true
+		return true, "private"
+	default:
+		return true, "private"
 	}
-
-	return body
 }

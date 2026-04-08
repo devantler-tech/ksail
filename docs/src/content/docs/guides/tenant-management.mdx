@@ -53,6 +53,31 @@ Add `--register` to automatically append the tenant to the nearest `kustomizatio
 ksail tenant create my-team --register
 ```
 
+### Deliver via Pull Request
+
+Use `--delivery pr` to deliver platform changes as a pull request instead of modifying local files:
+
+```bash
+ksail tenant create my-team --register --delivery pr \
+  --git-provider github
+```
+
+The platform repo is auto-detected from the local `git remote origin`. Override with `--platform-repo`:
+
+```bash
+ksail tenant create my-team --register --delivery pr \
+  --git-provider github \
+  --platform-repo my-org/platform-repo
+```
+
+Set the PR target branch with `--target-branch` (defaults to the repo's default branch):
+
+```bash
+ksail tenant create my-team --register --delivery pr \
+  --git-provider github \
+  --target-branch develop
+```
+
 ### Flux Tenants
 
 For Flux tenants, specify the sync source type and registry or Git repo:
@@ -67,7 +92,7 @@ ksail tenant create my-team --type flux \
 ksail tenant create my-team --type flux \
   --sync-source git \
   --git-provider github \
-  --git-repo my-org/my-team-infra
+  --tenant-repo my-org/my-team-infra
 ```
 
 To scaffold a new Git repository for the tenant (requires `--git-provider github`):
@@ -76,7 +101,7 @@ To scaffold a new Git repository for the tenant (requires `--git-provider github
 ksail tenant create my-team --type flux \
   --sync-source git \
   --git-provider github \
-  --git-repo my-org/my-team-infra
+  --tenant-repo my-org/my-team-infra
 ```
 
 KSail resolves the GitHub token automatically using the following fallback chain:
@@ -92,7 +117,7 @@ Pass `--git-token` explicitly only when you need to override the auto-detected t
 ```bash
 ksail tenant create my-team --type flux \
   --git-provider github \
-  --git-repo my-org/my-team-infra \
+  --tenant-repo my-org/my-team-infra \
   --git-token "${MY_BOT_TOKEN}"
 ```
 
@@ -103,7 +128,7 @@ ArgoCD tenants generate an AppProject, Application, and argocd-rbac-cm ConfigMap
 ```bash
 ksail tenant create my-team --type argocd \
   --git-provider github \
-  --git-repo my-org/my-team-infra
+  --tenant-repo my-org/my-team-infra
 ```
 
 ### kubectl Tenants
@@ -140,7 +165,7 @@ ksail tenant delete my-team
 # requires a valid token from the fallback chain above)
 ksail tenant delete my-team --delete-repo \
   --git-provider github \
-  --git-repo my-org/my-team-infra
+  --tenant-repo my-org/my-team-infra
 
 # Keep kustomization.yaml entry
 ksail tenant delete my-team --unregister=false

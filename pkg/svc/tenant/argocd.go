@@ -106,8 +106,8 @@ func GenerateArgoCDManifests(opts Options) (map[string]string, error) {
 		return nil, fmt.Errorf("%w for ArgoCD tenants", ErrGitProviderRequired)
 	}
 
-	if opts.GitRepo == "" {
-		return nil, fmt.Errorf("%w for ArgoCD tenants", ErrGitRepoRequired)
+	if opts.TenantRepo == "" {
+		return nil, fmt.Errorf("%w for ArgoCD tenants", ErrTenantRepoRequired)
 	}
 
 	if len(opts.Namespaces) == 0 {
@@ -143,7 +143,7 @@ func generateAppProject(opts Options) (string, error) {
 	}
 
 	host := gitProviderHost(opts.GitProvider)
-	repoURL := fmt.Sprintf("https://%s/%s", host, opts.GitRepo)
+	repoURL := fmt.Sprintf("https://%s/%s", host, opts.TenantRepo)
 
 	project := appProject{
 		APIVersion: gitops.ArgoCDApplicationAPIVersion,
@@ -175,7 +175,7 @@ func gitProviderHost(provider string) string {
 
 func generateArgoCDApp(opts Options) (string, error) {
 	host := gitProviderHost(opts.GitProvider)
-	repoURL := fmt.Sprintf("https://%s/%s", host, opts.GitRepo)
+	repoURL := fmt.Sprintf("https://%s/%s", host, opts.TenantRepo)
 	primaryNS := opts.Namespaces[0]
 
 	app := argoCDApp{
