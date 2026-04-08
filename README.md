@@ -32,10 +32,7 @@ go install github.com/devantler-tech/ksail/v5@latest
 ksail cluster init --name my-app
 ksail cluster create
 
-# 2. Deploy workloads
-ksail workload apply -k ./k8s
-
-# 3. Connect to your cluster with K9s
+# 2. Connect to your cluster with K9s
 ksail cluster connect
 ```
 
