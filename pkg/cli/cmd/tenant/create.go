@@ -85,39 +85,22 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 
 	opts.OutputDir = outputDir
 
-	// Generate tenant files.
-	err = tenant.Generate(opts)
+	err = generateAndRegister(cmd, opts)
 	if err != nil {
-		return fmt.Errorf("generating tenant: %w", err)
-	}
-
-	// Register in kustomization.yaml if requested.
-	if opts.Register {
-		regErr := registerTenantWithRBAC(opts)
-		if regErr != nil {
-			return regErr
-		}
+		return err
 	}
 
 	// Scaffold and push tenant repo (only supported for GitHub provider).
 	if strings.EqualFold(opts.GitProvider, "github") && opts.TenantRepo != "" {
-		scaffoldErr := scaffoldTenantRepo(cmd, opts)
-		if scaffoldErr != nil {
-			return scaffoldErr
+		err = scaffoldTenantRepo(cmd, opts)
+		if err != nil {
+			return err
 		}
 	}
 
 	// Deliver via PR if requested.
 	if delivery == "pr" {
-		prURL, prErr := deliverPR(cmd, opts)
-		if prErr != nil {
-			return prErr
-		}
-
-		notify.Successf(cmd.OutOrStdout(),
-			"Tenant %q created and PR opened: %s", opts.Name, prURL)
-
-		return nil
+		return handlePRDelivery(cmd, opts)
 	}
 
 	notify.Successf(cmd.OutOrStdout(), "Tenant %q created successfully in %s", opts.Name, outputDir)
@@ -125,7 +108,40 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func resolveCreateOptions(cmd *cobra.Command, args []string) (tenant.Options, string, string, error) {
+func generateAndRegister(cmd *cobra.Command, opts tenant.Options) error {
+	err := tenant.Generate(opts)
+	if err != nil {
+		return fmt.Errorf("generating tenant: %w", err)
+	}
+
+	if opts.Register {
+		regErr := registerTenantWithRBAC(opts)
+		if regErr != nil {
+			return regErr
+		}
+
+		notify.Successf(cmd.OutOrStdout(), "Tenant %q registered in kustomization.yaml", opts.Name)
+	}
+
+	return nil
+}
+
+func handlePRDelivery(cmd *cobra.Command, opts tenant.Options) error {
+	prURL, err := deliverPR(cmd, opts)
+	if err != nil {
+		return err
+	}
+
+	notify.Successf(cmd.OutOrStdout(),
+		"Tenant %q created and PR opened: %s", opts.Name, prURL)
+
+	return nil
+}
+
+func resolveCreateOptions(
+	cmd *cobra.Command,
+	args []string,
+) (tenant.Options, string, string, error) {
 	opts := tenant.Options{
 		Name: args[0],
 	}
@@ -153,8 +169,8 @@ func resolveCreateOptions(cmd *cobra.Command, args []string) (tenant.Options, st
 	opts.PlatformRepo, _ = cmd.Flags().GetString("platform-repo")
 	opts.TargetBranch, _ = cmd.Flags().GetString("target-branch")
 
-	// Validate delivery mode (CLI concern — not passed to service layer).
-	deliveryErr := validateDelivery(delivery)
+	// Validate delivery mode and its prerequisites.
+	deliveryErr := validateDelivery(delivery, opts.GitProvider)
 	if deliveryErr != nil {
 		return tenant.Options{}, "", "", deliveryErr
 	}
@@ -176,9 +192,18 @@ func resolveCreateOptions(cmd *cobra.Command, args []string) (tenant.Options, st
 	return opts, outputStr, delivery, nil
 }
 
-func validateDelivery(delivery string) error {
+func validateDelivery(delivery, gitProvider string) error {
 	switch delivery {
-	case "commit", "pr":
+	case "commit":
+		return nil
+	case "pr":
+		if gitProvider == "" {
+			return fmt.Errorf(
+				"%w: --git-provider is required when --delivery pr is used",
+				tenant.ErrGitProviderRequired,
+			)
+		}
+
 		return nil
 	default:
 		return fmt.Errorf("%w %q: must be 'commit' or 'pr'", tenant.ErrInvalidDelivery, delivery)
@@ -254,6 +279,7 @@ func deliverPR(cmd *cobra.Command, opts tenant.Options) (string, error) {
 		TargetBranch:      opts.TargetBranch,
 		TenantName:        opts.Name,
 		OutputDir:         opts.OutputDir,
+		Register:          opts.Register,
 		KustomizationPath: opts.KustomizationPath,
 	})
 	if err != nil {

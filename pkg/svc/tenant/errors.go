@@ -51,9 +51,15 @@ var (
 		"--git-provider is required when --delete-repo is set",
 	)
 	// ErrDeleteRepoTenantRepoRequired is returned when --tenant-repo is required with --delete-repo.
-	ErrDeleteRepoTenantRepoRequired = errors.New("--tenant-repo is required when --delete-repo is set")
+	ErrDeleteRepoTenantRepoRequired = errors.New(
+		"--tenant-repo is required when --delete-repo is set",
+	)
 	// ErrPlatformRepoRequired is returned when the platform repo cannot be resolved.
-	ErrPlatformRepoRequired = errors.New("--platform-repo is required (or run from a git repo with a remote)")
+	ErrPlatformRepoRequired = errors.New(
+		"--platform-repo is required (or run from a git repo with a remote)",
+	)
+	// ErrOutsideRepoRoot is returned when a collected file path escapes the repo root.
+	ErrOutsideRepoRoot = errors.New("file is outside the repository root")
 	// ErrRBACConfigMapNotFound is returned when no argocd-rbac-cm ConfigMap file is found.
 	ErrRBACConfigMapNotFound = errors.New("no argocd-rbac-cm ConfigMap found")
 )

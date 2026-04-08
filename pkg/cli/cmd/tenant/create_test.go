@@ -201,14 +201,34 @@ func TestCreateCmd_DeliveryPRAccepted(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"pr-tenant", "--type", "kubectl", "--delivery", "pr", "--output", outDir})
+	cmd.SetArgs([]string{
+		"pr-tenant", "--type", "kubectl", "--delivery", "pr",
+		"--git-provider", "github", "--output", outDir,
+	})
 
 	err := cmd.Execute()
-	// PR delivery is accepted but may fail at runtime (no git provider configured) —
+	// PR delivery is accepted but may fail at runtime (no git token) —
 	// the important thing is that it no longer returns "not implemented".
 	if err != nil {
 		require.NotContains(t, err.Error(), "not yet implemented")
 	}
+}
+
+func TestCreateCmd_DeliveryPRRequiresGitProvider(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"pr-tenant", "--type", "kubectl", "--delivery", "pr", "--output", outDir})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	require.ErrorContains(t, err, "--git-provider is required")
 }
 
 func TestCreateCmd_InvalidDelivery(t *testing.T) {

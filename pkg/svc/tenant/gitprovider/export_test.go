@@ -12,7 +12,11 @@ func ExportNewGitHubProviderForTest(token string, httpClient *http.Client, apiUR
 	client.UserAgent = userAgent
 
 	// Set the base URL to the test server.
-	baseURL, _ := client.BaseURL.Parse(apiURL + "/")
+	baseURL, err := client.BaseURL.Parse(apiURL + "/")
+	if err != nil {
+		panic("ExportNewGitHubProviderForTest: invalid test server URL: " + err.Error())
+	}
+
 	client.BaseURL = baseURL
 	client.UploadURL = baseURL
 

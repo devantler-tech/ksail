@@ -33,13 +33,13 @@ func TestParseRemoteURL_SSH(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := tenant.ParseRemoteURL(tc.url)
+			got, err := tenant.ParseRemoteURL(testCase.url)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, got)
+			require.Equal(t, testCase.expected, got)
 		})
 	}
 }
@@ -74,13 +74,13 @@ func TestParseRemoteURL_HTTPS(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := tenant.ParseRemoteURL(tc.url)
+			got, err := tenant.ParseRemoteURL(testCase.url)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, got)
+			require.Equal(t, testCase.expected, got)
 		})
 	}
 }
@@ -106,9 +106,15 @@ func TestCollectDeliveryFiles(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	tenantDir := repoRoot + "/tenants"
-	require.NoError(t, os.MkdirAll(tenantDir+"/my-tenant", 0o755))
-	require.NoError(t, os.WriteFile(tenantDir+"/my-tenant/namespace.yaml", []byte("kind: Namespace"), 0o600))
-	require.NoError(t, os.WriteFile(tenantDir+"/my-tenant/rbac.yaml", []byte("kind: ClusterRoleBinding"), 0o600))
+	require.NoError(t, os.MkdirAll(tenantDir+"/my-tenant", 0o750))
+	require.NoError(
+		t,
+		os.WriteFile(tenantDir+"/my-tenant/namespace.yaml", []byte("kind: Namespace"), 0o600),
+	)
+	require.NoError(
+		t,
+		os.WriteFile(tenantDir+"/my-tenant/rbac.yaml", []byte("kind: ClusterRoleBinding"), 0o600),
+	)
 
 	kustomizationPath := tenantDir + "/kustomization.yaml"
 	require.NoError(t, os.WriteFile(kustomizationPath, []byte("resources:\n- my-tenant"), 0o600))

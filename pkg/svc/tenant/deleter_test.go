@@ -121,7 +121,7 @@ func TestDelete_DeleteRepoRequiresGitProvider(t *testing.T) {
 		Name:       "my-tenant",
 		OutputDir:  tmpDir,
 		DeleteRepo: true,
-		TenantRepo:    "org/my-tenant",
+		TenantRepo: "org/my-tenant",
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "--git-provider")
@@ -156,7 +156,7 @@ func TestDelete_InvalidGitRepoFormat(t *testing.T) {
 		OutputDir:   tmpDir,
 		DeleteRepo:  true,
 		GitProvider: "github",
-		TenantRepo:     "invalid-no-slash",
+		TenantRepo:  "invalid-no-slash",
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "parse tenant-repo")
@@ -174,7 +174,7 @@ func TestDelete_UnsupportedGitProvider(t *testing.T) {
 		OutputDir:   tmpDir,
 		DeleteRepo:  true,
 		GitProvider: "bitbucket",
-		TenantRepo:     "org/my-tenant",
+		TenantRepo:  "org/my-tenant",
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "create git provider")

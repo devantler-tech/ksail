@@ -12,6 +12,12 @@ import (
 
 const userAgent = "ksail"
 
+const (
+	visibilityPublicStr   = "public"
+	visibilityInternalStr = "internal"
+	visibilityPrivateStr  = "private"
+)
+
 type gitHubProvider struct {
 	client *github.Client
 }
@@ -34,10 +40,10 @@ func (g *gitHubProvider) CreateRepo(
 	isPrivate, visStr := resolveVisibility(visibility)
 
 	repo := &github.Repository{
-		Name:       github.Ptr(name),
-		Private:    github.Ptr(isPrivate),
-		AutoInit:   github.Ptr(false),
-		Visibility: github.Ptr(visStr),
+		Name:       new(name),
+		Private:    new(isPrivate),
+		AutoInit:   new(false),
+		Visibility: new(visStr),
 	}
 
 	// Try org endpoint first.
@@ -77,7 +83,11 @@ func (g *gitHubProvider) PushFilesToBranch(
 func (g *gitHubProvider) DeleteRepo(ctx context.Context, owner, name string) error {
 	_, err := g.client.Repositories.Delete(ctx, owner, name)
 	if err != nil {
-		return fmt.Errorf("%w during delete repository: %v", ErrGitHubAPI, err) //nolint:errorlint // wrapping sentinel
+		return fmt.Errorf(
+			"%w during delete repository: %w",
+			ErrGitHubAPI,
+			err,
+		)
 	}
 
 	return nil
@@ -104,7 +114,7 @@ func (g *gitHubProvider) CreateBranch(
 	}
 
 	newRef := &github.Reference{
-		Ref:    github.Ptr("refs/heads/" + branchName),
+		Ref:    new("refs/heads/" + branchName),
 		Object: &github.GitObject{SHA: baseRef.Object.SHA},
 	}
 
@@ -126,17 +136,17 @@ func (g *gitHubProvider) CreatePullRequest(
 	owner, repo string,
 	opts PROptions,
 ) (string, error) {
-	pr, _, err := g.client.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
-		Title: github.Ptr(opts.Title),
-		Body:  github.Ptr(opts.Body),
-		Head:  github.Ptr(opts.Head),
-		Base:  github.Ptr(opts.Base),
+	pullRequest, _, err := g.client.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
+		Title: new(opts.Title),
+		Body:  new(opts.Body),
+		Head:  new(opts.Head),
+		Base:  new(opts.Base),
 	})
 	if err != nil {
 		return "", fmt.Errorf("create pull request: %w", err)
 	}
 
-	return pr.GetHTMLURL(), nil
+	return pullRequest.GetHTMLURL(), nil
 }
 
 func (g *gitHubProvider) pushFilesInternal(
@@ -156,12 +166,12 @@ func (g *gitHubProvider) pushFilesInternal(
 		content := files[path]
 
 		opts := &github.RepositoryContentFileOptions{
-			Message: github.Ptr(commitMsg),
+			Message: new(commitMsg),
 			Content: content,
 		}
 
 		if branch != "" {
-			opts.Branch = github.Ptr(branch)
+			opts.Branch = new(branch)
 		}
 
 		// Check if file already exists to get its SHA (required for updates).
@@ -171,7 +181,7 @@ func (g *gitHubProvider) pushFilesInternal(
 		}
 
 		if sha != "" {
-			opts.SHA = github.Ptr(sha)
+			opts.SHA = new(sha)
 		}
 
 		_, _, err = g.client.Repositories.CreateFile(ctx, owner, repo, path, opts)
@@ -230,7 +240,7 @@ func (g *gitHubProvider) createUserRepo(
 
 	// Internal visibility is not supported for user repos; fall back to private.
 	if visibility == VisibilityInternal {
-		repo.Private = github.Ptr(true)
+		repo.Private = new(true)
 		repo.Visibility = nil
 	}
 
@@ -252,18 +262,22 @@ func (g *gitHubProvider) classifyCreateError(
 		return fmt.Errorf("%w: %s/%s", ErrRepoAlreadyExists, owner, name)
 	}
 
-	return fmt.Errorf("%w during create repository: %v", ErrGitHubAPI, err) //nolint:errorlint // wrapping sentinel
+	return fmt.Errorf(
+		"%w during create repository: %w",
+		ErrGitHubAPI,
+		err,
+	)
 }
 
 func resolveVisibility(visibility RepoVisibility) (bool, string) {
 	switch visibility {
 	case VisibilityPublic:
-		return false, "public"
+		return false, visibilityPublicStr
 	case VisibilityInternal:
-		return false, "internal"
+		return false, visibilityInternalStr
 	case VisibilityPrivate:
-		return true, "private"
+		return true, visibilityPrivateStr
 	default:
-		return true, "private"
+		return true, visibilityPrivateStr
 	}
 }

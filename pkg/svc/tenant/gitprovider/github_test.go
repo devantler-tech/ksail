@@ -442,7 +442,13 @@ func TestGitHubProvider_CreateBranch(t *testing.T) {
 	defer srv.Close()
 
 	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
-	err := provider.CreateBranch(context.Background(), "my-org", "my-repo", "feature-branch", "main")
+	err := provider.CreateBranch(
+		context.Background(),
+		"my-org",
+		"my-repo",
+		"feature-branch",
+		"main",
+	)
 	require.NoError(t, err)
 }
 
@@ -451,11 +457,11 @@ func TestGitHubProvider_CreateBranch_AlreadyExists(t *testing.T) {
 
 	srv := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			switch {
-			case request.Method == http.MethodGet:
+			switch request.Method {
+			case http.MethodGet:
 				writer.WriteHeader(http.StatusOK)
 				_, _ = writer.Write([]byte(`{"ref":"refs/heads/main","object":{"sha":"abc123"}}`))
-			case request.Method == http.MethodPost:
+			case http.MethodPost:
 				writer.WriteHeader(http.StatusUnprocessableEntity)
 				_, _ = writer.Write([]byte(`{"message":"Reference already exists"}`))
 			default:
@@ -466,7 +472,13 @@ func TestGitHubProvider_CreateBranch_AlreadyExists(t *testing.T) {
 	defer srv.Close()
 
 	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
-	err := provider.CreateBranch(context.Background(), "my-org", "my-repo", "existing-branch", "main")
+	err := provider.CreateBranch(
+		context.Background(),
+		"my-org",
+		"my-repo",
+		"existing-branch",
+		"main",
+	)
 	require.Error(t, err)
 	require.ErrorIs(t, err, gitprovider.ErrBranchAlreadyExists)
 }
@@ -551,12 +563,17 @@ func TestGitHubProvider_CreatePullRequest(t *testing.T) {
 	defer srv.Close()
 
 	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
-	prURL, err := provider.CreatePullRequest(context.Background(), "my-org", "my-repo", gitprovider.PROptions{
-		Title: "feat(tenant): add my-tenant",
-		Body:  "Adds tenant manifests",
-		Head:  "feature-branch",
-		Base:  "main",
-	})
+	prURL, err := provider.CreatePullRequest(
+		context.Background(),
+		"my-org",
+		"my-repo",
+		gitprovider.PROptions{
+			Title: "feat(tenant): add my-tenant",
+			Body:  "Adds tenant manifests",
+			Head:  "feature-branch",
+			Base:  "main",
+		},
+	)
 	require.NoError(t, err)
 	require.Equal(t, "https://github.com/my-org/my-repo/pull/42", prURL)
 }
@@ -571,11 +588,16 @@ func TestGitHubProvider_CreatePullRequest_Error(t *testing.T) {
 	defer srv.Close()
 
 	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
-	_, err := provider.CreatePullRequest(context.Background(), "my-org", "my-repo", gitprovider.PROptions{
-		Title: "test",
-		Head:  "branch",
-		Base:  "main",
-	})
+	_, err := provider.CreatePullRequest(
+		context.Background(),
+		"my-org",
+		"my-repo",
+		gitprovider.PROptions{
+			Title: "test",
+			Head:  "branch",
+			Base:  "main",
+		},
+	)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "create pull request")
 }
