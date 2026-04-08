@@ -234,7 +234,12 @@ func computeRelativePath(kustomizationPath, outputDir, tenantName string) (strin
 // RegisterResource adds a resource name to a kustomization.yaml's resources list.
 // Idempotent — does nothing if the resource is already listed.
 func RegisterResource(kustomizationPath, resourceName string) error {
-	raw, err := readKustomizationRaw(kustomizationPath)
+	canonPath, err := fsutil.EvalCanonicalPath(kustomizationPath)
+	if err != nil {
+		return fmt.Errorf("resolving kustomization path: %w", err)
+	}
+
+	raw, err := readKustomizationRaw(canonPath)
 	if err != nil {
 		return err
 	}
@@ -246,5 +251,5 @@ func RegisterResource(kustomizationPath, resourceName string) error {
 
 	raw["resources"] = addResource(resources, resourceName)
 
-	return writeKustomizationRaw(kustomizationPath, raw)
+	return writeKustomizationRaw(canonPath, raw)
 }

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
@@ -259,7 +260,10 @@ data:
 
 	found, err := tenant.FindArgoCDRBACCM(dir)
 	require.NoError(t, err)
-	require.Equal(t, filepath.Join(dir, "my-custom-rbac.yaml"), found)
+
+	canonDir, err := fsutil.EvalCanonicalPath(dir)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(canonDir, "my-custom-rbac.yaml"), found)
 }
 
 func TestFindArgoCDRBACCM_NotFound(t *testing.T) {
@@ -321,7 +325,10 @@ data:
 
 	found, err := tenant.FindArgoCDRBACCM(dir)
 	require.NoError(t, err)
-	require.Equal(t, filepath.Join(dir, "argocd-resources.yaml"), found)
+
+	canonDir, err := fsutil.EvalCanonicalPath(dir)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(canonDir, "argocd-resources.yaml"), found)
 }
 
 // --- MergeArgoCDRBACPolicyFile tests ---

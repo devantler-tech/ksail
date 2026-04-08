@@ -385,9 +385,14 @@ func isTenantPolicyLine(line, tenantName string) bool {
 // Returns the file path if found, or empty string if not found.
 // Supports multi-document YAML files separated by "---".
 func FindArgoCDRBACCM(dir string) (string, error) {
-	entries, err := os.ReadDir(dir)
+	canonDir, err := fsutil.EvalCanonicalPath(dir)
 	if err != nil {
-		return "", fmt.Errorf("reading directory %s: %w", dir, err)
+		return "", fmt.Errorf("resolving directory %s: %w", dir, err)
+	}
+
+	entries, err := os.ReadDir(canonDir)
+	if err != nil {
+		return "", fmt.Errorf("reading directory %s: %w", canonDir, err)
 	}
 
 	for _, entry := range entries {
@@ -400,9 +405,9 @@ func FindArgoCDRBACCM(dir string) (string, error) {
 			continue
 		}
 
-		filePath := filepath.Join(dir, name)
+		filePath := filepath.Join(canonDir, name)
 
-		data, readErr := os.ReadFile(filePath) //nolint:gosec // directory is already validated
+		data, readErr := fsutil.ReadFileSafe(canonDir, filePath)
 		if readErr != nil {
 			return "", fmt.Errorf("reading %s: %w", filePath, readErr)
 		}
