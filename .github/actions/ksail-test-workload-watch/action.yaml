@@ -23,7 +23,10 @@ runs:
       id: watch-nonexistent
       shell: bash
       run: |
-        OUTPUT=$(ksail workload watch --path /tmp/ksail-watch-does-not-exist 2>&1 || true)
+        # Use a unique non-existent path to avoid false positives if /tmp has matching dirs.
+        # Wrap in timeout so the step cannot hang if the path somehow exists.
+        NONEXISTENT_DIR="$(mktemp -u -d -p "${GITHUB_WORKSPACE:-.}" .watch-nonexistent-XXXXXX)"
+        OUTPUT=$(timeout 30 ksail workload watch --path "$NONEXISTENT_DIR" 2>&1 || true)
         if echo "$OUTPUT" | grep -q "access watch directory"; then
           echo "✅ Watch correctly rejected non-existent directory"
         else
@@ -36,8 +39,6 @@ runs:
     - name: 🧪 watch --initial-apply syncs on startup
       id: watch-initial-apply
       shell: bash
-      env:
-        TIMEOUT: ${{ inputs.workload-timeout }}
       run: |
         # Use a directory on the main filesystem (not tmpfs) to avoid inotify
         # event loss from sed -i's create+rename under CI load (see #3729).
@@ -76,6 +77,14 @@ runs:
         done
 
         kill $WATCH_PID 2>/dev/null || true
+        for _ in $(seq 1 10); do
+          kill -0 "$WATCH_PID" 2>/dev/null || break
+          sleep 1
+        done
+        if kill -0 "$WATCH_PID" 2>/dev/null; then
+          kill -KILL "$WATCH_PID" 2>/dev/null || true
+        fi
+        wait "$WATCH_PID" 2>/dev/null || true
         ksail workload delete configmap/ksail-watch-initial-test --ignore-not-found
         rm -rf "$WATCH_DIR" "$WATCH_LOG"
         trap - EXIT
@@ -165,6 +174,14 @@ runs:
         done
 
         kill $WATCH_PID 2>/dev/null || true
+        for _ in $(seq 1 10); do
+          kill -0 "$WATCH_PID" 2>/dev/null || break
+          sleep 1
+        done
+        if kill -0 "$WATCH_PID" 2>/dev/null; then
+          kill -KILL "$WATCH_PID" 2>/dev/null || true
+        fi
+        wait "$WATCH_PID" 2>/dev/null || true
         ksail workload delete deployment/ksail-watch-modify-test --ignore-not-found
         rm -rf "$WATCH_DIR" "$WATCH_LOG"
         trap - EXIT
@@ -277,6 +294,14 @@ runs:
         fi
 
         kill $WATCH_PID 2>/dev/null || true
+        for _ in $(seq 1 10); do
+          kill -0 "$WATCH_PID" 2>/dev/null || break
+          sleep 1
+        done
+        if kill -0 "$WATCH_PID" 2>/dev/null; then
+          kill -KILL "$WATCH_PID" 2>/dev/null || true
+        fi
+        wait "$WATCH_PID" 2>/dev/null || true
         ksail workload delete configmap/ksail-watch-boundary-a configmap/ksail-watch-boundary-b --ignore-not-found
         rm -rf "$WATCH_DIR" "$WATCH_LOG"
         trap - EXIT
@@ -339,10 +364,21 @@ runs:
           exit 1
         fi
 
-        # Send SIGTERM and wait for the process to exit
+        # Send SIGTERM and wait for the process to exit (bounded to avoid hanging)
         kill -TERM "$WATCH_PID"
         EXIT_CODE=0
-        wait "$WATCH_PID" || EXIT_CODE=$?
+        if timeout 30s bash -c 'while kill -0 "$1" 2>/dev/null; do sleep 1; done' _ "$WATCH_PID"; then
+          wait "$WATCH_PID" || EXIT_CODE=$?
+        else
+          echo "❌ Watch did not exit within 30s of SIGTERM"
+          cat "$WATCH_LOG" || true
+          kill -KILL "$WATCH_PID" 2>/dev/null || true
+          wait "$WATCH_PID" 2>/dev/null || true
+          ksail workload delete configmap/ksail-watch-sigterm-test --ignore-not-found 2>/dev/null || true
+          rm -rf "$WATCH_DIR" "$WATCH_LOG"
+          trap - EXIT
+          exit 1
+        fi
 
         # Check for graceful shutdown message
         SHUTDOWN_OK=false
