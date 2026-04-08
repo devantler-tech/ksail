@@ -108,7 +108,7 @@ ksail tenant create my-team --type argocd \
 
 ### kubectl Tenants
 
-kubectl tenants generate RBAC-only platform manifests (no GitOps sync resources). When `--git-provider github` and `--git-repo` are provided, kubectl tenants also get a scaffolded tenant repository — just without GitOps-specific resources:
+kubectl tenants generate RBAC-only platform manifests (no GitOps sync resources). When `--git-provider github` and `--git-repo` are provided, KSail also scaffolds a tenant repository without GitOps-specific resources — provided a GitHub token can be resolved (see the [token resolution](#flux-tenants) fallback chain above). If no token is available, the command still succeeds and only the local platform manifests are generated:
 
 ```bash
 ksail tenant create my-team --type kubectl
