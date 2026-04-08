@@ -33,8 +33,9 @@ type RotateOpts struct {
 
 // Exported error variables for rotation operations.
 var (
-	ErrNoEncryptedFiles = errors.New("no SOPS-encrypted files found")
+	ErrNoEncryptedFiles   = errors.New("no SOPS-encrypted files found")
 	ErrUnsupportedKeyType = errors.New("unsupported key type")
+	ErrGenerateDataKey    = errors.New("generating new data key")
 )
 
 // FindEncryptedFiles discovers SOPS-encrypted YAML/JSON files in rootDir.
@@ -134,7 +135,7 @@ func isSupportedExtension(path string) bool {
 // I/O errors (read failures, permission errors) are returned as errors.
 // Parse/format errors are treated as "not encrypted" (returns false, nil).
 func IsFileEncrypted(path string) (bool, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is validated by caller
 	if err != nil {
 		return false, fmt.Errorf("reading file %q: %w", path, err)
 	}
@@ -192,24 +193,13 @@ func RotateFile(path string, opts RotateOpts) error {
 		return fmt.Errorf("decrypting %q: %w", absPath, err)
 	}
 
-	// Add new master keys to key group 0
-	if len(opts.AddKeys) > 0 {
-		if len(tree.Metadata.KeyGroups) == 0 {
-			tree.Metadata.KeyGroups = append(tree.Metadata.KeyGroups, sops.KeyGroup{})
-		}
-
-		tree.Metadata.KeyGroups[0] = append(tree.Metadata.KeyGroups[0], opts.AddKeys...)
-	}
-
-	// Remove specified master keys from all key groups
-	for _, removeKey := range opts.RemoveKeys {
-		tree.Metadata.KeyGroups = removeKeyFromGroups(tree.Metadata.KeyGroups, removeKey)
-	}
+	// Modify key groups (add/remove master keys)
+	modifyKeyGroups(&tree.Metadata, opts)
 
 	// Generate a new data key (core of rotate operation)
 	dataKey, errs := tree.GenerateDataKeyWithKeyServices(opts.KeyServices)
 	if len(errs) > 0 {
-		return fmt.Errorf("generating new data key for %q: %v", absPath, errs)
+		return fmt.Errorf("%w for %q: %v", ErrGenerateDataKey, absPath, errs)
 	}
 
 	output, err := EncryptTreeAndEmit(tree, dataKey, aes.NewCipher(), outputStore)
@@ -223,6 +213,21 @@ func RotateFile(path string, opts RotateOpts) error {
 	}
 
 	return nil
+}
+
+// modifyKeyGroups adds and removes master keys from the tree metadata.
+func modifyKeyGroups(metadata *sops.Metadata, opts RotateOpts) {
+	if len(opts.AddKeys) > 0 {
+		if len(metadata.KeyGroups) == 0 {
+			metadata.KeyGroups = append(metadata.KeyGroups, sops.KeyGroup{})
+		}
+
+		metadata.KeyGroups[0] = append(metadata.KeyGroups[0], opts.AddKeys...)
+	}
+
+	for _, removeKey := range opts.RemoveKeys {
+		metadata.KeyGroups = removeKeyFromGroups(metadata.KeyGroups, removeKey)
+	}
 }
 
 // removeKeyFromGroups removes keys matching the given string representation

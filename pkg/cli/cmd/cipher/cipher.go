@@ -1,6 +1,7 @@
 package cipher
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +18,8 @@ import (
 	"github.com/getsops/sops/v3/keyservice"
 	"github.com/spf13/cobra"
 )
+
+var errRotationFailed = errors.New("rotation failed")
 
 // NewCipherCmd creates the cipher command that integrates with SOPS.
 func NewCipherCmd(_ *di.Runtime) *cobra.Command {
@@ -466,19 +469,7 @@ func handleImportRunE(cmd *cobra.Command, privateKey string) error {
 	return nil
 }
 
-// NewRotateCmd creates and returns the rotate command.
-func NewRotateCmd() *cobra.Command {
-	var (
-		newKey    string
-		oldKey    string
-		recursive bool
-		force     bool
-	)
-
-	cmd := &cobra.Command{
-		Use:   "rotate <file/folder>",
-		Short: "Rotate data keys for SOPS-encrypted files",
-		Long: `Rotate data keys for SOPS-encrypted files.
+const rotateCmdLong = `Rotate data keys for SOPS-encrypted files.
 
 This command generates a new data encryption key and re-encrypts all values
 in the target file(s). This is the same behavior as the native 'sops rotate'
@@ -518,7 +509,21 @@ Examples:
   ksail cipher rotate ./k8s --old-key age1oldkey... --force
 
   # Replace a recipient (add new, remove old)
-  ksail cipher rotate ./k8s --new-key age1newkey... --old-key age1oldkey... --force`,
+  ksail cipher rotate ./k8s --new-key age1newkey... --old-key age1oldkey... --force`
+
+// NewRotateCmd creates and returns the rotate command.
+func NewRotateCmd() *cobra.Command {
+	var (
+		newKey    string
+		oldKey    string
+		recursive bool
+		force     bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "rotate <file/folder>",
+		Short: "Rotate data keys for SOPS-encrypted files",
+		Long:  rotateCmdLong,
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -683,7 +688,7 @@ func handleRotateApply(writer io.Writer, files []string, opts sopsclient.RotateO
 	}
 
 	if len(rotateErrors) > 0 {
-		return fmt.Errorf("rotation failed for %d file(s)", len(rotateErrors))
+		return fmt.Errorf("%w for %d file(s)", errRotationFailed, len(rotateErrors))
 	}
 
 	notify.WriteMessage(notify.Message{
