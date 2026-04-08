@@ -43,13 +43,13 @@ That's it — zero to a running cluster in under a minute.
 
 ## What KSail Replaces
 
-Most Kubernetes workflows look like this:
+Most Kubernetes workflows require juggling multiple tools:
 
 ```text
-kind/k3d/minikube + kubectl + helm + kustomize + flux/argocd + sops + k9s + kubeconform + ...
+kind + k3d + kubectl + helm + kustomize + flux + argocd + sops + k9s + kubeconform + ...
 ```
 
-KSail embeds all of it into **one binary**:
+KSail bundles these into **one binary**:
 
 | Category                 | Embedded Tools                                             |
 |--------------------------|------------------------------------------------------------|
