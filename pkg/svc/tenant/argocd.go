@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/detector/gitops"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
 	"sigs.k8s.io/yaml"
@@ -493,15 +494,23 @@ func RemoveArgoCDRBACPolicyFile(rbacCMPath, tenantName string) error {
 
 // writeRBACCMFile writes content to an argocd-rbac-cm file, preserving
 // existing file permissions when the file already exists.
+// The path is canonicalized to prevent symlink-based path traversal.
 func writeRBACCMFile(path, content string) error {
+	safePath, err := fsutil.EvalCanonicalPath(path)
+	if err != nil {
+		return fmt.Errorf("resolving canonical path for %s: %w", path, err)
+	}
+
 	perm := os.FileMode(rbacCMFilePermissions)
 
-	if info, statErr := os.Stat(path); statErr == nil {
+	info, statErr := os.Stat(safePath)
+	if statErr == nil {
 		perm = info.Mode().Perm()
 	}
 
-	if err := os.WriteFile(path, []byte(content), perm); err != nil {
-		return fmt.Errorf("writing %s: %w", path, err)
+	err = os.WriteFile(safePath, []byte(content), perm)
+	if err != nil {
+		return fmt.Errorf("writing %s: %w", safePath, err)
 	}
 
 	return nil

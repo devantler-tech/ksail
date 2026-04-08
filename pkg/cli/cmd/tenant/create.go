@@ -90,19 +90,9 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 
 	// Register in kustomization.yaml if requested.
 	if opts.Register {
-		regErr := tenant.RegisterTenant(
-			opts.Name, opts.OutputDir, opts.KustomizationPath,
-		)
+		regErr := registerTenantWithRBAC(opts)
 		if regErr != nil {
-			return fmt.Errorf("registering tenant: %w", regErr)
-		}
-
-		// For ArgoCD tenants, merge RBAC policy into the shared argocd-rbac-cm.
-		if opts.TenantType == tenant.TypeArgoCD {
-			mergeErr := mergeArgoCDRBACPolicy(opts)
-			if mergeErr != nil {
-				return mergeErr
-			}
+			return regErr
 		}
 	}
 
@@ -288,6 +278,26 @@ func scaffoldTenantRepo(cmd *cobra.Command, opts tenant.Options) error {
 	}
 
 	notify.Successf(cmd.OutOrStdout(), "Tenant repo %q scaffolded successfully", opts.GitRepo)
+
+	return nil
+}
+
+// registerTenantWithRBAC registers the tenant in kustomization.yaml and,
+// for ArgoCD tenants, merges RBAC policy into the shared argocd-rbac-cm.
+func registerTenantWithRBAC(opts tenant.Options) error {
+	err := tenant.RegisterTenant(
+		opts.Name, opts.OutputDir, opts.KustomizationPath,
+	)
+	if err != nil {
+		return fmt.Errorf("registering tenant: %w", err)
+	}
+
+	if opts.TenantType == tenant.TypeArgoCD {
+		err = mergeArgoCDRBACPolicy(opts)
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

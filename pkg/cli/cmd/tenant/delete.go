@@ -115,7 +115,8 @@ func removeArgoCDRBACPolicy(cmd *cobra.Command, opts tenant.DeleteOptions) {
 		return
 	}
 
-	if err := tenant.RemoveArgoCDRBACPolicyFile(rbacCMPath, opts.Name); err != nil {
+	err = tenant.RemoveArgoCDRBACPolicyFile(rbacCMPath, opts.Name)
+	if err != nil {
 		notify.Warningf(cmd.OutOrStdout(),
 			"failed to remove ArgoCD RBAC policy for tenant %q: %v", opts.Name, err)
 	}
