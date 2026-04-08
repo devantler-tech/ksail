@@ -6145,8 +6145,20 @@ func TestDisplayComponents_WithState(t *testing.T) {
 // TestClassifyRestoreError_FallbackToErrMsg verifies that classifyRestoreError
 // falls back to err.Error() when stderr is empty, so "already exists" errors
 // routed through BehaviorOnFatal (not stderr) are correctly suppressed.
+//
+//nolint:funlen // Table-driven test with comprehensive cases
 func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
 	t.Parallel()
+
+	// Sentinel errors used as test inputs for classifyRestoreError.
+	var (
+		errExitStatus1          = errors.New("exit status 1")
+		errDaemonSetExists      = errors.New("Error from server (AlreadyExists): daemonsets.apps \"svclb-traefik\" already exists")
+		errMultipleAlreadyExist = errors.New("daemonsets.apps \"svclb-traefik\" already exists\njobs.batch \"helm-install-traefik\" already exists")
+		errMixedExistsAndOther  = errors.New("daemonsets.apps \"svclb-traefik\" already exists\nconnection refused")
+		errConnectionRefused    = errors.New("connection refused")
+		errAlreadyExists        = errors.New("already exists")
+	)
 
 	tests := []struct {
 		name      string
@@ -6164,49 +6176,49 @@ func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
 		},
 		{
 			name:      "already exists in stderr with policy none",
-			err:       errors.New("exit status 1"),
+			err:       errExitStatus1,
 			stderr:    "Error from server (AlreadyExists): resource already exists",
 			policy:    "none",
 			expectNil: true,
 		},
 		{
 			name:      "already exists in err.Error() with empty stderr",
-			err:       errors.New("Error from server (AlreadyExists): daemonsets.apps \"svclb-traefik\" already exists"),
+			err:       errDaemonSetExists,
 			stderr:    "",
 			policy:    "none",
 			expectNil: true,
 		},
 		{
 			name:      "already exists in err.Error() with whitespace-only stderr",
-			err:       errors.New("Error from server (AlreadyExists): daemonsets.apps \"svclb-traefik\" already exists"),
+			err:       errDaemonSetExists,
 			stderr:    "\n",
 			policy:    "none",
 			expectNil: true,
 		},
 		{
 			name:      "multiple already exists lines in err.Error()",
-			err:       errors.New("daemonsets.apps \"svclb-traefik\" already exists\njobs.batch \"helm-install-traefik\" already exists"),
+			err:       errMultipleAlreadyExist,
 			stderr:    "",
 			policy:    "none",
 			expectNil: true,
 		},
 		{
 			name:      "mixed error in err.Error() with empty stderr",
-			err:       errors.New("daemonsets.apps \"svclb-traefik\" already exists\nconnection refused"),
+			err:       errMixedExistsAndOther,
 			stderr:    "",
 			policy:    "none",
 			expectNil: false,
 		},
 		{
 			name:      "real error with empty stderr",
-			err:       errors.New("connection refused"),
+			err:       errConnectionRefused,
 			stderr:    "",
 			policy:    "none",
 			expectNil: false,
 		},
 		{
 			name:      "already exists with policy update does not suppress",
-			err:       errors.New("already exists"),
+			err:       errAlreadyExists,
 			stderr:    "",
 			policy:    "update",
 			expectNil: false,
