@@ -61,6 +61,7 @@ export default defineConfig({
             { label: "Gateway API with Cilium", link: "/guides/gateway-api/" },
             { label: "Substitution Expansion (validate)", link: "/guides/workload-validate/" },
             { label: "Tenant Management", link: "/guides/tenant-management/" },
+            { label: "ArgoCD ApplicationSet", link: "/guides/argocd-applicationset/" },
           ],
         },
         {

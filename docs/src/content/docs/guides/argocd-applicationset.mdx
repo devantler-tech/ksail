@@ -1,0 +1,264 @@
+---
+title: ArgoCD ApplicationSet
+description: Use ArgoCD ApplicationSet with KSail to manage multiple Applications declaratively — multi-environment deployments, directory-based generators, and tenant cluster patterns.
+---
+
+KSail's ArgoCD bootstrap creates a single [Application](https://argo-cd.readthedocs.io/en/stable/user-guide/application-specification/) CR that syncs manifests from a local OCI registry. [ApplicationSet](https://argo-cd.readthedocs.io/en/stable/user-guide/application-set/) extends this by generating multiple Applications from a single template — useful for multi-environment deployments, multi-tenant clusters, and directory-based project structures.
+
+> [!NOTE]
+> The ApplicationSet controller ships with ArgoCD and is automatically available in every KSail ArgoCD cluster — no extra installation is needed.
+
+## Prerequisites
+
+Initialize a KSail project with ArgoCD as the GitOps engine:
+
+```bash
+ksail cluster init --gitops-engine ArgoCD
+ksail cluster create
+```
+
+This scaffolds a `ksail.yaml` with `spec.cluster.gitOpsEngine: ArgoCD` and creates the cluster with:
+
+- ArgoCD installed via Helm
+- A bootstrap `Application` CR named `ksail` pointing to the local OCI registry
+- Automated sync, pruning, and self-healing enabled
+
+## How It Works
+
+During `ksail cluster create`, KSail creates a single Application that syncs everything in the `k8s/` source directory:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ksail
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: oci://<registry>/<project>
+    targetRevision: dev
+    path: "."
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+```
+
+You can add ApplicationSet manifests to your source directory to generate additional Applications alongside the bootstrap one.
+
+## Directory Generator
+
+The [directory generator](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Generators-Directory/) creates one Application per subdirectory in a given path. This is useful for managing multiple independent workloads from a monorepo layout.
+
+### Project Layout
+
+```text
+my-app/
+├── ksail.yaml                      # gitOpsEngine: ArgoCD
+├── k8s/
+│   ├── kustomization.yaml
+│   ├── applicationset.yaml         # ApplicationSet manifest
+│   └── apps/
+│       ├── frontend/
+│       │   ├── deployment.yaml
+│       │   └── service.yaml
+│       ├── backend/
+│       │   ├── deployment.yaml
+│       │   └── service.yaml
+│       └── monitoring/
+│           ├── deployment.yaml
+│           └── service.yaml
+```
+
+### ApplicationSet Manifest
+
+Create `k8s/applicationset.yaml`:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: oci://<registry>/<project>
+        revision: dev
+        directories:
+          - path: apps/*
+  template:
+    metadata:
+      name: "{{.path.basename}}"
+    spec:
+      project: default
+      source:
+        repoURL: oci://<registry>/<project>
+        targetRevision: dev
+        path: "{{.path.path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{.path.basename}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+```
+
+This generates three Applications (`frontend`, `backend`, `monitoring`), each deployed to its own namespace.
+
+> [!TIP]
+> When using the local OCI registry, match the `repoURL` and `targetRevision` to what KSail configures in the bootstrap Application. You can inspect the bootstrap Application with:
+>
+> ```bash
+> ksail workload get application ksail -n argocd -o yaml
+> ```
+
+### Deploy
+
+Add the ApplicationSet to your kustomization and push:
+
+```bash
+ksail workload push
+ksail workload reconcile
+```
+
+## Git Generator
+
+The [git generator](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Generators-Git/) can also use `config.json` files in each directory to pass parameters to the template. This enables per-application configuration without duplicating manifests.
+
+### Project Layout
+
+```text
+my-app/
+├── ksail.yaml
+├── k8s/
+│   ├── kustomization.yaml
+│   ├── applicationset.yaml
+│   └── envs/
+│       ├── dev/
+│       │   └── config.json
+│       ├── staging/
+│       │   └── config.json
+│       └── production/
+│           └── config.json
+```
+
+Each `config.json` contains environment-specific parameters:
+
+```json
+{
+  "env": "dev",
+  "namespace": "app-dev",
+  "replicas": 1
+}
+```
+
+### ApplicationSet Manifest
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: multi-env
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: oci://<registry>/<project>
+        revision: dev
+        files:
+          - path: envs/*/config.json
+  template:
+    metadata:
+      name: "app-{{.env}}"
+    spec:
+      project: default
+      source:
+        repoURL: oci://<registry>/<project>
+        targetRevision: dev
+        path: "envs/{{.env}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{.namespace}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+```
+
+## Combining with Tenant Management
+
+KSail's [tenant management](/guides/tenant-management/) generates ArgoCD `AppProject` and `Application` resources per tenant. You can replace per-tenant Applications with a single ApplicationSet that auto-discovers tenant directories:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: tenants
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: oci://<registry>/<project>
+        revision: dev
+        directories:
+          - path: tenants/*
+  template:
+    metadata:
+      name: "tenant-{{.path.basename}}"
+    spec:
+      project: "{{.path.basename}}"
+      source:
+        repoURL: oci://<registry>/<project>
+        targetRevision: dev
+        path: "{{.path.path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{.path.basename}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+```
+
+> [!IMPORTANT]
+> Each tenant's `AppProject` must exist before the ApplicationSet creates the corresponding Application. Use `ksail tenant create` to scaffold the AppProject first, or include AppProject manifests in your source directory.
+
+## Tips
+
+- **Inspect the bootstrap Application** to get the correct `repoURL` and `targetRevision` values for your ApplicationSet templates:
+
+  ```bash
+  ksail workload get application ksail -n argocd -o yaml
+  ```
+
+- **Use `ksail workload push` and `ksail workload reconcile`** to deploy ApplicationSet manifests — they flow through the same OCI push pipeline as regular manifests.
+
+- **Combine with multi-environment workflows** by using separate `ksail.<env>.yaml` configs and ApplicationSet generators. See [Multi-Environment Workflows](/guides/multi-environment/) for the `--config` pattern.
+
+## Further Reading
+
+- [ArgoCD ApplicationSet documentation](https://argo-cd.readthedocs.io/en/stable/user-guide/application-set/)
+- [ApplicationSet generators reference](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Generators/)
+- [ArgoCD Application specification](https://argo-cd.readthedocs.io/en/stable/user-guide/application-specification/)
+- [Tenant Management guide](/guides/tenant-management/)
+- [Multi-Environment Workflows guide](/guides/multi-environment/)
