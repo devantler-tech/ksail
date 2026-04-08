@@ -192,7 +192,7 @@ func resolveFromConfig(
 		*kubeconfigPath = cfg.Spec.Cluster.Connection.Kubeconfig
 	}
 
-	*omniOpts = cfg.Spec.Cluster.Omni
+	*omniOpts = cfg.Spec.Provider.Omni
 }
 
 // clusterNameFromDistConfig extracts the cluster name from distribution-specific config.

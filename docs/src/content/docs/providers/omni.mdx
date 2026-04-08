@@ -38,11 +38,11 @@ export OMNI_SERVICE_ACCOUNT_KEY=your-base64-encoded-service-account-key
 > [!TIP]
 > Add the export to your shell profile (`~/.bashrc`, `~/.zshrc`) to persist across sessions.
 
-By default, KSail reads from `OMNI_SERVICE_ACCOUNT_KEY`. To use a different environment variable name, set `spec.cluster.omni.serviceAccountKeyEnvVar` in `ksail.yaml`.
+By default, KSail reads from `OMNI_SERVICE_ACCOUNT_KEY`. To use a different environment variable name, set `spec.provider.omni.serviceAccountKeyEnvVar` in `ksail.yaml`.
 
 ### ksail.yaml Reference
 
-The Omni provider is configured through `spec.cluster.omni` in `ksail.yaml`:
+The Omni provider is configured through `spec.provider.omni` in `ksail.yaml`:
 
 ```yaml
 apiVersion: ksail.io/v1alpha1
@@ -53,6 +53,10 @@ spec:
   cluster:
     distribution: Talos
     provider: Omni
+    talos:
+      controlPlanes: 1
+      workers: 2
+  provider:
     omni:
       # Required: your Omni API endpoint
       endpoint: "https://<account>.omni.siderolabs.io:443"
@@ -74,9 +78,6 @@ spec:
       # Optional: override default env var names
       # serviceAccountKeyEnvVar: "MY_CUSTOM_OMNI_KEY"
       # endpointEnvVar: "MY_CUSTOM_OMNI_ENDPOINT"
-    talos:
-      controlPlanes: 1
-      workers: 2
 ```
 
 | Field | Type | Default | Description |
@@ -116,7 +117,7 @@ The scaffolder does not generate the `omni:` block automatically. Open `ksail.ya
 
 ```yaml
 spec:
-  cluster:
+  provider:
     omni:
       endpoint: "https://<account>.omni.siderolabs.io:443"
       # Optional: pin versions (auto-resolved from Omni if omitted)
@@ -200,7 +201,7 @@ KSail authenticates via a service account key — no direct SSH or Talos API acc
 ksail cluster list
 ```
 
-Lists all clusters visible to your Omni account, including clusters created outside KSail, when both `OMNI_SERVICE_ACCOUNT_KEY` and `OMNI_ENDPOINT` are set in your environment. The list command does not read `spec.cluster.omni.endpoint` from `ksail.yaml`, so `OMNI_ENDPOINT` must be configured explicitly for listing.
+Lists all clusters visible to your Omni account, including clusters created outside KSail, when both `OMNI_SERVICE_ACCOUNT_KEY` and `OMNI_ENDPOINT` are set in your environment. The list command does not read `spec.provider.omni.endpoint` from `ksail.yaml`, so `OMNI_ENDPOINT` must be configured explicitly for listing.
 
 ### Cluster Info
 
@@ -231,7 +232,7 @@ KSail automatically refreshes your Omni kubeconfig token before it expires. Toke
 
 ```yaml
 spec:
-  cluster:
+  provider:
     omni:
       talosVersion: "v1.9.5"
       kubernetesVersion: "v1.32.3"
@@ -239,13 +240,13 @@ spec:
 
 **`TalosVersion is required`** or **`KubernetesVersion is required`** — Version resolution produced an empty value. This typically means the Omni query returned no results and no fallback was available. Set both fields explicitly as shown above.
 
-**`omni service account key is not set`** — The env var is missing or empty. Run `echo $OMNI_SERVICE_ACCOUNT_KEY` to check. Re-export if needed. If you use a custom variable name, verify it matches `spec.cluster.omni.serviceAccountKeyEnvVar` in `ksail.yaml`.
+**`omni service account key is not set`** — The env var is missing or empty. Run `echo $OMNI_SERVICE_ACCOUNT_KEY` to check. Re-export if needed. If you use a custom variable name, verify it matches `spec.provider.omni.serviceAccountKeyEnvVar` in `ksail.yaml`.
 
-**`omni endpoint is required`** — `spec.cluster.omni.endpoint` is missing from `ksail.yaml` and the `OMNI_ENDPOINT` env var is not set. Add it:
+**`omni endpoint is required`** — `spec.provider.omni.endpoint` is missing from `ksail.yaml` and the `OMNI_ENDPOINT` env var is not set. Add it:
 
 ```yaml
 spec:
-  cluster:
+  provider:
     omni:
       endpoint: "https://<account>.omni.siderolabs.io:443"
 ```
@@ -258,5 +259,5 @@ spec:
 
 **`not enough available machines in Omni for the requested node count`** — Auto-discovery found fewer available (unallocated) machines than the cluster requires. Log in to the [Omni web UI](https://omni.siderolabs.com/), navigate to **Machines**, and verify enough machines are registered and not already allocated to another cluster. Alternatively, set `machineClass` or `machines` explicitly to control allocation.
 
-**`MachineClass and Machines are mutually exclusive (set one or the other)`** — Both `spec.cluster.omni.machineClass` and `spec.cluster.omni.machines` are set in `ksail.yaml`. Remove one: use `machineClass` for dynamic allocation, `machines` for static allocation, or omit both for auto-discovery.
+**`MachineClass and Machines are mutually exclusive (set one or the other)`** — Both `spec.provider.omni.machineClass` and `spec.provider.omni.machines` are set in `ksail.yaml`. Remove one: use `machineClass` for dynamic allocation, `machines` for static allocation, or omit both for auto-discovery.
 

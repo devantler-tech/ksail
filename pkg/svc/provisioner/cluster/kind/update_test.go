@@ -246,7 +246,7 @@ func TestProvisioner_GetCurrentConfig_NoDetector(t *testing.T) {
 	provisioner, _, _ := newProvisionerForTest(t)
 	ctx := context.Background()
 
-	spec, err := provisioner.GetCurrentConfig(ctx)
+	spec, _, err := provisioner.GetCurrentConfig(ctx)
 
 	require.NoError(t, err)
 	require.NotNil(t, spec)

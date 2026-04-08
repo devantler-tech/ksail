@@ -315,6 +315,8 @@ func fullProductionCluster() v1alpha1.Cluster {
 					ControlPlanes: 3,
 					Workers:       2,
 				},
+			},
+			Provider: v1alpha1.ProviderSpec{
 				Hetzner: v1alpha1.OptionsHetzner{
 					Location:               "nbg1",
 					SSHKeyName:             "my-ssh-key",

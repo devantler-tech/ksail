@@ -5258,7 +5258,7 @@ func newInPlaceDiff(count int) *clusterupdate.UpdateResult {
 		{"cluster.gitOpsEngine", "None", "Flux"},
 		{"cluster.localRegistry.registry", "", "localhost:5050"},
 		{"cluster.talos.workers", "0", "2"},
-		{"cluster.hetzner.sshKeyName", "old-key", "new-key"},
+		{"provider.hetzner.sshKeyName", "old-key", "new-key"},
 	}
 
 	for i := range count {
@@ -5388,14 +5388,14 @@ func BenchmarkFormatDiffTable_WideValues(b *testing.B) {
 	result := clusterupdate.NewEmptyUpdateResult()
 	result.InPlaceChanges = []clusterupdate.Change{
 		{
-			Field:    "cluster.hetzner.controlPlaneServerType",
+			Field:    "provider.hetzner.controlPlaneServerType",
 			OldValue: "cx23",
 			NewValue: "cx53",
 			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "new worker servers will use the new type; existing workers unchanged",
 		},
 		{
-			Field:    "cluster.hetzner.networkName",
+			Field:    "provider.hetzner.networkName",
 			OldValue: "legacy-network-name",
 			NewValue: "production-network-name",
 			Category: clusterupdate.ChangeCategoryInPlace,

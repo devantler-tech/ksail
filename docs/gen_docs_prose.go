@@ -51,6 +51,7 @@ spec:
       mirrorsDir: "${MIRRORS_DIR:-mirrors}"
     talos:
       config: "${TALOS_CONFIG_PATH:-~/.talos/config}"
+  provider:
     hetzner:
       sshKeyName: "${HCLOUD_SSH_KEY}"
   workload:
@@ -301,7 +302,7 @@ Advanced configuration options are direct fields under ` + bt + `spec.cluster` +
 - ` + bt + `config` + bt + ` – Path to talosconfig file (default: ` + bt + `~/.talos/config` + bt + `)
 - ` + bt + `iso` + bt + ` – Cloud provider ISO/image ID for Talos Linux (default: ` + bt + `122630` + bt + ` for x86; use ` + bt + `122629` + bt + ` for ARM)
 
-**Hetzner options (` + bt + `spec.cluster.hetzner` + bt + `):**
+**Hetzner options (` + bt + `spec.provider.hetzner` + bt + `):**
 
 - ` + bt + `controlPlaneServerType` + bt + ` – Server type for control-plane nodes (default: ` + bt + `cx23` + bt + `)
 - ` + bt + `workerServerType` + bt + ` – Server type for worker nodes (default: ` + bt + `cx23` + bt + `)

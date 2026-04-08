@@ -422,7 +422,7 @@ func (k *Provisioner) nextAgentIndex(
 // static defaults when no detector is available.
 func (k *Provisioner) GetCurrentConfig(
 	ctx context.Context,
-) (*v1alpha1.ClusterSpec, error) {
+) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
 	if k.componentDetector != nil {
 		spec, err := k.componentDetector.DetectComponents(
 			ctx,
@@ -430,11 +430,11 @@ func (k *Provisioner) GetCurrentConfig(
 			v1alpha1.ProviderDocker,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("detect components: %w", err)
+			return nil, nil, fmt.Errorf("detect components: %w", err)
 		}
 
-		return spec, nil
+		return spec, nil, nil
 	}
 
-	return clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker), nil
+	return clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker), nil, nil
 }

@@ -37,11 +37,11 @@ export HCLOUD_TOKEN=your-hetzner-api-token
 > [!TIP]
 > Add the export to your shell profile (`~/.bashrc`, `~/.zshrc`) to persist across sessions.
 
-By default, KSail reads from `HCLOUD_TOKEN`. To use a different environment variable name, set `spec.cluster.hetzner.tokenEnvVar` in `ksail.yaml`.
+By default, KSail reads from `HCLOUD_TOKEN`. To use a different environment variable name, set `spec.provider.hetzner.tokenEnvVar` in `ksail.yaml`.
 
 ### ksail.yaml Reference
 
-The Hetzner provider is configured through `spec.cluster.hetzner` in `ksail.yaml`:
+The Hetzner provider is configured through `spec.provider.hetzner` in `ksail.yaml`:
 
 ```yaml
 apiVersion: ksail.io/v1alpha1
@@ -52,6 +52,12 @@ spec:
   cluster:
     distribution: Talos
     provider: Hetzner
+    talos:
+      controlPlanes: 1
+      workers: 2
+      # ISO image ID for Hetzner (default: 122630 for x86, use 122629 for ARM)
+      iso: 122630
+  provider:
     hetzner:
       # Server types (default: cx23 for both)
       controlPlaneServerType: "cx23"
@@ -70,11 +76,6 @@ spec:
       # placementGroup: "my-placement"  # defaults to <cluster>-placement
       # fallbackLocations: ["nbg1", "hel1"]
       # placementGroupFallbackToNone: false
-    talos:
-      controlPlanes: 1
-      workers: 2
-      # ISO image ID for Hetzner (default: 122630 for x86, use 122629 for ARM)
-      iso: 122630
 ```
 
 | Field | Type | Default | Description |
@@ -219,13 +220,13 @@ The `type: LoadBalancer` service provisions a real Hetzner Cloud Load Balancer w
 
 ## Troubleshooting
 
-**`hcloud token is not set`** — The `HCLOUD_TOKEN` environment variable is missing or empty. Run `echo $HCLOUD_TOKEN` to check. Re-export if needed. If you use a custom variable name, verify it matches `spec.cluster.hetzner.tokenEnvVar` in `ksail.yaml`.
+**`hcloud token is not set`** — The `HCLOUD_TOKEN` environment variable is missing or empty. Run `echo $HCLOUD_TOKEN` to check. Re-export if needed. If you use a custom variable name, verify it matches `spec.provider.hetzner.tokenEnvVar` in `ksail.yaml`.
 
-**Server creation fails with resource unavailability** — The selected location may be out of capacity for the requested server type. Configure `spec.cluster.hetzner.fallbackLocations` to try alternative datacenter locations automatically:
+**Server creation fails with resource unavailability** — The selected location may be out of capacity for the requested server type. Configure `spec.provider.hetzner.fallbackLocations` to try alternative datacenter locations automatically:
 
 ```yaml
 spec:
-  cluster:
+  provider:
     hetzner:
       location: "fsn1"
       fallbackLocations: ["nbg1", "hel1"]

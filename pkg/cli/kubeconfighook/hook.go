@@ -64,7 +64,7 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 
 	refreshErr := refreshKubeconfig(
 		cmd.Context(),
-		cfg.Spec.Cluster.Omni,
+		cfg.Spec.Provider.Omni,
 		clusterName,
 		canonicalPath,
 	)

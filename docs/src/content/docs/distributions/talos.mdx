@@ -133,11 +133,11 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
 
     #### Step 3: Add the Omni Endpoint
 
-    The scaffolder does not generate the `omni:` block automatically. Open `ksail.yaml` and add `spec.cluster.omni.endpoint` manually:
+    The scaffolder does not generate the `omni:` block automatically. Open `ksail.yaml` and add `spec.provider.omni.endpoint` manually:
 
     ```yaml
     spec:
-      cluster:
+      provider:
         omni:
           endpoint: "https://<account>.omni.siderolabs.io:443"
     ```

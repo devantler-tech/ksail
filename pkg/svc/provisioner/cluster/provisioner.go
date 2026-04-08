@@ -55,7 +55,8 @@ type Updater interface {
 
 	// GetCurrentConfig retrieves the current cluster configuration from the running cluster.
 	// Used to compare against the desired configuration for computing diffs.
-	GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, error)
+	// Returns the cluster spec and an optional provider spec (non-nil for provider-aware provisioners).
+	GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error)
 }
 
 // ProviderAware is an optional interface for provisioners that can use a provider

@@ -208,10 +208,11 @@ spec:
     name: production
     distribution: Talos
     provider: Omni
-    omni:
-      endpoint: "${OMNI_ENDPOINT}"
     localRegistry:
       registry: "${PROD_REGISTRY}"
+  provider:
+    omni:
+      endpoint: "${OMNI_ENDPOINT}"
 ```
 
 ```bash
