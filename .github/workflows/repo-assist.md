@@ -83,6 +83,8 @@ safe-outputs:
   remove-labels:
     max: 5
     target: "*"
+  noop:
+    report-as-issue: false
   link-sub-issue:
     max: 20
 
@@ -503,6 +505,7 @@ Maintain a single open issue titled `[Repo Assist] Monthly Activity {YYYY}-{MM}`
 
 ## Guidelines
 
+- **Always produce a safe output**: You MUST always produce at least one safe output — `noop`, `create_pull_request`, `create_issue`, `add_comment`, or another configured safe output. If none of the selected tasks produce actionable work, call `noop` with a descriptive message summarizing what was checked and why no action was needed.
 - **No breaking changes** without maintainer approval via a tracked issue.
 - **No new dependencies** without discussion in an issue first.
 - **Small, focused PRs** — one concern per PR.
