@@ -166,6 +166,7 @@ func cleanupArgoCDRBAC(outputDir, tenantName string) error {
 
 	rbacPath = filepath.Clean(rbacPath)
 
+	//nolint:gosec // rbacPath is constructed from os.ReadDir entries in the trusted outputDir
 	writeErr := os.WriteFile(rbacPath, []byte(updated), perm)
 	if writeErr != nil {
 		return fmt.Errorf("write RBAC ConfigMap: %w", writeErr)
