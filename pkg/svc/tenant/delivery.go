@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
 )
 
@@ -153,7 +154,7 @@ func collectKustomizationFile(
 		kustomizationPath = found
 	}
 
-	kContent, err := os.ReadFile(kustomizationPath) //nolint:gosec // path already resolved
+	kContent, err := fsutil.ReadFileSafe(repoRoot, kustomizationPath)
 	if err != nil {
 		return fmt.Errorf("reading kustomization.yaml: %w", err)
 	}
@@ -231,11 +232,11 @@ func collectTenantFiles(
 			return walkErr
 		}
 
-		if d.IsDir() {
+		if d.IsDir() || d.Type()&os.ModeSymlink != 0 {
 			return nil
 		}
 
-		content, readErr := os.ReadFile(path) //nolint:gosec // path from WalkDir within known dir
+		content, readErr := fsutil.ReadFileSafe(repoRoot, path)
 		if readErr != nil {
 			return fmt.Errorf("reading %s: %w", path, readErr)
 		}
