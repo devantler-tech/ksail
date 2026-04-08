@@ -6141,3 +6141,110 @@ func TestDisplayComponents_WithState(t *testing.T) {
 	assert.Contains(t, out, "(disabled)")
 	assert.Contains(t, out, "(none)")
 }
+
+// TestClassifyRestoreError_FallbackToErrMsg verifies that classifyRestoreError
+// falls back to err.Error() when stderr is empty, so "already exists" errors
+// routed through BehaviorOnFatal (not stderr) are correctly suppressed.
+//
+//nolint:funlen,err113 // Table-driven test with comprehensive cases; test errors are intentionally dynamic
+func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
+	t.Parallel()
+
+	// Sentinel errors used as test inputs for classifyRestoreError.
+	var (
+		errExitStatus1     = errors.New("exit status 1")
+		errDaemonSetExists = errors.New(
+			"Error from server (AlreadyExists): daemonsets.apps \"svclb-traefik\" already exists",
+		)
+		errMultipleAlreadyExist = errors.New(
+			"daemonsets.apps \"svclb-traefik\" already exists\n" +
+				"jobs.batch \"helm-install-traefik\" already exists",
+		)
+		errMixedExistsAndOther = errors.New(
+			"daemonsets.apps \"svclb-traefik\" already exists\n" +
+				"connection refused",
+		)
+		errConnectionRefused = errors.New("connection refused")
+		errAlreadyExists     = errors.New("already exists")
+	)
+
+	tests := []struct {
+		name      string
+		err       error
+		stderr    string
+		policy    string
+		expectNil bool
+	}{
+		{
+			name:      "nil error returns nil",
+			err:       nil,
+			stderr:    "",
+			policy:    "none",
+			expectNil: true,
+		},
+		{
+			name:      "already exists in stderr with policy none",
+			err:       errExitStatus1,
+			stderr:    "Error from server (AlreadyExists): resource already exists",
+			policy:    "none",
+			expectNil: true,
+		},
+		{
+			name:      "already exists in err.Error() with empty stderr",
+			err:       errDaemonSetExists,
+			stderr:    "",
+			policy:    "none",
+			expectNil: true,
+		},
+		{
+			name:      "already exists in err.Error() with whitespace-only stderr",
+			err:       errDaemonSetExists,
+			stderr:    "\n",
+			policy:    "none",
+			expectNil: true,
+		},
+		{
+			name:      "multiple already exists lines in err.Error()",
+			err:       errMultipleAlreadyExist,
+			stderr:    "",
+			policy:    "none",
+			expectNil: true,
+		},
+		{
+			name:      "mixed error in err.Error() with empty stderr",
+			err:       errMixedExistsAndOther,
+			stderr:    "",
+			policy:    "none",
+			expectNil: false,
+		},
+		{
+			name:      "real error with empty stderr",
+			err:       errConnectionRefused,
+			stderr:    "",
+			policy:    "none",
+			expectNil: false,
+		},
+		{
+			name:      "already exists with policy update does not suppress",
+			err:       errAlreadyExists,
+			stderr:    "",
+			policy:    "update",
+			expectNil: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := cluster.ExportClassifyRestoreError(
+				testCase.err, testCase.stderr, testCase.policy,
+			)
+			if testCase.expectNil {
+				assert.NoError(t, result)
+			} else {
+				assert.Error(t, result)
+			}
+		})
+	}
+}

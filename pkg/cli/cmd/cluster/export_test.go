@@ -355,3 +355,12 @@ func ExportDisplayTTLInfo(writer io.Writer, clusterName string) {
 func ExportDisplayComponents(writer io.Writer, clusterName string) {
 	displayComponents(writer, clusterName)
 }
+
+// ExportClassifyRestoreError exports classifyRestoreError for testing.
+func ExportClassifyRestoreError(err error, stderr, policy string) error {
+	flags := &restoreFlags{
+		existingResourcePolicy: policy,
+	}
+
+	return classifyRestoreError(err, stderr, flags)
+}
