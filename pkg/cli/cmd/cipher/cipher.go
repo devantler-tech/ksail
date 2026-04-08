@@ -599,7 +599,7 @@ func collectRotateTargets(canonPath string, recursive bool, writer io.Writer) ([
 				Writer:  writer,
 			})
 
-			return nil, nil //nolint:nilnil // nil signals "nothing to do, message printed"
+			return nil, nil
 		}
 
 		return files, nil
@@ -618,7 +618,7 @@ func collectRotateTargets(canonPath string, recursive bool, writer io.Writer) ([
 			Writer:  writer,
 		})
 
-		return nil, nil //nolint:nilnil // nil signals "nothing to do, message printed"
+		return nil, nil
 	}
 
 	return []string{canonPath}, nil
