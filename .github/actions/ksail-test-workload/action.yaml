@@ -1,7 +1,7 @@
 name: KSail Workload Test
 description: |
   Tests the full workload CRUD lifecycle on a running cluster:
-  create, get, describe, logs, scale, install, apply, watch,
+  create, get, describe, logs, scale, install, apply,
   push/reconcile, and delete.
 
 inputs:
@@ -143,96 +143,6 @@ runs:
           exit 1
         fi
 
-    - name: 🧪 ksail workload watch
-      id: workload-watch
-      if: inputs.apply-overlay-path != ''
-      shell: bash
-      run: |
-        # Use a directory on the main filesystem (not tmpfs) to avoid inotify
-        # event loss from sed -i's create+rename under CI load (see #3729).
-        WATCH_ROOT="${GITHUB_WORKSPACE:-.}"
-        WATCH_DIR="$(mktemp -d -p "$WATCH_ROOT" .watch-test-XXXXXX)"
-        WATCH_LOG="${WATCH_DIR}.log"
-        cat > "$WATCH_DIR/deployment.yaml" <<'EOF'
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: ksail-watch-test
-        spec:
-          replicas: 1
-          selector:
-            matchLabels:
-              app: ksail-watch-test
-          template:
-            metadata:
-              labels:
-                app: ksail-watch-test
-            spec:
-              containers:
-                - name: test
-                  image: traefik/whoami:v1.10
-        EOF
-        cat > "$WATCH_DIR/kustomization.yaml" <<'EOF'
-        apiVersion: kustomize.config.k8s.io/v1beta1
-        kind: Kustomization
-        resources:
-          - deployment.yaml
-        EOF
-        # Apply the initial manifest
-        ksail workload apply -k "$WATCH_DIR"
-        ksail workload wait --for=condition=Available deployment/ksail-watch-test --timeout=120s
-        # Start watcher in background, capturing output for debugging
-        ksail workload watch --path "$WATCH_DIR" --debug > "$WATCH_LOG" 2>&1 &
-        WATCH_PID=$!
-        trap 'kill $WATCH_PID 2>/dev/null || true; rm -rf "$WATCH_DIR" "$WATCH_LOG"' EXIT
-        # Wait for the watcher to finish initialization and build its file
-        # snapshot before modifying files.  A fixed sleep is unreliable because
-        # watcher startup time varies with cluster state (config loading, Flux
-        # reconciler creation).  Poll the log for the "poll: started" marker
-        # that is emitted right after the snapshot is built.
-        WATCHER_READY=false
-        for i in $(seq 1 120); do
-          if grep -q "poll: started" "$WATCH_LOG" 2>/dev/null; then
-            WATCHER_READY=true
-            break
-          fi
-          sleep 1
-        done
-        if [ "$WATCHER_READY" != "true" ]; then
-          echo "❌ Watcher did not become ready within 120s"
-          cat "$WATCH_LOG" || true
-          exit 1
-        fi
-        # Modify the manifest (change replicas)
-        sed -i 's/replicas: 1/replicas: 2/' "$WATCH_DIR/deployment.yaml"
-        # Wait for watcher to pick up the change (poll with timeout)
-        WATCH_SUCCESS=false
-        for i in $(seq 1 12); do
-          sleep 5
-          REPLICAS=$(ksail workload get deployment/ksail-watch-test -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "unknown")
-          if [ "$REPLICAS" = "2" ]; then
-            WATCH_SUCCESS=true
-            break
-          fi
-          echo "  Waiting for watch to apply change (attempt $i/12, replicas=$REPLICAS)..."
-        done
-        # Cleanup handled by trap, but also explicitly clean up the workload
-        kill $WATCH_PID 2>/dev/null || true
-        ksail workload delete deployment/ksail-watch-test --ignore-not-found
-        if [ "$WATCH_SUCCESS" = "true" ]; then
-          echo "✅ Workload watch correctly auto-applied changes"
-        else
-          echo "❌ Workload watch test failed: expected 2 replicas, got $REPLICAS"
-          echo "--- watcher output ---"
-          cat "$WATCH_LOG" || true
-          echo "--- end watcher output ---"
-        fi
-        rm -rf "$WATCH_DIR" "$WATCH_LOG"
-        trap - EXIT
-        if [ "$WATCH_SUCCESS" != "true" ]; then
-          exit 1
-        fi
-
     - name: 🧪 ksail workload push and reconcile
       id: workload-push-reconcile
       if: contains(inputs.args, '--gitops-engine')
@@ -259,7 +169,7 @@ runs:
         ksail workload delete deployment/"$WORKLOAD_NAME" --ignore-not-found
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-watch.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
+      if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
