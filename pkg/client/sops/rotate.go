@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/getsops/sops/v3"
-	sopsage "github.com/getsops/sops/v3/age"
 	"github.com/getsops/sops/v3/aes"
+	sopsage "github.com/getsops/sops/v3/age"
 	"github.com/getsops/sops/v3/cmd/sops/common"
 	"github.com/getsops/sops/v3/keys"
 	"github.com/getsops/sops/v3/keyservice"

@@ -521,9 +521,9 @@ func NewRotateCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "rotate <file/folder>",
-		Short: "Rotate data keys for SOPS-encrypted files",
-		Long:  rotateCmdLong,
+		Use:          "rotate <file/folder>",
+		Short:        "Rotate data keys for SOPS-encrypted files",
+		Long:         rotateCmdLong,
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -536,14 +536,19 @@ func NewRotateCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&newKey, "new-key", "", "public key to add as a master key recipient")
 	cmd.Flags().StringVar(&oldKey, "old-key", "", "public key to remove from master key recipients")
-	cmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "scan subdirectories when target is a folder")
+	cmd.Flags().
+		BoolVarP(&recursive, "recursive", "r", false, "scan subdirectories when target is a folder")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "apply rotation (default: dry-run)")
 
 	return cmd
 }
 
 // handleRotateRunE is the main handler for the rotate command.
-func handleRotateRunE(cmd *cobra.Command, target, newKey, oldKey string, recursive, force bool) error {
+func handleRotateRunE(
+	cmd *cobra.Command,
+	target, newKey, oldKey string,
+	recursive, force bool,
+) error {
 	writer := cmd.OutOrStdout()
 
 	canonPath, err := fsutil.EvalCanonicalPath(target)
