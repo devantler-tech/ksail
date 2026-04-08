@@ -377,9 +377,14 @@ func (p *Provisioner) saveOmniTalosconfig(
 // through the Omni proxy using the saved kubeconfig. The Omni cluster may
 // report RUNNING/Ready before the proxy is operational for kubectl connections.
 func (p *Provisioner) waitForOmniAPIServerReady(ctx context.Context, clusterName string) error {
-	// Canonicalize kubeconfig path to match what saveOmniConfig wrote,
-	// in case the original path contained ~ or was otherwise non-canonical.
-	kubeconfigPath, err := fsutil.EvalCanonicalPath(p.options.KubeconfigPath)
+	// Expand ~ and canonicalize the kubeconfig path to match what
+	// saveOmniConfig wrote (which also calls ExpandHomePath + EvalCanonicalPath).
+	expandedPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("expand kubeconfig path for readiness check: %w", err)
+	}
+
+	kubeconfigPath, err := fsutil.EvalCanonicalPath(expandedPath)
 	if err != nil {
 		return fmt.Errorf("canonicalize kubeconfig path for readiness check: %w", err)
 	}
@@ -392,7 +397,8 @@ func (p *Provisioner) waitForOmniAPIServerReady(ctx context.Context, clusterName
 		return fmt.Errorf("create clientset for Omni API readiness check: %w", err)
 	}
 
-	if err := readiness.WaitForAPIServerReady(ctx, clientset, omniAPIServerReadinessTimeout); err != nil {
+	err = readiness.WaitForAPIServerReady(ctx, clientset, omniAPIServerReadinessTimeout)
+	if err != nil {
 		return fmt.Errorf("wait for Omni API server readiness: %w", err)
 	}
 
