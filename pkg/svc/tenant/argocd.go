@@ -445,18 +445,7 @@ func MergeArgoCDRBACPolicyFile(rbacCMPath, tenantName string) error {
 		return fmt.Errorf("merging RBAC policy: %w", err)
 	}
 
-	perm := os.FileMode(rbacCMFilePermissions)
-
-	if info, statErr := os.Stat(rbacCMPath); statErr == nil {
-		perm = info.Mode().Perm()
-	}
-
-	writeErr := os.WriteFile(rbacCMPath, []byte(merged), perm)
-	if writeErr != nil {
-		return fmt.Errorf("writing %s: %w", rbacCMPath, writeErr)
-	}
-
-	return nil
+	return writeRBACCMFile(rbacCMPath, merged)
 }
 
 // RemoveArgoCDRBACPolicyFile reads an existing argocd-rbac-cm file and removes
@@ -476,15 +465,20 @@ func RemoveArgoCDRBACPolicyFile(rbacCMPath, tenantName string) error {
 		return fmt.Errorf("removing RBAC policy: %w", err)
 	}
 
+	return writeRBACCMFile(rbacCMPath, result)
+}
+
+// writeRBACCMFile writes content to an argocd-rbac-cm file, preserving
+// existing file permissions when the file already exists.
+func writeRBACCMFile(path, content string) error {
 	perm := os.FileMode(rbacCMFilePermissions)
 
-	if info, statErr := os.Stat(rbacCMPath); statErr == nil {
+	if info, statErr := os.Stat(path); statErr == nil {
 		perm = info.Mode().Perm()
 	}
 
-	writeErr := os.WriteFile(rbacCMPath, []byte(result), perm)
-	if writeErr != nil {
-		return fmt.Errorf("writing %s: %w", rbacCMPath, writeErr)
+	if err := os.WriteFile(path, []byte(content), perm); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
 	}
 
 	return nil
