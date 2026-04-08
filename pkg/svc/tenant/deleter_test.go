@@ -418,3 +418,26 @@ func TestDelete_ArgoCDTenantFindsRBACInMultiDocYAML(t *testing.T) {
 	require.NoError(t, readErr)
 	require.NotContains(t, string(data), "role:team-alpha")
 }
+
+func TestDelete_ArgoCDTenantFindsRBACInLeadingSeparatorYAML(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	createArgoCDTenantDir(t, tmpDir, "team-alpha")
+
+	// YAML file starts with --- (common Kubernetes manifest pattern).
+	leadingDoc := "---\n" + rbacCMContent
+	rbacPath := filepath.Join(tmpDir, "rbac.yaml")
+	require.NoError(t, os.WriteFile(rbacPath, []byte(leadingDoc), 0o600))
+
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
+		Name:       "team-alpha",
+		OutputDir:  tmpDir,
+		Unregister: false,
+	})
+	require.NoError(t, err)
+
+	data, readErr := os.ReadFile(rbacPath) //nolint:gosec // test path
+	require.NoError(t, readErr)
+	require.NotContains(t, string(data), "role:team-alpha")
+}

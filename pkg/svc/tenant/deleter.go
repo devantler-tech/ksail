@@ -93,18 +93,20 @@ func validateDeleteOpts(opts DeleteOptions) error {
 		)
 	}
 
+	if opts.DeleteRepo {
+		if opts.GitProvider == "" {
+			return fmt.Errorf("%w", ErrDeleteRepoGitProviderRequired)
+		}
+
+		if opts.GitRepo == "" {
+			return fmt.Errorf("%w", ErrDeleteRepoGitRepoRequired)
+		}
+	}
+
 	return nil
 }
 
 func deleteRepo(ctx context.Context, opts DeleteOptions) error {
-	if opts.GitProvider == "" {
-		return fmt.Errorf("%w", ErrDeleteRepoGitProviderRequired)
-	}
-
-	if opts.GitRepo == "" {
-		return fmt.Errorf("%w", ErrDeleteRepoGitRepoRequired)
-	}
-
 	owner, repo, err := gitprovider.ParseOwnerRepo(opts.GitRepo)
 	if err != nil {
 		return fmt.Errorf("parse git-repo: %w", err)
@@ -182,7 +184,7 @@ func cleanupArgoCDRBAC(outputDir, tenantName string) error {
 // separators, applying RemoveArgoCDRBACPolicy to the matching ConfigMap document, and
 // reassembling the full file content.
 func removeRBACPolicyFromContent(content []byte, tenantName string) ([]byte, error) {
-	docs := bytes.Split(content, []byte("\n---"))
+	docs := splitYAMLDocuments(content)
 	if len(docs) <= 1 {
 		result, err := RemoveArgoCDRBACPolicy(string(content), tenantName)
 		if err != nil {
@@ -192,48 +194,62 @@ func removeRBACPolicyFromContent(content []byte, tenantName string) ([]byte, err
 		return []byte(result), nil
 	}
 
-	for i, doc := range docs {
+	for docIdx, doc := range docs {
 		trimmed := bytes.TrimSpace(doc)
 		if len(trimmed) == 0 {
 			continue
 		}
 
-		var resource struct {
-			Kind     string `yaml:"kind"`
-			Metadata struct {
-				Name string `yaml:"name"`
-			} `yaml:"metadata"`
-		}
-
-		if unmarshalErr := yaml.Unmarshal(trimmed, &resource); unmarshalErr != nil {
+		if !isRBACConfigMapDoc(trimmed) {
 			continue
 		}
 
-		if resource.Kind == "ConfigMap" && resource.Metadata.Name == rbacConfigMapName {
-			docStr := string(doc)
-			// Preserve leading whitespace/newline from original split.
-			prefix := ""
-			if idx := strings.IndexFunc(docStr, func(r rune) bool { return r != '\n' && r != '\r' }); idx > 0 {
-				prefix = docStr[:idx]
-			}
-
-			updated, err := RemoveArgoCDRBACPolicy(string(trimmed), tenantName)
-			if err != nil {
-				return nil, err
-			}
-
-			docs[i] = []byte(prefix + updated)
-
-			break
+		updated, err := processConfigMapDoc(doc, trimmed, tenantName)
+		if err != nil {
+			return nil, err
 		}
+
+		docs[docIdx] = updated
+
+		break
 	}
 
 	return bytes.Join(docs, []byte("\n---")), nil
 }
 
+// processConfigMapDoc applies RemoveArgoCDRBACPolicy to a single YAML document while
+// preserving leading whitespace from the original split.
+func processConfigMapDoc(originalDoc, trimmedDoc []byte, tenantName string) ([]byte, error) {
+	docStr := string(originalDoc)
+
+	prefix := ""
+	if idx := strings.IndexFunc(docStr, func(r rune) bool { return r != '\n' && r != '\r' }); idx > 0 {
+		prefix = docStr[:idx]
+	}
+
+	updated, err := RemoveArgoCDRBACPolicy(string(trimmedDoc), tenantName)
+	if err != nil {
+		return nil, err
+	}
+
+	return []byte(prefix + updated), nil
+}
+
+// splitYAMLDocuments splits YAML content into individual documents, handling files
+// that start with a leading --- separator.
+func splitYAMLDocuments(content []byte) [][]byte {
+	if bytes.HasPrefix(content, []byte("---")) {
+		content = append([]byte("\n"), content...)
+	}
+
+	return bytes.Split(content, []byte("\n---"))
+}
+
 // findRBACConfigMapFile scans YAML files in dir (non-recursive) looking for a
 // Kubernetes ConfigMap with metadata.name "argocd-rbac-cm".
+// Symlinks are skipped to prevent symlink-escape writes.
 // Returns the path to the first matching file, or an error if none is found.
+// Read errors on individual files are propagated rather than silently skipped.
 func findRBACConfigMapFile(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -252,7 +268,12 @@ func findRBACConfigMapFile(dir string) (string, error) {
 
 		filePath := filepath.Join(dir, name)
 
-		if isRBACConfigMap(filePath) {
+		data, readErr := os.ReadFile(filePath) //nolint:gosec // path from trusted os.ReadDir
+		if readErr != nil {
+			return "", fmt.Errorf("read file %q: %w", filePath, readErr)
+		}
+
+		if contentContainsRBACConfigMap(data) {
 			return filePath, nil
 		}
 	}
@@ -266,14 +287,26 @@ func isYAMLFile(name string) bool {
 	return ext == ".yaml" || ext == ".yml"
 }
 
-// isRBACConfigMap reads a YAML file and checks if any document in it is a ConfigMap
-// with metadata.name "argocd-rbac-cm". Handles multi-document YAML (separated by ---).
-func isRBACConfigMap(path string) bool {
-	data, err := os.ReadFile(path) //nolint:gosec // path is from trusted directory listing
-	if err != nil {
-		return false
+// contentContainsRBACConfigMap checks whether any YAML document in the given content
+// is a ConfigMap with metadata.name "argocd-rbac-cm".
+func contentContainsRBACConfigMap(data []byte) bool {
+	for _, doc := range splitYAMLDocuments(data) {
+		doc = bytes.TrimSpace(doc)
+		if len(doc) == 0 {
+			continue
+		}
+
+		if isRBACConfigMapDoc(doc) {
+			return true
+		}
 	}
 
+	return false
+}
+
+// isRBACConfigMapDoc checks if a single YAML document is a ConfigMap
+// with metadata.name "argocd-rbac-cm".
+func isRBACConfigMapDoc(data []byte) bool {
 	var resource struct {
 		Kind     string `yaml:"kind"`
 		Metadata struct {
@@ -281,23 +314,9 @@ func isRBACConfigMap(path string) bool {
 		} `yaml:"metadata"`
 	}
 
-	for _, doc := range bytes.Split(data, []byte("\n---")) {
-		doc = bytes.TrimSpace(doc)
-		if len(doc) == 0 {
-			continue
-		}
-
-		resource.Kind = ""
-		resource.Metadata.Name = ""
-
-		if unmarshalErr := yaml.Unmarshal(doc, &resource); unmarshalErr != nil {
-			continue
-		}
-
-		if resource.Kind == "ConfigMap" && resource.Metadata.Name == rbacConfigMapName {
-			return true
-		}
+	if err := yaml.Unmarshal(data, &resource); err != nil {
+		return false
 	}
 
-	return false
+	return resource.Kind == "ConfigMap" && resource.Metadata.Name == rbacConfigMapName
 }
