@@ -2,11 +2,12 @@ name: KSail Backup & Restore Test
 description: |
   Tests the cluster backup and restore lifecycle on a running cluster.
   Deploys a test workload, backs up the cluster, validates archive
-  structure and metadata, tests namespace-filtered and compression-level
-  backups, tests dry-run restore, deletes the workload, restores from
-  backup, verifies the workload is restored, tests skip-existing policy,
-  and validates security guards (invalid archive, path traversal,
-  symlink rejection).
+  structure and metadata (including distribution, provider, resourceTypes,
+  and resourceCount cross-validation), tests namespace-filtered,
+  compression-level, and exclude-types backups, tests dry-run restore,
+  deletes the workload, restores from backup, verifies the workload is
+  restored, tests skip-existing policy, and validates security guards
+  (invalid archive, path traversal, symlink rejection).
 
   Does NOT create or delete the cluster — the orchestrator handles that.
 
@@ -77,11 +78,35 @@ runs:
             exit 1
           fi
         done
+        # distribution and provider are best-effort (detection may fail for
+        # some kubeconfig context patterns, e.g. Omni); log but don't fail.
+        for field in distribution provider; do
+          VALUE=$(echo "$METADATA" | jq -r ".$field")
+          if [ -z "$VALUE" ] || [ "$VALUE" = "null" ]; then
+            echo "ℹ️  Metadata field '$field' is empty (detection may not be supported for this distribution)"
+          fi
+        done
         if ! COUNT=$(echo "$METADATA" | jq -re '.resourceCount | tonumber | select(. > 0)'); then
           echo "❌ resourceCount should be an integer > 0"
           exit 1
         fi
-        echo "✅ Backup metadata is valid"
+        if ! TYPE_COUNT=$(echo "$METADATA" | jq -re '.resourceTypes | arrays | length | select(. > 0)'); then
+          echo "❌ resourceTypes should be a non-empty array"
+          exit 1
+        fi
+        # Cross-validate resourceCount against archive contents using a safe invariant:
+        # resourceCount counts exported resources, which may exceed the number of YAML files.
+        LISTING=$(tar tzf /tmp/cluster-backup.tar.gz)
+        YAML_COUNT=$(echo "$LISTING" | grep -c '[.]yaml$' || true)
+        if [ "$YAML_COUNT" -lt 1 ]; then
+          echo "❌ Archive contains no .yaml files"
+          exit 1
+        fi
+        if [ "$COUNT" -lt "$YAML_COUNT" ]; then
+          echo "❌ resourceCount ($COUNT) should be greater than or equal to YAML file count ($YAML_COUNT)"
+          exit 1
+        fi
+        echo "✅ Backup metadata is valid (resourceCount=$COUNT, resourceTypes=$TYPE_COUNT, yamlFiles=$YAML_COUNT)"
 
     - name: 🧪 Namespace-filtered backup
       id: backup-ns
@@ -102,6 +127,28 @@ runs:
         ksail cluster backup --output /tmp/backup-fast.tar.gz --compression 1
         tar tzf /tmp/backup-fast.tar.gz > /dev/null
         echo "✅ Compression-level backup is valid"
+
+    - name: 🧪 Exclude-types backup
+      id: backup-exclude-types
+      shell: bash
+      run: |
+        ksail cluster backup --output /tmp/backup-exclude.tar.gz --exclude-types deployments
+        METADATA=$(tar xzf /tmp/backup-exclude.tar.gz -O backup-metadata.json)
+        # Verify resourceTypes is a valid array before checking exclusion
+        if ! echo "$METADATA" | jq -e '.resourceTypes | type == "array"' > /dev/null 2>&1; then
+          echo "❌ backup-metadata.json has invalid or missing resourceTypes"
+          exit 1
+        fi
+        if ! echo "$METADATA" | jq -e --arg t "deployments" '.resourceTypes | index($t) == null' > /dev/null 2>&1; then
+          echo "❌ Excluded type 'deployments' still present in resourceTypes"
+          exit 1
+        fi
+        LISTING=$(tar tzf /tmp/backup-exclude.tar.gz)
+        if grep -q 'resources/deployments/' <<< "$LISTING"; then
+          echo "❌ Archive contains deployment resources despite --exclude-types deployments"
+          exit 1
+        fi
+        echo "✅ Exclude-types backup is valid"
 
     - name: 🧪 Dry-run restore (no changes applied)
       id: dry-run-restore
@@ -252,7 +299,7 @@ runs:
         ksail workload delete deployment/backup-test --ignore-not-found 2>/dev/null || true
 
     - name: 🐞 Debug failure
-      if: failure() && (steps.deploy.outcome == 'failure' || steps.backup.outcome == 'failure' || steps.validate-archive.outcome == 'failure' || steps.validate-metadata.outcome == 'failure' || steps.backup-ns.outcome == 'failure' || steps.backup-compression.outcome == 'failure' || steps.dry-run-restore.outcome == 'failure' || steps.restore.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.restore-policy-none.outcome == 'failure' || steps.invalid-archive.outcome == 'failure' || steps.path-traversal.outcome == 'failure' || steps.symlink-rejection.outcome == 'failure')
+      if: failure() && (steps.deploy.outcome == 'failure' || steps.backup.outcome == 'failure' || steps.validate-archive.outcome == 'failure' || steps.validate-metadata.outcome == 'failure' || steps.backup-ns.outcome == 'failure' || steps.backup-compression.outcome == 'failure' || steps.backup-exclude-types.outcome == 'failure' || steps.dry-run-restore.outcome == 'failure' || steps.restore.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.restore-policy-none.outcome == 'failure' || steps.invalid-archive.outcome == 'failure' || steps.path-traversal.outcome == 'failure' || steps.symlink-rejection.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
@@ -264,5 +311,6 @@ runs:
         rm -f /tmp/cluster-backup.tar.gz /tmp/invalid-backup.tar.gz \
               /tmp/traversal-backup.tar.gz /tmp/symlink-backup.tar.gz \
               /tmp/backup-ns.tar.gz /tmp/backup-fast.tar.gz \
+              /tmp/backup-exclude.tar.gz \
               /tmp/invalid-archive-stderr.txt /tmp/traversal-stderr.txt \
               /tmp/symlink-stderr.txt /tmp/restore-none-stderr.txt
