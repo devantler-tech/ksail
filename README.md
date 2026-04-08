@@ -48,7 +48,7 @@ kind + k3d + kubectl + helm + kustomize + flux + argocd + sops + k9s + kubeconfo
 
 KSail bundles these into **one binary**:
 
-| Category                 | Embedded Tools                                             |
+| Category                 | Built-in Capabilities                                      |
 |--------------------------|------------------------------------------------------------|
 | Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind)                          |
 | Container Orchestration  | kubectl, Helm, Kustomize                                   |
