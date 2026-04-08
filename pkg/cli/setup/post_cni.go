@@ -55,6 +55,11 @@ const (
 	// This catches eBPF dataplane race conditions where Cilium DaemonSet pods
 	// report Ready but pod-to-service routing is not yet fully programmed.
 	inClusterConnectivityTimeout = 2 * time.Minute
+
+	// inClusterConnectivityTimeoutSlow is the extended timeout for distributions
+	// (e.g. VCluster) where Cilium eBPF stabilization takes longer because the
+	// virtual cluster runs atop a host cluster's network layer.
+	inClusterConnectivityTimeoutSlow = 3 * time.Minute
 )
 
 // apiServerStabilitySuccesses returns the number of consecutive successful
@@ -70,6 +75,18 @@ func apiServerStabilitySuccesses(dist v1alpha1.Distribution) int {
 	default:
 		return apiServerStabilitySuccessesDefault
 	}
+}
+
+// inClusterConnectivityDeadline returns the in-cluster connectivity check
+// timeout based on the distribution. VCluster runs atop a host cluster's
+// network layer, so Cilium eBPF stabilization takes longer and needs an
+// extended timeout.
+func inClusterConnectivityDeadline(dist v1alpha1.Distribution) time.Duration {
+	if dist == v1alpha1.DistributionVCluster {
+		return inClusterConnectivityTimeoutSlow
+	}
+
+	return inClusterConnectivityTimeout
 }
 
 // ShouldPushOCIArtifact determines if OCI artifact push should happen for GitOps engines.
@@ -477,7 +494,7 @@ func waitForClusterStability(
 	// race condition does not apply.
 	if needsInClusterConnectivityCheck(clusterCfg) {
 		err = readiness.WaitForInClusterAPIConnectivity(
-			ctx, clientset, inClusterConnectivityTimeout,
+			ctx, clientset, inClusterConnectivityDeadline(clusterCfg.Spec.Cluster.Distribution),
 		)
 		if err != nil {
 			return fmt.Errorf("in-cluster API connectivity pre-flight check: %w", err)

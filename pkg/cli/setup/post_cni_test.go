@@ -2,6 +2,7 @@ package setup_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
@@ -460,6 +461,47 @@ func TestAPIServerStabilitySuccesses(t *testing.T) {
 
 			assert.Equal(
 				t, testCase.expected, setup.APIServerStabilitySuccesses(testCase.distribution),
+			)
+		})
+	}
+}
+
+func TestInClusterConnectivityDeadline(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		expected     time.Duration
+	}{
+		{
+			name:         "Vanilla uses default timeout",
+			distribution: v1alpha1.DistributionVanilla,
+			expected:     setup.InClusterConnectivityTimeout,
+		},
+		{
+			name:         "K3s uses default timeout",
+			distribution: v1alpha1.DistributionK3s,
+			expected:     setup.InClusterConnectivityTimeout,
+		},
+		{
+			name:         "Talos uses default timeout",
+			distribution: v1alpha1.DistributionTalos,
+			expected:     setup.InClusterConnectivityTimeout,
+		},
+		{
+			name:         "VCluster uses slow (extended) timeout",
+			distribution: v1alpha1.DistributionVCluster,
+			expected:     setup.InClusterConnectivityTimeoutSlow,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(
+				t, testCase.expected, setup.InClusterConnectivityDeadline(testCase.distribution),
 			)
 		})
 	}

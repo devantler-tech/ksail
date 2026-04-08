@@ -13,6 +13,15 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// isContextError returns true when the error wraps context.DeadlineExceeded or
+// context.Canceled. These errors typically originate from the client-go rate
+// limiter when the per-attempt context expires while an API request is queued.
+// They should be treated as transient so the outer polling loop can retry
+// rather than aborting prematurely.
+func isContextError(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
+}
+
 // errImagePullFailure is returned when the connectivity check pod cannot
 // pull its container image, which is distinct from actual API connectivity
 // failures and requires different remediation.
@@ -173,7 +182,7 @@ func pollConnectivityPod(
 		ctx, connectivityPodName, metav1.GetOptions{},
 	)
 	if getErr != nil {
-		if isTransientPodError(getErr) {
+		if isTransientPodError(getErr) || isContextError(getErr) {
 			return false, true, nil
 		}
 

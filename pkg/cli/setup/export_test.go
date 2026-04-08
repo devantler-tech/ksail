@@ -12,10 +12,17 @@ var NeedsInClusterConnectivityCheck = needsInClusterConnectivityCheck
 //nolint:gochecknoglobals // Standard Go export_test.go pattern.
 var APIServerStabilitySuccesses = apiServerStabilitySuccesses
 
+// InClusterConnectivityDeadline exports inClusterConnectivityDeadline for testing.
+//
+//nolint:gochecknoglobals // Standard Go export_test.go pattern.
+var InClusterConnectivityDeadline = inClusterConnectivityDeadline
+
 // Exported constants for test assertions.
 const (
 	APIServerStabilitySuccessesDefault = apiServerStabilitySuccessesDefault
 	APIServerStabilitySuccessesFast    = apiServerStabilitySuccessesFast
+	InClusterConnectivityTimeout       = inClusterConnectivityTimeout
+	InClusterConnectivityTimeoutSlow   = inClusterConnectivityTimeoutSlow
 )
 
 // ClusterWithCNI creates a minimal Cluster config with the given CNI for testing.
