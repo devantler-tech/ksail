@@ -51,16 +51,16 @@ kind/k3d/minikube + kubectl + helm + kustomize + flux/argocd + sops + k9s + kube
 
 KSail embeds all of it into **one binary**:
 
-| Category | Embedded Tools |
-|---|---|
-| Cluster Provisioning | Kind, K3d, Talos, VCluster (Vind) |
-| Container Orchestration | kubectl, Helm, Kustomize |
-| GitOps Engines | Flux, ArgoCD |
-| Secrets Management | SOPS with Age encryption |
-| Manifest Validation | Kubeconform |
-| Cluster Operations | K9s, backup & restore |
-| AI Integration | Chat assistant (Copilot SDK), MCP server, VSCode extension |
-| Infrastructure Providers | Docker (local), Hetzner Cloud, Sidero Omni |
+| Category                 | Embedded Tools                                             |
+|--------------------------|------------------------------------------------------------|
+| Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind)                          |
+| Container Orchestration  | kubectl, Helm, Kustomize                                   |
+| GitOps Engines           | Flux, ArgoCD                                               |
+| Secrets Management       | SOPS with Age encryption                                   |
+| Manifest Validation      | Kubeconform                                                |
+| Cluster Operations       | K9s, backup & restore                                      |
+| AI Integration           | Chat assistant (Copilot SDK), MCP server, VSCode extension |
+| Infrastructure Providers | Docker (local), Hetzner Cloud, Sidero Omni                 |
 
 **Only Docker is required** — no other tools to install, configure, or keep in sync.
 
