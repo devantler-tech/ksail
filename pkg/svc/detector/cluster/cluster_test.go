@@ -345,9 +345,17 @@ func TestIsOmniEndpoint(t *testing.T) {
 		host string
 		want bool
 	}{
-		{name: "omni_kubernetes_proxy", host: "devantler.kubernetes.na-west-1.omni.siderolabs.io", want: true},
+		{
+			name: "omni_kubernetes_proxy",
+			host: "devantler.kubernetes.na-west-1.omni.siderolabs.io",
+			want: true,
+		},
 		{name: "omni_api_endpoint", host: "devantler.omni.siderolabs.io", want: true},
-		{name: "omni_uppercase", host: "Devantler.Kubernetes.NA-West-1.Omni.Siderolabs.IO", want: true},
+		{
+			name: "omni_uppercase",
+			host: "Devantler.Kubernetes.NA-West-1.Omni.Siderolabs.IO",
+			want: true,
+		},
 		{name: "localhost", host: "localhost", want: false},
 		{name: "loopback_ip", host: "127.0.0.1", want: false},
 		{name: "public_ip", host: "1.2.3.4", want: false},

@@ -127,7 +127,10 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 			return nil, err
 		}
 
-		distribution, clusterName, err = detectFromServerURL(resolved.serverURL, resolved.clusterRef)
+		distribution, clusterName, err = detectFromServerURL(
+			resolved.serverURL,
+			resolved.clusterRef,
+		)
 		if err != nil {
 			return nil, err
 		}
