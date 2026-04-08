@@ -914,3 +914,133 @@ func TestImportRequiresPrivateKey(t *testing.T) {
 		t.Error("expected error when no private key provided, got none")
 	}
 }
+
+func TestNewRotateCmd(t *testing.T) {
+	t.Parallel()
+
+	cmd := cipher.NewRotateCmd()
+
+	if cmd == nil {
+		t.Fatal("expected non-nil command")
+	}
+
+	if cmd.Use != "rotate <file/folder>" {
+		t.Errorf("expected Use to be 'rotate <file/folder>', got %q", cmd.Use)
+	}
+
+	if cmd.Short == "" {
+		t.Error("expected Short description to be set")
+	}
+
+	// Verify flags are registered
+	newKeyFlag := cmd.Flags().Lookup("new-key")
+	if newKeyFlag == nil {
+		t.Error("expected new-key flag to be registered")
+	}
+
+	oldKeyFlag := cmd.Flags().Lookup("old-key")
+	if oldKeyFlag == nil {
+		t.Error("expected old-key flag to be registered")
+	}
+
+	recursiveFlag := cmd.Flags().Lookup("recursive")
+	if recursiveFlag == nil {
+		t.Error("expected recursive flag to be registered")
+	}
+
+	forceFlag := cmd.Flags().Lookup("force")
+	if forceFlag == nil {
+		t.Error("expected force flag to be registered")
+	}
+
+	// Verify write permission annotation
+	if perm, ok := cmd.Annotations["ai.toolgen.permission"]; !ok || perm != "write" {
+		t.Error("expected write permission annotation")
+	}
+}
+
+func TestRotateCommandHelp(t *testing.T) {
+	t.Parallel()
+
+	rt := di.NewRuntime()
+	cipherCmd := cipher.NewCipherCmd(rt)
+
+	var out bytes.Buffer
+	cipherCmd.SetOut(&out)
+	cipherCmd.SetArgs([]string{"rotate", "--help"})
+
+	err := cipherCmd.Execute()
+	if err != nil {
+		t.Errorf("expected no error executing --help, got: %v", err)
+	}
+
+	snaps.MatchSnapshot(t, out.String())
+}
+
+func TestCipherCommandHasRotateSubcommand(t *testing.T) {
+	t.Parallel()
+
+	rt := di.NewRuntime()
+	cmd := cipher.NewCipherCmd(rt)
+
+	rotateCmd := findSubcommand(cmd, "rotate")
+	if rotateCmd == nil {
+		t.Error("expected rotate subcommand to exist")
+	}
+}
+
+func TestRotateCommandRequiresArg(t *testing.T) {
+	t.Parallel()
+
+	rt := di.NewRuntime()
+	cipherCmd := cipher.NewCipherCmd(rt)
+
+	var out, errOut bytes.Buffer
+	cipherCmd.SetOut(&out)
+	cipherCmd.SetErr(&errOut)
+	cipherCmd.SetArgs([]string{"rotate"})
+
+	err := cipherCmd.Execute()
+	if err == nil {
+		t.Error("expected error when no argument provided, got none")
+	}
+}
+
+func TestRotateCommandDryRunNonExistentPath(t *testing.T) {
+	t.Parallel()
+
+	rt := di.NewRuntime()
+	cipherCmd := cipher.NewCipherCmd(rt)
+
+	var out, errOut bytes.Buffer
+	cipherCmd.SetOut(&out)
+	cipherCmd.SetErr(&errOut)
+	cipherCmd.SetArgs([]string{"rotate", "/nonexistent/path"})
+
+	err := cipherCmd.Execute()
+	if err == nil {
+		t.Error("expected error for non-existent path, got none")
+	}
+}
+
+func TestRotateCommandDryRunEmptyDir(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	rt := di.NewRuntime()
+	cipherCmd := cipher.NewCipherCmd(rt)
+
+	var out bytes.Buffer
+	cipherCmd.SetOut(&out)
+	cipherCmd.SetArgs([]string{"rotate", tmpDir})
+
+	err := cipherCmd.Execute()
+	if err != nil {
+		t.Errorf("expected no error for empty dir, got: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "no SOPS-encrypted files found") {
+		t.Errorf("expected 'no SOPS-encrypted files found' message, got: %s", out.String())
+	}
+}

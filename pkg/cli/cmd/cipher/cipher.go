@@ -2,6 +2,7 @@ package cipher
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
@@ -12,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
+	"github.com/getsops/sops/v3/keys"
 	"github.com/getsops/sops/v3/keyservice"
 	"github.com/spf13/cobra"
 )
@@ -45,6 +47,7 @@ SOPS supports multiple key management systems:
 	cmd.AddCommand(NewEditCmd())
 	cmd.AddCommand(NewDecryptCmd())
 	cmd.AddCommand(NewImportCmd())
+	cmd.AddCommand(NewRotateCmd())
 
 	return cmd
 }
@@ -458,6 +461,220 @@ func handleImportRunE(cmd *cobra.Command, privateKey string) error {
 		Content: "imported age key to %s",
 		Args:    []any{targetPath},
 		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// NewRotateCmd creates and returns the rotate command.
+func NewRotateCmd() *cobra.Command {
+	var (
+		newKey    string
+		oldKey    string
+		recursive bool
+		force     bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "rotate <file/folder>",
+		Short: "Rotate data keys for SOPS-encrypted files",
+		Long: `Rotate data keys for SOPS-encrypted files.
+
+This command generates a new data encryption key and re-encrypts all values
+in the target file(s). This is the same behavior as the native 'sops rotate'
+command, extended with batch directory support.
+
+When the target is a file, only that file is rotated. When the target is a
+folder, all SOPS-encrypted YAML and JSON files in the folder are rotated.
+Use --recursive to include subdirectories.
+
+Optionally, master key recipients can be added or removed during rotation:
+  --new-key adds a new master key recipient
+  --old-key removes an existing master key recipient
+
+By default, the command runs in dry-run mode and shows which files would
+be affected. Use --force to apply the changes.
+
+Key type is auto-detected from the key format:
+  - Age keys (age1...)
+
+Examples:
+  # Dry-run: see which files would be rotated
+  ksail cipher rotate ./k8s
+
+  # Rotate all encrypted files in a folder
+  ksail cipher rotate ./k8s --force
+
+  # Rotate recursively through subdirectories
+  ksail cipher rotate ./k8s --recursive --force
+
+  # Rotate a single file
+  ksail cipher rotate secrets.yaml --force
+
+  # Add a new age recipient during rotation
+  ksail cipher rotate ./k8s --new-key age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p --force
+
+  # Remove an old age recipient during rotation
+  ksail cipher rotate ./k8s --old-key age1oldkey... --force
+
+  # Replace a recipient (add new, remove old)
+  ksail cipher rotate ./k8s --new-key age1newkey... --old-key age1oldkey... --force`,
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return handleRotateRunE(cmd, args[0], newKey, oldKey, recursive, force)
+		},
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
+		},
+	}
+
+	cmd.Flags().StringVar(&newKey, "new-key", "", "public key to add as a master key recipient")
+	cmd.Flags().StringVar(&oldKey, "old-key", "", "public key to remove from master key recipients")
+	cmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "scan subdirectories when target is a folder")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "apply rotation (default: dry-run)")
+
+	return cmd
+}
+
+// handleRotateRunE is the main handler for the rotate command.
+func handleRotateRunE(cmd *cobra.Command, target, newKey, oldKey string, recursive, force bool) error {
+	writer := cmd.OutOrStdout()
+
+	canonPath, err := fsutil.EvalCanonicalPath(target)
+	if err != nil {
+		return fmt.Errorf("resolve target path %q: %w", target, err)
+	}
+
+	// Parse keys to add/remove
+	opts, err := buildRotateOpts(newKey, oldKey)
+	if err != nil {
+		return err
+	}
+
+	// Determine if target is a file or directory
+	info, err := os.Stat(canonPath)
+	if err != nil {
+		return fmt.Errorf("stat %q: %w", canonPath, err)
+	}
+
+	var files []string
+
+	if info.IsDir() {
+		files, err = sopsclient.FindEncryptedFiles(canonPath, recursive)
+		if err != nil {
+			return fmt.Errorf("finding encrypted files: %w", err)
+		}
+	} else {
+		files = []string{canonPath}
+	}
+
+	if len(files) == 0 {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: "no SOPS-encrypted files found in %s",
+			Args:    []any{canonPath},
+			Writer:  writer,
+		})
+
+		return nil
+	}
+
+	if !force {
+		return handleRotateDryRun(writer, files, canonPath)
+	}
+
+	return handleRotateApply(writer, files, opts)
+}
+
+// buildRotateOpts constructs RotateOpts from CLI flag values.
+func buildRotateOpts(newKey, oldKey string) (sopsclient.RotateOpts, error) {
+	opts := sopsclient.RotateOpts{
+		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+		DecryptionOrder: []string{},
+	}
+
+	if newKey != "" {
+		masterKey, err := sopsclient.ParseKeyType(newKey)
+		if err != nil {
+			return opts, fmt.Errorf("parsing --new-key: %w", err)
+		}
+
+		opts.AddKeys = []keys.MasterKey{masterKey}
+	}
+
+	if oldKey != "" {
+		opts.RemoveKeys = []string{oldKey}
+	}
+
+	return opts, nil
+}
+
+// handleRotateDryRun prints a summary of which files would be rotated.
+func handleRotateDryRun(writer io.Writer, files []string, scanPath string) error {
+	notify.WriteMessage(notify.Message{
+		Type:    notify.InfoType,
+		Content: "dry-run: found %d encrypted file(s) in %s",
+		Args:    []any{len(files), scanPath},
+		Writer:  writer,
+	})
+
+	for _, file := range files {
+		_, _ = fmt.Fprintf(writer, "  %s\n", file)
+	}
+
+	_, _ = fmt.Fprintln(writer)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.InfoType,
+		Content: "use --force to apply rotation",
+		Args:    []any{},
+		Writer:  writer,
+	})
+
+	return nil
+}
+
+// handleRotateApply performs the actual key rotation on all files.
+func handleRotateApply(writer io.Writer, files []string, opts sopsclient.RotateOpts) error {
+	rotated := 0
+
+	var rotateErrors []string
+
+	for _, file := range files {
+		err := sopsclient.RotateFile(file, opts)
+		if err != nil {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.WarningType,
+				Content: "  failed %s: %v",
+				Args:    []any{file, err},
+				Writer:  writer,
+			})
+
+			rotateErrors = append(rotateErrors, file)
+
+			continue
+		}
+
+		rotated++
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.SuccessType,
+			Content: "rotated %s",
+			Args:    []any{file},
+			Writer:  writer,
+		})
+	}
+
+	if len(rotateErrors) > 0 {
+		return fmt.Errorf("rotation failed for %d file(s)", len(rotateErrors))
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "rotated %d file(s)",
+		Args:    []any{rotated},
+		Writer:  writer,
 	})
 
 	return nil
