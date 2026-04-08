@@ -104,7 +104,7 @@ runs:
         # but are used by ksail-test-workload, ksail-test-backup-restore, and
         # ksail-test-workload-watch actions. Without pre-warming, transient Docker Hub
         # errors cause ImagePullBackOff timeouts in system tests (see issue #3822).
-        echo "traefik/whoami:v1.10" >> "$IMAGES_FILE"
+        echo "docker.io/traefik/whoami:v1.10" >> "$IMAGES_FILE"
 
         # Deduplicate and sort
         sort -u "$IMAGES_FILE" > /tmp/unique-images.txt
