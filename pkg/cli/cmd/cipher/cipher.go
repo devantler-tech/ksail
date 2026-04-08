@@ -9,6 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
 	sopsclient "github.com/devantler-tech/ksail/v5/pkg/client/sops"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
@@ -20,7 +21,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var errRotationFailed = errors.New("rotation failed")
+var (
+	errRotationFailed   = errors.New("rotation failed")
+	errRotationCancelled = errors.New("rotation cancelled")
+)
 
 // NewCipherCmd creates the cipher command that integrates with SOPS.
 func NewCipherCmd(_ *di.Runtime) *cobra.Command {
@@ -484,33 +488,33 @@ Optionally, master key recipients can be added or removed during rotation:
   --new-key adds a new master key recipient
   --old-key removes an existing master key recipient
 
-By default, the command runs in dry-run mode and shows which files would
-be affected. Use --force to apply the changes.
+By default, the command shows which files will be affected and prompts for
+confirmation. Use --force to skip the confirmation prompt.
 
 Key type is auto-detected from the key format:
   - Age keys (age1...)
 
 Examples:
-  # Dry-run: see which files would be rotated
+  # Rotate all encrypted files in a folder (with confirmation)
   ksail cipher rotate ./k8s
 
-  # Rotate all encrypted files in a folder
+  # Rotate without confirmation prompt
   ksail cipher rotate ./k8s --force
 
   # Rotate recursively through subdirectories
-  ksail cipher rotate ./k8s --recursive --force
+  ksail cipher rotate ./k8s --recursive
 
   # Rotate a single file
-  ksail cipher rotate secrets.yaml --force
+  ksail cipher rotate secrets.yaml
 
   # Add a new age recipient during rotation
-  ksail cipher rotate ./k8s --new-key age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p --force
+  ksail cipher rotate ./k8s --new-key age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
 
   # Remove an old age recipient during rotation
-  ksail cipher rotate ./k8s --old-key age1oldkey... --force
+  ksail cipher rotate ./k8s --old-key age1oldkey...
 
   # Replace a recipient (add new, remove old)
-  ksail cipher rotate ./k8s --new-key age1newkey... --old-key age1oldkey... --force`
+  ksail cipher rotate ./k8s --new-key age1newkey... --old-key age1oldkey...`
 
 // NewRotateCmd creates and returns the rotate command.
 func NewRotateCmd() *cobra.Command {
@@ -539,7 +543,7 @@ func NewRotateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&oldKey, "old-key", "", "public key to remove from master key recipients")
 	cmd.Flags().
 		BoolVarP(&recursive, "recursive", "r", false, "scan subdirectories when target is a folder")
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "apply rotation (default: dry-run)")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "skip confirmation prompt")
 
 	return cmd
 }
@@ -571,8 +575,12 @@ func handleRotateRunE(
 		return nil
 	}
 
-	if !force {
-		return handleRotateDryRun(writer, files, canonPath, isDir)
+	if !confirm.ShouldSkipPrompt(force) {
+		showRotatePreview(writer, files, canonPath, isDir)
+
+		if !confirm.PromptForConfirmation(writer) {
+			return errRotationCancelled
+		}
 	}
 
 	return handleRotateApply(writer, files, opts)
@@ -659,20 +667,20 @@ func buildRotateOpts(newKey, oldKey string) (sopsclient.RotateOpts, error) {
 	return opts, nil
 }
 
-// handleRotateDryRun prints a summary of which files would be rotated.
-func handleRotateDryRun(writer io.Writer, files []string, scanPath string, isDir bool) error {
+// showRotatePreview prints a summary of which files will be rotated and prompts for confirmation.
+func showRotatePreview(writer io.Writer, files []string, scanPath string, isDir bool) {
 	if isDir {
 		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: "dry-run: found %d encrypted file(s) in %s",
+			Type:    notify.WarningType,
+			Content: "the following %d file(s) in %s will be rotated:",
 			Args:    []any{len(files), scanPath},
 			Writer:  writer,
 		})
 	} else {
 		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: "dry-run: file is SOPS-encrypted: %s",
-			Args:    []any{scanPath},
+			Type:    notify.WarningType,
+			Content: "the following file will be rotated:",
+			Args:    []any{},
 			Writer:  writer,
 		})
 	}
@@ -681,16 +689,7 @@ func handleRotateDryRun(writer io.Writer, files []string, scanPath string, isDir
 		_, _ = fmt.Fprintf(writer, "  %s\n", file)
 	}
 
-	_, _ = fmt.Fprintln(writer)
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.InfoType,
-		Content: "use --force to apply rotation",
-		Args:    []any{},
-		Writer:  writer,
-	})
-
-	return nil
+	_, _ = fmt.Fprint(writer, `Type "yes" to confirm rotation: `)
 }
 
 // handleRotateApply performs the actual key rotation on all files.

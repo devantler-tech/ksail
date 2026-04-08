@@ -1015,7 +1015,7 @@ func TestRotateCommandDryRunNonExistentPath(t *testing.T) {
 	var out, errOut bytes.Buffer
 	cipherCmd.SetOut(&out)
 	cipherCmd.SetErr(&errOut)
-	cipherCmd.SetArgs([]string{"rotate", "/nonexistent/path"})
+	cipherCmd.SetArgs([]string{"rotate", "/nonexistent/path", "--force"})
 
 	err := cipherCmd.Execute()
 	if err == nil {
@@ -1033,7 +1033,7 @@ func TestRotateCommandDryRunEmptyDir(t *testing.T) {
 
 	var out bytes.Buffer
 	cipherCmd.SetOut(&out)
-	cipherCmd.SetArgs([]string{"rotate", tmpDir})
+	cipherCmd.SetArgs([]string{"rotate", tmpDir, "--force"})
 
 	err := cipherCmd.Execute()
 	if err != nil {
