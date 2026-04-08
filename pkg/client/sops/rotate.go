@@ -166,14 +166,9 @@ func IsFileEncrypted(path string) (bool, error) {
 // and re-encrypts all values in the file. This follows the SOPS native
 // rotate behavior: decrypt → modify key groups → new data key → re-encrypt.
 func RotateFile(path string, opts RotateOpts) error {
-	absPath, err := filepath.Abs(path)
+	absPath, inputStore, outputStore, err := CanonicalizeAndGetStores(path)
 	if err != nil {
-		return fmt.Errorf("resolving path %q: %w", path, err)
-	}
-
-	inputStore, outputStore, err := GetStores(absPath)
-	if err != nil {
-		return fmt.Errorf("getting stores for %q: %w", absPath, err)
+		return err
 	}
 
 	tree, err := common.LoadEncryptedFileWithBugFixes(common.GenericDecryptOpts{

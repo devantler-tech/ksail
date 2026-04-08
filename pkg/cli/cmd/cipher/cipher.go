@@ -561,7 +561,7 @@ func handleRotateRunE(
 		return err
 	}
 
-	files, err := collectRotateTargets(canonPath, recursive, writer)
+	files, isDir, err := collectRotateTargets(canonPath, recursive, writer)
 	if err != nil {
 		return err
 	}
@@ -571,7 +571,7 @@ func handleRotateRunE(
 	}
 
 	if !force {
-		return handleRotateDryRun(writer, files, canonPath)
+		return handleRotateDryRun(writer, files, canonPath, isDir)
 	}
 
 	return handleRotateApply(writer, files, opts)
@@ -579,16 +579,17 @@ func handleRotateRunE(
 
 // collectRotateTargets resolves the target path into a list of encrypted files.
 // Returns nil (not empty) when no files are found and a message has been printed.
-func collectRotateTargets(canonPath string, recursive bool, writer io.Writer) ([]string, error) {
+// The bool return indicates whether the target was a directory.
+func collectRotateTargets(canonPath string, recursive bool, writer io.Writer) ([]string, bool, error) {
 	info, err := os.Stat(canonPath)
 	if err != nil {
-		return nil, fmt.Errorf("stat %q: %w", canonPath, err)
+		return nil, false, fmt.Errorf("stat %q: %w", canonPath, err)
 	}
 
 	if info.IsDir() {
 		files, findErr := sopsclient.FindEncryptedFiles(canonPath, recursive)
 		if findErr != nil {
-			return nil, fmt.Errorf("finding encrypted files: %w", findErr)
+			return nil, true, fmt.Errorf("finding encrypted files: %w", findErr)
 		}
 
 		if len(files) == 0 {
@@ -599,15 +600,15 @@ func collectRotateTargets(canonPath string, recursive bool, writer io.Writer) ([
 				Writer:  writer,
 			})
 
-			return nil, nil
+			return nil, true, nil //nolint:nilnil // nil signals "nothing to do, message printed"
 		}
 
-		return files, nil
+		return files, true, nil
 	}
 
 	encrypted, encErr := sopsclient.IsFileEncrypted(canonPath)
 	if encErr != nil {
-		return nil, fmt.Errorf("checking file %q: %w", canonPath, encErr)
+		return nil, false, fmt.Errorf("checking file %q: %w", canonPath, encErr)
 	}
 
 	if !encrypted {
@@ -618,10 +619,10 @@ func collectRotateTargets(canonPath string, recursive bool, writer io.Writer) ([
 			Writer:  writer,
 		})
 
-		return nil, nil
+		return nil, false, nil //nolint:nilnil // nil signals "nothing to do, message printed"
 	}
 
-	return []string{canonPath}, nil
+	return []string{canonPath}, false, nil
 }
 
 // buildRotateOpts constructs RotateOpts from CLI flag values.
@@ -648,13 +649,22 @@ func buildRotateOpts(newKey, oldKey string) (sopsclient.RotateOpts, error) {
 }
 
 // handleRotateDryRun prints a summary of which files would be rotated.
-func handleRotateDryRun(writer io.Writer, files []string, scanPath string) error {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.InfoType,
-		Content: "dry-run: found %d encrypted file(s) in %s",
-		Args:    []any{len(files), scanPath},
-		Writer:  writer,
-	})
+func handleRotateDryRun(writer io.Writer, files []string, scanPath string, isDir bool) error {
+	if isDir {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: "dry-run: found %d encrypted file(s) in %s",
+			Args:    []any{len(files), scanPath},
+			Writer:  writer,
+		})
+	} else {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: "dry-run: file is SOPS-encrypted: %s",
+			Args:    []any{scanPath},
+			Writer:  writer,
+		})
+	}
 
 	for _, file := range files {
 		_, _ = fmt.Fprintf(writer, "  %s\n", file)
