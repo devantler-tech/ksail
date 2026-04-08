@@ -1,8 +1,8 @@
 {
-  "last_run": "2026-04-08T00:58:18Z",
-  "last_run_id": "24111888269",
-  "tasks_run": [1, 2, 11, 13],
-  "issue_backlog_cursor": 3794,
+  "last_run": "2026-04-08T12:36:21Z",
+  "last_run_id": "24135556025",
+  "tasks_run": [2, 4, 5, 13],
+  "issue_backlog_cursor": 3799,
   "commented_issues": {
     "3591": "2026-04-04T07:39:21Z",
     "3592": "2026-04-04T07:39:21Z",
@@ -18,10 +18,12 @@
     "3765": "2026-04-07T12:36:49Z",
     "3783": "2026-04-08T00:58:18Z"
   },
-  "open_prs": {},
+  "open_prs": {
+    "pending_3797_fix": "branch: repo-assist/fix-restore-already-allocated-error, commit: e6c73b03, not yet pushed (safeoutputs MCP unavailable)"
+  },
   "domain_alternation": {
-    "last_domain": "performance",
-    "next_domain": "test"
+    "last_domain": "test",
+    "next_domain": "refactor"
   },
   "monthly_activity_issue": "2026-04",
   "monthly_activity_issue_number": "3605",
@@ -56,11 +58,11 @@
     "3731": "[docs]: add ArgoCD ApplicationSet usage guide for KSail",
     "3732": "[kata]: evaluate vCluster v0.30+ standalone mode for KSail VCluster distribution",
     "3733": "[feature]: extend --timeout flag to all long-running cluster and workload commands",
-    "pending_3795": "[chore]: migrate Talos scaffolding to EnvironmentConfig document (Talos 1.13)",
-    "pending_3796": "[feature]: add `ksail cipher rotate` for SOPS Age key rotation"
+    "3795": "[chore]: migrate Talos scaffolding to EnvironmentConfig document (Talos 1.13)",
+    "3796": "[feature]: add `ksail cipher rotate` for SOPS Age key rotation"
   },
   "closed_issues": {
     "3730": "closed 2026-04-07 (superseded by merged PR #3745)"
   },
-  "notes": "Available labels: blocked, released, next, automation, documentation, repo-assist, bug, ci, dependencies, github_actions, javascript, agentic-workflows. All previous Repo Assist PRs (#3748, #3761, #3764, #3766, #3767, #3768 + perf PR) appear merged (repo_assist_prs=0 in task_selection). Issues #3783-#3785 (E2E coverage) now labelled ci. Issues #3412-#3415 (tenant features) now labelled next. Commented on #3783 warning about pipefail tar|grep-q pattern (same as #3794 root cause). Created EnvironmentConfig roadmap issue (note: #3305 was similar but completed - new issue focuses on cluster init scaffolding). Created cipher rotate issue. safeoutputs create_issue tool does not return issue numbers - check pending_3795 and pending_3796 next run. PR #3791 (CI flakiness fixes for metrics-server + Omni proxy) open. PR #3792 (E2E restore coverage) open with pipefail bug identified in #3794. PR #3793 (E2E watch coverage) open."
+  "notes": "Available labels: blocked, released, next, automation, documentation, repo-assist, bug, ci, dependencies, github_actions, javascript, agentic-workflows. safeoutputs MCP was completely unavailable this run (all calls returned 'session not found'). Could not create PR or post comments. Branch repo-assist/fix-restore-already-allocated-error has the fix for #3797 (classifyRestoreError 'already allocated' bug) committed at e6c73b03 but NOT pushed. Next run should attempt to push this as a PR. Issues #3794 and #3799 bugs are now fixed in main (pipefail tar|grep-q fixed in action.yaml; Omni context name uses empty string in waitForOmniAPIServerReady). Issues that need comments next run: #3794 (confirm fix merged), #3799 (confirm Omni fix merged). Monthly activity issue #3605 needs update. Open PRs (from daily-docs): #3801, #3802."
 }
