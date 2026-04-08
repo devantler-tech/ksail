@@ -436,5 +436,8 @@ func (k *Provisioner) GetCurrentConfig(
 		return spec, nil, nil
 	}
 
-	return clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker), nil, nil
+	return clusterupdate.DefaultCurrentSpec(
+		v1alpha1.DistributionK3s,
+		v1alpha1.ProviderDocker,
+	), nil, nil
 }

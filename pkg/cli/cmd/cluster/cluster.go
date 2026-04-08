@@ -5739,7 +5739,12 @@ func computeSpecOnlyDiff(
 		ctx.ClusterCfg.Spec.Cluster.Provider,
 	)
 
-	return diffEngine.ComputeDiff(currentSpec, &ctx.ClusterCfg.Spec.Cluster, nil, &ctx.ClusterCfg.Spec.Provider)
+	return diffEngine.ComputeDiff(
+		currentSpec,
+		&ctx.ClusterCfg.Spec.Cluster,
+		nil,
+		&ctx.ClusterCfg.Spec.Provider,
+	)
 }
 
 // applyOrReportChanges handles dry-run, recreate-required, no-changes, and

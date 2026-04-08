@@ -330,9 +330,9 @@ func (e *Engine) checkHetznerOptionsChange(
 
 // providerFieldRule describes how to diff a single scalar field from ProviderSpec.
 type providerFieldRule struct {
-	field    string
-	category clusterupdate.ChangeCategory
-	reason   string
+	field      string
+	category   clusterupdate.ChangeCategory
+	reason     string
 	getVal     func(*v1alpha1.ProviderSpec) string
 	defaultVal string
 }

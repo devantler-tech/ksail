@@ -494,7 +494,9 @@ func (p *Provisioner) getDockerNodesByRole(
 
 // GetCurrentConfig retrieves the current cluster configuration by probing the
 // running cluster through the Kubernetes API and Docker/Hetzner/Omni providers.
-func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
+func (p *Provisioner) GetCurrentConfig(
+	ctx context.Context,
+) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
 	var provider v1alpha1.Provider
 
 	switch {
