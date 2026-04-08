@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
 	sopsage "github.com/getsops/sops/v3/age"
@@ -141,12 +142,17 @@ func checkFileForEncryption(path string) (bool, error) {
 // I/O errors (read failures, permission errors) are returned as errors.
 // Parse/format errors are treated as "not encrypted" (returns false, nil).
 func IsFileEncrypted(path string) (bool, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // path is validated by caller
-	if err != nil {
-		return false, fmt.Errorf("reading file %q: %w", path, err)
+	canonPath, pathErr := fsutil.EvalCanonicalPath(path)
+	if pathErr != nil {
+		return false, fmt.Errorf("canonicalizing path %q: %w", path, pathErr)
 	}
 
-	store, _, storeErr := GetStores(path)
+	data, err := os.ReadFile(canonPath) //nolint:gosec // path canonicalized above via EvalCanonicalPath
+	if err != nil {
+		return false, fmt.Errorf("reading file %q: %w", canonPath, err)
+	}
+
+	store, _, storeErr := GetStores(canonPath)
 	if storeErr != nil {
 		//nolint:nilerr // unsupported format is not an I/O error; treat as "not encrypted"
 		return false, nil
