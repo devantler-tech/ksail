@@ -37,8 +37,10 @@ var ErrUnsupportedKeyType = errors.New("unsupported key type")
 
 // FindEncryptedFiles discovers SOPS-encrypted YAML/JSON files in rootDir.
 // When recursive is true, subdirectories are scanned; otherwise only
-// direct children of rootDir are checked. Hidden directories (starting
-// with ".") and symlinks are always skipped.
+// direct children of rootDir are checked. In recursive mode, hidden
+// subdirectories (starting with ".") are skipped, but rootDir itself is
+// still scanned when explicitly provided, even if it is hidden. Symlinks
+// are always skipped.
 func FindEncryptedFiles(rootDir string, recursive bool) ([]string, error) {
 	if recursive {
 		return findEncryptedFilesRecursive(rootDir)
