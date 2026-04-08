@@ -725,7 +725,12 @@ func handleRotateApply(writer io.Writer, files []string, opts sopsclient.RotateO
 	}
 
 	if len(rotateErrors) > 0 {
-		return fmt.Errorf("%w for %d file(s): %s", errRotationFailed, len(rotateErrors), strings.Join(rotateErrors, ", "))
+		return fmt.Errorf(
+			"%w for %d file(s): %s",
+			errRotationFailed,
+			len(rotateErrors),
+			strings.Join(rotateErrors, ", "),
+		)
 	}
 
 	notify.WriteMessage(notify.Message{
