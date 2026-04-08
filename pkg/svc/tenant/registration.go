@@ -38,7 +38,7 @@ func modifyKustomizationResources(
 		)
 	}
 
-	kPath, err := resolveKustomizationPath(outputDir, kustomizationPath)
+	kPath, err := ResolveKustomizationPath(outputDir, kustomizationPath)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,9 @@ func FindKustomization(startDir string) (string, error) {
 	}
 }
 
-func resolveKustomizationPath(outputDir, explicit string) (string, error) {
+// ResolveKustomizationPath resolves the kustomization.yaml path from an explicit
+// path or by auto-discovering it by walking up from outputDir.
+func ResolveKustomizationPath(outputDir, explicit string) (string, error) {
 	if explicit != "" {
 		canonical, err := fsutil.EvalCanonicalPath(explicit)
 		if err != nil {
@@ -227,4 +229,22 @@ func computeRelativePath(kustomizationPath, outputDir, tenantName string) (strin
 	rel = strings.ReplaceAll(rel, string(filepath.Separator), "/")
 
 	return rel, nil
+}
+
+// RegisterResource adds a resource name to a kustomization.yaml's resources list.
+// Idempotent — does nothing if the resource is already listed.
+func RegisterResource(kustomizationPath, resourceName string) error {
+	raw, err := readKustomizationRaw(kustomizationPath)
+	if err != nil {
+		return err
+	}
+
+	resources := getResources(raw)
+	if slices.Contains(resources, resourceName) {
+		return nil
+	}
+
+	raw["resources"] = addResource(resources, resourceName)
+
+	return writeKustomizationRaw(kustomizationPath, raw)
 }

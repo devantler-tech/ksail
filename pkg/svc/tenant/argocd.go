@@ -2,6 +2,8 @@ package tenant
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/detector/gitops"
@@ -13,6 +15,11 @@ const (
 	appProjectKind    = "AppProject"
 	k8sDefaultServer  = "https://kubernetes.default.svc"
 	rbacConfigMapName = "argocd-rbac-cm"
+
+	// DefaultArgoCDRBACCMFilename is the default filename when creating a new argocd-rbac-cm file.
+	DefaultArgoCDRBACCMFilename = "argocd-rbac-cm.yaml"
+
+	rbacCMFilePermissions = 0o600
 )
 
 // appProject represents an ArgoCD AppProject CR.
@@ -370,4 +377,115 @@ func isTenantPolicyLine(line, tenantName string) bool {
 	exactGroup := fmt.Sprintf("g, %s, role:%s", tenantName, tenantName)
 
 	return strings.Contains(line, exactRole) || strings.TrimSpace(line) == exactGroup
+}
+
+// FindArgoCDRBACCM scans YAML files in the given directory for a ConfigMap
+// named "argocd-rbac-cm" (apiVersion: v1, kind: ConfigMap).
+// Returns the file path if found, or empty string if not found.
+func FindArgoCDRBACCM(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", fmt.Errorf("reading directory %s: %w", dir, err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue
+		}
+
+		filePath := filepath.Join(dir, name)
+
+		data, readErr := os.ReadFile(filePath) //nolint:gosec // directory is already validated
+		if readErr != nil {
+			continue
+		}
+
+		var raw map[string]any
+		if unmarshalErr := yaml.Unmarshal(data, &raw); unmarshalErr != nil {
+			continue
+		}
+
+		if isArgoCDRBACConfigMap(raw) {
+			return filePath, nil
+		}
+	}
+
+	return "", nil
+}
+
+func isArgoCDRBACConfigMap(raw map[string]any) bool {
+	apiVersion, _ := raw["apiVersion"].(string)
+	kind, _ := raw["kind"].(string)
+
+	meta, _ := raw["metadata"].(map[string]any)
+	name, _ := meta["name"].(string)
+
+	return apiVersion == "v1" && kind == "ConfigMap" && name == rbacConfigMapName
+}
+
+// MergeArgoCDRBACPolicyFile reads an existing argocd-rbac-cm file (or creates a new one)
+// and merges the tenant's RBAC policy into it.
+func MergeArgoCDRBACPolicyFile(rbacCMPath, tenantName string) error {
+	existingContent := ""
+
+	data, err := os.ReadFile(rbacCMPath) //nolint:gosec // path is caller-controlled
+	if err == nil {
+		existingContent = string(data)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("reading %s: %w", rbacCMPath, err)
+	}
+
+	merged, err := MergeArgoCDRBACPolicy(existingContent, tenantName)
+	if err != nil {
+		return fmt.Errorf("merging RBAC policy: %w", err)
+	}
+
+	perm := os.FileMode(rbacCMFilePermissions)
+
+	if info, statErr := os.Stat(rbacCMPath); statErr == nil {
+		perm = info.Mode().Perm()
+	}
+
+	writeErr := os.WriteFile(rbacCMPath, []byte(merged), perm)
+	if writeErr != nil {
+		return fmt.Errorf("writing %s: %w", rbacCMPath, writeErr)
+	}
+
+	return nil
+}
+
+// RemoveArgoCDRBACPolicyFile reads an existing argocd-rbac-cm file and removes
+// the tenant's RBAC policy from it. No-op if the file does not exist.
+func RemoveArgoCDRBACPolicyFile(rbacCMPath, tenantName string) error {
+	data, err := os.ReadFile(rbacCMPath) //nolint:gosec // path is caller-controlled
+	if os.IsNotExist(err) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", rbacCMPath, err)
+	}
+
+	result, err := RemoveArgoCDRBACPolicy(string(data), tenantName)
+	if err != nil {
+		return fmt.Errorf("removing RBAC policy: %w", err)
+	}
+
+	perm := os.FileMode(rbacCMFilePermissions)
+
+	if info, statErr := os.Stat(rbacCMPath); statErr == nil {
+		perm = info.Mode().Perm()
+	}
+
+	writeErr := os.WriteFile(rbacCMPath, []byte(result), perm)
+	if writeErr != nil {
+		return fmt.Errorf("writing %s: %w", rbacCMPath, writeErr)
+	}
+
+	return nil
 }

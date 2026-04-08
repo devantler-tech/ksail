@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
@@ -89,7 +90,30 @@ func handleDeleteRunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("deleting tenant: %w", err)
 	}
 
+	// Best-effort: remove tenant's ArgoCD RBAC policy from argocd-rbac-cm.
+	if opts.Unregister {
+		removeArgoCDRBACPolicy(opts)
+	}
+
 	notify.Successf(cmd.OutOrStdout(), "Tenant %q deleted successfully", opts.Name)
 
 	return nil
+}
+
+// removeArgoCDRBACPolicy is a best-effort cleanup of ArgoCD RBAC policies.
+// It silently succeeds if the argocd-rbac-cm file is not found or the tenant has no policy.
+func removeArgoCDRBACPolicy(opts tenant.DeleteOptions) {
+	kPath, err := tenant.ResolveKustomizationPath(opts.OutputDir, opts.KustomizationPath)
+	if err != nil {
+		return
+	}
+
+	kDir := filepath.Dir(kPath)
+
+	rbacCMPath, err := tenant.FindArgoCDRBACCM(kDir)
+	if err != nil || rbacCMPath == "" {
+		return
+	}
+
+	_ = tenant.RemoveArgoCDRBACPolicyFile(rbacCMPath, opts.Name)
 }

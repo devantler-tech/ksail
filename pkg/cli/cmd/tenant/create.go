@@ -3,6 +3,7 @@ package tenant
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -94,6 +95,14 @@ func handleCreateRunE(cmd *cobra.Command, args []string) error {
 		)
 		if regErr != nil {
 			return fmt.Errorf("registering tenant: %w", regErr)
+		}
+
+		// For ArgoCD tenants, merge RBAC policy into the shared argocd-rbac-cm.
+		if opts.TenantType == tenant.TypeArgoCD {
+			mergeErr := mergeArgoCDRBACPolicy(opts)
+			if mergeErr != nil {
+				return mergeErr
+			}
 		}
 	}
 
@@ -279,6 +288,40 @@ func scaffoldTenantRepo(cmd *cobra.Command, opts tenant.Options) error {
 	}
 
 	notify.Successf(cmd.OutOrStdout(), "Tenant repo %q scaffolded successfully", opts.GitRepo)
+
+	return nil
+}
+
+func mergeArgoCDRBACPolicy(opts tenant.Options) error {
+	kPath, err := tenant.ResolveKustomizationPath(opts.OutputDir, opts.KustomizationPath)
+	if err != nil {
+		return fmt.Errorf("resolving kustomization path for RBAC merge: %w", err)
+	}
+
+	kDir := filepath.Dir(kPath)
+
+	rbacCMPath, err := tenant.FindArgoCDRBACCM(kDir)
+	if err != nil {
+		return fmt.Errorf("scanning for argocd-rbac-cm: %w", err)
+	}
+
+	// If no existing file found, create one with the default filename.
+	if rbacCMPath == "" {
+		rbacCMPath = filepath.Join(kDir, tenant.DefaultArgoCDRBACCMFilename)
+	}
+
+	mergeErr := tenant.MergeArgoCDRBACPolicyFile(rbacCMPath, opts.Name)
+	if mergeErr != nil {
+		return fmt.Errorf("merging ArgoCD RBAC policy: %w", mergeErr)
+	}
+
+	// Register the RBAC CM file in the kustomization.yaml resources.
+	resourceName := filepath.Base(rbacCMPath)
+
+	regErr := tenant.RegisterResource(kPath, resourceName)
+	if regErr != nil {
+		return fmt.Errorf("registering argocd-rbac-cm in kustomization: %w", regErr)
+	}
 
 	return nil
 }
