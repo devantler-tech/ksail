@@ -395,3 +395,26 @@ func TestDelete_ArgoCDTenantFindsRBACByContent(t *testing.T) {
 	require.NoError(t, readErr)
 	require.NotContains(t, string(data), "role:team-alpha")
 }
+
+func TestDelete_ArgoCDTenantFindsRBACInMultiDocYAML(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	createArgoCDTenantDir(t, tmpDir, "team-alpha")
+
+	// Multi-document YAML: argocd-rbac-cm is the second document.
+	multiDoc := "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: argocd\n---\n" + rbacCMContent
+	rbacPath := filepath.Join(tmpDir, "argocd-resources.yaml")
+	require.NoError(t, os.WriteFile(rbacPath, []byte(multiDoc), 0o600))
+
+	err := tenant.Delete(context.Background(), tenant.DeleteOptions{
+		Name:       "team-alpha",
+		OutputDir:  tmpDir,
+		Unregister: false,
+	})
+	require.NoError(t, err)
+
+	data, readErr := os.ReadFile(rbacPath) //nolint:gosec // test path
+	require.NoError(t, readErr)
+	require.NotContains(t, string(data), "role:team-alpha")
+}

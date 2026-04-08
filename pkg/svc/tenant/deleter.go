@@ -1,6 +1,7 @@
 package tenant
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -137,6 +138,7 @@ func isArgoCDTenant(tenantDir string) bool {
 // cleanupArgoCDRBAC removes the tenant's policy lines from the argocd-rbac-cm ConfigMap.
 // The ConfigMap is discovered by scanning YAML files in outputDir for a Kubernetes ConfigMap
 // with metadata.name "argocd-rbac-cm" (content-based, not filename-based).
+// Handles multi-document YAML files where the ConfigMap may not be the first document.
 // Skips silently if no matching file is found; propagates real I/O errors.
 func cleanupArgoCDRBAC(outputDir, tenantName string) error {
 	rbacPath, err := findRBACConfigMapFile(outputDir)
@@ -153,7 +155,7 @@ func cleanupArgoCDRBAC(outputDir, tenantName string) error {
 		return fmt.Errorf("read RBAC ConfigMap: %w", err)
 	}
 
-	updated, err := RemoveArgoCDRBACPolicy(string(content), tenantName)
+	updated, err := removeRBACPolicyFromContent(content, tenantName)
 	if err != nil {
 		return fmt.Errorf("remove RBAC policy: %w", err)
 	}
@@ -168,12 +170,65 @@ func cleanupArgoCDRBAC(outputDir, tenantName string) error {
 	rbacPath = filepath.Clean(rbacPath)
 
 	//nolint:gosec // rbacPath is constructed from os.ReadDir entries in the trusted outputDir
-	writeErr := os.WriteFile(rbacPath, []byte(updated), perm)
+	writeErr := os.WriteFile(rbacPath, updated, perm)
 	if writeErr != nil {
 		return fmt.Errorf("write RBAC ConfigMap: %w", writeErr)
 	}
 
 	return nil
+}
+
+// removeRBACPolicyFromContent handles multi-document YAML files by splitting on document
+// separators, applying RemoveArgoCDRBACPolicy to the matching ConfigMap document, and
+// reassembling the full file content.
+func removeRBACPolicyFromContent(content []byte, tenantName string) ([]byte, error) {
+	docs := bytes.Split(content, []byte("\n---"))
+	if len(docs) <= 1 {
+		result, err := RemoveArgoCDRBACPolicy(string(content), tenantName)
+		if err != nil {
+			return nil, err
+		}
+
+		return []byte(result), nil
+	}
+
+	for i, doc := range docs {
+		trimmed := bytes.TrimSpace(doc)
+		if len(trimmed) == 0 {
+			continue
+		}
+
+		var resource struct {
+			Kind     string `yaml:"kind"`
+			Metadata struct {
+				Name string `yaml:"name"`
+			} `yaml:"metadata"`
+		}
+
+		if unmarshalErr := yaml.Unmarshal(trimmed, &resource); unmarshalErr != nil {
+			continue
+		}
+
+		if resource.Kind == "ConfigMap" && resource.Metadata.Name == rbacConfigMapName {
+			docStr := string(doc)
+			// Preserve leading whitespace/newline from original split.
+			prefix := ""
+			if idx := strings.IndexFunc(docStr, func(r rune) bool { return r != '\n' && r != '\r' }); idx > 0 {
+				prefix = docStr[:idx]
+			}
+
+			updated, err := RemoveArgoCDRBACPolicy(string(trimmed), tenantName)
+			if err != nil {
+				return nil, err
+			}
+
+			docs[i] = []byte(prefix + updated)
+
+			break
+		}
+	}
+
+	return bytes.Join(docs, []byte("\n---")), nil
 }
 
 // findRBACConfigMapFile scans YAML files in dir (non-recursive) looking for a
@@ -186,7 +241,7 @@ func findRBACConfigMapFile(dir string) (string, error) {
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
 			continue
 		}
 
@@ -211,8 +266,8 @@ func isYAMLFile(name string) bool {
 	return ext == ".yaml" || ext == ".yml"
 }
 
-// isRBACConfigMap reads a YAML file and checks if it is a ConfigMap
-// with metadata.name "argocd-rbac-cm".
+// isRBACConfigMap reads a YAML file and checks if any document in it is a ConfigMap
+// with metadata.name "argocd-rbac-cm". Handles multi-document YAML (separated by ---).
 func isRBACConfigMap(path string) bool {
 	data, err := os.ReadFile(path) //nolint:gosec // path is from trusted directory listing
 	if err != nil {
@@ -226,10 +281,23 @@ func isRBACConfigMap(path string) bool {
 		} `yaml:"metadata"`
 	}
 
-	unmarshalErr := yaml.Unmarshal(data, &resource)
-	if unmarshalErr != nil {
-		return false
+	for _, doc := range bytes.Split(data, []byte("\n---")) {
+		doc = bytes.TrimSpace(doc)
+		if len(doc) == 0 {
+			continue
+		}
+
+		resource.Kind = ""
+		resource.Metadata.Name = ""
+
+		if unmarshalErr := yaml.Unmarshal(doc, &resource); unmarshalErr != nil {
+			continue
+		}
+
+		if resource.Kind == "ConfigMap" && resource.Metadata.Name == rbacConfigMapName {
+			return true
+		}
 	}
 
-	return resource.Kind == "ConfigMap" && resource.Metadata.Name == rbacConfigMapName
+	return false
 }
