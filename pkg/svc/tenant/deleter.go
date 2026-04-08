@@ -10,6 +10,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
 	"k8s.io/apimachinery/pkg/util/validation"
+	"sigs.k8s.io/yaml"
 )
 
 // DeleteOptions holds configuration for tenant deletion.
@@ -54,12 +55,22 @@ func Delete(ctx context.Context, opts DeleteOptions) error {
 		return fmt.Errorf("%w: %q", ErrTenantDirNotExist, tenantDir)
 	}
 
+	// Detect ArgoCD tenant before deletion so we can clean up RBAC.
+	argoCD := isArgoCDTenant(tenantDir)
+
 	if opts.Unregister {
 		unregErr := UnregisterTenant(opts.Name, opts.OutputDir, opts.KustomizationPath)
 		if unregErr != nil {
 			if !errors.Is(unregErr, ErrKustomizationNotFound) {
 				return fmt.Errorf("unregister tenant: %w", unregErr)
 			}
+		}
+	}
+
+	if argoCD {
+		rbacErr := cleanupArgoCDRBAC(opts.OutputDir, opts.Name)
+		if rbacErr != nil {
+			return fmt.Errorf("cleanup ArgoCD RBAC: %w", rbacErr)
 		}
 	}
 
@@ -102,4 +113,106 @@ func deleteRepo(ctx context.Context, opts DeleteOptions) error {
 	}
 
 	return nil
+}
+
+// isArgoCDTenant checks whether the tenant directory contains an ArgoCD AppProject
+// (project.yaml), indicating this is an ArgoCD-managed tenant.
+func isArgoCDTenant(tenantDir string) bool {
+	projectPath := filepath.Join(tenantDir, "project.yaml")
+
+	_, err := os.Stat(projectPath)
+
+	return err == nil
+}
+
+// cleanupArgoCDRBAC removes the tenant's policy lines from the argocd-rbac-cm ConfigMap.
+// The ConfigMap is discovered by scanning YAML files in outputDir for a Kubernetes ConfigMap
+// with metadata.name "argocd-rbac-cm" (content-based, not filename-based).
+// Skips silently if no matching file is found.
+func cleanupArgoCDRBAC(outputDir, tenantName string) error {
+	rbacPath, err := findRBACConfigMapFile(outputDir)
+	if err != nil {
+		return nil //nolint:nilerr // no RBAC CM file found is not an error
+	}
+
+	content, err := os.ReadFile(rbacPath) //nolint:gosec // path is from trusted directory scan
+	if err != nil {
+		return fmt.Errorf("read RBAC ConfigMap: %w", err)
+	}
+
+	updated, err := RemoveArgoCDRBACPolicy(string(content), tenantName)
+	if err != nil {
+		return fmt.Errorf("remove RBAC policy: %w", err)
+	}
+
+	info, statErr := os.Stat(rbacPath)
+
+	perm := os.FileMode(kustomizationFilePermissions)
+	if statErr == nil {
+		perm = info.Mode().Perm()
+	}
+
+	writeErr := os.WriteFile(rbacPath, []byte(updated), perm)
+	if writeErr != nil {
+		return fmt.Errorf("write RBAC ConfigMap: %w", writeErr)
+	}
+
+	return nil
+}
+
+// findRBACConfigMapFile scans YAML files in dir (non-recursive) looking for a
+// Kubernetes ConfigMap with metadata.name "argocd-rbac-cm".
+// Returns the path to the first matching file, or an error if none is found.
+func findRBACConfigMapFile(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", fmt.Errorf("read directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !isYAMLFile(name) {
+			continue
+		}
+
+		filePath := filepath.Join(dir, name)
+
+		if isRBACConfigMap(filePath) {
+			return filePath, nil
+		}
+	}
+
+	return "", fmt.Errorf("no argocd-rbac-cm ConfigMap found in %q", dir)
+}
+
+func isYAMLFile(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+
+	return ext == ".yaml" || ext == ".yml"
+}
+
+// isRBACConfigMap reads a YAML file and checks if it is a ConfigMap
+// with metadata.name "argocd-rbac-cm".
+func isRBACConfigMap(path string) bool {
+	data, err := os.ReadFile(path) //nolint:gosec // path is from trusted directory listing
+	if err != nil {
+		return false
+	}
+
+	var resource struct {
+		Kind     string `yaml:"kind"`
+		Metadata struct {
+			Name string `yaml:"name"`
+		} `yaml:"metadata"`
+	}
+
+	if unmarshalErr := yaml.Unmarshal(data, &resource); unmarshalErr != nil {
+		return false
+	}
+
+	return resource.Kind == "ConfigMap" && resource.Metadata.Name == rbacConfigMapName
 }
