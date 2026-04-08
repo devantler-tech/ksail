@@ -566,6 +566,22 @@ func handleRotateRunE(cmd *cobra.Command, target, newKey, oldKey string, recursi
 			return fmt.Errorf("finding encrypted files: %w", err)
 		}
 	} else {
+		encrypted, encErr := sopsclient.IsFileEncrypted(canonPath)
+		if encErr != nil {
+			return fmt.Errorf("checking file %q: %w", canonPath, encErr)
+		}
+
+		if !encrypted {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.InfoType,
+				Content: "file %s is not SOPS-encrypted, skipping",
+				Args:    []any{canonPath},
+				Writer:  writer,
+			})
+
+			return nil
+		}
+
 		files = []string{canonPath}
 	}
 

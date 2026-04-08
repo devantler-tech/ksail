@@ -70,8 +70,12 @@ func findEncryptedFilesRecursive(rootDir string) ([]string, error) {
 			return nil
 		}
 
-		encrypted, checkErr := isFileEncrypted(path)
-		if checkErr != nil || !encrypted {
+		encrypted, checkErr := IsFileEncrypted(path)
+		if checkErr != nil {
+			return checkErr
+		}
+
+		if !encrypted {
 			return nil
 		}
 
@@ -104,8 +108,12 @@ func findEncryptedFilesFlat(rootDir string) ([]string, error) {
 			continue
 		}
 
-		encrypted, checkErr := isFileEncrypted(path)
-		if checkErr != nil || !encrypted {
+		encrypted, checkErr := IsFileEncrypted(path)
+		if checkErr != nil {
+			return nil, fmt.Errorf("checking file %q: %w", path, checkErr)
+		}
+
+		if !encrypted {
 			continue
 		}
 
@@ -121,9 +129,11 @@ func isSupportedExtension(path string) bool {
 	return ext == ".yaml" || ext == ".yml" || ext == ".json"
 }
 
-// isFileEncrypted checks whether a file contains SOPS metadata by
+// IsFileEncrypted checks whether a file contains SOPS metadata by
 // loading it as a plain file and looking for the sops top-level key.
-func isFileEncrypted(path string) (bool, error) {
+// I/O errors (read failures, permission errors) are returned as errors.
+// Parse/format errors are treated as "not encrypted" (returns false, nil).
+func IsFileEncrypted(path string) (bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false, fmt.Errorf("reading file %q: %w", path, err)

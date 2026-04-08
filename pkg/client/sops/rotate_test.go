@@ -354,6 +354,35 @@ func TestRotateFile_RemoveKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decrypt with remaining key: %v", err)
 	}
+
+	// Verify the removed key can no longer decrypt the file
+	removedKeyFile := filepath.Join(t.TempDir(), "removed-key.txt")
+
+	err = os.WriteFile(removedKeyFile, []byte(identity2.String()+"\n"), 0o600)
+	if err != nil {
+		t.Fatalf("write removed key file: %v", err)
+	}
+
+	t.Setenv("SOPS_AGE_KEY_FILE", removedKeyFile)
+
+	inputStore2, outputStore2, err := sopsclient.GetDecryptStores(filePath, false)
+	if err != nil {
+		t.Fatalf("get decrypt stores for removed key: %v", err)
+	}
+
+	decOpts2 := sopsclient.DecryptOpts{
+		Cipher:          aes.NewCipher(),
+		InputStore:      inputStore2,
+		OutputStore:     outputStore2,
+		InputPath:       filePath,
+		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+		DecryptionOrder: []string{},
+	}
+
+	_, err = sopsclient.Decrypt(decOpts2)
+	if err == nil {
+		t.Fatal("expected decryption with removed key to fail, but it succeeded")
+	}
 }
 
 func TestParseKeyType_Age(t *testing.T) {
