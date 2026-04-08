@@ -19,10 +19,10 @@ var InClusterConnectivityDeadline = inClusterConnectivityDeadline
 
 // Exported constants for test assertions.
 const (
-	APIServerStabilitySuccessesDefault    = apiServerStabilitySuccessesDefault
-	APIServerStabilitySuccessesFast       = apiServerStabilitySuccessesFast
-	InClusterConnectivityTimeout          = inClusterConnectivityTimeout
-	InClusterConnectivityTimeoutSlow      = inClusterConnectivityTimeoutSlow
+	APIServerStabilitySuccessesDefault = apiServerStabilitySuccessesDefault
+	APIServerStabilitySuccessesFast    = apiServerStabilitySuccessesFast
+	InClusterConnectivityTimeout       = inClusterConnectivityTimeout
+	InClusterConnectivityTimeoutSlow   = inClusterConnectivityTimeoutSlow
 )
 
 // ClusterWithCNI creates a minimal Cluster config with the given CNI for testing.

@@ -259,7 +259,11 @@ func TestWaitForInClusterAPIConnectivity_ContextErrorIsTransient(t *testing.T) {
 
 	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 15*time.Second)
 
-	require.NoError(t, err, "context errors should be treated as transient; polling should continue and succeed")
+	require.NoError(
+		t,
+		err,
+		"context errors should be treated as transient; polling should continue and succeed",
+	)
 }
 
 func TestConnectivityCheckPodSpec(t *testing.T) {
