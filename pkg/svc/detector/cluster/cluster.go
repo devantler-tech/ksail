@@ -213,24 +213,25 @@ func DetectDistributionFromContext(contextName string) (v1alpha1.Distribution, s
 // detectFromServerURL infers distribution and cluster name from the server URL
 // when the kubeconfig context name doesn't match any known pattern. This handles
 // cloud providers with distinctive hostnames, such as Sidero Omni whose
-// Kubernetes API proxy URLs end in .omni.siderolabs.io.
+// Kubernetes API proxy URLs end in .omni.siderolabs.io. The kubeconfig cluster
+// reference is used only when endpoint-based detection needs a cluster name.
 func detectFromServerURL(
 	serverURL string,
-	kubeconfigClusterName string,
+	kubeconfigClusterRef string,
 ) (v1alpha1.Distribution, string, error) {
 	host, err := extractHostFromURL(serverURL)
 	if err != nil {
 		return "", "", fmt.Errorf(
-			"%w: %s (server URL also unrecognizable: %w)",
-			ErrUnknownContextPattern, kubeconfigClusterName, err,
+			"%w: server URL %q is unrecognizable (kubeconfig cluster reference %q): %w",
+			ErrUnknownContextPattern, serverURL, kubeconfigClusterRef, err,
 		)
 	}
 
 	// Omni endpoints → Talos (Omni only supports Talos)
 	if isOmniEndpoint(host) {
-		// Use the kubeconfig cluster name as the cluster name since
-		// context name is a service-account identifier for Omni.
-		clusterName := kubeconfigClusterName
+		// Use the kubeconfig cluster reference as the cluster name since
+		// the context name is a service-account identifier for Omni.
+		clusterName := kubeconfigClusterRef
 		if clusterName == "" {
 			return "", "", fmt.Errorf(
 				"%w: Omni endpoint detected but cluster name is empty",
