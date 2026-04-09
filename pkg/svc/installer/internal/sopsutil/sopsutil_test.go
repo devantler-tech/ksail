@@ -76,6 +76,7 @@ func noKeyFileEnv(t *testing.T) {
 }
 
 // TestResolveEnabledAgeKey verifies all branches of the enable/disable/auto-detect logic.
+//nolint:paralleltest // Uses t.Setenv
 func TestResolveEnabledAgeKey(t *testing.T) {
 	t.Run("explicitly disabled returns empty without error", func(t *testing.T) {
 		sops := v1alpha1.SOPS{Enabled: boolPtr(false)}
