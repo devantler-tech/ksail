@@ -1,6 +1,7 @@
 package sopsutil_test
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -12,7 +13,6 @@ import (
 const (
 	testAgeKey = "AGE-SECRET-KEY-1TESTKEY000000000000000000000000000000000000000000000000"
 	metaAgeKey = "AGE-SECRET-KEY-1METAKEY000000000000000000000000000000000000000000000000"
-	noKeyFile  = "/tmp/nonexistent-ksail-sopsutil-test-keys.txt"
 )
 
 // TestExtractAgeKey verifies extraction of AGE-SECRET-KEY lines from various inputs.
@@ -83,7 +83,7 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 
 	t.Run("auto-detect with no key returns empty without error", func(t *testing.T) {
 		// Prevent local key file lookup from succeeding
-		t.Setenv("SOPS_AGE_KEY_FILE", noKeyFile)
+		t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "keys.txt"))
 
 		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_VAR_AUTO_11111"}
 
@@ -94,7 +94,7 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 
 	t.Run("auto-detect with env key returns key", func(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_AGE_KEY_AUTO_22222", testAgeKey)
-		t.Setenv("SOPS_AGE_KEY_FILE", noKeyFile)
+		t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "keys.txt"))
 
 		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_AGE_KEY_AUTO_22222"}
 
@@ -105,7 +105,7 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 
 	t.Run("auto-detect with metadata env key extracts key", func(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_AGE_KEY_META_33333", "# comment\n"+metaAgeKey+"\n")
-		t.Setenv("SOPS_AGE_KEY_FILE", noKeyFile)
+		t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "keys.txt"))
 
 		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_AGE_KEY_META_33333"}
 
@@ -115,7 +115,7 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 	})
 
 	t.Run("explicitly enabled with no key returns error", func(t *testing.T) {
-		t.Setenv("SOPS_AGE_KEY_FILE", noKeyFile)
+		t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "keys.txt"))
 
 		enabled := true
 		sops := v1alpha1.SOPS{
@@ -131,7 +131,7 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 
 	t.Run("explicitly enabled with env key returns key", func(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_AGE_KEY_ENABLED_55555", testAgeKey)
-		t.Setenv("SOPS_AGE_KEY_FILE", noKeyFile)
+		t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "keys.txt"))
 
 		enabled := true
 		sops := v1alpha1.SOPS{
