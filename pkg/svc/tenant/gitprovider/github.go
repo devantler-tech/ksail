@@ -13,6 +13,8 @@ import (
 
 const userAgent = "ksail"
 
+const httpTimeout = 30 * time.Second
+
 const (
 	visibilityPublicStr   = "public"
 	visibilityInternalStr = "internal"
@@ -24,7 +26,7 @@ type gitHubProvider struct {
 }
 
 func newGitHubProvider(token string) *gitHubProvider {
-	httpClient := &http.Client{Timeout: 30 * time.Second}
+	httpClient := &http.Client{Timeout: httpTimeout}
 	client := github.NewClient(httpClient).WithAuthToken(token)
 	client.UserAgent = userAgent
 
