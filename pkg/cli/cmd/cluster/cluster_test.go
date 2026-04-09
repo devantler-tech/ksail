@@ -2635,22 +2635,22 @@ func TestConnect_CommandFlags(t *testing.T) {
 	editorFlag := cmd.Flags().Lookup("editor")
 	require.NotNil(t, editorFlag, "expected --editor flag")
 
-	// Verify removed flags do NOT exist
+	// Verify hidden flags exist but are hidden (needed for config defaults/validation)
 	distributionFlag := cmd.Flags().Lookup("distribution")
-	require.Nil(t, distributionFlag, "unexpected --distribution flag (should be removed)")
+	require.NotNil(t, distributionFlag, "expected --distribution flag (hidden)")
+	require.True(t, distributionFlag.Hidden, "--distribution should be hidden")
 
 	distributionConfigFlag := cmd.Flags().Lookup("distribution-config")
-	require.Nil(
-		t,
-		distributionConfigFlag,
-		"unexpected --distribution-config flag (should be removed)",
-	)
+	require.NotNil(t, distributionConfigFlag, "expected --distribution-config flag (hidden)")
+	require.True(t, distributionConfigFlag.Hidden, "--distribution-config should be hidden")
 
 	gitopsEngineFlag := cmd.Flags().Lookup("gitops-engine")
-	require.Nil(t, gitopsEngineFlag, "unexpected --gitops-engine flag (should be removed)")
+	require.NotNil(t, gitopsEngineFlag, "expected --gitops-engine flag (hidden)")
+	require.True(t, gitopsEngineFlag.Hidden, "--gitops-engine should be hidden")
 
 	localRegistryFlag := cmd.Flags().Lookup("local-registry")
-	require.Nil(t, localRegistryFlag, "unexpected --local-registry flag (should be removed)")
+	require.NotNil(t, localRegistryFlag, "expected --local-registry flag (hidden)")
+	require.True(t, localRegistryFlag.Hidden, "--local-registry should be hidden")
 }
 
 // TestDelete_Confirmation_Accepted tests that deletion proceeds when user confirms with "yes".

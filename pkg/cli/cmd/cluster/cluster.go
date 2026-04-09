@@ -1033,11 +1033,17 @@ any k9s functionality. Examples:
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(
 		cmd,
-		[]ksailconfigmanager.FieldSelector[v1alpha1.Cluster]{
-			ksailconfigmanager.DefaultContextFieldSelector(),
-			ksailconfigmanager.DefaultKubeconfigFieldSelector(),
-		},
+		ksailconfigmanager.DefaultClusterFieldSelectors(),
 	)
+
+	// Hide flags that connect doesn't use but that are needed for config
+	// defaults and validation (distribution, distributionConfig, gitopsEngine,
+	// localRegistry).
+	for _, flagName := range []string{"distribution", "distribution-config", "gitops-engine", "local-registry"} {
+		if f := cmd.Flags().Lookup(flagName); f != nil {
+			f.Hidden = true
+		}
+	}
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return handleConnectRunE(cmd, cfgManager, args, editorFlag)
