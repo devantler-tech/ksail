@@ -138,6 +138,11 @@ func (f DefaultFactory) createKindProvisioner(
 		kindconfigmanager.ApplyKubeletCertRotationPatches(kindConfig)
 	}
 
+	// Apply containerd image verifier plugin patch when image verification is enabled.
+	if cluster.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
+		kindconfigmanager.ApplyImageVerificationPatches(kindConfig)
+	}
+
 	provisioner, err := kindprovisioner.CreateProvisioner(
 		kindConfig,
 		cluster.Spec.Cluster.Connection.Kubeconfig,

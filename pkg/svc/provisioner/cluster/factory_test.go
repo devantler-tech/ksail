@@ -251,3 +251,67 @@ func TestCreateKindProvisioner_DockerClientError(t *testing.T) {
 	assert.Nil(t, provisioner)
 	assert.Contains(t, err.Error(), "failed to create Docker client")
 }
+
+func TestCreateKindProvisioner_ImageVerificationPatchApplied(t *testing.T) {
+	t.Parallel()
+
+	kindConfig := &v1alpha4.Cluster{
+		Name: "test-kind",
+	}
+
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind: kindConfig,
+		},
+	}
+
+	cluster := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVanilla,
+				Talos: v1alpha1.OptionsTalos{
+					ImageVerification: v1alpha1.ImageVerificationEnabled,
+				},
+			},
+		},
+	}
+
+	// factory.Create may fail due to Docker not being available,
+	// but image verification patches are applied before Docker client creation.
+	_, _, _ = factory.Create(context.Background(), cluster)
+
+	assert.NotEmpty(t, kindConfig.ContainerdConfigPatches,
+		"image verification containerd config patch should be applied")
+	assert.Contains(t, kindConfig.ContainerdConfigPatches[0],
+		`io.containerd.image-verifier.v1.bindir`)
+}
+
+func TestCreateKindProvisioner_ImageVerificationDisabledNoPatch(t *testing.T) {
+	t.Parallel()
+
+	kindConfig := &v1alpha4.Cluster{
+		Name: "test-kind",
+	}
+
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind: kindConfig,
+		},
+	}
+
+	cluster := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVanilla,
+				Talos: v1alpha1.OptionsTalos{
+					ImageVerification: v1alpha1.ImageVerificationDisabled,
+				},
+			},
+		},
+	}
+
+	_, _, _ = factory.Create(context.Background(), cluster)
+
+	assert.Empty(t, kindConfig.ContainerdConfigPatches,
+		"no containerd config patch should be applied when image verification is disabled")
+}
