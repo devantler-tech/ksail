@@ -27,13 +27,9 @@ Usage:
   ksail cluster connect [flags]
 
 Flags:
-  -c, --context string               Kubernetes context of cluster
-  -d, --distribution Distribution    Kubernetes distribution to use
-      --distribution-config string   Configuration file for the distribution
-      --editor string                editor command to use for k9s edit actions (e.g., 'code --wait', 'vim', 'nano')
-  -g, --gitops-engine GitOpsEngine   GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
-  -k, --kubeconfig string            Path to kubeconfig file (default "~/.kube/config")
-      --local-registry string        Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)
+  -c, --context string      Kubernetes context of cluster
+      --editor string       editor command to use for k9s edit actions (e.g., 'code --wait', 'vim', 'nano')
+  -k, --kubeconfig string   Path to kubeconfig file (default "~/.kube/config")
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
