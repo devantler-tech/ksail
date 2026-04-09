@@ -280,4 +280,16 @@ func TestApplyImageVerificationPatches(t *testing.T) {
 
 		assert.Equal(t, kind.ImageVerificationPatch, kindConfig.ContainerdConfigPatches[0])
 	})
+
+	t.Run("idempotent_does_not_duplicate_patch", func(t *testing.T) {
+		t.Parallel()
+
+		kindConfig := &kindv1alpha4.Cluster{}
+
+		kind.ApplyImageVerificationPatches(kindConfig)
+		kind.ApplyImageVerificationPatches(kindConfig)
+
+		assert.Len(t, kindConfig.ContainerdConfigPatches, 1,
+			"calling ApplyImageVerificationPatches twice should not duplicate the patch")
+	})
 }

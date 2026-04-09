@@ -253,7 +253,7 @@ func TestCreateKindProvisioner_DockerClientError(t *testing.T) {
 }
 
 func TestCreateKindProvisioner_ImageVerificationPatchApplied(t *testing.T) {
-	t.Parallel()
+	t.Setenv("DOCKER_HOST", "://invalid")
 
 	kindConfig := &v1alpha4.Cluster{
 		Name: "test-kind",
@@ -276,8 +276,8 @@ func TestCreateKindProvisioner_ImageVerificationPatchApplied(t *testing.T) {
 		},
 	}
 
-	// factory.Create may fail due to Docker not being available,
-	// but image verification patches are applied before Docker client creation.
+	// factory.Create will fail on Docker client creation,
+	// but image verification patches are applied before that.
 	//nolint:dogsled // only testing side effects on kindConfig, return values irrelevant
 	_, _, _ = factory.Create(context.Background(), cluster)
 
@@ -288,7 +288,7 @@ func TestCreateKindProvisioner_ImageVerificationPatchApplied(t *testing.T) {
 }
 
 func TestCreateKindProvisioner_ImageVerificationDisabledNoPatch(t *testing.T) {
-	t.Parallel()
+	t.Setenv("DOCKER_HOST", "://invalid")
 
 	kindConfig := &v1alpha4.Cluster{
 		Name: "test-kind",

@@ -111,7 +111,14 @@ per_verifier_timeout = "10s"
 
 // ApplyImageVerificationPatches adds a containerd config patch to enable the image verifier plugin.
 // The patch is applied at the cluster level and affects every node's containerd configuration.
+// This function is idempotent — it skips appending if the patch is already present.
 func ApplyImageVerificationPatches(kindConfig *kindv1alpha4.Cluster) {
+	for _, patch := range kindConfig.ContainerdConfigPatches {
+		if strings.Contains(patch, `io.containerd.image-verifier.v1.bindir`) {
+			return
+		}
+	}
+
 	kindConfig.ContainerdConfigPatches = append(
 		kindConfig.ContainerdConfigPatches,
 		ImageVerificationPatch,
