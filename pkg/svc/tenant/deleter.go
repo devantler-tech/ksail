@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/tenant/gitprovider"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/yaml"
 )

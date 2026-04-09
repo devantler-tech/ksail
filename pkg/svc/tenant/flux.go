@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/tenant/gitprovider"
 	"sigs.k8s.io/yaml"
 )
 

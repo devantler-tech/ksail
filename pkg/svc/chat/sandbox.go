@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 )
 
 // IsPathWithinDirectory reports whether the given path resolves to a location

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
-	"github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd/cipher"
+	"github.com/devantler-tech/ksail/v6/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )

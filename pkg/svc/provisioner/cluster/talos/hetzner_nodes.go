@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/go-retry/retry"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"

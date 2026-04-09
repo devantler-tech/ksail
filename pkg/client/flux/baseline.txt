@@ -1,6 +1,6 @@
 goos: linux
 goarch: amd64
-pkg: github.com/devantler-tech/ksail/v5/pkg/client/flux
+pkg: github.com/devantler-tech/ksail/v6/pkg/client/flux
 cpu: AMD EPYC 7763 64-Core Processor                
 BenchmarkClient_CreateCreateCommand-4   	   58666	     19866 ns/op	   29984 B/op	     170 allocs/op
 BenchmarkGitRepository_Creation/Minimal-4         	35541076	        33.78 ns/op	       0 B/op	       0 allocs/op
@@ -21,4 +21,4 @@ BenchmarkCopySpec/OCIRepository-4                 	 3456762	       343.2 ns/op	 
 BenchmarkCopySpec/Kustomization-4                 	 2057919	       592.7 ns/op	    1792 B/op	       2 allocs/op
 BenchmarkCopySpec/HelmRelease-4                   	 1833516	       651.7 ns/op	    1968 B/op	       3 allocs/op
 PASS
-ok  	github.com/devantler-tech/ksail/v5/pkg/client/flux	27.192s
+ok  	github.com/devantler-tech/ksail/v6/pkg/client/flux	27.192s

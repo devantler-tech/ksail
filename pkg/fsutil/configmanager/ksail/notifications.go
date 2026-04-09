@@ -1,8 +1,8 @@
 package configmanager
 
 import (
-	"github.com/devantler-tech/ksail/v5/pkg/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/timer"
+	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	"github.com/devantler-tech/ksail/v6/pkg/timer"
 )
 
 func (m *ConfigManager) notifyLoadingStart() {

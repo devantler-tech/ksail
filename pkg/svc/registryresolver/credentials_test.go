@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/registryresolver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

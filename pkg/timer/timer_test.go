@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/timer"
+	"github.com/devantler-tech/ksail/v6/pkg/timer"
 )
 
 // Contract tests for Timer interface

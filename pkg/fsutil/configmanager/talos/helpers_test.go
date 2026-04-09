@@ -3,8 +3,8 @@ package talos_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	talos "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	talos "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
+	"github.com/devantler-tech/ksail/v6/pkg/client/kustomize"
 	"github.com/gkampitakis/go-snaps/snaps"
 )
 

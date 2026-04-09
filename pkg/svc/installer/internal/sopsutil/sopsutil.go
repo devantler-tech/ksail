@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 )
 
 // AgeSecretKeyPrefix is the prefix for Age private keys.

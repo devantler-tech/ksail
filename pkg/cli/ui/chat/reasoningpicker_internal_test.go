@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/chat"
 )
 
 // TestFindCurrentReasoningIndex tests reasoning effort index resolution.

@@ -11,9 +11,9 @@ import (
 	"strings"
 	"sync"
 
-	runner "github.com/devantler-tech/ksail/v5/pkg/runner"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
+	runner "github.com/devantler-tech/ksail/v6/pkg/runner"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/detector"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
 	clustercommand "github.com/k3d-io/k3d/v5/cmd/cluster"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/sirupsen/logrus"

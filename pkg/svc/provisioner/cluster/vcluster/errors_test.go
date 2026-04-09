@@ -3,8 +3,8 @@ package vclusterprovisioner_test
 import (
 	"testing"
 
-	vclusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/vcluster"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	vclusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/vcluster"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

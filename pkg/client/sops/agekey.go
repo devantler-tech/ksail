@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"filippo.io/age"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 )
 
 // GetAgeKeyPath returns the platform-specific path for the age keys file.

@@ -7,9 +7,9 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/devantler-tech/ksail/v5/internal/buildmeta"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd"
-	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v6/internal/buildmeta"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd"
+	"github.com/devantler-tech/ksail/v6/pkg/notify"
 )
 
 func main() {

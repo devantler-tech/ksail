@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil/generator/flux"
-	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/flux"
+	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
 )

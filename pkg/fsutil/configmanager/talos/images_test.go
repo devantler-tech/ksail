@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
 )
 
 func TestTalosImage(t *testing.T) {
