@@ -541,7 +541,8 @@ func NewRotateCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&addKey, "add-key", "", "public key to add as a master key recipient")
-	cmd.Flags().StringVar(&removeKey, "remove-key", "", "public key to remove from master key recipients")
+	cmd.Flags().
+		StringVar(&removeKey, "remove-key", "", "public key to remove from master key recipients")
 	cmd.Flags().
 		BoolVarP(&recursive, "recursive", "r", false, "scan subdirectories when target is a folder")
 	cmd.Flags().
