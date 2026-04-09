@@ -57,7 +57,7 @@ runs:
       shell: bash
       run: |
         mkdir -p /tmp/tenant-test-flux && cd /tmp/tenant-test-flux
-        ksail tenant create my-flux-tenant --type flux --sync-source oci --registry oci://ghcr.io --git-repo myorg/my-flux-tenant --output .
+        ksail tenant create my-flux-tenant --type flux --sync-source oci --registry oci://ghcr.io --tenant-repo myorg/my-flux-tenant --output .
         test -f my-flux-tenant/namespace.yaml
         test -f my-flux-tenant/serviceaccount.yaml
         test -f my-flux-tenant/rolebinding.yaml
@@ -73,7 +73,7 @@ runs:
       shell: bash
       run: |
         cd /tmp/tenant-test-flux
-        ksail tenant create my-flux-git-tenant --type flux --sync-source git --git-provider github --git-repo myorg/my-flux-git-tenant --output . --force
+        ksail tenant create my-flux-git-tenant --type flux --sync-source git --git-provider github --tenant-repo myorg/my-flux-git-tenant --output . --force
         test -f my-flux-git-tenant/sync.yaml
         grep -q "kind: GitRepository" my-flux-git-tenant/sync.yaml
         grep -q "github.com" my-flux-git-tenant/sync.yaml
@@ -92,7 +92,7 @@ runs:
       shell: bash
       run: |
         mkdir -p /tmp/tenant-test-argocd && cd /tmp/tenant-test-argocd
-        ksail tenant create my-argocd-tenant --type argocd --git-provider github --git-repo myorg/my-argocd-tenant --output .
+        ksail tenant create my-argocd-tenant --type argocd --git-provider github --tenant-repo myorg/my-argocd-tenant --output .
         test -f my-argocd-tenant/namespace.yaml
         test -f my-argocd-tenant/serviceaccount.yaml
         test -f my-argocd-tenant/rolebinding.yaml
@@ -114,7 +114,7 @@ runs:
       shell: bash
       run: |
         cd /tmp/tenant-test-argocd
-        ksail tenant create multi-argocd --type argocd -n frontend -n backend --git-provider github --git-repo myorg/multi-argocd --output . --force
+        ksail tenant create multi-argocd --type argocd -n frontend -n backend --git-provider github --tenant-repo myorg/multi-argocd --output . --force
         grep -c "namespace:" multi-argocd/project.yaml | grep -qE "[2-9]"
         echo "✅ argocd tenant create (multi-namespace) passed"
 
