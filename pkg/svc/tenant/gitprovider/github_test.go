@@ -103,7 +103,7 @@ func TestParseOwnerRepo_InvalidFormats(t *testing.T) {
 	for _, input := range tests {
 		_, _, err := gitprovider.ParseOwnerRepo(input)
 		require.Error(t, err, "expected error for input %q", input)
-		require.ErrorContains(t, err, "invalid git-repo format")
+		require.ErrorContains(t, err, "invalid repo format")
 	}
 }
 

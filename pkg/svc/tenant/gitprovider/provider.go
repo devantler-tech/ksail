@@ -67,8 +67,8 @@ var (
 	ErrUnsupportedProvider = errors.New("unsupported git provider")
 	// ErrTokenRequired is returned when a token is required but not provided.
 	ErrTokenRequired = errors.New("git provider API token is required")
-	// ErrInvalidGitRepoFormat is returned when the git-repo format is invalid.
-	ErrInvalidGitRepoFormat = errors.New("invalid git-repo format")
+	// ErrInvalidRepoFormat is returned when the repo format is invalid.
+	ErrInvalidRepoFormat = errors.New("invalid repo format")
 	// ErrInvalidRepoVisibility is returned when the repo visibility is invalid.
 	ErrInvalidRepoVisibility = errors.New("invalid repo-visibility")
 	// ErrGitHubAPI is returned when the GitHub API returns an error.
@@ -146,7 +146,7 @@ func ParseOwnerRepo(gitRepo string) (string, string, error) {
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", "", fmt.Errorf(
 			"%w: %q (expected owner/repo-name)",
-			ErrInvalidGitRepoFormat,
+			ErrInvalidRepoFormat,
 			gitRepo,
 		)
 	}

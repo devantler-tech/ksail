@@ -275,7 +275,7 @@ func resolveVisibility(visibility RepoVisibility) (bool, string) {
 	case VisibilityPublic:
 		return false, visibilityPublicStr
 	case VisibilityInternal:
-		return false, visibilityInternalStr
+		return true, visibilityInternalStr
 	case VisibilityPrivate:
 		return true, visibilityPrivateStr
 	default:
