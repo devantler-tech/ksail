@@ -93,18 +93,18 @@ func installerImageFromTag(tag string) string {
 func (p *Provisioner) getRunningTalosVersion(ctx context.Context, nodeIP string) (string, error) {
 	talosClient, err := p.createTalosClient(ctx, nodeIP)
 	if err != nil {
-		return "", fmt.Errorf("failed to create client for version check: %w", err)
+		return "", fmt.Errorf("version check for node %s: %w", nodeIP, err)
 	}
 
 	defer talosClient.Close() //nolint:errcheck
 
 	resp, err := talosClient.Version(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to query Talos version: %w", err)
+		return "", fmt.Errorf("querying Talos version on %s: %w", nodeIP, err)
 	}
 
 	if len(resp.Messages) == 0 || resp.Messages[0].Version == nil {
-		return "", fmt.Errorf("empty version response from node %s", nodeIP)
+		return "", fmt.Errorf("node %s: %w", nodeIP, ErrEmptyVersionResponse)
 	}
 
 	return resp.Messages[0].Version.Tag, nil

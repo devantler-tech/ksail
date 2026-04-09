@@ -65,12 +65,9 @@ func (p *Provisioner) Update(
 		}
 	}
 
-	// Handle Talos OS version upgrade.
-	// Omni manages upgrades externally through its own API.
-	if p.omniOpts == nil {
-		if upgradeErr := p.applyTalosVersionUpgrade(ctx, clusterName, result); upgradeErr != nil {
-			return result, fmt.Errorf("failed to apply Talos version upgrade: %w", upgradeErr)
-		}
+	// Handle Talos OS version upgrade (skipped internally for Omni clusters).
+	if upgradeErr := p.applyTalosVersionUpgrade(ctx, clusterName, result); upgradeErr != nil {
+		return result, fmt.Errorf("failed to apply Talos version upgrade: %w", upgradeErr)
 	}
 
 	return result, nil
@@ -278,14 +275,20 @@ func (p *Provisioner) applyNodeConfig(
 	}
 }
 
-// applyTalosVersionUpgrade checks whether the running Talos version differs from
-// the desired version (derived from Options.TalosImage) and performs a rolling
-// upgrade if needed.
+// applyTalosVersionUpgrade checks whether any node's running Talos version
+// differs from the desired version (derived from Options.TalosImage) and
+// performs a rolling upgrade of all mismatched nodes.
+// Omni-managed clusters are skipped since Omni handles upgrades externally.
 func (p *Provisioner) applyTalosVersionUpgrade(
 	ctx context.Context,
 	clusterName string,
 	result *clusterupdate.UpdateResult,
 ) error {
+	// Omni manages Talos upgrades through its own API.
+	if p.omniOpts != nil {
+		return nil
+	}
+
 	desiredTag := extractTagFromImage(p.options.TalosImage)
 	if desiredTag == "" {
 		return nil // No tag to compare — skip
@@ -300,27 +303,41 @@ func (p *Provisioner) applyTalosVersionUpgrade(
 		return nil
 	}
 
-	// Check the first node's running version to decide if an upgrade is needed.
-	runningTag, err := p.getRunningTalosVersion(ctx, nodes[0].IP)
-	if err != nil {
-		return fmt.Errorf("checking running Talos version: %w", err)
+	// Check all nodes for version mismatch to handle partial upgrades.
+	needsUpgrade := false
+
+	var firstRunningTag string
+
+	for _, node := range nodes {
+		tag, versionErr := p.getRunningTalosVersion(ctx, node.IP)
+		if versionErr != nil {
+			return fmt.Errorf("checking running Talos version on %s: %w", node.IP, versionErr)
+		}
+
+		if firstRunningTag == "" {
+			firstRunningTag = tag
+		}
+
+		if tag != desiredTag {
+			needsUpgrade = true
+		}
 	}
 
-	if runningTag == desiredTag {
-		return nil // Already at desired version
+	if !needsUpgrade {
+		return nil // All nodes at desired version
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter,
-		"  Talos version mismatch: running %s, desired %s — starting rolling upgrade\n",
-		runningTag, desiredTag,
+		"  Talos version mismatch detected (desired %s) — starting rolling upgrade\n",
+		desiredTag,
 	)
 
 	installerImage := installerImageFromTag(desiredTag)
 
-	if upgradeErr := p.rollingUpgradeNodes(ctx, clusterName, installerImage); upgradeErr != nil {
+	if upgradeErr := p.rollingUpgradeNodes(ctx, clusterName, installerImage, desiredTag); upgradeErr != nil {
 		result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
 			Field:    "talos.version",
-			OldValue: runningTag,
+			OldValue: firstRunningTag,
 			NewValue: desiredTag,
 			Category: clusterupdate.ChangeCategoryRebootRequired,
 			Reason:   "Talos OS version upgrade via LifecycleService failed: " + upgradeErr.Error(),
@@ -331,7 +348,7 @@ func (p *Provisioner) applyTalosVersionUpgrade(
 
 	result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
 		Field:    "talos.version",
-		OldValue: runningTag,
+		OldValue: firstRunningTag,
 		NewValue: desiredTag,
 		Category: clusterupdate.ChangeCategoryRebootRequired,
 		Reason:   "Talos OS upgraded via LifecycleService API",

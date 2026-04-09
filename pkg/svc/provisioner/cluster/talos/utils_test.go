@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+//nolint:funlen // Table-driven test with comprehensive image tag scenarios
 func TestExtractTagFromImage(t *testing.T) {
 	t.Parallel()
 

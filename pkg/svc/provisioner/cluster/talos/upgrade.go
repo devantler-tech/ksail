@@ -13,24 +13,15 @@ import (
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 )
 
-// Upgrade timeouts and retry intervals.
-const (
-	// upgradeNodeReadinessTimeout is the maximum time to wait for a node to
-	// become reachable after a reboot following an upgrade.
-	upgradeNodeReadinessTimeout = 10 * time.Minute
-	// upgradeReadinessInterval is the poll interval for node readiness checks.
-	upgradeReadinessInterval = 5 * time.Second
-)
-
 // upgradeNodeTalosVersion performs a Talos OS upgrade on a single node using the
 // LifecycleService API. The flow is:
 //  1. Pull the installer image onto the node's containerd.
 //  2. Call LifecycleService.Upgrade to write the new OS image.
 //  3. Reboot the node.
-//  4. Wait for the node to come back online.
+//  4. Wait for the node to come back online with the expected version.
 func (p *Provisioner) upgradeNodeTalosVersion(
 	ctx context.Context,
-	nodeIP, installerImage string,
+	nodeIP, installerImage, desiredTag string,
 ) error {
 	talosClient, err := p.createTalosClient(ctx, nodeIP)
 	if err != nil {
@@ -61,10 +52,10 @@ func (p *Provisioner) upgradeNodeTalosVersion(
 		return fmt.Errorf("rebooting node %s: %w", nodeIP, rebootErr)
 	}
 
-	// Step 4: Wait for the node to come back.
+	// Step 4: Wait for the node to come back with the desired version.
 	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeIP)
 
-	if waitErr := p.waitForNodeReadyAfterUpgrade(ctx, nodeIP); waitErr != nil {
+	if waitErr := p.waitForNodeReadyAfterUpgrade(ctx, nodeIP, desiredTag); waitErr != nil {
 		return fmt.Errorf("waiting for node %s readiness: %w", nodeIP, waitErr)
 	}
 
@@ -125,14 +116,30 @@ func (p *Provisioner) lifecycleUpgrade(
 		return fmt.Errorf("lifecycle upgrade on %s: %w", nodeIP, err)
 	}
 
+	if drainErr := drainUpgradeStream(stream, p.logWriter, nodeIP); drainErr != nil {
+		return drainErr
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    ✓ Upgrade completed on %s\n", nodeIP)
+
+	return nil
+}
+
+// drainUpgradeStream reads all messages from a LifecycleService.Upgrade stream,
+// logging progress messages and checking the exit code.
+func drainUpgradeStream(
+	stream machineapi.LifecycleService_UpgradeClient,
+	logWriter io.Writer,
+	nodeIP string,
+) error {
 	for {
-		resp, recvErr := stream.Recv()
-		if errors.Is(recvErr, io.EOF) {
-			break
+		resp, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil
 		}
 
-		if recvErr != nil {
-			return fmt.Errorf("lifecycle upgrade on %s: %w", nodeIP, recvErr)
+		if err != nil {
+			return fmt.Errorf("lifecycle upgrade on %s: %w", nodeIP, err)
 		}
 
 		progress := resp.GetProgress()
@@ -142,52 +149,48 @@ func (p *Provisioner) lifecycleUpgrade(
 
 		switch msg := progress.GetResponse().(type) {
 		case *machineapi.LifecycleServiceInstallProgress_Message:
-			_, _ = fmt.Fprintf(p.logWriter, "      %s: %s\n", nodeIP, msg.Message)
+			_, _ = fmt.Fprintf(logWriter, "      %s: %s\n", nodeIP, msg.Message)
 		case *machineapi.LifecycleServiceInstallProgress_ExitCode:
 			if msg.ExitCode != 0 {
-				return fmt.Errorf("upgrade on %s failed with exit code %d", nodeIP, msg.ExitCode)
+				return fmt.Errorf("node %s exit code %d: %w", nodeIP, msg.ExitCode, ErrUpgradeFailed)
 			}
 		}
 	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "    ✓ Upgrade completed on %s\n", nodeIP)
-
-	return nil
 }
 
-// waitForNodeReadyAfterUpgrade polls a node's Talos API until it responds,
-// indicating the node has rebooted and is reachable again after an upgrade.
-func (p *Provisioner) waitForNodeReadyAfterUpgrade(ctx context.Context, nodeIP string) error {
-	deadline := time.Now().Add(upgradeNodeReadinessTimeout)
+// waitForNodeReadyAfterUpgrade polls a node's Talos API until it responds with
+// the desired version tag, indicating the node has rebooted into the new OS.
+func (p *Provisioner) waitForNodeReadyAfterUpgrade(ctx context.Context, nodeIP, desiredTag string) error {
+	deadline := time.Now().Add(clusterReadinessTimeout)
 
 	// Short delay to allow the node to begin rebooting before we start polling.
 	select {
-	case <-time.After(upgradeReadinessInterval):
+	case <-time.After(retryInterval):
 	case <-ctx.Done():
 		return ctx.Err() //nolint:wrapcheck
 	}
 
 	for time.Now().Before(deadline) {
-		_, err := p.getRunningTalosVersion(ctx, nodeIP)
-		if err == nil {
+		tag, err := p.getRunningTalosVersion(ctx, nodeIP)
+		if err == nil && tag == desiredTag {
 			return nil
 		}
 
 		select {
-		case <-time.After(upgradeReadinessInterval):
+		case <-time.After(retryInterval):
 		case <-ctx.Done():
 			return ctx.Err() //nolint:wrapcheck
 		}
 	}
 
-	return fmt.Errorf("node %s did not become ready within %s", nodeIP, upgradeNodeReadinessTimeout)
+	return fmt.Errorf("node %s: %w", nodeIP, ErrNodeNotReady)
 }
 
 // rollingUpgradeNodes performs a rolling Talos OS upgrade across all cluster
 // nodes. Workers are upgraded first, then control-planes, one node at a time.
 func (p *Provisioner) rollingUpgradeNodes(
 	ctx context.Context,
-	clusterName, installerImage string,
+	clusterName, installerImage, desiredTag string,
 ) error {
 	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
@@ -219,7 +222,7 @@ func (p *Provisioner) rollingUpgradeNodes(
 			i+1, len(ordered), node.IP, node.Role,
 		)
 
-		if upgradeErr := p.upgradeNodeTalosVersion(ctx, node.IP, installerImage); upgradeErr != nil {
+		if upgradeErr := p.upgradeNodeTalosVersion(ctx, node.IP, installerImage, desiredTag); upgradeErr != nil {
 			return fmt.Errorf("upgrading node %s (%s): %w", node.IP, node.Role, upgradeErr)
 		}
 
