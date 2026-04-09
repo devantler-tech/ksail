@@ -121,19 +121,19 @@ func TestCluster_ExpandEnvVars_HetznerOptions(t *testing.T) {
 	t.Setenv("TEST_PLACEMENT_GROUP", "my-placement")
 
 	cluster := v1alpha1.NewCluster()
-	cluster.Spec.Cluster.Hetzner.SSHKeyName = "${TEST_SSH_KEY}"
-	cluster.Spec.Cluster.Hetzner.NetworkName = "${TEST_NETWORK}"
-	cluster.Spec.Cluster.Hetzner.PlacementGroup = "${TEST_PLACEMENT_GROUP}"
+	cluster.Spec.Provider.Hetzner.SSHKeyName = "${TEST_SSH_KEY}"
+	cluster.Spec.Provider.Hetzner.NetworkName = "${TEST_NETWORK}"
+	cluster.Spec.Provider.Hetzner.PlacementGroup = "${TEST_PLACEMENT_GROUP}"
 	// TokenEnvVar should NOT be expanded as it's the name of the env var
-	cluster.Spec.Cluster.Hetzner.TokenEnvVar = "HCLOUD_TOKEN"
+	cluster.Spec.Provider.Hetzner.TokenEnvVar = "HCLOUD_TOKEN"
 
 	cluster.ExpandEnvVars()
 
-	assert.Equal(t, "my-ssh-key", cluster.Spec.Cluster.Hetzner.SSHKeyName)
-	assert.Equal(t, "my-network", cluster.Spec.Cluster.Hetzner.NetworkName)
-	assert.Equal(t, "my-placement", cluster.Spec.Cluster.Hetzner.PlacementGroup)
+	assert.Equal(t, "my-ssh-key", cluster.Spec.Provider.Hetzner.SSHKeyName)
+	assert.Equal(t, "my-network", cluster.Spec.Provider.Hetzner.NetworkName)
+	assert.Equal(t, "my-placement", cluster.Spec.Provider.Hetzner.PlacementGroup)
 	// TokenEnvVar should remain unchanged
-	assert.Equal(t, "HCLOUD_TOKEN", cluster.Spec.Cluster.Hetzner.TokenEnvVar)
+	assert.Equal(t, "HCLOUD_TOKEN", cluster.Spec.Provider.Hetzner.TokenEnvVar)
 }
 
 func TestCluster_ExpandEnvVars_UndefinedVariables(t *testing.T) {
@@ -230,9 +230,9 @@ func TestCluster_ExpandEnvVars_AllFieldsAtOnce(t *testing.T) {
 	cluster.Spec.Chat.Model = "${TEST_CHAT_MODEL}"
 	cluster.Spec.Cluster.Vanilla.MirrorsDir = "${TEST_MIRRORS_DIR}"
 	cluster.Spec.Cluster.Talos.Config = "${TEST_TALOS_CONFIG}"
-	cluster.Spec.Cluster.Hetzner.SSHKeyName = "${TEST_SSH_KEY}"
-	cluster.Spec.Cluster.Hetzner.NetworkName = "${TEST_NETWORK}"
-	cluster.Spec.Cluster.Hetzner.PlacementGroup = "${TEST_PLACEMENT}"
+	cluster.Spec.Provider.Hetzner.SSHKeyName = "${TEST_SSH_KEY}"
+	cluster.Spec.Provider.Hetzner.NetworkName = "${TEST_NETWORK}"
+	cluster.Spec.Provider.Hetzner.PlacementGroup = "${TEST_PLACEMENT}"
 
 	cluster.ExpandEnvVars()
 
@@ -247,9 +247,9 @@ func TestCluster_ExpandEnvVars_AllFieldsAtOnce(t *testing.T) {
 	assert.Equal(t, "claude", cluster.Spec.Chat.Model)
 	assert.Equal(t, "/test/mirrors", cluster.Spec.Cluster.Vanilla.MirrorsDir)
 	assert.Equal(t, "/test/talosconfig", cluster.Spec.Cluster.Talos.Config)
-	assert.Equal(t, "test-ssh", cluster.Spec.Cluster.Hetzner.SSHKeyName)
-	assert.Equal(t, "test-net", cluster.Spec.Cluster.Hetzner.NetworkName)
-	assert.Equal(t, "test-placement", cluster.Spec.Cluster.Hetzner.PlacementGroup)
+	assert.Equal(t, "test-ssh", cluster.Spec.Provider.Hetzner.SSHKeyName)
+	assert.Equal(t, "test-net", cluster.Spec.Provider.Hetzner.NetworkName)
+	assert.Equal(t, "test-placement", cluster.Spec.Provider.Hetzner.PlacementGroup)
 }
 
 func TestCluster_ExpandEnvVars_InvalidSyntax(t *testing.T) {

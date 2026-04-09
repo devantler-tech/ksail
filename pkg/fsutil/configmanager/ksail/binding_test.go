@@ -462,7 +462,7 @@ func TestAddFlagsFromFields_BoolField(t *testing.T) {
 
 			selector := newFieldSelector(
 				func(c *v1alpha1.Cluster) any {
-					return &c.Spec.Cluster.Hetzner.PlacementGroupFallbackToNone
+					return &c.Spec.Provider.Hetzner.PlacementGroupFallbackToNone
 				},
 				testCase.defaultValue,
 				"test bool field",
@@ -477,7 +477,7 @@ func TestAddFlagsFromFields_BoolField(t *testing.T) {
 			require.NoError(t, cmd.Flags().Set("unknown", testCase.setValue))
 			assert.Equal(
 				t, testCase.expected,
-				manager.Config.Spec.Cluster.Hetzner.PlacementGroupFallbackToNone,
+				manager.Config.Spec.Provider.Hetzner.PlacementGroupFallbackToNone,
 			)
 		})
 	}

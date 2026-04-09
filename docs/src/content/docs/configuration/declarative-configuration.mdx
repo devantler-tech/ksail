@@ -35,6 +35,7 @@ spec:
       mirrorsDir: "${MIRRORS_DIR:-mirrors}"
     talos:
       config: "${TALOS_CONFIG_PATH:-~/.talos/config}"
+  provider:
     hetzner:
       sshKeyName: "${HCLOUD_SSH_KEY}"
   workload:
@@ -172,6 +173,7 @@ The `spec` field is a `Spec` object that defines editor, cluster, and workload c
 | ----- | ---- | ------- | ----------- |
 | `editor` | string | – | Editor command for interactive workflows (e.g. code --wait) |
 | `cluster` | ClusterSpec | – |  |
+| `provider` | ProviderSpec | – |  |
 | `workload` | WorkloadSpec | – |  |
 | `chat` | ChatSpec | – |  |
 
@@ -199,8 +201,6 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | `importImages` | string | – | Path to tar archive with container images to import after cluster creation but before component installation |
 | `vanilla` | OptionsVanilla | – |  |
 | `talos` | OptionsTalos | – |  |
-| `hetzner` | OptionsHetzner | – |  |
-| `omni` | OptionsOmni | – |  |
 
 #### distribution
 
@@ -335,7 +335,7 @@ Advanced configuration options are direct fields under `spec.cluster`. See [Sche
 - `config` – Path to talosconfig file (default: `~/.talos/config`)
 - `iso` – Cloud provider ISO/image ID for Talos Linux (default: `122630` for x86; use `122629` for ARM)
 
-**Hetzner options (`spec.cluster.hetzner`):**
+**Hetzner options (`spec.provider.hetzner`):**
 
 - `controlPlaneServerType` – Server type for control-plane nodes (default: `cx23`)
 - `workerServerType` – Server type for worker nodes (default: `cx23`)

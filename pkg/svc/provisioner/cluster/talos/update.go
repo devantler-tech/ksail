@@ -107,22 +107,6 @@ func (p *Provisioner) DiffConfig(
 		})
 	}
 
-	// Check for network CIDR changes (requires recreate)
-	if p.hetznerOpts != nil {
-		oldCIDR := oldSpec.Hetzner.NetworkCIDR
-		newCIDR := newSpec.Hetzner.NetworkCIDR
-
-		if oldCIDR != newCIDR && oldCIDR != "" && newCIDR != "" {
-			result.RecreateRequired = append(result.RecreateRequired, clusterupdate.Change{
-				Field:    "hetzner.networkCidr",
-				OldValue: oldCIDR,
-				NewValue: newCIDR,
-				Category: clusterupdate.ChangeCategoryRecreateRequired,
-				Reason:   "network CIDR change requires PKI regeneration",
-			})
-		}
-	}
-
 	return result, nil
 }
 
@@ -510,7 +494,9 @@ func (p *Provisioner) getDockerNodesByRole(
 
 // GetCurrentConfig retrieves the current cluster configuration by probing the
 // running cluster through the Kubernetes API and Docker/Hetzner/Omni providers.
-func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, error) {
+func (p *Provisioner) GetCurrentConfig(
+	ctx context.Context,
+) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
 	var provider v1alpha1.Provider
 
 	switch {
@@ -550,14 +536,18 @@ func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSp
 		Workers:       workers,
 	}
 
-	// If we have Hetzner options configured
+	// Build provider spec if we have Hetzner options configured.
+	// Hetzner fields (server types, location, network, SSH key) cannot be
+	// introspected from the running cluster, so we echo the desired config
+	// as the baseline — identical to the approach used for NetworkCIDR.
+	var providerSpec *v1alpha1.ProviderSpec
 	if p.hetznerOpts != nil {
-		spec.Hetzner = v1alpha1.OptionsHetzner{
-			NetworkCIDR: p.hetznerOpts.NetworkCIDR,
+		providerSpec = &v1alpha1.ProviderSpec{
+			Hetzner: *p.hetznerOpts,
 		}
 	}
 
-	return spec, nil
+	return spec, providerSpec, nil
 }
 
 // introspectNodeCounts determines the actual control-plane and worker node

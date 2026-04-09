@@ -296,8 +296,8 @@ To test the Hetzner provider locally, you need:
 
 To test the Omni provider locally, you need:
 
-- **`OMNI_SERVICE_ACCOUNT_KEY`** – A Sidero Omni service account key with cluster management permissions. The environment variable name is configurable via `spec.cluster.omni.serviceAccountKeyEnvVar` in `ksail.yaml`.
-- **Omni endpoint** – The URL of your Sidero Omni instance, configured via `spec.cluster.omni.endpoint` in `ksail.yaml` (there is no CLI flag for this value).
+- **`OMNI_SERVICE_ACCOUNT_KEY`** – A Sidero Omni service account key with cluster management permissions. The environment variable name is configurable via `spec.provider.omni.serviceAccountKeyEnvVar` in `ksail.yaml`.
+- **Omni endpoint** – The URL of your Sidero Omni instance, configured via `spec.provider.omni.endpoint` in `ksail.yaml` (there is no CLI flag for this value).
 
 **Note:** Omni requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account and does not run locally. Omni manages the Talos machine lifecycle; `StartNodes` and `StopNodes` are no-ops in the Omni provider.
 

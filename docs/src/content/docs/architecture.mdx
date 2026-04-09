@@ -149,7 +149,7 @@ KSail embeds Kubernetes tools as Go libraries instead of shelling out to CLI too
 
 ### External Dependencies
 
-Only Docker is required externally (as the container runtime for local clusters). Cloud providers require credentials: `HCLOUD_TOKEN` for Hetzner, and a service account key (default env: `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.cluster.omni.serviceAccountKeyEnvVar`) for Omni.
+Only Docker is required externally (as the container runtime for local clusters). Cloud providers require credentials: `HCLOUD_TOKEN` for Hetzner, and a service account key (default env: `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.provider.omni.serviceAccountKeyEnvVar`) for Omni.
 
 ## State Persistence
 

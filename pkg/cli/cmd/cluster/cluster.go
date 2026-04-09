@@ -5343,7 +5343,7 @@ func autoDeleteCluster(
 		Provider:     clusterCfg.Spec.Cluster.Provider,
 	}
 
-	provisioner, err := createDeleteProvisioner(info, clusterCfg.Spec.Cluster.Omni)
+	provisioner, err := createDeleteProvisioner(info, clusterCfg.Spec.Provider.Omni)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
 	}
@@ -5685,7 +5685,7 @@ func computeUpdateDiff(
 	updater clusterprovisioner.Updater,
 	clusterName string,
 ) (*v1alpha1.ClusterSpec, *clusterupdate.UpdateResult, error) {
-	currentSpec, err := updater.GetCurrentConfig(cmd.Context())
+	currentSpec, currentProvider, err := updater.GetCurrentConfig(cmd.Context())
 	if err != nil {
 		return nil, nil, fmt.Errorf(
 			"could not retrieve current cluster configuration: %w", err,
@@ -5697,7 +5697,10 @@ func computeUpdateDiff(
 		ctx.ClusterCfg.Spec.Cluster.Provider,
 	)
 
-	diff := diffEngine.ComputeDiff(currentSpec, &ctx.ClusterCfg.Spec.Cluster)
+	diff := diffEngine.ComputeDiff(
+		currentSpec, &ctx.ClusterCfg.Spec.Cluster,
+		currentProvider, &ctx.ClusterCfg.Spec.Provider,
+	)
 
 	provisionerDiff, diffErr := updater.DiffConfig(
 		cmd.Context(), clusterName, currentSpec, &ctx.ClusterCfg.Spec.Cluster,
@@ -5746,7 +5749,12 @@ func computeSpecOnlyDiff(
 		ctx.ClusterCfg.Spec.Cluster.Provider,
 	)
 
-	return diffEngine.ComputeDiff(currentSpec, &ctx.ClusterCfg.Spec.Cluster)
+	return diffEngine.ComputeDiff(
+		currentSpec,
+		&ctx.ClusterCfg.Spec.Cluster,
+		nil,
+		&ctx.ClusterCfg.Spec.Provider,
+	)
 }
 
 // applyOrReportChanges handles dry-run, recreate-required, no-changes, and

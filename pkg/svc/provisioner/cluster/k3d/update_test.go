@@ -164,11 +164,9 @@ func TestProvisioner_GetCurrentConfig_NoDetector(t *testing.T) {
 	provisioner := k3dprovisioner.NewProvisioner(nil, "")
 	ctx := context.Background()
 
-	spec, err := provisioner.GetCurrentConfig(ctx)
+	spec, _, err := provisioner.GetCurrentConfig(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, spec)
-
-	// Should return default spec
 	assert.Equal(t, v1alpha1.DistributionK3s, spec.Distribution)
 	assert.Equal(t, v1alpha1.ProviderDocker, spec.Provider)
 }
