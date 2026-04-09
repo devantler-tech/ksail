@@ -64,6 +64,9 @@ spec:
     gitOpsEngine: Flux
     cni: Cilium
     metricsServer: Enabled
+  provider:
+    hetzner:
+      location: "fsn1"
   workload:
     sourceDirectory: k8s
 ```
@@ -84,6 +87,9 @@ spec:
     policyEngine: Kyverno
     certManager: Enabled
     metricsServer: Enabled
+  provider:
+    omni:
+      endpoint: "https://<account>.omni.siderolabs.io:443"
   workload:
     sourceDirectory: k8s
 ```

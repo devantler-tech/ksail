@@ -113,12 +113,14 @@ ksail cluster create
 
 Environment variables use the `KSAIL_` prefix and follow the configuration path in uppercase with underscores:
 
-| Setting                     | Environment Variable              |
-|-----------------------------|-----------------------------------|
-| `spec.cluster.distribution` | `KSAIL_SPEC_CLUSTER_DISTRIBUTION` |
-| `spec.cluster.cni`          | `KSAIL_SPEC_CLUSTER_CNI`          |
-| `spec.cluster.gitOpsEngine` | `KSAIL_SPEC_CLUSTER_GITOPSENGINE` |
-| `spec.workload.tag`         | `KSAIL_SPEC_WORKLOAD_TAG`         |
+| Setting                          | Environment Variable                   |
+|----------------------------------|----------------------------------------|
+| `spec.cluster.distribution`      | `KSAIL_SPEC_CLUSTER_DISTRIBUTION`      |
+| `spec.cluster.cni`               | `KSAIL_SPEC_CLUSTER_CNI`               |
+| `spec.cluster.gitOpsEngine`      | `KSAIL_SPEC_CLUSTER_GITOPSENGINE`      |
+| `spec.provider.hetzner.location` | `KSAIL_SPEC_PROVIDER_HETZNER_LOCATION` |
+| `spec.provider.omni.endpoint`    | `KSAIL_SPEC_PROVIDER_OMNI_ENDPOINT`    |
+| `spec.workload.tag`              | `KSAIL_SPEC_WORKLOAD_TAG`              |
 
 ### Distribution Config
 
