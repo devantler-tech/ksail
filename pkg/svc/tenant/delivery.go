@@ -88,10 +88,15 @@ func resolvePlatformRepo(
 func resolveProvider(opts DeliverPROptions) (gitprovider.Provider, error) {
 	token := gitprovider.ResolveToken(opts.GitProvider, opts.GitToken)
 	if token == "" {
+		envHint := strings.ToUpper(opts.GitProvider) + "_TOKEN"
+		if strings.EqualFold(opts.GitProvider, "github") {
+			envHint = "GH_TOKEN, GITHUB_TOKEN"
+		}
+
 		return nil, fmt.Errorf(
-			"%w: set --git-token or the %s environment variable",
+			"%w: set --git-token or one of the %s environment variables",
 			gitprovider.ErrTokenRequired,
-			strings.ToUpper(opts.GitProvider)+"_TOKEN",
+			envHint,
 		)
 	}
 
@@ -275,8 +280,11 @@ func safeRelPath(base, target string) (string, error) {
 	return rel, nil
 }
 
-// sshRemotePattern matches SSH git remote URLs (e.g. git@github.com:owner/repo.git).
+// sshRemotePattern matches SCP-style SSH git remote URLs (e.g. git@github.com:owner/repo.git).
 var sshRemotePattern = regexp.MustCompile(`^[^@]+@[^:]+:([^/]+/[^/]+?)(?:\.git)?$`)
+
+// sshURLPattern matches ssh:// style git remote URLs (e.g. ssh://git@github.com/owner/repo.git).
+var sshURLPattern = regexp.MustCompile(`^ssh://[^@]+@[^/]+/([^/]+/[^/]+?)(?:\.git)?/?$`)
 
 // httpsRemotePattern matches HTTPS git remote URLs (e.g. https://github.com/owner/repo.git).
 var httpsRemotePattern = regexp.MustCompile(`^https?://[^/]+/([^/]+/[^/]+?)(?:\.git)?/?$`)
@@ -304,9 +312,17 @@ func DetectPlatformRepo(ctx context.Context, dir string) (string, error) {
 }
 
 // ParseRemoteURL extracts owner/repo from a git remote URL.
-// Supports SSH (git@host:owner/repo.git) and HTTPS (https://host/owner/repo.git) formats.
+// Supports SCP-style SSH (git@host:owner/repo.git), ssh:// URLs, and HTTPS formats.
 func ParseRemoteURL(remoteURL string) (string, error) {
 	if matches := sshRemotePattern.FindStringSubmatch(
+		remoteURL,
+	); len(
+		matches,
+	) == remotePatternExpectedGroups {
+		return matches[1], nil
+	}
+
+	if matches := sshURLPattern.FindStringSubmatch(
 		remoteURL,
 	); len(
 		matches,

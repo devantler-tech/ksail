@@ -204,6 +204,13 @@ func validateDelivery(delivery, gitProvider string) error {
 			)
 		}
 
+		if !strings.EqualFold(gitProvider, "github") {
+			return fmt.Errorf(
+				"%w: --delivery pr is only supported with --git-provider github",
+				tenant.ErrInvalidDelivery,
+			)
+		}
+
 		return nil
 	default:
 		return fmt.Errorf("%w %q: must be 'commit' or 'pr'", tenant.ErrInvalidDelivery, delivery)

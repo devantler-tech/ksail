@@ -120,7 +120,8 @@ func (g *gitHubProvider) CreateBranch(
 
 	_, resp, err := g.client.Git.CreateRef(ctx, owner, repo, newRef)
 	if err != nil {
-		if resp != nil && resp.StatusCode == http.StatusUnprocessableEntity {
+		if resp != nil && resp.StatusCode == http.StatusUnprocessableEntity &&
+			strings.Contains(err.Error(), "Reference already exists") {
 			return fmt.Errorf("%w: %s", ErrBranchAlreadyExists, branchName)
 		}
 

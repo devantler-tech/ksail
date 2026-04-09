@@ -31,6 +31,16 @@ func TestParseRemoteURL_SSH(t *testing.T) {
 			url:      "git@gitlab.example.com:team/project.git",
 			expected: "team/project",
 		},
+		{
+			name:     "ssh:// URL format",
+			url:      "ssh://git@github.com/my-org/my-repo.git",
+			expected: "my-org/my-repo",
+		},
+		{
+			name:     "ssh:// URL without .git suffix",
+			url:      "ssh://git@github.com/my-org/my-repo",
+			expected: "my-org/my-repo",
+		},
 	}
 
 	for _, testCase := range tests {
