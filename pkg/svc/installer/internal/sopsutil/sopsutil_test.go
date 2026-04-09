@@ -82,7 +82,7 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 	})
 
 	t.Run("auto-detect with no key returns empty without error", func(t *testing.T) {
-		// Prevent local key file lookup from succeeding
+		t.Setenv("TEST_SOPSUTIL_NONEXISTENT_VAR_AUTO_11111", "")
 		t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "keys.txt"))
 
 		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_VAR_AUTO_11111"}
@@ -115,6 +115,7 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 	})
 
 	t.Run("explicitly enabled with no key returns error", func(t *testing.T) {
+		t.Setenv("TEST_SOPSUTIL_NONEXISTENT_VAR_ENABLED_44444", "")
 		t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "keys.txt"))
 
 		enabled := true
