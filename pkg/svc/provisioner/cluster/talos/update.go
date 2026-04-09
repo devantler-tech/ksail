@@ -299,28 +299,9 @@ func (p *Provisioner) applyTalosVersionUpgrade(
 		return fmt.Errorf("listing nodes for version check: %w", err)
 	}
 
-	if len(nodes) == 0 {
-		return nil
-	}
-
-	// Check all nodes for version mismatch to handle partial upgrades.
-	needsUpgrade := false
-
-	var firstRunningTag string
-
-	for _, node := range nodes {
-		tag, versionErr := p.getRunningTalosVersion(ctx, node.IP)
-		if versionErr != nil {
-			return fmt.Errorf("checking running Talos version on %s: %w", node.IP, versionErr)
-		}
-
-		if firstRunningTag == "" {
-			firstRunningTag = tag
-		}
-
-		if tag != desiredTag {
-			needsUpgrade = true
-		}
+	needsUpgrade, firstRunningTag, err := p.checkNodesNeedUpgrade(ctx, nodes, desiredTag)
+	if err != nil {
+		return err
 	}
 
 	if !needsUpgrade {
@@ -355,6 +336,36 @@ func (p *Provisioner) applyTalosVersionUpgrade(
 	})
 
 	return nil
+}
+
+// checkNodesNeedUpgrade checks all nodes for version mismatch to handle partial upgrades.
+func (p *Provisioner) checkNodesNeedUpgrade(
+	ctx context.Context,
+	nodes []nodeWithRole,
+	desiredTag string,
+) (bool, string, error) {
+	if len(nodes) == 0 {
+		return false, "", nil
+	}
+
+	var firstRunningTag string
+
+	for _, node := range nodes {
+		tag, versionErr := p.getRunningTalosVersion(ctx, node.IP)
+		if versionErr != nil {
+			return false, "", fmt.Errorf("checking running Talos version on %s: %w", node.IP, versionErr)
+		}
+
+		if firstRunningTag == "" {
+			firstRunningTag = tag
+		}
+
+		if tag != desiredTag {
+			return true, firstRunningTag, nil
+		}
+	}
+
+	return false, firstRunningTag, nil
 }
 
 // applyRebootRequiredChanges applies changes that require node reboots.
