@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/v72/github"
 )
@@ -23,7 +24,8 @@ type gitHubProvider struct {
 }
 
 func newGitHubProvider(token string) *gitHubProvider {
-	client := github.NewClient(nil).WithAuthToken(token)
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	client := github.NewClient(httpClient).WithAuthToken(token)
 	client.UserAgent = userAgent
 
 	return &gitHubProvider{client: client}
