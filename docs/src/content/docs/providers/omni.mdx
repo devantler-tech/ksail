@@ -225,7 +225,7 @@ ksail cluster backup --output ./backup.tar.gz
 ksail cluster restore --input ./backup.tar.gz
 ```
 
-KSail detects the Omni provider automatically from the server URL (`*.omni.siderolabs.io`) and embeds the correct distribution and provider metadata in the backup archive. This works even when the Omni-generated context name (e.g., `devantler-prod`) doesn't follow KSail's default naming conventions. See [Backup & Restore](/features/#backup--restore) for full details.
+KSail detects the Omni provider automatically from the server URL (`*.omni.siderolabs.io`) and embeds the correct distribution and provider metadata in the backup archive. This works even when the current context name (for example, `devantler-service-account@omni`) doesn't follow KSail's default naming conventions. See [Backup & Restore](/features/#cluster-backup--restore) for full details.
 
 ### Kubeconfig Tokens
 
