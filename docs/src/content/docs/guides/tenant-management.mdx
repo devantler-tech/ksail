@@ -98,13 +98,34 @@ ksail tenant create my-team --type flux \
 
 ### ArgoCD Tenants
 
-ArgoCD tenants generate an AppProject, Application, and argocd-rbac-cm ConfigMap entry:
+ArgoCD tenants generate RBAC isolation manifests, an AppProject, and an Application:
 
 ```bash
 ksail tenant create my-team --type argocd \
   --git-provider github \
   --git-repo my-org/my-team-infra
 ```
+
+```text
+platform/tenants/my-team/
+├── kustomization.yaml
+├── namespace.yaml
+├── serviceaccount.yaml
+├── rolebinding.yaml
+├── project.yaml
+└── app.yaml
+```
+
+Add `--register` to also merge the tenant RBAC policy into the shared `argocd-rbac-cm` ConfigMap:
+
+```bash
+ksail tenant create my-team --type argocd \
+  --git-provider github \
+  --git-repo my-org/my-team-infra \
+  --register
+```
+
+KSail scans the kustomization directory for an `argocd-rbac-cm` ConfigMap (by content, not filename). If found, it merges the tenant policy. If not found, it creates `argocd-rbac-cm.yaml` in the same directory and registers it in `kustomization.yaml`.
 
 ### kubectl Tenants
 
