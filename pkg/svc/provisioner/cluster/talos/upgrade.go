@@ -243,9 +243,9 @@ func (p *Provisioner) rollingUpgradeNodes(
 	)
 
 	// Upgrade workers first, then control-planes.
-	ordered := append(
-		workers,
-		controlPlanes...) //nolint:gocritic // intentional append to new slice
+	ordered := make([]nodeWithRole, 0, len(workers)+len(controlPlanes))
+	ordered = append(ordered, workers...)
+	ordered = append(ordered, controlPlanes...)
 
 	for i, node := range ordered {
 		_, _ = fmt.Fprintf(p.logWriter,
