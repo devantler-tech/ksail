@@ -2,6 +2,18 @@
 
 This project accepts contributions in the form of [**bug reports**](https://github.com/devantler-tech/ksail/issues/new/choose), [**feature requests**](https://github.com/devantler-tech/ksail/issues/new/choose), and **pull requests** (see below). If you are looking to contribute code, please follow the guidelines outlined in this document.
 
+## Your First Contribution
+
+New to KSail? Welcome! Here's how to get started:
+
+1. **Find an issue** — Look for issues labeled [`good first issue`](https://github.com/devantler-tech/ksail/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for beginner-friendly tasks, or [`help wanted`](https://github.com/devantler-tech/ksail/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) for tasks where the maintainers are looking for help.
+2. **Fork & clone** — [Fork the repository](https://github.com/devantler-tech/ksail/fork) and clone it locally.
+3. **Set up your environment** — Follow the [Prerequisites](#prerequisites) section below.
+4. **Make your changes** — Create a branch, implement your fix or feature, and write tests.
+5. **Submit a PR** — Open a pull request against `main` with a clear description of what changed and why.
+
+If you have questions, don't hesitate to ask in [GitHub Discussions](https://github.com/devantler-tech/ksail/discussions).
+
 ## Getting Started
 
 To get started with contributing to KSail, you'll need to set up your development environment, and understand the codebase, the CI setup and its requirements.

@@ -56,21 +56,24 @@ type Info struct {
 	KubeconfigPath string
 }
 
-// DetectInfo detects the distribution and provider from the kubeconfig context.
-// It reads the kubeconfig, determines the distribution from the context name pattern,
-// and detects the provider by analyzing the server endpoint.
-func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
-	// Resolve kubeconfig path (handles empty path, ~ expansion, and relative paths)
+// kubeContext holds the resolved kubeconfig fields needed by DetectInfo.
+type kubeContext struct {
+	kubeconfigPath string
+	contextName    string
+	clusterRef     string
+	serverURL      string
+}
+
+// loadKubeContext resolves the kubeconfig path, loads the file, and extracts
+// the context name, cluster reference, and server URL.
+func loadKubeContext(kubeconfigPath, contextName string) (*kubeContext, error) {
 	resolvedPath, err := ResolveKubeconfigPath(kubeconfigPath)
 	if err != nil {
 		return nil, err
 	}
 
-	kubeconfigPath = resolvedPath
-
-	// Load kubeconfig
 	//nolint:gosec // G304: Intentional file reading from user-provided kubeconfig path
-	configBytes, err := os.ReadFile(kubeconfigPath)
+	configBytes, err := os.ReadFile(resolvedPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kubeconfig: %w", err)
 	}
@@ -80,7 +83,6 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
 	}
 
-	// Resolve context name
 	if contextName == "" {
 		if config.CurrentContext == "" {
 			return nil, ErrNoCurrentContext
@@ -89,26 +91,53 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 		contextName = config.CurrentContext
 	}
 
-	// Get context
-	kubeContext, exists := config.Contexts[contextName]
+	ctx, exists := config.Contexts[contextName]
 	if !exists {
 		return nil, fmt.Errorf("%w: %s", ErrContextNotFound, contextName)
 	}
 
-	// Get cluster
-	cluster, exists := config.Clusters[kubeContext.Cluster]
+	cluster, exists := config.Clusters[ctx.Cluster]
 	if !exists {
-		return nil, fmt.Errorf("%w: %s", ErrClusterNotFound, kubeContext.Cluster)
+		return nil, fmt.Errorf("%w: %s", ErrClusterNotFound, ctx.Cluster)
 	}
 
-	// Detect distribution from context name
-	distribution, clusterName, err := DetectDistributionFromContext(contextName)
+	return &kubeContext{
+		kubeconfigPath: resolvedPath,
+		contextName:    contextName,
+		clusterRef:     ctx.Cluster,
+		serverURL:      cluster.Server,
+	}, nil
+}
+
+// DetectInfo detects the distribution and provider from the kubeconfig context.
+// It reads the kubeconfig, determines the distribution from the context name pattern,
+// and detects the provider by analyzing the server endpoint.
+func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
+	resolved, err := loadKubeContext(kubeconfigPath, contextName)
 	if err != nil {
 		return nil, err
 	}
 
+	// Detect distribution from context name
+	distribution, clusterName, err := DetectDistributionFromContext(resolved.contextName)
+	if err != nil {
+		// Context name didn't match any known pattern. Fall back to server
+		// URL-based detection for cloud providers with distinctive hostnames.
+		if !errors.Is(err, ErrUnknownContextPattern) {
+			return nil, err
+		}
+
+		distribution, clusterName, err = detectFromServerURL(
+			resolved.serverURL,
+			resolved.clusterRef,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Detect provider from server endpoint
-	provider, err := detectProviderFromEndpoint(distribution, cluster.Server, clusterName)
+	provider, err := detectProviderFromEndpoint(distribution, resolved.serverURL, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -117,9 +146,9 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 		Distribution:   distribution,
 		Provider:       provider,
 		ClusterName:    clusterName,
-		Context:        contextName,
-		ServerURL:      cluster.Server,
-		KubeconfigPath: kubeconfigPath,
+		Context:        resolved.contextName,
+		ServerURL:      resolved.serverURL,
+		KubeconfigPath: resolved.kubeconfigPath,
 	}, nil
 }
 
@@ -181,6 +210,44 @@ func DetectDistributionFromContext(contextName string) (v1alpha1.Distribution, s
 	return "", "", fmt.Errorf("%w: %s", ErrUnknownContextPattern, contextName)
 }
 
+// detectFromServerURL infers distribution and cluster name from the server URL
+// when the kubeconfig context name doesn't match any known pattern. This handles
+// cloud providers with distinctive hostnames, such as Sidero Omni whose
+// Kubernetes API proxy URLs end in .omni.siderolabs.io. The kubeconfig cluster
+// reference is used only when endpoint-based detection needs a cluster name.
+func detectFromServerURL(
+	serverURL string,
+	kubeconfigClusterRef string,
+) (v1alpha1.Distribution, string, error) {
+	host, err := extractHostFromURL(serverURL)
+	if err != nil {
+		return "", "", fmt.Errorf(
+			"%w: server URL %q is unrecognizable (kubeconfig cluster reference %q): %w",
+			ErrUnknownContextPattern, serverURL, kubeconfigClusterRef, err,
+		)
+	}
+
+	// Omni endpoints → Talos (Omni only supports Talos)
+	if isOmniEndpoint(host) {
+		// Use the kubeconfig cluster reference as the cluster name since
+		// the context name is a service-account identifier for Omni.
+		clusterName := kubeconfigClusterRef
+		if clusterName == "" {
+			return "", "", fmt.Errorf(
+				"%w: Omni endpoint detected but cluster name is empty",
+				ErrEmptyClusterName,
+			)
+		}
+
+		return v1alpha1.DistributionTalos, clusterName, nil
+	}
+
+	return "", "", fmt.Errorf(
+		"%w: server URL %s does not match any known cloud provider pattern",
+		ErrUnknownContextPattern, serverURL,
+	)
+}
+
 // detectProviderFromEndpoint determines the provider based on the server endpoint URL.
 // For localhost endpoints, returns ProviderDocker.
 // For public IPs, queries cloud provider APIs to verify ownership.
@@ -200,6 +267,11 @@ func detectProviderFromEndpoint(
 	host, err := extractHostFromURL(serverURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse server URL: %w", err)
+	}
+
+	// Check if it's a Sidero Omni endpoint → Omni
+	if isOmniEndpoint(host) {
+		return v1alpha1.ProviderOmni, nil
 	}
 
 	// Check if it's a localhost endpoint → Docker
@@ -224,6 +296,16 @@ func extractHostFromURL(serverURL string) (string, error) {
 	}
 
 	return host, nil
+}
+
+// omniHostSuffix is the DNS suffix for Sidero Omni SaaS endpoints.
+// Omni Kubernetes API proxy URLs follow the pattern:
+// https://<account>.kubernetes.<region>.omni.siderolabs.io
+const omniHostSuffix = ".omni.siderolabs.io"
+
+// isOmniEndpoint checks if the host is a Sidero Omni endpoint.
+func isOmniEndpoint(host string) bool {
+	return strings.HasSuffix(strings.ToLower(host), omniHostSuffix)
 }
 
 // isLocalhost checks if the host is a localhost address.

@@ -57,6 +57,10 @@ runs:
         # Source of truth: pkg/svc/installer/flux/Dockerfile.distribution
         grep '^FROM ' pkg/svc/installer/flux/Dockerfile.distribution | sed 's/^FROM //' >> "$IMAGES_FILE"
 
+        # Append CI test workload images (must match warm-mirror-cache exactly)
+        # See issue #3822 for context.
+        echo "docker.io/traefik/whoami:v1.10" >> "$IMAGES_FILE"
+
         # Deduplicate and sort (must match warm-mirror-cache exactly)
         sort -u "$IMAGES_FILE" > /tmp/unique-images.txt
         mv /tmp/unique-images.txt "$IMAGES_FILE"
