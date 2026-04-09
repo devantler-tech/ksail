@@ -68,9 +68,6 @@ func TestExtractAgeKey(t *testing.T) {
 	}
 }
 
-//go:fix inline
-func boolPtr(v bool) *bool { return new(v) }
-
 func noKeyFileEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "keys.txt"))
@@ -81,7 +78,8 @@ func noKeyFileEnv(t *testing.T) {
 //nolint:paralleltest // Uses t.Setenv
 func TestResolveEnabledAgeKey(t *testing.T) {
 	t.Run("explicitly disabled returns empty without error", func(t *testing.T) {
-		sops := v1alpha1.SOPS{Enabled: new(false)}
+		disabled := false
+		sops := v1alpha1.SOPS{Enabled: &disabled}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
 		require.NoError(t, err)
 		assert.Empty(t, got)
@@ -117,10 +115,8 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_NONEXISTENT_VAR_ENABLED_44444", "")
 		noKeyFileEnv(t)
 
-		sops := v1alpha1.SOPS{
-			Enabled:      new(true),
-			AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_VAR_ENABLED_44444",
-		}
+		enabled := true
+		sops := v1alpha1.SOPS{Enabled: &enabled, AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_VAR_ENABLED_44444"}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
 		require.ErrorIs(t, err, sopsutil.ErrSOPSKeyNotFound)
 		assert.Empty(t, got)
@@ -129,10 +125,8 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_AGE_KEY_ENABLED_55555", testAgeKey)
 		noKeyFileEnv(t)
 
-		sops := v1alpha1.SOPS{
-			Enabled:      new(true),
-			AgeKeyEnvVar: "TEST_SOPSUTIL_AGE_KEY_ENABLED_55555",
-		}
+		enabled := true
+		sops := v1alpha1.SOPS{Enabled: &enabled, AgeKeyEnvVar: "TEST_SOPSUTIL_AGE_KEY_ENABLED_55555"}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
 		require.NoError(t, err)
 		assert.Equal(t, testAgeKey, got)
