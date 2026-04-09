@@ -76,7 +76,7 @@ KSail performs cluster stability checks at two points during installation to pre
 - **Before infrastructure components** (Cilium CNI only): Ensures the Cilium eBPF dataplane has finished programming pod-to-service routing before deploying components like metrics-server that depend on ClusterIP connectivity.
 - **Before GitOps engines**: Ensures API server connectivity has recovered after infrastructure components (MetalLB, Kyverno, cert-manager) register webhooks and CRDs.
 
-Each check performs up to three steps: (1) 5 consecutive successful API server health checks, (2) all kube-system DaemonSets ready, and (3) a short-lived busybox pod confirms TCP connectivity to the API server ClusterIP (Cilium CNI only).
+Each check performs up to three steps: (1) 5 consecutive successful API server health checks, (2) all kube-system DaemonSets ready, and (3) a short-lived busybox pod confirms TCP connectivity to the API server ClusterIP (Cilium CNI only). The in-cluster connectivity check allows up to **3 minutes for VCluster** (vs 2 minutes for other distributions), since VCluster + Cilium eBPF needs extra time to stabilize atop the host cluster's network layer.
 
 If you see `cluster not stable before infrastructure installation`, `cluster not stable after infrastructure installation`, or `in-cluster API connectivity check failed`, check resources and optionally recreate with fewer components:
 
