@@ -36,26 +36,30 @@ func (p *Provisioner) upgradeNodeTalosVersion(
 	}
 
 	// Step 1: Pull the installer image on the node.
-	if pullErr := p.pullInstallerImage(ctx, talosClient, containerd, nodeIP, installerImage); pullErr != nil {
+	pullErr := p.pullInstallerImage(ctx, talosClient, containerd, nodeIP, installerImage)
+	if pullErr != nil {
 		return pullErr
 	}
 
 	// Step 2: Upgrade via LifecycleService.
-	if upgradeErr := p.lifecycleUpgrade(ctx, talosClient, containerd, nodeIP, installerImage); upgradeErr != nil {
+	upgradeErr := p.lifecycleUpgrade(ctx, talosClient, containerd, nodeIP, installerImage)
+	if upgradeErr != nil {
 		return upgradeErr
 	}
 
 	// Step 3: Reboot.
 	_, _ = fmt.Fprintf(p.logWriter, "    Rebooting %s...\n", nodeIP)
 
-	if rebootErr := talosClient.Reboot(ctx); rebootErr != nil {
+	rebootErr := talosClient.Reboot(ctx)
+	if rebootErr != nil {
 		return fmt.Errorf("rebooting node %s: %w", nodeIP, rebootErr)
 	}
 
 	// Step 4: Wait for the node to come back with the desired version.
 	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeIP)
 
-	if waitErr := p.waitForNodeReadyAfterUpgrade(ctx, nodeIP, desiredTag); waitErr != nil {
+	waitErr := p.waitForNodeReadyAfterUpgrade(ctx, nodeIP, desiredTag)
+	if waitErr != nil {
 		return fmt.Errorf("waiting for node %s readiness: %w", nodeIP, waitErr)
 	}
 
@@ -70,7 +74,12 @@ func (p *Provisioner) pullInstallerImage(
 	containerd *common.ContainerdInstance,
 	nodeIP, installerImage string,
 ) error {
-	_, _ = fmt.Fprintf(p.logWriter, "    Pulling installer image %s on %s...\n", installerImage, nodeIP)
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"    Pulling installer image %s on %s...\n",
+		installerImage,
+		nodeIP,
+	)
 
 	stream, err := talosClient.ImageClient.Pull(ctx, &machineapi.ImageServicePullRequest{
 		Containerd: containerd,
@@ -106,17 +115,21 @@ func (p *Provisioner) lifecycleUpgrade(
 ) error {
 	_, _ = fmt.Fprintf(p.logWriter, "    Upgrading %s via LifecycleService...\n", nodeIP)
 
-	stream, err := talosClient.LifecycleClient.Upgrade(ctx, &machineapi.LifecycleServiceUpgradeRequest{
-		Containerd: containerd,
-		Source: &machineapi.InstallArtifactsSource{
-			ImageName: installerImage,
+	stream, err := talosClient.LifecycleClient.Upgrade(
+		ctx,
+		&machineapi.LifecycleServiceUpgradeRequest{
+			Containerd: containerd,
+			Source: &machineapi.InstallArtifactsSource{
+				ImageName: installerImage,
+			},
 		},
-	})
+	)
 	if err != nil {
 		return fmt.Errorf("lifecycle upgrade on %s: %w", nodeIP, err)
 	}
 
-	if drainErr := drainUpgradeStream(stream, p.logWriter, nodeIP); drainErr != nil {
+	drainErr := drainUpgradeStream(stream, p.logWriter, nodeIP)
+	if drainErr != nil {
 		return drainErr
 	}
 
@@ -152,7 +165,12 @@ func drainUpgradeStream(
 			_, _ = fmt.Fprintf(logWriter, "      %s: %s\n", nodeIP, msg.Message)
 		case *machineapi.LifecycleServiceInstallProgress_ExitCode:
 			if msg.ExitCode != 0 {
-				return fmt.Errorf("node %s exit code %d: %w", nodeIP, msg.ExitCode, ErrUpgradeFailed)
+				return fmt.Errorf(
+					"node %s exit code %d: %w",
+					nodeIP,
+					msg.ExitCode,
+					ErrUpgradeFailed,
+				)
 			}
 		}
 	}
@@ -160,7 +178,10 @@ func drainUpgradeStream(
 
 // waitForNodeReadyAfterUpgrade polls a node's Talos API until it responds with
 // the desired version tag, indicating the node has rebooted into the new OS.
-func (p *Provisioner) waitForNodeReadyAfterUpgrade(ctx context.Context, nodeIP, desiredTag string) error {
+func (p *Provisioner) waitForNodeReadyAfterUpgrade(
+	ctx context.Context,
+	nodeIP, desiredTag string,
+) error {
 	deadline := time.Now().Add(clusterReadinessTimeout)
 
 	// Short delay to allow the node to begin rebooting before we start polling.
@@ -211,10 +232,15 @@ func (p *Provisioner) rollingUpgradeNodes(
 
 	// Sort for deterministic ordering.
 	sort.Slice(workers, func(i, j int) bool { return workers[i].IP < workers[j].IP })
-	sort.Slice(controlPlanes, func(i, j int) bool { return controlPlanes[i].IP < controlPlanes[j].IP })
+	sort.Slice(
+		controlPlanes,
+		func(i, j int) bool { return controlPlanes[i].IP < controlPlanes[j].IP },
+	)
 
 	// Upgrade workers first, then control-planes.
-	ordered := append(workers, controlPlanes...) //nolint:gocritic // intentional append to new slice
+	ordered := append(
+		workers,
+		controlPlanes...) //nolint:gocritic // intentional append to new slice
 
 	for i, node := range ordered {
 		_, _ = fmt.Fprintf(p.logWriter,
@@ -222,7 +248,8 @@ func (p *Provisioner) rollingUpgradeNodes(
 			i+1, len(ordered), node.IP, node.Role,
 		)
 
-		if upgradeErr := p.upgradeNodeTalosVersion(ctx, node.IP, installerImage, desiredTag); upgradeErr != nil {
+		upgradeErr := p.upgradeNodeTalosVersion(ctx, node.IP, installerImage, desiredTag)
+		if upgradeErr != nil {
 			return fmt.Errorf("upgrading node %s (%s): %w", node.IP, node.Role, upgradeErr)
 		}
 

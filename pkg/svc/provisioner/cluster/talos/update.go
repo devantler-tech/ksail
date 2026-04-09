@@ -66,7 +66,8 @@ func (p *Provisioner) Update(
 	}
 
 	// Handle Talos OS version upgrade (skipped internally for Omni clusters).
-	if upgradeErr := p.applyTalosVersionUpgrade(ctx, clusterName, result); upgradeErr != nil {
+	upgradeErr := p.applyTalosVersionUpgrade(ctx, clusterName, result)
+	if upgradeErr != nil {
 		return result, fmt.Errorf("failed to apply Talos version upgrade: %w", upgradeErr)
 	}
 
@@ -315,7 +316,8 @@ func (p *Provisioner) applyTalosVersionUpgrade(
 
 	installerImage := installerImageFromTag(desiredTag)
 
-	if upgradeErr := p.rollingUpgradeNodes(ctx, clusterName, installerImage, desiredTag); upgradeErr != nil {
+	upgradeErr := p.rollingUpgradeNodes(ctx, clusterName, installerImage, desiredTag)
+	if upgradeErr != nil {
 		result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
 			Field:    "talos.version",
 			OldValue: firstRunningTag,
@@ -353,7 +355,11 @@ func (p *Provisioner) checkNodesNeedUpgrade(
 	for _, node := range nodes {
 		tag, versionErr := p.getRunningTalosVersion(ctx, node.IP)
 		if versionErr != nil {
-			return false, "", fmt.Errorf("checking running Talos version on %s: %w", node.IP, versionErr)
+			return false, "", fmt.Errorf(
+				"checking running Talos version on %s: %w",
+				node.IP,
+				versionErr,
+			)
 		}
 
 		if firstRunningTag == "" {

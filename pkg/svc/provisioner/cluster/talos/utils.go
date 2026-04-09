@@ -103,9 +103,9 @@ func (p *Provisioner) getRunningTalosVersion(ctx context.Context, nodeIP string)
 		return "", fmt.Errorf("querying Talos version on %s: %w", nodeIP, err)
 	}
 
-	if len(resp.Messages) == 0 || resp.Messages[0].Version == nil {
+	if len(resp.GetMessages()) == 0 || resp.GetMessages()[0].GetVersion() == nil {
 		return "", fmt.Errorf("node %s: %w", nodeIP, ErrEmptyVersionResponse)
 	}
 
-	return resp.Messages[0].Version.Tag, nil
+	return resp.GetMessages()[0].GetVersion().GetTag(), nil
 }
