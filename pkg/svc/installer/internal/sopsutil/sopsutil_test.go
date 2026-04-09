@@ -78,7 +78,6 @@ func noKeyFileEnv(t *testing.T) {
 // TestResolveEnabledAgeKey verifies all branches of the enable/disable/auto-detect logic.
 func TestResolveEnabledAgeKey(t *testing.T) {
 	t.Run("explicitly disabled returns empty without error", func(t *testing.T) {
-		t.Parallel()
 		sops := v1alpha1.SOPS{Enabled: boolPtr(false)}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
 		require.NoError(t, err)
