@@ -1,10 +1,12 @@
 package talosprovisioner
 
 import (
+	"context"
 	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // nthIPInNetwork returns the nth IP in the network (1-indexed).
@@ -54,4 +56,56 @@ func getStateDirectory() (string, error) {
 	}
 
 	return stateDir, nil
+}
+
+// extractTagFromImage extracts the tag from a container image reference.
+// For example, "ghcr.io/siderolabs/talos:v1.13.0-beta.1" returns "v1.13.0-beta.1".
+// Returns empty string if no tag is present.
+func extractTagFromImage(image string) string {
+	// Handle digest references (image@sha256:...)
+	if idx := strings.LastIndex(image, "@"); idx != -1 {
+		image = image[:idx]
+	}
+
+	if idx := strings.LastIndex(image, ":"); idx != -1 {
+		tag := image[idx+1:]
+		// Ensure we're not splitting on a port number (e.g., "localhost:5000/image")
+		if !strings.Contains(tag, "/") {
+			return tag
+		}
+	}
+
+	return ""
+}
+
+// installerImageRepository is the OCI repository for the Talos installer image.
+// The installer is distinct from the node image and contains the OS assets used
+// by the LifecycleService API to perform in-place upgrades.
+const installerImageRepository = "ghcr.io/siderolabs/installer"
+
+// installerImageFromTag constructs a Talos installer image reference from a version tag.
+// The installer image is used by the LifecycleService API for upgrades.
+func installerImageFromTag(tag string) string {
+	return installerImageRepository + ":" + tag
+}
+
+// getRunningTalosVersion queries a Talos node for its running version tag.
+func (p *Provisioner) getRunningTalosVersion(ctx context.Context, nodeIP string) (string, error) {
+	talosClient, err := p.createTalosClient(ctx, nodeIP)
+	if err != nil {
+		return "", fmt.Errorf("version check for node %s: %w", nodeIP, err)
+	}
+
+	defer talosClient.Close() //nolint:errcheck
+
+	resp, err := talosClient.Version(ctx)
+	if err != nil {
+		return "", fmt.Errorf("querying Talos version on %s: %w", nodeIP, err)
+	}
+
+	if len(resp.GetMessages()) == 0 || resp.GetMessages()[0].GetVersion() == nil {
+		return "", fmt.Errorf("node %s: %w", nodeIP, ErrEmptyVersionResponse)
+	}
+
+	return resp.GetMessages()[0].GetVersion().GetTag(), nil
 }
