@@ -599,7 +599,7 @@ func (g *Generator) generateEnvironmentConfigDocument(
 # See: https://www.talos.dev/v1.13/talos-guides/configuration/environment-variables/
 apiVersion: v1alpha1
 kind: EnvironmentConfig
-variables: {}
+variables:
   # Example: Configure HTTP proxy for outbound traffic
   # HTTP_PROXY: "http://proxy.example.com:8080"
   # HTTPS_PROXY: "http://proxy.example.com:8080"

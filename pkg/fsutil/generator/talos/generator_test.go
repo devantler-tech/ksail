@@ -718,7 +718,7 @@ func TestGenerator_Generate_EnvironmentConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "apiVersion: v1alpha1")
 	assert.Contains(t, string(content), "kind: EnvironmentConfig")
-	assert.Contains(t, string(content), "variables: {}")
+	assert.Contains(t, string(content), "variables:")
 	// Verify commented examples are included
 	assert.Contains(t, string(content), "HTTP_PROXY")
 	assert.Contains(t, string(content), "HTTPS_PROXY")
