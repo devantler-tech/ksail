@@ -194,7 +194,8 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		// Unified node counts for all distributions
 		&m.Config.Spec.Cluster.Talos.ControlPlanes:     "control-planes",
 		&m.Config.Spec.Cluster.Talos.Workers:           "workers",
-		&m.Config.Spec.Cluster.Talos.ImageVerification: "image-verification",
+		&m.Config.Spec.Cluster.Talos.ImageVerification:  "image-verification",
+		&m.Config.Spec.Cluster.Talos.EnvironmentConfig: "environment-config",
 	}
 }
 
