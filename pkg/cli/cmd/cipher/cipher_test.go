@@ -933,14 +933,14 @@ func TestNewRotateCmd(t *testing.T) {
 	}
 
 	// Verify flags are registered
-	newKeyFlag := cmd.Flags().Lookup("new-key")
+	newKeyFlag := cmd.Flags().Lookup("add-key")
 	if newKeyFlag == nil {
-		t.Error("expected new-key flag to be registered")
+		t.Error("expected add-key flag to be registered")
 	}
 
-	oldKeyFlag := cmd.Flags().Lookup("old-key")
+	oldKeyFlag := cmd.Flags().Lookup("remove-key")
 	if oldKeyFlag == nil {
-		t.Error("expected old-key flag to be registered")
+		t.Error("expected remove-key flag to be registered")
 	}
 
 	recursiveFlag := cmd.Flags().Lookup("recursive")
