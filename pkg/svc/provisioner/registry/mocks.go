@@ -7,7 +7,7 @@ package registry
 import (
 	"context"
 
-	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v6/pkg/client/docker"
 	mock "github.com/stretchr/testify/mock"
 )
 

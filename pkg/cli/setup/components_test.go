@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
-	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/setup"
+	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/installer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

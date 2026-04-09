@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	runner "github.com/devantler-tech/ksail/v5/pkg/runner"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	runner "github.com/devantler-tech/ksail/v6/pkg/runner"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 	nodecommand "github.com/k3d-io/k3d/v5/cmd/node"
 )
 

@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/envvar"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil/validator"
+	"github.com/devantler-tech/ksail/v6/pkg/envvar"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil/marshaller"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil/validator"
 )
 
 // Configuration validation errors.

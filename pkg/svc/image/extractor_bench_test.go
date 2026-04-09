@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/image"
 )
 
 // smallManifest is a minimal single-Pod manifest with 1 init container and 2 containers (3 images).

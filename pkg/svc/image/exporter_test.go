@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
+	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/image"
 	"github.com/docker/docker/api/types/container"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

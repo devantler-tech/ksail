@@ -1,6 +1,6 @@
 goos: linux
 goarch: amd64
-pkg: github.com/devantler-tech/ksail/v5/pkg/client/argocd
+pkg: github.com/devantler-tech/ksail/v6/pkg/client/argocd
 cpu: AMD EPYC 7763 64-Core Processor                
 BenchmarkEnsureOptions/Minimal-4         	550357982	         2.182 ns/op	       0 B/op	       0 allocs/op
 BenchmarkEnsureOptions/WithApplicationName-4         	550528371	         2.180 ns/op	       0 B/op	       0 allocs/op
@@ -17,4 +17,4 @@ BenchmarkManagerUpdateTargetRevision/WithHardRefresh-4         	   60986	     19
 BenchmarkManagerUpdateTargetRevision/HardRefreshOnly-4         	   60470	     19257 ns/op	   11123 B/op	      86 allocs/op
 BenchmarkNewManager-4                                          	31696992	        36.07 ns/op	      32 B/op	       1 allocs/op
 PASS
-ok  	github.com/devantler-tech/ksail/v5/pkg/client/argocd	36.255s
+ok  	github.com/devantler-tech/ksail/v6/pkg/client/argocd	36.255s

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v5/pkg/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/timer"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	"github.com/devantler-tech/ksail/v6/pkg/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )

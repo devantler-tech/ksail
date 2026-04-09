@@ -1,6 +1,6 @@
 goos: linux
 goarch: amd64
-pkg: github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1
+pkg: github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1
 cpu: AMD EPYC 9V74 80-Core Processor                
 BenchmarkCluster_MarshalYAML/Minimal-4         	  138902	     26335 ns/op	    6880 B/op	     179 allocs/op
 BenchmarkCluster_MarshalYAML/WithBasicConfig-4 	  139065	     25770 ns/op	    6880 B/op	     179 allocs/op
@@ -17,4 +17,4 @@ BenchmarkPruneClusterDefaults/MostlyDefaults-4               	  244219	     1455
 BenchmarkPruneClusterDefaults/MixedDefaultsAndCustom-4       	  243889	     14545 ns/op	    3696 B/op	     117 allocs/op
 BenchmarkPruneClusterDefaults/AllCustomValues-4              	  247639	     14448 ns/op	    3696 B/op	     117 allocs/op
 PASS
-ok  	github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1	53.932s
+ok  	github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1	53.932s

@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
-	"github.com/devantler-tech/ksail/v5/pkg/di"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v5/pkg/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/confirm"
+	"github.com/devantler-tech/ksail/v6/pkg/di"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/tenant"
 	"github.com/spf13/cobra"
 )
 

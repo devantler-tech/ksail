@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
+	"github.com/devantler-tech/ksail/v6/pkg/client/kubeconform"
 )
 
 const validNamespaceYAML = `apiVersion: v1

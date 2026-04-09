@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v6/pkg/notify"
 	"github.com/gkampitakis/go-snaps/snaps"
 )
 

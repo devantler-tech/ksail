@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v5/pkg/k8s"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/helmutil"
+	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v6/pkg/k8s"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/installer/internal/helmutil"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

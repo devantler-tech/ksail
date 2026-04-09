@@ -7,12 +7,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	argocdgitops "github.com/devantler-tech/ksail/v5/pkg/client/argocd"
-	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
-	argocdinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/argocd"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	argocdgitops "github.com/devantler-tech/ksail/v6/pkg/client/argocd"
+	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/installer"
+	argocdinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/argocd"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
 )
 
 // InstallArgoCDSilent installs ArgoCD silently for parallel execution.

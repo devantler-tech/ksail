@@ -3,7 +3,7 @@ package oci
 import (
 	"context"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 )
 
 // Default naming constants.

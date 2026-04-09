@@ -3,7 +3,7 @@ package chat_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/chat"
 )
 
 // TestDefaultKeyMap tests that the default keymap is correctly configured.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
 	"github.com/docker/docker/client"
 )
 

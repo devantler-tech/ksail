@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	generator "github.com/devantler-tech/ksail/v5/pkg/fsutil/generator/kustomization"
-	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/fsutil/generator/yaml"
+	generator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/kustomization"
+	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kustomize/api/types"

@@ -1,6 +1,6 @@
 package setup
 
-import "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+import "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 
 // NeedsInClusterConnectivityCheck exports needsInClusterConnectivityCheck for testing.
 //

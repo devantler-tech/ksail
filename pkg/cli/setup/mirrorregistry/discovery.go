@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )

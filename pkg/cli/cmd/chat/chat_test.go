@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/chat"
-	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
-	"github.com/devantler-tech/ksail/v5/pkg/toolgen"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd/chat"
+	chatui "github.com/devantler-tech/ksail/v6/pkg/cli/ui/chat"
+	"github.com/devantler-tech/ksail/v6/pkg/toolgen"
 	copilot "github.com/github/copilot-sdk/go"
 )
 

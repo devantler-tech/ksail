@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
-	dockerprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
+	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
+	dockerprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/docker"
 	"github.com/docker/docker/client"
 )
 

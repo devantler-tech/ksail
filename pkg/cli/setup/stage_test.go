@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
-	"github.com/devantler-tech/ksail/v5/pkg/timer"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/setup"
+	"github.com/devantler-tech/ksail/v6/pkg/timer"
 	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"

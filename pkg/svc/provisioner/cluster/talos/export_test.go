@@ -3,9 +3,9 @@ package talosprovisioner
 import (
 	"context"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	omniprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.

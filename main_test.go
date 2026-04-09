@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/internal/buildmeta"
+	"github.com/devantler-tech/ksail/v6/internal/buildmeta"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/assert"
 )

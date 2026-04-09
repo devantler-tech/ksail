@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v5/pkg/k8s"
-	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
-	omniprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v6/pkg/k8s"
+	"github.com/devantler-tech/ksail/v6/pkg/k8s/readiness"
+	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
 )
 
 const (
