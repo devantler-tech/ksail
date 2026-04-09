@@ -1,8 +1,8 @@
 {
-  "last_run": "2026-04-08T12:36:21Z",
-  "last_run_id": "24135556025",
-  "tasks_run": [2, 4, 5, 13],
-  "issue_backlog_cursor": 3799,
+  "last_run": "2026-04-09T00:49:25Z",
+  "last_run_id": "24166457203",
+  "tasks_run": [11, 2, 5, 13],
+  "issue_backlog_cursor": 3830,
   "commented_issues": {
     "3591": "2026-04-04T07:39:21Z",
     "3592": "2026-04-04T07:39:21Z",
@@ -16,14 +16,14 @@
     "3729": "2026-04-07T00:57:30Z",
     "3730": "2026-04-07T00:57:30Z",
     "3765": "2026-04-07T12:36:49Z",
-    "3783": "2026-04-08T00:58:18Z"
+    "3783": "2026-04-08T00:58:18Z",
+    "3414": "2026-04-09T00:49:25Z",
+    "3574": "2026-04-09T00:49:25Z"
   },
-  "open_prs": {
-    "pending_3797_fix": "branch: repo-assist/fix-restore-already-allocated-error, commit: e6c73b03, not yet pushed (safeoutputs MCP unavailable)"
-  },
+  "open_prs": {},
   "domain_alternation": {
-    "last_domain": "test",
-    "next_domain": "refactor"
+    "last_domain": "refactor",
+    "next_domain": "perf"
   },
   "monthly_activity_issue": "2026-04",
   "monthly_activity_issue_number": "3605",
@@ -59,10 +59,15 @@
     "3732": "[kata]: evaluate vCluster v0.30+ standalone mode for KSail VCluster distribution",
     "3733": "[feature]: extend --timeout flag to all long-running cluster and workload commands",
     "3795": "[chore]: migrate Talos scaffolding to EnvironmentConfig document (Talos 1.13)",
-    "3796": "[feature]: add `ksail cipher rotate` for SOPS Age key rotation"
+    "3796": "[feature]: add `ksail cipher rotate` for SOPS Age key rotation",
+    "NEW": "[chore]: audit copilot-sdk/go v0.2.0 capabilities for ksail chat improvements"
   },
   "closed_issues": {
     "3730": "closed 2026-04-07 (superseded by merged PR #3745)"
   },
-  "notes": "Available labels: blocked, released, next, automation, documentation, repo-assist, bug, ci, dependencies, github_actions, javascript, agentic-workflows. safeoutputs MCP was completely unavailable this run (all calls returned 'session not found'). Could not create PR or post comments. Branch repo-assist/fix-restore-already-allocated-error has the fix for #3797 (classifyRestoreError 'already allocated' bug) committed at e6c73b03 but NOT pushed. Next run should attempt to push this as a PR. Issues #3794 and #3799 bugs are now fixed in main (pipefail tar|grep-q fixed in action.yaml; Omni context name uses empty string in waitForOmniAPIServerReady). Issues that need comments next run: #3794 (confirm fix merged), #3799 (confirm Omni fix merged). Monthly activity issue #3605 needs update. Open PRs (from daily-docs): #3801, #3802."
+  "roadmap_dedup_checked": {
+    "3518": "MCP Registry - already closed as completed",
+    "3575": "ImageVerificationConfig scaffolding - already closed as completed"
+  },
+  "notes": "Task 11: Created issue for copilot-sdk v0.2.0 audit. Attempted to create MCP Registry issue (aw_mcp001) and ImageVerificationConfig issue (aw_imgv01) but both were duplicates of closed issues (#3518, #3575 resp.) - closed immediately via update_issue with temporary_id. Task 2: Commented on #3414 (platform registration) and #3574 (LifecycleService migration). Task 5 refactor: Created PR refactor(installer): extract BuildSopsAgeSecret into shared sopsutil package (branch: repo-assist/refactor-sops-age-secret-builder). Domain alternation: last=refactor, next=perf. Monthly activity issue #3605 updated. Open issues needing attention: #3794 (tar|grep-q bug), #3738 (provider config refactor). Roadmap NOW items already tracked: #3491 ArgoCD SOPS, #3492 Gateway API guide, #3106 selective reconcile, #3130 cluster diff UX, #3427 multi-env guide, #3574 LifecycleService API, #3795 EnvironmentConfig. NEXT items: #3107 profiles, #2810 Omni CI, #2246/#3772 loft-sh/log removal, #2261 VCluster D-Bus."
 }
