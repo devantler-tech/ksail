@@ -25,7 +25,7 @@ func (p *Provisioner) upgradeNodeTalosVersion(
 ) error {
 	talosClient, err := p.createTalosClient(ctx, nodeIP)
 	if err != nil {
-		return fmt.Errorf("creating talos client: %w", err)
+		return fmt.Errorf("creating talos client for node %s: %w", nodeIP, err)
 	}
 
 	defer talosClient.Close() //nolint:errcheck
@@ -192,7 +192,12 @@ func (p *Provisioner) waitForNodeReadyAfterUpgrade(
 	}
 
 	for time.Now().Before(deadline) {
-		tag, err := p.getRunningTalosVersion(ctx, nodeIP)
+		pollCtx, pollCancel := context.WithTimeout(ctx, retryInterval)
+
+		tag, err := p.getRunningTalosVersion(pollCtx, nodeIP)
+
+		pollCancel()
+
 		if err == nil && tag == desiredTag {
 			return nil
 		}

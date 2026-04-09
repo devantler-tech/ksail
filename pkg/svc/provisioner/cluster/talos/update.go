@@ -341,6 +341,7 @@ func (p *Provisioner) applyTalosVersionUpgrade(
 }
 
 // checkNodesNeedUpgrade checks all nodes for version mismatch to handle partial upgrades.
+// Returns the first mismatched tag so the update result accurately reflects the old version.
 func (p *Provisioner) checkNodesNeedUpgrade(
 	ctx context.Context,
 	nodes []nodeWithRole,
@@ -349,8 +350,6 @@ func (p *Provisioner) checkNodesNeedUpgrade(
 	if len(nodes) == 0 {
 		return false, "", nil
 	}
-
-	var firstRunningTag string
 
 	for _, node := range nodes {
 		tag, versionErr := p.getRunningTalosVersion(ctx, node.IP)
@@ -362,16 +361,12 @@ func (p *Provisioner) checkNodesNeedUpgrade(
 			)
 		}
 
-		if firstRunningTag == "" {
-			firstRunningTag = tag
-		}
-
 		if tag != desiredTag {
-			return true, firstRunningTag, nil
+			return true, tag, nil
 		}
 	}
 
-	return false, firstRunningTag, nil
+	return false, desiredTag, nil
 }
 
 // applyRebootRequiredChanges applies changes that require node reboots.
