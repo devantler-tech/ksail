@@ -116,7 +116,10 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 		noKeyFileEnv(t)
 
 		enabled := true
-		sops := v1alpha1.SOPS{Enabled: &enabled, AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_VAR_ENABLED_44444"}
+		sops := v1alpha1.SOPS{
+			Enabled:      &enabled,
+			AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_VAR_ENABLED_44444",
+		}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
 		require.ErrorIs(t, err, sopsutil.ErrSOPSKeyNotFound)
 		assert.Empty(t, got)
@@ -126,7 +129,10 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 		noKeyFileEnv(t)
 
 		enabled := true
-		sops := v1alpha1.SOPS{Enabled: &enabled, AgeKeyEnvVar: "TEST_SOPSUTIL_AGE_KEY_ENABLED_55555"}
+		sops := v1alpha1.SOPS{
+			Enabled:      &enabled,
+			AgeKeyEnvVar: "TEST_SOPSUTIL_AGE_KEY_ENABLED_55555",
+		}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
 		require.NoError(t, err)
 		assert.Equal(t, testAgeKey, got)
