@@ -5,7 +5,8 @@ import (
 	"strings"
 )
 
-// ImageVerification defines image verification options for Talos distributions.
+// ImageVerification defines image verification options for supported distributions.
+// Talos uses a native ImageVerificationConfig document; Kind uses containerd config patches.
 type ImageVerification string
 
 const (

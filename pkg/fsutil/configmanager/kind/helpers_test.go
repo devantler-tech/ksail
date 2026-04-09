@@ -235,3 +235,61 @@ func TestApplyKubeletCertRotationPatches(t *testing.T) {
 		assert.Equal(t, kind.KubeletCertRotationPatch, kindConfig.Nodes[0].KubeadmConfigPatches[1])
 	})
 }
+
+func TestApplyImageVerificationPatches(t *testing.T) {
+	t.Parallel()
+
+	t.Run("adds_containerd_config_patch_to_empty_cluster", func(t *testing.T) {
+		t.Parallel()
+
+		kindConfig := &kindv1alpha4.Cluster{}
+
+		kind.ApplyImageVerificationPatches(kindConfig)
+
+		assert.Len(t, kindConfig.ContainerdConfigPatches, 1)
+		assert.Contains(
+			t,
+			kindConfig.ContainerdConfigPatches[0],
+			`io.containerd.image-verifier.v1.bindir`,
+		)
+		assert.Contains(t, kindConfig.ContainerdConfigPatches[0], `bin_dir`)
+		assert.Contains(t, kindConfig.ContainerdConfigPatches[0], `max_verifiers`)
+		assert.Contains(t, kindConfig.ContainerdConfigPatches[0], `per_verifier_timeout`)
+	})
+
+	t.Run("appends_to_existing_containerd_patches", func(t *testing.T) {
+		t.Parallel()
+
+		kindConfig := &kindv1alpha4.Cluster{
+			ContainerdConfigPatches: []string{"existing-patch"},
+		}
+
+		kind.ApplyImageVerificationPatches(kindConfig)
+
+		assert.Len(t, kindConfig.ContainerdConfigPatches, 2)
+		assert.Equal(t, "existing-patch", kindConfig.ContainerdConfigPatches[0])
+		assert.Equal(t, kind.ImageVerificationPatch, kindConfig.ContainerdConfigPatches[1])
+	})
+
+	t.Run("patch_equals_exported_constant", func(t *testing.T) {
+		t.Parallel()
+
+		kindConfig := &kindv1alpha4.Cluster{}
+
+		kind.ApplyImageVerificationPatches(kindConfig)
+
+		assert.Equal(t, kind.ImageVerificationPatch, kindConfig.ContainerdConfigPatches[0])
+	})
+
+	t.Run("idempotent_does_not_duplicate_patch", func(t *testing.T) {
+		t.Parallel()
+
+		kindConfig := &kindv1alpha4.Cluster{}
+
+		kind.ApplyImageVerificationPatches(kindConfig)
+		kind.ApplyImageVerificationPatches(kindConfig)
+
+		assert.Len(t, kindConfig.ContainerdConfigPatches, 1,
+			"calling ApplyImageVerificationPatches twice should not duplicate the patch")
+	})
+}

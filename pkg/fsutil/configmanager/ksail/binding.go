@@ -191,7 +191,7 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		&m.Config.Spec.Cluster.LocalRegistry.Registry: "local-registry",
 		&m.Config.Spec.Cluster.ImportImages:           "import-images",
 
-		// Unified node counts for all distributions
+		// Unified options for all distributions (stored in Talos struct for historical reasons)
 		&m.Config.Spec.Cluster.Talos.ControlPlanes:     "control-planes",
 		&m.Config.Spec.Cluster.Talos.Workers:           "workers",
 		&m.Config.Spec.Cluster.Talos.ImageVerification: "image-verification",

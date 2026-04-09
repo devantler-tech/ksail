@@ -203,13 +203,15 @@ func DefaultImportImagesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
-// ImageVerificationFieldSelector creates a field selector for Talos image verification.
+// ImageVerificationFieldSelector creates a field selector for image verification.
 func ImageVerificationFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
 			return &c.Spec.Cluster.Talos.ImageVerification
 		},
-		Description:  "Talos image verification (Enabled: scaffold ImageVerificationConfig template, Disabled: skip)",
+		Description: "Image verification (Talos: scaffold ImageVerificationConfig template; " +
+			"Vanilla/Kind: inject containerd verifier plugin patch, requires verifier binaries/policy; " +
+			"Disabled: skip)",
 		DefaultValue: v1alpha1.ImageVerificationDisabled,
 	}
 }

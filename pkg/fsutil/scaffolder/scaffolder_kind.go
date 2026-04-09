@@ -71,6 +71,11 @@ func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
 		kindconfigmanager.ApplyKubeletCertRotationPatches(kindConfig)
 	}
 
+	// Enable containerd image verifier plugin when image verification is enabled.
+	if s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
+		kindconfigmanager.ApplyImageVerificationPatches(kindConfig)
+	}
+
 	// Apply node counts from CLI flags (stored in Talos options)
 	s.applyKindNodeCounts(kindConfig)
 
