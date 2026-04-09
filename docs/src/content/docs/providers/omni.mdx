@@ -219,6 +219,15 @@ ksail cluster update
 
 Applies in-place changes to components (CNI, GitOps engine, cert-manager, etc.). Node scaling changes are **skipped** for Omni-managed clusters — Omni manages node lifecycle externally. Add or remove machines via the [Omni web UI](https://omni.siderolabs.com/) or Omni CLI instead. See the [Update Behavior table](/support-matrix/#update-behavior) for details.
 
+### Backup & Restore
+
+```bash
+ksail cluster backup --output ./backup.tar.gz
+ksail cluster restore --input ./backup.tar.gz
+```
+
+KSail detects the Omni provider automatically from the server URL (`*.omni.siderolabs.io`) and embeds the correct distribution and provider metadata in the backup archive. This works even when the current context name (for example, `devantler-service-account@omni`) doesn't follow KSail's default naming conventions. See [Backup & Restore](/features/#cluster-backup--restore) for full details.
+
 ### Kubeconfig Tokens
 
 KSail automatically refreshes your Omni kubeconfig token before it expires. Tokens have a **30-day TTL** and are renewed transparently before any CLI command runs (when the token has 5 minutes or less remaining). No manual action is required.
