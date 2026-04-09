@@ -101,7 +101,7 @@ Onboard teams to a shared Kubernetes cluster with RBAC isolation, GitOps sync re
 ksail tenant create my-team \
   --type flux \
   --registry oci://ghcr.io \
-  --git-repo my-org/my-team \
+  --tenant-repo my-org/my-team \
   --namespace my-team \
   --output ./platform/tenants \
   --register
@@ -112,13 +112,14 @@ ksail tenant delete my-team \
   --output ./platform/tenants \
   --delete-repo \
   --git-provider github \
-  --git-repo my-org/my-team
+  --tenant-repo my-org/my-team
 ```
 
 - **Auto-detection:** Tenant type is auto-detected from `gitOpsEngine` in `ksail.yaml` when `--type` is omitted.
 - **Registration:** Pass `--register` to automatically add the tenant to the nearest `kustomization.yaml`.
-- **GitHub scaffolding:** Use `--git-provider github` and `--git-repo` to scaffold a tenant repo. The token is auto-resolved from `--git-token`, `GH_TOKEN`/`GITHUB_TOKEN` env vars, or GitHub CLI config (`gh auth login`). If no token is found, scaffolding is skipped with a warning and the command succeeds.
-- **Flux OCI:** `--git-repo` is required for Flux OCI sync sources even without scaffolding — it builds the `OCIRepository` URL.
+- **PR delivery:** Pass `--delivery pr --git-provider github` to open a pull request against the platform repo instead of committing directly. The platform repo is auto-detected from `git remote origin`; override with `--platform-repo`. Set the PR target branch with `--target-branch`.
+- **GitHub scaffolding:** Use `--git-provider github` and `--tenant-repo` to scaffold a tenant repo. The token is auto-resolved from `--git-token`, `GH_TOKEN`/`GITHUB_TOKEN` env vars, or GitHub CLI config (`gh auth login`). If no token is found, scaffolding is skipped with a warning and the command succeeds.
+- **Flux OCI:** `--tenant-repo` is required for Flux OCI sync sources even without scaffolding — it builds the `OCIRepository` URL.
 
 **Commands:** [`ksail tenant`](/cli-flags/tenant/tenant-root/)
 
