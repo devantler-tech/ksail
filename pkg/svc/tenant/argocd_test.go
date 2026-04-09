@@ -21,7 +21,7 @@ func TestGenerateArgoCDManifests_ProjectSingleNamespace(t *testing.T) {
 		Namespaces:  []string{"team-alpha"},
 		TenantType:  tenant.TypeArgoCD,
 		GitProvider: "github",
-		GitRepo:     "org/team-alpha-app",
+		TenantRepo:  "org/team-alpha-app",
 	}
 	result, err := tenant.GenerateArgoCDManifests(opts)
 	require.NoError(t, err)
@@ -36,7 +36,7 @@ func TestGenerateArgoCDManifests_ProjectMultipleNamespaces(t *testing.T) {
 		Namespaces:  []string{"team-beta-dev", "team-beta-staging", "team-beta-prod"},
 		TenantType:  tenant.TypeArgoCD,
 		GitProvider: "github",
-		GitRepo:     "org/team-beta-app",
+		TenantRepo:  "org/team-beta-app",
 	}
 	result, err := tenant.GenerateArgoCDManifests(opts)
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestGenerateArgoCDManifests_AppGitHub(t *testing.T) {
 		Namespaces:  []string{"team-alpha"},
 		TenantType:  tenant.TypeArgoCD,
 		GitProvider: "github",
-		GitRepo:     "org/team-alpha-app",
+		TenantRepo:  "org/team-alpha-app",
 	}
 	result, err := tenant.GenerateArgoCDManifests(opts)
 	require.NoError(t, err)
@@ -66,7 +66,7 @@ func TestGenerateArgoCDManifests_AppGitLab(t *testing.T) {
 		Namespaces:  []string{"team-gamma"},
 		TenantType:  tenant.TypeArgoCD,
 		GitProvider: "gitlab",
-		GitRepo:     "org/team-gamma-app",
+		TenantRepo:  "org/team-gamma-app",
 	}
 	result, err := tenant.GenerateArgoCDManifests(opts)
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestGenerateArgoCDManifests_NoRBACConfigMap(t *testing.T) {
 		Namespaces:  []string{"team-alpha"},
 		TenantType:  tenant.TypeArgoCD,
 		GitProvider: "github",
-		GitRepo:     "org/team-alpha-app",
+		TenantRepo:  "org/team-alpha-app",
 	}
 	result, err := tenant.GenerateArgoCDManifests(opts)
 	require.NoError(t, err)

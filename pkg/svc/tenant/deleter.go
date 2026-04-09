@@ -28,8 +28,8 @@ type DeleteOptions struct {
 	DeleteRepo bool
 	// GitProvider is the Git provider name (github, gitlab, gitea).
 	GitProvider string
-	// GitRepo is the tenant repo as owner/repo-name.
-	GitRepo string
+	// TenantRepo is the tenant repo as owner/repo-name.
+	TenantRepo string
 	// GitToken is the Git provider API token.
 	GitToken string
 }
@@ -98,8 +98,8 @@ func validateDeleteOpts(opts DeleteOptions) error {
 			return fmt.Errorf("%w", ErrDeleteRepoGitProviderRequired)
 		}
 
-		if opts.GitRepo == "" {
-			return fmt.Errorf("%w", ErrDeleteRepoGitRepoRequired)
+		if opts.TenantRepo == "" {
+			return fmt.Errorf("%w", ErrDeleteRepoTenantRepoRequired)
 		}
 	}
 
@@ -107,9 +107,17 @@ func validateDeleteOpts(opts DeleteOptions) error {
 }
 
 func deleteRepo(ctx context.Context, opts DeleteOptions) error {
-	owner, repo, err := gitprovider.ParseOwnerRepo(opts.GitRepo)
+	if opts.GitProvider == "" {
+		return fmt.Errorf("%w", ErrDeleteRepoGitProviderRequired)
+	}
+
+	if opts.TenantRepo == "" {
+		return fmt.Errorf("%w", ErrDeleteRepoTenantRepoRequired)
+	}
+
+	owner, repo, err := gitprovider.ParseOwnerRepo(opts.TenantRepo)
 	if err != nil {
-		return fmt.Errorf("parse git-repo: %w", err)
+		return fmt.Errorf("parse tenant-repo: %w", err)
 	}
 
 	token := gitprovider.ResolveToken(opts.GitProvider, opts.GitToken)

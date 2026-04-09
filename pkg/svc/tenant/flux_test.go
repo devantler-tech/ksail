@@ -17,13 +17,13 @@ func TestGenerateFluxSyncManifests(t *testing.T) {
 		opts tenant.Options
 	}{
 		{
-			name: "oci source with registry and git-repo",
+			name: "oci source with registry and tenant-repo",
 			opts: tenant.Options{
 				Name:       "team-alpha",
 				Namespaces: []string{"team-alpha-ns", "team-alpha-extras"},
 				SyncSource: tenant.SyncSourceOCI,
 				Registry:   "oci://ghcr.io",
-				GitRepo:    "acme-org/team-alpha-manifests",
+				TenantRepo: "acme-org/team-alpha-manifests",
 				TenantType: tenant.TypeFlux,
 			},
 		},
@@ -34,7 +34,7 @@ func TestGenerateFluxSyncManifests(t *testing.T) {
 				Namespaces:  []string{"team-beta-ns"},
 				SyncSource:  tenant.SyncSourceGit,
 				GitProvider: "github",
-				GitRepo:     "acme-org/team-beta-config",
+				TenantRepo:  "acme-org/team-beta-config",
 				TenantType:  tenant.TypeFlux,
 			},
 		},
@@ -45,7 +45,7 @@ func TestGenerateFluxSyncManifests(t *testing.T) {
 				Namespaces:  []string{"team-gamma-ns"},
 				SyncSource:  tenant.SyncSourceGit,
 				GitProvider: "gitlab",
-				GitRepo:     "acme-org/team-gamma-config",
+				TenantRepo:  "acme-org/team-gamma-config",
 				TenantType:  tenant.TypeFlux,
 			},
 		},
@@ -74,7 +74,7 @@ func TestGenerateFluxSyncManifests_SourceKindReference(t *testing.T) {
 			Namespaces: []string{"oci-ns"},
 			SyncSource: tenant.SyncSourceOCI,
 			Registry:   "oci://ghcr.io",
-			GitRepo:    "org/repo",
+			TenantRepo: "org/repo",
 			TenantType: tenant.TypeFlux,
 		})
 		require.NoError(t, err)
@@ -97,7 +97,7 @@ func TestGenerateFluxSyncManifests_SourceKindReference(t *testing.T) {
 			Namespaces:  []string{"git-ns"},
 			SyncSource:  tenant.SyncSourceGit,
 			GitProvider: "github",
-			GitRepo:     "org/repo",
+			TenantRepo:  "org/repo",
 			TenantType:  tenant.TypeFlux,
 		})
 		require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestGenerateFluxSyncManifests_Labels(t *testing.T) {
 		Namespaces: []string{"labeled-ns"},
 		SyncSource: tenant.SyncSourceOCI,
 		Registry:   "oci://ghcr.io",
-		GitRepo:    "org/repo",
+		TenantRepo: "org/repo",
 		TenantType: tenant.TypeFlux,
 	})
 	require.NoError(t, err)
@@ -143,7 +143,7 @@ func TestGenerateFluxSyncManifests_PrimaryNamespace(t *testing.T) {
 		Namespaces: []string{"primary-ns", "secondary-ns", "tertiary-ns"},
 		SyncSource: tenant.SyncSourceOCI,
 		Registry:   "oci://ghcr.io",
-		GitRepo:    "org/repo",
+		TenantRepo: "org/repo",
 		TenantType: tenant.TypeFlux,
 	})
 	require.NoError(t, err)

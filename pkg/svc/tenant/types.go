@@ -95,8 +95,8 @@ type Options struct {
 	Registry string
 	// GitProvider is the Git provider name (github, gitlab, gitea).
 	GitProvider string
-	// GitRepo is the tenant repo as owner/repo-name.
-	GitRepo string
+	// TenantRepo is the tenant repo as owner/repo-name.
+	TenantRepo string
 	// GitToken is the Git provider API token.
 	GitToken string
 	// RepoVisibility is the repo visibility: Private, Internal, or Public.
@@ -105,6 +105,10 @@ type Options struct {
 	Register bool
 	// KustomizationPath is the explicit path to kustomization.yaml.
 	KustomizationPath string
+	// PlatformRepo is the platform repo as owner/repo-name for PR delivery.
+	PlatformRepo string
+	// TargetBranch is the PR target branch (empty = repo's default branch).
+	TargetBranch string
 }
 
 const (

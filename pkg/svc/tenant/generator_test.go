@@ -62,7 +62,7 @@ func TestGenerate_FluxType(t *testing.T) {
 		OutputDir:  dir,
 		SyncSource: tenant.SyncSourceOCI,
 		Registry:   "oci://ghcr.io",
-		GitRepo:    "acme/team-flux-manifests",
+		TenantRepo: "acme/team-flux-manifests",
 	})
 	require.NoError(t, err)
 
@@ -96,7 +96,7 @@ func TestGenerate_ArgoCDType(t *testing.T) {
 		TenantType:  tenant.TypeArgoCD,
 		OutputDir:   dir,
 		GitProvider: "github",
-		GitRepo:     "acme/team-argocd-app",
+		TenantRepo:  "acme/team-argocd-app",
 	})
 	require.NoError(t, err)
 
@@ -195,7 +195,7 @@ func TestGenerate_ForceRemovesStalePreviousFiles(t *testing.T) {
 		TenantType:  tenant.TypeArgoCD,
 		OutputDir:   dir,
 		GitProvider: "github",
-		GitRepo:     "acme/team-switch",
+		TenantRepo:  "acme/team-switch",
 	}))
 
 	tenantDir := filepath.Join(dir, "team-switch")
@@ -229,7 +229,7 @@ func TestGenerate_FluxGitSource(t *testing.T) {
 		OutputDir:   dir,
 		SyncSource:  tenant.SyncSourceGit,
 		GitProvider: "github",
-		GitRepo:     "acme/team-flux-git",
+		TenantRepo:  "acme/team-flux-git",
 	})
 	require.NoError(t, err)
 

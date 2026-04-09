@@ -13,17 +13,20 @@ Usage:
 
 Flags:
       --cluster-role string         ClusterRole to bind to the tenant ServiceAccount (default "edit")
+      --delivery string             How to deliver platform changes: commit or pr (default "commit")
       --force                       Overwrite existing tenant directory
       --git-provider string         Git provider for manifest URLs: github, gitlab, gitea (repo scaffolding requires github)
-      --git-repo string             Tenant repo as owner/repo-name
       --git-token string            GitHub API token for repo scaffolding (--git-provider=github)
       --kustomization-path string   Path to kustomization.yaml (fallback: auto-discover)
   -n, --namespace strings           Namespaces to create (repeatable, default: tenant-name)
   -o, --output string               Output directory for platform manifests (default ".")
+      --platform-repo string        Platform repo as owner/repo-name for PR delivery (default: auto-detect from git remote)
       --register                    Register tenant in kustomization.yaml
       --registry string             OCI registry URL for Flux OCI source (e.g., oci://ghcr.io)
       --repo-visibility string      Repo visibility: Private, Internal, or Public (default "Private")
       --sync-source string          Flux source type: oci or git (default "oci")
+      --target-branch string        PR target branch (default: repo's default branch)
+      --tenant-repo string          Tenant repo as owner/repo-name
   -t, --type string                 Tenant type: flux, argocd, or kubectl (default: auto-detect from ksail.yaml gitOpsEngine)
 
 Global Flags:
