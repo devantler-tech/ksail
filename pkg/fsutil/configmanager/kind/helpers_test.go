@@ -247,7 +247,11 @@ func TestApplyImageVerificationPatches(t *testing.T) {
 		kind.ApplyImageVerificationPatches(kindConfig)
 
 		assert.Len(t, kindConfig.ContainerdConfigPatches, 1)
-		assert.Contains(t, kindConfig.ContainerdConfigPatches[0], `io.containerd.image-verifier.v1.bindir`)
+		assert.Contains(
+			t,
+			kindConfig.ContainerdConfigPatches[0],
+			`io.containerd.image-verifier.v1.bindir`,
+		)
 		assert.Contains(t, kindConfig.ContainerdConfigPatches[0], `bin_dir`)
 		assert.Contains(t, kindConfig.ContainerdConfigPatches[0], `max_verifiers`)
 		assert.Contains(t, kindConfig.ContainerdConfigPatches[0], `per_verifier_timeout`)

@@ -572,7 +572,11 @@ func TestGenerateKindConfigHandlesImageVerification(t *testing.T) {
 		captured := captureKindConfigForImageVerification(t, v1alpha1.ImageVerificationEnabled)
 
 		assert.NotEmpty(t, captured.ContainerdConfigPatches)
-		assert.Contains(t, captured.ContainerdConfigPatches[0], `io.containerd.image-verifier.v1.bindir`)
+		assert.Contains(
+			t,
+			captured.ContainerdConfigPatches[0],
+			`io.containerd.image-verifier.v1.bindir`,
+		)
 	})
 
 	t.Run("disabled_has_no_containerd_config_patch", func(t *testing.T) {
