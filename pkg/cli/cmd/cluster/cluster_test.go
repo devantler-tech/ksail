@@ -2640,7 +2640,11 @@ func TestConnect_CommandFlags(t *testing.T) {
 	require.Nil(t, distributionFlag, "unexpected --distribution flag (should be removed)")
 
 	distributionConfigFlag := cmd.Flags().Lookup("distribution-config")
-	require.Nil(t, distributionConfigFlag, "unexpected --distribution-config flag (should be removed)")
+	require.Nil(
+		t,
+		distributionConfigFlag,
+		"unexpected --distribution-config flag (should be removed)",
+	)
 
 	gitopsEngineFlag := cmd.Flags().Lookup("gitops-engine")
 	require.Nil(t, gitopsEngineFlag, "unexpected --gitops-engine flag (should be removed)")
