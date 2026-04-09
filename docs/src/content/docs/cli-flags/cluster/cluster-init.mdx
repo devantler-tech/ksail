@@ -21,7 +21,7 @@ Flags:
       --distribution-config string             Configuration file for the distribution
   -f, --force                                  Overwrite existing files
   -g, --gitops-engine GitOpsEngine             GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
-      --image-verification ImageVerification   Talos image verification (Enabled: scaffold ImageVerificationConfig template, Disabled: skip)
+      --image-verification ImageVerification   Image verification (Enabled: scaffold verification config, Disabled: skip)
       --import-images string                   Path to tar archive with container images to import after cluster creation but before component installation
   -k, --kubeconfig string                      Path to kubeconfig file (default "~/.kube/config")
       --kustomization-file string              Relative directory within sourceDirectory used as the kustomize entry point (e.g., clusters/local)
