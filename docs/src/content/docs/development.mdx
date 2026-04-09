@@ -5,7 +5,7 @@ description: Guide for setting up KSail development environment and contributing
 
 ## Prerequisites
 
-**Required:** [Go 1.26.0+](https://go.dev/dl/) (`go version` ≥ 1.26.0), [Docker](https://docs.docker.com/get-started/) (`docker ps` without errors), [Git](https://git-scm.com/).
+**Required:** [Go 1.26.1+](https://go.dev/dl/) (`go version` ≥ 1.26.1), [Docker](https://docs.docker.com/get-started/) (`docker ps` without errors), [Git](https://git-scm.com/).
 
 **Optional:** Node.js 24 (docs), golangci-lint, VSCode with Go extension.
 
@@ -205,7 +205,7 @@ VSCode users can set breakpoints and press F5 with a `.vscode/launch.json` confi
 | Error | Fix |
 |-------|-----|
 | "Docker not available" | Verify Docker is running: `docker ps`. Check Docker Desktop is started (macOS/Windows) or socket permissions (Linux). |
-| "Go version mismatch" | Run `go version` — must be 1.26.0+. Update from [go.dev/dl](https://go.dev/dl/). |
+| "Go version mismatch" | Run `go version` — must be 1.26.1+. Update from [go.dev/dl](https://go.dev/dl/). |
 | "Import cycle not allowed" | Move shared types to `pkg/apis/` or a utility package. Avoid circular imports. |
 | "Linter failures" | Run `golangci-lint run --fix` to auto-fix. Check `.golangci.yml` for enabled linters; some issues require manual fixes. |
 
