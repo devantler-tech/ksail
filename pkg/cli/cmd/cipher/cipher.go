@@ -489,7 +489,8 @@ Optionally, master key recipients can be added or removed during rotation:
   --old-key removes an existing master key recipient
 
 By default, the command shows which files will be affected and prompts for
-confirmation. Use --force to skip the confirmation prompt.
+confirmation. Use --force to skip the confirmation prompt. In non-interactive
+environments (no TTY), the prompt is automatically skipped.
 
 Key type is auto-detected from the key format:
   - Age keys (age1...)
@@ -543,7 +544,7 @@ func NewRotateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&oldKey, "old-key", "", "public key to remove from master key recipients")
 	cmd.Flags().
 		BoolVarP(&recursive, "recursive", "r", false, "scan subdirectories when target is a folder")
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "skip confirmation prompt")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "skip confirmation prompt and rotate immediately")
 
 	return cmd
 }
