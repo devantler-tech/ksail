@@ -992,7 +992,7 @@ func TestImageVerification_ValidValues(t *testing.T) {
 	assert.Len(t, values, 2)
 }
 
-func TestImageVerification_Set(t *testing.T) {
+func TestImageVerification_Set(t *testing.T) { //nolint:dupl
 	t.Parallel()
 
 	tests := []struct {
@@ -1066,7 +1066,7 @@ func TestEnvironmentConfig_ValidValues(t *testing.T) {
 	assert.Len(t, values, 2)
 }
 
-func TestEnvironmentConfig_Set(t *testing.T) {
+func TestEnvironmentConfig_Set(t *testing.T) { //nolint:dupl
 	t.Parallel()
 
 	tests := []struct {
