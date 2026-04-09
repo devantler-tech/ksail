@@ -2618,6 +2618,37 @@ func TestDelete_CommandFlags(t *testing.T) {
 	require.Nil(t, distributionFlag, "unexpected --distribution flag (should be removed)")
 }
 
+func TestConnect_CommandFlags(t *testing.T) {
+	t.Parallel()
+
+	cmd := cluster.NewConnectCmd(nil)
+
+	// Verify expected flags exist
+	contextFlag := cmd.Flags().Lookup("context")
+	require.NotNil(t, contextFlag, "expected --context flag")
+	require.Equal(t, "c", contextFlag.Shorthand)
+
+	kubeconfigFlag := cmd.Flags().Lookup("kubeconfig")
+	require.NotNil(t, kubeconfigFlag, "expected --kubeconfig flag")
+	require.Equal(t, "k", kubeconfigFlag.Shorthand)
+
+	editorFlag := cmd.Flags().Lookup("editor")
+	require.NotNil(t, editorFlag, "expected --editor flag")
+
+	// Verify removed flags do NOT exist
+	distributionFlag := cmd.Flags().Lookup("distribution")
+	require.Nil(t, distributionFlag, "unexpected --distribution flag (should be removed)")
+
+	distributionConfigFlag := cmd.Flags().Lookup("distribution-config")
+	require.Nil(t, distributionConfigFlag, "unexpected --distribution-config flag (should be removed)")
+
+	gitopsEngineFlag := cmd.Flags().Lookup("gitops-engine")
+	require.Nil(t, gitopsEngineFlag, "unexpected --gitops-engine flag (should be removed)")
+
+	localRegistryFlag := cmd.Flags().Lookup("local-registry")
+	require.Nil(t, localRegistryFlag, "unexpected --local-registry flag (should be removed)")
+}
+
 // TestDelete_Confirmation_Accepted tests that deletion proceeds when user confirms with "yes".
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
