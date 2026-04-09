@@ -730,7 +730,7 @@ func captureK3dConfigForCNI(t *testing.T, cni v1alpha1.CNI) *k3dv1alpha5.SimpleC
 
 func captureKindConfigForImageVerification(
 	t *testing.T,
-	iv v1alpha1.ImageVerification,
+	imageVerification v1alpha1.ImageVerification,
 ) *v1alpha4.Cluster {
 	t.Helper()
 
@@ -738,7 +738,7 @@ func captureKindConfigForImageVerification(
 	buffer := &bytes.Buffer{}
 	instance, mocks := newScaffolderWithMocks(t, buffer)
 	instance.KSailConfig.Spec.Cluster.Distribution = v1alpha1.DistributionVanilla
-	instance.KSailConfig.Spec.Cluster.Talos.ImageVerification = iv
+	instance.KSailConfig.Spec.Cluster.Talos.ImageVerification = imageVerification
 
 	var captured *v1alpha4.Cluster
 

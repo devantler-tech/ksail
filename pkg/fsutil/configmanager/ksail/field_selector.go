@@ -209,7 +209,9 @@ func ImageVerificationFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		Selector: func(c *v1alpha1.Cluster) any {
 			return &c.Spec.Cluster.Talos.ImageVerification
 		},
-		Description:  "Image verification (Enabled: scaffold verification config, Disabled: skip)",
+		Description: "Image verification (Talos: scaffold ImageVerificationConfig template; " +
+			"Vanilla/Kind: inject containerd verifier plugin patch, requires verifier binaries/policy; " +
+			"Disabled: skip)",
 		DefaultValue: v1alpha1.ImageVerificationDisabled,
 	}
 }

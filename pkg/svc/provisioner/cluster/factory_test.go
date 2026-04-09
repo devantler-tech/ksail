@@ -278,6 +278,7 @@ func TestCreateKindProvisioner_ImageVerificationPatchApplied(t *testing.T) {
 
 	// factory.Create may fail due to Docker not being available,
 	// but image verification patches are applied before Docker client creation.
+	//nolint:dogsled // only testing side effects on kindConfig, return values irrelevant
 	_, _, _ = factory.Create(context.Background(), cluster)
 
 	assert.NotEmpty(t, kindConfig.ContainerdConfigPatches,
@@ -310,6 +311,7 @@ func TestCreateKindProvisioner_ImageVerificationDisabledNoPatch(t *testing.T) {
 		},
 	}
 
+	//nolint:dogsled // only testing side effects on kindConfig, return values irrelevant
 	_, _, _ = factory.Create(context.Background(), cluster)
 
 	assert.Empty(t, kindConfig.ContainerdConfigPatches,
