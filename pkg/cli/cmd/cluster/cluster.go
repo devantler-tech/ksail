@@ -2766,6 +2766,7 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	selectors = append(selectors, ksailconfigmanager.WorkersFieldSelector())
 	// Talos-specific selectors
 	selectors = append(selectors, ksailconfigmanager.ImageVerificationFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.EnvironmentConfigFieldSelector())
 
 	return selectors
 }

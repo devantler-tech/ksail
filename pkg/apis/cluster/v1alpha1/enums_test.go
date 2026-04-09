@@ -1047,3 +1047,77 @@ func TestImageVerification_StringAndType(t *testing.T) {
 	assert.Equal(t, "Enabled", imageVerification.String())
 	assert.Equal(t, "ImageVerification", imageVerification.Type())
 }
+
+func TestEnvironmentConfig_Default(t *testing.T) {
+	t.Parallel()
+
+	var environmentConfig v1alpha1.EnvironmentConfig
+	assert.Equal(t, v1alpha1.EnvironmentConfigDisabled, environmentConfig.Default())
+}
+
+func TestEnvironmentConfig_ValidValues(t *testing.T) {
+	t.Parallel()
+
+	var environmentConfig v1alpha1.EnvironmentConfig
+
+	values := environmentConfig.ValidValues()
+	assert.Contains(t, values, "Enabled")
+	assert.Contains(t, values, "Disabled")
+	assert.Len(t, values, 2)
+}
+
+func TestEnvironmentConfig_Set(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		input     string
+		expected  v1alpha1.EnvironmentConfig
+		wantError bool
+	}{
+		{name: "enabled_lowercase", input: "enabled", expected: v1alpha1.EnvironmentConfigEnabled},
+		{name: "enabled_mixed_case", input: "Enabled", expected: v1alpha1.EnvironmentConfigEnabled},
+		{name: "enabled_uppercase", input: "ENABLED", expected: v1alpha1.EnvironmentConfigEnabled},
+		{
+			name:     "disabled_lowercase",
+			input:    "disabled",
+			expected: v1alpha1.EnvironmentConfigDisabled,
+		},
+		{
+			name:     "disabled_mixed_case",
+			input:    "Disabled",
+			expected: v1alpha1.EnvironmentConfigDisabled,
+		},
+		{
+			name:     "disabled_uppercase",
+			input:    "DISABLED",
+			expected: v1alpha1.EnvironmentConfigDisabled,
+		},
+		{name: "invalid_value", input: "invalid", wantError: true},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var environmentConfig v1alpha1.EnvironmentConfig
+
+			err := environmentConfig.Set(testCase.input)
+			if testCase.wantError {
+				require.Error(t, err)
+				require.ErrorIs(t, err, v1alpha1.ErrInvalidEnvironmentConfig)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.expected, environmentConfig)
+			}
+		})
+	}
+}
+
+func TestEnvironmentConfig_StringAndType(t *testing.T) {
+	t.Parallel()
+
+	environmentConfig := v1alpha1.EnvironmentConfigEnabled
+	assert.Equal(t, "Enabled", environmentConfig.String())
+	assert.Equal(t, "EnvironmentConfig", environmentConfig.Type())
+}

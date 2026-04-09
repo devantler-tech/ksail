@@ -213,3 +213,14 @@ func ImageVerificationFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		DefaultValue: v1alpha1.ImageVerificationDisabled,
 	}
 }
+
+// EnvironmentConfigFieldSelector creates a field selector for Talos environment config.
+func EnvironmentConfigFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any {
+			return &c.Spec.Cluster.Talos.EnvironmentConfig
+		},
+		Description:  "Talos environment config (Enabled: scaffold EnvironmentConfig template, Disabled: skip)",
+		DefaultValue: v1alpha1.EnvironmentConfigDisabled,
+	}
+}

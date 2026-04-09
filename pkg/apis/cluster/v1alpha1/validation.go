@@ -106,6 +106,14 @@ func ValidImageVerifications() []ImageVerification {
 	}
 }
 
+// ValidEnvironmentConfigs returns supported environment config values.
+func ValidEnvironmentConfigs() []EnvironmentConfig {
+	return []EnvironmentConfig{
+		EnvironmentConfigEnabled,
+		EnvironmentConfigDisabled,
+	}
+}
+
 // ValidPolicyEngines returns supported policy engine values.
 func ValidPolicyEngines() []PolicyEngine {
 	return []PolicyEngine{

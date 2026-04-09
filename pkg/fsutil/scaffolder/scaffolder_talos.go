@@ -27,10 +27,14 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 	// Enable image verification scaffolding when explicitly enabled for Talos.
 	enableImageVerification := s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled
 
+	// Enable environment config scaffolding when explicitly enabled for Talos.
+	enableEnvironmentConfig := s.KSailConfig.Spec.Cluster.Talos.EnvironmentConfig == v1alpha1.EnvironmentConfigEnabled
+
 	// Mirror the conditions in generator.getDirectoriesWithPatches() exactly so
 	// .gitkeep notifications match the files the generator actually writes.
 	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
-		enableKubeletCertRotation || s.ClusterName != "" || enableImageVerification
+		enableKubeletCertRotation || s.ClusterName != "" || enableImageVerification ||
+		enableEnvironmentConfig
 
 	config := &talosgenerator.Config{
 		PatchesDir:                TalosConfigDir,
@@ -40,6 +44,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		EnableKubeletCertRotation: enableKubeletCertRotation,
 		ClusterName:               s.ClusterName,
 		EnableImageVerification:   enableImageVerification,
+		EnableEnvironmentConfig:   enableEnvironmentConfig,
 	}
 
 	opts := yamlgenerator.Options{
@@ -57,6 +62,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		disableDefaultCNI,
 		enableKubeletCertRotation,
 		enableImageVerification,
+		enableEnvironmentConfig,
 		clusterHasPatches,
 	)
 
@@ -67,6 +73,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 func (s *Scaffolder) notifyTalosGenerated(
 	workers int,
 	disableDefaultCNI, enableKubeletCertRotation, enableImageVerification bool,
+	enableEnvironmentConfig bool,
 	clusterHasPatches bool,
 ) {
 	// Notify about .gitkeep files only for directories without patches
@@ -93,6 +100,7 @@ func (s *Scaffolder) notifyTalosGenerated(
 		{enableKubeletCertRotation, "cluster", "kubelet-csr-approver.yaml"},
 		{s.ClusterName != "", "cluster", "cluster-name.yaml"},
 		{enableImageVerification, "cluster", "image-verification.yaml"},
+		{enableEnvironmentConfig, "cluster", "environment-config.yaml"},
 	}
 
 	for _, patch := range patches {

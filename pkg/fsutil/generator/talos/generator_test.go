@@ -501,6 +501,7 @@ func TestGenerator_Generate_AllPatchesCombined(t *testing.T) {
 		EnableKubeletCertRotation: true,
 		ClusterName:               "test-cluster",
 		EnableImageVerification:   true,
+		EnableEnvironmentConfig:   true,
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -540,6 +541,10 @@ func TestGenerator_Generate_AllPatchesCombined(t *testing.T) {
 	// Check image verification config (in cluster/ alongside other config documents)
 	_, err = os.Stat(filepath.Join(clusterDir, "image-verification.yaml"))
 	require.NoError(t, err, "expected image-verification.yaml")
+
+	// Check environment config (in cluster/ alongside other config documents)
+	_, err = os.Stat(filepath.Join(clusterDir, "environment-config.yaml"))
+	require.NoError(t, err, "expected environment-config.yaml")
 
 	// Verify .gitkeep was NOT created in cluster/ since we have patches there
 	gitkeepPath := filepath.Join(clusterDir, ".gitkeep")
@@ -686,4 +691,65 @@ func TestGenerator_Generate_NoImageVerificationPatchWhenFalse(t *testing.T) {
 	patchPath := filepath.Join(tempDir, "talos", "cluster", "image-verification.yaml")
 	_, err = os.Stat(patchPath)
 	assert.True(t, os.IsNotExist(err), "expected image-verification.yaml to not exist")
+}
+
+func TestGenerator_Generate_EnvironmentConfig(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+
+	config := &talosgenerator.Config{
+		PatchesDir:              "talos",
+		WorkerNodes:             1,
+		EnableEnvironmentConfig: true,
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	result, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
+
+	// Verify environment-config.yaml was created in cluster/ (loaded as config document)
+	patchPath := filepath.Join(tempDir, "talos", "cluster", "environment-config.yaml")
+	content, err := os.ReadFile(patchPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "apiVersion: v1alpha1")
+	assert.Contains(t, string(content), "kind: EnvironmentConfig")
+	assert.Contains(t, string(content), "variables: {}")
+	// Verify commented examples are included
+	assert.Contains(t, string(content), "HTTP_PROXY")
+	assert.Contains(t, string(content), "HTTPS_PROXY")
+	assert.Contains(t, string(content), "NO_PROXY")
+
+	// Verify .gitkeep was NOT created in cluster/ since we have a config document there
+	gitkeepPath := filepath.Join(tempDir, "talos", "cluster", ".gitkeep")
+	_, err = os.Stat(gitkeepPath)
+	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
+}
+
+func TestGenerator_Generate_NoEnvironmentConfigWhenFalse(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+
+	config := &talosgenerator.Config{
+		PatchesDir:              "talos",
+		WorkerNodes:             1,
+		EnableEnvironmentConfig: false,
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	_, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+
+	// Verify environment-config.yaml was NOT created
+	patchPath := filepath.Join(tempDir, "talos", "cluster", "environment-config.yaml")
+	_, err = os.Stat(patchPath)
+	assert.True(t, os.IsNotExist(err), "expected environment-config.yaml to not exist")
 }

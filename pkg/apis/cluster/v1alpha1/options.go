@@ -35,6 +35,11 @@ type OptionsTalos struct {
 	// in the Talos patches directory with commented-out examples for keyless (Cosign/OIDC)
 	// and public key verification rules. Requires Talos 1.13+.
 	ImageVerification ImageVerification `json:"imageVerification,omitzero"`
+	// EnvironmentConfig enables scaffolding of a Talos EnvironmentConfig document
+	// during cluster init. When Enabled, generates an environment-config.yaml template
+	// in the Talos patches directory with commented-out examples for proxy
+	// environment variables. Requires Talos 1.13+.
+	EnvironmentConfig EnvironmentConfig `json:"environmentConfig,omitzero"`
 }
 
 // PortMapping defines a mapping between a container port and a host port.

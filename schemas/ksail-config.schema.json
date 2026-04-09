@@ -189,6 +189,13 @@
                     "Enabled",
                     "Disabled"
                   ]
+                },
+                "environmentConfig": {
+                  "type": "string",
+                  "enum": [
+                    "Enabled",
+                    "Disabled"
+                  ]
                 }
               },
               "additionalProperties": false,

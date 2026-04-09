@@ -30,6 +30,8 @@ const (
 	clusterNameFileName = "cluster-name.yaml"
 	// imageVerificationFileName is the name of the image verification config document file.
 	imageVerificationFileName = "image-verification.yaml"
+	// environmentConfigFileName is the name of the environment config document file.
+	environmentConfigFileName = "environment-config.yaml"
 )
 
 // KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
@@ -72,6 +74,11 @@ type Config struct {
 	// and commented examples for keyless (Cosign/OIDC) and public key verification.
 	// This requires Talos 1.13+.
 	EnableImageVerification bool
+	// EnableEnvironmentConfig indicates whether to generate an EnvironmentConfig template.
+	// When true, generates an environment-config.yaml document with commented examples
+	// for proxy environment variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY).
+	// This requires Talos 1.13+.
+	EnableEnvironmentConfig bool
 }
 
 // Generator generates the Talos directory structure.
@@ -162,6 +169,14 @@ func (g *Generator) getDirectoriesWithPatches(
 		dirs["cluster"] = true
 	}
 
+	// Environment config document goes to cluster/ —
+	// Talos configpatcher.LoadPatch correctly recognizes it as an EnvironmentConfig
+	// document and StrategicMerge appends it to the config bundle (it does NOT overwrite
+	// the MachineConfig since it has a different kind).
+	if model.EnableEnvironmentConfig {
+		dirs["cluster"] = true
+	}
+
 	return dirs
 }
 
@@ -223,6 +238,14 @@ func (g *Generator) generateConditionalPatches(
 	// Generate image verification config document when enabled
 	if model.EnableImageVerification {
 		err := g.generateImageVerificationPatch(rootPath, force)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Generate environment config document when enabled
+	if model.EnableEnvironmentConfig {
+		err := g.generateEnvironmentConfigDocument(rootPath, force)
 		if err != nil {
 			return err
 		}
@@ -546,6 +569,46 @@ rules:
 	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create image-verification config: %w", err)
+	}
+
+	return nil
+}
+
+// generateEnvironmentConfigDocument creates a Talos EnvironmentConfig document.
+// The document is placed in cluster/ alongside other patches. Talos configpatcher recognizes
+// it as a registered config document (kind: EnvironmentConfig) and StrategicMerge
+// appends it to the config bundle — it does NOT overwrite the MachineConfig.
+// This replaces the deprecated .machine.env inline configuration.
+// See: https://www.talos.dev/v1.13/talos-guides/configuration/environment-variables/
+func (g *Generator) generateEnvironmentConfigDocument(
+	rootPath string,
+	force bool,
+) error {
+	patchPath := filepath.Join(rootPath, "cluster", environmentConfigFileName)
+
+	// Check if file already exists
+	_, statErr := os.Stat(patchPath)
+	if statErr == nil && !force {
+		return nil
+	}
+
+	patchContent := `# Talos EnvironmentConfig (Talos 1.13+)
+# This document sets environment variables on PID 1 and all services.
+# It replaces the deprecated .machine.env inline configuration.
+# Changes require a node restart to take effect.
+# See: https://www.talos.dev/v1.13/talos-guides/configuration/environment-variables/
+apiVersion: v1alpha1
+kind: EnvironmentConfig
+variables: {}
+  # Example: Configure HTTP proxy for outbound traffic
+  # HTTP_PROXY: "http://proxy.example.com:8080"
+  # HTTPS_PROXY: "http://proxy.example.com:8080"
+  # NO_PROXY: "localhost,127.0.0.1,10.0.0.0/8,192.168.0.0/16"
+`
+
+	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create environment config: %w", err)
 	}
 
 	return nil
