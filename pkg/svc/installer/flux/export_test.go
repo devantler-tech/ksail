@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	fluxclient "github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/sopsutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
@@ -123,9 +124,9 @@ func ExtractAgeKey(input string) string {
 	return sopsutil.ExtractAgeKey(input)
 }
 
-// BuildSopsAgeSecret exports buildSopsAgeSecret for testing.
+// BuildSopsAgeSecret exports sopsutil.BuildSopsAgeSecret for testing with the flux-system namespace.
 func BuildSopsAgeSecret(ageKey string) *corev1.Secret {
-	return buildSopsAgeSecret(ageKey)
+	return sopsutil.BuildSopsAgeSecret(fluxclient.DefaultNamespace, ageKey)
 }
 
 // EnsureSopsAgeSecret exports ensureSopsAgeSecret for testing.

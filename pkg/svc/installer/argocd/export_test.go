@@ -26,9 +26,9 @@ func ResolveAgeKey(sops v1alpha1.SOPS) (string, error) {
 	return key, nil
 }
 
-// BuildSopsAgeSecret exports buildSopsAgeSecretObj for testing.
+// BuildSopsAgeSecret exports sopsutil.BuildSopsAgeSecret for testing with the argocd namespace.
 func BuildSopsAgeSecret(ageKey string) *corev1.Secret {
-	return buildSopsAgeSecretObj(ageKey)
+	return sopsutil.BuildSopsAgeSecret(argoCDNamespace, ageKey)
 }
 
 // UpsertSopsAgeSecret exports upsertSopsAgeSecret for testing with a fake clientset.
