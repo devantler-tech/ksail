@@ -90,7 +90,7 @@ runs:
           echo "❌ resourceCount should be an integer > 0"
           exit 1
         fi
-        if ! TYPE_COUNT=$(echo "$METADATA" | jq -re '.resourceTypes | arrays | length | select(. > 0)'); then
+        if ! RESOURCE_TYPE_COUNT=$(echo "$METADATA" | jq -re '.resourceTypes | arrays | length | select(. > 0)'); then
           echo "❌ resourceTypes should be a non-empty array"
           exit 1
         fi
@@ -106,7 +106,7 @@ runs:
           echo "❌ resourceCount ($COUNT) should be greater than or equal to YAML file count ($YAML_COUNT)"
           exit 1
         fi
-        echo "✅ Backup metadata is valid (resourceCount=$COUNT, resourceTypes=$TYPE_COUNT, yamlFiles=$YAML_COUNT)"
+        echo "✅ Backup metadata is valid (resourceCount=$COUNT, resourceTypeCount=$RESOURCE_TYPE_COUNT, yamlFiles=$YAML_COUNT)"
 
     - name: 🧪 Namespace-filtered backup
       id: backup-ns
