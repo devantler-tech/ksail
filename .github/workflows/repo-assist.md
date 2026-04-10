@@ -187,15 +187,16 @@ steps:
 
 # Repo Assist
 
-> **CRITICAL**: You **MUST** call exactly one safe output tool before finishing:
+> **CRITICAL**: You **MUST** call exactly one configured safe output tool before finishing. Examples include:
 >
 > - `noop` — when no tasks produced actionable work (include a summary of what was checked and why no action was needed)
 > - `create_pull_request` — when creating a PR with code changes
 > - `create_issue` — when creating a new issue
 > - `add_comment` — when commenting on an existing issue or PR
 > - `update_issue` — when updating an existing issue
+> - another configured safe output for this workflow — for example `add_labels`, `remove_labels`, `link_sub_issue`, or `push_to_pull_request_branch`, when the selected task requires it
 >
-> Never finish without calling one of these tools. If you complete all selected tasks and none produced output, call `noop`.
+> Never finish without calling one configured safe output tool. If you complete all selected tasks and none produced output, call `noop`.
 
 ## Command Mode
 
