@@ -251,9 +251,8 @@ users:
 	require.Error(t, err)
 	assert.Nil(t, config)
 	assert.Contains(t, err.Error(), "failed to load kubeconfig")
+	assert.Contains(t, err.Error(), `context "admin@my-cluster" does not exist`)
 }
-
-// TestErrKubeconfigPathEmpty_ErrorMessage tests the error message content.
 func TestErrKubeconfigPathEmpty_ErrorMessage(t *testing.T) {
 	t.Parallel()
 
