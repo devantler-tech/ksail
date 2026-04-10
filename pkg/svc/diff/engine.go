@@ -108,7 +108,20 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			category: clusterupdate.ChangeCategoryRebootRequired,
 			reason:   "CDI requires node-level containerd reconfiguration",
 			getVal: func(spec *v1alpha1.ClusterSpec) string {
-				return string(spec.CDI.EffectiveValue(e.distribution, e.provider))
+				// Kind bakes containerd config at creation time; CDI changes
+				// require cluster recreation. K3s and VCluster have no CDI
+				// runtime wiring, so treat them as no-op by returning a constant.
+				switch e.distribution {
+				case v1alpha1.DistributionVanilla:
+					// Kind cannot mutate containerd config after cluster creation.
+					// Force constant so no diff is reported (handled by recreate logic).
+					return string(v1alpha1.CDIDisabled)
+				case v1alpha1.DistributionK3s, v1alpha1.DistributionVCluster:
+					// No runtime CDI wiring — suppress diff.
+					return string(v1alpha1.CDIDisabled)
+				default:
+					return string(spec.CDI.EffectiveValue(e.distribution, e.provider))
+				}
 			},
 		},
 		{
