@@ -107,7 +107,10 @@ func (s *Scaffolder) CreateK3dConfig(output string) k3dv1alpha5.SimpleConfig {
 
 		relativeTemplatePath, err := filepath.Rel(output, templatePath)
 		if err != nil {
-			relativeTemplatePath = filepath.Join(k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
+			relativeTemplatePath = filepath.Join(
+				k3dconfigmanager.DefaultImageVerifierDir,
+				"config.toml.tmpl",
+			)
 		}
 
 		k3dconfigmanager.ApplyImageVerificationVolumes(&config, relativeTemplatePath)
@@ -258,8 +261,13 @@ func (s *Scaffolder) generateK3dContainerdConfig(output string, force bool) erro
 	switch {
 	case statErr == nil:
 		if !fileInfo.Mode().IsRegular() {
-			return fmt.Errorf("%w: path exists but is not a regular file: %s", ErrK3dContainerdConfigGeneration, templatePath)
+			return fmt.Errorf(
+				"%w: path exists but is not a regular file: %s",
+				ErrK3dContainerdConfigGeneration,
+				templatePath,
+			)
 		}
+
 		if !force {
 			return nil
 		}

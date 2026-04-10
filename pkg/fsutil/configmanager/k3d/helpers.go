@@ -165,6 +165,7 @@ func ApplyImageVerificationVolumes(
 	for i, vol := range k3dConfig.Volumes {
 		if strings.Contains(vol.Volume, ContainerdConfigTemplatePath) {
 			k3dConfig.Volumes[i].Volume = volumeSpec
+
 			return
 		}
 	}

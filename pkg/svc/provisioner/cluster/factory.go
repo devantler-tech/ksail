@@ -2,6 +2,7 @@ package clusterprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,7 +32,9 @@ var (
 	ErrMissingDistributionConfig = clustererr.ErrMissingDistributionConfig
 	// ErrImageVerificationTemplateNotRegularFile is returned when the image verification
 	// template path exists but is not a regular file (e.g. it is a directory).
-	ErrImageVerificationTemplateNotRegularFile = fmt.Errorf("image verification template is not a regular file")
+	ErrImageVerificationTemplateNotRegularFile = errors.New(
+		"image verification template is not a regular file",
+	)
 )
 
 // DistributionConfig holds pre-loaded distribution-specific configuration.
@@ -239,6 +242,7 @@ func (f DefaultFactory) createK3dProvisioner(
 				err,
 			)
 		}
+
 		if !fileInfo.Mode().IsRegular() {
 			return nil, nil, fmt.Errorf(
 				"%w: %s; remove it and re-run 'ksail cluster init'",
