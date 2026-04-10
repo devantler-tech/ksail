@@ -574,7 +574,6 @@ github.com/derailed/tview v0.8.5 h1:pogM/OnWlgDo6j4zyzdiIXh7E7+eT7D4CPfBnyaETug=
 github.com/derailed/tview v0.8.5/go.mod h1:q+odnnhO6QDPpBT+0dqaWj+X+uoJ6MJehXj9shgP+Cw=
 github.com/detailyang/go-fallocate v0.0.0-20180908115635-432fa640bd2e h1:lj77EKYUpYXTd8CD/+QMIf8b6OIOTsfEBSXiAzuEHTU=
 github.com/detailyang/go-fallocate v0.0.0-20180908115635-432fa640bd2e/go.mod h1:3ZQK6DMPSz/QZ73jlWxBtUhNA8xZx7LzUFSq/OfP8vk=
-github.com/devantler-tech/ksail v1.5.0/go.mod h1:UYS/cYYMmn7ekXNAs+OwIEyYRPn+JxSukpdlCcZJXc8=
 github.com/devantler-tech/ksail/v5 v5.99.1 h1:87lnN/aEn6LPJn6Fccl0LEQIqlKNLBno+0LOmeoVYpc=
 github.com/devantler-tech/ksail/v5 v5.99.1/go.mod h1:hw+el4BVD9WQSURqb3nOdlCINn5rReckZHe6RT2iLjU=
 github.com/devantler/log v0.0.0-20260407144227-16cc61ebdb79 h1:gvhGzPnsMScj5r3hKQdyNSOXMic5xI9W40GLD9zqDnI=
