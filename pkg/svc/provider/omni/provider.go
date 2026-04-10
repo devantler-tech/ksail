@@ -228,59 +228,6 @@ func (p *Provider) CreateCluster(
 	return nil
 }
 
-// clusterReadyPollInterval is the interval between cluster readiness polls.
-const clusterReadyPollInterval = 10 * time.Second
-
-// clusterCheckFunc checks a cluster condition and returns true when the condition is met.
-type clusterCheckFunc func(ctx context.Context, st state.State, clusterName string) (bool, error)
-
-// waitForCluster polls a cluster condition until it is met or the timeout expires.
-func (p *Provider) waitForCluster(
-	ctx context.Context,
-	clusterName string,
-	timeout time.Duration,
-	check clusterCheckFunc,
-	conditionLabel string,
-) error {
-	if p.st == nil {
-		return provider.ErrProviderUnavailable
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(clusterReadyPollInterval)
-	defer ticker.Stop()
-
-	for {
-		ok, err := check(ctx, p.st, clusterName)
-		if err != nil {
-			return err
-		}
-
-		if ok {
-			return nil
-		}
-
-		select {
-		case <-ctx.Done():
-			ctxErr := ctx.Err()
-			if errors.Is(ctxErr, context.Canceled) {
-				return fmt.Errorf(
-					"cancelled waiting for cluster %q to %s: %w",
-					clusterName, conditionLabel, ctxErr,
-				)
-			}
-
-			return fmt.Errorf(
-				"timed out waiting for cluster %q to %s: %w",
-				clusterName, conditionLabel, ctxErr,
-			)
-		case <-ticker.C:
-		}
-	}
-}
-
 // WaitForClusterReady polls the ClusterStatus resource until the cluster is ready
 // (Phase == RUNNING and Ready == true) or the timeout expires.
 func (p *Provider) WaitForClusterReady(
@@ -302,63 +249,6 @@ func (p *Provider) WaitForClusterRunning(
 	timeout time.Duration,
 ) error {
 	return p.waitForCluster(ctx, clusterName, timeout, isClusterRunning, "reach RUNNING phase")
-}
-
-// getClusterStatus retrieves the ClusterStatus resource for the given cluster.
-// It returns (nil, nil) when the resource is not found or the context is done,
-// allowing the caller to retry or handle the context via ctx.Done().
-func getClusterStatus(
-	ctx context.Context,
-	omniState state.State,
-	clusterName string,
-) (*omnires.ClusterStatus, error) {
-	status, err := safe.StateGet[*omnires.ClusterStatus](
-		ctx,
-		omniState,
-		omnires.NewClusterStatus(clusterName).Metadata(),
-	)
-	if err != nil {
-		if state.IsNotFoundError(err) ||
-			errors.Is(err, context.DeadlineExceeded) ||
-			errors.Is(err, context.Canceled) {
-			return nil, nil
-		}
-
-		return nil, fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
-	}
-
-	return status, nil
-}
-
-// isClusterRunningAndReady checks whether the Omni cluster has Phase==RUNNING and Ready==true.
-func isClusterRunningAndReady(
-	ctx context.Context,
-	omniState state.State,
-	clusterName string,
-) (bool, error) {
-	status, err := getClusterStatus(ctx, omniState, clusterName)
-	if err != nil || status == nil {
-		return false, err
-	}
-
-	phase := status.TypedSpec().Value.GetPhase()
-	ready := status.TypedSpec().Value.GetReady()
-
-	return phase == specs.ClusterStatusSpec_RUNNING && ready, nil
-}
-
-// isClusterRunning checks whether the Omni cluster has Phase==RUNNING (regardless of Ready).
-func isClusterRunning(
-	ctx context.Context,
-	omniState state.State,
-	clusterName string,
-) (bool, error) {
-	status, err := getClusterStatus(ctx, omniState, clusterName)
-	if err != nil || status == nil {
-		return false, err
-	}
-
-	return status.TypedSpec().Value.GetPhase() == specs.ClusterStatusSpec_RUNNING, nil
 }
 
 // DefaultKubeconfigTTL is the default time-to-live for Omni service-account
@@ -616,4 +506,114 @@ func countReadyNodes(nodes []provider.NodeInfo) (int, int) {
 	}
 
 	return total, ready
+}
+
+// clusterReadyPollInterval is the interval between cluster readiness polls.
+const clusterReadyPollInterval = 10 * time.Second
+
+// clusterCheckFunc checks a cluster condition and returns true when the condition is met.
+type clusterCheckFunc func(ctx context.Context, st state.State, clusterName string) (bool, error)
+
+// waitForCluster polls a cluster condition until it is met or the timeout expires.
+func (p *Provider) waitForCluster(
+	ctx context.Context,
+	clusterName string,
+	timeout time.Duration,
+	check clusterCheckFunc,
+	conditionLabel string,
+) error {
+	if p.st == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(clusterReadyPollInterval)
+	defer ticker.Stop()
+
+	for {
+		ok, err := check(ctx, p.st, clusterName)
+		if err != nil {
+			return err
+		}
+
+		if ok {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			ctxErr := ctx.Err()
+			if errors.Is(ctxErr, context.Canceled) {
+				return fmt.Errorf(
+					"cancelled waiting for cluster %q to %s: %w",
+					clusterName, conditionLabel, ctxErr,
+				)
+			}
+
+			return fmt.Errorf(
+				"timed out waiting for cluster %q to %s: %w",
+				clusterName, conditionLabel, ctxErr,
+			)
+		case <-ticker.C:
+		}
+	}
+}
+
+// getClusterStatus retrieves the ClusterStatus resource for the given cluster.
+// It returns (nil, nil) when the resource is not found or the context is done,
+// allowing the caller to retry or handle the context via ctx.Done().
+func getClusterStatus(
+	ctx context.Context,
+	omniState state.State,
+	clusterName string,
+) (*omnires.ClusterStatus, error) {
+	status, err := safe.StateGet[*omnires.ClusterStatus](
+		ctx,
+		omniState,
+		omnires.NewClusterStatus(clusterName).Metadata(),
+	)
+	if err != nil {
+		if state.IsNotFoundError(err) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, context.Canceled) {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
+	}
+
+	return status, nil
+}
+
+// isClusterRunningAndReady checks whether the Omni cluster has Phase==RUNNING and Ready==true.
+func isClusterRunningAndReady(
+	ctx context.Context,
+	omniState state.State,
+	clusterName string,
+) (bool, error) {
+	status, err := getClusterStatus(ctx, omniState, clusterName)
+	if err != nil || status == nil {
+		return false, err
+	}
+
+	phase := status.TypedSpec().Value.GetPhase()
+	ready := status.TypedSpec().Value.GetReady()
+
+	return phase == specs.ClusterStatusSpec_RUNNING && ready, nil
+}
+
+// isClusterRunning checks whether the Omni cluster has Phase==RUNNING (regardless of Ready).
+func isClusterRunning(
+	ctx context.Context,
+	omniState state.State,
+	clusterName string,
+) (bool, error) {
+	status, err := getClusterStatus(ctx, omniState, clusterName)
+	if err != nil || status == nil {
+		return false, err
+	}
+
+	return status.TypedSpec().Value.GetPhase() == specs.ClusterStatusSpec_RUNNING, nil
 }
