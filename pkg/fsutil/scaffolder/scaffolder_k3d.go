@@ -253,10 +253,20 @@ func (s *Scaffolder) generateK3dContainerdConfig(output string, force bool) erro
 	templatePath := filepath.Join(containerdDir, "config.toml.tmpl")
 	displayName := filepath.Join(k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
 
-	// Check if file already exists
-	_, statErr := os.Stat(templatePath)
-	if statErr == nil && !force {
-		return nil
+	// Check if the target already exists and ensure it is a regular file.
+	fileInfo, statErr := os.Stat(templatePath)
+	switch {
+	case statErr == nil:
+		if !fileInfo.Mode().IsRegular() {
+			return fmt.Errorf("%w: path exists but is not a regular file: %s", ErrK3dContainerdConfigGeneration, templatePath)
+		}
+		if !force {
+			return nil
+		}
+	case os.IsNotExist(statErr):
+		// Continue and create the file.
+	default:
+		return fmt.Errorf("%w: stat file: %w", ErrK3dContainerdConfigGeneration, statErr)
 	}
 
 	// Create directory structure
