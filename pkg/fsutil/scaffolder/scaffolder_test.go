@@ -1423,7 +1423,7 @@ func TestScaffoldK3d_ImageVerificationEnabled_CreatesContainerdConfig(t *testing
 
 	// Verify the containerd config template file was created
 	templatePath := filepath.Join(tempDir, k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
-	content, err := os.ReadFile(templatePath)
+	content, err := os.ReadFile(templatePath) //nolint:gosec // test reads from t.TempDir()
 	require.NoError(t, err)
 
 	// Verify template contains the image verifier plugin section

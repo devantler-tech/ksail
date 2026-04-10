@@ -327,14 +327,14 @@ func TestCreateK3dProvisioner_ImageVerificationVolumeMountApplied(t *testing.T) 
 
 	// Create the template file so the factory finds it
 	templateDir := filepath.Join(t.TempDir(), k3dconfigmanager.DefaultImageVerifierDir)
-	require.NoError(t, os.MkdirAll(templateDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "config.toml.tmpl"), []byte("test"), 0o644))
+	require.NoError(t, os.MkdirAll(templateDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "config.toml.tmpl"), []byte("test"), 0o600))
 	t.Chdir(t.TempDir())
 
 	// Re-create structure in the test's working directory
 	wdTemplateDir := filepath.Join(".", k3dconfigmanager.DefaultImageVerifierDir)
-	require.NoError(t, os.MkdirAll(wdTemplateDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(wdTemplateDir, "config.toml.tmpl"), []byte("test"), 0o644))
+	require.NoError(t, os.MkdirAll(wdTemplateDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(wdTemplateDir, "config.toml.tmpl"), []byte("test"), 0o600))
 
 	k3dConfig := &k3dv1alpha5.SimpleConfig{
 		ObjectMeta: k3dTypes.ObjectMeta{Name: "test-k3d"},
