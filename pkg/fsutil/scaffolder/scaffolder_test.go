@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil/generator"
 	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil/scaffolder"
@@ -1171,7 +1172,7 @@ func TestCreateK3dConfig_MetricsServerDisabled(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig()
+	config := scaffolderInstance.CreateK3dConfig(".")
 
 	// Check that --disable=metrics-server flag is present
 	found := false
@@ -1202,7 +1203,7 @@ func TestCreateK3dConfig_MetricsServerEnabled(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig()
+	config := scaffolderInstance.CreateK3dConfig(".")
 
 	// Check that --disable=metrics-server flag is NOT present
 	for _, arg := range config.Options.K3sOptions.ExtraArgs {
@@ -1229,7 +1230,7 @@ func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig()
+	config := scaffolderInstance.CreateK3dConfig(".")
 
 	// Check that both CNI and metrics-server flags are present
 	hasCNIFlag := false
@@ -1262,7 +1263,7 @@ func TestCreateK3dConfig_CSIDisabled(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig()
+	config := scaffolderInstance.CreateK3dConfig(".")
 
 	// Check that --disable=local-storage flag is present
 	found := false
@@ -1293,7 +1294,7 @@ func TestCreateK3dConfig_CSIEnabled(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig()
+	config := scaffolderInstance.CreateK3dConfig(".")
 
 	// Check that --disable=local-storage flag is NOT present
 	for _, arg := range config.Options.K3sOptions.ExtraArgs {
@@ -1320,7 +1321,7 @@ func TestCreateK3dConfig_CSIDisabledWithCilium(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig()
+	config := scaffolderInstance.CreateK3dConfig(".")
 
 	// Check that both CNI and CSI flags are present
 	hasCNIFlag := false
@@ -1344,10 +1345,109 @@ func TestCreateK3dConfig_SetsDefaultImage(t *testing.T) {
 	t.Parallel()
 
 	scaffolderInstance := newK3dScaffolder(t, nil)
-	config := scaffolderInstance.CreateK3dConfig()
+	config := scaffolderInstance.CreateK3dConfig(".")
 
 	// Verify that image is empty, allowing k3d to use its built-in default
 	assert.Empty(t, config.Image)
+}
+
+func TestCreateK3dConfig_ImageVerificationEnabled(t *testing.T) {
+	t.Parallel()
+
+	cluster := v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				Talos: v1alpha1.OptionsTalos{
+					ImageVerification: v1alpha1.ImageVerificationEnabled,
+				},
+			},
+		},
+	}
+
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
+	config := scaffolderInstance.CreateK3dConfig(".")
+
+	// Verify volume mount is added for the containerd config template
+	found := false
+
+	for _, vol := range config.Volumes {
+		if strings.Contains(vol.Volume, k3dconfigmanager.ContainerdConfigTemplatePath) {
+			found = true
+			assert.Equal(t, []string{"all"}, vol.NodeFilters)
+
+			break
+		}
+	}
+
+	assert.True(t, found, "volume mount for containerd config template should be present")
+}
+
+func TestCreateK3dConfig_ImageVerificationDisabled(t *testing.T) {
+	t.Parallel()
+
+	cluster := v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				Talos: v1alpha1.OptionsTalos{
+					ImageVerification: v1alpha1.ImageVerificationDisabled,
+				},
+			},
+		},
+	}
+
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
+	config := scaffolderInstance.CreateK3dConfig(".")
+
+	// Verify no volume mount for containerd config template
+	for _, vol := range config.Volumes {
+		assert.False(t,
+			strings.Contains(vol.Volume, k3dconfigmanager.ContainerdConfigTemplatePath),
+			"volume mount for containerd config template should not be present when disabled",
+		)
+	}
+}
+
+func TestScaffoldK3d_ImageVerificationEnabled_CreatesContainerdConfig(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	cluster := createK3dCluster("k3d-imgver-test")
+	cluster.Spec.Cluster.Talos.ImageVerification = v1alpha1.ImageVerificationEnabled
+
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	// Verify the containerd config template file was created
+	templatePath := filepath.Join(tempDir, k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
+	content, err := os.ReadFile(templatePath)
+	require.NoError(t, err)
+
+	// Verify template contains the image verifier plugin section
+	assert.Contains(t, string(content), `[plugins."io.containerd.image-verifier.v1.bindir"]`)
+	assert.Contains(t, string(content), "bin_dir")
+	assert.Contains(t, string(content), "{{ .PrivateRegistryConfig }}")
+}
+
+func TestScaffoldK3d_ImageVerificationDisabled_SkipsContainerdConfig(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	cluster := createK3dCluster("k3d-imgver-disabled-test")
+	cluster.Spec.Cluster.Talos.ImageVerification = v1alpha1.ImageVerificationDisabled
+
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	// Verify the containerd config template file was NOT created
+	templatePath := filepath.Join(tempDir, k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
+	_, err = os.Stat(templatePath)
+	assert.True(t, os.IsNotExist(err), "containerd config template should not exist when image verification is disabled")
 }
 
 func TestScaffoldTalos_CreatesDirectoryStructure(t *testing.T) {

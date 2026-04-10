@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/detector"
@@ -210,6 +212,20 @@ func (f DefaultFactory) createK3dProvisioner(
 
 	// Apply node count overrides from CLI flags (stored in Talos options)
 	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.Talos)
+
+	// Apply containerd image verifier plugin volume mount when image verification is enabled.
+	// This mounts the generated config.toml.tmpl into K3d node containers so K3s uses it
+	// to generate the final containerd config with the image verifier plugin enabled.
+	if cluster.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
+		templatePath := filepath.Join(k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
+
+		absTemplatePath, err := filepath.Abs(templatePath)
+		if err != nil {
+			absTemplatePath = templatePath
+		}
+
+		k3dconfigmanager.ApplyImageVerificationVolumes(k3dConfig, absTemplatePath)
+	}
 
 	// Write the in-memory config to a temp file so k3d picks up any modifications
 	// (e.g., registry mirrors configured via --mirror-registry, node counts).

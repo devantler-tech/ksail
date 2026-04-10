@@ -350,6 +350,70 @@ func TestResolveClusterName(t *testing.T) {
 	})
 }
 
+func TestApplyImageVerificationVolumes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("adds_volume_mount_to_empty_config", func(t *testing.T) {
+		t.Parallel()
+
+		k3dConfig := &v1alpha5.SimpleConfig{}
+
+		k3d.ApplyImageVerificationVolumes(k3dConfig, "/project/k3d/containerd/config.toml.tmpl")
+
+		assert.Len(t, k3dConfig.Volumes, 1)
+		assert.Equal(t,
+			"/project/k3d/containerd/config.toml.tmpl:"+k3d.ContainerdConfigTemplatePath,
+			k3dConfig.Volumes[0].Volume,
+		)
+		assert.Equal(t, []string{"all"}, k3dConfig.Volumes[0].NodeFilters)
+	})
+
+	t.Run("appends_volume_without_removing_existing", func(t *testing.T) {
+		t.Parallel()
+
+		k3dConfig := &v1alpha5.SimpleConfig{
+			Volumes: []v1alpha5.VolumeWithNodeFilters{
+				{Volume: "/some/other/path:/other/container/path", NodeFilters: []string{"server:0"}},
+			},
+		}
+
+		k3d.ApplyImageVerificationVolumes(k3dConfig, "/project/k3d/containerd/config.toml.tmpl")
+
+		assert.Len(t, k3dConfig.Volumes, 2)
+		assert.Equal(t,
+			"/project/k3d/containerd/config.toml.tmpl:"+k3d.ContainerdConfigTemplatePath,
+			k3dConfig.Volumes[1].Volume,
+		)
+	})
+
+	t.Run("idempotent_no_duplicate_when_called_twice", func(t *testing.T) {
+		t.Parallel()
+
+		k3dConfig := &v1alpha5.SimpleConfig{}
+
+		k3d.ApplyImageVerificationVolumes(k3dConfig, "/project/k3d/containerd/config.toml.tmpl")
+		k3d.ApplyImageVerificationVolumes(k3dConfig, "/project/k3d/containerd/config.toml.tmpl")
+
+		assert.Len(t, k3dConfig.Volumes, 1,
+			"calling ApplyImageVerificationVolumes twice should not duplicate the volume mount")
+	})
+
+	t.Run("idempotent_skips_when_different_host_path_targets_same_container_path", func(t *testing.T) {
+		t.Parallel()
+
+		k3dConfig := &v1alpha5.SimpleConfig{
+			Volumes: []v1alpha5.VolumeWithNodeFilters{
+				{Volume: "/other/host/path:" + k3d.ContainerdConfigTemplatePath, NodeFilters: []string{"all"}},
+			},
+		}
+
+		k3d.ApplyImageVerificationVolumes(k3dConfig, "/project/k3d/containerd/config.toml.tmpl")
+
+		assert.Len(t, k3dConfig.Volumes, 1,
+			"should not add duplicate volume when container path is already mounted")
+	})
+}
+
 func TestResolveNetworkName(t *testing.T) {
 	t.Parallel()
 
