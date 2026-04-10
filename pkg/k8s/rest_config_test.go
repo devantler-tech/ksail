@@ -205,6 +205,54 @@ func TestGetRESTConfig_AppliesDefaults(t *testing.T) {
 	assert.Equal(t, 100, config.Burst, "Burst should be raised for exec-plugin compatibility")
 }
 
+// TestBuildRESTConfig_OmniStyleKubeconfig tests that an empty context resolves
+// correctly with Omni-generated kubeconfigs that use the bare cluster name as
+// the current-context (not the "admin@<name>" format used by talosctl).
+// Regression guard for https://github.com/devantler-tech/ksail/issues/3799.
+func TestBuildRESTConfig_OmniStyleKubeconfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+
+	// Omni kubeconfigs use the bare cluster name as context, not "admin@my-cluster".
+	omniKubeconfig := `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://omni-proxy.example.com:443
+  name: my-cluster
+contexts:
+- context:
+    cluster: my-cluster
+    user: my-cluster-sa
+  name: my-cluster
+current-context: my-cluster
+users:
+- name: my-cluster-sa
+  user:
+    token: omni-sa-token
+`
+
+	err := os.WriteFile(kubeconfigPath, []byte(omniKubeconfig), 0o600)
+	require.NoError(t, err)
+
+	// Empty context must resolve to the kubeconfig's current-context ("my-cluster").
+	config, err := k8s.BuildRESTConfig(kubeconfigPath, "")
+
+	require.NoError(t, err)
+	require.NotNil(t, config)
+	assert.Equal(t, "https://omni-proxy.example.com:443", config.Host)
+
+	// Using "admin@my-cluster" (talosctl convention) must fail because that
+	// context does not exist in an Omni-generated kubeconfig.
+	config, err = k8s.BuildRESTConfig(kubeconfigPath, "admin@my-cluster")
+
+	require.Error(t, err)
+	assert.Nil(t, config)
+	assert.Contains(t, err.Error(), "failed to load kubeconfig")
+}
+
 // TestErrKubeconfigPathEmpty_ErrorMessage tests the error message content.
 func TestErrKubeconfigPathEmpty_ErrorMessage(t *testing.T) {
 	t.Parallel()
