@@ -600,9 +600,14 @@ func isClusterRunningAndReady(
 	omniState state.State,
 	clusterName string,
 ) (bool, error) {
-	return checkClusterStatus(ctx, omniState, clusterName, func(phase specs.ClusterStatusSpec_Phase, ready bool) bool {
-		return phase == specs.ClusterStatusSpec_RUNNING && ready
-	})
+	return checkClusterStatus(
+		ctx,
+		omniState,
+		clusterName,
+		func(phase specs.ClusterStatusSpec_Phase, ready bool) bool {
+			return phase == specs.ClusterStatusSpec_RUNNING && ready
+		},
+	)
 }
 
 // isClusterRunning checks whether the Omni cluster has Phase==RUNNING (regardless of Ready).
@@ -611,7 +616,12 @@ func isClusterRunning(
 	omniState state.State,
 	clusterName string,
 ) (bool, error) {
-	return checkClusterStatus(ctx, omniState, clusterName, func(phase specs.ClusterStatusSpec_Phase, _ bool) bool {
-		return phase == specs.ClusterStatusSpec_RUNNING
-	})
+	return checkClusterStatus(
+		ctx,
+		omniState,
+		clusterName,
+		func(phase specs.ClusterStatusSpec_Phase, _ bool) bool {
+			return phase == specs.ClusterStatusSpec_RUNNING
+		},
+	)
 }
