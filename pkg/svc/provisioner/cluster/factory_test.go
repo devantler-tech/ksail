@@ -2,6 +2,8 @@ package clusterprovisioner_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -323,6 +325,17 @@ func TestCreateKindProvisioner_ImageVerificationDisabledNoPatch(t *testing.T) {
 func TestCreateK3dProvisioner_ImageVerificationVolumeMountApplied(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "://invalid")
 
+	// Create the template file so the factory finds it
+	templateDir := filepath.Join(t.TempDir(), k3dconfigmanager.DefaultImageVerifierDir)
+	require.NoError(t, os.MkdirAll(templateDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(templateDir, "config.toml.tmpl"), []byte("test"), 0o644))
+	t.Chdir(t.TempDir())
+
+	// Re-create structure in the test's working directory
+	wdTemplateDir := filepath.Join(".", k3dconfigmanager.DefaultImageVerifierDir)
+	require.NoError(t, os.MkdirAll(wdTemplateDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wdTemplateDir, "config.toml.tmpl"), []byte("test"), 0o644))
+
 	k3dConfig := &k3dv1alpha5.SimpleConfig{
 		ObjectMeta: k3dTypes.ObjectMeta{Name: "test-k3d"},
 	}
@@ -361,6 +374,36 @@ func TestCreateK3dProvisioner_ImageVerificationVolumeMountApplied(t *testing.T) 
 
 	assert.True(t, found,
 		"image verification volume mount should be applied to K3d config")
+}
+
+func TestCreateK3dProvisioner_ImageVerificationMissingTemplate(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "://invalid")
+	t.Chdir(t.TempDir())
+
+	k3dConfig := &k3dv1alpha5.SimpleConfig{
+		ObjectMeta: k3dTypes.ObjectMeta{Name: "test-k3d"},
+	}
+
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			K3d: k3dConfig,
+		},
+	}
+
+	cluster := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				Talos: v1alpha1.OptionsTalos{
+					ImageVerification: v1alpha1.ImageVerificationEnabled,
+				},
+			},
+		},
+	}
+
+	_, _, err := factory.Create(context.Background(), cluster)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "image verification template not found")
 }
 
 func TestCreateK3dProvisioner_ImageVerificationDisabledNoVolumeMount(t *testing.T) {
