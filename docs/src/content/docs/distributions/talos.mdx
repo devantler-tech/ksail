@@ -185,7 +185,6 @@ Talos excels at immutable infrastructure, security-focused production deployment
 talosctl -n <node-ip> get machineconfig   # View configuration
 talosctl -n <node-ip> version             # Check Talos version
 talosctl -n <node-ip> logs                # System logs
-talosctl -n <node-ip> upgrade --image ghcr.io/siderolabs/installer:v1.6.0
 ```
 
 > [!NOTE]
@@ -260,7 +259,20 @@ For cloud volumes, use the `hcloud-volumes` storage class installed automaticall
 
 ### Talos Upgrades
 
-Upgrade without cluster recreation: `talosctl -n <node-ip> upgrade --image ghcr.io/siderolabs/installer:v1.6.0`. See [Talos upgrade docs](https://www.talos.dev/latest/talos-guides/upgrading-talos/) for coordination details.
+`ksail cluster update` automatically upgrades the Talos OS version when the Talos version bundled with KSail differs from the running cluster's version. KSail performs a rolling upgrade using the Talos LifecycleService API (Talos 1.13+):
+
+1. Worker nodes are upgraded one at a time
+2. Control-plane nodes are upgraded one at a time after all workers complete
+
+For each node, KSail pulls the installer image, triggers the upgrade, and waits for the node to be ready before proceeding.
+
+> [!NOTE]
+> Automatic upgrades require the running cluster to already be on Talos 1.13+. For clusters on older versions, first upgrade to 1.13 manually using the [Talos upgrade docs](https://www.talos.dev/latest/talos-guides/upgrading-talos/).
+
+> [!NOTE]
+> Omni-managed clusters are excluded from automatic upgrades — Omni handles OS upgrades externally through its own cluster lifecycle management.
+
+For manual upgrades outside of KSail, see the [Talos upgrade docs](https://www.talos.dev/latest/talos-guides/upgrading-talos/).
 
 ### Image Verification (Talos 1.13+)
 
