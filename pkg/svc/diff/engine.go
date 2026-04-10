@@ -124,6 +124,8 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 				switch e.distribution {
 				case v1alpha1.DistributionK3s, v1alpha1.DistributionVCluster:
 					return string(v1alpha1.CDIDisabled)
+				case v1alpha1.DistributionVanilla, v1alpha1.DistributionTalos:
+					return string(spec.CDI.EffectiveValue(e.distribution, e.provider))
 				default:
 					return string(spec.CDI.EffectiveValue(e.distribution, e.provider))
 				}

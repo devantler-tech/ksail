@@ -144,7 +144,10 @@ func (f DefaultFactory) createKindProvisioner(
 	}
 
 	// Apply containerd CDI patch when CDI is enabled.
-	if cluster.Spec.Cluster.CDI.EffectiveValue(cluster.Spec.Cluster.Distribution, cluster.Spec.Cluster.Provider) == v1alpha1.CDIEnabled {
+	cdiVal := cluster.Spec.Cluster.CDI.EffectiveValue(
+		cluster.Spec.Cluster.Distribution, cluster.Spec.Cluster.Provider,
+	)
+	if cdiVal == v1alpha1.CDIEnabled {
 		kindconfigmanager.ApplyCDIPatches(kindConfig)
 	}
 
