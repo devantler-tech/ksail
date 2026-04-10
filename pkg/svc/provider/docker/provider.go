@@ -165,7 +165,14 @@ func (p *Provider) GetClusterStatus(
 	ctx context.Context,
 	clusterName string,
 ) (*provider.ClusterStatus, error) {
-	return provider.GetClusterStatusFromLister(ctx, p, clusterName, "running")
+	result, err := provider.GetClusterStatusFromLister(
+		ctx, p, clusterName, "running",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("docker cluster status: %w", err)
+	}
+
+	return result, nil
 }
 
 // nodeOperation defines a function that operates on a single container.

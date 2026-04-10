@@ -421,66 +421,38 @@ func (p *Provider) GetClusterStatus(
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	// Check if the cluster exists
 	exists, err := p.ClusterExists(ctx, clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("check cluster existence: %w", err)
 	}
 
 	if !exists {
-		return nil, nil
+		return nil, fmt.Errorf("%w: %s", provider.ErrClusterNotFound, clusterName)
 	}
 
-	// Get cluster status resource
-	status, err := safe.StateGet[*omnires.ClusterStatus](
-		ctx,
-		p.st,
-		omnires.NewClusterStatus(clusterName).Metadata(),
+	phase, ready, nodesTotal, nodesReady, statusErr := p.getClusterStatusSpec(
+		ctx, clusterName,
 	)
 
-	var phase string
-
-	var ready bool
-
-	var nodesTotal, nodesReady int
-
-	if err == nil {
-		phase = status.TypedSpec().Value.GetPhase().String()
-		ready = status.TypedSpec().Value.GetReady()
-
-		if machines := status.TypedSpec().Value.GetMachines(); machines != nil {
-			nodesTotal = int(machines.GetTotal())
-			nodesReady = int(machines.GetHealthy())
-		}
-	}
-
-	// List individual nodes for details
 	nodes, nodesErr := p.ListNodes(ctx, clusterName)
-	if nodesErr != nil {
-		// If we have status but can't list nodes, return status without node details
-		if err == nil {
-			return &provider.ClusterStatus{
-				Phase:      phase,
-				Ready:      ready,
-				NodesTotal: nodesTotal,
-				NodesReady: nodesReady,
-				Endpoint:   p.endpoint(),
-			}, nil
-		}
-
-		return nil, fmt.Errorf("get cluster status: %w", errors.Join(err, nodesErr))
+	if nodesErr != nil && statusErr != nil {
+		return nil, fmt.Errorf(
+			"get cluster status: %w", errors.Join(statusErr, nodesErr),
+		)
 	}
 
-	// If we had no status resource, derive from node list
-	if err != nil {
-		nodesTotal = len(nodes)
+	if nodesErr != nil {
+		return &provider.ClusterStatus{
+			Phase:      phase,
+			Ready:      ready,
+			NodesTotal: nodesTotal,
+			NodesReady: nodesReady,
+			Endpoint:   p.endpoint(),
+		}, nil
+	}
 
-		for _, n := range nodes {
-			if n.State == specs.ClusterMachineStatusSpec_RUNNING.String() {
-				nodesReady++
-			}
-		}
-
+	if statusErr != nil {
+		nodesTotal, nodesReady = countReadyNodes(nodes)
 		phase = "UNKNOWN"
 		ready = nodesReady == nodesTotal && nodesTotal > 0
 	}
@@ -493,15 +465,6 @@ func (p *Provider) GetClusterStatus(
 		Nodes:      nodes,
 		Endpoint:   p.endpoint(),
 	}, nil
-}
-
-// endpoint returns the Omni API endpoint URL if available.
-func (p *Provider) endpoint() string {
-	if p.client == nil {
-		return ""
-	}
-
-	return p.client.Endpoint()
 }
 
 // ListAvailableMachines queries Omni for machines that are available (not allocated
@@ -549,4 +512,51 @@ func (p *Provider) ListAvailableMachines(ctx context.Context, count int) ([]stri
 	}
 
 	return ids, nil
+}
+
+// getClusterStatusSpec fetches the COSI ClusterStatus resource fields.
+func (p *Provider) getClusterStatusSpec(
+	ctx context.Context,
+	clusterName string,
+) (phase string, ready bool, nodesTotal, nodesReady int, err error) {
+	status, err := safe.StateGet[*omnires.ClusterStatus](
+		ctx,
+		p.st,
+		omnires.NewClusterStatus(clusterName).Metadata(),
+	)
+	if err != nil {
+		return "", false, 0, 0, fmt.Errorf("get cluster status spec: %w", err)
+	}
+
+	phase = status.TypedSpec().Value.GetPhase().String()
+	ready = status.TypedSpec().Value.GetReady()
+
+	if machines := status.TypedSpec().Value.GetMachines(); machines != nil {
+		nodesTotal = int(machines.GetTotal())
+		nodesReady = int(machines.GetHealthy())
+	}
+
+	return phase, ready, nodesTotal, nodesReady, nil
+}
+
+// endpoint returns the Omni API endpoint URL if available.
+func (p *Provider) endpoint() string {
+	if p.client == nil {
+		return ""
+	}
+
+	return p.client.Endpoint()
+}
+
+// countReadyNodes derives node counts from the node list.
+func countReadyNodes(nodes []provider.NodeInfo) (total, ready int) {
+	total = len(nodes)
+
+	for _, n := range nodes {
+		if n.State == specs.ClusterMachineStatusSpec_RUNNING.String() {
+			ready++
+		}
+	}
+
+	return total, ready
 }

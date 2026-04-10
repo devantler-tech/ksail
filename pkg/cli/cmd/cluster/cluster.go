@@ -2573,6 +2573,9 @@ var errNoClusterInfo = errors.New("no cluster info available")
 // errUnsupportedProvider is a sentinel error for unrecognized provider values.
 var errUnsupportedProvider = errors.New("unsupported provider")
 
+// errProviderNotConfigured is returned when provider credentials are missing.
+var errProviderNotConfigured = errors.New("provider not configured")
+
 // NewInfoCmd creates the cluster info command.
 // The command queries the infrastructure provider API first, then attempts
 // kubectl cluster-info, and only fails if no information is available at all.
@@ -2583,9 +2586,10 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:          "info",
-		Short:        "Display cluster information",
-		Long:         "Display cluster information from the infrastructure provider and Kubernetes API. Succeeds if information is available from any source.",
+		Use:   "info",
+		Short: "Display cluster information",
+		Long: "Display cluster information from the infrastructure provider" +
+			" and Kubernetes API. Succeeds if information is available from any source.",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runInfoCmd(cmd, nameFlag, providerFlag)
@@ -2621,14 +2625,14 @@ func runInfoCmd(
 	nameFlag string,
 	providerFlag v1alpha1.Provider,
 ) error {
-	resolved, err := lifecycle.ResolveClusterInfo(cmd, nameFlag, providerFlag, "")
+	resolved, err := lifecycle.ResolveClusterInfo(
+		cmd, nameFlag, providerFlag, "",
+	)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve cluster info: %w", err)
 	}
 
 	writer := cmd.OutOrStdout()
-	hasProviderInfo := false
-	hasKubeInfo := false
 
 	// Phase 1: Query provider API
 	status, provErr := getProviderStatus(
@@ -2638,23 +2642,26 @@ func runInfoCmd(
 		resolved.OmniOpts,
 	)
 
-	// Unsupported provider is a hard error — bail immediately.
-	if provErr != nil && status == nil {
-		if errors.Is(provErr, errUnsupportedProvider) {
-			return provErr
-		}
+	if errors.Is(provErr, errUnsupportedProvider) {
+		return provErr
 	}
 
-	if provErr == nil && status != nil {
-		hasProviderInfo = true
+	// Soft errors mean "no provider info" — don't propagate them.
+	if errors.Is(provErr, errProviderNotConfigured) ||
+		errors.Is(provErr, provider.ErrClusterNotFound) {
+		provErr = nil
+	}
+
+	hasProviderInfo := provErr == nil && status != nil
+	if hasProviderInfo {
 		displayProviderStatus(writer, resolved.Provider, resolved.ClusterName, status)
 	}
 
 	// Phase 2: Attempt kubectl cluster-info
 	kubeErr := tryKubeClusterInfo(cmd, resolved.KubeconfigPath)
-	if kubeErr == nil {
-		hasKubeInfo = true
-	} else if hasProviderInfo {
+	hasKubeInfo := kubeErr == nil
+
+	if !hasKubeInfo && hasProviderInfo {
 		_, _ = fmt.Fprintln(writer)
 		_, _ = fmt.Fprintln(writer, "  Kubernetes API: unreachable")
 	}
@@ -2662,27 +2669,29 @@ func runInfoCmd(
 	// Phase 3: Append KSail details (TTL, components)
 	if hasProviderInfo || hasKubeInfo {
 		displayKSailDetails(cmd, resolved.KubeconfigPath)
+
+		return nil
 	}
 
-	// Exit code logic — include root cause when no info is available.
-	if !hasProviderInfo && !hasKubeInfo {
-		if provErr != nil {
-			return fmt.Errorf(
-				"%w for %q: provider: %w",
-				errNoClusterInfo,
-				resolved.ClusterName,
-				provErr,
-			)
-		}
+	return buildNoInfoError(resolved.ClusterName, provErr)
+}
 
+// buildNoInfoError creates the final error when no info is available.
+func buildNoInfoError(clusterName string, provErr error) error {
+	if provErr != nil {
 		return fmt.Errorf(
-			"%w for %q",
+			"%w for %q: provider: %w",
 			errNoClusterInfo,
-			resolved.ClusterName,
+			clusterName,
+			provErr,
 		)
 	}
 
-	return nil
+	return fmt.Errorf(
+		"%w for %q",
+		errNoClusterInfo,
+		clusterName,
+	)
 }
 
 // getProviderStatus queries the infrastructure provider for cluster status.
@@ -2751,13 +2760,18 @@ func getHetznerProviderStatus(
 ) (*provider.ClusterStatus, error) {
 	token := os.Getenv("HCLOUD_TOKEN")
 	if token == "" {
-		return nil, nil
+		return nil, fmt.Errorf("HCLOUD_TOKEN: %w", errProviderNotConfigured)
 	}
 
 	hetznerClient := hcloud.NewClient(hcloud.WithToken(token))
 	prov := hetzner.NewProvider(hetznerClient)
 
-	return prov.GetClusterStatus(ctx, clusterName)
+	result, err := prov.GetClusterStatus(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("hetzner provider status: %w", err)
+	}
+
+	return result, nil
 }
 
 // getOmniProviderStatus queries Omni for cluster status.
@@ -2768,15 +2782,22 @@ func getOmniProviderStatus(
 ) (*provider.ClusterStatus, error) {
 	omniProvider, err := omni.NewProviderFromOptions(omniOpts)
 	if err != nil {
-		// Missing credentials → skip Omni gracefully; propagate other errors.
-		if errors.Is(err, omni.ErrEndpointRequired) || errors.Is(err, omni.ErrServiceAccountKeyRequired) {
-			return nil, nil
+		if errors.Is(err, omni.ErrEndpointRequired) ||
+			errors.Is(err, omni.ErrServiceAccountKeyRequired) {
+			return nil, fmt.Errorf(
+				"%w: %w", errProviderNotConfigured, err,
+			)
 		}
 
 		return nil, fmt.Errorf("omni provider: %w", err)
 	}
 
-	return omniProvider.GetClusterStatus(ctx, clusterName)
+	result, err := omniProvider.GetClusterStatus(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("omni provider status: %w", err)
+	}
+
+	return result, nil
 }
 
 // displayProviderStatus prints the provider-level cluster status.

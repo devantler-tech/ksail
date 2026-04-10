@@ -163,5 +163,12 @@ func GetClusterStatusFromLister(
 		return nil, fmt.Errorf("get cluster status: %w", err)
 	}
 
-	return BuildClusterStatus(nodes, readyState), nil
+	status := BuildClusterStatus(nodes, readyState)
+	if status == nil {
+		return nil, fmt.Errorf(
+			"%w: %s", ErrClusterNotFound, clusterName,
+		)
+	}
+
+	return status, nil
 }

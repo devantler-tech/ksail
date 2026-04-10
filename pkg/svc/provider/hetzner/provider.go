@@ -261,7 +261,15 @@ func (p *Provider) GetClusterStatus(
 	ctx context.Context,
 	clusterName string,
 ) (*provider.ClusterStatus, error) {
-	return provider.GetClusterStatusFromLister(ctx, p, clusterName, string(hcloud.ServerStatusRunning))
+	result, err := provider.GetClusterStatusFromLister(
+		ctx, p, clusterName,
+		string(hcloud.ServerStatusRunning),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("hetzner cluster status: %w", err)
+	}
+
+	return result, nil
 }
 
 // DeleteServer deletes a single Hetzner Cloud server.

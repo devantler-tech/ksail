@@ -80,5 +80,7 @@ func (m *MockProvider) GetClusterStatus(
 		return nil, args.Error(1) //nolint:wrapcheck // Mock function, wrapping not needed
 	}
 
-	return val.(*ClusterStatus), args.Error(1) //nolint:wrapcheck // Mock function, wrapping not needed
+	result, _ := val.(*ClusterStatus) //nolint:wrapcheck // Mock function, wrapping not needed
+
+	return result, args.Error(1) //nolint:wrapcheck // Mock function, wrapping not needed
 }
