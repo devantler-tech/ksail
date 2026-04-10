@@ -75,10 +75,10 @@ func (m *MockProvider) GetClusterStatus(
 ) (*ClusterStatus, error) {
 	args := m.Called(ctx, clusterName)
 
-	result, ok := args.Get(0).(*ClusterStatus)
-	if !ok {
+	val := args.Get(0)
+	if val == nil {
 		return nil, args.Error(1) //nolint:wrapcheck // Mock function, wrapping not needed
 	}
 
-	return result, args.Error(1) //nolint:wrapcheck // Mock function, wrapping not needed
+	return val.(*ClusterStatus), args.Error(1) //nolint:wrapcheck // Mock function, wrapping not needed
 }

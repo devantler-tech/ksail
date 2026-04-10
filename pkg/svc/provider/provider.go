@@ -21,7 +21,8 @@ type NodeInfo struct {
 }
 
 // ClusterStatus contains the status of a cluster as reported by its infrastructure provider.
-// All providers populate Phase, Ready, NodesTotal, NodesReady, and Nodes.
+// Providers populate Phase and Ready. NodesTotal, NodesReady, and Nodes are best-effort
+// and may be zero/empty even on success (e.g., when node listing fails independently).
 // Provider-specific fields (e.g., Endpoint) are populated only by providers that support them.
 type ClusterStatus struct {
 	// Phase is the high-level lifecycle phase (e.g., "running", "RUNNING", "initializing").

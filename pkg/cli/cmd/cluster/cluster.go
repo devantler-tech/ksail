@@ -2629,7 +2629,7 @@ func runInfoCmd(
 
 	// Phase 1: Query provider API
 	status, provErr := getProviderStatus(
-		cmd.Context(),
+		cmd,
 		resolved.Provider,
 		resolved.ClusterName,
 		resolved.OmniOpts,
@@ -2668,18 +2668,18 @@ func runInfoCmd(
 // getProviderStatus queries the infrastructure provider for cluster status.
 // Returns nil status if the cluster doesn't exist in the provider.
 func getProviderStatus(
-	ctx context.Context,
+	cmd *cobra.Command,
 	prov v1alpha1.Provider,
 	clusterName string,
 	omniOpts v1alpha1.OptionsOmni,
 ) (*provider.ClusterStatus, error) {
 	switch prov {
 	case v1alpha1.ProviderDocker, "":
-		return getDockerProviderStatus(ctx, clusterName)
+		return getDockerProviderStatus(cmd, clusterName)
 	case v1alpha1.ProviderHetzner:
-		return getHetznerProviderStatus(ctx, clusterName)
+		return getHetznerProviderStatus(cmd.Context(), clusterName)
 	case v1alpha1.ProviderOmni:
-		return getOmniProviderStatus(ctx, clusterName, omniOpts)
+		return getOmniProviderStatus(cmd.Context(), clusterName, omniOpts)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", prov)
 	}
@@ -2687,40 +2687,41 @@ func getProviderStatus(
 
 // getDockerProviderStatus queries Docker for cluster status by trying all label schemes.
 func getDockerProviderStatus(
-	ctx context.Context,
+	cmd *cobra.Command,
 	clusterName string,
 ) (*provider.ClusterStatus, error) {
-	dockerClient, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	var result *provider.ClusterStatus
+
+	err := withDockerClient(cmd, func(dockerClient client.APIClient) error {
+		schemes := []dockerprovider.LabelScheme{
+			dockerprovider.LabelSchemeKind,
+			dockerprovider.LabelSchemeK3d,
+			dockerprovider.LabelSchemeTalos,
+			dockerprovider.LabelSchemeVCluster,
+		}
+
+		for _, scheme := range schemes {
+			prov := dockerprovider.NewProvider(dockerClient, scheme)
+
+			status, err := prov.GetClusterStatus(cmd.Context(), clusterName)
+			if err != nil {
+				continue
+			}
+
+			if status != nil && status.NodesTotal > 0 {
+				result = status
+
+				return nil
+			}
+		}
+
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create docker client: %w", err)
-	}
-	defer dockerClient.Close()
-
-	// Try each label scheme to find the cluster
-	schemes := []dockerprovider.LabelScheme{
-		dockerprovider.LabelSchemeKind,
-		dockerprovider.LabelSchemeK3d,
-		dockerprovider.LabelSchemeTalos,
-		dockerprovider.LabelSchemeVCluster,
+		return nil, fmt.Errorf("docker provider status: %w", err)
 	}
 
-	for _, scheme := range schemes {
-		prov := dockerprovider.NewProvider(dockerClient, scheme)
-
-		status, err := prov.GetClusterStatus(ctx, clusterName)
-		if err != nil {
-			continue
-		}
-
-		if status != nil && status.NodesTotal > 0 {
-			return status, nil
-		}
-	}
-
-	return nil, nil
+	return result, nil
 }
 
 // getHetznerProviderStatus queries Hetzner Cloud for cluster status.
@@ -2747,7 +2748,12 @@ func getOmniProviderStatus(
 ) (*provider.ClusterStatus, error) {
 	omniProvider, err := omni.NewProviderFromOptions(omniOpts)
 	if err != nil {
-		return nil, nil //nolint:nilerr // Missing credentials → skip Omni gracefully
+		// Missing credentials → skip Omni gracefully; propagate other errors.
+		if errors.Is(err, omni.ErrEndpointRequired) || errors.Is(err, omni.ErrServiceAccountKeyRequired) {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("omni provider: %w", err)
 	}
 
 	return omniProvider.GetClusterStatus(ctx, clusterName)
@@ -2796,6 +2802,8 @@ func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath string) error {
 	kubeCmd.SetErr(io.Discard)
 	kubeCmd.SilenceErrors = true
 	kubeCmd.SilenceUsage = true
+	// Prevent Cobra from parsing the parent ksail command's os.Args.
+	kubeCmd.SetArgs([]string{})
 
 	_, err := kubeCmd.ExecuteC()
 	if err != nil {
