@@ -2634,6 +2634,14 @@ func runInfoCmd(
 		resolved.ClusterName,
 		resolved.OmniOpts,
 	)
+
+	// Unsupported provider is a hard error — bail immediately.
+	if provErr != nil && status == nil {
+		if strings.HasPrefix(provErr.Error(), "unsupported provider") {
+			return provErr
+		}
+	}
+
 	if provErr == nil && status != nil {
 		hasProviderInfo = true
 		displayProviderStatus(writer, resolved.Provider, resolved.ClusterName, status)
@@ -2653,8 +2661,17 @@ func runInfoCmd(
 		displayKSailDetails(cmd, resolved.KubeconfigPath)
 	}
 
-	// Exit code logic
+	// Exit code logic — include root cause when no info is available.
 	if !hasProviderInfo && !hasKubeInfo {
+		if provErr != nil {
+			return fmt.Errorf(
+				"%w for %q: provider: %w",
+				errNoClusterInfo,
+				resolved.ClusterName,
+				provErr,
+			)
+		}
+
 		return fmt.Errorf(
 			"%w for %q",
 			errNoClusterInfo,
@@ -2705,7 +2722,7 @@ func getDockerProviderStatus(
 
 			status, err := prov.GetClusterStatus(cmd.Context(), clusterName)
 			if err != nil {
-				continue
+				return fmt.Errorf("docker label scheme %s: %w", scheme, err)
 			}
 
 			if status != nil && status.NodesTotal > 0 {

@@ -356,9 +356,6 @@ func ExportDisplayComponents(writer io.Writer, clusterName string) {
 	displayComponents(writer, clusterName)
 }
 
-// ErrNoClusterInfo exports errNoClusterInfo for testing.
-var ErrNoClusterInfo = errNoClusterInfo
-
 // ExportClassifyRestoreError exports classifyRestoreError for testing.
 func ExportClassifyRestoreError(err error, stderr, policy string) error {
 	flags := &restoreFlags{
