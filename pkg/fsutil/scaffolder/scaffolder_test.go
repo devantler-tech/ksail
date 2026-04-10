@@ -1374,6 +1374,7 @@ func TestCreateK3dConfig_ImageVerificationEnabled(t *testing.T) {
 	for _, vol := range config.Volumes {
 		if strings.Contains(vol.Volume, k3dconfigmanager.ContainerdConfigTemplatePath) {
 			found = true
+
 			assert.Equal(t, []string{"all"}, vol.NodeFilters)
 
 			break
@@ -1402,8 +1403,8 @@ func TestCreateK3dConfig_ImageVerificationDisabled(t *testing.T) {
 
 	// Verify no volume mount for containerd config template
 	for _, vol := range config.Volumes {
-		assert.False(t,
-			strings.Contains(vol.Volume, k3dconfigmanager.ContainerdConfigTemplatePath),
+		assert.NotContains(t,
+			vol.Volume, k3dconfigmanager.ContainerdConfigTemplatePath,
 			"volume mount for containerd config template should not be present when disabled",
 		)
 	}
@@ -1422,7 +1423,11 @@ func TestScaffoldK3d_ImageVerificationEnabled_CreatesContainerdConfig(t *testing
 	require.NoError(t, err)
 
 	// Verify the containerd config template file was created
-	templatePath := filepath.Join(tempDir, k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
+	templatePath := filepath.Join(
+		tempDir,
+		k3dconfigmanager.DefaultImageVerifierDir,
+		"config.toml.tmpl",
+	)
 	content, err := os.ReadFile(templatePath) //nolint:gosec // test reads from t.TempDir()
 	require.NoError(t, err)
 
@@ -1445,9 +1450,17 @@ func TestScaffoldK3d_ImageVerificationDisabled_SkipsContainerdConfig(t *testing.
 	require.NoError(t, err)
 
 	// Verify the containerd config template file was NOT created
-	templatePath := filepath.Join(tempDir, k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
+	templatePath := filepath.Join(
+		tempDir,
+		k3dconfigmanager.DefaultImageVerifierDir,
+		"config.toml.tmpl",
+	)
 	_, err = os.Stat(templatePath)
-	assert.True(t, os.IsNotExist(err), "containerd config template should not exist when image verification is disabled")
+	assert.True(
+		t,
+		os.IsNotExist(err),
+		"containerd config template should not exist when image verification is disabled",
+	)
 }
 
 func TestScaffoldTalos_CreatesDirectoryStructure(t *testing.T) {

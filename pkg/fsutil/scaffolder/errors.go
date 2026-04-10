@@ -17,7 +17,9 @@ var (
 	ErrK3dConfigGeneration = errors.New("failed to generate k3d configuration")
 
 	// ErrK3dContainerdConfigGeneration wraps failures when creating K3d containerd config template.
-	ErrK3dContainerdConfigGeneration = errors.New("failed to generate k3d containerd config template")
+	ErrK3dContainerdConfigGeneration = errors.New(
+		"failed to generate k3d containerd config template",
+	)
 
 	// ErrTalosConfigGeneration wraps failures when creating Talos configuration.
 	ErrTalosConfigGeneration = errors.New("failed to generate talos configuration")

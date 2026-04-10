@@ -99,7 +99,11 @@ func (s *Scaffolder) CreateK3dConfig(output string) k3dv1alpha5.SimpleConfig {
 	// This mounts the generated config.toml.tmpl into K3d node containers so K3s uses it
 	// to generate the final containerd config with the image verifier plugin enabled.
 	if s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
-		templatePath := filepath.Join(output, k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
+		templatePath := filepath.Join(
+			output,
+			k3dconfigmanager.DefaultImageVerifierDir,
+			"config.toml.tmpl",
+		)
 
 		absTemplatePath, err := filepath.Abs(templatePath)
 		if err != nil {
@@ -262,7 +266,11 @@ func (s *Scaffolder) generateK3dContainerdConfig(output string, force bool) erro
 	}
 
 	// Write the containerd config template
-	err = os.WriteFile(templatePath, []byte(k3dconfigmanager.ImageVerificationConfigTemplate), filePerm)
+	err = os.WriteFile(
+		templatePath,
+		[]byte(k3dconfigmanager.ImageVerificationConfigTemplate),
+		filePerm,
+	)
 	if err != nil {
 		return fmt.Errorf("%w: write file: %w", ErrK3dContainerdConfigGeneration, err)
 	}
