@@ -1047,3 +1047,141 @@ func TestImageVerification_StringAndType(t *testing.T) {
 	assert.Equal(t, "Enabled", imageVerification.String())
 	assert.Equal(t, "ImageVerification", imageVerification.Type())
 }
+
+func TestCDI_Default(t *testing.T) {
+	t.Parallel()
+
+	var cdi v1alpha1.CDI
+	assert.Equal(t, v1alpha1.CDIDefault, cdi.Default())
+}
+
+func TestCDI_ValidValues(t *testing.T) {
+	t.Parallel()
+
+	var cdi v1alpha1.CDI
+
+	values := cdi.ValidValues()
+	assert.Contains(t, values, "Default")
+	assert.Contains(t, values, "Enabled")
+	assert.Contains(t, values, "Disabled")
+	assert.Len(t, values, 3)
+}
+
+func TestCDI_StringAndType(t *testing.T) {
+	t.Parallel()
+
+	cdi := v1alpha1.CDIEnabled
+	assert.Equal(t, "Enabled", cdi.String())
+	assert.Equal(t, "CDI", cdi.Type())
+}
+
+func TestDistribution_ProvidesCDIByDefault(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		expected     bool
+	}{
+		{
+			name:         "talos_provides_cdi",
+			distribution: v1alpha1.DistributionTalos,
+			expected:     true,
+		},
+		{
+			name:         "vanilla_no_cdi",
+			distribution: v1alpha1.DistributionVanilla,
+			expected:     false,
+		},
+		{
+			name:         "k3s_no_cdi",
+			distribution: v1alpha1.DistributionK3s,
+			expected:     false,
+		},
+		{
+			name:         "vcluster_no_cdi",
+			distribution: v1alpha1.DistributionVCluster,
+			expected:     false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := testCase.distribution.ProvidesCDIByDefault()
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
+
+func TestCDI_EffectiveValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		cdi          v1alpha1.CDI
+		distribution v1alpha1.Distribution
+		provider     v1alpha1.Provider
+		expected     v1alpha1.CDI
+	}{
+		{
+			name:         "talos_docker_default_resolves_to_enabled",
+			cdi:          v1alpha1.CDIDefault,
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CDIEnabled,
+		},
+		{
+			name:         "vanilla_docker_default_resolves_to_disabled",
+			cdi:          v1alpha1.CDIDefault,
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CDIDisabled,
+		},
+		{
+			name:         "k3s_docker_default_resolves_to_disabled",
+			cdi:          v1alpha1.CDIDefault,
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CDIDisabled,
+		},
+		{
+			name:         "vcluster_docker_default_resolves_to_disabled",
+			cdi:          v1alpha1.CDIDefault,
+			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CDIDisabled,
+		},
+		{
+			name:         "enabled_passes_through",
+			cdi:          v1alpha1.CDIEnabled,
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CDIEnabled,
+		},
+		{
+			name:         "disabled_passes_through",
+			cdi:          v1alpha1.CDIDisabled,
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CDIDisabled,
+		},
+		{
+			name:         "empty_string_treated_as_default",
+			cdi:          v1alpha1.CDI(""),
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     v1alpha1.CDIEnabled,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := testCase.cdi.EffectiveValue(testCase.distribution, testCase.provider)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}

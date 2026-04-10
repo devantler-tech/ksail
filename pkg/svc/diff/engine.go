@@ -59,7 +59,7 @@ type fieldRule struct {
 
 // scalarFieldRules returns the table of simple scalar field diff rules.
 // These fields follow a uniform pattern: compare old vs new, emit a Change if different.
-// For CSI, MetricsServer, and LoadBalancer the effective value is used so that
+// For CSI, CDI, MetricsServer, and LoadBalancer the effective value is used so that
 // semantically equivalent states (e.g. Default and Disabled on Vanilla) compare as equal.
 //
 //nolint:funlen // Table-driven rule definitions are clearer as a single cohesive list.
@@ -101,6 +101,14 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 				}
 
 				return string(spec.CSI.EffectiveValue(e.distribution, e.provider))
+			},
+		},
+		{
+			field:    "cluster.cdi",
+			category: clusterupdate.ChangeCategoryRebootRequired,
+			reason:   "CDI requires node-level containerd reconfiguration",
+			getVal: func(spec *v1alpha1.ClusterSpec) string {
+				return string(spec.CDI.EffectiveValue(e.distribution, e.provider))
 			},
 		},
 		{

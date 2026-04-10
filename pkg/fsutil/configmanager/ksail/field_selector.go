@@ -146,6 +146,15 @@ func DefaultCSIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
+// DefaultCDIFieldSelector creates a standard field selector for CDI.
+func DefaultCDIFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CDI },
+		Description:  "Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI)",
+		DefaultValue: v1alpha1.CDIDefault,
+	}
+}
+
 // DefaultKubeconfigFieldSelector creates a standard field selector for kubeconfig.
 func DefaultKubeconfigFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{

@@ -2753,6 +2753,7 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	selectors = append(selectors, ksailconfigmanager.StandardKustomizationFileFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultCNIFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultCSIFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.DefaultCDIFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultLoadBalancerFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
@@ -4524,6 +4525,7 @@ func defaultClusterMutationFieldSelectors() []ksailconfigmanager.FieldSelector[v
 		ksailconfigmanager.DefaultCertManagerFieldSelector(),
 		ksailconfigmanager.DefaultPolicyEngineFieldSelector(),
 		ksailconfigmanager.DefaultCSIFieldSelector(),
+		ksailconfigmanager.DefaultCDIFieldSelector(),
 		ksailconfigmanager.DefaultImportImagesFieldSelector(),
 		ksailconfigmanager.ControlPlanesFieldSelector(),
 		ksailconfigmanager.WorkersFieldSelector(),
