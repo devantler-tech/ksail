@@ -81,6 +81,11 @@ func ExportAllLinesContain(output, substr string) bool {
 	return allLinesContain(output, substr)
 }
 
+// ExportAllLinesMatchAny exports allLinesMatchAny for testing.
+func ExportAllLinesMatchAny(output string, substrs ...string) bool {
+	return allLinesMatchAny(output, substrs...)
+}
+
 // ExportDeriveBackupName exports deriveBackupName for testing.
 func ExportDeriveBackupName(inputPath string) string {
 	return deriveBackupName(inputPath)

@@ -704,6 +704,76 @@ data:
 	}
 }
 
+func TestSanitizeYAMLOutput_stripsServiceClusterIPs(t *testing.T) {
+	t.Parallel()
+
+	input := `apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  namespace: default
+spec:
+  clusterIP: 10.96.0.100
+  clusterIPs:
+  - 10.96.0.100
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: my-app
+  type: ClusterIP`
+
+	result, err := cluster.ExportSanitizeYAMLOutput(input)
+	if err != nil {
+		t.Fatalf("sanitizeYAMLOutput() error = %v", err)
+	}
+
+	if strings.Contains(result, "clusterIP") {
+		t.Error("should strip spec.clusterIP from Service")
+	}
+
+	if strings.Contains(result, "clusterIPs") {
+		t.Error("should strip spec.clusterIPs from Service")
+	}
+
+	if !strings.Contains(result, "my-service") {
+		t.Error("should preserve service name")
+	}
+
+	if !strings.Contains(result, "targetPort") {
+		t.Error("should preserve other spec fields")
+	}
+}
+
+func TestSanitizeYAMLOutput_preservesHeadlessService(t *testing.T) {
+	t.Parallel()
+
+	input := `apiVersion: v1
+kind: Service
+metadata:
+  name: headless-svc
+  namespace: default
+spec:
+  clusterIP: None
+  ports:
+  - port: 80
+  selector:
+    app: my-app`
+
+	result, err := cluster.ExportSanitizeYAMLOutput(input)
+	if err != nil {
+		t.Fatalf("sanitizeYAMLOutput() error = %v", err)
+	}
+
+	if !strings.Contains(result, "clusterIP") {
+		t.Error("should preserve clusterIP: None for headless services")
+	}
+
+	if !strings.Contains(result, "None") {
+		t.Error("should preserve None value for headless services")
+	}
+}
+
 func TestIsHelmReleaseSecret(t *testing.T) {
 	t.Parallel()
 
@@ -6199,8 +6269,24 @@ func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
 			"daemonsets.apps \"svclb-traefik\" already exists\n" +
 				"connection refused",
 		)
-		errConnectionRefused = errors.New("connection refused")
-		errAlreadyExists     = errors.New("already exists")
+		errConnectionRefused    = errors.New("connection refused")
+		errAlreadyExists        = errors.New("already exists")
+		errIPAlreadyAllocated   = errors.New(
+			`Service "cert-manager" is invalid: spec.clusterIPs: Invalid value: ` +
+				`[]string{"10.110.234.28"}: failed to allocate IP 10.110.234.28: ` +
+				`provided IP is already allocated`,
+		)
+		errMixedAllocatedAndExists = errors.New(
+			`Service "cert-manager" is invalid: spec.clusterIPs: Invalid value: ` +
+				`[]string{"10.110.234.28"}: failed to allocate IP 10.110.234.28: ` +
+				"provided IP is already allocated\n" +
+				`services "cilium-envoy" already exists`,
+		)
+		errMixedAllocatedAndReal = errors.New(
+			`Service "cert-manager" is invalid: spec.clusterIPs: Invalid value: ` +
+				`[]string{"10.110.234.28"}: provided IP is already allocated` + "\n" +
+				"connection refused",
+		)
 	)
 
 	tests := []struct {
@@ -6264,6 +6350,34 @@ func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
 			err:       errAlreadyExists,
 			stderr:    "",
 			policy:    "update",
+			expectNil: false,
+		},
+		{
+			name:      "IP already allocated in stderr with policy none",
+			err:       errExitStatus1,
+			stderr:    `Service "cert-manager" is invalid: spec.clusterIPs: provided IP is already allocated`,
+			policy:    "none",
+			expectNil: true,
+		},
+		{
+			name:      "IP already allocated in err.Error() with empty stderr",
+			err:       errIPAlreadyAllocated,
+			stderr:    "",
+			policy:    "none",
+			expectNil: true,
+		},
+		{
+			name:      "mixed already allocated and already exists",
+			err:       errMixedAllocatedAndExists,
+			stderr:    "",
+			policy:    "none",
+			expectNil: true,
+		},
+		{
+			name:      "mixed already allocated and real error",
+			err:       errMixedAllocatedAndReal,
+			stderr:    "",
+			policy:    "none",
 			expectNil: false,
 		},
 	}
