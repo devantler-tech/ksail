@@ -1,0 +1,28 @@
+---
+title: Features
+description: Overview of KSail's core features — cluster provisioning, workload management, GitOps, tenant management, registries, secrets, backup, and CI/CD.
+---
+
+KSail bundles Kubernetes tooling into a single binary. Each feature is documented on its own page — click through for details, usage examples, and CLI references.
+
+## Core Features
+
+| Feature | Description |
+|---------|-------------|
+| [Cluster Provisioning](/features/cluster-provisioning/) | Create and manage clusters across Vanilla, K3s, Talos, and VCluster distributions with automatic component installation. |
+| [Ephemeral Clusters](/features/ephemeral-clusters/) | Time-limited clusters that auto-destroy via `--ttl` for debugging, demos, and temporary access. |
+| [Workload Management](/features/workload-management/) | Deploy, inspect, and manage Kubernetes workloads using familiar kubectl and Helm patterns. |
+| [GitOps Workflows](/features/gitops-workflows/) | Declarative Git-driven deployments with built-in Flux or ArgoCD support. |
+| [Tenant Management](/features/tenant-management/) | Onboard teams with RBAC isolation, GitOps sync resources, and optional repository scaffolding. |
+| [Registry Management](/features/registry-management/) | Run local OCI registries and configure mirror registries for faster image pulls. |
+| [Secret Management](/features/secret-management/) | Encrypt and decrypt secrets using SOPS with age, PGP, and cloud KMS providers. |
+| [Backup & Restore](/features/backup-restore/) | Export cluster resources to compressed archives and restore to any cluster. |
+| [CI/CD Integration](/features/cicd-integration/) | Provision clusters in GitHub Actions with the official composite action. |
+
+## Also See
+
+These features have dedicated pages in other sections:
+
+- [Declarative Configuration](/configuration/declarative-configuration/) — complete `ksail.yaml` reference
+- [AI Chat Assistant](/ai-chat/) — interactive AI-powered chat for configuration and troubleshooting
+- [VSCode Extension](/vscode-extension/) — manage clusters from Visual Studio Code

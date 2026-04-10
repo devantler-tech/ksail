@@ -1,0 +1,26 @@
+---
+title: Workload Management
+description: Deploy, inspect, and manage Kubernetes workloads using familiar kubectl and Helm patterns.
+---
+
+Deploy and manage Kubernetes workloads using familiar kubectl and Helm patterns:
+
+- **Apply** [Kustomize](/concepts/#kustomize) directories, [Helm](/concepts/#helm) charts, or raw YAML
+- **Manage** resources: create, edit, and delete
+- **Inspect and debug** with get, describe, logs, exec, and explain
+- **Expose** services
+- **Export and import** container images
+- **Validate** manifests against schemas — see [Substitution Expansion in `workload validate`](/configuration/workload-validate/) for Flux `${VAR}` expansion behavior
+- **Generate** resources — see [`ksail workload gen` reference](/cli-flags/workload/workload-gen/) for supported types
+- **Watch** directories for automatic live reconciliation — see the [`ksail workload watch` reference](/cli-flags/workload/workload-watch/) for the canonical behavior and supported options
+
+```bash
+ksail workload apply -k k8s/
+ksail workload get pods
+ksail workload logs deployment/my-app
+ksail workload gen deployment my-app --image=nginx --port=80
+```
+
+## CLI Reference
+
+[`ksail workload`](/cli-flags/workload/workload-root/)

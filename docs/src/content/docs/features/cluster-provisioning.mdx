@@ -1,0 +1,43 @@
+---
+title: Cluster Provisioning
+description: Create and manage local Kubernetes clusters with a single command — supporting Vanilla, K3s, Talos, and VCluster distributions.
+---
+
+Create and manage local Kubernetes clusters with a single command. KSail supports [Vanilla, K3s, Talos, and VCluster](/concepts/#distributions) distributions, generates native configuration files (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`) that work directly with upstream tools, and automatically configures [CNI](/concepts/#container-network-interface-cni), [CSI](/concepts/#container-storage-interface-csi), [metrics-server](/concepts/#metrics-server), [cert-manager](/concepts/#cert-manager), and [policy engines](/concepts/#policy-engines). Component installations use automatic retry with exponential backoff; the `--benchmark` flag shows per-component install durations during `cluster create` and `cluster update`.
+
+```bash
+ksail cluster init --name my-cluster --distribution Vanilla --cni Cilium
+ksail cluster create
+```
+
+> The generated config files work directly with `kind`, `k3d`, `talosctl`, and `vcluster` — KSail is a superset.
+
+## Ephemeral Clusters
+
+Use `--ttl` to create a cluster that auto-destroys after a set duration. See [Ephemeral Clusters](/features/ephemeral-clusters/) for usage patterns and tips.
+
+```bash
+ksail cluster create --ttl 1h
+```
+
+## Updating Clusters
+
+`ksail cluster update` applies changes from `ksail.yaml` to a running cluster. Changes are classified as in-place (no disruption), reboot-required, or recreate-required. Use `--dry-run` to preview changes without applying them. Use `--output json` for a machine-readable diff in CI pipelines or [MCP tools](/mcp/):
+
+```bash
+# Preview changes without applying
+ksail cluster update --dry-run
+
+# Machine-readable diff for CI gating or MCP consumption
+ksail cluster update --dry-run --output json | jq .recreateRequired
+```
+
+## CLI Reference
+
+[`ksail cluster`](/cli-flags/cluster/cluster-root/)
+
+## Related
+
+- [Declarative Configuration](/configuration/declarative-configuration/) — `ksail.yaml` reference
+- [Distributions](/distributions/vanilla/) — distribution-specific setup
+- [Multi-Environment Workflows](/guides/multi-environment/) — manage dev/staging/prod from one project

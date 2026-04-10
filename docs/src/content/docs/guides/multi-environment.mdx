@@ -253,14 +253,14 @@ ksail --config ksail.ci.yaml cluster create --ttl 30m
 ksail --config ksail.ci.yaml cluster delete
 ```
 
-See [Ephemeral Clusters (--ttl)](/guides/ephemeral-clusters/) for the full TTL guide, or [PR Preview Clusters](/guides/pr-preview-clusters/) for the full action inputs reference and PR preview patterns.
+See [Ephemeral Clusters (--ttl)](/features/ephemeral-clusters/) for the full TTL guide, or [PR Preview Clusters](/guides/pr-preview-clusters/) for the full action inputs reference and PR preview patterns.
 
 ## Tips
 
 - **Name your clusters after their environment** (`dev`, `staging`, `production`) so context names are predictable across machines.
 - **Keep distribution-specific config files** (`kind.yaml`, `talos/`) named consistently — `ksail cluster init` generates them alongside `ksail.yaml`.
 - **Version-control all `ksail.<env>.yaml` files** but keep credentials in environment variables or a secret manager.
-- **Use `ksail workload validate`** with the target environment config before promoting manifests. See [Substitution Expansion (validate)](/guides/workload-validate/) for how Flux `${VAR}` substitutions are handled during validation.
+- **Use `ksail workload validate`** with the target environment config before promoting manifests. See [Substitution Expansion (validate)](/configuration/workload-validate/) for how Flux `${VAR}` substitutions are handled during validation.
 
   ```bash
   ksail --config ksail.staging.yaml workload validate

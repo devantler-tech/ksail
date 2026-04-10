@@ -69,7 +69,7 @@ ksail cluster create --ttl 1h
 # Supported duration formats: 30m, 1h, 2h30m
 ```
 
-TTL is shown as a column in `ksail cluster list` output when any cluster has a TTL set (e.g., `59m` or `EXPIRED`). `ksail cluster info` also shows remaining TTL time for the current cluster context. See [`ksail cluster create` flags](/cli-flags/cluster/cluster-create/) for details. For usage patterns and tips, see [Ephemeral Clusters](/guides/ephemeral-clusters/).
+TTL is shown as a column in `ksail cluster list` output when any cluster has a TTL set (e.g., `59m` or `EXPIRED`). `ksail cluster info` also shows remaining TTL time for the current cluster context. See [`ksail cluster create` flags](/cli-flags/cluster/cluster-create/) for details. For usage patterns and tips, see [Ephemeral Clusters](/features/ephemeral-clusters/).
 
 ### How do I switch between clusters?
 
@@ -84,7 +84,7 @@ You can also use `kubectl config use-context <context-name>` directly, or list a
 
 ### Can I use my own container registry?
 
-Yes! KSail supports local registries with optional authentication, mirror registries to avoid rate limits, and external registries with authentication. Credentials are automatically discovered from Docker config (`~/.docker/config.json`), environment variables, or GitOps secrets. See [Registry Management](/features/#registry-management) for configuration examples.
+Yes! KSail supports local registries with optional authentication, mirror registries to avoid rate limits, and external registries with authentication. Credentials are automatically discovered from Docker config (`~/.docker/config.json`), environment variables, or GitOps secrets. See [Registry Management](/features/registry-management/) for configuration examples.
 
 ### What happens if I change the distribution or provider in ksail.yaml?
 
@@ -181,7 +181,7 @@ Alternatively, use environment variable placeholders in a shared `ksail.yaml`. F
 
 ### How do I manage secrets with KSail?
 
-KSail includes **SOPS** for secret encryption via `ksail cipher <file>` (age, PGP, cloud KMS). See [Secret Management](/features/#secret-management).
+KSail includes **SOPS** for secret encryption via `ksail cipher <file>` (age, PGP, cloud KMS). See [Secret Management](/features/secret-management/).
 
 ### Are my credentials stored securely?
 

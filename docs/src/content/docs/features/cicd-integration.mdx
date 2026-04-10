@@ -1,0 +1,17 @@
+---
+title: CI/CD Integration
+description: Provision KSail clusters in GitHub Actions with the official composite action.
+---
+
+Provision KSail clusters in GitHub Actions with the official `ksail-cluster` composite action. It handles installation, Helm chart caching, mirror registry caching, and image pre-pulling automatically.
+
+```yaml
+- uses: devantler-tech/ksail/.github/actions/ksail-cluster@v5.59.0
+  with:
+    distribution: K3s
+```
+
+## Related
+
+- [PR Preview Clusters](/guides/pr-preview-clusters/) — end-to-end guide for per-PR ephemeral clusters in GitHub Actions
+- [Testing in CI/CD](/use-cases/#testing-in-cicd) — integration test patterns

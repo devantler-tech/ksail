@@ -1,0 +1,25 @@
+---
+title: GitOps Workflows
+description: Enable declarative, Git-driven deployments with built-in Flux or ArgoCD support.
+---
+
+Enable GitOps with [Flux or ArgoCD](/concepts/#gitops) for declarative, Git-driven deployments. KSail automatically installs the GitOps engine, scaffolds FluxInstance or ArgoCD Application CRs, and provides commands to package manifests as OCI artifacts, push to the local registry, and trigger reconciliation.
+
+```bash
+ksail cluster init --gitops-engine Flux --local-registry localhost:5050
+ksail cluster create
+ksail workload push
+ksail workload reconcile
+```
+
+## Commands
+
+| Command                    | Description                            |
+| -------------------------- | -------------------------------------- |
+| `ksail workload push`      | Package and push manifests to registry |
+| `ksail workload reconcile` | Trigger GitOps sync and wait for full Flux Kustomization dependency chain |
+
+## Related
+
+- [ArgoCD ApplicationSet](/guides/argocd-applicationset/) — end-to-end guide for multi-environment GitOps with ArgoCD
+- [Tenant Management](/features/tenant-management/) — onboard teams with GitOps sync resources
