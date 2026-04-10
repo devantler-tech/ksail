@@ -611,6 +611,8 @@ jobs:
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     environment: ci
+    # Hetzner cloud tests are allowed to fail without blocking the merge queue
+    # because Hetzner infrastructure can be intermittently unavailable.
     continue-on-error: true
     concurrency:
       group: cloud-system-test-hetzner
@@ -621,6 +623,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
+        # Cluster names use st-hetzner-{init,noinit}-<run_id> pattern.
+        # Keep in sync with cleanup-hetzner label-selector values below.
         include:
           - distribution: Talos
             provider: Hetzner
@@ -700,6 +704,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
+        # Cluster names use st-omni-{init,noinit}-<run_id> pattern.
+        # Keep in sync with cleanup-omni cluster-names input below.
         include:
           - distribution: Talos
             provider: Omni

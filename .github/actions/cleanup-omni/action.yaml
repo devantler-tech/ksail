@@ -39,8 +39,9 @@ runs:
           exit 1
         fi
 
-        # Delete each cluster name passed as input
-        for CLUSTER_NAME in ${CLUSTER_NAMES}; do
+        # Delete each cluster name passed as input (read into array for safe iteration)
+        IFS=' ' read -ra NAMES <<< "${CLUSTER_NAMES}"
+        for CLUSTER_NAME in "${NAMES[@]}"; do
           echo "🗑️  Deleting cluster: ${CLUSTER_NAME}"
 
           DELETE_OUTPUT=""
