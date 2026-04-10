@@ -29,7 +29,7 @@ var (
 		"reading blob sha256:abc: fetching blob: denied: denied",
 	)
 	errEgressLimit = errors.New(
-		"copying blob sha256:fa365: fetching blob: received unexpected HTTP status: 503 Egress is over the account limit.",
+		"copying blob sha256:fa365: fetching blob: received unexpected HTTP status: 503 Egress is over the account limit",
 	)
 	errIOTimeout    = errors.New("dial tcp 1.2.3.4:443: i/o timeout")
 	errConnReset    = errors.New("read tcp 10.0.0.1:54321->1.2.3.4:443: connection reset by peer")
