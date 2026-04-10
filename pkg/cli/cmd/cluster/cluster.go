@@ -4384,7 +4384,7 @@ func classifyRestoreError(err error, stderr string, flags *restoreFlags) error {
 			source = err.Error()
 		}
 
-		if allLinesMatchAny(source, "already exists", "is already allocated") {
+		if allLinesContain(source, "already exists") {
 			return nil
 		}
 	}
@@ -4528,37 +4528,6 @@ func allLinesContain(output, substr string) bool {
 		hasNonEmptyLine = true
 
 		if !strings.Contains(trimmed, substr) {
-			return false
-		}
-	}
-
-	return hasNonEmptyLine
-}
-
-// allLinesMatchAny returns true when every non-empty line in output
-// contains at least one of the given substrings.
-func allLinesMatchAny(output string, substrs ...string) bool {
-	hasNonEmptyLine := false
-
-	for line := range strings.SplitSeq(output, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-
-		hasNonEmptyLine = true
-
-		matched := false
-
-		for _, s := range substrs {
-			if strings.Contains(trimmed, s) {
-				matched = true
-
-				break
-			}
-		}
-
-		if !matched {
 			return false
 		}
 	}

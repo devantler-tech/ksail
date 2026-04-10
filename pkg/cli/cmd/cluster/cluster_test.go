@@ -728,11 +728,11 @@ spec:
 		t.Fatalf("sanitizeYAMLOutput() error = %v", err)
 	}
 
-	if strings.Contains(result, "clusterIP") {
+	if strings.Contains(result, "clusterIP:") {
 		t.Error("should strip spec.clusterIP from Service")
 	}
 
-	if strings.Contains(result, "clusterIPs") {
+	if strings.Contains(result, "clusterIPs:") {
 		t.Error("should strip spec.clusterIPs from Service")
 	}
 
@@ -6269,24 +6269,8 @@ func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
 			"daemonsets.apps \"svclb-traefik\" already exists\n" +
 				"connection refused",
 		)
-		errConnectionRefused  = errors.New("connection refused")
-		errAlreadyExists      = errors.New("already exists")
-		errIPAlreadyAllocated = errors.New(
-			`Service "cert-manager" is invalid: spec.clusterIPs: Invalid value: ` +
-				`[]string{"10.110.234.28"}: failed to allocate IP 10.110.234.28: ` +
-				`provided IP is already allocated`,
-		)
-		errMixedAllocatedAndExists = errors.New(
-			`Service "cert-manager" is invalid: spec.clusterIPs: Invalid value: ` +
-				`[]string{"10.110.234.28"}: failed to allocate IP 10.110.234.28: ` +
-				"provided IP is already allocated\n" +
-				`services "cilium-envoy" already exists`,
-		)
-		errMixedAllocatedAndReal = errors.New(
-			`Service "cert-manager" is invalid: spec.clusterIPs: Invalid value: ` +
-				`[]string{"10.110.234.28"}: provided IP is already allocated` + "\n" +
-				"connection refused",
-		)
+		errConnectionRefused = errors.New("connection refused")
+		errAlreadyExists     = errors.New("already exists")
 	)
 
 	tests := []struct {
@@ -6350,34 +6334,6 @@ func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
 			err:       errAlreadyExists,
 			stderr:    "",
 			policy:    "update",
-			expectNil: false,
-		},
-		{
-			name:      "IP already allocated in stderr with policy none",
-			err:       errExitStatus1,
-			stderr:    `Service "cert-manager" is invalid: spec.clusterIPs: provided IP is already allocated`,
-			policy:    "none",
-			expectNil: true,
-		},
-		{
-			name:      "IP already allocated in err.Error() with empty stderr",
-			err:       errIPAlreadyAllocated,
-			stderr:    "",
-			policy:    "none",
-			expectNil: true,
-		},
-		{
-			name:      "mixed already allocated and already exists",
-			err:       errMixedAllocatedAndExists,
-			stderr:    "",
-			policy:    "none",
-			expectNil: true,
-		},
-		{
-			name:      "mixed already allocated and real error",
-			err:       errMixedAllocatedAndReal,
-			stderr:    "",
-			policy:    "none",
 			expectNil: false,
 		},
 	}
