@@ -318,7 +318,7 @@ rules:
 Edit the file to enforce your signature policy, then run `ksail cluster create`. Rules are evaluated in order; the first matching rule applies.
 
 > [!NOTE]
-> `--image-verification` is only available for the `Talos` distribution and requires Talos 1.13+. For earlier Talos versions, omit the flag or use `--image-verification Disabled`.
+> For `Talos`, `--image-verification Enabled` scaffolds a native `ImageVerificationConfig` document and requires Talos 1.13+. For earlier Talos versions, omit the flag or use `--image-verification Disabled`. The `Vanilla` (Kind) distribution also supports `--image-verification Enabled` via containerd config patches — see [Vanilla Image Verification](/distributions/vanilla/#image-verification).
 
 See the [Talos image verification docs](https://www.talos.dev/v1.13/talos-guides/configuration/image-verification/) for the full rule schema.
 
