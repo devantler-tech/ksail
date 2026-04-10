@@ -1759,8 +1759,8 @@ github.com/siderolabs/go-talos-support v0.1.4 h1:vFYI7tcuyH4PoSkSOZtFMX8OKjvrkkt
 github.com/siderolabs/go-talos-support v0.1.4/go.mod h1:1DX20fTINVjMaW2zBmmqDBmQ4Be/6a6HwyqI1DR1ijM=
 github.com/siderolabs/net v0.4.0 h1:1bOgVay/ijPkJz4qct98nHsiB/ysLQU0KLoBC4qLm7I=
 github.com/siderolabs/net v0.4.0/go.mod h1:/ibG+Hm9HU27agp5r9Q3eZicEfjquzNzQNux5uEk0kM=
-github.com/siderolabs/omni/client v1.6.3 h1:Lz/Ay7aTsEJGrGKfeKUkLx9dVIy/Clh7KT2EMxINOj4=
-github.com/siderolabs/omni/client v1.6.3/go.mod h1:ReJGPZd+az3yHzDvnZRH5PbU2zfdGgrIAtPBrv6e8Ac=
+github.com/siderolabs/omni/client v1.6.4 h1:vzSWbQp9c+wIUM0OdMM7QSRtyowKdD6d44O+TrOsrzA=
+github.com/siderolabs/omni/client v1.6.4/go.mod h1:ReJGPZd+az3yHzDvnZRH5PbU2zfdGgrIAtPBrv6e8Ac=
 github.com/siderolabs/proto-codec v0.1.3 h1:tRzt2Rlc84Uv+Lx6vV2VmFpgHSV1fUNq/7nTXU892dM=
 github.com/siderolabs/proto-codec v0.1.3/go.mod h1:k6Sn8r+0473+xHL4t1rxD51lWm05rDqFpXecSUg3UE8=
 github.com/siderolabs/protoenc v0.2.4 h1:D3Fpn2nQSQOhl8ZlAxijZAf7K6F8CM1uZq0afIGsr8Q=

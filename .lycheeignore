@@ -13,6 +13,9 @@ https://kubernetes.default.svc/
 # GoReleaser template URL (not a real URL)
 https://github.com/devantler-tech/ksail/releases/download/
 
+# pkg.go.dev may lag behind newly published major versions (returns 404 until indexed)
+https://pkg.go.dev/github.com/devantler-tech/ksail/
+
 # Part of templated code
 https://x-access-token/
 
