@@ -2618,6 +2618,41 @@ func TestDelete_CommandFlags(t *testing.T) {
 	require.Nil(t, distributionFlag, "unexpected --distribution flag (should be removed)")
 }
 
+func TestConnect_CommandFlags(t *testing.T) {
+	t.Parallel()
+
+	cmd := cluster.NewConnectCmd(nil)
+
+	// Verify expected flags exist
+	contextFlag := cmd.Flags().Lookup("context")
+	require.NotNil(t, contextFlag, "expected --context flag")
+	require.Equal(t, "c", contextFlag.Shorthand)
+
+	kubeconfigFlag := cmd.Flags().Lookup("kubeconfig")
+	require.NotNil(t, kubeconfigFlag, "expected --kubeconfig flag")
+	require.Equal(t, "k", kubeconfigFlag.Shorthand)
+
+	editorFlag := cmd.Flags().Lookup("editor")
+	require.NotNil(t, editorFlag, "expected --editor flag")
+
+	// Verify hidden flags exist but are hidden (needed for config defaults/validation)
+	distributionFlag := cmd.Flags().Lookup("distribution")
+	require.NotNil(t, distributionFlag, "expected --distribution flag (hidden)")
+	require.True(t, distributionFlag.Hidden, "--distribution should be hidden")
+
+	distributionConfigFlag := cmd.Flags().Lookup("distribution-config")
+	require.NotNil(t, distributionConfigFlag, "expected --distribution-config flag (hidden)")
+	require.True(t, distributionConfigFlag.Hidden, "--distribution-config should be hidden")
+
+	gitopsEngineFlag := cmd.Flags().Lookup("gitops-engine")
+	require.NotNil(t, gitopsEngineFlag, "expected --gitops-engine flag (hidden)")
+	require.True(t, gitopsEngineFlag.Hidden, "--gitops-engine should be hidden")
+
+	localRegistryFlag := cmd.Flags().Lookup("local-registry")
+	require.NotNil(t, localRegistryFlag, "expected --local-registry flag (hidden)")
+	require.True(t, localRegistryFlag.Hidden, "--local-registry should be hidden")
+}
+
 // TestDelete_Confirmation_Accepted tests that deletion proceeds when user confirms with "yes".
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper

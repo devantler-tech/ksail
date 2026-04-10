@@ -69,7 +69,7 @@ require (
 	github.com/loft-sh/vcluster v0.33.1
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/siderolabs/go-retry v0.3.3
-	github.com/siderolabs/omni/client v1.6.3
+	github.com/siderolabs/omni/client v1.6.4
 	golang.org/x/text v0.35.0
 	gopkg.in/yaml.v3 v3.0.1
 )

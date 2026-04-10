@@ -127,3 +127,13 @@ func (p *Provisioner) ApplyNodeScalingChangesForTest(
 ) error {
 	return p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
 }
+
+// ExtractTagFromImageForTest exposes extractTagFromImage for unit testing.
+func ExtractTagFromImageForTest(image string) string {
+	return extractTagFromImage(image)
+}
+
+// InstallerImageFromTagForTest exposes installerImageFromTag for unit testing.
+func InstallerImageFromTagForTest(tag string) string {
+	return installerImageFromTag(tag)
+}

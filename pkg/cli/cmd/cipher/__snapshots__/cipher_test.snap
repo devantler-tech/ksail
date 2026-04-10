@@ -165,8 +165,8 @@ folder, all SOPS-encrypted YAML and JSON files in the folder are rotated.
 Use --recursive to include subdirectories.
 
 Optionally, master key recipients can be added or removed during rotation:
-  --new-key adds a new master key recipient
-  --old-key removes an existing master key recipient
+  --add-key adds a new master key recipient
+  --remove-key removes an existing master key recipient
 
 By default, the command shows which files will be affected and prompts for
 confirmation. Use --force to skip the confirmation prompt. In non-interactive
@@ -189,22 +189,22 @@ Examples:
   ksail cipher rotate secrets.yaml
 
   # Add a new age recipient during rotation
-  ksail cipher rotate ./k8s --new-key age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+  ksail cipher rotate ./k8s --add-key age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
 
   # Remove an old age recipient during rotation
-  ksail cipher rotate ./k8s --old-key age1oldkey...
+  ksail cipher rotate ./k8s --remove-key age1oldkey...
 
   # Replace a recipient (add new, remove old)
-  ksail cipher rotate ./k8s --new-key age1newkey... --old-key age1oldkey...
+  ksail cipher rotate ./k8s --add-key age1newkey... --remove-key age1oldkey...
 
 Usage:
   cipher rotate <file/folder> [flags]
 
 Flags:
-  -f, --force            skip confirmation prompt and rotate immediately
-  -h, --help             help for rotate
-      --new-key string   public key to add as a master key recipient
-      --old-key string   public key to remove from master key recipients
-  -r, --recursive        scan subdirectories when target is a folder
+      --add-key string      public key to add as a master key recipient
+  -f, --force               skip confirmation prompt and rotate immediately
+  -h, --help                help for rotate
+  -r, --recursive           scan subdirectories when target is a folder
+      --remove-key string   public key to remove from master key recipients
 
 ---
