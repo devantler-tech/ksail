@@ -148,3 +148,20 @@ func BuildClusterStatus(nodes []NodeInfo, readyState string) *ClusterStatus {
 		Nodes:      nodes,
 	}
 }
+
+// GetClusterStatusFromLister lists nodes and derives cluster status using
+// the given readyState. This is a shared helper for providers whose
+// GetClusterStatus implementation only needs ListNodes + BuildClusterStatus.
+func GetClusterStatusFromLister(
+	ctx context.Context,
+	lister NodeLister,
+	clusterName string,
+	readyState string,
+) (*ClusterStatus, error) {
+	nodes, err := lister.ListNodes(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("get cluster status: %w", err)
+	}
+
+	return BuildClusterStatus(nodes, readyState), nil
+}

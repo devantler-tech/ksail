@@ -165,12 +165,7 @@ func (p *Provider) GetClusterStatus(
 	ctx context.Context,
 	clusterName string,
 ) (*provider.ClusterStatus, error) {
-	nodes, err := p.ListNodes(ctx, clusterName)
-	if err != nil {
-		return nil, fmt.Errorf("get cluster status: %w", err)
-	}
-
-	return provider.BuildClusterStatus(nodes, "running"), nil
+	return provider.GetClusterStatusFromLister(ctx, p, clusterName, "running")
 }
 
 // nodeOperation defines a function that operates on a single container.
