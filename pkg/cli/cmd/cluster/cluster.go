@@ -2646,11 +2646,7 @@ func runInfoCmd(
 		return provErr
 	}
 
-	// Soft errors mean "no provider info" — don't propagate them.
-	if errors.Is(provErr, errProviderNotConfigured) ||
-		errors.Is(provErr, provider.ErrClusterNotFound) {
-		provErr = nil
-	}
+	provErr = classifyProviderError(provErr)
 
 	hasProviderInfo := provErr == nil && status != nil
 	if hasProviderInfo {
@@ -2674,6 +2670,17 @@ func runInfoCmd(
 	}
 
 	return buildNoInfoError(resolved.ClusterName, provErr)
+}
+
+// classifyProviderError returns nil for soft errors that mean "no provider info"
+// (missing credentials, cluster not found) and passes through real errors.
+func classifyProviderError(err error) error {
+	if errors.Is(err, errProviderNotConfigured) ||
+		errors.Is(err, provider.ErrClusterNotFound) {
+		return nil
+	}
+
+	return err
 }
 
 // buildNoInfoError creates the final error when no info is available.
