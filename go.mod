@@ -759,7 +759,7 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gorm.io/gorm v1.31.1 // indirect
-	helm.sh/helm/v3 v3.19.2 // indirect
+	helm.sh/helm/v3 v3.20.2 // indirect
 	honnef.co/go/tools v0.6.1 // indirect
 	k8s.io/apiserver v0.35.3 // indirect
 	k8s.io/cluster-bootstrap v0.35.0 // indirect
