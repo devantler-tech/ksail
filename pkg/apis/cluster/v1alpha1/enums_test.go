@@ -759,7 +759,6 @@ func TestExpectedContextName(t *testing.T) {
 
 // EffectiveValue tests.
 
-//nolint:funlen // Table-driven test with comprehensive distribution × value combinations.
 func TestCSI_EffectiveValue(t *testing.T) { //nolint:dupl,funlen // enum pattern
 	t.Parallel()
 

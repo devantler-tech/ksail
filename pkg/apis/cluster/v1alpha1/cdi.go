@@ -1,4 +1,4 @@
-package v1alpha1 //nolint:dupl // enum types follow a consistent pattern by design
+package v1alpha1
 
 import (
 	"fmt"

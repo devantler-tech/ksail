@@ -134,8 +134,8 @@ func TestStandardFieldSelectors(t *testing.T) {
 			},
 		},
 		{
-			name:            "cdi",
-			factory:         configmanager.DefaultCDIFieldSelector,
+			name:    "cdi",
+			factory: configmanager.DefaultCDIFieldSelector,
 			expectedDesc: "Container Device Interface " +
 				"(Default: use distribution, Enabled: enable CDI, Disabled: disable CDI)",
 			expectedDefault: v1alpha1.CDIDefault,
