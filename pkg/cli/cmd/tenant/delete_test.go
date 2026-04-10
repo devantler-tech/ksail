@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	tenantcmd "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/tenant"
-	"github.com/devantler-tech/ksail/v5/pkg/di"
+	tenantcmd "github.com/devantler-tech/ksail/v6/pkg/cli/cmd/tenant"
+	"github.com/devantler-tech/ksail/v6/pkg/di"
 	"github.com/stretchr/testify/require"
 )
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/client/netretry"
+	"github.com/devantler-tech/ksail/v6/pkg/client/netretry"
 )
 
 const (

@@ -25,8 +25,8 @@ var (
 	ErrNamespaceRequired = errors.New("at least one namespace is required")
 	// ErrGitProviderRequired is returned when --git-provider is required but not set.
 	ErrGitProviderRequired = errors.New("--git-provider is required")
-	// ErrGitRepoRequired is returned when --git-repo is required but not set.
-	ErrGitRepoRequired = errors.New("--git-repo is required")
+	// ErrTenantRepoRequired is returned when --tenant-repo is required but not set.
+	ErrTenantRepoRequired = errors.New("--tenant-repo is required")
 	// ErrRegistryRequired is returned when --registry is required but not set.
 	ErrRegistryRequired = errors.New("--registry is required for Flux OCI sync source")
 	// ErrUnsupportedSyncSource is returned when an unsupported sync source is specified.
@@ -37,10 +37,6 @@ var (
 	ErrTenantDirNotExist = errors.New("tenant directory does not exist")
 	// ErrOutsideKustomizationRoot is returned when a tenant path is outside the kustomization root.
 	ErrOutsideKustomizationRoot = errors.New("tenant directory is outside the kustomization root")
-	// ErrDeliveryNotImplemented is returned when --delivery pr is used (not yet implemented).
-	ErrDeliveryNotImplemented = errors.New(
-		"--delivery pr is not yet implemented; use --delivery commit (default)",
-	)
 	// ErrInvalidDelivery is returned when an invalid --delivery value is provided.
 	ErrInvalidDelivery = errors.New("invalid --delivery value")
 	// ErrInvalidSyncSource is returned when an invalid --sync-source value is provided.
@@ -54,8 +50,16 @@ var (
 	ErrDeleteRepoGitProviderRequired = errors.New(
 		"--git-provider is required when --delete-repo is set",
 	)
-	// ErrDeleteRepoGitRepoRequired is returned when --git-repo is required with --delete-repo.
-	ErrDeleteRepoGitRepoRequired = errors.New("--git-repo is required when --delete-repo is set")
+	// ErrDeleteRepoTenantRepoRequired is returned when --tenant-repo is required with --delete-repo.
+	ErrDeleteRepoTenantRepoRequired = errors.New(
+		"--tenant-repo is required when --delete-repo is set",
+	)
+	// ErrPlatformRepoRequired is returned when the platform repo cannot be resolved.
+	ErrPlatformRepoRequired = errors.New(
+		"--platform-repo is required (or run from a git repo with a remote)",
+	)
+	// ErrOutsideRepoRoot is returned when a collected file path escapes the repo root.
+	ErrOutsideRepoRoot = errors.New("file is outside the repository root")
 	// ErrRBACConfigMapNotFound is returned when no argocd-rbac-cm ConfigMap file is found.
 	ErrRBACConfigMapNotFound = errors.New("no argocd-rbac-cm ConfigMap found")
 )

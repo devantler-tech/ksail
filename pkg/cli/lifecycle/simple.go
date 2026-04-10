@@ -5,15 +5,15 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
-	"github.com/devantler-tech/ksail/v5/pkg/notify"
-	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
-	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/flags"
+	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/ksail"
+	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	clusterdetector "github.com/devantler-tech/ksail/v6/pkg/svc/detector/cluster"
+	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
+	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
 	"github.com/spf13/cobra"
 )
 
@@ -192,7 +192,7 @@ func resolveFromConfig(
 		*kubeconfigPath = cfg.Spec.Cluster.Connection.Kubeconfig
 	}
 
-	*omniOpts = cfg.Spec.Cluster.Omni
+	*omniOpts = cfg.Spec.Provider.Omni
 }
 
 // clusterNameFromDistConfig extracts the cluster name from distribution-specific config.

@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/kind"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
-	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
-	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
-	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
-	vclusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/vcluster"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
+	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/detector"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	k3dprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/k3d"
+	kindprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kind"
+	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
+	vclusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/vcluster"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/yaml"
@@ -136,6 +136,11 @@ func (f DefaultFactory) createKindProvisioner(
 	// This must happen AFTER applyKindNodeCounts since that function may replace the nodes slice.
 	if cluster.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
 		kindconfigmanager.ApplyKubeletCertRotationPatches(kindConfig)
+	}
+
+	// Apply containerd image verifier plugin patch when image verification is enabled.
+	if cluster.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
+		kindconfigmanager.ApplyImageVerificationPatches(kindConfig)
 	}
 
 	provisioner, err := kindprovisioner.CreateProvisioner(
@@ -276,8 +281,8 @@ func (f DefaultFactory) createTalosProvisioner(
 		cluster.Spec.Cluster.Connection.Kubeconfig,
 		cluster.Spec.Cluster.Provider,
 		cluster.Spec.Cluster.Talos,
-		cluster.Spec.Cluster.Hetzner,
-		cluster.Spec.Cluster.Omni,
+		cluster.Spec.Provider.Hetzner,
+		cluster.Spec.Provider.Omni,
 		skipCNIChecks,
 	)
 	if err != nil {

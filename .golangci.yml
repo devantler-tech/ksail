@@ -83,6 +83,7 @@ linters:
             - github.com/github/copilot-sdk
             - github.com/go-viper/mapstructure/v2
             - github.com/google/go-containerregistry
+            - github.com/google/go-github
             - github.com/hetznercloud
             - github.com/invopop/jsonschema
             - github.com/Masterminds/semver

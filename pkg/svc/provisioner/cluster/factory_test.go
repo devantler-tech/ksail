@@ -4,12 +4,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
-	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
-	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
-	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
+	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
+	k3dprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/k3d"
+	kindprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kind"
+	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
 	k3dTypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
@@ -250,4 +250,70 @@ func TestCreateKindProvisioner_DockerClientError(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, provisioner)
 	assert.Contains(t, err.Error(), "failed to create Docker client")
+}
+
+func TestCreateKindProvisioner_ImageVerificationPatchApplied(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "://invalid")
+
+	kindConfig := &v1alpha4.Cluster{
+		Name: "test-kind",
+	}
+
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind: kindConfig,
+		},
+	}
+
+	cluster := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVanilla,
+				Talos: v1alpha1.OptionsTalos{
+					ImageVerification: v1alpha1.ImageVerificationEnabled,
+				},
+			},
+		},
+	}
+
+	// factory.Create will fail on Docker client creation,
+	// but image verification patches are applied before that.
+	//nolint:dogsled // only testing side effects on kindConfig, return values irrelevant
+	_, _, _ = factory.Create(context.Background(), cluster)
+
+	assert.NotEmpty(t, kindConfig.ContainerdConfigPatches,
+		"image verification containerd config patch should be applied")
+	assert.Contains(t, kindConfig.ContainerdConfigPatches[0],
+		`io.containerd.image-verifier.v1.bindir`)
+}
+
+func TestCreateKindProvisioner_ImageVerificationDisabledNoPatch(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "://invalid")
+
+	kindConfig := &v1alpha4.Cluster{
+		Name: "test-kind",
+	}
+
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind: kindConfig,
+		},
+	}
+
+	cluster := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVanilla,
+				Talos: v1alpha1.OptionsTalos{
+					ImageVerification: v1alpha1.ImageVerificationDisabled,
+				},
+			},
+		},
+	}
+
+	//nolint:dogsled // only testing side effects on kindConfig, return values irrelevant
+	_, _, _ = factory.Create(context.Background(), cluster)
+
+	assert.Empty(t, kindConfig.ContainerdConfigPatches,
+		"no containerd config patch should be applied when image verification is disabled")
 }

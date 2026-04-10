@@ -193,7 +193,13 @@
               },
               "additionalProperties": false,
               "type": "object"
-            },
+            }
+          },
+          "additionalProperties": false,
+          "type": "object"
+        },
+        "provider": {
+          "properties": {
             "hetzner": {
               "properties": {
                 "controlPlaneServerType": {

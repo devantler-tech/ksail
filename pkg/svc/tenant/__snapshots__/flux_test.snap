@@ -65,7 +65,7 @@ spec:
 
 ---
 
-[TestGenerateFluxSyncManifests/oci_source_with_registry_and_git-repo - 1]
+[TestGenerateFluxSyncManifests/oci_source_with_registry_and_tenant-repo - 1]
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:

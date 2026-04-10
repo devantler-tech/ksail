@@ -1,4 +1,4 @@
-module github.com/devantler-tech/ksail/v5
+module github.com/devantler-tech/ksail/v6
 
 go 1.26.1
 
@@ -62,13 +62,14 @@ require (
 	github.com/cosi-project/runtime v1.14.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/github/copilot-sdk/go v0.2.0
+	github.com/google/go-github/v72 v72.0.0
 	github.com/hetznercloud/hcloud-go/v2 v2.37.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
 	github.com/loft-sh/vcluster v0.33.1
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/siderolabs/go-retry v0.3.3
-	github.com/siderolabs/omni/client v1.6.3
+	github.com/siderolabs/omni/client v1.6.4
 	golang.org/x/text v0.35.0
 	gopkg.in/yaml.v3 v3.0.1
 )

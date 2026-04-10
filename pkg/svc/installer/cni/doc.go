@@ -46,8 +46,8 @@
 //	import (
 //	    "context"
 //	    "time"
-//	    "github.com/devantler-tech/ksail/v5/pkg/client/helm"
-//	    ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
+//	    "github.com/devantler-tech/ksail/v6/pkg/client/helm"
+//	    ciliuminstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/cni/cilium"
 //	)
 //
 //	helmClient := helm.NewClient(...)

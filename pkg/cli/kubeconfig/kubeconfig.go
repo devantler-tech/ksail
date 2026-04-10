@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
-	"github.com/devantler-tech/ksail/v5/pkg/k8s"
-	"github.com/devantler-tech/ksail/v5/pkg/timer"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v6/pkg/k8s"
+	"github.com/devantler-tech/ksail/v6/pkg/timer"
 	"github.com/spf13/cobra"
 )
 

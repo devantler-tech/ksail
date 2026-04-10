@@ -26,7 +26,7 @@ const (
 type Provider interface {
 	// CreateRepo creates a new repository.
 	CreateRepo(ctx context.Context, owner, name string, visibility RepoVisibility) error
-	// PushFiles pushes files to a repository (one commit per file via Contents API).
+	// PushFiles pushes files to a repository's default branch (one commit per file via Contents API).
 	PushFiles(
 		ctx context.Context,
 		owner, name string,
@@ -35,6 +35,31 @@ type Provider interface {
 	) error
 	// DeleteRepo deletes a repository.
 	DeleteRepo(ctx context.Context, owner, name string) error
+	// GetDefaultBranch returns the default branch name of a repository.
+	GetDefaultBranch(ctx context.Context, owner, repo string) (string, error)
+	// CreateBranch creates a new branch from the given base branch.
+	CreateBranch(ctx context.Context, owner, repo, branchName, baseBranch string) error
+	// PushFilesToBranch pushes files to a specific branch (one commit per file via Contents API).
+	PushFilesToBranch(
+		ctx context.Context,
+		owner, repo, branch string,
+		files map[string][]byte,
+		commitMsg string,
+	) error
+	// CreatePullRequest creates a pull request and returns the PR URL.
+	CreatePullRequest(ctx context.Context, owner, repo string, opts PROptions) (string, error)
+}
+
+// PROptions holds options for creating a pull request.
+type PROptions struct {
+	// Title is the pull request title.
+	Title string
+	// Body is the pull request description.
+	Body string
+	// Head is the source branch name.
+	Head string
+	// Base is the target branch name.
+	Base string
 }
 
 var (
@@ -42,8 +67,8 @@ var (
 	ErrUnsupportedProvider = errors.New("unsupported git provider")
 	// ErrTokenRequired is returned when a token is required but not provided.
 	ErrTokenRequired = errors.New("git provider API token is required")
-	// ErrInvalidGitRepoFormat is returned when the git-repo format is invalid.
-	ErrInvalidGitRepoFormat = errors.New("invalid git-repo format")
+	// ErrInvalidRepoFormat is returned when the repo format is invalid.
+	ErrInvalidRepoFormat = errors.New("invalid repo format")
 	// ErrInvalidRepoVisibility is returned when the repo visibility is invalid.
 	ErrInvalidRepoVisibility = errors.New("invalid repo-visibility")
 	// ErrGitHubAPI is returned when the GitHub API returns an error.
@@ -52,6 +77,8 @@ var (
 	ErrRepoAlreadyExists = errors.New("repository already exists")
 	// ErrOwnerMismatch is returned when the token user does not match the requested owner.
 	ErrOwnerMismatch = errors.New("authenticated user does not match requested owner")
+	// ErrBranchAlreadyExists is returned when the branch already exists.
+	ErrBranchAlreadyExists = errors.New("branch already exists")
 )
 
 const (
@@ -119,7 +146,7 @@ func ParseOwnerRepo(gitRepo string) (string, string, error) {
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", "", fmt.Errorf(
 			"%w: %q (expected owner/repo-name)",
-			ErrInvalidGitRepoFormat,
+			ErrInvalidRepoFormat,
 			gitRepo,
 		)
 	}

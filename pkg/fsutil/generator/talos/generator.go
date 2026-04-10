@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/fsutil/generator/yaml"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
 )
 
 const (

@@ -53,6 +53,31 @@ Add `--register` to automatically append the tenant to the nearest `kustomizatio
 ksail tenant create my-team --register
 ```
 
+### Deliver via Pull Request
+
+Use `--delivery pr` to deliver platform changes as a pull request against the platform repo:
+
+```bash
+ksail tenant create my-team --register --delivery pr \
+  --git-provider github
+```
+
+The platform repo is auto-detected from the local `git remote origin`. Override with `--platform-repo`:
+
+```bash
+ksail tenant create my-team --register --delivery pr \
+  --git-provider github \
+  --platform-repo my-org/platform-repo
+```
+
+Set the PR target branch with `--target-branch` (defaults to the repo's default branch):
+
+```bash
+ksail tenant create my-team --register --delivery pr \
+  --git-provider github \
+  --target-branch develop
+```
+
 ### Flux Tenants
 
 For Flux tenants, specify the sync source type and registry or Git repo:
@@ -67,7 +92,7 @@ ksail tenant create my-team --type flux \
 ksail tenant create my-team --type flux \
   --sync-source git \
   --git-provider github \
-  --git-repo my-org/my-team-infra
+  --tenant-repo my-org/my-team-infra
 ```
 
 To scaffold a new Git repository for the tenant (requires `--git-provider github`):
@@ -76,7 +101,7 @@ To scaffold a new Git repository for the tenant (requires `--git-provider github
 ksail tenant create my-team --type flux \
   --sync-source git \
   --git-provider github \
-  --git-repo my-org/my-team-infra
+  --tenant-repo my-org/my-team-infra
 ```
 
 KSail resolves the GitHub token automatically using the following fallback chain:
@@ -92,23 +117,44 @@ Pass `--git-token` explicitly only when you need to override the auto-detected t
 ```bash
 ksail tenant create my-team --type flux \
   --git-provider github \
-  --git-repo my-org/my-team-infra \
+  --tenant-repo my-org/my-team-infra \
   --git-token "${MY_BOT_TOKEN}"
 ```
 
 ### ArgoCD Tenants
 
-ArgoCD tenants generate an AppProject, Application, and argocd-rbac-cm ConfigMap entry:
+ArgoCD tenants generate RBAC isolation manifests, an AppProject, and an Application:
 
 ```bash
 ksail tenant create my-team --type argocd \
   --git-provider github \
-  --git-repo my-org/my-team-infra
+  --tenant-repo my-org/my-team-infra
 ```
+
+```text
+platform/tenants/my-team/
+├── kustomization.yaml
+├── namespace.yaml
+├── serviceaccount.yaml
+├── rolebinding.yaml
+├── project.yaml
+└── app.yaml
+```
+
+Add `--register` to also merge the tenant RBAC policy into the shared `argocd-rbac-cm` ConfigMap:
+
+```bash
+ksail tenant create my-team --type argocd \
+  --git-provider github \
+  --tenant-repo my-org/my-team-infra \
+  --register
+```
+
+KSail scans the kustomization directory for an `argocd-rbac-cm` ConfigMap (by content, not filename). If found, it merges the tenant policy. If not found, it creates `argocd-rbac-cm.yaml` in the same directory and registers it in `kustomization.yaml`.
 
 ### kubectl Tenants
 
-kubectl tenants generate RBAC-only platform manifests (no GitOps sync resources). When `--git-provider github` and `--git-repo` are provided, KSail also scaffolds a tenant repository without GitOps-specific resources — provided a GitHub token can be resolved (see the [token resolution](#flux-tenants) fallback chain above). If no token is available, the command still succeeds and only the local platform manifests are generated:
+kubectl tenants generate RBAC-only platform manifests (no GitOps sync resources). When `--git-provider github` and `--tenant-repo` are provided, KSail also scaffolds a tenant repository without GitOps-specific resources — provided a GitHub token can be resolved (see the [token resolution](#flux-tenants) fallback chain above). If no token is available, the command still succeeds and only the local platform manifests are generated:
 
 ```bash
 ksail tenant create my-team --type kubectl
@@ -116,7 +162,7 @@ ksail tenant create my-team --type kubectl
 # With repo scaffolding
 ksail tenant create my-team --type kubectl \
   --git-provider github \
-  --git-repo my-org/my-team-manifests
+  --tenant-repo my-org/my-team-manifests
 ```
 
 The scaffolded repo contains a plain kustomize setup for manual workflows:
@@ -140,11 +186,15 @@ ksail tenant delete my-team
 # requires a valid token from the fallback chain above)
 ksail tenant delete my-team --delete-repo \
   --git-provider github \
-  --git-repo my-org/my-team-infra
+  --tenant-repo my-org/my-team-infra
 
 # Keep kustomization.yaml entry
 ksail tenant delete my-team --unregister=false
 ```
+
+### ArgoCD RBAC Cleanup
+
+When deleting an ArgoCD tenant, KSail automatically removes the tenant's policy entries from the `argocd-rbac-cm` ConfigMap. It scans YAML files in the output directory for a ConfigMap named `argocd-rbac-cm` (content-based detection, not filename-based) and removes lines belonging to the deleted tenant. If no RBAC ConfigMap file is found, the step is silently skipped.
 
 ## Applying Tenant Manifests
 

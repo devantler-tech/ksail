@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	runner "github.com/devantler-tech/ksail/v5/pkg/runner"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	runner "github.com/devantler-tech/ksail/v6/pkg/runner"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 	nodecommand "github.com/k3d-io/k3d/v5/cmd/node"
 )
 
@@ -422,7 +422,7 @@ func (k *Provisioner) nextAgentIndex(
 // static defaults when no detector is available.
 func (k *Provisioner) GetCurrentConfig(
 	ctx context.Context,
-) (*v1alpha1.ClusterSpec, error) {
+) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
 	if k.componentDetector != nil {
 		spec, err := k.componentDetector.DetectComponents(
 			ctx,
@@ -430,11 +430,14 @@ func (k *Provisioner) GetCurrentConfig(
 			v1alpha1.ProviderDocker,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("detect components: %w", err)
+			return nil, nil, fmt.Errorf("detect components: %w", err)
 		}
 
-		return spec, nil
+		return spec, nil, nil
 	}
 
-	return clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker), nil
+	return clusterupdate.DefaultCurrentSpec(
+		v1alpha1.DistributionK3s,
+		v1alpha1.ProviderDocker,
+	), nil, nil
 }

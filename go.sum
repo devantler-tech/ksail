@@ -961,6 +961,8 @@ github.com/google/go-github/v30 v30.1.0 h1:VLDx+UolQICEOKu2m4uAoMti1SxuEBAl7RSEG
 github.com/google/go-github/v30 v30.1.0/go.mod h1:n8jBpHl45a/rlBUtRJMOG4GhNADUQFEufcolZ95JfU8=
 github.com/google/go-github/v53 v53.2.1-0.20230815134205-bb00f570d301 h1:+6L5X9drVctHpPxKN3JGVK1bSHwhih3hS5dA+HhTS1o=
 github.com/google/go-github/v53 v53.2.1-0.20230815134205-bb00f570d301/go.mod h1:xvyf7v3bRR+rQKPiD9ewOHBfC0Q0hS9AHxQJscBfSHg=
+github.com/google/go-github/v72 v72.0.0 h1:FcIO37BLoVPBO9igQQ6tStsv2asG4IPcYFi655PPvBM=
+github.com/google/go-github/v72 v72.0.0/go.mod h1:WWtw8GMRiL62mvIquf1kO3onRHeWWKmK01qdCY8c5fg=
 github.com/google/go-querystring v1.0.0/go.mod h1:odCYkC5MyYFN7vkCjXpyrEuKhc/BUO6wN/zVPAxq5ck=
 github.com/google/go-querystring v1.1.0 h1:AnCroh3fv4ZBgVIf1Iwtovgjaw/GiKJo8M8yD/fhyJ8=
 github.com/google/go-querystring v1.1.0/go.mod h1:Kcdr2DB4koayq7X8pmAG4sNG59So17icRSOU623lUBU=
@@ -1757,8 +1759,8 @@ github.com/siderolabs/go-talos-support v0.1.4 h1:vFYI7tcuyH4PoSkSOZtFMX8OKjvrkkt
 github.com/siderolabs/go-talos-support v0.1.4/go.mod h1:1DX20fTINVjMaW2zBmmqDBmQ4Be/6a6HwyqI1DR1ijM=
 github.com/siderolabs/net v0.4.0 h1:1bOgVay/ijPkJz4qct98nHsiB/ysLQU0KLoBC4qLm7I=
 github.com/siderolabs/net v0.4.0/go.mod h1:/ibG+Hm9HU27agp5r9Q3eZicEfjquzNzQNux5uEk0kM=
-github.com/siderolabs/omni/client v1.6.3 h1:Lz/Ay7aTsEJGrGKfeKUkLx9dVIy/Clh7KT2EMxINOj4=
-github.com/siderolabs/omni/client v1.6.3/go.mod h1:ReJGPZd+az3yHzDvnZRH5PbU2zfdGgrIAtPBrv6e8Ac=
+github.com/siderolabs/omni/client v1.6.4 h1:vzSWbQp9c+wIUM0OdMM7QSRtyowKdD6d44O+TrOsrzA=
+github.com/siderolabs/omni/client v1.6.4/go.mod h1:ReJGPZd+az3yHzDvnZRH5PbU2zfdGgrIAtPBrv6e8Ac=
 github.com/siderolabs/proto-codec v0.1.3 h1:tRzt2Rlc84Uv+Lx6vV2VmFpgHSV1fUNq/7nTXU892dM=
 github.com/siderolabs/proto-codec v0.1.3/go.mod h1:k6Sn8r+0473+xHL4t1rxD51lWm05rDqFpXecSUg3UE8=
 github.com/siderolabs/protoenc v0.2.4 h1:D3Fpn2nQSQOhl8ZlAxijZAf7K6F8CM1uZq0afIGsr8Q=

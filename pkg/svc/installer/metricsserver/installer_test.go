@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	metricsserverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metricsserver"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
+	metricsserverinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/metricsserver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

@@ -5,10 +5,10 @@ import (
 	"io"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
-	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -137,6 +137,36 @@ func TestUpdateSkipsOmniInPlaceConfigApply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Update() error = %v, want nil", err)
 	}
+}
+
+// TestUpdateSkipsOmniVersionUpgrade verifies the omniOpts guard in applyTalosVersionUpgrade
+// prevents Talos OS upgrade attempts on Omni-managed clusters.
+// Without the guard, Update() would try to query node versions via the Talos API and fail.
+func TestUpdateSkipsOmniVersionUpgrade(t *testing.T) {
+	t.Parallel()
+
+	talosConfigs, err := talosconfigmanager.NewDefaultConfigs()
+	if err != nil {
+		t.Fatalf("NewDefaultConfigs() error = %v", err)
+	}
+
+	provisioner := talosprovisioner.NewProvisioner(talosConfigs, nil).
+		WithOmniOptions(v1alpha1.OptionsOmni{}).
+		WithLogWriter(io.Discard)
+
+	// Identical specs: only the version upgrade step runs (no scaling/config changes).
+	spec := &v1alpha1.ClusterSpec{}
+	spec.Talos.ControlPlanes = 1
+
+	result, err := provisioner.Update(
+		context.Background(),
+		"demo",
+		spec,
+		spec,
+		clusterupdate.UpdateOptions{},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, result.FailedChanges)
 }
 
 // TestApplyNodeScalingChanges_NilSpecs verifies that nil specs short-circuit scaling without error.

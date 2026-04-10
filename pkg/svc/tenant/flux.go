@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/tenant/gitprovider"
 	"sigs.k8s.io/yaml"
 )
 
@@ -128,11 +128,11 @@ func buildFluxOCISource(opts Options, primaryNS string) (fluxSource, error) {
 		return fluxSource{}, fmt.Errorf("%w", ErrRegistryRequired)
 	}
 
-	if opts.GitRepo == "" {
-		return fluxSource{}, fmt.Errorf("%w for Flux OCI sync source", ErrGitRepoRequired)
+	if opts.TenantRepo == "" {
+		return fluxSource{}, fmt.Errorf("%w for Flux OCI sync source", ErrTenantRepoRequired)
 	}
 
-	owner, repo, err := gitprovider.ParseOwnerRepo(opts.GitRepo)
+	owner, repo, err := gitprovider.ParseOwnerRepo(opts.TenantRepo)
 	if err != nil {
 		return fluxSource{}, fmt.Errorf("parsing git repo for OCI source: %w", err)
 	}
@@ -160,11 +160,11 @@ func buildFluxGitSource(opts Options, primaryNS string) (fluxSource, error) {
 		return fluxSource{}, fmt.Errorf("%w for Flux Git sync source", ErrGitProviderRequired)
 	}
 
-	if opts.GitRepo == "" {
-		return fluxSource{}, fmt.Errorf("%w for Flux Git sync source", ErrGitRepoRequired)
+	if opts.TenantRepo == "" {
+		return fluxSource{}, fmt.Errorf("%w for Flux Git sync source", ErrTenantRepoRequired)
 	}
 
-	_, _, parseErr := gitprovider.ParseOwnerRepo(opts.GitRepo)
+	_, _, parseErr := gitprovider.ParseOwnerRepo(opts.TenantRepo)
 	if parseErr != nil {
 		return fluxSource{}, fmt.Errorf("parsing git repo for Git source: %w", parseErr)
 	}
@@ -181,7 +181,7 @@ func buildFluxGitSource(opts Options, primaryNS string) (fluxSource, error) {
 		},
 		Spec: fluxSourceSpec{
 			Interval: "1m",
-			URL:      fmt.Sprintf("https://%s/%s", host, opts.GitRepo),
+			URL:      fmt.Sprintf("https://%s/%s", host, opts.TenantRepo),
 			Ref:      fluxSourceRef{Branch: "main"},
 		},
 	}, nil

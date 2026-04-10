@@ -3,8 +3,8 @@ package diff
 import (
 	"strconv"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // Engine computes configuration differences and classifies their impact.
@@ -21,8 +21,11 @@ func NewEngine(distribution v1alpha1.Distribution, provider v1alpha1.Provider) *
 	}
 }
 
-// ComputeDiff compares old and new ClusterSpec and categorizes all changes.
-func (e *Engine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *clusterupdate.UpdateResult {
+// ComputeDiff compares old and new ClusterSpec and ProviderSpec, and categorizes all changes.
+func (e *Engine) ComputeDiff(
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	oldProvider, newProvider *v1alpha1.ProviderSpec,
+) *clusterupdate.UpdateResult {
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	if oldSpec == nil || newSpec == nil {
@@ -36,7 +39,7 @@ func (e *Engine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *clusterupd
 	e.checkLocalRegistryChange(oldSpec, newSpec, result)
 	e.checkVanillaOptionsChange(oldSpec, newSpec, result)
 	e.checkTalosOptionsChange(oldSpec, newSpec, result)
-	e.checkHetznerOptionsChange(oldSpec, newSpec, result)
+	e.checkHetznerOptionsChange(oldProvider, newProvider, result)
 
 	return result
 }
@@ -144,6 +147,46 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 	}
 }
 
+// appendChange appends a single diff change to the appropriate category slice in result.
+// Both applyFieldRules and applyProviderFieldRules delegate to this helper to
+// avoid duplicating the default-value substitution and category dispatch logic.
+func appendChange(
+	result *clusterupdate.UpdateResult,
+	field, oldVal, newVal, defaultVal, reason string,
+	category clusterupdate.ChangeCategory,
+) {
+	if defaultVal != "" {
+		if oldVal == "" {
+			oldVal = defaultVal
+		}
+
+		if newVal == "" {
+			newVal = defaultVal
+		}
+	}
+
+	if oldVal == newVal {
+		return
+	}
+
+	change := clusterupdate.Change{
+		Field:    field,
+		OldValue: oldVal,
+		NewValue: newVal,
+		Category: category,
+		Reason:   reason,
+	}
+
+	switch category {
+	case clusterupdate.ChangeCategoryRecreateRequired:
+		result.RecreateRequired = append(result.RecreateRequired, change)
+	case clusterupdate.ChangeCategoryInPlace:
+		result.InPlaceChanges = append(result.InPlaceChanges, change)
+	case clusterupdate.ChangeCategoryRebootRequired:
+		result.RebootRequired = append(result.RebootRequired, change)
+	}
+}
+
 // applyFieldRules evaluates each field rule and appends changes to the result.
 func (e *Engine) applyFieldRules(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
@@ -151,39 +194,9 @@ func (e *Engine) applyFieldRules(
 	rules []fieldRule,
 ) {
 	for _, rule := range rules {
-		oldVal := rule.getVal(oldSpec)
-		newVal := rule.getVal(newSpec)
-
-		if rule.defaultVal != "" {
-			if oldVal == "" {
-				oldVal = rule.defaultVal
-			}
-
-			if newVal == "" {
-				newVal = rule.defaultVal
-			}
-		}
-
-		if oldVal == newVal {
-			continue
-		}
-
-		change := clusterupdate.Change{
-			Field:    rule.field,
-			OldValue: oldVal,
-			NewValue: newVal,
-			Category: rule.category,
-			Reason:   rule.reason,
-		}
-
-		switch rule.category {
-		case clusterupdate.ChangeCategoryRecreateRequired:
-			result.RecreateRequired = append(result.RecreateRequired, change)
-		case clusterupdate.ChangeCategoryInPlace:
-			result.InPlaceChanges = append(result.InPlaceChanges, change)
-		case clusterupdate.ChangeCategoryRebootRequired:
-			result.RebootRequired = append(result.RebootRequired, change)
-		}
+		appendChange(result, rule.field,
+			rule.getVal(oldSpec), rule.getVal(newSpec),
+			rule.defaultVal, rule.reason, rule.category)
 	}
 }
 
@@ -301,59 +314,85 @@ var talosFieldRules = []fieldRule{
 
 // checkHetznerOptionsChange checks Hetzner-specific option changes.
 func (e *Engine) checkHetznerOptionsChange(
-	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	oldProvider, newProvider *v1alpha1.ProviderSpec,
 	result *clusterupdate.UpdateResult,
 ) {
 	if e.provider != v1alpha1.ProviderHetzner {
 		return
 	}
 
-	e.applyFieldRules(oldSpec, newSpec, result, hetznerFieldRules)
+	if oldProvider == nil || newProvider == nil {
+		return
+	}
+
+	e.applyProviderFieldRules(oldProvider, newProvider, result, hetznerFieldRules)
+}
+
+// providerFieldRule describes how to diff a single scalar field from ProviderSpec.
+type providerFieldRule struct {
+	field      string
+	category   clusterupdate.ChangeCategory
+	reason     string
+	getVal     func(*v1alpha1.ProviderSpec) string
+	defaultVal string
 }
 
 // hetznerFieldRules is the table of Hetzner-specific scalar field diff rules.
 // Defined as a package-level variable to avoid reallocating the slice on each ComputeDiff call.
 //
 //nolint:gochecknoglobals // Immutable field-rule table; avoids per-call heap allocation.
-var hetznerFieldRules = []fieldRule{
+var hetznerFieldRules = []providerFieldRule{
 	{
-		field:      "cluster.hetzner.controlPlaneServerType",
+		field:      "provider.hetzner.controlPlaneServerType",
 		category:   clusterupdate.ChangeCategoryRecreateRequired,
 		reason:     "existing control-plane servers cannot change VM type",
-		getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.ControlPlaneServerType },
+		getVal:     func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.ControlPlaneServerType },
 		defaultVal: v1alpha1.DefaultHetznerServerType,
 	},
 	{
-		field:      "cluster.hetzner.workerServerType",
+		field:      "provider.hetzner.workerServerType",
 		category:   clusterupdate.ChangeCategoryInPlace,
 		reason:     "new worker servers will use the new type; existing workers unchanged",
-		getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.WorkerServerType },
+		getVal:     func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.WorkerServerType },
 		defaultVal: v1alpha1.DefaultHetznerServerType,
 	},
 	{
-		field:      "cluster.hetzner.location",
+		field:      "provider.hetzner.location",
 		category:   clusterupdate.ChangeCategoryRecreateRequired,
 		reason:     "datacenter location cannot be changed for existing servers",
-		getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.Location },
+		getVal:     func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.Location },
 		defaultVal: v1alpha1.DefaultHetznerLocation,
 	},
 	{
-		field:    "cluster.hetzner.networkName",
+		field:    "provider.hetzner.networkName",
 		category: clusterupdate.ChangeCategoryRecreateRequired,
 		reason:   "cannot migrate servers between networks",
-		getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkName },
+		getVal:   func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.NetworkName },
 	},
 	{
-		field:      "cluster.hetzner.networkCidr",
+		field:      "provider.hetzner.networkCidr",
 		category:   clusterupdate.ChangeCategoryRecreateRequired,
 		reason:     "network CIDR change requires PKI regeneration",
-		getVal:     func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkCIDR },
+		getVal:     func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.NetworkCIDR },
 		defaultVal: v1alpha1.DefaultHetznerNetworkCIDR,
 	},
 	{
-		field:    "cluster.hetzner.sshKeyName",
+		field:    "provider.hetzner.sshKeyName",
 		category: clusterupdate.ChangeCategoryInPlace,
 		reason:   "SSH key change only affects newly provisioned servers",
-		getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.SSHKeyName },
+		getVal:   func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.SSHKeyName },
 	},
+}
+
+// applyProviderFieldRules evaluates each provider field rule and appends changes to the result.
+func (e *Engine) applyProviderFieldRules(
+	oldProvider, newProvider *v1alpha1.ProviderSpec,
+	result *clusterupdate.UpdateResult,
+	rules []providerFieldRule,
+) {
+	for _, rule := range rules {
+		appendChange(result, rule.field,
+			rule.getVal(oldProvider), rule.getVal(newProvider),
+			rule.defaultVal, rule.reason, rule.category)
+	}
 }

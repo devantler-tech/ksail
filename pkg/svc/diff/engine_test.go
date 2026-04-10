@@ -3,9 +3,9 @@ package diff_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/diff"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/diff"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 const (
@@ -31,6 +31,11 @@ func newBaseSpec() *v1alpha1.ClusterSpec {
 			Workers:       0,
 			ISO:           122630,
 		},
+	}
+}
+
+func newBaseProviderSpec() *v1alpha1.ProviderSpec {
+	return &v1alpha1.ProviderSpec{
 		Hetzner: v1alpha1.OptionsHetzner{
 			ControlPlaneServerType: "cx23",
 			WorkerServerType:       "cx23",
@@ -46,8 +51,14 @@ func clone(spec *v1alpha1.ClusterSpec) *v1alpha1.ClusterSpec {
 	out := *spec
 	out.Vanilla = spec.Vanilla
 	out.Talos = spec.Talos
-	out.Hetzner = spec.Hetzner
 	out.LocalRegistry = spec.LocalRegistry
+
+	return &out
+}
+
+func cloneProvider(spec *v1alpha1.ProviderSpec) *v1alpha1.ProviderSpec {
+	out := *spec
+	out.Hetzner = spec.Hetzner
 
 	return &out
 }
@@ -71,7 +82,7 @@ func TestEngine_NilSpecs(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := engine.ComputeDiff(testCase.oldSpec, testCase.newSpec)
+			result := engine.ComputeDiff(testCase.oldSpec, testCase.newSpec, nil, nil)
 			if result.TotalChanges() != 0 {
 				t.Errorf("expected 0 changes for nil spec, got %d", result.TotalChanges())
 			}
@@ -85,7 +96,7 @@ func TestEngine_NoChanges(t *testing.T) {
 	spec := newBaseSpec()
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 
-	result := engine.ComputeDiff(spec, spec)
+	result := engine.ComputeDiff(spec, spec, nil, nil)
 
 	if result.TotalChanges() != 0 {
 		t.Errorf("identical specs should produce 0 changes, got %d", result.TotalChanges())
@@ -100,7 +111,7 @@ func TestEngine_DistributionChange(t *testing.T) {
 	newer.Distribution = v1alpha1.DistributionTalos
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	if !result.HasRecreateRequired() {
 		t.Fatal("distribution change should require recreate")
@@ -118,7 +129,7 @@ func TestEngine_ProviderChange(t *testing.T) {
 	newer.Provider = v1alpha1.ProviderHetzner
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	if !result.HasRecreateRequired() {
 		t.Fatal("provider change should require recreate")
@@ -192,7 +203,7 @@ func TestEngine_ComponentChanges(t *testing.T) {
 			testCase.mutate(newer)
 
 			engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-			result := engine.ComputeDiff(old, newer)
+			result := engine.ComputeDiff(old, newer, nil, nil)
 
 			if !result.HasInPlaceChanges() {
 				t.Fatal("component change should be in-place")
@@ -216,7 +227,7 @@ func TestEngine_CSIChange_SkippedForVanilla(t *testing.T) {
 	newer.CSI = v1alpha1.CSIDisabled
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	for _, change := range result.AllChanges() {
 		if change.Field == "cluster.csi" {
@@ -237,7 +248,7 @@ func TestEngine_CSIChange_DetectedForTalos(t *testing.T) {
 	newer.CSI = v1alpha1.CSIEnabled
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	if !result.HasInPlaceChanges() {
 		t.Fatal("CSI change should be detected for Talos")
@@ -255,7 +266,7 @@ func TestEngine_LocalRegistryChange_Vanilla(t *testing.T) {
 	newer.LocalRegistry.Registry = testRegistryAlt
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	if !result.HasRecreateRequired() {
 		t.Fatal("Vanilla local registry change should require recreate")
@@ -275,7 +286,7 @@ func TestEngine_LocalRegistryChange_Talos(t *testing.T) {
 	newer.LocalRegistry.Registry = testRegistryAlt
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	if !result.HasInPlaceChanges() {
 		t.Fatal("Talos local registry change should be in-place")
@@ -299,7 +310,7 @@ func TestEngine_LocalRegistryChange_K3s(t *testing.T) {
 	newer.LocalRegistry.Registry = testRegistryAlt
 
 	engine := diff.NewEngine(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	if !result.HasInPlaceChanges() {
 		t.Fatal("K3s local registry change should be in-place")
@@ -323,7 +334,7 @@ func TestEngine_LocalRegistryChange_OldEmpty_Skipped(t *testing.T) {
 	newer.LocalRegistry.Registry = "ghcr.io/org/repo"
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	for _, change := range result.AllChanges() {
 		if change.Field == "cluster.localRegistry.registry" {
@@ -340,7 +351,7 @@ func TestEngine_VanillaOptionsChange(t *testing.T) {
 	newer.Vanilla.MirrorsDir = "other/mirrors"
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	if !result.HasRecreateRequired() {
 		t.Fatal("Vanilla mirrorsDir change should require recreate")
@@ -358,7 +369,7 @@ func TestEngine_VanillaOptionsChange_SkippedForNonVanilla(t *testing.T) {
 	newer.Vanilla.MirrorsDir = "other/mirrors"
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	for _, change := range result.AllChanges() {
 		if change.Field == "cluster.vanilla.mirrorsDir" {
@@ -409,7 +420,7 @@ func TestEngine_TalosOptionsChange(t *testing.T) {
 			testCase.mutate(newer)
 
 			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
-			result := engine.ComputeDiff(old, newer)
+			result := engine.ComputeDiff(old, newer, nil, nil)
 
 			if !result.HasInPlaceChanges() {
 				t.Fatal("Talos option change should be in-place")
@@ -429,7 +440,7 @@ func TestEngine_TalosOptionsChange_SkippedForNonTalos(t *testing.T) {
 	newer.Talos.ControlPlanes = 5
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	for _, change := range result.AllChanges() {
 		if change.Field == "cluster.talos.controlPlanes" {
@@ -443,36 +454,36 @@ func TestEngine_HetznerOptionsChange_RecreateRequired(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		mutate   func(spec *v1alpha1.ClusterSpec)
+		mutate   func(spec *v1alpha1.ProviderSpec)
 		field    string
 		oldValue string
 		newValue string
 	}{
 		{
 			name:     "control plane server type change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Hetzner.ControlPlaneServerType = "cpx21" },
-			field:    "cluster.hetzner.controlPlaneServerType",
+			mutate:   func(s *v1alpha1.ProviderSpec) { s.Hetzner.ControlPlaneServerType = "cpx21" },
+			field:    "provider.hetzner.controlPlaneServerType",
 			oldValue: "cx23",
 			newValue: "cpx21",
 		},
 		{
 			name:     "location change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Hetzner.Location = "nbg1" },
-			field:    "cluster.hetzner.location",
+			mutate:   func(s *v1alpha1.ProviderSpec) { s.Hetzner.Location = "nbg1" },
+			field:    "provider.hetzner.location",
 			oldValue: "fsn1",
 			newValue: "nbg1",
 		},
 		{
 			name:     "network name change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Hetzner.NetworkName = "new-network" },
-			field:    "cluster.hetzner.networkName",
+			mutate:   func(s *v1alpha1.ProviderSpec) { s.Hetzner.NetworkName = "new-network" },
+			field:    "provider.hetzner.networkName",
 			oldValue: "test-network",
 			newValue: "new-network",
 		},
 		{
 			name:     "network CIDR change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Hetzner.NetworkCIDR = "10.1.0.0/16" },
-			field:    "cluster.hetzner.networkCidr",
+			mutate:   func(s *v1alpha1.ProviderSpec) { s.Hetzner.NetworkCIDR = "10.1.0.0/16" },
+			field:    "provider.hetzner.networkCidr",
 			oldValue: "10.0.0.0/16",
 			newValue: "10.1.0.0/16",
 		},
@@ -484,10 +495,12 @@ func TestEngine_HetznerOptionsChange_RecreateRequired(t *testing.T) {
 
 			old := newBaseSpec()
 			newer := clone(old)
-			testCase.mutate(newer)
+			oldProvider := newBaseProviderSpec()
+			newProvider := cloneProvider(oldProvider)
+			testCase.mutate(newProvider)
 
 			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
-			result := engine.ComputeDiff(old, newer)
+			result := engine.ComputeDiff(old, newer, oldProvider, newProvider)
 
 			if !result.HasRecreateRequired() {
 				t.Fatal("Hetzner change should require recreate")
@@ -504,22 +517,22 @@ func TestEngine_HetznerOptionsChange_InPlace(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		mutate   func(spec *v1alpha1.ClusterSpec)
+		mutate   func(spec *v1alpha1.ProviderSpec)
 		field    string
 		oldValue string
 		newValue string
 	}{
 		{
 			name:     "worker server type change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Hetzner.WorkerServerType = "cpx21" },
-			field:    "cluster.hetzner.workerServerType",
+			mutate:   func(s *v1alpha1.ProviderSpec) { s.Hetzner.WorkerServerType = "cpx21" },
+			field:    "provider.hetzner.workerServerType",
 			oldValue: "cx23",
 			newValue: "cpx21",
 		},
 		{
 			name:     "SSH key name change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Hetzner.SSHKeyName = "other-key" },
-			field:    "cluster.hetzner.sshKeyName",
+			mutate:   func(s *v1alpha1.ProviderSpec) { s.Hetzner.SSHKeyName = "other-key" },
+			field:    "provider.hetzner.sshKeyName",
 			oldValue: "my-key",
 			newValue: "other-key",
 		},
@@ -531,10 +544,12 @@ func TestEngine_HetznerOptionsChange_InPlace(t *testing.T) {
 
 			old := newBaseSpec()
 			newer := clone(old)
-			testCase.mutate(newer)
+			oldProvider := newBaseProviderSpec()
+			newProvider := cloneProvider(oldProvider)
+			testCase.mutate(newProvider)
 
 			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
-			result := engine.ComputeDiff(old, newer)
+			result := engine.ComputeDiff(old, newer, oldProvider, newProvider)
 
 			if !result.HasInPlaceChanges() {
 				t.Fatal("Hetzner change should be in-place")
@@ -555,13 +570,15 @@ func TestEngine_HetznerOptionsChange_SkippedForDocker(t *testing.T) {
 
 	old := newBaseSpec()
 	newer := clone(old)
-	newer.Hetzner.Location = "nbg1"
+	oldProvider := newBaseProviderSpec()
+	newProvider := cloneProvider(oldProvider)
+	newProvider.Hetzner.Location = "nbg1"
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, oldProvider, newProvider)
 
 	for _, change := range result.AllChanges() {
-		if change.Field == "cluster.hetzner.location" {
+		if change.Field == "provider.hetzner.location" {
 			t.Fatal("Hetzner options should be ignored for Docker provider")
 		}
 	}
@@ -572,28 +589,28 @@ func TestEngine_HetznerOptionsChange_EmptyNewValueUsesDefault(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		mutate func(spec *v1alpha1.ClusterSpec)
+		mutate func(spec *v1alpha1.ProviderSpec)
 		field  string
 	}{
 		{
 			name:   "empty networkCidr treated as default",
-			mutate: func(s *v1alpha1.ClusterSpec) { s.Hetzner.NetworkCIDR = "" },
-			field:  "cluster.hetzner.networkCidr",
+			mutate: func(s *v1alpha1.ProviderSpec) { s.Hetzner.NetworkCIDR = "" },
+			field:  "provider.hetzner.networkCidr",
 		},
 		{
 			name:   "empty controlPlaneServerType treated as default",
-			mutate: func(s *v1alpha1.ClusterSpec) { s.Hetzner.ControlPlaneServerType = "" },
-			field:  "cluster.hetzner.controlPlaneServerType",
+			mutate: func(s *v1alpha1.ProviderSpec) { s.Hetzner.ControlPlaneServerType = "" },
+			field:  "provider.hetzner.controlPlaneServerType",
 		},
 		{
 			name:   "empty workerServerType treated as default",
-			mutate: func(s *v1alpha1.ClusterSpec) { s.Hetzner.WorkerServerType = "" },
-			field:  "cluster.hetzner.workerServerType",
+			mutate: func(s *v1alpha1.ProviderSpec) { s.Hetzner.WorkerServerType = "" },
+			field:  "provider.hetzner.workerServerType",
 		},
 		{
 			name:   "empty location treated as default",
-			mutate: func(s *v1alpha1.ClusterSpec) { s.Hetzner.Location = "" },
-			field:  "cluster.hetzner.location",
+			mutate: func(s *v1alpha1.ProviderSpec) { s.Hetzner.Location = "" },
+			field:  "provider.hetzner.location",
 		},
 	}
 
@@ -603,10 +620,12 @@ func TestEngine_HetznerOptionsChange_EmptyNewValueUsesDefault(t *testing.T) {
 
 			old := newBaseSpec()
 			newer := clone(old)
-			testCase.mutate(newer)
+			oldProvider := newBaseProviderSpec()
+			newProvider := cloneProvider(oldProvider)
+			testCase.mutate(newProvider)
 
 			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
-			result := engine.ComputeDiff(old, newer)
+			result := engine.ComputeDiff(old, newer, oldProvider, newProvider)
 
 			for _, change := range result.AllChanges() {
 				if change.Field == testCase.field {
@@ -631,7 +650,7 @@ func TestEngine_MultipleChanges(t *testing.T) {
 	newer.Vanilla.MirrorsDir = "changed"
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	// CSI change is skipped for Vanilla, so only CNI counts as in-place
 	if len(result.InPlaceChanges) != 1 {
@@ -664,7 +683,7 @@ func TestEngine_DefaultVsDisabled_NoFalsePositive_Vanilla(t *testing.T) {
 	newer.LoadBalancer = v1alpha1.LoadBalancerDisabled
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	// MetricsServer and LoadBalancer: Default and Disabled are semantically
 	// equivalent on Vanilla/Docker, so no changes should be detected.
@@ -699,7 +718,7 @@ func TestEngine_DefaultVsDisabled_DetectedOnK3s(t *testing.T) {
 	newer.LoadBalancer = v1alpha1.LoadBalancerDisabled
 
 	engine := diff.NewEngine(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
-	result := engine.ComputeDiff(old, newer)
+	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	expectedChanges := 3
 	if len(result.InPlaceChanges) != expectedChanges {
@@ -748,7 +767,7 @@ func TestEngine_VCluster_LoadBalancerIgnored(t *testing.T) {
 			newer.LoadBalancer = testCase.newLB
 
 			engine := diff.NewEngine(v1alpha1.DistributionVCluster, v1alpha1.ProviderDocker)
-			result := engine.ComputeDiff(old, newer)
+			result := engine.ComputeDiff(old, newer, nil, nil)
 
 			for _, change := range result.AllChanges() {
 				if change.Field == "cluster.loadBalancer" {

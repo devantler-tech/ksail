@@ -3,7 +3,7 @@ package kind
 import (
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -83,4 +83,44 @@ func ApplyKubeletCertRotationPatches(kindConfig *kindv1alpha4.Cluster) {
 			KubeletCertRotationPatch,
 		)
 	}
+}
+
+// ImageVerificationPatch is a TOML containerd config patch that enables the image verifier plugin.
+// This requires containerd 2.x (Kind v0.31.0+ / kindest/node:v1.35.1+).
+// Verifier binaries (e.g., Cosign, Notation) must be pre-installed in the Kind node image
+// at the configured bin_dir path.
+// See: https://github.com/containerd/containerd/blob/main/docs/image-verification.md
+const ImageVerificationPatch = `# Enable the containerd image verifier plugin (requires containerd 2.x).
+# Verifier binaries must be pre-installed in the Kind node image at bin_dir.
+# If bin_dir is empty or missing, image pulls proceed without verification.
+# See: https://github.com/containerd/containerd/blob/main/docs/image-verification.md
+[plugins."io.containerd.image-verifier.v1.bindir"]
+bin_dir = "/opt/image-verifier/bin"
+max_verifiers = 10
+per_verifier_timeout = "10s"
+
+# --- Example: Cosign keyless verification (OIDC / Sigstore) ---
+# Install the cosign verifier binary into /opt/image-verifier/bin/ in a custom Kind node image.
+# Cosign will verify signatures using the Sigstore public good instance by default.
+# See: https://docs.sigstore.dev/cosign/
+
+# --- Example: Notation verification ---
+# Install the notation verifier binary into /opt/image-verifier/bin/ in a custom Kind node image.
+# Configure trust policies and certificates in the notation config directory.
+# See: https://notaryproject.dev/docs/`
+
+// ApplyImageVerificationPatches adds a containerd config patch to enable the image verifier plugin.
+// The patch is applied at the cluster level and affects every node's containerd configuration.
+// This function is idempotent — it skips appending if the patch is already present.
+func ApplyImageVerificationPatches(kindConfig *kindv1alpha4.Cluster) {
+	for _, patch := range kindConfig.ContainerdConfigPatches {
+		if strings.Contains(patch, `io.containerd.image-verifier.v1.bindir`) {
+			return
+		}
+	}
+
+	kindConfig.ContainerdConfigPatches = append(
+		kindConfig.ContainerdConfigPatches,
+		ImageVerificationPatch,
+	)
 }

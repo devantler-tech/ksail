@@ -6,15 +6,15 @@ import (
 	"os"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
-	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
-	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cloudproviderkind"
-	hcloudccminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hcloudccm"
-	metallbinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metallb"
-	metricsserverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metricsserver"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/kubeconfig"
+	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/installer"
+	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/cloudproviderkind"
+	hcloudccminstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/hcloudccm"
+	metallbinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/metallb"
+	metricsserverinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/metricsserver"
 )
 
 // HelmClientForCluster creates a Helm client configured for the cluster.

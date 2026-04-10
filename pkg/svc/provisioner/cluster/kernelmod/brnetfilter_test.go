@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kernelmod"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kernelmod"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

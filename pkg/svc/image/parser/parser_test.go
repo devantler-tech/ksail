@@ -3,7 +3,7 @@ package parser_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/svc/image/parser"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/image/parser"
 )
 
 const (

@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
@@ -65,6 +65,12 @@ func (p *Provisioner) Update(
 		}
 	}
 
+	// Handle Talos OS version upgrade (skipped internally for Omni clusters).
+	upgradeErr := p.applyTalosVersionUpgrade(ctx, clusterName, result)
+	if upgradeErr != nil {
+		return result, fmt.Errorf("failed to apply Talos version upgrade: %w", upgradeErr)
+	}
+
 	return result, nil
 }
 
@@ -105,22 +111,6 @@ func (p *Provisioner) DiffConfig(
 			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "worker nodes can be added/removed via provider",
 		})
-	}
-
-	// Check for network CIDR changes (requires recreate)
-	if p.hetznerOpts != nil {
-		oldCIDR := oldSpec.Hetzner.NetworkCIDR
-		newCIDR := newSpec.Hetzner.NetworkCIDR
-
-		if oldCIDR != newCIDR && oldCIDR != "" && newCIDR != "" {
-			result.RecreateRequired = append(result.RecreateRequired, clusterupdate.Change{
-				Field:    "hetzner.networkCidr",
-				OldValue: oldCIDR,
-				NewValue: newCIDR,
-				Category: clusterupdate.ChangeCategoryRecreateRequired,
-				Reason:   "network CIDR change requires PKI regeneration",
-			})
-		}
 	}
 
 	return result, nil
@@ -284,6 +274,99 @@ func (p *Provisioner) applyNodeConfig(
 			Reason:   node.Role + " config applied successfully",
 		})
 	}
+}
+
+// applyTalosVersionUpgrade checks whether any node's running Talos version
+// differs from the desired version (derived from Options.TalosImage) and
+// performs a rolling upgrade of all mismatched nodes.
+// Omni-managed clusters are skipped since Omni handles upgrades externally.
+func (p *Provisioner) applyTalosVersionUpgrade(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	// Omni manages Talos upgrades through its own API.
+	if p.omniOpts != nil {
+		return nil
+	}
+
+	desiredTag := extractTagFromImage(p.options.TalosImage)
+	if desiredTag == "" {
+		return nil // No tag to compare — skip
+	}
+
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("listing nodes for version check: %w", err)
+	}
+
+	needsUpgrade, firstRunningTag, err := p.checkNodesNeedUpgrade(ctx, nodes, desiredTag)
+	if err != nil {
+		return err
+	}
+
+	if !needsUpgrade {
+		return nil // All nodes at desired version
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter,
+		"  Talos version mismatch detected (desired %s) — starting rolling upgrade\n",
+		desiredTag,
+	)
+
+	installerImage := installerImageFromTag(desiredTag)
+
+	upgradeErr := p.rollingUpgradeNodes(ctx, clusterName, installerImage, desiredTag)
+	if upgradeErr != nil {
+		result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
+			Field:    "talos.version",
+			OldValue: firstRunningTag,
+			NewValue: desiredTag,
+			Category: clusterupdate.ChangeCategoryRebootRequired,
+			Reason:   "Talos OS version upgrade via LifecycleService failed: " + upgradeErr.Error(),
+		})
+
+		return fmt.Errorf("rolling upgrade: %w", upgradeErr)
+	}
+
+	result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
+		Field:    "talos.version",
+		OldValue: firstRunningTag,
+		NewValue: desiredTag,
+		Category: clusterupdate.ChangeCategoryRebootRequired,
+		Reason:   "Talos OS upgraded via LifecycleService API",
+	})
+
+	return nil
+}
+
+// checkNodesNeedUpgrade checks all nodes for version mismatch to handle partial upgrades.
+// Returns the first mismatched tag so the update result accurately reflects the old version.
+func (p *Provisioner) checkNodesNeedUpgrade(
+	ctx context.Context,
+	nodes []nodeWithRole,
+	desiredTag string,
+) (bool, string, error) {
+	if len(nodes) == 0 {
+		return false, "", nil
+	}
+
+	for _, node := range nodes {
+		tag, versionErr := p.getRunningTalosVersion(ctx, node.IP)
+		if versionErr != nil {
+			return false, "", fmt.Errorf(
+				"checking running Talos version on %s: %w",
+				node.IP,
+				versionErr,
+			)
+		}
+
+		if tag != desiredTag {
+			return true, tag, nil
+		}
+	}
+
+	return false, desiredTag, nil
 }
 
 // applyRebootRequiredChanges applies changes that require node reboots.
@@ -510,7 +593,9 @@ func (p *Provisioner) getDockerNodesByRole(
 
 // GetCurrentConfig retrieves the current cluster configuration by probing the
 // running cluster through the Kubernetes API and Docker/Hetzner/Omni providers.
-func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, error) {
+func (p *Provisioner) GetCurrentConfig(
+	ctx context.Context,
+) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
 	var provider v1alpha1.Provider
 
 	switch {
@@ -550,14 +635,18 @@ func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSp
 		Workers:       workers,
 	}
 
-	// If we have Hetzner options configured
+	// Build provider spec if we have Hetzner options configured.
+	// Hetzner fields (server types, location, network, SSH key) cannot be
+	// introspected from the running cluster, so we echo the desired config
+	// as the baseline — identical to the approach used for NetworkCIDR.
+	var providerSpec *v1alpha1.ProviderSpec
 	if p.hetznerOpts != nil {
-		spec.Hetzner = v1alpha1.OptionsHetzner{
-			NetworkCIDR: p.hetznerOpts.NetworkCIDR,
+		providerSpec = &v1alpha1.ProviderSpec{
+			Hetzner: *p.hetznerOpts,
 		}
 	}
 
-	return spec, nil
+	return spec, providerSpec, nil
 }
 
 // introspectNodeCounts determines the actual control-plane and worker node

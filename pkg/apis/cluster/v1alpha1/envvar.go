@@ -1,6 +1,6 @@
 package v1alpha1
 
-import "github.com/devantler-tech/ksail/v5/pkg/envvar"
+import "github.com/devantler-tech/ksail/v6/pkg/envvar"
 
 // ExpandEnvVars expands environment variable placeholders in all string fields
 // of the cluster configuration. This includes paths, credentials, contexts, and
@@ -21,6 +21,9 @@ func (c *Cluster) expandSpec() {
 
 	// Expand ClusterSpec fields
 	c.expandClusterSpec()
+
+	// Expand ProviderSpec fields
+	c.expandProviderSpec()
 
 	// Expand WorkloadSpec fields
 	c.expandWorkloadSpec()
@@ -49,9 +52,6 @@ func (c *Cluster) expandClusterSpec() {
 	// Expand distribution-specific options
 	c.expandVanillaOptions()
 	c.expandTalosOptions()
-
-	// Expand provider-specific options
-	c.expandHetznerOptions()
 }
 
 func (c *Cluster) expandVanillaOptions() {
@@ -64,8 +64,12 @@ func (c *Cluster) expandTalosOptions() {
 	talos.Config = envvar.Expand(talos.Config)
 }
 
+func (c *Cluster) expandProviderSpec() {
+	c.expandHetznerOptions()
+}
+
 func (c *Cluster) expandHetznerOptions() {
-	hetzner := &c.Spec.Cluster.Hetzner
+	hetzner := &c.Spec.Provider.Hetzner
 	hetzner.SSHKeyName = envvar.Expand(hetzner.SSHKeyName)
 	hetzner.NetworkName = envvar.Expand(hetzner.NetworkName)
 	hetzner.PlacementGroup = envvar.Expand(hetzner.PlacementGroup)

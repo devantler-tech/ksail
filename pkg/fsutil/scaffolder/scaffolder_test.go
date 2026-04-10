@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil/generator"
-	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/fsutil/generator/yaml"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil/scaffolder"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil/generator"
+	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil/scaffolder"
 	"github.com/gkampitakis/go-snaps/snaps"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
@@ -563,6 +563,31 @@ func TestGenerateKindConfigHandlesCNI(t *testing.T) {
 	}
 }
 
+func TestGenerateKindConfigHandlesImageVerification(t *testing.T) {
+	t.Parallel()
+
+	t.Run("enabled_adds_containerd_config_patch", func(t *testing.T) {
+		t.Parallel()
+
+		captured := captureKindConfigForImageVerification(t, v1alpha1.ImageVerificationEnabled)
+
+		assert.NotEmpty(t, captured.ContainerdConfigPatches)
+		assert.Contains(
+			t,
+			captured.ContainerdConfigPatches[0],
+			`io.containerd.image-verifier.v1.bindir`,
+		)
+	})
+
+	t.Run("disabled_has_no_containerd_config_patch", func(t *testing.T) {
+		t.Parallel()
+
+		captured := captureKindConfigForImageVerification(t, v1alpha1.ImageVerificationDisabled)
+
+		assert.Empty(t, captured.ContainerdConfigPatches)
+	})
+}
+
 func TestGenerateK3dConfigHandlesCNI(t *testing.T) {
 	t.Parallel()
 
@@ -702,6 +727,38 @@ func captureK3dConfigForCNI(t *testing.T, cni v1alpha1.CNI) *k3dv1alpha5.SimpleC
 		},
 	)
 
+	require.NotNil(t, captured)
+
+	return captured
+}
+
+func captureKindConfigForImageVerification(
+	t *testing.T,
+	imageVerification v1alpha1.ImageVerification,
+) *v1alpha4.Cluster {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	buffer := &bytes.Buffer{}
+	instance, mocks := newScaffolderWithMocks(t, buffer)
+	instance.KSailConfig.Spec.Cluster.Distribution = v1alpha1.DistributionVanilla
+	instance.KSailConfig.Spec.Cluster.Talos.ImageVerification = imageVerification
+
+	var captured *v1alpha4.Cluster
+
+	mocks.kind.ExpectedCalls = nil
+	mocks.kind.On(
+		"Generate",
+		mock.MatchedBy(func(cfg *v1alpha4.Cluster) bool {
+			captured = cfg
+
+			return true
+		}),
+		mock.Anything,
+	).Return("", nil).Once()
+
+	err := instance.Scaffold(tempDir, true)
+	require.NoError(t, err)
 	require.NotNil(t, captured)
 
 	return captured

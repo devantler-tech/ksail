@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -315,6 +315,8 @@ func fullProductionCluster() v1alpha1.Cluster {
 					ControlPlanes: 3,
 					Workers:       2,
 				},
+			},
+			Provider: v1alpha1.ProviderSpec{
 				Hetzner: v1alpha1.OptionsHetzner{
 					Location:               "nbg1",
 					SSHKeyName:             "my-ssh-key",

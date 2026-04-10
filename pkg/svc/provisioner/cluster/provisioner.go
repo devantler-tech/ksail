@@ -3,9 +3,9 @@ package clusterprovisioner
 import (
 	"context"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // Provisioner defines methods for managing Kubernetes clusters.
@@ -55,7 +55,8 @@ type Updater interface {
 
 	// GetCurrentConfig retrieves the current cluster configuration from the running cluster.
 	// Used to compare against the desired configuration for computing diffs.
-	GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, error)
+	// Returns the cluster spec and an optional provider spec (non-nil for provider-aware provisioners).
+	GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error)
 }
 
 // ProviderAware is an optional interface for provisioners that can use a provider

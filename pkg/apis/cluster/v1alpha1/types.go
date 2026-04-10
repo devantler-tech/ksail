@@ -27,8 +27,17 @@ type Cluster struct {
 type Spec struct {
 	Editor   string       `json:"editor,omitzero"   jsonschema:"description=Editor command for interactive workflows (e.g. code --wait)"` //nolint:lll
 	Cluster  ClusterSpec  `json:"cluster,omitzero"`
+	Provider ProviderSpec `json:"provider,omitzero"`
 	Workload WorkloadSpec `json:"workload,omitzero"`
 	Chat     ChatSpec     `json:"chat,omitzero"`
+}
+
+// ProviderSpec defines provider-specific configuration for infrastructure providers.
+// This separates infrastructure provider concerns (Hetzner servers, Omni SaaS) from
+// cluster/distribution concerns in ClusterSpec.
+type ProviderSpec struct {
+	Hetzner OptionsHetzner `json:"hetzner,omitzero"`
+	Omni    OptionsOmni    `json:"omni,omitzero"`
 }
 
 // ClusterSpec defines cluster-related configuration.
@@ -51,10 +60,6 @@ type ClusterSpec struct {
 	// Distribution-specific options
 	Vanilla OptionsVanilla `json:"vanilla,omitzero"`
 	Talos   OptionsTalos   `json:"talos,omitzero"`
-
-	// Provider-specific options
-	Hetzner OptionsHetzner `json:"hetzner,omitzero"`
-	Omni    OptionsOmni    `json:"omni,omitzero"`
 }
 
 // WorkloadSpec defines workload-related configuration.

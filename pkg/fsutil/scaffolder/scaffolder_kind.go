@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/kind"
-	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/fsutil/generator/yaml"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
+	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
 	v1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -69,6 +69,11 @@ func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
 	// This is required for secure TLS communication between metrics-server and kubelets.
 	if s.KSailConfig.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
 		kindconfigmanager.ApplyKubeletCertRotationPatches(kindConfig)
+	}
+
+	// Enable containerd image verifier plugin when image verification is enabled.
+	if s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
+		kindconfigmanager.ApplyImageVerificationPatches(kindConfig)
 	}
 
 	// Apply node counts from CLI flags (stored in Talos options)

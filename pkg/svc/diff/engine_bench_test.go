@@ -3,9 +3,9 @@ package diff_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/diff"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/diff"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // Package-level sink prevents the compiler from optimizing away benchmark calls.
@@ -25,7 +25,7 @@ func BenchmarkComputeDiff_NoChanges(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec, nil, nil)
 	}
 }
 
@@ -50,7 +50,7 @@ func BenchmarkComputeDiff_AllInPlaceChanges(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec, nil, nil)
 	}
 }
 
@@ -69,7 +69,7 @@ func BenchmarkComputeDiff_RecreateRequired(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec, nil, nil)
 	}
 }
 
@@ -93,7 +93,7 @@ func BenchmarkComputeDiff_MixedCategories(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec, nil, nil)
 	}
 }
 
@@ -113,7 +113,7 @@ func BenchmarkComputeDiff_TalosOptions(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec, nil, nil)
 	}
 }
 
@@ -126,14 +126,16 @@ func BenchmarkComputeDiff_HetznerOptions(b *testing.B) {
 	oldSpec.Provider = v1alpha1.ProviderHetzner
 	newSpec := clone(oldSpec)
 
-	newSpec.Hetzner.WorkerServerType = "cx43"
-	newSpec.Hetzner.SSHKeyName = "new-key"
+	oldProvider := newBaseProviderSpec()
+	newProvider := cloneProvider(oldProvider)
+	newProvider.Hetzner.WorkerServerType = "cx43"
+	newProvider.Hetzner.SSHKeyName = "new-key"
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(oldSpec, newSpec, oldProvider, newProvider)
 	}
 }
 
@@ -147,6 +149,6 @@ func BenchmarkComputeDiff_NilSpec(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		benchComputeDiffSink = engine.ComputeDiff(nil, newSpec)
+		benchComputeDiffSink = engine.ComputeDiff(nil, newSpec, nil, nil)
 	}
 }

@@ -3,8 +3,8 @@ package workload
 import (
 	"time"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
+	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/client/flux"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 )

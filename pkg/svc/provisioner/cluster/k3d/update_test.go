@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
-	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	k3dprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/k3d"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -164,11 +164,9 @@ func TestProvisioner_GetCurrentConfig_NoDetector(t *testing.T) {
 	provisioner := k3dprovisioner.NewProvisioner(nil, "")
 	ctx := context.Background()
 
-	spec, err := provisioner.GetCurrentConfig(ctx)
+	spec, _, err := provisioner.GetCurrentConfig(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, spec)
-
-	// Should return default spec
 	assert.Equal(t, v1alpha1.DistributionK3s, spec.Distribution)
 	assert.Equal(t, v1alpha1.ProviderDocker, spec.Provider)
 }

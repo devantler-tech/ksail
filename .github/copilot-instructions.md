@@ -14,7 +14,7 @@ KSail is a Go-based CLI application that provides a unified SDK for spinning up 
 - KSail embeds kubectl, helm, kind, k3d, vcluster, flux, and argocd as Go libraries
 - No separate installation of these tools is needed
 - The Hetzner provider is supported for Talos clusters and requires cloud access/credentials (e.g., `HCLOUD_TOKEN`)
-- The Omni provider is supported for Talos clusters and requires a Sidero Omni account and credentials (e.g., `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.cluster.omni.serviceAccountKeyEnvVar`)
+- The Omni provider is supported for Talos clusters and requires a Sidero Omni account and credentials (e.g., `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.provider.omni.serviceAccountKeyEnvVar`)
 
 **Required for Documentation**:
 

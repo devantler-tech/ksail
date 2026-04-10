@@ -18,45 +18,45 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/internal/buildmeta"
-	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/dockerutil"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/picker"
-	docker "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v5/pkg/client/k9s"
-	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
-	"github.com/devantler-tech/ksail/v5/pkg/di"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/k3d"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/kind"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil/scaffolder"
-	"github.com/devantler-tech/ksail/v5/pkg/k8s"
-	"github.com/devantler-tech/ksail/v5/pkg/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
-	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
-	specdiff "github.com/devantler-tech/ksail/v5/pkg/svc/diff"
-	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
-	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
-	"github.com/devantler-tech/ksail/v5/pkg/timer"
+	"github.com/devantler-tech/ksail/v6/internal/buildmeta"
+	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/dockerutil"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/editor"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/setup"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/setup/localregistry"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/setup/mirrorregistry"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/confirm"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/picker"
+	docker "github.com/devantler-tech/ksail/v6/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v6/pkg/client/k9s"
+	"github.com/devantler-tech/ksail/v6/pkg/client/kubectl"
+	"github.com/devantler-tech/ksail/v6/pkg/di"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
+	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/ksail"
+	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil/scaffolder"
+	"github.com/devantler-tech/ksail/v6/pkg/k8s"
+	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/detector"
+	clusterdetector "github.com/devantler-tech/ksail/v6/pkg/svc/detector/cluster"
+	specdiff "github.com/devantler-tech/ksail/v6/pkg/svc/diff"
+	imagesvc "github.com/devantler-tech/ksail/v6/pkg/svc/image"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/installer"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
+	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/state"
+	"github.com/devantler-tech/ksail/v6/pkg/timer"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -109,7 +109,6 @@ type BackupMetadata struct {
 
 type backupFlags struct {
 	outputPath       string
-	includeVolumes   bool
 	namespaces       []string
 	excludeTypes     []string
 	compressionLevel int
@@ -149,10 +148,6 @@ Example:
 	cmd.Flags().StringVarP(
 		&flags.outputPath, "output", "o", "",
 		"Output path for backup archive (required)",
-	)
-	cmd.Flags().BoolVar(
-		&flags.includeVolumes, "include-volumes", true,
-		"Include persistent volume data in backup (not yet implemented)",
 	)
 	cmd.Flags().StringSliceVarP(
 		&flags.namespaces, "namespaces", "n", []string{},
@@ -210,13 +205,6 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 	writer := cmd.OutOrStdout()
 	_, _ = fmt.Fprintf(writer, "Starting cluster backup...\n")
 	_, _ = fmt.Fprintf(writer, "   Output: %s\n", flags.outputPath)
-
-	if flags.includeVolumes {
-		_, _ = fmt.Fprintln(writer,
-			"Warning: --include-volumes is not yet implemented;"+
-				" volume data will NOT be included in this backup.",
-		)
-	}
 
 	if len(flags.namespaces) > 0 {
 		_, _ = fmt.Fprintf(writer, "   Namespaces: %v\n", flags.namespaces)
@@ -1047,6 +1035,15 @@ any k9s functionality. Examples:
 		cmd,
 		ksailconfigmanager.DefaultClusterFieldSelectors(),
 	)
+
+	// Hide flags that connect doesn't use but that are needed for config
+	// defaults and validation (distribution, distributionConfig, gitopsEngine,
+	// localRegistry).
+	for _, flagName := range []string{"distribution", "distribution-config", "gitops-engine", "local-registry"} {
+		if f := cmd.Flags().Lookup(flagName); f != nil {
+			f.Hidden = true
+		}
+	}
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return handleConnectRunE(cmd, cfgManager, args, editorFlag)
@@ -5343,7 +5340,7 @@ func autoDeleteCluster(
 		Provider:     clusterCfg.Spec.Cluster.Provider,
 	}
 
-	provisioner, err := createDeleteProvisioner(info, clusterCfg.Spec.Cluster.Omni)
+	provisioner, err := createDeleteProvisioner(info, clusterCfg.Spec.Provider.Omni)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
 	}
@@ -5685,7 +5682,7 @@ func computeUpdateDiff(
 	updater clusterprovisioner.Updater,
 	clusterName string,
 ) (*v1alpha1.ClusterSpec, *clusterupdate.UpdateResult, error) {
-	currentSpec, err := updater.GetCurrentConfig(cmd.Context())
+	currentSpec, currentProvider, err := updater.GetCurrentConfig(cmd.Context())
 	if err != nil {
 		return nil, nil, fmt.Errorf(
 			"could not retrieve current cluster configuration: %w", err,
@@ -5697,7 +5694,10 @@ func computeUpdateDiff(
 		ctx.ClusterCfg.Spec.Cluster.Provider,
 	)
 
-	diff := diffEngine.ComputeDiff(currentSpec, &ctx.ClusterCfg.Spec.Cluster)
+	diff := diffEngine.ComputeDiff(
+		currentSpec, &ctx.ClusterCfg.Spec.Cluster,
+		currentProvider, &ctx.ClusterCfg.Spec.Provider,
+	)
 
 	provisionerDiff, diffErr := updater.DiffConfig(
 		cmd.Context(), clusterName, currentSpec, &ctx.ClusterCfg.Spec.Cluster,
@@ -5746,7 +5746,12 @@ func computeSpecOnlyDiff(
 		ctx.ClusterCfg.Spec.Cluster.Provider,
 	)
 
-	return diffEngine.ComputeDiff(currentSpec, &ctx.ClusterCfg.Spec.Cluster)
+	return diffEngine.ComputeDiff(
+		currentSpec,
+		&ctx.ClusterCfg.Spec.Cluster,
+		nil,
+		&ctx.ClusterCfg.Spec.Provider,
+	)
 }
 
 // applyOrReportChanges handles dry-run, recreate-required, no-changes, and

@@ -41,7 +41,7 @@ The supported Kubernetes distributions (x-axis) run on different infrastructure 
 | Omni     | —         | —        | ✅    | —          |
 
 > [!NOTE]
-> Talos on Hetzner requires a Hetzner Cloud account and API token (`HCLOUD_TOKEN`). Talos on Omni requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account, a service account key provided via environment variable (defaults to `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.cluster.omni.serviceAccountKeyEnvVar`), and an Omni API endpoint configured via `spec.cluster.omni.endpoint` in `ksail.yaml`. See the [Support Matrix](/support-matrix/) for more details.
+> Talos on Hetzner requires a Hetzner Cloud account and API token (`HCLOUD_TOKEN`). Talos on Omni requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account, a service account key provided via environment variable (defaults to `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.provider.omni.serviceAccountKeyEnvVar`), and an Omni API endpoint configured via `spec.provider.omni.endpoint` in `ksail.yaml`. See the [Support Matrix](/support-matrix/) for more details.
 
 ## Installation Methods
 
@@ -65,7 +65,7 @@ The supported Kubernetes distributions (x-axis) run on different infrastructure 
     If you have Go 1.26.1+ installed, you can build and install KSail via `go install`:
 
     ```bash
-    go install github.com/devantler-tech/ksail/v5@latest
+    go install github.com/devantler-tech/ksail/v6@latest
     ```
 
     This builds and installs the `ksail` binary to `$GOPATH/bin` (typically `~/go/bin`). Ensure this directory is in your PATH.

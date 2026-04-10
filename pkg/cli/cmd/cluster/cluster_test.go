@@ -15,23 +15,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
-	dockerpkg "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v5/pkg/di"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
-	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
-	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/state"
-	"github.com/devantler-tech/ksail/v5/pkg/timer"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/setup"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/setup/localregistry"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/confirm"
+	dockerpkg "github.com/devantler-tech/ksail/v6/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v6/pkg/di"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/ksail"
+	clusterdetector "github.com/devantler-tech/ksail/v6/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/installer"
+	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/state"
+	"github.com/devantler-tech/ksail/v6/pkg/timer"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
@@ -2616,6 +2616,41 @@ func TestDelete_CommandFlags(t *testing.T) {
 
 	distributionFlag := cmd.Flags().Lookup("distribution")
 	require.Nil(t, distributionFlag, "unexpected --distribution flag (should be removed)")
+}
+
+func TestConnect_CommandFlags(t *testing.T) {
+	t.Parallel()
+
+	cmd := cluster.NewConnectCmd(nil)
+
+	// Verify expected flags exist
+	contextFlag := cmd.Flags().Lookup("context")
+	require.NotNil(t, contextFlag, "expected --context flag")
+	require.Equal(t, "c", contextFlag.Shorthand)
+
+	kubeconfigFlag := cmd.Flags().Lookup("kubeconfig")
+	require.NotNil(t, kubeconfigFlag, "expected --kubeconfig flag")
+	require.Equal(t, "k", kubeconfigFlag.Shorthand)
+
+	editorFlag := cmd.Flags().Lookup("editor")
+	require.NotNil(t, editorFlag, "expected --editor flag")
+
+	// Verify hidden flags exist but are hidden (needed for config defaults/validation)
+	distributionFlag := cmd.Flags().Lookup("distribution")
+	require.NotNil(t, distributionFlag, "expected --distribution flag (hidden)")
+	require.True(t, distributionFlag.Hidden, "--distribution should be hidden")
+
+	distributionConfigFlag := cmd.Flags().Lookup("distribution-config")
+	require.NotNil(t, distributionConfigFlag, "expected --distribution-config flag (hidden)")
+	require.True(t, distributionConfigFlag.Hidden, "--distribution-config should be hidden")
+
+	gitopsEngineFlag := cmd.Flags().Lookup("gitops-engine")
+	require.NotNil(t, gitopsEngineFlag, "expected --gitops-engine flag (hidden)")
+	require.True(t, gitopsEngineFlag.Hidden, "--gitops-engine should be hidden")
+
+	localRegistryFlag := cmd.Flags().Lookup("local-registry")
+	require.NotNil(t, localRegistryFlag, "expected --local-registry flag (hidden)")
+	require.True(t, localRegistryFlag.Hidden, "--local-registry should be hidden")
 }
 
 // TestDelete_Confirmation_Accepted tests that deletion proceeds when user confirms with "yes".
@@ -5258,7 +5293,7 @@ func newInPlaceDiff(count int) *clusterupdate.UpdateResult {
 		{"cluster.gitOpsEngine", "None", "Flux"},
 		{"cluster.localRegistry.registry", "", "localhost:5050"},
 		{"cluster.talos.workers", "0", "2"},
-		{"cluster.hetzner.sshKeyName", "old-key", "new-key"},
+		{"provider.hetzner.sshKeyName", "old-key", "new-key"},
 	}
 
 	for i := range count {
@@ -5388,14 +5423,14 @@ func BenchmarkFormatDiffTable_WideValues(b *testing.B) {
 	result := clusterupdate.NewEmptyUpdateResult()
 	result.InPlaceChanges = []clusterupdate.Change{
 		{
-			Field:    "cluster.hetzner.controlPlaneServerType",
+			Field:    "provider.hetzner.controlPlaneServerType",
 			OldValue: "cx23",
 			NewValue: "cx53",
 			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "new worker servers will use the new type; existing workers unchanged",
 		},
 		{
-			Field:    "cluster.hetzner.networkName",
+			Field:    "provider.hetzner.networkName",
 			OldValue: "legacy-network-name",
 			NewValue: "production-network-name",
 			Category: clusterupdate.ChangeCategoryInPlace,

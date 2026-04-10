@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	hetznercsiinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hetznercsi"
+	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
+	hetznercsiinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/hetznercsi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

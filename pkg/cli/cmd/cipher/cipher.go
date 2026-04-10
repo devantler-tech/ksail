@@ -7,13 +7,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
-	sopsclient "github.com/devantler-tech/ksail/v5/pkg/client/sops"
-	"github.com/devantler-tech/ksail/v5/pkg/di"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/editor"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/confirm"
+	sopsclient "github.com/devantler-tech/ksail/v6/pkg/client/sops"
+	"github.com/devantler-tech/ksail/v6/pkg/di"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v6/pkg/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
 	"github.com/getsops/sops/v3/keys"
@@ -485,8 +485,8 @@ folder, all SOPS-encrypted YAML and JSON files in the folder are rotated.
 Use --recursive to include subdirectories.
 
 Optionally, master key recipients can be added or removed during rotation:
-  --new-key adds a new master key recipient
-  --old-key removes an existing master key recipient
+  --add-key adds a new master key recipient
+  --remove-key removes an existing master key recipient
 
 By default, the command shows which files will be affected and prompts for
 confirmation. Use --force to skip the confirmation prompt. In non-interactive
@@ -509,19 +509,19 @@ Examples:
   ksail cipher rotate secrets.yaml
 
   # Add a new age recipient during rotation
-  ksail cipher rotate ./k8s --new-key age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+  ksail cipher rotate ./k8s --add-key age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
 
   # Remove an old age recipient during rotation
-  ksail cipher rotate ./k8s --old-key age1oldkey...
+  ksail cipher rotate ./k8s --remove-key age1oldkey...
 
   # Replace a recipient (add new, remove old)
-  ksail cipher rotate ./k8s --new-key age1newkey... --old-key age1oldkey...`
+  ksail cipher rotate ./k8s --add-key age1newkey... --remove-key age1oldkey...`
 
 // NewRotateCmd creates and returns the rotate command.
 func NewRotateCmd() *cobra.Command {
 	var (
-		newKey    string
-		oldKey    string
+		addKey    string
+		removeKey string
 		recursive bool
 		force     bool
 	)
@@ -533,15 +533,16 @@ func NewRotateCmd() *cobra.Command {
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return handleRotateRunE(cmd, args[0], newKey, oldKey, recursive, force)
+			return handleRotateRunE(cmd, args[0], addKey, removeKey, recursive, force)
 		},
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: "write",
 		},
 	}
 
-	cmd.Flags().StringVar(&newKey, "new-key", "", "public key to add as a master key recipient")
-	cmd.Flags().StringVar(&oldKey, "old-key", "", "public key to remove from master key recipients")
+	cmd.Flags().StringVar(&addKey, "add-key", "", "public key to add as a master key recipient")
+	cmd.Flags().
+		StringVar(&removeKey, "remove-key", "", "public key to remove from master key recipients")
 	cmd.Flags().
 		BoolVarP(&recursive, "recursive", "r", false, "scan subdirectories when target is a folder")
 	cmd.Flags().
@@ -553,7 +554,7 @@ func NewRotateCmd() *cobra.Command {
 // handleRotateRunE is the main handler for the rotate command.
 func handleRotateRunE(
 	cmd *cobra.Command,
-	target, newKey, oldKey string,
+	target, addKey, removeKey string,
 	recursive, force bool,
 ) error {
 	writer := cmd.OutOrStdout()
@@ -563,7 +564,7 @@ func handleRotateRunE(
 		return fmt.Errorf("resolve target path %q: %w", target, err)
 	}
 
-	opts, err := buildRotateOpts(newKey, oldKey)
+	opts, err := buildRotateOpts(addKey, removeKey)
 	if err != nil {
 		return err
 	}
@@ -647,23 +648,23 @@ func collectRotateTargets(
 }
 
 // buildRotateOpts constructs RotateOpts from CLI flag values.
-func buildRotateOpts(newKey, oldKey string) (sopsclient.RotateOpts, error) {
+func buildRotateOpts(addKey, removeKey string) (sopsclient.RotateOpts, error) {
 	opts := sopsclient.RotateOpts{
 		KeyServices:     []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
 		DecryptionOrder: []string{},
 	}
 
-	if newKey != "" {
-		masterKey, err := sopsclient.ParseKeyType(newKey)
+	if addKey != "" {
+		masterKey, err := sopsclient.ParseKeyType(addKey)
 		if err != nil {
-			return opts, fmt.Errorf("parsing --new-key: %w", err)
+			return opts, fmt.Errorf("parsing --add-key: %w", err)
 		}
 
 		opts.AddKeys = []keys.MasterKey{masterKey}
 	}
 
-	if oldKey != "" {
-		opts.RemoveKeys = []string{oldKey}
+	if removeKey != "" {
+		opts.RemoveKeys = []string{removeKey}
 	}
 
 	return opts, nil

@@ -34,4 +34,10 @@ var (
 	ErrEtcdLeaveCluster = errors.New("failed to remove etcd member")
 	// ErrNoConfigForRole is returned when no Talos machine config is available for a role.
 	ErrNoConfigForRole = errors.New("no config available for role")
+	// ErrUpgradeFailed is returned when a Talos OS upgrade fails on a node.
+	ErrUpgradeFailed = errors.New("talos upgrade failed")
+	// ErrNodeNotReady is returned when a node does not become ready within the timeout.
+	ErrNodeNotReady = errors.New("node did not become ready within timeout")
+	// ErrEmptyVersionResponse is returned when a Talos node returns an empty version response.
+	ErrEmptyVersionResponse = errors.New("empty version response from node")
 )

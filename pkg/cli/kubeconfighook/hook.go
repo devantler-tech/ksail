@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
-	"github.com/devantler-tech/ksail/v5/pkg/notify"
-	omniprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/omni"
-	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
+	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
+	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -64,7 +64,7 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 
 	refreshErr := refreshKubeconfig(
 		cmd.Context(),
-		cfg.Spec.Cluster.Omni,
+		cfg.Spec.Provider.Omni,
 		clusterName,
 		canonicalPath,
 	)

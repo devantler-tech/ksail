@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/svc/tenant/gitprovider"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/tenant/gitprovider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -103,7 +103,7 @@ func TestParseOwnerRepo_InvalidFormats(t *testing.T) {
 	for _, input := range tests {
 		_, _, err := gitprovider.ParseOwnerRepo(input)
 		require.Error(t, err, "expected error for input %q", input)
-		require.ErrorContains(t, err, "invalid git-repo format")
+		require.ErrorContains(t, err, "invalid repo format")
 	}
 }
 
@@ -381,4 +381,223 @@ func TestParseVisibility(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGitHubProvider_GetDefaultBranch(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			assert.Equal(t, http.MethodGet, request.Method)
+			assert.Equal(t, "/repos/my-org/my-repo", request.URL.Path)
+			writer.WriteHeader(http.StatusOK)
+			_, _ = writer.Write([]byte(`{"default_branch":"main","full_name":"my-org/my-repo"}`))
+		}),
+	)
+	defer srv.Close()
+
+	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
+	branch, err := provider.GetDefaultBranch(context.Background(), "my-org", "my-repo")
+	require.NoError(t, err)
+	require.Equal(t, "main", branch)
+}
+
+func TestGitHubProvider_GetDefaultBranch_Error(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusNotFound)
+		_, _ = writer.Write([]byte(`{"message":"Not Found"}`))
+	}))
+	defer srv.Close()
+
+	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
+	_, err := provider.GetDefaultBranch(context.Background(), "my-org", "no-repo")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "get repository")
+}
+
+func TestGitHubProvider_CreateBranch(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			switch {
+			case request.Method == http.MethodGet && request.URL.Path == "/repos/my-org/my-repo/git/ref/heads/main":
+				writer.WriteHeader(http.StatusOK)
+				_, _ = writer.Write([]byte(`{"ref":"refs/heads/main","object":{"sha":"abc123"}}`))
+			case request.Method == http.MethodPost && request.URL.Path == "/repos/my-org/my-repo/git/refs":
+				var body map[string]any
+				assert.NoError(t, json.NewDecoder(request.Body).Decode(&body))
+				assert.Equal(t, "refs/heads/feature-branch", body["ref"])
+				writer.WriteHeader(http.StatusCreated)
+				_, _ = writer.Write(
+					[]byte(`{"ref":"refs/heads/feature-branch","object":{"sha":"abc123"}}`),
+				)
+			default:
+				writer.WriteHeader(http.StatusNotFound)
+			}
+		}),
+	)
+	defer srv.Close()
+
+	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
+	err := provider.CreateBranch(
+		context.Background(),
+		"my-org",
+		"my-repo",
+		"feature-branch",
+		"main",
+	)
+	require.NoError(t, err)
+}
+
+func TestGitHubProvider_CreateBranch_AlreadyExists(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			switch request.Method {
+			case http.MethodGet:
+				writer.WriteHeader(http.StatusOK)
+				_, _ = writer.Write([]byte(`{"ref":"refs/heads/main","object":{"sha":"abc123"}}`))
+			case http.MethodPost:
+				writer.WriteHeader(http.StatusUnprocessableEntity)
+				_, _ = writer.Write([]byte(`{"message":"Reference already exists"}`))
+			default:
+				writer.WriteHeader(http.StatusNotFound)
+			}
+		}),
+	)
+	defer srv.Close()
+
+	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
+	err := provider.CreateBranch(
+		context.Background(),
+		"my-org",
+		"my-repo",
+		"existing-branch",
+		"main",
+	)
+	require.Error(t, err)
+	require.ErrorIs(t, err, gitprovider.ErrBranchAlreadyExists)
+}
+
+func TestGitHubProvider_CreateBranch_BaseNotFound(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusNotFound)
+		_, _ = writer.Write([]byte(`{"message":"Not Found"}`))
+	}))
+	defer srv.Close()
+
+	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
+	err := provider.CreateBranch(
+		context.Background(), "my-org", "my-repo", "feature-branch", "nonexistent",
+	)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "get base branch")
+}
+
+func TestGitHubProvider_PushFilesToBranch(t *testing.T) {
+	t.Parallel()
+
+	var pushedPaths []string
+
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if request.Method == http.MethodGet {
+				writer.WriteHeader(http.StatusNotFound)
+
+				return
+			}
+
+			assert.Equal(t, http.MethodPut, request.Method)
+			pushedPaths = append(pushedPaths, request.URL.Path)
+
+			var body map[string]any
+			assert.NoError(t, json.NewDecoder(request.Body).Decode(&body))
+			assert.Equal(t, "add tenant files", body["message"])
+			assert.Equal(t, "feature-branch", body["branch"])
+			assert.NotEmpty(t, body["content"])
+			writer.WriteHeader(http.StatusCreated)
+			_, _ = writer.Write([]byte(`{"content":{"path":"test"}}`))
+		}),
+	)
+	defer srv.Close()
+
+	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
+	files := map[string][]byte{
+		"tenants/my-tenant/kustomization.yaml": []byte("resources: []"),
+	}
+	err := provider.PushFilesToBranch(
+		context.Background(), "my-org", "my-repo", "feature-branch", files, "add tenant files",
+	)
+	require.NoError(t, err)
+	require.Len(t, pushedPaths, 1)
+	require.Contains(t, pushedPaths[0], "tenants/my-tenant/kustomization.yaml")
+}
+
+func TestGitHubProvider_CreatePullRequest(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			assert.Equal(t, http.MethodPost, request.Method)
+			assert.Equal(t, "/repos/my-org/my-repo/pulls", request.URL.Path)
+
+			var body map[string]any
+			assert.NoError(t, json.NewDecoder(request.Body).Decode(&body))
+			assert.Equal(t, "feat(tenant): add my-tenant", body["title"])
+			assert.Equal(t, "Adds tenant manifests", body["body"])
+			assert.Equal(t, "feature-branch", body["head"])
+			assert.Equal(t, "main", body["base"])
+
+			writer.WriteHeader(http.StatusCreated)
+			_, _ = writer.Write(
+				[]byte(`{"html_url":"https://github.com/my-org/my-repo/pull/42","number":42}`),
+			)
+		}),
+	)
+	defer srv.Close()
+
+	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
+	prURL, err := provider.CreatePullRequest(
+		context.Background(),
+		"my-org",
+		"my-repo",
+		gitprovider.PROptions{
+			Title: "feat(tenant): add my-tenant",
+			Body:  "Adds tenant manifests",
+			Head:  "feature-branch",
+			Base:  "main",
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, "https://github.com/my-org/my-repo/pull/42", prURL)
+}
+
+func TestGitHubProvider_CreatePullRequest_Error(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = writer.Write([]byte(`{"message":"Validation Failed"}`))
+	}))
+	defer srv.Close()
+
+	provider := gitprovider.ExportNewGitHubProviderForTest("test-token", srv.Client(), srv.URL)
+	_, err := provider.CreatePullRequest(
+		context.Background(),
+		"my-org",
+		"my-repo",
+		gitprovider.PROptions{
+			Title: "test",
+			Head:  "branch",
+			Base:  "main",
+		},
+	)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "create pull request")
 }
