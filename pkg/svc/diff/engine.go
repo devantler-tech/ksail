@@ -117,6 +117,7 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 				if e.distribution == v1alpha1.DistributionVanilla {
 					return clusterupdate.ChangeCategoryRecreateRequired
 				}
+
 				return clusterupdate.ChangeCategoryRebootRequired
 			},
 			getVal: func(spec *v1alpha1.ClusterSpec) string {
@@ -226,6 +227,7 @@ func (e *Engine) applyFieldRules(
 		if rule.categoryFn != nil {
 			cat = rule.categoryFn()
 		}
+
 		appendChange(result, rule.field,
 			rule.getVal(oldSpec), rule.getVal(newSpec),
 			rule.defaultVal, rule.reason, cat)

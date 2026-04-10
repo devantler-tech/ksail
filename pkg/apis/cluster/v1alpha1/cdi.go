@@ -1,4 +1,4 @@
-package v1alpha1 //nolint:dupl
+package v1alpha1
 
 import (
 	"fmt"
