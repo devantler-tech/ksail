@@ -704,6 +704,76 @@ data:
 	}
 }
 
+func TestSanitizeYAMLOutput_stripsServiceClusterIPs(t *testing.T) {
+	t.Parallel()
+
+	input := `apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  namespace: default
+spec:
+  clusterIP: 10.96.0.100
+  clusterIPs:
+  - 10.96.0.100
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: my-app
+  type: ClusterIP`
+
+	result, err := cluster.ExportSanitizeYAMLOutput(input)
+	if err != nil {
+		t.Fatalf("sanitizeYAMLOutput() error = %v", err)
+	}
+
+	if strings.Contains(result, "clusterIP:") {
+		t.Error("should strip spec.clusterIP from Service")
+	}
+
+	if strings.Contains(result, "clusterIPs:") {
+		t.Error("should strip spec.clusterIPs from Service")
+	}
+
+	if !strings.Contains(result, "my-service") {
+		t.Error("should preserve service name")
+	}
+
+	if !strings.Contains(result, "targetPort") {
+		t.Error("should preserve other spec fields")
+	}
+}
+
+func TestSanitizeYAMLOutput_preservesHeadlessService(t *testing.T) {
+	t.Parallel()
+
+	input := `apiVersion: v1
+kind: Service
+metadata:
+  name: headless-svc
+  namespace: default
+spec:
+  clusterIP: None
+  ports:
+  - port: 80
+  selector:
+    app: my-app`
+
+	result, err := cluster.ExportSanitizeYAMLOutput(input)
+	if err != nil {
+		t.Fatalf("sanitizeYAMLOutput() error = %v", err)
+	}
+
+	if !strings.Contains(result, "clusterIP") {
+		t.Error("should preserve clusterIP: None for headless services")
+	}
+
+	if !strings.Contains(result, "clusterIP: None") {
+		t.Error("should preserve clusterIP: None for headless services")
+	}
+}
+
 func TestIsHelmReleaseSecret(t *testing.T) {
 	t.Parallel()
 
