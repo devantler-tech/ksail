@@ -73,6 +73,14 @@
                 "Disabled"
               ]
             },
+            "cdi": {
+              "type": "string",
+              "enum": [
+                "Default",
+                "Enabled",
+                "Disabled"
+              ]
+            },
             "metricsServer": {
               "type": "string",
               "enum": [

@@ -30,6 +30,8 @@ const (
 	clusterNameFileName = "cluster-name.yaml"
 	// imageVerificationFileName is the name of the image verification config document file.
 	imageVerificationFileName = "image-verification.yaml"
+	// disableCDIFileName is the name of the CDI disable patch file.
+	disableCDIFileName = "disable-cdi.yaml"
 )
 
 // KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
@@ -72,6 +74,10 @@ type Config struct {
 	// and commented examples for keyless (Cosign/OIDC) and public key verification.
 	// This requires Talos 1.13+.
 	EnableImageVerification bool
+	// DisableCDI indicates whether to generate a patch that disables CDI.
+	// When true, generates a disable-cdi.yaml patch to set machine.features.enableCDI to false.
+	// Talos 1.13+ enables CDI by default, so this patch is only needed when CDI should be turned off.
+	DisableCDI bool
 }
 
 // Generator generates the Talos directory structure.
@@ -162,6 +168,11 @@ func (g *Generator) getDirectoriesWithPatches(
 		dirs["cluster"] = true
 	}
 
+	// Disable CDI patch goes to cluster/
+	if model.DisableCDI {
+		dirs["cluster"] = true
+	}
+
 	return dirs
 }
 
@@ -223,6 +234,14 @@ func (g *Generator) generateConditionalPatches(
 	// Generate image verification config document when enabled
 	if model.EnableImageVerification {
 		err := g.generateImageVerificationPatch(rootPath, force)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Generate disable-cdi patch when CDI should be turned off
+	if model.DisableCDI {
+		err := g.generateDisableCDIPatch(rootPath, force)
 		if err != nil {
 			return err
 		}
@@ -546,6 +565,34 @@ rules:
 	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create image-verification config: %w", err)
+	}
+
+	return nil
+}
+
+// generateDisableCDIPatch creates a Talos patch file to disable CDI.
+// Talos 1.13+ enables CDI (Container Device Interface) by default via machine.features.
+// This patch explicitly disables CDI when the user sets CDI to Disabled.
+func (g *Generator) generateDisableCDIPatch(
+	rootPath string,
+	force bool,
+) error {
+	patchPath := filepath.Join(rootPath, "cluster", disableCDIFileName)
+
+	// Check if file already exists
+	_, statErr := os.Stat(patchPath)
+	if statErr == nil && !force {
+		return nil
+	}
+
+	patchContent := `machine:
+  features:
+    enableCDI: false
+`
+
+	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create disable-cdi patch: %w", err)
 	}
 
 	return nil

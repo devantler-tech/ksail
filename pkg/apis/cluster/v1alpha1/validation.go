@@ -72,6 +72,11 @@ func ValidCSIs() []CSI {
 	return []CSI{CSIDefault, CSIEnabled, CSIDisabled}
 }
 
+// ValidCDIs returns supported CDI values.
+func ValidCDIs() []CDI {
+	return []CDI{CDIDefault, CDIEnabled, CDIDisabled}
+}
+
 // ValidMetricsServers returns supported metrics server values.
 func ValidMetricsServers() []MetricsServer {
 	return []MetricsServer{

@@ -14,6 +14,9 @@ var ErrInvalidCNI = errors.New("invalid CNI")
 // ErrInvalidCSI is returned when an invalid CSI is specified.
 var ErrInvalidCSI = errors.New("invalid CSI")
 
+// ErrInvalidCDI is returned when an invalid CDI is specified.
+var ErrInvalidCDI = errors.New("invalid CDI")
+
 // ErrInvalidMetricsServer is returned when an invalid metrics server is specified.
 var ErrInvalidMetricsServer = errors.New("invalid metrics server")
 
