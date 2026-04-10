@@ -468,7 +468,7 @@ func (p *Provider) GetClusterStatus(
 			}, nil
 		}
 
-		return nil, fmt.Errorf("get cluster status: %w", nodesErr)
+		return nil, fmt.Errorf("get cluster status: %w", errors.Join(err, nodesErr))
 	}
 
 	// If we had no status resource, derive from node list

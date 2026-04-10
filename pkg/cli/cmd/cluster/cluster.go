@@ -2570,6 +2570,9 @@ func forEachContainer(
 // from any source (provider API or Kubernetes API).
 var errNoClusterInfo = errors.New("no cluster info available")
 
+// errUnsupportedProvider is a sentinel error for unrecognized provider values.
+var errUnsupportedProvider = errors.New("unsupported provider")
+
 // NewInfoCmd creates the cluster info command.
 // The command queries the infrastructure provider API first, then attempts
 // kubectl cluster-info, and only fails if no information is available at all.
@@ -2637,7 +2640,7 @@ func runInfoCmd(
 
 	// Unsupported provider is a hard error — bail immediately.
 	if provErr != nil && status == nil {
-		if strings.HasPrefix(provErr.Error(), "unsupported provider") {
+		if errors.Is(provErr, errUnsupportedProvider) {
 			return provErr
 		}
 	}
@@ -2698,7 +2701,7 @@ func getProviderStatus(
 	case v1alpha1.ProviderOmni:
 		return getOmniProviderStatus(cmd.Context(), clusterName, omniOpts)
 	default:
-		return nil, fmt.Errorf("unsupported provider: %s", prov)
+		return nil, fmt.Errorf("%w: %s", errUnsupportedProvider, prov)
 	}
 }
 
