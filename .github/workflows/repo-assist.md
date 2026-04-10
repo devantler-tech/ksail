@@ -187,7 +187,7 @@ steps:
 
 # Repo Assist
 
-> **CRITICAL**: You **MUST** call exactly one configured safe output tool before finishing. Examples include:
+> **CRITICAL**: You **MUST** call at least one configured safe output tool before finishing. Examples include:
 >
 > - `noop` — when no tasks produced actionable work (include a summary of what was checked and why no action was needed)
 > - `create_pull_request` — when creating a PR with code changes
