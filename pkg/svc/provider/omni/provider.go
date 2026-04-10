@@ -561,57 +561,57 @@ func (p *Provider) waitForCluster(
 	}
 }
 
-// isClusterRunningAndReady checks whether the Omni cluster has Phase==RUNNING and Ready==true.
-// It returns (false, nil) when the cluster resource is not yet found or when the context
+// clusterStatusPredicate evaluates a condition on a ClusterStatusSpec.
+type clusterStatusPredicate func(phase specs.ClusterStatusSpec_Phase, ready bool) bool
+
+// checkClusterStatus fetches the ClusterStatus and evaluates the predicate.
+// It returns (false, nil) when the resource is not yet found or when the context
 // is cancelled/expired, allowing the caller to retry or handle the context via ctx.Done().
+func checkClusterStatus(
+	ctx context.Context,
+	omniState state.State,
+	clusterName string,
+	predicate clusterStatusPredicate,
+) (bool, error) {
+	status, err := safe.StateGet[*omnires.ClusterStatus](
+		ctx,
+		omniState,
+		omnires.NewClusterStatus(clusterName).Metadata(),
+	)
+	if err != nil {
+		if state.IsNotFoundError(err) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, context.Canceled) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
+	}
+
+	return predicate(
+		status.TypedSpec().Value.GetPhase(),
+		status.TypedSpec().Value.GetReady(),
+	), nil
+}
+
+// isClusterRunningAndReady checks whether the Omni cluster has Phase==RUNNING and Ready==true.
 func isClusterRunningAndReady(
 	ctx context.Context,
 	omniState state.State,
 	clusterName string,
 ) (bool, error) {
-	status, err := safe.StateGet[*omnires.ClusterStatus](
-		ctx,
-		omniState,
-		omnires.NewClusterStatus(clusterName).Metadata(),
-	)
-	if err != nil {
-		if state.IsNotFoundError(err) ||
-			errors.Is(err, context.DeadlineExceeded) ||
-			errors.Is(err, context.Canceled) {
-			return false, nil
-		}
-
-		return false, fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
-	}
-
-	phase := status.TypedSpec().Value.GetPhase()
-	ready := status.TypedSpec().Value.GetReady()
-
-	return phase == specs.ClusterStatusSpec_RUNNING && ready, nil
+	return checkClusterStatus(ctx, omniState, clusterName, func(phase specs.ClusterStatusSpec_Phase, ready bool) bool {
+		return phase == specs.ClusterStatusSpec_RUNNING && ready
+	})
 }
 
 // isClusterRunning checks whether the Omni cluster has Phase==RUNNING (regardless of Ready).
-// It returns (false, nil) when the cluster resource is not yet found or when the context
-// is cancelled/expired, allowing the caller to retry or handle the context via ctx.Done().
 func isClusterRunning(
 	ctx context.Context,
 	omniState state.State,
 	clusterName string,
 ) (bool, error) {
-	status, err := safe.StateGet[*omnires.ClusterStatus](
-		ctx,
-		omniState,
-		omnires.NewClusterStatus(clusterName).Metadata(),
-	)
-	if err != nil {
-		if state.IsNotFoundError(err) ||
-			errors.Is(err, context.DeadlineExceeded) ||
-			errors.Is(err, context.Canceled) {
-			return false, nil
-		}
-
-		return false, fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
-	}
-
-	return status.TypedSpec().Value.GetPhase() == specs.ClusterStatusSpec_RUNNING, nil
+	return checkClusterStatus(ctx, omniState, clusterName, func(phase specs.ClusterStatusSpec_Phase, _ bool) bool {
+		return phase == specs.ClusterStatusSpec_RUNNING
+	})
 }
