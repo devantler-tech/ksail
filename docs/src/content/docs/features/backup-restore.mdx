@@ -1,0 +1,19 @@
+---
+title: Backup & Restore
+description: Export cluster resources to a compressed archive and restore to any cluster.
+---
+
+Export cluster resources to a compressed archive and restore to any cluster. Backups capture YAML in dependency order, strip server metadata, and include a manifest inventory.
+
+```bash
+ksail cluster backup --output ./backup.tar.gz
+ksail cluster restore --input ./backup.tar.gz
+ksail cluster restore -i ./backup.tar.gz --existing-resource-policy update --dry-run
+```
+
+> [!NOTE]
+> This feature backs up resource manifests (YAML) only. Persistent volume data is not included.
+
+## CLI Reference
+
+[`ksail cluster backup`](/cli-flags/cluster/cluster-backup/), [`ksail cluster restore`](/cli-flags/cluster/cluster-restore/)

@@ -1,0 +1,19 @@
+---
+title: Registry Management
+description: Run local OCI registries and configure mirror registries for faster image pulls and GitOps integration.
+---
+
+Run local [OCI registries](/concepts/#oci-registries) for faster image pulls and GitOps integration. Docker-based clusters (Vanilla, K3s, Talos-on-Docker, VCluster) enable `docker.io`, `ghcr.io`, `quay.io`, and `registry.k8s.io` mirrors by default; Talos on Hetzner requires explicit mirror configuration.
+
+```bash
+# Local registry
+ksail cluster init --local-registry localhost:5050
+ksail cluster create
+docker build -t localhost:5050/my-app .
+docker push localhost:5050/my-app
+
+# Authenticated mirror: [user:pass@]host[=endpoint]
+ksail cluster init --mirror-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io=https://ghcr.io'
+```
+
+> `${GITHUB_USER}` and `${GITHUB_TOKEN}` are placeholders resolved by KSail (replace with your GitHub username and a personal access token). They are not expanded by the shell — the single quotes ensure the shell passes the value verbatim so KSail can interpolate it.

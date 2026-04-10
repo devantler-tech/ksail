@@ -203,7 +203,7 @@ spec:
 
 ## Combining with Tenant Management
 
-KSail's [tenant management](/guides/tenant-management/) generates ArgoCD `AppProject` and `Application` resources per tenant. You can replace per-tenant Applications with a single ApplicationSet that auto-discovers tenant directories:
+KSail's [tenant management](/features/tenant-management/) generates ArgoCD `AppProject` and `Application` resources per tenant. You can replace per-tenant Applications with a single ApplicationSet that auto-discovers tenant directories:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -260,5 +260,5 @@ spec:
 - [ArgoCD ApplicationSet documentation](https://argo-cd.readthedocs.io/en/stable/user-guide/application-set/)
 - [ApplicationSet generators reference](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Generators/)
 - [ArgoCD Application specification](https://argo-cd.readthedocs.io/en/stable/user-guide/application-specification/)
-- [Tenant Management guide](/guides/tenant-management/)
+- [Tenant Management guide](/features/tenant-management/)
 - [Multi-Environment Workflows guide](/guides/multi-environment/)
