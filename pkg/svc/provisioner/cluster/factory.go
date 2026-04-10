@@ -228,7 +228,8 @@ func (f DefaultFactory) createK3dProvisioner(
 			)
 		}
 
-		if _, err := os.Stat(absTemplatePath); err != nil {
+		_, err = os.Stat(absTemplatePath)
+		if err != nil {
 			return nil, nil, fmt.Errorf(
 				"k3d image verification template not found at %q; run 'ksail cluster init' to generate it: %w",
 				absTemplatePath,
