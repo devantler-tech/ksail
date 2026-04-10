@@ -2766,7 +2766,13 @@ func getDockerProviderStatus(
 
 			status, err := prov.GetClusterStatus(cmd.Context(), clusterName)
 			if err != nil {
-				return fmt.Errorf("docker label scheme %s: %w", scheme, err)
+				if errors.Is(err, provider.ErrClusterNotFound) {
+					continue
+				}
+
+				return fmt.Errorf(
+					"docker label scheme %s: %w", scheme, err,
+				)
 			}
 
 			if status != nil && status.NodesTotal > 0 {
