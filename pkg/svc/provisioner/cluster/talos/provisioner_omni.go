@@ -16,9 +16,9 @@ import (
 
 const (
 	// omniAPIServerReadinessTimeout is the timeout for verifying the API server
-	// is reachable through the Omni proxy after WaitForClusterReady returns.
-	// The Omni proxy may report the cluster as ready before it is operational
-	// for kubectl connections, so this absorbs the propagation delay.
+	// is reachable through the Omni proxy after WaitForClusterRunning returns.
+	// The Omni proxy may report the cluster phase as RUNNING before it is
+	// operational for kubectl connections, so this absorbs the propagation delay.
 	omniAPIServerReadinessTimeout = 2 * time.Minute
 )
 
@@ -88,8 +88,8 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 }
 
 // verifyOmniAPIServerReachable checks that the API server is reachable through
-// the Omni proxy. WaitForClusterReady polls ClusterStatus until
-// Phase==RUNNING && Ready, but the Omni SaaS proxy may not yet be forwarding
+// the Omni proxy. WaitForClusterRunning polls ClusterStatus until
+// Phase==RUNNING, but the Omni SaaS proxy may not yet be forwarding
 // kubectl connections at that point. This probe absorbs the proxy propagation
 // delay so downstream commands (e.g., ksail cluster info) don't fail with
 // "proxy error".
@@ -178,7 +178,9 @@ func (p *Provisioner) buildOmniPatchInfos() []omniprovider.PatchInfo {
 	return patches
 }
 
-// syncAndWaitOmniCluster builds a cluster template, syncs it to Omni, and waits for readiness.
+// syncAndWaitOmniCluster builds a cluster template, syncs it to Omni, and waits
+// for the cluster to reach the RUNNING phase. It does not wait for full node
+// readiness (Ready==true) because CNI is installed as a post-creation step.
 func (p *Provisioner) syncAndWaitOmniCluster(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
