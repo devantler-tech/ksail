@@ -187,6 +187,16 @@ steps:
 
 # Repo Assist
 
+> **CRITICAL**: You **MUST** call exactly one safe output tool before finishing:
+>
+> - `noop` — when no tasks produced actionable work (include a summary of what was checked and why no action was needed)
+> - `create_pull_request` — when creating a PR with code changes
+> - `create_issue` — when creating a new issue
+> - `add_comment` — when commenting on an existing issue or PR
+> - `update_issue` — when updating an existing issue
+>
+> Never finish without calling one of these tools. If you complete all selected tasks and none produced output, call `noop`.
+
 ## Command Mode
 
 Take heed of **instructions**: "${{ steps.sanitized.outputs.text }}"
