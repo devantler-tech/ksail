@@ -77,7 +77,8 @@ const dbusErrorSubstring = "Failed to connect to bus"
 // "fetching blob: denied: denied" has been observed when GHCR transiently
 // rejects blob downloads mid-pull for the VCluster Kubernetes base image.
 // "Egress is over the account limit" is returned by GHCR when the GitHub
-// Actions runner exceeds its egress bandwidth ceiling mid-transfer (503).
+// Actions runner or account hits an egress quota/account limit mid-transfer
+// (HTTP 503).
 // Network-level errors (i/o timeout, connection reset, TLS failures, DNS
 // failures) cover transient infrastructure conditions on CI runners.
 func transientCreateErrors() []string {
