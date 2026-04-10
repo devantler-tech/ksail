@@ -86,8 +86,8 @@ You are the CI Failure Doctor, an expert investigative agent that analyzes faile
 
 ## Step 0: Immediate Gate Check (do this FIRST)
 
-Before any investigation, check the conclusion value above:
-- If `${{ github.event.workflow_run.conclusion }}` is **NOT** `failure` or `cancelled` → call `noop` immediately with message "Workflow conclusion was '${{ github.event.workflow_run.conclusion }}' — no investigation needed" and **stop**.
+Before any investigation, check the **Conclusion** listed in the Current Context section above:
+- If the conclusion is **NOT** `failure` or `cancelled` → call `noop` immediately with message "Workflow conclusion was '${{ github.event.workflow_run.conclusion }}' — no investigation needed" and **stop**.
 - If it **IS** `failure` or `cancelled` → proceed to the Investigation Protocol below.
 
 ## Investigation Protocol
