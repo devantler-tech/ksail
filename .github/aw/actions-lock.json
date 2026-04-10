@@ -40,6 +40,11 @@
       "version": "v6.3.0",
       "sha": "53b83947a5a98c8d113130e565377fae1a50d02f"
     },
+    "actions/upload-artifact@v7": {
+      "repo": "actions/upload-artifact",
+      "version": "v7",
+      "sha": "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    },
     "actions/upload-artifact@v7.0.0": {
       "repo": "actions/upload-artifact",
       "version": "v7.0.0",
