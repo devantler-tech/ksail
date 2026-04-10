@@ -109,7 +109,6 @@ type BackupMetadata struct {
 
 type backupFlags struct {
 	outputPath       string
-	includeVolumes   bool
 	namespaces       []string
 	excludeTypes     []string
 	compressionLevel int
@@ -149,10 +148,6 @@ Example:
 	cmd.Flags().StringVarP(
 		&flags.outputPath, "output", "o", "",
 		"Output path for backup archive (required)",
-	)
-	cmd.Flags().BoolVar(
-		&flags.includeVolumes, "include-volumes", true,
-		"Include persistent volume data in backup (not yet implemented)",
 	)
 	cmd.Flags().StringSliceVarP(
 		&flags.namespaces, "namespaces", "n", []string{},
@@ -210,13 +205,6 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 	writer := cmd.OutOrStdout()
 	_, _ = fmt.Fprintf(writer, "Starting cluster backup...\n")
 	_, _ = fmt.Fprintf(writer, "   Output: %s\n", flags.outputPath)
-
-	if flags.includeVolumes {
-		_, _ = fmt.Fprintln(writer,
-			"Warning: --include-volumes is not yet implemented;"+
-				" volume data will NOT be included in this backup.",
-		)
-	}
 
 	if len(flags.namespaces) > 0 {
 		_, _ = fmt.Fprintf(writer, "   Namespaces: %v\n", flags.namespaces)
@@ -1047,6 +1035,15 @@ any k9s functionality. Examples:
 		cmd,
 		ksailconfigmanager.DefaultClusterFieldSelectors(),
 	)
+
+	// Hide flags that connect doesn't use but that are needed for config
+	// defaults and validation (distribution, distributionConfig, gitopsEngine,
+	// localRegistry).
+	for _, flagName := range []string{"distribution", "distribution-config", "gitops-engine", "local-registry"} {
+		if f := cmd.Flags().Lookup(flagName); f != nil {
+			f.Hidden = true
+		}
+	}
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return handleConnectRunE(cmd, cfgManager, args, editorFlag)
