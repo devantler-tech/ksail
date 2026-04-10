@@ -199,16 +199,19 @@ func (p *Provisioner) syncAndWaitOmniCluster(
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster template synced\n")
 	_, _ = fmt.Fprintf(
 		p.logWriter,
-		"  Waiting for cluster to become ready (timeout: %s)...\n",
+		"  Waiting for cluster to reach RUNNING phase (timeout: %s)...\n",
 		clusterReadinessTimeout,
 	)
 
-	err = omniProv.WaitForClusterReady(ctx, params.ClusterName, clusterReadinessTimeout)
+	// Wait for Phase==RUNNING without requiring Ready==true.
+	// Nodes cannot become Ready until CNI is installed, which happens
+	// as a post-creation step in handlePostCreationSetup.
+	err = omniProv.WaitForClusterRunning(ctx, params.ClusterName, clusterReadinessTimeout)
 	if err != nil {
-		return fmt.Errorf("cluster created but not ready: %w", err)
+		return fmt.Errorf("cluster created but not running: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is running\n")
 
 	return nil
 }

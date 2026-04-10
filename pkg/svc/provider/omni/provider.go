@@ -308,6 +308,85 @@ func isClusterRunningAndReady(
 	return phase == specs.ClusterStatusSpec_RUNNING && ready, nil
 }
 
+// WaitForClusterRunning polls the ClusterStatus resource until the cluster phase
+// is RUNNING or the timeout expires. Unlike WaitForClusterReady, this does NOT
+// require Ready==true, which depends on all nodes being Ready in Kubernetes.
+// Nodes cannot become Ready until a CNI is installed, so this method is used
+// during cluster creation when CNI installation happens as a post-creation step.
+func (p *Provider) WaitForClusterRunning(
+	ctx context.Context,
+	clusterName string,
+	timeout time.Duration,
+) error {
+	if p.st == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(clusterReadyPollInterval)
+	defer ticker.Stop()
+
+	for {
+		running, err := isClusterRunning(ctx, p.st, clusterName)
+		if err != nil {
+			return err
+		}
+
+		if running {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			ctxErr := ctx.Err()
+			if errors.Is(ctxErr, context.Canceled) {
+				return fmt.Errorf(
+					"cancelled waiting for cluster %q to reach RUNNING phase: %w",
+					clusterName,
+					ctxErr,
+				)
+			}
+
+			return fmt.Errorf(
+				"timed out waiting for cluster %q to reach RUNNING phase: %w",
+				clusterName,
+				ctxErr,
+			)
+		case <-ticker.C:
+		}
+	}
+}
+
+// isClusterRunning checks whether the Omni cluster has Phase==RUNNING (regardless of Ready).
+// It returns (false, nil) when the cluster resource is not yet found or when the context
+// is cancelled/expired, allowing the caller to retry or handle the context via ctx.Done().
+func isClusterRunning(
+	ctx context.Context,
+	omniState state.State,
+	clusterName string,
+) (bool, error) {
+	status, err := safe.StateGet[*omnires.ClusterStatus](
+		ctx,
+		omniState,
+		omnires.NewClusterStatus(clusterName).Metadata(),
+	)
+	if err != nil {
+		if state.IsNotFoundError(err) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, context.Canceled) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("failed to get cluster status for %q: %w", clusterName, err)
+	}
+
+	phase := status.TypedSpec().Value.GetPhase()
+
+	return phase == specs.ClusterStatusSpec_RUNNING, nil
+}
+
 // DefaultKubeconfigTTL is the default time-to-live for Omni service-account
 // kubeconfig tokens. Tokens are automatically refreshed by the CLI's
 // PersistentPreRunE hook when they expire; the 30-day default keeps
