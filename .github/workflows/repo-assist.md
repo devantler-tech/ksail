@@ -517,3 +517,4 @@ Maintain a single open issue titled `[Repo Assist] Monthly Activity {YYYY}-{MM}`
 - **AI transparency**: every comment, PR, and issue must include a Repo Assist disclosure with 🤖.
 - **Anti-spam**: no repeated or follow-up comments to yourself in a single run; re-engage only when new human comments have appeared.
 - **Quality over quantity**: noise erodes trust. Do nothing rather than add low-value output.
+- **`update_issue` requires real issue numbers**: The `update_issue` safe output does NOT resolve temporary IDs (`aw_xxx`) as `item_number`. Always use the actual GitHub issue number (integer) when calling `update_issue`. If you just created an issue with a `temporary_id`, you cannot immediately update it via `update_issue` using that temporary ID — use `add_comment` instead to append additional content. Only use `update_issue` for issues whose real number you already know (e.g., existing issues found via search).
