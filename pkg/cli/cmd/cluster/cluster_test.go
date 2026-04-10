@@ -769,8 +769,8 @@ spec:
 		t.Error("should preserve clusterIP: None for headless services")
 	}
 
-	if !strings.Contains(result, "None") {
-		t.Error("should preserve None value for headless services")
+	if !strings.Contains(result, "clusterIP: None") {
+		t.Error("should preserve clusterIP: None for headless services")
 	}
 }
 
