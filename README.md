@@ -6,6 +6,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v6.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v6)
 [![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://app.codecov.io/gh/devantler-tech/ksail)
 [![CI - KSail](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
+[![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.devantler--tech/ksail-blue?logo=github)](https://github.com/mcp)
 
 # 🛥️🐳 KSail
 
