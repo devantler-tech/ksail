@@ -760,7 +760,7 @@ func TestExpectedContextName(t *testing.T) {
 // EffectiveValue tests.
 
 //nolint:funlen // Table-driven test with comprehensive distribution × value combinations.
-func TestCSI_EffectiveValue(t *testing.T) {
+func TestCSI_EffectiveValue(t *testing.T) { //nolint:dupl // enum EffectiveValue tests follow a consistent pattern by design
 	t.Parallel()
 
 	tests := []struct {
@@ -1115,7 +1115,7 @@ func TestDistribution_ProvidesCDIByDefault(t *testing.T) {
 	}
 }
 
-func TestCDI_EffectiveValue(t *testing.T) {
+func TestCDI_EffectiveValue(t *testing.T) { //nolint:dupl // enum EffectiveValue tests follow a consistent pattern by design
 	t.Parallel()
 
 	tests := []struct {
