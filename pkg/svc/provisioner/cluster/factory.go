@@ -2,10 +2,13 @@ package clusterprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/detector"
@@ -27,6 +30,11 @@ var (
 	ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
 	// ErrMissingDistributionConfig is returned when no pre-loaded distribution config is provided.
 	ErrMissingDistributionConfig = clustererr.ErrMissingDistributionConfig
+	// ErrImageVerificationTemplateNotRegularFile is returned when the image verification
+	// template path exists but is not a regular file (e.g. it is a directory).
+	ErrImageVerificationTemplateNotRegularFile = errors.New(
+		"image verification template is not a regular file",
+	)
 )
 
 // DistributionConfig holds pre-loaded distribution-specific configuration.
@@ -210,6 +218,41 @@ func (f DefaultFactory) createK3dProvisioner(
 
 	// Apply node count overrides from CLI flags (stored in Talos options)
 	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.Talos)
+
+	// Apply containerd image verifier plugin volume mount when image verification is enabled.
+	// This mounts the generated config.toml.tmpl into K3d node containers so K3s uses it
+	// to generate the final containerd config with the image verifier plugin enabled.
+	if cluster.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
+		templatePath := filepath.Join(k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
+
+		absTemplatePath, err := filepath.Abs(templatePath)
+		if err != nil {
+			return nil, nil, fmt.Errorf(
+				"failed to resolve k3d image verification template path %q: %w",
+				templatePath,
+				err,
+			)
+		}
+
+		fileInfo, err := os.Stat(absTemplatePath)
+		if err != nil {
+			return nil, nil, fmt.Errorf(
+				"k3d image verification template not found at %q; run 'ksail cluster init' to generate it: %w",
+				absTemplatePath,
+				err,
+			)
+		}
+
+		if !fileInfo.Mode().IsRegular() {
+			return nil, nil, fmt.Errorf(
+				"%w: %s; remove it and re-run 'ksail cluster init'",
+				ErrImageVerificationTemplateNotRegularFile,
+				absTemplatePath,
+			)
+		}
+
+		k3dconfigmanager.ApplyImageVerificationVolumes(k3dConfig, absTemplatePath)
+	}
 
 	// Write the in-memory config to a temp file so k3d picks up any modifications
 	// (e.g., registry mirrors configured via --mirror-registry, node counts).

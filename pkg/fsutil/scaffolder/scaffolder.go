@@ -126,6 +126,12 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 		return err
 	}
 
+	// Generate K3d containerd config template if image verification is enabled
+	err = s.generateK3dContainerdConfig(output, force)
+	if err != nil {
+		return err
+	}
+
 	// Generate GitOps CR manifests if a GitOps engine is configured
 	err = s.generateGitOpsConfig(output, force)
 	if err != nil {

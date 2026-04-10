@@ -3,6 +3,7 @@ package scaffolder
 import (
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"strconv"
 
@@ -10,6 +11,7 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
 	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v6/pkg/notify"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -45,7 +47,7 @@ func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistr
 
 // CreateK3dConfig creates a K3d configuration with distribution-specific settings.
 // Node counts can be set via --control-planes and --workers CLI flags.
-func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
+func (s *Scaffolder) CreateK3dConfig(output string) k3dv1alpha5.SimpleConfig {
 	// Resolve cluster name - use explicit ClusterName if set, otherwise resolve from config
 	var clusterName string
 	if s.ClusterName != "" {
@@ -91,6 +93,27 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	// including DNS resolution, network connectivity, and lifecycle management.
 	if s.KSailConfig.Spec.Cluster.LocalRegistry.Enabled() {
 		config.Registries = s.addK3dLocalRegistryConfig(config.Registries)
+	}
+
+	// Add volume mount for the containerd config template when image verification is enabled.
+	// This mounts the generated config.toml.tmpl into K3d node containers so K3s uses it
+	// to generate the final containerd config with the image verifier plugin enabled.
+	if s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
+		templatePath := filepath.Join(
+			output,
+			k3dconfigmanager.DefaultImageVerifierDir,
+			"config.toml.tmpl",
+		)
+
+		relativeTemplatePath, err := filepath.Rel(output, templatePath)
+		if err != nil {
+			relativeTemplatePath = filepath.Join(
+				k3dconfigmanager.DefaultImageVerifierDir,
+				"config.toml.tmpl",
+			)
+		}
+
+		k3dconfigmanager.ApplyImageVerificationVolumes(&config, relativeTemplatePath)
 	}
 
 	return config
@@ -194,7 +217,7 @@ func (s *Scaffolder) addK3dLocalRegistryConfig(
 
 // generateK3dConfig generates the k3d.yaml configuration file.
 func (s *Scaffolder) generateK3dConfig(output string, force bool) error {
-	k3dConfig := s.CreateK3dConfig()
+	k3dConfig := s.CreateK3dConfig(output)
 
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(output, "k3d.yaml"),
@@ -214,4 +237,68 @@ func (s *Scaffolder) generateK3dConfig(output string, force bool) error {
 			},
 		},
 	)
+}
+
+// generateK3dContainerdConfig generates the K3d containerd config template file.
+// This file enables the containerd image verifier plugin for K3s nodes.
+// The template is mounted into K3d node containers via volume mounts configured
+// in k3d.yaml (see CreateK3dConfig).
+func (s *Scaffolder) generateK3dContainerdConfig(output string, force bool) error {
+	if s.KSailConfig.Spec.Cluster.Distribution != v1alpha1.DistributionK3s {
+		return nil
+	}
+
+	if s.KSailConfig.Spec.Cluster.Talos.ImageVerification != v1alpha1.ImageVerificationEnabled {
+		return nil
+	}
+
+	containerdDir := filepath.Join(output, k3dconfigmanager.DefaultImageVerifierDir)
+	templatePath := filepath.Join(containerdDir, "config.toml.tmpl")
+	displayName := filepath.Join(k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
+
+	// Check if the target already exists and ensure it is a regular file.
+	fileInfo, statErr := os.Stat(templatePath)
+	switch {
+	case statErr == nil:
+		if !fileInfo.Mode().IsRegular() {
+			return fmt.Errorf(
+				"%w: path exists but is not a regular file: %s",
+				ErrK3dContainerdConfigGeneration,
+				templatePath,
+			)
+		}
+
+		if !force {
+			return nil
+		}
+	case os.IsNotExist(statErr):
+		// Continue and create the file.
+	default:
+		return fmt.Errorf("%w: stat file: %w", ErrK3dContainerdConfigGeneration, statErr)
+	}
+
+	// Create directory structure
+	err := os.MkdirAll(containerdDir, dirPerm)
+	if err != nil {
+		return fmt.Errorf("%w: create directory: %w", ErrK3dContainerdConfigGeneration, err)
+	}
+
+	// Write the containerd config template
+	err = os.WriteFile(
+		templatePath,
+		[]byte(k3dconfigmanager.ImageVerificationConfigTemplate),
+		filePerm,
+	)
+	if err != nil {
+		return fmt.Errorf("%w: write file: %w", ErrK3dContainerdConfigGeneration, err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.GenerateType,
+		Content: "created '%s'",
+		Args:    []any{displayName},
+		Writer:  s.Writer,
+	})
+
+	return nil
 }

@@ -2,9 +2,13 @@ package clusterprovisioner_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
 	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/k3d"
@@ -316,4 +320,132 @@ func TestCreateKindProvisioner_ImageVerificationDisabledNoPatch(t *testing.T) {
 
 	assert.Empty(t, kindConfig.ContainerdConfigPatches,
 		"no containerd config patch should be applied when image verification is disabled")
+}
+
+func TestCreateK3dProvisioner_ImageVerificationVolumeMountApplied(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "://invalid")
+
+	// Create the template file so the factory finds it
+	templateDir := filepath.Join(t.TempDir(), k3dconfigmanager.DefaultImageVerifierDir)
+	require.NoError(t, os.MkdirAll(templateDir, 0o750))
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(templateDir, "config.toml.tmpl"), []byte("test"), 0o600),
+	)
+	t.Chdir(t.TempDir())
+
+	// Re-create structure in the test's working directory
+	wdTemplateDir := filepath.Join(".", k3dconfigmanager.DefaultImageVerifierDir)
+	require.NoError(t, os.MkdirAll(wdTemplateDir, 0o750))
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(wdTemplateDir, "config.toml.tmpl"), []byte("test"), 0o600),
+	)
+
+	k3dConfig := &k3dv1alpha5.SimpleConfig{
+		ObjectMeta: k3dTypes.ObjectMeta{Name: "test-k3d"},
+	}
+
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			K3d: k3dConfig,
+		},
+	}
+
+	cluster := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				Talos: v1alpha1.OptionsTalos{
+					ImageVerification: v1alpha1.ImageVerificationEnabled,
+				},
+			},
+		},
+	}
+
+	// factory.Create may fail on k3d internals, but the volume mount is applied before that.
+	//nolint:dogsled // only testing side effects on k3dConfig, return values irrelevant
+	_, _, _ = factory.Create(context.Background(), cluster)
+
+	found := false
+
+	for _, vol := range k3dConfig.Volumes {
+		if strings.Contains(vol.Volume, k3dconfigmanager.ContainerdConfigTemplatePath) {
+			found = true
+
+			assert.Equal(t, []string{"all"}, vol.NodeFilters)
+
+			break
+		}
+	}
+
+	assert.True(t, found,
+		"image verification volume mount should be applied to K3d config")
+}
+
+func TestCreateK3dProvisioner_ImageVerificationMissingTemplate(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "://invalid")
+	t.Chdir(t.TempDir())
+
+	k3dConfig := &k3dv1alpha5.SimpleConfig{
+		ObjectMeta: k3dTypes.ObjectMeta{Name: "test-k3d"},
+	}
+
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			K3d: k3dConfig,
+		},
+	}
+
+	cluster := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				Talos: v1alpha1.OptionsTalos{
+					ImageVerification: v1alpha1.ImageVerificationEnabled,
+				},
+			},
+		},
+	}
+
+	_, _, err := factory.Create(context.Background(), cluster)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "image verification template not found")
+}
+
+func TestCreateK3dProvisioner_ImageVerificationDisabledNoVolumeMount(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "://invalid")
+
+	k3dConfig := &k3dv1alpha5.SimpleConfig{
+		ObjectMeta: k3dTypes.ObjectMeta{Name: "test-k3d"},
+	}
+
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			K3d: k3dConfig,
+		},
+	}
+
+	cluster := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				Talos: v1alpha1.OptionsTalos{
+					ImageVerification: v1alpha1.ImageVerificationDisabled,
+				},
+			},
+		},
+	}
+
+	//nolint:dogsled // only testing side effects on k3dConfig, return values irrelevant
+	_, _, _ = factory.Create(context.Background(), cluster)
+
+	for _, vol := range k3dConfig.Volumes {
+		assert.NotContains(
+			t,
+			vol.Volume,
+			k3dconfigmanager.ContainerdConfigTemplatePath,
+			"no volume mount for containerd config template should be present when image verification is disabled",
+		)
+	}
 }
