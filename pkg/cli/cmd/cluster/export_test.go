@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/ksail"
 	clusterdetector "github.com/devantler-tech/ksail/v6/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/state"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -355,6 +356,29 @@ func ExportDisplayTTLInfo(writer io.Writer, clusterName string) {
 func ExportDisplayComponents(writer io.Writer, clusterName string) {
 	displayComponents(writer, clusterName)
 }
+
+// ExportDisplayProviderStatus exports displayProviderStatus for testing.
+func ExportDisplayProviderStatus(
+	writer io.Writer,
+	prov v1alpha1.Provider,
+	clusterName string,
+	status *provider.ClusterStatus,
+) {
+	displayProviderStatus(writer, prov, clusterName, status)
+}
+
+// ExportGetProviderStatus exports getProviderStatus for testing.
+func ExportGetProviderStatus(
+	ctx context.Context,
+	prov v1alpha1.Provider,
+	clusterName string,
+	omniOpts v1alpha1.OptionsOmni,
+) (*provider.ClusterStatus, error) {
+	return getProviderStatus(ctx, prov, clusterName, omniOpts)
+}
+
+// ErrNoClusterInfo exports errNoClusterInfo for testing.
+var ErrNoClusterInfo = errNoClusterInfo
 
 // ExportClassifyRestoreError exports classifyRestoreError for testing.
 func ExportClassifyRestoreError(err error, stderr, policy string) error {

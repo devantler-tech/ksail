@@ -52,6 +52,8 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
+	dockerprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/docker"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
 	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
@@ -2564,47 +2566,243 @@ func forEachContainer(
 	})
 }
 
+// errNoClusterInfo is a sentinel error returned when no information is available
+// from any source (provider API or Kubernetes API).
+var errNoClusterInfo = errors.New("no cluster info available")
+
 // NewInfoCmd creates the cluster info command.
-// The command wraps kubectl cluster-info and appends TTL status when set.
+// The command queries the infrastructure provider API first, then attempts
+// kubectl cluster-info, and only fails if no information is available at all.
 func NewInfoCmd(_ *di.Runtime) *cobra.Command {
-	client := kubectl.NewClient(genericiooptions.IOStreams{
-		In:     os.Stdin,
-		Out:    os.Stdout,
-		ErrOut: os.Stderr,
-	})
+	var (
+		nameFlag     string
+		providerFlag v1alpha1.Provider
+	)
 
-	// kubectl requires a kubeconfig path at construction time to wire its
-	// ConfigFlags defaults.  We pass the default path here and override it
-	// in RunE (after cobra has parsed flags) so that --config is honored.
-	cmd := client.CreateClusterInfoCommand(k8s.DefaultKubeconfigPath())
+	cmd := &cobra.Command{
+		Use:          "info",
+		Short:        "Display cluster information",
+		Long:         "Display cluster information from the infrastructure provider and Kubernetes API. Succeeds if information is available from any source.",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runInfoCmd(cmd, nameFlag, providerFlag)
+		},
+	}
 
-	// Wrap RunE to resolve kubeconfig at runtime (honoring --config flag)
-	// and append KSail metadata after kubectl cluster-info output.
-	originalRunE := cmd.RunE
-	if originalRunE != nil {
-		cmd.RunE = func(cmd *cobra.Command, args []string) error {
-			kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
-			// Override kubectl's --kubeconfig default when the user has not
-			// explicitly set it via --kubeconfig themselves.
-			if f := cmd.Flag("kubeconfig"); f != nil && !f.Changed {
-				err := f.Value.Set(kubeconfigPath)
-				if err != nil {
-					return fmt.Errorf("set kubeconfig flag: %w", err)
-				}
-			}
+	cmd.Flags().StringVarP(
+		&nameFlag,
+		"name",
+		"n",
+		"",
+		"Name of the cluster to target",
+	)
 
-			err := originalRunE(cmd, args)
-			if err != nil {
-				return err
-			}
+	cmd.Flags().VarP(
+		&providerFlag,
+		"provider",
+		"p",
+		fmt.Sprintf("Provider to use (%s)", providerFlag.ValidValues()),
+	)
 
-			displayKSailDetails(cmd, kubeconfigPath)
+	return cmd
+}
 
-			return nil
+// runInfoCmd orchestrates the cluster info command flow:
+// 1. Resolve cluster identity (name, provider, kubeconfig)
+// 2. Query provider API for cluster status
+// 3. Attempt kubectl cluster-info
+// 4. Display combined results
+// 5. Return nil (exit 0) if any info available, error (exit 1) if nothing.
+func runInfoCmd(
+	cmd *cobra.Command,
+	nameFlag string,
+	providerFlag v1alpha1.Provider,
+) error {
+	resolved, err := lifecycle.ResolveClusterInfo(cmd, nameFlag, providerFlag, "")
+	if err != nil {
+		return err
+	}
+
+	writer := cmd.OutOrStdout()
+	hasProviderInfo := false
+	hasKubeInfo := false
+
+	// Phase 1: Query provider API
+	status, provErr := getProviderStatus(
+		cmd.Context(),
+		resolved.Provider,
+		resolved.ClusterName,
+		resolved.OmniOpts,
+	)
+	if provErr == nil && status != nil {
+		hasProviderInfo = true
+		displayProviderStatus(writer, resolved.Provider, resolved.ClusterName, status)
+	}
+
+	// Phase 2: Attempt kubectl cluster-info
+	kubeErr := tryKubeClusterInfo(cmd, resolved.KubeconfigPath)
+	if kubeErr == nil {
+		hasKubeInfo = true
+	} else if hasProviderInfo {
+		_, _ = fmt.Fprintln(writer)
+		_, _ = fmt.Fprintln(writer, "  Kubernetes API: unreachable")
+	}
+
+	// Phase 3: Append KSail details (TTL, components)
+	if hasProviderInfo || hasKubeInfo {
+		displayKSailDetails(cmd, resolved.KubeconfigPath)
+	}
+
+	// Exit code logic
+	if !hasProviderInfo && !hasKubeInfo {
+		return fmt.Errorf(
+			"%w for %q",
+			errNoClusterInfo,
+			resolved.ClusterName,
+		)
+	}
+
+	return nil
+}
+
+// getProviderStatus queries the infrastructure provider for cluster status.
+// Returns nil status if the cluster doesn't exist in the provider.
+func getProviderStatus(
+	ctx context.Context,
+	prov v1alpha1.Provider,
+	clusterName string,
+	omniOpts v1alpha1.OptionsOmni,
+) (*provider.ClusterStatus, error) {
+	switch prov {
+	case v1alpha1.ProviderDocker, "":
+		return getDockerProviderStatus(ctx, clusterName)
+	case v1alpha1.ProviderHetzner:
+		return getHetznerProviderStatus(ctx, clusterName)
+	case v1alpha1.ProviderOmni:
+		return getOmniProviderStatus(ctx, clusterName, omniOpts)
+	default:
+		return nil, fmt.Errorf("unsupported provider: %s", prov)
+	}
+}
+
+// getDockerProviderStatus queries Docker for cluster status by trying all label schemes.
+func getDockerProviderStatus(
+	ctx context.Context,
+	clusterName string,
+) (*provider.ClusterStatus, error) {
+	dockerClient, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create docker client: %w", err)
+	}
+	defer dockerClient.Close()
+
+	// Try each label scheme to find the cluster
+	schemes := []dockerprovider.LabelScheme{
+		dockerprovider.LabelSchemeKind,
+		dockerprovider.LabelSchemeK3d,
+		dockerprovider.LabelSchemeTalos,
+		dockerprovider.LabelSchemeVCluster,
+	}
+
+	for _, scheme := range schemes {
+		prov := dockerprovider.NewProvider(dockerClient, scheme)
+
+		status, err := prov.GetClusterStatus(ctx, clusterName)
+		if err != nil {
+			continue
+		}
+
+		if status != nil && status.NodesTotal > 0 {
+			return status, nil
 		}
 	}
 
-	return cmd
+	return nil, nil
+}
+
+// getHetznerProviderStatus queries Hetzner Cloud for cluster status.
+func getHetznerProviderStatus(
+	ctx context.Context,
+	clusterName string,
+) (*provider.ClusterStatus, error) {
+	token := os.Getenv("HCLOUD_TOKEN")
+	if token == "" {
+		return nil, nil
+	}
+
+	hetznerClient := hcloud.NewClient(hcloud.WithToken(token))
+	prov := hetzner.NewProvider(hetznerClient)
+
+	return prov.GetClusterStatus(ctx, clusterName)
+}
+
+// getOmniProviderStatus queries Omni for cluster status.
+func getOmniProviderStatus(
+	ctx context.Context,
+	clusterName string,
+	omniOpts v1alpha1.OptionsOmni,
+) (*provider.ClusterStatus, error) {
+	omniProvider, err := omni.NewProviderFromOptions(omniOpts)
+	if err != nil {
+		return nil, nil //nolint:nilerr // Missing credentials → skip Omni gracefully
+	}
+
+	return omniProvider.GetClusterStatus(ctx, clusterName)
+}
+
+// displayProviderStatus prints the provider-level cluster status.
+func displayProviderStatus(
+	writer io.Writer,
+	prov v1alpha1.Provider,
+	clusterName string,
+	status *provider.ClusterStatus,
+) {
+	_, _ = fmt.Fprintf(writer, "Provider:     %s\n", prov)
+	_, _ = fmt.Fprintf(writer, "Cluster:      %s\n", clusterName)
+
+	if status.Endpoint != "" {
+		_, _ = fmt.Fprintf(writer, "Endpoint:     %s\n", status.Endpoint)
+	}
+
+	_, _ = fmt.Fprintf(writer, "Status:       %s\n", strings.ToUpper(status.Phase))
+	_, _ = fmt.Fprintf(writer, "Ready:        %d/%d (ready/total)\n",
+		status.NodesReady, status.NodesTotal)
+
+	if len(status.Nodes) > 0 {
+		_, _ = fmt.Fprintln(writer, "Nodes:")
+
+		for _, node := range status.Nodes {
+			_, _ = fmt.Fprintf(writer, "  - %-40s %-15s %s\n",
+				node.Name, node.Role, node.State)
+		}
+	}
+}
+
+// tryKubeClusterInfo attempts kubectl cluster-info and writes output to cmd's writer.
+// Returns nil on success, an error if the Kubernetes API is unreachable.
+func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath string) error {
+	kubectlClient := kubectl.NewClient(genericiooptions.IOStreams{
+		In:     os.Stdin,
+		Out:    cmd.OutOrStdout(),
+		ErrOut: io.Discard,
+	})
+
+	kubeCmd := kubectlClient.CreateClusterInfoCommand(kubeconfigPath)
+
+	// Suppress kubectl's own error output
+	kubeCmd.SetErr(io.Discard)
+	kubeCmd.SilenceErrors = true
+	kubeCmd.SilenceUsage = true
+
+	_, err := kubeCmd.ExecuteC()
+	if err != nil {
+		return fmt.Errorf("kubectl cluster-info failed: %w", err)
+	}
+
+	return nil
 }
 
 // displayKSailDetails appends KSail-specific cluster metadata after kubectl output.

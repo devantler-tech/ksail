@@ -20,6 +20,29 @@ type NodeInfo struct {
 	State string
 }
 
+// ClusterStatus contains the status of a cluster as reported by its infrastructure provider.
+// All providers populate Phase, Ready, NodesTotal, NodesReady, and Nodes.
+// Provider-specific fields (e.g., Endpoint) are populated only by providers that support them.
+type ClusterStatus struct {
+	// Phase is the high-level lifecycle phase (e.g., "running", "RUNNING", "initializing").
+	Phase string
+
+	// Ready indicates whether the cluster is considered healthy by the provider.
+	Ready bool
+
+	// NodesTotal is the total number of nodes (machines, servers, containers) in the cluster.
+	NodesTotal int
+
+	// NodesReady is the number of nodes that are in a healthy/ready state.
+	NodesReady int
+
+	// Nodes lists individual node details.
+	Nodes []NodeInfo
+
+	// Endpoint is the provider API endpoint URL (populated by cloud providers like Omni).
+	Endpoint string
+}
+
 // Provider defines the interface for infrastructure providers.
 // Providers handle node-level operations independent of the Kubernetes distribution.
 type Provider interface {
@@ -44,6 +67,10 @@ type Provider interface {
 	// Note: Most provisioners handle node deletion through their SDK,
 	// so this is primarily used for cleanup scenarios.
 	DeleteNodes(ctx context.Context, clusterName string) error
+
+	// GetClusterStatus returns the provider-level status of a cluster.
+	// Returns nil and no error if the cluster does not exist in the provider.
+	GetClusterStatus(ctx context.Context, clusterName string) (*ClusterStatus, error)
 }
 
 // NodeLister can list nodes for a cluster. This minimal interface is used by

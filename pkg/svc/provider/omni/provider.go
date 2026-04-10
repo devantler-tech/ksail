@@ -410,6 +410,100 @@ func (p *Provider) IsAvailable() bool {
 	return p.st != nil
 }
 
+// GetClusterStatus returns the provider-level status of an Omni-managed cluster.
+// It queries the ClusterStatus COSI resource for phase, readiness, and machine counts,
+// and lists individual machine nodes.
+func (p *Provider) GetClusterStatus(
+	ctx context.Context,
+	clusterName string,
+) (*provider.ClusterStatus, error) {
+	if p.st == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	// Check if the cluster exists
+	exists, err := p.ClusterExists(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("check cluster existence: %w", err)
+	}
+
+	if !exists {
+		return nil, nil
+	}
+
+	// Get cluster status resource
+	status, err := safe.StateGet[*omnires.ClusterStatus](
+		ctx,
+		p.st,
+		omnires.NewClusterStatus(clusterName).Metadata(),
+	)
+
+	var phase string
+
+	var ready bool
+
+	var nodesTotal, nodesReady int
+
+	if err == nil {
+		phase = status.TypedSpec().Value.GetPhase().String()
+		ready = status.TypedSpec().Value.GetReady()
+
+		if machines := status.TypedSpec().Value.GetMachines(); machines != nil {
+			nodesTotal = int(machines.GetTotal())
+			nodesReady = int(machines.GetHealthy())
+		}
+	}
+
+	// List individual nodes for details
+	nodes, nodesErr := p.ListNodes(ctx, clusterName)
+	if nodesErr != nil {
+		// If we have status but can't list nodes, return status without node details
+		if err == nil {
+			return &provider.ClusterStatus{
+				Phase:      phase,
+				Ready:      ready,
+				NodesTotal: nodesTotal,
+				NodesReady: nodesReady,
+				Endpoint:   p.endpoint(),
+			}, nil
+		}
+
+		return nil, fmt.Errorf("get cluster status: %w", nodesErr)
+	}
+
+	// If we had no status resource, derive from node list
+	if err != nil {
+		nodesTotal = len(nodes)
+
+		for _, n := range nodes {
+			if n.State == specs.ClusterMachineStatusSpec_RUNNING.String() {
+				nodesReady++
+			}
+		}
+
+		phase = "UNKNOWN"
+		ready = nodesReady == nodesTotal && nodesTotal > 0
+	}
+
+	return &provider.ClusterStatus{
+		Phase:      phase,
+		Ready:      ready,
+		NodesTotal: nodesTotal,
+		NodesReady: nodesReady,
+		Nodes:      nodes,
+		Endpoint:   p.endpoint(),
+	}, nil
+}
+
+// endpoint returns the Omni API endpoint URL if available.
+func (p *Provider) endpoint() string {
+	if p.client == nil {
+		return ""
+	}
+
+	return p.client.Endpoint()
+}
+
 // ListAvailableMachines queries Omni for machines that are available (not allocated
 // to any cluster) and returns exactly count machine UUIDs on success.
 // Returns ErrInsufficientAvailableMachines when fewer than count machines are available.

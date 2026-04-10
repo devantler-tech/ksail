@@ -67,3 +67,18 @@ func (m *MockProvider) DeleteNodes(ctx context.Context, clusterName string) erro
 
 	return args.Error(0) //nolint:wrapcheck // Mock function, wrapping not needed
 }
+
+// GetClusterStatus mocks getting cluster status.
+func (m *MockProvider) GetClusterStatus(
+	ctx context.Context,
+	clusterName string,
+) (*ClusterStatus, error) {
+	args := m.Called(ctx, clusterName)
+
+	result, ok := args.Get(0).(*ClusterStatus)
+	if !ok {
+		return nil, args.Error(1) //nolint:wrapcheck // Mock function, wrapping not needed
+	}
+
+	return result, args.Error(1) //nolint:wrapcheck // Mock function, wrapping not needed
+}
