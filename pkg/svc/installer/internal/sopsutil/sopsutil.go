@@ -1,4 +1,4 @@
-// Package sopsutil provides shared helpers for SOPS Age key resolution
+// Package sopsutil provides shared helpers for SOPS Age key resolution and secret building
 // used by both the ArgoCD and Flux installers.
 package sopsutil
 
@@ -10,6 +10,15 @@ import (
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	// SopsAgeSecretName is the name of the Kubernetes secret used for SOPS Age decryption.
+	SopsAgeSecretName = "sops-age"
+	// sopsAgeKeyField is the data key within the secret that holds the Age private key.
+	sopsAgeKeyField = "sops.agekey"
 )
 
 // AgeSecretKeyPrefix is the prefix for Age private keys.
@@ -111,4 +120,22 @@ func ExtractAgeKey(input string) string {
 	}
 
 	return ""
+}
+
+// BuildSopsAgeSecret constructs the Kubernetes Secret for SOPS Age decryption
+// in the given namespace. This shared helper is used by both the Flux and ArgoCD installers.
+func BuildSopsAgeSecret(namespace, ageKey string) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      SopsAgeSecretName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "ksail",
+			},
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			sopsAgeKeyField: []byte(ageKey),
+		},
+	}
 }

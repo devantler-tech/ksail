@@ -8,18 +8,13 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v6/pkg/k8s"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/installer/internal/sopsutil"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
-const (
-	// SopsAgeSecretName is the name of the Kubernetes secret used for SOPS Age decryption.
-	SopsAgeSecretName = "sops-age"
-	// sopsAgeKeyField is the data key within the secret that holds the Age private key.
-	sopsAgeKeyField = "sops.agekey"
-)
+// SopsAgeSecretName is the name of the Kubernetes secret used for SOPS Age decryption.
+const SopsAgeSecretName = sopsutil.SopsAgeSecretName
 
 var errNilClusterCfg = errors.New("clusterCfg is nil")
 
@@ -70,7 +65,7 @@ func EnsureSopsAgeSecret(
 func upsertSopsAgeSecret(ctx context.Context, clientset kubernetes.Interface, ageKey string) error {
 	secretsClient := clientset.CoreV1().Secrets(argoCDNamespace)
 
-	desired := buildSopsAgeSecretObj(ageKey)
+	desired := sopsutil.BuildSopsAgeSecret(argoCDNamespace, ageKey)
 
 	existing, err := secretsClient.Get(ctx, SopsAgeSecretName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
@@ -96,21 +91,4 @@ func upsertSopsAgeSecret(ctx context.Context, clientset kubernetes.Interface, ag
 	}
 
 	return nil
-}
-
-// buildSopsAgeSecretObj constructs the Kubernetes Secret for SOPS Age decryption in the argocd namespace.
-func buildSopsAgeSecretObj(ageKey string) *corev1.Secret {
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      SopsAgeSecretName,
-			Namespace: argoCDNamespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "ksail",
-			},
-		},
-		Type: corev1.SecretTypeOpaque,
-		Data: map[string][]byte{
-			sopsAgeKeyField: []byte(ageKey),
-		},
-	}
 }
