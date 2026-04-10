@@ -267,6 +267,9 @@ For cloud volumes, use the `hcloud-volumes` storage class installed automaticall
 For each node, KSail pulls the installer image, triggers the upgrade, and waits for the node to be ready before proceeding.
 
 > [!NOTE]
+> Automatic upgrades require the running cluster to already be on Talos 1.13+. For clusters on older versions, first upgrade to 1.13 manually using the [Talos upgrade docs](https://www.talos.dev/latest/talos-guides/upgrading-talos/).
+
+> [!NOTE]
 > Omni-managed clusters are excluded from automatic upgrades — Omni handles OS upgrades externally through its own cluster lifecycle management.
 
 For manual upgrades outside of KSail, see the [Talos upgrade docs](https://www.talos.dev/latest/talos-guides/upgrading-talos/).
