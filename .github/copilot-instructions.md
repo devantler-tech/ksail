@@ -260,7 +260,7 @@ ksail cluster init --help
 **"Go version mismatch"**:
 
 ```bash
-go version  # Should match the version in go.mod (go 1.26.0)
+go version  # Should match the version in go.mod (go 1.26.1)
 # If not, install/update Go from https://go.dev/dl/
 ```
 
@@ -293,7 +293,7 @@ npm run dev                            # Test locally (if needed)
 
 ### Important Notes
 
-- The project uses **Go 1.26.0+** (see `go.mod`)
+- The project uses **Go 1.26.1+** (see `go.mod`)
 - All Kubernetes tools are embedded as Go libraries - only Docker is required externally
 - Unit tests run quickly and should generally pass
 - System tests in CI cover extensive scenarios with multiple tool combinations
@@ -366,7 +366,7 @@ For a deeper dive into KSail's design and internals, refer to:
 
 ## Active Technologies
 
-- Go 1.26.0+ (see `go.mod`)
+- Go 1.26.1+ (see `go.mod`)
 - Embedded Kubernetes tools (kubectl, helm, kind, k3d, vcluster, flux, argocd) as Go libraries
 - Docker as the only external dependency
 - Astro with Starlight for documentation (Node.js-based)
