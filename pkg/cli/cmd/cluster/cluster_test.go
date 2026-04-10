@@ -6269,9 +6269,9 @@ func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
 			"daemonsets.apps \"svclb-traefik\" already exists\n" +
 				"connection refused",
 		)
-		errConnectionRefused    = errors.New("connection refused")
-		errAlreadyExists        = errors.New("already exists")
-		errIPAlreadyAllocated   = errors.New(
+		errConnectionRefused  = errors.New("connection refused")
+		errAlreadyExists      = errors.New("already exists")
+		errIPAlreadyAllocated = errors.New(
 			`Service "cert-manager" is invalid: spec.clusterIPs: Invalid value: ` +
 				`[]string{"10.110.234.28"}: failed to allocate IP 10.110.234.28: ` +
 				`provided IP is already allocated`,
