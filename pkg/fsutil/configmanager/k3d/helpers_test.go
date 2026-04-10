@@ -352,10 +352,8 @@ func TestResolveClusterName(t *testing.T) {
 
 func TestApplyImageVerificationVolumes(t *testing.T) {
 	t.Parallel()
-
 	t.Run("adds_volume_mount_to_empty_config", func(t *testing.T) {
 		t.Parallel()
-
 		k3dConfig := &v1alpha5.SimpleConfig{}
 		k3d.ApplyImageVerificationVolumes(k3dConfig, "/project/k3d/containerd/config.toml.tmpl")
 		assert.Len(t, k3dConfig.Volumes, 1)
@@ -365,16 +363,11 @@ func TestApplyImageVerificationVolumes(t *testing.T) {
 		)
 		assert.Equal(t, []string{"all"}, k3dConfig.Volumes[0].NodeFilters)
 	})
-
 	t.Run("appends_volume_without_removing_existing", func(t *testing.T) {
 		t.Parallel()
-
 		k3dConfig := &v1alpha5.SimpleConfig{
 			Volumes: []v1alpha5.VolumeWithNodeFilters{
-				{
-					Volume:      "/some/other/path:/other/container/path",
-					NodeFilters: []string{"server:0"},
-				},
+				{Volume: "/some/other/path:/other/container/path", NodeFilters: []string{"server:0"}},
 			},
 		}
 		k3d.ApplyImageVerificationVolumes(k3dConfig, "/project/k3d/containerd/config.toml.tmpl")
@@ -384,35 +377,23 @@ func TestApplyImageVerificationVolumes(t *testing.T) {
 			k3dConfig.Volumes[1].Volume,
 		)
 	})
-
 	t.Run("idempotent_no_duplicate_when_called_twice", func(t *testing.T) {
 		t.Parallel()
-
 		k3dConfig := &v1alpha5.SimpleConfig{}
 		k3d.ApplyImageVerificationVolumes(k3dConfig, "/project/k3d/containerd/config.toml.tmpl")
 		k3d.ApplyImageVerificationVolumes(k3dConfig, "/project/k3d/containerd/config.toml.tmpl")
-		assert.Len(t, k3dConfig.Volumes, 1,
-			"calling ApplyImageVerificationVolumes twice should not duplicate the volume mount")
+		assert.Len(t, k3dConfig.Volumes, 1, "should not duplicate the volume mount")
 	})
-
 	t.Run("updates_host_path_when_container_path_already_mounted", func(t *testing.T) {
 		t.Parallel()
-
 		k3dConfig := &v1alpha5.SimpleConfig{
 			Volumes: []v1alpha5.VolumeWithNodeFilters{
-				{
-					Volume:      "/old/host/path:" + k3d.ContainerdConfigTemplatePath,
-					NodeFilters: []string{"all"},
-				},
+				{Volume: "/old/host/path:" + k3d.ContainerdConfigTemplatePath, NodeFilters: []string{"all"}},
 			},
 		}
 		k3d.ApplyImageVerificationVolumes(k3dConfig, "/new/host/path")
 		assert.Len(t, k3dConfig.Volumes, 1)
-		assert.Equal(
-			t,
-			"/new/host/path:"+k3d.ContainerdConfigTemplatePath,
-			k3dConfig.Volumes[0].Volume,
-		)
+		assert.Equal(t, "/new/host/path:"+k3d.ContainerdConfigTemplatePath, k3dConfig.Volumes[0].Volume)
 	})
 }
 
