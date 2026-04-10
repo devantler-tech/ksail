@@ -272,7 +272,7 @@ When creating an investigation issue, use this structure:
 - **Pattern Building**: Contribute to the knowledge base for future investigations
 - **Resource Efficient**: Use caching to avoid re-downloading large logs
 - **Security Conscious**: Never execute untrusted code from logs or external sources
-- **Fail Safe**: If anything goes wrong during investigation (errors, timeouts, missing data), call `noop` with a description of what happened and **stop immediately** rather than ending without output
+- **Fail Safe**: If anything goes wrong during investigation (errors, timeouts, missing data), call `noop` with a description of what happened and **stop immediately** rather than ending without output, but only if you have not already called a safe output tool; if you already called `noop`, `create-issue`, or `add-comment`, do not call another and stop immediately
 
 ## Cache Usage Strategy
 
@@ -298,6 +298,7 @@ Before finishing, verify:
 
 1. ✅ You called exactly one safe output tool (`noop`, `create-issue`, or `add-comment`)
 2. If you created an issue, it follows the Investigation Issue Template above
-3. If you found a duplicate, you added a comment to the existing issue instead of creating a new one
-4. If you performed an investigation, investigation data was saved to `/tmp/memory/investigations/` for future reference
-5. After completing a new investigation, append the run ID to `/tmp/memory/investigations/analyzed-runs.json` to prevent re-analysis
+3. If you found a duplicate issue/pattern that matches an existing issue, you used `add-comment` on the existing issue instead of creating a new one
+4. If this workflow run ID was already investigated (Phase 1 deduplication), you used `noop` rather than `add-comment` or `create-issue`
+5. If you performed an investigation, investigation data was saved to `/tmp/memory/investigations/` for future reference
+6. After completing a new investigation, append the run ID to `/tmp/memory/investigations/analyzed-runs.json` to prevent re-analysis
