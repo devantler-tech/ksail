@@ -410,6 +410,55 @@ func (p *Provider) IsAvailable() bool {
 	return p.st != nil
 }
 
+// GetClusterStatus returns the provider-level status of an Omni-managed cluster.
+// It queries the ClusterStatus COSI resource for phase, readiness, and machine counts,
+// and lists individual machine nodes.
+func (p *Provider) GetClusterStatus(
+	ctx context.Context,
+	clusterName string,
+) (*provider.ClusterStatus, error) {
+	if p.st == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	exists, err := p.ClusterExists(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("check cluster existence: %w", err)
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("%w: %s", provider.ErrClusterNotFound, clusterName)
+	}
+
+	fields, statusErr := p.getClusterStatusSpec(ctx, clusterName)
+
+	nodes, nodesErr := p.ListNodes(ctx, clusterName)
+
+	switch {
+	case nodesErr != nil && statusErr != nil:
+		return nil, fmt.Errorf(
+			"get cluster status: %w", errors.Join(statusErr, nodesErr),
+		)
+	case statusErr != nil:
+		total, ready := countReadyNodes(nodes)
+		fields = clusterStatusFields{
+			phase:      "UNKNOWN",
+			ready:      ready == total && total > 0,
+			nodesTotal: total,
+			nodesReady: ready,
+		}
+	}
+
+	return &provider.ClusterStatus{
+		Phase:      fields.phase,
+		Ready:      fields.ready,
+		NodesTotal: fields.nodesTotal,
+		NodesReady: fields.nodesReady,
+		Nodes:      nodes,
+		Endpoint:   p.endpoint(),
+	}, nil
+}
+
 // ListAvailableMachines queries Omni for machines that are available (not allocated
 // to any cluster) and returns exactly count machine UUIDs on success.
 // Returns ErrInsufficientAvailableMachines when fewer than count machines are available.
@@ -455,4 +504,63 @@ func (p *Provider) ListAvailableMachines(ctx context.Context, count int) ([]stri
 	}
 
 	return ids, nil
+}
+
+// clusterStatusFields holds the parsed COSI cluster status fields.
+type clusterStatusFields struct {
+	phase      string
+	ready      bool
+	nodesTotal int
+	nodesReady int
+}
+
+// getClusterStatusSpec fetches the COSI ClusterStatus resource fields.
+func (p *Provider) getClusterStatusSpec(
+	ctx context.Context,
+	clusterName string,
+) (clusterStatusFields, error) {
+	status, err := safe.StateGet[*omnires.ClusterStatus](
+		ctx,
+		p.st,
+		omnires.NewClusterStatus(clusterName).Metadata(),
+	)
+	if err != nil {
+		return clusterStatusFields{},
+			fmt.Errorf("get cluster status spec: %w", err)
+	}
+
+	fields := clusterStatusFields{
+		phase: status.TypedSpec().Value.GetPhase().String(),
+		ready: status.TypedSpec().Value.GetReady(),
+	}
+
+	if machines := status.TypedSpec().Value.GetMachines(); machines != nil {
+		fields.nodesTotal = int(machines.GetTotal())
+		fields.nodesReady = int(machines.GetHealthy())
+	}
+
+	return fields, nil
+}
+
+// endpoint returns the Omni API endpoint URL if available.
+func (p *Provider) endpoint() string {
+	if p.client == nil {
+		return ""
+	}
+
+	return p.client.Endpoint()
+}
+
+// countReadyNodes derives node counts from the node list.
+func countReadyNodes(nodes []provider.NodeInfo) (int, int) {
+	total := len(nodes)
+	ready := 0
+
+	for _, n := range nodes {
+		if n.State == specs.ClusterMachineStatusSpec_RUNNING.String() {
+			ready++
+		}
+	}
+
+	return total, ready
 }

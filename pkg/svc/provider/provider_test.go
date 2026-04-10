@@ -141,6 +141,7 @@ func TestErrors(t *testing.T) {
 	}{
 		{"ErrNoNodes", provider.ErrNoNodes, "no nodes found for cluster"},
 		{"ErrProviderUnavailable", provider.ErrProviderUnavailable, "provider is not available"},
+		{"ErrClusterNotFound", provider.ErrClusterNotFound, "cluster not found"},
 		{"ErrUnknownLabelScheme", provider.ErrUnknownLabelScheme, "unknown label scheme"},
 		{"ErrSkipAction", provider.ErrSkipAction, "skip action"},
 	}

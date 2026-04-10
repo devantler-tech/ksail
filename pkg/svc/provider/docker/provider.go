@@ -159,6 +159,22 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	return nil
 }
 
+// GetClusterStatus returns the provider-level status of a Docker-based cluster.
+// It derives the cluster phase and readiness from individual container states.
+func (p *Provider) GetClusterStatus(
+	ctx context.Context,
+	clusterName string,
+) (*provider.ClusterStatus, error) {
+	result, err := provider.GetClusterStatusFromLister(
+		ctx, p, clusterName, "running",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("docker cluster status: %w", err)
+	}
+
+	return result, nil
+}
+
 // nodeOperation defines a function that operates on a single container.
 type nodeOperation func(ctx context.Context, containerName string) error
 
