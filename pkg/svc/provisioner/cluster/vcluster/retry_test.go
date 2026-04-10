@@ -28,6 +28,9 @@ var (
 	errRegistryDenied = errors.New(
 		"reading blob sha256:abc: fetching blob: denied: denied",
 	)
+	errEgressLimit = errors.New(
+		"copying blob sha256:fa365: fetching blob: received unexpected HTTP status: 503 Egress is over the account limit",
+	)
 	errIOTimeout    = errors.New("dial tcp 1.2.3.4:443: i/o timeout")
 	errConnReset    = errors.New("read tcp 10.0.0.1:54321->1.2.3.4:443: connection reset by peer")
 	errTLSTimeout   = errors.New("net/http: TLS handshake timeout")
@@ -55,6 +58,7 @@ func TestIsTransientCreateError(t *testing.T) {
 		{"exit_status_22_in_wrapped_error", errWrapped22, true},
 		{"exit_status_1_is_not_transient", errExitStatus1, false},
 		{"registry_denied_is_transient", errRegistryDenied, true},
+		{"egress_limit_is_transient", errEgressLimit, true},
 		{"io_timeout_is_transient", errIOTimeout, true},
 		{"connection_reset_is_transient", errConnReset, true},
 		{"tls_handshake_timeout_is_transient", errTLSTimeout, true},
