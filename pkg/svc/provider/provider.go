@@ -116,3 +116,34 @@ func CheckNodesExist(ctx context.Context, lister NodeLister, clusterName string)
 
 	return len(nodes) > 0, nil
 }
+
+// BuildClusterStatus derives a ClusterStatus from a list of nodes by counting
+// how many are in the given readyState. Returns nil if nodes is empty.
+func BuildClusterStatus(nodes []NodeInfo, readyState string) *ClusterStatus {
+	if len(nodes) == 0 {
+		return nil
+	}
+
+	nodesReady := 0
+
+	for _, n := range nodes {
+		if n.State == readyState {
+			nodesReady++
+		}
+	}
+
+	phase := readyState
+	if nodesReady == 0 {
+		phase = "stopped"
+	} else if nodesReady < len(nodes) {
+		phase = "degraded"
+	}
+
+	return &ClusterStatus{
+		Phase:      phase,
+		Ready:      nodesReady == len(nodes),
+		NodesTotal: len(nodes),
+		NodesReady: nodesReady,
+		Nodes:      nodes,
+	}
+}

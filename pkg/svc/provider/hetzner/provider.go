@@ -266,32 +266,7 @@ func (p *Provider) GetClusterStatus(
 		return nil, fmt.Errorf("get cluster status: %w", err)
 	}
 
-	if len(nodes) == 0 {
-		return nil, nil
-	}
-
-	nodesReady := 0
-
-	for _, n := range nodes {
-		if n.State == string(hcloud.ServerStatusRunning) {
-			nodesReady++
-		}
-	}
-
-	phase := string(hcloud.ServerStatusRunning)
-	if nodesReady == 0 {
-		phase = "stopped"
-	} else if nodesReady < len(nodes) {
-		phase = "degraded"
-	}
-
-	return &provider.ClusterStatus{
-		Phase:      phase,
-		Ready:      nodesReady == len(nodes),
-		NodesTotal: len(nodes),
-		NodesReady: nodesReady,
-		Nodes:      nodes,
-	}, nil
+	return provider.BuildClusterStatus(nodes, string(hcloud.ServerStatusRunning)), nil
 }
 
 // DeleteServer deletes a single Hetzner Cloud server.
