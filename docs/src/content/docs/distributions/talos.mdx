@@ -259,7 +259,7 @@ For cloud volumes, use the `hcloud-volumes` storage class installed automaticall
 
 ### Talos Upgrades
 
-`ksail cluster update` automatically upgrades the Talos OS version when the compiled-in Talos version differs from the running cluster's version. KSail performs a rolling upgrade using the Talos LifecycleService API (Talos 1.13+):
+`ksail cluster update` automatically upgrades the Talos OS version when the Talos version bundled with KSail differs from the running cluster's version. KSail performs a rolling upgrade using the Talos LifecycleService API (Talos 1.13+):
 
 1. Worker nodes are upgraded one at a time
 2. Control-plane nodes are upgraded one at a time after all workers complete
