@@ -105,12 +105,12 @@ func (s *Scaffolder) CreateK3dConfig(output string) k3dv1alpha5.SimpleConfig {
 			"config.toml.tmpl",
 		)
 
-		absTemplatePath, err := filepath.Abs(templatePath)
+		relativeTemplatePath, err := filepath.Rel(output, templatePath)
 		if err != nil {
-			absTemplatePath = templatePath
+			relativeTemplatePath = filepath.Join(k3dconfigmanager.DefaultImageVerifierDir, "config.toml.tmpl")
 		}
 
-		k3dconfigmanager.ApplyImageVerificationVolumes(&config, absTemplatePath)
+		k3dconfigmanager.ApplyImageVerificationVolumes(&config, relativeTemplatePath)
 	}
 
 	return config

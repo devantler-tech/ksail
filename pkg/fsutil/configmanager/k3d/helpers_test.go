@@ -395,24 +395,17 @@ func TestApplyImageVerificationVolumes(t *testing.T) {
 			"calling ApplyImageVerificationVolumes twice should not duplicate the volume mount")
 	})
 
-	t.Run(
-		"idempotent_skips_when_different_host_path_targets_same_container_path",
-		func(t *testing.T) {
-			t.Parallel()
-
-			k3dConfig := &v1alpha5.SimpleConfig{
-				Volumes: []v1alpha5.VolumeWithNodeFilters{
-					{
-						Volume:      "/other/host/path:" + k3d.ContainerdConfigTemplatePath,
-						NodeFilters: []string{"all"},
-					},
-				},
-			}
-			k3d.ApplyImageVerificationVolumes(k3dConfig, "/project/k3d/containerd/config.toml.tmpl")
-			assert.Len(t, k3dConfig.Volumes, 1,
-				"should not add duplicate volume when container path is already mounted")
-		},
-	)
+	t.Run("updates_host_path_when_container_path_already_mounted", func(t *testing.T) {
+		t.Parallel()
+		k3dConfig := &v1alpha5.SimpleConfig{
+			Volumes: []v1alpha5.VolumeWithNodeFilters{
+				{Volume: "/old/host/path:" + k3d.ContainerdConfigTemplatePath, NodeFilters: []string{"all"}},
+			},
+		}
+		k3d.ApplyImageVerificationVolumes(k3dConfig, "/new/host/path")
+		assert.Len(t, k3dConfig.Volumes, 1)
+		assert.Equal(t, "/new/host/path:"+k3d.ContainerdConfigTemplatePath, k3dConfig.Volumes[0].Volume)
+	})
 }
 
 func TestResolveNetworkName(t *testing.T) {

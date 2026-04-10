@@ -159,9 +159,12 @@ func ApplyImageVerificationVolumes(
 	// Build the volume mount spec in Docker volume format: "host:container"
 	volumeSpec := templateHostPath + ":" + ContainerdConfigTemplatePath
 
-	// Check if the volume mount already exists (idempotent)
-	for _, vol := range k3dConfig.Volumes {
+	// Check if a volume targeting the container path already exists.
+	// If found, update the host path to match the desired template path (handles
+	// project directory moves) and return.
+	for i, vol := range k3dConfig.Volumes {
 		if strings.Contains(vol.Volume, ContainerdConfigTemplatePath) {
+			k3dConfig.Volumes[i].Volume = volumeSpec
 			return
 		}
 	}
