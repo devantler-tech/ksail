@@ -3,9 +3,11 @@
   "name": "io.github.devantler-tech/ksail",
   "title": "KSail",
   "description": "SDK for creating, managing, and operating Kubernetes clusters and workloads with ease.",
+  "websiteUrl": "https://ksail.devantler.tech",
   "repository": {
     "url": "https://github.com/devantler-tech/ksail",
-    "source": "github"
+    "source": "github",
+    "id": "737584922"
   },
   "version": "0.0.0",
   "packages": [
