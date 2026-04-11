@@ -16,6 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testOmniScalingTimeout is used in tests where SyncTemplate succeeds with
+// in-mem COSI state but WaitForClusterReady has no controller to satisfy.
+const testOmniScalingTimeout = 15 * time.Second
+
 //nolint:funlen // Table-driven test with multiple node topology scenarios is clearer as single function
 func TestCountNodeRoles(t *testing.T) {
 	t.Parallel()
@@ -108,10 +112,7 @@ func TestUpdateCallsOmniNodeScaling(t *testing.T) {
 	newSpec.Talos.ControlPlanes = 2
 	newSpec.Talos.Workers = 2
 
-	// Use a short timeout: SyncTemplate succeeds with in-mem state, but
-	// WaitForClusterReady will time out since no controller creates ClusterStatus.
-	// The timeout error proves scaling was attempted (not skipped).
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testOmniScalingTimeout)
 	defer cancel()
 
 	_, err := provisioner.Update(
@@ -294,9 +295,7 @@ func TestApplyNodeScalingChanges_OmniScalingIsAttempted(t *testing.T) {
 	newSpec.Talos.ControlPlanes = 3
 	newSpec.Talos.Workers = 2
 
-	// Use a short timeout: SyncTemplate succeeds with in-mem state, but
-	// WaitForClusterReady will time out since no controller creates ClusterStatus.
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testOmniScalingTimeout)
 	defer cancel()
 
 	err := provisioner.ApplyNodeScalingChangesForTest(
