@@ -322,9 +322,11 @@ func startStdinReader(ctx context.Context, msgC chan<- *machine.DebugContainerRu
 				continue
 			}
 
+			stdinData := append([]byte(nil), buf[:n]...)
+
 			if !channel.SendWithContext(ctx, msgC, &machine.DebugContainerRunRequest{
 				Request: &machine.DebugContainerRunRequest_StdinData{
-					StdinData: buf[:n],
+					StdinData: stdinData,
 				},
 			}) {
 				done <- ctx.Err()

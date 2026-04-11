@@ -451,17 +451,32 @@ func runInteractiveDockerExec(
 		}()
 	}
 
-	// Copy stdin → container and container → stdout concurrently.
+	// Use a pipe so the stdin forwarding goroutine can be canceled when the
+	// attach stream ends, instead of blocking forever on reads from os.Stdin.
 	doneCh := make(chan error, 1)
+	stdinReader, stdinWriter := io.Pipe()
 
 	go func() {
-		_, copyErr := io.Copy(resp.Conn, os.Stdin)
+		_, copyErr := io.Copy(stdinWriter, os.Stdin)
+		_ = stdinWriter.CloseWithError(copyErr)
+	}()
+
+	go func() {
+		_, copyErr := io.Copy(resp.Conn, stdinReader)
+		if errors.Is(copyErr, io.ErrClosedPipe) || errors.Is(copyErr, context.Canceled) {
+			doneCh <- nil
+			return
+		}
+
 		doneCh <- copyErr
 	}()
 
 	_, _ = io.Copy(os.Stdout, resp.Reader)
 
-	// Wait for stdin copy to finish.
+	// Cancel stdin forwarding now that the attach stream has ended.
+	_ = stdinReader.CloseWithError(context.Canceled)
+
+	// Wait for stdin forwarding to finish.
 	<-doneCh
 
 	// Check exit code.
