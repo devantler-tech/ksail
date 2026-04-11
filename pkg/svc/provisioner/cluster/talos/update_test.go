@@ -4,11 +4,14 @@ import (
 	"context"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
+	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
+	omnires "github.com/siderolabs/omni/client/pkg/omni/resources/omni"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,11 +81,23 @@ func TestCountNodeRoles(t *testing.T) {
 	}
 }
 
-func TestUpdateSkipsOmniNodeScaling(t *testing.T) {
+func TestUpdateCallsOmniNodeScaling(t *testing.T) {
 	t.Parallel()
 
+	testState := newInMemStateForOmniTest()
+
+	// Seed a TalosVersion so resolveOmniVersions succeeds
+	tv := omnires.NewTalosVersion("1.11.2")
+	tv.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.32.0"}
+	require.NoError(t, testState.Create(context.Background(), tv))
+
+	omniProv := omniprovider.NewProviderWithState(testState)
+
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).
-		WithOmniOptions(v1alpha1.OptionsOmni{}).
+		WithOmniOptions(v1alpha1.OptionsOmni{
+			MachineClass: "test-class",
+		}).
+		WithInfraProvider(omniProv).
 		WithLogWriter(io.Discard)
 
 	oldSpec := &v1alpha1.ClusterSpec{}
@@ -93,22 +108,29 @@ func TestUpdateSkipsOmniNodeScaling(t *testing.T) {
 	newSpec.Talos.ControlPlanes = 2
 	newSpec.Talos.Workers = 2
 
+	// Use a short timeout: SyncTemplate succeeds with in-mem state, but
+	// WaitForClusterReady will time out since no controller creates ClusterStatus.
+	// The timeout error proves scaling was attempted (not skipped).
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	_, err := provisioner.Update(
-		context.Background(),
+		ctx,
 		"demo",
 		oldSpec,
 		newSpec,
 		clusterupdate.UpdateOptions{},
 	)
-	if err != nil {
-		t.Fatalf("Update() error = %v, want nil", err)
-	}
+	// The error proves scaling was attempted (not skipped)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to apply node scaling changes")
 }
 
 // TestUpdateSkipsOmniInPlaceConfigApply verifies the omniOpts guard in Update() prevents
 // applyInPlaceConfigChanges from pushing Talos machine configs to Omni-managed nodes.
 // Non-nil talosConfigs are used so the guard (not the pre-existing talosConfigs nil-check)
 // is what prevents the call — without the guard this test would fail with a Talos API error.
+// Uses identical specs so no scaling is triggered, isolating the in-place config guard.
 func TestUpdateSkipsOmniInPlaceConfigApply(t *testing.T) {
 	t.Parallel()
 
@@ -121,17 +143,16 @@ func TestUpdateSkipsOmniInPlaceConfigApply(t *testing.T) {
 		WithOmniOptions(v1alpha1.OptionsOmni{}).
 		WithLogWriter(io.Discard)
 
-	oldSpec := &v1alpha1.ClusterSpec{}
-	oldSpec.Talos.ControlPlanes = 1
-
-	newSpec := &v1alpha1.ClusterSpec{}
-	newSpec.Talos.ControlPlanes = 2
+	// Use identical specs so no scaling delta exists — this isolates the
+	// in-place config change guard for Omni clusters.
+	spec := &v1alpha1.ClusterSpec{}
+	spec.Talos.ControlPlanes = 1
 
 	_, err = provisioner.Update(
 		context.Background(),
 		"demo",
-		oldSpec,
-		newSpec,
+		spec,
+		spec,
 		clusterupdate.UpdateOptions{},
 	)
 	if err != nil {
@@ -243,18 +264,26 @@ func TestApplyNodeScalingChanges_NoDelta(t *testing.T) {
 	assert.Equal(t, 0, result.TotalChanges(), "no changes expected when deltas are zero")
 }
 
-// TestApplyNodeScalingChanges_OmniScalingIsSkipped verifies that the Omni
-// provider path silently skips node scaling without error.
-// Omni manages node scaling externally, so KSail just logs and returns nil.
-// This was changed in https://github.com/devantler-tech/ksail/pull/3689.
-func TestApplyNodeScalingChanges_OmniScalingIsSkipped(t *testing.T) {
+// TestApplyNodeScalingChanges_OmniScalingIsAttempted verifies that the Omni
+// provider path attempts node scaling by syncing an updated cluster template.
+func TestApplyNodeScalingChanges_OmniScalingIsAttempted(t *testing.T) {
 	t.Parallel()
+
+	testState := newInMemStateForOmniTest()
+
+	// Seed a TalosVersion so resolveOmniVersions succeeds
+	tv := omnires.NewTalosVersion("1.11.2")
+	tv.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.32.0"}
+	require.NoError(t, testState.Create(context.Background(), tv))
+
+	omniProv := omniprovider.NewProviderWithState(testState)
 
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).
 		WithLogWriter(io.Discard).
 		WithOmniOptions(v1alpha1.OptionsOmni{
-			Endpoint: "https://example.omni.siderolabs.io",
-		})
+			MachineClass: "test-class",
+		}).
+		WithInfraProvider(omniProv)
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	oldSpec := &v1alpha1.ClusterSpec{}
@@ -265,20 +294,21 @@ func TestApplyNodeScalingChanges_OmniScalingIsSkipped(t *testing.T) {
 	newSpec.Talos.ControlPlanes = 3
 	newSpec.Talos.Workers = 2
 
+	// Use a short timeout: SyncTemplate succeeds with in-mem state, but
+	// WaitForClusterReady will time out since no controller creates ClusterStatus.
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	err := provisioner.ApplyNodeScalingChangesForTest(
-		context.Background(),
+		ctx,
 		"test",
 		oldSpec,
 		newSpec,
 		result,
 	)
-	require.NoError(t, err)
-	assert.Equal(
-		t,
-		0,
-		result.TotalChanges(),
-		"no changes expected: Omni manages scaling externally",
-	)
+	// The timeout error proves scaling was attempted (not skipped)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cluster not ready after scaling")
 }
 
 // TestApplyNodeScalingChanges_BelowMinimumControlPlanes verifies that scaling
