@@ -615,7 +615,7 @@ jobs:
     # because Hetzner infrastructure can be intermittently unavailable.
     continue-on-error: true
     concurrency:
-      group: cloud-system-test-hetzner
+      group: cloud-system-test-hetzner-${{ matrix.init }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -696,7 +696,7 @@ jobs:
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     environment: ci
     concurrency:
-      group: cloud-system-test-omni
+      group: cloud-system-test-omni-${{ matrix.init }}
       cancel-in-progress: false
     permissions:
       contents: read
