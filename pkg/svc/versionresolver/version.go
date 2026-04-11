@@ -127,8 +127,14 @@ func (v Version) Equal(other Version) bool {
 }
 
 // String returns the version as "vMAJOR.MINOR.PATCH" with suffix if present.
+// String returns the version as "vMAJOR.MINOR.PATCH" with pre-release and
+// suffix if present (e.g., "v1.13.0-beta.1", "v1.35.3-k3s1").
 func (v Version) String() string {
 	base := fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch)
+	if v.PreRelease != "" {
+		base += "-" + v.PreRelease
+	}
+
 	if v.Suffix != "" {
 		base += "-" + v.Suffix
 	}

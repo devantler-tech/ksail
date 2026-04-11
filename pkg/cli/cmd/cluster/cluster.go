@@ -6016,7 +6016,7 @@ func executeVersionUpgrade(
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	upgrader clusterupdate.Upgrader,
-	resolver *versionresolver.OCIResolver,
+	resolver versionresolver.Resolver,
 	clusterName string,
 	upgradeType string,
 	imageRef string,
