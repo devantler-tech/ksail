@@ -45,6 +45,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
 	registryhelpers "github.com/devantler-tech/ksail/v6/pkg/svc/registryresolver"
 	"github.com/devantler-tech/ksail/v6/pkg/timer"
+	dockertypes "github.com/docker/docker/api/types"
 	dockercontainer "github.com/docker/docker/api/types/container"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/fsnotify/fsnotify"
@@ -273,7 +274,15 @@ func NewDebugCmd() *cobra.Command {
 var ErrNodeNotFound = errors.New("node not found")
 
 // ErrUnsupportedHostDebug is returned for unsupported distribution/provider combinations.
-var ErrUnsupportedHostDebug = errors.New("host-level debugging is not supported for this distribution/provider combination")
+var ErrUnsupportedHostDebug = errors.New(
+	"host-level debugging is not supported for this distribution/provider combination",
+)
+
+// ErrNonZeroExitCode is returned when a container process exits with a non-zero exit code.
+var ErrNonZeroExitCode = errors.New("container process exited with non-zero code")
+
+// ErrNoIPAddress is returned when a container has no IP address.
+var ErrNoIPAddress = errors.New("no IP address found for container")
 
 // runHostDebug detects the cluster distribution and provider, then routes
 // to the appropriate host-level debug mechanism.
@@ -414,15 +423,13 @@ func runInteractiveDockerExec(
 	containerName string,
 	cmdArgs []string,
 ) error {
-	execConfig := dockercontainer.ExecOptions{
+	execID, err := dockerClient.ContainerExecCreate(ctx, containerName, dockercontainer.ExecOptions{
 		Cmd:          cmdArgs,
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
 		Tty:          true,
-	}
-
-	execID, err := dockerClient.ContainerExecCreate(ctx, containerName, execConfig)
+	})
 	if err != nil {
 		return fmt.Errorf("create exec in container %q: %w", containerName, err)
 	}
@@ -435,24 +442,40 @@ func runInteractiveDockerExec(
 	}
 	defer resp.Close()
 
-	// Set terminal to raw mode for interactive session.
-	fd := int(os.Stdin.Fd())
-
-	if term.IsTerminal(fd) {
-		oldState, termErr := term.MakeRaw(fd)
-		if termErr != nil {
-			return fmt.Errorf("set terminal to raw mode: %w", termErr)
-		}
-
-		defer func() {
-			if oldState != nil {
-				term.Restore(fd, oldState) //nolint:errcheck
-			}
-		}()
+	restoreFunc, termErr := setupRawTerminal()
+	if termErr != nil {
+		return termErr
 	}
 
-	// Use a pipe so the stdin forwarding goroutine can be canceled when the
-	// attach stream ends, instead of blocking forever on reads from os.Stdin.
+	defer restoreFunc()
+
+	pipeDockerExecStreams(&resp)
+
+	return checkExecExitCode(ctx, dockerClient, execID.ID)
+}
+
+// setupRawTerminal sets the terminal to raw mode and returns a restore function.
+func setupRawTerminal() (func(), error) {
+	fd := int(os.Stdin.Fd()) //nolint:gosec
+
+	if !term.IsTerminal(fd) {
+		return func() {}, nil
+	}
+
+	oldState, termErr := term.MakeRaw(fd)
+	if termErr != nil {
+		return nil, fmt.Errorf("set terminal to raw mode: %w", termErr)
+	}
+
+	return func() {
+		if oldState != nil {
+			_ = term.Restore(fd, oldState)
+		}
+	}, nil
+}
+
+// pipeDockerExecStreams pipes stdin/stdout between the terminal and Docker exec.
+func pipeDockerExecStreams(resp *dockertypes.HijackedResponse) {
 	doneCh := make(chan error, 1)
 	stdinReader, stdinWriter := io.Pipe()
 
@@ -478,15 +501,21 @@ func runInteractiveDockerExec(
 
 	// Wait for stdin forwarding to finish.
 	<-doneCh
+}
 
-	// Check exit code.
-	inspectResp, err := dockerClient.ContainerExecInspect(ctx, execID.ID)
+// checkExecExitCode inspects the exec session and returns an error for non-zero exit codes.
+func checkExecExitCode(
+	ctx context.Context,
+	dockerClient dockerclient.APIClient,
+	execID string,
+) error {
+	inspectResp, err := dockerClient.ContainerExecInspect(ctx, execID)
 	if err != nil {
 		return fmt.Errorf("inspect exec: %w", err)
 	}
 
 	if inspectResp.ExitCode != 0 {
-		return fmt.Errorf("container process exited with code %d", inspectResp.ExitCode)
+		return fmt.Errorf("%w: %d", ErrNonZeroExitCode, inspectResp.ExitCode)
 	}
 
 	return nil
@@ -527,7 +556,7 @@ func resolveDockerNodeIP(
 				}
 			}
 
-			return "", fmt.Errorf("no IP address found for container %q", node.Name)
+			return "", fmt.Errorf("%w: %q", ErrNoIPAddress, node.Name)
 		}
 	}
 
@@ -547,6 +576,8 @@ func resolveDockerNodeIP(
 // distributionToLabelScheme maps a distribution to its Docker provider label scheme.
 func distributionToLabelScheme(distribution v1alpha1.Distribution) dockerprovider.LabelScheme {
 	switch distribution {
+	case v1alpha1.DistributionVanilla:
+		return dockerprovider.LabelSchemeKind
 	case v1alpha1.DistributionK3s:
 		return dockerprovider.LabelSchemeK3d
 	case v1alpha1.DistributionTalos:

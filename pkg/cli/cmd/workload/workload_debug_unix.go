@@ -16,12 +16,20 @@ import (
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	"golang.org/x/term"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 )
+
+// stdinBufSize is the buffer size for reading stdin data.
+const stdinBufSize = 1024
+
+// debugStream abstracts the bidirectional streaming interface for debug container
+// communication, avoiding a direct dependency on google.golang.org/grpc types.
+type debugStream interface {
+	Send(*machine.DebugContainerRunRequest) error
+	Recv() (*machine.DebugContainerRunResponse, error)
+	CloseSend() error
+}
 
 // runTalosHostDebug launches a privileged debug container on a Talos node using the
 // Talos gRPC DebugClient. This provides host-level access for in-node troubleshooting.
@@ -42,7 +50,7 @@ func runTalosHostDebug(
 		return fmt.Errorf("open talosconfig %q: %w", expandedPath, err)
 	}
 
-	c, err := talosclient.New(ctx,
+	talosClient, err := talosclient.New(ctx,
 		talosclient.WithEndpoints(nodeEndpoint),
 		talosclient.WithConfig(talosConfig),
 	)
@@ -50,12 +58,11 @@ func runTalosHostDebug(
 		return fmt.Errorf("create Talos client: %w", err)
 	}
 
-	defer c.Close() //nolint:errcheck
+	defer talosClient.Close() //nolint:errcheck
 
 	nodeCtx := talosclient.WithNode(ctx, nodeEndpoint)
 
-	// Pull the image on the target node.
-	imgName, err := pullImageOnTalosNode(nodeCtx, c, image)
+	imgName, err := pullImageOnTalosNode(nodeCtx, talosClient, image)
 	if err != nil {
 		return err
 	}
@@ -66,12 +73,7 @@ func runTalosHostDebug(
 	nodeCtx, cancel := context.WithCancel(nodeCtx)
 	defer cancel()
 
-	const grpcMaxMsgSize = 4 * 1024 * 1024 // 4 MiB
-
-	runStream, err := c.DebugClient.ContainerRun(nodeCtx,
-		grpc.MaxCallRecvMsgSize(grpcMaxMsgSize),
-		grpc.MaxCallSendMsgSize(grpcMaxMsgSize),
-	)
+	runStream, err := talosClient.DebugClient.ContainerRun(nodeCtx)
 	if err != nil {
 		return fmt.Errorf("create debug container stream: %w", err)
 	}
@@ -83,10 +85,10 @@ func runTalosHostDebug(
 // using the Talos machine API.
 func pullImageOnTalosNode(
 	ctx context.Context,
-	c *talosclient.Client,
+	talosClient *talosclient.Client,
 	imageRef string,
 ) (string, error) {
-	err := c.ImagePull(ctx, common.ContainerdNamespace_NS_SYSTEM, imageRef)
+	err := talosClient.ImagePull(ctx, common.ContainerdNamespace_NS_SYSTEM, imageRef) //nolint:staticcheck
 	if err != nil {
 		return "", fmt.Errorf("pull image %q: %w", imageRef, err)
 	}
@@ -94,47 +96,33 @@ func pullImageOnTalosNode(
 	return imageRef, nil
 }
 
-//nolint:gocyclo,cyclop
+//nolint:cyclop,gocognit
 func streamDebugContainer(
 	ctx context.Context,
 	cancel context.CancelFunc,
-	stream grpc.BidiStreamingClient[machine.DebugContainerRunRequest, machine.DebugContainerRunResponse],
+	stream debugStream,
 	imageName string,
 	args []string,
 ) error {
 	defer cancel()
 
-	isTTY := term.IsTerminal(int(os.Stdin.Fd()))
+	stdinFd := int(os.Stdin.Fd()) //nolint:gosec
+	isTTY := term.IsTerminal(stdinFd)
 
-	ctrdInstance := &common.ContainerdInstance{
-		Driver:    common.ContainerDriver_CONTAINERD,
-		Namespace: common.ContainerdNamespace_NS_SYSTEM,
-	}
-
-	err := stream.Send(&machine.DebugContainerRunRequest{
-		Request: &machine.DebugContainerRunRequest_Spec{
-			Spec: &machine.DebugContainerRunRequestSpec{
-				Containerd: ctrdInstance,
-				ImageName:  imageName,
-				Args:       args,
-				Profile:    machine.DebugContainerRunRequestSpec_PROFILE_PRIVILEGED,
-				Tty:        isTTY,
-			},
-		},
-	})
+	err := sendContainerSpec(stream, imageName, args, isTTY)
 	if err != nil {
-		return fmt.Errorf("send container spec: %w", err)
+		return err
 	}
 
 	if isTTY {
-		oldState, termErr := term.MakeRaw(int(os.Stdin.Fd()))
+		oldState, termErr := term.MakeRaw(stdinFd)
 		if termErr != nil {
 			return fmt.Errorf("set terminal to raw mode: %w", termErr)
 		}
 
 		defer func() {
 			if oldState != nil {
-				term.Restore(int(os.Stdin.Fd()), oldState) //nolint:errcheck
+				_ = term.Restore(stdinFd, oldState)
 			}
 		}()
 	}
@@ -145,15 +133,57 @@ func streamDebugContainer(
 
 	stdinDone := startStdinReader(ctx, sendC)
 	sendDone := startSendLoop(stream, sendC)
-	recvDone := make(chan error, 1)
 
 	var exitCode int32 = -1
+
+	recvDone := startRecvLoop(ctx, stream, &exitCode)
+
+	return waitForStreams(ctx, cancel, stream, sendC,
+		stdinDone, sendDone, recvDone, exitCode,
+	)
+}
+
+// sendContainerSpec sends the initial container specification to the debug stream.
+func sendContainerSpec(
+	stream debugStream,
+	imageName string,
+	args []string,
+	isTTY bool,
+) error {
+	err := stream.Send(&machine.DebugContainerRunRequest{
+		Request: &machine.DebugContainerRunRequest_Spec{
+			Spec: &machine.DebugContainerRunRequestSpec{
+				Containerd: &common.ContainerdInstance{
+					Driver:    common.ContainerDriver_CONTAINERD,
+					Namespace: common.ContainerdNamespace_NS_SYSTEM,
+				},
+				ImageName: imageName,
+				Args:      args,
+				Profile:   machine.DebugContainerRunRequestSpec_PROFILE_PRIVILEGED,
+				Tty:       isTTY,
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("send container spec: %w", err)
+	}
+
+	return nil
+}
+
+// startRecvLoop receives messages from the debug stream and writes stdout data.
+func startRecvLoop(
+	ctx context.Context,
+	stream debugStream,
+	exitCode *int32,
+) chan error {
+	recvDone := make(chan error, 1)
 
 	go func() {
 		for {
 			msg, recvErr := stream.Recv()
 			if recvErr != nil {
-				if status.Code(recvErr) == codes.Canceled {
+				if ctx.Err() != nil {
 					recvDone <- context.Canceled
 
 					return
@@ -167,10 +197,10 @@ func streamDebugContainer(
 			switch msg.Resp.(type) {
 			case *machine.DebugContainerRunResponse_StdoutData:
 				if stdoutData := msg.GetStdoutData(); stdoutData != nil {
-					os.Stdout.Write(stdoutData) //nolint:errcheck
+					_, _ = os.Stdout.Write(stdoutData)
 				}
 			case *machine.DebugContainerRunResponse_ExitCode:
-				exitCode = msg.GetExitCode()
+				*exitCode = msg.GetExitCode()
 				recvDone <- io.EOF
 
 				return
@@ -180,6 +210,22 @@ func streamDebugContainer(
 		}
 	}()
 
+	return recvDone
+}
+
+// waitForStreams waits for either stdin or recv to complete and cleans up.
+//
+//nolint:cyclop
+func waitForStreams(
+	_ context.Context,
+	cancel context.CancelFunc,
+	stream debugStream,
+	sendC chan *machine.DebugContainerRunRequest,
+	stdinDone chan error,
+	sendDone chan error,
+	recvDone chan error,
+	exitCode int32,
+) error {
 	select {
 	case stdinErr := <-stdinDone:
 		if stdinErr != nil && stdinErr != io.EOF {
@@ -220,7 +266,7 @@ func streamDebugContainer(
 	}
 
 	if exitCode != -1 && exitCode != 0 {
-		return fmt.Errorf("container exited with code %d", exitCode)
+		return fmt.Errorf("%w: %d", ErrNonZeroExitCode, exitCode)
 	}
 
 	return nil
@@ -255,24 +301,7 @@ func setupSignalForwarding(ctx context.Context, msgC chan<- *machine.DebugContai
 				}
 
 				if unixSig == syscall.SIGWINCH {
-					if term.IsTerminal(int(os.Stdin.Fd())) {
-						width, height, sizeErr := term.GetSize(int(os.Stdin.Fd()))
-						if sizeErr != nil {
-							continue
-						}
-
-						if !channel.SendWithContext(ctx, msgC,
-							&machine.DebugContainerRunRequest{
-								Request: &machine.DebugContainerRunRequest_TermResize{
-									TermResize: &machine.DebugContainerTerminalResize{
-										Width:  int32(width),  //nolint:gosec
-										Height: int32(height), //nolint:gosec
-									},
-								},
-							}) {
-							return
-						}
-					}
+					sendTermResize(ctx, msgC)
 
 					continue
 				}
@@ -292,37 +321,61 @@ func setupSignalForwarding(ctx context.Context, msgC chan<- *machine.DebugContai
 	sigC <- syscall.SIGWINCH
 }
 
+// sendTermResize sends a terminal resize message if stdin is a terminal.
+func sendTermResize(ctx context.Context, msgC chan<- *machine.DebugContainerRunRequest) {
+	stdinFd := int(os.Stdin.Fd()) //nolint:gosec
+
+	if !term.IsTerminal(stdinFd) {
+		return
+	}
+
+	width, height, sizeErr := term.GetSize(stdinFd)
+	if sizeErr != nil {
+		return
+	}
+
+	channel.SendWithContext(ctx, msgC, //nolint:errcheck
+		&machine.DebugContainerRunRequest{
+			Request: &machine.DebugContainerRunRequest_TermResize{
+				TermResize: &machine.DebugContainerTerminalResize{
+					Width:  int32(width),  //nolint:gosec
+					Height: int32(height), //nolint:gosec
+				},
+			},
+		})
+}
+
 // startStdinReader reads from stdin and sends data to the debug container.
 func startStdinReader(ctx context.Context, msgC chan<- *machine.DebugContainerRunRequest) chan error {
-	r, w := io.Pipe()
+	reader, writer := io.Pipe()
 	done := make(chan error)
 
 	go func() {
-		io.Copy(w, os.Stdin) //nolint:errcheck
-		w.Close()            //nolint:errcheck
+		_, _ = io.Copy(writer, os.Stdin)
+		_ = writer.Close()
 	}()
 
 	go func() {
 		<-ctx.Done()
-		w.Close() //nolint:errcheck
+		_ = writer.Close()
 	}()
 
 	go func() {
-		buf := make([]byte, 1024)
+		buf := make([]byte, stdinBufSize)
 
 		for {
-			n, readErr := r.Read(buf)
+			bytesRead, readErr := reader.Read(buf)
 			if readErr != nil {
 				done <- readErr
 
 				return
 			}
 
-			if n == 0 {
+			if bytesRead == 0 {
 				continue
 			}
 
-			stdinData := append([]byte(nil), buf[:n]...)
+			stdinData := append([]byte(nil), buf[:bytesRead]...)
 
 			if !channel.SendWithContext(ctx, msgC, &machine.DebugContainerRunRequest{
 				Request: &machine.DebugContainerRunRequest_StdinData{
@@ -339,9 +392,9 @@ func startStdinReader(ctx context.Context, msgC chan<- *machine.DebugContainerRu
 	return done
 }
 
-// startSendLoop sends messages from msgC to the gRPC stream.
+// startSendLoop sends messages from msgC to the debug stream.
 func startSendLoop(
-	stream grpc.BidiStreamingClient[machine.DebugContainerRunRequest, machine.DebugContainerRunResponse],
+	stream debugStream,
 	msgC chan *machine.DebugContainerRunRequest,
 ) chan error {
 	done := make(chan error)
