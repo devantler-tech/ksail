@@ -3,6 +3,7 @@ package clusterupdate
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 )
@@ -277,4 +278,19 @@ type Upgrader interface {
 	// so that a subsequent cluster recreation uses the specified version.
 	// For rolling-upgrade distributions (Talos), this is a no-op.
 	PrepareConfigForVersion(upgradeType string, version string) error
+}
+
+// ExtractTag returns the tag portion of an OCI image reference, stripping any
+// digest suffix (e.g., "v1.35.1" from "kindest/node:v1.35.1@sha256:abc...").
+func ExtractTag(image string) string {
+	// Strip digest if present (e.g., "@sha256:abc...")
+	if digestIdx := strings.Index(image, "@"); digestIdx >= 0 {
+		image = image[:digestIdx]
+	}
+
+	if idx := strings.LastIndex(image, ":"); idx >= 0 {
+		return image[idx+1:]
+	}
+
+	return ""
 }

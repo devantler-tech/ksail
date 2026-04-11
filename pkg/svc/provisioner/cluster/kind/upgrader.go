@@ -3,7 +3,6 @@ package kindprovisioner
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
@@ -37,7 +36,7 @@ func (k *Provisioner) GetCurrentVersions(
 	_ context.Context, _ string,
 ) (*clusterupdate.VersionInfo, error) {
 	image := nodeImage(k)
-	tag := extractTag(image)
+	tag := clusterupdate.ExtractTag(image)
 
 	return &clusterupdate.VersionInfo{
 		KubernetesVersion:   tag,
@@ -84,19 +83,4 @@ func nodeImage(k *Provisioner) string {
 	}
 
 	return kindconfigmanager.DefaultKindNodeImage
-}
-
-// extractTag returns the tag portion of an image reference, stripping any
-// digest suffix (e.g., "v1.35.1" from "kindest/node:v1.35.1@sha256:abc...").
-func extractTag(image string) string {
-	// Strip digest if present (e.g., "@sha256:abc...")
-	if digestIdx := strings.Index(image, "@"); digestIdx >= 0 {
-		image = image[:digestIdx]
-	}
-
-	if idx := strings.LastIndex(image, ":"); idx >= 0 {
-		return image[idx+1:]
-	}
-
-	return ""
 }
