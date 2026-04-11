@@ -6441,6 +6441,7 @@ func checkWorkloadTagDrift(
 	}
 
 	desiredTag := fluxinstaller.ResolveDesiredTag(ctx.ClusterCfg)
+
 	var currentTag string
 
 	switch gitOpsEngine { //nolint:exhaustive // None/empty already filtered above

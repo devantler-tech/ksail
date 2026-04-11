@@ -931,7 +931,11 @@ func TestEngine_CheckWorkloadTag(t *testing.T) {
 	}
 }
 
-func assertWorkloadTagChange(t *testing.T, result *clusterupdate.UpdateResult, oldTag, newTag string) {
+func assertWorkloadTagChange(
+	t *testing.T,
+	result *clusterupdate.UpdateResult,
+	oldTag, newTag string,
+) {
 	t.Helper()
 
 	changes := result.InPlaceChanges
