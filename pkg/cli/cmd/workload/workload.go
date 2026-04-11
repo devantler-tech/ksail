@@ -1922,6 +1922,7 @@ const (
 	defaultReconcileTimeout          = 5 * time.Minute
 	fluxKustomizationPollInterval    = 500 * time.Millisecond
 	argoCDApplicationPollInterval    = 500 * time.Millisecond
+	reconcileConcurrency             = 5
 	reconcileCmdLong                 = "Trigger reconciliation/sync and wait for completion. " +
 		"For Flux, tracks the OCIRepository and each Kustomization individually. " +
 		"For ArgoCD, tracks each Application until synced and healthy."
@@ -2136,7 +2137,7 @@ func reconcileFlux(
 	err = ociGroup.Run(cmd.Context(), notify.ProgressTask{
 		Name: "flux-system",
 		Fn: func(ctx context.Context) error {
-			return fluxReconciler.WaitForOCIRepositoryReady(ctx, timeout)
+			return fluxReconciler.WaitForOCIRepositoryReady(ctx, time.Until(deadline))
 		},
 	})
 	if err != nil {
@@ -2205,6 +2206,7 @@ func reconcileFluxKustomizationsWithProgress(
 		notify.WithContinueOnError(),
 		notify.WithAppendOnly(),
 		notify.WithCountLabel("kustomizations"),
+		notify.WithConcurrency(reconcileConcurrency),
 	)
 
 	err = ksGroup.Run(cmd.Context(), tasks...)
@@ -2239,7 +2241,7 @@ func pollUntilKustomizationReady(
 				return kustomizationReadinessTimeoutError(name, lastStatus)
 			}
 
-			return fmt.Errorf("kustomization %q: %w", name, err)
+			return fmt.Errorf("permanent failure: %w", err)
 		}
 
 		if ready {
@@ -2261,17 +2263,15 @@ func pollUntilKustomizationReady(
 func kustomizationReadinessTimeoutError(name, lastStatus string) error {
 	if lastStatus != "" {
 		return fmt.Errorf(
-			"timeout waiting for kustomization %q to reconcile (last status: %s) — "+
-				"check Flux controller logs and kustomization status with "+
-				"'ksail workload get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system'",
-			name, lastStatus,
+			"timeout waiting for reconciliation (last status: %s) — "+
+				"run 'ksail workload get kustomizations.kustomize.toolkit.fluxcd.io %s -n flux-system' to inspect",
+			lastStatus, name,
 		)
 	}
 
 	return fmt.Errorf(
-		"timeout waiting for kustomization %q to reconcile — "+
-			"check Flux controller logs and kustomization status with "+
-			"'ksail workload get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system'",
+		"timeout waiting for reconciliation — "+
+			"run 'ksail workload get kustomizations.kustomize.toolkit.fluxcd.io %s -n flux-system' to inspect",
 		name,
 	)
 }
@@ -2296,7 +2296,14 @@ func topologicalSortKustomizations(
 	}
 
 	for _, ks := range kustomizations {
+		seen := make(map[string]struct{}, len(ks.DependsOn))
 		for _, dep := range ks.DependsOn {
+			if _, dup := seen[dep]; dup {
+				continue
+			}
+
+			seen[dep] = struct{}{}
+
 			if _, exists := byName[dep]; exists {
 				inDegree[ks.Name]++
 			}
@@ -2398,6 +2405,7 @@ func reconcileArgoCD(
 		notify.WithContinueOnError(),
 		notify.WithAppendOnly(),
 		notify.WithCountLabel("applications"),
+		notify.WithConcurrency(reconcileConcurrency),
 	)
 
 	err = appGroup.Run(cmd.Context(), tasks...)
@@ -2428,14 +2436,13 @@ func pollUntilApplicationReady(
 		if err != nil {
 			if reconciler.IsContextError(err) {
 				return fmt.Errorf(
-					"timeout waiting for argocd application %q to sync — "+
-						"check ArgoCD application status with "+
-						"'ksail workload get applications.argoproj.io -n argocd'",
+					"timeout waiting for sync — "+
+						"run 'ksail workload get applications.argoproj.io %s -n argocd' to inspect",
 					name,
 				)
 			}
 
-			return fmt.Errorf("argocd application %q: %w", name, err)
+			return fmt.Errorf("permanent failure: %w", err)
 		}
 
 		if ready {
@@ -2445,9 +2452,8 @@ func pollUntilApplicationReady(
 		select {
 		case <-timeoutCtx.Done():
 			return fmt.Errorf(
-				"timeout waiting for argocd application %q to sync — "+
-					"check ArgoCD application status with "+
-					"'ksail workload get applications.argoproj.io -n argocd'",
+				"timeout waiting for sync — "+
+					"run 'ksail workload get applications.argoproj.io %s -n argocd' to inspect",
 				name,
 			)
 		case <-ticker.C:

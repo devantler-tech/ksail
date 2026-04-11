@@ -2841,6 +2841,14 @@ func TestTopologicalSortKustomizations(t *testing.T) {
 			},
 			expected: []string{"c", "a", "b"},
 		},
+		{
+			name: "duplicate dependencies are de-duplicated",
+			input: []flux.KustomizationInfo{
+				{Name: "apps", Path: "./apps", DependsOn: []string{"infra", "infra"}},
+				{Name: "infra", Path: "./infra"},
+			},
+			expected: []string{"infra", "apps"},
+		},
 	}
 
 	for _, tc := range testCases {

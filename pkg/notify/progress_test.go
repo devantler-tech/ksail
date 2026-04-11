@@ -704,10 +704,15 @@ func TestProgressGroup_EmptyTitle(t *testing.T) {
 
 	output := buf.String()
 
-	// The title line format is "<emoji> <title>...\n". When both are empty,
-	// this line must be absent.
-	if strings.Contains(output, " ...\n") {
-		t.Errorf("expected no title line when title is empty, got: %q", output)
+	lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
+	if len(lines) == 0 || lines[0] == "" {
+		t.Fatalf("expected task output, got: %q", output)
+	}
+
+	// With an empty title, the first rendered line should be the task output,
+	// not a title line such as " ...".
+	if strings.HasPrefix(lines[0], " ...") || strings.TrimSpace(lines[0]) == "..." {
+		t.Errorf("expected no title line when title is empty, got first line %q in output %q", lines[0], output)
 	}
 }
 
