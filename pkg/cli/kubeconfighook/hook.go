@@ -15,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
+	"github.com/devantler-tech/ksail/v6/pkg/k8s"
 	"github.com/devantler-tech/ksail/v6/pkg/notify"
 	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
@@ -62,10 +63,18 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 		return
 	}
 
+	// Determine the desired kubeconfig context name.
+	// If explicitly configured, use that; otherwise derive from the Talos convention.
+	desiredContext := cfg.Spec.Cluster.Connection.Context
+	if desiredContext == "" {
+		desiredContext = cfg.Spec.Cluster.Distribution.ContextName(clusterName)
+	}
+
 	refreshErr := refreshKubeconfig(
 		cmd.Context(),
 		cfg.Spec.Provider.Omni,
 		clusterName,
+		desiredContext,
 		canonicalPath,
 	)
 	if refreshErr != nil {
@@ -157,24 +166,32 @@ func clusterNameFromDistConfig(distCfg *clusterprovisioner.DistributionConfig) s
 	return ""
 }
 
-// clusterNameFromKubeconfig extracts the current context name from the kubeconfig file.
-// For Omni, the context name matches the Omni cluster name.
+// clusterNameFromKubeconfig extracts the cluster name from the kubeconfig file.
+// Only returns a cluster name when the current context follows the Talos "admin@<name>"
+// convention. Returns empty for arbitrary/renamed context names since those cannot
+// reliably map to Omni cluster names.
 func clusterNameFromKubeconfig(kubeconfigPath string) string {
 	cfg, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
 		return ""
 	}
 
-	return cfg.CurrentContext
+	if after, ok := strings.CutPrefix(cfg.CurrentContext, "admin@"); ok {
+		return after
+	}
+
+	return ""
 }
 
 // refreshKubeconfig creates an Omni client and fetches a fresh kubeconfig.
-// The write is atomic (temp file + rename) to prevent corruption if the
-// process is interrupted.
+// The Omni-generated context is renamed to desiredContext so the kubeconfig
+// matches spec.cluster.connection.context. The write is atomic (temp file +
+// rename) to prevent corruption if the process is interrupted.
 func refreshKubeconfig(
 	ctx context.Context,
 	omniOpts v1alpha1.OptionsOmni,
 	clusterName string,
+	desiredContext string,
 	kubeconfigPath string,
 ) error {
 	prov, err := omniprovider.NewProviderFromOptions(omniOpts)
@@ -191,6 +208,14 @@ func refreshKubeconfig(
 	data, err := prov.GetKubeconfig(ctx, clusterName, omniprovider.DefaultKubeconfigTTL)
 	if err != nil {
 		return fmt.Errorf("fetch kubeconfig: %w", err)
+	}
+
+	// Rename the Omni-generated context to match the configured context name
+	if desiredContext != "" {
+		data, err = k8s.RenameKubeconfigContext(data, desiredContext)
+		if err != nil {
+			return fmt.Errorf("rename kubeconfig context: %w", err)
+		}
 	}
 
 	writeErr := atomicWriteFile(kubeconfigPath, data, kubeconfigFileMode)

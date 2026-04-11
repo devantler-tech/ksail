@@ -94,6 +94,149 @@ func removeEntriesFromKubeconfig(
 	return nil
 }
 
+// RenameKubeconfigContext renames the current context (and its associated cluster and
+// user entries) in raw kubeconfig bytes to desiredContext.
+//
+// If desiredContext is empty, the kubeconfig is returned unchanged. If desiredContext
+// already matches the current context, the kubeconfig is returned unchanged. If there
+// is no current context but the kubeconfig can be resolved without ambiguity, the
+// kubeconfig is updated to set CurrentContext to desiredContext. Returns an error when
+// the desired context name collides with an existing different context entry, or when
+// CurrentContext is empty and no single context entry can be unambiguously selected.
+func RenameKubeconfigContext(kubeconfigData []byte, desiredContext string) ([]byte, error) {
+	if desiredContext == "" {
+		return kubeconfigData, nil
+	}
+
+	config, err := clientcmd.Load(kubeconfigData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
+	}
+
+	oldContext, err := resolveOldContext(config)
+	if err != nil {
+		return nil, err
+	}
+
+	if oldContext == "" {
+		if len(config.Contexts) == 0 {
+			return nil, fmt.Errorf("%w: no contexts in kubeconfig", ErrKubeconfigContextNotFound)
+		}
+
+		config.CurrentContext = desiredContext
+
+		return writeConfig(config)
+	}
+
+	if oldContext == desiredContext {
+		config.CurrentContext = desiredContext
+
+		return writeConfig(config)
+	}
+
+	ctxEntry, exists := config.Contexts[oldContext]
+	if !exists {
+		return nil, fmt.Errorf("%w: %q", ErrKubeconfigContextNotFound, oldContext)
+	}
+
+	if _, collision := config.Contexts[desiredContext]; collision {
+		return nil, fmt.Errorf(
+			"%w: %q already exists in kubeconfig", ErrKubeconfigContextCollision, desiredContext,
+		)
+	}
+
+	// Rename context entry
+	delete(config.Contexts, oldContext)
+	config.Contexts[desiredContext] = ctxEntry
+
+	// Rename cluster and user references when they match the old context name
+	renameKubeconfigClusterRef(config, ctxEntry, oldContext, desiredContext)
+	renameKubeconfigAuthInfoRef(config, ctxEntry, oldContext, desiredContext)
+
+	config.CurrentContext = desiredContext
+
+	return writeConfig(config)
+}
+
+// resolveOldContext determines the context to rename. If CurrentContext is set,
+// it is returned. If empty, the sole context entry is selected; multiple entries
+// produce an error.
+func resolveOldContext(config *api.Config) (string, error) {
+	if config.CurrentContext != "" {
+		return config.CurrentContext, nil
+	}
+
+	switch len(config.Contexts) {
+	case 0:
+		return "", nil
+	case 1:
+		for name := range config.Contexts {
+			return name, nil
+		}
+	}
+
+	return "", fmt.Errorf(
+		"%w and %d context entries; cannot determine which to rename",
+		ErrKubeconfigNoCurrentContext, len(config.Contexts),
+	)
+}
+
+// writeConfig serializes a kubeconfig, wrapping the error.
+func writeConfig(config *api.Config) ([]byte, error) {
+	result, err := clientcmd.Write(*config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize kubeconfig: %w", err)
+	}
+
+	return result, nil
+}
+
+// renameKubeconfigClusterRef renames the cluster entry referenced by the context
+// when its name matches oldContext and desiredContext is not already taken.
+func renameKubeconfigClusterRef(
+	config *api.Config,
+	ctxEntry *api.Context,
+	oldContext, desiredContext string,
+) {
+	oldCluster := ctxEntry.Cluster
+	if oldCluster == "" || oldCluster != oldContext {
+		return
+	}
+
+	if _, collision := config.Clusters[desiredContext]; collision {
+		return
+	}
+
+	if clusterEntry, ok := config.Clusters[oldCluster]; ok {
+		delete(config.Clusters, oldCluster)
+		config.Clusters[desiredContext] = clusterEntry
+		ctxEntry.Cluster = desiredContext
+	}
+}
+
+// renameKubeconfigAuthInfoRef renames the authinfo/user entry referenced by the
+// context when its name matches oldContext and desiredContext is not already taken.
+func renameKubeconfigAuthInfoRef(
+	config *api.Config,
+	ctxEntry *api.Context,
+	oldContext, desiredContext string,
+) {
+	oldUser := ctxEntry.AuthInfo
+	if oldUser == "" || oldUser != oldContext {
+		return
+	}
+
+	if _, collision := config.AuthInfos[desiredContext]; collision {
+		return
+	}
+
+	if authEntry, ok := config.AuthInfos[oldUser]; ok {
+		delete(config.AuthInfos, oldUser)
+		config.AuthInfos[desiredContext] = authEntry
+		ctxEntry.AuthInfo = desiredContext
+	}
+}
+
 // hasKubeconfigEntriesToCleanup checks if any kubeconfig entries exist for cleanup.
 // Returns true if at least one of: context, cluster, user, or current-context needs removal.
 func hasKubeconfigEntriesToCleanup(

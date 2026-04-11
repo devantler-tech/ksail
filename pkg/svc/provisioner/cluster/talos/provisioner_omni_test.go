@@ -412,3 +412,36 @@ func TestSaveOmniConfig_WritesFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, dummyData, written)
 }
+
+func TestRenameKubeconfigContext(t *testing.T) {
+	t.Parallel()
+
+	// Core renaming logic is tested in pkg/k8s/kubeconfig_test.go.
+	// This test verifies the test seam delegates correctly.
+	validKubeconfig := `apiVersion: v1
+kind: Config
+current-context: devantler-devantler-dev-ksail
+clusters:
+- cluster:
+    server: https://10.0.0.1:6443
+  name: devantler-devantler-dev-ksail
+contexts:
+- context:
+    cluster: devantler-devantler-dev-ksail
+    user: devantler-devantler-dev-ksail
+  name: devantler-devantler-dev-ksail
+users:
+- name: devantler-devantler-dev-ksail
+  user:
+    token: test-token
+`
+
+	result, err := talosprovisioner.RenameKubeconfigContextForTest(
+		[]byte(validKubeconfig), "admin@devantler-dev",
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, string(result), "current-context: admin@devantler-dev")
+	assert.Contains(t, string(result), "name: admin@devantler-dev")
+	assert.NotContains(t, string(result), "devantler-devantler-dev-ksail")
+}

@@ -330,6 +330,7 @@ func (f DefaultFactory) createTalosProvisioner(
 	provisioner, err := talosprovisioner.CreateProvisioner(
 		f.DistributionConfig.Talos,
 		cluster.Spec.Cluster.Connection.Kubeconfig,
+		cluster.Spec.Cluster.Connection.Context,
 		cluster.Spec.Cluster.Provider,
 		cluster.Spec.Cluster.Talos,
 		cluster.Spec.Provider.Hetzner,

@@ -29,6 +29,7 @@ var ErrMissingHetznerToken = errors.New("hetzner API token not set")
 // Parameters:
 //   - talosConfigs: Pre-loaded Talos machine configurations with all patches applied
 //   - kubeconfigPath: Path where the kubeconfig should be written
+//   - kubeconfigContext: Desired kubeconfig context name (empty = derive from distribution)
 //   - provider: Infrastructure provider (e.g., Docker, Hetzner, Omni)
 //   - opts: Talos-specific options (node counts, etc.)
 //   - hetznerOpts: Hetzner-specific options (required when provider is Hetzner)
@@ -38,6 +39,7 @@ var ErrMissingHetznerToken = errors.New("hetzner API token not set")
 func CreateProvisioner(
 	talosConfigs *talosconfigmanager.Configs,
 	kubeconfigPath string,
+	kubeconfigContext string,
 	providerType v1alpha1.Provider,
 	opts v1alpha1.OptionsTalos,
 	hetznerOpts v1alpha1.OptionsHetzner,
@@ -52,6 +54,7 @@ func CreateProvisioner(
 	provisioner, provErr := newProvisionerFromOptions(
 		talosConfigs,
 		kubeconfigPath,
+		kubeconfigContext,
 		opts,
 		skipCNIChecks,
 	)
@@ -74,6 +77,7 @@ func CreateProvisioner(
 func newProvisionerFromOptions(
 	talosConfigs *talosconfigmanager.Configs,
 	kubeconfigPath string,
+	kubeconfigContext string,
 	opts v1alpha1.OptionsTalos,
 	skipCNIChecks bool,
 ) (*Provisioner, error) {
@@ -84,6 +88,7 @@ func newProvisionerFromOptions(
 
 	options := NewOptions().
 		WithKubeconfigPath(kubeconfigPath).
+		WithKubeconfigContext(kubeconfigContext).
 		WithTalosconfigPath(talosconfigPath).
 		WithSkipCNIChecks(skipCNIChecks)
 

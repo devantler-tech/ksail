@@ -350,6 +350,9 @@ func (p *Provisioner) saveOmniConfig(
 }
 
 // saveOmniKubeconfig retrieves and saves the kubeconfig from Omni.
+// If a desired context name is configured (via Options.KubeconfigContext) or can be
+// derived from the cluster name, the Omni-generated context is renamed to match.
+// This ensures the kubeconfig context name matches spec.cluster.connection.context.
 func (p *Provisioner) saveOmniKubeconfig(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
@@ -362,6 +365,19 @@ func (p *Provisioner) saveOmniKubeconfig(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to get kubeconfig from Omni: %w", err)
+	}
+
+	// Determine the desired context name
+	desiredContext := p.options.KubeconfigContext
+	if desiredContext == "" {
+		// Default to the Talos convention: admin@<clusterName>
+		desiredContext = "admin@" + clusterName
+	}
+
+	// Rename the Omni-generated context to the desired name
+	kubeconfigData, err = k8s.RenameKubeconfigContext(kubeconfigData, desiredContext)
+	if err != nil {
+		return fmt.Errorf("failed to rename kubeconfig context: %w", err)
 	}
 
 	return p.saveOmniConfig(kubeconfigData, p.options.KubeconfigPath, "Kubeconfig")
@@ -397,10 +413,10 @@ func (p *Provisioner) waitForOmniAPIServerReady(ctx context.Context) error {
 		return fmt.Errorf("canonicalize kubeconfig path for readiness check: %w", err)
 	}
 
-	// Use empty context to pick the kubeconfig's current-context, because
-	// Omni-generated kubeconfigs use a service-account context name that
-	// differs from the talosctl "admin@<name>" convention.
-	clientset, err := k8s.NewClientset(kubeconfigPath, "")
+	// Use the configured context name. If KubeconfigContext is set, it was used
+	// to rename the Omni-generated context during saveOmniKubeconfig. If empty,
+	// use the kubeconfig's current-context by passing "".
+	clientset, err := k8s.NewClientset(kubeconfigPath, p.options.KubeconfigContext)
 	if err != nil {
 		return fmt.Errorf("create clientset for Omni API readiness check: %w", err)
 	}

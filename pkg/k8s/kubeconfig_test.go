@@ -312,3 +312,182 @@ users:
 	assert.False(t, hasTargetContext, "target context should be removed")
 	assert.True(t, hasDifferentUser, "different user should remain")
 }
+
+// TestRenameKubeconfigContext tests context renaming in kubeconfig bytes.
+//
+//nolint:funlen // table-driven test with multiple test cases
+func TestRenameKubeconfigContext(t *testing.T) {
+	t.Parallel()
+
+	omniKubeconfig := `apiVersion: v1
+kind: Config
+current-context: devantler-devantler-dev-ksail
+clusters:
+- cluster:
+    server: https://10.0.0.1:6443
+  name: devantler-devantler-dev-ksail
+contexts:
+- context:
+    cluster: devantler-devantler-dev-ksail
+    user: devantler-devantler-dev-ksail
+  name: devantler-devantler-dev-ksail
+users:
+- name: devantler-devantler-dev-ksail
+  user:
+    token: test-token
+`
+
+	tests := []struct {
+		name           string
+		kubeconfig     string
+		desiredContext string
+		wantContext    string
+		wantErr        bool
+		errContains    string
+	}{
+		{
+			name:           "renames Omni SA context",
+			kubeconfig:     omniKubeconfig,
+			desiredContext: "admin@devantler-dev",
+			wantContext:    "admin@devantler-dev",
+		},
+		{
+			name:           "no-op when already correct",
+			kubeconfig:     omniKubeconfig,
+			desiredContext: "devantler-devantler-dev-ksail",
+			wantContext:    "devantler-devantler-dev-ksail",
+		},
+		{
+			name:           "error on invalid kubeconfig",
+			kubeconfig:     "not-valid-yaml: {{{",
+			desiredContext: "some-context",
+			wantErr:        true,
+		},
+		{
+			name: "error when no current context and multiple entries",
+			kubeconfig: `apiVersion: v1
+kind: Config
+current-context: ""
+clusters:
+- cluster:
+    server: https://a:6443
+  name: ctx-a
+- cluster:
+    server: https://b:6443
+  name: ctx-b
+contexts:
+- context:
+    cluster: ctx-a
+    user: user-a
+  name: ctx-a
+- context:
+    cluster: ctx-b
+    user: user-b
+  name: ctx-b
+users:
+- name: user-a
+  user:
+    token: a
+- name: user-b
+  user:
+    token: b
+`,
+			desiredContext: "admin@test",
+			wantErr:        true,
+			errContains:    "no current context",
+		},
+		{
+			name: "picks sole context when current context is empty",
+			kubeconfig: `apiVersion: v1
+kind: Config
+current-context: ""
+clusters:
+- cluster:
+    server: https://10.0.0.1:6443
+  name: only-ctx
+contexts:
+- context:
+    cluster: only-ctx
+    user: only-ctx
+  name: only-ctx
+users:
+- name: only-ctx
+  user:
+    token: t
+`,
+			desiredContext: "admin@my-cluster",
+			wantContext:    "admin@my-cluster",
+		},
+		{
+			name: "error on empty kubeconfig with no contexts",
+			kubeconfig: `apiVersion: v1
+kind: Config
+contexts: []
+clusters: []
+users: []
+`,
+			desiredContext: "admin@test",
+			wantErr:        true,
+			errContains:    "no contexts in kubeconfig",
+		},
+		{
+			name: "returns error on context name collision",
+			kubeconfig: `apiVersion: v1
+kind: Config
+current-context: old-ctx
+clusters:
+- cluster:
+    server: https://old:6443
+  name: old-ctx
+- cluster:
+    server: https://new:6443
+  name: new-ctx
+contexts:
+- context:
+    cluster: old-ctx
+    user: old-ctx
+  name: old-ctx
+- context:
+    cluster: new-ctx
+    user: new-user
+  name: new-ctx
+users:
+- name: old-ctx
+  user:
+    token: old-token
+- name: new-user
+  user:
+    token: new-token
+`,
+			desiredContext: "new-ctx",
+			wantErr:        true,
+			errContains:    "context name collision",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := k8s.RenameKubeconfigContext(
+				[]byte(testCase.kubeconfig), testCase.desiredContext,
+			)
+
+			if testCase.wantErr {
+				require.Error(t, err)
+
+				if testCase.errContains != "" {
+					assert.Contains(t, err.Error(), testCase.errContains)
+				}
+
+				return
+			}
+
+			require.NoError(t, err)
+
+			config, parseErr := clientcmd.Load(result)
+			require.NoError(t, parseErr)
+			assert.Equal(t, testCase.wantContext, config.CurrentContext)
+		})
+	}
+}

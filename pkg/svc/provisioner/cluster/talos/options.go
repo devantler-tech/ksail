@@ -43,6 +43,11 @@ type Options struct {
 	// TalosconfigPath is the path to write the talosconfig.
 	TalosconfigPath string
 
+	// KubeconfigContext is the desired kubeconfig context name.
+	// When set, the Omni-generated kubeconfig context is renamed to this value.
+	// When empty, the context is derived from Distribution.ContextName(clusterName).
+	KubeconfigContext string
+
 	// SkipCNIChecks indicates whether to skip CNI-dependent cluster checks
 	// (CoreDNS, kube-proxy) during bootstrap. This should be set to true when
 	// KSail will install a custom CNI (Cilium, Calico) after cluster creation,
@@ -115,6 +120,14 @@ func (o *Options) WithTalosconfigPath(path string) *Options {
 	if path != "" {
 		o.TalosconfigPath = path
 	}
+
+	return o
+}
+
+// WithKubeconfigContext sets the desired kubeconfig context name.
+// When set, the Omni-generated kubeconfig context will be renamed to this value.
+func (o *Options) WithKubeconfigContext(context string) *Options {
+	o.KubeconfigContext = context
 
 	return o
 }
