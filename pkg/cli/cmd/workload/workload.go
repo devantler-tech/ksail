@@ -2136,6 +2136,7 @@ func reconcileFlux(
 		writer,
 		notify.WithLabels(notify.ReconcilingLabels()),
 		notify.WithTimer(outputTimer),
+		notify.WithAppendOnly(),
 	)
 
 	err = ociGroup.Run(deadlineCtx, notify.ProgressTask{
