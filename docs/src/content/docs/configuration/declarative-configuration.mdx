@@ -356,7 +356,7 @@ Advanced configuration options are direct fields under `spec.cluster`. See [Sche
 | ----- | ---- | ------- | ----------- |
 | `sourceDirectory` | string | `k8s` | Path to the directory containing Kubernetes manifests. Used as the default path by validate, watch, and push when no explicit path argument is given. |
 | `validateOnPush` | boolean | `false` | Validate manifests against schemas before pushing (validation disabled by default) |
-| `tag` | string | `dev` | OCI artifact tag for ksail workload push. Priority: CLI oci:// ref > this field > registry-embedded tag > dev |
+| `tag` | string | `dev` | OCI artifact tag used for workload push and GitOps reconciliation (Flux OCIRepository and ArgoCD Application). Push priority: CLI oci:// ref > this field > registry-embedded tag > dev. Reconciliation priority: this field > registry-embedded tag > dev |
 | `kustomizationFile` | string | – | Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml. |
 
 

@@ -300,7 +300,7 @@
             },
             "tag": {
               "type": "string",
-              "description": "OCI artifact tag for ksail workload push. Priority: CLI oci:// ref \u003e this field \u003e registry-embedded tag \u003e dev"
+              "description": "OCI artifact tag used for workload push and GitOps reconciliation (Flux OCIRepository and ArgoCD Application). Push priority: CLI oci:// ref \u003e this field \u003e registry-embedded tag \u003e dev. Reconciliation priority: this field \u003e registry-embedded tag \u003e dev"
             },
             "kustomizationFile": {
               "type": "string",

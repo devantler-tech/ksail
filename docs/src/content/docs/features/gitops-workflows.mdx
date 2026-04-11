@@ -12,6 +12,23 @@ ksail workload push
 ksail workload reconcile
 ```
 
+## OCI Artifact Tag
+
+`spec.workload.tag` sets the OCI artifact tag used by both `workload push` and GitOps reconciliation (Flux OCIRepository / ArgoCD Application). Configure it in `ksail.yaml`:
+
+```yaml
+spec:
+  workload:
+    tag: v1.2.3  # default: dev
+```
+
+The tag is resolved differently depending on the context:
+
+- **Push** (`ksail workload push`): CLI `oci://` ref > `spec.workload.tag` > registry-embedded tag > `dev`.
+- **Reconciliation** (Flux / ArgoCD): `spec.workload.tag` > registry-embedded tag > `dev`.
+
+See [Declarative Configuration](/configuration/declarative-configuration/) for the full `spec.workload` reference.
+
 ## Commands
 
 | Command                    | Description                            |
