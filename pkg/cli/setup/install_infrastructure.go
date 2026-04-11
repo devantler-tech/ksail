@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/cli/kubeconfig"
 	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v6/pkg/k8s"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/installer"
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/cloudproviderkind"
 	hcloudccminstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/hcloudccm"
@@ -56,10 +57,15 @@ func HelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, e
 
 // validateKubeconfigContext checks that the specified context exists in the kubeconfig file.
 // Returns a descriptive error listing available contexts when the target context is missing.
+// Skips validation when the kubeconfig has no context entries (stub/placeholder file).
 func validateKubeconfigContext(kubeconfigPath, contextName string) error {
 	config, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to load kubeconfig for context validation: %w", err)
+	}
+
+	if len(config.Contexts) == 0 {
+		return nil
 	}
 
 	if _, exists := config.Contexts[contextName]; exists {
@@ -74,7 +80,8 @@ func validateKubeconfigContext(kubeconfigPath, contextName string) error {
 	sort.Strings(available)
 
 	return fmt.Errorf(
-		"kubeconfig context %q not found in %s (available: %s)",
+		"%w: %q not found in %s (available: %s)",
+		k8s.ErrKubeconfigContextNotFound,
 		contextName, kubeconfigPath, strings.Join(available, ", "),
 	)
 }

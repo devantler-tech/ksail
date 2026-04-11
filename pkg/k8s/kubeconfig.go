@@ -106,52 +106,62 @@ func RenameKubeconfigContext(kubeconfigData []byte, desiredContext string) ([]by
 		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
 	}
 
-	oldContext := config.CurrentContext
-
-	// When CurrentContext is empty, try to pick the sole context entry.
-	if oldContext == "" {
-		switch len(config.Contexts) {
-		case 0:
-			// No contexts at all — just set CurrentContext and return.
-			if desiredContext != "" {
-				config.CurrentContext = desiredContext
-			}
-
-			return clientcmd.Write(*config)
-		case 1:
-			for name := range config.Contexts {
-				oldContext = name
-			}
-		default:
-			return nil, fmt.Errorf(
-				"kubeconfig has no current context and %d context entries; cannot determine which to rename",
-				len(config.Contexts),
-			)
-		}
+	oldContext, err := resolveOldContext(config)
+	if err != nil {
+		return nil, err
 	}
 
-	if oldContext == desiredContext {
-		return clientcmd.Write(*config)
+	if oldContext == "" || oldContext == desiredContext {
+		if desiredContext != "" {
+			config.CurrentContext = desiredContext
+		}
+
+		return writeConfig(config)
 	}
 
 	ctxEntry, exists := config.Contexts[oldContext]
 	if !exists {
-		return nil, fmt.Errorf("current context %q not found in kubeconfig", oldContext)
+		return nil, fmt.Errorf("%w: %q", ErrKubeconfigContextNotFound, oldContext)
 	}
 
 	// Rename context entry
 	delete(config.Contexts, oldContext)
 	config.Contexts[desiredContext] = ctxEntry
 
-	// Rename cluster reference only when its name matches the old context name
-	// and the desired key does not already exist (avoids clobbering shared entries).
+	// Rename cluster and user references when they match the old context name
 	renameKubeconfigClusterRef(config, ctxEntry, oldContext, desiredContext)
-
-	// Rename user/authinfo reference under the same conditions.
 	renameKubeconfigAuthInfoRef(config, ctxEntry, oldContext, desiredContext)
 
 	config.CurrentContext = desiredContext
 
+	return writeConfig(config)
+}
+
+// resolveOldContext determines the context to rename. If CurrentContext is set,
+// it is returned. If empty, the sole context entry is selected; multiple entries
+// produce an error.
+func resolveOldContext(config *api.Config) (string, error) {
+	if config.CurrentContext != "" {
+		return config.CurrentContext, nil
+	}
+
+	switch len(config.Contexts) {
+	case 0:
+		return "", nil
+	case 1:
+		for name := range config.Contexts {
+			return name, nil
+		}
+	}
+
+	return "", fmt.Errorf(
+		"%w and %d context entries; cannot determine which to rename",
+		ErrKubeconfigNoCurrentContext, len(config.Contexts),
+	)
+}
+
+// writeConfig serializes a kubeconfig, wrapping the error.
+func writeConfig(config *api.Config) ([]byte, error) {
 	result, err := clientcmd.Write(*config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize kubeconfig: %w", err)

@@ -313,6 +313,7 @@ users:
 	assert.True(t, hasDifferentUser, "different user should remain")
 }
 
+//nolint:funlen // table-driven test with multiple test cases
 // TestRenameKubeconfigContext tests context renaming in kubeconfig bytes.
 func TestRenameKubeconfigContext(t *testing.T) {
 	t.Parallel()

@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v6/pkg/k8s"
@@ -141,5 +142,10 @@ func InstallerImageFromTagForTest(tag string) string {
 
 // RenameKubeconfigContextForTest exposes k8s.RenameKubeconfigContext for unit testing.
 func RenameKubeconfigContextForTest(kubeconfigData []byte, desiredContext string) ([]byte, error) {
-	return k8s.RenameKubeconfigContext(kubeconfigData, desiredContext)
+	result, err := k8s.RenameKubeconfigContext(kubeconfigData, desiredContext)
+	if err != nil {
+		return nil, fmt.Errorf("rename kubeconfig context: %w", err)
+	}
+
+	return result, nil
 }
