@@ -115,39 +115,29 @@ func TestMyFunction(t *testing.T) {
 }
 ````
 
-#### Export Pattern for Testing Unexported Functions
-
-Use `export_test.go` (in the package namespace) to expose unexported symbols without leaking into production binaries — e.g., `var ExportValidateConfig = validateConfig`. Test from `<pkg>_test` package; add `//nolint:gochecknoglobals` on exported vars if required by `golangci-lint`.
-
 #### DI Override Pattern for Command Tests
 
-Cluster command tests that depend on installer factories use an override pattern where each helper applies a factory override against shared global state and returns a restore function. Register the restore function with `t.Cleanup(restore)` so overrides are always reset at the end of the test case:
+Cluster command tests that depend on installer factories use an override pattern: each `Set*ForTests` helper applies a factory override against shared global state and returns a restore function. Register the restore function with `t.Cleanup(restore)` so overrides are always reset:
 
 ````go
-func TestPolicyEngineInstaller(t *testing.T) {
-    t.Run("happy path", func(t *testing.T) {
-        restore := cluster.SetPolicyEngineInstallerFactoryForTests(
-            func(_ *v1alpha1.Cluster) (installer.Installer, error) { return mockInstaller, nil },
-        )
-        t.Cleanup(restore)
-        // test logic...
-    })
-}
+restore := cluster.Set<Component>InstallerFactoryForTests(
+    func(_ *v1alpha1.Cluster) (installer.Installer, error) { return mockInstaller, nil },
+)
+t.Cleanup(restore)
+// test logic...
 ````
 
-> **Note:** These helpers mutate shared global state, so tests that use them **must not** run in parallel (annotate with `//nolint:paralleltest` and do not call `t.Parallel()`).
-
-For the full list of available override helpers, search for `Set*ForTests` definitions in [`pkg/cli/cmd/cluster/cluster.go`](https://github.com/devantler-tech/ksail/blob/main/pkg/cli/cmd/cluster/cluster.go).
+> **Note:** These helpers mutate shared global state, so tests that use them **must not** run in parallel (annotate with `//nolint:paralleltest` and do not call `t.Parallel()`). Search for `Set*ForTests` in `pkg/cli/cmd/cluster/` for all available helpers.
 
 #### Mocking with Testify
 
 KSail uses [mockery v3.5+](https://vektra.github.io/mockery/v3.5/) for generating mocks via `//go:generate mockery`. Call `mockProv.AssertExpectations(t)` at the end of each test.
 
-> **Note:** Never use `.Times(b.N)` with `for b.Loop()` in benchmarks — `b.N` is 1 when evaluated before the loop. Omit `.Times()` for unlimited calls.
-
 #### Benchmarks
 
 Use `for b.Loop()` style (Go 1.26+). PRs are auto-benchmarked against `main`; see [Benchmarks](/benchmarks/). Use `ksail cluster create --benchmark` for per-component timings.
+
+> **Note:** Never use `.Times(b.N)` with `for b.Loop()` — `b.N` is 1 when evaluated before the loop. Omit `.Times()` for unlimited calls.
 
 ### Documentation
 
