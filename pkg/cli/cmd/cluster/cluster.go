@@ -4099,14 +4099,24 @@ func (r *componentReconciler) reconcileWorkloadTag(
 			return fmt.Errorf("resolve registry host for flux: %w", resolveErr)
 		}
 
-		return fluxinstaller.SetupInstance(
+		err = fluxinstaller.SetupInstance(
 			ctx, kubeconfigPath, r.clusterCfg, r.clusterName, registryHost,
 		)
+		if err != nil {
+			return fmt.Errorf("setup flux instance: %w", err)
+		}
+
+		return nil
 
 	case v1alpha1.GitOpsEngineArgoCD:
-		return setup.EnsureArgoCDResources(
+		err = setup.EnsureArgoCDResources(
 			ctx, kubeconfigPath, r.clusterCfg, r.clusterName,
 		)
+		if err != nil {
+			return fmt.Errorf("ensure argocd resources: %w", err)
+		}
+
+		return nil
 
 	default:
 		return nil
@@ -6433,7 +6443,7 @@ func checkWorkloadTagDrift(
 	desiredTag := fluxinstaller.ResolveDesiredTag(ctx.ClusterCfg)
 	var currentTag string
 
-	switch gitOpsEngine {
+	switch gitOpsEngine { //nolint:exhaustive // None/empty already filtered above
 	case v1alpha1.GitOpsEngineFlux:
 		currentTag, err = fluxinstaller.GetCurrentSyncRef(cmd.Context(), kubeconfigPath)
 	case v1alpha1.GitOpsEngineArgoCD:
@@ -6468,7 +6478,12 @@ func getCurrentArgoCDTargetRevision(
 		return "", fmt.Errorf("create argocd manager: %w", err)
 	}
 
-	return mgr.GetCurrentTargetRevision(goCtx, "")
+	rev, err := mgr.GetCurrentTargetRevision(goCtx, "")
+	if err != nil {
+		return "", fmt.Errorf("get argocd target revision: %w", err)
+	}
+
+	return rev, nil
 }
 
 // applyOrReportChanges handles dry-run, recreate-required, no-changes, and

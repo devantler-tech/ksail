@@ -906,41 +906,11 @@ func TestEngine_CheckWorkloadTag(t *testing.T) {
 		gitOpsEngine v1alpha1.GitOpsEngine
 		wantChanges  int
 	}{
-		{
-			name:         "no gitops engine",
-			oldTag:       "dev",
-			newTag:       "latest",
-			gitOpsEngine: v1alpha1.GitOpsEngineNone,
-			wantChanges:  0,
-		},
-		{
-			name:         "empty gitops engine string",
-			oldTag:       "dev",
-			newTag:       "latest",
-			gitOpsEngine: "",
-			wantChanges:  0,
-		},
-		{
-			name:         "same tag no change",
-			oldTag:       "latest",
-			newTag:       "latest",
-			gitOpsEngine: v1alpha1.GitOpsEngineFlux,
-			wantChanges:  0,
-		},
-		{
-			name:         "flux tag drift",
-			oldTag:       "dev",
-			newTag:       "latest",
-			gitOpsEngine: v1alpha1.GitOpsEngineFlux,
-			wantChanges:  1,
-		},
-		{
-			name:         "argocd tag drift",
-			oldTag:       "dev",
-			newTag:       "v1.0.0",
-			gitOpsEngine: v1alpha1.GitOpsEngineArgoCD,
-			wantChanges:  1,
-		},
+		{"no gitops engine", "dev", "latest", v1alpha1.GitOpsEngineNone, 0},
+		{"empty gitops engine string", "dev", "latest", "", 0},
+		{"same tag no change", "latest", "latest", v1alpha1.GitOpsEngineFlux, 0},
+		{"flux tag drift", "dev", "latest", v1alpha1.GitOpsEngineFlux, 1},
+		{"argocd tag drift", "dev", "v1.0.0", v1alpha1.GitOpsEngineArgoCD, 1},
 	}
 
 	for _, testCase := range tests {
@@ -955,24 +925,30 @@ func TestEngine_CheckWorkloadTag(t *testing.T) {
 			}
 
 			if testCase.wantChanges > 0 {
-				changes := result.InPlaceChanges
-				if len(changes) != 1 {
-					t.Fatalf("expected 1 in-place change, got %d", len(changes))
-				}
-
-				change := changes[0]
-				if change.Field != "cluster.workload.tag" {
-					t.Errorf("expected field cluster.workload.tag, got %s", change.Field)
-				}
-
-				if change.OldValue != testCase.oldTag {
-					t.Errorf("expected old value %q, got %q", testCase.oldTag, change.OldValue)
-				}
-
-				if change.NewValue != testCase.newTag {
-					t.Errorf("expected new value %q, got %q", testCase.newTag, change.NewValue)
-				}
+				assertWorkloadTagChange(t, result, testCase.oldTag, testCase.newTag)
 			}
 		})
+	}
+}
+
+func assertWorkloadTagChange(t *testing.T, result *clusterupdate.UpdateResult, oldTag, newTag string) {
+	t.Helper()
+
+	changes := result.InPlaceChanges
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 in-place change, got %d", len(changes))
+	}
+
+	change := changes[0]
+	if change.Field != "cluster.workload.tag" {
+		t.Errorf("expected field cluster.workload.tag, got %s", change.Field)
+	}
+
+	if change.OldValue != oldTag {
+		t.Errorf("expected old value %q, got %q", oldTag, change.OldValue)
+	}
+
+	if change.NewValue != newTag {
+		t.Errorf("expected new value %q, got %q", newTag, change.NewValue)
 	}
 }

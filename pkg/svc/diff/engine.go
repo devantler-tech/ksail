@@ -44,6 +44,26 @@ func (e *Engine) ComputeDiff(
 	return result
 }
 
+// CheckWorkloadTag compares the currently deployed GitOps sync ref against the desired
+// workload tag and appends an in-place change when they differ. This detects
+// stale sync refs left by pre-v6.7.1 cluster creation.
+// The caller is responsible for querying the cluster for oldTag and resolving
+// newTag from the configuration.
+func (e *Engine) CheckWorkloadTag(
+	oldTag, newTag string,
+	gitOpsEngine v1alpha1.GitOpsEngine,
+	result *clusterupdate.UpdateResult,
+) {
+	if gitOpsEngine == v1alpha1.GitOpsEngineNone || gitOpsEngine == "" {
+		return
+	}
+
+	appendChange(result, "cluster.workload.tag",
+		oldTag, newTag, "",
+		"workload tag can be updated in-place on the GitOps sync resource",
+		clusterupdate.ChangeCategoryInPlace)
+}
+
 // fieldRule describes how to diff a single scalar field.
 type fieldRule struct {
 	field    string
@@ -429,24 +449,4 @@ func (e *Engine) applyProviderFieldRules(
 			rule.getVal(oldProvider), rule.getVal(newProvider),
 			rule.defaultVal, rule.reason, rule.category)
 	}
-}
-
-// CheckWorkloadTag compares the current GitOps sync ref against the desired
-// workload tag and appends an in-place change when they differ. This detects
-// stale sync refs left by pre-v6.7.1 cluster creation.
-// The caller is responsible for querying the cluster for oldTag and resolving
-// newTag from the configuration.
-func (e *Engine) CheckWorkloadTag(
-	oldTag, newTag string,
-	gitOpsEngine v1alpha1.GitOpsEngine,
-	result *clusterupdate.UpdateResult,
-) {
-	if gitOpsEngine == v1alpha1.GitOpsEngineNone || gitOpsEngine == "" {
-		return
-	}
-
-	appendChange(result, "cluster.workload.tag",
-		oldTag, newTag, "",
-		"workload tag can be updated in-place on the GitOps sync resource",
-		clusterupdate.ChangeCategoryInPlace)
 }
