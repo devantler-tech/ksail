@@ -3,6 +3,9 @@ package kubeconfighook_test
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -57,6 +60,32 @@ func writeKubeconfig(t *testing.T, dir, token string) string {
 	return kubeconfigPath
 }
 
+// writeKubeconfigWithServer writes a kubeconfig pointing at the given server URL.
+func writeKubeconfigWithServer(t *testing.T, dir, contextName, serverURL, token string) string {
+	t.Helper()
+
+	kubeconfigPath := filepath.Join(dir, "kubeconfig")
+
+	cfg := clientcmdapi.NewConfig()
+	cfg.CurrentContext = contextName
+	cfg.Clusters[contextName] = &clientcmdapi.Cluster{
+		Server:                serverURL,
+		InsecureSkipTLSVerify: true,
+	}
+	cfg.AuthInfos[contextName] = &clientcmdapi.AuthInfo{
+		Token: token,
+	}
+	cfg.Contexts[contextName] = &clientcmdapi.Context{
+		Cluster:  contextName,
+		AuthInfo: contextName,
+	}
+
+	err := clientcmd.WriteToFile(*cfg, kubeconfigPath)
+	require.NoError(t, err)
+
+	return kubeconfigPath
+}
+
 func TestIsTokenExpired_TimeBased(t *testing.T) {
 	t.Parallel()
 
@@ -68,7 +97,7 @@ func TestIsTokenExpired_TimeBased(t *testing.T) {
 		token := makeJWT(t, expiredAt)
 		path := writeKubeconfig(t, dir, token)
 
-		assert.True(t, kubeconfighook.IsTokenExpired(path))
+		assert.True(t, kubeconfighook.IsTokenExpired(path, ""))
 	})
 
 	t.Run("ValidToken", func(t *testing.T) {
@@ -79,7 +108,7 @@ func TestIsTokenExpired_TimeBased(t *testing.T) {
 		token := makeJWT(t, expiresAt)
 		path := writeKubeconfig(t, dir, token)
 
-		assert.False(t, kubeconfighook.IsTokenExpired(path))
+		assert.False(t, kubeconfighook.IsTokenExpired(path, ""))
 	})
 
 	t.Run("TokenExpiringWithinBuffer", func(t *testing.T) {
@@ -90,7 +119,7 @@ func TestIsTokenExpired_TimeBased(t *testing.T) {
 		token := makeJWT(t, expiresAt)
 		path := writeKubeconfig(t, dir, token)
 
-		assert.True(t, kubeconfighook.IsTokenExpired(path))
+		assert.True(t, kubeconfighook.IsTokenExpired(path, ""))
 	})
 
 	t.Run("TokenExpiringOutsideBuffer", func(t *testing.T) {
@@ -101,7 +130,38 @@ func TestIsTokenExpired_TimeBased(t *testing.T) {
 		token := makeJWT(t, expiresAt)
 		path := writeKubeconfig(t, dir, token)
 
-		assert.False(t, kubeconfighook.IsTokenExpired(path))
+		assert.False(t, kubeconfighook.IsTokenExpired(path, ""))
+	})
+
+	t.Run("ExplicitContextOverride", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		kubeconfigPath := filepath.Join(dir, "kubeconfig")
+
+		validToken := makeJWT(t, time.Now().Add(24*time.Hour).Unix())
+		expiredToken := makeJWT(t, time.Now().Add(-1*time.Hour).Unix())
+
+		cfg := clientcmdapi.NewConfig()
+		cfg.CurrentContext = "valid-ctx"
+		cfg.Clusters["valid-ctx"] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:6443"}
+		cfg.AuthInfos["valid-user"] = &clientcmdapi.AuthInfo{Token: validToken}
+		cfg.Contexts["valid-ctx"] = &clientcmdapi.Context{
+			Cluster: "valid-ctx", AuthInfo: "valid-user",
+		}
+		cfg.Clusters["expired-ctx"] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:6444"}
+		cfg.AuthInfos["expired-user"] = &clientcmdapi.AuthInfo{Token: expiredToken}
+		cfg.Contexts["expired-ctx"] = &clientcmdapi.Context{
+			Cluster: "expired-ctx", AuthInfo: "expired-user",
+		}
+
+		err := clientcmd.WriteToFile(*cfg, kubeconfigPath)
+		require.NoError(t, err)
+
+		// CurrentContext has a valid token
+		assert.False(t, kubeconfighook.IsTokenExpired(kubeconfigPath, ""))
+		// Explicit context has an expired token
+		assert.True(t, kubeconfighook.IsTokenExpired(kubeconfigPath, "expired-ctx"))
 	})
 }
 
@@ -114,7 +174,7 @@ func TestIsTokenExpired_EdgeCases(t *testing.T) {
 		dir := t.TempDir()
 		path := writeKubeconfig(t, dir, "plain-bearer-token")
 
-		assert.False(t, kubeconfighook.IsTokenExpired(path))
+		assert.False(t, kubeconfighook.IsTokenExpired(path, ""))
 	})
 
 	t.Run("TwoSegmentToken", func(t *testing.T) {
@@ -123,7 +183,7 @@ func TestIsTokenExpired_EdgeCases(t *testing.T) {
 		dir := t.TempDir()
 		path := writeKubeconfig(t, dir, "header.payload")
 
-		assert.False(t, kubeconfighook.IsTokenExpired(path))
+		assert.False(t, kubeconfighook.IsTokenExpired(path, ""))
 	})
 
 	t.Run("FourSegmentToken", func(t *testing.T) {
@@ -132,7 +192,7 @@ func TestIsTokenExpired_EdgeCases(t *testing.T) {
 		dir := t.TempDir()
 		path := writeKubeconfig(t, dir, "a.b.c.d")
 
-		assert.False(t, kubeconfighook.IsTokenExpired(path))
+		assert.False(t, kubeconfighook.IsTokenExpired(path, ""))
 	})
 
 	t.Run("NoToken", func(t *testing.T) {
@@ -141,13 +201,13 @@ func TestIsTokenExpired_EdgeCases(t *testing.T) {
 		dir := t.TempDir()
 		path := writeKubeconfig(t, dir, "")
 
-		assert.False(t, kubeconfighook.IsTokenExpired(path))
+		assert.False(t, kubeconfighook.IsTokenExpired(path, ""))
 	})
 
 	t.Run("MissingFile", func(t *testing.T) {
 		t.Parallel()
 
-		assert.False(t, kubeconfighook.IsTokenExpired("/nonexistent/kubeconfig"))
+		assert.False(t, kubeconfighook.IsTokenExpired("/nonexistent/kubeconfig", ""))
 	})
 
 	t.Run("MissingContext", func(t *testing.T) {
@@ -162,6 +222,121 @@ func TestIsTokenExpired_EdgeCases(t *testing.T) {
 		err := clientcmd.WriteToFile(*cfg, kubeconfigPath)
 		require.NoError(t, err)
 
-		assert.False(t, kubeconfighook.IsTokenExpired(kubeconfigPath))
+		assert.False(t, kubeconfighook.IsTokenExpired(kubeconfigPath, ""))
+	})
+}
+
+func TestIsKubeconfigStale(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Unauthorized401", func(t *testing.T) {
+		t.Parallel()
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"kind":"Status","apiVersion":"v1","status":"Failure","message":"Unauthorized","reason":"Unauthorized","code":401}`)
+		}))
+		defer srv.Close()
+
+		dir := t.TempDir()
+		path := writeKubeconfigWithServer(t, dir, "test", srv.URL, "stale-token")
+
+		assert.True(t, kubeconfighook.IsKubeconfigStale(path, ""))
+	})
+
+	t.Run("Forbidden403", func(t *testing.T) {
+		t.Parallel()
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"kind":"Status","apiVersion":"v1","status":"Failure","message":"Forbidden","reason":"Forbidden","code":403}`)
+		}))
+		defer srv.Close()
+
+		dir := t.TempDir()
+		path := writeKubeconfigWithServer(t, dir, "test", srv.URL, "stale-token")
+
+		assert.True(t, kubeconfighook.IsKubeconfigStale(path, ""))
+	})
+
+	t.Run("SuccessfulResponse", func(t *testing.T) {
+		t.Parallel()
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"major":"1","minor":"30","gitVersion":"v1.30.0"}`)
+		}))
+		defer srv.Close()
+
+		dir := t.TempDir()
+		path := writeKubeconfigWithServer(t, dir, "test", srv.URL, "valid-token")
+
+		assert.False(t, kubeconfighook.IsKubeconfigStale(path, ""))
+	})
+
+	t.Run("ConnectionRefused", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		// Port 1 is unlikely to be listening
+		path := writeKubeconfigWithServer(t, dir, "test", "https://127.0.0.1:1", "some-token")
+
+		assert.False(t, kubeconfighook.IsKubeconfigStale(path, ""))
+	})
+
+	t.Run("MissingFile", func(t *testing.T) {
+		t.Parallel()
+
+		assert.True(t, kubeconfighook.IsKubeconfigStale("/nonexistent/kubeconfig", ""))
+	})
+
+	t.Run("MissingContext", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		path := writeKubeconfigWithServer(t, dir, "test", "https://127.0.0.1:6443", "token")
+
+		// Request a context that doesn't exist in the kubeconfig
+		assert.True(t, kubeconfighook.IsKubeconfigStale(path, "nonexistent-context"))
+	})
+
+	t.Run("ExplicitContextHonored", func(t *testing.T) {
+		t.Parallel()
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"major":"1","minor":"30","gitVersion":"v1.30.0"}`)
+		}))
+		defer srv.Close()
+
+		dir := t.TempDir()
+		kubeconfigPath := filepath.Join(dir, "kubeconfig")
+
+		cfg := clientcmdapi.NewConfig()
+		cfg.CurrentContext = "default"
+		cfg.Clusters["default"] = &clientcmdapi.Cluster{
+			Server:                "https://127.0.0.1:1", // unreachable
+			InsecureSkipTLSVerify: true,
+		}
+		cfg.AuthInfos["default"] = &clientcmdapi.AuthInfo{Token: "tok"}
+		cfg.Contexts["default"] = &clientcmdapi.Context{
+			Cluster: "default", AuthInfo: "default",
+		}
+		cfg.Clusters["reachable"] = &clientcmdapi.Cluster{
+			Server:                srv.URL,
+			InsecureSkipTLSVerify: true,
+		}
+		cfg.AuthInfos["reachable"] = &clientcmdapi.AuthInfo{Token: "tok"}
+		cfg.Contexts["reachable"] = &clientcmdapi.Context{
+			Cluster: "reachable", AuthInfo: "reachable",
+		}
+
+		err := clientcmd.WriteToFile(*cfg, kubeconfigPath)
+		require.NoError(t, err)
+
+		// Explicit context points to the reachable server → not stale
+		assert.False(t, kubeconfighook.IsKubeconfigStale(kubeconfigPath, "reachable"))
 	})
 }
