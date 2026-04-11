@@ -58,15 +58,10 @@ func HelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, e
 
 // validateKubeconfigContext checks that the specified context exists in the kubeconfig file.
 // Returns a descriptive error listing available contexts when the target context is missing.
-// Skips validation when the kubeconfig has no context entries (stub/placeholder file).
 func validateKubeconfigContext(kubeconfigPath, contextName string) error {
 	config, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to load kubeconfig for context validation: %w", err)
-	}
-
-	if len(config.Contexts) == 0 {
-		return nil
 	}
 
 	if _, exists := config.Contexts[contextName]; exists {

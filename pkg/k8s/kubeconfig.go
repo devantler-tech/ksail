@@ -97,10 +97,12 @@ func removeEntriesFromKubeconfig(
 // RenameKubeconfigContext renames the current context (and its associated cluster and
 // user entries) in raw kubeconfig bytes to desiredContext.
 //
-// If desiredContext is empty or already matches the current context, the kubeconfig is
-// returned as-is. Returns an error when the desired context name collides with an
-// existing different context entry, or when CurrentContext is empty and no single
-// context entry can be unambiguously selected.
+// If desiredContext is empty, the kubeconfig is returned unchanged. If desiredContext
+// already matches the current context, the kubeconfig is returned unchanged. If there
+// is no current context but the kubeconfig can be resolved without ambiguity, the
+// kubeconfig is updated to set CurrentContext to desiredContext. Returns an error when
+// the desired context name collides with an existing different context entry, or when
+// CurrentContext is empty and no single context entry can be unambiguously selected.
 func RenameKubeconfigContext(kubeconfigData []byte, desiredContext string) ([]byte, error) {
 	if desiredContext == "" {
 		return kubeconfigData, nil

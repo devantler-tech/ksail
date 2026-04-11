@@ -1507,12 +1507,17 @@ spec:
 		"kind.yaml",
 		"kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test\nnodes: []\n",
 	)
-	// Create a fake kubeconfig file to prevent errors when ArgoCD tries to create Helm client
+	// Create a fake kubeconfig file with the expected context entry to prevent
+	// validation errors when ArgoCD tries to create a Helm client.
+	// Vanilla distribution with kind.yaml name "test" → context "kind-test".
 	writeFile(
 		t,
 		workingDir,
 		"kubeconfig",
-		"apiVersion: v1\nkind: Config\nclusters: []\ncontexts: []\nusers: []\n",
+		"apiVersion: v1\nkind: Config\ncurrent-context: kind-test\nclusters:\n"+
+			"- cluster:\n    server: https://127.0.0.1:6443\n  name: kind-test\n"+
+			"contexts:\n- context:\n    cluster: kind-test\n    user: kind-test\n  name: kind-test\n"+
+			"users:\n- name: kind-test\n  user:\n    token: fake\n",
 	)
 }
 
