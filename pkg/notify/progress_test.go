@@ -652,6 +652,91 @@ func TestProgressGroup_InstallingLabels(t *testing.T) {
 	}
 }
 
+// TestProgressGroup_ReconcilingLabels verifies that ReconcilingLabels returns
+// labels with "reconciling" as the running state and "reconciled" as completed.
+func TestProgressGroup_ReconcilingLabels(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	labels := notify.ReconcilingLabels()
+	progressGroup := notify.NewProgressGroup("Reconciling", "🔄", &buf, notify.WithLabels(labels))
+
+	task := notify.ProgressTask{
+		Name: "my-kustomization",
+		Fn:   func(_ context.Context) error { return nil },
+	}
+
+	err := progressGroup.Run(context.Background(), task)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+
+	if !strings.Contains(output, "reconciling") {
+		t.Errorf("expected 'reconciling' label in output, got: %q", output)
+	}
+
+	if !strings.Contains(output, "reconciled") {
+		t.Errorf("expected 'reconciled' label in output, got: %q", output)
+	}
+}
+
+// TestProgressGroup_EmptyTitle verifies that ProgressGroup with an empty title
+// does not print a title line.
+func TestProgressGroup_EmptyTitle(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	progressGroup := notify.NewProgressGroup("", "", &buf)
+
+	task := notify.ProgressTask{
+		Name: "my-task",
+		Fn:   func(_ context.Context) error { return nil },
+	}
+
+	err := progressGroup.Run(context.Background(), task)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+
+	lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
+	if len(lines) == 0 || lines[0] == "" {
+		t.Fatalf("expected task output, got: %q", output)
+	}
+
+	// With an empty title, the first rendered line should be the task output,
+	// not a title line such as " ..." or "► ...".
+	if strings.HasPrefix(lines[0], " ...") || strings.TrimSpace(lines[0]) == "..." {
+		t.Errorf(
+			"expected no title line when title is empty, got first line %q in output %q",
+			lines[0],
+			output,
+		)
+	}
+
+	if strings.HasPrefix(lines[0], "► ...") {
+		t.Errorf(
+			"expected no title line when title is empty, got first line %q in output %q",
+			lines[0],
+			output,
+		)
+	}
+
+	if !strings.Contains(lines[0], "my-task") {
+		t.Errorf(
+			"expected first line to contain task name %q, got first line %q in output %q",
+			"my-task",
+			lines[0],
+			output,
+		)
+	}
+}
+
 // TestProgressGroup_ContinueOnError verifies that WithContinueOnError makes the
 // group run all tasks even when some fail, collecting all errors.
 func TestProgressGroup_ContinueOnError(t *testing.T) {

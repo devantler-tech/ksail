@@ -2774,3 +2774,103 @@ func TestNewWorkloadCmdRunETriggersHelp(t *testing.T) {
 
 	snaps.MatchSnapshot(t, normalizeHomePaths(out.String()))
 }
+
+// TestTopologicalSortKustomizations tests the topological sort of Flux Kustomizations.
+//
+//nolint:funlen // Table-driven test with comprehensive cases
+func TestTopologicalSortKustomizations(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		input    []flux.KustomizationInfo
+		expected []string // expected order of names
+	}{
+		{
+			name:     "empty list",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name: "single kustomization",
+			input: []flux.KustomizationInfo{
+				{Name: "apps", Path: "./apps"},
+			},
+			expected: []string{"apps"},
+		},
+		{
+			name: "no dependencies preserves order",
+			input: []flux.KustomizationInfo{
+				{Name: "apps", Path: "./apps"},
+				{Name: "infra", Path: "./infra"},
+				{Name: "monitoring", Path: "./monitoring"},
+			},
+			expected: []string{"apps", "infra", "monitoring"},
+		},
+		{
+			name: "linear dependency chain",
+			input: []flux.KustomizationInfo{
+				{Name: "apps", Path: "./apps", DependsOn: []string{"infra"}},
+				{Name: "infra", Path: "./infra", DependsOn: []string{"flux-system"}},
+				{Name: "flux-system", Path: "./"},
+			},
+			expected: []string{"flux-system", "infra", "apps"},
+		},
+		{
+			name: "diamond dependencies",
+			input: []flux.KustomizationInfo{
+				{Name: "apps", Path: "./apps", DependsOn: []string{"infra", "config"}},
+				{Name: "infra", Path: "./infra", DependsOn: []string{"flux-system"}},
+				{Name: "config", Path: "./config", DependsOn: []string{"flux-system"}},
+				{Name: "flux-system", Path: "./"},
+			},
+			expected: []string{"flux-system", "infra", "config", "apps"},
+		},
+		{
+			name: "dependency on nonexistent kustomization ignored",
+			input: []flux.KustomizationInfo{
+				{Name: "apps", Path: "./apps", DependsOn: []string{"nonexistent"}},
+				{Name: "infra", Path: "./infra"},
+			},
+			expected: []string{"apps", "infra"},
+		},
+		{
+			name: "cycle protection appends remaining",
+			input: []flux.KustomizationInfo{
+				{Name: "a", Path: "./a", DependsOn: []string{"b"}},
+				{Name: "b", Path: "./b", DependsOn: []string{"a"}},
+				{Name: "c", Path: "./c"},
+			},
+			expected: []string{"c", "a", "b"},
+		},
+		{
+			name: "duplicate dependencies are de-duplicated",
+			input: []flux.KustomizationInfo{
+				{Name: "apps", Path: "./apps", DependsOn: []string{"infra", "infra"}},
+				{Name: "infra", Path: "./infra"},
+			},
+			expected: []string{"infra", "apps"},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			sorted := workload.ExportTopologicalSortKustomizations(testCase.input)
+
+			if testCase.expected == nil {
+				assert.Empty(t, sorted)
+
+				return
+			}
+
+			names := make([]string, len(sorted))
+			for i, ks := range sorted {
+				names[i] = ks.Name
+			}
+
+			assert.Equal(t, testCase.expected, names)
+		})
+	}
+}

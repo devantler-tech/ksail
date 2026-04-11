@@ -30,9 +30,8 @@ var (
 // Reconciler constants.
 const (
 	// DefaultNamespace is the default namespace for ArgoCD resources.
-	DefaultNamespace       = "argocd"
-	rootApplicationName    = "ksail"
-	reconcilerPollInterval = 500 * time.Millisecond
+	DefaultNamespace    = "argocd"
+	rootApplicationName = "ksail"
 )
 
 // Reconciler handles ArgoCD reconciliation operations.
@@ -102,56 +101,56 @@ func (r *Reconciler) TriggerRefresh(ctx context.Context, hardRefresh bool) error
 	return nil
 }
 
-// WaitForApplicationReady waits for the ArgoCD application to be synced and healthy.
-func (r *Reconciler) WaitForApplicationReady(ctx context.Context, timeout time.Duration) error {
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(reconcilerPollInterval)
-	defer ticker.Stop()
-
-	appClient := r.applicationClient()
-
-	for {
-		ready, err := r.pollApplicationStatus(timeoutCtx, appClient)
-		if err != nil {
-			return err
-		}
-
-		if ready {
-			return nil
-		}
-
-		select {
-		case <-timeoutCtx.Done():
-			return ErrReconcileTimeout
-		case <-ticker.C:
-		}
-	}
+// ApplicationInfo holds the name of an ArgoCD Application CR.
+type ApplicationInfo struct {
+	Name string
 }
 
-// pollApplicationStatus checks application status with timeout guard.
-// It returns (ready, nil) on success, (false, nil) when not yet ready,
-// or (false, err) for permanent/timeout errors.
-func (r *Reconciler) pollApplicationStatus(
+// ListApplications lists all ArgoCD Application CRs in the argocd namespace.
+func (r *Reconciler) ListApplications(
 	ctx context.Context,
-	client dynamic.ResourceInterface,
-) (bool, error) {
-	err := ctx.Err()
+) ([]ApplicationInfo, error) {
+	client := r.applicationClient()
+
+	list, err := client.List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return false, ErrReconcileTimeout
+		return nil, fmt.Errorf("list argocd applications: %w", err)
 	}
 
-	ready, err := r.checkApplicationStatus(ctx, client)
-	if err != nil {
-		if reconciler.IsContextError(err) {
-			return false, ErrReconcileTimeout
-		}
+	infos := make([]ApplicationInfo, 0, len(list.Items))
 
+	for i := range list.Items {
+		infos = append(infos, ApplicationInfo{Name: list.Items[i].GetName()})
+	}
+
+	return infos, nil
+}
+
+// CheckNamedApplicationReady performs a single-poll readiness check for
+// a specific ArgoCD Application CR identified by name.
+// Returns (ready, error) where error is non-nil for permanent failures.
+func (r *Reconciler) CheckNamedApplicationReady(
+	ctx context.Context,
+	name string,
+) (bool, error) {
+	client := r.applicationClient()
+
+	app, err := client.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return false, fmt.Errorf("get argocd application %q: %w", name, err)
+	}
+
+	err = r.checkOperationState(app)
+	if err != nil {
 		return false, err
 	}
 
-	return ready, nil
+	err = r.checkConditions(app)
+	if err != nil {
+		return false, err
+	}
+
+	return isApplicationSynced(app), nil
 }
 
 // applicationClient returns a dynamic client for ArgoCD Applications.
@@ -163,32 +162,6 @@ func (r *Reconciler) applicationClient() dynamic.ResourceInterface {
 	}
 
 	return r.Dynamic.Resource(gvr).Namespace(DefaultNamespace)
-}
-
-// checkApplicationStatus checks if the application is synced and healthy.
-func (r *Reconciler) checkApplicationStatus(
-	ctx context.Context,
-	client dynamic.ResourceInterface,
-) (bool, error) {
-	app, err := client.Get(ctx, rootApplicationName, metav1.GetOptions{})
-	if err != nil {
-		return false, fmt.Errorf("get argocd application: %w", err)
-	}
-
-	// Check for operation state first (ongoing sync operations)
-	err = r.checkOperationState(app)
-	if err != nil {
-		return false, err
-	}
-
-	// Check for error conditions
-	err = r.checkConditions(app)
-	if err != nil {
-		return false, err
-	}
-
-	// Check if synced and healthy
-	return isApplicationSynced(app), nil
 }
 
 // checkOperationState checks if there's an operation in progress or failed.
