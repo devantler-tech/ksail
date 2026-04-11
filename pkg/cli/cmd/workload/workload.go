@@ -393,7 +393,13 @@ func resolveTalosNodeEndpoint(
 	case v1alpha1.ProviderDocker:
 		return resolveDockerNodeIP(ctx, info.ClusterName, nodeName, dockerprovider.LabelSchemeTalos)
 	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
-		return resolveNodeIPFromKubernetes(ctx, kubeconfigPath, contextName, nodeName, info.Provider)
+		return resolveNodeIPFromKubernetes(
+			ctx,
+			kubeconfigPath,
+			contextName,
+			nodeName,
+			info.Provider,
+		)
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Provider)
 	}
