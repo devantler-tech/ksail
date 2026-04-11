@@ -193,7 +193,12 @@ func (p *Provisioner) GetCurrentVersions(
 		return nil, fmt.Errorf("getting Talos version: %w", err)
 	}
 
-	k8sVersion := p.talosConfigs.KubernetesVersion()
+	var k8sVersion string
+
+	if p.talosConfigs != nil {
+		k8sVersion = p.talosConfigs.KubernetesVersion()
+	}
+
 	if k8sVersion != "" && k8sVersion[0] != 'v' {
 		k8sVersion = "v" + k8sVersion
 	}
