@@ -238,7 +238,11 @@ func WaitForFluxReady(
 // GetCurrentSyncRef queries the running FluxInstance in the cluster and returns
 // its spec.sync.ref value. Returns empty string if the FluxInstance does not exist
 // or has no sync configuration.
-func GetCurrentSyncRef(ctx context.Context, kubeconfig string) (string, error) {
+func GetCurrentSyncRef(ctx context.Context, kubeconfig string) (string, error) { //nolint:contextcheck // nil-guard consistent with SetupInstance/WaitForFluxReady
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	restConfig, err := loadRESTConfig(kubeconfig)
 	if err != nil {
 		return "", fmt.Errorf("build REST config: %w", err)
