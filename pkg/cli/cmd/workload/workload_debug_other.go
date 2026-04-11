@@ -9,7 +9,7 @@ import (
 
 // ErrTalosDebugNotSupportedOnWindows is returned when attempting Talos host-level debugging on Windows.
 var ErrTalosDebugNotSupportedOnWindows = errors.New(
-	"Talos host-level debugging requires Unix signal handling and is not supported on Windows",
+	"talos host-level debugging requires Unix signal handling and is not supported on Windows",
 )
 
 // runTalosHostDebug is not supported on Windows due to signal handling requirements.

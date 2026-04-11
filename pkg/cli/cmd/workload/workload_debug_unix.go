@@ -243,7 +243,7 @@ func waitForStreams(
 			fmt.Fprintf(os.Stderr, "Warning: failed to close send stream: %v\n", closeErr)
 		}
 
-		if recvErr := <-recvDone; recvErr != nil && recvErr != io.EOF {
+		if recvErr := <-recvDone; recvErr != nil && recvErr != context.Canceled && recvErr != io.EOF {
 			return recvErr
 		}
 

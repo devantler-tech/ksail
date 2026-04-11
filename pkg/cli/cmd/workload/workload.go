@@ -331,7 +331,10 @@ func runTalosHostDebugFromInfo(
 	image string,
 	args []string,
 ) error {
-	talosconfigPath := "~/.talos/config"
+	talosconfigPath := os.Getenv("TALOSCONFIG")
+	if talosconfigPath == "" {
+		talosconfigPath = "~/.talos/config"
+	}
 
 	nodeEndpoint, err := resolveTalosNodeEndpoint(cmd.Context(), info, nodeName)
 	if err != nil {
@@ -423,31 +426,35 @@ func runInteractiveDockerExec(
 	containerName string,
 	cmdArgs []string,
 ) error {
+	isTTY := term.IsTerminal(int(os.Stdin.Fd())) //nolint:gosec
+
 	execID, err := dockerClient.ContainerExecCreate(ctx, containerName, dockercontainer.ExecOptions{
 		Cmd:          cmdArgs,
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
-		Tty:          true,
+		Tty:          isTTY,
 	})
 	if err != nil {
 		return fmt.Errorf("create exec in container %q: %w", containerName, err)
 	}
 
 	resp, err := dockerClient.ContainerExecAttach(ctx, execID.ID, dockercontainer.ExecAttachOptions{
-		Tty: true,
+		Tty: isTTY,
 	})
 	if err != nil {
 		return fmt.Errorf("attach to exec in container %q: %w", containerName, err)
 	}
 	defer resp.Close()
 
-	restoreFunc, termErr := setupRawTerminal()
-	if termErr != nil {
-		return termErr
-	}
+	if isTTY {
+		restoreFunc, termErr := setupRawTerminal()
+		if termErr != nil {
+			return termErr
+		}
 
-	defer restoreFunc()
+		defer restoreFunc()
+	}
 
 	pipeDockerExecStreams(&resp)
 
