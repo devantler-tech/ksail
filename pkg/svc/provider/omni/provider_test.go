@@ -259,6 +259,33 @@ func TestWaitForClusterReady_RunningAndReady_Succeeds(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestWaitForClusterReady_NotFoundTimesOut(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	err := prov.WaitForClusterReady(context.Background(), "nonexistent", 500*time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "timed out")
+}
+
+func TestWaitForClusterReady_CancelledContext(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := prov.WaitForClusterReady(ctx, "test-cluster", 5*time.Second)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
+}
+
 func TestGetKubeconfig_NilClient(t *testing.T) {
 	t.Parallel()
 

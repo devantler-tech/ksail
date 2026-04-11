@@ -508,8 +508,8 @@ func countReadyNodes(nodes []provider.NodeInfo) (int, int) {
 	return total, ready
 }
 
-// clusterReadyPollInterval is the interval between cluster readiness polls.
-const clusterReadyPollInterval = 10 * time.Second
+// clusterStatusPollInterval is the interval between cluster status polls.
+const clusterStatusPollInterval = 10 * time.Second
 
 // clusterCheckFunc checks a cluster condition and returns true when the condition is met.
 type clusterCheckFunc func(ctx context.Context, st state.State, clusterName string) (bool, error)
@@ -529,7 +529,7 @@ func (p *Provider) waitForCluster(
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	ticker := time.NewTicker(clusterReadyPollInterval)
+	ticker := time.NewTicker(clusterStatusPollInterval)
 	defer ticker.Stop()
 
 	for {
