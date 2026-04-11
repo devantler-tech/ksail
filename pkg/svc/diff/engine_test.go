@@ -893,3 +893,86 @@ func assertSingleChange(
 		)
 	}
 }
+
+func TestEngine_CheckWorkloadTag(t *testing.T) {
+	t.Parallel()
+
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+
+	tests := []struct {
+		name         string
+		oldTag       string
+		newTag       string
+		gitOpsEngine v1alpha1.GitOpsEngine
+		wantChanges  int
+	}{
+		{
+			name:         "no gitops engine",
+			oldTag:       "dev",
+			newTag:       "latest",
+			gitOpsEngine: v1alpha1.GitOpsEngineNone,
+			wantChanges:  0,
+		},
+		{
+			name:         "empty gitops engine string",
+			oldTag:       "dev",
+			newTag:       "latest",
+			gitOpsEngine: "",
+			wantChanges:  0,
+		},
+		{
+			name:         "same tag no change",
+			oldTag:       "latest",
+			newTag:       "latest",
+			gitOpsEngine: v1alpha1.GitOpsEngineFlux,
+			wantChanges:  0,
+		},
+		{
+			name:         "flux tag drift",
+			oldTag:       "dev",
+			newTag:       "latest",
+			gitOpsEngine: v1alpha1.GitOpsEngineFlux,
+			wantChanges:  1,
+		},
+		{
+			name:         "argocd tag drift",
+			oldTag:       "dev",
+			newTag:       "v1.0.0",
+			gitOpsEngine: v1alpha1.GitOpsEngineArgoCD,
+			wantChanges:  1,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := &clusterupdate.UpdateResult{}
+			engine.CheckWorkloadTag(testCase.oldTag, testCase.newTag, testCase.gitOpsEngine, result)
+
+			if got := result.TotalChanges(); got != testCase.wantChanges {
+				t.Errorf("want %d changes, got %d", testCase.wantChanges, got)
+			}
+
+			if testCase.wantChanges > 0 {
+				changes := result.InPlaceChanges
+				if len(changes) != 1 {
+					t.Fatalf("expected 1 in-place change, got %d", len(changes))
+				}
+
+				change := changes[0]
+				if change.Field != "cluster.workload.tag" {
+					t.Errorf("expected field cluster.workload.tag, got %s", change.Field)
+				}
+
+				if change.OldValue != testCase.oldTag {
+					t.Errorf("expected old value %q, got %q", testCase.oldTag, change.OldValue)
+				}
+
+				if change.NewValue != testCase.newTag {
+					t.Errorf("expected new value %q, got %q", testCase.newTag, change.NewValue)
+				}
+			}
+		})
+	}
+}

@@ -65,3 +65,14 @@ func needsRegistryIPResolution(clusterCfg *v1alpha1.Cluster) bool {
 
 	return clusterCfg.Spec.Cluster.LocalRegistry.Enabled()
 }
+
+// ResolveRegistryHostForCluster is the exported variant of resolveRegistryHost.
+// It determines the registry host override needed for the given cluster config,
+// returning an empty string when no override is needed.
+func ResolveRegistryHostForCluster(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+) (string, error) {
+	return resolveRegistryHost(ctx, clusterCfg, clusterName)
+}

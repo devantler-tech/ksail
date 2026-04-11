@@ -137,6 +137,45 @@ func (m *ManagerImpl) UpdateTargetRevision(
 	return nil
 }
 
+// GetCurrentTargetRevision returns the Application's current targetRevision.
+// Returns empty string if the Application does not exist.
+func (m *ManagerImpl) GetCurrentTargetRevision(
+	ctx context.Context,
+	applicationName string,
+) (string, error) {
+	if ctx == nil {
+		return "", errNilContext
+	}
+
+	name := applicationName
+	if name == "" {
+		name = defaultApplicationName
+	}
+
+	obj, err := m.dynamic.Resource(applicationGVR()).
+		Namespace(argoCDNamespace).
+		Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", nil
+		}
+
+		return "", fmt.Errorf("get Argo CD Application %s: %w", name, err)
+	}
+
+	rev, found, err := unstructured.NestedString(
+		obj.Object,
+		"spec",
+		"source",
+		"targetRevision",
+	)
+	if err != nil || !found {
+		return "", nil //nolint:nilerr // Missing field is not an error
+	}
+
+	return rev, nil
+}
+
 func (m *ManagerImpl) ensureNamespace(ctx context.Context, name string) error {
 	_, err := m.clientset.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
 	if err == nil {
