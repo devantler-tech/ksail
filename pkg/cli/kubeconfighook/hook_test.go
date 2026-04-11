@@ -134,7 +134,6 @@ func TestIsTokenExpired_TimeBased(t *testing.T) {
 
 		assert.False(t, kubeconfighook.IsTokenExpired(path, ""))
 	})
-
 }
 
 func TestIsTokenExpired_ExplicitContext(t *testing.T) {
