@@ -1263,7 +1263,7 @@ Global Flags:
 ---
 
 [TestWorkloadHelpSnapshots/reconcile - 1]
-Trigger reconciliation/sync and wait for completion. For Flux, waits for the OCIRepository and all Kustomizations in the Flux namespace to become ready. For ArgoCD, waits for the root application.
+Trigger reconciliation/sync and wait for completion. For Flux, tracks the OCIRepository and each Kustomization individually. For ArgoCD, tracks each Application until synced and healthy.
 
 Usage:
   ksail workload reconcile [flags]

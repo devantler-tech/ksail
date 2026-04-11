@@ -139,3 +139,10 @@ func ExportBuildFileSnapshot(dir string) ExportFileSnapshot {
 func ExportDetectChangedFile(dir string, snapshot ExportFileSnapshot) string {
 	return detectChangedFile(dir, snapshot)
 }
+
+// ExportTopologicalSortKustomizations exposes topologicalSortKustomizations for testing.
+func ExportTopologicalSortKustomizations(
+	kustomizations []flux.KustomizationInfo,
+) []flux.KustomizationInfo {
+	return topologicalSortKustomizations(kustomizations)
+}

@@ -55,6 +55,15 @@ func ValidatingLabels() ProgressLabels {
 	}
 }
 
+// ReconcilingLabels returns labels suitable for reconciliation tasks.
+func ReconcilingLabels() ProgressLabels {
+	return ProgressLabels{
+		Pending:   "pending",
+		Running:   "reconciling",
+		Completed: "reconciled",
+	}
+}
+
 // ProgressTask represents a named task to be executed with progress tracking.
 type ProgressTask struct {
 	// Name is the display name of the task (e.g., "metrics-server", "argocd").
@@ -319,7 +328,9 @@ func (pg *ProgressGroup) Run(ctx context.Context, tasks ...ProgressTask) error {
 	}
 
 	// Print title (StageSeparatingWriter handles leading newlines automatically)
-	_, _ = fmt.Fprintf(pg.writer, "%s %s...\n", pg.emoji, pg.title)
+	if pg.title != "" {
+		_, _ = fmt.Fprintf(pg.writer, "%s %s...\n", pg.emoji, pg.title)
+	}
 
 	// Use different modes for TTY vs non-TTY
 	if pg.appendOnly && pg.isTTY {

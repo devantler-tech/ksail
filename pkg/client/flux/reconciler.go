@@ -162,15 +162,17 @@ func (r *Reconciler) TriggerNamedKustomizationReconciliation(
 	)
 }
 
-// KustomizationInfo holds the name and spec.path of a Flux Kustomization CR.
+// KustomizationInfo holds the name, spec.path, and dependency information
+// of a Flux Kustomization CR.
 type KustomizationInfo struct {
-	Name string
-	Path string
+	Name      string
+	Path      string
+	DependsOn []string
 }
 
-// ListKustomizationPaths lists all Flux Kustomization CRs in the default
-// namespace and returns their names and spec.path values.
-func (r *Reconciler) ListKustomizationPaths(
+// ListKustomizations lists all Flux Kustomization CRs in the default
+// namespace and returns their names, spec.path values, and dependency information.
+func (r *Reconciler) ListKustomizations(
 	ctx context.Context,
 ) ([]KustomizationInfo, error) {
 	client := r.kustomizationClient()
@@ -185,11 +187,62 @@ func (r *Reconciler) ListKustomizationPaths(
 	for i := range list.Items {
 		name := list.Items[i].GetName()
 		path, _, _ := unstructured.NestedString(list.Items[i].Object, "spec", "path")
+		dependsOn := parseDependsOn(&list.Items[i])
 
-		infos = append(infos, KustomizationInfo{Name: name, Path: path})
+		infos = append(infos, KustomizationInfo{Name: name, Path: path, DependsOn: dependsOn})
 	}
 
 	return infos, nil
+}
+
+// ListKustomizationPaths lists all Flux Kustomization CRs in the default
+// namespace and returns their names and spec.path values.
+func (r *Reconciler) ListKustomizationPaths(
+	ctx context.Context,
+) ([]KustomizationInfo, error) {
+	return r.ListKustomizations(ctx)
+}
+
+// CheckNamedKustomizationReady performs a single-poll readiness check for
+// a specific Kustomization CR identified by name.
+// Returns (ready, status, error) where status is a human-readable string.
+func (r *Reconciler) CheckNamedKustomizationReady(
+	ctx context.Context,
+	name string,
+) (bool, string, error) {
+	client := r.kustomizationClient()
+
+	kustomization, err := client.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return false, "", fmt.Errorf("get flux kustomization %q: %w", name, err)
+	}
+
+	return checkKustomizationStatus(kustomization)
+}
+
+// parseDependsOn extracts the dependency names from a Kustomization CR's
+// spec.dependsOn field.
+func parseDependsOn(kustomization *unstructured.Unstructured) []string {
+	deps, found, _ := unstructured.NestedSlice(kustomization.Object, "spec", "dependsOn")
+	if !found || len(deps) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(deps))
+
+	for _, dep := range deps {
+		depMap, ok := dep.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		name, _, _ := unstructured.NestedString(depMap, "name")
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+
+	return names
 }
 
 // WaitForKustomizationReady waits for the Kustomization to be ready.

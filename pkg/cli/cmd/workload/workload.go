@@ -33,6 +33,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v6/pkg/client/kustomize"
 	"github.com/devantler-tech/ksail/v6/pkg/client/oci"
+	"github.com/devantler-tech/ksail/v6/pkg/client/reconciler"
 	"github.com/devantler-tech/ksail/v6/pkg/di"
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 	configmanagerinterface "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
@@ -1918,10 +1919,12 @@ var errGitOpsEngineRequired = errors.New(
 
 // Shared constants for reconciliation.
 const (
-	defaultReconcileTimeout = 5 * time.Minute
-	reconcileCmdLong        = "Trigger reconciliation/sync and wait for completion. " +
-		"For Flux, waits for the OCIRepository and all Kustomizations " +
-		"in the Flux namespace to become ready. For ArgoCD, waits for the root application."
+	defaultReconcileTimeout          = 5 * time.Minute
+	fluxKustomizationPollInterval    = 500 * time.Millisecond
+	argoCDApplicationPollInterval    = 500 * time.Millisecond
+	reconcileCmdLong                 = "Trigger reconciliation/sync and wait for completion. " +
+		"For Flux, tracks the OCIRepository and each Kustomization individually. " +
+		"For ArgoCD, tracks each Application until synced and healthy."
 )
 
 // getKubeconfigPath returns the kubeconfig path from config or default.
@@ -2099,57 +2102,61 @@ func executeReconciliation(
 }
 
 // reconcileFlux triggers and waits for Flux reconciliation using the client reconciler.
+// It uses ProgressGroup to show per-resource reconciliation status in real-time.
 func reconcileFlux(
 	cmd *cobra.Command,
 	kubeconfigPath string,
 	timeout time.Duration,
 	outputTimer timer.Timer,
 ) error {
-	reconciler, err := flux.NewReconciler(kubeconfigPath)
+	fluxReconciler, err := flux.NewReconciler(kubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("create flux reconciler: %w", err)
 	}
 
-	writeActivityNotification(
-		"triggering flux oci repository reconciliation",
-		outputTimer,
-		cmd.OutOrStdout(),
-	)
+	writer := cmd.OutOrStdout()
+	deadline := time.Now().Add(timeout)
 
-	err = reconciler.TriggerOCIRepositoryReconciliation(cmd.Context())
+	// Sub-phase 1: OCI source reconciliation
+	writeActivityNotification("reconciling oci source...", outputTimer, writer)
+
+	err = fluxReconciler.TriggerOCIRepositoryReconciliation(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("trigger oci repository reconciliation: %w", err)
 	}
 
-	writeActivityNotification(
-		"waiting for flux oci repository to be ready",
-		outputTimer,
-		cmd.OutOrStdout(),
+	ociGroup := notify.NewProgressGroup(
+		"",
+		"",
+		writer,
+		notify.WithLabels(notify.ReconcilingLabels()),
+		notify.WithTimer(outputTimer),
 	)
 
-	err = reconciler.WaitForOCIRepositoryReady(cmd.Context(), timeout)
+	err = ociGroup.Run(cmd.Context(), notify.ProgressTask{
+		Name: "flux-system",
+		Fn: func(ctx context.Context) error {
+			return fluxReconciler.WaitForOCIRepositoryReady(ctx, timeout)
+		},
+	})
 	if err != nil {
-		return fmt.Errorf("wait for oci repository ready: %w", err)
+		return fmt.Errorf("reconcile oci source: %w", err)
 	}
 
-	writeActivityNotification(
-		"triggering flux kustomization reconciliation",
-		outputTimer,
-		cmd.OutOrStdout(),
-	)
+	// Sub-phase 2: Kustomization reconciliation with per-resource tracking
+	writeActivityNotification("reconciling kustomizations...", outputTimer, writer)
 
-	err = reconciler.TriggerKustomizationReconciliation(cmd.Context())
+	err = fluxReconciler.TriggerKustomizationReconciliation(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("trigger kustomization reconciliation: %w", err)
 	}
 
-	writeActivityNotification(
-		"waiting for flux kustomization to reconcile",
-		outputTimer,
-		cmd.OutOrStdout(),
-	)
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return fmt.Errorf("reconcile kustomizations: %w", flux.ErrReconcileTimeout)
+	}
 
-	err = waitForAllFluxKustomizations(cmd, reconciler, timeout, outputTimer)
+	err = reconcileFluxKustomizationsWithProgress(cmd, fluxReconciler, remaining, outputTimer)
 	if err != nil {
 		return err
 	}
@@ -2157,77 +2164,295 @@ func reconcileFlux(
 	return nil
 }
 
-// waitForAllFluxKustomizations waits for the root kustomization and then all
-// downstream kustomizations to become ready within a single shared deadline.
-func waitForAllFluxKustomizations(
+// reconcileFluxKustomizationsWithProgress lists all Flux Kustomizations, sorts
+// them in topological (dependency) order, and monitors each individually using
+// a ProgressGroup. Flux's controller handles the actual dependency-driven
+// triggering; we just poll and display status.
+func reconcileFluxKustomizationsWithProgress(
 	cmd *cobra.Command,
-	reconciler *flux.Reconciler,
+	fluxReconciler *flux.Reconciler,
 	timeout time.Duration,
 	outputTimer timer.Timer,
 ) error {
-	// Create a single deadline so that WaitForKustomizationReady +
-	// WaitForAllKustomizationsReady together respect the user-configured timeout.
-	deadline := time.Now().Add(timeout)
-
-	err := reconciler.WaitForKustomizationReady(cmd.Context(), timeout)
+	kustomizations, err := fluxReconciler.ListKustomizations(cmd.Context())
 	if err != nil {
-		return fmt.Errorf("wait for kustomization ready: %w", err)
+		return fmt.Errorf("list kustomizations: %w", err)
 	}
 
-	writeActivityNotification(
-		"waiting for all flux kustomizations to reconcile",
-		outputTimer,
+	if len(kustomizations) == 0 {
+		return nil
+	}
+
+	sorted := topologicalSortKustomizations(kustomizations)
+
+	tasks := make([]notify.ProgressTask, 0, len(sorted))
+	for _, ks := range sorted {
+		name := ks.Name
+		tasks = append(tasks, notify.ProgressTask{
+			Name: name,
+			Fn: func(ctx context.Context) error {
+				return pollUntilKustomizationReady(ctx, fluxReconciler, name, timeout)
+			},
+		})
+	}
+
+	ksGroup := notify.NewProgressGroup(
+		"",
+		"",
 		cmd.OutOrStdout(),
+		notify.WithLabels(notify.ReconcilingLabels()),
+		notify.WithTimer(outputTimer),
+		notify.WithContinueOnError(),
+		notify.WithAppendOnly(),
+		notify.WithCountLabel("kustomizations"),
 	)
 
-	remaining := time.Until(deadline)
-	if remaining <= 0 {
-		return fmt.Errorf("wait for all kustomizations ready: %w", flux.ErrReconcileTimeout)
-	}
-
-	err = reconciler.WaitForAllKustomizationsReady(cmd.Context(), remaining)
+	err = ksGroup.Run(cmd.Context(), tasks...)
 	if err != nil {
-		return fmt.Errorf("wait for all kustomizations ready: %w", err)
+		return fmt.Errorf("reconcile kustomizations: %w", err)
 	}
 
 	return nil
 }
 
+// pollUntilKustomizationReady polls a named Flux Kustomization until it is
+// ready or the timeout expires. On permanent failure, it returns an actionable
+// error including the resource name and failure reason.
+func pollUntilKustomizationReady(
+	ctx context.Context,
+	fluxReconciler *flux.Reconciler,
+	name string,
+	timeout time.Duration,
+) error {
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(fluxKustomizationPollInterval)
+	defer ticker.Stop()
+
+	var lastStatus string
+
+	for {
+		ready, status, err := fluxReconciler.CheckNamedKustomizationReady(timeoutCtx, name)
+		if err != nil {
+			if reconciler.IsContextError(err) {
+				return kustomizationReadinessTimeoutError(name, lastStatus)
+			}
+
+			return fmt.Errorf("kustomization %q: %w", name, err)
+		}
+
+		if ready {
+			return nil
+		}
+
+		lastStatus = status
+
+		select {
+		case <-timeoutCtx.Done():
+			return kustomizationReadinessTimeoutError(name, lastStatus)
+		case <-ticker.C:
+		}
+	}
+}
+
+// kustomizationReadinessTimeoutError returns an actionable error for a
+// kustomization that did not become ready within the timeout.
+func kustomizationReadinessTimeoutError(name, lastStatus string) error {
+	if lastStatus != "" {
+		return fmt.Errorf(
+			"timeout waiting for kustomization %q to reconcile (last status: %s) — "+
+				"check Flux controller logs and kustomization status with "+
+				"'ksail workload get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system'",
+			name, lastStatus,
+		)
+	}
+
+	return fmt.Errorf(
+		"timeout waiting for kustomization %q to reconcile — "+
+			"check Flux controller logs and kustomization status with "+
+			"'ksail workload get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system'",
+		name,
+	)
+}
+
+// topologicalSortKustomizations returns kustomizations in topological order
+// (dependencies before dependents) for display purposes.
+// Uses Kahn's algorithm. If cycles are detected, remaining items are appended
+// in their original order so the ProgressGroup still shows all resources.
+func topologicalSortKustomizations(
+	kustomizations []flux.KustomizationInfo,
+) []flux.KustomizationInfo {
+	if len(kustomizations) <= 1 {
+		return kustomizations
+	}
+
+	byName := make(map[string]flux.KustomizationInfo, len(kustomizations))
+	inDegree := make(map[string]int, len(kustomizations))
+
+	for _, ks := range kustomizations {
+		byName[ks.Name] = ks
+		inDegree[ks.Name] = 0
+	}
+
+	for _, ks := range kustomizations {
+		for _, dep := range ks.DependsOn {
+			if _, exists := byName[dep]; exists {
+				inDegree[ks.Name]++
+			}
+		}
+	}
+
+	// Seed queue with zero-indegree nodes
+	queue := make([]string, 0, len(kustomizations))
+	for _, ks := range kustomizations {
+		if inDegree[ks.Name] == 0 {
+			queue = append(queue, ks.Name)
+		}
+	}
+
+	sorted := make([]flux.KustomizationInfo, 0, len(kustomizations))
+
+	for len(queue) > 0 {
+		name := queue[0]
+		queue = queue[1:]
+		sorted = append(sorted, byName[name])
+
+		for _, ks := range kustomizations {
+			if !slices.Contains(ks.DependsOn, name) {
+				continue
+			}
+
+			inDegree[ks.Name]--
+
+			if inDegree[ks.Name] == 0 {
+				queue = append(queue, ks.Name)
+			}
+		}
+	}
+
+	// Append any remaining items (cycle protection)
+	if len(sorted) < len(kustomizations) {
+		for _, ks := range kustomizations {
+			if inDegree[ks.Name] > 0 {
+				sorted = append(sorted, ks)
+			}
+		}
+	}
+
+	return sorted
+}
+
 // reconcileArgoCD triggers and waits for ArgoCD application sync using the client reconciler.
+// It uses ProgressGroup to show per-application reconciliation status in real-time.
 func reconcileArgoCD(
 	cmd *cobra.Command,
 	kubeconfigPath string,
 	timeout time.Duration,
 	outputTimer timer.Timer,
 ) error {
-	reconciler, err := argocd.NewReconciler(kubeconfigPath)
+	argoReconciler, err := argocd.NewReconciler(kubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("create argocd reconciler: %w", err)
 	}
 
-	writeActivityNotification(
-		"triggering argocd application refresh",
-		outputTimer,
-		cmd.OutOrStdout(),
-	)
+	writer := cmd.OutOrStdout()
 
-	err = reconciler.TriggerRefresh(cmd.Context(), true) // Always hard refresh
+	// Sub-phase 1: Trigger refresh
+	writeActivityNotification("triggering argocd refresh...", outputTimer, writer)
+
+	err = argoReconciler.TriggerRefresh(cmd.Context(), true) // Always hard refresh
 	if err != nil {
 		return fmt.Errorf("trigger argocd refresh: %w", err)
 	}
 
-	writeActivityNotification(
-		"waiting for argocd application to sync",
-		outputTimer,
-		cmd.OutOrStdout(),
+	// Sub-phase 2: Monitor all applications with per-app tracking
+	writeActivityNotification("reconciling argocd applications...", outputTimer, writer)
+
+	apps, err := argoReconciler.ListApplications(cmd.Context())
+	if err != nil {
+		return fmt.Errorf("list argocd applications: %w", err)
+	}
+
+	if len(apps) == 0 {
+		return nil
+	}
+
+	tasks := make([]notify.ProgressTask, 0, len(apps))
+	for _, app := range apps {
+		name := app.Name
+		tasks = append(tasks, notify.ProgressTask{
+			Name: name,
+			Fn: func(ctx context.Context) error {
+				return pollUntilApplicationReady(ctx, argoReconciler, name, timeout)
+			},
+		})
+	}
+
+	appGroup := notify.NewProgressGroup(
+		"",
+		"",
+		writer,
+		notify.WithLabels(notify.ReconcilingLabels()),
+		notify.WithTimer(outputTimer),
+		notify.WithContinueOnError(),
+		notify.WithAppendOnly(),
+		notify.WithCountLabel("applications"),
 	)
 
-	err = reconciler.WaitForApplicationReady(cmd.Context(), timeout)
+	err = appGroup.Run(cmd.Context(), tasks...)
 	if err != nil {
-		return fmt.Errorf("wait for argocd application ready: %w", err)
+		return fmt.Errorf("reconcile argocd applications: %w", err)
 	}
 
 	return nil
+}
+
+// pollUntilApplicationReady polls a named ArgoCD Application until it is
+// synced and healthy, or the timeout expires. On permanent failure, it returns
+// an actionable error including the resource name and failure details.
+func pollUntilApplicationReady(
+	ctx context.Context,
+	argoReconciler *argocd.Reconciler,
+	name string,
+	timeout time.Duration,
+) error {
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(argoCDApplicationPollInterval)
+	defer ticker.Stop()
+
+	for {
+		ready, err := argoReconciler.CheckNamedApplicationReady(timeoutCtx, name)
+		if err != nil {
+			if reconciler.IsContextError(err) {
+				return fmt.Errorf(
+					"timeout waiting for argocd application %q to sync — "+
+						"check ArgoCD application status with "+
+						"'ksail workload get applications.argoproj.io -n argocd'",
+					name,
+				)
+			}
+
+			return fmt.Errorf("argocd application %q: %w", name, err)
+		}
+
+		if ready {
+			return nil
+		}
+
+		select {
+		case <-timeoutCtx.Done():
+			return fmt.Errorf(
+				"timeout waiting for argocd application %q to sync — "+
+					"check ArgoCD application status with "+
+					"'ksail workload get applications.argoproj.io -n argocd'",
+				name,
+			)
+		case <-ticker.C:
+		}
+	}
 }
 
 // NewRolloutCmd creates the workload rollout command.

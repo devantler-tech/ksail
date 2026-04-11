@@ -130,6 +130,58 @@ func (r *Reconciler) WaitForApplicationReady(ctx context.Context, timeout time.D
 	}
 }
 
+// ApplicationInfo holds the name of an ArgoCD Application CR.
+type ApplicationInfo struct {
+	Name string
+}
+
+// ListApplications lists all ArgoCD Application CRs in the argocd namespace.
+func (r *Reconciler) ListApplications(
+	ctx context.Context,
+) ([]ApplicationInfo, error) {
+	client := r.applicationClient()
+
+	list, err := client.List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list argocd applications: %w", err)
+	}
+
+	infos := make([]ApplicationInfo, 0, len(list.Items))
+
+	for i := range list.Items {
+		infos = append(infos, ApplicationInfo{Name: list.Items[i].GetName()})
+	}
+
+	return infos, nil
+}
+
+// CheckNamedApplicationReady performs a single-poll readiness check for
+// a specific ArgoCD Application CR identified by name.
+// Returns (ready, error) where error is non-nil for permanent failures.
+func (r *Reconciler) CheckNamedApplicationReady(
+	ctx context.Context,
+	name string,
+) (bool, error) {
+	client := r.applicationClient()
+
+	app, err := client.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return false, fmt.Errorf("get argocd application %q: %w", name, err)
+	}
+
+	err = r.checkOperationState(app)
+	if err != nil {
+		return false, err
+	}
+
+	err = r.checkConditions(app)
+	if err != nil {
+		return false, err
+	}
+
+	return isApplicationSynced(app), nil
+}
+
 // pollApplicationStatus checks application status with timeout guard.
 // It returns (ready, nil) on success, (false, nil) when not yet ready,
 // or (false, err) for permanent/timeout errors.
