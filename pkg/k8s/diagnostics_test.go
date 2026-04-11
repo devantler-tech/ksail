@@ -2,7 +2,7 @@ package k8s_test
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/k8s"
@@ -14,6 +14,9 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
+var errConnectionRefused = errors.New("connection refused")
+
+//nolint:funlen // Table-driven cases are verbose; keep assertions straightforward.
 func TestDiagnosePodFailures(t *testing.T) {
 	t.Parallel()
 
@@ -175,20 +178,20 @@ func TestDiagnosePodFailures(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			clientset := k8sfake.NewClientset(objectsToRuntimeObjects(tc.pods)...)
+			clientset := k8sfake.NewClientset(objectsToRuntimeObjects(testCase.pods)...)
 
-			result := k8s.DiagnosePodFailures(context.Background(), clientset, tc.namespaces)
+			result := k8s.DiagnosePodFailures(context.Background(), clientset, testCase.namespaces)
 
-			if tc.wantEmpty {
+			if testCase.wantEmpty {
 				assert.Empty(t, result, "expected empty diagnostic output")
 			} else {
 				assert.NotEmpty(t, result, "expected non-empty diagnostic output")
 
-				for _, want := range tc.wantContain {
+				for _, want := range testCase.wantContain {
 					assert.Contains(t, result, want)
 				}
 			}
@@ -201,7 +204,7 @@ func TestDiagnosePodFailures_ListError(t *testing.T) {
 
 	clientset := k8sfake.NewClientset()
 	clientset.PrependReactor("list", "pods", func(_ k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("connection refused")
+		return true, nil, errConnectionRefused
 	})
 
 	result := k8s.DiagnosePodFailures(context.Background(), clientset, []string{"default"})
