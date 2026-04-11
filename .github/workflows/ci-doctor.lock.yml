@@ -99,11 +99,6 @@ jobs:
       secret_verification_result: ${{ steps.validate-secret.outputs.verification_result }}
       setup-trace-id: ${{ steps.setup.outputs.trace-id }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
-        with:
-          egress-policy: audit
-
       - name: Setup Scripts
         id: setup
         uses: github/gh-aw-actions/setup@addd8a8bc8bad66050cec907c7bf182cca4d2e69 # v0.67.1
@@ -356,11 +351,6 @@ jobs:
       output_types: ${{ steps.collect_output.outputs.output_types }}
       setup-trace-id: ${{ steps.setup.outputs.trace-id }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
-        with:
-          egress-policy: audit
-
       - name: Setup Scripts
         id: setup
         uses: github/gh-aw-actions/setup@addd8a8bc8bad66050cec907c7bf182cca4d2e69 # v0.67.1
@@ -931,11 +921,6 @@ jobs:
       tools_reported: ${{ steps.missing_tool.outputs.tools_reported }}
       total_count: ${{ steps.missing_tool.outputs.total_count }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
-        with:
-          egress-policy: audit
-
       - name: Setup Scripts
         id: setup
         uses: github/gh-aw-actions/setup@addd8a8bc8bad66050cec907c7bf182cca4d2e69 # v0.67.1
@@ -1049,11 +1034,6 @@ jobs:
       detection_conclusion: ${{ steps.detection_conclusion.outputs.conclusion }}
       detection_success: ${{ steps.detection_conclusion.outputs.success }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
-        with:
-          egress-policy: audit
-
       - name: Setup Scripts
         id: setup
         uses: github/gh-aw-actions/setup@addd8a8bc8bad66050cec907c7bf182cca4d2e69 # v0.67.1
@@ -1199,11 +1179,6 @@ jobs:
       matched_command: ""
       setup-trace-id: ${{ steps.setup.outputs.trace-id }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
-        with:
-          egress-policy: audit
-
       - name: Setup Scripts
         id: setup
         uses: github/gh-aw-actions/setup@addd8a8bc8bad66050cec907c7bf182cca4d2e69 # v0.67.1
@@ -1270,11 +1245,6 @@ jobs:
       process_safe_outputs_processed_count: ${{ steps.process_safe_outputs.outputs.processed_count }}
       process_safe_outputs_temporary_id_map: ${{ steps.process_safe_outputs.outputs.temporary_id_map }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
-        with:
-          egress-policy: audit
-
       - name: Setup Scripts
         id: setup
         uses: github/gh-aw-actions/setup@addd8a8bc8bad66050cec907c7bf182cca4d2e69 # v0.67.1
@@ -1342,11 +1312,6 @@ jobs:
     env:
       GH_AW_WORKFLOW_ID_SANITIZED: cidoctor
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
-        with:
-          egress-policy: audit
-
       - name: Setup Scripts
         id: setup
         uses: github/gh-aw-actions/setup@addd8a8bc8bad66050cec907c7bf182cca4d2e69 # v0.67.1
