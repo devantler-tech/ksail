@@ -86,17 +86,27 @@ func describePodFailure(pod *corev1.Pod) string {
 	// Check container statuses for waiting reasons (ImagePullBackOff, CrashLoopBackOff, etc.)
 	for _, container := range pod.Status.ContainerStatuses {
 		if container.State.Waiting != nil && container.State.Waiting.Reason != "" {
-			return fmt.Sprintf(
+			desc := fmt.Sprintf(
 				"%s: %s for %s",
 				pod.Name, container.State.Waiting.Reason, container.Image,
 			)
+			if container.RestartCount > 0 {
+				desc += fmt.Sprintf(" (%d restarts)", container.RestartCount)
+			}
+
+			return desc
 		}
 
 		if container.State.Terminated != nil && container.State.Terminated.ExitCode != 0 {
-			return fmt.Sprintf(
+			desc := fmt.Sprintf(
 				"%s: terminated with exit code %d (%s)",
 				pod.Name, container.State.Terminated.ExitCode, container.State.Terminated.Reason,
 			)
+			if container.RestartCount > 0 {
+				desc += fmt.Sprintf(" (%d restarts)", container.RestartCount)
+			}
+
+			return desc
 		}
 	}
 

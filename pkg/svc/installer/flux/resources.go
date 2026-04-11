@@ -13,6 +13,7 @@ import (
 	registry "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -47,9 +48,12 @@ var (
 	// fluxAPIAvailabilityTimeout is the maximum time to wait for Flux CRDs/APIs to become
 	// available during installation. This timeout should balance quick feedback for errors
 	// with enough time for slower environments like Talos on GitHub Actions, where CRD
-	// registration and API discovery can take longer to stabilize. 8 minutes aligns with
-	// other component timeouts (Kyverno 10m, CertManager 10m, Gatekeeper 7m).
-	fluxAPIAvailabilityTimeout      = 8 * time.Minute
+	// registration and API discovery can take longer to stabilize. 12 minutes matches the
+	// FluxInstallTimeout and provides sufficient headroom for complex setups (e.g.,
+	// Cilium+Kyverno+cert-manager+Flux on Talos) where Flux controllers may take longer
+	// to start due to resource contention or transient networking instability.
+	// See: https://github.com/devantler-tech/ksail/issues/3937
+	fluxAPIAvailabilityTimeout      = 12 * time.Minute
 	fluxAPIAvailabilityPollInterval = 2 * time.Second
 )
 
@@ -162,7 +166,9 @@ func EnsureDefaultResources(
 
 		err = fluxMgr.waitForReady(ctx)
 		if err != nil {
-			return fmt.Errorf("failed waiting for FluxInstance to be ready: %w", err)
+			diag := diagnoseFluxPodFailures(ctx, restConfig)
+
+			return fmt.Errorf("failed waiting for FluxInstance to be ready: %w%s", err, diag)
 		}
 	}
 
@@ -229,7 +235,9 @@ func WaitForFluxReady(
 
 	err = fluxMgr.waitForReady(ctx)
 	if err != nil {
-		return fmt.Errorf("failed waiting for FluxInstance to be ready: %w", err)
+		diag := diagnoseFluxPodFailures(ctx, restConfig)
+
+		return fmt.Errorf("failed waiting for FluxInstance to be ready: %w%s", err, diag)
 	}
 
 	return nil
@@ -303,6 +311,22 @@ func ResolveDesiredTag(clusterCfg *v1alpha1.Cluster) string {
 	}
 
 	return tag
+}
+
+// diagnoseFluxPodFailures checks pods in the flux-system namespace and returns
+// a diagnostic summary of any failing pods. This helps identify issues like
+// CrashLoopBackOff in Flux controllers when FluxInstance readiness times out.
+func diagnoseFluxPodFailures(ctx context.Context, restConfig *rest.Config) string {
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return ""
+	}
+
+	// Use a short timeout for diagnostics to avoid blocking on a degraded API server.
+	diagCtx, cancel := context.WithTimeout(ctx, 10*time.Second) //nolint:mnd // diagnostic timeout
+	defer cancel()
+
+	return k8s.DiagnosePodFailures(diagCtx, clientset, []string{fluxclient.DefaultNamespace})
 }
 
 // ensureLocalRegistryInsecureIfNeeded patches OCIRepository with insecure: true only for

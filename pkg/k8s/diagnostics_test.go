@@ -117,6 +117,30 @@ func TestDiagnosePodFailures(t *testing.T) {
 			wantContain: []string{"crash-pod", "CrashLoopBackOff", "myapp:v1"},
 		},
 		{
+			name:       "pod with CrashLoopBackOff includes restart count",
+			namespaces: []string{"default"},
+			pods: []corev1.Pod{
+				makePod("crash-pod-restarts", "default", corev1.PodRunning, []corev1.ContainerStatus{
+					{
+						Ready: false,
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{
+								Reason: "CrashLoopBackOff",
+							},
+						},
+						Image:        "ghcr.io/fluxcd/notification-controller:v1.8.3",
+						RestartCount: 7,
+					},
+				}, nil),
+			},
+			wantContain: []string{
+				"crash-pod-restarts",
+				"CrashLoopBackOff",
+				"notification-controller:v1.8.3",
+				"7 restarts",
+			},
+		},
+		{
 			name:       "pod terminated with non-zero exit code is reported",
 			namespaces: []string{"default"},
 			pods: []corev1.Pod{
@@ -133,6 +157,25 @@ func TestDiagnosePodFailures(t *testing.T) {
 				}, nil),
 			},
 			wantContain: []string{"terminated-pod", "exit code 1"},
+		},
+		{
+			name:       "terminated container includes restart count",
+			namespaces: []string{"default"},
+			pods: []corev1.Pod{
+				makePod("terminated-restarts", "default", corev1.PodFailed, []corev1.ContainerStatus{
+					{
+						Ready: false,
+						State: corev1.ContainerState{
+							Terminated: &corev1.ContainerStateTerminated{
+								ExitCode: 2,
+								Reason:   "Error",
+							},
+						},
+						RestartCount: 3,
+					},
+				}, nil),
+			},
+			wantContain: []string{"terminated-restarts", "exit code 2", "3 restarts"},
 		},
 		{
 			name:       "pod with failing init container is reported",
