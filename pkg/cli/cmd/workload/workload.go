@@ -33,7 +33,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v6/pkg/client/kustomize"
 	"github.com/devantler-tech/ksail/v6/pkg/client/oci"
-	"github.com/devantler-tech/ksail/v6/pkg/client/reconciler"
+	reconcilerclient "github.com/devantler-tech/ksail/v6/pkg/client/reconciler"
 	"github.com/devantler-tech/ksail/v6/pkg/di"
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 	configmanagerinterface "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
@@ -2235,7 +2235,7 @@ func pollUntilKustomizationReady(
 	for {
 		ready, status, err := fluxReconciler.CheckNamedKustomizationReady(ctx, name)
 		if err != nil {
-			if reconciler.IsContextError(err) {
+			if reconcilerclient.IsContextError(err) {
 				if ctx.Err() == context.Canceled {
 					return ctx.Err() //nolint:wrapcheck // propagate cancellation as-is
 				}
@@ -2423,7 +2423,7 @@ func pollUntilApplicationReady(
 	for {
 		ready, err := argoReconciler.CheckNamedApplicationReady(ctx, name)
 		if err != nil {
-			if reconciler.IsContextError(err) {
+			if reconcilerclient.IsContextError(err) {
 				if ctx.Err() == context.Canceled {
 					return ctx.Err() //nolint:wrapcheck // propagate cancellation as-is
 				}
