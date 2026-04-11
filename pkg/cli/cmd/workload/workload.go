@@ -463,20 +463,20 @@ func runInteractiveDockerExec(
 
 // setupRawTerminal sets the terminal to raw mode and returns a restore function.
 func setupRawTerminal() (func(), error) {
-	fd := int(os.Stdin.Fd()) //nolint:gosec
+	stdinFd := int(os.Stdin.Fd()) //nolint:gosec
 
-	if !term.IsTerminal(fd) {
+	if !term.IsTerminal(stdinFd) {
 		return func() {}, nil
 	}
 
-	oldState, termErr := term.MakeRaw(fd)
+	oldState, termErr := term.MakeRaw(stdinFd)
 	if termErr != nil {
 		return nil, fmt.Errorf("set terminal to raw mode: %w", termErr)
 	}
 
 	return func() {
 		if oldState != nil {
-			_ = term.Restore(fd, oldState)
+			_ = term.Restore(stdinFd, oldState)
 		}
 	}, nil
 }

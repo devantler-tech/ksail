@@ -26,7 +26,7 @@ const stdinBufSize = 1024
 // debugStream abstracts the bidirectional streaming interface for debug container
 // communication, avoiding a direct dependency on google.golang.org/grpc types.
 type debugStream interface {
-	Send(*machine.DebugContainerRunRequest) error
+	Send(request *machine.DebugContainerRunRequest) error
 	Recv() (*machine.DebugContainerRunResponse, error)
 	CloseSend() error
 }
@@ -96,7 +96,7 @@ func pullImageOnTalosNode(
 	return imageRef, nil
 }
 
-//nolint:cyclop,gocognit
+//nolint:gocognit
 func streamDebugContainer(
 	ctx context.Context,
 	cancel context.CancelFunc,
