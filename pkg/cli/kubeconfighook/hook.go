@@ -20,6 +20,8 @@ import (
 	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -35,16 +37,29 @@ const (
 	// (header.payload.signature). Requiring exactly 3 prevents non-JWT
 	// bearer tokens that happen to contain a dot from being parsed.
 	jwtParts = 3
+
+	// staleCheckTimeout is the timeout for the lightweight API health check
+	// used to detect stale kubeconfigs (e.g., after cluster recreation).
+	staleCheckTimeout = 3 * time.Second
 )
 
 // MaybeRefreshOmniKubeconfig checks whether the current kubeconfig's service-account
-// token is expired for Omni-managed clusters and transparently refreshes it.
+// token is expired or stale for Omni-managed clusters and transparently refreshes it.
 //
 // This function is designed to be called from Cobra PersistentPreRunE hooks.
-// It is a fast no-op (~1ms) when:
+// It is a fast no-op when:
 //   - No KSail config is found or the provider is not Omni
 //   - The kubeconfig file does not exist yet (e.g., before cluster create)
-//   - The token is still valid
+//
+// For Omni clusters with an existing kubeconfig, this function first checks
+// JWT token expiry (~1ms, local-only). If the token is still valid, a
+// lightweight API server probe (up to staleCheckTimeout) detects credentials
+// that are structurally valid but rejected by a recreated cluster.
+//
+// Refresh is triggered when:
+//   - The JWT token in the kubeconfig is expired or about to expire
+//   - The kubeconfig credentials are rejected by the API server (e.g., after
+//     cluster recreation with the same name)
 //
 // On refresh failure, a warning is logged but the error is not propagated —
 // the command proceeds with the existing kubeconfig.
@@ -54,7 +69,18 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 		return
 	}
 
-	if !IsTokenExpired(canonicalPath) {
+	kubeconfigContext := cfg.Spec.Cluster.Connection.Context
+
+	needsRefresh := IsTokenExpired(canonicalPath, kubeconfigContext)
+
+	// When the token is not expired, check if the credentials are still
+	// accepted by the API server. After cluster recreation the token may
+	// be structurally valid (not expired) but rejected by the new cluster.
+	if !needsRefresh {
+		needsRefresh = IsKubeconfigStale(canonicalPath, kubeconfigContext)
+	}
+
+	if !needsRefresh {
 		return
 	}
 
@@ -65,7 +91,7 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 
 	// Determine the desired kubeconfig context name.
 	// If explicitly configured, use that; otherwise derive from the Talos convention.
-	desiredContext := cfg.Spec.Cluster.Connection.Context
+	desiredContext := kubeconfigContext
 	if desiredContext == "" {
 		desiredContext = cfg.Spec.Cluster.Distribution.ContextName(clusterName)
 	}
@@ -294,19 +320,68 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-// IsTokenExpired checks whether the bearer token in the kubeconfig's current
+// IsKubeconfigStale performs a lightweight API server health check to detect
+// kubeconfigs with valid (non-expired) tokens that are rejected by the server.
+// This happens when a cluster is recreated with the same name — the old token
+// is structurally valid but the new cluster does not accept it.
+//
+// Returns true when:
+//   - The kubeconfig cannot be loaded or the configured context is missing
+//     (subsequent K8s operations would fail anyway, so a refresh is warranted)
+//   - The API server explicitly rejects the credentials (HTTP 401/403)
+//
+// Returns false when:
+//   - The API server responds successfully (credentials are valid)
+//   - A non-auth error occurs (connection refused, timeout, TLS errors) —
+//     the cluster is simply unreachable, not necessarily using stale credentials
+func IsKubeconfigStale(kubeconfigPath, kubeconfigContext string) bool {
+	restConfig, err := k8s.BuildRESTConfig(kubeconfigPath, kubeconfigContext)
+	if err != nil {
+		// The kubeconfig cannot be loaded or the configured context is
+		// missing. A refresh is warranted since downstream operations
+		// using this kubeconfig would fail.
+		return true
+	}
+
+	restConfig.Timeout = staleCheckTimeout
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		// The REST config is unusable (e.g., missing cert/key files,
+		// invalid host). A refresh is warranted since downstream
+		// operations would fail with the same config.
+		return true
+	}
+
+	_, err = clientset.Discovery().ServerVersion()
+	if err == nil {
+		return false
+	}
+
+	return apierrors.IsUnauthorized(err) || apierrors.IsForbidden(err)
+}
+
+// IsTokenExpired checks whether the bearer token in the kubeconfig's specified
 // context has expired (or will expire within the expiryBuffer).
+//
+// When kubeconfigContext is non-empty, the token for that context is checked.
+// When empty, the kubeconfig's CurrentContext is used.
 //
 // Returns false (not expired) when the kubeconfig cannot be parsed, has no
 // token, or the token is not a JWT — erring on the side of not refreshing
 // unnecessarily.
-func IsTokenExpired(kubeconfigPath string) bool {
+func IsTokenExpired(kubeconfigPath, kubeconfigContext string) bool {
 	cfg, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
 		return false
 	}
 
-	currentCtx, contextExists := cfg.Contexts[cfg.CurrentContext]
+	contextName := kubeconfigContext
+	if contextName == "" {
+		contextName = cfg.CurrentContext
+	}
+
+	currentCtx, contextExists := cfg.Contexts[contextName]
 	if !contextExists {
 		return false
 	}
