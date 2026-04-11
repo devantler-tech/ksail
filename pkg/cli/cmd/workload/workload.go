@@ -312,7 +312,15 @@ func runHostDebug(cmd *cobra.Command, nodeName string, args []string) error {
 
 	switch info.Distribution {
 	case v1alpha1.DistributionTalos:
-		return runTalosHostDebugFromInfo(cmd, info, kubeconfigPath, contextName, nodeName, debugImage, args)
+		return runTalosHostDebugFromInfo(
+			cmd,
+			info,
+			kubeconfigPath,
+			contextName,
+			nodeName,
+			debugImage,
+			args,
+		)
 	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s, v1alpha1.DistributionVCluster:
 		if info.Provider != v1alpha1.ProviderDocker {
 			return fmt.Errorf(
@@ -344,7 +352,13 @@ func runTalosHostDebugFromInfo(
 		talosconfigPath = "~/.talos/config"
 	}
 
-	nodeEndpoint, err := resolveTalosNodeEndpoint(cmd.Context(), info, kubeconfigPath, contextName, nodeName)
+	nodeEndpoint, err := resolveTalosNodeEndpoint(
+		cmd.Context(),
+		info,
+		kubeconfigPath,
+		contextName,
+		nodeName,
+	)
 	if err != nil {
 		return err
 	}
