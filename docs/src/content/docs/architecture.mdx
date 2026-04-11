@@ -159,53 +159,16 @@ Vanilla (Kind) and K3s (K3d) don't expose cluster config via API, so KSail persi
 
 ## AI Integration
 
-KSail provides two AI interfaces:
+KSail provides two AI interfaces built on top of the same CLI tool infrastructure:
 
-### Chat Assistant
-
-**Command:** `ksail chat`
-
-Uses GitHub Copilot SDK for interactive cluster configuration and troubleshooting. Supports two modes: **Agent** (`</>`) with full tool execution and **Plan** (`≡`) for describing steps without executing. Authenticated via `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN`. See [AI Chat](/ai-chat/) for full documentation.
-
-### MCP Server
-
-**Command:** `ksail mcp`
-
-Exposes KSail as a Model Context Protocol server for Claude and other AI assistants. Tools are auto-generated from the CLI command tree — most runnable user-facing commands are automatically exposed as tools, excluding certain internal/meta commands, and grouped into read/write pairs: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, and `cipher_write`. Adding a new CLI command automatically makes it available as an MCP tool. See [MCP](/mcp/) for setup instructions.
-
-## Testing Strategy
-
-KSail uses unit tests (`go test ./...`), integration tests against real clusters, system tests on Linux via CI, and benchmarks (`go test -bench=. -benchmem ./...`). See [Development Guide](/development/#testing-patterns) for patterns and examples.
-
-## Configuration Management
-
-KSail uses a declarative configuration model:
-
-### Configuration Files
-
-1. **`ksail.yaml`** — Cluster metadata, component selection (CNI, CSI, metrics-server, etc.), GitOps engine, mirror registries, and distribution-specific settings
-2. **Distribution configs** — `kind.yaml` (Vanilla), `k3d.yaml` (K3s), `talos/` patches, `vcluster.yaml` (VCluster)
-3. **`k8s/` directory** — Kubernetes manifests (Deployments, Services, ConfigMaps, Kustomize overlays)
-
-### Schema Validation
-
-JSON schemas provide editor autocomplete and validation:
-
-**Generate schemas:** `go generate ./schemas/...`
-
-**Location:** `schemas/ksail-config.schema.json`
-
-**VSCode integration:** Automatic via `.vscode/settings.json`
-
-### Configuration Loading
-
-KSail loads `ksail.yaml`, merges it with distribution-specific configuration and defaults according to a defined precedence (defaults &lt; config files &lt; environment variables &lt; CLI flags), validates the combined result, and returns a strongly-typed cluster configuration object.
+- **`ksail chat`** — interactive AI assistant using GitHub Copilot SDK; supports Agent and Plan modes. See [AI Chat](/ai-chat/).
+- **`ksail mcp`** — Model Context Protocol server for Claude and other AI assistants; tools are auto-generated from the CLI command tree and grouped into read/write pairs. See [MCP](/mcp/).
 
 ## Further Reading
 
-- [Development Guide](/development/) — Build commands, release process, coding standards, testing, and CI/CD
-- [Contributing](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md) — Dev setup, coding standards, and PR process
+- [Configuration](/configuration/) — Declarative configuration, sources, and precedence
 - [Concepts](/concepts/) — High-level concepts and mental models
-- [Configuration](/configuration/) — Detailed configuration reference
+- [Development Guide](/development/) — Build commands, coding standards, testing patterns, and CI/CD
+- [Contributing](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md) — Dev setup and PR process
 - [CLI Flags](/cli-flags/) — Complete CLI reference
 - [GitHub Repository](https://github.com/devantler-tech/ksail) — Source code and issues
