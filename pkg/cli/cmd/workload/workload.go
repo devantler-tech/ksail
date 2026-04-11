@@ -48,6 +48,7 @@ import (
 	dockertypes "github.com/docker/docker/api/types"
 	dockercontainer "github.com/docker/docker/api/types/container"
 	dockerclient "github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -458,7 +459,7 @@ func runInteractiveDockerExec(
 		defer restoreFunc()
 	}
 
-	pipeDockerExecStreams(&resp)
+	pipeDockerExecStreams(&resp, isTTY)
 
 	return checkExecExitCode(ctx, dockerClient, execID.ID)
 }
@@ -484,7 +485,8 @@ func setupRawTerminal() (func(), error) {
 }
 
 // pipeDockerExecStreams pipes stdin/stdout between the terminal and Docker exec.
-func pipeDockerExecStreams(resp *dockertypes.HijackedResponse) {
+// When isTTY is true, raw copy is used. When false, stdcopy demuxes stdout/stderr.
+func pipeDockerExecStreams(resp *dockertypes.HijackedResponse, isTTY bool) {
 	doneCh := make(chan error, 1)
 	stdinReader, stdinWriter := io.Pipe()
 
@@ -504,7 +506,11 @@ func pipeDockerExecStreams(resp *dockertypes.HijackedResponse) {
 		doneCh <- copyErr
 	}()
 
-	_, _ = io.Copy(os.Stdout, resp.Reader)
+	if isTTY {
+		_, _ = io.Copy(os.Stdout, resp.Reader)
+	} else {
+		_, _ = stdcopy.StdCopy(os.Stdout, os.Stderr, resp.Reader)
+	}
 
 	// Cancel stdin forwarding now that the attach stream has ended.
 	_ = stdinReader.CloseWithError(context.Canceled)

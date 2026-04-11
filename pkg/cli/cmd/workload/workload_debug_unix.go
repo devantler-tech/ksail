@@ -408,7 +408,7 @@ func startSendLoop(
 	stream debugStream,
 	msgC chan *machine.DebugContainerRunRequest,
 ) chan error {
-	done := make(chan error)
+	done := make(chan error, 1)
 
 	go func() {
 		for msg := range msgC {
