@@ -416,6 +416,8 @@ func TestSaveOmniConfig_WritesFile(t *testing.T) {
 func TestRenameKubeconfigContext(t *testing.T) {
 	t.Parallel()
 
+	// Core renaming logic is tested in pkg/k8s/kubeconfig_test.go.
+	// This test verifies the test seam delegates correctly.
 	validKubeconfig := `apiVersion: v1
 kind: Config
 current-context: devantler-devantler-dev-ksail
@@ -434,69 +436,12 @@ users:
     token: test-token
 `
 
-	tests := []struct {
-		name           string
-		kubeconfig     string
-		desiredContext string
-		wantContext    string
-		hasEntries     bool
-		wantErr        bool
-	}{
-		{
-			name:           "renames Omni SA context to desired name",
-			kubeconfig:     validKubeconfig,
-			desiredContext: "admin@devantler-dev",
-			wantContext:    "admin@devantler-dev",
-			hasEntries:     true,
-		},
-		{
-			name:           "renames to simple context name",
-			kubeconfig:     validKubeconfig,
-			desiredContext: "devantler-dev",
-			wantContext:    "devantler-dev",
-			hasEntries:     true,
-		},
-		{
-			name:       "returns error for invalid kubeconfig",
-			kubeconfig: "not-valid-yaml: {{{",
-			wantErr:    true,
-		},
-		{
-			name: "handles kubeconfig with no contexts",
-			kubeconfig: `apiVersion: v1
-kind: Config
-contexts: []
-clusters: []
-users: []
-`,
-			desiredContext: "admin@test",
-			wantContext:    "admin@test",
-		},
-	}
+	result, err := talosprovisioner.RenameKubeconfigContextForTest(
+		[]byte(validKubeconfig), "admin@devantler-dev",
+	)
 
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			result, err := talosprovisioner.RenameKubeconfigContextForTest(
-				[]byte(testCase.kubeconfig), testCase.desiredContext,
-			)
-
-			if testCase.wantErr {
-				require.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-
-			// Verify current-context is set correctly
-			assert.Contains(t, string(result), "current-context: "+testCase.wantContext)
-			if testCase.hasEntries {
-				// Verify context/cluster/user entries are renamed
-				assert.Contains(t, string(result), "name: "+testCase.wantContext)
-				// Verify the original Omni context name is removed
-				assert.NotContains(t, string(result), "devantler-devantler-dev-ksail")
-			}
-		})
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(result), "current-context: admin@devantler-dev")
+	assert.Contains(t, string(result), "name: admin@devantler-dev")
+	assert.NotContains(t, string(result), "devantler-devantler-dev-ksail")
 }

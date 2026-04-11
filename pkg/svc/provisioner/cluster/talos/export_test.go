@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/k8s"
 	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 )
@@ -138,7 +139,7 @@ func InstallerImageFromTagForTest(tag string) string {
 	return installerImageFromTag(tag)
 }
 
-// RenameKubeconfigContextForTest exposes renameKubeconfigContext for unit testing.
+// RenameKubeconfigContextForTest exposes k8s.RenameKubeconfigContext for unit testing.
 func RenameKubeconfigContextForTest(kubeconfigData []byte, desiredContext string) ([]byte, error) {
-	return renameKubeconfigContext(kubeconfigData, desiredContext)
+	return k8s.RenameKubeconfigContext(kubeconfigData, desiredContext)
 }

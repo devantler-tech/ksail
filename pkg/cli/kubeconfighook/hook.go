@@ -15,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
+	"github.com/devantler-tech/ksail/v6/pkg/k8s"
 	"github.com/devantler-tech/ksail/v6/pkg/notify"
 	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
@@ -165,16 +166,21 @@ func clusterNameFromDistConfig(distCfg *clusterprovisioner.DistributionConfig) s
 	return ""
 }
 
-// clusterNameFromKubeconfig extracts the current context name from the kubeconfig file.
-// Note: After context renaming, this may return the renamed context (e.g., "admin@<name>")
-// rather than the raw Omni cluster name. The distribution config is the preferred source.
+// clusterNameFromKubeconfig extracts the cluster name from the kubeconfig file.
+// After context renaming, the current context may be "admin@<name>" rather than
+// the raw Omni cluster name. We strip the "admin@" prefix if present.
 func clusterNameFromKubeconfig(kubeconfigPath string) string {
 	cfg, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
 		return ""
 	}
 
-	return cfg.CurrentContext
+	ctx := cfg.CurrentContext
+	if after, ok := strings.CutPrefix(ctx, "admin@"); ok {
+		return after
+	}
+
+	return ctx
 }
 
 // refreshKubeconfig creates an Omni client and fetches a fresh kubeconfig.
@@ -206,7 +212,7 @@ func refreshKubeconfig(
 
 	// Rename the Omni-generated context to match the configured context name
 	if desiredContext != "" {
-		data, err = renameKubeconfigContext(data, desiredContext)
+		data, err = k8s.RenameKubeconfigContext(data, desiredContext)
 		if err != nil {
 			return fmt.Errorf("rename kubeconfig context: %w", err)
 		}
@@ -218,60 +224,6 @@ func refreshKubeconfig(
 	}
 
 	return nil
-}
-
-// renameKubeconfigContext renames the current context in a kubeconfig to the desired name.
-// It updates the context, cluster, and user entry names, along with CurrentContext.
-func renameKubeconfigContext(kubeconfigData []byte, desiredContext string) ([]byte, error) {
-	config, err := clientcmd.Load(kubeconfigData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
-	}
-
-	oldContext := config.CurrentContext
-	if oldContext == "" || oldContext == desiredContext {
-		if desiredContext != "" {
-			config.CurrentContext = desiredContext
-		}
-
-		return clientcmd.Write(*config)
-	}
-
-	ctxEntry, exists := config.Contexts[oldContext]
-	if !exists {
-		return nil, fmt.Errorf("current context %q not found in kubeconfig", oldContext)
-	}
-
-	// Rename context entry
-	delete(config.Contexts, oldContext)
-	config.Contexts[desiredContext] = ctxEntry
-
-	// Rename cluster reference
-	if oldCluster := ctxEntry.Cluster; oldCluster != "" {
-		if clusterEntry, ok := config.Clusters[oldCluster]; ok {
-			delete(config.Clusters, oldCluster)
-			config.Clusters[desiredContext] = clusterEntry
-			ctxEntry.Cluster = desiredContext
-		}
-	}
-
-	// Rename user/authinfo reference
-	if oldUser := ctxEntry.AuthInfo; oldUser != "" {
-		if authEntry, ok := config.AuthInfos[oldUser]; ok {
-			delete(config.AuthInfos, oldUser)
-			config.AuthInfos[desiredContext] = authEntry
-			ctxEntry.AuthInfo = desiredContext
-		}
-	}
-
-	config.CurrentContext = desiredContext
-
-	result, err := clientcmd.Write(*config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize kubeconfig: %w", err)
-	}
-
-	return result, nil
 }
 
 // atomicWriteFile writes data to a temp file in the same directory and

@@ -12,8 +12,6 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/k8s/readiness"
 	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
-	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 const (
@@ -377,84 +375,12 @@ func (p *Provisioner) saveOmniKubeconfig(
 	}
 
 	// Rename the Omni-generated context to the desired name
-	kubeconfigData, err = renameKubeconfigContext(kubeconfigData, desiredContext)
+	kubeconfigData, err = k8s.RenameKubeconfigContext(kubeconfigData, desiredContext)
 	if err != nil {
 		return fmt.Errorf("failed to rename kubeconfig context: %w", err)
 	}
 
 	return p.saveOmniConfig(kubeconfigData, p.options.KubeconfigPath, "Kubeconfig")
-}
-
-// renameKubeconfigContext renames the current context in a kubeconfig to the desired name.
-// It updates the context, cluster, and user entry names, along with CurrentContext.
-func renameKubeconfigContext(kubeconfigData []byte, desiredContext string) ([]byte, error) {
-	config, err := clientcmd.Load(kubeconfigData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
-	}
-
-	oldContext := config.CurrentContext
-	if oldContext == "" || oldContext == desiredContext {
-		// Nothing to rename — either no current context or already correct
-		if desiredContext != "" {
-			config.CurrentContext = desiredContext
-		}
-
-		return clientcmd.Write(*config)
-	}
-
-	ctxEntry, exists := config.Contexts[oldContext]
-	if !exists {
-		return nil, fmt.Errorf("current context %q not found in kubeconfig", oldContext)
-	}
-
-	// Rename context entry
-	delete(config.Contexts, oldContext)
-	config.Contexts[desiredContext] = ctxEntry
-
-	// Rename cluster reference if it matches the old context
-	renameClusterRef(config, ctxEntry, desiredContext)
-
-	// Rename user/authinfo reference if it matches the old context
-	renameAuthInfoRef(config, ctxEntry, desiredContext)
-
-	config.CurrentContext = desiredContext
-
-	result, err := clientcmd.Write(*config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize kubeconfig: %w", err)
-	}
-
-	return result, nil
-}
-
-// renameClusterRef renames the cluster entry referenced by the context if the old
-// cluster name matches the old context name.
-func renameClusterRef(config *clientcmdapi.Config, ctxEntry *clientcmdapi.Context, desiredContext string) {
-	oldCluster := ctxEntry.Cluster
-	if oldCluster == "" {
-		return
-	}
-
-	if clusterEntry, ok := config.Clusters[oldCluster]; ok {
-		delete(config.Clusters, oldCluster)
-		config.Clusters[desiredContext] = clusterEntry
-		ctxEntry.Cluster = desiredContext
-	}
-}
-
-// renameAuthInfoRef renames the authinfo/user entry referenced by the context.
-func renameAuthInfoRef(config *clientcmdapi.Config, ctxEntry *clientcmdapi.Context, desiredContext string) {
-	oldUser := ctxEntry.AuthInfo
-	if oldUser == "" {
-		return
-	}
-
-	if authEntry, ok := config.AuthInfos[oldUser]; ok {
-		delete(config.AuthInfos, oldUser)
-		config.AuthInfos[desiredContext] = authEntry
-		ctxEntry.AuthInfo = desiredContext
-	}
 }
 
 // saveOmniTalosconfig retrieves and saves the talosconfig from Omni.
