@@ -4965,10 +4965,18 @@ func runClusterCreationWorkflow(
 	// the correct kubeconfig context. This MUST happen after local registry operations
 	// (which resolve cluster name from distribution configs, not from context) but before
 	// post-CNI setup (which needs the kubectl context name like "kind-kind").
-	clusterName := resolveClusterNameFromContext(ctx)
-	ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(
-		clusterName,
-	)
+	//
+	// Omni-generated kubeconfigs use a service-account context name that differs from
+	// the talosctl "admin@<name>" convention. Use empty context (= kubeconfig's
+	// current-context) so helm/kubectl pick the right context automatically.
+	if ctx.ClusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderOmni {
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = ""
+	} else {
+		clusterName := resolveClusterNameFromContext(ctx)
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(
+			clusterName,
+		)
+	}
 
 	maybeImportCachedImages(cmd, ctx, deps.Timer)
 
