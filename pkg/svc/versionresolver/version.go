@@ -36,9 +36,13 @@ func ParseVersion(tag string) (Version, error) {
 		return Version{}, fmt.Errorf("%w: %q", ErrInvalidVersion, tag)
 	}
 
-	major, _ := strconv.Atoi(matches[1])
-	minor, _ := strconv.Atoi(matches[2])
-	patch, _ := strconv.Atoi(matches[3])
+	major, errMajor := strconv.Atoi(matches[1])
+	minor, errMinor := strconv.Atoi(matches[2])
+	patch, errPatch := strconv.Atoi(matches[3])
+
+	if errMajor != nil || errMinor != nil || errPatch != nil {
+		return Version{}, fmt.Errorf("%w: %q (numeric overflow)", ErrInvalidVersion, tag)
+	}
 
 	return Version{
 		Major:      major,
@@ -96,7 +100,10 @@ func suffixNum(suffix string) int {
 		return 0
 	}
 
-	num, _ := strconv.Atoi(suffix[idx:])
+	num, err := strconv.Atoi(suffix[idx:])
+	if err != nil {
+		return 0
+	}
 
 	return num
 }
@@ -170,8 +177,10 @@ func ParseTags(tags []string) []Version {
 	return versions
 }
 
-// MatchingSuffix filters versions to those with the same suffix as the reference.
-// This is useful for K3s where tags have suffixes like "-k3s1".
+// MatchingSuffix filters versions to those whose suffix shares the same base
+// prefix as the reference. Trailing digits are stripped before comparison, so
+// passing "k3s1" matches "k3s1", "k3s2", etc. When suffix is empty, only
+// versions without a suffix are returned.
 func MatchingSuffix(versions []Version, suffix string) []Version {
 	if suffix == "" {
 		result := make([]Version, 0, len(versions))
