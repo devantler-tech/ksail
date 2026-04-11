@@ -169,8 +169,12 @@ func (m *ManagerImpl) GetCurrentTargetRevision(
 		"source",
 		"targetRevision",
 	)
-	if err != nil || !found {
-		return "", nil //nolint:nilerr // Missing field is not an error
+	if err != nil {
+		return "", fmt.Errorf("read targetRevision from Argo CD Application %s: %w", name, err)
+	}
+
+	if !found {
+		return "", nil
 	}
 
 	return rev, nil

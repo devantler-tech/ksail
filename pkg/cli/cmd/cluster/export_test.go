@@ -183,7 +183,7 @@ var ErrMetricsServerDisableUnsupported = errMetricsServerDisableUnsupported
 
 // ExportHandlerForField reports whether a registered handler exists for the given field name.
 func ExportHandlerForField(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, field string) bool {
-	r := newComponentReconciler(cmd, clusterCfg)
+	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
 	_, ok := r.handlerForField(field)
 
 	return ok
@@ -195,7 +195,7 @@ func ExportReconcileMetricsServer(
 	clusterCfg *v1alpha1.Cluster,
 	change clusterupdate.Change,
 ) error {
-	r := newComponentReconciler(cmd, clusterCfg)
+	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
 
 	return r.reconcileMetricsServer(context.Background(), change)
 }
@@ -206,7 +206,7 @@ func ExportReconcileCSI(
 	clusterCfg *v1alpha1.Cluster,
 	change clusterupdate.Change,
 ) error {
-	r := newComponentReconciler(cmd, clusterCfg)
+	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
 
 	return r.reconcileCSI(context.Background(), change)
 }
@@ -217,7 +217,7 @@ func ExportReconcileCertManager(
 	clusterCfg *v1alpha1.Cluster,
 	change clusterupdate.Change,
 ) error {
-	r := newComponentReconciler(cmd, clusterCfg)
+	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
 
 	return r.reconcileCertManager(context.Background(), change)
 }
@@ -228,7 +228,7 @@ func ExportReconcilePolicyEngine(
 	clusterCfg *v1alpha1.Cluster,
 	change clusterupdate.Change,
 ) error {
-	r := newComponentReconciler(cmd, clusterCfg)
+	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
 
 	return r.reconcilePolicyEngine(context.Background(), change)
 }
@@ -239,7 +239,7 @@ func ExportReconcileGitOpsEngine(
 	clusterCfg *v1alpha1.Cluster,
 	change clusterupdate.Change,
 ) error {
-	r := newComponentReconciler(cmd, clusterCfg)
+	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
 
 	return r.reconcileGitOpsEngine(context.Background(), change)
 }
@@ -251,7 +251,7 @@ func ExportReconcileComponents(
 	diff *clusterupdate.UpdateResult,
 	result *clusterupdate.UpdateResult,
 ) error {
-	r := newComponentReconciler(cmd, clusterCfg)
+	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
 
 	return r.reconcileComponents(context.Background(), diff, result)
 }

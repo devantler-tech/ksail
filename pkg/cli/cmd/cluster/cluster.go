@@ -6424,6 +6424,9 @@ func checkWorkloadTagDrift(
 
 	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
 	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot resolve kubeconfig path for workload tag drift detection: %v", err)
+
 		return
 	}
 

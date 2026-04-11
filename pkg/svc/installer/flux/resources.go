@@ -239,6 +239,10 @@ func WaitForFluxReady(
 // its spec.sync.ref value. Returns empty string if the FluxInstance does not exist
 // or has no sync configuration.
 func GetCurrentSyncRef(ctx context.Context, kubeconfig string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	restConfig, err := loadRESTConfig(kubeconfig)
 	if err != nil {
 		return "", fmt.Errorf("build REST config: %w", err)
@@ -274,7 +278,12 @@ func GetCurrentSyncRef(ctx context.Context, kubeconfig string) (string, error) {
 // ResolveDesiredTag computes the desired OCI artifact tag using the standard
 // resolution priority: workload.tag > registry-embedded tag > default "dev".
 // This is the same logic used by buildInstance and buildArgoCDEnsureOptions.
+// A nil clusterCfg falls back to the default local artifact tag.
 func ResolveDesiredTag(clusterCfg *v1alpha1.Cluster) string {
+	if clusterCfg == nil {
+		return registry.DefaultLocalArtifactTag
+	}
+
 	tag := clusterCfg.Spec.Workload.Tag
 
 	if tag == "" {
