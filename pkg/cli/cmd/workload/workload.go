@@ -244,9 +244,11 @@ func NewDebugCmd() *cobra.Command {
 
 	kubectlDebugCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if hostNode != "" {
-			// In --host mode, positional args before '--' are kubectl-style targets
-			// (e.g., node/<name>) and should not be mixed with host-level debugging.
-			if dashIdx := cmd.ArgsLenAtDash(); dashIdx > 0 {
+			// In --host mode, only accept args after '--' as the container command.
+			// Positional args without '--' or before '--' are likely kubectl-style
+			// targets (e.g., node/<name>) that would be misinterpreted.
+			dashIdx := cmd.ArgsLenAtDash()
+			if dashIdx > 0 || (dashIdx == -1 && len(args) > 0) {
 				return ErrHostModePositionalArgs
 			}
 

@@ -232,6 +232,7 @@ func TestWriteWorkloadCommandsHaveWritePermission(t *testing.T) {
 	}{
 		{name: "apply", cmd: workload.NewApplyCmd()},
 		{name: "create", cmd: workload.NewCreateCmd(di.New(nil))},
+		{name: "debug", cmd: workload.NewDebugCmd()},
 		{name: "delete", cmd: workload.NewDeleteCmd()},
 		{name: "edit", cmd: workload.NewEditCmd()},
 		{name: "exec", cmd: workload.NewExecCmd()},
