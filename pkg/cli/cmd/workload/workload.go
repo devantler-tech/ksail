@@ -2236,7 +2236,7 @@ func pollUntilKustomizationReady(
 		ready, status, err := fluxReconciler.CheckNamedKustomizationReady(ctx, name)
 		if err != nil {
 			if reconcilerclient.IsContextError(err) {
-				if ctx.Err() == context.Canceled {
+				if errors.Is(ctx.Err(), context.Canceled) {
 					return ctx.Err() //nolint:wrapcheck // propagate cancellation as-is
 				}
 
@@ -2254,7 +2254,7 @@ func pollUntilKustomizationReady(
 
 		select {
 		case <-ctx.Done():
-			if ctx.Err() == context.Canceled {
+			if errors.Is(ctx.Err(), context.Canceled) {
 				return ctx.Err() //nolint:wrapcheck // propagate cancellation as-is
 			}
 
@@ -2363,21 +2363,26 @@ func reconcileArgoCD(
 	if err != nil {
 		return fmt.Errorf("create argocd reconciler: %w", err)
 	}
+
 	writer := cmd.OutOrStdout()
+
 	deadlineCtx, deadlineCancel := context.WithTimeout(cmd.Context(), timeout)
 	defer deadlineCancel()
 
 	writeActivityNotification("triggering argocd refresh...", outputTimer, writer)
+
 	err = argoReconciler.TriggerRefresh(deadlineCtx, true)
 	if err != nil {
 		return fmt.Errorf("trigger argocd refresh: %w", err)
 	}
 
 	writeActivityNotification("reconciling argocd applications...", outputTimer, writer)
+
 	apps, err := argoReconciler.ListApplications(deadlineCtx)
 	if err != nil {
 		return fmt.Errorf("list argocd applications: %w", err)
 	}
+
 	if len(apps) == 0 {
 		return nil
 	}
@@ -2392,6 +2397,7 @@ func reconcileArgoCD(
 			},
 		})
 	}
+
 	appGroup := notify.NewProgressGroup("", "", writer,
 		notify.WithLabels(notify.ReconcilingLabels()),
 		notify.WithTimer(outputTimer),
@@ -2400,10 +2406,12 @@ func reconcileArgoCD(
 		notify.WithCountLabel("applications"),
 		notify.WithConcurrency(reconcileConcurrency),
 	)
+
 	err = appGroup.Run(deadlineCtx, tasks...)
 	if err != nil {
 		return fmt.Errorf("reconcile argocd applications: %w", err)
 	}
+
 	return nil
 }
 
@@ -2424,7 +2432,7 @@ func pollUntilApplicationReady(
 		ready, err := argoReconciler.CheckNamedApplicationReady(ctx, name)
 		if err != nil {
 			if reconcilerclient.IsContextError(err) {
-				if ctx.Err() == context.Canceled {
+				if errors.Is(ctx.Err(), context.Canceled) {
 					return ctx.Err() //nolint:wrapcheck // propagate cancellation as-is
 				}
 
@@ -2444,7 +2452,7 @@ func pollUntilApplicationReady(
 
 		select {
 		case <-ctx.Done():
-			if ctx.Err() == context.Canceled {
+			if errors.Is(ctx.Err(), context.Canceled) {
 				return ctx.Err() //nolint:wrapcheck // propagate cancellation as-is
 			}
 
