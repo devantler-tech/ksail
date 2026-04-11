@@ -1,13 +1,13 @@
 {
-  "last_run": "2026-04-11T08:47:00Z",
-  "last_run_id": "24278894066",
+  "last_run": "2026-04-11T12:25:36Z",
+  "last_run_id": "24282401588",
   "tasks_run": [
-    9,
-    4,
+    1,
     2,
+    9,
     13
   ],
-  "issue_backlog_cursor": 3912,
+  "issue_backlog_cursor": 3922,
   "commented_issues": {
     "3591": "2026-04-04T07:39:21Z",
     "3592": "2026-04-04T07:39:21Z",
@@ -27,12 +27,12 @@
     "3609": "2026-04-09T12:39:36Z",
     "3865": "2026-04-10T12:31:32Z",
     "2261": "2026-04-11T08:47:00Z",
-    "3772": "2026-04-11T08:47:00Z"
+    "3772": "2026-04-11T08:47:00Z",
+    "3922": "2026-04-11T12:25:36Z"
   },
   "open_prs": {
     "3834": "refactor(installer): extract BuildSopsAgeSecret",
-    "aw_test_provider": "[Repo Assist] test(provider): BuildClusterStatus+GetClusterStatusFromLister+CheckNodesExist - created 2026-04-11",
-    "aw_eng_golangci": "[Repo Assist] chore(ci): sync golangci-lint go version - created 2026-04-11"
+    "aw_test_diagnostics": "[Repo Assist] test(k8s): add table-driven tests for DiagnosePodFailures - created 2026-04-11"
   },
   "domain_alternation": {
     "last_domain": "test",
@@ -48,68 +48,26 @@
     "#3659->3654": "linked 2026-04-05"
   },
   "labelled_issues": {
-    "3729": [
-      "automation",
-      "ci",
-      "bug"
-    ],
-    "3730": [
-      "repo-assist",
-      "ci"
-    ],
-    "3731": [
-      "repo-assist",
-      "documentation"
-    ],
-    "3732": [
-      "repo-assist"
-    ],
-    "3733": [
-      "repo-assist"
-    ],
-    "3605": [
-      "repo-assist"
-    ],
-    "3608": [
-      "next"
-    ],
-    "3609": [
-      "next"
-    ],
-    "3738": [
-      "next"
-    ],
-    "3719": [
-      "automation"
-    ],
-    "3625": [
-      "bug"
-    ],
-    "3412": [
-      "next"
-    ],
-    "3413": [
-      "next"
-    ],
-    "3414": [
-      "next"
-    ],
-    "3415": [
-      "next"
-    ],
-    "3783": [
-      "ci"
-    ],
-    "3784": [
-      "ci"
-    ],
-    "3785": [
-      "ci"
-    ],
-    "3912": [
-      "bug",
-      "blocked"
-    ]
+    "3729": ["automation", "ci", "bug"],
+    "3730": ["repo-assist", "ci"],
+    "3731": ["repo-assist", "documentation"],
+    "3732": ["repo-assist"],
+    "3733": ["repo-assist"],
+    "3605": ["repo-assist"],
+    "3608": ["next"],
+    "3609": ["next"],
+    "3738": ["next"],
+    "3719": ["automation"],
+    "3625": ["bug"],
+    "3412": ["next"],
+    "3413": ["next"],
+    "3414": ["next"],
+    "3415": ["next"],
+    "3783": ["ci"],
+    "3784": ["ci"],
+    "3785": ["ci"],
+    "3912": ["bug", "blocked"],
+    "3922": ["bug"]
   },
   "created_issues": {
     "3836": "[chore]: audit copilot-sdk/go v0.2.0 capabilities",
@@ -137,12 +95,15 @@
     "aw_flux1": "Flux v2.8.x update - created 2026-04-10",
     "aw_vcr1": "VCluster image verification - created 2026-04-10"
   },
-  "notes": "Task 9: Added 12 table-driven tests for BuildClusterStatus (6), CheckNodesExist (3), GetClusterStatusFromLister (3). PR created. Task 4: Sync golangci.yml go: 1.26.0->1.26.1. PR created. Task 2: Commented on #2261 (D-Bus workaround still active) and #3772 (upstream still open). Bonus: labelled #3912 bug+blocked. Domain: test this run, next should be refactor.",
+  "notes": "Task 9: Added 13 table-driven tests for DiagnosePodFailures in pkg/k8s/diagnostics_test.go (previously untested). PR created. Task 1: Labelled #3922 as bug. Task 2: Commented on #3922 with root cause (saveOmniConfigs missing from cluster update path). Domain: test again this run, next should be refactor.",
   "open_issues_snapshot": {
     "2261": "blocked - VCluster D-Bus race",
     "3605": "repo-assist - Monthly Activity 2026-04",
     "3772": "blocked - loft-sh/log replace",
     "3845": "next,automation,repo-assist - talosctl debug container",
-    "3912": "bug,blocked - Dependabot multi-arch ghcr.io"
+    "3908": "automation - verify update_issue temp ID resolution",
+    "3909": "automation - remove sed workaround after gh-aw fix",
+    "3912": "bug,blocked - Dependabot multi-arch ghcr.io",
+    "3922": "bug - cluster update should refresh Omni kubeconfig"
   }
 }
