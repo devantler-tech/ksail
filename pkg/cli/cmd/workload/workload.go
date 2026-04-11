@@ -41,12 +41,16 @@ import (
 	clusterdetector "github.com/devantler-tech/ksail/v6/pkg/svc/detector/cluster"
 	imagesvc "github.com/devantler-tech/ksail/v6/pkg/svc/image"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/installer"
+	dockerprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
 	registryhelpers "github.com/devantler-tech/ksail/v6/pkg/svc/registryresolver"
 	"github.com/devantler-tech/ksail/v6/pkg/timer"
+	dockercontainer "github.com/docker/docker/api/types/container"
+	dockerclient "github.com/docker/docker/client"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/term"
 	yamlio "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 	kustomizeTypes "sigs.k8s.io/kustomize/api/types"
@@ -210,6 +214,333 @@ func NewDescribeCmd() *cobra.Command {
 	return newKubectlCommand(func(client *kubectl.Client, kubeconfigPath string) *cobra.Command {
 		return client.CreateDescribeCommand(kubeconfigPath)
 	})
+}
+
+const defaultDebugImage = "docker.io/library/alpine:latest"
+
+// NewDebugCmd creates the workload debug command.
+//
+// Without --host it wraps kubectl debug (ephemeral containers, node debugging).
+// With --host <node-name> it performs host-level debugging routed per distribution:
+//   - Vanilla/K3s/VCluster (Docker): interactive docker exec into the node container
+//   - Talos (all providers): Talos SDK DebugClient.ContainerRun()
+func NewDebugCmd() *cobra.Command {
+	var hostNode string
+
+	kubectlDebugCmd := newKubectlCommand(func(client *kubectl.Client, kubeconfigPath string) *cobra.Command {
+		return client.CreateDebugCommand(kubeconfigPath)
+	})
+
+	// Preserve the original RunE from kubectl debug.
+	originalRunE := kubectlDebugCmd.RunE
+	originalRun := kubectlDebugCmd.Run
+
+	kubectlDebugCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if hostNode != "" {
+			return runHostDebug(cmd, hostNode, args)
+		}
+
+		// Fall through to kubectl debug.
+		if originalRunE != nil {
+			return originalRunE(cmd, args)
+		}
+
+		if originalRun != nil {
+			originalRun(cmd, args)
+		}
+
+		return nil
+	}
+
+	// Clear Run since we use RunE.
+	kubectlDebugCmd.Run = nil
+
+	kubectlDebugCmd.Flags().StringVar(
+		&hostNode,
+		"host",
+		"",
+		"Node name for host-level debugging (bypasses Kubernetes, targets the infrastructure node directly)",
+	)
+
+	kubectlDebugCmd.Annotations = map[string]string{
+		annotations.AnnotationPermission: "write",
+	}
+
+	return kubectlDebugCmd
+}
+
+// ErrNodeNotFound is returned when the specified node name cannot be resolved.
+var ErrNodeNotFound = errors.New("node not found")
+
+// ErrUnsupportedHostDebug is returned for unsupported distribution/provider combinations.
+var ErrUnsupportedHostDebug = errors.New("host-level debugging is not supported for this distribution/provider combination")
+
+// runHostDebug detects the cluster distribution and provider, then routes
+// to the appropriate host-level debug mechanism.
+func runHostDebug(cmd *cobra.Command, nodeName string, args []string) error {
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
+
+	contextName := ""
+	if cmd.Flags().Lookup("context") != nil {
+		contextName, _ = cmd.Flags().GetString("context")
+	}
+
+	info, err := clusterdetector.DetectInfo(kubeconfigPath, contextName)
+	if err != nil {
+		return fmt.Errorf("detect cluster info: %w", err)
+	}
+
+	debugImage, _ := cmd.Flags().GetString("image")
+	if debugImage == "" {
+		debugImage = defaultDebugImage
+	}
+
+	switch info.Distribution {
+	case v1alpha1.DistributionTalos:
+		return runTalosHostDebugFromInfo(cmd, info, nodeName, debugImage, args)
+	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s, v1alpha1.DistributionVCluster:
+		if info.Provider != v1alpha1.ProviderDocker {
+			return fmt.Errorf(
+				"%w: %s with %s provider",
+				ErrUnsupportedHostDebug,
+				info.Distribution,
+				info.Provider,
+			)
+		}
+
+		return runDockerHostDebug(cmd, info, nodeName, args)
+	default:
+		return fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Distribution)
+	}
+}
+
+// runTalosHostDebugFromInfo resolves the Talos node endpoint and launches a debug container.
+func runTalosHostDebugFromInfo(
+	cmd *cobra.Command,
+	info *clusterdetector.Info,
+	nodeName string,
+	image string,
+	args []string,
+) error {
+	talosconfigPath := "~/.talos/config"
+
+	nodeEndpoint, err := resolveTalosNodeEndpoint(cmd.Context(), info, nodeName)
+	if err != nil {
+		return err
+	}
+
+	return runTalosHostDebug(cmd.Context(), nodeEndpoint, talosconfigPath, image, args)
+}
+
+// resolveTalosNodeEndpoint resolves a node name to a Talos API endpoint.
+// For Docker provider, it inspects the container's network settings.
+// For Hetzner/Omni, the node name is used directly as the endpoint.
+func resolveTalosNodeEndpoint(
+	ctx context.Context,
+	info *clusterdetector.Info,
+	nodeName string,
+) (string, error) {
+	switch info.Provider {
+	case v1alpha1.ProviderDocker:
+		return resolveDockerNodeIP(ctx, info.ClusterName, nodeName, dockerprovider.LabelSchemeTalos)
+	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
+		// For cloud/managed providers, the node name is the endpoint.
+		return nodeName, nil
+	default:
+		return "", fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Provider)
+	}
+}
+
+// runDockerHostDebug runs an interactive shell inside a Docker container node.
+func runDockerHostDebug(
+	cmd *cobra.Command,
+	info *clusterdetector.Info,
+	nodeName string,
+	execArgs []string,
+) error {
+	scheme := distributionToLabelScheme(info.Distribution)
+
+	dockerClient, err := docker.GetDockerClient()
+	if err != nil {
+		return fmt.Errorf("create Docker client: %w", err)
+	}
+
+	defer func() { _ = dockerClient.Close() }()
+
+	prov := dockerprovider.NewProvider(dockerClient, scheme)
+
+	nodes, err := prov.ListNodes(cmd.Context(), info.ClusterName)
+	if err != nil {
+		return fmt.Errorf("list nodes: %w", err)
+	}
+
+	containerName := ""
+
+	for _, node := range nodes {
+		if node.Name == nodeName {
+			containerName = node.Name
+
+			break
+		}
+	}
+
+	if containerName == "" {
+		availableNames := make([]string, 0, len(nodes))
+		for _, n := range nodes {
+			availableNames = append(availableNames, n.Name)
+		}
+
+		return fmt.Errorf(
+			"%w: %q (available nodes: %v)",
+			ErrNodeNotFound,
+			nodeName,
+			availableNames,
+		)
+	}
+
+	shellCmd := execArgs
+	if len(shellCmd) == 0 {
+		shellCmd = []string{"/bin/sh"}
+	}
+
+	return runInteractiveDockerExec(cmd.Context(), dockerClient, containerName, shellCmd)
+}
+
+// runInteractiveDockerExec runs an interactive exec session in a Docker container
+// with stdin, stdout, and TTY attached.
+func runInteractiveDockerExec(
+	ctx context.Context,
+	dockerClient dockerclient.APIClient,
+	containerName string,
+	cmdArgs []string,
+) error {
+	execConfig := dockercontainer.ExecOptions{
+		Cmd:          cmdArgs,
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+		Tty:          true,
+	}
+
+	execID, err := dockerClient.ContainerExecCreate(ctx, containerName, execConfig)
+	if err != nil {
+		return fmt.Errorf("create exec in container %q: %w", containerName, err)
+	}
+
+	resp, err := dockerClient.ContainerExecAttach(ctx, execID.ID, dockercontainer.ExecAttachOptions{
+		Tty: true,
+	})
+	if err != nil {
+		return fmt.Errorf("attach to exec in container %q: %w", containerName, err)
+	}
+	defer resp.Close()
+
+	// Set terminal to raw mode for interactive session.
+	fd := int(os.Stdin.Fd())
+
+	if term.IsTerminal(fd) {
+		oldState, termErr := term.MakeRaw(fd)
+		if termErr != nil {
+			return fmt.Errorf("set terminal to raw mode: %w", termErr)
+		}
+
+		defer func() {
+			if oldState != nil {
+				term.Restore(fd, oldState) //nolint:errcheck
+			}
+		}()
+	}
+
+	// Copy stdin → container and container → stdout concurrently.
+	doneCh := make(chan error, 1)
+
+	go func() {
+		_, copyErr := io.Copy(resp.Conn, os.Stdin)
+		doneCh <- copyErr
+	}()
+
+	_, _ = io.Copy(os.Stdout, resp.Reader)
+
+	// Wait for stdin copy to finish.
+	<-doneCh
+
+	// Check exit code.
+	inspectResp, err := dockerClient.ContainerExecInspect(ctx, execID.ID)
+	if err != nil {
+		return fmt.Errorf("inspect exec: %w", err)
+	}
+
+	if inspectResp.ExitCode != 0 {
+		return fmt.Errorf("container process exited with code %d", inspectResp.ExitCode)
+	}
+
+	return nil
+}
+
+// resolveDockerNodeIP resolves a node name to its Docker container IP address.
+func resolveDockerNodeIP(
+	ctx context.Context,
+	clusterName string,
+	nodeName string,
+	scheme dockerprovider.LabelScheme,
+) (string, error) {
+	dockerClient, err := docker.GetDockerClient()
+	if err != nil {
+		return "", fmt.Errorf("create Docker client: %w", err)
+	}
+
+	defer func() { _ = dockerClient.Close() }()
+
+	prov := dockerprovider.NewProvider(dockerClient, scheme)
+
+	nodes, err := prov.ListNodes(ctx, clusterName)
+	if err != nil {
+		return "", fmt.Errorf("list nodes: %w", err)
+	}
+
+	for _, node := range nodes {
+		if node.Name == nodeName {
+			// Inspect the container to get its IP address.
+			containerJSON, inspectErr := dockerClient.ContainerInspect(ctx, node.Name)
+			if inspectErr != nil {
+				return "", fmt.Errorf("inspect container %q: %w", node.Name, inspectErr)
+			}
+
+			for _, network := range containerJSON.NetworkSettings.Networks {
+				if network.IPAddress != "" {
+					return network.IPAddress, nil
+				}
+			}
+
+			return "", fmt.Errorf("no IP address found for container %q", node.Name)
+		}
+	}
+
+	availableNames := make([]string, 0, len(nodes))
+	for _, n := range nodes {
+		availableNames = append(availableNames, n.Name)
+	}
+
+	return "", fmt.Errorf(
+		"%w: %q (available nodes: %v)",
+		ErrNodeNotFound,
+		nodeName,
+		availableNames,
+	)
+}
+
+// distributionToLabelScheme maps a distribution to its Docker provider label scheme.
+func distributionToLabelScheme(distribution v1alpha1.Distribution) dockerprovider.LabelScheme {
+	switch distribution {
+	case v1alpha1.DistributionK3s:
+		return dockerprovider.LabelSchemeK3d
+	case v1alpha1.DistributionTalos:
+		return dockerprovider.LabelSchemeTalos
+	case v1alpha1.DistributionVCluster:
+		return dockerprovider.LabelSchemeVCluster
+	default:
+		return dockerprovider.LabelSchemeKind
+	}
 }
 
 // NewEditCmd creates the workload edit command.
@@ -3874,7 +4205,7 @@ func NewWorkloadCmd(runtimeContainer *di.Runtime) *cobra.Command {
 			"  images    - List container images required by cluster components\n" +
 			"  wait      - Wait for a specific condition on resources\n\n" +
 			"Write operations:\n" +
-			"  apply, create, delete, edit, exec, export, expose, import, install, push, " +
+			"  apply, create, debug, delete, edit, exec, export, expose, import, install, push, " +
 			"reconcile, rollout, scale, watch\n\n" +
 			"GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, " +
 			"ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check " +
@@ -3896,6 +4227,7 @@ func NewWorkloadCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd.AddCommand(NewPushCmd(runtimeContainer))
 	cmd.AddCommand(NewApplyCmd())
 	cmd.AddCommand(NewCreateCmd(runtimeContainer))
+	cmd.AddCommand(NewDebugCmd())
 	cmd.AddCommand(NewDeleteCmd())
 	cmd.AddCommand(NewDescribeCmd())
 	cmd.AddCommand(NewEditCmd())
