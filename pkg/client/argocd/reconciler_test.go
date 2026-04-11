@@ -16,7 +16,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
-var errSimulatedAPIFailure = errors.New("simulated API failure") //nolint:gochecknoglobals // test sentinel error
+var errSimulatedAPIFailure = errors.New("simulated API failure")
 
 // applicationGVR is the GroupVersionResource for ArgoCD Application CRs.
 var applicationGVR = schema.GroupVersionResource{ //nolint:gochecknoglobals // test-scoped constant
@@ -377,7 +377,7 @@ func TestCheckNamedApplicationReady(t *testing.T) {
 				require.Error(t, err)
 
 				if testCase.wantErrType != nil {
-					assert.True(t, errors.Is(err, testCase.wantErrType),
+					assert.ErrorIs(t, err, testCase.wantErrType,
 						"expected error wrapping %v, got: %v", testCase.wantErrType, err)
 				}
 

@@ -16,7 +16,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
-var errSimulatedAPIFailure = errors.New("simulated API failure") //nolint:gochecknoglobals // test sentinel error
+var errSimulatedAPIFailure = errors.New("simulated API failure")
 
 // kustomizationGVR is the GroupVersionResource for Flux Kustomization CRs.
 var kustomizationGVR = schema.GroupVersionResource{ //nolint:gochecknoglobals // test-scoped constant
@@ -109,7 +109,14 @@ func TestListKustomizations(t *testing.T) {
 		{
 			name: "single kustomization without dependencies",
 			objects: []runtime.Object{
-				newFakeKustomization("infra", "./infrastructure", nil, "True", "Succeeded", "Applied revision: v1"),
+				newFakeKustomization(
+					"infra",
+					"./infrastructure",
+					nil,
+					"True",
+					"Succeeded",
+					"Applied revision: v1",
+				),
 			},
 			wantInfos: []flux.KustomizationInfo{
 				{Name: "infra", Path: "./infrastructure", DependsOn: nil},
@@ -118,7 +125,14 @@ func TestListKustomizations(t *testing.T) {
 		{
 			name: "single kustomization with dependencies",
 			objects: []runtime.Object{
-				newFakeKustomization("apps", "./apps", []string{"infra", "configs"}, "True", "Succeeded", "ok"),
+				newFakeKustomization(
+					"apps",
+					"./apps",
+					[]string{"infra", "configs"},
+					"True",
+					"Succeeded",
+					"ok",
+				),
 			},
 			wantInfos: []flux.KustomizationInfo{
 				{Name: "apps", Path: "./apps", DependsOn: []string{"infra", "configs"}},
@@ -127,9 +141,30 @@ func TestListKustomizations(t *testing.T) {
 		{
 			name: "multiple kustomizations with mixed dependencies",
 			objects: []runtime.Object{
-				newFakeKustomization("flux-system", "./clusters/my-cluster", nil, "True", "Succeeded", "ok"),
-				newFakeKustomization("infra", "./infrastructure", []string{"flux-system"}, "True", "Succeeded", "ok"),
-				newFakeKustomization("apps", "./apps", []string{"infra"}, "False", "Progressing", "reconciling"),
+				newFakeKustomization(
+					"flux-system",
+					"./clusters/my-cluster",
+					nil,
+					"True",
+					"Succeeded",
+					"ok",
+				),
+				newFakeKustomization(
+					"infra",
+					"./infrastructure",
+					[]string{"flux-system"},
+					"True",
+					"Succeeded",
+					"ok",
+				),
+				newFakeKustomization(
+					"apps",
+					"./apps",
+					[]string{"infra"},
+					"False",
+					"Progressing",
+					"reconciling",
+				),
 			},
 			wantInfos: []flux.KustomizationInfo{
 				{Name: "apps", Path: "./apps", DependsOn: []string{"infra"}},
@@ -151,6 +186,7 @@ func TestListKustomizations(t *testing.T) {
 					kust.SetName("no-path")
 					kust.SetNamespace("flux-system")
 					kust.Object["spec"] = map[string]any{}
+
 					return kust
 				}(),
 			},
@@ -239,7 +275,14 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 			name:   "ready kustomization",
 			ksName: "infra",
 			objects: []runtime.Object{
-				newFakeKustomization("infra", "./infrastructure", nil, "True", "Succeeded", "Applied revision: main@sha1:abc123"),
+				newFakeKustomization(
+					"infra",
+					"./infrastructure",
+					nil,
+					"True",
+					"Succeeded",
+					"Applied revision: main@sha1:abc123",
+				),
 			},
 			wantReady:  true,
 			wantStatus: "Ready",
@@ -248,7 +291,14 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 			name:   "not-ready kustomization with transient reason",
 			ksName: "apps",
 			objects: []runtime.Object{
-				newFakeKustomization("apps", "./apps", nil, "False", "Progressing", "reconciliation in progress"),
+				newFakeKustomization(
+					"apps",
+					"./apps",
+					nil,
+					"False",
+					"Progressing",
+					"reconciliation in progress",
+				),
 			},
 			wantReady:  false,
 			wantStatus: "Progressing: reconciliation in progress",
@@ -269,7 +319,14 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 			name:   "failed kustomization with ReconciliationFailed",
 			ksName: "broken",
 			objects: []runtime.Object{
-				newFakeKustomization("broken", "./broken", nil, "False", "ReconciliationFailed", "kustomize build failed"),
+				newFakeKustomization(
+					"broken",
+					"./broken",
+					nil,
+					"False",
+					"ReconciliationFailed",
+					"kustomize build failed",
+				),
 			},
 			wantReady:   false,
 			wantErr:     true,
@@ -280,7 +337,14 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 			name:   "failed kustomization with ValidationFailed",
 			ksName: "invalid",
 			objects: []runtime.Object{
-				newFakeKustomization("invalid", "./invalid", nil, "False", "ValidationFailed", "validation error"),
+				newFakeKustomization(
+					"invalid",
+					"./invalid",
+					nil,
+					"False",
+					"ValidationFailed",
+					"validation error",
+				),
 			},
 			wantReady:   false,
 			wantErr:     true,
@@ -291,7 +355,14 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 			name:   "failed kustomization with ArtifactFailed",
 			ksName: "no-artifact",
 			objects: []runtime.Object{
-				newFakeKustomization("no-artifact", "./na", nil, "False", "ArtifactFailed", "artifact not found"),
+				newFakeKustomization(
+					"no-artifact",
+					"./na",
+					nil,
+					"False",
+					"ArtifactFailed",
+					"artifact not found",
+				),
 			},
 			wantReady:   false,
 			wantErr:     true,
@@ -299,10 +370,10 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 			wantErrMsg:  "ArtifactFailed",
 		},
 		{
-			name:    "not-found kustomization returns error",
-			ksName:  "nonexistent",
-			objects: nil,
-			wantErr: true,
+			name:       "not-found kustomization returns error",
+			ksName:     "nonexistent",
+			objects:    nil,
+			wantErr:    true,
 			wantErrMsg: `get flux kustomization "nonexistent"`,
 		},
 		{
@@ -319,6 +390,7 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 					kust.SetName("new-ks")
 					kust.SetNamespace("flux-system")
 					kust.Object["spec"] = map[string]any{"path": "./new"}
+
 					return kust
 				}(),
 			},
@@ -349,6 +421,7 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 							},
 						},
 					}
+
 					return kust
 				}(),
 			},
@@ -365,13 +438,16 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 
 			r := newTestFluxReconciler(testCase.objects...)
 
-			ready, status, err := r.CheckNamedKustomizationReady(context.Background(), testCase.ksName)
+			ready, status, err := r.CheckNamedKustomizationReady(
+				context.Background(),
+				testCase.ksName,
+			)
 
 			if testCase.wantErr {
 				require.Error(t, err)
 
 				if testCase.wantErrType != nil {
-					assert.True(t, errors.Is(err, testCase.wantErrType),
+					assert.ErrorIs(t, err, testCase.wantErrType,
 						"expected error wrapping %v, got: %v", testCase.wantErrType, err)
 				}
 
@@ -411,6 +487,7 @@ func TestListKustomizations_DependsOnEdgeCases(t *testing.T) {
 					kust := newFakeKustomization("test", "./test", nil, "", "", "")
 					spec, _ := kust.Object["spec"].(map[string]any)
 					spec["dependsOn"] = []any{}
+
 					return kust
 				}(),
 			},
@@ -426,6 +503,7 @@ func TestListKustomizations_DependsOnEdgeCases(t *testing.T) {
 						map[string]any{"name": ""},
 						map[string]any{"name": "valid-dep"},
 					}
+
 					return kust
 				}(),
 			},
@@ -441,6 +519,7 @@ func TestListKustomizations_DependsOnEdgeCases(t *testing.T) {
 						"not-a-map",
 						map[string]any{"name": "real-dep"},
 					}
+
 					return kust
 				}(),
 			},

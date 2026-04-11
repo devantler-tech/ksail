@@ -712,15 +712,28 @@ func TestProgressGroup_EmptyTitle(t *testing.T) {
 	// With an empty title, the first rendered line should be the task output,
 	// not a title line such as " ..." or "► ...".
 	if strings.HasPrefix(lines[0], " ...") || strings.TrimSpace(lines[0]) == "..." {
-		t.Errorf("expected no title line when title is empty, got first line %q in output %q", lines[0], output)
+		t.Errorf(
+			"expected no title line when title is empty, got first line %q in output %q",
+			lines[0],
+			output,
+		)
 	}
 
 	if strings.HasPrefix(lines[0], "► ...") {
-		t.Errorf("expected no title line when title is empty, got first line %q in output %q", lines[0], output)
+		t.Errorf(
+			"expected no title line when title is empty, got first line %q in output %q",
+			lines[0],
+			output,
+		)
 	}
 
 	if !strings.Contains(lines[0], "my-task") {
-		t.Errorf("expected first line to contain task name %q, got first line %q in output %q", "my-task", lines[0], output)
+		t.Errorf(
+			"expected first line to contain task name %q, got first line %q in output %q",
+			"my-task",
+			lines[0],
+			output,
+		)
 	}
 }
 

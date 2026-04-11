@@ -1919,11 +1919,11 @@ var errGitOpsEngineRequired = errors.New(
 
 // Shared constants for reconciliation.
 const (
-	defaultReconcileTimeout          = 5 * time.Minute
-	fluxKustomizationPollInterval    = 500 * time.Millisecond
-	argoCDApplicationPollInterval    = 500 * time.Millisecond
-	reconcileConcurrency             = 5
-	reconcileCmdLong                 = "Trigger reconciliation/sync and wait for completion. " +
+	defaultReconcileTimeout       = 5 * time.Minute
+	fluxKustomizationPollInterval = 500 * time.Millisecond
+	argoCDApplicationPollInterval = 500 * time.Millisecond
+	reconcileConcurrency          = 5
+	reconcileCmdLong              = "Trigger reconciliation/sync and wait for completion. " +
 		"For Flux, tracks the OCIRepository and each Kustomization individually. " +
 		"For ArgoCD, tracks each Application until synced and healthy."
 )
@@ -2278,6 +2278,7 @@ func kustomizationReadinessTimeoutError(name, lastStatus string) error {
 // (dependencies before dependents) for display purposes.
 // Uses Kahn's algorithm. If cycles are detected, remaining items are appended
 // in their original order so the ProgressGroup still shows all resources.
+//
 //nolint:cyclop // Kahn's algorithm has inherent branching; complexity is structural, not avoidable.
 func topologicalSortKustomizations(
 	kustomizations []flux.KustomizationInfo,
@@ -2288,6 +2289,7 @@ func topologicalSortKustomizations(
 
 	byName := make(map[string]flux.KustomizationInfo, len(kustomizations))
 	inDegree := make(map[string]int, len(kustomizations))
+
 	dependents := make(map[string][]string, len(kustomizations))
 	for _, kust := range kustomizations {
 		byName[kust.Name] = kust
@@ -2300,6 +2302,7 @@ func topologicalSortKustomizations(
 			if _, dup := seen[dep]; dup {
 				continue
 			}
+
 			seen[dep] = struct{}{}
 			if _, exists := byName[dep]; exists {
 				inDegree[kust.Name]++
@@ -2319,6 +2322,7 @@ func topologicalSortKustomizations(
 	for len(queue) > 0 {
 		name := queue[0]
 		queue = queue[1:]
+
 		sorted = append(sorted, byName[name])
 		for _, child := range dependents[name] {
 			inDegree[child]--
@@ -2335,6 +2339,7 @@ func topologicalSortKustomizations(
 			}
 		}
 	}
+
 	return sorted
 }
 
@@ -2366,6 +2371,7 @@ func reconcileArgoCD(
 
 	// Sub-phase 2: Monitor all applications with per-app tracking
 	writeActivityNotification("reconciling argocd applications...", outputTimer, writer)
+
 	apps, err := argoReconciler.ListApplications(deadlineCtx)
 	if err != nil {
 		return fmt.Errorf("list argocd applications: %w", err)

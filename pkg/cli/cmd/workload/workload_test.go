@@ -2776,6 +2776,7 @@ func TestNewWorkloadCmdRunETriggersHelp(t *testing.T) {
 }
 
 // TestTopologicalSortKustomizations tests the topological sort of Flux Kustomizations.
+//
 //nolint:funlen // Table-driven test with comprehensive cases
 func TestTopologicalSortKustomizations(t *testing.T) {
 	t.Parallel()
