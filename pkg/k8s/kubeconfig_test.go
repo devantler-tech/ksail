@@ -313,8 +313,9 @@ users:
 	assert.True(t, hasDifferentUser, "different user should remain")
 }
 
-//nolint:funlen // table-driven test with multiple test cases
 // TestRenameKubeconfigContext tests context renaming in kubeconfig bytes.
+//
+//nolint:funlen // table-driven test with multiple test cases
 func TestRenameKubeconfigContext(t *testing.T) {
 	t.Parallel()
 
@@ -391,8 +392,8 @@ users:
     token: b
 `,
 			desiredContext: "admin@test",
-			wantErr:       true,
-			errContains:   "no current context",
+			wantErr:        true,
+			errContains:    "no current context",
 		},
 		{
 			name: "picks sole context when current context is empty",
@@ -471,9 +472,11 @@ users:
 
 			if testCase.wantErr {
 				require.Error(t, err)
+
 				if testCase.errContains != "" {
 					assert.Contains(t, err.Error(), testCase.errContains)
 				}
+
 				return
 			}
 

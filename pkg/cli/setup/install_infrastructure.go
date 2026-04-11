@@ -42,7 +42,8 @@ func HelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, e
 	// dereference panics in Helm v4, which defers context validation until
 	// the REST client is actually used (e.g., in IsReachable).
 	if kubeContext != "" {
-		if err := validateKubeconfigContext(kubeconfigPath, kubeContext); err != nil {
+		err := validateKubeconfigContext(kubeconfigPath, kubeContext)
+		if err != nil {
 			return nil, "", err
 		}
 	}
