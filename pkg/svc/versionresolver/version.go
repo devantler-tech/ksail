@@ -56,6 +56,7 @@ func (v Version) IsStable() bool {
 	if v.PreRelease != "" {
 		return false
 	}
+
 	return !preReleaseRegexp.MatchString(v.Original)
 }
 
@@ -67,35 +68,43 @@ func (v Version) Less(other Version) bool {
 	if v.Major != other.Major {
 		return v.Major < other.Major
 	}
+
 	if v.Minor != other.Minor {
 		return v.Minor < other.Minor
 	}
+
 	if v.Patch != other.Patch {
 		return v.Patch < other.Patch
 	}
+
 	return suffixNum(v.Suffix) < suffixNum(other.Suffix)
 }
 
 // suffixNum extracts the trailing numeric portion of a suffix string.
 // For example, "k3s2" → 2, "" → 0, "abc" → 0.
-func suffixNum(s string) int {
-	if s == "" {
+func suffixNum(suffix string) int {
+	if suffix == "" {
 		return 0
 	}
-	i := len(s)
-	for i > 0 && s[i-1] >= '0' && s[i-1] <= '9' {
-		i--
+
+	idx := len(suffix)
+	for idx > 0 && suffix[idx-1] >= '0' && suffix[idx-1] <= '9' {
+		idx--
 	}
-	if i == len(s) {
+
+	if idx == len(suffix) {
 		return 0
 	}
-	n, _ := strconv.Atoi(s[i:])
-	return n
+
+	num, _ := strconv.Atoi(suffix[idx:])
+
+	return num
 }
 
 // Equal returns true if v and other have the same major.minor.patch and suffix.
 func (v Version) Equal(other Version) bool {
-	return v.Major == other.Major && v.Minor == other.Minor && v.Patch == other.Patch && v.Suffix == other.Suffix
+	return v.Major == other.Major && v.Minor == other.Minor &&
+		v.Patch == other.Patch && v.Suffix == other.Suffix
 }
 
 // String returns the version as "vMAJOR.MINOR.PATCH" with suffix if present.
@@ -104,6 +113,7 @@ func (v Version) String() string {
 	if v.Suffix != "" {
 		base += "-" + v.Suffix
 	}
+
 	return base
 }
 
@@ -115,6 +125,7 @@ func FilterStable(versions []Version) []Version {
 			result = append(result, v)
 		}
 	}
+
 	return result
 }
 
@@ -126,7 +137,9 @@ func NewerThan(versions []Version, current Version) []Version {
 			result = append(result, v)
 		}
 	}
+
 	SortVersions(result)
+
 	return result
 }
 
@@ -145,12 +158,15 @@ func ParseTags(tags []string) []Version {
 		if tag == "latest" || tag == "" {
 			continue
 		}
+
 		v, err := ParseVersion(tag)
 		if err != nil {
 			continue
 		}
+
 		versions = append(versions, v)
 	}
+
 	return versions
 }
 
@@ -164,6 +180,7 @@ func MatchingSuffix(versions []Version, suffix string) []Version {
 				result = append(result, v)
 			}
 		}
+
 		return result
 	}
 
@@ -176,5 +193,6 @@ func MatchingSuffix(versions []Version, suffix string) []Version {
 			result = append(result, v)
 		}
 	}
+
 	return result
 }

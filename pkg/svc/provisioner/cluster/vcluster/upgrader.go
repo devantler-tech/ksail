@@ -23,13 +23,18 @@ const (
 // UpgradeKubernetes returns ErrRecreationRequired because VCluster does not
 // support in-place Kubernetes version upgrades.
 func (p *Provisioner) UpgradeKubernetes(_ context.Context, _ string, _, _ string) error {
-	return fmt.Errorf("vcluster: in-place Kubernetes upgrade not supported: %w", clustererr.ErrRecreationRequired)
+	return fmt.Errorf(
+		"vcluster: in-place Kubernetes upgrade not supported: %w", clustererr.ErrRecreationRequired,
+	)
 }
 
 // UpgradeDistribution returns ErrRecreationRequired because VCluster does not
 // support in-place distribution version upgrades.
 func (p *Provisioner) UpgradeDistribution(_ context.Context, _ string, _, _ string) error {
-	return fmt.Errorf("vcluster: in-place distribution upgrade not supported: %w", clustererr.ErrRecreationRequired)
+	return fmt.Errorf(
+		"vcluster: in-place distribution upgrade not supported: %w",
+		clustererr.ErrRecreationRequired,
+	)
 }
 
 // GetCurrentVersions returns the configured Kubernetes and VCluster chart versions.
@@ -65,5 +70,6 @@ func (p *Provisioner) PrepareConfigForVersion(upgradeType string, version string
 	// re-reads chart defaults. No in-memory config update needed.
 	_ = upgradeType
 	_ = version
+
 	return nil
 }

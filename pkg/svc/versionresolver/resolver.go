@@ -68,7 +68,7 @@ func ComputeUpgradePath(
 
 	allVersions, err := resolver.ListVersions(ctx, imageRef)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing versions for %s: %w", imageRef, err)
 	}
 
 	stable := FilterStable(allVersions)
@@ -91,7 +91,9 @@ func ComputeUpgradePath(
 
 	newer := NewerThan(stable, current)
 	if len(newer) == 0 {
-		return nil, fmt.Errorf("%w: already at latest stable version %s", ErrNoUpgradesAvailable, currentTag)
+		return nil, fmt.Errorf(
+			"%w: already at latest stable version %s", ErrNoUpgradesAvailable, currentTag,
+		)
 	}
 
 	steps := make([]UpgradeStep, 0, len(newer))

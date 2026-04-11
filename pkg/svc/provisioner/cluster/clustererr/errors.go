@@ -61,3 +61,6 @@ var ErrCreateNotSupported = errors.New("create not supported without specifying 
 // (e.g., Omni-managed Talos clusters). The orchestrator should treat this as a no-op with
 // an informational message rather than a failure.
 var ErrUpgradeSkipped = errors.New("upgrade skipped")
+
+// ErrUpgraderNotSupported is returned when a provisioner does not implement the Upgrader interface.
+var ErrUpgraderNotSupported = errors.New("provisioner does not support version upgrades")

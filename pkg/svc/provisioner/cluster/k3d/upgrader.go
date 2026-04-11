@@ -16,19 +16,25 @@ var _ clusterupdate.Upgrader = (*Provisioner)(nil)
 // UpgradeKubernetes returns ErrRecreationRequired because K3d does not support
 // in-place Kubernetes version changes. The orchestrator handles recreation.
 func (p *Provisioner) UpgradeKubernetes(_ context.Context, _ string, _, _ string) error {
-	return fmt.Errorf("k3d: in-place Kubernetes upgrade not supported: %w", clustererr.ErrRecreationRequired)
+	return fmt.Errorf(
+		"k3d: in-place Kubernetes upgrade not supported: %w", clustererr.ErrRecreationRequired,
+	)
 }
 
 // UpgradeDistribution returns ErrRecreationRequired because K3d does not support
 // in-place distribution version changes. The orchestrator handles recreation.
 func (p *Provisioner) UpgradeDistribution(_ context.Context, _ string, _, _ string) error {
-	return fmt.Errorf("k3d: in-place distribution upgrade not supported: %w", clustererr.ErrRecreationRequired)
+	return fmt.Errorf(
+		"k3d: in-place distribution upgrade not supported: %w", clustererr.ErrRecreationRequired,
+	)
 }
 
 // GetCurrentVersions returns the Kubernetes and distribution versions for the cluster.
 // For K3s, both versions are the same. The version is extracted from the configured
 // K3s image tag (e.g., "v1.35.3-k3s1" from "rancher/k3s:v1.35.3-k3s1").
-func (p *Provisioner) GetCurrentVersions(_ context.Context, _ string) (*clusterupdate.VersionInfo, error) {
+func (p *Provisioner) GetCurrentVersions(
+	_ context.Context, _ string,
+) (*clusterupdate.VersionInfo, error) {
 	image := k3sImage(p)
 	tag := extractTag(image)
 
@@ -62,6 +68,7 @@ func (p *Provisioner) PrepareConfigForVersion(_ string, version string) error {
 	if p.simpleCfg != nil {
 		p.simpleCfg.Image = "rancher/k3s:" + version
 	}
+
 	return nil
 }
 

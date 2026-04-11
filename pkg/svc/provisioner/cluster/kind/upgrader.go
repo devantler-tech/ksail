@@ -16,18 +16,26 @@ var _ clusterupdate.Upgrader = (*Provisioner)(nil)
 // UpgradeKubernetes returns ErrRecreationRequired because Kind does not support
 // in-place Kubernetes version changes. The orchestrator handles recreation.
 func (k *Provisioner) UpgradeKubernetes(_ context.Context, _ string, _, _ string) error {
-	return fmt.Errorf("kind: in-place Kubernetes upgrade not supported: %w", clustererr.ErrRecreationRequired)
+	return fmt.Errorf(
+		"kind: in-place Kubernetes upgrade not supported: %w",
+		clustererr.ErrRecreationRequired,
+	)
 }
 
 // UpgradeDistribution returns ErrRecreationRequired because Kind does not support
 // in-place distribution version changes. The orchestrator handles recreation.
 func (k *Provisioner) UpgradeDistribution(_ context.Context, _ string, _, _ string) error {
-	return fmt.Errorf("kind: in-place distribution upgrade not supported: %w", clustererr.ErrRecreationRequired)
+	return fmt.Errorf(
+		"kind: in-place distribution upgrade not supported: %w",
+		clustererr.ErrRecreationRequired,
+	)
 }
 
 // GetCurrentVersions returns the Kubernetes and distribution versions for the cluster.
 // It extracts the version tag from the configured Kind node image.
-func (k *Provisioner) GetCurrentVersions(_ context.Context, _ string) (*clusterupdate.VersionInfo, error) {
+func (k *Provisioner) GetCurrentVersions(
+	_ context.Context, _ string,
+) (*clusterupdate.VersionInfo, error) {
 	image := nodeImage(k)
 	tag := extractTag(image)
 
@@ -61,9 +69,11 @@ func (k *Provisioner) PrepareConfigForVersion(_ string, version string) error {
 	if k.kindConfig == nil {
 		return nil
 	}
+
 	for i := range k.kindConfig.Nodes {
 		k.kindConfig.Nodes[i].Image = "kindest/node:" + version
 	}
+
 	return nil
 }
 

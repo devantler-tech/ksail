@@ -5827,6 +5827,8 @@ Use --output json to emit a machine-readable diff for CI/MCP consumption.`,
 // handleUpdateRunE executes the cluster update logic.
 // It computes a diff between current and desired configuration, then applies
 // changes in-place where possible, falling back to cluster recreation when necessary.
+//
+//nolint:cyclop,funlen // orchestration function with sequential lifecycle phases
 func handleUpdateRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -5926,7 +5928,7 @@ func handleUpdateRunE(
 // When both flags are set, distribution upgrades run first (the distribution
 // runtime must support the target Kubernetes version).
 //
-//nolint:cyclop // orchestration function with distinct sequential phases
+//nolint:cyclop,funlen // orchestration function with distinct sequential phases
 func handleVersionUpgrades(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -5938,8 +5940,8 @@ func handleVersionUpgrades(
 ) (bool, error) {
 	upgrader, ok := provisioner.(clusterupdate.Upgrader)
 	if !ok {
-		return false, fmt.Errorf("provisioner for %s does not support version upgrades",
-			ctx.ClusterCfg.Spec.Cluster.Distribution)
+		return false, fmt.Errorf("%w: %s",
+			clustererr.ErrUpgraderNotSupported, ctx.ClusterCfg.Spec.Cluster.Distribution)
 	}
 
 	currentVersions, err := upgrader.GetCurrentVersions(cmd.Context(), clusterName)
@@ -5952,7 +5954,7 @@ func handleVersionUpgrades(
 	recreated := false
 
 	// Distribution upgrades first (runtime must support K8s version).
-	if updateDist {
+	if updateDist { //nolint:nestif // sequential phase with version refresh guard
 		stepRecreated, err := executeVersionUpgrade(
 			cmd, cfgManager, ctx, deps, upgrader, resolver, clusterName,
 			"distribution", upgrader.DistributionImageRef(),
@@ -5962,6 +5964,7 @@ func handleVersionUpgrades(
 		if err != nil {
 			return false, err
 		}
+
 		if stepRecreated {
 			recreated = true
 		}
@@ -5971,7 +5974,9 @@ func handleVersionUpgrades(
 		if updateK8s && !dryRun && !recreated {
 			currentVersions, err = upgrader.GetCurrentVersions(cmd.Context(), clusterName)
 			if err != nil {
-				return false, fmt.Errorf("failed to refresh versions after distribution upgrade: %w", err)
+				return false, fmt.Errorf(
+					"failed to refresh versions after distribution upgrade: %w", err,
+				)
 			}
 		}
 	}
@@ -5988,6 +5993,7 @@ func handleVersionUpgrades(
 		if err != nil {
 			return false, err
 		}
+
 		if stepRecreated {
 			recreated = true
 		}
@@ -6003,7 +6009,7 @@ type upgradeFunc func(ctx context.Context, clusterName, fromVersion, toVersion s
 // and applies each step. For distributions requiring recreation, it jumps to the
 // latest version and triggers a single recreate.
 //
-//nolint:cyclop // sequential upgrade logic with distinct phases
+//nolint:cyclop,funlen // sequential upgrade logic with distinct phases
 func executeVersionUpgrade(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -6076,12 +6082,19 @@ func executeVersionUpgrade(
 	probeErr := applyFn(cmd.Context(), clusterName, currentVersion, path[0].Version.Original)
 	if probeErr != nil && errors.Is(probeErr, clustererr.ErrUpgradeSkipped) {
 		notify.Infof(cmd.OutOrStdout(), "%s upgrade skipped: %v", upgradeType, probeErr)
+
 		return false, nil
 	}
+
 	if probeErr != nil && errors.Is(probeErr, clustererr.ErrRecreationRequired) {
-		if err := upgrader.PrepareConfigForVersion(upgradeType, targetVersion); err != nil {
-			return false, fmt.Errorf("failed to prepare config for %s %s: %w", upgradeType, targetVersion, err)
+		prepErr := upgrader.PrepareConfigForVersion(upgradeType, targetVersion)
+		if prepErr != nil {
+			return false, fmt.Errorf(
+				"failed to prepare config for %s %s: %w",
+				upgradeType, targetVersion, prepErr,
+			)
 		}
+
 		return true, handleRecreationUpgrade(cmd, cfgManager, ctx, deps, clusterName,
 			upgradeType, currentVersion, targetVersion, force)
 	}
@@ -6089,10 +6102,9 @@ func executeVersionUpgrade(
 	// Rolling upgrade (Talos): first step already applied by the probe, continue with the rest.
 	if probeErr != nil {
 		return false, fmt.Errorf(
-			"%s upgrade failed at step 1/%d (%s → %s): %w\n"+
-				"The cluster is still running %s.",
-			upgradeType, len(path), currentVersion, path[0].Version.Original, probeErr,
-			currentVersion,
+			"%s upgrade failed at step 1/%d (%s → %s), cluster is still running %s: %w",
+			upgradeType, len(path), currentVersion, path[0].Version.Original,
+			currentVersion, probeErr,
 		)
 	}
 
@@ -6104,29 +6116,30 @@ func executeVersionUpgrade(
 		Writer: cmd.OutOrStdout(),
 	})
 
-	for i := 1; i < len(path); i++ {
-		step := path[i]
-		prevVersion := path[i-1].Version.Original
+	for stepIdx := 1; stepIdx < len(path); stepIdx++ {
+		step := path[stepIdx]
+		prevVersion := path[stepIdx-1].Version.Original
 
 		notify.WriteMessage(notify.Message{
 			Type:  notify.ActivityType,
 			Emoji: "⬆️",
 			Content: fmt.Sprintf("upgrading %s: step %d/%d (%s → %s)",
-				upgradeType, i+1, len(path), prevVersion, step.Version.Original),
+				upgradeType, stepIdx+1, len(path), prevVersion, step.Version.Original),
 			Writer: cmd.OutOrStdout(),
 		})
 
-		if err := applyFn(cmd.Context(), clusterName, prevVersion, step.Version.Original); err != nil {
+		applyErr := applyFn(
+			cmd.Context(), clusterName, prevVersion, step.Version.Original,
+		)
+		if applyErr != nil {
 			notify.Warningf(cmd.OutOrStderr(),
 				"%s upgrade to %s failed (cluster is at %s): %v",
-				upgradeType, step.Version.Original, prevVersion, err)
+				upgradeType, step.Version.Original, prevVersion, applyErr)
 
 			return false, fmt.Errorf(
-				"%s upgrade failed at step %d/%d (%s → %s): %w\n"+
-					"The cluster is running %s. "+
-					"Check compatibility notes for %s before retrying.",
-				upgradeType, i+1, len(path), prevVersion, step.Version.Original, err,
-				prevVersion, step.Version.Original,
+				"%s upgrade failed at step %d/%d (%s → %s), cluster is running %s: %w",
+				upgradeType, stepIdx+1, len(path), prevVersion, step.Version.Original,
+				prevVersion, applyErr,
 			)
 		}
 
@@ -6134,15 +6147,18 @@ func executeVersionUpgrade(
 			Type:  notify.SuccessType,
 			Emoji: "⬆️",
 			Content: fmt.Sprintf("%s upgraded: step %d/%d → %s",
-				upgradeType, i+1, len(path), step.Version.Original),
+				upgradeType, stepIdx+1, len(path), step.Version.Original),
 			Writer: cmd.OutOrStdout(),
 		})
 	}
 
 	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: fmt.Sprintf("%s upgrade complete: %s → %s", upgradeType, currentVersion, targetVersion),
-		Writer:  cmd.OutOrStdout(),
+		Type: notify.SuccessType,
+		Content: fmt.Sprintf(
+			"%s upgrade complete: %s → %s",
+			upgradeType, currentVersion, targetVersion,
+		),
+		Writer: cmd.OutOrStdout(),
 	})
 
 	return false, nil

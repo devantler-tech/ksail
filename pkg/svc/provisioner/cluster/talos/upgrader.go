@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/siderolabs/go-kubernetes/kubernetes/upgrade"
 	"github.com/siderolabs/talos/pkg/cluster"
 	k8s "github.com/siderolabs/talos/pkg/cluster/kubernetes"
 	"github.com/siderolabs/talos/pkg/machinery/config/encoder"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
-
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // Compile-time interface compliance check.
@@ -32,7 +31,10 @@ func (p *Provisioner) UpgradeDistribution(
 	fromVersion, toVersion string,
 ) error {
 	if p.omniOpts != nil {
-		return fmt.Errorf("Talos upgrades are managed externally by Omni: %w", clustererr.ErrUpgradeSkipped)
+		return fmt.Errorf(
+			"talos upgrades are managed externally by Omni: %w",
+			clustererr.ErrUpgradeSkipped,
+		)
 	}
 
 	clusterName = p.resolveClusterName(clusterName)
@@ -62,13 +64,18 @@ func (p *Provisioner) UpgradeDistribution(
 // - Kubernetes manifest sync (SSA for Talos >= 1.13)
 //
 // Omni-managed clusters are skipped since Omni handles K8s upgrades externally.
+//
+//nolint:funlen // sequential SDK workflow with setup, detection, and upgrade phases
 func (p *Provisioner) UpgradeKubernetes(
 	ctx context.Context,
 	clusterName string,
 	_, toVersion string,
 ) error {
 	if p.omniOpts != nil {
-		return fmt.Errorf("Kubernetes upgrades are managed externally by Omni: %w", clustererr.ErrUpgradeSkipped)
+		return fmt.Errorf(
+			"kubernetes upgrades are managed externally by Omni: %w",
+			clustererr.ErrUpgradeSkipped,
+		)
 	}
 
 	clusterName = p.resolveClusterName(clusterName)
@@ -90,7 +97,7 @@ func (p *Provisioner) UpgradeKubernetes(
 	}
 
 	if cpNodeIP == "" {
-		return fmt.Errorf("no control-plane node found for cluster %s", clusterName)
+		return fmt.Errorf("%w: %s", clustererr.ErrNoControlPlaneNodes, clusterName)
 	}
 
 	// Build the Talos client.
@@ -134,7 +141,9 @@ func (p *Provisioner) UpgradeKubernetes(
 		ControllerManagerImage: constants.KubernetesControllerManagerImage,
 		SchedulerImage:         constants.KubernetesSchedulerImage,
 		ProxyImage:             constants.KubeProxyImage,
-		EncoderOpt:             encoder.WithComments(encoder.CommentsDocs | encoder.CommentsExamples),
+		EncoderOpt: encoder.WithComments(
+			encoder.CommentsDocs | encoder.CommentsExamples,
+		),
 	}
 
 	fromVersionBare, err := k8s.DetectLowestVersion(ctx, &state, upgradeOpts)
@@ -151,7 +160,8 @@ func (p *Provisioner) UpgradeKubernetes(
 		"  Upgrade path: %s → %s\n", fromVersionBare, toVersionBare,
 	)
 
-	if err := k8s.Upgrade(ctx, &state, upgradeOpts); err != nil {
+	err = k8s.Upgrade(ctx, &state, upgradeOpts)
+	if err != nil {
 		return fmt.Errorf("K8s upgrade to %s failed: %w", toVersion, err)
 	}
 
@@ -175,7 +185,7 @@ func (p *Provisioner) GetCurrentVersions(
 	}
 
 	if len(nodes) == 0 {
-		return nil, fmt.Errorf("no nodes found for cluster %s", clusterName)
+		return nil, fmt.Errorf("%w: %s", clustererr.ErrNoNodesFound, clusterName)
 	}
 
 	talosVersion, err := p.getRunningTalosVersion(ctx, nodes[0].IP)

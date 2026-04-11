@@ -13,10 +13,13 @@ type mockResolver struct {
 	err      error
 }
 
-func (m *mockResolver) ListVersions(_ context.Context, _ string) ([]versionresolver.Version, error) {
+func (m *mockResolver) ListVersions(
+	_ context.Context, _ string,
+) ([]versionresolver.Version, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
+
 	return m.versions, nil
 }
 

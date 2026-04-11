@@ -6,6 +6,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/svc/versionresolver"
 )
 
+//nolint:cyclop,funlen // table-driven test with many assertions per case
 func TestParseVersion(t *testing.T) {
 	t.Parallel()
 
@@ -56,14 +57,14 @@ func TestParseVersion(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			v, err := versionresolver.ParseVersion(tt.input)
-			if tt.wantErr {
+			version, err := versionresolver.ParseVersion(testCase.input)
+			if testCase.wantErr {
 				if err == nil {
-					t.Fatalf("expected error for input %q, got nil", tt.input)
+					t.Fatalf("expected error for input %q, got nil", testCase.input)
 				}
 
 				return
@@ -73,21 +74,24 @@ func TestParseVersion(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if v.Major != tt.wantMajor || v.Minor != tt.wantMinor || v.Patch != tt.wantPatch {
+			if version.Major != testCase.wantMajor ||
+				version.Minor != testCase.wantMinor ||
+				version.Patch != testCase.wantPatch {
 				t.Errorf("version = %d.%d.%d, want %d.%d.%d",
-					v.Major, v.Minor, v.Patch, tt.wantMajor, tt.wantMinor, tt.wantPatch)
+					version.Major, version.Minor, version.Patch,
+					testCase.wantMajor, testCase.wantMinor, testCase.wantPatch)
 			}
 
-			if v.PreRelease != tt.wantPre {
-				t.Errorf("prerelease = %q, want %q", v.PreRelease, tt.wantPre)
+			if version.PreRelease != testCase.wantPre {
+				t.Errorf("prerelease = %q, want %q", version.PreRelease, testCase.wantPre)
 			}
 
-			if v.Suffix != tt.wantSuf {
-				t.Errorf("suffix = %q, want %q", v.Suffix, tt.wantSuf)
+			if version.Suffix != testCase.wantSuf {
+				t.Errorf("suffix = %q, want %q", version.Suffix, testCase.wantSuf)
 			}
 
-			if v.Original != tt.wantOrig {
-				t.Errorf("original = %q, want %q", v.Original, tt.wantOrig)
+			if version.Original != testCase.wantOrig {
+				t.Errorf("original = %q, want %q", version.Original, testCase.wantOrig)
 			}
 		})
 	}
@@ -204,15 +208,15 @@ func TestLess_K3sSuffix(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			a, _ := versionresolver.ParseVersion(tt.a)
-			b, _ := versionresolver.ParseVersion(tt.b)
+			versionA, _ := versionresolver.ParseVersion(testCase.a)
+			versionB, _ := versionresolver.ParseVersion(testCase.b)
 
-			if got := a.Less(b); got != tt.want {
-				t.Errorf("%s.Less(%s) = %v, want %v", tt.a, tt.b, got, tt.want)
+			if got := versionA.Less(versionB); got != testCase.want {
+				t.Errorf("%s.Less(%s) = %v, want %v", testCase.a, testCase.b, got, testCase.want)
 			}
 		})
 	}

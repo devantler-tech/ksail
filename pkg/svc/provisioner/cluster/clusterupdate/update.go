@@ -253,7 +253,9 @@ type Upgrader interface {
 	// UpgradeDistribution upgrades the distribution version on the cluster.
 	// For Talos, this performs a rolling OS upgrade via LifecycleService.
 	// For Kind/K3d/VCluster, this returns clustererr.ErrRecreationRequired.
-	UpgradeDistribution(ctx context.Context, clusterName string, fromVersion, toVersion string) error
+	UpgradeDistribution(
+		ctx context.Context, clusterName string, fromVersion, toVersion string,
+	) error
 
 	// GetCurrentVersions returns the running Kubernetes and distribution versions.
 	GetCurrentVersions(ctx context.Context, clusterName string) (*VersionInfo, error)
