@@ -419,7 +419,7 @@ users:
 			wantContext:    "admin@my-cluster",
 		},
 		{
-			name: "handles empty kubeconfig with no contexts",
+			name: "error on empty kubeconfig with no contexts",
 			kubeconfig: `apiVersion: v1
 kind: Config
 contexts: []
@@ -427,7 +427,8 @@ clusters: []
 users: []
 `,
 			desiredContext: "admin@test",
-			wantContext:    "admin@test",
+			wantErr:        true,
+			errContains:    "no contexts in kubeconfig",
 		},
 		{
 			name: "returns error on context name collision",

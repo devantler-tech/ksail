@@ -167,20 +167,20 @@ func clusterNameFromDistConfig(distCfg *clusterprovisioner.DistributionConfig) s
 }
 
 // clusterNameFromKubeconfig extracts the cluster name from the kubeconfig file.
-// After context renaming, the current context may be "admin@<name>" rather than
-// the raw Omni cluster name. We strip the "admin@" prefix if present.
+// Only returns a cluster name when the current context follows the Talos "admin@<name>"
+// convention. Returns empty for arbitrary/renamed context names since those cannot
+// reliably map to Omni cluster names.
 func clusterNameFromKubeconfig(kubeconfigPath string) string {
 	cfg, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
 		return ""
 	}
 
-	ctx := cfg.CurrentContext
-	if after, ok := strings.CutPrefix(ctx, "admin@"); ok {
+	if after, ok := strings.CutPrefix(cfg.CurrentContext, "admin@"); ok {
 		return after
 	}
 
-	return ctx
+	return ""
 }
 
 // refreshKubeconfig creates an Omni client and fetches a fresh kubeconfig.

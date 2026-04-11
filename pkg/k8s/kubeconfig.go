@@ -118,7 +118,17 @@ func RenameKubeconfigContext(kubeconfigData []byte, desiredContext string) ([]by
 		return nil, err
 	}
 
-	if oldContext == "" || oldContext == desiredContext {
+	if oldContext == "" {
+		if len(config.Contexts) == 0 {
+			return nil, fmt.Errorf("%w: no contexts in kubeconfig", ErrKubeconfigContextNotFound)
+		}
+
+		config.CurrentContext = desiredContext
+
+		return writeConfig(config)
+	}
+
+	if oldContext == desiredContext {
 		config.CurrentContext = desiredContext
 
 		return writeConfig(config)
