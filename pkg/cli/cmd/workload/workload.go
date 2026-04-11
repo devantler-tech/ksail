@@ -37,6 +37,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 	configmanagerinterface "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
 	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/ksail"
+	k8sutil "github.com/devantler-tech/ksail/v6/pkg/k8s"
 	"github.com/devantler-tech/ksail/v6/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v6/pkg/svc/detector/cluster"
 	imagesvc "github.com/devantler-tech/ksail/v6/pkg/svc/image"
@@ -53,6 +54,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	yamlio "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 	kustomizeTypes "sigs.k8s.io/kustomize/api/types"
@@ -309,7 +312,7 @@ func runHostDebug(cmd *cobra.Command, nodeName string, args []string) error {
 
 	switch info.Distribution {
 	case v1alpha1.DistributionTalos:
-		return runTalosHostDebugFromInfo(cmd, info, nodeName, debugImage, args)
+		return runTalosHostDebugFromInfo(cmd, info, kubeconfigPath, contextName, nodeName, debugImage, args)
 	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s, v1alpha1.DistributionVCluster:
 		if info.Provider != v1alpha1.ProviderDocker {
 			return fmt.Errorf(
@@ -330,6 +333,8 @@ func runHostDebug(cmd *cobra.Command, nodeName string, args []string) error {
 func runTalosHostDebugFromInfo(
 	cmd *cobra.Command,
 	info *clusterdetector.Info,
+	kubeconfigPath string,
+	contextName string,
 	nodeName string,
 	image string,
 	args []string,
@@ -339,7 +344,7 @@ func runTalosHostDebugFromInfo(
 		talosconfigPath = "~/.talos/config"
 	}
 
-	nodeEndpoint, err := resolveTalosNodeEndpoint(cmd.Context(), info, nodeName)
+	nodeEndpoint, err := resolveTalosNodeEndpoint(cmd.Context(), info, kubeconfigPath, contextName, nodeName)
 	if err != nil {
 		return err
 	}
@@ -349,18 +354,19 @@ func runTalosHostDebugFromInfo(
 
 // resolveTalosNodeEndpoint resolves a node name to a Talos API endpoint.
 // For Docker provider, it inspects the container's network settings.
-// For Hetzner/Omni, the node name is used directly as the endpoint.
+// For Hetzner/Omni, it resolves the node IP from the Kubernetes Node object.
 func resolveTalosNodeEndpoint(
 	ctx context.Context,
 	info *clusterdetector.Info,
+	kubeconfigPath string,
+	contextName string,
 	nodeName string,
 ) (string, error) {
 	switch info.Provider {
 	case v1alpha1.ProviderDocker:
 		return resolveDockerNodeIP(ctx, info.ClusterName, nodeName, dockerprovider.LabelSchemeTalos)
 	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
-		// For cloud/managed providers, the node name is the endpoint.
-		return nodeName, nil
+		return resolveNodeIPFromKubernetes(ctx, kubeconfigPath, contextName, nodeName)
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Provider)
 	}
@@ -603,6 +609,39 @@ func distributionToLabelScheme(distribution v1alpha1.Distribution) dockerprovide
 	default:
 		return dockerprovider.LabelSchemeKind
 	}
+}
+
+// resolveNodeIPFromKubernetes resolves a Kubernetes node name to its IP address
+// by querying the Node object. Prefers InternalIP, falls back to ExternalIP.
+func resolveNodeIPFromKubernetes(
+	ctx context.Context,
+	kubeconfigPath string,
+	contextName string,
+	nodeName string,
+) (string, error) {
+	clientset, err := k8sutil.NewClientset(kubeconfigPath, contextName)
+	if err != nil {
+		return "", fmt.Errorf("create Kubernetes client: %w", err)
+	}
+
+	node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("get node %q: %w", nodeName, err)
+	}
+
+	for _, addr := range node.Status.Addresses {
+		if addr.Type == corev1.NodeInternalIP {
+			return addr.Address, nil
+		}
+	}
+
+	for _, addr := range node.Status.Addresses {
+		if addr.Type == corev1.NodeExternalIP {
+			return addr.Address, nil
+		}
+	}
+
+	return "", fmt.Errorf("%w: %q", ErrNoIPAddress, nodeName)
 }
 
 // NewEditCmd creates the workload edit command.
