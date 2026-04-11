@@ -69,6 +69,7 @@ require (
 	github.com/loft-sh/vcluster v0.33.1
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/siderolabs/gen v0.8.6
+	github.com/siderolabs/go-kubernetes v0.2.36
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/omni/client v1.6.4
 	golang.org/x/text v0.35.0
@@ -306,6 +307,7 @@ require (
 	github.com/fluxcd/cli-utils v0.37.2-flux.1 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.9.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.15.1 // indirect
+	github.com/fluxcd/pkg/ssa v0.70.0 // indirect
 	github.com/fvbommel/sortorder v1.1.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/fzipp/gocyclo v0.6.0 // indirect
@@ -623,7 +625,6 @@ require (
 	github.com/siderolabs/go-api-signature v0.3.12 // indirect
 	github.com/siderolabs/go-blockdevice/v2 v2.0.27 // indirect
 	github.com/siderolabs/go-cmd v0.2.0 // indirect
-	github.com/siderolabs/go-kubernetes v0.2.36 // indirect
 	github.com/siderolabs/go-pointer v1.0.1 // indirect
 	github.com/siderolabs/go-procfs v0.1.2 // indirect
 	github.com/siderolabs/go-talos-support v0.1.4 // indirect
