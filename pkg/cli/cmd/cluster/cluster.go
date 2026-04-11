@@ -31,6 +31,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/cli/setup/mirrorregistry"
 	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/confirm"
 	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/picker"
+	argocdclient "github.com/devantler-tech/ksail/v6/pkg/client/argocd"
 	docker "github.com/devantler-tech/ksail/v6/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v6/pkg/client/k9s"
@@ -50,6 +51,7 @@ import (
 	specdiff "github.com/devantler-tech/ksail/v6/pkg/svc/diff"
 	imagesvc "github.com/devantler-tech/ksail/v6/pkg/svc/image"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/installer"
+	fluxinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/flux"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
@@ -3775,20 +3777,23 @@ var errMetricsServerDisableUnsupported = errors.New(
 // componentReconciler applies component-level changes detected by the DiffEngine.
 // It maps field names from the diff to installer Install/Uninstall operations.
 type componentReconciler struct {
-	cmd        *cobra.Command
-	clusterCfg *v1alpha1.Cluster
-	factories  *setup.InstallerFactories
+	cmd         *cobra.Command
+	clusterCfg  *v1alpha1.Cluster
+	clusterName string
+	factories   *setup.InstallerFactories
 }
 
 // newComponentReconciler creates a reconciler for applying component changes.
 func newComponentReconciler(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
 ) *componentReconciler {
 	return &componentReconciler{
-		cmd:        cmd,
-		clusterCfg: clusterCfg,
-		factories:  getInstallerFactories(),
+		cmd:         cmd,
+		clusterCfg:  clusterCfg,
+		clusterName: clusterName,
+		factories:   getInstallerFactories(),
 	}
 }
 
@@ -3848,6 +3853,7 @@ func (r *componentReconciler) handlerForField(
 		"cluster.certManager":   r.reconcileCertManager,
 		"cluster.policyEngine":  r.reconcilePolicyEngine,
 		"cluster.gitOpsEngine":  r.reconcileGitOpsEngine,
+		"cluster.workload.tag":  r.reconcileWorkloadTag,
 	}
 
 	handler, ok := handlers[field]
@@ -4062,6 +4068,55 @@ func (r *componentReconciler) uninstallGitOpsEngine(
 		}
 
 		return r.uninstallWithFactory(ctx, r.factories.ArgoCD)
+
+	default:
+		return nil
+	}
+}
+
+// reconcileWorkloadTag updates the GitOps sync resource (FluxInstance or ArgoCD
+// Application) to match the desired workload tag from configuration.
+//
+//nolint:exhaustive // Only Flux and ArgoCD have sync resources to update
+func (r *componentReconciler) reconcileWorkloadTag(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	gitOpsEngine := r.clusterCfg.Spec.Cluster.GitOpsEngine
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(r.clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to get kubeconfig path: %w", err)
+	}
+
+	switch gitOpsEngine {
+	case v1alpha1.GitOpsEngineFlux:
+		// Resolve registry host for VCluster (others return empty string)
+		registryHost, resolveErr := setup.ResolveRegistryHostForCluster(
+			ctx, r.clusterCfg, r.clusterName,
+		)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve registry host for flux: %w", resolveErr)
+		}
+
+		err = fluxinstaller.SetupInstance(
+			ctx, kubeconfigPath, r.clusterCfg, r.clusterName, registryHost,
+		)
+		if err != nil {
+			return fmt.Errorf("setup flux instance: %w", err)
+		}
+
+		return nil
+
+	case v1alpha1.GitOpsEngineArgoCD:
+		err = setup.EnsureArgoCDResources(
+			ctx, kubeconfigPath, r.clusterCfg, r.clusterName,
+		)
+		if err != nil {
+			return fmt.Errorf("ensure argocd resources: %w", err)
+		}
+
+		return nil
 
 	default:
 		return nil
@@ -6303,6 +6358,9 @@ func computeUpdateDiff(
 		specdiff.MergeProvisionerDiff(diff, provisionerDiff)
 	}
 
+	// Check for workload tag drift (stale GitOps sync ref)
+	checkWorkloadTagDrift(cmd, ctx, diffEngine, diff)
+
 	return currentSpec, diff, nil
 }
 
@@ -6343,12 +6401,90 @@ func computeSpecOnlyDiff(
 		ctx.ClusterCfg.Spec.Cluster.Provider,
 	)
 
-	return diffEngine.ComputeDiff(
+	diff := diffEngine.ComputeDiff(
 		currentSpec,
 		&ctx.ClusterCfg.Spec.Cluster,
 		nil,
 		&ctx.ClusterCfg.Spec.Provider,
 	)
+
+	// Check for workload tag drift (stale GitOps sync ref)
+	checkWorkloadTagDrift(cmd, ctx, diffEngine, diff)
+
+	return diff
+}
+
+// checkWorkloadTagDrift queries the running GitOps sync resource for its current
+// tag (FluxInstance.sync.ref or ArgoCD Application.targetRevision) and compares
+// it against the desired tag from configuration. If they differ, an in-place
+// change is appended to the diff result. This detects stale sync refs left by
+// pre-v6.7.1 cluster creation.
+// Errors during cluster queries are logged as warnings and skipped — they should
+// not block the rest of the update.
+func checkWorkloadTagDrift(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	diffEngine *specdiff.Engine,
+	diff *clusterupdate.UpdateResult,
+) {
+	gitOpsEngine := ctx.ClusterCfg.Spec.Cluster.GitOpsEngine
+	if gitOpsEngine == v1alpha1.GitOpsEngineNone || gitOpsEngine == "" {
+		return
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot resolve kubeconfig path for workload tag drift detection: %v", err)
+
+		return
+	}
+
+	desiredTag := fluxinstaller.ResolveDesiredTag(ctx.ClusterCfg)
+
+	var currentTag string
+
+	switch gitOpsEngine { //nolint:exhaustive // None/empty already filtered above
+	case v1alpha1.GitOpsEngineFlux:
+		currentTag, err = fluxinstaller.GetCurrentSyncRef(cmd.Context(), kubeconfigPath)
+	case v1alpha1.GitOpsEngineArgoCD:
+		currentTag, err = getCurrentArgoCDTargetRevision(cmd.Context(), kubeconfigPath)
+	default:
+		return
+	}
+
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot query current GitOps sync ref for drift detection: %v", err)
+
+		return
+	}
+
+	// Empty current tag means the resource does not exist yet — no drift to fix.
+	if currentTag == "" {
+		return
+	}
+
+	diffEngine.CheckWorkloadTag(currentTag, desiredTag, gitOpsEngine, diff)
+}
+
+// getCurrentArgoCDTargetRevision queries the ArgoCD Application for its current
+// targetRevision. Returns empty string if the Application does not exist.
+func getCurrentArgoCDTargetRevision(
+	goCtx context.Context,
+	kubeconfigPath string,
+) (string, error) {
+	mgr, err := argocdclient.NewManagerFromKubeconfig(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("create argocd manager: %w", err)
+	}
+
+	rev, err := mgr.GetCurrentTargetRevision(goCtx, "")
+	if err != nil {
+		return "", fmt.Errorf("get argocd target revision: %w", err)
+	}
+
+	return rev, nil
 }
 
 // applyOrReportChanges handles dry-run, recreate-required, no-changes, and
@@ -6406,7 +6542,7 @@ func applyOrReportChanges(
 		}
 	}
 
-	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg)
+	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg, clusterName)
 
 	return applyInPlaceChanges(
 		cmd, updater, reconciler, clusterName,
