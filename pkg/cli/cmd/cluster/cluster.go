@@ -6027,8 +6027,9 @@ func executeVersionUpgrade(
 ) (bool, error) {
 	if imageRef == "" {
 		notify.Infof(cmd.OutOrStdout(),
-			"No %s image repository configured; skipping %s upgrade",
-			upgradeType, upgradeType)
+			"No separate %s image for this distribution; "+
+				"use --update-kubernetes to upgrade",
+			upgradeType)
 
 		return false, nil
 	}

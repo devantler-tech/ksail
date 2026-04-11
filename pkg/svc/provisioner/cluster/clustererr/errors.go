@@ -64,3 +64,6 @@ var ErrUpgradeSkipped = errors.New("upgrade skipped")
 
 // ErrUpgraderNotSupported is returned when a provisioner does not implement the Upgrader interface.
 var ErrUpgraderNotSupported = errors.New("provisioner does not support version upgrades")
+
+// ErrVersionUndetermined is returned when the running version cannot be determined from the cluster state.
+var ErrVersionUndetermined = errors.New("cannot determine running version")

@@ -4,7 +4,7 @@
 # Go code reads from it via go:embed.
 #
 # Image mappings:
-# - ghcr.io/loft-sh/vcluster-pro → chartVersion() in images.go
+# - ghcr.io/loft-sh/vcluster-pro → ChartVersion() in images.go
 # - ghcr.io/loft-sh/kubernetes → KubernetesVersion() in images.go
 
 FROM ghcr.io/loft-sh/vcluster-pro:0.33.1@sha256:29379ee7d3c41a3fb0cc5513d9b20ef856c1fe80f7311104210f20f1ab4e0a38
