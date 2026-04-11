@@ -5860,11 +5860,17 @@ func handleUpdateRunE(
 	updateDist := cfgManager.Viper.GetBool("update-distribution")
 
 	if updateK8s || updateDist {
-		if err := handleVersionUpgrades(
+		recreated, err := handleVersionUpgrades(
 			cmd, cfgManager, ctx, deps, provisioner,
 			clusterName, updateK8s, updateDist, force,
-		); err != nil {
+		)
+		if err != nil {
 			return err
+		}
+		// If the cluster was recreated, skip the regular update flow —
+		// recreation already started a fresh cluster at the target version.
+		if recreated {
+			return nil
 		}
 	}
 
@@ -5929,55 +5935,65 @@ func handleVersionUpgrades(
 	provisioner clusterprovisioner.Provisioner,
 	clusterName string,
 	updateK8s, updateDist, force bool,
-) error {
+) (bool, error) {
 	upgrader, ok := provisioner.(clusterupdate.Upgrader)
 	if !ok {
-		return fmt.Errorf("provisioner for %s does not support version upgrades",
+		return false, fmt.Errorf("provisioner for %s does not support version upgrades",
 			ctx.ClusterCfg.Spec.Cluster.Distribution)
 	}
 
 	currentVersions, err := upgrader.GetCurrentVersions(cmd.Context(), clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to get current versions: %w", err)
+		return false, fmt.Errorf("failed to get current versions: %w", err)
 	}
 
 	resolver := versionresolver.NewOCIResolver()
 	dryRun := cfgManager.Viper.GetBool("dry-run")
+	recreated := false
 
 	// Distribution upgrades first (runtime must support K8s version).
 	if updateDist {
-		if err := executeVersionUpgrade(
+		stepRecreated, err := executeVersionUpgrade(
 			cmd, cfgManager, ctx, deps, upgrader, resolver, clusterName,
 			"distribution", upgrader.DistributionImageRef(),
 			currentVersions.DistributionVersion, upgrader.VersionSuffix(),
 			upgrader.UpgradeDistribution, force, dryRun,
-		); err != nil {
-			return err
+		)
+		if err != nil {
+			return false, err
+		}
+		if stepRecreated {
+			recreated = true
 		}
 
 		// Re-fetch versions after distribution upgrade since recreation may
 		// have changed the Kubernetes version too (Kind/K3d bundle both).
-		if updateK8s && !dryRun {
+		if updateK8s && !dryRun && !recreated {
 			currentVersions, err = upgrader.GetCurrentVersions(cmd.Context(), clusterName)
 			if err != nil {
-				return fmt.Errorf("failed to refresh versions after distribution upgrade: %w", err)
+				return false, fmt.Errorf("failed to refresh versions after distribution upgrade: %w", err)
 			}
 		}
 	}
 
-	// Then Kubernetes upgrades.
-	if updateK8s {
-		if err := executeVersionUpgrade(
+	// Then Kubernetes upgrades. Skip if we already recreated the cluster
+	// (recreation picks up the latest configured version for both).
+	if updateK8s && !recreated {
+		stepRecreated, err := executeVersionUpgrade(
 			cmd, cfgManager, ctx, deps, upgrader, resolver, clusterName,
 			"Kubernetes", upgrader.KubernetesImageRef(),
 			currentVersions.KubernetesVersion, upgrader.VersionSuffix(),
 			upgrader.UpgradeKubernetes, force, dryRun,
-		); err != nil {
-			return err
+		)
+		if err != nil {
+			return false, err
+		}
+		if stepRecreated {
+			recreated = true
 		}
 	}
 
-	return nil
+	return recreated, nil
 }
 
 // upgradeFunc is the signature for UpgradeKubernetes / UpgradeDistribution.
@@ -6002,13 +6018,13 @@ func executeVersionUpgrade(
 	suffix string,
 	applyFn upgradeFunc,
 	force, dryRun bool,
-) error {
+) (bool, error) {
 	if imageRef == "" {
 		notify.Infof(cmd.OutOrStdout(),
 			"No %s image repository configured; skipping %s upgrade",
 			upgradeType, upgradeType)
 
-		return nil
+		return false, nil
 	}
 
 	notify.WriteMessage(notify.Message{
@@ -6025,10 +6041,10 @@ func executeVersionUpgrade(
 			notify.Infof(cmd.OutOrStdout(),
 				"%s is already at the latest stable version (%s)", upgradeType, currentVersion)
 
-			return nil
+			return false, nil
 		}
 
-		return fmt.Errorf("failed to compute %s upgrade path: %w", upgradeType, err)
+		return false, fmt.Errorf("failed to compute %s upgrade path: %w", upgradeType, err)
 	}
 
 	// Display upgrade path
@@ -6047,7 +6063,7 @@ func executeVersionUpgrade(
 
 		notify.Infof(cmd.OutOrStdout(), "Dry run complete. No %s upgrades applied.", upgradeType)
 
-		return nil
+		return false, nil
 	}
 
 	// Check if the distribution requires recreation by probing with a no-op call.
@@ -6058,19 +6074,19 @@ func executeVersionUpgrade(
 	probeErr := applyFn(cmd.Context(), clusterName, currentVersion, path[0].Version.Original)
 	if probeErr != nil && errors.Is(probeErr, clustererr.ErrUpgradeSkipped) {
 		notify.Infof(cmd.OutOrStdout(), "%s upgrade skipped: %v", upgradeType, probeErr)
-		return nil
+		return false, nil
 	}
 	if probeErr != nil && errors.Is(probeErr, clustererr.ErrRecreationRequired) {
 		if err := upgrader.PrepareConfigForVersion(upgradeType, targetVersion); err != nil {
-			return fmt.Errorf("failed to prepare config for %s %s: %w", upgradeType, targetVersion, err)
+			return false, fmt.Errorf("failed to prepare config for %s %s: %w", upgradeType, targetVersion, err)
 		}
-		return handleRecreationUpgrade(cmd, cfgManager, ctx, deps, clusterName,
+		return true, handleRecreationUpgrade(cmd, cfgManager, ctx, deps, clusterName,
 			upgradeType, currentVersion, targetVersion, force)
 	}
 
 	// Rolling upgrade (Talos): first step already applied by the probe, continue with the rest.
 	if probeErr != nil {
-		return fmt.Errorf(
+		return false, fmt.Errorf(
 			"%s upgrade failed at step 1/%d (%s → %s): %w\n"+
 				"The cluster is still running %s.",
 			upgradeType, len(path), currentVersion, path[0].Version.Original, probeErr,
@@ -6103,7 +6119,7 @@ func executeVersionUpgrade(
 				"%s upgrade to %s failed (cluster is at %s): %v",
 				upgradeType, step.Version.Original, prevVersion, err)
 
-			return fmt.Errorf(
+			return false, fmt.Errorf(
 				"%s upgrade failed at step %d/%d (%s → %s): %w\n"+
 					"The cluster is running %s. "+
 					"Check compatibility notes for %s before retrying.",
@@ -6127,7 +6143,7 @@ func executeVersionUpgrade(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	return nil
+	return false, nil
 }
 
 // handleRecreationUpgrade handles version upgrades for distributions that require

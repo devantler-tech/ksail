@@ -14,7 +14,7 @@ type Version struct {
 	Minor      int
 	Patch      int
 	PreRelease string
-	Suffix     string // distribution-specific suffix, e.g. "-k3s1"
+	Suffix     string // distribution-specific suffix, e.g. "k3s1" (without leading dash)
 	Original   string // original tag string as found in the registry
 }
 
