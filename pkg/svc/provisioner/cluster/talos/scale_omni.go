@@ -134,7 +134,9 @@ func (p *Provisioner) resolveOmniMachinesForScaling(
 
 	// Neither machine class nor static machines: fetch existing cluster machines
 	// and discover only the additional ones needed for the new counts.
-	return p.discoverMachinesForScaling(ctx, omniProv, clusterName, newCPCount+newWorkerCount)
+	return p.discoverMachinesForScaling(
+		ctx, omniProv, clusterName, newCPCount, newWorkerCount,
+	)
 }
 
 // expandStaticMachinesForScaling appends additional available machines when the
@@ -159,26 +161,27 @@ func (p *Provisioner) expandStaticMachinesForScaling(
 	return append(machines, additional...), nil
 }
 
-// discoverMachinesForScaling fetches existing cluster machines and discovers
-// only the additional ones needed to reach the required total. The returned list
-// preserves role ordering: control-plane machines first, then workers, with any
-// newly discovered machines appended at the end. This matches the Omni template
-// positional semantics (first N machines become control planes).
+// discoverMachinesForScaling fetches existing cluster machines and builds a
+// role-aware machine list for the Omni cluster template. Existing machines are
+// partitioned by role, each pool is trimmed to the desired count, and any
+// shortfall is filled by discovering available machines. The returned list is
+// ordered [CP machines..., worker machines...] to match the Omni template
+// positional semantics (first ControlPlanes entries become control planes).
 func (p *Provisioner) discoverMachinesForScaling(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
 	clusterName string,
-	required int,
+	newCPCount, newWorkerCount int,
 ) ([]string, error) {
 	existingNodes, err := omniProv.ListNodes(ctx, clusterName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list existing cluster machines: %w", err)
+		return nil, fmt.Errorf(
+			"failed to list existing cluster machines: %w", err,
+		)
 	}
 
-	// Build the machine list with control-plane nodes first to preserve
-	// Omni template positional semantics.
-	cpIDs := make([]string, 0, len(existingNodes))
-	workerIDs := make([]string, 0, len(existingNodes))
+	// Partition existing nodes by role.
+	var cpIDs, workerIDs []string
 
 	for _, n := range existingNodes {
 		if n.Role == omniRoleControlPlane {
@@ -188,25 +191,44 @@ func (p *Provisioner) discoverMachinesForScaling(
 		}
 	}
 
-	machines := make([]string, 0, len(existingNodes))
-	machines = append(machines, cpIDs...)
-	machines = append(machines, workerIDs...)
+	// Trim each pool to the desired count and compute shortfall.
+	selectedCP := cpIDs[:min(newCPCount, len(cpIDs))]
+	selectedWorkers := workerIDs[:min(newWorkerCount, len(workerIDs))]
 
-	additionalNeeded := required - len(machines)
-	if additionalNeeded <= 0 {
-		return machines, nil
+	cpShortfall := newCPCount - len(selectedCP)
+	workerShortfall := newWorkerCount - len(selectedWorkers)
+	totalShortfall := cpShortfall + workerShortfall
+
+	// Discover additional machines if needed.
+	var additional []string
+
+	if totalShortfall > 0 {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Discovering %d additional machine(s) in Omni"+
+				" for scaling...\n",
+			totalShortfall,
+		)
+
+		additional, err = omniProv.ListAvailableMachines(
+			ctx, totalShortfall,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"auto-discover machines for scaling: %w", err,
+			)
+		}
 	}
 
-	_, _ = fmt.Fprintf(
-		p.logWriter,
-		"  Discovering %d additional machine(s) in Omni for scaling...\n",
-		additionalNeeded,
+	// Build the final list: [CP..., Workers...].
+	// Discovered machines fill CP shortfall first, then worker shortfall.
+	machines := make(
+		[]string, 0, newCPCount+newWorkerCount,
 	)
+	machines = append(machines, selectedCP...)
+	machines = append(machines, additional[:cpShortfall]...)
+	machines = append(machines, selectedWorkers...)
+	machines = append(machines, additional[cpShortfall:]...)
 
-	additional, err := omniProv.ListAvailableMachines(ctx, additionalNeeded)
-	if err != nil {
-		return nil, fmt.Errorf("auto-discover machines for scaling: %w", err)
-	}
-
-	return append(machines, additional...), nil
+	return machines, nil
 }
