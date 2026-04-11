@@ -79,16 +79,22 @@ func TestDiagnosePodFailures(t *testing.T) {
 			name:       "pod with ImagePullBackOff is reported",
 			namespaces: []string{"default"},
 			pods: []corev1.Pod{
-				makePod("pull-fail-pod", "default", corev1.PodPending, nil, []corev1.ContainerStatus{
-					{
-						State: corev1.ContainerState{
-							Waiting: &corev1.ContainerStateWaiting{
-								Reason: "ImagePullBackOff",
+				makePod(
+					"pull-fail-pod",
+					"default",
+					corev1.PodPending,
+					nil,
+					[]corev1.ContainerStatus{
+						{
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: "ImagePullBackOff",
+								},
 							},
+							Image: "ghcr.io/org/app:latest",
 						},
-						Image: "ghcr.io/org/app:latest",
 					},
-				}),
+				),
 			},
 			wantContain: []string{"pull-fail-pod", "ImagePullBackOff", "ghcr.io/org/app:latest"},
 		},
@@ -147,7 +153,12 @@ func TestDiagnosePodFailures(t *testing.T) {
 					},
 				),
 			},
-			wantContain: []string{"init-fail-pod", "init container", "init-setup", "PodInitializing"},
+			wantContain: []string{
+				"init-fail-pod",
+				"init container",
+				"init-setup",
+				"PodInitializing",
+			},
 		},
 		{
 			name:       "pod with reason falls back to phase and reason",
@@ -211,9 +222,13 @@ func TestDiagnosePodFailures_ListError(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset()
-	clientset.PrependReactor("list", "pods", func(_ k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errConnectionRefused
-	})
+	clientset.PrependReactor(
+		"list",
+		"pods",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errConnectionRefused
+		},
+	)
 
 	result := k8s.DiagnosePodFailures(context.Background(), clientset, []string{"default"})
 
