@@ -1,6 +1,7 @@
 name: Summarize Workflow Result
 description: |
   Summarizes the results of multiple jobs and fails if any job failed.
+  Cancelled and skipped jobs are treated as acceptable (non-failure).
   Useful for status check jobs that aggregate results from matrix or parallel jobs.
 
 inputs:
@@ -34,7 +35,7 @@ runs:
 
         for result in $JOB_RESULTS; do
           case "$result" in
-            success|skipped)
+            success|skipped|cancelled)
               ;;
             *)
               failed=true
