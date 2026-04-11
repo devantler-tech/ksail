@@ -46,16 +46,16 @@ func newFakeKustomization(
 	dependsOn []string,
 	readyStatus, readyReason, readyMessage string,
 ) *unstructured.Unstructured {
-	ks := &unstructured.Unstructured{}
-	ks.SetGroupVersionKind(schema.GroupVersionKind{
+	kust := &unstructured.Unstructured{}
+	kust.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "kustomize.toolkit.fluxcd.io",
 		Version: "v1",
 		Kind:    "Kustomization",
 	})
-	ks.SetName(name)
-	ks.SetNamespace("flux-system")
+	kust.SetName(name)
+	kust.SetNamespace("flux-system")
 
-	obj := ks.Object
+	obj := kust.Object
 	obj["spec"] = map[string]any{
 		"path": path,
 	}
@@ -83,7 +83,7 @@ func newFakeKustomization(
 		}
 	}
 
-	return ks
+	return kust
 }
 
 // ---------------------------------------------------------------------------
@@ -142,16 +142,16 @@ func TestListKustomizations(t *testing.T) {
 			name: "kustomization without spec.path returns empty path",
 			objects: []runtime.Object{
 				func() *unstructured.Unstructured {
-					ks := &unstructured.Unstructured{}
-					ks.SetGroupVersionKind(schema.GroupVersionKind{
+					kust := &unstructured.Unstructured{}
+					kust.SetGroupVersionKind(schema.GroupVersionKind{
 						Group:   "kustomize.toolkit.fluxcd.io",
 						Version: "v1",
 						Kind:    "Kustomization",
 					})
-					ks.SetName("no-path")
-					ks.SetNamespace("flux-system")
-					ks.Object["spec"] = map[string]any{}
-					return ks
+					kust.SetName("no-path")
+					kust.SetNamespace("flux-system")
+					kust.Object["spec"] = map[string]any{}
+					return kust
 				}(),
 			},
 			wantInfos: []flux.KustomizationInfo{
@@ -310,16 +310,16 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 			ksName: "new-ks",
 			objects: []runtime.Object{
 				func() *unstructured.Unstructured {
-					ks := &unstructured.Unstructured{}
-					ks.SetGroupVersionKind(schema.GroupVersionKind{
+					kust := &unstructured.Unstructured{}
+					kust.SetGroupVersionKind(schema.GroupVersionKind{
 						Group:   "kustomize.toolkit.fluxcd.io",
 						Version: "v1",
 						Kind:    "Kustomization",
 					})
-					ks.SetName("new-ks")
-					ks.SetNamespace("flux-system")
-					ks.Object["spec"] = map[string]any{"path": "./new"}
-					return ks
+					kust.SetName("new-ks")
+					kust.SetNamespace("flux-system")
+					kust.Object["spec"] = map[string]any{"path": "./new"}
+					return kust
 				}(),
 			},
 			wantReady:  false,
@@ -330,16 +330,16 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 			ksName: "stalled-ks",
 			objects: []runtime.Object{
 				func() *unstructured.Unstructured {
-					ks := &unstructured.Unstructured{}
-					ks.SetGroupVersionKind(schema.GroupVersionKind{
+					kust := &unstructured.Unstructured{}
+					kust.SetGroupVersionKind(schema.GroupVersionKind{
 						Group:   "kustomize.toolkit.fluxcd.io",
 						Version: "v1",
 						Kind:    "Kustomization",
 					})
-					ks.SetName("stalled-ks")
-					ks.SetNamespace("flux-system")
-					ks.Object["spec"] = map[string]any{"path": "./stalled"}
-					ks.Object["status"] = map[string]any{
+					kust.SetName("stalled-ks")
+					kust.SetNamespace("flux-system")
+					kust.Object["spec"] = map[string]any{"path": "./stalled"}
+					kust.Object["status"] = map[string]any{
 						"conditions": []any{
 							map[string]any{
 								"type":    "Stalled",
@@ -349,7 +349,7 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 							},
 						},
 					}
-					return ks
+					return kust
 				}(),
 			},
 			wantReady:   false,

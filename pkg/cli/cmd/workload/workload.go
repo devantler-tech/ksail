@@ -2281,7 +2281,7 @@ func kustomizationReadinessTimeoutError(name, lastStatus string) error {
 // (dependencies before dependents) for display purposes.
 // Uses Kahn's algorithm. If cycles are detected, remaining items are appended
 // in their original order so the ProgressGroup still shows all resources.
-//nolint:cyclop // Kahn's algorithm has inherent branching; complexity is structural, not avoidable.
+//nolint:cyclop,funlen // Kahn's algorithm has inherent branching; complexity is structural, not avoidable.
 func topologicalSortKustomizations(
 	kustomizations []flux.KustomizationInfo,
 ) []flux.KustomizationInfo {
