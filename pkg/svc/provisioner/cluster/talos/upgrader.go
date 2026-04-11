@@ -3,6 +3,13 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"github.com/siderolabs/go-kubernetes/kubernetes/upgrade"
+	"github.com/siderolabs/talos/pkg/cluster"
+	k8s "github.com/siderolabs/talos/pkg/cluster/kubernetes"
+	"github.com/siderolabs/talos/pkg/machinery/config/encoder"
+	"github.com/siderolabs/talos/pkg/machinery/constants"
 
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 )
@@ -46,20 +53,112 @@ func (p *Provisioner) UpgradeDistribution(
 	return nil
 }
 
-// UpgradeKubernetes is not yet supported for Talos clusters.
-// Talos manages Kubernetes versions through machine configuration and requires
-// the full k8s.Upgrade SDK workflow (control plane component updates, kubelet
-// upgrades, manifest syncing). This will be implemented in a future release.
+// UpgradeKubernetes upgrades the Kubernetes control plane and kubelets on a Talos
+// cluster using the Talos SDK's kubernetes.Upgrade() function. This handles:
+// - Static pod upgrades (apiserver, controller-manager, scheduler)
+// - Kube-proxy configuration patching
+// - Rolling kubelet upgrades across all nodes
+// - Kubernetes manifest sync (SSA for Talos >= 1.13)
+//
+// Omni-managed clusters are skipped since Omni handles K8s upgrades externally.
 func (p *Provisioner) UpgradeKubernetes(
-	_ context.Context,
-	_ string,
-	_, _ string,
+	ctx context.Context,
+	clusterName string,
+	_, toVersion string,
 ) error {
-	return fmt.Errorf(
-		"%w: Kubernetes version upgrades on Talos require the talosctl upgrade-k8s workflow; "+
-			"use --update-distribution to upgrade Talos OS instead",
-		ErrNotImplemented,
+	if p.omniOpts != nil {
+		return fmt.Errorf("omni-managed clusters handle Kubernetes upgrades externally")
+	}
+
+	clusterName = p.resolveClusterName(clusterName)
+
+	// Get the first control-plane node to connect through.
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("listing nodes for K8s upgrade: %w", err)
+	}
+
+	var cpNodeIP string
+
+	for _, n := range nodes {
+		if n.Role == RoleControlPlane {
+			cpNodeIP = n.IP
+
+			break
+		}
+	}
+
+	if cpNodeIP == "" {
+		return fmt.Errorf("no control-plane node found for cluster %s", clusterName)
+	}
+
+	// Build the Talos client.
+	talosClient, err := p.createTalosClient(ctx, cpNodeIP)
+	if err != nil {
+		return fmt.Errorf("creating Talos client for K8s upgrade: %w", err)
+	}
+
+	defer talosClient.Close() //nolint:errcheck
+
+	// Build the UpgradeProvider using SDK ready-made types.
+	clientProvider := &cluster.ConfigClientProvider{
+		DefaultClient: talosClient,
+	}
+	defer clientProvider.Close() //nolint:errcheck
+
+	state := struct {
+		cluster.ClientProvider
+		cluster.K8sProvider
+	}{
+		ClientProvider: clientProvider,
+		K8sProvider: &cluster.KubernetesClient{
+			ClientProvider: clientProvider,
+		},
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter,
+		"  Upgrading Kubernetes to %s...\n", toVersion,
 	)
+
+	// Strip the "v" prefix — the Talos SDK uses bare version numbers (e.g., "1.35.1").
+	toVersionBare := strings.TrimPrefix(toVersion, "v")
+
+	// Auto-detect the current running K8s version from the cluster.
+	upgradeOpts := k8s.UpgradeOptions{
+		LogOutput:              p.logWriter,
+		PrePullImages:          true,
+		UpgradeKubelet:         true,
+		KubeletImage:           constants.KubeletImage,
+		APIServerImage:         constants.KubernetesAPIServerImage,
+		ControllerManagerImage: constants.KubernetesControllerManagerImage,
+		SchedulerImage:         constants.KubernetesSchedulerImage,
+		ProxyImage:             constants.KubeProxyImage,
+		EncoderOpt:             encoder.WithComments(encoder.CommentsDocs | encoder.CommentsExamples),
+	}
+
+	fromVersionBare, err := k8s.DetectLowestVersion(ctx, &state, upgradeOpts)
+	if err != nil {
+		return fmt.Errorf("detecting current K8s version: %w", err)
+	}
+
+	upgradeOpts.Path, err = upgrade.NewPath(fromVersionBare, toVersionBare)
+	if err != nil {
+		return fmt.Errorf("creating upgrade path %s → %s: %w", fromVersionBare, toVersionBare, err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter,
+		"  Upgrade path: %s → %s\n", fromVersionBare, toVersionBare,
+	)
+
+	if err := k8s.Upgrade(ctx, &state, upgradeOpts); err != nil {
+		return fmt.Errorf("K8s upgrade to %s failed: %w", toVersion, err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter,
+		"  ✓ Kubernetes upgraded to %s\n", toVersion,
+	)
+
+	return nil
 }
 
 // GetCurrentVersions returns the running Talos and Kubernetes versions.
@@ -94,10 +193,11 @@ func (p *Provisioner) GetCurrentVersions(
 	}, nil
 }
 
-// KubernetesImageRef returns an empty string because Talos manages Kubernetes
-// versions through its own machine configuration, not via a container image tag.
+// KubernetesImageRef returns the Kubernetes apiserver image repository, which is
+// used for version discovery. While Talos manages K8s versions internally through
+// machine configuration, we need a registry to query for available versions.
 func (p *Provisioner) KubernetesImageRef() string {
-	return ""
+	return constants.KubernetesAPIServerImage
 }
 
 // DistributionImageRef returns the OCI repository for Talos node images.
