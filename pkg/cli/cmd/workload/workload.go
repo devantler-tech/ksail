@@ -2116,12 +2116,16 @@ func reconcileFlux(
 	}
 
 	writer := cmd.OutOrStdout()
-	deadline := time.Now().Add(timeout)
+
+	deadlineCtx, deadlineCancel := context.WithTimeout(cmd.Context(), timeout)
+	defer deadlineCancel()
+
+	deadline, _ := deadlineCtx.Deadline()
 
 	// Sub-phase 1: OCI source reconciliation
 	writeActivityNotification("reconciling oci source...", outputTimer, writer)
 
-	err = fluxReconciler.TriggerOCIRepositoryReconciliation(cmd.Context())
+	err = fluxReconciler.TriggerOCIRepositoryReconciliation(deadlineCtx)
 	if err != nil {
 		return fmt.Errorf("trigger oci repository reconciliation: %w", err)
 	}
@@ -2134,7 +2138,7 @@ func reconcileFlux(
 		notify.WithTimer(outputTimer),
 	)
 
-	err = ociGroup.Run(cmd.Context(), notify.ProgressTask{
+	err = ociGroup.Run(deadlineCtx, notify.ProgressTask{
 		Name: "flux-system",
 		Fn: func(ctx context.Context) error {
 			return fluxReconciler.WaitForOCIRepositoryReady(ctx, time.Until(deadline))
@@ -2147,20 +2151,12 @@ func reconcileFlux(
 	// Sub-phase 2: Kustomization reconciliation with per-resource tracking
 	writeActivityNotification("reconciling kustomizations...", outputTimer, writer)
 
-	err = fluxReconciler.TriggerKustomizationReconciliation(cmd.Context())
+	err = fluxReconciler.TriggerKustomizationReconciliation(deadlineCtx)
 	if err != nil {
 		return fmt.Errorf("trigger kustomization reconciliation: %w", err)
 	}
 
-	remaining := time.Until(deadline)
-	if remaining <= 0 {
-		return fmt.Errorf("reconcile kustomizations: %w", flux.ErrReconcileTimeout)
-	}
-
-	ksCtx, ksCancel := context.WithTimeout(cmd.Context(), remaining)
-	defer ksCancel()
-
-	err = reconcileFluxKustomizationsWithProgress(ksCtx, cmd, fluxReconciler, outputTimer)
+	err = reconcileFluxKustomizationsWithProgress(deadlineCtx, cmd, fluxReconciler, outputTimer)
 	if err != nil {
 		return err
 	}
@@ -2281,7 +2277,7 @@ func kustomizationReadinessTimeoutError(name, lastStatus string) error {
 // (dependencies before dependents) for display purposes.
 // Uses Kahn's algorithm. If cycles are detected, remaining items are appended
 // in their original order so the ProgressGroup still shows all resources.
-//nolint:cyclop,funlen // Kahn's algorithm has inherent branching; complexity is structural, not avoidable.
+//nolint:cyclop // Kahn's algorithm has inherent branching; complexity is structural, not avoidable.
 func topologicalSortKustomizations(
 	kustomizations []flux.KustomizationInfo,
 ) []flux.KustomizationInfo {
@@ -2291,6 +2287,7 @@ func topologicalSortKustomizations(
 
 	byName := make(map[string]flux.KustomizationInfo, len(kustomizations))
 	inDegree := make(map[string]int, len(kustomizations))
+	dependents := make(map[string][]string, len(kustomizations))
 
 	for _, kust := range kustomizations {
 		byName[kust.Name] = kust
@@ -2308,6 +2305,7 @@ func topologicalSortKustomizations(
 
 			if _, exists := byName[dep]; exists {
 				inDegree[kust.Name]++
+				dependents[dep] = append(dependents[dep], kust.Name)
 			}
 		}
 	}
@@ -2327,15 +2325,11 @@ func topologicalSortKustomizations(
 		queue = queue[1:]
 		sorted = append(sorted, byName[name])
 
-		for _, kust := range kustomizations {
-			if !slices.Contains(kust.DependsOn, name) {
-				continue
-			}
+		for _, child := range dependents[name] {
+			inDegree[child]--
 
-			inDegree[kust.Name]--
-
-			if inDegree[kust.Name] == 0 {
-				queue = append(queue, kust.Name)
+			if inDegree[child] == 0 {
+				queue = append(queue, child)
 			}
 		}
 	}
