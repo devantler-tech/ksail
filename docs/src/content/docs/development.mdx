@@ -120,7 +120,7 @@ func TestMyFunction(t *testing.T) {
 Cluster command tests that depend on installer factories use an override pattern: each `Set*ForTests` helper applies a factory override against shared global state and returns a restore function. Register the restore function with `t.Cleanup(restore)` so overrides are always reset:
 
 ````go
-restore := cluster.SetXxxInstallerFactoryForTests(
+restore := cluster.Set<Component>InstallerFactoryForTests(
     func(_ *v1alpha1.Cluster) (installer.Installer, error) { return mockInstaller, nil },
 )
 t.Cleanup(restore)
