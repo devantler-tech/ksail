@@ -26,7 +26,8 @@ func (p *Provisioner) scaleOmniByRole(
 		return err
 	}
 
-	if err := p.syncOmniScaling(ctx, omniProv, clusterName, newCPCount, newWorkerCount); err != nil {
+	err = p.syncOmniScaling(ctx, omniProv, clusterName, newCPCount, newWorkerCount)
+	if err != nil {
 		return err
 	}
 
@@ -101,8 +102,10 @@ func (p *Provisioner) syncOmniScaling(
 
 // resolveOmniMachinesForScaling resolves machine UUIDs for scaling operations.
 // For machine-class-based allocation, nil is returned (Omni handles dynamic allocation).
-// For static machine allocation, the existing machines from omniOpts are returned
-// (the caller must ensure the list has enough machines for the new counts).
+// For static machine allocation, the configured list is returned; if too short,
+// additional available machines are discovered via ListAvailableMachines.
+// When neither is configured, existing cluster machines are fetched and supplemented
+// with newly discovered machines to reach the required total.
 func (p *Provisioner) resolveOmniMachinesForScaling(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
@@ -155,7 +158,10 @@ func (p *Provisioner) expandStaticMachinesForScaling(
 }
 
 // discoverMachinesForScaling fetches existing cluster machines and discovers
-// only the additional ones needed to reach the required total.
+// only the additional ones needed to reach the required total. The returned list
+// preserves role ordering: control-plane machines first, then workers, with any
+// newly discovered machines appended at the end. This matches the Omni template
+// positional semantics (first N machines become control planes).
 func (p *Provisioner) discoverMachinesForScaling(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
@@ -167,14 +173,24 @@ func (p *Provisioner) discoverMachinesForScaling(
 		return nil, fmt.Errorf("failed to list existing cluster machines: %w", err)
 	}
 
-	existingIDs := make([]string, 0, len(existingNodes))
+	// Build the machine list with control-plane nodes first to preserve
+	// Omni template positional semantics.
+	cpIDs := make([]string, 0, len(existingNodes))
+	workerIDs := make([]string, 0, len(existingNodes))
+
 	for _, n := range existingNodes {
-		existingIDs = append(existingIDs, n.Name)
+		if n.Role == "controlplane" {
+			cpIDs = append(cpIDs, n.Name)
+		} else {
+			workerIDs = append(workerIDs, n.Name)
+		}
 	}
 
-	additionalNeeded := required - len(existingIDs)
+	orderedIDs := append(cpIDs, workerIDs...)
+
+	additionalNeeded := required - len(orderedIDs)
 	if additionalNeeded <= 0 {
-		return existingIDs, nil
+		return orderedIDs, nil
 	}
 
 	_, _ = fmt.Fprintf(
@@ -188,5 +204,5 @@ func (p *Provisioner) discoverMachinesForScaling(
 		return nil, fmt.Errorf("auto-discover machines for scaling: %w", err)
 	}
 
-	return append(existingIDs, additional...), nil
+	return append(orderedIDs, additional...), nil
 }
