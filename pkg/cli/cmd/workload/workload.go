@@ -2288,7 +2288,6 @@ func topologicalSortKustomizations(
 	byName := make(map[string]flux.KustomizationInfo, len(kustomizations))
 	inDegree := make(map[string]int, len(kustomizations))
 	dependents := make(map[string][]string, len(kustomizations))
-
 	for _, kust := range kustomizations {
 		byName[kust.Name] = kust
 		inDegree[kust.Name] = 0
@@ -2300,9 +2299,7 @@ func topologicalSortKustomizations(
 			if _, dup := seen[dep]; dup {
 				continue
 			}
-
 			seen[dep] = struct{}{}
-
 			if _, exists := byName[dep]; exists {
 				inDegree[kust.Name]++
 				dependents[dep] = append(dependents[dep], kust.Name)
@@ -2310,7 +2307,6 @@ func topologicalSortKustomizations(
 		}
 	}
 
-	// Seed queue with zero-indegree nodes
 	queue := make([]string, 0, len(kustomizations))
 	for _, kust := range kustomizations {
 		if inDegree[kust.Name] == 0 {
@@ -2319,22 +2315,18 @@ func topologicalSortKustomizations(
 	}
 
 	sorted := make([]flux.KustomizationInfo, 0, len(kustomizations))
-
 	for len(queue) > 0 {
 		name := queue[0]
 		queue = queue[1:]
 		sorted = append(sorted, byName[name])
-
 		for _, child := range dependents[name] {
 			inDegree[child]--
-
 			if inDegree[child] == 0 {
 				queue = append(queue, child)
 			}
 		}
 	}
 
-	// Append any remaining items (cycle protection)
 	if len(sorted) < len(kustomizations) {
 		for _, kust := range kustomizations {
 			if inDegree[kust.Name] > 0 {
@@ -2342,7 +2334,6 @@ func topologicalSortKustomizations(
 			}
 		}
 	}
-
 	return sorted
 }
 
