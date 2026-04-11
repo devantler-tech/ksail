@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -245,117 +244,6 @@ func parseDependsOn(kustomization *unstructured.Unstructured) []string {
 	return names
 }
 
-// WaitForKustomizationReady waits for the Kustomization to be ready.
-func (r *Reconciler) WaitForKustomizationReady(ctx context.Context, timeout time.Duration) error {
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	kustomizationClient := r.kustomizationClient()
-
-	var lastStatus string
-
-	for {
-		ready, err := r.pollKustomizationStatus(timeoutCtx, kustomizationClient, &lastStatus)
-		if err != nil {
-			return err
-		}
-
-		if ready {
-			return nil
-		}
-
-		select {
-		case <-timeoutCtx.Done():
-			return kustomizationTimeoutError(lastStatus)
-		case <-ticker.C:
-		}
-	}
-}
-
-// WaitForAllKustomizationsReady waits for all Kustomizations in the namespace to be ready.
-// This ensures the full Flux dependency chain has propagated after the root kustomization is ready.
-func (r *Reconciler) WaitForAllKustomizationsReady(
-	ctx context.Context,
-	timeout time.Duration,
-) error {
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	client := r.kustomizationClient()
-
-	var lastStatus string
-
-	for {
-		ready, status, err := r.pollAllKustomizationsStatus(timeoutCtx, client)
-		if err != nil {
-			return err
-		}
-
-		if ready {
-			return nil
-		}
-
-		lastStatus = status
-
-		select {
-		case <-timeoutCtx.Done():
-			return kustomizationTimeoutError(lastStatus)
-		case <-ticker.C:
-		}
-	}
-}
-
-// pollAllKustomizationsStatus checks if all kustomizations in the namespace are ready.
-// Returns (allReady, statusSummary, error).
-// On context cancellation/timeout, returns (false, "", nil) to let the caller's
-// outer loop handle the timeout with the last recorded status summary.
-func (r *Reconciler) pollAllKustomizationsStatus(
-	ctx context.Context,
-	client dynamic.ResourceInterface,
-) (bool, string, error) {
-	kustomizations, err := client.List(ctx, metav1.ListOptions{})
-	if err != nil {
-		if reconciler.IsContextError(err) {
-			return false, "", nil
-		}
-
-		return false, "", fmt.Errorf("list flux kustomizations: %w", err)
-	}
-
-	if len(kustomizations.Items) == 0 {
-		return true, "", nil
-	}
-
-	var notReady []string
-
-	for i := range kustomizations.Items {
-		kustomization := &kustomizations.Items[i]
-
-		ready, status, err := checkKustomizationStatus(kustomization)
-		if err != nil {
-			return false, "", fmt.Errorf("kustomization %q: %w", kustomization.GetName(), err)
-		}
-
-		if !ready {
-			notReady = append(notReady, kustomization.GetName()+" ("+status+")")
-		}
-	}
-
-	if len(notReady) == 0 {
-		return true, "", nil
-	}
-
-	sort.Strings(notReady)
-
-	return false, "not ready: " + strings.Join(notReady, ", "), nil
-}
-
 // pollOCIRepositoryStatus checks OCI repository status with timeout guard.
 // It returns (ready, nil) on success, (false, nil) for transient errors (stored in lastErr),
 // or (false, err) for permanent/timeout errors.
@@ -394,51 +282,6 @@ func ociTimeoutError(lastErr error) error {
 	}
 
 	return ErrOCIRepositoryNotReady
-}
-
-// pollKustomizationStatus checks kustomization status with timeout guard.
-// It returns (ready, nil) on success, (false, nil) when not yet ready (status stored in lastStatus),
-// or (false, err) for permanent/timeout errors.
-func (r *Reconciler) pollKustomizationStatus(
-	ctx context.Context,
-	client dynamic.ResourceInterface,
-	lastStatus *string,
-) (bool, error) {
-	err := ctx.Err()
-	if err != nil {
-		return false, kustomizationTimeoutError(*lastStatus)
-	}
-
-	kustomization, err := client.Get(
-		ctx,
-		rootKustomizationName,
-		metav1.GetOptions{},
-	)
-	if err != nil {
-		if reconciler.IsContextError(err) {
-			return false, kustomizationTimeoutError(*lastStatus)
-		}
-
-		return false, fmt.Errorf("get flux kustomization status: %w", err)
-	}
-
-	ready, status, err := checkKustomizationStatus(kustomization)
-	if err != nil {
-		return false, err
-	}
-
-	*lastStatus = status
-
-	return ready, nil
-}
-
-// kustomizationTimeoutError returns ErrReconcileTimeout, optionally with last status.
-func kustomizationTimeoutError(lastStatus string) error {
-	if lastStatus != "" {
-		return fmt.Errorf("%w: last status: %s", ErrReconcileTimeout, lastStatus)
-	}
-
-	return ErrReconcileTimeout
 }
 
 // ociRepositoryClient returns a dynamic client for Flux OCIRepositories.
