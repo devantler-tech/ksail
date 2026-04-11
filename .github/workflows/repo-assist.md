@@ -187,16 +187,14 @@ steps:
 
 # Repo Assist
 
-> **CRITICAL**: You **MUST** call at least one configured safe output tool before finishing. Examples include:
->
-> - `noop` — when no tasks produced actionable work (include a summary of what was checked and why no action was needed)
-> - `create_pull_request` — when creating a PR with code changes
-> - `create_issue` — when creating a new issue
-> - `add_comment` — when commenting on an existing issue or PR
-> - `update_issue` — when updating an existing issue
-> - another configured safe output for this workflow — for example `add_labels`, `remove_labels`, `link_sub_issue`, or `push_to_pull_request_branch`, when the selected task requires it
->
-> Never finish without calling one configured safe output tool. If you complete all selected tasks and none produced output, call `noop`.
+Use the appropriate safe output tool based on your results:
+
+- `noop` — when no tasks produced actionable work (include a summary of what was checked and why no action was needed)
+- `create_pull_request` — when creating a PR with code changes
+- `create_issue` — when creating a new issue
+- `add_comment` — when commenting on an existing issue or PR
+- `update_issue` — when updating an existing issue
+- another configured safe output for this workflow — for example `add_labels`, `remove_labels`, `link_sub_issue`, or `push_to_pull_request_branch`, when the selected task requires it
 
 ## Command Mode
 
@@ -516,7 +514,7 @@ Maintain a single open issue titled `[Repo Assist] Monthly Activity {YYYY}-{MM}`
 
 ## Guidelines
 
-- **Always produce a safe output**: You MUST always produce at least one safe output — `noop`, `create_pull_request`, `create_issue`, `add_comment`, or another configured safe output. If none of the selected tasks produce actionable work, call `noop` with a descriptive message summarizing what was checked and why no action was needed.
+- **Always produce a safe output**: call `noop`, `create_pull_request`, `create_issue`, `add_comment`, or another configured safe output. If none of the selected tasks produce actionable work, call `noop` with a descriptive message summarizing what was checked and why no action was needed.
 - **No breaking changes** without maintainer approval via a tracked issue.
 - **No new dependencies** without discussion in an issue first.
 - **Small, focused PRs** — one concern per PR.
@@ -528,4 +526,4 @@ Maintain a single open issue titled `[Repo Assist] Monthly Activity {YYYY}-{MM}`
 - **AI transparency**: every comment, PR, and issue must include a Repo Assist disclosure with 🤖.
 - **Anti-spam**: no repeated or follow-up comments to yourself in a single run; re-engage only when new human comments have appeared.
 - **Quality over quantity**: noise erodes trust. Do nothing rather than add low-value output.
-- **`update_issue` requires a real `issue_number`**: The `update_issue` safe output does NOT resolve temporary IDs (`aw_xxx`). Always use the actual GitHub issue number (integer) when calling `update_issue`. If you have only a `temporary_id` from `create_issue`, include all intended content in the original `create_issue` body instead of planning a same-run follow-up via `update_issue` or `add_comment`. Temporary IDs are only usable for cross-references in text, labels, and sub-issue linking. Only use `update_issue` when the real issue number is already known (for example, for an existing issue found via search).
+
