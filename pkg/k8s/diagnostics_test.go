@@ -68,6 +68,14 @@ func TestDiagnosePodFailures(t *testing.T) {
 			wantContain: []string{"failed-pod", "Failed"},
 		},
 		{
+			name:       "unknown phase pod is reported",
+			namespaces: []string{"default"},
+			pods: []corev1.Pod{
+				makePod("unknown-pod", "default", corev1.PodUnknown, nil, nil),
+			},
+			wantContain: []string{"unknown-pod", "Unknown"},
+		},
+		{
 			name:       "pod with ImagePullBackOff is reported",
 			namespaces: []string{"default"},
 			pods: []corev1.Pod{
