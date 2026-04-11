@@ -58,6 +58,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/state"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/versionresolver"
 	"github.com/devantler-tech/ksail/v6/pkg/timer"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -5810,6 +5811,14 @@ Use --output json to emit a machine-readable diff for CI/MCP consumption.`,
 	cmd.Flags().String("output", outputFormatText,
 		"Output format: text (default) or json (machine-readable, for CI/MCP)")
 
+	cmd.Flags().Bool("update-kubernetes", false,
+		"Upgrade Kubernetes to the latest stable version available in the OCI registry")
+	_ = cfgManager.Viper.BindPFlag("update-kubernetes", cmd.Flags().Lookup("update-kubernetes"))
+
+	cmd.Flags().Bool("update-distribution", false,
+		"Upgrade the distribution to the latest stable version available in the OCI registry")
+	_ = cfgManager.Viper.BindPFlag("update-distribution", cmd.Flags().Lookup("update-distribution"))
+
 	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleUpdateRunE)
 
 	return cmd
@@ -5844,6 +5853,19 @@ func handleUpdateRunE(
 	provisioner, err := createAndVerifyProvisioner(cmd, ctx, clusterName)
 	if err != nil {
 		return err
+	}
+
+	// Handle version upgrades when requested
+	updateK8s := cfgManager.Viper.GetBool("update-kubernetes")
+	updateDist := cfgManager.Viper.GetBool("update-distribution")
+
+	if updateK8s || updateDist {
+		if err := handleVersionUpgrades(
+			cmd, cfgManager, ctx, deps, provisioner,
+			clusterName, updateK8s, updateDist, force,
+		); err != nil {
+			return err
+		}
 	}
 
 	// Check if provisioner supports updates
@@ -5884,6 +5906,237 @@ func handleUpdateRunE(
 
 	return applyOrReportChanges(cmd, cfgManager, ctx, deps, updater,
 		clusterName, currentSpec, diff, outputTimer)
+}
+
+// handleVersionUpgrades orchestrates Kubernetes and/or distribution version upgrades.
+// It discovers available versions from OCI registries, computes an ordered upgrade
+// path (oldest→latest), and applies each step sequentially. If any step fails, the
+// cluster remains at the last successful version with actionable feedback.
+//
+// For distributions that require recreation (Kind, K3d, VCluster), the upgrade
+// skips directly to the latest available version and recreates the cluster once,
+// since there is no running state to preserve between intermediate versions.
+//
+// When both flags are set, distribution upgrades run first (the distribution
+// runtime must support the target Kubernetes version).
+//
+//nolint:cyclop // orchestration function with distinct sequential phases
+func handleVersionUpgrades(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+	deps lifecycle.Deps,
+	provisioner clusterprovisioner.Provisioner,
+	clusterName string,
+	updateK8s, updateDist, force bool,
+) error {
+	upgrader, ok := provisioner.(clusterupdate.Upgrader)
+	if !ok {
+		return fmt.Errorf("provisioner for %s does not support version upgrades",
+			ctx.ClusterCfg.Spec.Cluster.Distribution)
+	}
+
+	currentVersions, err := upgrader.GetCurrentVersions(cmd.Context(), clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to get current versions: %w", err)
+	}
+
+	resolver := versionresolver.NewOCIResolver()
+	dryRun := cfgManager.Viper.GetBool("dry-run")
+
+	// Distribution upgrades first (runtime must support K8s version).
+	if updateDist {
+		if err := executeVersionUpgrade(
+			cmd, cfgManager, ctx, deps, upgrader, resolver, clusterName,
+			"distribution", upgrader.DistributionImageRef(),
+			currentVersions.DistributionVersion, upgrader.VersionSuffix(),
+			upgrader.UpgradeDistribution, force, dryRun,
+		); err != nil {
+			return err
+		}
+	}
+
+	// Then Kubernetes upgrades.
+	if updateK8s {
+		if err := executeVersionUpgrade(
+			cmd, cfgManager, ctx, deps, upgrader, resolver, clusterName,
+			"Kubernetes", upgrader.KubernetesImageRef(),
+			currentVersions.KubernetesVersion, upgrader.VersionSuffix(),
+			upgrader.UpgradeKubernetes, force, dryRun,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// upgradeFunc is the signature for UpgradeKubernetes / UpgradeDistribution.
+type upgradeFunc func(ctx context.Context, clusterName, fromVersion, toVersion string) error
+
+// executeVersionUpgrade discovers available versions, computes an upgrade path,
+// and applies each step. For distributions requiring recreation, it jumps to the
+// latest version and triggers a single recreate.
+//
+//nolint:cyclop // sequential upgrade logic with distinct phases
+func executeVersionUpgrade(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+	deps lifecycle.Deps,
+	upgrader clusterupdate.Upgrader,
+	resolver *versionresolver.OCIResolver,
+	clusterName string,
+	upgradeType string,
+	imageRef string,
+	currentVersion string,
+	suffix string,
+	applyFn upgradeFunc,
+	force, dryRun bool,
+) error {
+	if imageRef == "" {
+		notify.Infof(cmd.OutOrStdout(),
+			"No %s image repository configured; skipping %s upgrade",
+			upgradeType, upgradeType)
+
+		return nil
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Emoji:   "🔍",
+		Content: fmt.Sprintf("discovering available %s versions from %s", upgradeType, imageRef),
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	path, err := versionresolver.ComputeUpgradePath(
+		cmd.Context(), resolver, imageRef, currentVersion, suffix)
+	if err != nil {
+		if errors.Is(err, versionresolver.ErrNoUpgradesAvailable) {
+			notify.Infof(cmd.OutOrStdout(),
+				"%s is already at the latest stable version (%s)", upgradeType, currentVersion)
+
+			return nil
+		}
+
+		return fmt.Errorf("failed to compute %s upgrade path: %w", upgradeType, err)
+	}
+
+	// Display upgrade path
+	notify.WriteMessage(notify.Message{
+		Type:  notify.InfoType,
+		Emoji: "📋",
+		Content: fmt.Sprintf("%s upgrade path: %s → %s (%d step(s))",
+			upgradeType, currentVersion, path[len(path)-1].Version.Original, len(path)),
+		Writer: cmd.OutOrStdout(),
+	})
+
+	if dryRun {
+		for i, step := range path {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %d. %s\n", i+1, step.Version.Original)
+		}
+
+		notify.Infof(cmd.OutOrStdout(), "Dry run complete. No %s upgrades applied.", upgradeType)
+
+		return nil
+	}
+
+	// Check if the distribution requires recreation by probing with a no-op call.
+	// Recreation-based distributions (Kind/K3d/VCluster) return ErrRecreationRequired
+	// immediately, so we jump to the latest version and recreate once.
+	targetVersion := path[len(path)-1].Version.Original
+
+	probeErr := applyFn(cmd.Context(), clusterName, currentVersion, path[0].Version.Original)
+	if probeErr != nil && errors.Is(probeErr, clustererr.ErrRecreationRequired) {
+		return handleRecreationUpgrade(cmd, cfgManager, ctx, deps, clusterName,
+			upgradeType, currentVersion, targetVersion, force)
+	}
+
+	// Rolling upgrade (Talos): first step already applied by the probe, continue with the rest.
+	if probeErr != nil {
+		return fmt.Errorf(
+			"%s upgrade failed at step 1/%d (%s → %s): %w\n"+
+				"The cluster is still running %s.",
+			upgradeType, len(path), currentVersion, path[0].Version.Original, probeErr,
+			currentVersion,
+		)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:  notify.SuccessType,
+		Emoji: "⬆️",
+		Content: fmt.Sprintf("%s upgraded: step 1/%d → %s",
+			upgradeType, len(path), path[0].Version.Original),
+		Writer: cmd.OutOrStdout(),
+	})
+
+	for i := 1; i < len(path); i++ {
+		step := path[i]
+		prevVersion := path[i-1].Version.Original
+
+		notify.WriteMessage(notify.Message{
+			Type:  notify.ActivityType,
+			Emoji: "⬆️",
+			Content: fmt.Sprintf("upgrading %s: step %d/%d (%s → %s)",
+				upgradeType, i+1, len(path), prevVersion, step.Version.Original),
+			Writer: cmd.OutOrStdout(),
+		})
+
+		if err := applyFn(cmd.Context(), clusterName, prevVersion, step.Version.Original); err != nil {
+			notify.Warningf(cmd.OutOrStderr(),
+				"%s upgrade to %s failed (cluster is at %s): %v",
+				upgradeType, step.Version.Original, prevVersion, err)
+
+			return fmt.Errorf(
+				"%s upgrade failed at step %d/%d (%s → %s): %w\n"+
+					"The cluster is running %s. "+
+					"Check compatibility notes for %s before retrying.",
+				upgradeType, i+1, len(path), prevVersion, step.Version.Original, err,
+				prevVersion, step.Version.Original,
+			)
+		}
+
+		notify.WriteMessage(notify.Message{
+			Type:  notify.SuccessType,
+			Emoji: "⬆️",
+			Content: fmt.Sprintf("%s upgraded: step %d/%d → %s",
+				upgradeType, i+1, len(path), step.Version.Original),
+			Writer: cmd.OutOrStdout(),
+		})
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: fmt.Sprintf("%s upgrade complete: %s → %s", upgradeType, currentVersion, targetVersion),
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// handleRecreationUpgrade handles version upgrades for distributions that require
+// cluster recreation (Kind, K3d, VCluster). It confirms with the user, then
+// recreates the cluster which will pick up the latest configured version.
+func handleRecreationUpgrade(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+	deps lifecycle.Deps,
+	clusterName string,
+	upgradeType string,
+	currentVersion, targetVersion string,
+	force bool,
+) error {
+	notify.WriteMessage(notify.Message{
+		Type:  notify.InfoType,
+		Emoji: "🔄",
+		Content: fmt.Sprintf(
+			"%s upgrade from %s to %s requires cluster recreation",
+			upgradeType, currentVersion, targetVersion),
+		Writer: cmd.OutOrStdout(),
+	})
+
+	return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 }
 
 // createAndVerifyProvisioner creates a provisioner and verifies the cluster exists.

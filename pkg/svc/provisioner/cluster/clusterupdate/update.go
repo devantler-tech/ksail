@@ -1,6 +1,7 @@
 package clusterupdate
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
@@ -223,4 +224,50 @@ func PrepareUpdate(
 	}
 
 	return result, true, nil
+}
+
+// --- Version Upgrade Types ---
+
+// VersionInfo contains the current Kubernetes and distribution versions of a cluster.
+type VersionInfo struct {
+	// KubernetesVersion is the running Kubernetes version (e.g., "v1.35.1").
+	KubernetesVersion string
+	// DistributionVersion is the running distribution version (e.g., "v1.13.0" for Talos).
+	// For distributions where Kubernetes and distribution versions are the same
+	// (Kind, K3s), this matches KubernetesVersion.
+	DistributionVersion string
+}
+
+// Upgrader is an optional interface for provisioners that support version upgrades.
+// Not all provisioners support in-place upgrades — Kind, K3d, and VCluster require
+// cluster recreation for version changes, while Talos supports rolling upgrades.
+//
+// This interface is defined in the clusterupdate package (rather than the parent
+// clusterprovisioner package) to avoid import cycles, since child provisioner
+// packages already import clusterupdate and the parent imports them via factory.go.
+type Upgrader interface {
+	// UpgradeKubernetes upgrades the Kubernetes version on the cluster.
+	// For distributions that require recreation, this returns clustererr.ErrRecreationRequired.
+	UpgradeKubernetes(ctx context.Context, clusterName string, fromVersion, toVersion string) error
+
+	// UpgradeDistribution upgrades the distribution version on the cluster.
+	// For Talos, this performs a rolling OS upgrade via LifecycleService.
+	// For Kind/K3d/VCluster, this returns clustererr.ErrRecreationRequired.
+	UpgradeDistribution(ctx context.Context, clusterName string, fromVersion, toVersion string) error
+
+	// GetCurrentVersions returns the running Kubernetes and distribution versions.
+	GetCurrentVersions(ctx context.Context, clusterName string) (*VersionInfo, error)
+
+	// KubernetesImageRef returns the OCI image repository used for Kubernetes
+	// version discovery (e.g., "kindest/node", "rancher/k3s").
+	KubernetesImageRef() string
+
+	// DistributionImageRef returns the OCI image repository used for distribution
+	// version discovery (e.g., "ghcr.io/siderolabs/talos").
+	// Returns empty string if the distribution version equals the Kubernetes version.
+	DistributionImageRef() string
+
+	// VersionSuffix returns the tag suffix used by the distribution (e.g., "k3s" for K3s).
+	// Returns empty string for distributions that use plain semver tags.
+	VersionSuffix() string
 }

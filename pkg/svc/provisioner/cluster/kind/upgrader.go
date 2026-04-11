@@ -6,12 +6,12 @@ import (
 	"strings"
 
 	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
-	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // Compile-time interface compliance check.
-var _ clusterprovisioner.Upgrader = (*Provisioner)(nil)
+var _ clusterupdate.Upgrader = (*Provisioner)(nil)
 
 // UpgradeKubernetes returns ErrRecreationRequired because Kind does not support
 // in-place Kubernetes version changes. The orchestrator handles recreation.
@@ -27,11 +27,11 @@ func (k *Provisioner) UpgradeDistribution(_ context.Context, _ string, _, _ stri
 
 // GetCurrentVersions returns the Kubernetes and distribution versions for the cluster.
 // It extracts the version tag from the configured Kind node image.
-func (k *Provisioner) GetCurrentVersions(_ context.Context, _ string) (*clusterprovisioner.VersionInfo, error) {
+func (k *Provisioner) GetCurrentVersions(_ context.Context, _ string) (*clusterupdate.VersionInfo, error) {
 	image := nodeImage(k)
 	tag := extractTag(image)
 
-	return &clusterprovisioner.VersionInfo{
+	return &clusterupdate.VersionInfo{
 		KubernetesVersion:   tag,
 		DistributionVersion: tag,
 	}, nil
