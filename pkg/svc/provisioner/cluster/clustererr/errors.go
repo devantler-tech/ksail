@@ -56,3 +56,8 @@ var ErrClusterNotFoundInDistributions = errors.New("cluster not found in any dis
 
 // ErrCreateNotSupported is returned when create is called on a multi-distribution provisioner.
 var ErrCreateNotSupported = errors.New("create not supported without specifying distribution")
+
+// ErrUpgradeSkipped is returned when an upgrade is skipped because it is managed externally
+// (e.g., Omni-managed Talos clusters). The orchestrator should treat this as a no-op with
+// an informational message rather than a failure.
+var ErrUpgradeSkipped = errors.New("upgrade skipped")

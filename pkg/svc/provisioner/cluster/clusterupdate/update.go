@@ -270,4 +270,9 @@ type Upgrader interface {
 	// VersionSuffix returns the tag suffix used by the distribution (e.g., "k3s" for K3s).
 	// Returns empty string for distributions that use plain semver tags.
 	VersionSuffix() string
+
+	// PrepareConfigForVersion updates the in-memory distribution configuration
+	// so that a subsequent cluster recreation uses the specified version.
+	// For rolling-upgrade distributions (Talos), this is a no-op.
+	PrepareConfigForVersion(upgradeType string, version string) error
 }

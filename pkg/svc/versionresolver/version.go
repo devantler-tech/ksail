@@ -60,6 +60,9 @@ func (v Version) IsStable() bool {
 }
 
 // Less returns true if v is strictly less than other.
+// When major.minor.patch are equal, suffixes are compared by extracting the
+// trailing numeric portion (e.g., k3s1 < k3s2) so that K3s patch-level
+// bumps are ordered correctly.
 func (v Version) Less(other Version) bool {
 	if v.Major != other.Major {
 		return v.Major < other.Major
@@ -67,12 +70,32 @@ func (v Version) Less(other Version) bool {
 	if v.Minor != other.Minor {
 		return v.Minor < other.Minor
 	}
-	return v.Patch < other.Patch
+	if v.Patch != other.Patch {
+		return v.Patch < other.Patch
+	}
+	return suffixNum(v.Suffix) < suffixNum(other.Suffix)
 }
 
-// Equal returns true if v and other have the same major.minor.patch.
+// suffixNum extracts the trailing numeric portion of a suffix string.
+// For example, "k3s2" → 2, "" → 0, "abc" → 0.
+func suffixNum(s string) int {
+	if s == "" {
+		return 0
+	}
+	i := len(s)
+	for i > 0 && s[i-1] >= '0' && s[i-1] <= '9' {
+		i--
+	}
+	if i == len(s) {
+		return 0
+	}
+	n, _ := strconv.Atoi(s[i:])
+	return n
+}
+
+// Equal returns true if v and other have the same major.minor.patch and suffix.
 func (v Version) Equal(other Version) bool {
-	return v.Major == other.Major && v.Minor == other.Minor && v.Patch == other.Patch
+	return v.Major == other.Major && v.Minor == other.Minor && v.Patch == other.Patch && v.Suffix == other.Suffix
 }
 
 // String returns the version as "vMAJOR.MINOR.PATCH" with suffix if present.

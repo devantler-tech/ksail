@@ -5954,6 +5954,15 @@ func handleVersionUpgrades(
 		); err != nil {
 			return err
 		}
+
+		// Re-fetch versions after distribution upgrade since recreation may
+		// have changed the Kubernetes version too (Kind/K3d bundle both).
+		if updateK8s && !dryRun {
+			currentVersions, err = upgrader.GetCurrentVersions(cmd.Context(), clusterName)
+			if err != nil {
+				return fmt.Errorf("failed to refresh versions after distribution upgrade: %w", err)
+			}
+		}
 	}
 
 	// Then Kubernetes upgrades.
@@ -6047,7 +6056,14 @@ func executeVersionUpgrade(
 	targetVersion := path[len(path)-1].Version.Original
 
 	probeErr := applyFn(cmd.Context(), clusterName, currentVersion, path[0].Version.Original)
+	if probeErr != nil && errors.Is(probeErr, clustererr.ErrUpgradeSkipped) {
+		notify.Infof(cmd.OutOrStdout(), "%s upgrade skipped: %v", upgradeType, probeErr)
+		return nil
+	}
 	if probeErr != nil && errors.Is(probeErr, clustererr.ErrRecreationRequired) {
+		if err := upgrader.PrepareConfigForVersion(upgradeType, targetVersion); err != nil {
+			return fmt.Errorf("failed to prepare config for %s %s: %w", upgradeType, targetVersion, err)
+		}
 		return handleRecreationUpgrade(cmd, cfgManager, ctx, deps, clusterName,
 			upgradeType, currentVersion, targetVersion, force)
 	}

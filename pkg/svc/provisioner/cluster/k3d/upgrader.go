@@ -43,8 +43,10 @@ func (p *Provisioner) KubernetesImageRef() string {
 	return "rancher/k3s"
 }
 
-// DistributionImageRef returns an empty string because K3s's distribution
-// version is the same as the Kubernetes version.
+// DistributionImageRef returns an empty string because K3d's distribution
+// version is the same as the Kubernetes version — the rancher/k3s image
+// bundles both. The `--update-distribution` flag is intentionally a no-op
+// for K3d; use `--update-kubernetes` to upgrade both.
 func (p *Provisioner) DistributionImageRef() string {
 	return ""
 }
@@ -52,6 +54,15 @@ func (p *Provisioner) DistributionImageRef() string {
 // VersionSuffix returns "k3s" to match K3s image tags like "v1.35.3-k3s1".
 func (p *Provisioner) VersionSuffix() string {
 	return "k3s"
+}
+
+// PrepareConfigForVersion updates the K3d configuration to use the specified
+// version so that a subsequent cluster recreation uses the new image.
+func (p *Provisioner) PrepareConfigForVersion(_ string, version string) error {
+	if p.simpleCfg != nil {
+		p.simpleCfg.Image = "rancher/k3s:" + version
+	}
+	return nil
 }
 
 // k3sImage returns the K3s image from the config, falling back to the default.

@@ -11,6 +11,7 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/config/encoder"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
 
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
@@ -31,7 +32,7 @@ func (p *Provisioner) UpgradeDistribution(
 	fromVersion, toVersion string,
 ) error {
 	if p.omniOpts != nil {
-		return fmt.Errorf("omni-managed clusters handle Talos upgrades externally")
+		return fmt.Errorf("Talos upgrades are managed externally by Omni: %w", clustererr.ErrUpgradeSkipped)
 	}
 
 	clusterName = p.resolveClusterName(clusterName)
@@ -67,7 +68,7 @@ func (p *Provisioner) UpgradeKubernetes(
 	_, toVersion string,
 ) error {
 	if p.omniOpts != nil {
-		return fmt.Errorf("omni-managed clusters handle Kubernetes upgrades externally")
+		return fmt.Errorf("Kubernetes upgrades are managed externally by Omni: %w", clustererr.ErrUpgradeSkipped)
 	}
 
 	clusterName = p.resolveClusterName(clusterName)
@@ -208,4 +209,10 @@ func (p *Provisioner) DistributionImageRef() string {
 // VersionSuffix returns an empty string since Talos uses plain semver tags.
 func (p *Provisioner) VersionSuffix() string {
 	return ""
+}
+
+// PrepareConfigForVersion is a no-op for Talos because it performs rolling
+// upgrades via the SDK rather than cluster recreation.
+func (p *Provisioner) PrepareConfigForVersion(_ string, _ string) error {
+	return nil
 }

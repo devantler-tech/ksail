@@ -43,7 +43,9 @@ func (k *Provisioner) KubernetesImageRef() string {
 }
 
 // DistributionImageRef returns an empty string because Kind's distribution
-// version is the same as the Kubernetes version.
+// version is the same as the Kubernetes version — there is no separate
+// distribution image. The `--update-distribution` flag is intentionally a
+// no-op for Kind; use `--update-kubernetes` to upgrade both.
 func (k *Provisioner) DistributionImageRef() string {
 	return ""
 }
@@ -51,6 +53,18 @@ func (k *Provisioner) DistributionImageRef() string {
 // VersionSuffix returns an empty string because Kind uses plain semver tags.
 func (k *Provisioner) VersionSuffix() string {
 	return ""
+}
+
+// PrepareConfigForVersion updates the Kind configuration to use the specified
+// version so that a subsequent cluster recreation uses the new image.
+func (k *Provisioner) PrepareConfigForVersion(_ string, version string) error {
+	if k.kindConfig == nil {
+		return nil
+	}
+	for i := range k.kindConfig.Nodes {
+		k.kindConfig.Nodes[i].Image = "kindest/node:" + version
+	}
+	return nil
 }
 
 // nodeImage returns the Kind node image from the config, falling back to the default.

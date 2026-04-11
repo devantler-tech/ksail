@@ -169,3 +169,66 @@ func TestMatchingSuffix(t *testing.T) {
 		t.Fatalf("expected 2 plain versions, got %d", len(noSuffix))
 	}
 }
+
+func TestLess_K3sSuffix(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		a, b string
+		want bool
+	}{
+		{
+			name: "k3s1 < k3s2 same semver",
+			a:    "v1.35.3-k3s1",
+			b:    "v1.35.3-k3s2",
+			want: true,
+		},
+		{
+			name: "k3s2 not less than k3s1",
+			a:    "v1.35.3-k3s2",
+			b:    "v1.35.3-k3s1",
+			want: false,
+		},
+		{
+			name: "different patch takes precedence",
+			a:    "v1.35.2-k3s2",
+			b:    "v1.35.3-k3s1",
+			want: true,
+		},
+		{
+			name: "same version same suffix not less",
+			a:    "v1.35.3-k3s1",
+			b:    "v1.35.3-k3s1",
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			a, _ := versionresolver.ParseVersion(tt.a)
+			b, _ := versionresolver.ParseVersion(tt.b)
+
+			if got := a.Less(b); got != tt.want {
+				t.Errorf("%s.Less(%s) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSortVersions_K3sSuffix(t *testing.T) {
+	t.Parallel()
+
+	tags := []string{"v1.35.3-k3s2", "v1.35.3-k3s1", "v1.35.2-k3s1", "v1.35.4-k3s1"}
+	versions := versionresolver.ParseTags(tags)
+	versionresolver.SortVersions(versions)
+
+	expected := []string{"v1.35.2-k3s1", "v1.35.3-k3s1", "v1.35.3-k3s2", "v1.35.4-k3s1"}
+	for i, v := range versions {
+		if v.Original != expected[i] {
+			t.Errorf("index %d = %q, want %q", i, v.Original, expected[i])
+		}
+	}
+}

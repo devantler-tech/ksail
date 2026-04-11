@@ -57,3 +57,13 @@ func (p *Provisioner) DistributionImageRef() string {
 func (p *Provisioner) VersionSuffix() string {
 	return ""
 }
+
+// PrepareConfigForVersion updates the VCluster configuration to use the specified
+// version so that a subsequent cluster recreation uses the new image.
+func (p *Provisioner) PrepareConfigForVersion(upgradeType string, version string) error {
+	// VCluster config is managed by the chart values; the recreation flow
+	// re-reads chart defaults. No in-memory config update needed.
+	_ = upgradeType
+	_ = version
+	return nil
+}

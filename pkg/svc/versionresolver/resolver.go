@@ -3,7 +3,6 @@ package versionresolver
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -97,13 +96,9 @@ func ComputeUpgradePath(
 
 	steps := make([]UpgradeStep, 0, len(newer))
 	for _, v := range newer {
-		ref := imageRef + ":" + v.Original
-		if !strings.Contains(imageRef, "/") {
-			ref = imageRef + ":" + v.Original
-		}
 		steps = append(steps, UpgradeStep{
 			Version:  v,
-			ImageRef: ref,
+			ImageRef: imageRef + ":" + v.Original,
 		})
 	}
 
