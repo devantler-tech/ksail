@@ -244,6 +244,12 @@ func NewDebugCmd() *cobra.Command {
 
 	kubectlDebugCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if hostNode != "" {
+			// In --host mode, positional args before '--' are kubectl-style targets
+			// (e.g., node/<name>) and should not be mixed with host-level debugging.
+			if dashIdx := cmd.ArgsLenAtDash(); dashIdx > 0 {
+				return ErrHostModePositionalArgs
+			}
+
 			return runHostDebug(cmd, hostNode, args)
 		}
 
@@ -289,6 +295,13 @@ var ErrNonZeroExitCode = errors.New("container process exited with non-zero code
 
 // ErrNoIPAddress is returned when a container has no IP address.
 var ErrNoIPAddress = errors.New("no IP address found for container")
+
+// ErrHostModePositionalArgs is returned when kubectl-style positional args are
+// used with --host mode.
+var ErrHostModePositionalArgs = errors.New(
+	"--host mode does not accept kubectl-style positional args; " +
+		"place the container command after '--' (e.g., debug --host <node> -- /bin/sh)",
+)
 
 // runHostDebug detects the cluster distribution and provider, then routes
 // to the appropriate host-level debug mechanism.
@@ -380,7 +393,7 @@ func resolveTalosNodeEndpoint(
 	case v1alpha1.ProviderDocker:
 		return resolveDockerNodeIP(ctx, info.ClusterName, nodeName, dockerprovider.LabelSchemeTalos)
 	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
-		return resolveNodeIPFromKubernetes(ctx, kubeconfigPath, contextName, nodeName)
+		return resolveNodeIPFromKubernetes(ctx, kubeconfigPath, contextName, nodeName, info.Provider)
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Provider)
 	}
@@ -626,12 +639,14 @@ func distributionToLabelScheme(distribution v1alpha1.Distribution) dockerprovide
 }
 
 // resolveNodeIPFromKubernetes resolves a Kubernetes node name to its IP address
-// by querying the Node object. Prefers InternalIP, falls back to ExternalIP.
+// by querying the Node object. For cloud providers (Hetzner), prefers ExternalIP
+// since InternalIP may not be reachable. Otherwise prefers InternalIP.
 func resolveNodeIPFromKubernetes(
 	ctx context.Context,
 	kubeconfigPath string,
 	contextName string,
 	nodeName string,
+	provider v1alpha1.Provider,
 ) (string, error) {
 	clientset, err := k8sutil.NewClientset(kubeconfigPath, contextName)
 	if err != nil {
@@ -643,14 +658,25 @@ func resolveNodeIPFromKubernetes(
 		return "", fmt.Errorf("get node %q: %w", nodeName, err)
 	}
 
+	// Cloud providers expose nodes via public IPs; prefer ExternalIP.
+	preferExternal := provider == v1alpha1.ProviderHetzner || provider == v1alpha1.ProviderOmni
+
+	primary := corev1.NodeExternalIP
+	fallback := corev1.NodeInternalIP
+
+	if !preferExternal {
+		primary = corev1.NodeInternalIP
+		fallback = corev1.NodeExternalIP
+	}
+
 	for _, addr := range node.Status.Addresses {
-		if addr.Type == corev1.NodeInternalIP {
+		if addr.Type == primary {
 			return addr.Address, nil
 		}
 	}
 
 	for _, addr := range node.Status.Addresses {
-		if addr.Type == corev1.NodeExternalIP {
+		if addr.Type == fallback {
 			return addr.Address, nil
 		}
 	}

@@ -143,7 +143,7 @@ func streamDebugContainer(
 	recvDone := startRecvLoop(ctx, stream, &exitCode)
 
 	return waitForStreams(ctx, cancel, stream, sendC,
-		stdinDone, sendDone, recvDone, exitCode,
+		stdinDone, sendDone, recvDone, &exitCode,
 	)
 }
 
@@ -229,7 +229,7 @@ func waitForStreams(
 	stdinDone chan error,
 	sendDone chan error,
 	recvDone chan error,
-	exitCode int32,
+	exitCode *int32,
 ) error {
 	select {
 	case stdinErr := <-stdinDone:
@@ -272,8 +272,8 @@ func waitForStreams(
 		}
 	}
 
-	if exitCode != -1 && exitCode != 0 {
-		return fmt.Errorf("%w: %d", ErrNonZeroExitCode, exitCode)
+	if *exitCode != -1 && *exitCode != 0 {
+		return fmt.Errorf("%w: %d", ErrNonZeroExitCode, *exitCode)
 	}
 
 	return nil
