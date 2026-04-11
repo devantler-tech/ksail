@@ -57,7 +57,9 @@ func (p *Provisioner) syncOmniScaling(
 		return fmt.Errorf("failed to resolve versions for scaling: %w", err)
 	}
 
-	machines, err := p.resolveOmniMachinesForScaling(ctx, omniProv, clusterName, newCPCount, newWorkerCount)
+	machines, err := p.resolveOmniMachinesForScaling(
+		ctx, omniProv, clusterName, newCPCount, newWorkerCount,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to resolve machines for scaling: %w", err)
 	}
@@ -179,18 +181,20 @@ func (p *Provisioner) discoverMachinesForScaling(
 	workerIDs := make([]string, 0, len(existingNodes))
 
 	for _, n := range existingNodes {
-		if n.Role == "controlplane" {
+		if n.Role == omniRoleControlPlane {
 			cpIDs = append(cpIDs, n.Name)
 		} else {
 			workerIDs = append(workerIDs, n.Name)
 		}
 	}
 
-	orderedIDs := append(cpIDs, workerIDs...)
+	machines := make([]string, 0, len(existingNodes))
+	machines = append(machines, cpIDs...)
+	machines = append(machines, workerIDs...)
 
-	additionalNeeded := required - len(orderedIDs)
+	additionalNeeded := required - len(machines)
 	if additionalNeeded <= 0 {
-		return orderedIDs, nil
+		return machines, nil
 	}
 
 	_, _ = fmt.Fprintf(
@@ -204,5 +208,5 @@ func (p *Provisioner) discoverMachinesForScaling(
 		return nil, fmt.Errorf("auto-discover machines for scaling: %w", err)
 	}
 
-	return append(orderedIDs, additional...), nil
+	return append(machines, additional...), nil
 }
