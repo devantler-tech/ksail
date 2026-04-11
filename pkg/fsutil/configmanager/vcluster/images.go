@@ -21,8 +21,8 @@ func ChartVersion() string {
 	)
 }
 
-// kubernetesVersion returns the Kubernetes version tag from the embedded Dockerfile.
-func kubernetesVersion() string {
+// KubernetesVersion returns the Kubernetes version tag from the embedded Dockerfile.
+func KubernetesVersion() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
 		`FROM\s+ghcr\.io/loft-sh/kubernetes:([^\s@]+)`,
