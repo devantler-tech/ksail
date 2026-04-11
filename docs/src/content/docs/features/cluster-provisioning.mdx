@@ -32,6 +32,29 @@ ksail cluster update --dry-run
 ksail cluster update --dry-run --output json | jq .recreateRequired
 ```
 
+## Version Upgrades
+
+Two flags let you upgrade a running cluster to the latest stable versions without editing config files:
+
+- `--update-distribution` — upgrades distributions that have a separate distribution image (for example, Talos) to the latest stable OCI image tag. This is a no-op for Vanilla (Kind) and K3s (K3d) since their distribution version is tied to the Kubernetes version.
+- `--update-kubernetes` — upgrades the Kubernetes control plane to the latest stable version. For Vanilla (Kind) and K3s (K3d), this also upgrades the distribution since both are bundled into a single image.
+
+```bash
+# Upgrade both distribution and Kubernetes at once
+ksail cluster update --update-distribution --update-kubernetes
+```
+
+**Upgrade strategy by distribution:**
+
+| Distribution | Strategy | Details |
+|---|---|---|
+| **Talos** | Rolling upgrade | Upgrades nodes in-place via the Talos API — no downtime for multi-node clusters |
+| **Vanilla (Kind)** | Recreation | Cluster is deleted and recreated at the target version |
+| **K3s (K3d)** | Recreation | Cluster is deleted and recreated at the target version |
+| **VCluster** | Recreation | Cluster is deleted and recreated using KSail's embedded vCluster/Kubernetes defaults; versions only advance when those defaults change (for example, after updating KSail) |
+
+For Talos (rolling upgrades), KSail steps through intermediate versions sequentially before reaching the final target. For recreation-based distributions, KSail skips intermediate versions and recreates the cluster once at the latest available target version. You will be prompted for confirmation before any recreation; pass `--force` or `--yes` (`-y`) to skip the prompt.
+
 ## CLI Reference
 
 [`ksail cluster`](/cli-flags/cluster/cluster-root/)
