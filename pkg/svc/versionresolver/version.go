@@ -44,14 +44,25 @@ func ParseVersion(tag string) (Version, error) {
 		return Version{}, fmt.Errorf("%w: %q (numeric overflow)", ErrInvalidVersion, tag)
 	}
 
-	return Version{
+	version := Version{
 		Major:      major,
 		Minor:      minor,
 		Patch:      patch,
 		PreRelease: matches[4],
 		Suffix:     matches[5],
 		Original:   tag,
-	}, nil
+	}
+
+	// If the regex didn't capture a pre-release but the suffix contains a
+	// pre-release indicator (e.g., "dev", "nightly"), promote it so that
+	// Less() correctly orders pre-release < stable.
+	if version.PreRelease == "" && version.Suffix != "" &&
+		preReleaseRegexp.MatchString(version.Suffix) {
+		version.PreRelease = version.Suffix
+		version.Suffix = ""
+	}
+
+	return version, nil
 }
 
 // IsStable returns true if the version has no pre-release component and the
@@ -126,7 +137,6 @@ func (v Version) Equal(other Version) bool {
 		v.PreRelease == other.PreRelease
 }
 
-// String returns the version as "vMAJOR.MINOR.PATCH" with suffix if present.
 // String returns the version as "vMAJOR.MINOR.PATCH" with pre-release and
 // suffix if present (e.g., "v1.13.0-beta.1", "v1.35.3-k3s1").
 func (v Version) String() string {

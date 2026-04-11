@@ -5523,7 +5523,7 @@ func BenchmarkFormatDiffTable_WideValues(b *testing.B) {
 	}
 }
 
-func TestNewUpdateCmd(t *testing.T) {
+func TestNewUpdateCmd(t *testing.T) { //nolint:cyclop // flag assertion test
 	t.Parallel()
 
 	runtimeContainer := &di.Runtime{}
@@ -5566,6 +5566,23 @@ func TestNewUpdateCmd(t *testing.T) {
 	yesFlag := cmd.Flags().Lookup("yes")
 	if yesFlag == nil {
 		t.Error("expected --yes flag to exist")
+	}
+
+	updateK8sFlag := cmd.Flags().Lookup("update-kubernetes")
+	if updateK8sFlag == nil {
+		t.Error("expected --update-kubernetes flag to exist")
+	} else if updateK8sFlag.DefValue != "false" {
+		t.Errorf("expected --update-kubernetes default to be false, got %q", updateK8sFlag.DefValue)
+	}
+
+	updateDistFlag := cmd.Flags().Lookup("update-distribution")
+	if updateDistFlag == nil {
+		t.Error("expected --update-distribution flag to exist")
+	} else if updateDistFlag.DefValue != "false" {
+		t.Errorf(
+			"expected --update-distribution default to be false, got %q",
+			updateDistFlag.DefValue,
+		)
 	}
 }
 
