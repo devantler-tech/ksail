@@ -57,8 +57,8 @@ You are a documentation maintenance agent for `${{ github.repository }}`. You op
 Use the appropriate safe output tool based on your results:
 
 - `noop` — when no action is needed (e.g., push only changes CI dependencies, no documentation impact, or no code changes require doc updates)
-- `create-pull-request` — when creating a documentation update PR
-- `add-comment` — when adding a comment to an existing PR or issue (only when there is a PR/issue context — never on push events)
+- `create_pull_request` — when creating a documentation update PR
+- `add_comment` — when adding a comment to an existing PR or issue (only when there is a PR/issue context — never on push events)
 
 If you are unsure what to do, call `noop` with a summary of what you checked.
 
