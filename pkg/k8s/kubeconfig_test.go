@@ -459,8 +459,8 @@ users:
     token: new-token
 `,
 			desiredContext: "new-ctx",
-			wantErr:       true,
-			errContains:   "context name collision",
+			wantErr:        true,
+			errContains:    "context name collision",
 		},
 	}
 
