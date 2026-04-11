@@ -6,4 +6,4 @@ package vcluster
 // updated manually to keep this default in sync.
 //
 //nolint:gochecknoglobals // Exported constant initialized from embedded Dockerfile
-var DefaultKubernetesVersion = kubernetesVersion()
+var DefaultKubernetesVersion = KubernetesVersion()
