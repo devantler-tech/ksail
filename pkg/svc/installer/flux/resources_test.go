@@ -226,9 +226,10 @@ func TestBuildInstance(t *testing.T) {
 		clusterCfg  *v1alpha1.Cluster
 		clusterName string
 		wantName    string
+		wantRef     string
 	}{
 		{
-			name: "local registry enabled",
+			name: "local registry with default tag",
 			clusterCfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
@@ -241,9 +242,27 @@ func TestBuildInstance(t *testing.T) {
 			},
 			clusterName: "test-cluster",
 			wantName:    "flux",
+			wantRef:     "dev",
 		},
 		{
-			name: "external registry",
+			name: "local registry with custom workload tag",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						LocalRegistry: v1alpha1.LocalRegistry{},
+					},
+					Workload: v1alpha1.WorkloadSpec{
+						SourceDirectory: "k8s",
+						Tag:             "latest",
+					},
+				},
+			},
+			clusterName: "test-cluster",
+			wantName:    "flux",
+			wantRef:     "latest",
+		},
+		{
+			name: "external registry with default tag",
 			clusterCfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
@@ -258,6 +277,44 @@ func TestBuildInstance(t *testing.T) {
 			},
 			clusterName: "test-cluster",
 			wantName:    "flux",
+			wantRef:     "dev",
+		},
+		{
+			name: "external registry with registry-embedded tag",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						LocalRegistry: v1alpha1.LocalRegistry{
+							Registry: "ghcr.io/example/repo:custom",
+						},
+					},
+					Workload: v1alpha1.WorkloadSpec{
+						SourceDirectory: "k8s",
+					},
+				},
+			},
+			clusterName: "test-cluster",
+			wantName:    "flux",
+			wantRef:     "custom",
+		},
+		{
+			name: "workload tag takes priority over registry-embedded tag",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						LocalRegistry: v1alpha1.LocalRegistry{
+							Registry: "ghcr.io/example/repo:custom",
+						},
+					},
+					Workload: v1alpha1.WorkloadSpec{
+						SourceDirectory: "k8s",
+						Tag:             "v1.0",
+					},
+				},
+			},
+			clusterName: "test-cluster",
+			wantName:    "flux",
+			wantRef:     "v1.0",
 		},
 	}
 
@@ -282,6 +339,7 @@ func TestBuildInstance(t *testing.T) {
 			assert.NotNil(t, instance.Spec.Sync)
 			assert.Equal(t, "OCIRepository", instance.Spec.Sync.Kind)
 			assert.NotEmpty(t, instance.Spec.Sync.URL)
+			assert.Equal(t, testCase.wantRef, instance.Spec.Sync.Ref)
 		})
 	}
 }

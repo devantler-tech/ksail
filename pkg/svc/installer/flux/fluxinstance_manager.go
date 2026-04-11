@@ -23,7 +23,6 @@ import (
 
 const (
 	defaultSourceDirectory   = "k8s"
-	defaultArtifactTag       = "dev"
 	fluxIntervalFallback     = time.Minute
 	fluxDistributionVersion  = "2.x"
 	fluxDistributionRegistry = "ghcr.io/fluxcd"
@@ -260,19 +259,24 @@ func buildInstance(
 ) (*FluxInstance, error) {
 	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 
-	var repoURL, pullSecret, tag string
+	var repoURL, pullSecret, registryTag string
 
 	if localRegistry.IsExternal() {
-		repoURL, pullSecret, tag = buildExternalRegistryURL(localRegistry)
+		repoURL, pullSecret, registryTag = buildExternalRegistryURL(localRegistry)
 	} else {
 		repoURL = buildLocalRegistryURL(
 			localRegistry, clusterCfg, clusterName, registryHostOverride,
 		)
 	}
 
-	// Use configured tag if provided, otherwise default
+	// Resolve tag: workload tag > registry-embedded tag > default.
+	tag := clusterCfg.Spec.Workload.Tag
+	if tag == "" && registryTag != "" {
+		tag = registryTag
+	}
+
 	if tag == "" {
-		tag = defaultArtifactTag
+		tag = registry.DefaultLocalArtifactTag
 	}
 
 	intervalPtr := &metav1.Duration{Duration: fluxIntervalFallback}

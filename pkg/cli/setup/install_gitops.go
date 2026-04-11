@@ -103,13 +103,27 @@ func buildArgoCDEnsureOptions(
 	clusterName string,
 	registryHost string,
 ) argocdgitops.EnsureOptions {
+	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
+
+	// Resolve tag: workload tag > registry-embedded tag > default.
+	tag := clusterCfg.Spec.Workload.Tag
+	if tag == "" && localRegistry.IsExternal() {
+		parsed := localRegistry.Parse()
+		if parsed.Tag != "" {
+			tag = parsed.Tag
+		}
+	}
+
+	if tag == "" {
+		tag = registry.DefaultLocalArtifactTag
+	}
+
 	opts := argocdgitops.EnsureOptions{
 		SourcePath:      ".",
 		ApplicationName: "ksail",
-		TargetRevision:  "dev",
+		TargetRevision:  tag,
 	}
 
-	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 	if localRegistry.IsExternal() {
 		applyExternalRegistryOptions(&opts, localRegistry)
 	} else {
