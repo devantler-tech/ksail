@@ -318,6 +318,7 @@ func TestGenerateFlagName(t *testing.T) {
 		{"Timeout field", &manager.Config.Spec.Cluster.Connection.Timeout, "timeout"},
 		{"CNI field", &manager.Config.Spec.Cluster.CNI, "cni"},
 		{"CSI field", &manager.Config.Spec.Cluster.CSI, "csi"},
+		{"CDI field", &manager.Config.Spec.Cluster.CDI, "cdi"},
 		{
 			"MetricsServer field",
 			&manager.Config.Spec.Cluster.MetricsServer,

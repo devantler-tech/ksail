@@ -10,6 +10,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/state/impl/namespaced"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
+	"github.com/siderolabs/omni/client/api/omni/specs"
 	omnires "github.com/siderolabs/omni/client/pkg/omni/resources/omni"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -145,6 +146,144 @@ func TestWaitForClusterReady_NilClient(t *testing.T) {
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestWaitForClusterRunning_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	err := prov.WaitForClusterRunning(context.Background(), "test-cluster", time.Second)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestWaitForClusterRunning_ClusterNotFound_TimesOut(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProviderWithState(newInMemState())
+
+	ctx := context.Background()
+	err := prov.WaitForClusterRunning(ctx, "nonexistent", 500*time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "timed out")
+}
+
+func TestWaitForClusterRunning_CancelledContext(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProviderWithState(newInMemState())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	err := prov.WaitForClusterRunning(ctx, "test-cluster", 5*time.Second)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
+}
+
+func TestWaitForClusterRunning_RunningNotReady_Succeeds(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Create a ClusterStatus with Phase=RUNNING but Ready=false
+	// This simulates a cluster where CNI hasn't been installed yet
+	cs := omnires.NewClusterStatus("test-cluster")
+	cs.TypedSpec().Value.Phase = specs.ClusterStatusSpec_RUNNING
+	cs.TypedSpec().Value.Ready = false
+
+	require.NoError(t, testState.Create(context.Background(), cs))
+
+	err := prov.WaitForClusterRunning(context.Background(), "test-cluster", 5*time.Second)
+
+	// Should succeed because Phase==RUNNING, even though Ready==false
+	require.NoError(t, err)
+}
+
+func TestWaitForClusterRunning_RunningAndReady_Succeeds(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	cs := omnires.NewClusterStatus("test-cluster")
+	cs.TypedSpec().Value.Phase = specs.ClusterStatusSpec_RUNNING
+	cs.TypedSpec().Value.Ready = true
+
+	require.NoError(t, testState.Create(context.Background(), cs))
+
+	err := prov.WaitForClusterRunning(context.Background(), "test-cluster", 5*time.Second)
+
+	require.NoError(t, err)
+}
+
+func TestWaitForClusterReady_RunningNotReady_TimesOut(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Create a ClusterStatus with Phase=RUNNING but Ready=false
+	cs := omnires.NewClusterStatus("test-cluster")
+	cs.TypedSpec().Value.Phase = specs.ClusterStatusSpec_RUNNING
+	cs.TypedSpec().Value.Ready = false
+
+	require.NoError(t, testState.Create(context.Background(), cs))
+
+	err := prov.WaitForClusterReady(context.Background(), "test-cluster", 500*time.Millisecond)
+
+	// Should time out because Ready==false
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "timed out")
+}
+
+func TestWaitForClusterReady_RunningAndReady_Succeeds(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	cs := omnires.NewClusterStatus("test-cluster")
+	cs.TypedSpec().Value.Phase = specs.ClusterStatusSpec_RUNNING
+	cs.TypedSpec().Value.Ready = true
+
+	require.NoError(t, testState.Create(context.Background(), cs))
+
+	err := prov.WaitForClusterReady(context.Background(), "test-cluster", 5*time.Second)
+
+	require.NoError(t, err)
+}
+
+func TestWaitForClusterReady_NotFoundTimesOut(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	err := prov.WaitForClusterReady(context.Background(), "nonexistent", 500*time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "timed out")
+}
+
+func TestWaitForClusterReady_CancelledContext(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := prov.WaitForClusterReady(ctx, "test-cluster", 5*time.Second)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
 }
 
 func TestGetKubeconfig_NilClient(t *testing.T) {

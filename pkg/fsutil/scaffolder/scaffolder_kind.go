@@ -71,6 +71,12 @@ func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
 		kindconfigmanager.ApplyKubeletCertRotationPatches(kindConfig)
 	}
 
+	// Enable CDI when explicitly enabled. Kind does not enable CDI by default,
+	// so we apply a containerd config patch to turn it on.
+	if s.KSailConfig.Spec.Cluster.CDI == v1alpha1.CDIEnabled {
+		kindconfigmanager.ApplyCDIPatches(kindConfig)
+	}
+
 	// Enable containerd image verifier plugin when image verification is enabled.
 	if s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
 		kindconfigmanager.ApplyImageVerificationPatches(kindConfig)

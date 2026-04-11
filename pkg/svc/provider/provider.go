@@ -70,7 +70,7 @@ type Provider interface {
 	DeleteNodes(ctx context.Context, clusterName string) error
 
 	// GetClusterStatus returns the provider-level status of a cluster.
-	// Returns nil and no error if the cluster does not exist in the provider.
+	// Returns ErrClusterNotFound if the cluster does not exist in the provider.
 	GetClusterStatus(ctx context.Context, clusterName string) (*ClusterStatus, error)
 }
 

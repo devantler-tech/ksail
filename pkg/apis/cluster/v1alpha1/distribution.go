@@ -20,6 +20,20 @@ const (
 	DistributionVCluster Distribution = "VCluster"
 )
 
+// ProvidesCDIByDefault returns true if the distribution enables CDI by default.
+// Talos 1.13+ enables CDI (Container Device Interface) by default via machine.features.enableCDI.
+// Vanilla, K3s, and VCluster do not enable CDI by default.
+func (d *Distribution) ProvidesCDIByDefault() bool {
+	switch *d {
+	case DistributionTalos:
+		return true
+	case DistributionVanilla, DistributionK3s, DistributionVCluster:
+		return false
+	default:
+		return false
+	}
+}
+
 // ProvidesMetricsServerByDefault returns true if the distribution includes metrics-server by default.
 // K3s includes metrics-server.
 // Vanilla, Talos, and VCluster (Vind with Distro: k8s) do not.
