@@ -1,15 +1,20 @@
 name: Cleanup Omni Resources
 description: |
-  Deletes the known KSail system-test clusters from Omni to ensure clean slate
+  Deletes the specified KSail system-test clusters from Omni to ensure clean slate
   for next CI run, even if individual test jobs fail to clean up after themselves.
 
-inputs: {}
+inputs:
+  cluster-names:
+    description: "Space-separated list of cluster names to delete"
+    required: true
 
 runs:
   using: composite
   steps:
-    - name: 🧹 Cleanup known KSail system-test clusters from Omni
+    - name: 🧹 Cleanup KSail system-test clusters from Omni
       shell: bash
+      env:
+        CLUSTER_NAMES: ${{ inputs.cluster-names }}
       run: |
         set -euo pipefail
 
@@ -34,8 +39,9 @@ runs:
           exit 1
         fi
 
-        # Delete the two known system-test cluster names used by CI
-        for CLUSTER_NAME in "system-test-cluster-with-scaffolding" "system-test-cluster-without-scaffolding"; do
+        # Delete each cluster name passed as input (read into array for safe iteration)
+        IFS=' ' read -ra NAMES <<< "${CLUSTER_NAMES}"
+        for CLUSTER_NAME in "${NAMES[@]}"; do
           echo "🗑️  Deleting cluster: ${CLUSTER_NAME}"
 
           DELETE_OUTPUT=""

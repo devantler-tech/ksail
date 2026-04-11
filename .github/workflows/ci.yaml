@@ -522,8 +522,10 @@ jobs:
         id: warm
         uses: ./.github/actions/warm-mirror-cache
 
-  system-test:
-    name: 🧪 System Test
+  # Docker-based system tests run in full parallelism with no concurrency
+  # constraints — each job gets its own runner with local Docker containers.
+  system-test-docker:
+    name: 🧪 System Test (Docker)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
@@ -550,22 +552,88 @@ jobs:
             provider: Docker
             init: true
             args: "--name system-test-cluster-with-image-verification --image-verification Enabled"
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: 🧹 Free disk space
+        uses: ./.github/actions/free-disk-space
+
+      - name: 🔐 Login to Docker Hub
+        if: ${{ vars.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
+
+      - name: ⚙️ Setup Go
+        id: setup-go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 📦 Cache KSail Binary
+        uses: ./.github/actions/cache-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: /usr/local/bin/ksail
+          save: "false"
+
+      - name: 📥 Restore Helm Cache
+        uses: ./.github/actions/restore-helm-cache
+
+      - name: 📥 Restore Mirror Cache
+        uses: ./.github/actions/restore-mirror-cache
+
+      - name: 🧪 Run KSail System Test
+        uses: ./.github/actions/ksail-system-test
+        with:
+          distribution: ${{ matrix.distribution }}
+          provider: ${{ matrix.provider }}
+          init: ${{ matrix.init }}
+          args: ${{ matrix.args }}
+          apply-overlay-path: ".github/fixtures/podinfo-overlay"
+
+          ghcr-user: ${{ github.actor }}
+          ghcr-token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Hetzner cloud tests are serialized across workflow runs via a concurrency
+  # group to prevent resource conflicts (shared servers, firewalls, networks).
+  # Cluster names include github.run_id for defense-in-depth uniqueness.
+  system-test-hetzner:
+    name: 🧪 System Test (Hetzner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
+    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+    environment: ci
+    # Hetzner cloud tests are allowed to fail without blocking the merge queue
+    # because Hetzner infrastructure can be intermittently unavailable.
+    continue-on-error: true
+    concurrency:
+      group: cloud-system-test-hetzner-${{ matrix.init }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        # Cluster names use st-hetzner-{init,noinit}-<run_id> pattern.
+        # Keep in sync with cleanup-hetzner label-selector values below.
+        include:
           - distribution: Talos
             provider: Hetzner
             init: true
-            args: "--name system-test-cluster-with-scaffolding"
+            args: "--name st-hetzner-init-${{ github.run_id }}"
           - distribution: Talos
             provider: Hetzner
             init: false
-            args: "--name system-test-cluster-without-scaffolding"
-          - distribution: Talos
-            provider: Omni
-            init: true
-            args: "--name system-test-cluster-with-scaffolding"
-          - distribution: Talos
-            provider: Omni
-            init: false
-            args: "--name system-test-cluster-without-scaffolding"
+            args: "--name st-hetzner-noinit-${{ github.run_id }}"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -606,10 +674,90 @@ jobs:
       - name: 🧪 Run KSail System Test
         uses: ./.github/actions/ksail-system-test
         env:
-          HCLOUD_TOKEN: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }}
-          OMNI_SERVICE_ACCOUNT_KEY: ${{ matrix.provider == 'Omni' && secrets.OMNI_SERVICE_ACCOUNT_KEY || '' }}
-          OMNI_ENDPOINT: ${{ matrix.provider == 'Omni' && vars.OMNI_ENDPOINT || '' }}
-          KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS: ${{ matrix.provider == 'Omni' && 'ksail' || '' }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+        with:
+          distribution: ${{ matrix.distribution }}
+          provider: ${{ matrix.provider }}
+          init: ${{ matrix.init }}
+          args: ${{ matrix.args }}
+          apply-overlay-path: ".github/fixtures/podinfo-overlay"
+
+          ghcr-user: ${{ github.actor }}
+          ghcr-token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Omni cloud tests are serialized across workflow runs via a concurrency
+  # group to prevent resource conflicts (shared machine pool).
+  # Cluster names include github.run_id for defense-in-depth uniqueness.
+  system-test-omni:
+    name: 🧪 System Test (Omni)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
+    if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+    environment: ci
+    concurrency:
+      group: cloud-system-test-omni-${{ matrix.init }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        # Cluster names use st-omni-{init,noinit}-<run_id> pattern.
+        # Keep in sync with cleanup-omni cluster-names input below.
+        include:
+          - distribution: Talos
+            provider: Omni
+            init: true
+            args: "--name st-omni-init-${{ github.run_id }}"
+          - distribution: Talos
+            provider: Omni
+            init: false
+            args: "--name st-omni-noinit-${{ github.run_id }}"
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: 🧹 Free disk space
+        uses: ./.github/actions/free-disk-space
+
+      - name: 🔐 Login to Docker Hub
+        if: ${{ vars.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
+
+      - name: ⚙️ Setup Go
+        id: setup-go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 📦 Cache KSail Binary
+        uses: ./.github/actions/cache-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: /usr/local/bin/ksail
+          save: "false"
+
+      - name: 📥 Restore Helm Cache
+        uses: ./.github/actions/restore-helm-cache
+
+      - name: 📥 Restore Mirror Cache
+        uses: ./.github/actions/restore-mirror-cache
+
+      - name: 🧪 Run KSail System Test
+        uses: ./.github/actions/ksail-system-test
+        env:
+          OMNI_SERVICE_ACCOUNT_KEY: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
+          OMNI_ENDPOINT: ${{ vars.OMNI_ENDPOINT }}
+          KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS: ksail
         with:
           distribution: ${{ matrix.distribution }}
           provider: ${{ matrix.provider }}
@@ -753,8 +901,8 @@ jobs:
     name: 🧹 Cleanup Hetzner Resources
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [system-test]
-    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test.result != 'skipped' }}
+    needs: [system-test-hetzner]
+    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test-hetzner.result != 'skipped' }}
     environment: ci
     permissions:
       contents: read
@@ -764,8 +912,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: 🧹 Cleanup all KSail-owned Hetzner resources
+      - name: 🧹 Cleanup Hetzner resources for init cluster
         uses: ./.github/actions/cleanup-hetzner
+        with:
+          label-selector: "ksail.cluster.name=st-hetzner-init-${{ github.run_id }}"
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+
+      - name: 🧹 Cleanup Hetzner resources for noinit cluster
+        uses: ./.github/actions/cleanup-hetzner
+        with:
+          label-selector: "ksail.cluster.name=st-hetzner-noinit-${{ github.run_id }}"
         env:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
 
@@ -773,8 +930,8 @@ jobs:
     name: 🧹 Cleanup Omni Resources
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [system-test]
-    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test.result != 'skipped' }}
+    needs: [system-test-omni]
+    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test-omni.result != 'skipped' }}
     environment: ci
     permissions:
       contents: read
@@ -799,8 +956,10 @@ jobs:
           output-path: /usr/local/bin/ksail
           save: "false"
 
-      - name: 🧹 Cleanup all KSail test clusters from Omni
+      - name: 🧹 Cleanup KSail test clusters from Omni
         uses: ./.github/actions/cleanup-omni
+        with:
+          cluster-names: "st-omni-init-${{ github.run_id }} st-omni-noinit-${{ github.run_id }}"
         env:
           OMNI_SERVICE_ACCOUNT_KEY: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
           OMNI_ENDPOINT: ${{ vars.OMNI_ENDPOINT }}
@@ -818,7 +977,9 @@ jobs:
         generate-docs,
         auto-commit,
         warm-helm-cache,
-        system-test,
+        system-test-docker,
+        system-test-hetzner,
+        system-test-omni,
         cleanup-hetzner,
         cleanup-omni,
         audit-docs,
@@ -843,7 +1004,9 @@ jobs:
             ${{ needs.generate-docs.result }}
             ${{ needs.auto-commit.result }}
             ${{ needs.warm-helm-cache.result }}
-            ${{ needs.system-test.result }}
+            ${{ needs.system-test-docker.result }}
+            ${{ needs.system-test-hetzner.result }}
+            ${{ needs.system-test-omni.result }}
             ${{ needs.cleanup-hetzner.result }}
             ${{ needs.cleanup-omni.result }}
             ${{ needs.audit-docs.result }}
