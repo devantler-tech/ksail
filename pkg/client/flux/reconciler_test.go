@@ -447,7 +447,7 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 				require.Error(t, err)
 
 				if testCase.wantErrType != nil {
-					assert.ErrorIs(t, err, testCase.wantErrType,
+					require.ErrorIs(t, err, testCase.wantErrType,
 						"expected error wrapping %v, got: %v", testCase.wantErrType, err)
 				}
 
