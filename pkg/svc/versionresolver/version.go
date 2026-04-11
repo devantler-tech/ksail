@@ -67,7 +67,8 @@ func (v Version) IsStable() bool {
 // Less returns true if v is strictly less than other.
 // When major.minor.patch are equal, suffixes are compared by extracting the
 // trailing numeric portion (e.g., k3s1 < k3s2) so that K3s patch-level
-// bumps are ordered correctly.
+// bumps are ordered correctly. Pre-release versions are always less than
+// their stable counterpart (e.g., v1.35.1-rc.1 < v1.35.1).
 func (v Version) Less(other Version) bool {
 	if v.Major != other.Major {
 		return v.Major < other.Major
@@ -79,6 +80,15 @@ func (v Version) Less(other Version) bool {
 
 	if v.Patch != other.Patch {
 		return v.Patch < other.Patch
+	}
+
+	// Pre-release < stable (e.g., v1.35.1-rc.1 < v1.35.1).
+	if v.PreRelease != "" && other.PreRelease == "" {
+		return true
+	}
+
+	if v.PreRelease == "" && other.PreRelease != "" {
+		return false
 	}
 
 	return suffixNum(v.Suffix) < suffixNum(other.Suffix)
@@ -108,10 +118,12 @@ func suffixNum(suffix string) int {
 	return num
 }
 
-// Equal returns true if v and other have the same major.minor.patch and suffix.
+// Equal returns true if v and other have the same major.minor.patch, suffix,
+// and pre-release label.
 func (v Version) Equal(other Version) bool {
 	return v.Major == other.Major && v.Minor == other.Minor &&
-		v.Patch == other.Patch && v.Suffix == other.Suffix
+		v.Patch == other.Patch && v.Suffix == other.Suffix &&
+		v.PreRelease == other.PreRelease
 }
 
 // String returns the version as "vMAJOR.MINOR.PATCH" with suffix if present.

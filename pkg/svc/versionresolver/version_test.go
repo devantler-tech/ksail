@@ -141,6 +141,29 @@ func TestNewerThan(t *testing.T) {
 	}
 }
 
+func TestNewerThan_PreReleaseCurrent(t *testing.T) {
+	t.Parallel()
+
+	current, _ := versionresolver.ParseVersion("v1.35.1-rc.1")
+	tags := []string{"v1.35.0", "v1.35.1", "v1.35.2"}
+	versions := versionresolver.ParseTags(tags)
+
+	newer := versionresolver.NewerThan(versions, current)
+
+	// v1.35.1 should be considered newer than v1.35.1-rc.1 (stable > pre-release)
+	if len(newer) != 2 {
+		t.Fatalf("expected 2 newer versions (v1.35.1, v1.35.2), got %d: %v", len(newer), newer)
+	}
+
+	if newer[0].Original != "v1.35.1" {
+		t.Errorf("first newer = %q, want %q", newer[0].Original, "v1.35.1")
+	}
+
+	if newer[1].Original != "v1.35.2" {
+		t.Errorf("second newer = %q, want %q", newer[1].Original, "v1.35.2")
+	}
+}
+
 func TestSortVersions(t *testing.T) {
 	t.Parallel()
 
