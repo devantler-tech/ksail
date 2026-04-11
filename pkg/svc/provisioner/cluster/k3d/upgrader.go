@@ -81,8 +81,14 @@ func k3sImage(p *Provisioner) string {
 	return k3dconfigmanager.DefaultK3sImage
 }
 
-// extractTag returns the tag portion of an image reference (e.g., "v1.35.3-k3s1" from "rancher/k3s:v1.35.3-k3s1").
+// extractTag returns the tag portion of an image reference, stripping any
+// digest suffix (e.g., "v1.35.3-k3s1" from "rancher/k3s:v1.35.3-k3s1@sha256:abc...").
 func extractTag(image string) string {
+	// Strip digest if present (e.g., "@sha256:abc...")
+	if digestIdx := strings.Index(image, "@"); digestIdx >= 0 {
+		image = image[:digestIdx]
+	}
+
 	if idx := strings.LastIndex(image, ":"); idx >= 0 {
 		return image[idx+1:]
 	}

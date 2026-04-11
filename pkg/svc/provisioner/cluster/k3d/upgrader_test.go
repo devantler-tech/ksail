@@ -70,6 +70,24 @@ func TestGetCurrentVersions_WithConfig(t *testing.T) {
 	}
 }
 
+func TestGetCurrentVersions_DigestPinned(t *testing.T) {
+	t.Parallel()
+
+	cfg := &v1alpha5.SimpleConfig{}
+	cfg.Image = "rancher/k3s:v1.35.3-k3s1@sha256:abc123def456"
+
+	provisioner := k3dprovisioner.NewProvisioner(cfg, "")
+
+	info, err := provisioner.GetCurrentVersions(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if info.KubernetesVersion != "v1.35.3-k3s1" {
+		t.Errorf("KubernetesVersion = %q, want %q", info.KubernetesVersion, "v1.35.3-k3s1")
+	}
+}
+
 func TestGetCurrentVersions_DefaultImage(t *testing.T) {
 	t.Parallel()
 

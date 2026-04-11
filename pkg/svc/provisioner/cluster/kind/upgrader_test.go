@@ -70,6 +70,28 @@ func TestGetCurrentVersions_WithConfig(t *testing.T) {
 	}
 }
 
+func TestGetCurrentVersions_DigestPinned(t *testing.T) {
+	t.Parallel()
+
+	cfg := &v1alpha4.Cluster{}
+	cfg.Nodes = []v1alpha4.Node{
+		{
+			Image: "kindest/node:v1.35.1@sha256:05d7bcdefbda08b4e038f644c4df690cdac3fba8b06f8289f30e10026720a1ab",
+		},
+	}
+
+	provisioner := kindprovisioner.NewProvisioner(cfg, "", nil, nil)
+
+	info, err := provisioner.GetCurrentVersions(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if info.KubernetesVersion != "v1.35.1" {
+		t.Errorf("KubernetesVersion = %q, want %q", info.KubernetesVersion, "v1.35.1")
+	}
+}
+
 func TestGetCurrentVersions_DefaultImage(t *testing.T) {
 	t.Parallel()
 
