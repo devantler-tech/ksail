@@ -1,13 +1,13 @@
 {
-  "last_run": "2026-04-11T00:45:00Z",
-  "last_run_id": "24270819213",
+  "last_run": "2026-04-11T08:47:00Z",
+  "last_run_id": "24278894066",
   "tasks_run": [
-    11,
-    12,
     9,
+    4,
+    2,
     13
   ],
-  "issue_backlog_cursor": 3899,
+  "issue_backlog_cursor": 3912,
   "commented_issues": {
     "3591": "2026-04-04T07:39:21Z",
     "3592": "2026-04-04T07:39:21Z",
@@ -25,11 +25,14 @@
     "3414": "2026-04-09T00:49:25Z",
     "3574": "2026-04-09T00:49:25Z",
     "3609": "2026-04-09T12:39:36Z",
-    "3865": "2026-04-10T12:31:32Z"
+    "3865": "2026-04-10T12:31:32Z",
+    "2261": "2026-04-11T08:47:00Z",
+    "3772": "2026-04-11T08:47:00Z"
   },
   "open_prs": {
-    "3834": "refactor(installer): extract BuildSopsAgeSecret [status unknown - may have merged]",
-    "repo-assist/test-provider-cluster-status-helpers": "test(provider): BuildClusterStatus+GetClusterStatusFromLister [branch created, PR not pushed - safeoutputs unavailable]"
+    "3834": "refactor(installer): extract BuildSopsAgeSecret",
+    "aw_test_provider": "[Repo Assist] test(provider): BuildClusterStatus+GetClusterStatusFromLister+CheckNodesExist - created 2026-04-11",
+    "aw_eng_golangci": "[Repo Assist] chore(ci): sync golangci-lint go version - created 2026-04-11"
   },
   "domain_alternation": {
     "last_domain": "test",
@@ -102,62 +105,44 @@
     ],
     "3785": [
       "ci"
+    ],
+    "3912": [
+      "bug",
+      "blocked"
     ]
   },
   "created_issues": {
-    "3795": "[chore]: migrate Talos scaffolding to EnvironmentConfig document (Talos 1.13) - likely closed/merged",
-    "3836": "[chore]: audit copilot-sdk/go v0.2.0 capabilities for ksail chat improvements",
-    "3844": "[chore]: adopt Talos CDI as default in cluster scaffolding (Talos 1.13)",
+    "3836": "[chore]: audit copilot-sdk/go v0.2.0 capabilities",
+    "3844": "[chore]: adopt Talos CDI as default in cluster scaffolding",
     "3845": "[feature]: expose talosctl debug container in ksail workload exec",
-    "3833": "[feature]: expose ImageVerificationConfig scaffolding in Talos cluster init",
+    "3833": "[feature]: expose ImageVerificationConfig scaffolding in Talos",
     "3835": "[chore]: submit KSail MCP server to GitHub MCP Registry",
-    "aw_flux1": "[chore]: update embedded Flux to v2.8.x (CancelHealthCheckOnNewRevision + go1.26.1) - created 2026-04-10",
-    "aw_vcr1": "[feature]: implement image verification for VCluster distribution - created 2026-04-10"
+    "aw_flux1": "[chore]: update embedded Flux to v2.8.x - created 2026-04-10",
+    "aw_vcr1": "[feature]: implement image verification for VCluster - created 2026-04-10"
   },
   "closed_issues": {
-    "3730": "closed 2026-04-07 (superseded by merged PR #3745)",
-    "3731": "closed 2026-04-08 (ArgoCD ApplicationSet guide - completed)",
-    "3732": "closed 2026-04-08 (vCluster standalone evaluation - not planned)",
-    "3733": "closed 2026-04-08 (configurable timeout - not planned)",
-    "3794": "closed 2026-04-09 (tar|grep-q broken pipe fix - completed)",
-    "3796": "closed 2026-04-09 (cipher rotate - completed)",
-    "2810": "closed 2026-04-07 (Omni CI - completed)",
-    "3130": "closed (cluster diff UX - completed)",
+    "3730": "closed 2026-04-07",
+    "3731": "closed 2026-04-08",
+    "3732": "closed 2026-04-08",
+    "3733": "closed 2026-04-08",
+    "3794": "closed 2026-04-09",
+    "3796": "closed 2026-04-09",
+    "2810": "closed 2026-04-07",
+    "3130": "closed (diff UX - completed)",
     "3106": "closed (selective reconcile - completed)",
-    "3738": "closed 2026-04-09 (provider config - completed via PR #3825)",
-    "3574": "closed (Talos LifecycleService API migration - completed via PR #3852)"
+    "3738": "closed 2026-04-09 (via PR #3825)",
+    "3574": "closed (Talos LifecycleService API - via PR #3852)"
   },
   "roadmap_dedup_checked": {
-    "3518": "MCP Registry - closed, replaced by #3835",
-    "3575": "ImageVerificationConfig - closed, replaced by #3833",
-    "3130": "cluster diff UX - CLOSED as completed",
-    "3106": "selective reconcile - CLOSED as completed",
-    "2810": "Omni CI - CLOSED as completed",
-    "aw_cdi001": "CDI scaffolding - #3844",
-    "aw_dbg001": "talosctl debug - #3845",
     "aw_flux1": "Flux v2.8.x update - created 2026-04-10",
     "aw_vcr1": "VCluster image verification - created 2026-04-10"
   },
-  "notes": "Task 6: Rebased PR #3834 on main v6 (module path change). Branch: repo-assist/refactor-sops-age-secret-builder-v6. Task 9: Added TestBuildSopsAgeSecret table-driven tests to sopsutil_test.go. Task 11: Created 2 issues - aw_flux1 (Flux v2.8.x update) and aw_vcr1 (VCluster image verification). Added comment on #3865 (.releaserc analysis). Domain alternation: test this run, next should be refactor.",
-  "task_9_attempt": {
-    "run": "24270819213",
-    "branch": "repo-assist/test-provider-cluster-status-helpers",
-    "description": "Added TestBuildClusterStatus (6 cases) and TestGetClusterStatusFromLister (4 cases) to pkg/svc/provider/provider_test.go",
-    "status": "committed_locally_safeoutputs_unavailable"
-  },
-  "task_11_attempted": {
-    "run": "24270819213",
-    "planned_issues": [
-      "[feature]: AI-enhanced cluster diagnosis via ksail chat",
-      "[feature]: support K3s and Vanilla distributions on the Hetzner provider"
-    ],
-    "status": "not_created_safeoutputs_unavailable"
-  },
-  "task_12_attempted": {
-    "run": "24270819213",
-    "planned_links": [
-      "#3898 -> parent #3890"
-    ],
-    "status": "not_linked_safeoutputs_unavailable"
+  "notes": "Task 9: Added 12 table-driven tests for BuildClusterStatus (6), CheckNodesExist (3), GetClusterStatusFromLister (3). PR created. Task 4: Sync golangci.yml go: 1.26.0->1.26.1. PR created. Task 2: Commented on #2261 (D-Bus workaround still active) and #3772 (upstream still open). Bonus: labelled #3912 bug+blocked. Domain: test this run, next should be refactor.",
+  "open_issues_snapshot": {
+    "2261": "blocked - VCluster D-Bus race",
+    "3605": "repo-assist - Monthly Activity 2026-04",
+    "3772": "blocked - loft-sh/log replace",
+    "3845": "next,automation,repo-assist - talosctl debug container",
+    "3912": "bug,blocked - Dependabot multi-arch ghcr.io"
   }
 }
