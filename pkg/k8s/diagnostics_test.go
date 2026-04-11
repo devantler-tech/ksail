@@ -2,6 +2,7 @@ package k8s_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/k8s"
@@ -10,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func TestDiagnosePodFailures(t *testing.T) {
@@ -184,12 +186,29 @@ func TestDiagnosePodFailures(t *testing.T) {
 			if tc.wantEmpty {
 				assert.Empty(t, result, "expected empty diagnostic output")
 			} else {
+				assert.NotEmpty(t, result, "expected non-empty diagnostic output")
+
 				for _, want := range tc.wantContain {
 					assert.Contains(t, result, want)
 				}
 			}
 		})
 	}
+}
+
+func TestDiagnosePodFailures_ListError(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset()
+	clientset.PrependReactor("list", "pods", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("connection refused")
+	})
+
+	result := k8s.DiagnosePodFailures(context.Background(), clientset, []string{"default"})
+
+	assert.Contains(t, result, "failed to list pods")
+	assert.Contains(t, result, "default")
+	assert.Contains(t, result, "connection refused")
 }
 
 // makePod creates a test pod with the given phase and regular container statuses.
