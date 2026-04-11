@@ -228,9 +228,11 @@ const defaultDebugImage = "docker.io/library/alpine:latest"
 func NewDebugCmd() *cobra.Command {
 	var hostNode string
 
-	kubectlDebugCmd := newKubectlCommand(func(client *kubectl.Client, kubeconfigPath string) *cobra.Command {
-		return client.CreateDebugCommand(kubeconfigPath)
-	})
+	kubectlDebugCmd := newKubectlCommand(
+		func(client *kubectl.Client, kubeconfigPath string) *cobra.Command {
+			return client.CreateDebugCommand(kubeconfigPath)
+		},
+	)
 
 	// Preserve the original RunE from kubectl debug.
 	originalRunE := kubectlDebugCmd.RunE
@@ -495,6 +497,7 @@ func pipeDockerExecStreams(resp *dockertypes.HijackedResponse) {
 		_, copyErr := io.Copy(resp.Conn, stdinReader)
 		if errors.Is(copyErr, io.ErrClosedPipe) || errors.Is(copyErr, context.Canceled) {
 			doneCh <- nil
+
 			return
 		}
 

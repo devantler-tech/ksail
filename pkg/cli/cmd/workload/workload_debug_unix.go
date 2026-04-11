@@ -4,20 +4,20 @@ package workload
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 	"github.com/siderolabs/gen/channel"
 	"github.com/siderolabs/talos/pkg/machinery/api/common"
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	"golang.org/x/term"
-
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 )
 
 // stdinBufSize is the buffer size for reading stdin data.
@@ -70,6 +70,7 @@ func runTalosHostDebug(
 	// Detach from the parent context so SIGINT is forwarded to the container
 	// rather than cancelling the stream immediately.
 	nodeCtx = context.WithoutCancel(nodeCtx)
+
 	nodeCtx, cancel := context.WithCancel(nodeCtx)
 	defer cancel()
 
@@ -88,7 +89,11 @@ func pullImageOnTalosNode(
 	talosClient *talosclient.Client,
 	imageRef string,
 ) (string, error) {
-	err := talosClient.ImagePull(ctx, common.ContainerdNamespace_NS_SYSTEM, imageRef) //nolint:staticcheck
+	err := talosClient.ImagePull(
+		ctx,
+		common.ContainerdNamespace_NS_SYSTEM,
+		imageRef,
+	) //nolint:staticcheck
 	if err != nil {
 		return "", fmt.Errorf("pull image %q: %w", imageRef, err)
 	}
@@ -96,7 +101,6 @@ func pullImageOnTalosNode(
 	return imageRef, nil
 }
 
-//nolint:gocognit
 func streamDebugContainer(
 	ctx context.Context,
 	cancel context.CancelFunc,
@@ -194,18 +198,19 @@ func startRecvLoop(
 				return
 			}
 
-			switch msg.Resp.(type) {
+			switch msg.GetResp().(type) {
 			case *machine.DebugContainerRunResponse_StdoutData:
 				if stdoutData := msg.GetStdoutData(); stdoutData != nil {
 					_, _ = os.Stdout.Write(stdoutData)
 				}
 			case *machine.DebugContainerRunResponse_ExitCode:
 				*exitCode = msg.GetExitCode()
+
 				recvDone <- io.EOF
 
 				return
 			default:
-				fmt.Fprintf(os.Stderr, "unknown message type %T\n", msg.Resp)
+				fmt.Fprintf(os.Stderr, "unknown message type %T\n", msg.GetResp())
 			}
 		}
 	}()
@@ -228,7 +233,7 @@ func waitForStreams(
 ) error {
 	select {
 	case stdinErr := <-stdinDone:
-		if stdinErr != nil && stdinErr != io.EOF {
+		if stdinErr != nil && !errors.Is(stdinErr, io.EOF) {
 			fmt.Fprintf(os.Stderr, "%s\n", stdinErr.Error())
 		}
 
@@ -239,16 +244,18 @@ func waitForStreams(
 			<-sendDone
 		}
 
-		if closeErr := stream.CloseSend(); closeErr != nil {
+		closeErr := stream.CloseSend()
+		if closeErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to close send stream: %v\n", closeErr)
 		}
 
-		if recvErr := <-recvDone; recvErr != nil && recvErr != context.Canceled && recvErr != io.EOF {
+		recvErr := <-recvDone
+		if recvErr != nil && !errors.Is(recvErr, context.Canceled) && !errors.Is(recvErr, io.EOF) {
 			return recvErr
 		}
 
 	case recvErr := <-recvDone:
-		if recvErr != nil && recvErr != context.Canceled && recvErr != io.EOF {
+		if recvErr != nil && !errors.Is(recvErr, context.Canceled) && !errors.Is(recvErr, io.EOF) {
 			return recvErr
 		}
 
@@ -334,7 +341,7 @@ func sendTermResize(ctx context.Context, msgC chan<- *machine.DebugContainerRunR
 		return
 	}
 
-	channel.SendWithContext(ctx, msgC, //nolint:errcheck
+	channel.SendWithContext(ctx, msgC,
 		&machine.DebugContainerRunRequest{
 			Request: &machine.DebugContainerRunRequest_TermResize{
 				TermResize: &machine.DebugContainerTerminalResize{
@@ -346,7 +353,10 @@ func sendTermResize(ctx context.Context, msgC chan<- *machine.DebugContainerRunR
 }
 
 // startStdinReader reads from stdin and sends data to the debug container.
-func startStdinReader(ctx context.Context, msgC chan<- *machine.DebugContainerRunRequest) chan error {
+func startStdinReader(
+	ctx context.Context,
+	msgC chan<- *machine.DebugContainerRunRequest,
+) chan error {
 	reader, writer := io.Pipe()
 	done := make(chan error)
 
@@ -357,6 +367,7 @@ func startStdinReader(ctx context.Context, msgC chan<- *machine.DebugContainerRu
 
 	go func() {
 		<-ctx.Done()
+
 		_ = writer.Close()
 	}()
 
