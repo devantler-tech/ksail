@@ -219,8 +219,10 @@ func (r *Reconciler) CheckNamedKustomizationReady(
 	return checkKustomizationStatus(kustomization)
 }
 
-// parseDependsOn extracts the dependency names from a Kustomization CR's
-// spec.dependsOn field.
+// parseDependsOn extracts dependency names from a Kustomization CR's
+// spec.dependsOn field. Only same-namespace dependencies (namespace empty or
+// equal to DefaultNamespace) are included; cross-namespace references are
+// treated as external and excluded from topological ordering.
 func parseDependsOn(kustomization *unstructured.Unstructured) []string {
 	deps, found, _ := unstructured.NestedSlice(kustomization.Object, "spec", "dependsOn")
 	if !found || len(deps) == 0 {
@@ -236,9 +238,16 @@ func parseDependsOn(kustomization *unstructured.Unstructured) []string {
 		}
 
 		name, _, _ := unstructured.NestedString(depMap, "name")
-		if name != "" {
-			names = append(names, name)
+		if name == "" {
+			continue
 		}
+
+		ns, _, _ := unstructured.NestedString(depMap, "namespace")
+		if ns != "" && ns != DefaultNamespace {
+			continue
+		}
+
+		names = append(names, name)
 	}
 
 	return names
