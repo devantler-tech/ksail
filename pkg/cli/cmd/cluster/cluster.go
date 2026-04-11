@@ -6066,9 +6066,11 @@ func executeVersionUpgrade(
 		return false, nil
 	}
 
-	// Check if the distribution requires recreation by probing with a no-op call.
+	// Determine upgrade mechanism by attempting the first upgrade step.
 	// Recreation-based distributions (Kind/K3d/VCluster) return ErrRecreationRequired
-	// immediately, so we jump to the latest version and recreate once.
+	// immediately without modifying the cluster, so we jump to the latest version
+	// and recreate once. For rolling-upgrade distributions (Talos), the first step
+	// is actually applied.
 	targetVersion := path[len(path)-1].Version.Original
 
 	probeErr := applyFn(cmd.Context(), clusterName, currentVersion, path[0].Version.Original)
