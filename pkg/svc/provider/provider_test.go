@@ -447,45 +447,45 @@ func TestCheckNodesExist(t *testing.T) {
 	}
 }
 
+var getClusterStatusFromListerTests = []struct { //nolint:gochecknoglobals // table-driven test cases
+	name        string
+	nodes       []provider.NodeInfo
+	listErr     error
+	readyState  string
+	wantPhase   string
+	wantReady   bool
+	wantErr     bool
+	errContains string
+}{
+	{
+		name: "returns status for running cluster",
+		nodes: []provider.NodeInfo{
+			{Name: "node1", ClusterName: testClusterName, State: "running"},
+		},
+		readyState: "running",
+		wantPhase:  "running",
+		wantReady:  true,
+	},
+	{
+		name:        "list error propagates",
+		listErr:     errListFailed,
+		readyState:  "running",
+		wantErr:     true,
+		errContains: "get cluster status",
+	},
+	{
+		name:        "empty node list returns cluster not found error",
+		nodes:       []provider.NodeInfo{},
+		readyState:  "running",
+		wantErr:     true,
+		errContains: testClusterName,
+	},
+}
+
 func TestGetClusterStatusFromLister(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		nodes       []provider.NodeInfo
-		listErr     error
-		readyState  string
-		wantPhase   string
-		wantReady   bool
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name: "returns status for running cluster",
-			nodes: []provider.NodeInfo{
-				{Name: "node1", ClusterName: testClusterName, State: "running"},
-			},
-			readyState: "running",
-			wantPhase:  "running",
-			wantReady:  true,
-		},
-		{
-			name:        "list error propagates",
-			listErr:     errListFailed,
-			readyState:  "running",
-			wantErr:     true,
-			errContains: "get cluster status",
-		},
-		{
-			name:        "empty node list returns cluster not found error",
-			nodes:       []provider.NodeInfo{},
-			readyState:  "running",
-			wantErr:     true,
-			errContains: testClusterName,
-		},
-	}
-
-	for _, testCase := range tests {
+	for _, testCase := range getClusterStatusFromListerTests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
