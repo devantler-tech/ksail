@@ -151,8 +151,7 @@ When investigating failures from **CI - KSail** or **Benchmark Regression** work
 
 1. **System test matrix**: System tests run only in merge queue and test combinations of Distribution × Provider × Init × Args:
    - Distributions: Vanilla (Kind), K3s (K3d), Talos, VCluster (Vind)
-   - Providers: Docker (local), Hetzner (cloud, uses `continue-on-error`)
-   - Hetzner system tests may fail due to environment-specific issues (cloud API rate limits, server provisioning delays) — these are expected to be less stable
+   - Providers: Docker (local), Hetzner (cloud), Omni (cloud)
 2. **Go-specific failures**: Check for:
    - `go build` compilation errors (missing imports, type mismatches)
    - `golangci-lint` failures (lint rule violations)
