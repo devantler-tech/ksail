@@ -14,7 +14,7 @@ var dockerfile string
 func chartVersion() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
-		`FROM\s+quay\.io/cilium/cilium:v([^\s]+)`,
+		`FROM\s+quay\.io/cilium/cilium:v([^\s@]+)`,
 		"cilium chart",
 	)
 }

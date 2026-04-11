@@ -388,4 +388,4 @@ To decide which deep-mode phase to perform:
 - **Include both `.lock.yml` and `.md` source files in PRs** — both compiled `.lock.yml` files and `.md` workflow source files should be committed when they change (e.g., after action version updates or codemod fixes).
 - The gh-aw CLI extension has already been installed and is available
 - Always check the gh-aw changelog before making manual fixes
-- **You MUST always produce a safe output** — either `noop`, `create_pull_request`, or `create_issue`
+- **Always produce a safe output** — either `noop`, `create_pull_request`, or `create_issue`

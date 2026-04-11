@@ -13,7 +13,7 @@ var dockerfile string
 func chartVersion() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
-		`FROM\s+ghcr\.io/kyverno/charts/kyverno:([^\s]+)`,
+		`FROM\s+ghcr\.io/kyverno/charts/kyverno:([^\s@]+)`,
 		"kyverno chart",
 	)
 }
