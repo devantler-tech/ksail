@@ -26,6 +26,31 @@ func (p *Provisioner) scaleOmniByRole(
 		return err
 	}
 
+	if err := p.syncOmniScaling(ctx, omniProv, clusterName, newCPCount, newWorkerCount); err != nil {
+		return err
+	}
+
+	if newCPCount != oldCPCount {
+		recordAppliedChange(result, RoleControlPlane, clusterName,
+			fmt.Sprintf("scaled to %d", newCPCount))
+	}
+
+	if newWorkerCount != oldWorkerCount {
+		recordAppliedChange(result, RoleWorker, clusterName,
+			fmt.Sprintf("scaled to %d", newWorkerCount))
+	}
+
+	return nil
+}
+
+// syncOmniScaling builds an updated cluster template with the desired node counts,
+// syncs it to Omni, and waits for the cluster to become ready.
+func (p *Provisioner) syncOmniScaling(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+	clusterName string,
+	newCPCount, newWorkerCount int,
+) error {
 	talosVersion, kubernetesVersion, err := p.resolveOmniVersions(ctx, omniProv)
 	if err != nil {
 		return fmt.Errorf("failed to resolve versions for scaling: %w", err)
@@ -71,16 +96,6 @@ func (p *Provisioner) scaleOmniByRole(
 
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
 
-	if newCPCount != oldCPCount {
-		recordAppliedChange(result, RoleControlPlane, clusterName,
-			fmt.Sprintf("scaled to %d", newCPCount))
-	}
-
-	if newWorkerCount != oldWorkerCount {
-		recordAppliedChange(result, RoleWorker, clusterName,
-			fmt.Sprintf("scaled to %d", newWorkerCount))
-	}
-
 	return nil
 }
 
@@ -109,24 +124,44 @@ func (p *Provisioner) resolveOmniMachinesForScaling(
 
 	// Static machine allocation: check if we have enough machines.
 	if len(machines) > 0 {
-		required := newCPCount + newWorkerCount
-		if len(machines) < required {
-			// Discover additional available machines to fill the gap.
-			additionalNeeded := required - len(machines)
-
-			additional, err := omniProv.ListAvailableMachines(ctx, additionalNeeded)
-			if err != nil {
-				return nil, fmt.Errorf("need %d more machine(s) for scaling: %w", additionalNeeded, err)
-			}
-
-			machines = append(machines, additional...)
-		}
-
-		return machines, nil
+		return p.expandStaticMachinesForScaling(ctx, omniProv, machines, newCPCount+newWorkerCount)
 	}
 
 	// Neither machine class nor static machines: fetch existing cluster machines
 	// and discover only the additional ones needed for the new counts.
+	return p.discoverMachinesForScaling(ctx, omniProv, clusterName, newCPCount+newWorkerCount)
+}
+
+// expandStaticMachinesForScaling appends additional available machines when the
+// configured static list is shorter than the required total.
+func (p *Provisioner) expandStaticMachinesForScaling(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+	machines []string,
+	required int,
+) ([]string, error) {
+	if len(machines) >= required {
+		return machines, nil
+	}
+
+	additionalNeeded := required - len(machines)
+
+	additional, err := omniProv.ListAvailableMachines(ctx, additionalNeeded)
+	if err != nil {
+		return nil, fmt.Errorf("need %d more machine(s) for scaling: %w", additionalNeeded, err)
+	}
+
+	return append(machines, additional...), nil
+}
+
+// discoverMachinesForScaling fetches existing cluster machines and discovers
+// only the additional ones needed to reach the required total.
+func (p *Provisioner) discoverMachinesForScaling(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+	clusterName string,
+	required int,
+) ([]string, error) {
 	existingNodes, err := omniProv.ListNodes(ctx, clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list existing cluster machines: %w", err)
@@ -137,23 +172,21 @@ func (p *Provisioner) resolveOmniMachinesForScaling(
 		existingIDs = append(existingIDs, n.Name)
 	}
 
-	required := newCPCount + newWorkerCount
 	additionalNeeded := required - len(existingIDs)
-
-	if additionalNeeded > 0 {
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  Discovering %d additional machine(s) in Omni for scaling...\n",
-			additionalNeeded,
-		)
-
-		additional, err := omniProv.ListAvailableMachines(ctx, additionalNeeded)
-		if err != nil {
-			return nil, fmt.Errorf("auto-discover machines for scaling: %w", err)
-		}
-
-		existingIDs = append(existingIDs, additional...)
+	if additionalNeeded <= 0 {
+		return existingIDs, nil
 	}
 
-	return existingIDs, nil
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  Discovering %d additional machine(s) in Omni for scaling...\n",
+		additionalNeeded,
+	)
+
+	additional, err := omniProv.ListAvailableMachines(ctx, additionalNeeded)
+	if err != nil {
+		return nil, fmt.Errorf("auto-discover machines for scaling: %w", err)
+	}
+
+	return append(existingIDs, additional...), nil
 }
