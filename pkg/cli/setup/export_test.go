@@ -1,6 +1,9 @@
 package setup
 
-import "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+import (
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	argocdgitops "github.com/devantler-tech/ksail/v6/pkg/client/argocd"
+)
 
 // NeedsInClusterConnectivityCheck exports needsInClusterConnectivityCheck for testing.
 //
@@ -34,4 +37,13 @@ func ClusterWithCNI(cni v1alpha1.CNI) *v1alpha1.Cluster {
 			},
 		},
 	}
+}
+
+// BuildArgoCDEnsureOptions exports buildArgoCDEnsureOptions for testing.
+func BuildArgoCDEnsureOptions(
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+	registryHost string,
+) argocdgitops.EnsureOptions {
+	return buildArgoCDEnsureOptions(clusterCfg, clusterName, registryHost)
 }
