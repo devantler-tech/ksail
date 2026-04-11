@@ -1,0 +1,72 @@
+package kindprovisioner
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
+	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+)
+
+// Compile-time interface compliance check.
+var _ clusterprovisioner.Upgrader = (*Provisioner)(nil)
+
+// UpgradeKubernetes returns ErrRecreationRequired because Kind does not support
+// in-place Kubernetes version changes. The orchestrator handles recreation.
+func (k *Provisioner) UpgradeKubernetes(_ context.Context, _ string, _, _ string) error {
+	return fmt.Errorf("kind: in-place Kubernetes upgrade not supported: %w", clustererr.ErrRecreationRequired)
+}
+
+// UpgradeDistribution returns ErrRecreationRequired because Kind does not support
+// in-place distribution version changes. The orchestrator handles recreation.
+func (k *Provisioner) UpgradeDistribution(_ context.Context, _ string, _, _ string) error {
+	return fmt.Errorf("kind: in-place distribution upgrade not supported: %w", clustererr.ErrRecreationRequired)
+}
+
+// GetCurrentVersions returns the Kubernetes and distribution versions for the cluster.
+// It extracts the version tag from the configured Kind node image.
+func (k *Provisioner) GetCurrentVersions(_ context.Context, _ string) (*clusterprovisioner.VersionInfo, error) {
+	image := nodeImage(k)
+	tag := extractTag(image)
+
+	return &clusterprovisioner.VersionInfo{
+		KubernetesVersion:   tag,
+		DistributionVersion: tag,
+	}, nil
+}
+
+// KubernetesImageRef returns the OCI image repository for Kind node images.
+func (k *Provisioner) KubernetesImageRef() string {
+	return "kindest/node"
+}
+
+// DistributionImageRef returns an empty string because Kind's distribution
+// version is the same as the Kubernetes version.
+func (k *Provisioner) DistributionImageRef() string {
+	return ""
+}
+
+// VersionSuffix returns an empty string because Kind uses plain semver tags.
+func (k *Provisioner) VersionSuffix() string {
+	return ""
+}
+
+// nodeImage returns the Kind node image from the config, falling back to the default.
+func nodeImage(k *Provisioner) string {
+	if k.kindConfig != nil && len(k.kindConfig.Nodes) > 0 && k.kindConfig.Nodes[0].Image != "" {
+		return k.kindConfig.Nodes[0].Image
+	}
+
+	return kindconfigmanager.DefaultKindNodeImage
+}
+
+// extractTag returns the tag portion of an image reference (e.g., "v1.35.1" from "kindest/node:v1.35.1").
+func extractTag(image string) string {
+	if idx := strings.LastIndex(image, ":"); idx >= 0 {
+		return image[idx+1:]
+	}
+
+	return ""
+}
