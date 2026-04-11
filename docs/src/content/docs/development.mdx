@@ -137,7 +137,7 @@ func TestPolicyEngineInstaller(t *testing.T) {
 
 > **Note:** These helpers mutate shared global state, so tests that use them **must not** run in parallel (annotate with `//nolint:paralleltest` and do not call `t.Parallel()`).
 
-For the full list of available override helpers, see [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md).
+For the full list of available override helpers, search for `Set*ForTests` definitions in [`pkg/cli/cmd/cluster/cluster.go`](https://github.com/devantler-tech/ksail/blob/main/pkg/cli/cmd/cluster/cluster.go).
 
 #### Mocking with Testify
 
