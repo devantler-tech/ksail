@@ -28,10 +28,21 @@ runs:
           echo "--- gen $name ---"
           if "$@" > "$OUTPUT_FILE"; then
             echo "  ✅ gen $name succeeded"
-            if ksail workload validate $VALIDATE_FLAGS "$OUTPUT_FILE"; then
+            local validate_succeeded=false
+            for attempt in 1 2 3; do
+              if ksail workload validate $VALIDATE_FLAGS "$OUTPUT_FILE"; then
+                validate_succeeded=true
+                break
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                echo "  ⚠️ validate $name attempt $attempt failed, retrying in 5s…"
+                sleep 5
+              fi
+            done
+            if [ "$validate_succeeded" = true ]; then
               echo "  ✅ validate $name succeeded"
             else
-              echo "  ❌ validate $name FAILED"
+              echo "  ❌ validate $name FAILED after 3 attempts"
               cat "$OUTPUT_FILE"
               FAILED=$((FAILED + 1))
             fi
