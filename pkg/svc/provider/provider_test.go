@@ -282,7 +282,12 @@ var buildClusterStatusTests = []struct { //nolint:gochecknoglobals // table-driv
 			NodesTotal: 2,
 			NodesReady: 2,
 			Nodes: []provider.NodeInfo{
-				{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "running"},
+				{
+					Name:        "node1",
+					ClusterName: testClusterName,
+					Role:        "control-plane",
+					State:       "running",
+				},
 				{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "running"},
 			},
 		},
@@ -300,7 +305,12 @@ var buildClusterStatusTests = []struct { //nolint:gochecknoglobals // table-driv
 			NodesTotal: 2,
 			NodesReady: 0,
 			Nodes: []provider.NodeInfo{
-				{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "stopped"},
+				{
+					Name:        "node1",
+					ClusterName: testClusterName,
+					Role:        "control-plane",
+					State:       "stopped",
+				},
 				{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "stopped"},
 			},
 		},
@@ -318,7 +328,12 @@ var buildClusterStatusTests = []struct { //nolint:gochecknoglobals // table-driv
 			NodesTotal: 2,
 			NodesReady: 1,
 			Nodes: []provider.NodeInfo{
-				{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "running"},
+				{
+					Name:        "node1",
+					ClusterName: testClusterName,
+					Role:        "control-plane",
+					State:       "running",
+				},
 				{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "stopped"},
 			},
 		},
@@ -335,7 +350,12 @@ var buildClusterStatusTests = []struct { //nolint:gochecknoglobals // table-driv
 			NodesTotal: 1,
 			NodesReady: 1,
 			Nodes: []provider.NodeInfo{
-				{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "RUNNING"},
+				{
+					Name:        "node1",
+					ClusterName: testClusterName,
+					Role:        "control-plane",
+					State:       "RUNNING",
+				},
 			},
 		},
 	},
@@ -409,7 +429,8 @@ func TestCheckNodesExist(t *testing.T) {
 
 			ctx := context.Background()
 			mockLister := new(mockNodeLister)
-			mockLister.On("ListNodes", ctx, testClusterName).Return(testCase.nodes, testCase.listErr)
+			mockLister.On("ListNodes", ctx, testClusterName).
+				Return(testCase.nodes, testCase.listErr)
 
 			exists, err := provider.CheckNodesExist(ctx, mockLister, testClusterName)
 
@@ -420,6 +441,7 @@ func TestCheckNodesExist(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, testCase.wantExists, exists)
 			}
+
 			mockLister.AssertExpectations(t)
 		})
 	}
@@ -469,9 +491,15 @@ func TestGetClusterStatusFromLister(t *testing.T) {
 
 			ctx := context.Background()
 			mockLister := new(mockNodeLister)
-			mockLister.On("ListNodes", ctx, testClusterName).Return(testCase.nodes, testCase.listErr)
+			mockLister.On("ListNodes", ctx, testClusterName).
+				Return(testCase.nodes, testCase.listErr)
 
-			status, err := provider.GetClusterStatusFromLister(ctx, mockLister, testClusterName, testCase.readyState)
+			status, err := provider.GetClusterStatusFromLister(
+				ctx,
+				mockLister,
+				testClusterName,
+				testCase.readyState,
+			)
 
 			if testCase.wantErr {
 				require.Error(t, err)
@@ -483,6 +511,7 @@ func TestGetClusterStatusFromLister(t *testing.T) {
 				assert.Equal(t, testCase.wantPhase, status.Phase)
 				assert.Equal(t, testCase.wantReady, status.Ready)
 			}
+
 			mockLister.AssertExpectations(t)
 		})
 	}
