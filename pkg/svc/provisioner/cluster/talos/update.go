@@ -147,6 +147,7 @@ func (p *Provisioner) applyNodeScalingChanges(
 	if p.omniOpts != nil {
 		return p.scaleOmniByRole(
 			ctx, clusterName,
+			int(oldSpec.Talos.ControlPlanes), int(oldSpec.Talos.Workers),
 			int(newSpec.Talos.ControlPlanes), int(newSpec.Talos.Workers),
 			result,
 		)

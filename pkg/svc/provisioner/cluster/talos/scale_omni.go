@@ -17,6 +17,7 @@ import (
 func (p *Provisioner) scaleOmniByRole(
 	ctx context.Context,
 	clusterName string,
+	oldCPCount, oldWorkerCount int,
 	newCPCount, newWorkerCount int,
 	result *clusterupdate.UpdateResult,
 ) error {
@@ -30,7 +31,7 @@ func (p *Provisioner) scaleOmniByRole(
 		return fmt.Errorf("failed to resolve versions for scaling: %w", err)
 	}
 
-	machines, err := p.resolveOmniMachinesForScaling(ctx, omniProv, newCPCount, newWorkerCount)
+	machines, err := p.resolveOmniMachinesForScaling(ctx, omniProv, clusterName, newCPCount, newWorkerCount)
 	if err != nil {
 		return fmt.Errorf("failed to resolve machines for scaling: %w", err)
 	}
@@ -70,10 +71,15 @@ func (p *Provisioner) scaleOmniByRole(
 
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
 
-	recordAppliedChange(result, RoleControlPlane, clusterName,
-		fmt.Sprintf("scaled to %d", newCPCount))
-	recordAppliedChange(result, RoleWorker, clusterName,
-		fmt.Sprintf("scaled to %d", newWorkerCount))
+	if newCPCount != oldCPCount {
+		recordAppliedChange(result, RoleControlPlane, clusterName,
+			fmt.Sprintf("scaled to %d", newCPCount))
+	}
+
+	if newWorkerCount != oldWorkerCount {
+		recordAppliedChange(result, RoleWorker, clusterName,
+			fmt.Sprintf("scaled to %d", newWorkerCount))
+	}
 
 	return nil
 }
@@ -85,10 +91,16 @@ func (p *Provisioner) scaleOmniByRole(
 func (p *Provisioner) resolveOmniMachinesForScaling(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
+	clusterName string,
 	newCPCount, newWorkerCount int,
 ) ([]string, error) {
 	machineClass := p.omniMachineClass()
 	machines := p.omniMachines()
+
+	// Reject ambiguous allocation: machine class and static machines are mutually exclusive.
+	if machineClass != "" && len(machines) > 0 {
+		return nil, omniprovider.ErrMachineAllocationConflict
+	}
 
 	// Machine-class allocation: Omni manages sizing dynamically.
 	if machineClass != "" {
@@ -113,19 +125,35 @@ func (p *Provisioner) resolveOmniMachinesForScaling(
 		return machines, nil
 	}
 
-	// Neither machine class nor static machines: auto-discover.
-	required := newCPCount + newWorkerCount
-
-	_, _ = fmt.Fprintf(
-		p.logWriter,
-		"  Discovering %d available machine(s) in Omni for scaling...\n",
-		required,
-	)
-
-	resolved, err := omniProv.ListAvailableMachines(ctx, required)
+	// Neither machine class nor static machines: fetch existing cluster machines
+	// and discover only the additional ones needed for the new counts.
+	existingNodes, err := omniProv.ListNodes(ctx, clusterName)
 	if err != nil {
-		return nil, fmt.Errorf("auto-discover machines for scaling: %w", err)
+		return nil, fmt.Errorf("failed to list existing cluster machines: %w", err)
 	}
 
-	return resolved, nil
+	existingIDs := make([]string, 0, len(existingNodes))
+	for _, n := range existingNodes {
+		existingIDs = append(existingIDs, n.Name)
+	}
+
+	required := newCPCount + newWorkerCount
+	additionalNeeded := required - len(existingIDs)
+
+	if additionalNeeded > 0 {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Discovering %d additional machine(s) in Omni for scaling...\n",
+			additionalNeeded,
+		)
+
+		additional, err := omniProv.ListAvailableMachines(ctx, additionalNeeded)
+		if err != nil {
+			return nil, fmt.Errorf("auto-discover machines for scaling: %w", err)
+		}
+
+		existingIDs = append(existingIDs, additional...)
+	}
+
+	return existingIDs, nil
 }

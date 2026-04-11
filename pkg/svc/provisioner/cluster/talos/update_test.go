@@ -4,21 +4,17 @@ import (
 	"context"
 	"io"
 	"testing"
-	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
 	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
+	"github.com/siderolabs/omni/client/api/omni/specs"
 	omnires "github.com/siderolabs/omni/client/pkg/omni/resources/omni"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// testOmniScalingTimeout is used in tests where SyncTemplate succeeds with
-// in-mem COSI state but WaitForClusterReady has no controller to satisfy.
-const testOmniScalingTimeout = 15 * time.Second
 
 //nolint:funlen // Table-driven test with multiple node topology scenarios is clearer as single function
 func TestCountNodeRoles(t *testing.T) {
@@ -95,6 +91,12 @@ func TestUpdateCallsOmniNodeScaling(t *testing.T) {
 	tv.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.32.0"}
 	require.NoError(t, testState.Create(context.Background(), tv))
 
+	// Seed a ready ClusterStatus so WaitForClusterReady returns immediately
+	cs := omnires.NewClusterStatus("demo")
+	cs.TypedSpec().Value.Phase = specs.ClusterStatusSpec_RUNNING
+	cs.TypedSpec().Value.Ready = true
+	require.NoError(t, testState.Create(context.Background(), cs))
+
 	omniProv := omniprovider.NewProviderWithState(testState)
 
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).
@@ -112,19 +114,15 @@ func TestUpdateCallsOmniNodeScaling(t *testing.T) {
 	newSpec.Talos.ControlPlanes = 2
 	newSpec.Talos.Workers = 2
 
-	ctx, cancel := context.WithTimeout(context.Background(), testOmniScalingTimeout)
-	defer cancel()
-
-	_, err := provisioner.Update(
-		ctx,
+	result, err := provisioner.Update(
+		context.Background(),
 		"demo",
 		oldSpec,
 		newSpec,
 		clusterupdate.UpdateOptions{},
 	)
-	// The error proves scaling was attempted (not skipped)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to apply node scaling changes")
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.TotalChanges(), "expected 1 CP + 1 Worker scaling change")
 }
 
 // TestUpdateSkipsOmniInPlaceConfigApply verifies the omniOpts guard in Update() prevents
@@ -277,6 +275,12 @@ func TestApplyNodeScalingChanges_OmniScalingIsAttempted(t *testing.T) {
 	tv.TypedSpec().Value.CompatibleKubernetesVersions = []string{"1.32.0"}
 	require.NoError(t, testState.Create(context.Background(), tv))
 
+	// Seed a ready ClusterStatus so WaitForClusterReady returns immediately
+	cs := omnires.NewClusterStatus("test")
+	cs.TypedSpec().Value.Phase = specs.ClusterStatusSpec_RUNNING
+	cs.TypedSpec().Value.Ready = true
+	require.NoError(t, testState.Create(context.Background(), cs))
+
 	omniProv := omniprovider.NewProviderWithState(testState)
 
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).
@@ -295,19 +299,15 @@ func TestApplyNodeScalingChanges_OmniScalingIsAttempted(t *testing.T) {
 	newSpec.Talos.ControlPlanes = 3
 	newSpec.Talos.Workers = 2
 
-	ctx, cancel := context.WithTimeout(context.Background(), testOmniScalingTimeout)
-	defer cancel()
-
 	err := provisioner.ApplyNodeScalingChangesForTest(
-		ctx,
+		context.Background(),
 		"test",
 		oldSpec,
 		newSpec,
 		result,
 	)
-	// The timeout error proves scaling was attempted (not skipped)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cluster not ready after scaling")
+	require.NoError(t, err)
+	assert.Len(t, result.AppliedChanges, 2, "expected 1 CP + 1 Worker applied scaling change")
 }
 
 // TestApplyNodeScalingChanges_BelowMinimumControlPlanes verifies that scaling
