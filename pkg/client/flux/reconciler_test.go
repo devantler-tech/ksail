@@ -16,8 +16,10 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
+var errSimulatedAPIFailure = errors.New("simulated API failure") //nolint:gochecknoglobals // test sentinel error
+
 // kustomizationGVR is the GroupVersionResource for Flux Kustomization CRs.
-var kustomizationGVR = schema.GroupVersionResource{
+var kustomizationGVR = schema.GroupVersionResource{ //nolint:gochecknoglobals // test-scoped constant
 	Group:    "kustomize.toolkit.fluxcd.io",
 	Version:  "v1",
 	Resource: "kustomizations",
@@ -88,6 +90,7 @@ func newFakeKustomization(
 // ListKustomizations
 // ---------------------------------------------------------------------------
 
+//nolint:funlen // Table-driven test with comprehensive cases
 func TestListKustomizations(t *testing.T) {
 	t.Parallel()
 
@@ -157,27 +160,27 @@ func TestListKustomizations(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := newTestFluxReconciler(tc.objects...)
+			r := newTestFluxReconciler(testCase.objects...)
 
 			infos, err := r.ListKustomizations(context.Background())
 
-			if tc.wantErrMsg != "" {
+			if testCase.wantErrMsg != "" {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.wantErrMsg)
+				assert.Contains(t, err.Error(), testCase.wantErrMsg)
 
 				return
 			}
 
 			require.NoError(t, err)
 
-			if tc.unordered {
-				assert.ElementsMatch(t, tc.wantInfos, infos)
+			if testCase.unordered {
+				assert.ElementsMatch(t, testCase.wantInfos, infos)
 			} else {
-				assert.Equal(t, tc.wantInfos, infos)
+				assert.Equal(t, testCase.wantInfos, infos)
 			}
 		})
 	}
@@ -203,7 +206,7 @@ func TestListKustomizations_APIError(t *testing.T) {
 	fakeClient.PrependReactor("list", "kustomizations", func(
 		_ k8stesting.Action,
 	) (bool, runtime.Object, error) {
-		return true, nil, errors.New("simulated API failure")
+		return true, nil, errSimulatedAPIFailure
 	})
 
 	r := &flux.Reconciler{Base: reconciler.NewBaseWithClient(fakeClient)}
@@ -218,6 +221,7 @@ func TestListKustomizations_APIError(t *testing.T) {
 // CheckNamedKustomizationReady
 // ---------------------------------------------------------------------------
 
+//nolint:funlen // Table-driven test with comprehensive cases
 func TestCheckNamedKustomizationReady(t *testing.T) {
 	t.Parallel()
 
@@ -253,7 +257,10 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 			name:   "not-ready kustomization with DependencyNotReady",
 			ksName: "apps",
 			objects: []runtime.Object{
-				newFakeKustomization("apps", "./apps", []string{"infra"}, "False", "DependencyNotReady", "dependency 'infra' is not ready"),
+				newFakeKustomization(
+					"apps", "./apps", []string{"infra"},
+					"False", "DependencyNotReady", "dependency 'infra' is not ready",
+				),
 			},
 			wantReady:  false,
 			wantStatus: "DependencyNotReady: dependency 'infra' is not ready",
@@ -352,24 +359,24 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := newTestFluxReconciler(tc.objects...)
+			r := newTestFluxReconciler(testCase.objects...)
 
-			ready, status, err := r.CheckNamedKustomizationReady(context.Background(), tc.ksName)
+			ready, status, err := r.CheckNamedKustomizationReady(context.Background(), testCase.ksName)
 
-			if tc.wantErr {
+			if testCase.wantErr {
 				require.Error(t, err)
 
-				if tc.wantErrType != nil {
-					assert.True(t, errors.Is(err, tc.wantErrType),
-						"expected error wrapping %v, got: %v", tc.wantErrType, err)
+				if testCase.wantErrType != nil {
+					assert.True(t, errors.Is(err, testCase.wantErrType),
+						"expected error wrapping %v, got: %v", testCase.wantErrType, err)
 				}
 
-				if tc.wantErrMsg != "" {
-					assert.Contains(t, err.Error(), tc.wantErrMsg)
+				if testCase.wantErrMsg != "" {
+					assert.Contains(t, err.Error(), testCase.wantErrMsg)
 				}
 
 				assert.False(t, ready, "ready should be false on error")
@@ -378,8 +385,8 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tc.wantReady, ready)
-			assert.Equal(t, tc.wantStatus, status)
+			assert.Equal(t, testCase.wantReady, ready)
+			assert.Equal(t, testCase.wantStatus, status)
 		})
 	}
 }
@@ -388,6 +395,7 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 // parseDependsOn (tested indirectly through ListKustomizations)
 // ---------------------------------------------------------------------------
 
+//nolint:funlen // Table-driven test with comprehensive edge cases
 func TestListKustomizations_DependsOnEdgeCases(t *testing.T) {
 	t.Parallel()
 
@@ -400,10 +408,10 @@ func TestListKustomizations_DependsOnEdgeCases(t *testing.T) {
 			name: "empty dependsOn array",
 			objects: []runtime.Object{
 				func() *unstructured.Unstructured {
-					ks := newFakeKustomization("test", "./test", nil, "", "", "")
-					spec, _ := ks.Object["spec"].(map[string]any)
+					kust := newFakeKustomization("test", "./test", nil, "", "", "")
+					spec, _ := kust.Object["spec"].(map[string]any)
 					spec["dependsOn"] = []any{}
-					return ks
+					return kust
 				}(),
 			},
 			wantDeps: nil,
@@ -412,13 +420,13 @@ func TestListKustomizations_DependsOnEdgeCases(t *testing.T) {
 			name: "dependsOn with empty-name entry is skipped",
 			objects: []runtime.Object{
 				func() *unstructured.Unstructured {
-					ks := newFakeKustomization("test", "./test", nil, "", "", "")
-					spec, _ := ks.Object["spec"].(map[string]any)
+					kust := newFakeKustomization("test", "./test", nil, "", "", "")
+					spec, _ := kust.Object["spec"].(map[string]any)
 					spec["dependsOn"] = []any{
 						map[string]any{"name": ""},
 						map[string]any{"name": "valid-dep"},
 					}
-					return ks
+					return kust
 				}(),
 			},
 			wantDeps: []string{"valid-dep"},
@@ -427,29 +435,29 @@ func TestListKustomizations_DependsOnEdgeCases(t *testing.T) {
 			name: "dependsOn with non-map entry is skipped",
 			objects: []runtime.Object{
 				func() *unstructured.Unstructured {
-					ks := newFakeKustomization("test", "./test", nil, "", "", "")
-					spec, _ := ks.Object["spec"].(map[string]any)
+					kust := newFakeKustomization("test", "./test", nil, "", "", "")
+					spec, _ := kust.Object["spec"].(map[string]any)
 					spec["dependsOn"] = []any{
 						"not-a-map",
 						map[string]any{"name": "real-dep"},
 					}
-					return ks
+					return kust
 				}(),
 			},
 			wantDeps: []string{"real-dep"},
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := newTestFluxReconciler(tc.objects...)
+			r := newTestFluxReconciler(testCase.objects...)
 
 			infos, err := r.ListKustomizations(context.Background())
 			require.NoError(t, err)
 			require.Len(t, infos, 1)
-			assert.Equal(t, tc.wantDeps, infos[0].DependsOn)
+			assert.Equal(t, testCase.wantDeps, infos[0].DependsOn)
 		})
 	}
 }

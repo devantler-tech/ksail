@@ -2160,7 +2160,7 @@ func reconcileFlux(
 	ksCtx, ksCancel := context.WithTimeout(cmd.Context(), remaining)
 	defer ksCancel()
 
-	err = reconcileFluxKustomizationsWithProgress(cmd, ksCtx, fluxReconciler, outputTimer)
+	err = reconcileFluxKustomizationsWithProgress(ksCtx, cmd, fluxReconciler, outputTimer)
 	if err != nil {
 		return err
 	}
@@ -2173,12 +2173,12 @@ func reconcileFlux(
 // a ProgressGroup. Flux's controller handles the actual dependency-driven
 // triggering; we just poll and display status.
 func reconcileFluxKustomizationsWithProgress(
-	cmd *cobra.Command,
 	deadlineCtx context.Context,
+	cmd *cobra.Command,
 	fluxReconciler *flux.Reconciler,
 	outputTimer timer.Timer,
 ) error {
-	kustomizations, err := fluxReconciler.ListKustomizations(cmd.Context())
+	kustomizations, err := fluxReconciler.ListKustomizations(deadlineCtx)
 	if err != nil {
 		return fmt.Errorf("list kustomizations: %w", err)
 	}
@@ -2190,8 +2190,8 @@ func reconcileFluxKustomizationsWithProgress(
 	sorted := topologicalSortKustomizations(kustomizations)
 
 	tasks := make([]notify.ProgressTask, 0, len(sorted))
-	for _, ks := range sorted {
-		name := ks.Name
+	for _, kustomization := range sorted {
+		name := kustomization.Name
 		tasks = append(tasks, notify.ProgressTask{
 			Name: name,
 			Fn: func(ctx context.Context) error {
@@ -2264,16 +2264,16 @@ func pollUntilKustomizationReady(
 func kustomizationReadinessTimeoutError(name, lastStatus string) error {
 	if lastStatus != "" {
 		return fmt.Errorf(
-			"timeout waiting for reconciliation (last status: %s) — "+
+			"%w (last status: %s) — "+
 				"run 'ksail workload get kustomizations.kustomize.toolkit.fluxcd.io %s -n flux-system' to inspect",
-			lastStatus, name,
+			flux.ErrReconcileTimeout, lastStatus, name,
 		)
 	}
 
 	return fmt.Errorf(
-		"timeout waiting for reconciliation — "+
+		"%w — "+
 			"run 'ksail workload get kustomizations.kustomize.toolkit.fluxcd.io %s -n flux-system' to inspect",
-		name,
+		flux.ErrReconcileTimeout, name,
 	)
 }
 
@@ -2281,6 +2281,7 @@ func kustomizationReadinessTimeoutError(name, lastStatus string) error {
 // (dependencies before dependents) for display purposes.
 // Uses Kahn's algorithm. If cycles are detected, remaining items are appended
 // in their original order so the ProgressGroup still shows all resources.
+//nolint:cyclop // Kahn's algorithm has inherent branching; complexity is structural, not avoidable.
 func topologicalSortKustomizations(
 	kustomizations []flux.KustomizationInfo,
 ) []flux.KustomizationInfo {
@@ -2291,14 +2292,14 @@ func topologicalSortKustomizations(
 	byName := make(map[string]flux.KustomizationInfo, len(kustomizations))
 	inDegree := make(map[string]int, len(kustomizations))
 
-	for _, ks := range kustomizations {
-		byName[ks.Name] = ks
-		inDegree[ks.Name] = 0
+	for _, kust := range kustomizations {
+		byName[kust.Name] = kust
+		inDegree[kust.Name] = 0
 	}
 
-	for _, ks := range kustomizations {
-		seen := make(map[string]struct{}, len(ks.DependsOn))
-		for _, dep := range ks.DependsOn {
+	for _, kust := range kustomizations {
+		seen := make(map[string]struct{}, len(kust.DependsOn))
+		for _, dep := range kust.DependsOn {
 			if _, dup := seen[dep]; dup {
 				continue
 			}
@@ -2306,16 +2307,16 @@ func topologicalSortKustomizations(
 			seen[dep] = struct{}{}
 
 			if _, exists := byName[dep]; exists {
-				inDegree[ks.Name]++
+				inDegree[kust.Name]++
 			}
 		}
 	}
 
 	// Seed queue with zero-indegree nodes
 	queue := make([]string, 0, len(kustomizations))
-	for _, ks := range kustomizations {
-		if inDegree[ks.Name] == 0 {
-			queue = append(queue, ks.Name)
+	for _, kust := range kustomizations {
+		if inDegree[kust.Name] == 0 {
+			queue = append(queue, kust.Name)
 		}
 	}
 
@@ -2326,24 +2327,24 @@ func topologicalSortKustomizations(
 		queue = queue[1:]
 		sorted = append(sorted, byName[name])
 
-		for _, ks := range kustomizations {
-			if !slices.Contains(ks.DependsOn, name) {
+		for _, kust := range kustomizations {
+			if !slices.Contains(kust.DependsOn, name) {
 				continue
 			}
 
-			inDegree[ks.Name]--
+			inDegree[kust.Name]--
 
-			if inDegree[ks.Name] == 0 {
-				queue = append(queue, ks.Name)
+			if inDegree[kust.Name] == 0 {
+				queue = append(queue, kust.Name)
 			}
 		}
 	}
 
 	// Append any remaining items (cycle protection)
 	if len(sorted) < len(kustomizations) {
-		for _, ks := range kustomizations {
-			if inDegree[ks.Name] > 0 {
-				sorted = append(sorted, ks)
+		for _, kust := range kustomizations {
+			if inDegree[kust.Name] > 0 {
+				sorted = append(sorted, kust)
 			}
 		}
 	}
@@ -2376,7 +2377,6 @@ func reconcileArgoCD(
 
 	// Sub-phase 2: Monitor all applications with per-app tracking
 	writeActivityNotification("reconciling argocd applications...", outputTimer, writer)
-
 	apps, err := argoReconciler.ListApplications(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("list argocd applications: %w", err)
@@ -2438,9 +2438,9 @@ func pollUntilApplicationReady(
 		if err != nil {
 			if reconciler.IsContextError(err) {
 				return fmt.Errorf(
-					"timeout waiting for sync — "+
+					"%w — "+
 						"run 'ksail workload get applications.argoproj.io %s -n argocd' to inspect",
-					name,
+					argocd.ErrReconcileTimeout, name,
 				)
 			}
 
@@ -2454,9 +2454,9 @@ func pollUntilApplicationReady(
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf(
-				"timeout waiting for sync — "+
+				"%w — "+
 					"run 'ksail workload get applications.argoproj.io %s -n argocd' to inspect",
-				name,
+				argocd.ErrReconcileTimeout, name,
 			)
 		case <-ticker.C:
 		}

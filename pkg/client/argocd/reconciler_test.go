@@ -16,8 +16,10 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
+var errSimulatedAPIFailure = errors.New("simulated API failure") //nolint:gochecknoglobals // test sentinel error
+
 // applicationGVR is the GroupVersionResource for ArgoCD Application CRs.
-var applicationGVR = schema.GroupVersionResource{
+var applicationGVR = schema.GroupVersionResource{ //nolint:gochecknoglobals // test-scoped constant
 	Group:    "argoproj.io",
 	Version:  "v1alpha1",
 	Resource: "applications",
@@ -95,8 +97,9 @@ func newFakeApplicationWithConditions(
 		condSlice[i] = c
 	}
 
-	status, _ := app.Object["status"].(map[string]any)
-	status["conditions"] = condSlice
+	if status, ok := app.Object["status"].(map[string]any); ok {
+		status["conditions"] = condSlice
+	}
 
 	return app
 }
@@ -144,19 +147,19 @@ func TestListApplications(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := newTestArgoCDReconciler(tc.objects...)
+			r := newTestArgoCDReconciler(testCase.objects...)
 
 			infos, err := r.ListApplications(context.Background())
 			require.NoError(t, err)
 
-			if tc.unordered {
-				assert.ElementsMatch(t, tc.wantInfos, infos)
+			if testCase.unordered {
+				assert.ElementsMatch(t, testCase.wantInfos, infos)
 			} else {
-				assert.Equal(t, tc.wantInfos, infos)
+				assert.Equal(t, testCase.wantInfos, infos)
 			}
 		})
 	}
@@ -176,7 +179,7 @@ func TestListApplications_APIError(t *testing.T) {
 	fakeClient.PrependReactor("list", "applications", func(
 		_ k8stesting.Action,
 	) (bool, runtime.Object, error) {
-		return true, nil, errors.New("simulated API failure")
+		return true, nil, errSimulatedAPIFailure
 	})
 
 	r := &argocd.Reconciler{Base: reconciler.NewBaseWithClient(fakeClient)}
@@ -191,6 +194,7 @@ func TestListApplications_APIError(t *testing.T) {
 // CheckNamedApplicationReady
 // ---------------------------------------------------------------------------
 
+//nolint:funlen // Table-driven test with comprehensive cases
 func TestCheckNamedApplicationReady(t *testing.T) {
 	t.Parallel()
 
@@ -304,10 +308,13 @@ func TestCheckNamedApplicationReady(t *testing.T) {
 			objects: []runtime.Object{
 				func() *unstructured.Unstructured {
 					app := newFakeApplication("running-app", "OutOfSync", "Progressing")
-					app.Object["status"].(map[string]any)["operationState"] = map[string]any{
-						"phase":   "Running",
-						"message": "syncing",
+					if status, ok := app.Object["status"].(map[string]any); ok {
+						status["operationState"] = map[string]any{
+							"phase":   "Running",
+							"message": "syncing",
+						}
 					}
+
 					return app
 				}(),
 			},
@@ -358,24 +365,24 @@ func TestCheckNamedApplicationReady(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := newTestArgoCDReconciler(tc.objects...)
+			r := newTestArgoCDReconciler(testCase.objects...)
 
-			ready, err := r.CheckNamedApplicationReady(context.Background(), tc.appName)
+			ready, err := r.CheckNamedApplicationReady(context.Background(), testCase.appName)
 
-			if tc.wantErr {
+			if testCase.wantErr {
 				require.Error(t, err)
 
-				if tc.wantErrType != nil {
-					assert.True(t, errors.Is(err, tc.wantErrType),
-						"expected error wrapping %v, got: %v", tc.wantErrType, err)
+				if testCase.wantErrType != nil {
+					assert.True(t, errors.Is(err, testCase.wantErrType),
+						"expected error wrapping %v, got: %v", testCase.wantErrType, err)
 				}
 
-				if tc.wantErrMsg != "" {
-					assert.Contains(t, err.Error(), tc.wantErrMsg)
+				if testCase.wantErrMsg != "" {
+					assert.Contains(t, err.Error(), testCase.wantErrMsg)
 				}
 
 				assert.False(t, ready, "ready should be false on error")
@@ -384,7 +391,7 @@ func TestCheckNamedApplicationReady(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tc.wantReady, ready)
+			assert.Equal(t, testCase.wantReady, ready)
 		})
 	}
 }

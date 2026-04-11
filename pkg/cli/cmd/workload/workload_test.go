@@ -2776,6 +2776,7 @@ func TestNewWorkloadCmdRunETriggersHelp(t *testing.T) {
 }
 
 // TestTopologicalSortKustomizations tests the topological sort of Flux Kustomizations.
+//nolint:funlen // Table-driven test with comprehensive cases
 func TestTopologicalSortKustomizations(t *testing.T) {
 	t.Parallel()
 
@@ -2851,13 +2852,13 @@ func TestTopologicalSortKustomizations(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			sorted := workload.ExportTopologicalSortKustomizations(tc.input)
+			sorted := workload.ExportTopologicalSortKustomizations(testCase.input)
 
-			if tc.expected == nil {
+			if testCase.expected == nil {
 				assert.Empty(t, sorted)
 
 				return
@@ -2868,7 +2869,7 @@ func TestTopologicalSortKustomizations(t *testing.T) {
 				names[i] = ks.Name
 			}
 
-			assert.Equal(t, tc.expected, names)
+			assert.Equal(t, testCase.expected, names)
 		})
 	}
 }
