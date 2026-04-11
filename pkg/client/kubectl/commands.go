@@ -9,6 +9,7 @@ import (
 	"k8s.io/kubectl/pkg/cmd/apply"
 	"k8s.io/kubectl/pkg/cmd/clusterinfo"
 	"k8s.io/kubectl/pkg/cmd/create"
+	"k8s.io/kubectl/pkg/cmd/debug"
 	"k8s.io/kubectl/pkg/cmd/delete"
 	"k8s.io/kubectl/pkg/cmd/describe"
 	"k8s.io/kubectl/pkg/cmd/edit"
@@ -285,6 +286,28 @@ func (c *Client) CreateClusterInfoCommand(kubeConfigPath string) *cobra.Command 
 	clusterInfoCmd.AddCommand(clusterinfo.NewCmdClusterInfoDump(restClientGetter, c.ioStreams))
 
 	return clusterInfoCmd
+}
+
+// CreateDebugCommand creates a kubectl debug command with all its flags and behavior.
+func (c *Client) CreateDebugCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
+	factory, configFlags := c.createFactory(kubeConfigPath)
+	debugCmd := debug.NewCmdDebug(factory, c.ioStreams)
+
+	c.customizeCommand(
+		debugCmd,
+		"debug",
+		"Create debugging sessions for troubleshooting workloads and nodes",
+		"Create debugging sessions for troubleshooting workloads and nodes.\n\n"+
+			"Debug containers allow you to interactively troubleshoot running pods, "+
+			"create copies of pods with modified configuration, or attach a debug "+
+			"container to a node.",
+		configFlags,
+	)
+
+	return debugCmd
 }
 
 // CreateExecCommand creates a kubectl exec command with all its flags and behavior.

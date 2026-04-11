@@ -17,7 +17,7 @@ Read operations:
   wait      - Wait for a specific condition on resources
 
 Write operations:
-  apply, create, delete, edit, exec, export, expose, import, install, push, reconcile, rollout, scale, watch
+  apply, create, debug, delete, edit, exec, export, expose, import, install, push, reconcile, rollout, scale, watch
 
 GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check reconciliation status, health, and errors in a single call.
 
@@ -28,6 +28,7 @@ Usage:
 Available Commands:
   apply       Apply manifests
   create      Create resources
+  debug       Create debugging sessions for troubleshooting workloads and nodes
   delete      Delete resources
   describe    Describe resources
   edit        Edit a resource
