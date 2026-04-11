@@ -10,6 +10,9 @@ var (
 	// ErrProviderUnavailable is returned when the provider is not available.
 	ErrProviderUnavailable = errors.New("provider is not available")
 
+	// ErrClusterNotFound is returned when the cluster does not exist in the provider.
+	ErrClusterNotFound = errors.New("cluster not found")
+
 	// ErrUnknownLabelScheme is returned when an unknown label scheme is specified.
 	ErrUnknownLabelScheme = errors.New("unknown label scheme")
 

@@ -20,6 +20,30 @@ type NodeInfo struct {
 	State string
 }
 
+// ClusterStatus contains the status of a cluster as reported by its infrastructure provider.
+// Providers populate Phase and Ready. NodesTotal, NodesReady, and Nodes are best-effort
+// and may be zero/empty even on success (e.g., when node listing fails independently).
+// Provider-specific fields (e.g., Endpoint) are populated only by providers that support them.
+type ClusterStatus struct {
+	// Phase is the high-level lifecycle phase (e.g., "running", "RUNNING", "initializing").
+	Phase string
+
+	// Ready indicates whether the cluster is considered healthy by the provider.
+	Ready bool
+
+	// NodesTotal is the total number of nodes (machines, servers, containers) in the cluster.
+	NodesTotal int
+
+	// NodesReady is the number of nodes that are in a healthy/ready state.
+	NodesReady int
+
+	// Nodes lists individual node details.
+	Nodes []NodeInfo
+
+	// Endpoint is the provider API endpoint URL (populated by cloud providers like Omni).
+	Endpoint string
+}
+
 // Provider defines the interface for infrastructure providers.
 // Providers handle node-level operations independent of the Kubernetes distribution.
 type Provider interface {
@@ -44,6 +68,10 @@ type Provider interface {
 	// Note: Most provisioners handle node deletion through their SDK,
 	// so this is primarily used for cleanup scenarios.
 	DeleteNodes(ctx context.Context, clusterName string) error
+
+	// GetClusterStatus returns the provider-level status of a cluster.
+	// Returns ErrClusterNotFound if the cluster does not exist in the provider.
+	GetClusterStatus(ctx context.Context, clusterName string) (*ClusterStatus, error)
 }
 
 // NodeLister can list nodes for a cluster. This minimal interface is used by
@@ -88,4 +116,59 @@ func CheckNodesExist(ctx context.Context, lister NodeLister, clusterName string)
 	}
 
 	return len(nodes) > 0, nil
+}
+
+// BuildClusterStatus derives a ClusterStatus from a list of nodes by counting
+// how many are in the given readyState. Returns nil if nodes is empty.
+func BuildClusterStatus(nodes []NodeInfo, readyState string) *ClusterStatus {
+	if len(nodes) == 0 {
+		return nil
+	}
+
+	nodesReady := 0
+
+	for _, n := range nodes {
+		if n.State == readyState {
+			nodesReady++
+		}
+	}
+
+	phase := readyState
+	if nodesReady == 0 {
+		phase = "stopped"
+	} else if nodesReady < len(nodes) {
+		phase = "degraded"
+	}
+
+	return &ClusterStatus{
+		Phase:      phase,
+		Ready:      nodesReady == len(nodes),
+		NodesTotal: len(nodes),
+		NodesReady: nodesReady,
+		Nodes:      nodes,
+	}
+}
+
+// GetClusterStatusFromLister lists nodes and derives cluster status using
+// the given readyState. This is a shared helper for providers whose
+// GetClusterStatus implementation only needs ListNodes + BuildClusterStatus.
+func GetClusterStatusFromLister(
+	ctx context.Context,
+	lister NodeLister,
+	clusterName string,
+	readyState string,
+) (*ClusterStatus, error) {
+	nodes, err := lister.ListNodes(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("get cluster status: %w", err)
+	}
+
+	status := BuildClusterStatus(nodes, readyState)
+	if status == nil {
+		return nil, fmt.Errorf(
+			"%w: %s", ErrClusterNotFound, clusterName,
+		)
+	}
+
+	return status, nil
 }

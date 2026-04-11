@@ -134,6 +134,17 @@ func TestStandardFieldSelectors(t *testing.T) {
 			},
 		},
 		{
+			name:    "cdi",
+			factory: configmanager.DefaultCDIFieldSelector,
+			expectedDesc: "Container Device Interface " +
+				"(Default: use distribution, Enabled: enable CDI, Disabled: disable CDI)",
+			expectedDefault: v1alpha1.CDIDefault,
+			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
+				t.Helper()
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.CDI)
+			},
+		},
+		{
 			name:            "provider",
 			factory:         configmanager.DefaultProviderFieldSelector,
 			expectedDesc:    "Infrastructure provider backend (e.g., Docker)",

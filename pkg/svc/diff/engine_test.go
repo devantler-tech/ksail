@@ -19,6 +19,7 @@ func newBaseSpec() *v1alpha1.ClusterSpec {
 		Provider:      v1alpha1.ProviderDocker,
 		CNI:           v1alpha1.CNIDefault,
 		CSI:           v1alpha1.CSIDefault,
+		CDI:           v1alpha1.CDIDefault,
 		MetricsServer: "Default",
 		LoadBalancer:  "Default",
 		CertManager:   "Disabled",
@@ -256,6 +257,62 @@ func TestEngine_CSIChange_DetectedForTalos(t *testing.T) {
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.csi",
 		"Disabled", testValueEnabled, clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_CDIChange_RecreateRequiredForVanilla(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.CDI = v1alpha1.CDIEnabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasRecreateRequired() {
+		t.Fatal("CDI change should require recreate for Vanilla (Kind)")
+	}
+
+	assertSingleChange(t, result.RecreateRequired, "cluster.cdi",
+		"Disabled", testValueEnabled, clusterupdate.ChangeCategoryRecreateRequired)
+}
+
+func TestEngine_CDIChange_RebootRequiredForTalos(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.CDI = v1alpha1.CDIDefault
+	newer := clone(old)
+	newer.CDI = v1alpha1.CDIDisabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasRebootRequired() {
+		t.Fatal("CDI change should require reboot for Talos")
+	}
+
+	assertSingleChange(t, result.RebootRequired, "cluster.cdi",
+		testValueEnabled, "Disabled", clusterupdate.ChangeCategoryRebootRequired)
+}
+
+func TestEngine_CDIChange_SuppressedForK3s(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionK3s
+	newer := clone(old)
+	newer.CDI = v1alpha1.CDIEnabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, change := range result.AllChanges() {
+		if change.Field == "cluster.cdi" {
+			t.Fatal("CDI changes should be suppressed for K3s (no runtime wiring)")
+		}
+	}
 }
 
 func TestEngine_LocalRegistryChange_Vanilla(t *testing.T) {

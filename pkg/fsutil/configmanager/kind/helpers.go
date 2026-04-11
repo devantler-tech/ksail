@@ -109,6 +109,28 @@ per_verifier_timeout = "10s"
 # Configure trust policies and certificates in the notation config directory.
 # See: https://notaryproject.dev/docs/`
 
+// CDIPatch is a containerd config TOML merge patch that enables CDI (Container Device Interface).
+// CDI provides a standardized mechanism for container runtimes to create containers which are able
+// to interact with third party devices (e.g., GPUs, network devices, FPGAs).
+const CDIPatch = `[plugins."io.containerd.grpc.v1.cri"]
+  enable_cdi = true`
+
+// ApplyCDIPatches adds a containerd config patch to enable CDI.
+// The patch is applied at the cluster level and affects every node's containerd configuration.
+// This function is idempotent — it skips appending if the patch is already present.
+func ApplyCDIPatches(kindConfig *kindv1alpha4.Cluster) {
+	for _, patch := range kindConfig.ContainerdConfigPatches {
+		if strings.Contains(patch, `enable_cdi`) {
+			return
+		}
+	}
+
+	kindConfig.ContainerdConfigPatches = append(
+		kindConfig.ContainerdConfigPatches,
+		CDIPatch,
+	)
+}
+
 // ApplyImageVerificationPatches adds a containerd config patch to enable the image verifier plugin.
 // The patch is applied at the cluster level and affects every node's containerd configuration.
 // This function is idempotent — it skips appending if the patch is already present.

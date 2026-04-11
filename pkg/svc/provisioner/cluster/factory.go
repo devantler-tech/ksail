@@ -151,6 +151,14 @@ func (f DefaultFactory) createKindProvisioner(
 		kindconfigmanager.ApplyImageVerificationPatches(kindConfig)
 	}
 
+	// Apply containerd CDI patch when CDI is enabled.
+	cdiVal := cluster.Spec.Cluster.CDI.EffectiveValue(
+		cluster.Spec.Cluster.Distribution, cluster.Spec.Cluster.Provider,
+	)
+	if cdiVal == v1alpha1.CDIEnabled {
+		kindconfigmanager.ApplyCDIPatches(kindConfig)
+	}
+
 	provisioner, err := kindprovisioner.CreateProvisioner(
 		kindConfig,
 		cluster.Spec.Cluster.Connection.Kubeconfig,

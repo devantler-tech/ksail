@@ -255,6 +255,23 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	return nil
 }
 
+// GetClusterStatus returns the provider-level status of a Hetzner Cloud cluster.
+// It derives the cluster phase and readiness from individual server states.
+func (p *Provider) GetClusterStatus(
+	ctx context.Context,
+	clusterName string,
+) (*provider.ClusterStatus, error) {
+	result, err := provider.GetClusterStatusFromLister(
+		ctx, p, clusterName,
+		string(hcloud.ServerStatusRunning),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("hetzner cluster status: %w", err)
+	}
+
+	return result, nil
+}
+
 // DeleteServer deletes a single Hetzner Cloud server.
 // Unlike DeleteNodes, this targets a specific server without removing infrastructure.
 func (p *Provider) DeleteServer(ctx context.Context, server *hcloud.Server) error {

@@ -184,6 +184,7 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		&m.Config.Spec.Cluster.GitOpsEngine:           "gitops-engine",
 		&m.Config.Spec.Cluster.CNI:                    "cni",
 		&m.Config.Spec.Cluster.CSI:                    "csi",
+		&m.Config.Spec.Cluster.CDI:                    "cdi",
 		&m.Config.Spec.Cluster.MetricsServer:          "metrics-server",
 		&m.Config.Spec.Cluster.LoadBalancer:           "load-balancer",
 		&m.Config.Spec.Cluster.CertManager:            "cert-manager",

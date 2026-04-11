@@ -55,11 +55,15 @@ type fieldRule struct {
 	// by getVal. This prevents false-positive diffs when a config field is unset
 	// (zero value) but the cluster state contains the applied default.
 	defaultVal string
+	// categoryFn, when non-nil, overrides the static category field. Use this for
+	// rules whose change impact varies by distribution/provider (e.g. CDI is
+	// recreate-required on Kind but reboot-required on Talos).
+	categoryFn func() clusterupdate.ChangeCategory
 }
 
 // scalarFieldRules returns the table of simple scalar field diff rules.
 // These fields follow a uniform pattern: compare old vs new, emit a Change if different.
-// For CSI, MetricsServer, and LoadBalancer the effective value is used so that
+// For CSI, CDI, MetricsServer, and LoadBalancer the effective value is used so that
 // semantically equivalent states (e.g. Default and Disabled on Vanilla) compare as equal.
 //
 //nolint:funlen // Table-driven rule definitions are clearer as a single cohesive list.
@@ -101,6 +105,31 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 				}
 
 				return string(spec.CSI.EffectiveValue(e.distribution, e.provider))
+			},
+		},
+		{
+			field:  "cluster.cdi",
+			reason: "CDI requires node-level containerd reconfiguration",
+			categoryFn: func() clusterupdate.ChangeCategory {
+				// Kind bakes containerd config at creation time — CDI changes
+				// require cluster recreation. Talos can apply machine config
+				// patches via reboot.
+				if e.distribution == v1alpha1.DistributionVanilla {
+					return clusterupdate.ChangeCategoryRecreateRequired
+				}
+
+				return clusterupdate.ChangeCategoryRebootRequired
+			},
+			getVal: func(spec *v1alpha1.ClusterSpec) string {
+				// K3s and VCluster have no CDI runtime wiring — suppress diffs.
+				switch e.distribution {
+				case v1alpha1.DistributionK3s, v1alpha1.DistributionVCluster:
+					return string(v1alpha1.CDIDisabled)
+				case v1alpha1.DistributionVanilla, v1alpha1.DistributionTalos:
+					return string(spec.CDI.EffectiveValue(e.distribution, e.provider))
+				default:
+					return string(spec.CDI.EffectiveValue(e.distribution, e.provider))
+				}
 			},
 		},
 		{
@@ -194,9 +223,14 @@ func (e *Engine) applyFieldRules(
 	rules []fieldRule,
 ) {
 	for _, rule := range rules {
+		cat := rule.category
+		if rule.categoryFn != nil {
+			cat = rule.categoryFn()
+		}
+
 		appendChange(result, rule.field,
 			rule.getVal(oldSpec), rule.getVal(newSpec),
-			rule.defaultVal, rule.reason, rule.category)
+			rule.defaultVal, rule.reason, cat)
 	}
 }
 
