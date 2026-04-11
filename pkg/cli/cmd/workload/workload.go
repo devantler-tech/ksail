@@ -2157,7 +2157,10 @@ func reconcileFlux(
 		return fmt.Errorf("reconcile kustomizations: %w", flux.ErrReconcileTimeout)
 	}
 
-	err = reconcileFluxKustomizationsWithProgress(cmd, fluxReconciler, remaining, outputTimer)
+	ksCtx, ksCancel := context.WithTimeout(cmd.Context(), remaining)
+	defer ksCancel()
+
+	err = reconcileFluxKustomizationsWithProgress(cmd, ksCtx, fluxReconciler, outputTimer)
 	if err != nil {
 		return err
 	}
@@ -2171,8 +2174,8 @@ func reconcileFlux(
 // triggering; we just poll and display status.
 func reconcileFluxKustomizationsWithProgress(
 	cmd *cobra.Command,
+	deadlineCtx context.Context,
 	fluxReconciler *flux.Reconciler,
-	timeout time.Duration,
 	outputTimer timer.Timer,
 ) error {
 	kustomizations, err := fluxReconciler.ListKustomizations(cmd.Context())
@@ -2192,7 +2195,7 @@ func reconcileFluxKustomizationsWithProgress(
 		tasks = append(tasks, notify.ProgressTask{
 			Name: name,
 			Fn: func(ctx context.Context) error {
-				return pollUntilKustomizationReady(ctx, fluxReconciler, name, timeout)
+				return pollUntilKustomizationReady(ctx, fluxReconciler, name)
 			},
 		})
 	}
@@ -2209,7 +2212,7 @@ func reconcileFluxKustomizationsWithProgress(
 		notify.WithConcurrency(reconcileConcurrency),
 	)
 
-	err = ksGroup.Run(cmd.Context(), tasks...)
+	err = ksGroup.Run(deadlineCtx, tasks...)
 	if err != nil {
 		return fmt.Errorf("reconcile kustomizations: %w", err)
 	}
@@ -2218,24 +2221,22 @@ func reconcileFluxKustomizationsWithProgress(
 }
 
 // pollUntilKustomizationReady polls a named Flux Kustomization until it is
-// ready or the timeout expires. On permanent failure, it returns an actionable
-// error including the resource name and failure reason.
+// ready or the context's deadline expires. On permanent failure, it returns an
+// actionable error including the resource name and failure reason.
+// The caller is expected to provide a context with a deadline (shared across all
+// kustomization tasks) so that the total reconcile time is bounded.
 func pollUntilKustomizationReady(
 	ctx context.Context,
 	fluxReconciler *flux.Reconciler,
 	name string,
-	timeout time.Duration,
 ) error {
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
 	ticker := time.NewTicker(fluxKustomizationPollInterval)
 	defer ticker.Stop()
 
 	var lastStatus string
 
 	for {
-		ready, status, err := fluxReconciler.CheckNamedKustomizationReady(timeoutCtx, name)
+		ready, status, err := fluxReconciler.CheckNamedKustomizationReady(ctx, name)
 		if err != nil {
 			if reconciler.IsContextError(err) {
 				return kustomizationReadinessTimeoutError(name, lastStatus)
@@ -2251,7 +2252,7 @@ func pollUntilKustomizationReady(
 		lastStatus = status
 
 		select {
-		case <-timeoutCtx.Done():
+		case <-ctx.Done():
 			return kustomizationReadinessTimeoutError(name, lastStatus)
 		case <-ticker.C:
 		}
@@ -2385,13 +2386,16 @@ func reconcileArgoCD(
 		return nil
 	}
 
+	deadlineCtx, deadlineCancel := context.WithTimeout(cmd.Context(), timeout)
+	defer deadlineCancel()
+
 	tasks := make([]notify.ProgressTask, 0, len(apps))
 	for _, app := range apps {
 		name := app.Name
 		tasks = append(tasks, notify.ProgressTask{
 			Name: name,
 			Fn: func(ctx context.Context) error {
-				return pollUntilApplicationReady(ctx, argoReconciler, name, timeout)
+				return pollUntilApplicationReady(ctx, argoReconciler, name)
 			},
 		})
 	}
@@ -2408,7 +2412,7 @@ func reconcileArgoCD(
 		notify.WithConcurrency(reconcileConcurrency),
 	)
 
-	err = appGroup.Run(cmd.Context(), tasks...)
+	err = appGroup.Run(deadlineCtx, tasks...)
 	if err != nil {
 		return fmt.Errorf("reconcile argocd applications: %w", err)
 	}
@@ -2417,22 +2421,20 @@ func reconcileArgoCD(
 }
 
 // pollUntilApplicationReady polls a named ArgoCD Application until it is
-// synced and healthy, or the timeout expires. On permanent failure, it returns
-// an actionable error including the resource name and failure details.
+// synced and healthy, or the context's deadline expires. On permanent failure,
+// it returns an actionable error including the resource name and failure details.
+// The caller is expected to provide a context with a deadline (shared across all
+// application tasks) so that the total reconcile time is bounded.
 func pollUntilApplicationReady(
 	ctx context.Context,
 	argoReconciler *argocd.Reconciler,
 	name string,
-	timeout time.Duration,
 ) error {
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
 	ticker := time.NewTicker(argoCDApplicationPollInterval)
 	defer ticker.Stop()
 
 	for {
-		ready, err := argoReconciler.CheckNamedApplicationReady(timeoutCtx, name)
+		ready, err := argoReconciler.CheckNamedApplicationReady(ctx, name)
 		if err != nil {
 			if reconciler.IsContextError(err) {
 				return fmt.Errorf(
@@ -2450,7 +2452,7 @@ func pollUntilApplicationReady(
 		}
 
 		select {
-		case <-timeoutCtx.Done():
+		case <-ctx.Done():
 			return fmt.Errorf(
 				"timeout waiting for sync — "+
 					"run 'ksail workload get applications.argoproj.io %s -n argocd' to inspect",
