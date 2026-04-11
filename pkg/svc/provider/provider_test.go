@@ -251,100 +251,100 @@ func TestMockProvider_DeleteNodes(t *testing.T) {
 	mockProv.AssertExpectations(t)
 }
 
-func TestBuildClusterStatus(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name       string
-		nodes      []provider.NodeInfo
-		readyState string
-		want       *provider.ClusterStatus
-	}{
-		{
-			name:       "empty nodes returns nil",
-			nodes:      []provider.NodeInfo{},
-			readyState: "running",
-			want:       nil,
+var buildClusterStatusTests = []struct { //nolint:gochecknoglobals // table-driven test cases
+	name       string
+	nodes      []provider.NodeInfo
+	readyState string
+	want       *provider.ClusterStatus
+}{
+	{
+		name:       "empty nodes returns nil",
+		nodes:      []provider.NodeInfo{},
+		readyState: "running",
+		want:       nil,
+	},
+	{
+		name:       "nil nodes returns nil",
+		nodes:      nil,
+		readyState: "running",
+		want:       nil,
+	},
+	{
+		name: "all nodes ready",
+		nodes: []provider.NodeInfo{
+			{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "running"},
+			{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "running"},
 		},
-		{
-			name:       "nil nodes returns nil",
-			nodes:      nil,
-			readyState: "running",
-			want:       nil,
-		},
-		{
-			name: "all nodes ready",
-			nodes: []provider.NodeInfo{
+		readyState: "running",
+		want: &provider.ClusterStatus{
+			Phase:      "running",
+			Ready:      true,
+			NodesTotal: 2,
+			NodesReady: 2,
+			Nodes: []provider.NodeInfo{
 				{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "running"},
 				{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "running"},
 			},
-			readyState: "running",
-			want: &provider.ClusterStatus{
-				Phase:      "running",
-				Ready:      true,
-				NodesTotal: 2,
-				NodesReady: 2,
-				Nodes: []provider.NodeInfo{
-					{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "running"},
-					{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "running"},
-				},
-			},
 		},
-		{
-			name: "no nodes ready returns stopped phase",
-			nodes: []provider.NodeInfo{
+	},
+	{
+		name: "no nodes ready returns stopped phase",
+		nodes: []provider.NodeInfo{
+			{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "stopped"},
+			{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "stopped"},
+		},
+		readyState: "running",
+		want: &provider.ClusterStatus{
+			Phase:      "stopped",
+			Ready:      false,
+			NodesTotal: 2,
+			NodesReady: 0,
+			Nodes: []provider.NodeInfo{
 				{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "stopped"},
 				{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "stopped"},
 			},
-			readyState: "running",
-			want: &provider.ClusterStatus{
-				Phase:      "stopped",
-				Ready:      false,
-				NodesTotal: 2,
-				NodesReady: 0,
-				Nodes: []provider.NodeInfo{
-					{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "stopped"},
-					{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "stopped"},
-				},
-			},
 		},
-		{
-			name: "partial nodes ready returns degraded phase",
-			nodes: []provider.NodeInfo{
+	},
+	{
+		name: "partial nodes ready returns degraded phase",
+		nodes: []provider.NodeInfo{
+			{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "running"},
+			{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "stopped"},
+		},
+		readyState: "running",
+		want: &provider.ClusterStatus{
+			Phase:      "degraded",
+			Ready:      false,
+			NodesTotal: 2,
+			NodesReady: 1,
+			Nodes: []provider.NodeInfo{
 				{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "running"},
 				{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "stopped"},
 			},
-			readyState: "running",
-			want: &provider.ClusterStatus{
-				Phase:      "degraded",
-				Ready:      false,
-				NodesTotal: 2,
-				NodesReady: 1,
-				Nodes: []provider.NodeInfo{
-					{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "running"},
-					{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "stopped"},
-				},
-			},
 		},
-		{
-			name: "single ready node",
-			nodes: []provider.NodeInfo{
+	},
+	{
+		name: "single ready node",
+		nodes: []provider.NodeInfo{
+			{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "RUNNING"},
+		},
+		readyState: "RUNNING",
+		want: &provider.ClusterStatus{
+			Phase:      "RUNNING",
+			Ready:      true,
+			NodesTotal: 1,
+			NodesReady: 1,
+			Nodes: []provider.NodeInfo{
 				{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "RUNNING"},
 			},
-			readyState: "RUNNING",
-			want: &provider.ClusterStatus{
-				Phase:      "RUNNING",
-				Ready:      true,
-				NodesTotal: 1,
-				NodesReady: 1,
-				Nodes: []provider.NodeInfo{
-					{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "RUNNING"},
-				},
-			},
 		},
-	}
+	},
+}
 
-	for _, testCase := range tests {
+func TestBuildClusterStatus(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range buildClusterStatusTests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -408,10 +408,10 @@ func TestCheckNodesExist(t *testing.T) {
 			t.Parallel()
 
 			ctx := context.Background()
-			m := new(mockNodeLister)
-			m.On("ListNodes", ctx, testClusterName).Return(testCase.nodes, testCase.listErr)
+			mockLister := new(mockNodeLister)
+			mockLister.On("ListNodes", ctx, testClusterName).Return(testCase.nodes, testCase.listErr)
 
-			exists, err := provider.CheckNodesExist(ctx, m, testClusterName)
+			exists, err := provider.CheckNodesExist(ctx, mockLister, testClusterName)
 
 			if testCase.wantErr {
 				require.Error(t, err)
@@ -420,7 +420,7 @@ func TestCheckNodesExist(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, testCase.wantExists, exists)
 			}
-			m.AssertExpectations(t)
+			mockLister.AssertExpectations(t)
 		})
 	}
 }
@@ -468,10 +468,10 @@ func TestGetClusterStatusFromLister(t *testing.T) {
 			t.Parallel()
 
 			ctx := context.Background()
-			m := new(mockNodeLister)
-			m.On("ListNodes", ctx, testClusterName).Return(testCase.nodes, testCase.listErr)
+			mockLister := new(mockNodeLister)
+			mockLister.On("ListNodes", ctx, testClusterName).Return(testCase.nodes, testCase.listErr)
 
-			status, err := provider.GetClusterStatusFromLister(ctx, m, testClusterName, testCase.readyState)
+			status, err := provider.GetClusterStatusFromLister(ctx, mockLister, testClusterName, testCase.readyState)
 
 			if testCase.wantErr {
 				require.Error(t, err)
@@ -483,7 +483,7 @@ func TestGetClusterStatusFromLister(t *testing.T) {
 				assert.Equal(t, testCase.wantPhase, status.Phase)
 				assert.Equal(t, testCase.wantReady, status.Ready)
 			}
-			m.AssertExpectations(t)
+			mockLister.AssertExpectations(t)
 		})
 	}
 }
