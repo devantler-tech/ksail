@@ -50,7 +50,7 @@ golangci-lint run --fix  # auto-fix (import order, etc.)
 
 ## Project Structure
 
-See the [Architecture Guide](/architecture/#package-structure) for the full package structure and descriptions of each package. `internal/` packages can only be imported within the `ksail` module; `pkg/` packages are public. Circular dependencies are not allowed.
+See [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md#project-structure) for the full package structure and descriptions of each package. `internal/` packages can only be imported within the `ksail` module; `pkg/` packages are public. Circular dependencies are not allowed.
 
 ## Development Workflow
 
@@ -121,11 +121,7 @@ Use `export_test.go` (in the package namespace) to expose unexported symbols wit
 
 #### DI Override Pattern for Command Tests
 
-Cluster command tests that depend on `setup.InstallerFactories` use an override pattern defined in [`pkg/cli/cmd/cluster/testing.go`](https://github.com/devantler-tech/ksail/blob/main/pkg/cli/cmd/cluster/testing.go). Each helper applies a factory override against shared global state and returns a restore function.
-
-> **Note:** These helpers mutate shared global state, so tests that use them **must not** run in parallel (annotate with `//nolint:paralleltest` and do not call `t.Parallel()`).
-
-Register the restore function with `t.Cleanup(restore)` inside each test or subtest so the override is always reset at the end of that test case, including in table-driven tests:
+Cluster command tests that depend on installer factories use an override pattern where each helper applies a factory override against shared global state and returns a restore function. Register the restore function with `t.Cleanup(restore)` so overrides are always reset at the end of the test case:
 
 ````go
 func TestPolicyEngineInstaller(t *testing.T) {
@@ -139,7 +135,9 @@ func TestPolicyEngineInstaller(t *testing.T) {
 }
 ````
 
-Available helpers: `SetCSIInstallerFactoryForTests`, `SetCertManagerInstallerFactoryForTests`, `SetArgoCDInstallerFactoryForTests`, `SetPolicyEngineInstallerFactoryForTests`, `SetFluxInstallerFactoryForTests`, `SetProvisionerFactoryForTests`, and others.
+> **Note:** These helpers mutate shared global state, so tests that use them **must not** run in parallel (annotate with `//nolint:paralleltest` and do not call `t.Parallel()`).
+
+For the full list of available override helpers, search for `Set*ForTests` definitions in [`pkg/cli/cmd/cluster/cluster.go`](https://github.com/devantler-tech/ksail/blob/main/pkg/cli/cmd/cluster/cluster.go).
 
 #### Mocking with Testify
 
