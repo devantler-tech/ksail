@@ -250,3 +250,240 @@ func TestMockProvider_DeleteNodes(t *testing.T) {
 	require.NoError(t, err)
 	mockProv.AssertExpectations(t)
 }
+
+func TestBuildClusterStatus(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		nodes      []provider.NodeInfo
+		readyState string
+		want       *provider.ClusterStatus
+	}{
+		{
+			name:       "empty nodes returns nil",
+			nodes:      []provider.NodeInfo{},
+			readyState: "running",
+			want:       nil,
+		},
+		{
+			name:       "nil nodes returns nil",
+			nodes:      nil,
+			readyState: "running",
+			want:       nil,
+		},
+		{
+			name: "all nodes ready",
+			nodes: []provider.NodeInfo{
+				{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "running"},
+				{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "running"},
+			},
+			readyState: "running",
+			want: &provider.ClusterStatus{
+				Phase:      "running",
+				Ready:      true,
+				NodesTotal: 2,
+				NodesReady: 2,
+				Nodes: []provider.NodeInfo{
+					{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "running"},
+					{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "running"},
+				},
+			},
+		},
+		{
+			name: "no nodes ready returns stopped phase",
+			nodes: []provider.NodeInfo{
+				{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "stopped"},
+				{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "stopped"},
+			},
+			readyState: "running",
+			want: &provider.ClusterStatus{
+				Phase:      "stopped",
+				Ready:      false,
+				NodesTotal: 2,
+				NodesReady: 0,
+				Nodes: []provider.NodeInfo{
+					{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "stopped"},
+					{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "stopped"},
+				},
+			},
+		},
+		{
+			name: "partial nodes ready returns degraded phase",
+			nodes: []provider.NodeInfo{
+				{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "running"},
+				{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "stopped"},
+			},
+			readyState: "running",
+			want: &provider.ClusterStatus{
+				Phase:      "degraded",
+				Ready:      false,
+				NodesTotal: 2,
+				NodesReady: 1,
+				Nodes: []provider.NodeInfo{
+					{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "running"},
+					{Name: "node2", ClusterName: testClusterName, Role: "worker", State: "stopped"},
+				},
+			},
+		},
+		{
+			name: "single ready node",
+			nodes: []provider.NodeInfo{
+				{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "RUNNING"},
+			},
+			readyState: "RUNNING",
+			want: &provider.ClusterStatus{
+				Phase:      "RUNNING",
+				Ready:      true,
+				NodesTotal: 1,
+				NodesReady: 1,
+				Nodes: []provider.NodeInfo{
+					{Name: "node1", ClusterName: testClusterName, Role: "control-plane", State: "RUNNING"},
+				},
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := provider.BuildClusterStatus(testCase.nodes, testCase.readyState)
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
+
+// mockNodeLister implements NodeLister for testing CheckNodesExist and
+// GetClusterStatusFromLister.
+type mockNodeLister struct {
+	mock.Mock
+}
+
+func (m *mockNodeLister) ListNodes(
+	ctx context.Context,
+	clusterName string,
+) ([]provider.NodeInfo, error) {
+	args := m.Called(ctx, clusterName)
+
+	result, ok := args.Get(0).([]provider.NodeInfo)
+	if !ok {
+		return nil, args.Error(1) //nolint:wrapcheck // mock
+	}
+
+	return result, args.Error(1) //nolint:wrapcheck // mock
+}
+
+func TestCheckNodesExist(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		nodes       []provider.NodeInfo
+		listErr     error
+		wantExists  bool
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:       "nodes exist returns true",
+			nodes:      []provider.NodeInfo{{Name: "node1", ClusterName: testClusterName}},
+			wantExists: true,
+		},
+		{
+			name:       "no nodes returns false",
+			nodes:      []provider.NodeInfo{},
+			wantExists: false,
+		},
+		{
+			name:        "list error propagates",
+			listErr:     errListFailed,
+			wantErr:     true,
+			errContains: "check nodes exist",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			m := new(mockNodeLister)
+			m.On("ListNodes", ctx, testClusterName).Return(testCase.nodes, testCase.listErr)
+
+			exists, err := provider.CheckNodesExist(ctx, m, testClusterName)
+
+			if testCase.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), testCase.errContains)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.wantExists, exists)
+			}
+			m.AssertExpectations(t)
+		})
+	}
+}
+
+func TestGetClusterStatusFromLister(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		nodes       []provider.NodeInfo
+		listErr     error
+		readyState  string
+		wantPhase   string
+		wantReady   bool
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "returns status for running cluster",
+			nodes: []provider.NodeInfo{
+				{Name: "node1", ClusterName: testClusterName, State: "running"},
+			},
+			readyState: "running",
+			wantPhase:  "running",
+			wantReady:  true,
+		},
+		{
+			name:        "list error propagates",
+			listErr:     errListFailed,
+			readyState:  "running",
+			wantErr:     true,
+			errContains: "get cluster status",
+		},
+		{
+			name:        "empty node list returns cluster not found error",
+			nodes:       []provider.NodeInfo{},
+			readyState:  "running",
+			wantErr:     true,
+			errContains: testClusterName,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			m := new(mockNodeLister)
+			m.On("ListNodes", ctx, testClusterName).Return(testCase.nodes, testCase.listErr)
+
+			status, err := provider.GetClusterStatusFromLister(ctx, m, testClusterName, testCase.readyState)
+
+			if testCase.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), testCase.errContains)
+				assert.Nil(t, status)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, status)
+				assert.Equal(t, testCase.wantPhase, status.Phase)
+				assert.Equal(t, testCase.wantReady, status.Ready)
+			}
+			m.AssertExpectations(t)
+		})
+	}
+}
