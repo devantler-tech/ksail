@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
@@ -15,9 +17,12 @@ import (
 	hcloudccminstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/hcloudccm"
 	metallbinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/metallb"
 	metricsserverinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/metricsserver"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // HelmClientForCluster creates a Helm client configured for the cluster.
+// It validates that the kubeconfig file exists and that the specified context
+// is present in the kubeconfig before creating the Helm client.
 func HelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, error) {
 	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
 	if err != nil {
@@ -30,12 +35,48 @@ func HelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, e
 		return nil, "", fmt.Errorf("failed to access kubeconfig file: %w", err)
 	}
 
-	helmClient, err := helm.NewClient(kubeconfigPath, clusterCfg.Spec.Cluster.Connection.Context)
+	kubeContext := clusterCfg.Spec.Cluster.Connection.Context
+
+	// Validate the context exists in the kubeconfig to prevent nil pointer
+	// dereference panics in Helm v4, which defers context validation until
+	// the REST client is actually used (e.g., in IsReachable).
+	if kubeContext != "" {
+		if err := validateKubeconfigContext(kubeconfigPath, kubeContext); err != nil {
+			return nil, "", err
+		}
+	}
+
+	helmClient, err := helm.NewClient(kubeconfigPath, kubeContext)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create Helm client: %w", err)
 	}
 
 	return helmClient, kubeconfigPath, nil
+}
+
+// validateKubeconfigContext checks that the specified context exists in the kubeconfig file.
+// Returns a descriptive error listing available contexts when the target context is missing.
+func validateKubeconfigContext(kubeconfigPath, contextName string) error {
+	config, err := clientcmd.LoadFromFile(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to load kubeconfig for context validation: %w", err)
+	}
+
+	if _, exists := config.Contexts[contextName]; exists {
+		return nil
+	}
+
+	available := make([]string, 0, len(config.Contexts))
+	for name := range config.Contexts {
+		available = append(available, name)
+	}
+
+	sort.Strings(available)
+
+	return fmt.Errorf(
+		"kubeconfig context %q not found in %s (available: %s)",
+		contextName, kubeconfigPath, strings.Join(available, ", "),
+	)
 }
 
 // NeedsMetricsServerInstall determines if metrics-server needs to be installed.

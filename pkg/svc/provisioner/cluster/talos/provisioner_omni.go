@@ -12,6 +12,8 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/k8s/readiness"
 	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 const (
@@ -350,6 +352,9 @@ func (p *Provisioner) saveOmniConfig(
 }
 
 // saveOmniKubeconfig retrieves and saves the kubeconfig from Omni.
+// If a desired context name is configured (via Options.KubeconfigContext) or can be
+// derived from the cluster name, the Omni-generated context is renamed to match.
+// This ensures the kubeconfig context name matches spec.cluster.connection.context.
 func (p *Provisioner) saveOmniKubeconfig(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
@@ -364,7 +369,92 @@ func (p *Provisioner) saveOmniKubeconfig(
 		return fmt.Errorf("failed to get kubeconfig from Omni: %w", err)
 	}
 
+	// Determine the desired context name
+	desiredContext := p.options.KubeconfigContext
+	if desiredContext == "" {
+		// Default to the Talos convention: admin@<clusterName>
+		desiredContext = "admin@" + clusterName
+	}
+
+	// Rename the Omni-generated context to the desired name
+	kubeconfigData, err = renameKubeconfigContext(kubeconfigData, desiredContext)
+	if err != nil {
+		return fmt.Errorf("failed to rename kubeconfig context: %w", err)
+	}
+
 	return p.saveOmniConfig(kubeconfigData, p.options.KubeconfigPath, "Kubeconfig")
+}
+
+// renameKubeconfigContext renames the current context in a kubeconfig to the desired name.
+// It updates the context, cluster, and user entry names, along with CurrentContext.
+func renameKubeconfigContext(kubeconfigData []byte, desiredContext string) ([]byte, error) {
+	config, err := clientcmd.Load(kubeconfigData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
+	}
+
+	oldContext := config.CurrentContext
+	if oldContext == "" || oldContext == desiredContext {
+		// Nothing to rename — either no current context or already correct
+		if desiredContext != "" {
+			config.CurrentContext = desiredContext
+		}
+
+		return clientcmd.Write(*config)
+	}
+
+	ctxEntry, exists := config.Contexts[oldContext]
+	if !exists {
+		return nil, fmt.Errorf("current context %q not found in kubeconfig", oldContext)
+	}
+
+	// Rename context entry
+	delete(config.Contexts, oldContext)
+	config.Contexts[desiredContext] = ctxEntry
+
+	// Rename cluster reference if it matches the old context
+	renameClusterRef(config, ctxEntry, desiredContext)
+
+	// Rename user/authinfo reference if it matches the old context
+	renameAuthInfoRef(config, ctxEntry, desiredContext)
+
+	config.CurrentContext = desiredContext
+
+	result, err := clientcmd.Write(*config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize kubeconfig: %w", err)
+	}
+
+	return result, nil
+}
+
+// renameClusterRef renames the cluster entry referenced by the context if the old
+// cluster name matches the old context name.
+func renameClusterRef(config *clientcmdapi.Config, ctxEntry *clientcmdapi.Context, desiredContext string) {
+	oldCluster := ctxEntry.Cluster
+	if oldCluster == "" {
+		return
+	}
+
+	if clusterEntry, ok := config.Clusters[oldCluster]; ok {
+		delete(config.Clusters, oldCluster)
+		config.Clusters[desiredContext] = clusterEntry
+		ctxEntry.Cluster = desiredContext
+	}
+}
+
+// renameAuthInfoRef renames the authinfo/user entry referenced by the context.
+func renameAuthInfoRef(config *clientcmdapi.Config, ctxEntry *clientcmdapi.Context, desiredContext string) {
+	oldUser := ctxEntry.AuthInfo
+	if oldUser == "" {
+		return
+	}
+
+	if authEntry, ok := config.AuthInfos[oldUser]; ok {
+		delete(config.AuthInfos, oldUser)
+		config.AuthInfos[desiredContext] = authEntry
+		ctxEntry.AuthInfo = desiredContext
+	}
 }
 
 // saveOmniTalosconfig retrieves and saves the talosconfig from Omni.
@@ -397,10 +487,10 @@ func (p *Provisioner) waitForOmniAPIServerReady(ctx context.Context) error {
 		return fmt.Errorf("canonicalize kubeconfig path for readiness check: %w", err)
 	}
 
-	// Use empty context to pick the kubeconfig's current-context, because
-	// Omni-generated kubeconfigs use a service-account context name that
-	// differs from the talosctl "admin@<name>" convention.
-	clientset, err := k8s.NewClientset(kubeconfigPath, "")
+	// Use the configured context name. If KubeconfigContext is set, it was used
+	// to rename the Omni-generated context during saveOmniKubeconfig. If empty,
+	// use the kubeconfig's current-context by passing "".
+	clientset, err := k8s.NewClientset(kubeconfigPath, p.options.KubeconfigContext)
 	if err != nil {
 		return fmt.Errorf("create clientset for Omni API readiness check: %w", err)
 	}

@@ -4966,12 +4966,10 @@ func runClusterCreationWorkflow(
 	// (which resolve cluster name from distribution configs, not from context) but before
 	// post-CNI setup (which needs the kubectl context name like "kind-kind").
 	//
-	// Omni-generated kubeconfigs use a service-account context name that differs from
-	// the talosctl "admin@<name>" convention. Use empty context (= kubeconfig's
-	// current-context) so helm/kubectl pick the right context automatically.
-	if ctx.ClusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderOmni {
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = ""
-	} else {
+	// For Omni clusters, the kubeconfig context is now renamed during saveOmniKubeconfig
+	// to match the configured context or the Talos convention (admin@<name>).
+	// If an explicit context is already configured, preserve it.
+	if ctx.ClusterCfg.Spec.Cluster.Connection.Context == "" {
 		clusterName := resolveClusterNameFromContext(ctx)
 		ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(
 			clusterName,

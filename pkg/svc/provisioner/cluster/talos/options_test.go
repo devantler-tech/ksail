@@ -22,6 +22,7 @@ func TestNewOptions_DefaultValues(t *testing.T) {
 	assert.Equal(t, talos.DefaultNetworkCIDR, opts.NetworkCIDR)
 	assert.Empty(t, opts.KubeconfigPath)
 	assert.Empty(t, opts.TalosconfigPath)
+	assert.Empty(t, opts.KubeconfigContext)
 	assert.False(t, opts.SkipCNIChecks)
 }
 
@@ -156,6 +157,29 @@ func TestOptions_WithTalosconfigPath(t *testing.T) {
 			opts := talosprovisioner.NewOptions().WithTalosconfigPath(testCase.path)
 
 			assert.Equal(t, testCase.expected, opts.TalosconfigPath)
+		})
+	}
+}
+
+func TestOptions_WithKubeconfigContext(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		context  string
+		expected string
+	}{
+		{"sets context", "admin@my-cluster", "admin@my-cluster"},
+		{"sets custom context", "devantler-dev", "devantler-dev"},
+		{"allows empty string", "", ""},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			opts := talosprovisioner.NewOptions().WithKubeconfigContext(testCase.context)
+
+			assert.Equal(t, testCase.expected, opts.KubeconfigContext)
 		})
 	}
 }
@@ -321,6 +345,7 @@ func TestOptions_Chaining(t *testing.T) {
 		WithWorkerNodes(2).
 		WithNetworkCIDR("10.0.0.0/8").
 		WithKubeconfigPath("/tmp/kc").
+		WithKubeconfigContext("admin@test").
 		WithTalosconfigPath("/tmp/tc").
 		WithSkipCNIChecks(true).
 		WithExtraPortMappings([]string{"8080:80/tcp"})
@@ -329,6 +354,7 @@ func TestOptions_Chaining(t *testing.T) {
 	assert.Equal(t, 2, opts.WorkerNodes)
 	assert.Equal(t, "10.0.0.0/8", opts.NetworkCIDR)
 	assert.Equal(t, "/tmp/kc", opts.KubeconfigPath)
+	assert.Equal(t, "admin@test", opts.KubeconfigContext)
 	assert.Equal(t, "/tmp/tc", opts.TalosconfigPath)
 	assert.True(t, opts.SkipCNIChecks)
 	assert.Equal(t, []string{"8080:80/tcp"}, opts.ExtraPortMappings)

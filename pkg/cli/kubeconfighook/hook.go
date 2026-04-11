@@ -62,10 +62,18 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 		return
 	}
 
+	// Determine the desired kubeconfig context name.
+	// If explicitly configured, use that; otherwise derive from the Talos convention.
+	desiredContext := cfg.Spec.Cluster.Connection.Context
+	if desiredContext == "" {
+		desiredContext = cfg.Spec.Cluster.Distribution.ContextName(clusterName)
+	}
+
 	refreshErr := refreshKubeconfig(
 		cmd.Context(),
 		cfg.Spec.Provider.Omni,
 		clusterName,
+		desiredContext,
 		canonicalPath,
 	)
 	if refreshErr != nil {
@@ -158,7 +166,8 @@ func clusterNameFromDistConfig(distCfg *clusterprovisioner.DistributionConfig) s
 }
 
 // clusterNameFromKubeconfig extracts the current context name from the kubeconfig file.
-// For Omni, the context name matches the Omni cluster name.
+// Note: After context renaming, this may return the renamed context (e.g., "admin@<name>")
+// rather than the raw Omni cluster name. The distribution config is the preferred source.
 func clusterNameFromKubeconfig(kubeconfigPath string) string {
 	cfg, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
@@ -169,12 +178,14 @@ func clusterNameFromKubeconfig(kubeconfigPath string) string {
 }
 
 // refreshKubeconfig creates an Omni client and fetches a fresh kubeconfig.
-// The write is atomic (temp file + rename) to prevent corruption if the
-// process is interrupted.
+// The Omni-generated context is renamed to desiredContext so the kubeconfig
+// matches spec.cluster.connection.context. The write is atomic (temp file +
+// rename) to prevent corruption if the process is interrupted.
 func refreshKubeconfig(
 	ctx context.Context,
 	omniOpts v1alpha1.OptionsOmni,
 	clusterName string,
+	desiredContext string,
 	kubeconfigPath string,
 ) error {
 	prov, err := omniprovider.NewProviderFromOptions(omniOpts)
@@ -193,12 +204,74 @@ func refreshKubeconfig(
 		return fmt.Errorf("fetch kubeconfig: %w", err)
 	}
 
+	// Rename the Omni-generated context to match the configured context name
+	if desiredContext != "" {
+		data, err = renameKubeconfigContext(data, desiredContext)
+		if err != nil {
+			return fmt.Errorf("rename kubeconfig context: %w", err)
+		}
+	}
+
 	writeErr := atomicWriteFile(kubeconfigPath, data, kubeconfigFileMode)
 	if writeErr != nil {
 		return fmt.Errorf("write kubeconfig: %w", writeErr)
 	}
 
 	return nil
+}
+
+// renameKubeconfigContext renames the current context in a kubeconfig to the desired name.
+// It updates the context, cluster, and user entry names, along with CurrentContext.
+func renameKubeconfigContext(kubeconfigData []byte, desiredContext string) ([]byte, error) {
+	config, err := clientcmd.Load(kubeconfigData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
+	}
+
+	oldContext := config.CurrentContext
+	if oldContext == "" || oldContext == desiredContext {
+		if desiredContext != "" {
+			config.CurrentContext = desiredContext
+		}
+
+		return clientcmd.Write(*config)
+	}
+
+	ctxEntry, exists := config.Contexts[oldContext]
+	if !exists {
+		return nil, fmt.Errorf("current context %q not found in kubeconfig", oldContext)
+	}
+
+	// Rename context entry
+	delete(config.Contexts, oldContext)
+	config.Contexts[desiredContext] = ctxEntry
+
+	// Rename cluster reference
+	if oldCluster := ctxEntry.Cluster; oldCluster != "" {
+		if clusterEntry, ok := config.Clusters[oldCluster]; ok {
+			delete(config.Clusters, oldCluster)
+			config.Clusters[desiredContext] = clusterEntry
+			ctxEntry.Cluster = desiredContext
+		}
+	}
+
+	// Rename user/authinfo reference
+	if oldUser := ctxEntry.AuthInfo; oldUser != "" {
+		if authEntry, ok := config.AuthInfos[oldUser]; ok {
+			delete(config.AuthInfos, oldUser)
+			config.AuthInfos[desiredContext] = authEntry
+			ctxEntry.AuthInfo = desiredContext
+		}
+	}
+
+	config.CurrentContext = desiredContext
+
+	result, err := clientcmd.Write(*config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize kubeconfig: %w", err)
+	}
+
+	return result, nil
 }
 
 // atomicWriteFile writes data to a temp file in the same directory and

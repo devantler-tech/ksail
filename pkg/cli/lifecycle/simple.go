@@ -345,6 +345,7 @@ func CreateMinimalProvisionerForProvider(
 		provisioner, err := talosprovisioner.CreateProvisioner(
 			talosConfig,
 			kubeconfigPath,
+			"",
 			info.Provider,
 			v1alpha1.OptionsTalos{},
 			v1alpha1.OptionsHetzner{},

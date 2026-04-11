@@ -137,3 +137,8 @@ func ExtractTagFromImageForTest(image string) string {
 func InstallerImageFromTagForTest(tag string) string {
 	return installerImageFromTag(tag)
 }
+
+// RenameKubeconfigContextForTest exposes renameKubeconfigContext for unit testing.
+func RenameKubeconfigContextForTest(kubeconfigData []byte, desiredContext string) ([]byte, error) {
+	return renameKubeconfigContext(kubeconfigData, desiredContext)
+}
