@@ -14,7 +14,7 @@ var dockerfile string
 func chartVersion() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
-		`FROM\s+docker\.io/openpolicyagent/gatekeeper:v([^\s]+)`,
+		`FROM\s+docker\.io/openpolicyagent/gatekeeper:v([^\s@]+)`,
 		"gatekeeper chart",
 	)
 }

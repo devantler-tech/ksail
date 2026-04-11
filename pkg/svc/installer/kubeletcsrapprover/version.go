@@ -14,7 +14,7 @@ var dockerfile string
 func chartVersion() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
-		`FROM\s+ghcr\.io/postfinance/kubelet-csr-approver:v([^\s]+)`,
+		`FROM\s+ghcr\.io/postfinance/kubelet-csr-approver:v([^\s@]+)`,
 		"kubelet-csr-approver chart",
 	)
 }
