@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -2997,10 +2998,7 @@ func setupInitTest(
 	cmd := newInitCommand(t)
 	cfgManager := newConfigManager(t, cmd, buffer)
 
-	forceStr := "false"
-	if force {
-		forceStr = "true"
-	}
+	forceStr := strconv.FormatBool(force)
 
 	setFlags(t, cmd, map[string]string{
 		"output": outDir,
