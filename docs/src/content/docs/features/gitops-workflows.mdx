@@ -34,7 +34,7 @@ See [Declarative Configuration](/configuration/declarative-configuration/) for t
 | Command                    | Description                            |
 | -------------------------- | -------------------------------------- |
 | `ksail workload push`      | Package and push manifests to registry |
-| `ksail workload reconcile` | Trigger GitOps sync and wait for full Flux Kustomization dependency chain |
+| `ksail workload reconcile` | Trigger GitOps sync and wait for completion — tracks each Flux Kustomization (with dependency ordering) and each ArgoCD Application individually |
 
 ## Related
 
