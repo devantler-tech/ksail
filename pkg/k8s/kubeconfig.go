@@ -98,9 +98,14 @@ func removeEntriesFromKubeconfig(
 // user entries) in raw kubeconfig bytes to desiredContext.
 //
 // If desiredContext is empty or already matches the current context, the kubeconfig is
-// returned as-is. Returns an error when CurrentContext is empty and no single context
-// entry can be unambiguously selected.
+// returned as-is. Returns an error when the desired context name collides with an
+// existing different context entry, or when CurrentContext is empty and no single
+// context entry can be unambiguously selected.
 func RenameKubeconfigContext(kubeconfigData []byte, desiredContext string) ([]byte, error) {
+	if desiredContext == "" {
+		return kubeconfigData, nil
+	}
+
 	config, err := clientcmd.Load(kubeconfigData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
@@ -112,9 +117,7 @@ func RenameKubeconfigContext(kubeconfigData []byte, desiredContext string) ([]by
 	}
 
 	if oldContext == "" || oldContext == desiredContext {
-		if desiredContext != "" {
-			config.CurrentContext = desiredContext
-		}
+		config.CurrentContext = desiredContext
 
 		return writeConfig(config)
 	}
@@ -122,6 +125,12 @@ func RenameKubeconfigContext(kubeconfigData []byte, desiredContext string) ([]by
 	ctxEntry, exists := config.Contexts[oldContext]
 	if !exists {
 		return nil, fmt.Errorf("%w: %q", ErrKubeconfigContextNotFound, oldContext)
+	}
+
+	if _, collision := config.Contexts[desiredContext]; collision {
+		return nil, fmt.Errorf(
+			"%w: %q already exists in kubeconfig", ErrKubeconfigContextCollision, desiredContext,
+		)
 	}
 
 	// Rename context entry

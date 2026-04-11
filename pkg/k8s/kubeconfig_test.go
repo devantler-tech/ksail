@@ -358,9 +358,10 @@ users:
 			wantContext:    "devantler-devantler-dev-ksail",
 		},
 		{
-			name:       "error on invalid kubeconfig",
-			kubeconfig: "not-valid-yaml: {{{",
-			wantErr:    true,
+			name:           "error on invalid kubeconfig",
+			kubeconfig:     "not-valid-yaml: {{{",
+			desiredContext: "some-context",
+			wantErr:        true,
 		},
 		{
 			name: "error when no current context and multiple entries",
@@ -429,7 +430,7 @@ users: []
 			wantContext:    "admin@test",
 		},
 		{
-			name: "does not clobber existing cluster entry",
+			name: "returns error on context name collision",
 			kubeconfig: `apiVersion: v1
 kind: Config
 current-context: old-ctx
@@ -458,7 +459,8 @@ users:
     token: new-token
 `,
 			desiredContext: "new-ctx",
-			wantContext:    "new-ctx",
+			wantErr:       true,
+			errContains:   "context name collision",
 		},
 	}
 

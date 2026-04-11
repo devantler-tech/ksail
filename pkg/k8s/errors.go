@@ -12,3 +12,7 @@ var ErrKubeconfigNoCurrentContext = errors.New("kubeconfig has no current contex
 // ErrKubeconfigContextNotFound is returned when the specified context name
 // does not exist in the kubeconfig.
 var ErrKubeconfigContextNotFound = errors.New("kubeconfig context not found")
+
+// ErrKubeconfigContextCollision is returned when the desired context name
+// already exists as a different context entry in the kubeconfig.
+var ErrKubeconfigContextCollision = errors.New("kubeconfig context name collision")
