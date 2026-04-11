@@ -16,7 +16,7 @@ var distributionDockerfile string
 func chartVersion() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
-		`FROM\s+ghcr\.io/controlplaneio-fluxcd/charts/flux-operator:([^\s]+)`,
+		`FROM\s+ghcr\.io/controlplaneio-fluxcd/charts/flux-operator:([^\s@]+)`,
 		"flux-operator chart",
 	)
 }

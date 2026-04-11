@@ -16,7 +16,7 @@ var dockerfile string
 func ChartVersion() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
-		`FROM\s+ghcr\.io/loft-sh/vcluster-pro:([^\s]+)`,
+		`FROM\s+ghcr\.io/loft-sh/vcluster-pro:([^\s@]+)`,
 		"vCluster chart",
 	)
 }
@@ -25,7 +25,7 @@ func ChartVersion() string {
 func kubernetesVersion() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
-		`FROM\s+ghcr\.io/loft-sh/kubernetes:([^\s]+)`,
+		`FROM\s+ghcr\.io/loft-sh/kubernetes:([^\s@]+)`,
 		"vCluster Kubernetes",
 	)
 }

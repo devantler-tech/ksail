@@ -13,7 +13,7 @@ var dockerfile string
 func chartVersion() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
-		`FROM\s+quay\.io/jetstack/cert-manager-controller:([^\s]+)`,
+		`FROM\s+quay\.io/jetstack/cert-manager-controller:([^\s@]+)`,
 		"cert-manager chart",
 	)
 }

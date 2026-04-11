@@ -14,7 +14,7 @@ var dockerfile string
 func chartVersion() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
-		`FROM\s+quay\.io/metallb/controller:v([^\s]+)`,
+		`FROM\s+quay\.io/metallb/controller:v([^\s@]+)`,
 		"metallb chart",
 	)
 }

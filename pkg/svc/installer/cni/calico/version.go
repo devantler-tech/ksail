@@ -13,7 +13,7 @@ var dockerfile string
 func chartVersion() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
-		`FROM\s+docker\.io/calico/node:([^\s]+)`,
+		`FROM\s+docker\.io/calico/node:([^\s@]+)`,
 		"calico chart",
 	)
 }

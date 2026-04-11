@@ -19,7 +19,7 @@ var dockerfileApp string
 func chartVersion() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
-		`FROM\s+ghcr\.io/argoproj/argo-helm/argo-cd:([^\s]+)`,
+		`FROM\s+ghcr\.io/argoproj/argo-helm/argo-cd:([^\s@]+)`,
 		"argocd chart",
 	)
 }
