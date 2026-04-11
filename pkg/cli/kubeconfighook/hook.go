@@ -347,7 +347,10 @@ func IsKubeconfigStale(kubeconfigPath, kubeconfigContext string) bool {
 
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return false
+		// The REST config is unusable (e.g., missing cert/key files,
+		// invalid host). A refresh is warranted since downstream
+		// operations would fail with the same config.
+		return true
 	}
 
 	_, err = clientset.Discovery().ServerVersion()

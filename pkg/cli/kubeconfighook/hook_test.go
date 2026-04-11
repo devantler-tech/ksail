@@ -238,7 +238,9 @@ func TestIsKubeconfigStale_AuthErrors(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = fmt.Fprint(w, `{"kind":"Status","apiVersion":"v1","status":"Failure","message":"Unauthorized","reason":"Unauthorized","code":401}`)
+			_, _ = fmt.Fprint(w,
+				`{"kind":"Status","apiVersion":"v1","status":"Failure",`+
+					`"message":"Unauthorized","reason":"Unauthorized","code":401}`)
 		}))
 		defer srv.Close()
 
@@ -254,7 +256,9 @@ func TestIsKubeconfigStale_AuthErrors(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
-			_, _ = fmt.Fprint(w, `{"kind":"Status","apiVersion":"v1","status":"Failure","message":"Forbidden","reason":"Forbidden","code":403}`)
+			_, _ = fmt.Fprint(w,
+				`{"kind":"Status","apiVersion":"v1","status":"Failure",`+
+					`"message":"Forbidden","reason":"Forbidden","code":403}`)
 		}))
 		defer srv.Close()
 
