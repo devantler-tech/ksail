@@ -2355,15 +2355,12 @@ func reconcileArgoCD(
 	if err != nil {
 		return fmt.Errorf("create argocd reconciler: %w", err)
 	}
-
 	writer := cmd.OutOrStdout()
-
 	deadlineCtx, deadlineCancel := context.WithTimeout(cmd.Context(), timeout)
 	defer deadlineCancel()
 
 	// Sub-phase 1: Trigger refresh
 	writeActivityNotification("triggering argocd refresh...", outputTimer, writer)
-
 	err = argoReconciler.TriggerRefresh(deadlineCtx, true) // Always hard refresh
 	if err != nil {
 		return fmt.Errorf("trigger argocd refresh: %w", err)
@@ -2371,12 +2368,10 @@ func reconcileArgoCD(
 
 	// Sub-phase 2: Monitor all applications with per-app tracking
 	writeActivityNotification("reconciling argocd applications...", outputTimer, writer)
-
 	apps, err := argoReconciler.ListApplications(deadlineCtx)
 	if err != nil {
 		return fmt.Errorf("list argocd applications: %w", err)
 	}
-
 	if len(apps) == 0 {
 		return nil
 	}
@@ -2391,7 +2386,6 @@ func reconcileArgoCD(
 			},
 		})
 	}
-
 	appGroup := notify.NewProgressGroup(
 		"",
 		"",
@@ -2403,12 +2397,10 @@ func reconcileArgoCD(
 		notify.WithCountLabel("applications"),
 		notify.WithConcurrency(reconcileConcurrency),
 	)
-
 	err = appGroup.Run(deadlineCtx, tasks...)
 	if err != nil {
 		return fmt.Errorf("reconcile argocd applications: %w", err)
 	}
-
 	return nil
 }
 
