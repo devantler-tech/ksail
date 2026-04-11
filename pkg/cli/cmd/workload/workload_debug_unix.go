@@ -89,11 +89,11 @@ func pullImageOnTalosNode(
 	talosClient *talosclient.Client,
 	imageRef string,
 ) (string, error) {
-	err := talosClient.ImagePull(
+	err := talosClient.ImagePull( //nolint:staticcheck // ImageServiceClient returns grpc types blocked by depguard
 		ctx,
 		common.ContainerdNamespace_NS_SYSTEM,
 		imageRef,
-	) //nolint:staticcheck
+	)
 	if err != nil {
 		return "", fmt.Errorf("pull image %q: %w", imageRef, err)
 	}
