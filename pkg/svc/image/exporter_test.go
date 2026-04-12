@@ -733,7 +733,7 @@ func setupPlatformDetectMockForExporter(
 // ensureImageContent creates a context.WithTimeout internally, so the context
 // argument is matched with mock.Anything instead of the parent context.
 func setupEnsureImageContentMocks(
-	_ctx context.Context,
+	_ context.Context,
 	t *testing.T,
 	mockClient *docker.MockAPIClient,
 	containerName string,
