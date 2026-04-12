@@ -129,9 +129,9 @@ runs:
       env:
         TIMEOUT: ${{ inputs.workload-timeout }}
       run: |
-        # Verify the installed chart's deployment is healthy
-        ksail workload wait --for=condition=Available deployment/ksail-install-test-podinfo --timeout="$TIMEOUT"
-        echo "✅ deployment/ksail-install-test-podinfo is Available"
+        # Verify the installed chart's deployment is healthy using label selector
+        ksail workload wait --for=condition=Available deployment -l app.kubernetes.io/instance=ksail-install-test --timeout="$TIMEOUT"
+        echo "✅ deployment for release ksail-install-test is Available"
 
         # Verify the Helm release secret exists
         ksail workload get secret -l owner=helm,name=ksail-install-test
@@ -141,8 +141,8 @@ runs:
       if: always() && steps.workload-install.outcome == 'success'
       shell: bash
       run: |
-        ksail workload delete deployment/ksail-install-test-podinfo --ignore-not-found
-        ksail workload delete secret -l owner=helm,name=ksail-install-test --ignore-not-found 2>/dev/null || true
+        ksail workload delete all,configmap,secret,serviceaccount,ingress,networkpolicy,persistentvolumeclaim,role,rolebinding -l app.kubernetes.io/instance=ksail-install-test --ignore-not-found
+        ksail workload delete secret -l owner=helm,name=ksail-install-test --ignore-not-found
         echo "✅ workload install cleanup complete"
 
     - name: 🧪 ksail workload apply
