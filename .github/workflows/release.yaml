@@ -16,4 +16,3 @@ jobs:
     uses: devantler-tech/reusable-workflows/.github/workflows/create-release.yaml@3273c09293df3e99d4aa9601de31d0f51279120c # v1.33.0
     secrets:
       app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
