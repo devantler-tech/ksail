@@ -159,7 +159,40 @@ runs:
     - name: 🧪 ksail cluster info
       shell: bash
       run: |
-        ksail cluster info
+        output=$(ksail cluster info 2>&1)
+        echo "$output"
+
+        FAILED=0
+        assert_contains() {
+          if echo "$output" | grep -q "$1"; then
+            echo "  ✅ Found: $1"
+          else
+            echo "  ❌ Missing: $1"
+            FAILED=$((FAILED + 1))
+          fi
+        }
+
+        echo "=== Validating cluster info output ==="
+
+        # Provider status
+        assert_contains "Provider:"
+        assert_contains "Cluster:"
+        assert_contains "Status:"
+        assert_contains "Ready:"
+
+        # kubectl cluster-info
+        assert_contains "Kubernetes control plane is running at"
+
+        # KSail cluster details
+        assert_contains "KSail Cluster Details:"
+        assert_contains "Distribution:"
+        assert_contains "Kubeconfig:"
+
+        if [ "$FAILED" -gt 0 ]; then
+          echo "❌ $FAILED cluster info assertions failed"
+          exit 1
+        fi
+        echo "✅ All cluster info assertions passed"
 
     - name: 🧪 ksail cluster connect --help
       shell: bash
