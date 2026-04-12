@@ -24,6 +24,10 @@ type Installer struct {
 	*cni.InstallerBase
 
 	distribution v1alpha1.Distribution
+	// apiServerChecker is called before Helm operations to ensure the API server
+	// is stable. It defaults to WaitForAPIServerStability and can be overridden
+	// in tests to avoid needing a real cluster.
+	apiServerChecker func(ctx context.Context) error
 }
 
 // NewInstaller creates a new Calico installer instance.
@@ -51,23 +55,28 @@ func NewInstallerWithDistribution(
 		context,
 		timeout,
 	)
+	calicoInstaller.apiServerChecker = calicoInstaller.WaitForAPIServerStability
 
 	return calicoInstaller
 }
 
 // Install installs or upgrades Calico via its Helm chart.
 func (c *Installer) Install(ctx context.Context) error {
-	// For Talos, we need to create namespaces with PSS labels before installing
-	// because Talos has PSS enforcement enabled by default.
-	// We also need to wait for API server stability as the API server may be
-	// unstable immediately after bootstrap.
-	if c.distribution == v1alpha1.DistributionTalos {
-		err := c.WaitForAPIServerStability(ctx)
+	// K3d/K3s and Talos may report "cluster ready" before the API server is fully
+	// serving all endpoints (e.g. /openapi/v2 used by Helm for resource validation).
+	// Wait for stability to prevent transient CNI install failures.
+	if c.distribution == v1alpha1.DistributionTalos ||
+		c.distribution == v1alpha1.DistributionK3s {
+		err := c.apiServerChecker(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to wait for API server stability: %w", err)
 		}
+	}
 
-		err = c.ensurePrivilegedNamespaces(ctx)
+	// For Talos, we need to create namespaces with PSS labels before installing
+	// because Talos has PSS enforcement enabled by default.
+	if c.distribution == v1alpha1.DistributionTalos {
+		err := c.ensurePrivilegedNamespaces(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to create privileged namespaces: %w", err)
 		}

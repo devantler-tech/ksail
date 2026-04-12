@@ -149,6 +149,7 @@ func TestInstaller_Install_K3sDistribution(t *testing.T) {
 	t.Parallel()
 
 	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionK3s)
+	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
 	expectCalicoInstall(t, client, nil)
 
 	err := installer.Install(context.Background())
