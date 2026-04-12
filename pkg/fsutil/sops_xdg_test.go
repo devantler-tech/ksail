@@ -59,7 +59,10 @@ func TestExpandHomePath_AlreadyAbsolute(t *testing.T) {
 func TestEvalCanonicalPath_ParentNotExist(t *testing.T) {
 	t.Parallel()
 
-	_, err := fsutil.EvalCanonicalPath("/nonexistent-dir-for-fsutil-test/nested/file.txt")
+	missingParent := filepath.Join(t.TempDir(), "nonexistent-parent")
+	missingFile := filepath.Join(missingParent, "nested", "file.txt")
+
+	_, err := fsutil.EvalCanonicalPath(missingFile)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolving symlinks for parent")

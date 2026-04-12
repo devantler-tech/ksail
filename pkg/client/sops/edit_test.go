@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	sopsclient "github.com/devantler-tech/ksail/v6/pkg/client/sops"
@@ -184,11 +185,18 @@ func TestLookupAnyEditor(t *testing.T) {
 	t.Run("returns first available", func(t *testing.T) {
 		t.Parallel()
 
-		// Both "sh" and "bash" should be available; test picks the first one found.
-		path, err := sopsclient.LookupAnyEditor("sh", "bash")
+		primaryEditor := "sh"
+		secondaryEditor := "bash"
+
+		if runtime.GOOS == "windows" {
+			primaryEditor = "cmd"
+			secondaryEditor = "powershell"
+		}
+
+		path, err := sopsclient.LookupAnyEditor(primaryEditor, secondaryEditor)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, path)
-		assert.Contains(t, path, "sh")
+		assert.Contains(t, strings.ToLower(filepath.Base(path)), primaryEditor)
 	})
 }

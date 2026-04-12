@@ -189,9 +189,12 @@ func TestBuildOptionsValidate_RepositoryNameNormalization(t *testing.T) {
 			validated, err := opts.Validate()
 			require.NoError(t, err)
 
+			expectedRepository := testCase.repoName
 			if testCase.wantLower {
-				assert.Equal(t, strings.ToLower(testCase.repoName), validated.Repository)
+				expectedRepository = strings.ToLower(testCase.repoName)
 			}
+
+			assert.Equal(t, expectedRepository, validated.Repository)
 		})
 	}
 }
