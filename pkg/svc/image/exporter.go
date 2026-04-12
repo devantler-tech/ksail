@@ -217,14 +217,6 @@ func (e *Exporter) exportImagesFromNode(
 		return fmt.Errorf("failed to detect node platform: %w", err)
 	}
 
-	// Ensure all image content blobs are present before exporting.
-	// When CRI (kubelet) pulls multi-arch images, it may only store the
-	// platform-specific manifest and layers, omitting the manifest index
-	// content blob. This causes "content digest not found" errors during
-	// ctr export, even with --platform. Re-pulling with --platform ensures
-	// the full content chain is available for export.
-	e.ensureImageContent(ctx, nodeName, platform, images)
-
 	// Try exporting all images at once first (most efficient if it works)
 	err = e.tryExportImages(ctx, nodeName, tmpPath, platform, images)
 	if err != nil {
@@ -306,35 +298,34 @@ func (e *Exporter) tryExportImages(
 	return err
 }
 
-// ensureImageContent pulls images inside the node to ensure all content blobs
-// (including the manifest index) are present in containerd's content store.
-// CRI-pulled multi-arch images often lack the manifest index content blob,
-// causing "content digest not found" errors during ctr export. This pull is
-// idempotent — if all content is already present, it's effectively a no-op.
+// ensureImageContent pulls a single image inside the node to ensure all
+// content blobs (including the manifest index) are present in containerd's
+// content store. CRI-pulled multi-arch images often lack the manifest index
+// content blob, causing "content digest not found" errors during ctr export.
 func (e *Exporter) ensureImageContent(
 	ctx context.Context,
 	nodeName string,
 	platform string,
-	images []string,
+	image string,
 ) {
-	for _, image := range images {
-		cmd := []string{
-			"ctr",
-			"--namespace=k8s.io",
-			"images",
-			"pull",
-			"--platform",
-			platform,
-			image,
-		}
-		// Best-effort: ignore errors since the image may still be exportable
-		// even if the pull fails (e.g., in air-gapped environments where
-		// the content was pre-loaded).
-		_, _ = e.executor.ExecInContainer(ctx, nodeName, cmd)
+	cmd := []string{
+		"ctr",
+		"--namespace=k8s.io",
+		"images",
+		"pull",
+		"--platform",
+		platform,
+		image,
 	}
+	// Best-effort: ignore errors since the image may still be exportable
+	// even if the pull fails (e.g., in air-gapped environments where
+	// the content was pre-loaded).
+	_, _ = e.executor.ExecInContainer(ctx, nodeName, cmd)
 }
 
-// images that can be successfully exported, along with the list of failed images.
+// exportImagesOneByOne tests each image individually and returns the list of
+// When an image fails to export, it attempts to pull the image content (to fix
+// missing manifest index blobs from CRI pulls) and retries the export once.
 func (e *Exporter) exportImagesOneByOne(
 	ctx context.Context,
 	nodeName string,
@@ -347,6 +338,16 @@ func (e *Exporter) exportImagesOneByOne(
 
 	for _, image := range images {
 		err := e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
+		if err == nil {
+			successful = append(successful, image)
+			continue
+		}
+
+		// Export failed — try pulling the image to fix missing content blobs
+		// (e.g., manifest index not stored by CRI), then retry export once.
+		e.ensureImageContent(ctx, nodeName, platform, image)
+
+		err = e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
 		if err == nil {
 			successful = append(successful, image)
 		} else {

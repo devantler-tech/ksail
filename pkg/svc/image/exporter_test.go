@@ -215,10 +215,6 @@ func TestExportWithSpecificImages(t *testing.T) {
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
-	// Mock ensureImageContent pulls
-	setupEnsureImageContentMocks(ctx, t, mockClient, "my-cluster-control-plane",
-		[]string{"docker.io/library/nginx:latest"})
-
 	// Mock exec for export command
 	exportCmd := []string{
 		ctrCommand, "--namespace=k8s.io", "images", "export",
@@ -281,10 +277,6 @@ func TestExportK3sDistribution(t *testing.T) {
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "k3d-my-cluster-server-0")
 
-	// Mock ensureImageContent pulls
-	setupEnsureImageContentMocks(ctx, t, mockClient, "k3d-my-cluster-server-0",
-		[]string{"docker.io/library/nginx:latest"})
-
 	// Mock exec for export - K3d uses /tmp path
 	k3dExportCmd := []string{
 		ctrCommand, "--namespace=k8s.io", "images", "export",
@@ -339,10 +331,6 @@ func TestExportEmptyProvider(t *testing.T) {
 
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
-
-	// Mock ensureImageContent pulls
-	setupEnsureImageContentMocks(ctx, t, mockClient, "my-cluster-control-plane",
-		[]string{"docker.io/library/nginx:latest"})
 
 	// Mock exec for export
 	setupExecMockWithCmdForExporter(
@@ -399,10 +387,6 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
-
-	// Mock ensureImageContent pulls
-	setupEnsureImageContentMocks(ctx, t, mockClient, "my-cluster-control-plane",
-		[]string{"docker.io/library/nginx:latest"})
 
 	// Mock exec for export
 	setupExecMockWithCmdForExporter(
@@ -520,8 +504,6 @@ func TestExportFallbackReportsFailedImages(t *testing.T) {
 		}, nil)
 
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
-	setupEnsureImageContentMocks(ctx, t, mockClient, "my-cluster-control-plane",
-		[]string{"docker.io/library/nginx:latest", "docker.io/library/redis:alpine"})
 	setupFallbackExportMocks(ctx, t, mockClient, "my-cluster-control-plane")
 
 	// Mock CopyFromContainer
@@ -585,10 +567,6 @@ func TestExportListImagesFiltersDigests(t *testing.T) {
 
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
-
-	// Mock ensureImageContent pulls (images from listImagesInNode are not normalized)
-	setupEnsureImageContentMocks(ctx, t, mockClient, "my-cluster-control-plane",
-		[]string{"nginx:latest", "redis:alpine"})
 
 	// Second exec is for exporting - only named images
 	exportCmd := []string{
@@ -685,10 +663,6 @@ func runNodeSelectionTest(
 
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, expectedNodeName)
-
-	// Mock ensureImageContent pulls
-	setupEnsureImageContentMocks(ctx, t, mockClient, expectedNodeName,
-		[]string{"docker.io/library/nginx:latest"})
 
 	// Mock export command
 	setupExecMockForExporter(ctx, t, mockClient, expectedNodeName)
@@ -942,7 +916,7 @@ func setupIndividualImageExportMocks(
 		ContainerExecInspect(ctx, execID2).
 		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
 
-	// Second image fails
+	// Second image fails on first attempt
 	execID3 := "exec-image2-fail"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
@@ -957,6 +931,27 @@ func setupIndividualImageExportMocks(
 
 	mockClient.EXPECT().
 		ContainerExecInspect(ctx, execID3).
+		Return(container.ExecInspect{ExitCode: 1}, nil).Once()
+
+	// Pull redis to fix missing content blobs
+	setupEnsureImageContentMocks(ctx, t, mockClient, nodeName,
+		[]string{"docker.io/library/redis:alpine"})
+
+	// Retry redis export also fails
+	execID4 := "exec-image2-retry-fail"
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+			return len(opts.Cmd) == 8 &&
+				opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/redis:alpine"
+		})).
+		Return(container.ExecCreateResponse{ID: execID4}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID4, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", "export failed after pull"), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID4).
 		Return(container.ExecInspect{ExitCode: 1}, nil).Once()
 }
 
