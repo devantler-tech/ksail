@@ -97,6 +97,7 @@ func (b *InstallerBase) PrepareInstall(
 	}
 
 	needsCheck := dist == v1alpha1.DistributionTalos || dist == v1alpha1.DistributionK3s
+
 	err = b.RunAPIServerCheck(ctx, needsCheck, checker)
 	if err != nil {
 		return fmt.Errorf("run API server check: %w", err)
