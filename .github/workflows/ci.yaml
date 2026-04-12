@@ -670,12 +670,9 @@ jobs:
     name: "🧪 System Test (Hetzner/${{ matrix.init && 'init' || 'noinit' }})"
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
+    needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache, system-test-docker]
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     environment: ci
-    # Hetzner cloud tests are allowed to fail without blocking the merge queue
-    # because Hetzner infrastructure can be intermittently unavailable.
-    continue-on-error: true
     permissions:
       actions: read
       contents: read
@@ -767,7 +764,7 @@ jobs:
     name: "🧪 System Test (Omni/${{ matrix.init && 'init' || 'noinit' }})"
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
+    needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache, system-test-docker]
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     environment: ci
     permissions:
