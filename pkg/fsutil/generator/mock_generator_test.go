@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var errMockGeneratorGenerateFailed = errors.New("generate failed")
+
 // TestMockGenerator_Generate exercises the generated MockGenerator.Generate method
 // to verify the mock implements the Generator interface correctly.
 func TestMockGenerator_Generate(t *testing.T) {
@@ -18,6 +20,7 @@ func TestMockGenerator_Generate(t *testing.T) {
 	type model struct {
 		Name string
 	}
+
 	type options struct {
 		Force bool
 	}
@@ -43,7 +46,7 @@ func TestMockGenerator_Generate(t *testing.T) {
 			model:       model{Name: "bad"},
 			opts:        options{Force: true},
 			returnStr:   "",
-			returnErr:   errors.New("generate failed"),
+			returnErr:   errMockGeneratorGenerateFailed,
 			expectError: true,
 		},
 	}
@@ -78,6 +81,7 @@ func TestMockGenerator_RunAndReturn(t *testing.T) {
 	type myModel struct {
 		Value int
 	}
+
 	type myOpts struct {
 		Prefix string
 	}
@@ -86,7 +90,7 @@ func TestMockGenerator_RunAndReturn(t *testing.T) {
 
 	mockGen.EXPECT().
 		Generate(mock.Anything, mock.Anything).
-		RunAndReturn(func(model myModel, opts myOpts) (string, error) {
+		RunAndReturn(func(_ myModel, opts myOpts) (string, error) {
 			return opts.Prefix + "-generated", nil
 		})
 
@@ -106,14 +110,17 @@ func TestMockGenerator_Run(t *testing.T) {
 	type genModel struct {
 		ID string
 	}
+
 	type genOpts struct {
 		Debug bool
 	}
 
 	mockGen := generator.NewMockGenerator[genModel, genOpts](t)
 
-	var capturedModel genModel
-	var capturedOpts genOpts
+	var (
+		capturedModel genModel
+		capturedOpts  genOpts
+	)
 
 	mockGen.EXPECT().
 		Generate(mock.Anything, mock.Anything).

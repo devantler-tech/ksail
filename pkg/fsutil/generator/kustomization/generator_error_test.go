@@ -13,19 +13,25 @@ import (
 	ktypes "sigs.k8s.io/kustomize/api/types"
 )
 
+var (
+	errKustomizationMarshal         = errors.New("marshal error")
+	errKustomizationUnmarshal       = errors.New("unmarshal error")
+	errKustomizationUnmarshalString = errors.New("unmarshal string error")
+)
+
 // errorMarshaller is a test double that always returns an error from Marshal.
 type errorMarshaller struct{}
 
 func (e *errorMarshaller) Marshal(_ *ktypes.Kustomization) (string, error) {
-	return "", errors.New("marshal error")
+	return "", errKustomizationMarshal
 }
 
 func (e *errorMarshaller) Unmarshal(_ []byte, _ **ktypes.Kustomization) error {
-	return errors.New("unmarshal error")
+	return errKustomizationUnmarshal
 }
 
 func (e *errorMarshaller) UnmarshalString(_ string, _ **ktypes.Kustomization) error {
-	return errors.New("unmarshal string error")
+	return errKustomizationUnmarshalString
 }
 
 // TestGenerate_MarshalError verifies that a marshalling failure is propagated
@@ -54,16 +60,19 @@ func TestGenerate_WriteError(t *testing.T) {
 	err := os.MkdirAll(readOnlyDir, 0o500)
 	require.NoError(t, err)
 
-	t.Cleanup(func() { _ = os.Chmod(readOnlyDir, 0o700) })
+	t.Cleanup(func() {
+		//nolint:gosec // restoring test-directory permissions
+		_ = os.Chmod(readOnlyDir, 0o700)
+	})
 
-	g := kustomizationgenerator.NewGenerator()
+	generator := kustomizationgenerator.NewGenerator()
 
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(readOnlyDir, "subdir", "kustomization.yaml"),
 		Force:  true,
 	}
 
-	_, err = g.Generate(&ktypes.Kustomization{}, opts)
+	_, err = generator.Generate(&ktypes.Kustomization{}, opts)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "write kustomization")

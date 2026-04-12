@@ -13,6 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var errHelmInstallFailed = errors.New("install failed") //nolint:gochecknoglobals // test sentinel
+
+//nolint:funlen // Table-driven release conversion cases are clearer inline.
 func TestReleaseToInfo(t *testing.T) {
 	t.Parallel()
 
@@ -92,7 +95,9 @@ func TestReleaseToInfo(t *testing.T) {
 			if rel == nil {
 				got = helm.ReleaseToInfo(nil)
 			} else {
-				got = helm.ReleaseToInfo(rel.(*v1.Release))
+				release, ok := rel.(*v1.Release)
+				require.True(t, ok)
+				got = helm.ReleaseToInfo(release)
 			}
 
 			assert.Equal(t, tc.wantInfo, got)
@@ -126,7 +131,7 @@ func TestExecuteAndExtractRelease(t *testing.T) {
 	t.Run("runFn returns error", func(t *testing.T) {
 		t.Parallel()
 
-		expectedErr := errors.New("install failed")
+		expectedErr := errHelmInstallFailed
 		runFn := func() (any, error) {
 			return nil, expectedErr
 		}

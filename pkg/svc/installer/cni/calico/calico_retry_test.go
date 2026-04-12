@@ -14,6 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var errCalicoRetryNoMatchesInstallation = errors.New(
+	`no matches for kind "Installation" in version "v1"`,
+)
+
 // TestInstaller_Install_TalosDistribution_Values verifies Talos-specific Calico values
 // are passed through the Helm install, including kubeletVolumePluginPath and NFTables.
 func TestInstaller_Install_TalosDistribution_Values(t *testing.T) {
@@ -60,7 +64,7 @@ func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 	// First install call returns API discovery error
 	client.EXPECT().
 		InstallOrUpgradeChart(mock.Anything, mock.Anything).
-		Return(nil, errors.New("no matches for kind \"Installation\" in version \"v1\"")).
+		Return(nil, errCalicoRetryNoMatchesInstallation).
 		Once()
 
 	// The retry path calls waitForCalicoCRDs which uses k8s.BuildRESTConfig.

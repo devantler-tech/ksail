@@ -12,7 +12,12 @@ import (
 )
 
 // errStatusFailed is a test error for status operations.
-var errStatusFailed = errors.New("status failed") //nolint:gochecknoglobals // test helper
+var (
+	errStatusFailed              = errors.New("status failed")
+	errProviderConnectionRefused = errors.New("connection refused")
+	errProviderTimeout           = errors.New("timeout")
+	errProviderNetworkError      = errors.New("network error")
+)
 
 func TestMockProvider_GetClusterStatus_Success(t *testing.T) {
 	t.Parallel()
@@ -133,7 +138,7 @@ func TestGetClusterStatusFromLister_ClusterNotFoundError(t *testing.T) {
 	status, err := provider.GetClusterStatusFromLister(ctx, mockLister, clusterName, "running")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrClusterNotFound)
+	require.ErrorIs(t, err, provider.ErrClusterNotFound)
 	assert.Contains(t, err.Error(), clusterName)
 	assert.Nil(t, status)
 	mockLister.AssertExpectations(t)
@@ -309,7 +314,7 @@ func TestEnsureAvailableAndListNodes_ErrorWrapping(t *testing.T) {
 
 	ctx := context.Background()
 	clusterName := testClusterName
-	innerErr := errors.New("connection refused")
+	innerErr := errProviderConnectionRefused
 
 	mockProv := new(mockAvailableProviderWithError)
 	mockProv.On("IsAvailable").Return(true)
@@ -318,7 +323,7 @@ func TestEnsureAvailableAndListNodes_ErrorWrapping(t *testing.T) {
 	_, err := provider.EnsureAvailableAndListNodes(ctx, mockProv, clusterName)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, innerErr, "inner error should be wrapped")
+	require.ErrorIs(t, err, innerErr, "inner error should be wrapped")
 	assert.Contains(t, err.Error(), "failed to list nodes")
 	mockProv.AssertExpectations(t)
 }
@@ -328,7 +333,7 @@ func TestGetClusterStatusFromLister_ErrorWrapping(t *testing.T) {
 
 	ctx := context.Background()
 	clusterName := testClusterName
-	innerErr := errors.New("timeout")
+	innerErr := errProviderTimeout
 
 	mockLister := new(mockNodeLister)
 	mockLister.On("ListNodes", ctx, clusterName).Return(nil, innerErr)
@@ -336,7 +341,7 @@ func TestGetClusterStatusFromLister_ErrorWrapping(t *testing.T) {
 	_, err := provider.GetClusterStatusFromLister(ctx, mockLister, clusterName, "running")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, innerErr, "inner error should be wrapped")
+	require.ErrorIs(t, err, innerErr, "inner error should be wrapped")
 	assert.Contains(t, err.Error(), "get cluster status")
 	mockLister.AssertExpectations(t)
 }
@@ -345,7 +350,7 @@ func TestCheckNodesExist_ErrorWrapping(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	innerErr := errors.New("network error")
+	innerErr := errProviderNetworkError
 
 	mockLister := new(mockNodeLister)
 	mockLister.On("ListNodes", ctx, testClusterName).Return(nil, innerErr)
@@ -353,7 +358,7 @@ func TestCheckNodesExist_ErrorWrapping(t *testing.T) {
 	_, err := provider.CheckNodesExist(ctx, mockLister, testClusterName)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, innerErr, "inner error should be wrapped")
+	require.ErrorIs(t, err, innerErr, "inner error should be wrapped")
 	assert.Contains(t, err.Error(), "check nodes exist")
 	mockLister.AssertExpectations(t)
 }

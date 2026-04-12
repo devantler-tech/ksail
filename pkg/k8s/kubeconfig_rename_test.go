@@ -145,21 +145,26 @@ users:
     token: tok
 `)
 
-	// This should error because the context name "new-ctx" is already taken
-	// by an existing cluster but the context collision is what triggers the error
-	_, err := k8s.RenameKubeconfigContext(input, "new-ctx")
-
-	// Even though cluster has collision, context doesn't exist so it should work
-	// Actually wait - there's no context named "new-ctx", so no collision there
-	// The cluster collision is handled gracefully (skip rename)
-	// But wait, there's no context collision here (only old-ctx exists)
-	// Let me check if this is the right test
+	result, err := k8s.RenameKubeconfigContext(input, "new-ctx")
 	require.NoError(t, err)
 
-	// Actually, the code checks for context name collision on line 142:
-	// `if _, collision := config.Contexts[desiredContext]; collision`
-	// This should NOT collide since there's no context named "new-ctx"
-	// But the cluster rename should be skipped due to cluster name collision
+	config, parseErr := clientcmd.Load(result)
+	require.NoError(t, parseErr)
+	assert.Equal(t, "new-ctx", config.CurrentContext)
+
+	_, hasOldContext := config.Contexts["old-ctx"]
+	assert.False(t, hasOldContext, "old context entry should be renamed")
+
+	ctxEntry, hasNewContext := config.Contexts["new-ctx"]
+	require.True(t, hasNewContext, "renamed context entry should exist")
+	assert.Equal(t, "old-ctx", ctxEntry.Cluster, "cluster rename should be skipped on collision")
+	assert.Equal(t, "new-ctx", ctxEntry.AuthInfo, "user rename should still succeed")
+
+	_, hasOldCluster := config.Clusters["old-ctx"]
+	assert.True(t, hasOldCluster, "old cluster entry should remain due to collision")
+
+	_, hasNewUser := config.AuthInfos["new-ctx"]
+	assert.True(t, hasNewUser, "user entry should be renamed when there is no collision")
 }
 
 // TestRenameKubeconfigContext_AuthInfoRefCollision verifies that the user

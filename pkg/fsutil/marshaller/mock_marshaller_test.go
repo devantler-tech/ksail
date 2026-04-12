@@ -10,6 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errMockMarshallerMarshalFailed         = errors.New("marshal failed")
+	errMockMarshallerUnmarshalFailed       = errors.New("unmarshal failed")
+	errMockMarshallerUnmarshalStringFailed = errors.New("unmarshal string failed")
+)
+
 // TestMockMarshaller_Marshal exercises the MockMarshaller.Marshal method
 // to verify the generated mock implements the Marshaller interface correctly.
 func TestMockMarshaller_Marshal(t *testing.T) {
@@ -33,7 +39,7 @@ func TestMockMarshaller_Marshal(t *testing.T) {
 			name:        "marshal returns error",
 			model:       TestModel{Name: "bad", Value: -1},
 			returnStr:   "",
-			returnErr:   errors.New("marshal failed"),
+			returnErr:   errMockMarshallerMarshalFailed,
 			expectError: true,
 		},
 	}
@@ -80,7 +86,7 @@ func TestMockMarshaller_Unmarshal(t *testing.T) {
 		{
 			name:        "unmarshal error",
 			data:        []byte("invalid"),
-			returnErr:   errors.New("unmarshal failed"),
+			returnErr:   errMockMarshallerUnmarshalFailed,
 			expectError: true,
 		},
 	}
@@ -127,7 +133,7 @@ func TestMockMarshaller_UnmarshalString(t *testing.T) {
 		{
 			name:        "unmarshal string error",
 			data:        "bad yaml",
-			returnErr:   errors.New("unmarshal string failed"),
+			returnErr:   errMockMarshallerUnmarshalStringFailed,
 			expectError: true,
 		},
 	}
@@ -156,6 +162,8 @@ func TestMockMarshaller_UnmarshalString(t *testing.T) {
 }
 
 // TestMockMarshaller_RunAndReturn verifies the RunAndReturn fluent API on mock calls.
+//
+//nolint:funlen // Subtests keep each mock callback scenario readable.
 func TestMockMarshaller_RunAndReturn(t *testing.T) {
 	t.Parallel()
 
@@ -222,6 +230,8 @@ func TestMockMarshaller_RunAndReturn(t *testing.T) {
 }
 
 // TestMockMarshaller_Run verifies the Run fluent API on mock calls.
+//
+//nolint:funlen // Subtests keep each mock callback scenario readable.
 func TestMockMarshaller_Run(t *testing.T) {
 	t.Parallel()
 

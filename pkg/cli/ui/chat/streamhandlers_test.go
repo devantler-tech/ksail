@@ -11,6 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errStreamConnectionTimeout = errors.New("connection timeout") //nolint:gochecknoglobals // test sentinel
+	errStreamTest              = errors.New("test")               //nolint:gochecknoglobals // test sentinel
+)
+
 // --- handleStreamChunk tests ---
 
 func TestHandleStreamChunk_AccumulatesText(t *testing.T) {
@@ -539,7 +544,7 @@ func TestHandleStreamErr_SetsErrorState(t *testing.T) {
 		chat.ExportNewStreamingAssistantMessage("partial"),
 	})
 
-	testErr := errors.New("connection timeout")
+	testErr := errStreamConnectionTimeout
 
 	var updated tea.Model = model
 
@@ -563,7 +568,7 @@ func TestHandleStreamErr_ReturnsNilCmd(t *testing.T) {
 		chat.ExportNewStreamingAssistantMessage(""),
 	})
 
-	_, cmd := model.Update(chat.ExportNewStreamErrMsg(errors.New("test")))
+	_, cmd := model.Update(chat.ExportNewStreamErrMsg(errStreamTest))
 
 	assert.Nil(t, cmd)
 }

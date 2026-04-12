@@ -2,10 +2,8 @@
 package configmanager
 
 import (
-	"reflect"
-
-	mapstructure "github.com/go-viper/mapstructure/v2"
 	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
+	mapstructure "github.com/go-viper/mapstructure/v2"
 )
 
 // SetFieldValueFromFlagForTest exports setFieldValueFromFlag for testing.
@@ -18,11 +16,6 @@ func MetaV1DurationDecodeHookForTest() mapstructure.DecodeHookFuncType {
 
 // ErrUnsupportedFlagFieldTypeForTest exports errUnsupportedFlagFieldType for testing.
 var ErrUnsupportedFlagFieldTypeForTest = errUnsupportedFlagFieldType
-
-// ReflectTypeFor is a helper for creating reflect.Type values in tests.
-func ReflectTypeFor[T any]() reflect.Type {
-	return reflect.TypeFor[T]()
-}
 
 // ResolveVClusterNameForTest exposes resolveVClusterName for testing.
 func (m *ConfigManager) ResolveVClusterNameForTest() string {

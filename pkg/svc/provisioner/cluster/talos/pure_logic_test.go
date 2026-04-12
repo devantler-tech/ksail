@@ -13,6 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errTalosDockerConnectionRefused = errors.New("docker connection refused")
+	errTalosTimeout                 = errors.New("timeout")
+)
+
 // --- dockerNodeName ---
 
 func TestDockerNodeName(t *testing.T) {
@@ -109,6 +114,7 @@ func TestTalosTypeFromRole(t *testing.T) {
 
 // --- calculateNodeIP ---
 
+//nolint:funlen // Table-driven IP allocation cases are easiest to read inline.
 func TestCalculateNodeIP(t *testing.T) {
 	t.Parallel()
 
@@ -173,12 +179,17 @@ func TestCalculateNodeIP(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := talosprovisioner.CalculateNodeIPForTest(tc.cidr, tc.role, tc.nodeIndex, tc.cpCount)
-			if tc.wantErr {
+			got, err := talosprovisioner.CalculateNodeIPForTest(
+				testCase.cidr,
+				testCase.role,
+				testCase.nodeIndex,
+				testCase.cpCount,
+			)
+			if testCase.wantErr {
 				require.Error(t, err)
 				assert.ErrorIs(t, err, talosprovisioner.ErrIPv6NotSupported)
 
@@ -186,13 +197,14 @@ func TestCalculateNodeIP(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tc.wantIP, got.String())
+			assert.Equal(t, testCase.wantIP, got.String())
 		})
 	}
 }
 
 // --- preCalculateNodeSpecs ---
 
+//nolint:funlen // Table-driven spec normalization cases are easiest to read inline.
 func TestPreCalculateNodeSpecs(t *testing.T) {
 	t.Parallel()
 
@@ -214,8 +226,12 @@ func TestPreCalculateNodeSpecs(t *testing.T) {
 			nextIndex: 0,
 			count:     3,
 			cpCount:   3,
-			wantNames: []string{"test-controlplane-1", "test-controlplane-2", "test-controlplane-3"},
-			wantIPs:   []string{"10.5.0.2", "10.5.0.3", "10.5.0.4"},
+			wantNames: []string{
+				"test-controlplane-1",
+				"test-controlplane-2",
+				"test-controlplane-3",
+			},
+			wantIPs: []string{"10.5.0.2", "10.5.0.3", "10.5.0.4"},
 		},
 		{
 			name:      "2 workers starting at 0 with 3 CPs",
@@ -246,28 +262,28 @@ func TestPreCalculateNodeSpecs(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			names, ips, err := talosprovisioner.PreCalculateNodeSpecsForTest(
-				cidr, "test", tc.role, tc.nextIndex, tc.count, tc.cpCount,
+				cidr, "test", testCase.role, testCase.nextIndex, testCase.count, testCase.cpCount,
 			)
-			if tc.wantErr {
+			if testCase.wantErr {
 				require.Error(t, err)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Len(t, names, len(tc.wantNames))
-			assert.Len(t, ips, len(tc.wantIPs))
+			assert.Len(t, names, len(testCase.wantNames))
+			assert.Len(t, ips, len(testCase.wantIPs))
 
-			for i, wantName := range tc.wantNames {
+			for i, wantName := range testCase.wantNames {
 				assert.Equal(t, wantName, names[i], "name mismatch at index %d", i)
 			}
 
-			for i, wantIP := range tc.wantIPs {
+			for i, wantIP := range testCase.wantIPs {
 				assert.Equal(t, wantIP, ips[i].String(), "IP mismatch at index %d", i)
 			}
 		})
@@ -276,6 +292,7 @@ func TestPreCalculateNodeSpecs(t *testing.T) {
 
 // --- nthIPInNetwork ---
 
+//nolint:funlen // Table-driven network edge cases are easiest to read inline.
 func TestNthIPInNetwork(t *testing.T) {
 	t.Parallel()
 
@@ -324,25 +341,26 @@ func TestNthIPInNetwork(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := talosprovisioner.NthIPInNetworkForTest(tc.prefix, tc.offset)
-			if tc.wantErr != nil {
-				require.ErrorIs(t, err, tc.wantErr)
+			got, err := talosprovisioner.NthIPInNetworkForTest(testCase.prefix, testCase.offset)
+			if testCase.wantErr != nil {
+				require.ErrorIs(t, err, testCase.wantErr)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tc.wantIP, got.String())
+			assert.Equal(t, testCase.wantIP, got.String())
 		})
 	}
 }
 
 // --- rewriteKubeconfigEndpoint ---
 
+//nolint:funlen // Endpoint rewrite scenarios are easier to validate as a table.
 func TestRewriteKubeconfigEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -390,19 +408,22 @@ users:
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result, err := talosprovisioner.RewriteKubeconfigEndpointForTest(tc.kubeconfig, tc.endpoint)
-			if tc.wantErr {
+			result, err := talosprovisioner.RewriteKubeconfigEndpointForTest(
+				testCase.kubeconfig,
+				testCase.endpoint,
+			)
+			if testCase.wantErr {
 				require.Error(t, err)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Contains(t, string(result), tc.wantContain)
+			assert.Contains(t, string(result), testCase.wantContain)
 		})
 	}
 }
@@ -441,7 +462,6 @@ func TestApplyTalosDefaults(t *testing.T) {
 
 // --- applyHetznerDefaults ---
 
-//nolint:funlen // Table-driven test with comprehensive default scenarios
 func TestApplyHetznerDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -491,16 +511,16 @@ func TestApplyHetznerDefaults(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := talosprovisioner.ApplyHetznerDefaultsForTest(tc.opts)
-			assert.Equal(t, tc.wantCP, result.ControlPlaneServerType)
-			assert.Equal(t, tc.wantWk, result.WorkerServerType)
-			assert.Equal(t, tc.wantLoc, result.Location)
-			assert.Equal(t, tc.wantCIDR, result.NetworkCIDR)
-			assert.Equal(t, tc.wantTok, result.TokenEnvVar)
+			result := talosprovisioner.ApplyHetznerDefaultsForTest(testCase.opts)
+			assert.Equal(t, testCase.wantCP, result.ControlPlaneServerType)
+			assert.Equal(t, testCase.wantWk, result.WorkerServerType)
+			assert.Equal(t, testCase.wantLoc, result.Location)
+			assert.Equal(t, testCase.wantCIDR, result.NetworkCIDR)
+			assert.Equal(t, testCase.wantTok, result.TokenEnvVar)
 		})
 	}
 }
@@ -536,17 +556,22 @@ func TestRecordAppliedChange(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			result := clusterupdate.NewEmptyUpdateResult()
-			talosprovisioner.RecordAppliedChangeForTest(result, tc.role, tc.nodeName, tc.action)
+			talosprovisioner.RecordAppliedChangeForTest(
+				result,
+				testCase.role,
+				testCase.nodeName,
+				testCase.action,
+			)
 
-			require.Len(t, result.AppliedChanges, tc.wantLen)
-			assert.Equal(t, tc.wantField, result.AppliedChanges[0].Field)
-			assert.Equal(t, tc.nodeName, result.AppliedChanges[0].NewValue)
-			assert.Contains(t, result.AppliedChanges[0].Reason, tc.action)
+			require.Len(t, result.AppliedChanges, testCase.wantLen)
+			assert.Equal(t, testCase.wantField, result.AppliedChanges[0].Field)
+			assert.Equal(t, testCase.nodeName, result.AppliedChanges[0].NewValue)
+			assert.Contains(t, result.AppliedChanges[0].Reason, testCase.action)
 		})
 	}
 }
@@ -565,29 +590,34 @@ func TestRecordFailedChange(t *testing.T) {
 			name:      "control-plane failure",
 			role:      talosprovisioner.RoleControlPlane,
 			nodeName:  "cp-1",
-			err:       errors.New("docker connection refused"),
+			err:       errTalosDockerConnectionRefused,
 			wantField: "talos.controlPlanes",
 		},
 		{
 			name:      "worker failure",
 			role:      talosprovisioner.RoleWorker,
 			nodeName:  "worker-3",
-			err:       errors.New("timeout"),
+			err:       errTalosTimeout,
 			wantField: "talos.workers",
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			result := clusterupdate.NewEmptyUpdateResult()
-			talosprovisioner.RecordFailedChangeForTest(result, tc.role, tc.nodeName, tc.err)
+			talosprovisioner.RecordFailedChangeForTest(
+				result,
+				testCase.role,
+				testCase.nodeName,
+				testCase.err,
+			)
 
 			require.Len(t, result.FailedChanges, 1)
-			assert.Equal(t, tc.wantField, result.FailedChanges[0].Field)
-			assert.Contains(t, result.FailedChanges[0].Reason, tc.nodeName)
-			assert.Contains(t, result.FailedChanges[0].Reason, tc.err.Error())
+			assert.Equal(t, testCase.wantField, result.FailedChanges[0].Field)
+			assert.Contains(t, result.FailedChanges[0].Reason, testCase.nodeName)
+			assert.Contains(t, result.FailedChanges[0].Reason, testCase.err.Error())
 		})
 	}
 }

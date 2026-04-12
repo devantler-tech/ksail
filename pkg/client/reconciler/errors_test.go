@@ -10,6 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var (
+	errReconcilerSomethingWentWrong = errors.New("something went wrong") //nolint:gochecknoglobals // test sentinel
+	errReconcilerNotContext         = errors.New("not a context error")  //nolint:gochecknoglobals // test sentinel
+)
+
 func TestIsContextError(t *testing.T) {
 	t.Parallel()
 
@@ -50,12 +55,12 @@ func TestIsContextError(t *testing.T) {
 		},
 		{
 			name:     "generic error",
-			err:      errors.New("something went wrong"),
+			err:      errReconcilerSomethingWentWrong,
 			expected: false,
 		},
 		{
 			name:     "wrapped generic error",
-			err:      fmt.Errorf("wrap: %w", errors.New("not a context error")),
+			err:      fmt.Errorf("wrap: %w", errReconcilerNotContext),
 			expected: false,
 		},
 	}

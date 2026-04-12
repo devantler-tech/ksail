@@ -3,10 +3,7 @@ package localregistry
 import (
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v6/pkg/client/oci"
-	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
-	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
-	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
 // ResolveClusterNameForTest exports resolveClusterName for testing.
@@ -38,19 +35,6 @@ var ShouldSkipK3dForTest = shouldSkipK3d
 //
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions.
 var IsCloudProviderForTest = isCloudProvider
-
-// NewRegistryContextForTest exports newRegistryContext for testing.
-func NewRegistryContextForTest(
-	clusterCfg *v1alpha1.Cluster,
-	kindConfig *kindv1alpha4.Cluster,
-	k3dConfig *k3dv1alpha5.SimpleConfig,
-	talosConfig interface{},
-	vclusterConfig *clusterprovisioner.VClusterConfig,
-) (string, string) {
-	// We can't expose the registryContext type directly, so return its fields.
-	ctx := newRegistryContext(clusterCfg, kindConfig, k3dConfig, nil, vclusterConfig)
-	return ctx.clusterName, ctx.networkName
-}
 
 // NewCreateOptionsForTest exports newCreateOptions for testing.
 func NewCreateOptionsForTest(

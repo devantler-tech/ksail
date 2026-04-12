@@ -3,6 +3,7 @@ package gitops_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/svc/detector/gitops"
@@ -13,6 +14,14 @@ import (
 // error is propagated. This covers the WalkDir error path in findCR.
 func TestCRDetector_FindFluxInstance_WalkDirError(t *testing.T) {
 	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod-based permission checks are not reliable on Windows")
+	}
+
+	if os.Getuid() == 0 {
+		t.Skip("permission-based test is not reliable when running as root")
+	}
 
 	tempDir := t.TempDir()
 

@@ -34,6 +34,7 @@ func TestGenerator_Generate_DisableCDI(t *testing.T) {
 	assert.NotEmpty(t, result)
 
 	patchPath := filepath.Join(tempDir, "talos", "cluster", "disable-cdi.yaml")
+	//nolint:gosec // Test reads a file created in its own temp directory.
 	content, err := os.ReadFile(patchPath)
 	require.NoError(t, err, "disable-cdi.yaml should exist")
 	assert.Contains(t, string(content), "enableCDI: false")
@@ -72,6 +73,7 @@ func TestGenerator_Generate_DisableCDISkipsExisting(t *testing.T) {
 	_, err = gen.Generate(config, opts)
 	require.NoError(t, err)
 
+	//nolint:gosec // Test reads a file created in its own temp directory.
 	content, err := os.ReadFile(patchPath)
 	require.NoError(t, err)
 	assert.Equal(t, "custom content", string(content))
@@ -108,6 +110,7 @@ func TestGenerator_Generate_DisableCDIOverwritesWithForce(t *testing.T) {
 	_, err = gen.Generate(config, opts)
 	require.NoError(t, err)
 
+	//nolint:gosec // Test reads a file created in its own temp directory.
 	content, err := os.ReadFile(patchPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "enableCDI: false")
@@ -139,7 +142,11 @@ func TestGenerator_Generate_MirrorRegistriesEmptyHost(t *testing.T) {
 	// and the cluster dir should have .gitkeep instead
 	patchPath := filepath.Join(tempDir, "talos", "cluster", "mirror-registries.yaml")
 	_, statErr := os.Stat(patchPath)
-	assert.True(t, os.IsNotExist(statErr), "mirror-registries.yaml should not be created for empty host")
+	assert.True(
+		t,
+		os.IsNotExist(statErr),
+		"mirror-registries.yaml should not be created for empty host",
+	)
 }
 
 // TestGenerator_Generate_DisableCDIDirectoryHasPatches verifies that the cluster
@@ -196,6 +203,7 @@ func TestGenerator_Generate_ImageVerificationPatch(t *testing.T) {
 	require.NoError(t, err)
 
 	patchPath := filepath.Join(tempDir, "talos", "cluster", "image-verification.yaml")
+	//nolint:gosec // Test reads a file created in its own temp directory.
 	content, err := os.ReadFile(patchPath)
 	require.NoError(t, err, "image-verification.yaml should exist")
 	assert.Contains(t, string(content), "ImageVerificationConfig")
@@ -222,6 +230,7 @@ func TestGenerator_Generate_ClusterNamePatch(t *testing.T) {
 	require.NoError(t, err)
 
 	patchPath := filepath.Join(tempDir, "talos", "cluster", "cluster-name.yaml")
+	//nolint:gosec // Test reads a file created in its own temp directory.
 	content, err := os.ReadFile(patchPath)
 	require.NoError(t, err, "cluster-name.yaml should exist")
 	assert.Contains(t, string(content), "my-custom-cluster")
@@ -236,14 +245,14 @@ func TestGenerator_Generate_AllConditionalPatches(t *testing.T) {
 	gen := talosgenerator.NewGenerator()
 
 	config := &talosgenerator.Config{
-		PatchesDir:                 "talos",
-		WorkerNodes:                0,
-		DisableDefaultCNI:          true,
-		EnableKubeletCertRotation:  true,
-		ClusterName:                "all-patches",
-		EnableImageVerification:    true,
-		DisableCDI:                 true,
-		MirrorRegistries:           []string{"docker.io=http://mirror.local:5000"},
+		PatchesDir:                "talos",
+		WorkerNodes:               0,
+		DisableDefaultCNI:         true,
+		EnableKubeletCertRotation: true,
+		ClusterName:               "all-patches",
+		EnableImageVerification:   true,
+		DisableCDI:                true,
+		MirrorRegistries:          []string{"docker.io=http://mirror.local:5000"},
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,

@@ -10,8 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var errMockConfigManagerLoadFailed = errors.New("load failed")
+
 // TestMockConfigManager_Load exercises the generated MockConfigManager.Load method
 // to verify the mock implements the ConfigManager interface correctly.
+//
+//nolint:funlen,modernize // Table-driven pointer fixtures are clearer with the helper.
 func TestMockConfigManager_Load(t *testing.T) {
 	t.Parallel()
 
@@ -40,7 +44,7 @@ func TestMockConfigManager_Load(t *testing.T) {
 			name:        "load returns error",
 			opts:        configmanager.LoadOptions{},
 			returnVal:   nil,
-			returnErr:   errors.New("load failed"),
+			returnErr:   errMockConfigManagerLoadFailed,
 			expectError: true,
 		},
 		{
@@ -151,6 +155,7 @@ func TestLoadOptions_Defaults(t *testing.T) {
 	assert.Nil(t, opts.Timer)
 }
 
+//nolint:modernize // Generic helper keeps the table definitions concise.
 func ptrTo[T any](v T) *T {
 	return &v
 }

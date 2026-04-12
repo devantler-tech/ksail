@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var errVersionResolverRegistryUnreachable = errors.New("registry unreachable")
+
 // TestParseTags_SkipsLatestAndEmpty verifies that "latest" and empty tags are skipped.
 func TestParseTags_SkipsLatestAndEmpty(t *testing.T) {
 	t.Parallel()
@@ -66,7 +68,7 @@ func TestComputeUpgradePath_ResolverError(t *testing.T) {
 	t.Parallel()
 
 	resolver := &mockResolver{
-		err: errors.New("registry unreachable"),
+		err: errVersionResolverRegistryUnreachable,
 	}
 
 	_, err := versionresolver.ComputeUpgradePath(
@@ -105,7 +107,7 @@ func TestComputeUpgradePath_SuffixFilterEmpty(t *testing.T) {
 		context.Background(), resolver, "rancher/k3s", "v1.0.0-k3s1", "k3s")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, versionresolver.ErrNoVersionsFound)
+	require.ErrorIs(t, err, versionresolver.ErrNoVersionsFound)
 	assert.Contains(t, err.Error(), "suffix")
 }
 
@@ -138,17 +140,17 @@ func TestVersion_String(t *testing.T) {
 func TestVersion_Equal(t *testing.T) {
 	t.Parallel()
 
-	v1, err := versionresolver.ParseVersion("v1.35.3-k3s1")
+	versionOne, err := versionresolver.ParseVersion("v1.35.3-k3s1")
 	require.NoError(t, err)
 
-	v2, err := versionresolver.ParseVersion("v1.35.3-k3s1")
+	versionTwo, err := versionresolver.ParseVersion("v1.35.3-k3s1")
 	require.NoError(t, err)
 
-	v3, err := versionresolver.ParseVersion("v1.35.3-k3s2")
+	versionThree, err := versionresolver.ParseVersion("v1.35.3-k3s2")
 	require.NoError(t, err)
 
-	assert.True(t, v1.Equal(v2))
-	assert.False(t, v1.Equal(v3))
+	assert.True(t, versionOne.Equal(versionTwo))
+	assert.False(t, versionOne.Equal(versionThree))
 }
 
 // TestVersion_IsStable verifies stable detection.
@@ -197,15 +199,15 @@ func TestSuffixNum_EdgeCases(t *testing.T) {
 	t.Parallel()
 
 	// suffixes with no trailing number like "abc" should sort equal
-	v1, err := versionresolver.ParseVersion("v1.0.0-abc")
+	versionOne, err := versionresolver.ParseVersion("v1.0.0-abc")
 	require.NoError(t, err)
 
-	v2, err := versionresolver.ParseVersion("v1.0.0-xyz")
+	versionTwo, err := versionresolver.ParseVersion("v1.0.0-xyz")
 	require.NoError(t, err)
 
 	// Both have suffixNum=0, so Less returns false in both directions
-	assert.False(t, v1.Less(v2))
-	assert.False(t, v2.Less(v1))
+	assert.False(t, versionOne.Less(versionTwo))
+	assert.False(t, versionTwo.Less(versionOne))
 }
 
 // TestLess_PreReleaseOrdering tests pre-release vs stable ordering.
@@ -226,14 +228,14 @@ func TestLess_PreReleaseOrdering(t *testing.T) {
 func TestLess_MajorMinorPrecedence(t *testing.T) {
 	t.Parallel()
 
-	v1, err := versionresolver.ParseVersion("v1.0.0")
+	versionOne, err := versionresolver.ParseVersion("v1.0.0")
 	require.NoError(t, err)
 
-	v2, err := versionresolver.ParseVersion("v2.0.0")
+	versionTwo, err := versionresolver.ParseVersion("v2.0.0")
 	require.NoError(t, err)
 
-	assert.True(t, v1.Less(v2))
-	assert.False(t, v2.Less(v1))
+	assert.True(t, versionOne.Less(versionTwo))
+	assert.False(t, versionTwo.Less(versionOne))
 }
 
 // TestNewOCIResolver tests the OCIResolver constructor.
@@ -251,6 +253,6 @@ func TestParseVersion_NumericOverflow(t *testing.T) {
 
 	_, err := versionresolver.ParseVersion("v99999999999999999999.0.0")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, versionresolver.ErrInvalidVersion)
+	require.ErrorIs(t, err, versionresolver.ErrInvalidVersion)
 	assert.Contains(t, err.Error(), "numeric overflow")
 }

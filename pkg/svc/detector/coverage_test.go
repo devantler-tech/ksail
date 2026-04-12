@@ -18,6 +18,11 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+var (
+	errDetectorHelm   = errors.New("helm error")
+	errDetectorDocker = errors.New("docker error")
+)
+
 // TestDetectComponents_CSIError verifies that DetectComponents returns an
 // error when CSI detection fails.
 func TestDetectComponents_CSIError(t *testing.T) {
@@ -34,7 +39,7 @@ func TestDetectComponents_CSIError(t *testing.T) {
 		Return(false, nil)
 	// CSI: Talos+Hetzner triggers ReleaseExists for hcloud-csi which errors
 	helmClient.On("ReleaseExists", ctx, detector.ReleaseHCloudCSI, detector.NamespaceHCloudCSI).
-		Return(false, errors.New("helm error"))
+		Return(false, errDetectorHelm)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	_, err := d.DetectComponents(ctx, v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
@@ -60,7 +65,7 @@ func TestDetectComponents_MetricsServerError(t *testing.T) {
 	// CSI succeeds (Vanilla distribution, no local-path-provisioner found)
 	// MetricsServer errors
 	helmClient.On("ReleaseExists", ctx, detector.ReleaseMetricsServer, detector.NamespaceMetricsServer).
-		Return(false, errors.New("helm error"))
+		Return(false, errDetectorHelm)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	_, err := d.DetectComponents(ctx, v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
@@ -90,7 +95,7 @@ func TestDetectComponents_LoadBalancerError(t *testing.T) {
 		Return(false, nil)
 	// LoadBalancer: Vanilla with Docker client that returns error
 	dockerClient.On("ContainerList", ctx, mock.AnythingOfType("container.ListOptions")).
-		Return([]container.Summary{}, errors.New("docker error"))
+		Return([]container.Summary{}, errDetectorDocker)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
 	_, err := d.DetectComponents(ctx, v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
@@ -120,7 +125,7 @@ func TestDetectComponents_CertManagerError(t *testing.T) {
 	// LoadBalancer succeeds (K3s, no svclb daemonsets, no traefik)
 	// CertManager errors
 	helmClient.On("ReleaseExists", ctx, detector.ReleaseCertManager, detector.NamespaceCertManager).
-		Return(false, errors.New("helm error"))
+		Return(false, errDetectorHelm)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	_, err := d.DetectComponents(ctx, v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
@@ -153,7 +158,7 @@ func TestDetectComponents_PolicyEngineError(t *testing.T) {
 		Return(false, nil)
 	// PolicyEngine errors
 	helmClient.On("ReleaseExists", ctx, detector.ReleaseKyverno, detector.NamespaceKyverno).
-		Return(false, errors.New("helm error"))
+		Return(false, errDetectorHelm)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	_, err := d.DetectComponents(ctx, v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
@@ -191,7 +196,7 @@ func TestDetectComponents_GitOpsEngineError(t *testing.T) {
 		Return(false, nil)
 	// GitOpsEngine errors
 	helmClient.On("ReleaseExists", ctx, detector.ReleaseFluxOperator, detector.NamespaceFluxOperator).
-		Return(false, errors.New("helm error"))
+		Return(false, errDetectorHelm)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	_, err := d.DetectComponents(ctx, v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
@@ -248,7 +253,7 @@ func TestDetectCSI_TalosHetznerError(t *testing.T) {
 	k8sClientset := fake.NewClientset()
 
 	helmClient.On("ReleaseExists", ctx, detector.ReleaseHCloudCSI, detector.NamespaceHCloudCSI).
-		Return(false, errors.New("helm error"))
+		Return(false, errDetectorHelm)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	_, err := d.ExportDetectCSI(ctx, v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
@@ -331,10 +336,14 @@ func TestDetectLoadBalancer_VanillaNoDocker(t *testing.T) {
 	k8sClientset := fake.NewClientset()
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
-	lb, err := d.ExportDetectLoadBalancer(ctx, v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	loadBalancer, err := d.ExportDetectLoadBalancer(
+		ctx,
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+	)
 
 	require.NoError(t, err)
-	assert.Equal(t, v1alpha1.LoadBalancerDefault, lb)
+	assert.Equal(t, v1alpha1.LoadBalancerDefault, loadBalancer)
 }
 
 // TestDetectLoadBalancer_VanillaDockerError verifies error wrapping when
@@ -348,7 +357,7 @@ func TestDetectLoadBalancer_VanillaDockerError(t *testing.T) {
 	dockerClient := docker.NewMockAPIClient(t)
 
 	dockerClient.On("ContainerList", ctx, mock.AnythingOfType("container.ListOptions")).
-		Return([]container.Summary{}, errors.New("docker error"))
+		Return([]container.Summary{}, errDetectorDocker)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
 	_, err := d.ExportDetectLoadBalancer(ctx, v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
@@ -366,7 +375,7 @@ func TestDetectMetalLB_Error(t *testing.T) {
 	k8sClientset := fake.NewClientset()
 
 	helmClient.On("ReleaseExists", ctx, detector.ReleaseMetalLB, detector.NamespaceMetalLB).
-		Return(false, errors.New("helm error"))
+		Return(false, errDetectorHelm)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	_, err := d.ExportDetectLoadBalancer(ctx, v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)

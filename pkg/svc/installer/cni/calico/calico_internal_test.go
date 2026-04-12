@@ -1,6 +1,7 @@
 package calicoinstaller_test
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -8,6 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+)
+
+var (
+	errCalicoNoMatchesInstallation = errors.New(`no matches for kind "Installation"`)
+	errCalicoRequestedResource     = errors.New("could not find the requested resource")
 )
 
 func TestTalosCalicoValues(t *testing.T) {
@@ -61,13 +67,22 @@ func TestIsAPIDiscoveryError(t *testing.T) {
 	}{
 		{name: "nil error", err: nil, want: false},
 		{name: "generic error", err: assert.AnError, want: false},
-		{name: "no matches for kind", err: fmt.Errorf("no matches for kind \"Installation\""), want: true},
-		{name: "could not find resource", err: fmt.Errorf("could not find the requested resource"), want: true},
+		{
+			name: "no matches for kind",
+			err:  fmt.Errorf("%w", errCalicoNoMatchesInstallation),
+			want: true,
+		},
+		{
+			name: "could not find resource",
+			err:  fmt.Errorf("%w", errCalicoRequestedResource),
+			want: true,
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := calicoinstaller.IsAPIDiscoveryErrorForTest(tc.err)
 			assert.Equal(t, tc.want, got)
 		})
@@ -79,6 +94,7 @@ func TestIsCRDEstablished(t *testing.T) {
 
 	t.Run("established CRD returns true", func(t *testing.T) {
 		t.Parallel()
+
 		crd := &apiextensionsv1.CustomResourceDefinition{
 			Status: apiextensionsv1.CustomResourceDefinitionStatus{
 				Conditions: []apiextensionsv1.CustomResourceDefinitionCondition{
@@ -94,6 +110,7 @@ func TestIsCRDEstablished(t *testing.T) {
 
 	t.Run("not established CRD returns false", func(t *testing.T) {
 		t.Parallel()
+
 		crd := &apiextensionsv1.CustomResourceDefinition{
 			Status: apiextensionsv1.CustomResourceDefinitionStatus{
 				Conditions: []apiextensionsv1.CustomResourceDefinitionCondition{
@@ -109,12 +126,14 @@ func TestIsCRDEstablished(t *testing.T) {
 
 	t.Run("no conditions returns false", func(t *testing.T) {
 		t.Parallel()
+
 		crd := &apiextensionsv1.CustomResourceDefinition{}
 		assert.False(t, calicoinstaller.IsCRDEstablishedForTest(crd))
 	})
 
 	t.Run("multiple conditions with established", func(t *testing.T) {
 		t.Parallel()
+
 		crd := &apiextensionsv1.CustomResourceDefinition{
 			Status: apiextensionsv1.CustomResourceDefinitionStatus{
 				Conditions: []apiextensionsv1.CustomResourceDefinitionCondition{

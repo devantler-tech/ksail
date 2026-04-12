@@ -13,6 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errCNIAPIServerUnstable          = errors.New("api server unstable")
+	errCNIAPIServerConnectionRefused = errors.New("api server connection refused")
+)
+
 func TestNewInstallerBase_Fields(t *testing.T) {
 	t.Parallel()
 
@@ -36,8 +41,8 @@ func TestNewInstallerBase_NilClient(t *testing.T) {
 	base := cni.NewInstallerBase(nil, "", "", 0)
 
 	require.NotNil(t, base)
-	assert.Equal(t, "", base.GetKubeconfig())
-	assert.Equal(t, "", base.GetContext())
+	assert.Empty(t, base.GetKubeconfig())
+	assert.Empty(t, base.GetContext())
 	assert.Equal(t, time.Duration(0), base.GetTimeout())
 }
 
@@ -155,7 +160,7 @@ func TestInstallerBase_RunAPIServerCheck_ShouldCheckTrue_CheckerFails(t *testing
 
 	base := cni.NewInstallerBase(helm.NewMockInterface(t), "", "", time.Second)
 
-	checkerErr := errors.New("api server unstable")
+	checkerErr := errCNIAPIServerUnstable
 	checker := func(_ context.Context) error {
 		return checkerErr
 	}
@@ -163,7 +168,7 @@ func TestInstallerBase_RunAPIServerCheck_ShouldCheckTrue_CheckerFails(t *testing
 	err := base.RunAPIServerCheck(context.Background(), true, checker)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, checkerErr)
+	require.ErrorIs(t, err, checkerErr)
 	assert.Contains(t, err.Error(), "failed to wait for API server stability")
 }
 
@@ -240,13 +245,13 @@ func TestInstallerBase_PrepareInstall_CheckerError(t *testing.T) {
 
 	base := cni.NewInstallerBase(helm.NewMockInterface(t), "", "", time.Second)
 
-	checkerErr := errors.New("api server connection refused")
+	checkerErr := errCNIAPIServerConnectionRefused
 	checker := func(_ context.Context) error { return checkerErr }
 
 	err := base.PrepareInstall(context.Background(), v1alpha1.DistributionTalos, checker)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, checkerErr)
+	require.ErrorIs(t, err, checkerErr)
 	assert.Contains(t, err.Error(), "run API server check")
 }
 

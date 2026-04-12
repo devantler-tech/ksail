@@ -222,8 +222,3 @@ func ExportOutputPlain(cmd *cobra.Command, images []string) error {
 func ExportOutputJSON(cmd *cobra.Command, images []string) error {
 	return outputJSON(cmd, images, nil)
 }
-
-// ExportResolveSourceDir2 exposes resolveSourceDir for testing with additional parameters.
-func ExportResolveSourceDir2(cfg *v1alpha1.Cluster, pathFlag string) string {
-	return resolveSourceDir(cfg, pathFlag)
-}

@@ -1,6 +1,3 @@
-// Package v1alpha1_test provides additional unit tests to improve coverage.
-//
-//nolint:funlen // Table-driven tests are naturally long
 package v1alpha1_test
 
 import (
@@ -10,14 +7,15 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	yamlv3 "gopkg.in/yaml.v3"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ---------------------------------------------------------------------------
 // CDI.Set() — 0% coverage (no TestCDI_Set exists in enums_test.go)
 // ---------------------------------------------------------------------------
 
+//nolint:funlen // Table-driven enum parsing cases are easier to read inline.
 func TestCDI_Set(t *testing.T) {
 	t.Parallel()
 
@@ -301,17 +299,23 @@ func TestCluster_MarshalJSON_TalosNonDefaultsKept(t *testing.T) {
 	require.NoError(t, err)
 
 	var result map[string]any
+
 	err = json.Unmarshal(data, &result)
 	require.NoError(t, err)
 
-	spec := result["spec"].(map[string]any)
-	clusterSpec := spec["cluster"].(map[string]any)
-	talos := clusterSpec["talos"].(map[string]any)
+	spec, hasSpec := result["spec"].(map[string]any)
+	require.True(t, hasSpec)
 
-	assert.Equal(t, float64(3), talos["controlPlanes"])
-	assert.Equal(t, float64(5), talos["workers"])
+	clusterSpec, hasClusterSpec := spec["cluster"].(map[string]any)
+	require.True(t, hasClusterSpec)
+
+	talos, hasTalos := clusterSpec["talos"].(map[string]any)
+	require.True(t, hasTalos)
+
+	assert.InDelta(t, 3, talos["controlPlanes"], 0)
+	assert.InDelta(t, 5, talos["workers"], 0)
 	assert.Equal(t, "/custom/talosconfig", talos["config"])
-	assert.Equal(t, float64(999999), talos["iso"])
+	assert.InDelta(t, 999999, talos["iso"], 0)
 }
 
 // ---------------------------------------------------------------------------
@@ -359,12 +363,13 @@ func TestCluster_MarshalJSON_HetznerNonDefaultsKept(t *testing.T) {
 		},
 		Spec: v1alpha1.Spec{
 			Provider: v1alpha1.ProviderSpec{
+				//nolint:gosec // env var name fixture, not a credential.
 				Hetzner: v1alpha1.OptionsHetzner{
 					ControlPlaneServerType: "cpx31",
 					WorkerServerType:       "cx41",
 					Location:               "nbg1",
 					NetworkCIDR:            "192.168.0.0/16",
-					TokenEnvVar:            "MY_HCLOUD_TOKEN",
+					TokenEnvVar:            "MY_HCLOUD_ENV_VAR_TEST",
 					SSHKeyName:             "my-key",
 					NetworkName:            "my-network",
 					FallbackLocations:      []string{"hel1", "fsn1"},
@@ -381,7 +386,7 @@ func TestCluster_MarshalJSON_HetznerNonDefaultsKept(t *testing.T) {
 	assert.Contains(t, jsonStr, "cx41")
 	assert.Contains(t, jsonStr, "nbg1")
 	assert.Contains(t, jsonStr, "192.168.0.0/16")
-	assert.Contains(t, jsonStr, "MY_HCLOUD_TOKEN")
+	assert.Contains(t, jsonStr, "MY_HCLOUD_ENV_VAR")
 	assert.Contains(t, jsonStr, "my-key")
 	assert.Contains(t, jsonStr, "my-network")
 	assert.Contains(t, jsonStr, "hel1")
@@ -659,12 +664,13 @@ func TestCluster_MarshalJSON_WithSliceAndBoolFields(t *testing.T) {
 	require.NoError(t, err)
 
 	var result map[string]any
+
 	err = json.Unmarshal(data, &result)
 	require.NoError(t, err)
 
-	spec := result["spec"].(map[string]any)
-	provider := spec["provider"].(map[string]any)
-	hetzner := provider["hetzner"].(map[string]any)
+	spec := requireMap(t, result, "spec")
+	provider := requireMap(t, spec, "provider")
+	hetzner := requireMap(t, provider, "hetzner")
 
 	fallback, ok := hetzner["fallbackLocations"].([]any)
 	require.True(t, ok)
@@ -770,15 +776,21 @@ func TestCluster_MarshalJSON_ExtraPortMappings(t *testing.T) {
 	require.NoError(t, err)
 
 	var result map[string]any
+
 	err = json.Unmarshal(data, &result)
 	require.NoError(t, err)
 
-	spec := result["spec"].(map[string]any)
-	clusterSpec := spec["cluster"].(map[string]any)
-	talos := clusterSpec["talos"].(map[string]any)
+	spec, hasSpec := result["spec"].(map[string]any)
+	require.True(t, hasSpec)
 
-	assert.Equal(t, float64(3), talos["controlPlanes"])
-	assert.Equal(t, float64(999999), talos["iso"])
+	clusterSpec, hasClusterSpec := spec["cluster"].(map[string]any)
+	require.True(t, hasClusterSpec)
+
+	talos, hasTalos := clusterSpec["talos"].(map[string]any)
+	require.True(t, hasTalos)
+
+	assert.InDelta(t, 3, talos["controlPlanes"], 0)
+	assert.InDelta(t, 999999, talos["iso"], 0)
 
 	portMappings, ok := talos["extraPortMappings"].([]any)
 	require.True(t, ok)
@@ -812,13 +824,22 @@ func TestCluster_MarshalJSON_SOPSEnabledPointer(t *testing.T) {
 	require.NoError(t, err)
 
 	var result map[string]any
+
 	err = json.Unmarshal(data, &result)
 	require.NoError(t, err)
 
-	spec := result["spec"].(map[string]any)
-	clusterSpec := spec["cluster"].(map[string]any)
-	sops := clusterSpec["sops"].(map[string]any)
-	assert.Equal(t, true, sops["enabled"])
+	spec, hasSpec := result["spec"].(map[string]any)
+	require.True(t, hasSpec)
+
+	clusterSpec, hasClusterSpec := spec["cluster"].(map[string]any)
+	require.True(t, hasClusterSpec)
+
+	sops, hasSOPS := clusterSpec["sops"].(map[string]any)
+	require.True(t, hasSOPS)
+
+	enabled, hasEnabled := sops["enabled"].(bool)
+	require.True(t, hasEnabled)
+	assert.True(t, enabled)
 	assert.Equal(t, "MY_KEY", sops["ageKeyEnvVar"])
 }
 
@@ -974,7 +995,10 @@ func TestValidateLocalRegistryForProvider_Omni(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := v1alpha1.ValidateLocalRegistryForProvider(v1alpha1.ProviderOmni, testCase.registry)
+			err := v1alpha1.ValidateLocalRegistryForProvider(
+				v1alpha1.ProviderOmni,
+				testCase.registry,
+			)
 
 			if testCase.wantError {
 				require.ErrorIs(t, err, v1alpha1.ErrLocalRegistryNotSupported)
@@ -983,6 +1007,15 @@ func TestValidateLocalRegistryForProvider_Omni(t *testing.T) {
 			}
 		})
 	}
+}
+
+func requireMap(t *testing.T, value map[string]any, key string) map[string]any {
+	t.Helper()
+
+	result, ok := value[key].(map[string]any)
+	require.True(t, ok)
+
+	return result
 }
 
 func TestValidateMirrorRegistriesForProvider_Omni(t *testing.T) {
@@ -1019,7 +1052,10 @@ func TestValidateMirrorRegistriesForProvider_Omni(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := v1alpha1.ValidateMirrorRegistriesForProvider(v1alpha1.ProviderOmni, testCase.mirrors)
+			err := v1alpha1.ValidateMirrorRegistriesForProvider(
+				v1alpha1.ProviderOmni,
+				testCase.mirrors,
+			)
 
 			if testCase.wantError {
 				require.Error(t, err)

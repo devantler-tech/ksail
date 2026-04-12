@@ -16,6 +16,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errClusterPureResourceAlreadyExists = errors.New("resource already exists")
+	errClusterPureGeneric               = errors.New("some error")
+)
+
 // ===========================================================================
 // formatDiffTable — comprehensive table rendering tests
 // ===========================================================================
@@ -36,7 +41,12 @@ func TestFormatDiffTable_InPlaceOnly(t *testing.T) {
 
 	diff := &clusterupdate.UpdateResult{
 		InPlaceChanges: []clusterupdate.Change{
-			{Field: "replicas", OldValue: "1", NewValue: "3", Category: clusterupdate.ChangeCategoryInPlace},
+			{
+				Field:    "replicas",
+				OldValue: "1",
+				NewValue: "3",
+				Category: clusterupdate.ChangeCategoryInPlace,
+			},
 		},
 	}
 	got := cluster.ExportFormatDiffTable(diff, 1)
@@ -51,7 +61,12 @@ func TestFormatDiffTable_RebootOnly(t *testing.T) {
 
 	diff := &clusterupdate.UpdateResult{
 		RebootRequired: []clusterupdate.Change{
-			{Field: "kernel", OldValue: "5.4", NewValue: "5.15", Category: clusterupdate.ChangeCategoryRebootRequired},
+			{
+				Field:    "kernel",
+				OldValue: "5.4",
+				NewValue: "5.15",
+				Category: clusterupdate.ChangeCategoryRebootRequired,
+			},
 		},
 	}
 	got := cluster.ExportFormatDiffTable(diff, 1)
@@ -64,7 +79,12 @@ func TestFormatDiffTable_RecreateOnly(t *testing.T) {
 
 	diff := &clusterupdate.UpdateResult{
 		RecreateRequired: []clusterupdate.Change{
-			{Field: "distribution", OldValue: "k3s", NewValue: "talos", Category: clusterupdate.ChangeCategoryRecreateRequired},
+			{
+				Field:    "distribution",
+				OldValue: "k3s",
+				NewValue: "talos",
+				Category: clusterupdate.ChangeCategoryRecreateRequired,
+			},
 		},
 	}
 	got := cluster.ExportFormatDiffTable(diff, 1)
@@ -77,13 +97,28 @@ func TestFormatDiffTable_MixedSeverities(t *testing.T) {
 
 	diff := &clusterupdate.UpdateResult{
 		RecreateRequired: []clusterupdate.Change{
-			{Field: "dist", OldValue: "a", NewValue: "b", Category: clusterupdate.ChangeCategoryRecreateRequired},
+			{
+				Field:    "dist",
+				OldValue: "a",
+				NewValue: "b",
+				Category: clusterupdate.ChangeCategoryRecreateRequired,
+			},
 		},
 		RebootRequired: []clusterupdate.Change{
-			{Field: "kern", OldValue: "c", NewValue: "d", Category: clusterupdate.ChangeCategoryRebootRequired},
+			{
+				Field:    "kern",
+				OldValue: "c",
+				NewValue: "d",
+				Category: clusterupdate.ChangeCategoryRebootRequired,
+			},
 		},
 		InPlaceChanges: []clusterupdate.Change{
-			{Field: "reps", OldValue: "e", NewValue: "f", Category: clusterupdate.ChangeCategoryInPlace},
+			{
+				Field:    "reps",
+				OldValue: "e",
+				NewValue: "f",
+				Category: clusterupdate.ChangeCategoryInPlace,
+			},
 		},
 	}
 	got := cluster.ExportFormatDiffTable(diff, 3)
@@ -125,9 +160,24 @@ func TestFormatDiffTable_MultipleRows(t *testing.T) {
 
 	diff := &clusterupdate.UpdateResult{
 		InPlaceChanges: []clusterupdate.Change{
-			{Field: "a", OldValue: "1", NewValue: "2", Category: clusterupdate.ChangeCategoryInPlace},
-			{Field: "b", OldValue: "3", NewValue: "4", Category: clusterupdate.ChangeCategoryInPlace},
-			{Field: "c", OldValue: "5", NewValue: "6", Category: clusterupdate.ChangeCategoryInPlace},
+			{
+				Field:    "a",
+				OldValue: "1",
+				NewValue: "2",
+				Category: clusterupdate.ChangeCategoryInPlace,
+			},
+			{
+				Field:    "b",
+				OldValue: "3",
+				NewValue: "4",
+				Category: clusterupdate.ChangeCategoryInPlace,
+			},
+			{
+				Field:    "c",
+				OldValue: "5",
+				NewValue: "6",
+				Category: clusterupdate.ChangeCategoryInPlace,
+			},
 		},
 	}
 	got := cluster.ExportFormatDiffTable(diff, 3)
@@ -171,16 +221,16 @@ func TestIsEmptyYAML(t *testing.T) {
 		{"single non-empty line", "hello", false},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			dir := t.TempDir()
 			path := filepath.Join(dir, "test.yaml")
-			require.NoError(t, os.WriteFile(path, []byte(tt.content), 0o644))
+			require.NoError(t, os.WriteFile(path, []byte(testCase.content), 0o600))
 
 			got := cluster.ExportIsEmptyYAML(path)
-			assert.Equal(t, tt.want, got)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
@@ -200,10 +250,10 @@ func TestHasK3sArg(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name   string
-		args   []v1alpha5.K3sArgWithNodeFilters
-		flag   string
-		want   bool
+		name string
+		args []v1alpha5.K3sArgWithNodeFilters
+		flag string
+		want bool
 	}{
 		{
 			name: "flag present",
@@ -238,20 +288,20 @@ func TestHasK3sArg(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			config := &v1alpha5.SimpleConfig{
 				Options: v1alpha5.SimpleConfigOptions{
 					K3sOptions: v1alpha5.SimpleConfigOptionsK3s{
-						ExtraArgs: tt.args,
+						ExtraArgs: testCase.args,
 					},
 				},
 			}
 
-			got := cluster.ExportHasK3sArg(config, tt.flag)
-			assert.Equal(t, tt.want, got)
+			got := cluster.ExportHasK3sArg(config, testCase.flag)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
@@ -339,8 +389,8 @@ func TestValidateTarEntry_TrailingDotDot(t *testing.T) {
 	}
 
 	_, err := cluster.ExportValidateTarEntry(header, "/tmp/dest")
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, cluster.ErrInvalidTarPath))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, cluster.ErrInvalidTarPath)
 }
 
 // ===========================================================================
@@ -352,7 +402,7 @@ func TestClassifyRestoreError_AlreadyExistsFromErrMsg(t *testing.T) {
 
 	// When stderr is empty but error message says "already exists", should be nil with "none" policy
 	err := cluster.ExportClassifyRestoreError(
-		errors.New("resource already exists"),
+		errClusterPureResourceAlreadyExists,
 		"",
 		"none",
 	)
@@ -363,7 +413,7 @@ func TestClassifyRestoreError_EmptyStderrWithUpdatePolicy(t *testing.T) {
 	t.Parallel()
 
 	err := cluster.ExportClassifyRestoreError(
-		errors.New("some error"),
+		errClusterPureGeneric,
 		"",
 		"update",
 	)
@@ -487,13 +537,28 @@ func TestDisplayChangesSummary_RecreateBeforeRebootBeforeInPlace(t *testing.T) {
 
 	diff := &clusterupdate.UpdateResult{
 		InPlaceChanges: []clusterupdate.Change{
-			{Field: "in-place-field", OldValue: "a", NewValue: "b", Category: clusterupdate.ChangeCategoryInPlace},
+			{
+				Field:    "in-place-field",
+				OldValue: "a",
+				NewValue: "b",
+				Category: clusterupdate.ChangeCategoryInPlace,
+			},
 		},
 		RebootRequired: []clusterupdate.Change{
-			{Field: "reboot-field", OldValue: "c", NewValue: "d", Category: clusterupdate.ChangeCategoryRebootRequired},
+			{
+				Field:    "reboot-field",
+				OldValue: "c",
+				NewValue: "d",
+				Category: clusterupdate.ChangeCategoryRebootRequired,
+			},
 		},
 		RecreateRequired: []clusterupdate.Change{
-			{Field: "recreate-field", OldValue: "e", NewValue: "f", Category: clusterupdate.ChangeCategoryRecreateRequired},
+			{
+				Field:    "recreate-field",
+				OldValue: "e",
+				NewValue: "f",
+				Category: clusterupdate.ChangeCategoryRecreateRequired,
+			},
 		},
 	}
 
@@ -568,7 +633,7 @@ func TestDeriveBackupName_OnlyExtension(t *testing.T) {
 	t.Parallel()
 
 	got := cluster.ExportDeriveBackupName(".tar.gz")
-	assert.Equal(t, "", got)
+	assert.Empty(t, got)
 }
 
 func TestDeriveBackupName_NoDirectory(t *testing.T) {

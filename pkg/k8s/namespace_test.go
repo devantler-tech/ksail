@@ -15,8 +15,13 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
-var errFakeGetFailed = errors.New("get failed")
+var (
+	errFakeGetFailed    = errors.New("get failed")
+	errFakeCreateFailed = errors.New("create failed")
+	errFakeUpdateFailed = errors.New("update failed")
+)
 
+//nolint:funlen // Table-style subtests keep namespace label permutations explicit.
 func TestEnsurePrivilegedNamespace(t *testing.T) {
 	t.Parallel()
 
@@ -114,16 +119,16 @@ func TestEnsurePrivilegedNamespace(t *testing.T) {
 			require.NoError(t, err)
 
 			// Verify the namespace exists with correct labels
-			ns, getErr := clientset.CoreV1().Namespaces().Get(
+			namespace, getErr := clientset.CoreV1().Namespaces().Get(
 				context.Background(),
 				testCase.namespace,
 				metav1.GetOptions{},
 			)
 			require.NoError(t, getErr)
-			require.NotNil(t, ns)
+			require.NotNil(t, namespace)
 
 			for _, key := range pssLabelKeys {
-				assert.Equal(t, "privileged", ns.Labels[key],
+				assert.Equal(t, "privileged", namespace.Labels[key],
 					"expected label %s=privileged", key)
 			}
 		})
@@ -162,7 +167,7 @@ func TestEnsurePrivilegedNamespace_CreateError(t *testing.T) {
 		"create",
 		"namespaces",
 		func(_ k8stesting.Action) (bool, runtime.Object, error) {
-			return true, nil, errors.New("create failed")
+			return true, nil, errFakeCreateFailed
 		},
 	)
 
@@ -190,7 +195,7 @@ func TestEnsurePrivilegedNamespace_UpdateError(t *testing.T) {
 		"update",
 		"namespaces",
 		func(_ k8stesting.Action) (bool, runtime.Object, error) {
-			return true, nil, errors.New("update failed")
+			return true, nil, errFakeUpdateFailed
 		},
 	)
 

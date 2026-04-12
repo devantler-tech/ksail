@@ -12,7 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errProviderOpConnectionRefused = errors.New("connection refused")
+	errProviderOpDeadlineExceeded  = errors.New("deadline exceeded")
+	errProviderOpUnexpectedName    = errors.New("unexpected cluster name")
+)
+
 // allErrors returns every sentinel error in the clustererr package.
+//
+//nolint:funlen // Sentinel coverage list is easiest to scan one item per line.
 func allErrors() []struct {
 	name     string
 	err      error
@@ -23,25 +31,93 @@ func allErrors() []struct {
 		err      error
 		contains string
 	}{
-		{name: "ErrClusterNotFound", err: clustererr.ErrClusterNotFound, contains: "cluster not found"},
-		{name: "ErrProviderNotSet", err: clustererr.ErrProviderNotSet, contains: "infrastructure provider not set"},
-		{name: "ErrNoNodesFound", err: clustererr.ErrNoNodesFound, contains: "no nodes found for cluster"},
-		{name: "ErrNotHetznerProvider", err: clustererr.ErrNotHetznerProvider, contains: "infrastructure provider is not a Hetzner provider"},
-		{name: "ErrNoControlPlaneNodes", err: clustererr.ErrNoControlPlaneNodes, contains: "no control-plane nodes found for cluster"},
-		{name: "ErrUnsupportedDistribution", err: clustererr.ErrUnsupportedDistribution, contains: "unsupported distribution"},
-		{name: "ErrUnsupportedProvider", err: clustererr.ErrUnsupportedProvider, contains: "unsupported provider"},
-		{name: "ErrMissingDistributionConfig", err: clustererr.ErrMissingDistributionConfig, contains: "missing distribution config"},
-		{name: "ErrRecreationRequired", err: clustererr.ErrRecreationRequired, contains: "cluster recreation required"},
+		{
+			name:     "ErrClusterNotFound",
+			err:      clustererr.ErrClusterNotFound,
+			contains: "cluster not found",
+		},
+		{
+			name:     "ErrProviderNotSet",
+			err:      clustererr.ErrProviderNotSet,
+			contains: "infrastructure provider not set",
+		},
+		{
+			name:     "ErrNoNodesFound",
+			err:      clustererr.ErrNoNodesFound,
+			contains: "no nodes found for cluster",
+		},
+		{
+			name:     "ErrNotHetznerProvider",
+			err:      clustererr.ErrNotHetznerProvider,
+			contains: "infrastructure provider is not a Hetzner provider",
+		},
+		{
+			name:     "ErrNoControlPlaneNodes",
+			err:      clustererr.ErrNoControlPlaneNodes,
+			contains: "no control-plane nodes found for cluster",
+		},
+		{
+			name:     "ErrUnsupportedDistribution",
+			err:      clustererr.ErrUnsupportedDistribution,
+			contains: "unsupported distribution",
+		},
+		{
+			name:     "ErrUnsupportedProvider",
+			err:      clustererr.ErrUnsupportedProvider,
+			contains: "unsupported provider",
+		},
+		{
+			name:     "ErrMissingDistributionConfig",
+			err:      clustererr.ErrMissingDistributionConfig,
+			contains: "missing distribution config",
+		},
+		{
+			name:     "ErrRecreationRequired",
+			err:      clustererr.ErrRecreationRequired,
+			contains: "cluster recreation required",
+		},
 		{name: "ErrConfigNil", err: clustererr.ErrConfigNil, contains: "config is nil"},
-		{name: "ErrNoProviderConfigured", err: clustererr.ErrNoProviderConfigured, contains: "no provider configured to get node IPs"},
-		{name: "ErrDockerClientNotConfigured", err: clustererr.ErrDockerClientNotConfigured, contains: "docker client not configured"},
-		{name: "ErrClusterDoesNotExist", err: clustererr.ErrClusterDoesNotExist, contains: "cluster does not exist"},
-		{name: "ErrTalosConfigRequired", err: clustererr.ErrTalosConfigRequired, contains: "TalosConfig required"},
-		{name: "ErrClusterNotFoundInDistributions", err: clustererr.ErrClusterNotFoundInDistributions, contains: "cluster not found in any distribution"},
-		{name: "ErrCreateNotSupported", err: clustererr.ErrCreateNotSupported, contains: "create not supported"},
+		{
+			name:     "ErrNoProviderConfigured",
+			err:      clustererr.ErrNoProviderConfigured,
+			contains: "no provider configured to get node IPs",
+		},
+		{
+			name:     "ErrDockerClientNotConfigured",
+			err:      clustererr.ErrDockerClientNotConfigured,
+			contains: "docker client not configured",
+		},
+		{
+			name:     "ErrClusterDoesNotExist",
+			err:      clustererr.ErrClusterDoesNotExist,
+			contains: "cluster does not exist",
+		},
+		{
+			name:     "ErrTalosConfigRequired",
+			err:      clustererr.ErrTalosConfigRequired,
+			contains: "TalosConfig required",
+		},
+		{
+			name:     "ErrClusterNotFoundInDistributions",
+			err:      clustererr.ErrClusterNotFoundInDistributions,
+			contains: "cluster not found in any distribution",
+		},
+		{
+			name:     "ErrCreateNotSupported",
+			err:      clustererr.ErrCreateNotSupported,
+			contains: "create not supported",
+		},
 		{name: "ErrUpgradeSkipped", err: clustererr.ErrUpgradeSkipped, contains: "upgrade skipped"},
-		{name: "ErrUpgraderNotSupported", err: clustererr.ErrUpgraderNotSupported, contains: "provisioner does not support version upgrades"},
-		{name: "ErrVersionUndetermined", err: clustererr.ErrVersionUndetermined, contains: "cannot determine running version"},
+		{
+			name:     "ErrUpgraderNotSupported",
+			err:      clustererr.ErrUpgraderNotSupported,
+			contains: "provisioner does not support version upgrades",
+		},
+		{
+			name:     "ErrVersionUndetermined",
+			err:      clustererr.ErrVersionUndetermined,
+			contains: "cannot determine running version",
+		},
 	}
 }
 
@@ -78,6 +154,7 @@ func TestAllErrorsAreDistinct(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Table-driven provider-op scenarios are clearer inline.
 func TestRunProviderOp(t *testing.T) {
 	t.Parallel()
 
@@ -121,7 +198,7 @@ func TestRunProviderOp(t *testing.T) {
 			resolvedName:  "fail-cluster",
 			operationName: "delete",
 			providerFunc: func(_ context.Context, _ string) error {
-				return errors.New("connection refused")
+				return errProviderOpConnectionRefused
 			},
 			wantErr:      true,
 			wantContains: "failed to delete cluster 'fail-cluster'",
@@ -144,7 +221,7 @@ func TestRunProviderOp(t *testing.T) {
 			resolvedName:  "wrap-cluster",
 			operationName: "upgrade",
 			providerFunc: func(_ context.Context, _ string) error {
-				return fmt.Errorf("timeout: %w", errors.New("deadline exceeded"))
+				return fmt.Errorf("timeout: %w", errProviderOpDeadlineExceeded)
 			},
 			wantErr:      true,
 			wantContains: "failed to upgrade cluster 'wrap-cluster'",
@@ -156,7 +233,7 @@ func TestRunProviderOp(t *testing.T) {
 			operationName: "verify",
 			providerFunc: func(_ context.Context, clusterName string) error {
 				if clusterName != "name-check" {
-					return fmt.Errorf("unexpected cluster name: %s", clusterName)
+					return fmt.Errorf("%w: %s", errProviderOpUnexpectedName, clusterName)
 				}
 
 				return nil
@@ -165,14 +242,20 @@ func TestRunProviderOp(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctx := context.Background()
-			err := clustererr.RunProviderOp(ctx, tc.provider, tc.resolvedName, tc.operationName, tc.providerFunc)
+			err := clustererr.RunProviderOp(
+				ctx,
+				testCase.provider,
+				testCase.resolvedName,
+				testCase.operationName,
+				testCase.providerFunc,
+			)
 
-			if !tc.wantErr {
+			if !testCase.wantErr {
 				require.NoError(t, err)
 
 				return
@@ -180,12 +263,12 @@ func TestRunProviderOp(t *testing.T) {
 
 			require.Error(t, err)
 
-			if tc.wantSentinel != nil {
-				assert.ErrorIs(t, err, tc.wantSentinel)
+			if testCase.wantSentinel != nil {
+				require.ErrorIs(t, err, testCase.wantSentinel)
 			}
 
-			if tc.wantContains != "" {
-				assert.Contains(t, err.Error(), tc.wantContains)
+			if testCase.wantContains != "" {
+				assert.Contains(t, err.Error(), testCase.wantContains)
 			}
 		})
 	}

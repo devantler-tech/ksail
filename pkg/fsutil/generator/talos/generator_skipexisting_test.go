@@ -71,6 +71,12 @@ func TestGenerate_MirrorRegistriesSkipExisting(t *testing.T) {
 	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
 	require.NoError(t, err)
 
+	//nolint:gosec // Test reads a file created in its own temp directory.
+	//nolint:gosec // Test reads a file created in its own temp directory.
+	//nolint:gosec // Test reads a file created in its own temp directory.
+	//nolint:gosec // Test reads a file created in its own temp directory.
+	//nolint:gosec // Test reads a file created in its own temp directory.
+	//nolint:gosec // Test reads a file created in its own temp directory.
 	content, err := os.ReadFile(patchPath)
 	require.NoError(t, err)
 	assert.Equal(t, "custom-content", string(content))
@@ -94,7 +100,12 @@ func TestGenerate_AllowSchedulingSkipExisting(t *testing.T) {
 	require.NoError(t, err)
 
 	// Overwrite with custom content
-	patchPath := filepath.Join(tempDir, "talos", "cluster", "allow-scheduling-on-control-planes.yaml")
+	patchPath := filepath.Join(
+		tempDir,
+		"talos",
+		"cluster",
+		"allow-scheduling-on-control-planes.yaml",
+	)
 	err = os.WriteFile(patchPath, []byte("original"), 0o600)
 	require.NoError(t, err)
 
@@ -102,6 +113,9 @@ func TestGenerate_AllowSchedulingSkipExisting(t *testing.T) {
 	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
 	require.NoError(t, err)
 
+	//nolint:gosec // Test reads a file created in its own temp directory.
+	//nolint:gosec // Test reads a file created in its own temp directory.
+	//nolint:gosec // Test reads a file created in its own temp directory.
 	content, err := os.ReadFile(patchPath)
 	require.NoError(t, err)
 	assert.Equal(t, "original", string(content))
@@ -134,6 +148,7 @@ func TestGenerate_DisableCNISkipExisting(t *testing.T) {
 	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
 	require.NoError(t, err)
 
+	//nolint:gosec // Test reads a file created in its own temp directory.
 	content, err := os.ReadFile(patchPath)
 	require.NoError(t, err)
 	assert.Equal(t, "original", string(content))
@@ -171,10 +186,12 @@ func TestGenerate_KubeletCertRotationSkipExisting(t *testing.T) {
 	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
 	require.NoError(t, err)
 
+	//nolint:gosec // Test reads a file created in its own temp directory.
 	certContent, err := os.ReadFile(certPath)
 	require.NoError(t, err)
 	assert.Equal(t, "original-cert", string(certContent))
 
+	//nolint:gosec // Test reads a file created in its own temp directory.
 	csrContent, err := os.ReadFile(csrPath)
 	require.NoError(t, err)
 	assert.Equal(t, "original-csr", string(csrContent))
@@ -207,6 +224,7 @@ func TestGenerate_ClusterNameSkipExisting(t *testing.T) {
 	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
 	require.NoError(t, err)
 
+	//nolint:gosec // Test reads a file created in its own temp directory.
 	content, err := os.ReadFile(patchPath)
 	require.NoError(t, err)
 	assert.Equal(t, "original", string(content))
@@ -239,6 +257,7 @@ func TestGenerate_ImageVerificationSkipExisting(t *testing.T) {
 	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
 	require.NoError(t, err)
 
+	//nolint:gosec // Test reads a file created in its own temp directory.
 	content, err := os.ReadFile(patchPath)
 	require.NoError(t, err)
 	assert.Equal(t, "original", string(content))

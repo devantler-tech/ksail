@@ -27,11 +27,10 @@ func TestResolveAgeKey_KeyFileReadError(t *testing.T) {
 
 	sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_READ_ERR"}
 
-	_, resolveErr := sopsutil.ResolveAgeKey(sops)
-	// Reading a directory should return an error
-	if resolveErr != nil {
-		assert.Contains(t, resolveErr.Error(), "read age key file")
-	}
+	got, resolveErr := sopsutil.ResolveAgeKey(sops)
+	require.Error(t, resolveErr)
+	assert.Empty(t, got)
+	assert.Contains(t, resolveErr.Error(), "read age key file")
 }
 
 // TestResolveEnabledAgeKey_ExplicitlyEnabledWithResolveError tests the path where
@@ -55,11 +54,8 @@ func TestResolveEnabledAgeKey_ExplicitlyEnabledWithResolveError(t *testing.T) {
 	}
 
 	got, resolveErr := sopsutil.ResolveEnabledAgeKey(sops)
-	// When explicitly enabled and an error occurs during resolution,
-	// the error should be propagated
-	if resolveErr != nil {
-		assert.Empty(t, got)
-	}
+	require.Error(t, resolveErr)
+	assert.Empty(t, got)
 }
 
 // TestResolveAgeKey_EnvVarWithInvalidKey tests that an env var containing

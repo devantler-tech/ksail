@@ -13,19 +13,25 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
+var (
+	errKindMarshal         = errors.New("marshal error")
+	errKindUnmarshal       = errors.New("unmarshal error")
+	errKindUnmarshalString = errors.New("unmarshal string error")
+)
+
 // errorKindMarshaller is a test double that always returns a marshal error.
 type errorKindMarshaller struct{}
 
 func (e *errorKindMarshaller) Marshal(_ *v1alpha4.Cluster) (string, error) {
-	return "", errors.New("marshal error")
+	return "", errKindMarshal
 }
 
 func (e *errorKindMarshaller) Unmarshal(_ []byte, _ **v1alpha4.Cluster) error {
-	return errors.New("unmarshal error")
+	return errKindUnmarshal
 }
 
 func (e *errorKindMarshaller) UnmarshalString(_ string, _ **v1alpha4.Cluster) error {
-	return errors.New("unmarshal string error")
+	return errKindUnmarshalString
 }
 
 // TestGenerate_MarshalError verifies that a marshalling error is propagated.
@@ -52,16 +58,19 @@ func TestGenerate_WriteError(t *testing.T) {
 	err := os.MkdirAll(readOnlyDir, 0o500)
 	require.NoError(t, err)
 
-	t.Cleanup(func() { _ = os.Chmod(readOnlyDir, 0o700) })
+	t.Cleanup(func() {
+		//nolint:gosec // restoring test-directory permissions
+		_ = os.Chmod(readOnlyDir, 0o700)
+	})
 
-	g := kindgenerator.NewGenerator()
+	generator := kindgenerator.NewGenerator()
 
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(readOnlyDir, "subdir", "kind.yaml"),
 		Force:  true,
 	}
 
-	_, err = g.Generate(&v1alpha4.Cluster{}, opts)
+	_, err = generator.Generate(&v1alpha4.Cluster{}, opts)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "write kind config")

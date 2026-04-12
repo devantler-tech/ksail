@@ -143,7 +143,11 @@ func TalosTypeFromRoleForTest(role string) string {
 }
 
 // CalculateNodeIPForTest exposes calculateNodeIP for unit testing.
-func CalculateNodeIPForTest(cidr netip.Prefix, role string, nodeIndex, cpCount int) (netip.Addr, error) {
+func CalculateNodeIPForTest(
+	cidr netip.Prefix,
+	role string,
+	nodeIndex, cpCount int,
+) (netip.Addr, error) {
 	return calculateNodeIP(cidr, role, nodeIndex, cpCount)
 }
 
@@ -160,6 +164,7 @@ func PreCalculateNodeSpecsForTest(
 	}
 
 	names := make([]string, len(specs))
+
 	ips := make([]netip.Addr, len(specs))
 	for i, s := range specs {
 		names[i] = s.name
@@ -190,7 +195,11 @@ func RecordAppliedChangeForTest(result *clusterupdate.UpdateResult, role, nodeNa
 }
 
 // RecordFailedChangeForTest exposes recordFailedChange for unit testing.
-func RecordFailedChangeForTest(result *clusterupdate.UpdateResult, role, nodeName string, err error) {
+func RecordFailedChangeForTest(
+	result *clusterupdate.UpdateResult,
+	role, nodeName string,
+	err error,
+) {
 	recordFailedChange(result, role, nodeName, err)
 }
 

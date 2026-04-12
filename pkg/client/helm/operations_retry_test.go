@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var errHelmConnectionResetByPeer = errors.New("read tcp 10.0.0.1:12345->1.2.3.4:443: read: connection reset by peer") //nolint:gochecknoglobals // test sentinel
+
 func TestInstallChartWithRetry_SuccessOnFirstAttempt(t *testing.T) {
 	t.Parallel()
 
@@ -48,9 +50,7 @@ func TestInstallChartWithRetry_ContextCancellation(t *testing.T) {
 		Namespace:   "default",
 	}
 
-	transientErr := fmt.Errorf("install error: %w",
-		errors.New("read tcp 10.0.0.1:12345->1.2.3.4:443: read: connection reset by peer"),
-	)
+	transientErr := fmt.Errorf("install error: %w", errHelmConnectionResetByPeer)
 
 	mockClient.EXPECT().InstallOrUpgradeChart(
 		mock.Anything,
@@ -78,9 +78,7 @@ func TestInstallChartWithRetry_MaxRetriesExhausted(t *testing.T) {
 		Namespace:   "default",
 	}
 
-	transientErr := fmt.Errorf("install error: %w",
-		errors.New("read tcp 10.0.0.1:12345->1.2.3.4:443: read: connection reset by peer"),
-	)
+	transientErr := fmt.Errorf("install error: %w", errHelmConnectionResetByPeer)
 
 	// All 5 retry attempts fail with transient error.
 	mockClient.EXPECT().InstallOrUpgradeChart(
@@ -107,9 +105,7 @@ func TestInstallChartWithRetry_SuccessOnThirdAttempt(t *testing.T) {
 		Namespace:   "default",
 	}
 
-	transientErr := fmt.Errorf("install error: %w",
-		errors.New("read tcp 10.0.0.1:12345->1.2.3.4:443: read: connection reset by peer"),
-	)
+	transientErr := fmt.Errorf("install error: %w", errHelmConnectionResetByPeer)
 
 	// First two calls fail, third succeeds.
 	mockClient.EXPECT().InstallOrUpgradeChart(
@@ -197,25 +193,30 @@ func TestInstallOrUpgradeChart_ChartSpecFields(t *testing.T) {
 		timeout,
 	).Return(nil)
 
+	var gotSpec *helm.ChartSpec
+
 	mockClient.EXPECT().InstallOrUpgradeChart(
 		mock.Anything,
-		mock.MatchedBy(func(spec *helm.ChartSpec) bool {
-			return spec.ReleaseName == "calico" &&
-				spec.ChartName == "calico/tigera-operator" &&
-				spec.Namespace == "tigera-operator" &&
-				spec.Version == "v3.31.3" &&
-				spec.RepoURL == "https://docs.tigera.io/calico/charts" &&
-				spec.CreateNamespace &&
-				spec.Atomic &&
-				spec.Silent &&
-				spec.UpgradeCRDs &&
-				spec.Timeout == timeout &&
-				spec.SetJSONVals["installation.cni.type"] == `"Calico"`
-		}),
-	).Return(&helm.ReleaseInfo{Name: "calico"}, nil)
+		mock.Anything,
+	).RunAndReturn(func(_ context.Context, spec *helm.ChartSpec) (*helm.ReleaseInfo, error) {
+		gotSpec = spec
+		return &helm.ReleaseInfo{Name: "calico"}, nil
+	})
 
 	err := helm.InstallOrUpgradeChart(ctx, mockClient, repoConfig, chartConfig, timeout)
 	require.NoError(t, err)
+	require.NotNil(t, gotSpec)
+	assert.Equal(t, "calico", gotSpec.ReleaseName)
+	assert.Equal(t, "calico/tigera-operator", gotSpec.ChartName)
+	assert.Equal(t, "tigera-operator", gotSpec.Namespace)
+	assert.Equal(t, "v3.31.3", gotSpec.Version)
+	assert.Equal(t, "https://docs.tigera.io/calico/charts", gotSpec.RepoURL)
+	assert.True(t, gotSpec.CreateNamespace)
+	assert.True(t, gotSpec.Atomic)
+	assert.True(t, gotSpec.Silent)
+	assert.True(t, gotSpec.UpgradeCRDs)
+	assert.Equal(t, timeout, gotSpec.Timeout)
+	assert.Equal(t, `"Calico"`, gotSpec.SetJSONVals["installation.cni.type"])
 }
 
 func TestContextTimeoutBuffer(t *testing.T) {
