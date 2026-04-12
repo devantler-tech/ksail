@@ -149,6 +149,7 @@ func (e *Exporter) resolveImages(
 			if img == "" {
 				continue
 			}
+
 			normalized = append(normalized, NormalizeImageRef(img))
 		}
 
