@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v6/pkg/k8s"
 	"github.com/devantler-tech/ksail/v6/pkg/k8s/readiness"
@@ -81,9 +82,55 @@ func (b *InstallerBase) BuildRESTConfig() (*rest.Config, error) {
 	return config, nil
 }
 
+// errAPIServerCheckerNil is returned when the API server checker is not configured.
+var errAPIServerCheckerNil = errors.New("api server checker is not configured")
+
+// PrepareInstall validates the Helm client and runs the API server stability
+// check for distributions that require it (Talos and K3s). It consolidates
+// the common Install() preamble shared by all CNI installers.
+func (b *InstallerBase) PrepareInstall(
+	ctx context.Context, dist v1alpha1.Distribution, checker func(ctx context.Context) error,
+) error {
+	_, err := b.GetClient()
+	if err != nil {
+		return fmt.Errorf("get helm client: %w", err)
+	}
+
+	needsCheck := dist == v1alpha1.DistributionTalos || dist == v1alpha1.DistributionK3s
+
+	err = b.RunAPIServerCheck(ctx, needsCheck, checker)
+	if err != nil {
+		return fmt.Errorf("run API server check: %w", err)
+	}
+
+	return nil
+}
+
+// RunAPIServerCheck calls checker if shouldCheck is true. It returns a clear
+// error when checker is nil to prevent panics. This is intended to be called
+// from CNI Install() methods that share the same stability-check pattern.
+func (b *InstallerBase) RunAPIServerCheck(
+	ctx context.Context, shouldCheck bool, checker func(ctx context.Context) error,
+) error {
+	if !shouldCheck {
+		return nil
+	}
+
+	if checker == nil {
+		return errAPIServerCheckerNil
+	}
+
+	err := checker(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to wait for API server stability: %w", err)
+	}
+
+	return nil
+}
+
 // WaitForAPIServerStability waits for the Kubernetes API server to be stable.
-// This is needed for distributions like Talos where the API server may be
-// unstable immediately after bootstrap, causing transient connection errors.
+// This is needed for distributions like Talos and K3s where the API server may
+// be unstable immediately after bootstrap, causing transient connection errors.
 // This method should be called before Helm operations for such distributions.
 func (b *InstallerBase) WaitForAPIServerStability(ctx context.Context) error {
 	restConfig, err := b.BuildRESTConfig()

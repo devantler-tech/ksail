@@ -149,11 +149,24 @@ func TestInstaller_Install_K3sDistribution(t *testing.T) {
 	t.Parallel()
 
 	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionK3s)
+	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
 	expectCalicoInstall(t, client, nil)
 
 	err := installer.Install(context.Background())
 
 	require.NoError(t, err)
+}
+
+func TestInstaller_Install_NilAPIServerChecker(t *testing.T) {
+	t.Parallel()
+
+	installer, _ := newInstallerWithDistribution(t, v1alpha1.DistributionK3s)
+	installer.SetAPIServerCheckerForTest(nil)
+
+	err := installer.Install(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "api server checker is not configured")
 }
 
 func TestInstaller_Install_RepoError(t *testing.T) {
