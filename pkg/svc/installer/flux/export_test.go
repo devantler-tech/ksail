@@ -109,7 +109,37 @@ func SetNewFluxResourcesClient(fn func(*rest.Config) (any, error)) func() {
 	}
 }
 
-// ResolveAgeKey exports sopsutil.ResolveAgeKey for testing.
+// SetLoadRESTConfig allows tests to replace loadRESTConfig with a stub.
+func SetLoadRESTConfig(fn func(string) (*rest.Config, error)) func() {
+	original := loadRESTConfig
+	loadRESTConfig = fn
+
+	return func() {
+		loadRESTConfig = original
+	}
+}
+
+// SetDiagnoseFluxPodFailures allows tests to replace the pod diagnostics function with a stub.
+func SetDiagnoseFluxPodFailures(fn func(context.Context, *rest.Config) string) func() {
+	original := diagnoseFluxPodFailures
+	diagnoseFluxPodFailures = fn
+
+	return func() {
+		diagnoseFluxPodFailures = original
+	}
+}
+
+// SetSetupFluxCoreToNoop replaces the core Flux setup function with a no-op stub
+// that always returns nil, allowing tests to skip API server and CRD interactions.
+func SetSetupFluxCoreToNoop() func() {
+	original := setupFluxCoreImpl
+	setupFluxCoreImpl = func(_ context.Context, _ setupParams) error { return nil }
+
+	return func() {
+		setupFluxCoreImpl = original
+	}
+}
+
 func ResolveAgeKey(sops v1alpha1.SOPS) (string, error) {
 	key, err := sopsutil.ResolveAgeKey(sops)
 	if err != nil {

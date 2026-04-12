@@ -160,6 +160,12 @@ func (k *Provisioner) WithComponentDetector(d *detector.ComponentDetector) {
 	k.componentDetector = d
 }
 
+// SetComponentDetector sets the component detector for querying cluster state.
+// This implements the ComponentDetectorAware interface.
+func (k *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
+	k.WithComponentDetector(d)
+}
+
 // Create creates a kind cluster using kind's Cobra command.
 func (k *Provisioner) Create(ctx context.Context, name string) error {
 	target := setName(name, k.kindConfig.Name)

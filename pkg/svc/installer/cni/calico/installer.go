@@ -14,7 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/svc/installer/cni"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -24,6 +24,10 @@ type Installer struct {
 	*cni.InstallerBase
 
 	distribution v1alpha1.Distribution
+	// apiServerChecker is called before Helm operations to ensure the API server
+	// is stable. It defaults to WaitForAPIServerStability and can be overridden
+	// in tests to avoid needing a real cluster.
+	apiServerChecker func(ctx context.Context) error
 }
 
 // NewInstaller creates a new Calico installer instance.
@@ -51,29 +55,28 @@ func NewInstallerWithDistribution(
 		context,
 		timeout,
 	)
+	calicoInstaller.apiServerChecker = calicoInstaller.WaitForAPIServerStability
 
 	return calicoInstaller
 }
 
 // Install installs or upgrades Calico via its Helm chart.
 func (c *Installer) Install(ctx context.Context) error {
+	err := c.PrepareInstall(ctx, c.distribution, c.apiServerChecker)
+	if err != nil {
+		return fmt.Errorf("install: %w", err)
+	}
+
 	// For Talos, we need to create namespaces with PSS labels before installing
 	// because Talos has PSS enforcement enabled by default.
-	// We also need to wait for API server stability as the API server may be
-	// unstable immediately after bootstrap.
 	if c.distribution == v1alpha1.DistributionTalos {
-		err := c.WaitForAPIServerStability(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to wait for API server stability: %w", err)
-		}
-
 		err = c.ensurePrivilegedNamespaces(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to create privileged namespaces: %w", err)
 		}
 	}
 
-	err := c.helmInstallOrUpgradeCalico(ctx)
+	err = c.helmInstallOrUpgradeCalico(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install Calico: %w", err)
 	}
@@ -224,7 +227,7 @@ func (c *Installer) waitForCalicoCRDs(ctx context.Context) error {
 					ApiextensionsV1().
 					CustomResourceDefinitions().
 					Get(ctx, name, metav1.GetOptions{})
-				if errors.IsNotFound(getErr) {
+				if k8serrors.IsNotFound(getErr) {
 					return false, nil
 				}
 
