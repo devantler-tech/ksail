@@ -159,12 +159,21 @@ runs:
     - name: 🧪 ksail cluster info
       shell: bash
       run: |
-        output=$(ksail cluster info 2>&1)
+        if output=$(ksail cluster info 2>&1); then
+          status=0
+        else
+          status=$?
+        fi
         echo "$output"
+
+        if [ "$status" -ne 0 ]; then
+          echo "❌ ksail cluster info failed with exit code $status"
+          exit "$status"
+        fi
 
         FAILED=0
         assert_contains() {
-          if echo "$output" | grep -q "$1"; then
+          if printf '%s\n' "$output" | grep -Fq -- "$1"; then
             echo "  ✅ Found: $1"
           else
             echo "  ❌ Missing: $1"
