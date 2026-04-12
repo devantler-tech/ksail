@@ -166,7 +166,7 @@ func TestInstaller_Install_NilAPIServerChecker(t *testing.T) {
 	err := installer.Install(context.Background())
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "API server checker is not configured")
+	assert.Contains(t, err.Error(), "api server checker is not configured")
 }
 
 func TestInstaller_Install_RepoError(t *testing.T) {

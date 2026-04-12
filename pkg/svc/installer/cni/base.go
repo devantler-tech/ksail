@@ -83,7 +83,7 @@ func (b *InstallerBase) BuildRESTConfig() (*rest.Config, error) {
 }
 
 // errAPIServerCheckerNil is returned when the API server checker is not configured.
-var errAPIServerCheckerNil = errors.New("API server checker is not configured")
+var errAPIServerCheckerNil = errors.New("api server checker is not configured")
 
 // PrepareInstall validates the Helm client and runs the API server stability
 // check for distributions that require it (Talos and K3s). It consolidates
@@ -129,8 +129,8 @@ func (b *InstallerBase) RunAPIServerCheck(
 }
 
 // WaitForAPIServerStability waits for the Kubernetes API server to be stable.
-// This is needed for distributions like Talos where the API server may be
-// unstable immediately after bootstrap, causing transient connection errors.
+// This is needed for distributions like Talos and K3s where the API server may
+// be unstable immediately after bootstrap, causing transient connection errors.
 // This method should be called before Helm operations for such distributions.
 func (b *InstallerBase) WaitForAPIServerStability(ctx context.Context) error {
 	restConfig, err := b.BuildRESTConfig()
