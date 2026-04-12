@@ -340,6 +340,7 @@ func (e *Exporter) exportImagesOneByOne(
 		err := e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
 		if err == nil {
 			successful = append(successful, image)
+
 			continue
 		}
 
