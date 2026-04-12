@@ -77,9 +77,11 @@ runs:
         # Import the previously exported images back
         ksail workload import /tmp/test-images.tar
         echo "✅ Image import succeeded"
-        # Verify the workload still runs (images are available)
+        # Restart pods to force an image lookup from containerd, validating
+        # that the imported images are actually usable on the node.
+        ksail workload rollout restart deployment/"$WORKLOAD_NAME"
         ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
-        echo "✅ Import round-trip validated"
+        echo "✅ Import round-trip validated (pods restarted and healthy)"
 
     - name: 🧪 Cleanup export/import test workload
       if: always()
