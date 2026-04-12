@@ -916,7 +916,7 @@ func setupIndividualImageExportMocks(
 		ContainerExecInspect(ctx, execID2).
 		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
 
-	// Second image fails on first attempt
+	// Second image fails on first attempt with "content digest not found" error
 	execID3 := "exec-image2-fail"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
@@ -927,7 +927,7 @@ func setupIndividualImageExportMocks(
 
 	mockClient.EXPECT().
 		ContainerExecAttach(ctx, execID3, container.ExecStartOptions{}).
-		Return(mockDockerStreamResponse("", "export failed"), nil).Once()
+		Return(mockDockerStreamResponse("", "ctr: content digest not found: sha256:abc"), nil).Once()
 
 	mockClient.EXPECT().
 		ContainerExecInspect(ctx, execID3).

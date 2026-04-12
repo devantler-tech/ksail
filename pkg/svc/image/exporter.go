@@ -154,7 +154,7 @@ func (e *Exporter) resolveImages(
 		}
 
 		if len(normalized) == 0 {
-			return nil, ErrNoImagesFound
+			return nil, fmt.Errorf("no valid images provided (all specified names are empty or whitespace): %w", ErrNoImagesFound)
 		}
 
 		return normalized, nil
@@ -323,9 +323,11 @@ func (e *Exporter) ensureImageContent(
 	_, _ = e.executor.ExecInContainer(ctx, nodeName, cmd)
 }
 
-// exportImagesOneByOne tests each image individually and returns the list of
-// When an image fails to export, it attempts to pull the image content (to fix
-// missing manifest index blobs from CRI pulls) and retries the export once.
+// exportImagesOneByOne exports each image individually, returning the list of
+// images that can be successfully exported along with the list that failed.
+// When an image fails to export with a "content digest not found" error,
+// it attempts to pull the image content (to fix missing manifest index blobs
+// from CRI pulls) and retries the export once.
 func (e *Exporter) exportImagesOneByOne(
 	ctx context.Context,
 	nodeName string,
@@ -344,11 +346,15 @@ func (e *Exporter) exportImagesOneByOne(
 			continue
 		}
 
-		// Export failed — try pulling the image to fix missing content blobs
-		// (e.g., manifest index not stored by CRI), then retry export once.
-		e.ensureImageContent(ctx, nodeName, platform, image)
+		// Export failed — if the error indicates missing content blobs
+		// (e.g., manifest index not stored by CRI), pull the image to
+		// repopulate the content store, then retry export once.
+		if strings.Contains(err.Error(), "content digest not found") {
+			e.ensureImageContent(ctx, nodeName, platform, image)
 
-		err = e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
+			err = e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
+		}
+
 		if err == nil {
 			successful = append(successful, image)
 		} else {
