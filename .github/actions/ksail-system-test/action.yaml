@@ -6,7 +6,7 @@ description: |
     Phase 1 — Setup (provider validation, artifact tag, GHCR resolution)
     Phase 2 — Offline tests (gen/smoke, tenant — no cluster needed)
     Phase 3 — Cluster provisioning (init + create, info, list)
-    Phase 4 — Online tests (workload CRUD, online gen, backup/restore, update)
+    Phase 4 — Online tests (workload CRUD, image export/import, online gen, backup/restore, update)
     Phase 5 — Debug (on failure)
     Phase 6 — Lifecycle tests (stop, start, switch)
     Phase 7 — Cleanup (cluster delete, always)
@@ -186,6 +186,15 @@ runs:
         ghcr-token: ${{ inputs.ghcr-token }}
         gitops-path: ${{ inputs.gitops-path }}
 
+    - name: 🧪 Image Export/Import Tests
+      id: image-export-import-tests
+      if: inputs.distribution == 'Vanilla' || inputs.distribution == 'K3s'
+      uses: ./.github/actions/ksail-test-image-export-import
+      with:
+        test-workload-name: ${{ inputs.test-workload-name }}
+        test-workload-image: ${{ inputs.test-workload-image }}
+        workload-timeout: ${{ inputs.workload-timeout }}
+
     - name: 🧪 Workload Watch Tests
       id: workload-watch-tests
       uses: ./.github/actions/ksail-test-workload-watch
@@ -286,7 +295,7 @@ runs:
     # ── Phase 5 — Debug ──────────────────────────────────────────────
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-watch-tests.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
+      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.image-export-import-tests.outcome == 'failure' || steps.workload-watch-tests.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
