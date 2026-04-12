@@ -143,9 +143,17 @@ func (e *Exporter) resolveImages(
 		// Normalize user-supplied image references so bare Docker Hub refs
 		// (e.g. "traefik/whoami:v1.10") are expanded to their fully qualified
 		// form ("docker.io/traefik/whoami:v1.10") matching how containerd stores them.
-		normalized := make([]string, len(opts.Images))
-		for i, img := range opts.Images {
-			normalized[i] = NormalizeImageRef(img)
+		normalized := make([]string, 0, len(opts.Images))
+		for _, img := range opts.Images {
+			img = strings.TrimSpace(img)
+			if img == "" {
+				continue
+			}
+			normalized = append(normalized, NormalizeImageRef(img))
+		}
+
+		if len(normalized) == 0 {
+			return nil, ErrNoImagesFound
 		}
 
 		return normalized, nil

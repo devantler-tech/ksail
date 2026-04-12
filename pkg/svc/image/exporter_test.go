@@ -161,6 +161,39 @@ func TestExportNoImagesFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "no images found in cluster")
 }
 
+func TestExportEmptyImageStringsFiltered(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
+			},
+		}, nil)
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{
+			OutputPath: outputPath,
+			Images:     []string{"", "  ", ""},
+		},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, image.ErrNoImagesFound)
+}
+
 func TestExportWithSpecificImages(t *testing.T) {
 	t.Parallel()
 
