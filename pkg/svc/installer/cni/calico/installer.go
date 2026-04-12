@@ -62,18 +62,9 @@ func NewInstallerWithDistribution(
 
 // Install installs or upgrades Calico via its Helm chart.
 func (c *Installer) Install(ctx context.Context) error {
-	// Validate Helm client early to fail-fast before any cluster contact.
-	_, err := c.GetClient()
+	err := c.PrepareInstall(ctx, c.distribution, c.apiServerChecker)
 	if err != nil {
-		return fmt.Errorf("get helm client: %w", err)
-	}
-
-	needsStabilityCheck := c.distribution == v1alpha1.DistributionTalos ||
-		c.distribution == v1alpha1.DistributionK3s
-
-	err = c.RunAPIServerCheck(ctx, needsStabilityCheck, c.apiServerChecker)
-	if err != nil {
-		return fmt.Errorf("run API server check: %w", err)
+		return fmt.Errorf("install: %w", err)
 	}
 
 	// For Talos, we need to create namespaces with PSS labels before installing

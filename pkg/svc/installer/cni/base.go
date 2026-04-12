@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v6/pkg/k8s"
 	"github.com/devantler-tech/ksail/v6/pkg/k8s/readiness"
@@ -83,6 +84,26 @@ func (b *InstallerBase) BuildRESTConfig() (*rest.Config, error) {
 
 // errAPIServerCheckerNil is returned when the API server checker is not configured.
 var errAPIServerCheckerNil = errors.New("API server checker is not configured")
+
+// PrepareInstall validates the Helm client and runs the API server stability
+// check for distributions that require it (Talos and K3s). It consolidates
+// the common Install() preamble shared by all CNI installers.
+func (b *InstallerBase) PrepareInstall(
+	ctx context.Context, dist v1alpha1.Distribution, checker func(ctx context.Context) error,
+) error {
+	_, err := b.GetClient()
+	if err != nil {
+		return fmt.Errorf("get helm client: %w", err)
+	}
+
+	needsCheck := dist == v1alpha1.DistributionTalos || dist == v1alpha1.DistributionK3s
+	err = b.RunAPIServerCheck(ctx, needsCheck, checker)
+	if err != nil {
+		return fmt.Errorf("run API server check: %w", err)
+	}
+
+	return nil
+}
 
 // RunAPIServerCheck calls checker if shouldCheck is true. It returns a clear
 // error when checker is nil to prevent panics. This is intended to be called

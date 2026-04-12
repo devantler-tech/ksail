@@ -73,18 +73,9 @@ func NewInstallerWithDistribution(
 
 // Install installs or upgrades Cilium via its Helm chart.
 func (c *Installer) Install(ctx context.Context) error {
-	// Validate Helm client early to avoid unnecessary CRD work when misconfigured.
-	_, err := c.GetClient()
+	err := c.PrepareInstall(ctx, c.distribution, c.apiServerChecker)
 	if err != nil {
-		return fmt.Errorf("get helm client: %w", err)
-	}
-
-	needsStabilityCheck := c.distribution == v1alpha1.DistributionTalos ||
-		c.distribution == v1alpha1.DistributionK3s
-
-	err = c.RunAPIServerCheck(ctx, needsStabilityCheck, c.apiServerChecker)
-	if err != nil {
-		return fmt.Errorf("run API server check: %w", err)
+		return fmt.Errorf("install: %w", err)
 	}
 
 	// Install Gateway API CRDs before Cilium, as Cilium requires them
