@@ -129,28 +129,34 @@ runs:
       env:
         TIMEOUT: ${{ inputs.workload-timeout }}
       run: |
-        # Discover the deployment created by the Helm release
-        DEPLOY_NAME=$(ksail workload get deployment -o name 2>/dev/null | grep "ksail-install-test" || true)
-        if [ -z "$DEPLOY_NAME" ]; then
+        # Discover deployments created by the Helm release.
+        # Note: podinfo chart does not set app.kubernetes.io/instance, so we
+        # discover by name pattern instead of label selector.
+        DEPLOYS=$(ksail workload get deployment -o name | grep "ksail-install-test" || true)
+        if [ -z "$DEPLOYS" ]; then
           echo "❌ No deployment found for release ksail-install-test"
           exit 1
         fi
-        echo "Found deployment: $DEPLOY_NAME"
 
-        # Verify the installed chart's deployment is healthy
-        ksail workload wait --for=condition=Available "$DEPLOY_NAME" --timeout="$TIMEOUT"
-        echo "✅ $DEPLOY_NAME is Available"
+        # Wait for each matched deployment individually
+        for DEPLOY in $DEPLOYS; do
+          echo "Waiting for $DEPLOY…"
+          ksail workload wait --for=condition=Available "$DEPLOY" --timeout="$TIMEOUT"
+          echo "✅ $DEPLOY is Available"
+        done
 
         # Verify the Helm release secret exists
         ksail workload get secret -l owner=helm,name=ksail-install-test
         echo "✅ Helm release secret verified"
 
     - name: 🧪 ksail workload install — cleanup
-      if: always() && steps.workload-install.outcome == 'success'
+      if: ${{ !failure() && steps.workload-install.outcome == 'success' }}
       shell: bash
       run: |
-        # Delete chart-managed resources by name pattern
-        for RES in $(ksail workload get deployment,service,pod -o name 2>/dev/null | grep "ksail-install-test" || true); do
+        # Delete chart-managed resources by name pattern.
+        # Note: podinfo chart does not set app.kubernetes.io/instance, so we
+        # discover by name pattern instead of label selector.
+        for RES in $(ksail workload get all -o name | grep "ksail-install-test" || true); do
           ksail workload delete "$RES" --ignore-not-found
         done
         # Delete the Helm release secret
