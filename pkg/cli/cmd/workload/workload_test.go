@@ -2749,7 +2749,7 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 		},
 		{
 			name:          "push",
-			args:          []string{"workload", "push", "oci://example.com/test:dev"},
+			args:          []string{"workload", "push", "oci://example.com:5000/test:dev"},
 			expectedError: "no manifest files found in source directory",
 			writeConfig:   writeValidKsailConfig,
 		},
