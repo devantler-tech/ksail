@@ -154,7 +154,10 @@ func (e *Exporter) resolveImages(
 		}
 
 		if len(normalized) == 0 {
-			return nil, fmt.Errorf("no valid images provided (all specified names are empty or whitespace): %w", ErrNoImagesFound)
+			return nil, fmt.Errorf(
+				"no valid images provided (all specified names are empty or whitespace): %w",
+				ErrNoImagesFound,
+			)
 		}
 
 		return normalized, nil
