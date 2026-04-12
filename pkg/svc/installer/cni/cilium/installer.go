@@ -26,6 +26,10 @@ type Installer struct {
 	provider               v1alpha1.Provider
 	loadBalancer           v1alpha1.LoadBalancer
 	gatewayAPICRDInstaller GatewayAPICRDInstallerFunc
+	// apiServerChecker is called for distributions that may have an API server
+	// timing gap. It defaults to WaitForAPIServerStability and can be overridden
+	// in tests to avoid needing a real cluster.
+	apiServerChecker func(ctx context.Context) error
 }
 
 // NewInstaller creates a new Cilium installer instance.
@@ -62,25 +66,16 @@ func NewInstallerWithDistribution(
 		timeout,
 	)
 	ciliumInstaller.gatewayAPICRDInstaller = ciliumInstaller.installGatewayAPICRDs
+	ciliumInstaller.apiServerChecker = ciliumInstaller.WaitForAPIServerStability
 
 	return ciliumInstaller
 }
 
 // Install installs or upgrades Cilium via its Helm chart.
 func (c *Installer) Install(ctx context.Context) error {
-	// Validate Helm client early to avoid unnecessary CRD work when misconfigured.
-	_, err := c.GetClient()
+	err := c.PrepareInstall(ctx, c.distribution, c.apiServerChecker)
 	if err != nil {
-		return fmt.Errorf("get helm client: %w", err)
-	}
-
-	// For Talos, wait for API server to stabilize before CNI installation.
-	// The API server may be unstable immediately after bootstrap.
-	if c.distribution == v1alpha1.DistributionTalos {
-		err := c.WaitForAPIServerStability(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to wait for API server stability: %w", err)
-		}
+		return fmt.Errorf("install: %w", err)
 	}
 
 	// Install Gateway API CRDs before Cilium, as Cilium requires them
