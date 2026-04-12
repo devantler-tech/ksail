@@ -1,0 +1,71 @@
+package reconciler_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"testing"
+
+	"github.com/devantler-tech/ksail/v6/pkg/client/reconciler"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestIsContextError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "deadline exceeded",
+			err:      context.DeadlineExceeded,
+			expected: true,
+		},
+		{
+			name:     "context canceled",
+			err:      context.Canceled,
+			expected: true,
+		},
+		{
+			name:     "wrapped deadline exceeded",
+			err:      fmt.Errorf("operation failed: %w", context.DeadlineExceeded),
+			expected: true,
+		},
+		{
+			name:     "wrapped context canceled",
+			err:      fmt.Errorf("reconcile: %w", context.Canceled),
+			expected: true,
+		},
+		{
+			name:     "double wrapped deadline exceeded",
+			err:      fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", context.DeadlineExceeded)),
+			expected: true,
+		},
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+		{
+			name:     "generic error",
+			err:      errors.New("something went wrong"),
+			expected: false,
+		},
+		{
+			name:     "wrapped generic error",
+			err:      fmt.Errorf("wrap: %w", errors.New("not a context error")),
+			expected: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := reconciler.IsContextError(testCase.err)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
