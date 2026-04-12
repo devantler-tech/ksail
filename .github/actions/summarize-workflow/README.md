@@ -1,6 +1,6 @@
 # Summarize Workflow Result Action
 
-A GitHub composite action that summarizes the results of multiple jobs and fails if any job failed. Useful for creating status check jobs that aggregate results from matrix builds or parallel jobs.
+A GitHub composite action that summarizes the results of multiple jobs and fails if any job failed or was cancelled. Useful for creating status check jobs that aggregate results from matrix builds or parallel jobs.
 
 ## Why?
 
@@ -42,8 +42,8 @@ jobs:
 | Input             | Description                                  | Required | Default                                 |
 |-------------------|----------------------------------------------|----------|-----------------------------------------|
 | `job-results`     | Space-separated list of job results to check | Yes      | -                                       |
-| `success-message` | Message when all jobs passed                 | No       | `✅ All jobs succeeded or were skipped.` |
-| `failure-message` | Message when a job failed                    | No       | `❌ At least one job failed.`            |
+| `success-message` | Message when all jobs passed                 | No       | `✅ No jobs failed or were cancelled.`   |
+| `failure-message` | Message when a job failed or was cancelled   | No       | `❌ At least one job failed or was cancelled.` |
 
 ## Job Result Values
 
@@ -93,11 +93,11 @@ status:
 On success:
 
 ```text
-✅ All jobs succeeded or were skipped.
+✅ No jobs failed or were cancelled.
 ```
 
 On failure:
 
 ```text
-❌ At least one job failed.
+❌ At least one job failed or was cancelled.
 ```
