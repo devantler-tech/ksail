@@ -104,11 +104,13 @@ runs:
     - name: 🧪 ksail workload install
       id: workload-install
       shell: bash
+      env:
+        TIMEOUT: ${{ inputs.workload-timeout }}
       run: |
         # Install a lightweight Helm chart to verify workload install works
         install_succeeded=false
         for attempt in 1 2 3; do
-          if ksail workload install ksail-install-test oci://ghcr.io/stefanprodan/charts/podinfo --version=6.7.1 --wait --timeout=120s; then
+          if ksail workload install ksail-install-test oci://ghcr.io/stefanprodan/charts/podinfo --version=6.7.1 --wait --timeout="$TIMEOUT"; then
             install_succeeded=true
             break
           fi
@@ -120,6 +122,30 @@ runs:
           exit 1
         fi
         echo "✅ workload install succeeded"
+
+    - name: 🧪 ksail workload install — verify
+      id: workload-install-verify
+      shell: bash
+      env:
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        # Verify the installed chart's deployment is healthy by name
+        # (podinfo chart does not use standard app.kubernetes.io/instance labels)
+        ksail workload wait --for=condition=Available deployment/ksail-install-test-podinfo --timeout="$TIMEOUT"
+        echo "✅ deployment ksail-install-test-podinfo is Available"
+
+        # Verify the Helm release secret exists
+        ksail workload get secret -l owner=helm,name=ksail-install-test
+        echo "✅ Helm release secret verified"
+
+    - name: 🧪 ksail workload install — cleanup
+      if: always() && steps.workload-install.outcome == 'success'
+      shell: bash
+      run: |
+        ksail workload delete deployment/ksail-install-test-podinfo --ignore-not-found
+        ksail workload delete secret -l owner=helm,name=ksail-install-test --ignore-not-found
+        ksail workload delete service/ksail-install-test-podinfo --ignore-not-found
+        echo "✅ workload install cleanup complete"
 
     - name: 🧪 ksail workload apply
       id: workload-apply
@@ -169,7 +195,7 @@ runs:
         ksail workload delete deployment/"$WORKLOAD_NAME" --ignore-not-found
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
+      if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-install-verify.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"

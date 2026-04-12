@@ -106,32 +106,20 @@ func configureViperEnvironment(viperInstance *viper.Viper) {
 // addParentDirectoriesToViperPaths adds parent directories containing ksail.yaml to Viper's search paths.
 // This enables directory traversal functionality similar to how Git finds .git directories.
 func addParentDirectoriesToViperPaths(viperInstance *viper.Viper) {
-	// Get absolute path of current directory
 	currentDir, err := filepath.Abs(".")
 	if err != nil {
-		// If we can't get current dir, the default paths should suffice
 		return
 	}
 
-	// Track which directories we've added to avoid duplicates
-	addedPaths := make(map[string]bool)
-
 	// Walk up the directory tree and add each directory to Viper's search paths
-	// but only if a ksail.yaml file actually exists in that directory
+	// but only if a ksail.yaml file actually exists in that directory.
+	// No duplicate-detection map is needed: upward traversal always visits unique directories.
 	for dir := currentDir; ; dir = filepath.Dir(dir) {
-		configPath := filepath.Join(dir, "ksail.yaml")
-
-		_, statErr := os.Stat(configPath)
+		_, statErr := os.Stat(filepath.Join(dir, "ksail.yaml"))
 		if statErr == nil {
-			// Only add the directory to search path if ksail.yaml exists there
-			// and we haven't added it already
-			if !addedPaths[dir] {
-				viperInstance.AddConfigPath(dir)
-				addedPaths[dir] = true
-			}
+			viperInstance.AddConfigPath(dir)
 		}
 
-		// Check if we've reached the root directory
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			break

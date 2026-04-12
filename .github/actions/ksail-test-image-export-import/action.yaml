@@ -1,0 +1,115 @@
+name: KSail Image Export/Import Test
+description: |
+  Tests the container image export/import round-trip on a running cluster:
+    1. Deploy a test workload with a known image
+    2. Export specific image to a tar archive
+    3. Verify the archive was created and is non-empty
+    4. Import the archive back into the cluster
+    5. Verify the workload still runs (round-trip integrity)
+
+  Only supported for Vanilla (Kind) and K3s (K3d) distributions.
+  Talos and VCluster are unsupported (immutable OS / nested containerd).
+
+  Does NOT create or delete the cluster — the orchestrator handles that.
+
+inputs:
+  test-workload-name:
+    description: Name for the test workload deployment
+    required: false
+    default: "export-import-test"
+  test-workload-image:
+    description: Image to use for the test workload
+    required: false
+    default: "traefik/whoami:v1.10"
+  workload-timeout:
+    description: |
+      Timeout for workload wait operations. Set to 10 minutes to handle
+      intermittent delays in CI environments (image pulls, resource contention).
+    required: false
+    default: "600s"
+
+runs:
+  using: composite
+  steps:
+    - name: 🧪 Deploy export/import test workload
+      id: deploy
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+        WORKLOAD_IMAGE: ${{ inputs.test-workload-image }}
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        create_succeeded=false
+        for attempt in 1 2 3; do
+          if ksail workload create deployment "$WORKLOAD_NAME" --image="$WORKLOAD_IMAGE"; then
+            create_succeeded=true
+            break
+          fi
+          if [ "$attempt" -lt 3 ]; then
+            echo "⚠️ workload create attempt $attempt failed, retrying in 10s…"
+            sleep 10
+          fi
+        done
+        if [ "$create_succeeded" != "true" ]; then
+          echo "❌ ksail workload create failed after 3 attempts for deployment/$WORKLOAD_NAME"
+          exit 1
+        fi
+        ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
+
+    - name: 🧪 ksail workload export
+      id: export
+      shell: bash
+      env:
+        WORKLOAD_IMAGE: ${{ inputs.test-workload-image }}
+      run: |
+        export_image="$WORKLOAD_IMAGE"
+        first_component="${WORKLOAD_IMAGE%%/*}"
+
+        # Normalize shorthand image references to the fully-qualified names
+        # containerd typically stores internally.
+        if [[ "$WORKLOAD_IMAGE" != */* ]]; then
+          export_image="docker.io/library/$WORKLOAD_IMAGE"
+        elif [[ "$first_component" != *.* && "$first_component" != *:* && "$first_component" != "localhost" ]]; then
+          export_image="docker.io/$WORKLOAD_IMAGE"
+        fi
+
+        ksail workload export /tmp/test-images.tar --image="$export_image"
+        # Verify the archive was created and is non-empty
+        test -s /tmp/test-images.tar
+        echo "✅ Image export succeeded ($(du -h /tmp/test-images.tar | cut -f1)) from $export_image"
+
+    - name: 🧪 ksail workload import
+      id: import
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        # Import the previously exported images back
+        ksail workload import /tmp/test-images.tar
+        echo "✅ Image import succeeded"
+        # Restart pods to force an image lookup from containerd, validating
+        # that the imported images are actually usable on the node.
+        ksail workload rollout restart deployment/"$WORKLOAD_NAME"
+        ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
+        echo "✅ Import round-trip validated (pods restarted and healthy)"
+
+    - name: 🐞 Debug failure
+      if: failure() && (steps.deploy.outcome == 'failure' || steps.export.outcome == 'failure' || steps.import.outcome == 'failure')
+      uses: ./.github/actions/debug-kubernetes-failure
+      with:
+        kubectl-command: "ksail workload"
+
+    - name: 🧪 Cleanup export/import test workload
+      if: always()
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+      run: |
+        ksail workload delete deployment/"$WORKLOAD_NAME" --ignore-not-found 2>/dev/null || true
+
+    - name: 🧹 Cleanup temp files
+      if: always()
+      shell: bash
+      run: |
+        rm -f /tmp/test-images.tar

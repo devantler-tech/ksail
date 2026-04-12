@@ -24,7 +24,7 @@ builds:
       - -s -w -X github.com/devantler-tech/ksail/v6/internal/buildmeta.Version={{.Version}} -X github.com/devantler-tech/ksail/v6/internal/buildmeta.Commit={{.Commit}} -X github.com/devantler-tech/ksail/v6/internal/buildmeta.Date={{.Date}}
     hooks:
       pre:
-        - go tool bundler --platform {{ .Os }}/{{ .Arch }}
+        - go tool bundler --platform {{ .Os }}/{{ .Arch }} --cli-version 1.0.10
 
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
