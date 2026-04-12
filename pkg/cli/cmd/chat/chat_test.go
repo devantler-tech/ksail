@@ -607,32 +607,54 @@ func assertResolveReasoningEffort(
 // TestFilterEnvVars verifies environment variable filtering.
 func TestFilterEnvVars(t *testing.T) {
 	t.Parallel()
+
 	filter := chat.GetFilterEnvVars()
+
 	for _, testCase := range []struct {
 		name       string
 		environ    []string
 		filterList []string
 		expected   []string
 	}{
-		{"filters matching vars",
+		{
+			"filters matching vars",
 			[]string{"PATH=/bin", "GITHUB_TOKEN=s", "GH_TOKEN=s2", "HOME=/h"},
-			[]string{"GITHUB_TOKEN", "GH_TOKEN"}, []string{"PATH=/bin", "HOME=/h"}},
-		{"empty filter list preserves all",
-			[]string{"PATH=/bin", "HOME=/h"}, []string{}, []string{"PATH=/bin", "HOME=/h"}},
-		{"preserves input order",
-			[]string{"A=1", "B=2", "C=3", "D=4"}, []string{"C"}, []string{"A=1", "B=2", "D=4"}},
-		{"non-matching filter keys are harmless",
-			[]string{"PATH=/bin", "HOME=/h"}, []string{"NONEXISTENT"}, []string{"PATH=/bin", "HOME=/h"}},
-		{"COPILOT_GITHUB_TOKEN filtered, user vars preserved",
+			[]string{"GITHUB_TOKEN", "GH_TOKEN"},
+			[]string{"PATH=/bin", "HOME=/h"},
+		},
+		{
+			"empty filter list preserves all",
+			[]string{"PATH=/bin", "HOME=/h"},
+			[]string{},
+			[]string{"PATH=/bin", "HOME=/h"},
+		},
+		{
+			"preserves input order",
+			[]string{"A=1", "B=2", "C=3", "D=4"},
+			[]string{"C"},
+			[]string{"A=1", "B=2", "D=4"},
+		},
+		{
+			"non-matching filter keys are harmless",
+			[]string{"PATH=/bin", "HOME=/h"},
+			[]string{"NONEXISTENT"},
+			[]string{"PATH=/bin", "HOME=/h"},
+		},
+		{
+			"COPILOT_GITHUB_TOKEN filtered, user vars preserved",
 			[]string{"PATH=/bin", "COPILOT_GITHUB_TOKEN=t", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d"},
-			[]string{"COPILOT_GITHUB_TOKEN"}, []string{"PATH=/bin", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d"}},
+			[]string{"COPILOT_GITHUB_TOKEN"},
+			[]string{"PATH=/bin", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d"},
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := filter(testCase.environ, testCase.filterList)
 			if len(got) != len(testCase.expected) {
 				t.Fatalf("expected %d vars, got %d: %v", len(testCase.expected), len(got), got)
 			}
+
 			for i := range testCase.expected {
 				if got[i] != testCase.expected[i] {
 					t.Errorf("pos %d: expected %q, got %q", i, testCase.expected[i], got[i])
