@@ -140,7 +140,14 @@ func (e *Exporter) resolveImages(
 	opts ExportOptions,
 ) ([]string, error) {
 	if len(opts.Images) > 0 {
-		return opts.Images, nil
+		// Normalize user-supplied image references so bare Docker Hub refs
+		// (e.g. "traefik/whoami:v1.10") are expanded to their fully qualified
+		// form ("docker.io/traefik/whoami:v1.10") matching how containerd stores them.
+		normalized := make([]string, len(opts.Images))
+		for i, img := range opts.Images {
+			normalized[i] = NormalizeImageRef(img)
+		}
+		return normalized, nil
 	}
 
 	images, err := e.listImagesInNode(ctx, nodeName)

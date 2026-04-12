@@ -186,7 +186,7 @@ func TestExportWithSpecificImages(t *testing.T) {
 	exportCmd := []string{
 		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
-		"/root/ksail-images-export.tar", "nginx:latest",
+		"/root/ksail-images-export.tar", "docker.io/library/nginx:latest",
 	}
 	setupExecMockWithCmdForExporter(
 		ctx, t, mockClient, "my-cluster-control-plane", exportCmd,
@@ -248,7 +248,7 @@ func TestExportK3sDistribution(t *testing.T) {
 	k3dExportCmd := []string{
 		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
-		"/tmp/ksail-images-export.tar", "nginx:latest",
+		"/tmp/ksail-images-export.tar", "docker.io/library/nginx:latest",
 	}
 	setupExecMockWithCmdForExporter(
 		ctx, t, mockClient, "k3d-my-cluster-server-0", k3dExportCmd,
@@ -313,7 +313,7 @@ func TestExportEmptyProvider(t *testing.T) {
 			"--platform",
 			"linux/amd64",
 			"/root/ksail-images-export.tar",
-			"nginx:latest",
+			"docker.io/library/nginx:latest",
 		},
 	)
 
@@ -369,7 +369,7 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 			"--platform",
 			"linux/amd64",
 			"/root/ksail-images-export.tar",
-			"nginx:latest",
+			"docker.io/library/nginx:latest",
 		},
 	)
 
@@ -507,7 +507,7 @@ func TestExportFallbackReportsFailedImages(t *testing.T) {
 	// Verify stderr contains warning about failed image
 	stderrOutput := stderrBuf.String()
 	assert.Contains(t, stderrOutput, "warning: failed to export 1 image(s)")
-	assert.Contains(t, stderrOutput, "redis:alpine")
+	assert.Contains(t, stderrOutput, "docker.io/library/redis:alpine")
 }
 
 func TestExportListImagesFiltersDigests(t *testing.T) {
@@ -840,7 +840,7 @@ func setupIndividualImageExportMocks(
 	execID2 := "exec-image1-success"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "nginx:latest"
+			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/nginx:latest"
 		})).
 		Return(container.ExecCreateResponse{ID: execID2}, nil).Once()
 
@@ -856,7 +856,7 @@ func setupIndividualImageExportMocks(
 	execID3 := "exec-image2-fail"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "redis:alpine"
+			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/redis:alpine"
 		})).
 		Return(container.ExecCreateResponse{ID: execID3}, nil).Once()
 
@@ -881,7 +881,7 @@ func setupReexportSuccessfulImageMock(
 	execID := "exec-reexport"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "nginx:latest"
+			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/nginx:latest"
 		})).
 		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
 
