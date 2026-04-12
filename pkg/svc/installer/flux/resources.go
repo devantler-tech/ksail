@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	fluxclient "github.com/devantler-tech/ksail/v6/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v6/pkg/k8s"
+	registry "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
@@ -231,6 +233,76 @@ func WaitForFluxReady(
 	}
 
 	return nil
+}
+
+// GetCurrentSyncRef queries the running FluxInstance in the cluster and returns
+// its spec.sync.ref value. Returns empty string if the FluxInstance does not exist
+// or has no sync configuration.
+//
+//nolint:contextcheck // nil-guard consistent with SetupInstance/WaitForFluxReady
+func GetCurrentSyncRef(ctx context.Context, kubeconfig string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	restConfig, err := loadRESTConfig(kubeconfig)
+	if err != nil {
+		return "", fmt.Errorf("build REST config: %w", err)
+	}
+
+	fluxClient, err := newFluxResourcesClient(restConfig)
+	if err != nil {
+		return "", fmt.Errorf("create flux client: %w", err)
+	}
+
+	instance := &FluxInstance{}
+	key := client.ObjectKey{
+		Name:      fluxInstanceDefaultName,
+		Namespace: fluxclient.DefaultNamespace,
+	}
+
+	err = fluxClient.Get(ctx, key, instance)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", nil
+		}
+
+		return "", fmt.Errorf("get FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
+	}
+
+	if instance.Spec.Sync != nil {
+		return instance.Spec.Sync.Ref, nil
+	}
+
+	return "", nil
+}
+
+// ResolveDesiredTag computes the desired OCI artifact tag using the standard
+// resolution priority: workload.tag > registry-embedded tag > default "dev".
+// This is the same logic used by buildInstance and buildArgoCDEnsureOptions.
+// A nil clusterCfg falls back to the default local artifact tag.
+func ResolveDesiredTag(clusterCfg *v1alpha1.Cluster) string {
+	if clusterCfg == nil {
+		return registry.DefaultLocalArtifactTag
+	}
+
+	tag := clusterCfg.Spec.Workload.Tag
+
+	if tag == "" {
+		localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
+		if localRegistry.IsExternal() {
+			parsed := localRegistry.Parse()
+			if parsed.Tag != "" {
+				tag = parsed.Tag
+			}
+		}
+	}
+
+	if tag == "" {
+		tag = registry.DefaultLocalArtifactTag
+	}
+
+	return tag
 }
 
 // ensureLocalRegistryInsecureIfNeeded patches OCIRepository with insecure: true only for

@@ -893,3 +893,66 @@ func assertSingleChange(
 		)
 	}
 }
+
+func TestEngine_CheckWorkloadTag(t *testing.T) {
+	t.Parallel()
+
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+
+	tests := []struct {
+		name         string
+		oldTag       string
+		newTag       string
+		gitOpsEngine v1alpha1.GitOpsEngine
+		wantChanges  int
+	}{
+		{"no gitops engine", "dev", "latest", v1alpha1.GitOpsEngineNone, 0},
+		{"empty gitops engine string", "dev", "latest", "", 0},
+		{"same tag no change", "latest", "latest", v1alpha1.GitOpsEngineFlux, 0},
+		{"flux tag drift", "dev", "latest", v1alpha1.GitOpsEngineFlux, 1},
+		{"argocd tag drift", "dev", "v1.0.0", v1alpha1.GitOpsEngineArgoCD, 1},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := &clusterupdate.UpdateResult{}
+			engine.CheckWorkloadTag(testCase.oldTag, testCase.newTag, testCase.gitOpsEngine, result)
+
+			if got := result.TotalChanges(); got != testCase.wantChanges {
+				t.Errorf("want %d changes, got %d", testCase.wantChanges, got)
+			}
+
+			if testCase.wantChanges > 0 {
+				assertWorkloadTagChange(t, result, testCase.oldTag, testCase.newTag)
+			}
+		})
+	}
+}
+
+func assertWorkloadTagChange(
+	t *testing.T,
+	result *clusterupdate.UpdateResult,
+	oldTag, newTag string,
+) {
+	t.Helper()
+
+	changes := result.InPlaceChanges
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 in-place change, got %d", len(changes))
+	}
+
+	change := changes[0]
+	if change.Field != "cluster.workload.tag" {
+		t.Errorf("expected field cluster.workload.tag, got %s", change.Field)
+	}
+
+	if change.OldValue != oldTag {
+		t.Errorf("expected old value %q, got %q", oldTag, change.OldValue)
+	}
+
+	if change.NewValue != newTag {
+		t.Errorf("expected new value %q, got %q", newTag, change.NewValue)
+	}
+}
