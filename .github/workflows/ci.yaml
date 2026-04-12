@@ -661,23 +661,23 @@ jobs:
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
 
-  # Hetzner cloud tests are serialized across workflow runs via a concurrency
-  # group to prevent resource conflicts (shared servers, firewalls, networks).
+  # Hetzner cloud tests are serialized across workflow runs via turnstyle to
+  # prevent resource conflicts (shared servers, firewalls, networks).
+  # Unlike concurrency groups (which cancel intermediate pending jobs),
+  # turnstyle implements a true FIFO queue by polling the GitHub API.
   # Cluster names include github.run_id for defense-in-depth uniqueness.
   system-test-hetzner:
-    name: 🧪 System Test (Hetzner)
+    name: "🧪 System Test (Hetzner/${{ matrix.init && 'init' || 'noinit' }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     environment: ci
     # Hetzner cloud tests are allowed to fail without blocking the merge queue
     # because Hetzner infrastructure can be intermittently unavailable.
     continue-on-error: true
-    concurrency:
-      group: cloud-system-test-hetzner-${{ matrix.init }}
-      cancel-in-progress: false
     permissions:
+      actions: read
       contents: read
       packages: write
     strategy:
@@ -704,6 +704,14 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+
+      - name: ⏳ Wait for cloud test queue
+        uses: softprops/turnstyle@e565d2d86403c5d23533937e95980570545e5586 # v3.2.3
+        with:
+          same-branch-only: false
+          job-to-wait-for: "🧪 System Test (Hetzner/${{ matrix.init && 'init' || 'noinit' }})"
+          poll-interval-seconds: 30
+          abort-after-seconds: 3600
 
       - name: 🧹 Free disk space
         uses: ./.github/actions/free-disk-space
@@ -750,20 +758,20 @@ jobs:
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
 
-  # Omni cloud tests are serialized across workflow runs via a concurrency
-  # group to prevent resource conflicts (shared machine pool).
+  # Omni cloud tests are serialized across workflow runs via turnstyle to
+  # prevent resource conflicts (shared machine pool).
+  # Unlike concurrency groups (which cancel intermediate pending jobs),
+  # turnstyle implements a true FIFO queue by polling the GitHub API.
   # Cluster names include github.run_id for defense-in-depth uniqueness.
   system-test-omni:
-    name: 🧪 System Test (Omni)
+    name: "🧪 System Test (Omni/${{ matrix.init && 'init' || 'noinit' }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     environment: ci
-    concurrency:
-      group: cloud-system-test-omni-${{ matrix.init }}
-      cancel-in-progress: false
     permissions:
+      actions: read
       contents: read
       packages: write
     strategy:
@@ -785,6 +793,14 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+
+      - name: ⏳ Wait for cloud test queue
+        uses: softprops/turnstyle@e565d2d86403c5d23533937e95980570545e5586 # v3.2.3
+        with:
+          same-branch-only: false
+          job-to-wait-for: "🧪 System Test (Omni/${{ matrix.init && 'init' || 'noinit' }})"
+          poll-interval-seconds: 30
+          abort-after-seconds: 3600
 
       - name: 🧹 Free disk space
         uses: ./.github/actions/free-disk-space
