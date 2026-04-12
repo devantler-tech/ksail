@@ -39,10 +39,10 @@ jobs:
 
 ## Inputs
 
-| Input             | Description                                  | Required | Default                                 |
-|-------------------|----------------------------------------------|----------|-----------------------------------------|
-| `job-results`     | Space-separated list of job results to check | Yes      | -                                       |
-| `success-message` | Message when all jobs passed                 | No       | `✅ No jobs failed or were cancelled.`   |
+| Input             | Description                                  | Required | Default                                       |
+|-------------------|----------------------------------------------|----------|-----------------------------------------------|
+| `job-results`     | Space-separated list of job results to check | Yes      | -                                             |
+| `success-message` | Message when all jobs passed                 | No       | `✅ No jobs failed or were cancelled.`         |
 | `failure-message` | Message when a job failed or was cancelled   | No       | `❌ At least one job failed or was cancelled.` |
 
 ## Job Result Values
