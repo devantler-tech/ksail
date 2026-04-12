@@ -90,6 +90,7 @@ func (c *Installer) Install(ctx context.Context) error {
 		if c.apiServerChecker == nil {
 			return errAPIServerCheckerNil
 		}
+
 		err = c.apiServerChecker(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to wait for API server stability: %w", err)
