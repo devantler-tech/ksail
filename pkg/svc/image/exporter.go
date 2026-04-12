@@ -23,8 +23,8 @@ const dirPerm = 0o750
 // contentPullTimeout caps the best-effort "ctr images pull" that is issued when
 // an individual image export fails with a "content digest not found" error.
 // Without a deadline, a slow or unreachable registry can block the entire
-// export indefinitely; the pull is already best-effort (errors are ignored),
-// so timing out simply skips the retry for that image.
+// export indefinitely. The pull remains best-effort (errors, including
+// timeouts, are ignored), and the export retry still proceeds afterward.
 const contentPullTimeout = 5 * time.Minute
 
 // Error definitions.
