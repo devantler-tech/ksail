@@ -29,7 +29,7 @@ func TestReadFileSafe_DeepNonExistentBasePath(t *testing.T) {
 	t.Parallel()
 
 	// basePath has a parent chain that also doesn't exist — triggers the EvalCanonicalPath(basePath) error path
-	deepNonExistent := filepath.Join("/nonexistent-root-abc", "deep", "nested", "base")
+	deepNonExistent := filepath.Join(t.TempDir(), "nonexistent-root", "deep", "nested", "base")
 	filePath := filepath.Join(deepNonExistent, "file.txt")
 
 	_, err := fsutil.ReadFileSafe(deepNonExistent, filePath)

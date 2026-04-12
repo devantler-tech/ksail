@@ -3,6 +3,7 @@ package talosgenerator_test
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -22,7 +23,10 @@ func skipPermissionWriteFailureTest(t *testing.T) {
 		t.Skip("permission semantics differ on Windows")
 	}
 
-	if os.Getuid() == 0 {
+	currentUser, err := user.Current()
+	require.NoError(t, err)
+
+	if currentUser.Uid == "0" {
 		t.Skip("running as root — permission checks are bypassed")
 	}
 }

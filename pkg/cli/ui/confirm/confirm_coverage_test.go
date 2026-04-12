@@ -116,22 +116,21 @@ func TestShowDeletionPreview_HetznerNetworkOnly(t *testing.T) {
 	require.Contains(t, output, "Network: hetzner-net-network")
 }
 
+//nolint:paralleltest // Modifies package-level test overrides.
 func TestSetStdinReaderForTests_Restore(t *testing.T) {
-	t.Parallel()
-
 	// Verify the override and restore mechanism works correctly
 	restore1 := confirm.SetStdinReaderForTests(nil)
+	require.NotNil(t, restore1)
 	restore1()
 
 	// After restore, setting a new reader should work
 	restore2 := confirm.SetStdinReaderForTests(nil)
+	require.NotNil(t, restore2)
 	restore2()
 }
 
+//nolint:paralleltest // Modifies package-level test overrides.
 func TestSetTTYCheckerForTests_Restore(t *testing.T) {
-	t.Parallel()
-	// Not parallel - modifies global state
-
 	// Set a checker
 	restore := confirm.SetTTYCheckerForTests(func() bool { return true })
 

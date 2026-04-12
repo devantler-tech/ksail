@@ -2,6 +2,7 @@ package gitops_test
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -21,7 +22,10 @@ func TestCRDetector_FindFluxInstance_WalkDirError(t *testing.T) {
 		t.Skip("chmod-based permission checks are not reliable on Windows")
 	}
 
-	if os.Getuid() == 0 {
+	currentUser, err := user.Current()
+	require.NoError(t, err)
+
+	if currentUser.Uid == "0" {
 		t.Skip("permission-based test is not reliable when running as root")
 	}
 
@@ -29,7 +33,7 @@ func TestCRDetector_FindFluxInstance_WalkDirError(t *testing.T) {
 
 	// Create a subdirectory with restricted permissions to trigger a walk error.
 	restrictedDir := filepath.Join(tempDir, "restricted")
-	err := os.MkdirAll(restrictedDir, 0o750)
+	err = os.MkdirAll(restrictedDir, 0o750)
 	require.NoError(t, err)
 
 	// Write a file inside it so the walker tries to descend.
@@ -58,7 +62,7 @@ func TestCRDetector_FindFluxInstance_WalkDirError(t *testing.T) {
 func TestCRDetector_FindFluxInstance_NonExistentDirReturnsEmpty(t *testing.T) {
 	t.Parallel()
 
-	det := gitops.NewCRDetector("/non/existent/path/that/does/not/exist")
+	det := gitops.NewCRDetector(filepath.Join(t.TempDir(), "does", "not", "exist"))
 	result, err := det.FindFluxInstance()
 
 	require.NoError(t, err)

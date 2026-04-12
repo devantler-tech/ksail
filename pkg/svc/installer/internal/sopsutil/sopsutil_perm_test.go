@@ -3,7 +3,6 @@ package sopsutil_test
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
@@ -15,13 +14,7 @@ import (
 // TestResolveAgeKey_KeyFilePermissionDenied tests the os.ReadFile error path
 // when the key file exists but is not readable (permission denied).
 func TestResolveAgeKey_KeyFilePermissionDenied(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("permission tests not reliable on Windows")
-	}
-
-	if os.Getuid() == 0 {
-		t.Skip("test requires non-root user for permission checks")
-	}
+	skipPermissionSensitiveTest(t)
 
 	dir := t.TempDir()
 	keyPath := filepath.Join(dir, "keys.txt")

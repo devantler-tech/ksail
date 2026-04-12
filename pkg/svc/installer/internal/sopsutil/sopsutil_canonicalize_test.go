@@ -2,6 +2,7 @@ package sopsutil_test
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -12,6 +13,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func skipPermissionSensitiveTest(t *testing.T) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("permission semantics differ on Windows")
+	}
+
+	currentUser, err := user.Current()
+	require.NoError(t, err)
+
+	if currentUser.Uid == "0" {
+		t.Skip("running as root — permission checks are bypassed")
+	}
+}
+
 // TestResolveAgeKey_EvalCanonicalPathParentNotExist verifies that when the SOPS
 // age key file path has a non-existent parent directory, EvalCanonicalPath
 // returns a wrapped error and ResolveAgeKey propagates it. This exercises the
@@ -21,7 +37,10 @@ import (
 func TestResolveAgeKey_EvalCanonicalPathParentNotExist(t *testing.T) {
 	// Point SOPS_AGE_KEY_FILE to a path where even the parent directory does
 	// not exist. EvalCanonicalPath will fail to resolve the parent's symlinks.
-	t.Setenv("SOPS_AGE_KEY_FILE", "/nonexistent-parent-dir-for-sopsutil-test/nested/keys.txt")
+	t.Setenv(
+		"SOPS_AGE_KEY_FILE",
+		filepath.Join(t.TempDir(), "nonexistent-parent-dir", "nested", "keys.txt"),
+	)
 	t.Setenv("TEST_SOPSUTIL_CANONICAL_NOT_EXIST", "")
 
 	sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_CANONICAL_NOT_EXIST"}
@@ -37,15 +56,9 @@ func TestResolveAgeKey_EvalCanonicalPathParentNotExist(t *testing.T) {
 // returns a non-IsNotExist error and ResolveAgeKey propagates it.
 //
 
-//nolint:goconst,gosec // Test-only permission setup stays explicit.
+//nolint:gosec // Test-only permission setup stays explicit.
 func TestResolveAgeKey_EvalCanonicalPathPermissionDenied(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("permission semantics differ on Windows")
-	}
-
-	if os.Getuid() == 0 {
-		t.Skip("running as root — permission checks are bypassed")
-	}
+	skipPermissionSensitiveTest(t)
 
 	// Create a directory hierarchy where we remove all permissions from a
 	// middle directory. EvalCanonicalPath will fail with a permission error
@@ -86,13 +99,7 @@ func TestResolveAgeKey_EvalCanonicalPathPermissionDenied(t *testing.T) {
 //
 
 func TestResolveEnabledAgeKey_AutoDetectWithCanonicalError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("permission semantics differ on Windows")
-	}
-
-	if os.Getuid() == 0 {
-		t.Skip("running as root — permission checks are bypassed")
-	}
+	skipPermissionSensitiveTest(t)
 
 	baseDir := t.TempDir()
 	restrictedDir := filepath.Join(baseDir, "no-access")

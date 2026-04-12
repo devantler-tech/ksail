@@ -49,30 +49,23 @@ func TestGenerate_MarshalError(t *testing.T) {
 	assert.Contains(t, err.Error(), "marshal kustomization")
 }
 
-// TestGenerate_WriteError verifies that a write failure (e.g. read-only
-// directory) is propagated as a wrapped error.
+// TestGenerate_WriteError verifies that a write failure is propagated as a
+// wrapped error.
 func TestGenerate_WriteError(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	readOnlyDir := filepath.Join(tmpDir, "readonly")
-
-	err := os.MkdirAll(readOnlyDir, 0o500)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		//nolint:gosec // restoring test-directory permissions
-		_ = os.Chmod(readOnlyDir, 0o700)
-	})
+	blockingPath := filepath.Join(tmpDir, "blocking-file")
+	require.NoError(t, os.WriteFile(blockingPath, []byte("blocker"), 0o600))
 
 	generator := kustomizationgenerator.NewGenerator()
 
 	opts := yamlgenerator.Options{
-		Output: filepath.Join(readOnlyDir, "subdir", "kustomization.yaml"),
+		Output: filepath.Join(blockingPath, "subdir", "kustomization.yaml"),
 		Force:  true,
 	}
 
-	_, err = generator.Generate(&ktypes.Kustomization{}, opts)
+	_, err := generator.Generate(&ktypes.Kustomization{}, opts)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "write kustomization")
