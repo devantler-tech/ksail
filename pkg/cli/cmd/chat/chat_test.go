@@ -607,58 +607,39 @@ func assertResolveReasoningEffort(
 // TestFilterEnvVars verifies environment variable filtering.
 func TestFilterEnvVars(t *testing.T) {
 	t.Parallel()
-
-	tests := []struct {
-		name       string
-		environ    []string
-		filterList []string
-		expected   []string
+	filter := chat.GetFilterEnvVars()
+	for _, tc := range []struct {
+		name, environ, filterList, expected string // comma-separated KEY=VAL lists
 	}{
-		{
-			name: "filters matching variables and preserves others",
-			environ: []string{
-				"PATH=/bin",
-				"GITHUB_TOKEN=secret",
-				"GH_TOKEN=secret2",
-				"HOME=/home",
-			},
-			filterList: []string{"GITHUB_TOKEN", "GH_TOKEN"},
-			expected:   []string{"PATH=/bin", "HOME=/home"},
-		},
-		{
-			name:       "no filtering when list is empty",
-			environ:    []string{"PATH=/bin", "HOME=/home"},
-			filterList: []string{},
-			expected:   []string{"PATH=/bin", "HOME=/home"},
-		},
-		{
-			name: "filters COPILOT_GITHUB_TOKEN while preserving user-configurable Copilot vars",
-			environ: []string{
-				"PATH=/bin",
-				"COPILOT_GITHUB_TOKEN=app-token",
-				"COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/my/dir",
-			},
-			filterList: []string{"COPILOT_GITHUB_TOKEN"},
-			expected:   []string{"PATH=/bin", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/my/dir"},
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
+		{"filters matching vars", "PATH=/bin,GITHUB_TOKEN=s,GH_TOKEN=s2,HOME=/h", "GITHUB_TOKEN,GH_TOKEN", "PATH=/bin,HOME=/h"},
+		{"empty filter list preserves all", "PATH=/bin,HOME=/h", "", "PATH=/bin,HOME=/h"},
+		{"preserves input order", "A=1,B=2,C=3,D=4", "C", "A=1,B=2,D=4"},
+		{"non-matching filter keys are harmless", "PATH=/bin,HOME=/h", "NONEXISTENT,ALSO_MISSING", "PATH=/bin,HOME=/h"},
+		{"COPILOT_GITHUB_TOKEN filtered, user vars preserved", "PATH=/bin,COPILOT_GITHUB_TOKEN=t,COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d", "COPILOT_GITHUB_TOKEN", "PATH=/bin,COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			result := chat.GetFilterEnvVars()(testCase.environ, testCase.filterList)
-			if len(result) != len(testCase.expected) {
-				t.Fatalf("Expected %d vars, got %d", len(testCase.expected), len(result))
+			env := splitCSV(tc.environ)
+			fl := splitCSV(tc.filterList)
+			exp := splitCSV(tc.expected)
+			got := filter(env, fl)
+			if len(got) != len(exp) {
+				t.Fatalf("expected %d vars, got %d: %v", len(exp), len(got), got)
 			}
-
-			for i, expected := range testCase.expected {
-				if result[i] != expected {
-					t.Errorf("Position %d: expected %q, got %q", i, expected, result[i])
+			for i := range exp {
+				if got[i] != exp[i] {
+					t.Errorf("pos %d: expected %q, got %q", i, exp[i], got[i])
 				}
 			}
 		})
 	}
+}
+
+func splitCSV(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	return strings.Split(s, ",")
 }
 
 // mockAuthChecker is a test double for chat.AuthStatusChecker that tracks
