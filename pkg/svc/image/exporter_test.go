@@ -194,6 +194,40 @@ func TestExportEmptyImageStringsFiltered(t *testing.T) {
 	assert.ErrorIs(t, err, image.ErrNoImagesFound)
 }
 
+func TestExportRejectsDigestOnlyImageArgument(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
+			},
+		}, nil)
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{
+			OutputPath: outputPath,
+			Images:     []string{"sha256:abc123"},
+		},
+	)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, image.ErrDigestOnlyReference)
+	assert.Contains(t, err.Error(), "digest-only references are not supported")
+}
+
 func TestExportWithSpecificImages(t *testing.T) {
 	t.Parallel()
 

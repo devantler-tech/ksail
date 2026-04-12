@@ -27,6 +27,8 @@ var (
 	ErrUnsupportedProvider = errors.New("unsupported provider for image operations")
 	// ErrNoImagesFound is returned when no images are found in the cluster.
 	ErrNoImagesFound = errors.New("no images found in cluster")
+	// ErrDigestOnlyReference is returned when an image reference omits its repository name.
+	ErrDigestOnlyReference = errors.New("digest-only references are not supported")
 )
 
 // ExportOptions configures the image export operation.
@@ -148,6 +150,14 @@ func (e *Exporter) resolveImages(
 			img = strings.TrimSpace(img)
 			if img == "" {
 				continue
+			}
+
+			if strings.HasPrefix(img, "sha256:") {
+				return nil, fmt.Errorf(
+					"invalid image reference %q: %w; provide a named image reference instead",
+					img,
+					ErrDigestOnlyReference,
+				)
 			}
 
 			normalized = append(normalized, NormalizeImageRef(img))
