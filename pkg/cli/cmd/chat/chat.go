@@ -191,7 +191,15 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 	// Environment variables filtered from the child copilot CLI process to
 	// prevent implicit auth interference. GITHUB_TOKEN and GH_TOKEN are
 	// general-purpose PATs that may not carry Copilot-specific scopes.
-	filteredEnvVars := []string{"GITHUB_TOKEN", "GH_TOKEN"}
+	// COPILOT_GITHUB_TOKEN is the Copilot CLI's own auth token env var;
+	// if set by a parent process (e.g. a GitHub App) with a token that
+	// lacks Copilot scopes, it causes immediate startup failure. The SDK
+	// manages auth separately via COPILOT_SDK_AUTH_TOKEN.
+	//
+	// NOTE: We intentionally use a specific denylist rather than filtering
+	// all COPILOT_* prefixed vars, so that user-configurable settings like
+	// COPILOT_CUSTOM_INSTRUCTIONS_DIRS are preserved.
+	filteredEnvVars := []string{"GITHUB_TOKEN", "GH_TOKEN", "COPILOT_GITHUB_TOKEN"}
 
 	opts := &copilot.ClientOptions{
 		LogLevel: "error",

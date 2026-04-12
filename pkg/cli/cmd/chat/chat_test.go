@@ -608,55 +608,56 @@ func assertResolveReasoningEffort(
 func TestFilterEnvVars(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	filter := chat.GetFilterEnvVars()
+
+	for _, testCase := range []struct {
 		name       string
 		environ    []string
 		filterList []string
 		expected   []string
 	}{
 		{
-			name:       "filters single variable",
-			environ:    []string{"PATH=/bin", "GITHUB_TOKEN=secret", "HOME=/home"},
-			filterList: []string{"GITHUB_TOKEN"},
-			expected:   []string{"PATH=/bin", "HOME=/home"},
+			"filters matching vars",
+			[]string{"PATH=/bin", "GITHUB_TOKEN=s", "GH_TOKEN=s2", "HOME=/h"},
+			[]string{"GITHUB_TOKEN", "GH_TOKEN"},
+			[]string{"PATH=/bin", "HOME=/h"},
 		},
 		{
-			name: "filters multiple variables",
-			environ: []string{
-				"PATH=/bin",
-				"GITHUB_TOKEN=secret",
-				"GH_TOKEN=secret2",
-				"HOME=/home",
-			},
-			filterList: []string{"GITHUB_TOKEN", "GH_TOKEN"},
-			expected:   []string{"PATH=/bin", "HOME=/home"},
+			"empty filter list preserves all",
+			[]string{"PATH=/bin", "HOME=/h"},
+			[]string{},
+			[]string{"PATH=/bin", "HOME=/h"},
 		},
 		{
-			name:       "no filtering when list is empty",
-			environ:    []string{"PATH=/bin", "HOME=/home"},
-			filterList: []string{},
-			expected:   []string{"PATH=/bin", "HOME=/home"},
+			"preserves input order",
+			[]string{"A=1", "B=2", "C=3", "D=4"},
+			[]string{"C"},
+			[]string{"A=1", "B=2", "D=4"},
 		},
 		{
-			name:       "preserves order",
-			environ:    []string{"A=1", "B=2", "C=3", "D=4"},
-			filterList: []string{"B"},
-			expected:   []string{"A=1", "C=3", "D=4"},
+			"non-matching filter keys are harmless",
+			[]string{"PATH=/bin", "HOME=/h"},
+			[]string{"NONEXISTENT"},
+			[]string{"PATH=/bin", "HOME=/h"},
 		},
-	}
-
-	for _, testCase := range tests {
+		{
+			"COPILOT_GITHUB_TOKEN filtered, user vars preserved",
+			[]string{"PATH=/bin", "COPILOT_GITHUB_TOKEN=t", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d"},
+			[]string{"COPILOT_GITHUB_TOKEN"},
+			[]string{"PATH=/bin", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/d"},
+		},
+	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := chat.GetFilterEnvVars()(testCase.environ, testCase.filterList)
-			if len(result) != len(testCase.expected) {
-				t.Fatalf("Expected %d vars, got %d", len(testCase.expected), len(result))
+			got := filter(testCase.environ, testCase.filterList)
+			if len(got) != len(testCase.expected) {
+				t.Fatalf("expected %d vars, got %d: %v", len(testCase.expected), len(got), got)
 			}
 
-			for i, expected := range testCase.expected {
-				if result[i] != expected {
-					t.Errorf("Position %d: expected %q, got %q", i, expected, result[i])
+			for i := range testCase.expected {
+				if got[i] != testCase.expected[i] {
+					t.Errorf("pos %d: expected %q, got %q", i, testCase.expected[i], got[i])
 				}
 			}
 		})
