@@ -109,7 +109,25 @@ func SetNewFluxResourcesClient(fn func(*rest.Config) (any, error)) func() {
 	}
 }
 
-// ResolveAgeKey exports sopsutil.ResolveAgeKey for testing.
+// SetLoadRESTConfig allows tests to replace loadRESTConfig with a stub.
+func SetLoadRESTConfig(fn func(string) (*rest.Config, error)) func() {
+	original := loadRESTConfig
+	loadRESTConfig = fn
+
+	return func() {
+		loadRESTConfig = original
+	}
+}
+
+// SetDiagnoseFluxPodFailures allows tests to replace the pod diagnostics function with a stub.
+func SetDiagnoseFluxPodFailures(fn func(context.Context, *rest.Config) string) func() {
+	original := diagnoseFluxPodFailures
+	diagnoseFluxPodFailures = fn
+
+	return func() {
+		diagnoseFluxPodFailures = original
+	}
+}
 func ResolveAgeKey(sops v1alpha1.SOPS) (string, error) {
 	key, err := sopsutil.ResolveAgeKey(sops)
 	if err != nil {

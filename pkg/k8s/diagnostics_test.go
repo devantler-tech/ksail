@@ -117,7 +117,7 @@ func TestDiagnosePodFailures(t *testing.T) {
 			wantContain: []string{"crash-pod", "CrashLoopBackOff", "myapp:v1"},
 		},
 		{
-			name:       "pod with CrashLoopBackOff includes restart count",
+			name:       "pod with CrashLoopBackOff includes restart count (plural)",
 			namespaces: []string{"default"},
 			pods: []corev1.Pod{
 				makePod("crash-pod-restarts", "default", corev1.PodRunning, []corev1.ContainerStatus{
@@ -141,6 +141,25 @@ func TestDiagnosePodFailures(t *testing.T) {
 			},
 		},
 		{
+			name:       "pod with CrashLoopBackOff uses singular for exactly 1 restart",
+			namespaces: []string{"default"},
+			pods: []corev1.Pod{
+				makePod("crash-pod-one-restart", "default", corev1.PodRunning, []corev1.ContainerStatus{
+					{
+						Ready: false,
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{
+								Reason: "CrashLoopBackOff",
+							},
+						},
+						Image:        "myapp:v1",
+						RestartCount: 1,
+					},
+				}, nil),
+			},
+			wantContain: []string{"crash-pod-one-restart", "CrashLoopBackOff", "1 restart"},
+		},
+		{
 			name:       "pod terminated with non-zero exit code is reported",
 			namespaces: []string{"default"},
 			pods: []corev1.Pod{
@@ -159,7 +178,7 @@ func TestDiagnosePodFailures(t *testing.T) {
 			wantContain: []string{"terminated-pod", "exit code 1"},
 		},
 		{
-			name:       "terminated container includes restart count",
+			name:       "terminated container includes restart count (plural)",
 			namespaces: []string{"default"},
 			pods: []corev1.Pod{
 				makePod("terminated-restarts", "default", corev1.PodFailed, []corev1.ContainerStatus{
@@ -176,6 +195,25 @@ func TestDiagnosePodFailures(t *testing.T) {
 				}, nil),
 			},
 			wantContain: []string{"terminated-restarts", "exit code 2", "3 restarts"},
+		},
+		{
+			name:       "terminated container uses singular for exactly 1 restart",
+			namespaces: []string{"default"},
+			pods: []corev1.Pod{
+				makePod("terminated-one-restart", "default", corev1.PodFailed, []corev1.ContainerStatus{
+					{
+						Ready: false,
+						State: corev1.ContainerState{
+							Terminated: &corev1.ContainerStateTerminated{
+								ExitCode: 1,
+								Reason:   "Error",
+							},
+						},
+						RestartCount: 1,
+					},
+				}, nil),
+			},
+			wantContain: []string{"terminated-one-restart", "exit code 1", "1 restart"},
 		},
 		{
 			name:       "pod with failing init container is reported",
