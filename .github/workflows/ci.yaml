@@ -770,13 +770,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs:
-      [
-        changes,
-        build-artifact,
-        warm-helm-cache,
-        warm-mirror-cache,
-        system-test-docker,
-      ]
+      - changes
+      - build-artifact
+      - warm-helm-cache
+      - warm-mirror-cache
+      - system-test-docker
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     environment: ci
     permissions:
@@ -1079,26 +1077,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
-      [
-        rate-limit-gate,
-        changes,
-        build-artifact,
-        generate-schema,
-        generate-docs,
-        auto-commit,
-        warm-helm-cache,
-        system-test-docker,
-        system-test-hetzner,
-        system-test-omni,
-        cleanup-hetzner,
-        cleanup-omni,
-        audit-docs,
-        audit-vsce,
-        build-docs,
-        vscode-extension,
-        benchmark,
-        benchmark-store,
-      ]
+      - rate-limit-gate
+      - changes
+      - build-artifact
+      - generate-schema
+      - generate-docs
+      - auto-commit
+      - warm-helm-cache
+      - system-test-docker
+      - system-test-hetzner
+      - system-test-omni
+      - cleanup-hetzner
+      - cleanup-omni
+      - audit-docs
+      - audit-vsce
+      - build-docs
+      - vscode-extension
+      - benchmark
+      - benchmark-store
     if: ${{ always() }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
