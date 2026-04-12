@@ -29,6 +29,10 @@ The tag is resolved differently depending on the context:
 
 See [Declarative Configuration](/configuration/declarative-configuration/) for the full `spec.workload` reference.
 
+### Tag drift auto-repair
+
+`ksail cluster update` detects when the live GitOps sync ref (Flux OCIRepository tag or ArgoCD `targetRevision`) has drifted from the configured `spec.workload.tag` and reconciles it in-place — no manual intervention required. This keeps the cluster's GitOps engine aligned with your declared configuration automatically.
+
 ## Commands
 
 | Command                    | Description                            |
