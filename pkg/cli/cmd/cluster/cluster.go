@@ -6291,7 +6291,8 @@ func createAndVerifyProvisioner(
 	// This ensures the kubeconfig is available for component detection
 	// and subsequent Helm operations (CNI, GitOps installation).
 	if refresher, ok := provisioner.(clusterprovisioner.KubeconfigRefresher); ok {
-		if err := refresher.RefreshKubeconfig(cmd.Context(), clusterName); err != nil {
+		err := refresher.RefreshKubeconfig(cmd.Context(), clusterName)
+		if err != nil {
 			return nil, fmt.Errorf("failed to refresh kubeconfig: %w", err)
 		}
 	}
