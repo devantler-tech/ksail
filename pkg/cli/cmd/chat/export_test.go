@@ -32,11 +32,6 @@ func GetFilterEnvVars() func([]string, []string) []string {
 	return filterEnvVars
 }
 
-// GetFilterEnvVarPrefixes returns the filterEnvVarPrefixes function for testing.
-func GetFilterEnvVarPrefixes() func([]string, []string) []string {
-	return filterEnvVarPrefixes
-}
-
 // AuthMaxAttempts exports the authMaxAttempts constant for testing.
 const AuthMaxAttempts = authMaxAttempts
 

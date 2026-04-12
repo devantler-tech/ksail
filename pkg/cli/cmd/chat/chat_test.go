@@ -643,6 +643,19 @@ func TestFilterEnvVars(t *testing.T) {
 			filterList: []string{"B"},
 			expected:   []string{"A=1", "C=3", "D=4"},
 		},
+		{
+			name: "filters COPILOT_GITHUB_TOKEN alongside general PATs",
+			environ: []string{
+				"PATH=/bin",
+				"GITHUB_TOKEN=secret",
+				"GH_TOKEN=secret2",
+				"COPILOT_GITHUB_TOKEN=app-token",
+				"COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/my/dir",
+				"HOME=/home",
+			},
+			filterList: []string{"GITHUB_TOKEN", "GH_TOKEN", "COPILOT_GITHUB_TOKEN"},
+			expected:   []string{"PATH=/bin", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/my/dir", "HOME=/home"},
+		},
 	}
 
 	for _, testCase := range tests {
@@ -652,80 +665,6 @@ func TestFilterEnvVars(t *testing.T) {
 			result := chat.GetFilterEnvVars()(testCase.environ, testCase.filterList)
 			if len(result) != len(testCase.expected) {
 				t.Fatalf("Expected %d vars, got %d", len(testCase.expected), len(result))
-			}
-
-			for i, expected := range testCase.expected {
-				if result[i] != expected {
-					t.Errorf("Position %d: expected %q, got %q", i, expected, result[i])
-				}
-			}
-		})
-	}
-}
-
-// TestFilterEnvVarPrefixes verifies prefix-based environment variable filtering.
-func TestFilterEnvVarPrefixes(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		environ  []string
-		prefixes []string
-		expected []string
-	}{
-		{
-			name: "filters single prefix",
-			environ: []string{
-				"PATH=/bin",
-				"COPILOT_GITHUB_TOKEN=secret",
-				"COPILOT_CLI=1",
-				"HOME=/home",
-			},
-			prefixes: []string{"COPILOT_"},
-			expected: []string{"PATH=/bin", "HOME=/home"},
-		},
-		{
-			name: "filters multiple prefixes",
-			environ: []string{
-				"PATH=/bin",
-				"COPILOT_GITHUB_TOKEN=secret",
-				"GITHUB_COPILOT_FEATURE=on",
-				"HOME=/home",
-			},
-			prefixes: []string{"COPILOT_", "GITHUB_COPILOT_"},
-			expected: []string{"PATH=/bin", "HOME=/home"},
-		},
-		{
-			name:     "no filtering when prefixes list is empty",
-			environ:  []string{"COPILOT_TOKEN=x", "PATH=/bin"},
-			prefixes: []string{},
-			expected: []string{"COPILOT_TOKEN=x", "PATH=/bin"},
-		},
-		{
-			name: "preserves vars that do not match prefix",
-			environ: []string{
-				"KSAIL_COPILOT_TOKEN=keep",
-				"COPILOT_GITHUB_TOKEN=remove",
-				"MY_COPILOT=keep",
-			},
-			prefixes: []string{"COPILOT_"},
-			expected: []string{"KSAIL_COPILOT_TOKEN=keep", "MY_COPILOT=keep"},
-		},
-		{
-			name:     "preserves order",
-			environ:  []string{"A=1", "COPILOT_X=2", "B=3", "COPILOT_Y=4", "C=5"},
-			prefixes: []string{"COPILOT_"},
-			expected: []string{"A=1", "B=3", "C=5"},
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := chat.GetFilterEnvVarPrefixes()(testCase.environ, testCase.prefixes)
-			if len(result) != len(testCase.expected) {
-				t.Fatalf("Expected %d vars, got %d: %v", len(testCase.expected), len(result), result)
 			}
 
 			for i, expected := range testCase.expected {
