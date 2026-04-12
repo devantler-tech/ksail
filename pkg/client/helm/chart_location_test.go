@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestParseChartRef(t *testing.T) {
 	t.Parallel()
 
@@ -61,14 +62,14 @@ func TestParseChartRef(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			repo, chart := helm.ParseChartRef(tc.chartRef)
+			repo, chart := helm.ParseChartRef(testCase.chartRef)
 
-			assert.Equal(t, tc.wantRepo, repo, "repo")
-			assert.Equal(t, tc.wantChart, chart, "chart")
+			assert.Equal(t, testCase.wantRepo, repo, "repo")
+			assert.Equal(t, testCase.wantChart, chart, "chart")
 		})
 	}
 }
@@ -108,20 +109,20 @@ func TestBuildChartPathOptions(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			opts := helm.BuildChartPathOptions(tc.spec, tc.repoURL)
+			opts := helm.BuildChartPathOptions(testCase.spec, testCase.repoURL)
 
-			assert.Equal(t, tc.repoURL, opts.RepoURL)
-			assert.Equal(t, tc.spec.Version, opts.Version)
-			assert.Equal(t, tc.spec.Username, opts.Username)
-			assert.Equal(t, tc.spec.Password, opts.Password)
-			assert.Equal(t, tc.spec.CertFile, opts.CertFile)
-			assert.Equal(t, tc.spec.KeyFile, opts.KeyFile)
-			assert.Equal(t, tc.spec.CaFile, opts.CaFile)
-			assert.Equal(t, tc.spec.InsecureSkipTLSverify, opts.InsecureSkipTLSVerify)
+			assert.Equal(t, testCase.repoURL, opts.RepoURL)
+			assert.Equal(t, testCase.spec.Version, opts.Version)
+			assert.Equal(t, testCase.spec.Username, opts.Username)
+			assert.Equal(t, testCase.spec.Password, opts.Password)
+			assert.Equal(t, testCase.spec.CertFile, opts.CertFile)
+			assert.Equal(t, testCase.spec.KeyFile, opts.KeyFile)
+			assert.Equal(t, testCase.spec.CaFile, opts.CaFile)
+			assert.Equal(t, testCase.spec.InsecureSkipTLSverify, opts.InsecureSkipTLSVerify)
 		})
 	}
 }
@@ -141,10 +142,10 @@ func TestApplyChartPathOptions(t *testing.T) {
 
 		helm.ApplyChartPathOptions(install, opts)
 
-		assert.Equal(t, "https://repo.io", install.ChartPathOptions.RepoURL)
-		assert.Equal(t, "2.0.0", install.ChartPathOptions.Version)
-		assert.Equal(t, "admin", install.ChartPathOptions.Username)
-		assert.Equal(t, "secret", install.ChartPathOptions.Password)
+		assert.Equal(t, "https://repo.io", install.RepoURL)
+		assert.Equal(t, "2.0.0", install.Version)
+		assert.Equal(t, "admin", install.Username)
+		assert.Equal(t, "secret", install.Password)
 	})
 
 	t.Run("applies to Upgrade action", func(t *testing.T) {
@@ -158,9 +159,9 @@ func TestApplyChartPathOptions(t *testing.T) {
 
 		helm.ApplyChartPathOptions(upgrade, opts)
 
-		assert.Equal(t, "https://charts.io", upgrade.ChartPathOptions.RepoURL)
-		assert.Equal(t, "3.0.0", upgrade.ChartPathOptions.Version)
-		assert.Equal(t, "/ca.pem", upgrade.ChartPathOptions.CaFile)
+		assert.Equal(t, "https://charts.io", upgrade.RepoURL)
+		assert.Equal(t, "3.0.0", upgrade.Version)
+		assert.Equal(t, "/ca.pem", upgrade.CaFile)
 	})
 
 	t.Run("no-op for unsupported client type", func(t *testing.T) {
@@ -168,7 +169,10 @@ func TestApplyChartPathOptions(t *testing.T) {
 
 		// Should not panic when passed an unsupported type.
 		require.NotPanics(t, func() {
-			helm.ApplyChartPathOptions("unsupported", helm.BuildChartPathOptions(&helm.ChartSpec{}, ""))
+			helm.ApplyChartPathOptions(
+				"unsupported",
+				helm.BuildChartPathOptions(&helm.ChartSpec{}, ""),
+			)
 		})
 	})
 }

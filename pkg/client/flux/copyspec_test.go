@@ -180,6 +180,6 @@ type unsupportedObject struct {
 func (o *unsupportedObject) DeepCopyObject() runtime.Object {
 	return &unsupportedObject{
 		TypeMeta:   o.TypeMeta,
-		ObjectMeta: *o.ObjectMeta.DeepCopy(),
+		ObjectMeta: *o.DeepCopy(),
 	}
 }

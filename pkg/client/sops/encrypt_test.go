@@ -36,7 +36,9 @@ func TestMetadataFromEncryptionConfig(t *testing.T) {
 	t.Run("fully populated config", func(t *testing.T) {
 		t.Parallel()
 
-		ageKey, err := sopsage.MasterKeyFromRecipient("age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p")
+		ageKey, err := sopsage.MasterKeyFromRecipient(
+			"age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+		)
 		require.NoError(t, err)
 
 		config := sopsclient.EncryptConfig{

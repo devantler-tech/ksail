@@ -17,7 +17,12 @@ func TestReadFileSafe_InvalidBasePath(t *testing.T) {
 	filePath := filepath.Join(nonExistentBase, "file.txt")
 
 	_, err := fsutil.ReadFileSafe(nonExistentBase, filePath)
-	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase, "should fail with ErrPathOutsideBase for non-existent base")
+	require.ErrorIs(
+		t,
+		err,
+		fsutil.ErrPathOutsideBase,
+		"should fail with ErrPathOutsideBase for non-existent base",
+	)
 }
 
 func TestReadFileSafe_DeepNonExistentBasePath(t *testing.T) {
@@ -28,7 +33,12 @@ func TestReadFileSafe_DeepNonExistentBasePath(t *testing.T) {
 	filePath := filepath.Join(deepNonExistent, "file.txt")
 
 	_, err := fsutil.ReadFileSafe(deepNonExistent, filePath)
-	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase, "should fail with ErrPathOutsideBase for deeply non-existent base")
+	require.ErrorIs(
+		t,
+		err,
+		fsutil.ErrPathOutsideBase,
+		"should fail with ErrPathOutsideBase for deeply non-existent base",
+	)
 }
 
 func TestReadFileSafe_SameAsBase(t *testing.T) {

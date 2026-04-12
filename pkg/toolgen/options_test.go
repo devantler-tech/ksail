@@ -67,13 +67,16 @@ func TestSessionLogRef_SetOverwritesPrevious(t *testing.T) {
 	assert.Equal(t, 1, callCount2, "second function should have been called once")
 }
 
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestSessionLogRef_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 
 	ref := toolgen.NewSessionLogRef()
 
-	var callCount int
-	var mu sync.Mutex
+	var (
+		callCount int
+		mu        sync.Mutex
+	)
 
 	ref.Set(func(_ context.Context, _, _ string) {
 		mu.Lock()

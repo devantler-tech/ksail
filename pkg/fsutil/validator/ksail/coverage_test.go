@@ -25,6 +25,8 @@ func TestNewValidatorForVCluster(t *testing.T) {
 }
 
 // TestValidate_VClusterContextValidation verifies VCluster context name validation.
+//
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestValidate_VClusterContextValidation(t *testing.T) {
 	t.Parallel()
 
@@ -59,6 +61,8 @@ func TestValidate_VClusterContextValidation(t *testing.T) {
 }
 
 // TestValidate_VClusterContextMismatch verifies VCluster context name mismatch is flagged.
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestValidate_VClusterContextMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -87,6 +91,7 @@ func TestValidate_VClusterContextMismatch(t *testing.T) {
 	result := v.Validate(config)
 
 	found := false
+
 	for _, err := range result.Errors {
 		if err.Field == "spec.cluster.connection.context" {
 			found = true
@@ -97,6 +102,8 @@ func TestValidate_VClusterContextMismatch(t *testing.T) {
 }
 
 // TestValidate_TalosCiliumCNIAlignment verifies Talos+Cilium CNI alignment.
+//
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestValidate_TalosCiliumCNIAlignment(t *testing.T) {
 	t.Parallel()
 
@@ -122,17 +129,24 @@ func TestValidate_TalosCiliumCNIAlignment(t *testing.T) {
 	result := v.Validate(config)
 
 	found := false
+
 	for _, err := range result.Errors {
 		if err.Field == "spec.cni" {
 			found = true
 		}
 	}
 
-	assert.True(t, found, "should flag CNI mismatch when Cilium requested but Talos CNI not disabled")
+	assert.True(
+		t,
+		found,
+		"should flag CNI mismatch when Cilium requested but Talos CNI not disabled",
+	)
 }
 
 // TestValidate_TalosDefaultCNIAlignment verifies Talos+Default CNI alignment
 // when CNI is disabled in Talos config.
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestValidate_TalosDefaultCNIAlignment(t *testing.T) {
 	t.Parallel()
 
@@ -166,6 +180,8 @@ func TestValidate_TalosDefaultCNIAlignment(t *testing.T) {
 
 // TestValidate_VClusterCiliumCNI verifies VCluster+Cilium does not produce CNI errors
 // when no specific config is provided.
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestValidate_VClusterCiliumCNI(t *testing.T) {
 	t.Parallel()
 
@@ -195,6 +211,8 @@ func TestValidate_VClusterCiliumCNI(t *testing.T) {
 }
 
 // TestValidate_ExternalRegistryPort verifies external registry port validation.
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestValidate_ExternalRegistryPort(t *testing.T) {
 	t.Parallel()
 
@@ -226,6 +244,8 @@ func TestValidate_ExternalRegistryPort(t *testing.T) {
 }
 
 // TestValidate_FluxValidation verifies the Flux validation placeholder.
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestValidate_FluxValidation(t *testing.T) {
 	t.Parallel()
 
@@ -251,6 +271,8 @@ func TestValidate_FluxValidation(t *testing.T) {
 }
 
 // TestValidate_GetVClusterConfigNameEmpty verifies empty VCluster name returns empty.
+//
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestValidate_GetVClusterConfigNameEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -285,6 +307,8 @@ func TestValidate_GetVClusterConfigNameEmpty(t *testing.T) {
 }
 
 // TestValidate_TalosConfigName verifies Talos config name extraction.
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestValidate_TalosConfigName(t *testing.T) {
 	t.Parallel()
 

@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+//nolint:paralleltest // Uses t.Setenv and must not run in parallel.
 func TestSetupEditorEnv_NilCmd(t *testing.T) {
 	// Not parallel because it uses environment variables
-
 	// Clear all editor environment variables first
 	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
 	for _, env := range envsToClear {
@@ -27,9 +27,9 @@ func TestSetupEditorEnv_NilCmd(t *testing.T) {
 	assert.Equal(t, "test-editor", os.Getenv("EDITOR"))
 }
 
+//nolint:paralleltest // Uses t.Setenv and must not run in parallel.
 func TestSetupEditorEnv_NilCmdWorkload(t *testing.T) {
 	// Not parallel because it uses environment variables
-
 	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
 	for _, env := range envsToClear {
 		t.Setenv(env, "")
@@ -43,9 +43,9 @@ func TestSetupEditorEnv_NilCmdWorkload(t *testing.T) {
 	assert.Equal(t, "code", os.Getenv("VISUAL"))
 }
 
+//nolint:paralleltest // Uses t.Setenv and must not run in parallel.
 func TestSetupEditorEnv_NilCmdConnect(t *testing.T) {
 	// Not parallel because it uses environment variables
-
 	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
 	for _, env := range envsToClear {
 		t.Setenv(env, "")
@@ -61,7 +61,6 @@ func TestSetupEditorEnv_NilCmdConnect(t *testing.T) {
 
 func TestSetupEditorEnv_EmptyFlagFallsBackToEnv(t *testing.T) {
 	// Not parallel because it uses environment variables
-
 	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "VISUAL"}
 	for _, env := range envsToClear {
 		t.Setenv(env, "")
@@ -80,7 +79,6 @@ func TestSetupEditorEnv_EmptyFlagFallsBackToEnv(t *testing.T) {
 
 func TestSetupEditorEnv_CleanupRestoresOriginal(t *testing.T) {
 	// Not parallel because it uses environment variables
-
 	t.Setenv("SOPS_EDITOR", "original-sops")
 	t.Setenv("KUBE_EDITOR", "original-kube")
 	t.Setenv("EDITOR", "original-editor")
@@ -103,15 +101,16 @@ func TestSetupEditorEnv_CleanupRestoresOriginal(t *testing.T) {
 	assert.Equal(t, "original-visual", os.Getenv("VISUAL"))
 }
 
+//nolint:paralleltest // Uses t.Setenv and must not run in parallel.
 func TestEditorResolver_SetEnvVars_UnknownCommand(t *testing.T) {
 	// Not parallel because it uses environment variables
-
 	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
 	for _, env := range envsToClear {
 		t.Setenv(env, "")
 	}
 
 	resolver := editor.NewResolver("", nil)
+
 	cleanup := resolver.SetEnvVars("some-editor", "unknown-command")
 	defer cleanup()
 
@@ -122,9 +121,9 @@ func TestEditorResolver_SetEnvVars_UnknownCommand(t *testing.T) {
 	assert.Empty(t, os.Getenv("VISUAL"))
 }
 
+//nolint:paralleltest // Uses t.Setenv and must not run in parallel.
 func TestEditorResolver_SetEnvVars_RestoresUnsetVars(t *testing.T) {
 	// Not parallel because it uses environment variables
-
 	// Ensure vars are unset
 	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
 	for _, env := range envsToClear {

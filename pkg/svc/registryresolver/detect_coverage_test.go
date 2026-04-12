@@ -1,3 +1,4 @@
+//nolint:varnamelen // Table-driven registry resolver tests keep short locals for readability.
 package registryresolver_test
 
 import (
@@ -75,45 +76,47 @@ func TestDetectRegistryFromConfig_EnabledLocalRegistry(t *testing.T) {
 
 // TestDetectRegistryFromViper_WithRegistrySet tests DetectRegistryFromViper with
 // a valid registry flag value.
+//
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestDetectRegistryFromViper_WithRegistrySet(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		registry   string
-		wantHost   string
-		wantPort   int32
-		wantRepo   string
+		name         string
+		registry     string
+		wantHost     string
+		wantPort     int32
+		wantRepo     string
 		wantExternal bool
 	}{
 		{
-			name:       "localhost with port",
-			registry:   "localhost:5000",
-			wantHost:   "localhost",
-			wantPort:   5000,
+			name:         "localhost with port",
+			registry:     "localhost:5000",
+			wantHost:     "localhost",
+			wantPort:     5000,
 			wantExternal: false,
 		},
 		{
-			name:       "external registry with path",
-			registry:   "ghcr.io/myorg/myrepo",
-			wantHost:   "ghcr.io",
-			wantPort:   0,
-			wantRepo:   "myorg/myrepo",
+			name:         "external registry with path",
+			registry:     "ghcr.io/myorg/myrepo",
+			wantHost:     "ghcr.io",
+			wantPort:     0,
+			wantRepo:     "myorg/myrepo",
 			wantExternal: true,
 		},
 		{
-			name:       "registry with port and path",
-			registry:   "registry.example.com:8080/myproject",
-			wantHost:   "registry.example.com",
-			wantPort:   8080,
-			wantRepo:   "myproject",
+			name:         "registry with port and path",
+			registry:     "registry.example.com:8080/myproject",
+			wantHost:     "registry.example.com",
+			wantPort:     8080,
+			wantRepo:     "myproject",
 			wantExternal: true,
 		},
 		{
-			name:       "127.0.0.1 with port",
-			registry:   "127.0.0.1:5000",
-			wantHost:   "127.0.0.1",
-			wantPort:   5000,
+			name:         "127.0.0.1 with port",
+			registry:     "127.0.0.1:5000",
+			wantHost:     "127.0.0.1",
+			wantPort:     5000,
 			wantExternal: false,
 		},
 	}
@@ -184,40 +187,42 @@ func TestParseHostPort_Host(t *testing.T) {
 }
 
 // TestParseOCIURL tests the parseOCIURL function through parseRegistryFlag.
+//
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestParseOCIURL(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		url        string
-		wantHost   string
-		wantPort   int32
-		wantRepo   string
+		name         string
+		url          string
+		wantHost     string
+		wantPort     int32
+		wantRepo     string
 		wantExternal bool
-		wantErr    bool
+		wantErr      bool
 	}{
 		{
-			name:       "oci URL with host and path",
-			url:        "oci://ghcr.io/org/repo",
-			wantHost:   "ghcr.io",
-			wantPort:   0,
-			wantRepo:   "org/repo",
+			name:         "oci URL with host and path",
+			url:          "oci://ghcr.io/org/repo",
+			wantHost:     "ghcr.io",
+			wantPort:     0,
+			wantRepo:     "org/repo",
 			wantExternal: true,
 		},
 		{
-			name:       "oci URL with host port and path",
-			url:        "oci://localhost:5000/myrepo",
-			wantHost:   "localhost",
-			wantPort:   5000,
-			wantRepo:   "myrepo",
+			name:         "oci URL with host port and path",
+			url:          "oci://localhost:5000/myrepo",
+			wantHost:     "localhost",
+			wantPort:     5000,
+			wantRepo:     "myrepo",
 			wantExternal: false,
 		},
 		{
-			name:       "oci URL with only host",
-			url:        "oci://ghcr.io",
-			wantHost:   "ghcr.io",
-			wantPort:   0,
-			wantRepo:   "",
+			name:         "oci URL with only host",
+			url:          "oci://ghcr.io",
+			wantHost:     "ghcr.io",
+			wantPort:     0,
+			wantRepo:     "",
 			wantExternal: true,
 		},
 		{
@@ -226,11 +231,11 @@ func TestParseOCIURL(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:       "URL without oci prefix",
-			url:        "ghcr.io/org/repo",
-			wantHost:   "ghcr.io",
-			wantPort:   0,
-			wantRepo:   "org/repo",
+			name:         "URL without oci prefix",
+			url:          "ghcr.io/org/repo",
+			wantHost:     "ghcr.io",
+			wantPort:     0,
+			wantRepo:     "org/repo",
 			wantExternal: true,
 		},
 	}
@@ -243,6 +248,7 @@ func TestParseOCIURL(t *testing.T) {
 
 			if tt.wantErr {
 				require.Error(t, err)
+
 				return
 			}
 
@@ -257,6 +263,8 @@ func TestParseOCIURL(t *testing.T) {
 }
 
 // TestParseRegistryFlag tests the parseRegistryFlag function.
+//
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestParseRegistryFlag(t *testing.T) {
 	t.Parallel()
 
@@ -266,22 +274,22 @@ func TestParseRegistryFlag(t *testing.T) {
 		wantHost     string
 		wantPort     int32
 		wantRepo     string
-		wantUsername  string
+		wantUsername string
 		wantPassword string
 		wantExternal bool
 	}{
 		{
-			name:       "simple localhost with port",
-			flag:       "localhost:5000",
-			wantHost:   "localhost",
-			wantPort:   5000,
+			name:         "simple localhost with port",
+			flag:         "localhost:5000",
+			wantHost:     "localhost",
+			wantPort:     5000,
 			wantExternal: false,
 		},
 		{
-			name:       "external registry with path",
-			flag:       "ghcr.io/org/repo",
-			wantHost:   "ghcr.io",
-			wantRepo:   "org/repo",
+			name:         "external registry with path",
+			flag:         "ghcr.io/org/repo",
+			wantHost:     "ghcr.io",
+			wantRepo:     "org/repo",
 			wantExternal: true,
 		},
 		{
@@ -289,7 +297,7 @@ func TestParseRegistryFlag(t *testing.T) {
 			flag:         "user:pass@ghcr.io/org/repo",
 			wantHost:     "ghcr.io",
 			wantRepo:     "org/repo",
-			wantUsername:  "user",
+			wantUsername: "user",
 			wantPassword: "pass",
 			wantExternal: true,
 		},
@@ -298,23 +306,23 @@ func TestParseRegistryFlag(t *testing.T) {
 			flag:         "user@ghcr.io/org/repo",
 			wantHost:     "ghcr.io",
 			wantRepo:     "org/repo",
-			wantUsername:  "user",
+			wantUsername: "user",
 			wantPassword: "",
 			wantExternal: true,
 		},
 		{
-			name:       "port with path",
-			flag:       "registry.example.com:8080/myapp",
-			wantHost:   "registry.example.com",
-			wantPort:   8080,
-			wantRepo:   "myapp",
+			name:         "port with path",
+			flag:         "registry.example.com:8080/myapp",
+			wantHost:     "registry.example.com",
+			wantPort:     8080,
+			wantRepo:     "myapp",
 			wantExternal: true,
 		},
 		{
-			name:       "localhost.domain suffix",
-			flag:       "registry.localhost:5000",
-			wantHost:   "registry.localhost",
-			wantPort:   5000,
+			name:         "localhost.domain suffix",
+			flag:         "registry.localhost:5000",
+			wantHost:     "registry.localhost",
+			wantPort:     5000,
 			wantExternal: false,
 		},
 	}

@@ -36,7 +36,6 @@ func TestEnsureDefaultResources_EmptyKubeconfig(t *testing.T) {
 	require.Error(t, err)
 }
 
-//nolint:paralleltest // Uses t.Setenv
 func TestEnsureSopsAgeSecret_EnabledWithKey_InvalidKubeconfig(t *testing.T) {
 	const testKey = "AGE-SECRET-KEY-1TESTKEY000000000000000000000000000000000000000000000000"
 	t.Setenv("TEST_ARGOCD_SOPS_AGE_KEY_KUBECONFIG", testKey)
@@ -53,7 +52,11 @@ func TestEnsureSopsAgeSecret_EnabledWithKey_InvalidKubeconfig(t *testing.T) {
 		},
 	}
 
-	err := argocdinstaller.EnsureSopsAgeSecret(context.Background(), "/nonexistent/kubeconfig", clusterCfg)
+	err := argocdinstaller.EnsureSopsAgeSecret(
+		context.Background(),
+		"/nonexistent/kubeconfig",
+		clusterCfg,
+	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "build REST config")
 }

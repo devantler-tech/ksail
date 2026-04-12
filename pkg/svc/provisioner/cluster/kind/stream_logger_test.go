@@ -16,9 +16,12 @@ func TestStreamLogger_Info(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
-	logger.(log.InfoLogger).Info("hello world")
+	infoLogger, ok := logger.(log.InfoLogger)
+	require.True(t, ok)
+	infoLogger.Info("hello world")
 
 	assert.Equal(t, "hello world\n", buf.String())
 }
@@ -27,9 +30,12 @@ func TestStreamLogger_Infof(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
-	logger.(log.InfoLogger).Infof("count: %d", 42)
+	infoLogger, ok := logger.(log.InfoLogger)
+	require.True(t, ok)
+	infoLogger.Infof("count: %d", 42)
 
 	assert.Equal(t, "count: 42\n", buf.String())
 }
@@ -38,6 +44,7 @@ func TestStreamLogger_Warn(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	logger.Warn("caution")
@@ -49,6 +56,7 @@ func TestStreamLogger_Warnf(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	logger.Warnf("warning %s", "msg")
@@ -60,6 +68,7 @@ func TestStreamLogger_Error(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	logger.Error("failure")
@@ -71,6 +80,7 @@ func TestStreamLogger_Errorf(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	logger.Errorf("error: %v", "details")
@@ -82,6 +92,7 @@ func TestStreamLogger_V0_ReturnsEnabled(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	infoLogger := logger.V(0)
@@ -92,6 +103,7 @@ func TestStreamLogger_V0_WritesToBuffer(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	infoLogger := logger.V(0)
@@ -104,6 +116,7 @@ func TestStreamLogger_V1_ReturnsDisabled(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	infoLogger := logger.V(1)
@@ -114,6 +127,7 @@ func TestStreamLogger_V1_NoOutput(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	infoLogger := logger.V(1)
@@ -126,6 +140,7 @@ func TestStreamLogger_V2_NoOutput(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	infoLogger := logger.V(2)
@@ -138,10 +153,13 @@ func TestStreamLogger_Write_EmptyMessage(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	// An empty message should still produce a newline
-	logger.(log.InfoLogger).Info("")
+	infoLogger, ok := logger.(log.InfoLogger)
+	require.True(t, ok)
+	infoLogger.Info("")
 
 	assert.Equal(t, "\n", buf.String())
 }
@@ -150,10 +168,13 @@ func TestStreamLogger_Write_MessageWithNewline(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	// Message already ending with \n should not get another one
-	logger.(log.InfoLogger).Info("already terminated\n")
+	infoLogger, ok := logger.(log.InfoLogger)
+	require.True(t, ok)
+	infoLogger.Info("already terminated\n")
 
 	assert.Equal(t, "already terminated\n", buf.String())
 }
@@ -162,10 +183,13 @@ func TestStreamLogger_Write_MessageWithCarriageReturn(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	// Messages with carriage return are passed through as-is
-	logger.(log.InfoLogger).Info("progress\r")
+	infoLogger, ok := logger.(log.InfoLogger)
+	require.True(t, ok)
+	infoLogger.Info("progress\r")
 
 	assert.Equal(t, "progress\r", buf.String())
 }
@@ -174,11 +198,13 @@ func TestStreamLogger_Enabled(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	logger := kindprovisioner.NewStreamLoggerForTest(&buf)
 
 	// The streamLogger itself should be enabled (it implements InfoLogger for V(0))
-	enabled := logger.(log.InfoLogger).Enabled()
-	assert.True(t, enabled)
+	infoLogger, ok := logger.(log.InfoLogger)
+	require.True(t, ok)
+	assert.True(t, infoLogger.Enabled())
 }
 
 // --- setName ---

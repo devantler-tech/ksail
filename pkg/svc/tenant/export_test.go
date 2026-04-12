@@ -13,18 +13,14 @@ func ExportResolveKustomizationPath(
 }
 
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+var (
+	ExportAddResource = addResource
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	ExportRemoveResource         = removeResource
+	ExportHasDuplicateNamespaces = hasDuplicateNamespaces
+	ExportIsValidType            = isValidType
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	ExportSafeRelPath = safeRelPath
 
-// ExportAddResource exposes addResource for use in external test packages.
-var ExportAddResource = addResource
-
-// ExportRemoveResource exposes removeResource for use in external test packages.
-var ExportRemoveResource = removeResource
-
-// ExportHasDuplicateNamespaces exposes hasDuplicateNamespaces for use in external test packages.
-var ExportHasDuplicateNamespaces = hasDuplicateNamespaces
-
-// ExportIsValidType exposes isValidType for use in external test packages.
-var ExportIsValidType = isValidType
-
-// ExportSafeRelPath exposes safeRelPath for use in external test packages.
-var ExportSafeRelPath = safeRelPath
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+)

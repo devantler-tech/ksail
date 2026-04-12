@@ -43,6 +43,7 @@ func NewCreateOptionsForTest(
 	networkName string,
 ) registry.CreateOptions {
 	ctx := registryContext{clusterName: clusterName, networkName: networkName}
+
 	return newCreateOptions(clusterCfg, ctx)
 }
 

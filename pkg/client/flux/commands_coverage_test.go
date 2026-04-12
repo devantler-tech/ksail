@@ -118,6 +118,7 @@ func TestNewCreateHelmReleaseCmd_ExportWithAllOptions(t *testing.T) {
 	t.Parallel()
 
 	var outBuf bytes.Buffer
+
 	createCmd := setupFluxCommand(&outBuf)
 
 	createCmd.SetArgs([]string{
@@ -199,6 +200,7 @@ func TestNewCreateKustomizationCmd_ExportWithAllOptions(t *testing.T) {
 	t.Parallel()
 
 	var outBuf bytes.Buffer
+
 	createCmd := setupFluxCommand(&outBuf)
 
 	createCmd.SetArgs([]string{
@@ -284,6 +286,8 @@ func TestSourceHelmCommand_Flags(t *testing.T) {
 
 // TestHelmReleaseExport_SourceRefParsing verifies source reference parsing
 // in export mode (Kind/name.namespace format).
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestHelmReleaseExport_SourceRefParsing(t *testing.T) {
 	t.Parallel()
 
@@ -314,6 +318,7 @@ func TestHelmReleaseExport_SourceRefParsing(t *testing.T) {
 			t.Parallel()
 
 			var outBuf bytes.Buffer
+
 			createCmd := setupFluxCommand(&outBuf)
 
 			createCmd.SetArgs([]string{
@@ -335,6 +340,8 @@ func TestHelmReleaseExport_SourceRefParsing(t *testing.T) {
 
 // TestKustomizationExport_SourceRefParsing verifies source reference parsing
 // in the kustomization command.
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestKustomizationExport_SourceRefParsing(t *testing.T) {
 	t.Parallel()
 
@@ -361,6 +368,7 @@ func TestKustomizationExport_SourceRefParsing(t *testing.T) {
 			t.Parallel()
 
 			var outBuf bytes.Buffer
+
 			createCmd := setupFluxCommand(&outBuf)
 
 			createCmd.SetArgs([]string{
@@ -384,6 +392,7 @@ func TestKustomizationExport_DependsOn(t *testing.T) {
 	t.Parallel()
 
 	var outBuf bytes.Buffer
+
 	createCmd := setupFluxCommand(&outBuf)
 
 	createCmd.SetArgs([]string{
@@ -406,6 +415,7 @@ func TestHelmReleaseExport_DependsOn(t *testing.T) {
 	t.Parallel()
 
 	var outBuf bytes.Buffer
+
 	createCmd := setupFluxCommand(&outBuf)
 
 	createCmd.SetArgs([]string{

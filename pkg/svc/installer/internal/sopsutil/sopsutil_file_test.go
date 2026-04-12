@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:paralleltest // Uses t.Setenv
 func TestResolveAgeKey_FromKeyFile(t *testing.T) {
 	const testKey = "AGE-SECRET-KEY-1FILETEST0000000000000000000000000000000000000000000000"
 
@@ -30,7 +29,6 @@ func TestResolveAgeKey_FromKeyFile(t *testing.T) {
 	assert.Equal(t, testKey, got)
 }
 
-//nolint:paralleltest // Uses t.Setenv
 func TestResolveAgeKey_KeyFileNoKey(t *testing.T) {
 	dir := t.TempDir()
 	keyPath := filepath.Join(dir, "keys.txt")
@@ -47,7 +45,6 @@ func TestResolveAgeKey_KeyFileNoKey(t *testing.T) {
 	assert.Empty(t, got)
 }
 
-//nolint:paralleltest // Uses t.Setenv
 func TestResolveEnabledAgeKey_AutoDetectWithError(t *testing.T) {
 	// Point SOPS_AGE_KEY_FILE to a directory (not a file) to trigger a read error.
 	dir := t.TempDir()

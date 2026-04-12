@@ -21,6 +21,7 @@ func TestRenderMessage_UserMessage(t *testing.T) {
 
 	// Trigger a render by doing a window resize
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
 	output := updated.View()
@@ -38,6 +39,7 @@ func TestRenderMessage_AssistantMessageWithContent(t *testing.T) {
 	})
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
 	output := updated.View()
@@ -56,6 +58,7 @@ func TestRenderMessage_StreamingAssistantShowsSpinner(t *testing.T) {
 	})
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
 	output := updated.View()
@@ -74,6 +77,7 @@ func TestRenderMessage_ToolOutputMessage(t *testing.T) {
 	})
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
 	output := updated.View()
@@ -95,9 +99,13 @@ func TestRenderToolInline_RunningTool(t *testing.T) {
 	})
 
 	var updated tea.Model = model
-	updated, _ = updated.Update(chat.ExportNewToolStartMsg("t1", "ksail_cluster_list", "ksail cluster list"))
 
-	var m tea.Model = updated
+	updated, _ = updated.Update(
+		chat.ExportNewToolStartMsg("t1", "ksail_cluster_list", "ksail cluster list"),
+	)
+
+	m := updated
+
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
 	output := m.View()
@@ -116,6 +124,7 @@ func TestRenderToolInline_SuccessTool_Expanded(t *testing.T) {
 	})
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(chat.ExportNewToolStartMsg("t1", "bash", "> ls"))
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t1", "bash", "file1\nfile2", true))
 
@@ -139,6 +148,7 @@ func TestRenderToolInline_FailedTool(t *testing.T) {
 	})
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(chat.ExportNewToolStartMsg("t1", "bash", "> rm -rf /"))
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t1", "bash", "permission denied", false))
 
@@ -156,7 +166,13 @@ func TestRenderToolInline_CollapsedSuccessTool(t *testing.T) {
 
 	// Use pre-built tool with collapsed state
 	tools := map[string]*chat.ToolExecutionForTest{
-		"t1": chat.ExportNewToolExecutionFull("bash", chat.ToolStatusComplete, false, "> ls", "file1"),
+		"t1": chat.ExportNewToolExecutionFull(
+			"bash",
+			chat.ToolStatusComplete,
+			false,
+			"> ls",
+			"file1",
+		),
 	}
 	chat.ExportSetTools(model, tools, []string{"t1"})
 
@@ -165,6 +181,7 @@ func TestRenderToolInline_CollapsedSuccessTool(t *testing.T) {
 	})
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
 	output := updated.View()
@@ -216,11 +233,11 @@ func TestRenderExitConfirmModal_ShowsPendingCount(t *testing.T) {
 	typed, _ = typed.Update(ctrlQKey())
 
 	// Stop streaming and trigger exit confirm
-	m := typed.(*chat.Model)
-	chat.ExportSetStreaming(m, false)
-	chat.ExportSetConfirmExit(m, true)
+	modelState := requireModel(t, typed)
+	chat.ExportSetStreaming(modelState, false)
+	chat.ExportSetConfirmExit(modelState, true)
 
-	output := m.View()
+	output := modelState.View()
 
 	assert.Contains(t, output, "pending prompt")
 }
@@ -237,6 +254,7 @@ func TestRenderFooter_ShowsQuotaInfo(t *testing.T) {
 
 	// Give enough width for both help and quota
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
 
 	output := updated.View()
@@ -255,6 +273,7 @@ func TestRenderFooter_UnlimitedQuota(t *testing.T) {
 	})
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
 
 	output := updated.View()
@@ -268,10 +287,13 @@ func TestBuildModelStatusText_AutoModeWithMultiplier(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		model    string
-		config   string
-		models   []struct{ id string; mult float64 }
+		name   string
+		model  string
+		config string
+		models []struct {
+			id   string
+			mult float64
+		}
 		contains []string
 	}{
 		{
@@ -364,6 +386,7 @@ func TestRenderInputOrModal_ShowsHelpOverlay(t *testing.T) {
 	chat.ExportSetShowHelpOverlay(model, true)
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 120, Height: 50})
 
 	output := updated.View()
@@ -380,6 +403,7 @@ func TestRenderInputOrModal_ShowsPermissionModal(t *testing.T) {
 	chat.ExportSetPendingPermission(model, "bash", "rm -rf /tmp/test", "", resp)
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
 	output := updated.View()
@@ -389,6 +413,7 @@ func TestRenderInputOrModal_ShowsPermissionModal(t *testing.T) {
 
 // --- truncateString tests (viewport context) ---
 
+//nolint:gosmopolitan // This test intentionally exercises Han-script truncation.
 func TestTruncateString_ViewportCases(t *testing.T) {
 	t.Parallel()
 

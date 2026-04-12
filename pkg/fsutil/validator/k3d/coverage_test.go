@@ -91,7 +91,12 @@ func TestValidate_UpstreamErrors(t *testing.T) {
 			require.NotNil(t, result)
 
 			if testCase.wantValid {
-				assert.True(t, result.Valid, "expected valid result but got errors: %v", result.Errors)
+				assert.True(
+					t,
+					result.Valid,
+					"expected valid result but got errors: %v",
+					result.Errors,
+				)
 			} else {
 				assert.False(t, result.Valid, "expected validation errors")
 				assert.NotEmpty(t, result.Errors)
@@ -112,6 +117,7 @@ func TestValidate_NilConfig(t *testing.T) {
 	assert.NotEmpty(t, result.Errors)
 
 	found := false
+
 	for _, err := range result.Errors {
 		if err.Field == "config" && err.Message == "configuration is nil" {
 			found = true
@@ -145,10 +151,8 @@ func TestValidate_ConfigWithInvalidPortMapping(t *testing.T) {
 	result := validatorInstance.Validate(config)
 	require.NotNil(t, result)
 
-	// The result should have errors from port parsing
-	if !result.Valid {
-		assert.NotEmpty(t, result.Errors)
-	}
+	assert.False(t, result.Valid, "invalid port mapping should fail validation")
+	assert.NotEmpty(t, result.Errors)
 }
 
 // TestValidate_ConfigWithVolumes tests config with volume mounts that may

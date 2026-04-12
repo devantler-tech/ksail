@@ -1216,6 +1216,7 @@ func TestCreateK3dConfig_MetricsServerEnabled(t *testing.T) {
 	}
 }
 
+//nolint:goconst // Repeated literals keep the test cases explicit.
 func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 	t.Parallel()
 

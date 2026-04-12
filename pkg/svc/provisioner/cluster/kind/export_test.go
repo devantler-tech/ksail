@@ -8,7 +8,10 @@ func (k *Provisioner) KubeConfigForTest() string {
 }
 
 // NewStreamLoggerForTest creates a streamLogger for testing.
-func NewStreamLoggerForTest(w interface{ Write(p []byte) (n int, err error) }) log.Logger {
+func NewStreamLoggerForTest(w interface {
+	Write(p []byte) (n int, err error)
+},
+) log.Logger {
 	return &streamLogger{writer: w}
 }
 

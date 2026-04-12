@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/chat"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // --- ModeRef concurrent safety ---
@@ -18,14 +19,15 @@ func TestModeRef_ConcurrentAccess(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			ref.SetEnabled(true)
 			ref.SetEnabled(false)
 		}
+
 		close(done)
 	}()
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		_ = ref.IsEnabled()
 	}
 
@@ -41,15 +43,16 @@ func TestChatModeRef_ConcurrentAccess(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			ref.SetMode(chat.PlanMode)
 			ref.SetMode(chat.AutopilotMode)
 			ref.SetMode(chat.InteractiveMode)
 		}
+
 		close(done)
 	}()
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		_ = ref.Mode()
 	}
 
@@ -70,6 +73,7 @@ func TestView_WithMixedMessages(t *testing.T) {
 	})
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
 	output := updated.View()
@@ -85,12 +89,22 @@ func TestView_WithAssistantToolsInMessage(t *testing.T) {
 
 	model := chat.NewModel(newTestParams())
 
-	tool := chat.ExportNewToolExecutionFull("bash", chat.ToolStatusComplete, true, "> ls", "file1\nfile2")
-	msg := chat.ExportNewAssistantMessageWithTools("Here are the files:", []*chat.ToolExecutionForTest{tool})
+	tool := chat.ExportNewToolExecutionFull(
+		"bash",
+		chat.ToolStatusComplete,
+		true,
+		"> ls",
+		"file1\nfile2",
+	)
+	msg := chat.ExportNewAssistantMessageWithTools(
+		"Here are the files:",
+		[]*chat.ToolExecutionForTest{tool},
+	)
 
 	chat.ExportSetMessages(model, []chat.MessageForTest{msg})
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
 	output := updated.View()
@@ -110,13 +124,14 @@ func TestPendingPromptQueue_PeekAndDrop(t *testing.T) {
 	updated := typeText(model, "queued")
 	updated, _ = updated.Update(ctrlQKey())
 
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	assert.True(t, chat.ExportPeekNextPendingPrompt(m))
+	assert.True(t, chat.ExportPeekNextPendingPrompt(modelState))
 
-	chat.ExportDropNextPendingPrompt(m)
+	chat.ExportDropNextPendingPrompt(modelState)
 
-	assert.False(t, chat.ExportPeekNextPendingPrompt(m))
+	assert.False(t, chat.ExportPeekNextPendingPrompt(modelState))
 }
 
 // --- Tool toggle with message tools ---
@@ -149,6 +164,7 @@ func TestView_ToolOutputWrapping(t *testing.T) {
 	})
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(chat.ExportNewToolStartMsg("t1", "bash", "ls"))
 
 	longOutput := strings.Repeat("abcdefghij", 20)
@@ -167,11 +183,22 @@ func TestView_ToolPositionInterleaving(t *testing.T) {
 
 	model := chat.NewModel(newTestParams())
 
-	tool := chat.ExportNewToolExecutionWithPosition("bash", chat.ToolStatusComplete, true, "ls", "output", 5)
-	msg := chat.ExportNewAssistantMessageWithTools("Hello world", []*chat.ToolExecutionForTest{tool})
+	tool := chat.ExportNewToolExecutionWithPosition(
+		"bash",
+		chat.ToolStatusComplete,
+		true,
+		"ls",
+		"output",
+		5,
+	)
+	msg := chat.ExportNewAssistantMessageWithTools(
+		"Hello world",
+		[]*chat.ToolExecutionForTest{tool},
+	)
 	chat.ExportSetMessages(model, []chat.MessageForTest{msg})
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
 	output := updated.View()
@@ -233,7 +260,11 @@ func TestDefaultCommandBuilders_WorkloadGet(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := chat.ExportExtractCommandFromArgs("ksail_workload_get", testCase.args, builders)
+			result := chat.ExportExtractCommandFromArgs(
+				"ksail_workload_get",
+				testCase.args,
+				builders,
+			)
 			assert.Equal(t, testCase.expected, result)
 		})
 	}
@@ -287,7 +318,7 @@ func TestDefaultCommandBuilders_ReadFile_Empty(t *testing.T) {
 
 	result := chat.ExportExtractCommandFromArgs("read_file", map[string]any{}, builders)
 
-	assert.Equal(t, "", result)
+	assert.Empty(t, result)
 }
 
 // --- DefaultToolDisplayConfig tests ---

@@ -38,11 +38,12 @@ func TestParseInteger(t *testing.T) {
 		{"whitespace falls back", " ", "fallback", "fallback"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			got := workload.ExportParseInteger(tt.trimmed, tt.defaultVal)
-			assert.Equal(t, tt.want, got)
+
+			got := workload.ExportParseInteger(testCase.trimmed, testCase.defaultVal)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
@@ -72,6 +73,7 @@ func TestParseNumber(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := workload.ExportParseNumber(tt.trimmed, tt.defaultVal)
 			assert.Equal(t, tt.want, got)
 		})
@@ -104,6 +106,7 @@ func TestParseBoolean(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := workload.ExportParseBoolean(tt.trimmed, tt.defaultVal)
 			assert.Equal(t, tt.want, got)
 		})
@@ -133,12 +136,13 @@ func TestInferYAMLType(t *testing.T) {
 		{"tilde returns default", "~", "default", "default"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			got := workload.ExportInferYAMLType(tt.trimmed, tt.defaultVal)
 
-			switch tt.wantType {
+			got := workload.ExportInferYAMLType(testCase.trimmed, testCase.defaultVal)
+
+			switch testCase.wantType {
 			case "int":
 				assert.IsType(t, 0, got)
 			case "float":
@@ -148,7 +152,7 @@ func TestInferYAMLType(t *testing.T) {
 			case "string":
 				assert.IsType(t, "", got)
 			case "default":
-				assert.Equal(t, tt.defaultVal, got)
+				assert.Equal(t, testCase.defaultVal, got)
 			}
 		})
 	}
@@ -195,6 +199,7 @@ func TestSchemaNodeType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := workload.ExportSchemaNodeType(tt.schema)
 			assert.Equal(t, tt.want, got)
 		})
@@ -227,6 +232,7 @@ func TestIsNumericIndex(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := workload.ExportIsNumericIndex(tt.input)
 			assert.Equal(t, tt.want, got)
 		})
@@ -260,6 +266,7 @@ func TestParseJSONSchema(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := workload.ExportParseJSONSchema(tt.data)
 			if tt.wantNil {
 				assert.Nil(t, got)
@@ -270,10 +277,13 @@ func TestParseJSONSchema(t *testing.T) {
 	}
 }
 
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestParseJSONSchema_ContentPreserved(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{"type":"object","properties":{"replicas":{"type":"integer"},"name":{"type":"string"}}}`)
+	data := []byte(
+		`{"type":"object","properties":{"replicas":{"type":"integer"},"name":{"type":"string"}}}`,
+	)
 	schema := workload.ExportParseJSONSchema(data)
 	require.NotNil(t, schema)
 
@@ -342,6 +352,7 @@ func TestResolveFromProperties(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := workload.ExportResolveFromProperties(tt.schema, tt.key)
 			if tt.wantNil {
 				assert.Nil(t, got)
@@ -400,6 +411,7 @@ func TestResolveFromItems(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := workload.ExportResolveFromItems(tt.schema, tt.key)
 			if tt.wantNil {
 				assert.Nil(t, got)
@@ -414,6 +426,7 @@ func TestResolveFromItems(t *testing.T) {
 // resolveFromCombiners — allOf/anyOf/oneOf resolution
 // ===========================================================================
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestResolveFromCombiners(t *testing.T) {
 	t.Parallel()
 
@@ -527,6 +540,7 @@ func TestResolveFromCombiners(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := workload.ExportResolveFromCombiners(tt.schema, tt.key)
 			if tt.wantNil {
 				assert.Nil(t, got)
@@ -569,6 +583,7 @@ func TestSchemaCacheFileName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := workload.ExportSchemaCacheFileName(tt.url)
 			assert.NotEmpty(t, got)
 			assert.True(t, strings.HasSuffix(got, ".json"), "expected .json suffix, got %q", got)
@@ -617,6 +632,7 @@ func TestDistributionToLabelScheme(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := workload.ExportDistributionToLabelScheme(tt.distribution)
 			assert.Equal(t, tt.want, got)
 		})
@@ -718,7 +734,7 @@ func TestDetectChangedFile_DeletedFile(t *testing.T) {
 
 	dir := t.TempDir()
 	testFile := filepath.Join(dir, "ephemeral.yaml")
-	require.NoError(t, os.WriteFile(testFile, []byte("data"), 0o644))
+	require.NoError(t, os.WriteFile(testFile, []byte("data"), 0o600))
 
 	snapshot := workload.ExportBuildFileSnapshot(dir)
 	require.NotEmpty(t, snapshot)
@@ -734,13 +750,13 @@ func TestDetectChangedFile_NewFile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "existing.yaml"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "existing.yaml"), []byte("a"), 0o600))
 
 	snapshot := workload.ExportBuildFileSnapshot(dir)
 
 	// Add a new file
 	newFile := filepath.Join(dir, "new.yaml")
-	require.NoError(t, os.WriteFile(newFile, []byte("b"), 0o644))
+	require.NoError(t, os.WriteFile(newFile, []byte("b"), 0o600))
 
 	changed := workload.ExportDetectChangedFile(dir, snapshot)
 	assert.NotEmpty(t, changed, "should detect new file")
@@ -798,6 +814,7 @@ func TestGetSchemaTypeAtPath_NestedSchema(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := workload.ExportGetSchemaTypeAtPath(schema, tt.path)
 			assert.Equal(t, tt.want, got)
 		})
@@ -833,9 +850,9 @@ func TestFindKustomizationDir_FileInRoot(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "kustomization.yaml"), []byte("---"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "kustomization.yaml"), []byte("---"), 0o600))
 	testFile := filepath.Join(dir, "test.yaml")
-	require.NoError(t, os.WriteFile(testFile, []byte("data"), 0o644))
+	require.NoError(t, os.WriteFile(testFile, []byte("data"), 0o600))
 
 	result := workload.ExportFindKustomizationDir(testFile, dir)
 	assert.Equal(t, dir, result)

@@ -36,6 +36,7 @@ users:
 	path := filepath.Join(dir, "kubeconfig")
 	err := os.WriteFile(path, []byte(content), 0o600)
 	require.NoError(t, err)
+
 	return path
 }
 

@@ -38,7 +38,7 @@ func TestFindToolByID_ViaToolEnd(t *testing.T) {
 			},
 			setupOrder:   []string{"tool-abc"},
 			toolID:       "tool-xyz",
-			endToolName:  "unknown",      // doesn't match "bash" by name
+			endToolName:  "unknown",               // doesn't match "bash" by name
 			expectStatus: chat.ToolStatusComplete, // falls through to FIFO which matches first running
 		},
 	}
@@ -51,19 +51,13 @@ func TestFindToolByID_ViaToolEnd(t *testing.T) {
 			chat.ExportSetStreaming(model, true)
 			chat.ExportSetTools(model, testCase.setupTools, testCase.setupOrder)
 
-			// Manually set pendingToolCount
-			for _, tool := range testCase.setupTools {
-				if int(tool.Status()) == chat.ToolStatusRunning {
-					// Account for each running tool
-					_ = tool
-				}
-			}
-
 			// Use ToolEnd to trigger findCompletedTool internally
-			updated, _ := model.Update(chat.ExportNewToolEndMsg(testCase.toolID, testCase.endToolName, "output", true))
-			m := updated.(*chat.Model)
+			updated, _ := model.Update(
+				chat.ExportNewToolEndMsg(testCase.toolID, testCase.endToolName, "output", true),
+			)
+			modelState := requireModel(t, updated)
 
-			tools := chat.ExportGetTools(m)
+			tools := chat.ExportGetTools(modelState)
 			require.Contains(t, tools, "tool-abc")
 			assert.Equal(t, testCase.expectStatus, int(tools["tool-abc"].Status()))
 		})
@@ -83,9 +77,9 @@ func TestFindRunningToolByName_MatchesRunningTool(t *testing.T) {
 
 	// End with different ID but same name - findRunningToolByName should match
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("no-match-id", "bash", "output", true))
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	require.Contains(t, tools, "t1")
 	assert.Equal(t, chat.ToolStatusComplete, int(tools["t1"].Status()))
 }
@@ -105,9 +99,9 @@ func TestFindRunningToolByName_SkipsCompletedTool(t *testing.T) {
 
 	// Complete by name again - should match t2 (the running one)
 	u4, _ := u3.Update(chat.ExportNewToolEndMsg("no-match", "bash", "out2", true))
-	m := u4.(*chat.Model)
+	modelState := requireModel(t, u4)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	assert.Equal(t, chat.ToolStatusComplete, int(tools["t1"].Status()))
 	assert.Equal(t, chat.ToolStatusComplete, int(tools["t2"].Status()))
 }
@@ -122,9 +116,9 @@ func TestCompleteToolExecution_SuccessStatus(t *testing.T) {
 
 	updated, _ := model.Update(chat.ExportNewToolStartMsg("t1", "bash", "ls"))
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t1", "bash", "output", true))
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	assert.Equal(t, chat.ToolStatusComplete, int(tools["t1"].Status()))
 	assert.True(t, tools["t1"].Expanded())
 }
@@ -137,9 +131,9 @@ func TestCompleteToolExecution_FailedStatus(t *testing.T) {
 
 	updated, _ := model.Update(chat.ExportNewToolStartMsg("t1", "bash", "bad-cmd"))
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t1", "bash", "error: not found", false))
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	assert.Equal(t, chat.ToolStatusFailed, int(tools["t1"].Status()))
 	assert.Equal(t, "error: not found", tools["t1"].Output())
 }
@@ -153,9 +147,9 @@ func TestHasRunningTools_TrueWhenToolRunning(t *testing.T) {
 	chat.ExportSetStreaming(model, true)
 
 	updated, _ := model.Update(chat.ExportNewToolStartMsg("t1", "bash", "ls"))
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
-	assert.True(t, chat.ExportHasRunningTools(m))
+	assert.True(t, chat.ExportHasRunningTools(modelState))
 }
 
 func TestHasRunningTools_FalseWhenAllComplete(t *testing.T) {
@@ -166,9 +160,9 @@ func TestHasRunningTools_FalseWhenAllComplete(t *testing.T) {
 
 	updated, _ := model.Update(chat.ExportNewToolStartMsg("t1", "bash", "ls"))
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t1", "bash", "", true))
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
-	assert.False(t, chat.ExportHasRunningTools(m))
+	assert.False(t, chat.ExportHasRunningTools(modelState))
 }
 
 func TestHasRunningTools_FalseWhenEmpty(t *testing.T) {
@@ -195,12 +189,12 @@ func TestCommitToolsToLastAssistantMessage_TransfersTools(t *testing.T) {
 	// Start and complete a tool
 	updated, _ := model.Update(chat.ExportNewToolStartMsg("t1", "bash", "ls"))
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t1", "bash", "output", true))
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
 	// Commit tools to message
-	chat.ExportCommitToolsToLastAssistantMessage(m)
+	chat.ExportCommitToolsToLastAssistantMessage(modelState)
 
-	assert.Equal(t, 1, chat.ExportGetMessageToolCount(m, 0))
+	assert.Equal(t, 1, chat.ExportGetMessageToolCount(modelState, 0))
 }
 
 func TestCommitToolsToLastAssistantMessage_NoMessages(t *testing.T) {
@@ -225,14 +219,14 @@ func TestPrepareForNewTurn_ResetsState(t *testing.T) {
 
 	// Simulate adding a tool
 	u, _ := model.Update(chat.ExportNewToolStartMsg("t1", "bash", "ls"))
-	m := u.(*chat.Model)
+	modelState := requireModel(t, u)
 
 	// Now prepare for new turn
-	chat.ExportPrepareForNewTurn(m)
+	chat.ExportPrepareForNewTurn(modelState)
 
-	assert.True(t, chat.ExportGetStreaming(m))
-	assert.False(t, chat.ExportGetJustCompleted(m))
-	assert.Empty(t, chat.ExportGetToolOrder(m))
-	assert.Equal(t, 0, chat.ExportGetPendingToolCount(m))
-	assert.False(t, chat.ExportGetSessionComplete(m))
+	assert.True(t, chat.ExportGetStreaming(modelState))
+	assert.False(t, chat.ExportGetJustCompleted(modelState))
+	assert.Empty(t, chat.ExportGetToolOrder(modelState))
+	assert.Equal(t, 0, chat.ExportGetPendingToolCount(modelState))
+	assert.False(t, chat.ExportGetSessionComplete(modelState))
 }

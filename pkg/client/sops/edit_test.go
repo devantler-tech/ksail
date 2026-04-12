@@ -3,6 +3,7 @@ package sops_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	sopsclient "github.com/devantler-tech/ksail/v6/pkg/client/sops"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:funlen // Table-driven hashing/editor cases are easier to keep together.
 func TestHashFile(t *testing.T) {
 	t.Parallel()
 
@@ -91,6 +93,7 @@ func TestHashFile(t *testing.T) {
 	})
 }
 
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestParseEditorCommand(t *testing.T) {
 	t.Parallel()
 
@@ -159,7 +162,7 @@ func TestLookupAnyEditor(t *testing.T) {
 		_, err := sopsclient.LookupAnyEditor("nonexistent-editor-1", "nonexistent-editor-2")
 
 		require.Error(t, err)
-		assert.ErrorIs(t, err, sopsclient.ErrNoEditorAvailable)
+		require.ErrorIs(t, err, sopsclient.ErrNoEditorAvailable)
 		assert.Contains(t, err.Error(), "nonexistent-editor-1")
 		assert.Contains(t, err.Error(), "nonexistent-editor-2")
 	})
@@ -167,8 +170,12 @@ func TestLookupAnyEditor(t *testing.T) {
 	t.Run("finds available editor", func(t *testing.T) {
 		t.Parallel()
 
-		// "sh" should be available on any Unix system.
-		path, err := sopsclient.LookupAnyEditor("nonexistent-editor", "sh")
+		editor := "sh"
+		if runtime.GOOS == "windows" {
+			editor = "cmd"
+		}
+
+		path, err := sopsclient.LookupAnyEditor("nonexistent-editor", editor)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, path)

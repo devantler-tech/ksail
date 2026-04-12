@@ -264,4 +264,3 @@ func TestConfigs_Patches_Nil(t *testing.T) {
 	configs := &talosconfig.Configs{}
 	assert.Nil(t, configs.Patches())
 }
-

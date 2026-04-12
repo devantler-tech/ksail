@@ -36,6 +36,7 @@ func testEvalCanonicalPathExisting(t *testing.T) {
 	// Resolve tempDir itself to handle macOS /private/var vs /var symlinks
 	resolvedTempDir, resolveErr := filepath.EvalSymlinks(tempDir)
 	require.NoError(t, resolveErr)
+
 	expected := filepath.Join(resolvedTempDir, "test.txt")
 	assert.Equal(t, expected, result, "should match resolved path")
 }
@@ -74,6 +75,7 @@ func testEvalCanonicalPathSymlink(t *testing.T) {
 	// Resolve tempDir to handle macOS symlinks
 	resolvedTempDir, resolveErr := filepath.EvalSymlinks(tempDir)
 	require.NoError(t, resolveErr)
+
 	expected := filepath.Join(resolvedTempDir, "real.txt")
 	assert.Equal(t, expected, result, "should resolve through symlink")
 }

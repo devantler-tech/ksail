@@ -12,9 +12,18 @@ import (
 )
 
 var (
-	errStreamConnectionTimeout = errors.New("connection timeout") //nolint:gochecknoglobals // test sentinel
-	errStreamTest              = errors.New("test")               //nolint:gochecknoglobals // test sentinel
+	errStreamConnectionTimeout = errors.New("connection timeout")
+	errStreamTest              = errors.New("test")
 )
+
+func requireModel(t *testing.T, updated tea.Model) *chat.Model {
+	t.Helper()
+
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
+
+	return modelState
+}
 
 // --- handleStreamChunk tests ---
 
@@ -33,15 +42,17 @@ func TestHandleStreamChunk_AccumulatesText(t *testing.T) {
 
 	// Send first chunk
 	updated, _ = updated.Update(chat.ExportNewStreamChunkMsg("Hello"))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	assert.Equal(t, "Hello", chat.ExportGetMessageContent(m, 0))
+	assert.Equal(t, "Hello", chat.ExportGetMessageContent(modelState, 0))
 
 	// Send second chunk - should accumulate
 	updated, _ = updated.Update(chat.ExportNewStreamChunkMsg(" world"))
-	m = updated.(*chat.Model)
+	modelState, isModel = updated.(*chat.Model)
+	require.True(t, isModel)
 
-	assert.Equal(t, "Hello world", chat.ExportGetMessageContent(m, 0))
+	assert.Equal(t, "Hello world", chat.ExportGetMessageContent(modelState, 0))
 }
 
 func TestHandleStreamChunk_EmptyContent(t *testing.T) {
@@ -58,9 +69,10 @@ func TestHandleStreamChunk_EmptyContent(t *testing.T) {
 
 	// Send empty chunk - should not alter content
 	updated, _ = updated.Update(chat.ExportNewStreamChunkMsg(""))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	assert.Equal(t, "existing", chat.ExportGetMessageContent(m, 0))
+	assert.Equal(t, "existing", chat.ExportGetMessageContent(modelState, 0))
 }
 
 func TestHandleStreamChunk_NoMessages(t *testing.T) {
@@ -98,9 +110,10 @@ func TestHandleAssistantMessage_OverridesPartialContent(t *testing.T) {
 
 	// Then send the final complete message which is longer
 	updated, _ = updated.Update(chat.ExportNewAssistantMessageMsg("partial complete response"))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	assert.Equal(t, "partial complete response", chat.ExportGetMessageContent(m, 0))
+	assert.Equal(t, "partial complete response", chat.ExportGetMessageContent(modelState, 0))
 }
 
 func TestHandleAssistantMessage_KeepsLongerCurrentResponse(t *testing.T) {
@@ -116,13 +129,20 @@ func TestHandleAssistantMessage_KeepsLongerCurrentResponse(t *testing.T) {
 	var updated tea.Model = model
 
 	// Build up a longer response from chunks
-	updated, _ = updated.Update(chat.ExportNewStreamChunkMsg("this is a very long response from chunks"))
+	updated, _ = updated.Update(
+		chat.ExportNewStreamChunkMsg("this is a very long response from chunks"),
+	)
 
 	// Final message is shorter (e.g., a summary) - currentResponse should be kept
 	updated, _ = updated.Update(chat.ExportNewAssistantMessageMsg("short"))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	assert.Equal(t, "this is a very long response from chunks", chat.ExportGetMessageContent(m, 0))
+	assert.Equal(
+		t,
+		"this is a very long response from chunks",
+		chat.ExportGetMessageContent(modelState, 0),
+	)
 }
 
 // --- handleToolStart tests ---
@@ -136,13 +156,14 @@ func TestHandleToolStart_AddsToolExecution(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewToolStartMsg("tool-1", "bash", "> ls"))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	require.Contains(t, tools, "tool-1")
 	assert.Equal(t, "bash", tools["tool-1"].Name())
-	assert.Equal(t, 1, chat.ExportGetPendingToolCount(m))
-	assert.Contains(t, chat.ExportGetToolOrder(m), "tool-1")
+	assert.Equal(t, 1, chat.ExportGetPendingToolCount(modelState))
+	assert.Contains(t, chat.ExportGetToolOrder(modelState), "tool-1")
 }
 
 func TestHandleToolStart_GeneratesIDWhenEmpty(t *testing.T) {
@@ -155,12 +176,13 @@ func TestHandleToolStart_GeneratesIDWhenEmpty(t *testing.T) {
 
 	// Empty toolID should generate one
 	updated, _ = updated.Update(chat.ExportNewToolStartMsg("", "read_file", ""))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	toolOrder := chat.ExportGetToolOrder(m)
+	toolOrder := chat.ExportGetToolOrder(modelState)
 	require.Len(t, toolOrder, 1)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	generatedID := toolOrder[0]
 	assert.True(t, strings.HasPrefix(generatedID, "tool-"))
 	assert.NotNil(t, tools[generatedID])
@@ -176,10 +198,11 @@ func TestHandleToolStart_MultipleTool(t *testing.T) {
 
 	updated, _ = updated.Update(chat.ExportNewToolStartMsg("t1", "bash", "ls"))
 	updated, _ = updated.Update(chat.ExportNewToolStartMsg("t2", "read_file", "cat foo"))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	assert.Equal(t, 2, chat.ExportGetPendingToolCount(m))
-	assert.Len(t, chat.ExportGetToolOrder(m), 2)
+	assert.Equal(t, 2, chat.ExportGetPendingToolCount(modelState))
+	assert.Len(t, chat.ExportGetToolOrder(modelState), 2)
 }
 
 // --- handleToolEnd tests ---
@@ -197,13 +220,14 @@ func TestHandleToolEnd_SuccessfulCompletion(t *testing.T) {
 
 	// Complete it successfully
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t1", "bash", "file1\nfile2", true))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	require.Contains(t, tools, "t1")
 	assert.Equal(t, chat.ToolStatusComplete, int(tools["t1"].Status()))
 	assert.Equal(t, "file1\nfile2", tools["t1"].Output())
-	assert.Equal(t, 0, chat.ExportGetPendingToolCount(m))
+	assert.Equal(t, 0, chat.ExportGetPendingToolCount(modelState))
 }
 
 func TestHandleToolEnd_FailedCompletion(t *testing.T) {
@@ -216,9 +240,10 @@ func TestHandleToolEnd_FailedCompletion(t *testing.T) {
 
 	updated, _ = updated.Update(chat.ExportNewToolStartMsg("t1", "bash", "rm /"))
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t1", "bash", "permission denied", false))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	require.Contains(t, tools, "t1")
 	assert.Equal(t, chat.ToolStatusFailed, int(tools["t1"].Status()))
 }
@@ -236,9 +261,10 @@ func TestHandleToolEnd_MatchByName(t *testing.T) {
 
 	// End with different ID but matching name
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("different-id", "bash", "output", true))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	require.Contains(t, tools, "t1")
 	assert.Equal(t, chat.ToolStatusComplete, int(tools["t1"].Status()))
 }
@@ -257,9 +283,10 @@ func TestHandleToolEnd_FIFOFallback(t *testing.T) {
 
 	// End with unknown name and ID - should match first running tool (FIFO)
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("", "unknown", "output", true))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	assert.Equal(t, chat.ToolStatusComplete, int(tools["t1"].Status()))
 	assert.Equal(t, chat.ToolStatusRunning, int(tools["t2"].Status()))
 }
@@ -280,9 +307,10 @@ func TestHandleToolEnd_KeepsStreamedOutput(t *testing.T) {
 
 	// End with SDK output - should NOT overwrite streamed output
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t1", "bash", "sdk-output", true))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	assert.Equal(t, "streamed", tools["t1"].Output())
 }
 
@@ -297,9 +325,10 @@ func TestHandleToolEnd_UsesSDKOutputWhenNoStreaming(t *testing.T) {
 	// Start and end tool without any output streaming
 	updated, _ = updated.Update(chat.ExportNewToolStartMsg("t1", "bash", "ls"))
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t1", "bash", "sdk-output", true))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	assert.Equal(t, "sdk-output", tools["t1"].Output())
 }
 
@@ -313,9 +342,10 @@ func TestHandleToolEnd_PendingCountNeverNegative(t *testing.T) {
 
 	// Complete without starting - pendingToolCount should stay at 0
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t-nonexistent", "bash", "", true))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	assert.GreaterOrEqual(t, chat.ExportGetPendingToolCount(m), 0)
+	assert.GreaterOrEqual(t, chat.ExportGetPendingToolCount(modelState), 0)
 }
 
 // --- handleToolOutputChunk tests ---
@@ -331,9 +361,10 @@ func TestHandleToolOutputChunk_AppendsToRunningTool(t *testing.T) {
 	updated, _ = updated.Update(chat.ExportNewToolStartMsg("t1", "bash", "ls"))
 	updated, _ = updated.Update(chat.ExportNewToolOutputChunkMsg("bash", "line1\n"))
 	updated, _ = updated.Update(chat.ExportNewToolOutputChunkMsg("bash", "line2\n"))
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	assert.Equal(t, "line1\nline2\n", tools["t1"].Output())
 }
 
@@ -371,11 +402,12 @@ func TestHandleStreamEnd_FinalizesWhenNoTools(t *testing.T) {
 
 	// Stream end should finalize since no tools are pending
 	updated, _ = updated.Update(chat.ExportNewStreamEndMsg())
-	m := updated.(*chat.Model)
+	modelState, isModel := updated.(*chat.Model)
+	require.True(t, isModel)
 
-	assert.False(t, chat.ExportGetStreaming(m))
-	assert.True(t, chat.ExportGetJustCompleted(m))
-	assert.False(t, chat.ExportGetMessageIsStreaming(m, 0))
+	assert.False(t, chat.ExportGetStreaming(modelState))
+	assert.True(t, chat.ExportGetJustCompleted(modelState))
+	assert.False(t, chat.ExportGetMessageIsStreaming(modelState, 0))
 }
 
 func TestHandleStreamEnd_WaitsForPendingTools(t *testing.T) {
@@ -395,11 +427,11 @@ func TestHandleStreamEnd_WaitsForPendingTools(t *testing.T) {
 
 	// Stream end while tool is pending - should NOT finalize
 	updated, _ = updated.Update(chat.ExportNewStreamEndMsg())
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
 	// Should still be in streaming state because tool is pending
-	assert.True(t, chat.ExportGetSessionComplete(m))
-	assert.Equal(t, 1, chat.ExportGetPendingToolCount(m))
+	assert.True(t, chat.ExportGetSessionComplete(modelState))
+	assert.Equal(t, 1, chat.ExportGetPendingToolCount(modelState))
 }
 
 func TestHandleStreamEnd_FinalizesWhenToolsComplete(t *testing.T) {
@@ -420,7 +452,7 @@ func TestHandleStreamEnd_FinalizesWhenToolsComplete(t *testing.T) {
 
 	// Now stream end should finalize
 	updated, _ = updated.Update(chat.ExportNewStreamEndMsg())
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	assert.False(t, chat.ExportGetStreaming(m))
 	assert.True(t, chat.ExportGetJustCompleted(m))
@@ -438,7 +470,7 @@ func TestHandleTurnStart_SetsStreamingState(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewTurnStartMsg())
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	assert.True(t, chat.ExportGetStreaming(m))
 	assert.False(t, chat.ExportGetJustCompleted(m))
@@ -472,7 +504,7 @@ func TestHandleReasoning_SetsStreamingState(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewReasoningMsg("thinking...", true))
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	assert.True(t, chat.ExportGetStreaming(m))
 	assert.False(t, chat.ExportGetJustCompleted(m))
@@ -493,13 +525,13 @@ func TestHandleAbort_StopsStreaming(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewAbortMsg())
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
-	assert.False(t, chat.ExportGetStreaming(m))
+	assert.False(t, chat.ExportGetStreaming(modelState))
 
-	content := chat.ExportGetMessageContent(m, 0)
+	content := chat.ExportGetMessageContent(modelState, 0)
 	assert.Contains(t, content, "[Session aborted]")
-	assert.False(t, chat.ExportGetMessageIsStreaming(m, 0))
+	assert.False(t, chat.ExportGetMessageIsStreaming(modelState, 0))
 }
 
 func TestHandleAbort_NoMessagesNoPanic(t *testing.T) {
@@ -513,9 +545,9 @@ func TestHandleAbort_NoMessagesNoPanic(t *testing.T) {
 
 	// Should not panic
 	updated, _ = updated.Update(chat.ExportNewAbortMsg())
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
-	assert.False(t, chat.ExportGetStreaming(m))
+	assert.False(t, chat.ExportGetStreaming(modelState))
 }
 
 func TestHandleAbort_ReturnsNilCmd(t *testing.T) {
@@ -549,14 +581,14 @@ func TestHandleStreamErr_SetsErrorState(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewStreamErrMsg(testErr))
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
-	assert.False(t, chat.ExportGetStreaming(m))
-	assert.Equal(t, testErr, chat.ExportGetErr(m))
+	assert.False(t, chat.ExportGetStreaming(modelState))
+	assert.Equal(t, testErr, chat.ExportGetErr(modelState))
 
-	content := chat.ExportGetMessageContent(m, 0)
+	content := chat.ExportGetMessageContent(modelState, 0)
 	assert.Contains(t, content, "Error:")
-	assert.False(t, chat.ExportGetMessageIsStreaming(m, 0))
+	assert.False(t, chat.ExportGetMessageIsStreaming(modelState, 0))
 }
 
 func TestHandleStreamErr_ReturnsNilCmd(t *testing.T) {
@@ -587,10 +619,11 @@ func TestHandleSnapshotRewind_AppendsIndicator(t *testing.T) {
 
 	// Build up currentResponse to match message content
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(chat.ExportNewStreamChunkMsg("existing content"))
 
 	updated, _ = updated.Update(chat.ExportNewSnapshotRewindMsg())
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	content := chat.ExportGetMessageContent(m, 0)
 	assert.Contains(t, content, "[Session rewound to previous state]")
@@ -607,7 +640,7 @@ func TestHandleUsage_UpdatesUsageState(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewUsageMsg("gpt-4o", 100, 50, 0.005))
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	assert.Equal(t, "gpt-4o", chat.ExportGetLastUsageModel(m))
 }
@@ -630,8 +663,10 @@ func TestHandleUsage_MergesQuotaSnapshots(t *testing.T) {
 
 	var updated tea.Model = model
 
-	updated, _ = updated.Update(chat.ExportNewUsageMsgWithQuota("gpt-4o", 100, 50, 0.01, premiumQuota))
-	m := updated.(*chat.Model)
+	updated, _ = updated.Update(
+		chat.ExportNewUsageMsgWithQuota("gpt-4o", 100, 50, 0.01, premiumQuota),
+	)
+	m := requireModel(t, updated)
 
 	snapshots := chat.ExportGetLastQuotaSnapshots(m)
 	assert.Contains(t, snapshots, "chat")
@@ -649,7 +684,7 @@ func TestHandleCompactionStart_SetsCompactingState(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewCompactionStartMsg())
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	assert.True(t, chat.ExportGetIsCompacting(m))
 }
@@ -664,7 +699,7 @@ func TestHandleCompactionComplete_ClearsCompactingState(t *testing.T) {
 
 	updated, _ = updated.Update(chat.ExportNewCompactionStartMsg())
 	updated, _ = updated.Update(chat.ExportNewCompactionCompleteMsg(true))
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	assert.False(t, chat.ExportGetIsCompacting(m))
 }
@@ -684,7 +719,7 @@ func TestHandleIntent_AppendsToStreamingMessage(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewIntentMsg("Planning approach"))
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	content := chat.ExportGetMessageContent(m, 0)
 	assert.Contains(t, content, "Planning approach")
@@ -703,7 +738,7 @@ func TestHandleIntent_IgnoresNonStreamingMessage(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewIntentMsg("some intent"))
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	// Content should not change since the message is not streaming
 	assert.Equal(t, "completed", chat.ExportGetMessageContent(m, 0))
@@ -721,7 +756,7 @@ func TestHandleModelChange_UpdatesCurrentModel(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewModelChangeMsg("old-model", "new-model"))
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	assert.Equal(t, "new-model", chat.ExportGetCurrentModel(m))
 }
@@ -736,7 +771,7 @@ func TestHandleModelChange_EmptyModelIgnored(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewModelChangeMsg("current", ""))
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	assert.Equal(t, "current", chat.ExportGetCurrentModel(m))
 }
@@ -752,7 +787,7 @@ func TestHandleShutdown_StopsStreaming(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewShutdownMsg())
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	assert.False(t, chat.ExportGetStreaming(m))
 }
@@ -783,7 +818,7 @@ func TestHandleSystemNotification_AppendsToStreamingMessage(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewSystemNotificationMsg("System info"))
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	content := chat.ExportGetMessageContent(m, 0)
 	assert.Contains(t, content, "ℹ️ System info")
@@ -804,7 +839,7 @@ func TestHandleSessionWarning_AppendsToStreamingMessage(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.ExportNewSessionWarningMsg("Rate limited"))
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	content := chat.ExportGetMessageContent(m, 0)
 	assert.Contains(t, content, "⚠️ Rate limited")
@@ -824,9 +859,9 @@ func TestHandleToolProgress_AppendsToTool(t *testing.T) {
 
 	// Send progress update
 	updated, _ = updated.Update(chat.ToolProgressMsg{ToolID: "t1", Message: "50% complete"})
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	require.Contains(t, tools, "t1")
 	assert.Contains(t, tools["t1"].Output(), "⏳ 50% complete")
 }
@@ -845,9 +880,9 @@ func TestHandleToolProgress_IgnoresNonRunningTool(t *testing.T) {
 
 	// Progress update to completed tool should be ignored
 	updated, _ = updated.Update(chat.ToolProgressMsg{ToolID: "t1", Message: "late update"})
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	assert.NotContains(t, tools["t1"].Output(), "late update")
 }
 
@@ -866,7 +901,7 @@ func TestHandleTaskComplete_AppendsToStreamingMessage(t *testing.T) {
 	var updated tea.Model = model
 
 	updated, _ = updated.Update(chat.TaskCompleteMsg{Message: "Deploy succeeded"})
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	content := chat.ExportGetMessageContent(m, 0)
 	assert.Contains(t, content, "✅ Deploy succeeded")
@@ -896,9 +931,15 @@ func TestStreamFlow_FullConversation(t *testing.T) {
 	updated, _ = updated.Update(chat.ExportNewStreamChunkMsg("your clusters."))
 
 	// 3. Tool execution
-	updated, _ = updated.Update(chat.ExportNewToolStartMsg("t1", "ksail_cluster_list", "ksail cluster list"))
-	updated, _ = updated.Update(chat.ExportNewToolOutputChunkMsg("ksail_cluster_list", "cluster-1\n"))
-	updated, _ = updated.Update(chat.ExportNewToolOutputChunkMsg("ksail_cluster_list", "cluster-2\n"))
+	updated, _ = updated.Update(
+		chat.ExportNewToolStartMsg("t1", "ksail_cluster_list", "ksail cluster list"),
+	)
+	updated, _ = updated.Update(
+		chat.ExportNewToolOutputChunkMsg("ksail_cluster_list", "cluster-1\n"),
+	)
+	updated, _ = updated.Update(
+		chat.ExportNewToolOutputChunkMsg("ksail_cluster_list", "cluster-2\n"),
+	)
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t1", "ksail_cluster_list", "", true))
 
 	// 4. More text
@@ -911,19 +952,19 @@ func TestStreamFlow_FullConversation(t *testing.T) {
 	// 6. Turn end + stream end
 	updated, _ = updated.Update(chat.ExportNewTurnEndMsg())
 	updated, _ = updated.Update(chat.ExportNewStreamEndMsg())
-	m := updated.(*chat.Model)
+	modelState := requireModel(t, updated)
 
 	// Verify final state
-	assert.False(t, chat.ExportGetStreaming(m))
-	assert.True(t, chat.ExportGetJustCompleted(m))
-	assert.Equal(t, 0, chat.ExportGetPendingToolCount(m))
+	assert.False(t, chat.ExportGetStreaming(modelState))
+	assert.True(t, chat.ExportGetJustCompleted(modelState))
+	assert.Equal(t, 0, chat.ExportGetPendingToolCount(modelState))
 
 	// Check the assistant message content
-	content := chat.ExportGetMessageContent(m, 1)
+	content := chat.ExportGetMessageContent(modelState, 1)
 	assert.Contains(t, content, "clusters")
 
 	// Check tool was tracked
-	tools := chat.ExportGetTools(m)
+	tools := chat.ExportGetTools(modelState)
 	require.Contains(t, tools, "t1")
 	assert.Equal(t, chat.ToolStatusComplete, int(tools["t1"].Status()))
 }
@@ -950,7 +991,7 @@ func TestHandleToolEnd_FinalizesWhenSessionComplete(t *testing.T) {
 
 	// Tool completes AFTER streamEnd - should trigger finalization
 	updated, _ = updated.Update(chat.ExportNewToolEndMsg("t1", "bash", "output", true))
-	m := updated.(*chat.Model)
+	m := requireModel(t, updated)
 
 	assert.False(t, chat.ExportGetStreaming(m))
 	assert.True(t, chat.ExportGetJustCompleted(m))

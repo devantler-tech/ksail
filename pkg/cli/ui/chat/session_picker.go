@@ -446,7 +446,7 @@ func (m *Model) sessionEventsToMessages(
 	for _, event := range events {
 		var role, content string
 
-		//nolint:exhaustive // Only user and assistant messages are relevant for session history.
+		//nolint:exhaustive // Only message-producing event types are handled here.
 		switch event.Type {
 		case copilot.SessionEventTypeUserMessage:
 			role = roleUser

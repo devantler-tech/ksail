@@ -128,6 +128,7 @@ func TestMockTimerGetTiming(t *testing.T) {
 	})
 }
 
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestMockTimerFullWorkflow(t *testing.T) {
 	t.Parallel()
 

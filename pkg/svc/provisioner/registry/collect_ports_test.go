@@ -39,7 +39,10 @@ func TestCollectExistingRegistryPorts_CollectsExistingPorts(t *testing.T) {
 	t.Parallel()
 
 	mockBackend := registry.NewMockBackend(t)
-	mockBackend.EXPECT().ListRegistries(mock.Anything).Return([]string{"mirror-1", "mirror-2"}, nil).Once()
+	mockBackend.EXPECT().
+		ListRegistries(mock.Anything).
+		Return([]string{"mirror-1", "mirror-2"}, nil).
+		Once()
 	mockBackend.EXPECT().GetRegistryPort(mock.Anything, "mirror-1").Return(5000, nil).Once()
 	mockBackend.EXPECT().GetRegistryPort(mock.Anything, "mirror-2").Return(5001, nil).Once()
 

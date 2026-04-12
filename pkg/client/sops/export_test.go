@@ -1,11 +1,15 @@
 package sops
 
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
-
-// Expose unexported functions for testing.
 var (
 	IsSupportedExtension = isSupportedExtension
 	IsHiddenDir          = isHiddenDir
-	ModifyKeyGroups      = modifyKeyGroups
-	RemoveKeyFromGroups  = removeKeyFromGroups
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	ModifyKeyGroups = modifyKeyGroups
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	RemoveKeyFromGroups = removeKeyFromGroups
+
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 )

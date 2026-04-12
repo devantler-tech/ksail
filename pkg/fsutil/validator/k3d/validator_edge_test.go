@@ -75,7 +75,7 @@ func TestValidate_WithK3sArgs(t *testing.T) {
 		Options: k3dapi.SimpleConfigOptions{
 			K3sOptions: k3dapi.SimpleConfigOptionsK3s{
 				ExtraArgs: []k3dapi.K3sArgWithNodeFilters{
-					{Arg: "--disable=traefik"},
+					{Arg: "--disable=traefik", NodeFilters: []string{"server:*"}},
 				},
 			},
 		},
@@ -83,7 +83,8 @@ func TestValidate_WithK3sArgs(t *testing.T) {
 
 	result := validatorInstance.Validate(config)
 	require.NotNil(t, result)
-	// K3s args are passed through without validation errors
+	assert.True(t, result.Valid, "config with k3s args should be valid")
+	assert.Empty(t, result.Errors)
 }
 
 // TestValidate_MultipleServers verifies a config with multiple server nodes.

@@ -12,6 +12,8 @@ import (
 
 // TestCRDetector_FindFluxInstance_WalkDirError verifies that a walk directory
 // error is propagated. This covers the WalkDir error path in findCR.
+//
+//nolint:gosec // Test-only fixtures use controlled temp paths and permissions.
 func TestCRDetector_FindFluxInstance_WalkDirError(t *testing.T) {
 	t.Parallel()
 

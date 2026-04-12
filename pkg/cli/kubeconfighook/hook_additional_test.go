@@ -18,6 +18,8 @@ import (
 )
 
 // TestAtomicWriteFile exercises the atomic file write logic.
+//
+//nolint:gosec // Test-only fixtures use controlled temp paths and permissions.
 func TestAtomicWriteFile(t *testing.T) {
 	t.Parallel()
 

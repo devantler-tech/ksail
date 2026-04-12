@@ -65,14 +65,20 @@ func TestManager_EnsureBatch_CreateFailsRollsBack(t *testing.T) {
 	mockBackend.EXPECT().ListRegistries(mock.Anything).Return([]string{}, nil).Once()
 
 	// First CreateRegistry succeeds
-	mockBackend.EXPECT().CreateRegistry(mock.Anything, mock.MatchedBy(func(c docker.RegistryConfig) bool {
-		return c.Name == "mirror-1"
-	})).Return(nil).Once()
+	mockBackend.EXPECT().
+		CreateRegistry(mock.Anything, mock.MatchedBy(func(c docker.RegistryConfig) bool {
+			return c.Name == "mirror-1"
+		})).
+		Return(nil).
+		Once()
 
 	// Second CreateRegistry fails
-	mockBackend.EXPECT().CreateRegistry(mock.Anything, mock.MatchedBy(func(c docker.RegistryConfig) bool {
-		return c.Name == "mirror-2"
-	})).Return(errBackendFailure).Once()
+	mockBackend.EXPECT().
+		CreateRegistry(mock.Anything, mock.MatchedBy(func(c docker.RegistryConfig) bool {
+			return c.Name == "mirror-2"
+		})).
+		Return(errBackendFailure).
+		Once()
 
 	// Rollback: DeleteRegistry called for the first successfully created one
 	mockBackend.EXPECT().DeleteRegistry(
@@ -156,7 +162,10 @@ func TestManager_EnsureOne_CreateFails_RollsBack(t *testing.T) {
 	mockBackend := registry.NewMockBackend(t)
 
 	mockBackend.EXPECT().ListRegistries(mock.Anything).Return([]string{}, nil).Once()
-	mockBackend.EXPECT().CreateRegistry(mock.Anything, mock.Anything).Return(errBackendFailure).Once()
+	mockBackend.EXPECT().
+		CreateRegistry(mock.Anything, mock.Anything).
+		Return(errBackendFailure).
+		Once()
 
 	// No rollback expected since nothing was created (create failed)
 

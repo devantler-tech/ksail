@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestParseExtractPath(t *testing.T) {
 	t.Parallel()
 
@@ -59,6 +60,7 @@ func TestParseExtractPath(t *testing.T) {
 		},
 	}
 
+	//nolint:varnamelen // Short names keep table-driven tests readable.
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

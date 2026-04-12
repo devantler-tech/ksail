@@ -1,6 +1,7 @@
 package fsutil_test
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
@@ -11,7 +12,7 @@ import (
 // TestSOPSAgeKeyPath_XDGConfigHome verifies that when XDG_CONFIG_HOME is set,
 // SOPSAgeKeyPath returns the XDG-based path.
 //
-//nolint:paralleltest // Uses t.Setenv
+
 func TestSOPSAgeKeyPath_XDGConfigHome(t *testing.T) {
 	// Clear SOPS_AGE_KEY_FILE so it doesn't take precedence.
 	t.Setenv("SOPS_AGE_KEY_FILE", "")
@@ -20,13 +21,13 @@ func TestSOPSAgeKeyPath_XDGConfigHome(t *testing.T) {
 	path, err := fsutil.SOPSAgeKeyPath()
 
 	require.NoError(t, err)
-	assert.Equal(t, "/custom/xdg-config/sops/age/keys.txt", path)
+	assert.Equal(t, filepath.Join("/custom/xdg-config", "sops", "age", "keys.txt"), path)
 }
 
 // TestSOPSAgeKeyPath_DarwinDefault verifies the macOS default path when no
 // environment variables are set.
 //
-//nolint:paralleltest // Uses t.Setenv
+
 func TestSOPSAgeKeyPath_DarwinDefault(t *testing.T) {
 	t.Setenv("SOPS_AGE_KEY_FILE", "")
 	t.Setenv("XDG_CONFIG_HOME", "")
@@ -46,10 +47,11 @@ func TestSOPSAgeKeyPath_DarwinDefault(t *testing.T) {
 func TestExpandHomePath_AlreadyAbsolute(t *testing.T) {
 	t.Parallel()
 
-	path, err := fsutil.ExpandHomePath("/absolute/path/to/file")
+	absolutePath := filepath.Join(t.TempDir(), "file")
+	path, err := fsutil.ExpandHomePath(absolutePath)
 
 	require.NoError(t, err)
-	assert.Equal(t, "/absolute/path/to/file", path)
+	assert.Equal(t, absolutePath, path)
 }
 
 // TestEvalCanonicalPath_ParentNotExist verifies that when both the path and its

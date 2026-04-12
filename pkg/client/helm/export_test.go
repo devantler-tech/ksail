@@ -10,25 +10,50 @@ import (
 	v1 "helm.sh/helm/v4/pkg/release/v1"
 )
 
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
-
 // Expose unexported functions for testing.
 var (
-	ParseChartRef            = parseChartRef
-	BuildChartPathOptions    = buildChartPathOptions
-	ApplyChartPathOptions    = applyChartPathOptions
-	MergeSetValues           = mergeSetValues
-	MergeSetJSONValues       = mergeSetJSONValues
-	MergeValuesYaml          = mergeValuesYaml
-	MergeMapsInto            = mergeMapsInto
-	ReleaseToInfo            = releaseToInfo
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	ParseChartRef = parseChartRef
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	BuildChartPathOptions = buildChartPathOptions
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	ApplyChartPathOptions = applyChartPathOptions
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	MergeSetValues = mergeSetValues
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	MergeSetJSONValues = mergeSetJSONValues
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	MergeValuesYaml = mergeValuesYaml
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	MergeMapsInto = mergeMapsInto
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	ReleaseToInfo = releaseToInfo
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 	ExecuteAndExtractRelease = executeAndExtractRelease
-	ApplyCommonActionConfig  = applyCommonActionConfig
+	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	ApplyCommonActionConfig = applyCommonActionConfig
 )
 
 // Expose unexported error sentinels for test assertions.
 var (
-	ErrUnexpectedReleaseType = errUnexpectedReleaseType
+	ErrUnexpectedReleaseType   = errUnexpectedReleaseType
+	ErrReleaseNameRequired     = errReleaseNameRequired
+	ErrChartSpecRequired       = errChartSpecRequired
+	ErrRepositoryEntryRequired = errRepositoryEntryRequired
+	ErrRepositoryNameRequired  = errRepositoryNameRequired
+	ErrRepositoryCacheUnset    = errRepositoryCacheUnset
+	ErrRepositoryConfigUnset   = errRepositoryConfigUnset
+	//nolint:gochecknoglobals // export_test.go exposes package internals as globals for tests.
+	ConvertRepositoryEntry = convertRepositoryEntry
+	//nolint:gochecknoglobals // export_test.go exposes package internals as globals for tests.
+	LoadOrInitRepositoryFile = loadOrInitRepositoryFile
+	//nolint:gochecknoglobals // export_test.go exposes package internals as globals for tests.
+	ValidateRepositoryRequest = validateRepositoryRequest
 )
 
 // TestableActionConfig captures calls to actionConfig for verification in tests.
@@ -43,6 +68,20 @@ func (t *TestableActionConfig) setWaitStrategy(s helmv4kube.WaitStrategy) { t.Wa
 func (t *TestableActionConfig) setWaitForJobs(w bool)                     { t.WaitForJobs = w }
 func (t *TestableActionConfig) setTimeout(d time.Duration)                { t.Timeout = d }
 func (t *TestableActionConfig) setVersion(v string)                       { t.Version = v }
+
+// NewInstallActionAdapter creates an installActionAdapter wrapping an Install action.
+func NewInstallActionAdapter() (actionConfig, *helmv4action.Install) {
+	install := &helmv4action.Install{}
+
+	return installActionAdapter{install}, install
+}
+
+// NewUpgradeActionAdapter creates an upgradeActionAdapter wrapping an Upgrade action.
+func NewUpgradeActionAdapter() (actionConfig, *helmv4action.Upgrade) {
+	upgrade := &helmv4action.Upgrade{}
+
+	return upgradeActionAdapter{upgrade}, upgrade
+}
 
 // NewInstallAction creates an Install action for testing applyChartPathOptions.
 func NewInstallAction() *helmv4action.Install {

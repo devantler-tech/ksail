@@ -11,6 +11,7 @@ import (
 
 // --- EscapeShellArg ---
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestEscapeShellArg(t *testing.T) {
 	t.Parallel()
 
@@ -91,7 +92,12 @@ func TestGenerateRandomDelimiter(t *testing.T) {
 
 		delimiter, err := registry.GenerateRandomDelimiter()
 		require.NoError(t, err)
-		assert.True(t, strings.HasPrefix(delimiter, "EOF_"), "expected prefix EOF_, got %s", delimiter)
+		assert.True(
+			t,
+			strings.HasPrefix(delimiter, "EOF_"),
+			"expected prefix EOF_, got %s",
+			delimiter,
+		)
 	})
 
 	t.Run("has expected length", func(t *testing.T) {
@@ -107,6 +113,7 @@ func TestGenerateRandomDelimiter(t *testing.T) {
 		t.Parallel()
 
 		seen := make(map[string]struct{})
+
 		const iterations = 100
 
 		for range iterations {

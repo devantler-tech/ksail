@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
-	helmv4kube "helm.sh/helm/v4/pkg/kube"
-
 	"github.com/stretchr/testify/assert"
+	helmv4kube "helm.sh/helm/v4/pkg/kube"
 )
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestApplyCommonActionConfig(t *testing.T) {
 	t.Parallel()
 
@@ -73,7 +73,7 @@ func TestApplyCommonActionConfig(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range tests { //nolint:varnamelen
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

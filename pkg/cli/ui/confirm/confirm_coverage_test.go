@@ -129,10 +129,12 @@ func TestSetStdinReaderForTests_Restore(t *testing.T) {
 }
 
 func TestSetTTYCheckerForTests_Restore(t *testing.T) {
+	t.Parallel()
 	// Not parallel - modifies global state
 
 	// Set a checker
 	restore := confirm.SetTTYCheckerForTests(func() bool { return true })
+
 	assert.True(t, confirm.IsTTY())
 
 	// Restore and check the override is gone
@@ -140,6 +142,7 @@ func TestSetTTYCheckerForTests_Restore(t *testing.T) {
 
 	// Set the opposite
 	restore = confirm.SetTTYCheckerForTests(func() bool { return false })
+
 	assert.False(t, confirm.IsTTY())
 
 	restore()

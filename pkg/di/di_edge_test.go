@@ -16,6 +16,7 @@ import (
 
 var errExtraModuleFailed = errors.New("extra module failed")
 
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestRuntime_Invoke_ExtraModuleError(t *testing.T) {
 	t.Parallel()
 
@@ -35,6 +36,7 @@ func TestRuntime_Invoke_ExtraModuleError(t *testing.T) {
 	assert.Equal(t, errExtraModuleFailed, err)
 }
 
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestRuntime_Invoke_BaseModuleSetsUpDependencyForExtraModule(t *testing.T) {
 	t.Parallel()
 
@@ -71,6 +73,7 @@ func TestRuntime_Invoke_BaseModuleSetsUpDependencyForExtraModule(t *testing.T) {
 	assert.Equal(t, "base", resolvedValue)
 }
 
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestRuntime_Invoke_ExtraModuleOverridesBase(t *testing.T) {
 	t.Parallel()
 
@@ -96,6 +99,7 @@ func TestRuntime_Invoke_ExtraModuleOverridesBase(t *testing.T) {
 
 	err := rt.Invoke(func(i di.Injector) error {
 		var resolveErr error
+
 		resolvedValue, resolveErr = do.Invoke[string](i)
 
 		return resolveErr
@@ -105,12 +109,14 @@ func TestRuntime_Invoke_ExtraModuleOverridesBase(t *testing.T) {
 	assert.Equal(t, "override-value", resolvedValue)
 }
 
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestRuntime_Invoke_FreshInjectorPerCall(t *testing.T) {
 	t.Parallel()
 
 	callCount := 0
 	rt := di.New(func(i di.Injector) error {
 		callCount++
+
 		do.Provide(i, func(di.Injector) (int, error) {
 			return callCount, nil
 		})
@@ -122,6 +128,7 @@ func TestRuntime_Invoke_FreshInjectorPerCall(t *testing.T) {
 
 	err := rt.Invoke(func(i di.Injector) error {
 		var resolveErr error
+
 		val1, resolveErr = do.Invoke[int](i)
 
 		return resolveErr
@@ -130,6 +137,7 @@ func TestRuntime_Invoke_FreshInjectorPerCall(t *testing.T) {
 
 	err = rt.Invoke(func(i di.Injector) error {
 		var resolveErr error
+
 		val2, resolveErr = do.Invoke[int](i)
 
 		return resolveErr
@@ -140,6 +148,7 @@ func TestRuntime_Invoke_FreshInjectorPerCall(t *testing.T) {
 	assert.Equal(t, 2, val2)
 }
 
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestRunEWithRuntime_PassesArgsCorrectly(t *testing.T) {
 	t.Parallel()
 
@@ -188,6 +197,7 @@ func TestRunEWithRuntime_ModuleError(t *testing.T) {
 	assert.Equal(t, errExtraModuleFailed, err)
 }
 
+//nolint:wrapcheck // The test intentionally returns the original sentinel error.
 func TestNewRuntime_TimerIsFunctional(t *testing.T) {
 	t.Parallel()
 
@@ -210,6 +220,7 @@ func TestNewRuntime_TimerIsFunctional(t *testing.T) {
 	require.NoError(t, err)
 }
 
+//nolint:wrapcheck // The test intentionally returns the original sentinel error.
 func TestNewRuntime_ProvisionerFactoryIsFunctional(t *testing.T) {
 	t.Parallel()
 

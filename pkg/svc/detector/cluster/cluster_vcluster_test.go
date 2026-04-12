@@ -290,6 +290,8 @@ func TestExtractHostFromURL_EmptyHost(t *testing.T) {
 }
 
 // TestExtractHostFromURL_ValidURLs tests various valid URLs.
+//
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestExtractHostFromURL_ValidURLs(t *testing.T) {
 	t.Parallel()
 

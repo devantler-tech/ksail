@@ -5,15 +5,14 @@ import (
 	"errors"
 	"testing"
 
-	copilot "github.com/github/copilot-sdk/go"
-
 	"github.com/devantler-tech/ksail/v6/pkg/toolgen"
+	copilot "github.com/github/copilot-sdk/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // errFake is a reusable error value for tests.
-var errFake = errors.New("command failed: exit status 1") //nolint:gochecknoglobals // test helper
+var errFake = errors.New("command failed: exit status 1")
 
 // --- buildFullCommand tests ---
 
@@ -272,7 +271,12 @@ func TestToCopilotTools_HandlerInvocable(t *testing.T) {
 	toolResult, err := result[0].Handler(invocation)
 
 	require.NoError(t, err, "handler always returns nil Go error")
-	assert.Equal(t, "failure", toolResult.ResultType, "command should fail since binary does not exist")
+	assert.Equal(
+		t,
+		"failure",
+		toolResult.ResultType,
+		"command should fail since binary does not exist",
+	)
 }
 
 func TestToCopilotTools_HandlerWithSessionLog(t *testing.T) {

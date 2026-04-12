@@ -14,17 +14,19 @@ import (
 )
 
 // TestScaffoldKind_MirrorRegistries tests Kind scaffolding with mirror registries configured.
+//
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestScaffoldKind_MirrorRegistries(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name             string
-		mirrors          []string
+		name               string
+		mirrors            []string
 		expectedMirrorDirs []string
 	}{
 		{
-			name:    "single mirror creates hosts.toml",
-			mirrors: []string{"docker.io=https://registry-1.docker.io"},
+			name:               "single mirror creates hosts.toml",
+			mirrors:            []string{"docker.io=https://registry-1.docker.io"},
 			expectedMirrorDirs: []string{"docker.io"},
 		},
 		{
@@ -252,8 +254,8 @@ func TestScaffoldK3d_LoadBalancerDisabled(t *testing.T) {
 	cluster := v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution:  v1alpha1.DistributionK3s,
-				LoadBalancer:  v1alpha1.LoadBalancerDisabled,
+				Distribution: v1alpha1.DistributionK3s,
+				LoadBalancer: v1alpha1.LoadBalancerDisabled,
 			},
 		},
 	}
@@ -262,9 +264,11 @@ func TestScaffoldK3d_LoadBalancerDisabled(t *testing.T) {
 	config := scaffolderInstance.CreateK3dConfig(".")
 
 	found := false
+
 	for _, arg := range config.Options.K3sOptions.ExtraArgs {
 		if arg.Arg == "--disable=servicelb" {
 			found = true
+
 			assert.Equal(t, []string{"server:*"}, arg.NodeFilters)
 
 			break

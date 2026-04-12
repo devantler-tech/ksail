@@ -1,3 +1,4 @@
+//nolint:varnamelen // Table-driven registry tests keep short locals for readability.
 package registry_test
 
 import (
@@ -87,7 +88,11 @@ func TestBuildHostEndpointMap(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			result, updated := registry.BuildHostEndpointMap(tc.specs, tc.containerPrefix, tc.existing)
+			result, updated := registry.BuildHostEndpointMap(
+				tc.specs,
+				tc.containerPrefix,
+				tc.existing,
+			)
 			assert.Equal(t, tc.wantUpdated, updated)
 
 			for _, host := range tc.wantHosts {
@@ -140,6 +145,7 @@ func TestBuildHostEndpointMap_EndpointsContainMirrorAndRemote(t *testing.T) {
 
 	// Should contain the remote URL
 	hasRemote := false
+
 	for _, ep := range endpoints {
 		if ep == "https://registry-1.docker.io" {
 			hasRemote = true

@@ -176,6 +176,7 @@ func TestGenerateFluxSyncManifests_OCIRegistryTrailingSlash(t *testing.T) {
 	result, err := tenant.GenerateFluxSyncManifests(opts)
 
 	require.NoError(t, err)
+
 	syncYAML := result["sync.yaml"]
 	// Should not contain double slashes from trailing slash
 	assert.NotContains(t, syncYAML, "ghcr.io//")
@@ -266,6 +267,7 @@ func TestGenerateArgoCDManifests_ProjectHasAllDestinations(t *testing.T) {
 	result, err := tenant.GenerateArgoCDManifests(opts)
 
 	require.NoError(t, err)
+
 	projectYAML := result["project.yaml"]
 
 	// All namespaces should appear as destinations
@@ -402,6 +404,7 @@ func TestOptions_ResolveDefaults_PreservesExisting(t *testing.T) {
 	assert.Equal(t, "Public", opts.RepoVisibility)
 }
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestOptions_Validate(t *testing.T) {
 	t.Parallel()
 
@@ -491,7 +494,7 @@ func TestOptions_Validate(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range tests { //nolint:varnamelen
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -528,11 +531,13 @@ func TestType_Set(t *testing.T) {
 		{"empty", "", "", true},
 	}
 
+	//nolint:varnamelen // Short names keep table-driven tests readable.
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			var typ tenant.Type
+
 			err := typ.Set(tt.input)
 
 			if tt.wantErr {
@@ -560,7 +565,7 @@ func TestType_String(t *testing.T) {
 
 	// Test nil case via pointer
 	var nilType *tenant.Type
-	assert.Equal(t, "", nilType.String())
+	assert.Empty(t, nilType.String())
 }
 
 func TestType_TypeMethodReturnsTypeName(t *testing.T) {
@@ -594,6 +599,7 @@ func TestManagedByLabels_Content(t *testing.T) {
 
 // --- ParseRemoteURL tests ---
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestParseRemoteURL(t *testing.T) {
 	t.Parallel()
 
@@ -655,18 +661,18 @@ func TestParseRemoteURL(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := tenant.ParseRemoteURL(tt.url)
+			got, err := tenant.ParseRemoteURL(testCase.url)
 
-			if tt.wantErr {
+			if testCase.wantErr {
 				require.Error(t, err)
 				assert.ErrorIs(t, err, tenant.ErrPlatformRepoRequired)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tt.want, got)
+				assert.Equal(t, testCase.want, got)
 			}
 		})
 	}
@@ -739,18 +745,18 @@ func TestExportSafeRelPath(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := tenant.ExportSafeRelPath(tt.base, tt.target)
+			got, err := tenant.ExportSafeRelPath(testCase.base, testCase.target)
 
-			if tt.wantErr {
+			if testCase.wantErr {
 				require.Error(t, err)
 				assert.ErrorIs(t, err, tenant.ErrOutsideRepoRoot)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tt.want, got)
+				assert.Equal(t, testCase.want, got)
 			}
 		})
 	}
@@ -791,7 +797,7 @@ func TestGenerate_FluxOCI(t *testing.T) {
 	for _, filename := range expectedFiles {
 		filePath := filepath.Join(tenantDir, filename)
 		_, statErr := os.Stat(filePath)
-		assert.NoError(t, statErr, "expected file %s to exist", filename)
+		require.NoError(t, statErr, "expected file %s to exist", filename)
 	}
 }
 
@@ -827,7 +833,7 @@ func TestGenerate_ArgoCD(t *testing.T) {
 	for _, filename := range expectedFiles {
 		filePath := filepath.Join(tenantDir, filename)
 		_, statErr := os.Stat(filePath)
-		assert.NoError(t, statErr, "expected file %s to exist", filename)
+		require.NoError(t, statErr, "expected file %s to exist", filename)
 	}
 }
 
@@ -860,7 +866,7 @@ func TestGenerate_Kubectl(t *testing.T) {
 	for _, filename := range expectedFiles {
 		filePath := filepath.Join(tenantDir, filename)
 		_, statErr := os.Stat(filePath)
-		assert.NoError(t, statErr, "expected file %s to exist", filename)
+		require.NoError(t, statErr, "expected file %s to exist", filename)
 	}
 
 	// Should NOT have sync.yaml or ArgoCD files
@@ -1055,12 +1061,15 @@ func TestCollectDeliveryFiles_WithKustomizationIncluded(t *testing.T) {
 
 	// Should contain the kustomization file
 	found := false
+
 	for key := range files {
 		if strings.Contains(key, "kustomization.yaml") {
 			found = true
+
 			break
 		}
 	}
+
 	assert.True(t, found, "should find kustomization.yaml in collected files")
 }
 
@@ -1104,6 +1113,7 @@ func TestRemoveArgoCDRBACPolicy_InvalidYAML(t *testing.T) {
 
 // --- Generate with Flux Git sync source ---
 
+//nolint:gosec // Test-only fixtures use controlled temp paths and permissions.
 func TestGenerate_FluxGit(t *testing.T) {
 	t.Parallel()
 

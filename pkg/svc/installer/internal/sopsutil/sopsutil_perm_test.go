@@ -18,6 +18,7 @@ func TestResolveAgeKey_KeyFilePermissionDenied(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission tests not reliable on Windows")
 	}
+
 	if os.Getuid() == 0 {
 		t.Skip("test requires non-root user for permission checks")
 	}

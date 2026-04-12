@@ -1,4 +1,3 @@
-//nolint:err113,funlen // Tests use dynamic errors for mock behaviors and table-driven tests are naturally long
 package docker_test
 
 import (
@@ -12,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:err113,funlen // Tests use controlled mock errors. Table-driven coverage stays easier to read as one block.
 func TestIsContainerRunning(t *testing.T) {
 	t.Parallel()
 
@@ -59,41 +59,42 @@ func TestIsContainerRunning(t *testing.T) {
 	}
 
 	for i := range tests {
-		tc := tests[i]
+		testCase := tests[i]
 
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			mockClient, manager, ctx := setupTestRegistryManager(t)
 
 			mockClient.EXPECT().
 				ContainerList(ctx, mock.Anything).
-				Return(tc.containers, tc.listErr).
+				Return(testCase.containers, testCase.listErr).
 				Once()
 
 			result, err := manager.IsContainerRunning(ctx, "k3d-registry")
 
-			if tc.expectErr {
+			if testCase.expectErr {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.errContains)
+				assert.Contains(t, err.Error(), testCase.errContains)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tc.expected, result)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }
 
+//nolint:err113,funlen // Tests use controlled mock errors. Table-driven coverage stays easier to read as one block.
 func TestGetContainerPort(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		containers  []container.Summary
-		privatePort uint16
-		listErr     error
+		name         string
+		containers   []container.Summary
+		privatePort  uint16
+		listErr      error
 		expectedPort int
 		expectedErr  error
 		errContains  string
@@ -113,8 +114,8 @@ func TestGetContainerPort(t *testing.T) {
 			expectedPort: 5050,
 		},
 		{
-			name: "returns ErrRegistryNotFound when no containers",
-			containers: []container.Summary{},
+			name:        "returns ErrRegistryNotFound when no containers",
+			containers:  []container.Summary{},
 			privatePort: 5000,
 			expectedErr: docker.ErrRegistryNotFound,
 		},
@@ -156,40 +157,41 @@ func TestGetContainerPort(t *testing.T) {
 	}
 
 	for i := range tests {
-		tc := tests[i]
+		testCase := tests[i]
 
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			mockClient, manager, ctx := setupTestRegistryManager(t)
 
 			mockClient.EXPECT().
 				ContainerList(ctx, mock.Anything).
-				Return(tc.containers, tc.listErr).
+				Return(testCase.containers, testCase.listErr).
 				Once()
 
-			port, err := manager.GetContainerPort(ctx, "k3d-registry", tc.privatePort)
+			port, err := manager.GetContainerPort(ctx, "k3d-registry", testCase.privatePort)
 
-			if tc.expectedErr != nil {
-				require.ErrorIs(t, err, tc.expectedErr)
+			if testCase.expectedErr != nil {
+				require.ErrorIs(t, err, testCase.expectedErr)
 				assert.Zero(t, port)
 
 				return
 			}
 
-			if tc.errContains != "" {
+			if testCase.errContains != "" {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.errContains)
+				assert.Contains(t, err.Error(), testCase.errContains)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tc.expectedPort, port)
+			assert.Equal(t, testCase.expectedPort, port)
 		})
 	}
 }
 
+//nolint:err113,funlen // Tests use controlled mock errors. Table-driven coverage stays easier to read as one block.
 func TestGetUsedHostPorts(t *testing.T) {
 	t.Parallel()
 
@@ -291,6 +293,7 @@ func TestGetUsedHostPorts(t *testing.T) {
 	})
 }
 
+//nolint:err113,funlen // Tests use controlled mock errors. Table-driven coverage stays easier to read as one block.
 func TestFindContainerBySuffix(t *testing.T) {
 	t.Parallel()
 
@@ -378,33 +381,34 @@ func TestFindContainerBySuffix(t *testing.T) {
 	}
 
 	for i := range tests {
-		tc := tests[i]
+		testCase := tests[i]
 
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			mockClient, manager, ctx := setupTestRegistryManager(t)
 
 			mockClient.EXPECT().
 				ContainerList(ctx, mock.Anything).
-				Return(tc.containers, tc.listErr).
+				Return(testCase.containers, testCase.listErr).
 				Once()
 
-			name, err := manager.FindContainerBySuffix(ctx, tc.suffix)
+			name, err := manager.FindContainerBySuffix(ctx, testCase.suffix)
 
-			if tc.expectErr {
+			if testCase.expectErr {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.errContains)
+				assert.Contains(t, err.Error(), testCase.errContains)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tc.expectedName, name)
+			assert.Equal(t, testCase.expectedName, name)
 		})
 	}
 }
 
+//nolint:funlen // Table-driven coverage stays easier to read as one block.
 func TestBuildContainerConfig(t *testing.T) {
 	t.Parallel()
 
@@ -457,6 +461,7 @@ func TestBuildContainerConfig(t *testing.T) {
 		cfg, err := manager.ExportBuildContainerConfig(config)
 
 		require.NoError(t, err)
+
 		_, hasLabel := cfg.Labels[docker.RegistryLabelKey]
 		assert.False(t, hasLabel)
 	})
@@ -473,11 +478,13 @@ func TestBuildContainerConfig(t *testing.T) {
 		cfg, err := manager.ExportBuildContainerConfig(config)
 
 		require.NoError(t, err)
+
 		_, hasPort := cfg.ExposedPorts[docker.RegistryContainerPort]
 		assert.True(t, hasPort)
 	})
 }
 
+//nolint:funlen // Table-driven coverage stays easier to read as one block.
 func TestBuildHostConfig(t *testing.T) {
 	t.Parallel()
 
@@ -638,16 +645,16 @@ func TestResolveVolumeName(t *testing.T) {
 	}
 
 	for i := range tests {
-		tc := tests[i]
+		testCase := tests[i]
 
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			_, manager, _ := setupTestRegistryManager(t)
 
-			result := manager.ExportResolveVolumeName(tc.config)
+			result := manager.ExportResolveVolumeName(testCase.config)
 
-			assert.Equal(t, tc.expected, result)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }
@@ -714,6 +721,7 @@ func TestBuildProxyCredentialsEnv_ExpandsEnvVars(t *testing.T) {
 	assert.Equal(t, "REGISTRY_PROXY_PASSWORD=expanded-pass", env[1])
 }
 
+//nolint:gosec // Test-only fixtures use controlled temp paths and permissions.
 func TestBuildContainerConfig_WithCredentials(t *testing.T) {
 	t.Setenv("PROXY_USER", "testuser")
 	t.Setenv("PROXY_PASS", "testpass")

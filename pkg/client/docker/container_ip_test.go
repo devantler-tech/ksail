@@ -1,4 +1,3 @@
-//nolint:err113 // Tests use dynamic errors for mock behaviors
 package docker_test
 
 import (
@@ -13,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestResolveContainerIPOnNetwork(t *testing.T) {
 	t.Parallel()
 
@@ -50,6 +50,7 @@ func TestResolveContainerIPOnNetwork(t *testing.T) {
 			setupMock: func(m *docker.MockAPIClient, ctx context.Context) {
 				m.EXPECT().
 					ContainerInspect(ctx, "missing-container").
+					//nolint:err113 // Tests use controlled mock errors.
 					Return(container.InspectResponse{}, errors.New("no such container")).
 					Once()
 			},
@@ -144,34 +145,40 @@ func TestResolveContainerIPOnNetwork(t *testing.T) {
 	}
 
 	for i := range tests {
-		tc := tests[i]
+		testCase := tests[i]
 
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			mockClient := docker.NewMockAPIClient(t)
 			ctx := context.Background()
-			tc.setupMock(mockClient, ctx)
+			testCase.setupMock(mockClient, ctx)
 
-			ip, err := docker.ResolveContainerIPOnNetwork(ctx, mockClient, tc.containerName, tc.networkName)
+			//nolint:varnamelen // Short names keep table-driven tests readable.
+			ip, err := docker.ResolveContainerIPOnNetwork(
+				ctx,
+				mockClient,
+				testCase.containerName,
+				testCase.networkName,
+			)
 
-			if tc.expectedErr != nil {
-				require.ErrorIs(t, err, tc.expectedErr)
+			if testCase.expectedErr != nil {
+				require.ErrorIs(t, err, testCase.expectedErr)
 				assert.Empty(t, ip)
 
 				return
 			}
 
-			if tc.errContains != "" {
+			if testCase.errContains != "" {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.errContains)
+				assert.Contains(t, err.Error(), testCase.errContains)
 				assert.Empty(t, ip)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tc.expectedIP, ip)
+			assert.Equal(t, testCase.expectedIP, ip)
 		})
 	}
 }

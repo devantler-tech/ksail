@@ -10,14 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestGetStores(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		inputPath  string
-		wantErr    bool
-		storeType  string // "yaml" or "json"
+		name      string
+		inputPath string
+		wantErr   bool
+		storeType string // "yaml" or "json"
 	}{
 		{
 			name:      "yaml extension",
@@ -56,6 +57,7 @@ func TestGetStores(t *testing.T) {
 		},
 	}
 
+	//nolint:varnamelen // Short names keep table-driven tests readable.
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -64,7 +66,7 @@ func TestGetStores(t *testing.T) {
 
 			if tc.wantErr {
 				require.Error(t, err)
-				assert.ErrorIs(t, err, sopsclient.ErrUnsupportedFileFormat)
+				require.ErrorIs(t, err, sopsclient.ErrUnsupportedFileFormat)
 				assert.Nil(t, inputStore)
 				assert.Nil(t, outputStore)
 			} else {

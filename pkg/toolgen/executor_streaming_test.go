@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:goconst // Repeated literals keep the test cases explicit.
 func TestExecuteTool_SimpleCommand(t *testing.T) {
 	t.Parallel()
 
@@ -226,10 +227,10 @@ func TestExecuteTool_WithConsolidatedTool(t *testing.T) {
 	}
 
 	tool := toolgen.ToolDefinition{
-		Name:           "echo_tools",
-		CommandPath:    "echo tools",
-		CommandParts:   []string{"echo", "tools"},
-		IsConsolidated: true,
+		Name:            "echo_tools",
+		CommandPath:     "echo tools",
+		CommandParts:    []string{"echo", "tools"},
+		IsConsolidated:  true,
 		SubcommandParam: "action",
 		Subcommands: map[string]*toolgen.SubcommandDef{
 			"hello": {

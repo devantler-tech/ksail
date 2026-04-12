@@ -1,6 +1,7 @@
 package helm_test
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
@@ -52,7 +53,7 @@ func TestMergeSetValues(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range tests { //nolint:varnamelen
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -104,26 +105,28 @@ func TestMergeSetJSONValues(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			base := copyMap(tc.base)
-			err := helm.MergeSetJSONValues(tc.setJSONVals, base)
+			base := copyMap(testCase.base)
+			err := helm.MergeSetJSONValues(testCase.setJSONVals, base)
 
-			if tc.wantErr {
+			if testCase.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "failed to parse JSON value")
 			} else {
 				require.NoError(t, err)
-				if tc.checkKey != "" {
-					assert.Contains(t, base, tc.checkKey)
+
+				if testCase.checkKey != "" {
+					assert.Contains(t, base, testCase.checkKey)
 				}
 			}
 		})
 	}
 }
 
+//nolint:varnamelen // Short names keep table-driven tests readable.
 func TestMergeValuesYaml(t *testing.T) {
 	t.Parallel()
 
@@ -186,6 +189,7 @@ func TestMergeValuesYaml(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestMergeMapsInto(t *testing.T) {
 	t.Parallel()
 
@@ -251,13 +255,13 @@ func TestMergeMapsInto(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			helm.MergeMapsInto(tc.dest, tc.src)
+			helm.MergeMapsInto(testCase.dest, testCase.src)
 
-			assert.Equal(t, tc.wantDest, tc.dest)
+			assert.Equal(t, testCase.wantDest, testCase.dest)
 		})
 	}
 }
@@ -265,9 +269,7 @@ func TestMergeMapsInto(t *testing.T) {
 // copyMap creates a shallow copy of a map to avoid test mutation.
 func copyMap(m map[string]any) map[string]any {
 	result := make(map[string]any, len(m))
-	for k, v := range m {
-		result[k] = v
-	}
+	maps.Copy(result, m)
 
 	return result
 }

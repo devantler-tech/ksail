@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	errTestHelmFactory = errors.New("test helm factory error")
-)
+var errTestHelmFactory = errors.New("test helm factory error")
+
+const testKubeconfig = "kubeconfig"
 
 // TestPolicyEngineFactory exercises the policy engine factory returned by
 // DefaultInstallerFactories. It tests engine selection (Kyverno, Gatekeeper),
@@ -72,41 +72,42 @@ func TestPolicyEngineFactory(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			factories := setup.DefaultInstallerFactories()
-			if tc.helmErr != nil {
+			if testCase.helmErr != nil {
 				factories.HelmClientFactory = func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
-					return nil, "", tc.helmErr
+					return nil, "", testCase.helmErr
 				}
 			} else {
 				factories.HelmClientFactory = func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
-					return nil, "kubeconfig", nil
+					return nil, testKubeconfig, nil
 				}
 			}
 
 			clusterCfg := &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						PolicyEngine: tc.engine,
+						PolicyEngine: testCase.engine,
 					},
 				},
 			}
 
 			inst, err := factories.PolicyEngine(clusterCfg)
 
-			if tc.expectErr {
+			if testCase.expectErr {
 				require.Error(t, err)
-				if tc.expectErrIs != nil {
-					assert.ErrorIs(t, err, tc.expectErrIs)
+
+				if testCase.expectErrIs != nil {
+					require.ErrorIs(t, err, testCase.expectErrIs)
 				}
 			} else {
 				require.NoError(t, err)
 			}
 
-			if tc.expectNilInst {
+			if testCase.expectNilInst {
 				assert.Nil(t, inst)
 			} else {
 				assert.NotNil(t, inst)
@@ -117,6 +118,8 @@ func TestPolicyEngineFactory(t *testing.T) {
 
 // TestCSIFactory exercises the CSI factory returned by DefaultInstallerFactories.
 // It tests the Talos×Hetzner special case and the default local-path-provisioner path.
+//
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestCSIFactory(t *testing.T) {
 	t.Parallel()
 
@@ -154,33 +157,33 @@ func TestCSIFactory(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			factories := setup.DefaultInstallerFactories()
-			if tc.helmErr != nil {
+			if testCase.helmErr != nil {
 				factories.HelmClientFactory = func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
-					return nil, "", tc.helmErr
+					return nil, "", testCase.helmErr
 				}
 			} else {
 				factories.HelmClientFactory = func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
-					return nil, "kubeconfig", nil
+					return nil, testKubeconfig, nil
 				}
 			}
 
 			clusterCfg := &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution: tc.distribution,
-						Provider:     tc.provider,
+						Distribution: testCase.distribution,
+						Provider:     testCase.provider,
 					},
 				},
 			}
 
 			inst, err := factories.CSI(clusterCfg)
 
-			if tc.expectErr {
+			if testCase.expectErr {
 				require.Error(t, err)
 				assert.Nil(t, inst)
 			} else {
@@ -211,24 +214,24 @@ func TestArgoCDInstallerFactory(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			factories := setup.DefaultInstallerFactories()
-			if tc.helmErr != nil {
+			if testCase.helmErr != nil {
 				factories.HelmClientFactory = func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
-					return nil, "", tc.helmErr
+					return nil, "", testCase.helmErr
 				}
 			} else {
 				factories.HelmClientFactory = func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
-					return nil, "kubeconfig", nil
+					return nil, testKubeconfig, nil
 				}
 			}
 
 			inst, err := factories.ArgoCD(&v1alpha1.Cluster{})
 
-			if tc.expectErr {
+			if testCase.expectErr {
 				require.Error(t, err)
 				assert.Nil(t, inst)
 			} else {
@@ -241,6 +244,8 @@ func TestArgoCDInstallerFactory(t *testing.T) {
 
 // TestHelmInstallerFactory_CertManager exercises the generic helmInstallerFactory
 // via the CertManager factory.
+//
+//nolint:dupl // Duplicated setup keeps the parallel test cases readable.
 func TestHelmInstallerFactory_CertManager(t *testing.T) {
 	t.Parallel()
 
@@ -249,7 +254,7 @@ func TestHelmInstallerFactory_CertManager(t *testing.T) {
 
 		factories := setup.DefaultInstallerFactories()
 		factories.HelmClientFactory = func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
-			return nil, "kubeconfig", nil
+			return nil, testKubeconfig, nil
 		}
 
 		inst, err := factories.CertManager(&v1alpha1.Cluster{})
@@ -272,6 +277,8 @@ func TestHelmInstallerFactory_CertManager(t *testing.T) {
 }
 
 // TestHelmInstallerFactory_KubeletCSRApprover exercises the KubeletCSRApprover factory.
+//
+//nolint:dupl // Duplicated setup keeps the parallel test cases readable.
 func TestHelmInstallerFactory_KubeletCSRApprover(t *testing.T) {
 	t.Parallel()
 
@@ -280,7 +287,7 @@ func TestHelmInstallerFactory_KubeletCSRApprover(t *testing.T) {
 
 		factories := setup.DefaultInstallerFactories()
 		factories.HelmClientFactory = func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
-			return nil, "kubeconfig", nil
+			return nil, testKubeconfig, nil
 		}
 
 		inst, err := factories.KubeletCSRApprover(&v1alpha1.Cluster{})
@@ -355,7 +362,7 @@ func TestInstallPolicyEngineSilent_DisabledEngine(t *testing.T) {
 
 	factories := setup.DefaultInstallerFactories()
 	factories.HelmClientFactory = func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
-		return nil, "kubeconfig", nil
+		return nil, testKubeconfig, nil
 	}
 
 	clusterCfg := &v1alpha1.Cluster{

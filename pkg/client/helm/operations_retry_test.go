@@ -13,7 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var errHelmConnectionResetByPeer = errors.New("read tcp 10.0.0.1:12345->1.2.3.4:443: read: connection reset by peer") //nolint:gochecknoglobals // test sentinel
+var errHelmConnectionResetByPeer = errors.New(
+	"read tcp 10.0.0.1:12345->1.2.3.4:443: read: connection reset by peer",
+)
 
 func TestInstallChartWithRetry_SuccessOnFirstAttempt(t *testing.T) {
 	t.Parallel()
@@ -200,6 +202,7 @@ func TestInstallOrUpgradeChart_ChartSpecFields(t *testing.T) {
 		mock.Anything,
 	).RunAndReturn(func(_ context.Context, spec *helm.ChartSpec) (*helm.ReleaseInfo, error) {
 		gotSpec = spec
+
 		return &helm.ReleaseInfo{Name: "calico"}, nil
 	})
 

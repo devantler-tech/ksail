@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	errReconcilerSomethingWentWrong = errors.New("something went wrong") //nolint:gochecknoglobals // test sentinel
-	errReconcilerNotContext         = errors.New("not a context error")  //nolint:gochecknoglobals // test sentinel
+	errReconcilerSomethingWentWrong = errors.New("something went wrong")
+	errReconcilerNotContext         = errors.New("not a context error")
 )
 
 func TestIsContextError(t *testing.T) {

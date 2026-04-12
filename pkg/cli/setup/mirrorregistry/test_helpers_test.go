@@ -1,3 +1,4 @@
+//nolint:testpackage // Test needs package access for internal helpers.
 package mirrorregistry
 
 import (

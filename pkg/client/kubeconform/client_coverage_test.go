@@ -2,7 +2,6 @@ package kubeconform_test
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -110,7 +109,7 @@ func TestValidateBytes_CancelledContext(t *testing.T) {
 
 	err := client.ValidateBytes(ctx, "test.yaml", []byte("apiVersion: v1"), nil)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, context.Canceled))
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func TestValidateFile_CancelledContext(t *testing.T) {
@@ -123,7 +122,7 @@ func TestValidateFile_CancelledContext(t *testing.T) {
 
 	err := client.ValidateFile(ctx, "/some/file.yaml", nil)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, context.Canceled))
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func TestValidateManifests_CancelledContext(t *testing.T) {
@@ -136,13 +135,12 @@ func TestValidateManifests_CancelledContext(t *testing.T) {
 
 	err := client.ValidateManifests(ctx, strings.NewReader("apiVersion: v1"), nil)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, context.Canceled))
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func TestValidateManifests_SkipKinds(t *testing.T) {
 	t.Parallel()
 
-	//nolint:gosec // G101: This is a test manifest, not a hardcoded credential
 	yaml := `apiVersion: v1
 kind: Secret
 metadata:

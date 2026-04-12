@@ -209,7 +209,9 @@ func ExportSchemaCacheFileName(schemaURL string) string {
 }
 
 // ExportDistributionToLabelScheme exposes distributionToLabelScheme for testing.
-func ExportDistributionToLabelScheme(distribution v1alpha1.Distribution) dockerprovider.LabelScheme {
+func ExportDistributionToLabelScheme(
+	distribution v1alpha1.Distribution,
+) dockerprovider.LabelScheme {
 	return distributionToLabelScheme(distribution)
 }
 

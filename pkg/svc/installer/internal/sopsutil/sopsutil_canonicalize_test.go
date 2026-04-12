@@ -17,7 +17,7 @@ import (
 // returns a wrapped error and ResolveAgeKey propagates it. This exercises the
 // canonicalize error path that is otherwise unreachable with valid parent dirs.
 //
-//nolint:paralleltest // Uses t.Setenv
+
 func TestResolveAgeKey_EvalCanonicalPathParentNotExist(t *testing.T) {
 	// Point SOPS_AGE_KEY_FILE to a path where even the parent directory does
 	// not exist. EvalCanonicalPath will fail to resolve the parent's symlinks.
@@ -36,7 +36,8 @@ func TestResolveAgeKey_EvalCanonicalPathParentNotExist(t *testing.T) {
 // key file path has a parent directory with no permissions, EvalCanonicalPath
 // returns a non-IsNotExist error and ResolveAgeKey propagates it.
 //
-//nolint:paralleltest // Uses t.Setenv
+
+//nolint:goconst,gosec // Test-only permission setup stays explicit.
 func TestResolveAgeKey_EvalCanonicalPathPermissionDenied(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission semantics differ on Windows")
@@ -64,6 +65,7 @@ func TestResolveAgeKey_EvalCanonicalPathPermissionDenied(t *testing.T) {
 	// inside it fails with EACCES.
 	err = os.Chmod(restrictedDir, 0o000)
 	require.NoError(t, err)
+	//nolint:gosec // Test restores temp directory permissions after the assertion.
 	t.Cleanup(func() { _ = os.Chmod(restrictedDir, 0o700) })
 
 	keyFilePath := filepath.Join(innerDir, "keys.txt")
@@ -82,7 +84,7 @@ func TestResolveAgeKey_EvalCanonicalPathPermissionDenied(t *testing.T) {
 // SOPS.Enabled is nil (auto-detect mode) and ResolveAgeKey returns an error,
 // ResolveEnabledAgeKey swallows the error and returns ("", nil).
 //
-//nolint:paralleltest // Uses t.Setenv
+
 func TestResolveEnabledAgeKey_AutoDetectWithCanonicalError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission semantics differ on Windows")
@@ -100,6 +102,7 @@ func TestResolveEnabledAgeKey_AutoDetectWithCanonicalError(t *testing.T) {
 
 	err = os.Chmod(restrictedDir, 0o000)
 	require.NoError(t, err)
+	//nolint:gosec // Test restores temp directory permissions after the assertion.
 	t.Cleanup(func() { _ = os.Chmod(restrictedDir, 0o700) })
 
 	t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(restrictedDir, "inner", "keys.txt"))

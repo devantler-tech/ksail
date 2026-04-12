@@ -46,6 +46,7 @@ func TestMockValidator_Validate(t *testing.T) {
 			mockVal := validator.NewMockValidator[config](t)
 
 			expectedResult := validator.NewValidationResult("test.yaml")
+
 			if !testCase.returnValid {
 				for range testCase.errorCount {
 					expectedResult.AddError(validator.ValidationError{
@@ -239,5 +240,5 @@ func TestFileLocation_EmptyPath(t *testing.T) {
 	t.Parallel()
 
 	location := validator.FileLocation{}
-	assert.Equal(t, "", location.String())
+	assert.Empty(t, location.String())
 }

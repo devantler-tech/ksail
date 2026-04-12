@@ -36,7 +36,7 @@ func newSessionEventDispatcher(
 func (d *sessionEventDispatcher) dispatch(
 	event copilot.SessionEvent,
 ) {
-	//nolint:exhaustive // Only handling events relevant to the chat TUI.
+	//nolint:exhaustive // Only message-producing event types are handled here.
 	switch event.Type {
 	case copilot.SessionEventTypeAssistantTurnStart:
 		d.handleTurnStart()
@@ -83,7 +83,7 @@ func (d *sessionEventDispatcher) dispatch(
 }
 
 func (d *sessionEventDispatcher) handleSessionLifecycle(eventType copilot.SessionEventType) {
-	//nolint:exhaustive // Only SessionIdle and TurnEnd are relevant here.
+	//nolint:exhaustive // Only message-producing event types are handled here.
 	switch eventType {
 	case copilot.SessionEventTypeSessionIdle:
 		d.eventChan <- streamEndMsg{}

@@ -136,6 +136,8 @@ func TestConfigs_WithName_CustomName(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestResolveClusterName_TalosContext verifies Talos cluster name resolution.
+//
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestResolveClusterName_TalosContext(t *testing.T) {
 	t.Parallel()
 

@@ -6,14 +6,13 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
-	releasecommon "helm.sh/helm/v4/pkg/release/common"
-	v1 "helm.sh/helm/v4/pkg/release/v1"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	releasecommon "helm.sh/helm/v4/pkg/release/common"
+	v1 "helm.sh/helm/v4/pkg/release/v1"
 )
 
-var errHelmInstallFailed = errors.New("install failed") //nolint:gochecknoglobals // test sentinel
+var errHelmInstallFailed = errors.New("install failed")
 
 //nolint:funlen // Table-driven release conversion cases are clearer inline.
 func TestReleaseToInfo(t *testing.T) {
@@ -85,11 +84,11 @@ func TestReleaseToInfo(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			rel := tc.release()
+			rel := testCase.release()
 
 			var got *helm.ReleaseInfo
 			if rel == nil {
@@ -97,10 +96,11 @@ func TestReleaseToInfo(t *testing.T) {
 			} else {
 				release, ok := rel.(*v1.Release)
 				require.True(t, ok)
+
 				got = helm.ReleaseToInfo(release)
 			}
 
-			assert.Equal(t, tc.wantInfo, got)
+			assert.Equal(t, testCase.wantInfo, got)
 		})
 	}
 }

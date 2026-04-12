@@ -46,6 +46,7 @@ func TestBuildExternalRegistryURL_Formats(t *testing.T) {
 		},
 	}
 
+	//nolint:varnamelen // Short names keep table-driven tests readable.
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -128,6 +129,7 @@ func TestBuildInstance_RegistryHostOverride(t *testing.T) {
 	require.NotNil(t, instance)
 }
 
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestBuildLocalRegistryURL_Variations(t *testing.T) {
 	t.Parallel()
 
@@ -211,6 +213,7 @@ func TestNormalizeFluxPath_Coverage(t *testing.T) {
 	}
 }
 
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestBuildDockerConfigJSON_Formats(t *testing.T) {
 	t.Parallel()
 
@@ -252,6 +255,7 @@ func TestBuildDockerConfigJSON_Formats(t *testing.T) {
 
 			if tt.wantErr {
 				require.Error(t, err)
+
 				return
 			}
 
@@ -263,6 +267,7 @@ func TestBuildDockerConfigJSON_Formats(t *testing.T) {
 	}
 }
 
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestBuildRegistrySecret_Types(t *testing.T) {
 	t.Parallel()
 
@@ -307,6 +312,7 @@ func TestBuildRegistrySecret_Types(t *testing.T) {
 
 			if tt.wantErr {
 				require.Error(t, err)
+
 				return
 			}
 

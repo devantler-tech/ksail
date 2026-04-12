@@ -153,6 +153,7 @@ func TestValidateFile_NonExistentFile(t *testing.T) {
 	}
 }
 
+//nolint:goconst // Inline manifests keep the skip-kind cases readable.
 func TestValidateFile_SkipKinds(t *testing.T) {
 	t.Parallel()
 

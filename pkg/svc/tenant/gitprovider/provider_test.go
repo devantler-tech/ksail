@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestResolveProviderHost(t *testing.T) {
 	t.Parallel()
 
@@ -78,7 +79,6 @@ func TestResolveProviderHost(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // mutates environment variables
 func TestResolveToken_GitLabEnvVar(t *testing.T) {
 	t.Setenv("GITLAB_TOKEN", "gitlab-test-token")
 
@@ -86,7 +86,6 @@ func TestResolveToken_GitLabEnvVar(t *testing.T) {
 	require.Equal(t, "gitlab-test-token", got)
 }
 
-//nolint:paralleltest // mutates environment variables
 func TestResolveToken_GiteaEnvVar(t *testing.T) {
 	t.Setenv("GITEA_TOKEN", "gitea-test-token")
 
@@ -94,7 +93,6 @@ func TestResolveToken_GiteaEnvVar(t *testing.T) {
 	require.Equal(t, "gitea-test-token", got)
 }
 
-//nolint:paralleltest // mutates environment variables
 func TestResolveToken_GitLabExplicitOverridesEnv(t *testing.T) {
 	t.Setenv("GITLAB_TOKEN", "env-token")
 
@@ -102,7 +100,6 @@ func TestResolveToken_GitLabExplicitOverridesEnv(t *testing.T) {
 	require.Equal(t, "explicit-token", got)
 }
 
-//nolint:paralleltest // mutates environment variables
 func TestResolveToken_GiteaExplicitOverridesEnv(t *testing.T) {
 	t.Setenv("GITEA_TOKEN", "env-token")
 
@@ -110,7 +107,6 @@ func TestResolveToken_GiteaExplicitOverridesEnv(t *testing.T) {
 	require.Equal(t, "explicit-token", got)
 }
 
-//nolint:paralleltest // mutates environment variables
 func TestResolveToken_GitLabEmptyEnvVar(t *testing.T) {
 	t.Setenv("GITLAB_TOKEN", "")
 
@@ -118,7 +114,6 @@ func TestResolveToken_GitLabEmptyEnvVar(t *testing.T) {
 	require.Empty(t, got)
 }
 
-//nolint:paralleltest // mutates environment variables
 func TestResolveToken_GiteaEmptyEnvVar(t *testing.T) {
 	t.Setenv("GITEA_TOKEN", "")
 

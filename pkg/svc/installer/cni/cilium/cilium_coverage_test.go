@@ -47,6 +47,7 @@ func TestInstaller_Install_TalosDistribution(t *testing.T) {
 				assert.Equal(t, `"localhost"`, spec.SetJSONVals["k8sServiceHost"])
 				assert.Equal(t, `"7445"`, spec.SetJSONVals["k8sServicePort"])
 				assert.Equal(t, "false", spec.SetJSONVals["cgroup.autoMount.enabled"])
+
 				return true
 			}),
 		).
@@ -91,6 +92,7 @@ func TestInstaller_Install_HetznerProvider(t *testing.T) {
 				// Default values should be present
 				assert.Equal(t, "true", spec.SetJSONVals["gatewayAPI.enabled"])
 				assert.Equal(t, "1", spec.SetJSONVals["operator.replicas"])
+
 				return true
 			}),
 		).
@@ -135,6 +137,7 @@ func TestInstaller_Install_TalosDockerWithLoadBalancer(t *testing.T) {
 				_, hasHostNetwork := spec.SetJSONVals["gatewayAPI.hostNetwork.enabled"]
 				assert.False(t, hasHostNetwork,
 					"hostNetwork should not be set when LoadBalancer is enabled")
+
 				return true
 			}),
 		).

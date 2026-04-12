@@ -14,7 +14,7 @@ import (
 // TestResolveAgeKey_KeyFileReadError tests that a key file path that is
 // a directory (not a regular file) returns an error from os.ReadFile.
 //
-//nolint:paralleltest // Uses t.Setenv
+
 func TestResolveAgeKey_KeyFileReadError(t *testing.T) {
 	// Create a directory where key file should be
 	dir := t.TempDir()
@@ -36,7 +36,7 @@ func TestResolveAgeKey_KeyFileReadError(t *testing.T) {
 // TestResolveEnabledAgeKey_ExplicitlyEnabledWithResolveError tests the path where
 // SOPS is explicitly enabled and ResolveAgeKey returns an error.
 //
-//nolint:paralleltest // Uses t.Setenv
+
 func TestResolveEnabledAgeKey_ExplicitlyEnabledWithResolveError(t *testing.T) {
 	// Create a key file path that is a directory to trigger a read error
 	dir := t.TempDir()
@@ -61,7 +61,7 @@ func TestResolveEnabledAgeKey_ExplicitlyEnabledWithResolveError(t *testing.T) {
 // TestResolveAgeKey_EnvVarWithInvalidKey tests that an env var containing
 // text without the AGE-SECRET-KEY prefix returns empty.
 //
-//nolint:paralleltest // Uses t.Setenv
+
 func TestResolveAgeKey_EnvVarWithInvalidKey(t *testing.T) {
 	t.Setenv("TEST_SOPSUTIL_INVALID_KEY", "not-a-valid-age-key")
 	t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "nonexistent-keys.txt"))

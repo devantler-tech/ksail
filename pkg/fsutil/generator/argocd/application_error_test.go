@@ -13,6 +13,8 @@ import (
 
 // TestGenerate_WriteError verifies that a write error is propagated when
 // the output directory is not writable.
+//
+//nolint:gosec,varnamelen // Test-only permission setup stays explicit.
 func TestGenerate_WriteError(t *testing.T) {
 	t.Parallel()
 

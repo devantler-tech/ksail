@@ -14,7 +14,7 @@ import (
 
 // TestResolveClusterName exercises cluster name resolution for each distribution.
 //
-//nolint:funlen // table-driven test with comprehensive distribution cases
+
 func TestResolveClusterName(t *testing.T) {
 	t.Parallel()
 
@@ -51,7 +51,7 @@ func TestResolveClusterName(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range tests { //nolint:varnamelen
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -137,20 +137,20 @@ func TestResolveNetworkName(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			clusterCfg := &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution: tc.distribution,
+						Distribution: testCase.distribution,
 					},
 				},
 			}
 
-			result := localregistry.ResolveNetworkNameForTest(clusterCfg, tc.clusterName)
-			assert.Equal(t, tc.expected, result)
+			result := localregistry.ResolveNetworkNameForTest(clusterCfg, testCase.clusterName)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }
@@ -195,6 +195,8 @@ func TestResolveStage(t *testing.T) {
 }
 
 // TestShouldSkipK3d verifies K3d skip detection.
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestShouldSkipK3d(t *testing.T) {
 	t.Parallel()
 
@@ -238,6 +240,8 @@ func TestShouldSkipK3d(t *testing.T) {
 }
 
 // TestIsCloudProvider verifies cloud provider detection.
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestIsCloudProvider(t *testing.T) {
 	t.Parallel()
 

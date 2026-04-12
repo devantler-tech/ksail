@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestValidateAgeKey(t *testing.T) {
 	t.Parallel()
 
@@ -62,7 +63,7 @@ func TestValidateAgeKey(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range tests { //nolint:varnamelen
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -70,7 +71,8 @@ func TestValidateAgeKey(t *testing.T) {
 
 			if tc.wantErr {
 				require.Error(t, err)
-				assert.ErrorIs(t, err, sopsclient.ErrInvalidAgeKey)
+				require.ErrorIs(t, err, sopsclient.ErrInvalidAgeKey)
+
 				if tc.errMsg != "" {
 					assert.Contains(t, err.Error(), tc.errMsg)
 				}
@@ -173,7 +175,11 @@ func TestFormatAgeKeyWithMetadata(t *testing.T) {
 		result := sopsclient.FormatAgeKeyWithMetadata(privateKey, "")
 
 		// Should not have double newlines at the end.
-		assert.False(t, strings.HasSuffix(result, "\n\n"), "should not have double trailing newline")
+		assert.False(
+			t,
+			strings.HasSuffix(result, "\n\n"),
+			"should not have double trailing newline",
+		)
 		assert.True(t, strings.HasSuffix(result, "\n"))
 	})
 }

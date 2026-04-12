@@ -126,10 +126,10 @@ func TestModel_View_EmptyItems(t *testing.T) {
 func TestErrVariables(t *testing.T) {
 	t.Parallel()
 
-	assert.Error(t, picker.ErrCancelled)
-	assert.Error(t, picker.ErrNoItems)
-	assert.Error(t, picker.ErrUnexpectedModel)
-	assert.Error(t, picker.ErrNotInteractive)
+	require.Error(t, picker.ErrCancelled)
+	require.Error(t, picker.ErrNoItems)
+	require.Error(t, picker.ErrUnexpectedModel)
+	require.Error(t, picker.ErrNotInteractive)
 
 	assert.Equal(t, "selection cancelled", picker.ErrCancelled.Error())
 	assert.Equal(t, "no items to select from", picker.ErrNoItems.Error())

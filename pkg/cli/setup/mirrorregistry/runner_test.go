@@ -1,3 +1,4 @@
+//nolint:testpackage // Test needs package access for internal helpers.
 package mirrorregistry
 
 import (
@@ -21,7 +22,9 @@ func TestNewRegistryHandlers(t *testing.T) {
 
 	clusterCfg := &v1alpha1.Cluster{}
 	kindConfig := &v1alpha4.Cluster{}
+
 	var mirrorSpecs []registry.MirrorSpec
+
 	noop := func(_ context.Context, _ client.APIClient) error { return nil }
 
 	handlers := newRegistryHandlers(
@@ -116,6 +119,8 @@ func TestStageDefinitions_AllRolesMapped(t *testing.T) {
 }
 
 // TestStageInfoConstants verifies the stage info constants are populated correctly.
+//
+//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestStageInfoConstants(t *testing.T) {
 	t.Parallel()
 

@@ -496,162 +496,162 @@ var ExportGetMessageToolCount = func(m *Model, msgIndex int) int {
 // --- Stream handler exports for black-box testing ---
 
 // StreamChunkMsgForTest is an exported alias for streamChunkMsg.
-type StreamChunkMsgForTest = streamChunkMsg //nolint:gochecknoglobals // export_test.go pattern
+type StreamChunkMsgForTest = streamChunkMsg
 
 // AssistantMessageMsgForTest is an exported alias for assistantMessageMsg.
-type AssistantMessageMsgForTest = assistantMessageMsg //nolint:gochecknoglobals // export_test.go pattern
+type AssistantMessageMsgForTest = assistantMessageMsg
 
 // ToolStartMsgForTest is an exported alias for toolStartMsg.
-type ToolStartMsgForTest = toolStartMsg //nolint:gochecknoglobals // export_test.go pattern
+type ToolStartMsgForTest = toolStartMsg
 
 // ToolEndMsgForTest is an exported alias for toolEndMsg.
-type ToolEndMsgForTest = toolEndMsg //nolint:gochecknoglobals // export_test.go pattern
+type ToolEndMsgForTest = toolEndMsg
 
 // ToolOutputChunkMsgForTest is an exported alias for toolOutputChunkMsg.
-type ToolOutputChunkMsgForTest = toolOutputChunkMsg //nolint:gochecknoglobals // export_test.go pattern
+type ToolOutputChunkMsgForTest = toolOutputChunkMsg
 
 // StreamEndMsgForTest is an exported alias for streamEndMsg.
-type StreamEndMsgForTest = streamEndMsg //nolint:gochecknoglobals // export_test.go pattern
+type StreamEndMsgForTest = streamEndMsg
 
 // TurnStartMsgForTest is an exported alias for turnStartMsg.
-type TurnStartMsgForTest = turnStartMsg //nolint:gochecknoglobals // export_test.go pattern
+type TurnStartMsgForTest = turnStartMsg
 
 // TurnEndMsgForTest is an exported alias for turnEndMsg.
-type TurnEndMsgForTest = turnEndMsg //nolint:gochecknoglobals // export_test.go pattern
+type TurnEndMsgForTest = turnEndMsg
 
 // ReasoningMsgForTest is an exported alias for reasoningMsg.
-type ReasoningMsgForTest = reasoningMsg //nolint:gochecknoglobals // export_test.go pattern
+type ReasoningMsgForTest = reasoningMsg
 
 // AbortMsgForTest is an exported alias for abortMsg.
-type AbortMsgForTest = abortMsg //nolint:gochecknoglobals // export_test.go pattern
+type AbortMsgForTest = abortMsg
 
 // StreamErrMsgForTest is an exported alias for streamErrMsg.
-type StreamErrMsgForTest = streamErrMsg //nolint:gochecknoglobals // export_test.go pattern
+type StreamErrMsgForTest = streamErrMsg
 
 // SnapshotRewindMsgForTest is an exported alias for snapshotRewindMsg.
-type SnapshotRewindMsgForTest = snapshotRewindMsg //nolint:gochecknoglobals // export_test.go pattern
+type SnapshotRewindMsgForTest = snapshotRewindMsg
 
 // UsageMsgForTest is an exported alias for usageMsg.
-type UsageMsgForTest = usageMsg //nolint:gochecknoglobals // export_test.go pattern
+type UsageMsgForTest = usageMsg
 
 // CompactionStartMsgForTest is an exported alias for compactionStartMsg.
-type CompactionStartMsgForTest = compactionStartMsg //nolint:gochecknoglobals // export_test.go pattern
+type CompactionStartMsgForTest = compactionStartMsg
 
 // CompactionCompleteMsgForTest is an exported alias for compactionCompleteMsg.
-type CompactionCompleteMsgForTest = compactionCompleteMsg //nolint:gochecknoglobals // export_test.go pattern
+type CompactionCompleteMsgForTest = compactionCompleteMsg
 
 // IntentMsgForTest is an exported alias for intentMsg.
-type IntentMsgForTest = intentMsg //nolint:gochecknoglobals // export_test.go pattern
+type IntentMsgForTest = intentMsg
 
 // ModelChangeMsgForTest is an exported alias for modelChangeMsg.
-type ModelChangeMsgForTest = modelChangeMsg //nolint:gochecknoglobals // export_test.go pattern
+type ModelChangeMsgForTest = modelChangeMsg
 
 // ShutdownMsgForTest is an exported alias for shutdownMsg.
-type ShutdownMsgForTest = shutdownMsg //nolint:gochecknoglobals // export_test.go pattern
+type ShutdownMsgForTest = shutdownMsg
 
 // SystemNotificationMsgForTest is an exported alias for systemNotificationMsg.
-type SystemNotificationMsgForTest = systemNotificationMsg //nolint:gochecknoglobals // export_test.go pattern
+type SystemNotificationMsgForTest = systemNotificationMsg
 
 // SessionWarningMsgForTest is an exported alias for sessionWarningMsg.
-type SessionWarningMsgForTest = sessionWarningMsg //nolint:gochecknoglobals // export_test.go pattern
+type SessionWarningMsgForTest = sessionWarningMsg
 
 // UserSubmitMsgForTest is an exported alias for userSubmitMsg.
-type UserSubmitMsgForTest = userSubmitMsg //nolint:gochecknoglobals // export_test.go pattern
+type UserSubmitMsgForTest = userSubmitMsg
 
 // ExportNewStreamChunkMsg creates a streamChunkMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewStreamChunkMsg = func(content string) StreamChunkMsgForTest {
 	return streamChunkMsg{content: content}
 }
 
 // ExportNewAssistantMessageMsg creates an assistantMessageMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewAssistantMessageMsg = func(content string) AssistantMessageMsgForTest {
 	return assistantMessageMsg{content: content}
 }
 
 // ExportNewToolStartMsg creates a toolStartMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewToolStartMsg = func(toolID, toolName, command string) ToolStartMsgForTest {
 	return toolStartMsg{toolID: toolID, toolName: toolName, command: command}
 }
 
 // ExportNewToolEndMsg creates a toolEndMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewToolEndMsg = func(toolID, toolName, output string, success bool) ToolEndMsgForTest {
 	return toolEndMsg{toolID: toolID, toolName: toolName, output: output, success: success}
 }
 
 // ExportNewToolOutputChunkMsg creates a toolOutputChunkMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewToolOutputChunkMsg = func(toolID, chunk string) ToolOutputChunkMsgForTest {
 	return toolOutputChunkMsg{toolID: toolID, chunk: chunk}
 }
 
 // ExportNewStreamEndMsg creates a streamEndMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewStreamEndMsg = func() StreamEndMsgForTest {
 	return streamEndMsg{}
 }
 
 // ExportNewTurnStartMsg creates a turnStartMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewTurnStartMsg = func() TurnStartMsgForTest {
 	return turnStartMsg{}
 }
 
 // ExportNewTurnEndMsg creates a turnEndMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewTurnEndMsg = func() TurnEndMsgForTest {
 	return turnEndMsg{}
 }
 
 // ExportNewReasoningMsg creates a reasoningMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewReasoningMsg = func(content string, isDelta bool) ReasoningMsgForTest {
 	return reasoningMsg{content: content, isDelta: isDelta}
 }
 
 // ExportNewAbortMsg creates an abortMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewAbortMsg = func() AbortMsgForTest {
 	return abortMsg{}
 }
 
 // ExportNewStreamErrMsg creates a streamErrMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewStreamErrMsg = func(err error) StreamErrMsgForTest {
 	return streamErrMsg{err: err}
 }
 
 // ExportNewSnapshotRewindMsg creates a snapshotRewindMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewSnapshotRewindMsg = func() SnapshotRewindMsgForTest {
 	return snapshotRewindMsg{}
 }
 
 // ExportNewUsageMsg creates a usageMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewUsageMsg = func(model string, inputTokens, outputTokens, cost float64) UsageMsgForTest {
 	return usageMsg{model: model, inputTokens: inputTokens, outputTokens: outputTokens, cost: cost}
 }
 
 // ExportNewUsageMsgWithQuota creates a usageMsg with quota snapshots for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewUsageMsgWithQuota = func(
 	model string,
 	inputTokens, outputTokens, cost float64,
@@ -668,184 +668,187 @@ var ExportNewUsageMsgWithQuota = func(
 
 // ExportNewCompactionStartMsg creates a compactionStartMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewCompactionStartMsg = func() CompactionStartMsgForTest {
 	return compactionStartMsg{}
 }
 
 // ExportNewCompactionCompleteMsg creates a compactionCompleteMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewCompactionCompleteMsg = func(success bool) CompactionCompleteMsgForTest {
 	return compactionCompleteMsg{success: success}
 }
 
 // ExportNewIntentMsg creates an intentMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewIntentMsg = func(content string) IntentMsgForTest {
 	return intentMsg{content: content}
 }
 
 // ExportNewModelChangeMsg creates a modelChangeMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewModelChangeMsg = func(previousModel, newModel string) ModelChangeMsgForTest {
 	return modelChangeMsg{previousModel: previousModel, newModel: newModel}
 }
 
 // ExportNewShutdownMsg creates a shutdownMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewShutdownMsg = func() ShutdownMsgForTest {
 	return shutdownMsg{}
 }
 
 // ExportNewSystemNotificationMsg creates a systemNotificationMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewSystemNotificationMsg = func(message string) SystemNotificationMsgForTest {
 	return systemNotificationMsg{message: message}
 }
 
 // ExportNewSessionWarningMsg creates a sessionWarningMsg for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportNewSessionWarningMsg = func(message string) SessionWarningMsgForTest {
 	return sessionWarningMsg{message: message}
 }
 
 // ExportGetStreaming returns Model.isStreaming for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetStreaming = func(m *Model) bool {
 	return m.isStreaming
 }
 
 // ExportGetCurrentModel returns Model.currentModel for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetCurrentModel = func(m *Model) string {
 	return m.currentModel
 }
 
 // ExportGetErr returns Model.err for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetErr = func(m *Model) error {
 	return m.err
 }
 
 // ExportGetIsCompacting returns Model.isCompacting for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetIsCompacting = func(m *Model) bool {
 	return m.isCompacting
 }
 
 // ExportGetLastUsageModel returns Model.lastUsageModel for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetLastUsageModel = func(m *Model) string {
 	return m.lastUsageModel
 }
 
 // ExportGetLastQuotaSnapshots returns Model.lastQuotaSnapshots for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetLastQuotaSnapshots = func(m *Model) map[string]QuotaSnapshotForTest {
 	return m.lastQuotaSnapshots
 }
 
 // ExportGetToolOrder returns Model.toolOrder for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetToolOrder = func(m *Model) []string {
 	return m.toolOrder
 }
 
 // ExportGetTools returns Model.tools for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetTools = func(m *Model) map[string]*ToolExecutionForTest {
 	return m.tools
 }
 
 // ExportGetPendingToolCount returns Model.pendingToolCount for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetPendingToolCount = func(m *Model) int {
 	return m.pendingToolCount
 }
 
 // ExportGetSessionComplete returns Model.sessionComplete for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetSessionComplete = func(m *Model) bool {
 	return m.sessionComplete
 }
 
 // ExportGetJustCompleted returns Model.justCompleted for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetJustCompleted = func(m *Model) bool {
 	return m.justCompleted
 }
 
 // ExportPrepareForNewTurn exposes prepareForNewTurn for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportPrepareForNewTurn = func(m *Model) {
 	m.prepareForNewTurn()
 }
 
 // ExportGetMessageContent returns the content of a message at the given index.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetMessageContent = func(m *Model, idx int) string {
 	if idx < 0 || idx >= len(m.messages) {
 		return ""
 	}
+
 	return m.messages[idx].content
 }
 
 // ExportGetMessageRole returns the role of a message at the given index.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetMessageRole = func(m *Model, idx int) string {
 	if idx < 0 || idx >= len(m.messages) {
 		return ""
 	}
+
 	return m.messages[idx].role
 }
 
 // ExportGetMessageIsStreaming returns whether a message is streaming at the given index.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetMessageIsStreaming = func(m *Model, idx int) bool {
 	if idx < 0 || idx >= len(m.messages) {
 		return false
 	}
+
 	return m.messages[idx].isStreaming
 }
 
 // ExportSetUserScrolled sets Model.userScrolled for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportSetUserScrolled = func(m *Model, scrolled bool) {
 	m.userScrolled = scrolled
 }
 
 // ExportGetUserScrolled returns Model.userScrolled for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetUserScrolled = func(m *Model) bool {
 	return m.userScrolled
 }
 
 // ExportGetSavedInput returns Model.savedInput for testing.
 //
-//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+
 var ExportGetSavedInput = func(m *Model) string {
 	return m.savedInput
 }

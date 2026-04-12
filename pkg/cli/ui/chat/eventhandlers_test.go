@@ -12,13 +12,14 @@ import (
 
 // --- handleStreamEvent dispatch tests ---
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestHandleStreamEvent_DispatchesAllEventTypes(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		msg     tea.Msg
-		check   func(t *testing.T, m *chat.Model)
+		name  string
+		msg   tea.Msg
+		check func(t *testing.T, m *chat.Model)
 	}{
 		{
 			name: "streamChunkMsg accumulates text",
@@ -81,7 +82,8 @@ func TestHandleStreamEvent_DispatchesAllEventTypes(t *testing.T) {
 			})
 
 			updated, _ := model.Update(testCase.msg)
-			m := updated.(*chat.Model)
+			m, ok := updated.(*chat.Model)
+			require.True(t, ok)
 			testCase.check(t, m)
 		})
 	}
@@ -100,7 +102,8 @@ func TestHandleStreamEvent_ToolOutputChunkMsg_Exported(t *testing.T) {
 
 	// Use the exported ToolOutputChunkMsg type
 	updated, _ = updated.Update(chat.ToolOutputChunkMsg{ToolID: "bash", Chunk: "exported chunk"})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	tools := chat.ExportGetTools(m)
 	require.Contains(t, tools, "t1")
@@ -121,7 +124,8 @@ func TestHandleStreamEvent_PermissionRequestMsg_Exported(t *testing.T) {
 		Arguments:  `{"path": "/tmp/test"}`,
 		Response:   resp,
 	})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.True(t, chat.ExportHasPendingPermission(m))
 }
@@ -135,7 +139,8 @@ func TestUpdate_CopyFeedbackClearMsg(t *testing.T) {
 	chat.ExportSetShowCopyFeedback(model, true)
 
 	updated, _ := model.Update(chat.ExportNewCopyFeedbackClearMsg())
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.False(t, chat.ExportGetShowCopyFeedback(m))
 }
@@ -148,7 +153,8 @@ func TestUpdate_ModelUnavailableClearMsg(t *testing.T) {
 	chat.ExportSetModelUnavailableReason(model, "rate limited")
 
 	updated, _ := model.Update(chat.ExportNewModelUnavailableClearMsg())
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	// Verify the feedback was cleared
 	output := m.View()
@@ -291,10 +297,10 @@ func TestReasoningPicker_IsCurrentReasoningEffort(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		effort    string
-		level     string
-		expected  bool
+		name     string
+		effort   string
+		level    string
+		expected bool
 	}{
 		{name: "off matches empty", effort: "", level: "off", expected: true},
 		{name: "high matches high", effort: "high", level: "high", expected: true},
@@ -491,7 +497,8 @@ func TestHandleUserSubmit_AddsUserAndAssistantMessages(t *testing.T) {
 	// Type and send
 	updated := typeText(model, "hello copilot")
 	updated, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.True(t, chat.ExportGetStreaming(m))
 	// The messages get added by the command, not synchronously

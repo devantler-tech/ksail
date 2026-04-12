@@ -97,9 +97,13 @@ func TestEnsureSecret_GetError(t *testing.T) {
 	t.Parallel()
 
 	clientset := fake.NewClientset()
-	clientset.PrependReactor("get", "secrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, assert.AnError
-	})
+	clientset.PrependReactor(
+		"get",
+		"secrets",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, assert.AnError
+		},
+	)
 
 	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "some-token")
 

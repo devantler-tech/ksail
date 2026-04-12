@@ -33,13 +33,13 @@ func TestIsSupportedExtension(t *testing.T) {
 		{name: "env", path: ".env", want: false},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := sopsclient.IsSupportedExtension(tc.path)
+			got := sopsclient.IsSupportedExtension(testCase.path)
 
-			assert.Equal(t, tc.want, got)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
@@ -62,17 +62,18 @@ func TestIsHiddenDir(t *testing.T) {
 		{name: "empty string", dir: "", want: false},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := sopsclient.IsHiddenDir(tc.dir)
+			got := sopsclient.IsHiddenDir(testCase.dir)
 
-			assert.Equal(t, tc.want, got)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestModifyKeyGroups(t *testing.T) {
 	t.Parallel()
 
@@ -182,6 +183,7 @@ func TestModifyKeyGroups(t *testing.T) {
 	})
 }
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestRemoveKeyFromGroups(t *testing.T) {
 	t.Parallel()
 

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:paralleltest,tparallel // Cannot use t.Parallel() with t.Setenv()
+//nolint:paralleltest // Cannot use t.Parallel() with t.Setenv()
 func TestSOPSAgeKeyPath(t *testing.T) {
 	//nolint:paralleltest // Cannot use t.Parallel() with t.Setenv()
 	t.Run("returns SOPS_AGE_KEY_FILE when set", testSOPSAgeKeyPathEnvOverride)
@@ -33,12 +33,14 @@ func testSOPSAgeKeyPathEnvOverride(t *testing.T) {
 
 func testSOPSAgeKeyPathXDGConfigHome(t *testing.T) {
 	xdgDir := "/custom/xdg"
+
 	t.Setenv("SOPS_AGE_KEY_FILE", "")
 	t.Setenv("XDG_CONFIG_HOME", xdgDir)
 
 	result, err := fsutil.SOPSAgeKeyPath()
 
 	require.NoError(t, err, "SOPSAgeKeyPath")
+
 	expected := filepath.Join(xdgDir, "sops", "age", "keys.txt")
 	assert.Equal(t, expected, result, "should use XDG_CONFIG_HOME")
 }
@@ -55,7 +57,14 @@ func testSOPSAgeKeyPathPlatformDefault(t *testing.T) {
 
 	switch runtime.GOOS {
 	case "darwin":
-		expected := filepath.Join(homeDir, "Library", "Application Support", "sops", "age", "keys.txt")
+		expected := filepath.Join(
+			homeDir,
+			"Library",
+			"Application Support",
+			"sops",
+			"age",
+			"keys.txt",
+		)
 		assert.Equal(t, expected, result, "macOS default path")
 	case "windows":
 		// On Windows without AppData set, this would fail.

@@ -80,26 +80,35 @@ func TestEnsureSecret_CreateConflictThenUpdate(t *testing.T) {
 	clientset := fake.NewClientset(existing)
 
 	getCallCount := 0
-	clientset.PrependReactor("get", "secrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
-		getCallCount++
-		if getCallCount == 1 {
-			// First Get: return NotFound to enter the create path
-			return true, nil, apierrors.NewNotFound(
+
+	clientset.PrependReactor(
+		"get",
+		"secrets",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			getCallCount++
+			if getCallCount == 1 {
+				// First Get: return NotFound to enter the create path
+				return true, nil, apierrors.NewNotFound(
+					schema.GroupResource{Group: "", Resource: "secrets"},
+					hetzner.SecretName,
+				)
+			}
+			// Subsequent Gets: pass through to the fake clientset
+			return false, nil, nil
+		},
+	)
+
+	// Create returns AlreadyExists to simulate concurrent creation.
+	clientset.PrependReactor(
+		"create",
+		"secrets",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewAlreadyExists(
 				schema.GroupResource{Group: "", Resource: "secrets"},
 				hetzner.SecretName,
 			)
-		}
-		// Subsequent Gets: pass through to the fake clientset
-		return false, nil, nil
-	})
-
-	// Create returns AlreadyExists to simulate concurrent creation.
-	clientset.PrependReactor("create", "secrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, apierrors.NewAlreadyExists(
-			schema.GroupResource{Group: "", Resource: "secrets"},
-			hetzner.SecretName,
-		)
-	})
+		},
+	)
 
 	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "updated-token")
 	require.NoError(t, err)

@@ -1,4 +1,4 @@
-//nolint:err113,funlen // Tests use dynamic errors for mock behaviors and table-driven tests are naturally long
+//nolint:err113 // Tests use dynamic errors for mock behaviors.
 package docker_test
 
 import (
@@ -108,6 +108,7 @@ func TestWaitForRegistryReady_ListError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to check if registry")
 }
 
+//nolint:dupl // Duplicated setup keeps the parallel test cases readable.
 func TestWaitForRegistryReadyWithTimeout_Success(t *testing.T) {
 	t.Parallel()
 
@@ -268,6 +269,7 @@ func TestWaitForRegistryReadyWithTimeout_Timeout(t *testing.T) {
 	assert.ErrorIs(t, waitErr, docker.ErrRegistryNotReady)
 }
 
+//nolint:dupl // Duplicated setup keeps the parallel test cases readable.
 func TestWaitForRegistryReadyWithTimeout_401IsReady(t *testing.T) {
 	t.Parallel()
 

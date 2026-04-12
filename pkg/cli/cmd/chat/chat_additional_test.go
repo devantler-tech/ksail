@@ -167,7 +167,8 @@ func TestInjectForceFlag(t *testing.T) {
 			Arguments: map[string]any{"name": "test"},
 		}
 		result := injectForce(invocation)
-		args := result.Arguments.(map[string]any)
+		args, ok := result.Arguments.(map[string]any)
+		require.True(t, ok)
 		assert.Equal(t, true, args["force"])
 		assert.Equal(t, "test", args["name"])
 	})
@@ -177,7 +178,8 @@ func TestInjectForceFlag(t *testing.T) {
 
 		invocation := copilot.ToolInvocation{Arguments: nil}
 		result := injectForce(invocation)
-		args := result.Arguments.(map[string]any)
+		args, ok := result.Arguments.(map[string]any)
+		require.True(t, ok)
 		assert.Equal(t, true, args["force"])
 	})
 
@@ -186,7 +188,8 @@ func TestInjectForceFlag(t *testing.T) {
 
 		invocation := copilot.ToolInvocation{Arguments: "string"}
 		result := injectForce(invocation)
-		args := result.Arguments.(map[string]any)
+		args, ok := result.Arguments.(map[string]any)
+		require.True(t, ok)
 		assert.Equal(t, true, args["force"])
 	})
 }
@@ -279,6 +282,8 @@ func TestToolSupportsForce(t *testing.T) {
 }
 
 // TestValidatePathAccess verifies path sandboxing logic.
+//
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestValidatePathAccess(t *testing.T) {
 	t.Parallel()
 
@@ -287,7 +292,7 @@ func TestValidatePathAccess(t *testing.T) {
 
 	// Create a file in the root to make paths resolvable
 	innerDir := filepath.Join(root, "sub")
-	require.NoError(t, os.MkdirAll(innerDir, 0o755))
+	require.NoError(t, os.MkdirAll(innerDir, 0o750))
 
 	t.Run("empty root allows everything", func(t *testing.T) {
 		t.Parallel()

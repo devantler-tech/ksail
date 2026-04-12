@@ -1,3 +1,4 @@
+//nolint:forcetypeassert,varnamelen,wsl_v5 // Large key-handling tests favor direct assertions and compact locals.
 package chat_test
 
 import (
@@ -18,7 +19,8 @@ func TestHandleChatKey_CtrlC_Quits(t *testing.T) {
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 	assert.True(t, chat.ExportGetQuitting(m))
 	assert.NotNil(t, cmd)
 }
@@ -33,8 +35,10 @@ func TestHandleChatKey_Escape_WhenStreaming_Cancels(t *testing.T) {
 	})
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.False(t, chat.ExportGetStreaming(m))
 	content := chat.ExportGetMessageContent(m, 0)
@@ -47,8 +51,10 @@ func TestHandleChatKey_Escape_WhenNotStreaming_ShowsExitConfirm(t *testing.T) {
 	model := chat.NewModel(newTestParams())
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.True(t, chat.ExportGetConfirmExit(m))
 }
@@ -59,8 +65,10 @@ func TestHandleChatKey_Enter_WithEmptyInput_NoOp(t *testing.T) {
 	model := chat.NewModel(newTestParams())
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	msgs := chat.ExportGetMessages(m)
 	assert.Empty(t, msgs)
@@ -72,9 +80,11 @@ func TestHandleChatKey_Enter_WithContent_SendsMessage(t *testing.T) {
 	model := chat.NewModel(newTestParams())
 
 	var updated tea.Model = model
+
 	updated = typeText(updated, "hello copilot")
 	updated, cmd := updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.True(t, chat.ExportGetStreaming(m))
 	assert.NotNil(t, cmd)
@@ -86,6 +96,7 @@ func TestHandleChatKey_AltEnter_InsertsNewline(t *testing.T) {
 	model := chat.NewModel(newTestParams())
 
 	var updated tea.Model = model
+
 	updated = typeText(updated, "line1")
 	updated, _ = updated.Update(tea.KeyMsg{
 		Type:  tea.KeyRunes,
@@ -93,12 +104,14 @@ func TestHandleChatKey_AltEnter_InsertsNewline(t *testing.T) {
 		Alt:   true,
 	})
 
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 	val := chat.ExportGetTextareaValue(m)
 
 	// The alt+enter message with Runes '\n' might not directly insert a newline
 	// in the textarea the same way - verify the model doesn't crash
 	assert.NotNil(t, m)
+
 	_ = val
 }
 
@@ -111,7 +124,8 @@ func TestHandleExitConfirmKey_YConfirms(t *testing.T) {
 	chat.ExportSetConfirmExit(model, true)
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.True(t, chat.ExportGetQuitting(m))
 	assert.NotNil(t, cmd)
@@ -124,7 +138,8 @@ func TestHandleExitConfirmKey_NDenies(t *testing.T) {
 	chat.ExportSetConfirmExit(model, true)
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.False(t, chat.ExportGetConfirmExit(m))
 	assert.False(t, chat.ExportGetQuitting(m))
@@ -137,7 +152,8 @@ func TestHandleExitConfirmKey_EscapeDenies(t *testing.T) {
 	chat.ExportSetConfirmExit(model, true)
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.False(t, chat.ExportGetConfirmExit(m))
 }
@@ -155,7 +171,8 @@ func TestHandleHelpOverlayKey_F1Closes(t *testing.T) {
 	output := updated.View()
 	// Help overlay should be gone - shouldn't show complex help
 	_ = output
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 	_ = m
 }
 
@@ -180,9 +197,11 @@ func TestHandleHelpOverlayKey_OtherKeysIgnored(t *testing.T) {
 
 	// Press a regular key - should be ignored
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	_ = m
+
 	assert.Nil(t, cmd)
 }
 
@@ -211,7 +230,8 @@ func TestHandleToggleMode_BlockedWhileStreaming(t *testing.T) {
 
 	// Tab should be ignored while streaming
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyTab})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	// Mode should not change
 	assert.Equal(t, chat.InteractiveMode, chat.ExportGetChatMode(m))
@@ -226,14 +246,27 @@ func TestHandleToggleAllTools_TogglesExpansion(t *testing.T) {
 
 	// Set up tools in expanded state
 	tools := map[string]*chat.ToolExecutionForTest{
-		"t1": chat.ExportNewToolExecutionFull("bash", chat.ToolStatusComplete, true, "ls", "output1"),
-		"t2": chat.ExportNewToolExecutionFull("read_file", chat.ToolStatusComplete, true, "cat", "output2"),
+		"t1": chat.ExportNewToolExecutionFull(
+			"bash",
+			chat.ToolStatusComplete,
+			true,
+			"ls",
+			"output1",
+		),
+		"t2": chat.ExportNewToolExecutionFull(
+			"read_file",
+			chat.ToolStatusComplete,
+			true,
+			"cat",
+			"output2",
+		),
 	}
 	chat.ExportSetTools(model, tools, []string{"t1", "t2"})
 
 	// Press Ctrl+T to toggle all tools
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	toolMap := chat.ExportGetTools(m)
 	// All tools should be collapsed (toggled)
@@ -261,7 +294,8 @@ func TestHandleHistory_UpDown_Navigation(t *testing.T) {
 
 	// Press Up - should go to last history entry
 	updated, _ = updated.Update(tea.KeyMsg{Type: tea.KeyUp})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 	assert.Equal(t, "third", chat.ExportGetTextareaValue(m))
 
 	// Press Up again - should go to second
@@ -288,11 +322,13 @@ func TestHandleHistory_Up_SavesCurrentInput(t *testing.T) {
 
 	// Type some current input
 	var updated tea.Model = model
+
 	updated = typeText(updated, "current")
 
 	// Press Up
 	updated, _ = updated.Update(tea.KeyMsg{Type: tea.KeyUp})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.Equal(t, "old prompt", chat.ExportGetTextareaValue(m))
 	assert.Equal(t, "current", chat.ExportGetSavedInput(m))
@@ -400,6 +436,7 @@ func TestHandleDeletePendingPrompt_NoPendingNoOp(t *testing.T) {
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
 
 	assert.NotNil(t, updated)
+
 	_ = cmd
 }
 
@@ -413,8 +450,10 @@ func TestHandleCopyOutput_BlockedWhileStreaming(t *testing.T) {
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
 
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 	assert.False(t, chat.ExportGetShowCopyFeedback(m))
+
 	_ = cmd
 }
 
@@ -427,7 +466,8 @@ func TestHandleCopyOutput_ShowsFeedback(t *testing.T) {
 	})
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.True(t, chat.ExportGetShowCopyFeedback(m))
 	assert.NotNil(t, cmd)
@@ -443,7 +483,8 @@ func TestHandleCopyOutput_NoAssistantMessage_NoFeedback(t *testing.T) {
 	})
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.False(t, chat.ExportGetShowCopyFeedback(m))
 	assert.Nil(t, cmd)
@@ -458,11 +499,13 @@ func TestHandleMouseMsg_WheelUp(t *testing.T) {
 
 	// Resize to known dimensions first
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
 	// Scroll up
 	updated, _ = updated.Update(tea.MouseMsg{Button: tea.MouseButtonWheelUp})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	_ = m // Just verify no panic
 }
@@ -473,10 +516,12 @@ func TestHandleMouseMsg_WheelDown(t *testing.T) {
 	model := chat.NewModel(newTestParams())
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
 	updated, _ = updated.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	_ = m // Just verify no panic
 }
@@ -504,7 +549,8 @@ func TestHandlePermissionKey_YApproves(t *testing.T) {
 	chat.ExportSetPendingPermission(model, "bash", "ls", "", resp)
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.False(t, chat.ExportHasPendingPermission(m))
 	assert.True(t, chat.ExportGetPermissionHistoryLastAllowed(m))
@@ -522,7 +568,8 @@ func TestHandlePermissionKey_NDenies(t *testing.T) {
 	chat.ExportSetPendingPermission(model, "bash", "rm /", "", resp)
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.False(t, chat.ExportHasPendingPermission(m))
 
@@ -538,7 +585,8 @@ func TestHandlePermissionKey_CtrlC_DeniesAndQuits(t *testing.T) {
 	chat.ExportSetPendingPermission(model, "bash", "cmd", "", resp)
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.True(t, chat.ExportGetQuitting(m))
 	assert.NotNil(t, cmd)
@@ -556,13 +604,15 @@ func TestHandleViewportAndTextareaKey_PageUp(t *testing.T) {
 
 	// Add enough messages to make viewport scrollable
 	msgs := make([]chat.MessageForTest, 0, 20)
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		msgs = append(msgs, chat.ExportNewUserMessage("message"))
 		msgs = append(msgs, chat.ExportNewAssistantMessage("long response that takes space"))
 	}
+
 	chat.ExportSetMessages(model, msgs)
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 
 	// Page up
@@ -578,6 +628,7 @@ func TestHandleViewportAndTextareaKey_PageDown(t *testing.T) {
 	model := chat.NewModel(newTestParams())
 
 	var updated tea.Model = model
+
 	updated, _ = updated.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 
 	updated, cmd := updated.Update(tea.KeyMsg{Type: tea.KeyPgDown})
@@ -606,9 +657,9 @@ func TestShortcutKeys_BlockedWhileStreaming(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		key      tea.KeyMsg
-		checkFn  func(*chat.Model) bool
+		name      string
+		key       tea.KeyMsg
+		checkFn   func(*chat.Model) bool
 		wantFalse bool
 	}{
 		{
@@ -629,7 +680,8 @@ func TestShortcutKeys_BlockedWhileStreaming(t *testing.T) {
 			chat.ExportSetStreaming(model, true)
 
 			updated, _ := model.Update(testCase.key)
-			m := updated.(*chat.Model)
+			m, ok := updated.(*chat.Model)
+			require.True(t, ok)
 
 			if testCase.wantFalse {
 				assert.False(t, testCase.checkFn(m))
@@ -648,7 +700,8 @@ func TestNewChat_BlockedWhileStreaming(t *testing.T) {
 
 	// Ctrl+N should be ignored while streaming
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	// Should still be streaming
 	assert.True(t, chat.ExportGetStreaming(m))
@@ -663,7 +716,8 @@ func TestOpenSessionPicker_BlockedWhileStreaming(t *testing.T) {
 	chat.ExportSetStreaming(model, true)
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlH})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	assert.False(t, chat.ExportGetShowSessionPicker(m))
 }
@@ -677,7 +731,8 @@ func TestOpenReasoningPicker_BlockedWhileStreaming(t *testing.T) {
 	chat.ExportSetStreaming(model, true)
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
-	m := updated.(*chat.Model)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
 
 	// Can't check directly but verify no panic
 	assert.NotNil(t, m)

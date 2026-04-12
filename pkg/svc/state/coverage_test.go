@@ -20,7 +20,7 @@ func TestSaveClusterSpec_InvalidClusterName(t *testing.T) {
 	}{
 		{name: "forward slash", clusterName: "../etc/passwd"},
 		{name: "backslash", clusterName: "..\\etc\\passwd"},
-		{name: "dot dot", clusterName: ".."},
+		{name: "dot", clusterName: ".."},
 		{name: "embedded dots", clusterName: "foo/../bar"},
 	}
 

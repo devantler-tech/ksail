@@ -86,10 +86,13 @@ func TestResolveAgeKey_EmptyEnvVarName(t *testing.T) {
 	key, err := sopsutil.ResolveAgeKey(sops)
 
 	require.NoError(t, err)
-	assert.Empty(t, key, "empty env var name should skip env lookup and return empty when no key file")
+	assert.Empty(
+		t,
+		key,
+		"empty env var name should skip env lookup and return empty when no key file",
+	)
 }
 
-//nolint:paralleltest // Uses t.Setenv
 func TestResolveAgeKey_EnvVarSetWithoutAgePrefix(t *testing.T) {
 	t.Setenv("TEST_SOPSUTIL_NO_PREFIX_88888", "not-a-valid-age-key")
 	noKeyFile(t)
@@ -105,7 +108,6 @@ func TestResolveAgeKey_EnvVarSetWithoutAgePrefix(t *testing.T) {
 // ResolveEnabledAgeKey
 // ---------------------------------------------------------------------------
 
-//nolint:paralleltest // Uses t.Setenv
 func TestResolveEnabledAgeKey_NilEnabled(t *testing.T) {
 	t.Setenv("TEST_SOPSUTIL_NILCHECK_99999", "")
 	noKeyFile(t)

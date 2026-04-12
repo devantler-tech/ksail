@@ -24,7 +24,7 @@ func TestStandardKustomizationFileFieldSelector(t *testing.T) {
 	selector := configmanager.StandardKustomizationFileFieldSelector()
 
 	assert.Contains(t, selector.Description, "kustomize entry point")
-	assert.Equal(t, "", selector.DefaultValue)
+	assert.Empty(t, selector.DefaultValue)
 
 	cluster := &v1alpha1.Cluster{}
 	ptr := selector.Selector(cluster)

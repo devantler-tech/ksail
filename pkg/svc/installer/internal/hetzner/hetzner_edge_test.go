@@ -22,9 +22,13 @@ func TestEnsureSecret_CreateError(t *testing.T) {
 	clientset := fake.NewClientset()
 
 	// Make Get return NotFound (default for empty clientset), but Create fails.
-	clientset.PrependReactor("create", "secrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, assert.AnError
-	})
+	clientset.PrependReactor(
+		"create",
+		"secrets",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, assert.AnError
+		},
+	)
 
 	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "some-token")
 
@@ -49,9 +53,13 @@ func TestEnsureSecret_UpdateError(t *testing.T) {
 	clientset := fake.NewClientset(existing)
 
 	// Make Update fail permanently.
-	clientset.PrependReactor("update", "secrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, assert.AnError
-	})
+	clientset.PrependReactor(
+		"update",
+		"secrets",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, assert.AnError
+		},
+	)
 
 	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "new-token")
 
@@ -93,23 +101,32 @@ func TestEnsureSecret_AlreadyExists_GetFails(t *testing.T) {
 	clientset := fake.NewClientset()
 
 	callCount := 0
-	clientset.PrependReactor("get", "secrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
-		callCount++
-		if callCount == 1 {
-			// First Get: NotFound, triggers Create path.
-			return false, nil, nil
-		}
-		// Second Get (after AlreadyExists): return error.
-		return true, nil, assert.AnError
-	})
+
+	clientset.PrependReactor(
+		"get",
+		"secrets",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			callCount++
+			if callCount == 1 {
+				// First Get: NotFound, triggers Create path.
+				return false, nil, nil
+			}
+			// Second Get (after AlreadyExists): return error.
+			return true, nil, assert.AnError
+		},
+	)
 
 	// Create returns AlreadyExists to trigger the race-handling path.
-	clientset.PrependReactor("create", "secrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, apierrors.NewAlreadyExists(
-			schema.GroupResource{Group: "", Resource: "secrets"},
-			hetzner.SecretName,
-		)
-	})
+	clientset.PrependReactor(
+		"create",
+		"secrets",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewAlreadyExists(
+				schema.GroupResource{Group: "", Resource: "secrets"},
+				hetzner.SecretName,
+			)
+		},
+	)
 
 	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "some-token")
 

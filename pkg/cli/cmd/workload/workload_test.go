@@ -2641,6 +2641,36 @@ func writeValidKsailConfig(t *testing.T, dir string) {
 	require.NoError(t, os.WriteFile(kindConfigPath, []byte(kindConfigContent), 0o600))
 }
 
+func writeFluxReconcileKsailConfig(t *testing.T, dir string) {
+	t.Helper()
+
+	writeValidKsailConfig(t, dir)
+
+	ksailConfigContent := fmt.Sprintf(
+		"apiVersion: ksail.io/v1alpha1\n"+
+			"kind: Cluster\n"+
+			"spec:\n"+
+			"  cluster:\n"+
+			"    distribution: Vanilla\n"+
+			"    distributionConfig: kind.yaml\n"+
+			"    gitOpsEngine: Flux\n"+
+			"    connection:\n"+
+			"      kubeconfig: %s\n"+
+			"  workload:\n"+
+			"    sourceDirectory: k8s\n",
+		filepath.Join(dir, "missing-kubeconfig"),
+	)
+
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(dir, "ksail.yaml"),
+			[]byte(ksailConfigContent),
+			0o600,
+		),
+	)
+}
+
 func TestWorkloadHelpSnapshots(t *testing.T) {
 	t.Parallel()
 
@@ -2707,17 +2737,21 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 	// Note: "apply" and "install" are excluded as they are full implementations with kubectl/helm wrappers
 	testCases := []struct {
 		name          string
+		args          []string
 		expectedError string
+		writeConfig   func(t *testing.T, dir string)
 	}{
 		{
-			name: "reconcile",
-			// Reconcile auto-detects GitOps engine; fails if no engine in cluster
-			expectedError: "no GitOps engine detected in cluster",
+			name:          "reconcile",
+			args:          []string{"workload", "reconcile", "--timeout=1ms"},
+			expectedError: "create flux reconciler",
+			writeConfig:   writeFluxReconcileKsailConfig,
 		},
 		{
-			name: "push",
-			// Push auto-detects registry; fails if no registry can be detected
-			expectedError: "unable to detect registry",
+			name:          "push",
+			args:          []string{"workload", "push", "oci://example.com/test:dev"},
+			expectedError: "no manifest files found in source directory",
+			writeConfig:   writeValidKsailConfig,
 		},
 	}
 
@@ -2726,14 +2760,14 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 			var out bytes.Buffer
 
 			tempDir := t.TempDir()
-			writeValidKsailConfig(t, tempDir)
+			testCase.writeConfig(t, tempDir)
 
 			t.Chdir(tempDir)
 
 			root := cmd.NewRootCmd("test", "test", "test")
 			root.SetOut(&out)
 			root.SetErr(&out)
-			root.SetArgs([]string{"workload", testCase.name})
+			root.SetArgs(testCase.args)
 
 			err := root.Execute()
 			require.ErrorContains(
@@ -2879,6 +2913,7 @@ func TestOutputPlain(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
+
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 
@@ -2896,6 +2931,7 @@ func TestOutputJSON(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
+
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 

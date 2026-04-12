@@ -39,9 +39,9 @@ func TestStartsWithEmoji(t *testing.T) {
 		{"ascii text", []byte("hello world"), false},
 		{"number", []byte("123"), false},
 		{"invalid utf8", []byte{0xFF, 0xFE}, false},
-		{"single byte", []byte{0x41}, false},          // 'A'
-		{"single emoji byte", []byte("🚀"), true},      // just emoji
-		{"gear emoji", []byte("⚙️ config"), true},      // "Other Symbol"
+		{"single byte", []byte{0x41}, false},      // 'A'
+		{"single emoji byte", []byte("🚀"), true},  // just emoji
+		{"gear emoji", []byte("⚙️ config"), true}, // "Other Symbol"
 		{"check mark emoji", []byte("✅ validated"), true},
 	}
 
@@ -59,6 +59,7 @@ func TestStartsWithEmoji(t *testing.T) {
 // appendSlots tests
 // =============================================================================
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestAppendSlots(t *testing.T) {
 	t.Parallel()
 
@@ -237,6 +238,7 @@ func TestIndentMultilineContent(t *testing.T) {
 // fitName tests
 // =============================================================================
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestFitName(t *testing.T) {
 	t.Parallel()
 
@@ -459,6 +461,7 @@ func TestCountPending(t *testing.T) {
 // getDisplayOrder tests
 // =============================================================================
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestGetDisplayOrder(t *testing.T) {
 	t.Parallel()
 
@@ -543,6 +546,7 @@ func TestGetDisplayOrder(t *testing.T) {
 // getVisibleTasks tests
 // =============================================================================
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestGetVisibleTasks(t *testing.T) {
 	t.Parallel()
 
@@ -766,6 +770,7 @@ func TestFormatTaskLine_FailedContainsFailed(t *testing.T) {
 // formatSummary tests
 // =============================================================================
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestFormatSummary(t *testing.T) {
 	t.Parallel()
 
@@ -938,6 +943,7 @@ func TestWithClock_NilIgnored(t *testing.T) {
 // buildCompactWindow tests
 // =============================================================================
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestBuildCompactWindow(t *testing.T) {
 	t.Parallel()
 
@@ -1055,6 +1061,7 @@ func TestWriteSummaryLine(t *testing.T) {
 // emitCompleted tests
 // =============================================================================
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestEmitCompleted(t *testing.T) {
 	t.Parallel()
 
@@ -1280,6 +1287,7 @@ func TestPrintAllLines(t *testing.T) {
 // redrawAllLines tests
 // =============================================================================
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestRedrawAllLines(t *testing.T) {
 	t.Parallel()
 

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestPullImage(t *testing.T) {
 	t.Parallel()
 
@@ -121,6 +122,7 @@ func (r *failingReader) Read(_ []byte) (int, error) {
 // failingCloser implements io.ReadCloser with a reader that succeeds but Close fails.
 type failingCloser struct {
 	io.Reader
+
 	err error
 }
 

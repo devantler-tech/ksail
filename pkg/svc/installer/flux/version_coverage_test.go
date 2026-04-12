@@ -27,6 +27,7 @@ func TestChartSpec_Fields(t *testing.T) {
 			mock.Anything,
 			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
 				capturedSpec = spec
+
 				return true
 			}),
 		).
@@ -39,7 +40,11 @@ func TestChartSpec_Fields(t *testing.T) {
 	require.NotNil(t, capturedSpec)
 
 	assert.Equal(t, "flux-operator", capturedSpec.ReleaseName)
-	assert.Equal(t, "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator", capturedSpec.ChartName)
+	assert.Equal(
+		t,
+		"oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
+		capturedSpec.ChartName,
+	)
 	assert.Equal(t, "flux-system", capturedSpec.Namespace)
 	assert.True(t, capturedSpec.CreateNamespace, "CreateNamespace should be true")
 	assert.True(t, capturedSpec.Atomic, "Atomic should be true")
@@ -64,6 +69,7 @@ func TestChartSpec_DifferentTimeouts(t *testing.T) {
 		{"zero timeout", 0},
 	}
 
+	//nolint:varnamelen // Short names keep table-driven tests readable.
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -77,6 +83,7 @@ func TestChartSpec_DifferentTimeouts(t *testing.T) {
 					mock.Anything,
 					mock.MatchedBy(func(spec *helm.ChartSpec) bool {
 						capturedSpec = spec
+
 						return true
 					}),
 				).
@@ -100,7 +107,7 @@ func TestHelmInstallOrUpgrade_ContextTimeout(t *testing.T) {
 
 	client.EXPECT().
 		InstallOrUpgradeChart(
-			mock.MatchedBy(func(ctx interface{}) bool {
+			mock.MatchedBy(func(_ any) bool {
 				// The context should have a deadline
 				return true
 			}),

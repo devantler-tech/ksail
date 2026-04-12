@@ -3,6 +3,7 @@ package oci_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
@@ -12,6 +13,8 @@ import (
 )
 
 // TestEmptyBuildOptionsValidate tests the Validate method on EmptyBuildOptions.
+//
+//nolint:funlen // Table-driven validation cases are easier to keep together.
 func TestEmptyBuildOptionsValidate(t *testing.T) {
 	t.Parallel()
 
@@ -65,7 +68,7 @@ func TestEmptyBuildOptionsValidate(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range tests { //nolint:varnamelen
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -74,6 +77,7 @@ func TestEmptyBuildOptionsValidate(t *testing.T) {
 			if tt.wantErr != nil {
 				require.Error(t, err)
 				assert.ErrorIs(t, err, tt.wantErr)
+
 				return
 			}
 
@@ -86,6 +90,8 @@ func TestEmptyBuildOptionsValidate(t *testing.T) {
 
 // TestBuildOptionsValidate_RegistryEndpointNormalization verifies that protocol
 // prefixes are stripped from registry endpoints.
+//
+//nolint:varnamelen // Short names keep table-driven tests readable.
 func TestBuildOptionsValidate_RegistryEndpointNormalization(t *testing.T) {
 	t.Parallel()
 
@@ -148,8 +154,8 @@ func TestBuildOptionsValidate_RepositoryNameNormalization(t *testing.T) {
 	require.NoError(t, os.WriteFile(testFile, []byte("apiVersion: v1"), 0o600))
 
 	tests := []struct {
-		name     string
-		repoName string
+		name      string
+		repoName  string
 		wantLower bool
 	}{
 		{
@@ -169,22 +175,22 @@ func TestBuildOptionsValidate_RepositoryNameNormalization(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			opts := oci.BuildOptions{
 				SourcePath:       dir,
 				RegistryEndpoint: "localhost:5000",
 				Version:          "v1.0.0",
-				Repository:       tt.repoName,
+				Repository:       testCase.repoName,
 			}
 
 			validated, err := opts.Validate()
 			require.NoError(t, err)
 
-			if tt.wantLower {
-				assert.Equal(t, validated.Repository, validated.Repository)
+			if testCase.wantLower {
+				assert.Equal(t, strings.ToLower(testCase.repoName), validated.Repository)
 			}
 		})
 	}
@@ -312,6 +318,8 @@ func TestBuildOptionsValidate_DefaultRepoFromSourceDir(t *testing.T) {
 
 // TestEmptyBuildOptionsValidate_EndpointNormalization verifies endpoint
 // normalization for empty build options.
+//
+//nolint:varnamelen // Short names keep table-driven tests readable.
 func TestEmptyBuildOptionsValidate_EndpointNormalization(t *testing.T) {
 	t.Parallel()
 

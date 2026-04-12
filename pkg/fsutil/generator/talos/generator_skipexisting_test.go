@@ -72,11 +72,6 @@ func TestGenerate_MirrorRegistriesSkipExisting(t *testing.T) {
 	require.NoError(t, err)
 
 	//nolint:gosec // Test reads a file created in its own temp directory.
-	//nolint:gosec // Test reads a file created in its own temp directory.
-	//nolint:gosec // Test reads a file created in its own temp directory.
-	//nolint:gosec // Test reads a file created in its own temp directory.
-	//nolint:gosec // Test reads a file created in its own temp directory.
-	//nolint:gosec // Test reads a file created in its own temp directory.
 	content, err := os.ReadFile(patchPath)
 	require.NoError(t, err)
 	assert.Equal(t, "custom-content", string(content))

@@ -17,20 +17,23 @@ func TestSetFieldValueFromFlag_String(t *testing.T) {
 	t.Parallel()
 
 	var s string
+
 	err := configmanager.SetFieldValueFromFlagForTest(&s, "hello")
 	require.NoError(t, err)
 	assert.Equal(t, "hello", s)
 }
 
 // TestSetFieldValueFromFlag_Duration tests duration field setting.
+//
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestSetFieldValueFromFlag_Duration(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		raw      string
-		wantDur  time.Duration
-		wantErr  bool
+		name    string
+		raw     string
+		wantDur time.Duration
+		wantErr bool
 	}{
 		{name: "valid duration", raw: "5m", wantDur: 5 * time.Minute},
 		{name: "empty string", raw: "", wantDur: 0},
@@ -42,6 +45,7 @@ func TestSetFieldValueFromFlag_Duration(t *testing.T) {
 			t.Parallel()
 
 			var d metav1.Duration
+
 			err := configmanager.SetFieldValueFromFlagForTest(&d, testCase.raw)
 
 			if testCase.wantErr {
@@ -56,6 +60,8 @@ func TestSetFieldValueFromFlag_Duration(t *testing.T) {
 }
 
 // TestSetFieldValueFromFlag_Bool tests bool field setting.
+//
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestSetFieldValueFromFlag_Bool(t *testing.T) {
 	t.Parallel()
 
@@ -76,6 +82,7 @@ func TestSetFieldValueFromFlag_Bool(t *testing.T) {
 			t.Parallel()
 
 			var b bool
+
 			err := configmanager.SetFieldValueFromFlagForTest(&b, testCase.raw)
 
 			if testCase.wantErr {
@@ -90,6 +97,8 @@ func TestSetFieldValueFromFlag_Bool(t *testing.T) {
 }
 
 // TestSetFieldValueFromFlag_Int32 tests int32 field setting.
+//
+//nolint:varnamelen // Short names keep the table-driven tests readable.
 func TestSetFieldValueFromFlag_Int32(t *testing.T) {
 	t.Parallel()
 
@@ -112,6 +121,7 @@ func TestSetFieldValueFromFlag_Int32(t *testing.T) {
 			t.Parallel()
 
 			var i int32
+
 			err := configmanager.SetFieldValueFromFlagForTest(&i, testCase.raw)
 
 			if testCase.wantErr {
@@ -130,6 +140,7 @@ func TestSetFieldValueFromFlag_Unsupported(t *testing.T) {
 	t.Parallel()
 
 	var f float64
+
 	err := configmanager.SetFieldValueFromFlagForTest(&f, "1.0")
 
 	require.Error(t, err)
@@ -137,6 +148,8 @@ func TestSetFieldValueFromFlag_Unsupported(t *testing.T) {
 }
 
 // TestMetaV1DurationDecodeHook tests the decode hook for various conversions.
+//
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestMetaV1DurationDecodeHook(t *testing.T) {
 	t.Parallel()
 
@@ -146,7 +159,7 @@ func TestMetaV1DurationDecodeHook(t *testing.T) {
 		t.Parallel()
 
 		result, err := hook(
-			reflect.TypeOf(""),
+			reflect.TypeFor[string](),
 			reflect.TypeFor[metav1.Duration](),
 			"5m",
 		)
@@ -161,7 +174,7 @@ func TestMetaV1DurationDecodeHook(t *testing.T) {
 		t.Parallel()
 
 		result, err := hook(
-			reflect.TypeOf(""),
+			reflect.TypeFor[string](),
 			reflect.TypeFor[*metav1.Duration](),
 			"30s",
 		)
@@ -176,7 +189,7 @@ func TestMetaV1DurationDecodeHook(t *testing.T) {
 		t.Parallel()
 
 		result, err := hook(
-			reflect.TypeOf(""),
+			reflect.TypeFor[string](),
 			reflect.TypeFor[metav1.Duration](),
 			"",
 		)
@@ -191,7 +204,7 @@ func TestMetaV1DurationDecodeHook(t *testing.T) {
 		t.Parallel()
 
 		result, err := hook(
-			reflect.TypeOf(""),
+			reflect.TypeFor[string](),
 			reflect.TypeFor[*metav1.Duration](),
 			"",
 		)
@@ -206,7 +219,7 @@ func TestMetaV1DurationDecodeHook(t *testing.T) {
 		t.Parallel()
 
 		_, err := hook(
-			reflect.TypeOf(""),
+			reflect.TypeFor[string](),
 			reflect.TypeFor[metav1.Duration](),
 			"not-a-duration",
 		)
@@ -218,7 +231,7 @@ func TestMetaV1DurationDecodeHook(t *testing.T) {
 		t.Parallel()
 
 		result, err := hook(
-			reflect.TypeOf(42),
+			reflect.TypeFor[int](),
 			reflect.TypeFor[metav1.Duration](),
 			42,
 		)
@@ -230,8 +243,8 @@ func TestMetaV1DurationDecodeHook(t *testing.T) {
 		t.Parallel()
 
 		result, err := hook(
-			reflect.TypeOf(""),
-			reflect.TypeOf(""),
+			reflect.TypeFor[string](),
+			reflect.TypeFor[string](),
 			"hello",
 		)
 		require.NoError(t, err)
@@ -244,7 +257,7 @@ func TestMetaV1DurationDecodeHook(t *testing.T) {
 		// Use a string reflect type but non-string actual data
 		// This shouldn't normally happen, but we test the defensive branch
 		result, err := hook(
-			reflect.TypeOf(""),
+			reflect.TypeFor[string](),
 			reflect.TypeFor[metav1.Duration](),
 			42, // int data but string type
 		)
