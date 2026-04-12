@@ -364,3 +364,23 @@ func ExportClassifyRestoreError(err error, stderr, policy string) error {
 
 	return classifyRestoreError(err, stderr, flags)
 }
+
+// ExportStripDistributionPrefix exports stripDistributionPrefix for testing.
+func ExportStripDistributionPrefix(contextName string) string {
+	return stripDistributionPrefix(contextName)
+}
+
+// ExportIsEmptyYAML exports isEmptyYAML for testing.
+func ExportIsEmptyYAML(path string) bool {
+	return isEmptyYAML(path)
+}
+
+// ExportHasK3sArg exports hasK3sArg for testing.
+func ExportHasK3sArg(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
+	return hasK3sArg(k3dConfig, flag)
+}
+
+// ExportValidateOutputFormat exports validateOutputFormat for testing.
+func ExportValidateOutputFormat(cmd *cobra.Command) error {
+	return validateOutputFormat(cmd)
+}

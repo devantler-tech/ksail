@@ -5,6 +5,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v6/pkg/client/flux"
+	dockerprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/docker"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 )
@@ -145,4 +146,69 @@ func ExportTopologicalSortKustomizations(
 	kustomizations []flux.KustomizationInfo,
 ) []flux.KustomizationInfo {
 	return topologicalSortKustomizations(kustomizations)
+}
+
+// ExportParseInteger exposes parseInteger for testing.
+func ExportParseInteger(trimmed, defaultVal string) any {
+	return parseInteger(trimmed, defaultVal)
+}
+
+// ExportParseNumber exposes parseNumber for testing.
+func ExportParseNumber(trimmed, defaultVal string) any {
+	return parseNumber(trimmed, defaultVal)
+}
+
+// ExportParseBoolean exposes parseBoolean for testing.
+func ExportParseBoolean(trimmed, defaultVal string) any {
+	return parseBoolean(trimmed, defaultVal)
+}
+
+// ExportInferYAMLType exposes inferYAMLType for testing.
+func ExportInferYAMLType(trimmed, defaultVal string) any {
+	return inferYAMLType(trimmed, defaultVal)
+}
+
+// ExportSchemaNodeType exposes schemaNodeType for testing.
+func ExportSchemaNodeType(schema map[string]any) string {
+	return schemaNodeType(schema)
+}
+
+// ExportIsNumericIndex exposes isNumericIndex for testing.
+func ExportIsNumericIndex(str string) bool {
+	return isNumericIndex(str)
+}
+
+// ExportParseJSONSchema exposes parseJSONSchema for testing.
+func ExportParseJSONSchema(data []byte) map[string]any {
+	return parseJSONSchema(data)
+}
+
+// ExportResolveFromProperties exposes resolveFromProperties for testing.
+func ExportResolveFromProperties(schema map[string]any, key string) map[string]any {
+	return resolveFromProperties(schema, key)
+}
+
+// ExportResolveFromItems exposes resolveFromItems for testing.
+func ExportResolveFromItems(schema map[string]any, key string) map[string]any {
+	return resolveFromItems(schema, key)
+}
+
+// ExportResolveFromCombiners exposes resolveFromCombiners for testing.
+func ExportResolveFromCombiners(schema map[string]any, key string) map[string]any {
+	return resolveFromCombiners(schema, key)
+}
+
+// ExportSchemaCacheDir exposes schemaCacheDir for testing.
+func ExportSchemaCacheDir() string {
+	return schemaCacheDir()
+}
+
+// ExportSchemaCacheFileName exposes schemaCacheFileName for testing.
+func ExportSchemaCacheFileName(schemaURL string) string {
+	return schemaCacheFileName(schemaURL)
+}
+
+// ExportDistributionToLabelScheme exposes distributionToLabelScheme for testing.
+func ExportDistributionToLabelScheme(distribution v1alpha1.Distribution) dockerprovider.LabelScheme {
+	return distributionToLabelScheme(distribution)
 }
