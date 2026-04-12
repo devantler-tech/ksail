@@ -1030,3 +1030,69 @@ func TestWaitForFluxReady_DiagnosticsIncludedOnTimeout(t *testing.T) {
 	assert.Contains(t, err.Error(), "source-controller")
 	assert.Contains(t, err.Error(), "CrashLoopBackOff")
 }
+
+//nolint:paralleltest // Cannot run in parallel due to global mock
+func TestEnsureDefaultResources_DiagnosticsIncludedOnTimeout(t *testing.T) {
+	const wantDiagFragment = "source-controller: CrashLoopBackOff"
+
+	// Skip core Flux setup (API server / CRD interactions) so the test exercises
+	// only the waitForReady + diagnoseFluxPodFailures code path.
+	restoreSetup := fluxinstaller.SetSetupFluxCoreToNoop()
+	defer restoreSetup()
+
+	// Mock the flux resources client: always return Ready=False so waitForReady times out.
+	restoreFlux := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
+		return &mockFluxClient{
+			getFunc: func(
+				_ context.Context,
+				_ client.ObjectKey,
+				obj client.Object,
+				_ ...client.GetOption,
+			) error {
+				instance, ok := obj.(*fluxinstaller.FluxInstance)
+				require.True(t, ok, "expected FluxInstance type")
+
+				instance.Status.Conditions = []metav1.Condition{
+					{
+						Type:    "Ready",
+						Status:  metav1.ConditionFalse,
+						Reason:  "HealthCheckFailed",
+						Message: "source-controller unhealthy",
+					},
+				}
+
+				return nil
+			},
+		}, nil
+	})
+	defer restoreFlux()
+
+	// Mock loadRESTConfig to avoid hitting the filesystem.
+	restoreLoad := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+		return &rest.Config{}, nil
+	})
+	defer restoreLoad()
+
+	// Mock diagnoseFluxPodFailures to return a canned diagnostic string.
+	restoreDiag := fluxinstaller.SetDiagnoseFluxPodFailures(func(_ context.Context, _ *rest.Config) string {
+		return "\nFailing pods in flux-system namespace:\n  " + wantDiagFragment
+	})
+	defer restoreDiag()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Workload: v1alpha1.WorkloadSpec{
+				SourceDirectory: "k8s",
+			},
+		},
+	}
+
+	err := fluxinstaller.EnsureDefaultResources(ctx, "", clusterCfg, "test-cluster", "", true)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed waiting for FluxInstance to be ready")
+	assert.Contains(t, err.Error(), wantDiagFragment)
+}

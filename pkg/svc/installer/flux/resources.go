@@ -73,6 +73,14 @@ type setupParams struct {
 	registryHostOverride string
 }
 
+// setupFluxCoreImpl is the injectable implementation of setupFluxCore, used by
+// EnsureDefaultResources and SetupInstance. Override in tests via SetSetupFluxCore.
+//
+//nolint:gochecknoglobals // Allows mocking for tests
+var setupFluxCoreImpl = func(ctx context.Context, params setupParams) error {
+	return setupFluxCore(ctx, params)
+}
+
 // setupFluxCore performs the common Flux setup: secret creation, FluxInstance creation, and OCIRepository patching.
 func setupFluxCore(ctx context.Context, params setupParams) error {
 	// For external registries with credentials, create the pull secret before FluxInstance
@@ -144,7 +152,7 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	err = setupFluxCore(ctx, setupParams{
+	err = setupFluxCoreImpl(ctx, setupParams{
 		restConfig:           restConfig,
 		clusterCfg:           clusterCfg,
 		clusterName:          clusterName,
@@ -154,7 +162,6 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	// Only wait for FluxInstance readiness if artifact was pushed.
 	// If no artifact was pushed (e.g., source directory missing during cluster create),
 	// the FluxInstance will remain in "Reconciliation in progress" until workload push is run.
 	if artifactPushed {
@@ -202,7 +209,7 @@ func SetupInstance(
 		return err
 	}
 
-	return setupFluxCore(ctx, setupParams{
+	return setupFluxCoreImpl(ctx, setupParams{
 		restConfig:           restConfig,
 		clusterCfg:           clusterCfg,
 		clusterName:          clusterName,
