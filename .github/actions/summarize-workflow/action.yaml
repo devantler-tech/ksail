@@ -12,9 +12,9 @@ inputs:
       Example: "success success skipped failure"
     required: true
   success-message:
-    description: Message to display when all jobs succeeded or were skipped
+    description: Message to display when no job failed (success, skipped, and cancelled are all acceptable)
     required: false
-    default: "✅ All jobs succeeded or were skipped."
+    default: "✅ No jobs failed."
   failure-message:
     description: Message to display when at least one job failed
     required: false
