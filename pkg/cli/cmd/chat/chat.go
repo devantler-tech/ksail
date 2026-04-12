@@ -191,23 +191,19 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 	// Environment variables filtered from the child copilot CLI process to
 	// prevent implicit auth interference. GITHUB_TOKEN and GH_TOKEN are
 	// general-purpose PATs that may not carry Copilot-specific scopes.
-	filteredEnvVars := []string{"GITHUB_TOKEN", "GH_TOKEN"}
-
-	// Prefixes filtered from the child process environment. COPILOT_* vars
-	// (e.g. COPILOT_GITHUB_TOKEN, COPILOT_AGENT_ADDRESS) from the parent
-	// process can redirect the CLI to an existing agent or supply an
-	// incompatible auth token, causing immediate startup failure. The SDK
-	// appends the vars the child actually needs (COPILOT_SDK_AUTH_TOKEN,
-	// COPILOT_OTEL_*) after setting process.Env, so filtering inherited
-	// COPILOT_* vars is safe.
-	filteredEnvPrefixes := []string{"COPILOT_"}
-
-	env := filterEnvVars(os.Environ(), filteredEnvVars)
-	env = filterEnvVarPrefixes(env, filteredEnvPrefixes)
+	// COPILOT_GITHUB_TOKEN is the Copilot CLI's own auth token env var;
+	// if set by a parent process (e.g. a GitHub App) with a token that
+	// lacks Copilot scopes, it causes immediate startup failure. The SDK
+	// manages auth separately via COPILOT_SDK_AUTH_TOKEN.
+	//
+	// NOTE: We intentionally use a specific denylist rather than filtering
+	// all COPILOT_* prefixed vars, so that user-configurable settings like
+	// COPILOT_CUSTOM_INSTRUCTIONS_DIRS are preserved.
+	filteredEnvVars := []string{"GITHUB_TOKEN", "GH_TOKEN", "COPILOT_GITHUB_TOKEN"}
 
 	opts := &copilot.ClientOptions{
 		LogLevel: "error",
-		Env:      env,
+		Env:      filterEnvVars(os.Environ(), filteredEnvVars),
 	}
 
 	cwd, cwdErr := os.Getwd()
@@ -248,31 +244,6 @@ func filterEnvVars(env []string, remove []string) []string {
 
 		for _, name := range remove {
 			prefix := name + "="
-			if len(entry) >= len(prefix) && entry[:len(prefix)] == prefix {
-				exclude = true
-
-				break
-			}
-		}
-
-		if !exclude {
-			filtered = append(filtered, entry)
-		}
-	}
-
-	return filtered
-}
-
-// filterEnvVarPrefixes returns a copy of env with all variables whose key
-// starts with any of the given prefixes removed. For example, the prefix
-// "COPILOT_" removes "COPILOT_GITHUB_TOKEN=x", "COPILOT_CLI=1", etc.
-func filterEnvVarPrefixes(env []string, prefixes []string) []string {
-	filtered := make([]string, 0, len(env))
-
-	for _, entry := range env {
-		exclude := false
-
-		for _, prefix := range prefixes {
 			if len(entry) >= len(prefix) && entry[:len(prefix)] == prefix {
 				exclude = true
 
