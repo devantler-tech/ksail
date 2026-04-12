@@ -249,7 +249,7 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 // SetComponentDetector sets the component detector for querying cluster state.
 // This implements the ComponentDetectorAware interface.
 func (p *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
-	p.componentDetector = d
+	p.WithComponentDetector(d)
 }
 
 // RefreshKubeconfig fetches and saves the kubeconfig for a running cluster.
