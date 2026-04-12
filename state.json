@@ -1,13 +1,8 @@
 {
-  "last_run": "2026-04-11T12:25:36Z",
-  "last_run_id": "24282401588",
-  "tasks_run": [
-    1,
-    2,
-    9,
-    13
-  ],
-  "issue_backlog_cursor": 3922,
+  "last_run": "2026-04-12T01:02:51Z",
+  "last_run_id": "24295450573",
+  "tasks_run": [5, 2, 8, 13],
+  "issue_backlog_cursor": 3942,
   "commented_issues": {
     "3591": "2026-04-04T07:39:21Z",
     "3592": "2026-04-04T07:39:21Z",
@@ -28,15 +23,17 @@
     "3865": "2026-04-10T12:31:32Z",
     "2261": "2026-04-11T08:47:00Z",
     "3772": "2026-04-11T08:47:00Z",
-    "3922": "2026-04-11T12:25:36Z"
+    "3922": "2026-04-11T12:25:36Z",
+    "3942": "2026-04-12T01:02:51Z",
+    "3936": "2026-04-12T01:02:51Z"
   },
   "open_prs": {
     "3834": "refactor(installer): extract BuildSopsAgeSecret",
-    "aw_test_diagnostics": "[Repo Assist] test(k8s): add table-driven tests for DiagnosePodFailures - created 2026-04-11"
+    "3945": "[Repo Assist] fix(installer): extend API server stability check to K3s - created 2026-04-12"
   },
   "domain_alternation": {
-    "last_domain": "test",
-    "next_domain": "refactor"
+    "last_domain": "refactor",
+    "next_domain": "perf"
   },
   "monthly_activity_issue": "2026-04",
   "monthly_activity_issue_number": "3605",
@@ -95,7 +92,7 @@
     "aw_flux1": "Flux v2.8.x update - created 2026-04-10",
     "aw_vcr1": "VCluster image verification - created 2026-04-10"
   },
-  "notes": "Task 9: Added 13 table-driven tests for DiagnosePodFailures in pkg/k8s/diagnostics_test.go (previously untested). PR created. Task 1: Labelled #3922 as bug. Task 2: Commented on #3922 with root cause (saveOmniConfigs missing from cluster update path). Domain: test again this run, next should be refactor.",
+  "notes": "Task 5 (refactor): PR #3945 - extend API server stability check to K3s in Calico/Cilium installers. Used injectable apiServerChecker field pattern (like gatewayAPICRDInstaller). Task 2: Commented on #3942 (K3s Calico CNI timing) and #3936 (Flux notification-controller crash). Task 8: CI clean, no benchmark regressions; skipped. Domain: refactor done, next is perf.",
   "open_issues_snapshot": {
     "2261": "blocked - VCluster D-Bus race",
     "3605": "repo-assist - Monthly Activity 2026-04",
@@ -104,6 +101,9 @@
     "3908": "automation - verify update_issue temp ID resolution",
     "3909": "automation - remove sed workaround after gh-aw fix",
     "3912": "bug,blocked - Dependabot multi-arch ghcr.io",
-    "3922": "bug - cluster update should refresh Omni kubeconfig"
+    "3917": "blocked,ci,bug - re-enable harden-runner",
+    "3922": "bug - cluster update should refresh Omni kubeconfig",
+    "3936": "automation,ci - Flux notification-controller CrashLoopBackOff",
+    "3942": "automation,ci - K3s Calico CNI API server not ready"
   }
 }
