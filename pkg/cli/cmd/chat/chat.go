@@ -193,9 +193,21 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 	// general-purpose PATs that may not carry Copilot-specific scopes.
 	filteredEnvVars := []string{"GITHUB_TOKEN", "GH_TOKEN"}
 
+	// Prefixes filtered from the child process environment. COPILOT_* vars
+	// (e.g. COPILOT_GITHUB_TOKEN, COPILOT_AGENT_ADDRESS) from the parent
+	// process can redirect the CLI to an existing agent or supply an
+	// incompatible auth token, causing immediate startup failure. The SDK
+	// appends the vars the child actually needs (COPILOT_SDK_AUTH_TOKEN,
+	// COPILOT_OTEL_*) after setting process.Env, so filtering inherited
+	// COPILOT_* vars is safe.
+	filteredEnvPrefixes := []string{"COPILOT_"}
+
+	env := filterEnvVars(os.Environ(), filteredEnvVars)
+	env = filterEnvVarPrefixes(env, filteredEnvPrefixes)
+
 	opts := &copilot.ClientOptions{
 		LogLevel: "error",
-		Env:      filterEnvVars(os.Environ(), filteredEnvVars),
+		Env:      env,
 	}
 
 	cwd, cwdErr := os.Getwd()
@@ -236,6 +248,31 @@ func filterEnvVars(env []string, remove []string) []string {
 
 		for _, name := range remove {
 			prefix := name + "="
+			if len(entry) >= len(prefix) && entry[:len(prefix)] == prefix {
+				exclude = true
+
+				break
+			}
+		}
+
+		if !exclude {
+			filtered = append(filtered, entry)
+		}
+	}
+
+	return filtered
+}
+
+// filterEnvVarPrefixes returns a copy of env with all variables whose key
+// starts with any of the given prefixes removed. For example, the prefix
+// "COPILOT_" removes "COPILOT_GITHUB_TOKEN=x", "COPILOT_CLI=1", etc.
+func filterEnvVarPrefixes(env []string, prefixes []string) []string {
+	filtered := make([]string, 0, len(env))
+
+	for _, entry := range env {
+		exclude := false
+
+		for _, prefix := range prefixes {
 			if len(entry) >= len(prefix) && entry[:len(prefix)] == prefix {
 				exclude = true
 
