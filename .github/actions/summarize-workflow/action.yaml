@@ -1,7 +1,7 @@
 name: Summarize Workflow Result
 description: |
-  Summarizes the results of multiple jobs and fails if any job failed.
-  Cancelled and skipped jobs are treated as acceptable (non-failure).
+  Summarizes the results of multiple jobs and fails if any job failed or was cancelled.
+  Only skipped jobs are treated as acceptable (non-failure).
   Useful for status check jobs that aggregate results from matrix or parallel jobs.
 
 inputs:
@@ -12,13 +12,13 @@ inputs:
       Example: "success success skipped failure"
     required: true
   success-message:
-    description: Message to display when no job failed (success, skipped, and cancelled are all acceptable)
+    description: Message to display when no job failed or was cancelled (success and skipped are acceptable)
     required: false
-    default: "✅ No jobs failed."
+    default: "✅ All jobs succeeded or were skipped."
   failure-message:
-    description: Message to display when at least one job failed
+    description: Message to display when at least one job failed or was cancelled
     required: false
-    default: "❌ At least one job failed."
+    default: "❌ At least one job failed or was cancelled."
 
 runs:
   using: composite
@@ -35,7 +35,7 @@ runs:
 
         for result in $JOB_RESULTS; do
           case "$result" in
-            success|skipped|cancelled)
+            success|skipped)
               ;;
             *)
               failed=true
