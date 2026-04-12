@@ -615,8 +615,13 @@ func TestFilterEnvVars(t *testing.T) {
 		expected   []string
 	}{
 		{
-			name:       "filters matching variables and preserves others",
-			environ:    []string{"PATH=/bin", "GITHUB_TOKEN=secret", "GH_TOKEN=secret2", "HOME=/home"},
+			name: "filters matching variables and preserves others",
+			environ: []string{
+				"PATH=/bin",
+				"GITHUB_TOKEN=secret",
+				"GH_TOKEN=secret2",
+				"HOME=/home",
+			},
 			filterList: []string{"GITHUB_TOKEN", "GH_TOKEN"},
 			expected:   []string{"PATH=/bin", "HOME=/home"},
 		},
@@ -627,8 +632,12 @@ func TestFilterEnvVars(t *testing.T) {
 			expected:   []string{"PATH=/bin", "HOME=/home"},
 		},
 		{
-			name:       "filters COPILOT_GITHUB_TOKEN while preserving user-configurable Copilot vars",
-			environ:    []string{"PATH=/bin", "COPILOT_GITHUB_TOKEN=app-token", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/my/dir"},
+			name: "filters COPILOT_GITHUB_TOKEN while preserving user-configurable Copilot vars",
+			environ: []string{
+				"PATH=/bin",
+				"COPILOT_GITHUB_TOKEN=app-token",
+				"COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/my/dir",
+			},
 			filterList: []string{"COPILOT_GITHUB_TOKEN"},
 			expected:   []string{"PATH=/bin", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=/my/dir"},
 		},
@@ -637,10 +646,12 @@ func TestFilterEnvVars(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			result := chat.GetFilterEnvVars()(testCase.environ, testCase.filterList)
 			if len(result) != len(testCase.expected) {
 				t.Fatalf("Expected %d vars, got %d", len(testCase.expected), len(result))
 			}
+
 			for i, expected := range testCase.expected {
 				if result[i] != expected {
 					t.Errorf("Position %d: expected %q, got %q", i, expected, result[i])
