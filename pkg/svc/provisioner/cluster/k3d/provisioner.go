@@ -219,7 +219,11 @@ func (k *Provisioner) WithComponentDetector(d *detector.ComponentDetector) {
 	k.componentDetector = d
 }
 
-// runListCommand executes the k3d cluster list command and returns the output.
+// SetComponentDetector sets the component detector for querying cluster state.
+// This implements the ComponentDetectorAware interface.
+func (k *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
+	k.componentDetector = d
+}
 func (k *Provisioner) runListCommand(ctx context.Context) (string, error) {
 	cmd := clustercommand.NewCmdClusterList()
 	args := []string{"--output", "json"}

@@ -6260,9 +6260,10 @@ func createAndVerifyProvisioner(
 	ctx *localregistry.Context,
 	clusterName string,
 ) (clusterprovisioner.Provisioner, error) {
-	// Build a ComponentDetector scoped to the running cluster.
-	componentDetector := buildComponentDetector(cmd, ctx)
-
+	// Create provisioner without component detector first.
+	// The detector requires a kubeconfig, which may not exist yet for
+	// remote providers (Omni). We build the detector after refreshing
+	// the kubeconfig below.
 	factory := clusterprovisioner.DefaultFactory{
 		DistributionConfig: &clusterprovisioner.DistributionConfig{
 			Kind:     ctx.KindConfig,
@@ -6270,7 +6271,6 @@ func createAndVerifyProvisioner(
 			Talos:    ctx.TalosConfig,
 			VCluster: ctx.VClusterConfig,
 		},
-		ComponentDetector: componentDetector,
 	}
 
 	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
@@ -6285,6 +6285,23 @@ func createAndVerifyProvisioner(
 
 	if !exists {
 		return nil, fmt.Errorf("%w: %q", clustererr.ErrClusterDoesNotExist, clusterName)
+	}
+
+	// Refresh kubeconfig from the remote provider if supported.
+	// This ensures the kubeconfig is available for component detection
+	// and subsequent Helm operations (CNI, GitOps installation).
+	if refresher, ok := provisioner.(clusterprovisioner.KubeconfigRefresher); ok {
+		if err := refresher.RefreshKubeconfig(cmd.Context(), clusterName); err != nil {
+			return nil, fmt.Errorf("failed to refresh kubeconfig: %w", err)
+		}
+	}
+
+	// Build a ComponentDetector scoped to the running cluster.
+	// Now that kubeconfig is ensured, the detector can connect.
+	componentDetector := buildComponentDetector(cmd, ctx)
+
+	if aware, ok := provisioner.(clusterprovisioner.ComponentDetectorAware); ok {
+		aware.SetComponentDetector(componentDetector)
 	}
 
 	return provisioner, nil

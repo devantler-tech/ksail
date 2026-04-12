@@ -246,6 +246,31 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 	p.infraProvider = prov
 }
 
+// SetComponentDetector sets the component detector for querying cluster state.
+// This implements the ComponentDetectorAware interface.
+func (p *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
+	p.componentDetector = d
+}
+
+// RefreshKubeconfig fetches and saves the kubeconfig for a running cluster.
+// For Omni clusters, the kubeconfig is retrieved from the Omni API.
+// For Docker and Hetzner clusters, kubeconfig is expected to persist from creation.
+// This implements the KubeconfigRefresher interface.
+func (p *Provisioner) RefreshKubeconfig(ctx context.Context, name string) error {
+	if p.omniOpts == nil {
+		return nil
+	}
+
+	clusterName := p.resolveClusterName(name)
+
+	omniProv, err := p.omniProvider()
+	if err != nil {
+		return err
+	}
+
+	return p.saveOmniKubeconfig(ctx, omniProv, clusterName)
+}
+
 // Options returns the current runtime options.
 func (p *Provisioner) Options() *Options {
 	return p.options
