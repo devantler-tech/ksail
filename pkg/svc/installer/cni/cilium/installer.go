@@ -15,6 +15,9 @@ import (
 // errGatewayAPICRDInstallerNil is returned when the Gateway API CRD installer is not configured.
 var errGatewayAPICRDInstallerNil = errors.New("gateway API CRD installer is not configured")
 
+// errAPIServerCheckerNil is returned when the API server checker is not configured.
+var errAPIServerCheckerNil = errors.New("API server checker is not configured")
+
 // GatewayAPICRDInstallerFunc is a function that installs Gateway API CRDs.
 type GatewayAPICRDInstallerFunc func(ctx context.Context) error
 
@@ -84,6 +87,9 @@ func (c *Installer) Install(ctx context.Context) error {
 	// Wait for stability to prevent transient CNI install failures.
 	if c.distribution == v1alpha1.DistributionTalos ||
 		c.distribution == v1alpha1.DistributionK3s {
+		if c.apiServerChecker == nil {
+			return errAPIServerCheckerNil
+		}
 		err = c.apiServerChecker(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to wait for API server stability: %w", err)

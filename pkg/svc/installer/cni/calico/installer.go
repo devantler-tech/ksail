@@ -2,6 +2,7 @@ package calicoinstaller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -14,10 +15,13 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/svc/installer/cni"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
+
+// errAPIServerCheckerNil is returned when the API server checker is not configured.
+var errAPIServerCheckerNil = errors.New("API server checker is not configured")
 
 // Installer implements the installer.Installer interface for Calico.
 type Installer struct {
@@ -62,12 +66,21 @@ func NewInstallerWithDistribution(
 
 // Install installs or upgrades Calico via its Helm chart.
 func (c *Installer) Install(ctx context.Context) error {
+	// Validate Helm client early to fail-fast before any cluster contact.
+	_, err := c.GetClient()
+	if err != nil {
+		return fmt.Errorf("get helm client: %w", err)
+	}
+
 	// K3d/K3s and Talos may report "cluster ready" before the API server is fully
 	// serving all endpoints (e.g. /openapi/v2 used by Helm for resource validation).
 	// Wait for stability to prevent transient CNI install failures.
 	if c.distribution == v1alpha1.DistributionTalos ||
 		c.distribution == v1alpha1.DistributionK3s {
-		err := c.apiServerChecker(ctx)
+		if c.apiServerChecker == nil {
+			return errAPIServerCheckerNil
+		}
+		err = c.apiServerChecker(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to wait for API server stability: %w", err)
 		}
@@ -76,13 +89,13 @@ func (c *Installer) Install(ctx context.Context) error {
 	// For Talos, we need to create namespaces with PSS labels before installing
 	// because Talos has PSS enforcement enabled by default.
 	if c.distribution == v1alpha1.DistributionTalos {
-		err := c.ensurePrivilegedNamespaces(ctx)
+		err = c.ensurePrivilegedNamespaces(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to create privileged namespaces: %w", err)
 		}
 	}
 
-	err := c.helmInstallOrUpgradeCalico(ctx)
+	err = c.helmInstallOrUpgradeCalico(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install Calico: %w", err)
 	}
@@ -233,7 +246,7 @@ func (c *Installer) waitForCalicoCRDs(ctx context.Context) error {
 					ApiextensionsV1().
 					CustomResourceDefinitions().
 					Get(ctx, name, metav1.GetOptions{})
-				if errors.IsNotFound(getErr) {
+				if k8serrors.IsNotFound(getErr) {
 					return false, nil
 				}
 
