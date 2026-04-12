@@ -81,19 +81,25 @@ func (b *InstallerBase) BuildRESTConfig() (*rest.Config, error) {
 	return config, nil
 }
 
+// errAPIServerCheckerNil is returned when the API server checker is not configured.
+var errAPIServerCheckerNil = errors.New("API server checker is not configured")
+
 // RunAPIServerCheck calls checker if shouldCheck is true. It returns a clear
 // error when checker is nil to prevent panics. This is intended to be called
 // from CNI Install() methods that share the same stability-check pattern.
-func (b *InstallerBase) RunAPIServerCheck(ctx context.Context, shouldCheck bool, checker func(ctx context.Context) error) error {
+func (b *InstallerBase) RunAPIServerCheck(
+	ctx context.Context, shouldCheck bool, checker func(ctx context.Context) error,
+) error {
 	if !shouldCheck {
 		return nil
 	}
 
 	if checker == nil {
-		return errors.New("API server checker is not configured")
+		return errAPIServerCheckerNil
 	}
 
-	if err := checker(ctx); err != nil {
+	err := checker(ctx)
+	if err != nil {
 		return fmt.Errorf("failed to wait for API server stability: %w", err)
 	}
 

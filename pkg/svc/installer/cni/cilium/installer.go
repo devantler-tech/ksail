@@ -79,13 +79,11 @@ func (c *Installer) Install(ctx context.Context) error {
 		return fmt.Errorf("get helm client: %w", err)
 	}
 
-	// K3d/K3s and Talos may report "cluster ready" before the API server is fully
-	// serving all endpoints (e.g. /openapi/v2 used by Helm for resource validation).
-	// Wait for stability to prevent transient CNI install failures.
 	needsStabilityCheck := c.distribution == v1alpha1.DistributionTalos ||
 		c.distribution == v1alpha1.DistributionK3s
-	if err = c.RunAPIServerCheck(ctx, needsStabilityCheck, c.apiServerChecker); err != nil {
-		return err
+	err = c.RunAPIServerCheck(ctx, needsStabilityCheck, c.apiServerChecker)
+	if err != nil {
+		return fmt.Errorf("run API server check: %w", err)
 	}
 
 	// Install Gateway API CRDs before Cilium, as Cilium requires them
