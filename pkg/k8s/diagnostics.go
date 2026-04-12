@@ -83,47 +83,59 @@ func isPodHealthy(pod *corev1.Pod) bool {
 
 // describePodFailure returns a single-line description of why a pod is unhealthy.
 func describePodFailure(pod *corev1.Pod) string {
-	// Check container statuses for waiting reasons (ImagePullBackOff, CrashLoopBackOff, etc.)
-	for _, container := range pod.Status.ContainerStatuses {
-		if container.State.Waiting != nil && container.State.Waiting.Reason != "" {
-			desc := fmt.Sprintf(
-				"%s: %s for %s",
-				pod.Name, container.State.Waiting.Reason, container.Image,
-			)
-			if container.RestartCount > 0 {
-				desc += fmt.Sprintf(" (%d restarts)", container.RestartCount)
-			}
-
+	for _, cs := range pod.Status.ContainerStatuses {
+		if desc := describeContainerWaiting(pod.Name, cs); desc != "" {
 			return desc
 		}
 
-		if container.State.Terminated != nil && container.State.Terminated.ExitCode != 0 {
-			desc := fmt.Sprintf(
-				"%s: terminated with exit code %d (%s)",
-				pod.Name, container.State.Terminated.ExitCode, container.State.Terminated.Reason,
-			)
-			if container.RestartCount > 0 {
-				desc += fmt.Sprintf(" (%d restarts)", container.RestartCount)
-			}
-
+		if desc := describeContainerTerminated(pod.Name, cs); desc != "" {
 			return desc
 		}
 	}
 
-	// Check init container statuses
-	for _, container := range pod.Status.InitContainerStatuses {
-		if container.State.Waiting != nil && container.State.Waiting.Reason != "" {
+	for _, cs := range pod.Status.InitContainerStatuses {
+		if cs.State.Waiting != nil && cs.State.Waiting.Reason != "" {
 			return fmt.Sprintf(
 				"%s: init container %s: %s for %s",
-				pod.Name, container.Name, container.State.Waiting.Reason, container.Image,
+				pod.Name, cs.Name, cs.State.Waiting.Reason, cs.Image,
 			)
 		}
 	}
 
-	// Fall back to pod phase and reason
 	if pod.Status.Reason != "" {
 		return fmt.Sprintf("%s: %s (%s)", pod.Name, pod.Status.Phase, pod.Status.Reason)
 	}
 
 	return fmt.Sprintf("%s: %s", pod.Name, pod.Status.Phase)
+}
+
+// describeContainerWaiting returns a description when a container is stuck waiting with a reason.
+func describeContainerWaiting(podName string, cs corev1.ContainerStatus) string {
+	if cs.State.Waiting == nil || cs.State.Waiting.Reason == "" {
+		return ""
+	}
+
+	desc := fmt.Sprintf("%s: %s for %s", podName, cs.State.Waiting.Reason, cs.Image)
+	if cs.RestartCount > 0 {
+		desc += fmt.Sprintf(" (%d restarts)", cs.RestartCount)
+	}
+
+	return desc
+}
+
+// describeContainerTerminated returns a description when a container exited with a non-zero code.
+func describeContainerTerminated(podName string, cs corev1.ContainerStatus) string {
+	if cs.State.Terminated == nil || cs.State.Terminated.ExitCode == 0 {
+		return ""
+	}
+
+	desc := fmt.Sprintf(
+		"%s: terminated with exit code %d (%s)",
+		podName, cs.State.Terminated.ExitCode, cs.State.Terminated.Reason,
+	)
+	if cs.RestartCount > 0 {
+		desc += fmt.Sprintf(" (%d restarts)", cs.RestartCount)
+	}
+
+	return desc
 }
