@@ -2,7 +2,6 @@ package calicoinstaller
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -19,9 +18,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
-
-// errAPIServerCheckerNil is returned when the API server checker is not configured.
-var errAPIServerCheckerNil = errors.New("API server checker is not configured")
 
 // Installer implements the installer.Installer interface for Calico.
 type Installer struct {
@@ -75,16 +71,10 @@ func (c *Installer) Install(ctx context.Context) error {
 	// K3d/K3s and Talos may report "cluster ready" before the API server is fully
 	// serving all endpoints (e.g. /openapi/v2 used by Helm for resource validation).
 	// Wait for stability to prevent transient CNI install failures.
-	if c.distribution == v1alpha1.DistributionTalos ||
-		c.distribution == v1alpha1.DistributionK3s {
-		if c.apiServerChecker == nil {
-			return errAPIServerCheckerNil
-		}
-
-		err = c.apiServerChecker(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to wait for API server stability: %w", err)
-		}
+	needsStabilityCheck := c.distribution == v1alpha1.DistributionTalos ||
+		c.distribution == v1alpha1.DistributionK3s
+	if err = c.RunAPIServerCheck(ctx, needsStabilityCheck, c.apiServerChecker); err != nil {
+		return err
 	}
 
 	// For Talos, we need to create namespaces with PSS labels before installing

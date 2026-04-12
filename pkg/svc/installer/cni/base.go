@@ -81,6 +81,25 @@ func (b *InstallerBase) BuildRESTConfig() (*rest.Config, error) {
 	return config, nil
 }
 
+// RunAPIServerCheck calls checker if shouldCheck is true. It returns a clear
+// error when checker is nil to prevent panics. This is intended to be called
+// from CNI Install() methods that share the same stability-check pattern.
+func (b *InstallerBase) RunAPIServerCheck(ctx context.Context, shouldCheck bool, checker func(ctx context.Context) error) error {
+	if !shouldCheck {
+		return nil
+	}
+
+	if checker == nil {
+		return errors.New("API server checker is not configured")
+	}
+
+	if err := checker(ctx); err != nil {
+		return fmt.Errorf("failed to wait for API server stability: %w", err)
+	}
+
+	return nil
+}
+
 // WaitForAPIServerStability waits for the Kubernetes API server to be stable.
 // This is needed for distributions like Talos where the API server may be
 // unstable immediately after bootstrap, causing transient connection errors.
