@@ -730,8 +730,10 @@ func setupPlatformDetectMockForExporter(
 
 // setupEnsureImageContentMocks sets up mocks for the ensureImageContent calls.
 // Each image triggers a "ctr images pull --platform <platform>" exec inside the node.
+// ensureImageContent creates a context.WithTimeout internally, so the context
+// argument is matched with mock.Anything instead of the parent context.
 func setupEnsureImageContentMocks(
-	ctx context.Context,
+	_ctx context.Context,
 	t *testing.T,
 	mockClient *docker.MockAPIClient,
 	containerName string,
@@ -740,21 +742,41 @@ func setupEnsureImageContentMocks(
 	t.Helper()
 
 	for _, img := range images {
-		setupExecMockWithCmdForExporter(
-			ctx,
-			t,
-			mockClient,
-			containerName,
-			[]string{
-				ctrCommand,
-				"--namespace=k8s.io",
-				"images",
-				"pull",
-				"--platform",
-				"linux/amd64",
-				img,
-			},
-		)
+		expectedCmd := []string{
+			ctrCommand,
+			"--namespace=k8s.io",
+			"images",
+			"pull",
+			"--platform",
+			"linux/amd64",
+			img,
+		}
+
+		execID := "exec-pull-" + containerName + "-" + img
+
+		mockClient.EXPECT().
+			ContainerExecCreate(mock.Anything, containerName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+				if len(opts.Cmd) != len(expectedCmd) {
+					return false
+				}
+
+				for index := range opts.Cmd {
+					if opts.Cmd[index] != expectedCmd[index] {
+						return false
+					}
+				}
+
+				return true
+			})).
+			Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+
+		mockClient.EXPECT().
+			ContainerExecAttach(mock.Anything, execID, container.ExecStartOptions{}).
+			Return(mockDockerStreamResponse("", ""), nil).Once()
+
+		mockClient.EXPECT().
+			ContainerExecInspect(mock.Anything, execID).
+			Return(container.ExecInspect{ExitCode: 0}, nil).Once()
 	}
 }
 

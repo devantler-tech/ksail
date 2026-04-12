@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
@@ -18,6 +19,13 @@ import (
 
 // File permission constant.
 const dirPerm = 0o750
+
+// contentPullTimeout caps the best-effort "ctr images pull" that is issued when
+// an individual image export fails with a "content digest not found" error.
+// Without a deadline, a slow or unreachable registry can block the entire
+// export indefinitely; the pull is already best-effort (errors are ignored),
+// so timing out simply skips the retry for that image.
+const contentPullTimeout = 5 * time.Minute
 
 // Error definitions.
 var (
@@ -321,6 +329,14 @@ func (e *Exporter) ensureImageContent(
 	platform string,
 	image string,
 ) {
+	// Cap the pull with a deadline so a slow or unreachable registry cannot
+	// stall the export indefinitely. The operation is best-effort: if the
+	// pull times out the image may still export (e.g., content was
+	// pre-loaded in an air-gapped environment), or it will simply be added
+	// to the failed list by the caller.
+	pullCtx, cancel := context.WithTimeout(ctx, contentPullTimeout)
+	defer cancel()
+
 	cmd := []string{
 		"ctr",
 		"--namespace=k8s.io",
@@ -333,7 +349,7 @@ func (e *Exporter) ensureImageContent(
 	// Best-effort: ignore errors since the image may still be exportable
 	// even if the pull fails (e.g., in air-gapped environments where
 	// the content was pre-loaded).
-	_, _ = e.executor.ExecInContainer(ctx, nodeName, cmd)
+	_, _ = e.executor.ExecInContainer(pullCtx, nodeName, cmd)
 }
 
 // exportImagesOneByOne exports each image individually, returning the list of
