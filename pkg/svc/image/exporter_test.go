@@ -215,6 +215,10 @@ func TestExportWithSpecificImages(t *testing.T) {
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
+	// Mock ensureImageContent pulls
+	setupEnsureImageContentMocks(ctx, t, mockClient, "my-cluster-control-plane",
+		[]string{"docker.io/library/nginx:latest"})
+
 	// Mock exec for export command
 	exportCmd := []string{
 		ctrCommand, "--namespace=k8s.io", "images", "export",
@@ -277,6 +281,10 @@ func TestExportK3sDistribution(t *testing.T) {
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "k3d-my-cluster-server-0")
 
+	// Mock ensureImageContent pulls
+	setupEnsureImageContentMocks(ctx, t, mockClient, "k3d-my-cluster-server-0",
+		[]string{"docker.io/library/nginx:latest"})
+
 	// Mock exec for export - K3d uses /tmp path
 	k3dExportCmd := []string{
 		ctrCommand, "--namespace=k8s.io", "images", "export",
@@ -331,6 +339,10 @@ func TestExportEmptyProvider(t *testing.T) {
 
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	// Mock ensureImageContent pulls
+	setupEnsureImageContentMocks(ctx, t, mockClient, "my-cluster-control-plane",
+		[]string{"docker.io/library/nginx:latest"})
 
 	// Mock exec for export
 	setupExecMockWithCmdForExporter(
@@ -387,6 +399,10 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	// Mock ensureImageContent pulls
+	setupEnsureImageContentMocks(ctx, t, mockClient, "my-cluster-control-plane",
+		[]string{"docker.io/library/nginx:latest"})
 
 	// Mock exec for export
 	setupExecMockWithCmdForExporter(
@@ -504,6 +520,8 @@ func TestExportFallbackReportsFailedImages(t *testing.T) {
 		}, nil)
 
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+	setupEnsureImageContentMocks(ctx, t, mockClient, "my-cluster-control-plane",
+		[]string{"docker.io/library/nginx:latest", "docker.io/library/redis:alpine"})
 	setupFallbackExportMocks(ctx, t, mockClient, "my-cluster-control-plane")
 
 	// Mock CopyFromContainer
@@ -567,6 +585,10 @@ func TestExportListImagesFiltersDigests(t *testing.T) {
 
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	// Mock ensureImageContent pulls (images from listImagesInNode are not normalized)
+	setupEnsureImageContentMocks(ctx, t, mockClient, "my-cluster-control-plane",
+		[]string{"nginx:latest", "redis:alpine"})
 
 	// Second exec is for exporting - only named images
 	exportCmd := []string{
@@ -664,6 +686,10 @@ func runNodeSelectionTest(
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, expectedNodeName)
 
+	// Mock ensureImageContent pulls
+	setupEnsureImageContentMocks(ctx, t, mockClient, expectedNodeName,
+		[]string{"docker.io/library/nginx:latest"})
+
 	// Mock export command
 	setupExecMockForExporter(ctx, t, mockClient, expectedNodeName)
 
@@ -692,6 +718,23 @@ func setupPlatformDetectMockForExporter(
 
 	setupExecMockWithStdoutForExporter(ctx, t, mockClient, containerName,
 		[]string{"uname", "-m"}, "x86_64\n")
+}
+
+// setupEnsureImageContentMocks sets up mocks for the ensureImageContent calls.
+// Each image triggers a "ctr images pull --platform <platform>" exec inside the node.
+func setupEnsureImageContentMocks(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	containerName string,
+	images []string,
+) {
+	t.Helper()
+
+	for _, img := range images {
+		setupExecMockWithCmdForExporter(ctx, t, mockClient, containerName,
+			[]string{ctrCommand, "--namespace=k8s.io", "images", "pull", "--platform", "linux/amd64", img})
+	}
 }
 
 // setupExecMockForExporter is a helper to set up ContainerExec* mocks for simple cases.
