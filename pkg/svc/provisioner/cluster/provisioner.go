@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 )
@@ -64,4 +65,21 @@ type Updater interface {
 type ProviderAware interface {
 	// SetProvider sets the infrastructure provider for node operations.
 	SetProvider(p provider.Provider)
+}
+
+// KubeconfigRefresher is an optional interface for provisioners that can
+// refresh the kubeconfig for a running cluster from a remote source.
+// This is needed for remote providers (e.g., Omni) where the kubeconfig
+// is not persisted locally and must be fetched from the provider API.
+type KubeconfigRefresher interface {
+	// RefreshKubeconfig fetches and saves the kubeconfig for the named cluster.
+	RefreshKubeconfig(ctx context.Context, name string) error
+}
+
+// ComponentDetectorAware is an optional interface for provisioners that
+// accept a component detector for probing installed cluster components.
+type ComponentDetectorAware interface {
+	// SetComponentDetector sets the component detector used by GetCurrentConfig
+	// to return accurate live state instead of static defaults.
+	SetComponentDetector(d *detector.ComponentDetector)
 }
