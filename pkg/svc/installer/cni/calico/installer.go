@@ -70,6 +70,7 @@ func (c *Installer) Install(ctx context.Context) error {
 
 	needsStabilityCheck := c.distribution == v1alpha1.DistributionTalos ||
 		c.distribution == v1alpha1.DistributionK3s
+
 	err = c.RunAPIServerCheck(ctx, needsStabilityCheck, c.apiServerChecker)
 	if err != nil {
 		return fmt.Errorf("run API server check: %w", err)
