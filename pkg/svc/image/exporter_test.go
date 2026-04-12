@@ -840,7 +840,8 @@ func setupIndividualImageExportMocks(
 	execID2 := "exec-image1-success"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/nginx:latest"
+			return len(opts.Cmd) == 8 &&
+				opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/nginx:latest"
 		})).
 		Return(container.ExecCreateResponse{ID: execID2}, nil).Once()
 
@@ -856,7 +857,8 @@ func setupIndividualImageExportMocks(
 	execID3 := "exec-image2-fail"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/redis:alpine"
+			return len(opts.Cmd) == 8 &&
+				opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/redis:alpine"
 		})).
 		Return(container.ExecCreateResponse{ID: execID3}, nil).Once()
 
@@ -881,7 +883,8 @@ func setupReexportSuccessfulImageMock(
 	execID := "exec-reexport"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/nginx:latest"
+			return len(opts.Cmd) == 8 &&
+				opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/nginx:latest"
 		})).
 		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
 

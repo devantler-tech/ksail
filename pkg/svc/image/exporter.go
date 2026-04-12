@@ -147,6 +147,7 @@ func (e *Exporter) resolveImages(
 		for i, img := range opts.Images {
 			normalized[i] = NormalizeImageRef(img)
 		}
+
 		return normalized, nil
 	}
 
