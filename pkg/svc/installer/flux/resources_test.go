@@ -1074,9 +1074,11 @@ func TestEnsureDefaultResources_DiagnosticsIncludedOnTimeout(t *testing.T) {
 	defer restoreLoad()
 
 	// Mock diagnoseFluxPodFailures to return a canned diagnostic string.
-	restoreDiag := fluxinstaller.SetDiagnoseFluxPodFailures(func(_ context.Context, _ *rest.Config) string {
-		return "\nFailing pods in flux-system namespace:\n  " + wantDiagFragment
-	})
+	restoreDiag := fluxinstaller.SetDiagnoseFluxPodFailures(
+		func(_ context.Context, _ *rest.Config) string {
+			return "\nFailing pods in flux-system namespace:\n  " + wantDiagFragment
+		},
+	)
 	defer restoreDiag()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
