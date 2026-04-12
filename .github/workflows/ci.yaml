@@ -669,7 +669,7 @@ jobs:
   system-test-hetzner:
     name: "🧪 System Test (Hetzner/${{ matrix.init && 'init' || 'noinit' }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     environment: ci
@@ -766,7 +766,7 @@ jobs:
   system-test-omni:
     name: "🧪 System Test (Omni/${{ matrix.init && 'init' || 'noinit' }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
     if: (github.event_name == 'merge_group' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     environment: ci
