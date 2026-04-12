@@ -128,6 +128,7 @@ func SetDiagnoseFluxPodFailures(fn func(context.Context, *rest.Config) string) f
 		diagnoseFluxPodFailures = original
 	}
 }
+
 func ResolveAgeKey(sops v1alpha1.SOPS) (string, error) {
 	key, err := sopsutil.ResolveAgeKey(sops)
 	if err != nil {

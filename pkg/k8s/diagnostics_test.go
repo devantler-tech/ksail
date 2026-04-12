@@ -120,18 +120,24 @@ func TestDiagnosePodFailures(t *testing.T) {
 			name:       "pod with CrashLoopBackOff includes restart count (plural)",
 			namespaces: []string{"default"},
 			pods: []corev1.Pod{
-				makePod("crash-pod-restarts", "default", corev1.PodRunning, []corev1.ContainerStatus{
-					{
-						Ready: false,
-						State: corev1.ContainerState{
-							Waiting: &corev1.ContainerStateWaiting{
-								Reason: "CrashLoopBackOff",
+				makePod(
+					"crash-pod-restarts",
+					"default",
+					corev1.PodRunning,
+					[]corev1.ContainerStatus{
+						{
+							Ready: false,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: "CrashLoopBackOff",
+								},
 							},
+							Image:        "ghcr.io/fluxcd/notification-controller:v1.8.3",
+							RestartCount: 7,
 						},
-						Image:        "ghcr.io/fluxcd/notification-controller:v1.8.3",
-						RestartCount: 7,
 					},
-				}, nil),
+					nil,
+				),
 			},
 			wantContain: []string{
 				"crash-pod-restarts",
@@ -144,18 +150,24 @@ func TestDiagnosePodFailures(t *testing.T) {
 			name:       "pod with CrashLoopBackOff uses singular for exactly 1 restart",
 			namespaces: []string{"default"},
 			pods: []corev1.Pod{
-				makePod("crash-pod-one-restart", "default", corev1.PodRunning, []corev1.ContainerStatus{
-					{
-						Ready: false,
-						State: corev1.ContainerState{
-							Waiting: &corev1.ContainerStateWaiting{
-								Reason: "CrashLoopBackOff",
+				makePod(
+					"crash-pod-one-restart",
+					"default",
+					corev1.PodRunning,
+					[]corev1.ContainerStatus{
+						{
+							Ready: false,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: "CrashLoopBackOff",
+								},
 							},
+							Image:        "myapp:v1",
+							RestartCount: 1,
 						},
-						Image:        "myapp:v1",
-						RestartCount: 1,
 					},
-				}, nil),
+					nil,
+				),
 			},
 			wantContain: []string{"crash-pod-one-restart", "CrashLoopBackOff", "1 restart"},
 		},
@@ -181,18 +193,24 @@ func TestDiagnosePodFailures(t *testing.T) {
 			name:       "terminated container includes restart count (plural)",
 			namespaces: []string{"default"},
 			pods: []corev1.Pod{
-				makePod("terminated-restarts", "default", corev1.PodFailed, []corev1.ContainerStatus{
-					{
-						Ready: false,
-						State: corev1.ContainerState{
-							Terminated: &corev1.ContainerStateTerminated{
-								ExitCode: 2,
-								Reason:   "Error",
+				makePod(
+					"terminated-restarts",
+					"default",
+					corev1.PodFailed,
+					[]corev1.ContainerStatus{
+						{
+							Ready: false,
+							State: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									ExitCode: 2,
+									Reason:   "Error",
+								},
 							},
+							RestartCount: 3,
 						},
-						RestartCount: 3,
 					},
-				}, nil),
+					nil,
+				),
 			},
 			wantContain: []string{"terminated-restarts", "exit code 2", "3 restarts"},
 		},
@@ -200,18 +218,24 @@ func TestDiagnosePodFailures(t *testing.T) {
 			name:       "terminated container uses singular for exactly 1 restart",
 			namespaces: []string{"default"},
 			pods: []corev1.Pod{
-				makePod("terminated-one-restart", "default", corev1.PodFailed, []corev1.ContainerStatus{
-					{
-						Ready: false,
-						State: corev1.ContainerState{
-							Terminated: &corev1.ContainerStateTerminated{
-								ExitCode: 1,
-								Reason:   "Error",
+				makePod(
+					"terminated-one-restart",
+					"default",
+					corev1.PodFailed,
+					[]corev1.ContainerStatus{
+						{
+							Ready: false,
+							State: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									ExitCode: 1,
+									Reason:   "Error",
+								},
 							},
+							RestartCount: 1,
 						},
-						RestartCount: 1,
 					},
-				}, nil),
+					nil,
+				),
 			},
 			wantContain: []string{"terminated-one-restart", "exit code 1", "1 restart"},
 		},

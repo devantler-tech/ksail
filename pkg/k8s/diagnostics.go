@@ -97,7 +97,10 @@ func describePodFailure(pod *corev1.Pod) string {
 		if containerStatus.State.Waiting != nil && containerStatus.State.Waiting.Reason != "" {
 			return fmt.Sprintf(
 				"%s: init container %s: %s for %s",
-				pod.Name, containerStatus.Name, containerStatus.State.Waiting.Reason, containerStatus.Image,
+				pod.Name,
+				containerStatus.Name,
+				containerStatus.State.Waiting.Reason,
+				containerStatus.Image,
 			)
 		}
 	}
@@ -115,7 +118,12 @@ func describeContainerWaiting(podName string, containerStatus corev1.ContainerSt
 		return ""
 	}
 
-	desc := fmt.Sprintf("%s: %s for %s", podName, containerStatus.State.Waiting.Reason, containerStatus.Image)
+	desc := fmt.Sprintf(
+		"%s: %s for %s",
+		podName,
+		containerStatus.State.Waiting.Reason,
+		containerStatus.Image,
+	)
 	if containerStatus.RestartCount == 1 {
 		desc += " (1 restart)"
 	} else if containerStatus.RestartCount > 1 {
