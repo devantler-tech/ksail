@@ -212,3 +212,18 @@ func ExportSchemaCacheFileName(schemaURL string) string {
 func ExportDistributionToLabelScheme(distribution v1alpha1.Distribution) dockerprovider.LabelScheme {
 	return distributionToLabelScheme(distribution)
 }
+
+// ExportOutputPlain exposes outputPlain for testing.
+func ExportOutputPlain(cmd *cobra.Command, images []string) error {
+	return outputPlain(cmd, images, nil)
+}
+
+// ExportOutputJSON exposes outputJSON for testing.
+func ExportOutputJSON(cmd *cobra.Command, images []string) error {
+	return outputJSON(cmd, images, nil)
+}
+
+// ExportResolveSourceDir2 exposes resolveSourceDir for testing with additional parameters.
+func ExportResolveSourceDir2(cfg *v1alpha1.Cluster, pathFlag string) string {
+	return resolveSourceDir(cfg, pathFlag)
+}

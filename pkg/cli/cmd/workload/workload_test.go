@@ -2874,3 +2874,37 @@ func TestTopologicalSortKustomizations(t *testing.T) {
 		})
 	}
 }
+
+func TestOutputPlain(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	images := []string{"nginx:latest", "redis:7", "postgres:16"}
+	err := workload.ExportOutputPlain(cmd, images)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "nginx:latest")
+	assert.Contains(t, output, "redis:7")
+	assert.Contains(t, output, "postgres:16")
+}
+
+func TestOutputJSON(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	images := []string{"nginx:latest", "redis:7"}
+	err := workload.ExportOutputJSON(cmd, images)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "nginx:latest")
+	assert.Contains(t, output, "redis:7")
+	assert.Contains(t, output, "[")
+}
