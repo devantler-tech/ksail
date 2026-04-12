@@ -74,12 +74,10 @@ type setupParams struct {
 }
 
 // setupFluxCoreImpl is the injectable implementation of setupFluxCore, used by
-// EnsureDefaultResources and SetupInstance. Override in tests via SetSetupFluxCore.
+// EnsureDefaultResources and SetupInstance. Override in tests via SetSetupFluxCoreToNoop.
 //
 //nolint:gochecknoglobals // Allows mocking for tests
-var setupFluxCoreImpl = func(ctx context.Context, params setupParams) error {
-	return setupFluxCore(ctx, params)
-}
+var setupFluxCoreImpl = setupFluxCore
 
 // setupFluxCore performs the common Flux setup: secret creation, FluxInstance creation, and OCIRepository patching.
 func setupFluxCore(ctx context.Context, params setupParams) error {
