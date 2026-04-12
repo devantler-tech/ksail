@@ -316,6 +316,8 @@ func ResolveDesiredTag(clusterCfg *v1alpha1.Cluster) string {
 // diagnoseFluxPodFailures checks pods in the flux-system namespace and returns
 // a diagnostic summary of any failing pods. This helps identify issues like
 // CrashLoopBackOff in Flux controllers when FluxInstance readiness times out.
+//
+//nolint:gochecknoglobals // Allows mocking for tests
 var diagnoseFluxPodFailures = func(ctx context.Context, restConfig *rest.Config) string {
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {

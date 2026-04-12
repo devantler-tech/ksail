@@ -977,54 +977,54 @@ func TestWaitForFluxInstanceReady_ClientCreationError(t *testing.T) {
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
 func TestWaitForFluxReady_DiagnosticsIncludedOnTimeout(t *testing.T) {
-const wantDiag = "\nFailing pods in flux-system namespace:\n  source-controller: CrashLoopBackOff for ghcr.io/fluxcd/source-controller:v1.4.0 (3 restarts)"
+	const wantDiagFragment = "source-controller: CrashLoopBackOff"
 
-// Mock flux resources client: always return Ready=False so the call times out.
-restoreFlux := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
-return &mockFluxClient{
-getFunc: func(
-_ context.Context,
-_ client.ObjectKey,
-obj client.Object,
-_ ...client.GetOption,
-) error {
-instance, ok := obj.(*fluxinstaller.FluxInstance)
-require.True(t, ok, "expected FluxInstance type")
+	// Mock flux resources client: always return Ready=False so the call times out.
+	restoreFlux := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
+		return &mockFluxClient{
+			getFunc: func(
+				_ context.Context,
+				_ client.ObjectKey,
+				obj client.Object,
+				_ ...client.GetOption,
+			) error {
+				instance, ok := obj.(*fluxinstaller.FluxInstance)
+				require.True(t, ok, "expected FluxInstance type")
 
-instance.Status.Conditions = []metav1.Condition{
-{
-Type:    "Ready",
-Status:  metav1.ConditionFalse,
-Reason:  "HealthCheckFailed",
-Message: "source-controller unhealthy",
-},
-}
+				instance.Status.Conditions = []metav1.Condition{
+					{
+						Type:    "Ready",
+						Status:  metav1.ConditionFalse,
+						Reason:  "HealthCheckFailed",
+						Message: "source-controller unhealthy",
+					},
+				}
 
-return nil
-},
-}, nil
-})
-defer restoreFlux()
+				return nil
+			},
+		}, nil
+	})
+	defer restoreFlux()
 
-// Mock loadRESTConfig to return a dummy config without hitting the filesystem.
-restoreLoad := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
-return &rest.Config{}, nil
-})
-defer restoreLoad()
+	// Mock loadRESTConfig to return a dummy config without hitting the filesystem.
+	restoreLoad := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+		return &rest.Config{}, nil
+	})
+	defer restoreLoad()
 
-// Mock diagnoseFluxPodFailures to return a canned diagnostic string.
-restoreDiag := fluxinstaller.SetDiagnoseFluxPodFailures(func(_ context.Context, _ *rest.Config) string {
-return wantDiag
-})
-defer restoreDiag()
+	// Mock diagnoseFluxPodFailures to return a canned diagnostic string.
+	restoreDiag := fluxinstaller.SetDiagnoseFluxPodFailures(func(_ context.Context, _ *rest.Config) string {
+		return "\nFailing pods in flux-system namespace:\n  " + wantDiagFragment
+	})
+	defer restoreDiag()
 
-ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
-defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
 
-err := fluxinstaller.WaitForFluxReady(ctx, "")
+	err := fluxinstaller.WaitForFluxReady(ctx, "")
 
-require.Error(t, err)
-assert.Contains(t, err.Error(), "failed waiting for FluxInstance to be ready")
-assert.Contains(t, err.Error(), "source-controller")
-assert.Contains(t, err.Error(), "CrashLoopBackOff")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed waiting for FluxInstance to be ready")
+	assert.Contains(t, err.Error(), "source-controller")
+	assert.Contains(t, err.Error(), "CrashLoopBackOff")
 }

@@ -16,7 +16,7 @@ import (
 
 var errConnectionRefused = errors.New("connection refused")
 
-//nolint:funlen // Table-driven cases are verbose; keep assertions straightforward.
+//nolint:funlen,maintidx // Table-driven cases are verbose; keep assertions straightforward.
 func TestDiagnosePodFailures(t *testing.T) {
 	t.Parallel()
 
