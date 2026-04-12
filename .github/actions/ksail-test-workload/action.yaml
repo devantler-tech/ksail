@@ -104,11 +104,13 @@ runs:
     - name: 🧪 ksail workload install
       id: workload-install
       shell: bash
+      env:
+        TIMEOUT: ${{ inputs.workload-timeout }}
       run: |
         # Install a lightweight Helm chart to verify workload install works
         install_succeeded=false
         for attempt in 1 2 3; do
-          if ksail workload install ksail-install-test oci://ghcr.io/stefanprodan/charts/podinfo --version=6.7.1 --wait --timeout=120s; then
+          if ksail workload install ksail-install-test oci://ghcr.io/stefanprodan/charts/podinfo --version=6.7.1 --wait --timeout="$TIMEOUT"; then
             install_succeeded=true
             break
           fi
@@ -120,6 +122,46 @@ runs:
           exit 1
         fi
         echo "✅ workload install succeeded"
+
+    - name: 🧪 ksail workload install — verify
+      id: workload-install-verify
+      shell: bash
+      env:
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        # Discover deployments created by the Helm release.
+        # Note: podinfo chart does not set app.kubernetes.io/instance, so we
+        # discover by name pattern instead of label selector.
+        DEPLOYS=$(ksail workload get deployment -o name | grep "ksail-install-test" || true)
+        if [ -z "$DEPLOYS" ]; then
+          echo "❌ No deployment found for release ksail-install-test"
+          exit 1
+        fi
+
+        # Wait for each matched deployment individually
+        for DEPLOY in $DEPLOYS; do
+          echo "Waiting for $DEPLOY…"
+          ksail workload wait --for=condition=Available "$DEPLOY" --timeout="$TIMEOUT"
+          echo "✅ $DEPLOY is Available"
+        done
+
+        # Verify the Helm release secret exists
+        ksail workload get secret -l owner=helm,name=ksail-install-test
+        echo "✅ Helm release secret verified"
+
+    - name: 🧪 ksail workload install — cleanup
+      if: ${{ !failure() && steps.workload-install.outcome == 'success' }}
+      shell: bash
+      run: |
+        # Delete chart-managed resources by name pattern.
+        # Note: podinfo chart does not set app.kubernetes.io/instance, so we
+        # discover by name pattern instead of label selector.
+        for RES in $(ksail workload get all -o name | grep "ksail-install-test" || true); do
+          ksail workload delete "$RES" --ignore-not-found
+        done
+        # Delete the Helm release secret
+        ksail workload delete secret -l owner=helm,name=ksail-install-test --ignore-not-found
+        echo "✅ workload install cleanup complete"
 
     - name: 🧪 ksail workload apply
       id: workload-apply
@@ -169,7 +211,7 @@ runs:
         ksail workload delete deployment/"$WORKLOAD_NAME" --ignore-not-found
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
+      if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-install.outcome == 'failure' || steps.workload-install-verify.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-scale.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
