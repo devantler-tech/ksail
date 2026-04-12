@@ -732,8 +732,21 @@ func setupEnsureImageContentMocks(
 	t.Helper()
 
 	for _, img := range images {
-		setupExecMockWithCmdForExporter(ctx, t, mockClient, containerName,
-			[]string{ctrCommand, "--namespace=k8s.io", "images", "pull", "--platform", "linux/amd64", img})
+		setupExecMockWithCmdForExporter(
+			ctx,
+			t,
+			mockClient,
+			containerName,
+			[]string{
+				ctrCommand,
+				"--namespace=k8s.io",
+				"images",
+				"pull",
+				"--platform",
+				"linux/amd64",
+				img,
+			},
+		)
 	}
 }
 

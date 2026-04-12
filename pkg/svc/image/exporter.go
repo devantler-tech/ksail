@@ -333,6 +333,7 @@ func (e *Exporter) ensureImageContent(
 		_, _ = e.executor.ExecInContainer(ctx, nodeName, cmd)
 	}
 }
+
 // images that can be successfully exported, along with the list of failed images.
 func (e *Exporter) exportImagesOneByOne(
 	ctx context.Context,
