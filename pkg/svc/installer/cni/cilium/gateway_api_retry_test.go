@@ -1,4 +1,4 @@
-package ciliuminstaller
+package ciliuminstaller_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	ciliuminstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/cni/cilium"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,7 +51,7 @@ func TestFetchGatewayAPICRDsWithRetry_RetriesTransientHTTPStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	crds, err := fetchGatewayAPICRDsWithRetry(
+	crds, err := ciliuminstaller.FetchGatewayAPICRDsWithRetryForTest(
 		context.Background(),
 		server.URL,
 		time.Second,
@@ -75,7 +76,7 @@ func TestFetchGatewayAPICRDsWithRetry_DoesNotRetryNonRetryableStatus(t *testing.
 	}))
 	defer server.Close()
 
-	_, err := fetchGatewayAPICRDsWithRetry(
+	_, err := ciliuminstaller.FetchGatewayAPICRDsWithRetryForTest(
 		context.Background(),
 		server.URL,
 		time.Second,
