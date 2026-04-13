@@ -9,12 +9,14 @@ import (
 )
 
 // Run executes the test suite and only cleans snapshots after successful runs
-// outside CI, where rewrite-in-place cleanup would otherwise trip
-// source-overwrite protections.
+// when snapshot cleanup is explicitly enabled outside CI.
 func Run(m *testing.M, opts snaps.CleanOpts) int {
 	exitCode := m.Run()
 
-	if exitCode != 0 || os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+	if exitCode != 0 ||
+		!snapshotCleanupEnabled() ||
+		os.Getenv("CI") != "" ||
+		os.Getenv("GITHUB_ACTIONS") != "" {
 		return exitCode
 	}
 
@@ -26,4 +28,8 @@ func Run(m *testing.M, opts snaps.CleanOpts) int {
 	}
 
 	return exitCode
+}
+
+func snapshotCleanupEnabled() bool {
+	return os.Getenv("SNAPSHOT_CLEAN") == "1"
 }

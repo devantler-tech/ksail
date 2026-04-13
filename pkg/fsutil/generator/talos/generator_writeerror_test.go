@@ -2,6 +2,7 @@ package talosgenerator_test
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -76,6 +77,7 @@ func assertGenerateWriteError(
 
 	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: true})
 	require.Error(t, err)
+	require.ErrorIs(t, err, fs.ErrPermission, "expected permission-denied write failure")
 	assert.Contains(t, err.Error(), wantErrorSubstring)
 }
 

@@ -60,6 +60,8 @@ func TestGenerate_WriteError(t *testing.T) {
 
 	generator := kustomizationgenerator.NewGenerator()
 
+	// kustomizationgenerator writes directly to opts.Output, so make an
+	// intermediate parent path a file to force TryWriteFile to fail.
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(blockingPath, "subdir", "kustomization.yaml"),
 		Force:  true,

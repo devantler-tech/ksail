@@ -56,7 +56,7 @@ func FindEncryptedFiles(rootDir string, recursive bool) ([]string, error) {
 
 // isHiddenDir reports whether a directory entry is hidden (name starts with ".").
 func isHiddenDir(name string) bool {
-	return strings.HasPrefix(name, ".") && name != "."
+	return strings.HasPrefix(name, ".") && name != "." && name != ".."
 }
 
 func findEncryptedFilesRecursive(rootDir string) ([]string, error) {

@@ -57,7 +57,7 @@ func TestIsHiddenDir(t *testing.T) {
 		{name: "normal directory", dir: "config", want: false},
 		{name: "underscore directory", dir: "_internal", want: false},
 		{name: "current directory dot", dir: ".", want: false},
-		{name: "double dot", dir: "..", want: true},
+		{name: "double dot", dir: "..", want: false},
 		{name: "hidden with number", dir: ".ssh2", want: true},
 		{name: "empty string", dir: "", want: false},
 	}
