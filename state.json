@@ -1,7 +1,7 @@
 {
-  "last_run": "2026-04-12T12:26:00Z",
-  "last_run_id": "24306693896",
-  "issue_backlog_cursor": 3959,
+  "last_run": "2026-04-13T01:03:00Z",
+  "last_run_id": "24320886399",
+  "issue_backlog_cursor": 3982,
   "monthly_activity_issue": 3605,
   "domain_alternation": {
     "last_domain": "perf",
@@ -30,7 +30,8 @@
     "3942": "2026-04-12T01:02:00Z",
     "3936": "2026-04-12T01:02:00Z",
     "3912": "2026-04-12T12:26:00Z",
-    "3922": "2026-04-11T12:25:00Z"
+    "3922": "2026-04-11T12:25:00Z",
+    "3917": "2026-04-13T01:03:00Z"
   },
   "labelled_issues": {
     "3412": ["next"],
@@ -56,22 +57,11 @@
     "3950": ["ci"]
   },
   "open_prs": {
-    "3834": "refactor(installer): extract BuildSopsAgeSecret",
-    "3941": "fix: increase FluxInstance readiness timeout and add pod diagnostics",
-    "3945": "fix(installer): extend API server stability check to K3s/K3d",
-    "3952": "test(ci): add verification and cleanup for workload install E2E",
     "3956": "fix(chat): filter inherited COPILOT_GITHUB_TOKEN",
-    "3957": "test(e2e): add output validation for ksail cluster info",
-    "3958": "test(ci): add E2E coverage for workload export and import",
-    "3960": "fix: update reusable workflow callsites for naming refactor",
-    "3961": "ci: replace concurrency groups with turnstyle",
-    "pending-perf-configmanager": "perf(configmanager): remove redundant duplicate-detection map (branch: repo-assist/perf-viper-remove-redundant-map)"
+    "3970": "fix(image): normalize user-supplied image refs before ctr export",
+    "3974": "test: improve unit test coverage across 55+ packages",
+    "3981": "chore(deps): Bump github/gh-aw-actions (Dependabot)"
   },
   "nudged_prs": {},
-  "fix_attempts": {
-    "3922": {
-      "status": "pending",
-      "note": "PR creation deferred; perf PR created instead this run"
-    }
-  }
+  "fix_attempts": {}
 }
