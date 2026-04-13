@@ -99,9 +99,9 @@ func (e *Exporter) Export(
 		return err
 	}
 
-	var resolveImages []string
+	var requestedImages []string
 	if len(opts.Images) > 0 {
-		resolveImages = append(resolveImages, images...)
+		requestedImages = images
 	}
 
 	// Export images using ctr inside the node container
@@ -111,7 +111,7 @@ func (e *Exporter) Export(
 		opts.OutputPath,
 		images,
 		tmpPath,
-		resolveImages,
+		requestedImages,
 	)
 }
 
@@ -393,7 +393,7 @@ func (e *Exporter) exportImagesFromNode(
 	outputPath string,
 	images []string,
 	tmpBasePath string,
-	resolveImages []string,
+	requestedImages []string,
 ) error {
 	// Create a temporary file path inside the container
 	tmpPath := tmpBasePath + "/ksail-images-export.tar"
@@ -410,7 +410,7 @@ func (e *Exporter) exportImagesFromNode(
 		tmpPath,
 		platform,
 		images,
-		resolveImages,
+		requestedImages,
 	)
 	if exportErr != nil {
 		// Fall back to exporting images one-by-one, skipping failures
@@ -465,20 +465,20 @@ func (e *Exporter) tryExportImagesWithRepair(
 	tmpPath string,
 	platform string,
 	images []string,
-	resolveImages []string,
+	requestedImages []string,
 ) ([]string, error) {
 	exportErr := e.tryExportImages(ctx, nodeName, tmpPath, platform, images)
-	if exportErr == nil || len(resolveImages) == 0 || !isMissingContentError(exportErr) {
+	if exportErr == nil || len(requestedImages) == 0 || !isMissingContentError(exportErr) {
 		return images, exportErr
 	}
 
 	repairImages := mergeRepairImages(
-		e.resolveSpecifiedImages(ctx, nodeName, resolveImages),
-		resolveImages,
+		e.resolveSpecifiedImages(ctx, nodeName, requestedImages),
+		requestedImages,
 	)
 	e.refreshImageContent(ctx, nodeName, platform, repairImages)
 
-	refreshedImages := e.resolveSpecifiedImages(ctx, nodeName, resolveImages)
+	refreshedImages := e.resolveSpecifiedImages(ctx, nodeName, requestedImages)
 
 	return refreshedImages, e.tryExportImages(
 		ctx,
