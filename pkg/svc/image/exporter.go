@@ -378,7 +378,7 @@ func (e *Exporter) exportImagesOneByOne(
 		// Export failed — if the error indicates missing content blobs
 		// (e.g., manifest index not stored by CRI), pull the image to
 		// repopulate the content store, then retry export once.
-		if strings.Contains(err.Error(), "content digest not found") {
+		if strings.Contains(err.Error(), "content digest") && strings.Contains(err.Error(), "not found") {
 			e.ensureImageContent(ctx, nodeName, platform, image)
 
 			err = e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})

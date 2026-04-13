@@ -983,7 +983,7 @@ func setupRetryFailedImageExportMocks(
 ) {
 	t.Helper()
 
-	// Second image fails on first attempt with "content digest not found" error
+	// Second image fails on first attempt with "content digest ... not found" error
 	execID3 := "exec-image2-fail"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
@@ -995,7 +995,7 @@ func setupRetryFailedImageExportMocks(
 	mockClient.EXPECT().
 		ContainerExecAttach(ctx, execID3, container.ExecStartOptions{}).
 		Return(
-			mockDockerStreamResponse("", "ctr: content digest not found: sha256:abc"),
+			mockDockerStreamResponse("", "ctr: failed to get reader: content digest sha256:abc: not found"),
 			nil,
 		).
 		Once()
