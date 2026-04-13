@@ -3,11 +3,13 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
+	"net/netip"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v6/pkg/k8s"
 	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/docker/docker/api/types/container"
 )
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
@@ -128,6 +130,87 @@ func (p *Provisioner) ApplyNodeScalingChangesForTest(
 	result *clusterupdate.UpdateResult,
 ) error {
 	return p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
+}
+
+// DockerNodeNameForTest exposes dockerNodeName for unit testing.
+func DockerNodeNameForTest(clusterName, role string, index int) string {
+	return dockerNodeName(clusterName, role, index)
+}
+
+// TalosTypeFromRoleForTest exposes talosTypeFromRole for unit testing.
+func TalosTypeFromRoleForTest(role string) string {
+	return talosTypeFromRole(role)
+}
+
+// CalculateNodeIPForTest exposes calculateNodeIP for unit testing.
+func CalculateNodeIPForTest(
+	cidr netip.Prefix,
+	role string,
+	nodeIndex, cpCount int,
+) (netip.Addr, error) {
+	return calculateNodeIP(cidr, role, nodeIndex, cpCount)
+}
+
+// PreCalculateNodeSpecsForTest exposes preCalculateNodeSpecs for unit testing.
+// Returns node names and IPs as parallel slices (nodeSpec is unexported).
+func PreCalculateNodeSpecsForTest(
+	cidr netip.Prefix,
+	clusterName, role string,
+	nextIndex, count, cpCount int,
+) ([]string, []netip.Addr, error) {
+	specs, err := preCalculateNodeSpecs(cidr, clusterName, role, nextIndex, count, cpCount)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	names := make([]string, len(specs))
+
+	ips := make([]netip.Addr, len(specs))
+	for i, s := range specs {
+		names[i] = s.name
+		ips[i] = s.ip
+	}
+
+	return names, ips, nil
+}
+
+// RewriteKubeconfigEndpointForTest exposes rewriteKubeconfigEndpoint for unit testing.
+func RewriteKubeconfigEndpointForTest(kubeconfigBytes []byte, endpoint string) ([]byte, error) {
+	return rewriteKubeconfigEndpoint(kubeconfigBytes, endpoint)
+}
+
+// ApplyTalosDefaultsForTest exposes applyTalosDefaults for unit testing.
+func ApplyTalosDefaultsForTest(opts v1alpha1.OptionsTalos) v1alpha1.OptionsTalos {
+	return applyTalosDefaults(opts)
+}
+
+// ApplyHetznerDefaultsForTest exposes applyHetznerDefaults for unit testing.
+func ApplyHetznerDefaultsForTest(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner {
+	return applyHetznerDefaults(opts)
+}
+
+// RecordAppliedChangeForTest exposes recordAppliedChange for unit testing.
+func RecordAppliedChangeForTest(result *clusterupdate.UpdateResult, role, nodeName, action string) {
+	recordAppliedChange(result, role, nodeName, action)
+}
+
+// RecordFailedChangeForTest exposes recordFailedChange for unit testing.
+func RecordFailedChangeForTest(
+	result *clusterupdate.UpdateResult,
+	role, nodeName string,
+	err error,
+) {
+	recordFailedChange(result, role, nodeName, err)
+}
+
+// ContainerNameForTest exposes containerName for unit testing.
+func ContainerNameForTest(ctr container.Summary) string {
+	return containerName(ctr)
+}
+
+// NthIPInNetworkForTest exposes nthIPInNetwork for unit testing.
+func NthIPInNetworkForTest(prefix netip.Prefix, offset int) (netip.Addr, error) {
+	return nthIPInNetwork(prefix, offset)
 }
 
 // ExtractTagFromImageForTest exposes extractTagFromImage for unit testing.

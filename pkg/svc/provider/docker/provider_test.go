@@ -145,6 +145,49 @@ func TestProvider_ListNodes_Kind(t *testing.T) {
 	assert.Equal(t, "worker", nodes[1].Role)
 }
 
+func TestProvider_ListNodes_KindIgnoresMirrorHelpers(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := dockerclient.NewMockAPIClient(t)
+
+	client.EXPECT().
+		ContainerList(ctx, container.ListOptions{All: true}).
+		Return([]container.Summary{
+			{
+				ID:    "cp1",
+				Names: []string{"/" + testClusterName + "-control-plane"},
+				State: "running",
+			},
+			{
+				ID:    "mirror1",
+				Names: []string{"/" + testClusterName + "-docker.io"},
+				State: "running",
+			},
+			{
+				ID:    "mirror2",
+				Names: []string{"/" + testClusterName + "-quay.io"},
+				State: "running",
+			},
+			{
+				ID:    "w1",
+				Names: []string{"/" + testClusterName + "-worker"},
+				State: "running",
+			},
+		}, nil)
+
+	prov := docker.NewProvider(client, docker.LabelSchemeKind)
+
+	nodes, err := prov.ListNodes(ctx, testClusterName)
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+	assert.Equal(t, testClusterName+"-control-plane", nodes[0].Name)
+	assert.Equal(t, "control-plane", nodes[0].Role)
+	assert.Equal(t, testClusterName+"-worker", nodes[1].Name)
+	assert.Equal(t, "worker", nodes[1].Role)
+}
+
 func TestProvider_ListNodes_K3d(t *testing.T) {
 	t.Parallel()
 

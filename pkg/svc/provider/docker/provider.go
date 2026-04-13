@@ -257,25 +257,19 @@ func (p *Provider) listKindContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
-	// Kind uses container names with format: <cluster>-control-plane, <cluster>-worker, etc.
+	// Kind uses container names with format: <cluster>-control-plane, <cluster>-worker,
+	// etc. Mirror helper containers can share the same prefix, so keep only names that
+	// map back to the requested cluster via the Kind node naming rules.
 	containers, err := p.client.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	prefix := clusterName + "-"
-
 	var result []container.Summary
 
 	for _, ctr := range containers {
-		for _, name := range ctr.Names {
-			// Container names have leading "/"
-			name = strings.TrimPrefix(name, "/")
-			if strings.HasPrefix(name, prefix) {
-				result = append(result, ctr)
-
-				break
-			}
+		if p.extractClusterName(ctr) == clusterName {
+			result = append(result, ctr)
 		}
 	}
 
