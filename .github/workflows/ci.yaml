@@ -137,8 +137,7 @@ jobs:
 
   ci-go:
     name: ✅ Validate Go Project
-    needs: [changes]
-    if: github.event_name == 'push' && needs.changes.outputs.code == 'true'
+    if: github.event_name == 'push'
     uses: devantler-tech/reusable-workflows/.github/workflows/validate-go-project.yaml@c46f75962deb2dab6619de8a379b47b929f40d15 # v2.3.0
     permissions:
       contents: write
