@@ -65,12 +65,12 @@ func TestIsContextError(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
+	for index := range tests {
+		t.Run(tests[index].name, func(t *testing.T) {
 			t.Parallel()
 
-			result := reconciler.IsContextError(testCase.err)
-			assert.Equal(t, testCase.expected, result)
+			result := reconciler.IsContextError(tests[index].err)
+			assert.Equal(t, tests[index].expected, result)
 		})
 	}
 }
