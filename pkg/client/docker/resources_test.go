@@ -13,10 +13,7 @@ func TestGetConcreteDockerClient(t *testing.T) {
 
 	concreteClient, err := docker.GetConcreteDockerClient()
 	if err != nil {
-		// Docker may not be running in CI; verify the error is returned
-		assert.Nil(t, concreteClient)
-
-		return
+		t.Skipf("Docker unavailable: %v", err)
 	}
 
 	require.NotNil(t, concreteClient)

@@ -12,8 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const windowsGOOS = "windows"
-
 func TestEvalCanonicalPath(t *testing.T) {
 	t.Parallel()
 
@@ -44,14 +42,6 @@ func skipPermissionSensitivePathTest(t *testing.T) {
 
 	if currentUser.Uid == "0" {
 		t.Skip("running as root — permission checks are bypassed")
-	}
-}
-
-func skipWindowsSymlinkPrivilegeError(t *testing.T, err error) {
-	t.Helper()
-
-	if err != nil && runtime.GOOS == windowsGOOS && os.IsPermission(err) {
-		t.Skip("skipping symlink test on Windows: creating symlinks requires additional privileges")
 	}
 }
 

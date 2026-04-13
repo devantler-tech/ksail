@@ -83,7 +83,7 @@ func (d *sessionEventDispatcher) dispatch(
 }
 
 func (d *sessionEventDispatcher) handleSessionLifecycle(eventType copilot.SessionEventType) {
-	//nolint:exhaustive // Only message-producing event types are handled here.
+	//nolint:exhaustive // Only lifecycle event types relevant to ending or transitioning a stream are handled here.
 	switch eventType {
 	case copilot.SessionEventTypeSessionIdle:
 		d.eventChan <- streamEndMsg{}
