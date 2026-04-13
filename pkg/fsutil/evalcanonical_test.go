@@ -25,7 +25,12 @@ func nonExistentRootPath(t *testing.T, parts ...string) string {
 	t.Helper()
 
 	root := filepath.VolumeName(t.TempDir()) + string(filepath.Separator)
-	pathParts := append([]string{root, "ksail-nonexistent-root-abc123"}, parts...)
+	candidateRoot := filepath.Join(root, "ksail-nonexistent-root", filepath.Base(t.TempDir()))
+
+	_, err := os.Stat(candidateRoot)
+	require.ErrorIs(t, err, os.ErrNotExist)
+
+	pathParts := append([]string{candidateRoot}, parts...)
 
 	return filepath.Join(pathParts...)
 }
