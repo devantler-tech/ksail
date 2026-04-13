@@ -522,6 +522,13 @@ func TestExportMissingContentRetriesPullForExplicitImages(t *testing.T) {
 		ctx, t, mockClient, exportCmd,
 		"ctr: failed to get reader: content digest sha256:missing: not found",
 	)
+	setupKindExecFailWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
+		"ctr: pull failed",
+	)
 	setupExecMockWithCmdForExporter(
 		ctx, t, mockClient, kindExporterNodeName,
 		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
@@ -575,7 +582,7 @@ func TestExportMissingContentReresolvesExplicitImagesAfterRepairPull(t *testing.
 		t,
 		mockClient,
 		kindExporterNodeName,
-		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
 	)
 	setupExecMockWithStdoutForExporter(
 		ctx, t, mockClient, kindExporterNodeName,

@@ -89,9 +89,14 @@ func (e *Exporter) Export(
 		return err
 	}
 
-	var repairImages []string
+	var (
+		repairImages  []string
+		resolveImages []string
+	)
+
 	if len(opts.Images) > 0 {
-		repairImages = normalizeImageRefs(opts.Images)
+		resolveImages = normalizeImageRefs(opts.Images)
+		repairImages = mergeRepairImages(images, resolveImages)
 	}
 
 	// Export images using ctr inside the node container
@@ -102,6 +107,7 @@ func (e *Exporter) Export(
 		images,
 		tmpPath,
 		repairImages,
+		resolveImages,
 	)
 }
 
@@ -327,6 +333,29 @@ func normalizeImageRefs(imageRefs []string) []string {
 	return normalized
 }
 
+func mergeRepairImages(primary []string, secondary []string) []string {
+	covered := make(map[string]struct{}, len(primary)+len(secondary))
+	merged := make([]string, 0, len(primary)+len(secondary))
+
+	add := func(imageRefs []string) {
+		for _, imageRef := range imageRefs {
+			if _, exists := covered[imageRef]; exists {
+				continue
+			}
+
+			merged = append(merged, imageRef)
+			for _, candidate := range repairPullCandidates(imageRef) {
+				covered[candidate] = struct{}{}
+			}
+		}
+	}
+
+	add(primary)
+	add(secondary)
+
+	return merged
+}
+
 // exportImagesFromNode exports images from a node's containerd to the host filesystem.
 func (e *Exporter) exportImagesFromNode(
 	ctx context.Context,
@@ -335,6 +364,7 @@ func (e *Exporter) exportImagesFromNode(
 	images []string,
 	tmpBasePath string,
 	repairImages []string,
+	resolveImages []string,
 ) error {
 	// Create a temporary file path inside the container
 	tmpPath := tmpBasePath + "/ksail-images-export.tar"
@@ -352,6 +382,7 @@ func (e *Exporter) exportImagesFromNode(
 		platform,
 		images,
 		repairImages,
+		resolveImages,
 	)
 	if exportErr != nil {
 		err = e.fallbackExportImages(
@@ -386,6 +417,7 @@ func (e *Exporter) tryExportImagesWithRepair(
 	platform string,
 	images []string,
 	repairImages []string,
+	resolveImages []string,
 ) ([]string, error) {
 	exportErr := e.tryExportImages(ctx, nodeName, tmpPath, platform, images)
 	if exportErr == nil || len(repairImages) == 0 || !isMissingContentError(exportErr) {
@@ -397,7 +429,10 @@ func (e *Exporter) tryExportImagesWithRepair(
 		return images, exportErr
 	}
 
-	refreshedImages := e.resolveSpecifiedImages(ctx, nodeName, repairImages)
+	refreshedImages := images
+	if len(resolveImages) > 0 {
+		refreshedImages = e.resolveSpecifiedImages(ctx, nodeName, resolveImages)
+	}
 
 	return refreshedImages, e.tryExportImages(
 		ctx,
