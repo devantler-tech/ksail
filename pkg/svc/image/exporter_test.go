@@ -77,6 +77,40 @@ func setupWhoamiExplicitExportTest(
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 }
 
+func expectRepairPullSuccess(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	imageRef string,
+) {
+	t.Helper()
+
+	setupExecMockWithCmdForExporter(
+		ctx, t, mockClient, kindExporterNodeName,
+		buildCtrPullCommand("linux/amd64", imageRef),
+	)
+	setupExecMockWithCmdForExporter(
+		ctx, t, mockClient, kindExporterNodeName,
+		buildCtrContentFetchCommand("linux/amd64", imageRef),
+	)
+}
+
+func expectRepairPullFailure(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	imageRef string,
+	stderr string,
+) {
+	t.Helper()
+
+	setupKindExecFailWithCmdForExporter(
+		ctx, t, mockClient,
+		buildCtrPullCommand("linux/amd64", imageRef),
+		stderr,
+	)
+}
+
 func TestNewExporter(t *testing.T) {
 	t.Parallel()
 
@@ -557,17 +591,10 @@ func TestExportMissingContentRetriesPullForExplicitImages(t *testing.T) {
 		ctx, t, mockClient, exportCmd,
 		"ctr: failed to get reader: content digest sha256:missing: not found",
 	)
-	setupKindExecFailWithCmdForExporter(
-		ctx,
-		t,
-		mockClient,
-		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
-		"ctr: pull failed",
+	expectRepairPullFailure(
+		ctx, t, mockClient, "docker.io/traefik/whoami:v1.10@sha256:abc123", "ctr: pull failed",
 	)
-	setupExecMockWithCmdForExporter(
-		ctx, t, mockClient, kindExporterNodeName,
-		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
-	)
+	expectRepairPullSuccess(ctx, t, mockClient, "docker.io/traefik/whoami:v1.10")
 	setupExecMockWithStdoutForExporter(
 		ctx, t, mockClient, kindExporterNodeName,
 		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
@@ -606,20 +633,8 @@ func TestExportMissingContentUsesFallbackRepairCandidateAfterDigestPullSucceeds(
 		exportCmd,
 		"ctr: failed to get reader: content digest sha256:missing: not found",
 	)
-	setupExecMockWithCmdForExporter(
-		ctx,
-		t,
-		mockClient,
-		kindExporterNodeName,
-		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
-	)
-	setupExecMockWithCmdForExporter(
-		ctx,
-		t,
-		mockClient,
-		kindExporterNodeName,
-		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
-	)
+	expectRepairPullSuccess(ctx, t, mockClient, "docker.io/traefik/whoami:v1.10@sha256:abc123")
+	expectRepairPullSuccess(ctx, t, mockClient, "docker.io/traefik/whoami:v1.10")
 	setupExecMockWithStdoutForExporter(
 		ctx, t, mockClient, kindExporterNodeName,
 		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
@@ -658,20 +673,8 @@ func TestExportMissingContentReresolvesExplicitImagesAfterRepairPull(t *testing.
 		exportCmd,
 		"ctr: failed to get reader: content digest sha256:missing: not found",
 	)
-	setupExecMockWithCmdForExporter(
-		ctx,
-		t,
-		mockClient,
-		kindExporterNodeName,
-		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
-	)
-	setupExecMockWithCmdForExporter(
-		ctx,
-		t,
-		mockClient,
-		kindExporterNodeName,
-		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
-	)
+	expectRepairPullSuccess(ctx, t, mockClient, "docker.io/traefik/whoami:v1.10@sha256:abc123")
+	expectRepairPullSuccess(ctx, t, mockClient, "docker.io/traefik/whoami:v1.10")
 	setupExecMockWithStdoutForExporter(
 		ctx, t, mockClient, kindExporterNodeName,
 		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
@@ -930,6 +933,18 @@ func buildCtrPullCommand(platform string, imageRef string) []string {
 		"--namespace=k8s.io",
 		"images",
 		"pull",
+		"--platform",
+		platform,
+		imageRef,
+	}
+}
+
+func buildCtrContentFetchCommand(platform string, imageRef string) []string {
+	return []string{
+		ctrCommand,
+		"--namespace=k8s.io",
+		"content",
+		"fetch",
 		"--platform",
 		platform,
 		imageRef,
@@ -1235,19 +1250,9 @@ func setupFallbackRepairRetryMocks(
 	missingContentErr := "ctr: failed to get reader: content digest sha256:missing: not found"
 
 	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, missingContentErr)
-	setupExecMockWithCmdForExporter(
-		ctx,
-		t,
-		mockClient,
-		kindExporterNodeName,
-		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
-	)
-	setupKindExecFailWithCmdForExporter(
-		ctx,
-		t,
-		mockClient,
-		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
-		"ctr: pull failed",
+	expectRepairPullSuccess(ctx, t, mockClient, "docker.io/traefik/whoami:v1.10@sha256:abc123")
+	expectRepairPullFailure(
+		ctx, t, mockClient, "docker.io/traefik/whoami:v1.10", "ctr: pull failed",
 	)
 	setupExecMockWithStdoutForExporter(
 		ctx, t, mockClient, kindExporterNodeName,
@@ -1256,20 +1261,10 @@ func setupFallbackRepairRetryMocks(
 	)
 	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, missingContentErr)
 	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, missingContentErr)
-	setupKindExecFailWithCmdForExporter(
-		ctx,
-		t,
-		mockClient,
-		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
-		"ctr: pull failed",
+	expectRepairPullFailure(
+		ctx, t, mockClient, "docker.io/traefik/whoami:v1.10@sha256:abc123", "ctr: pull failed",
 	)
-	setupExecMockWithCmdForExporter(
-		ctx,
-		t,
-		mockClient,
-		kindExporterNodeName,
-		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
-	)
+	expectRepairPullSuccess(ctx, t, mockClient, "docker.io/traefik/whoami:v1.10")
 
 	tagExportCmd := buildKindCtrExportCommand("docker.io/traefik/whoami:v1.10")
 	setupExecMockWithCmdForExporter(ctx, t, mockClient, kindExporterNodeName, tagExportCmd)

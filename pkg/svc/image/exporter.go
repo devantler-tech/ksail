@@ -540,15 +540,24 @@ func (e *Exporter) refreshSingleImageContent(
 			nodeName,
 			buildCtrPullCommand(platform, candidate),
 		)
-		if err == nil {
-			if successfulRef == "" || preferBaseRef(successfulRef, candidate) {
-				successfulRef = candidate
-			}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", candidate, err))
 
 			continue
 		}
 
-		errs = append(errs, fmt.Errorf("%s: %w", candidate, err))
+		// Kind nodes commonly run containerd with discard_unpacked_layers=true, so a
+		// pull can succeed while export still fails until the missing blobs are fetched
+		// back into the content store.
+		_, _ = e.executor.ExecInContainer(
+			ctx,
+			nodeName,
+			buildCtrContentFetchCommand(platform, candidate),
+		)
+
+		if successfulRef == "" || preferBaseRef(successfulRef, candidate) {
+			successfulRef = candidate
+		}
 	}
 
 	if successfulRef != "" {
@@ -564,6 +573,18 @@ func buildCtrPullCommand(platform string, imageRef string) []string {
 		"--namespace=k8s.io",
 		"images",
 		"pull",
+		"--platform",
+		platform,
+		imageRef,
+	}
+}
+
+func buildCtrContentFetchCommand(platform string, imageRef string) []string {
+	return []string{
+		"ctr",
+		"--namespace=k8s.io",
+		"content",
+		"fetch",
 		"--platform",
 		platform,
 		imageRef,
