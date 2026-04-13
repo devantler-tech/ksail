@@ -995,7 +995,10 @@ func setupRetryFailedImageExportMocks(
 	mockClient.EXPECT().
 		ContainerExecAttach(ctx, execID3, container.ExecStartOptions{}).
 		Return(
-			mockDockerStreamResponse("", "ctr: failed to get reader: content digest sha256:abc: not found"),
+			mockDockerStreamResponse(
+				"",
+				"ctr: failed to get reader: content digest sha256:abc: not found",
+			),
 			nil,
 		).
 		Once()
