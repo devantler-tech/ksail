@@ -11,6 +11,44 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type skipExistingFile struct {
+	relativePath string
+	content      string
+}
+
+func assertGenerateSkipExistingPreservesContent(
+	t *testing.T,
+	config *talosgenerator.Config,
+	files ...skipExistingFile,
+) {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+
+	_, err := gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: true})
+	require.NoError(t, err)
+
+	for _, file := range files {
+		patchPath := filepath.Join(tempDir, file.relativePath)
+
+		err = os.WriteFile(patchPath, []byte(file.content), 0o600)
+		require.NoError(t, err)
+	}
+
+	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
+	require.NoError(t, err)
+
+	for _, file := range files {
+		patchPath := filepath.Join(tempDir, file.relativePath)
+
+		//nolint:gosec // Test reads a file created in its own temp directory.
+		content, err := os.ReadFile(patchPath)
+		require.NoError(t, err)
+		assert.Equal(t, file.content, string(content))
+	}
+}
+
 // TestGenerate_NilConfig verifies that a nil config returns ErrConfigRequired.
 func TestGenerate_NilConfig(t *testing.T) {
 	t.Parallel()
@@ -49,32 +87,14 @@ func TestGenerate_EmptyPatchesDir(t *testing.T) {
 func TestGenerate_MirrorRegistriesSkipExisting(t *testing.T) {
 	t.Parallel()
 
-	tempDir := t.TempDir()
-	gen := talosgenerator.NewGenerator()
-
-	config := &talosgenerator.Config{
+	assertGenerateSkipExistingPreservesContent(t, &talosgenerator.Config{
 		PatchesDir:       "talos",
 		WorkerNodes:      1,
 		MirrorRegistries: []string{"docker.io=http://mirror.local:5000"},
-	}
-
-	// First generate with force to create the file
-	_, err := gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: true})
-	require.NoError(t, err)
-
-	// Overwrite with custom content
-	patchPath := filepath.Join(tempDir, "talos", "cluster", "mirror-registries.yaml")
-	err = os.WriteFile(patchPath, []byte("custom-content"), 0o600)
-	require.NoError(t, err)
-
-	// Generate again without force — should not overwrite
-	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
-	require.NoError(t, err)
-
-	//nolint:gosec // Test reads a file created in its own temp directory.
-	content, err := os.ReadFile(patchPath)
-	require.NoError(t, err)
-	assert.Equal(t, "custom-content", string(content))
+	}, skipExistingFile{
+		relativePath: filepath.Join("talos", "cluster", "mirror-registries.yaml"),
+		content:      "custom-content",
+	})
 }
 
 // TestGenerate_AllowSchedulingSkipExisting verifies that the allow-scheduling
@@ -82,36 +102,13 @@ func TestGenerate_MirrorRegistriesSkipExisting(t *testing.T) {
 func TestGenerate_AllowSchedulingSkipExisting(t *testing.T) {
 	t.Parallel()
 
-	tempDir := t.TempDir()
-	gen := talosgenerator.NewGenerator()
-
-	config := &talosgenerator.Config{
+	assertGenerateSkipExistingPreservesContent(t, &talosgenerator.Config{
 		PatchesDir:  "talos",
 		WorkerNodes: 0, // triggers allow-scheduling patch
-	}
-
-	// First generate with force
-	_, err := gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: true})
-	require.NoError(t, err)
-
-	// Overwrite with custom content
-	patchPath := filepath.Join(
-		tempDir,
-		"talos",
-		"cluster",
-		"allow-scheduling-on-control-planes.yaml",
-	)
-	err = os.WriteFile(patchPath, []byte("original"), 0o600)
-	require.NoError(t, err)
-
-	// Generate again without force
-	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
-	require.NoError(t, err)
-
-	//nolint:gosec // Test reads a file created in its own temp directory.
-	content, err := os.ReadFile(patchPath)
-	require.NoError(t, err)
-	assert.Equal(t, "original", string(content))
+	}, skipExistingFile{
+		relativePath: filepath.Join("talos", "cluster", "allow-scheduling-on-control-planes.yaml"),
+		content:      "original",
+	})
 }
 
 // TestGenerate_DisableCNISkipExisting verifies that the disable-cni patch is
@@ -119,32 +116,14 @@ func TestGenerate_AllowSchedulingSkipExisting(t *testing.T) {
 func TestGenerate_DisableCNISkipExisting(t *testing.T) {
 	t.Parallel()
 
-	tempDir := t.TempDir()
-	gen := talosgenerator.NewGenerator()
-
-	config := &talosgenerator.Config{
+	assertGenerateSkipExistingPreservesContent(t, &talosgenerator.Config{
 		PatchesDir:        "talos",
 		WorkerNodes:       1,
 		DisableDefaultCNI: true,
-	}
-
-	// First generate with force
-	_, err := gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: true})
-	require.NoError(t, err)
-
-	// Overwrite with custom content
-	patchPath := filepath.Join(tempDir, "talos", "cluster", "disable-default-cni.yaml")
-	err = os.WriteFile(patchPath, []byte("original"), 0o600)
-	require.NoError(t, err)
-
-	// Generate again without force
-	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
-	require.NoError(t, err)
-
-	//nolint:gosec // Test reads a file created in its own temp directory.
-	content, err := os.ReadFile(patchPath)
-	require.NoError(t, err)
-	assert.Equal(t, "original", string(content))
+	}, skipExistingFile{
+		relativePath: filepath.Join("talos", "cluster", "disable-default-cni.yaml"),
+		content:      "original",
+	})
 }
 
 // TestGenerate_KubeletCertRotationSkipExisting verifies that kubelet cert
@@ -152,42 +131,20 @@ func TestGenerate_DisableCNISkipExisting(t *testing.T) {
 func TestGenerate_KubeletCertRotationSkipExisting(t *testing.T) {
 	t.Parallel()
 
-	tempDir := t.TempDir()
-	gen := talosgenerator.NewGenerator()
-
-	config := &talosgenerator.Config{
+	assertGenerateSkipExistingPreservesContent(t, &talosgenerator.Config{
 		PatchesDir:                "talos",
 		WorkerNodes:               1,
 		EnableKubeletCertRotation: true,
-	}
-
-	// First generate with force
-	_, err := gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: true})
-	require.NoError(t, err)
-
-	// Overwrite with custom content
-	certPath := filepath.Join(tempDir, "talos", "cluster", "kubelet-cert-rotation.yaml")
-	csrPath := filepath.Join(tempDir, "talos", "cluster", "kubelet-csr-approver.yaml")
-
-	err = os.WriteFile(certPath, []byte("original-cert"), 0o600)
-	require.NoError(t, err)
-
-	err = os.WriteFile(csrPath, []byte("original-csr"), 0o600)
-	require.NoError(t, err)
-
-	// Generate again without force
-	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
-	require.NoError(t, err)
-
-	//nolint:gosec // Test reads a file created in its own temp directory.
-	certContent, err := os.ReadFile(certPath)
-	require.NoError(t, err)
-	assert.Equal(t, "original-cert", string(certContent))
-
-	//nolint:gosec // Test reads a file created in its own temp directory.
-	csrContent, err := os.ReadFile(csrPath)
-	require.NoError(t, err)
-	assert.Equal(t, "original-csr", string(csrContent))
+	},
+		skipExistingFile{
+			relativePath: filepath.Join("talos", "cluster", "kubelet-cert-rotation.yaml"),
+			content:      "original-cert",
+		},
+		skipExistingFile{
+			relativePath: filepath.Join("talos", "cluster", "kubelet-csr-approver.yaml"),
+			content:      "original-csr",
+		},
+	)
 }
 
 // TestGenerate_ClusterNameSkipExisting verifies that the cluster name patch is
@@ -195,32 +152,14 @@ func TestGenerate_KubeletCertRotationSkipExisting(t *testing.T) {
 func TestGenerate_ClusterNameSkipExisting(t *testing.T) {
 	t.Parallel()
 
-	tempDir := t.TempDir()
-	gen := talosgenerator.NewGenerator()
-
-	config := &talosgenerator.Config{
+	assertGenerateSkipExistingPreservesContent(t, &talosgenerator.Config{
 		PatchesDir:  "talos",
 		WorkerNodes: 1,
 		ClusterName: "my-cluster",
-	}
-
-	// First generate with force
-	_, err := gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: true})
-	require.NoError(t, err)
-
-	// Overwrite
-	patchPath := filepath.Join(tempDir, "talos", "cluster", "cluster-name.yaml")
-	err = os.WriteFile(patchPath, []byte("original"), 0o600)
-	require.NoError(t, err)
-
-	// Generate again without force
-	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
-	require.NoError(t, err)
-
-	//nolint:gosec // Test reads a file created in its own temp directory.
-	content, err := os.ReadFile(patchPath)
-	require.NoError(t, err)
-	assert.Equal(t, "original", string(content))
+	}, skipExistingFile{
+		relativePath: filepath.Join("talos", "cluster", "cluster-name.yaml"),
+		content:      "original",
+	})
 }
 
 // TestGenerate_ImageVerificationSkipExisting verifies that the image verification
@@ -228,32 +167,14 @@ func TestGenerate_ClusterNameSkipExisting(t *testing.T) {
 func TestGenerate_ImageVerificationSkipExisting(t *testing.T) {
 	t.Parallel()
 
-	tempDir := t.TempDir()
-	gen := talosgenerator.NewGenerator()
-
-	config := &talosgenerator.Config{
+	assertGenerateSkipExistingPreservesContent(t, &talosgenerator.Config{
 		PatchesDir:              "talos",
 		WorkerNodes:             1,
 		EnableImageVerification: true,
-	}
-
-	// First generate with force
-	_, err := gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: true})
-	require.NoError(t, err)
-
-	// Overwrite
-	patchPath := filepath.Join(tempDir, "talos", "cluster", "image-verification.yaml")
-	err = os.WriteFile(patchPath, []byte("original"), 0o600)
-	require.NoError(t, err)
-
-	// Generate again without force
-	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: false})
-	require.NoError(t, err)
-
-	//nolint:gosec // Test reads a file created in its own temp directory.
-	content, err := os.ReadFile(patchPath)
-	require.NoError(t, err)
-	assert.Equal(t, "original", string(content))
+	}, skipExistingFile{
+		relativePath: filepath.Join("talos", "cluster", "image-verification.yaml"),
+		content:      "original",
+	})
 }
 
 // TestGenerate_GitkeepExistingNoForce verifies that .gitkeep files are not
