@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,6 +18,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+//nolint:gochecknoglobals // Serializes t.Chdir-based config discovery tests in this package.
+var hookConfigDiscoveryMu sync.Mutex
 
 // TestAtomicWriteFile exercises the atomic file write logic.
 //
@@ -273,6 +277,10 @@ func TestJwtExpiry(t *testing.T) {
 func TestMaybeRefreshOmniKubeconfig_NoConfig(t *testing.T) {
 	// Run in a temp directory with no ksail.yaml
 	tmpDir := t.TempDir()
+
+	hookConfigDiscoveryMu.Lock()
+	t.Cleanup(hookConfigDiscoveryMu.Unlock)
+
 	t.Chdir(tmpDir)
 
 	cmd := &cobra.Command{}

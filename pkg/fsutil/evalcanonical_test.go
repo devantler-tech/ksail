@@ -24,10 +24,12 @@ func TestEvalCanonicalPath(t *testing.T) {
 func nonExistentRootPath(t *testing.T, parts ...string) string {
 	t.Helper()
 
-	root := filepath.VolumeName(t.TempDir()) + string(filepath.Separator)
-	candidateRoot := filepath.Join(root, "ksail-nonexistent-root", filepath.Base(t.TempDir()))
+	candidateRoot := filepath.Join(t.TempDir(), "ksail-nonexistent-root")
 
-	_, err := os.Stat(candidateRoot)
+	err := os.RemoveAll(candidateRoot)
+	require.NoError(t, err)
+
+	_, err = os.Stat(candidateRoot)
 	require.ErrorIs(t, err, os.ErrNotExist)
 
 	pathParts := append([]string{candidateRoot}, parts...)
