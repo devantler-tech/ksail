@@ -179,6 +179,8 @@ func TestExportWithSpecificImages(t *testing.T) {
 			},
 		}, nil)
 
+	setupEmptyImageListMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
@@ -186,7 +188,7 @@ func TestExportWithSpecificImages(t *testing.T) {
 	exportCmd := []string{
 		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
-		"/root/ksail-images-export.tar", "nginx:latest",
+		"/root/ksail-images-export.tar", "docker.io/library/nginx:latest",
 	}
 	setupExecMockWithCmdForExporter(
 		ctx, t, mockClient, "my-cluster-control-plane", exportCmd,
@@ -220,6 +222,256 @@ func TestExportWithSpecificImages(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestExportWithSpecificImagesResolvesLocalDigestRef(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
+			},
+		}, nil)
+
+	setupExecMockWithStdoutForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
+	)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	exportCmd := []string{
+		ctrCommand, "--namespace=k8s.io", "images", "export",
+		"--platform", "linux/amd64",
+		"/root/ksail-images-export.tar", "docker.io/traefik/whoami:v1.10@sha256:abc123",
+	}
+	setupExecMockWithCmdForExporter(
+		ctx, t, mockClient, "my-cluster-control-plane", exportCmd,
+	)
+
+	tarContent := createExportTar(t, []byte("fake image data"))
+	mockClient.EXPECT().
+		CopyFromContainer(ctx, "my-cluster-control-plane", "/root/ksail-images-export.tar").
+		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
+
+	setupExecMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{
+			OutputPath: outputPath,
+			Images:     []string{"traefik/whoami:v1.10"},
+		},
+	)
+
+	require.NoError(t, err)
+}
+
+func TestExportWithDigestPinnedImageResolvesMatchingLocalRef(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
+			},
+		}, nil)
+
+	setupExecMockWithStdoutForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
+	)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	exportCmd := []string{
+		ctrCommand, "--namespace=k8s.io", "images", "export",
+		"--platform", "linux/amd64",
+		"/root/ksail-images-export.tar", "docker.io/traefik/whoami:v1.10@sha256:abc123",
+	}
+	setupExecMockWithCmdForExporter(
+		ctx, t, mockClient, "my-cluster-control-plane", exportCmd,
+	)
+
+	tarContent := createExportTar(t, []byte("fake image data"))
+	mockClient.EXPECT().
+		CopyFromContainer(ctx, "my-cluster-control-plane", "/root/ksail-images-export.tar").
+		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
+
+	setupExecMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{
+			OutputPath: outputPath,
+			Images:     []string{"docker.io/traefik/whoami@sha256:abc123"},
+		},
+	)
+
+	require.NoError(t, err)
+}
+
+func TestExportWithDigestPinnedImageDoesNotMatchDifferentRepository(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
+			},
+		}, nil)
+
+	setupExecMockWithStdoutForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/library/busybox:latest@sha256:abc123\n",
+	)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	exportCmd := []string{
+		ctrCommand, "--namespace=k8s.io", "images", "export",
+		"--platform", "linux/amd64",
+		"/root/ksail-images-export.tar", "docker.io/traefik/whoami@sha256:abc123",
+	}
+	setupExecMockWithCmdForExporter(
+		ctx, t, mockClient, "my-cluster-control-plane", exportCmd,
+	)
+
+	tarContent := createExportTar(t, []byte("fake image data"))
+	mockClient.EXPECT().
+		CopyFromContainer(ctx, "my-cluster-control-plane", "/root/ksail-images-export.tar").
+		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
+
+	setupExecMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{
+			OutputPath: outputPath,
+			Images:     []string{"docker.io/traefik/whoami@sha256:abc123"},
+		},
+	)
+
+	require.NoError(t, err)
+}
+
+func TestExportWithSpecificImagesFallsBackWhenLocalImageListFails(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
+			},
+		}, nil)
+
+	execID := "exec-list-fail"
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, "my-cluster-control-plane", mock.MatchedBy(func(opts container.ExecOptions) bool {
+			expectedCmd := []string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"}
+			if len(opts.Cmd) != len(expectedCmd) {
+				return false
+			}
+
+			for index := range opts.Cmd {
+				if opts.Cmd[index] != expectedCmd[index] {
+					return false
+				}
+			}
+
+			return true
+		})).
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", "ctr: list failed"), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID).
+		Return(container.ExecInspect{ExitCode: 1}, nil).Once()
+
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	exportCmd := []string{
+		ctrCommand, "--namespace=k8s.io", "images", "export",
+		"--platform", "linux/amd64",
+		"/root/ksail-images-export.tar", "docker.io/traefik/whoami:v1.10",
+	}
+	setupExecMockWithCmdForExporter(
+		ctx, t, mockClient, "my-cluster-control-plane", exportCmd,
+	)
+
+	tarContent := createExportTar(t, []byte("fake image data"))
+	mockClient.EXPECT().
+		CopyFromContainer(ctx, "my-cluster-control-plane", "/root/ksail-images-export.tar").
+		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
+
+	setupExecMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{
+			OutputPath: outputPath,
+			Images:     []string{"traefik/whoami:v1.10"},
+		},
+	)
+
+	require.NoError(t, err)
+}
+
 func TestExportK3sDistribution(t *testing.T) {
 	t.Parallel()
 
@@ -241,6 +493,8 @@ func TestExportK3sDistribution(t *testing.T) {
 			},
 		}, nil)
 
+	setupEmptyImageListMockForExporter(ctx, t, mockClient, "k3d-my-cluster-server-0")
+
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "k3d-my-cluster-server-0")
 
@@ -248,7 +502,7 @@ func TestExportK3sDistribution(t *testing.T) {
 	k3dExportCmd := []string{
 		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
-		"/tmp/ksail-images-export.tar", "nginx:latest",
+		"/tmp/ksail-images-export.tar", "docker.io/library/nginx:latest",
 	}
 	setupExecMockWithCmdForExporter(
 		ctx, t, mockClient, "k3d-my-cluster-server-0", k3dExportCmd,
@@ -296,6 +550,8 @@ func TestExportEmptyProvider(t *testing.T) {
 			},
 		}, nil)
 
+	setupEmptyImageListMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
@@ -313,7 +569,7 @@ func TestExportEmptyProvider(t *testing.T) {
 			"--platform",
 			"linux/amd64",
 			"/root/ksail-images-export.tar",
-			"nginx:latest",
+			"docker.io/library/nginx:latest",
 		},
 	)
 
@@ -352,6 +608,8 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 			},
 		}, nil)
 
+	setupEmptyImageListMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
@@ -369,7 +627,7 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 			"--platform",
 			"linux/amd64",
 			"/root/ksail-images-export.tar",
-			"nginx:latest",
+			"docker.io/library/nginx:latest",
 		},
 	)
 
@@ -411,22 +669,47 @@ func TestExportExecFails(t *testing.T) {
 			},
 		}, nil)
 
+	setupEmptyImageListMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
 	// Mock exec for export - fails with non-zero exit code
-	execID := "exec-fail"
-	mockClient.EXPECT().
-		ContainerExecCreate(ctx, "my-cluster-control-plane", mock.Anything).
-		Return(container.ExecCreateResponse{ID: execID}, nil)
-
-	mockClient.EXPECT().
-		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
-		Return(mockDockerStreamResponse("", "ctr: export failed"), nil)
-
-	mockClient.EXPECT().
-		ContainerExecInspect(ctx, execID).
-		Return(container.ExecInspect{ExitCode: 1}, nil)
+	setupExecFailWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{
+			ctrCommand,
+			"--namespace=k8s.io",
+			"images",
+			"export",
+			"--platform",
+			"linux/amd64",
+			"/root/ksail-images-export.tar",
+			"docker.io/library/nginx:latest",
+		},
+		"ctr: export failed",
+	)
+	setupExecFailWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{
+			ctrCommand,
+			"--namespace=k8s.io",
+			"images",
+			"export",
+			"--platform",
+			"linux/amd64",
+			"/root/ksail-images-export.tar",
+			"docker.io/library/nginx:latest",
+		},
+		"ctr: export failed",
+	)
+	setupExecMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
 	exporter := image.NewExporter(mockClient)
 	err := exporter.Export(
@@ -442,6 +725,87 @@ func TestExportExecFails(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ctr export failed")
+}
+
+func TestExportMissingContentRetriesPullForExplicitImages(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
+			},
+		}, nil)
+
+	setupExecMockWithStdoutForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
+	)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	exportCmd := []string{
+		ctrCommand, "--namespace=k8s.io", "images", "export",
+		"--platform", "linux/amd64",
+		"/root/ksail-images-export.tar", "docker.io/traefik/whoami:v1.10@sha256:abc123",
+	}
+	setupExecFailWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		exportCmd,
+		"ctr: failed to get reader: content digest sha256:missing: not found",
+	)
+	setupExecMockWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{
+			ctrCommand,
+			"--namespace=k8s.io",
+			"images",
+			"pull",
+			"--platform",
+			"linux/amd64",
+			"docker.io/traefik/whoami:v1.10@sha256:abc123",
+		},
+	)
+	setupExecMockWithCmdForExporter(
+		ctx, t, mockClient, "my-cluster-control-plane", exportCmd,
+	)
+
+	tarContent := createExportTar(t, []byte("fake image data"))
+	mockClient.EXPECT().
+		CopyFromContainer(ctx, "my-cluster-control-plane", "/root/ksail-images-export.tar").
+		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
+
+	setupExecMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{
+			OutputPath: outputPath,
+			Images:     []string{"traefik/whoami:v1.10"},
+		},
+	)
+
+	require.NoError(t, err)
 }
 
 func TestExportFallbackReportsFailedImages(t *testing.T) {
@@ -469,6 +833,8 @@ func TestExportFallbackReportsFailedImages(t *testing.T) {
 				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
 			},
 		}, nil)
+
+	setupEmptyImageListMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 	setupFallbackExportMocks(ctx, t, mockClient, "my-cluster-control-plane")
@@ -507,7 +873,7 @@ func TestExportFallbackReportsFailedImages(t *testing.T) {
 	// Verify stderr contains warning about failed image
 	stderrOutput := stderrBuf.String()
 	assert.Contains(t, stderrOutput, "warning: failed to export 1 image(s)")
-	assert.Contains(t, stderrOutput, "redis:alpine")
+	assert.Contains(t, stderrOutput, "docker.io/library/redis:alpine")
 }
 
 func TestExportListImagesFiltersDigests(t *testing.T) {
@@ -628,6 +994,8 @@ func runNodeSelectionTest(
 
 	mockClient.EXPECT().ContainerList(ctx, mock.Anything).Return(nodes, nil)
 
+	setupEmptyImageListMockForExporter(ctx, t, mockClient, expectedNodeName)
+
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, expectedNodeName)
 
@@ -659,6 +1027,18 @@ func setupPlatformDetectMockForExporter(
 
 	setupExecMockWithStdoutForExporter(ctx, t, mockClient, containerName,
 		[]string{"uname", "-m"}, "x86_64\n")
+}
+
+func setupEmptyImageListMockForExporter(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	containerName string,
+) {
+	t.Helper()
+
+	setupExecMockWithStdoutForExporter(ctx, t, mockClient, containerName,
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"}, "")
 }
 
 // setupExecMockForExporter is a helper to set up ContainerExec* mocks for simple cases.
@@ -720,6 +1100,43 @@ func setupExecMockWithCmdForExporter(
 	mockClient.EXPECT().
 		ContainerExecInspect(ctx, execID).
 		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
+}
+
+func setupExecFailWithCmdForExporter(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	containerName string,
+	expectedCmd []string,
+	stderr string,
+) {
+	t.Helper()
+
+	execID := "exec-" + containerName + "-cmd-fail"
+
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, containerName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+			if len(opts.Cmd) != len(expectedCmd) {
+				return false
+			}
+
+			for index := range opts.Cmd {
+				if opts.Cmd[index] != expectedCmd[index] {
+					return false
+				}
+			}
+
+			return true
+		})).
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", stderr), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID).
+		Return(container.ExecInspect{ExitCode: 1}, nil).Once()
 }
 
 // setupExecMockWithStdoutForExporter sets up exec mocks with stdout output.
@@ -840,7 +1257,7 @@ func setupIndividualImageExportMocks(
 	execID2 := "exec-image1-success"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "nginx:latest"
+			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/nginx:latest"
 		})).
 		Return(container.ExecCreateResponse{ID: execID2}, nil).Once()
 
@@ -856,7 +1273,7 @@ func setupIndividualImageExportMocks(
 	execID3 := "exec-image2-fail"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "redis:alpine"
+			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/redis:alpine"
 		})).
 		Return(container.ExecCreateResponse{ID: execID3}, nil).Once()
 
@@ -881,7 +1298,7 @@ func setupReexportSuccessfulImageMock(
 	execID := "exec-reexport"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "nginx:latest"
+			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "docker.io/library/nginx:latest"
 		})).
 		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
 

@@ -89,8 +89,20 @@ func (e *Exporter) Export(
 		return err
 	}
 
+	var repairImages []string
+	if len(opts.Images) > 0 {
+		repairImages = append(repairImages, images...)
+	}
+
 	// Export images using ctr inside the node container
-	return e.exportImagesFromNode(ctx, nodeName, opts.OutputPath, images, tmpPath)
+	return e.exportImagesFromNode(
+		ctx,
+		nodeName,
+		opts.OutputPath,
+		images,
+		tmpPath,
+		repairImages,
+	)
 }
 
 // findExportNode finds a suitable node for export operations.
@@ -140,7 +152,7 @@ func (e *Exporter) resolveImages(
 	opts ExportOptions,
 ) ([]string, error) {
 	if len(opts.Images) > 0 {
-		return opts.Images, nil
+		return e.resolveSpecifiedImages(ctx, nodeName, opts.Images), nil
 	}
 
 	images, err := e.listImagesInNode(ctx, nodeName)
@@ -153,6 +165,78 @@ func (e *Exporter) resolveImages(
 	}
 
 	return images, nil
+}
+
+// resolveSpecifiedImages normalizes user-provided image refs and, when possible,
+// resolves them to the exact refs already present in the node's image store.
+// This keeps shorthand refs working while preferring the precise local tag@digest
+// references returned by `ctr images list -q`.
+func (e *Exporter) resolveSpecifiedImages(
+	ctx context.Context,
+	nodeName string,
+	requestedImages []string,
+) []string {
+	resolved := make([]string, 0, len(requestedImages))
+	normalizedRequested := normalizeImageRefs(requestedImages)
+
+	localImages, err := e.listImagesInNode(ctx, nodeName)
+	if err != nil {
+		return normalizedRequested
+	}
+
+	byExactRef := make(map[string]string, len(localImages))
+	byBaseRef := make(map[string]string, len(localImages))
+	byRepoDigestRef := make(map[string]string, len(localImages))
+
+	for _, imageRef := range localImages {
+		byExactRef[imageRef] = imageRef
+
+		baseRef := stripDigestFromImageRef(imageRef)
+		if _, exists := byBaseRef[baseRef]; !exists {
+			byBaseRef[baseRef] = imageRef
+		}
+
+		normalizedBaseRef := NormalizeImageRef(baseRef)
+		if _, exists := byBaseRef[normalizedBaseRef]; !exists {
+			byBaseRef[normalizedBaseRef] = imageRef
+		}
+
+		digest := imageDigest(imageRef)
+		if digest != "" {
+			repoDigestRef := imageRepository(imageRef) + "@" + digest
+			if _, exists := byRepoDigestRef[repoDigestRef]; !exists {
+				byRepoDigestRef[repoDigestRef] = imageRef
+			}
+		}
+	}
+
+	for _, imageRef := range normalizedRequested {
+		if exactRef, exists := byExactRef[imageRef]; exists {
+			resolved = append(resolved, exactRef)
+
+			continue
+		}
+
+		if localRef, exists := byBaseRef[imageRef]; exists {
+			resolved = append(resolved, localRef)
+
+			continue
+		}
+
+		digest := imageDigest(imageRef)
+		if digest != "" {
+			repoDigestRef := imageRepository(imageRef) + "@" + digest
+			if localRef, exists := byRepoDigestRef[repoDigestRef]; exists {
+				resolved = append(resolved, localRef)
+
+				continue
+			}
+		}
+
+		resolved = append(resolved, imageRef)
+	}
+
+	return resolved
 }
 
 // listImagesInNode lists all images in the containerd of a node.
@@ -183,6 +267,45 @@ func (e *Exporter) listImagesInNode(
 	return images, nil
 }
 
+func stripDigestFromImageRef(imageRef string) string {
+	baseRef, _, found := strings.Cut(imageRef, "@")
+	if found {
+		return baseRef
+	}
+
+	return imageRef
+}
+
+func imageDigest(imageRef string) string {
+	_, digest, found := strings.Cut(imageRef, "@")
+	if found {
+		return digest
+	}
+
+	return ""
+}
+
+func imageRepository(imageRef string) string {
+	baseRef := stripDigestFromImageRef(imageRef)
+	lastSlash := strings.LastIndex(baseRef, "/")
+	lastColon := strings.LastIndex(baseRef, ":")
+	if lastColon > lastSlash {
+		return baseRef[:lastColon]
+	}
+
+	return baseRef
+}
+
+func normalizeImageRefs(imageRefs []string) []string {
+	normalized := make([]string, 0, len(imageRefs))
+
+	for _, imageRef := range imageRefs {
+		normalized = append(normalized, NormalizeImageRef(imageRef))
+	}
+
+	return normalized
+}
+
 // exportImagesFromNode exports images from a node's containerd to the host filesystem.
 func (e *Exporter) exportImagesFromNode(
 	ctx context.Context,
@@ -190,6 +313,7 @@ func (e *Exporter) exportImagesFromNode(
 	outputPath string,
 	images []string,
 	tmpBasePath string,
+	repairImages []string,
 ) error {
 	// Create a temporary file path inside the container
 	tmpPath := tmpBasePath + "/ksail-images-export.tar"
@@ -202,6 +326,16 @@ func (e *Exporter) exportImagesFromNode(
 
 	// Try exporting all images at once first (most efficient if it works)
 	err = e.tryExportImages(ctx, nodeName, tmpPath, platform, images)
+	if err != nil && len(repairImages) > 0 && isMissingContentError(err) {
+		if refreshErr := e.refreshImageContent(
+			ctx,
+			nodeName,
+			platform,
+			repairImages,
+		); refreshErr == nil {
+			err = e.tryExportImages(ctx, nodeName, tmpPath, platform, images)
+		}
+	}
 	if err != nil {
 		// Fall back to exporting images one-by-one, skipping failures
 		// This handles cases where some images have incomplete manifests
@@ -247,6 +381,49 @@ func (e *Exporter) exportImagesFromNode(
 	_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
 
 	return nil
+}
+
+func (e *Exporter) refreshImageContent(
+	ctx context.Context,
+	nodeName string,
+	platform string,
+	imageRefs []string,
+) error {
+	var errs []error
+
+	for _, imageRef := range imageRefs {
+		cmd := []string{
+			"ctr",
+			"--namespace=k8s.io",
+			"images",
+			"pull",
+			"--platform",
+			platform,
+			imageRef,
+		}
+
+		_, err := e.executor.ExecInContainer(ctx, nodeName, cmd)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", imageRef, err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+
+	return nil
+}
+
+func isMissingContentError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errText := err.Error()
+
+	return strings.Contains(errText, "failed to get reader: content digest") &&
+		strings.Contains(errText, "not found")
 }
 
 // tryExportImages attempts to export a set of images using ctr.
