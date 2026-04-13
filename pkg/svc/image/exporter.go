@@ -91,7 +91,7 @@ func (e *Exporter) Export(
 
 	var repairImages []string
 	if len(opts.Images) > 0 {
-		repairImages = append(repairImages, images...)
+		repairImages = normalizeImageRefs(opts.Images)
 	}
 
 	// Export images using ctr inside the node container
@@ -345,7 +345,7 @@ func (e *Exporter) exportImagesFromNode(
 		return fmt.Errorf("failed to detect node platform: %w", err)
 	}
 
-	exportErr := e.tryExportImagesWithRepair(
+	exportImages, exportErr := e.tryExportImagesWithRepair(
 		ctx,
 		nodeName,
 		tmpPath,
@@ -359,7 +359,7 @@ func (e *Exporter) exportImagesFromNode(
 			nodeName,
 			tmpPath,
 			platform,
-			images,
+			exportImages,
 			exportErr,
 		)
 		if err != nil {
@@ -386,18 +386,26 @@ func (e *Exporter) tryExportImagesWithRepair(
 	platform string,
 	images []string,
 	repairImages []string,
-) error {
+) ([]string, error) {
 	exportErr := e.tryExportImages(ctx, nodeName, tmpPath, platform, images)
 	if exportErr == nil || len(repairImages) == 0 || !isMissingContentError(exportErr) {
-		return exportErr
+		return images, exportErr
 	}
 
 	refreshErr := e.refreshImageContent(ctx, nodeName, platform, repairImages)
 	if refreshErr != nil {
-		return exportErr
+		return images, exportErr
 	}
 
-	return e.tryExportImages(ctx, nodeName, tmpPath, platform, images)
+	refreshedImages := e.resolveSpecifiedImages(ctx, nodeName, repairImages)
+
+	return refreshedImages, e.tryExportImages(
+		ctx,
+		nodeName,
+		tmpPath,
+		platform,
+		refreshedImages,
+	)
 }
 
 func (e *Exporter) fallbackExportImages(
