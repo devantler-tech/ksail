@@ -225,7 +225,8 @@ func TestImportSuccessVanilla(t *testing.T) {
 	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o600)
 	require.NoError(t, err)
 
-	// Mock ContainerList - returns both control-plane and worker
+	// Mock ContainerList - include helper mirror containers, but only import to
+	// actual Kind nodes with containerd.
 	mockClient.EXPECT().
 		ContainerList(ctx, mock.Anything).
 		Return([]container.Summary{
@@ -234,8 +235,16 @@ func TestImportSuccessVanilla(t *testing.T) {
 				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
 			},
 			{
+				Names:  []string{"/my-cluster-docker.io"},
+				Labels: map[string]string{},
+			},
+			{
 				Names:  []string{"/my-cluster-worker"},
 				Labels: map[string]string{"io.x-k8s.kind.role": "worker"},
+			},
+			{
+				Names:  []string{"/my-cluster-ghcr.io"},
+				Labels: map[string]string{},
 			},
 		}, nil)
 

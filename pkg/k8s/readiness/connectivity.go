@@ -30,7 +30,7 @@ var errImagePullFailure = errors.New("connectivity check pod image pull failed")
 const (
 	connectivityPodName  = "ksail-api-connectivity-check"
 	connectivityPodNS    = "default"
-	connectivityPodImage = "busybox:stable"
+	connectivityPodImage = "busybox:1.36.1"
 
 	// connectivityPodTimeout is the maximum time to wait for a single
 	// connectivity test pod to complete before retrying.

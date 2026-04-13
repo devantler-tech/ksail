@@ -135,6 +135,18 @@ jobs:
               - 'vsce/package*.json'
               - '.github/workflows/ci.yaml'
 
+  ci-go:
+    name: ✅ Validate Go Project
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: devantler-tech/reusable-workflows/.github/workflows/validate-go-project.yaml@c46f75962deb2dab6619de8a379b47b929f40d15 # v2.3.0
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+
   build-artifact:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
@@ -1084,6 +1096,7 @@ jobs:
       [
         rate-limit-gate,
         changes,
+        ci-go,
         build-artifact,
         generate-schema,
         generate-docs,
@@ -1116,6 +1129,7 @@ jobs:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
             ${{ needs.changes.result }}
+            ${{ needs.ci-go.result }}
             ${{ needs.build-artifact.result }}
             ${{ needs.generate-schema.result }}
             ${{ needs.generate-docs.result }}
