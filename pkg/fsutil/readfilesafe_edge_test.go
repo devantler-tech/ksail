@@ -65,6 +65,7 @@ func TestReadFileSafe_NestedSymlinkInsideBase(t *testing.T) {
 	// Create a symlink inside base that points to the real file (also inside base)
 	linkPath := filepath.Join(subDir, "link.txt")
 	err = os.Symlink(realFile, linkPath)
+	skipWindowsSymlinkPrivilegeError(t, err)
 	require.NoError(t, err)
 
 	// This should succeed because both the link and the target are inside base

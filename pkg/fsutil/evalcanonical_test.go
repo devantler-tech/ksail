@@ -45,6 +45,14 @@ func skipPermissionSensitivePathTest(t *testing.T) {
 	}
 }
 
+func skipWindowsSymlinkPrivilegeError(t *testing.T, err error) {
+	t.Helper()
+
+	if err != nil && runtime.GOOS == "windows" && os.IsPermission(err) {
+		t.Skip("skipping symlink test on Windows: creating symlinks requires additional privileges")
+	}
+}
+
 func testEvalCanonicalPathExisting(t *testing.T) {
 	t.Helper()
 	t.Parallel()
@@ -92,6 +100,7 @@ func testEvalCanonicalPathSymlink(t *testing.T) {
 
 	linkPath := filepath.Join(tempDir, "link.txt")
 	err = os.Symlink(realFile, linkPath)
+	skipWindowsSymlinkPrivilegeError(t, err)
 	require.NoError(t, err, "Symlink")
 
 	result, err := fsutil.EvalCanonicalPath(linkPath)
@@ -129,6 +138,9 @@ func TestEvalCanonicalPath_PermissionDenied(t *testing.T) {
 	restrictedDir := filepath.Join(tempDir, "restricted")
 	err := os.Mkdir(restrictedDir, 0o000)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.Chmod(restrictedDir, 0o700)
+	})
 
 	// Try to resolve a path inside the restricted directory
 	// This should fail with a permission error (not NotExist)

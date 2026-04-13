@@ -2757,6 +2757,7 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			// Intentionally not parallel: this test exercises config discovery via t.Chdir.
 			var out bytes.Buffer
 
 			tempDir := t.TempDir()

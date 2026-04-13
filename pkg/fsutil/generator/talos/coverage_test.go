@@ -280,11 +280,10 @@ func TestGenerator_Generate_AllConditionalPatches(t *testing.T) {
 	}
 }
 
-// TestGenerator_Generate_EmptyOutput verifies default output directory.
-func TestGenerator_Generate_EmptyOutput(t *testing.T) {
+// TestGenerator_Generate_ConfiguredOutput verifies the configured output directory is used.
+func TestGenerator_Generate_ConfiguredOutput(t *testing.T) {
 	t.Parallel()
 
-	// Change to temp dir to test empty output
 	tempDir := t.TempDir()
 	gen := talosgenerator.NewGenerator()
 
