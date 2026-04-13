@@ -327,9 +327,13 @@ func runInfraPhase(
 }
 
 // runGitOpsPhase installs Phase 2 GitOps engines (ArgoCD, Flux) after
-// infrastructure components are ready. If infrastructure was installed,
-// a stability check ensures API server connectivity has recovered from
-// webhook/CRD registrations before GitOps operators start.
+// infrastructure components are ready. A stability check always runs before
+// GitOps operators start, both to recover from webhook/CRD registrations after
+// infrastructure installation and to guard against distributions (e.g. K3s/K3d)
+// that report cluster creation success before the API server is fully ready.
+// Without this guard, Helm's cluster reachability check can fail with
+// "the server is currently unable to handle the request" when no infrastructure
+// components are installed and the cluster was just created.
 func runGitOpsPhase(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -339,13 +343,14 @@ func runGitOpsPhase(
 	infraTasks []notify.ProgressTask,
 	gitopsTasks []notify.ProgressTask,
 ) error {
+	stabilityErrFmt := "cluster not stable before GitOps installation: %w"
 	if len(infraTasks) > 0 {
-		err := waitForClusterStability(ctx, clusterCfg)
-		if err != nil {
-			return fmt.Errorf(
-				"cluster not stable after infrastructure installation: %w", err,
-			)
-		}
+		stabilityErrFmt = "cluster not stable after infrastructure installation: %w"
+	}
+
+	err := waitForClusterStability(ctx, clusterCfg)
+	if err != nil {
+		return fmt.Errorf(stabilityErrFmt, err)
 	}
 
 	gitopsGroup := notify.NewProgressGroup(
@@ -356,7 +361,7 @@ func runGitOpsPhase(
 		notify.WithTimer(tmr),
 	)
 
-	err := gitopsGroup.Run(ctx, gitopsTasks...)
+	err = gitopsGroup.Run(ctx, gitopsTasks...)
 	if err != nil {
 		return fmt.Errorf("failed to install GitOps engines: %w", err)
 	}
