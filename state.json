@@ -1,7 +1,7 @@
 {
-  "last_run": "2026-04-13T01:03:00Z",
-  "last_run_id": "24320886399",
-  "issue_backlog_cursor": 3982,
+  "last_run": "2026-04-13T12:40:00Z",
+  "last_run_id": "24343759969",
+  "issue_backlog_cursor": 3989,
   "monthly_activity_issue": 3605,
   "domain_alternation": {
     "last_domain": "perf",
@@ -34,33 +34,129 @@
     "3917": "2026-04-13T01:03:00Z"
   },
   "labelled_issues": {
-    "3412": ["next"],
-    "3413": ["next"],
-    "3414": ["next"],
-    "3415": ["next"],
-    "3605": ["repo-assist"],
-    "3654": ["triaged"],
-    "3656": ["triaged"],
-    "3657": ["triaged"],
-    "3659": ["triaged"],
-    "3719": ["triaged"],
-    "3729": ["triaged"],
-    "3730": ["triaged"],
-    "3731": ["triaged"],
-    "3732": ["triaged"],
-    "3733": ["triaged"],
-    "3783": ["ci"],
-    "3784": ["ci"],
-    "3785": ["ci"],
-    "3912": ["bug", "blocked"],
-    "3922": ["bug"],
-    "3950": ["ci"]
+    "3412": [
+      "next"
+    ],
+    "3413": [
+      "next"
+    ],
+    "3414": [
+      "next"
+    ],
+    "3415": [
+      "next"
+    ],
+    "3605": [
+      "repo-assist"
+    ],
+    "3654": [
+      "triaged"
+    ],
+    "3656": [
+      "triaged"
+    ],
+    "3657": [
+      "triaged"
+    ],
+    "3659": [
+      "triaged"
+    ],
+    "3719": [
+      "triaged"
+    ],
+    "3729": [
+      "triaged"
+    ],
+    "3730": [
+      "triaged"
+    ],
+    "3731": [
+      "triaged"
+    ],
+    "3732": [
+      "triaged"
+    ],
+    "3733": [
+      "triaged"
+    ],
+    "3783": [
+      "ci"
+    ],
+    "3784": [
+      "ci"
+    ],
+    "3785": [
+      "ci"
+    ],
+    "3912": [
+      "bug",
+      "blocked"
+    ],
+    "3922": [
+      "bug"
+    ],
+    "3950": [
+      "ci"
+    ],
+    "3986": [
+      "automation",
+      "ci",
+      "bug"
+    ],
+    "3985": [
+      "automation",
+      "ci"
+    ],
+    "3984": [
+      "automation"
+    ],
+    "3983": [
+      "automation"
+    ],
+    "3982": [
+      "automation",
+      "ci"
+    ],
+    "3977": [
+      "automation",
+      "ci"
+    ],
+    "3976": [
+      "automation",
+      "ci"
+    ],
+    "3973": [
+      "automation",
+      "ci",
+      "bug"
+    ],
+    "3966": [
+      "automation",
+      "ci"
+    ],
+    "3964": [
+      "automation",
+      "ci",
+      "bug"
+    ],
+    "3909": [
+      "blocked"
+    ],
+    "3908": [
+      "blocked"
+    ]
   },
   "open_prs": {
     "3956": "fix(chat): filter inherited COPILOT_GITHUB_TOKEN",
     "3970": "fix(image): normalize user-supplied image refs before ctr export",
     "3974": "test: improve unit test coverage across 55+ packages",
-    "3981": "chore(deps): Bump github/gh-aw-actions (Dependabot)"
+    "3981": "chore(deps): Bump github/gh-aw-actions (Dependabot)",
+    "fix-gitops-stability-k3s-no-infra": {
+      "branch": "repo-assist/fix-gitops-stability-k3s-no-infra",
+      "title": "fix(setup): always wait for API server stability before GitOps installation",
+      "fixes": 3973,
+      "created": "2026-04-13T12:40:00Z"
+    }
   },
   "nudged_prs": {},
   "fix_attempts": {}
