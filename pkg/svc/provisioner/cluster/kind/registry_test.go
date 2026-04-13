@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	snapshottest "github.com/devantler-tech/ksail/v6/internal/testutil/snapshottest"
 	docker "github.com/devantler-tech/ksail/v6/pkg/client/docker"
 	kindprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kind"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
@@ -18,7 +19,6 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/errdefs"
-	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -33,12 +33,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	v := m.Run()
-
-	// After all tests have run, clean up snapshots
-	_, _ = snaps.Clean(m)
-
-	os.Exit(v)
+	os.Exit(snapshottest.Run(m))
 }
 
 // setupTestEnvironment creates a standard test environment with mock client, context, and buffer.
