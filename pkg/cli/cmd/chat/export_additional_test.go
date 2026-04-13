@@ -11,8 +11,8 @@ func GetIsExitCommand() func(string) bool {
 	return isExitCommand
 }
 
-// GetGetToolName returns the getToolName function for testing.
-func GetGetToolName() func(copilot.SessionEvent) string {
+// GetToolNameFn returns the getToolName function for testing.
+func GetToolNameFn() func(copilot.SessionEvent) string {
 	return getToolName
 }
 
@@ -21,8 +21,8 @@ func GetFormatArgsMap() func(map[string]any) string {
 	return formatArgsMap
 }
 
-// GetGetToolArgs returns the getToolArgs function for testing.
-func GetGetToolArgs() func(copilot.SessionEvent) string {
+// GetToolArgsFn returns the getToolArgs function for testing.
+func GetToolArgsFn() func(copilot.SessionEvent) string {
 	return getToolArgs
 }
 

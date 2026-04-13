@@ -9,6 +9,7 @@ import (
 )
 
 func TestGetConcreteDockerClient_DefaultEnv(t *testing.T) {
+	// Not parallel because it uses environment variables.
 	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_TLS_VERIFY", "")
 	t.Setenv("DOCKER_CERT_PATH", "")
@@ -21,6 +22,7 @@ func TestGetConcreteDockerClient_DefaultEnv(t *testing.T) {
 }
 
 func TestGetConcreteDockerClient_InvalidEnv(t *testing.T) {
+	// Not parallel because it uses environment variables.
 	t.Setenv("DOCKER_HOST", "://")
 	t.Setenv("DOCKER_TLS_VERIFY", "")
 	t.Setenv("DOCKER_CERT_PATH", "")

@@ -13,7 +13,7 @@ import (
 func Run(m *testing.M, opts snaps.CleanOpts) int {
 	exitCode := m.Run()
 
-	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+	if exitCode != 0 || os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
 		return exitCode
 	}
 

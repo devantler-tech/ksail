@@ -52,7 +52,7 @@ func TestIsExitCommand(t *testing.T) {
 func TestGetToolName(t *testing.T) {
 	t.Parallel()
 
-	getToolName := chat.GetGetToolName()
+	getToolName := chat.GetToolNameFn()
 
 	t.Run("returns tool name when present", func(t *testing.T) {
 		t.Parallel()
@@ -114,7 +114,7 @@ func TestFormatArgsMap(t *testing.T) {
 func TestGetToolArgs(t *testing.T) {
 	t.Parallel()
 
-	getToolArgs := chat.GetGetToolArgs()
+	getToolArgs := chat.GetToolArgsFn()
 
 	t.Run("nil arguments returns empty", func(t *testing.T) {
 		t.Parallel()
