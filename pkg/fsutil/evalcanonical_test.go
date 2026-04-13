@@ -2,7 +2,9 @@ package fsutil_test
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
@@ -17,6 +19,30 @@ func TestEvalCanonicalPath(t *testing.T) {
 	t.Run("resolves non-existing path via parent", testEvalCanonicalPathNonExisting)
 	t.Run("resolves symlink to real path", testEvalCanonicalPathSymlink)
 	t.Run("returns error for invalid parent", testEvalCanonicalPathInvalidParent)
+}
+
+func nonExistentRootPath(t *testing.T, parts ...string) string {
+	t.Helper()
+
+	root := filepath.VolumeName(t.TempDir()) + string(filepath.Separator)
+	pathParts := append([]string{root, "ksail-nonexistent-root-abc123"}, parts...)
+
+	return filepath.Join(pathParts...)
+}
+
+func skipPermissionSensitivePathTest(t *testing.T) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("permission semantics differ on Windows")
+	}
+
+	currentUser, err := user.Current()
+	require.NoError(t, err)
+
+	if currentUser.Uid == "0" {
+		t.Skip("running as root — permission checks are bypassed")
+	}
 }
 
 func testEvalCanonicalPathExisting(t *testing.T) {
@@ -84,8 +110,7 @@ func testEvalCanonicalPathInvalidParent(t *testing.T) {
 	t.Helper()
 	t.Parallel()
 
-	// Use a path whose parent directory also does not exist
-	invalidPath := filepath.Join("/nonexistent-dir-abc123", "subdir", "file.txt")
+	invalidPath := nonExistentRootPath(t, "subdir", "file.txt")
 
 	_, err := fsutil.EvalCanonicalPath(invalidPath)
 
@@ -96,6 +121,7 @@ func testEvalCanonicalPathInvalidParent(t *testing.T) {
 // fails with a non-NotExist error (e.g., permission denied).
 func TestEvalCanonicalPath_PermissionDenied(t *testing.T) {
 	t.Parallel()
+	skipPermissionSensitivePathTest(t)
 
 	tempDir := t.TempDir()
 
@@ -109,11 +135,8 @@ func TestEvalCanonicalPath_PermissionDenied(t *testing.T) {
 	targetPath := filepath.Join(restrictedDir, "subdir", "file.txt")
 
 	_, err = fsutil.EvalCanonicalPath(targetPath)
-	// On some OS configurations root might bypass permissions, so we just
-	// verify we either get an error or a valid result
-	if err != nil {
-		assert.Contains(t, err.Error(), "resolving symlinks")
-	}
+	require.Error(t, err)
+	assert.False(t, os.IsNotExist(err), "expected a non-NotExist error")
 }
 
 // TestEvalCanonicalPath_DotDotInPath verifies resolution of paths containing .. components.

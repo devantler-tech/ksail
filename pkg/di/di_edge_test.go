@@ -148,16 +148,12 @@ func TestRuntime_Invoke_FreshInjectorPerCall(t *testing.T) {
 	assert.Equal(t, 2, val2)
 }
 
-//nolint:varnamelen // Short names keep this table-driven test readable.
 func TestRunEWithRuntime_PassesArgsCorrectly(t *testing.T) {
 	t.Parallel()
 
 	rt := di.New()
 
-	var (
-		receivedCmd  *cobra.Command
-		receivedArgs []string
-	)
+	var receivedCmd *cobra.Command
 
 	// RunEWithRuntime passes args via Invoke (handler sees cmd, not args).
 	runE := di.RunEWithRuntime(rt, func(cmd *cobra.Command, _ di.Injector) error {
@@ -171,8 +167,6 @@ func TestRunEWithRuntime_PassesArgsCorrectly(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "deploy", receivedCmd.Use)
-	// Args are intentionally discarded by RunEWithRuntime (convention).
-	assert.Nil(t, receivedArgs)
 }
 
 func TestRunEWithRuntime_ModuleError(t *testing.T) {

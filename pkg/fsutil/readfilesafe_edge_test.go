@@ -9,35 +9,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReadFileSafe_InvalidBasePath(t *testing.T) {
+func TestReadFileSafe_MissingBasePathReturnsNotExist(t *testing.T) {
 	t.Parallel()
 
-	// basePath does not exist at all
+	// A missing base path whose parent exists should canonicalize through the
+	// existing parent; the eventual failure is reading the missing path itself.
 	nonExistentBase := filepath.Join(t.TempDir(), "nonexistent-base")
-	filePath := filepath.Join(nonExistentBase, "file.txt")
 
-	_, err := fsutil.ReadFileSafe(nonExistentBase, filePath)
-	require.ErrorIs(
-		t,
-		err,
-		fsutil.ErrPathOutsideBase,
-		"should fail with ErrPathOutsideBase for non-existent base",
-	)
+	_, err := fsutil.ReadFileSafe(nonExistentBase, nonExistentBase)
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
-func TestReadFileSafe_DeepNonExistentBasePath(t *testing.T) {
+func TestReadFileSafe_FileOutsideBaseReturnsOutsideBase(t *testing.T) {
 	t.Parallel()
 
-	// basePath has a parent chain that also doesn't exist — triggers the EvalCanonicalPath(basePath) error path
-	deepNonExistent := filepath.Join(t.TempDir(), "nonexistent-root", "deep", "nested", "base")
-	filePath := filepath.Join(deepNonExistent, "file.txt")
+	base := t.TempDir()
+	outsideFile := filepath.Join(filepath.Dir(base), "outside.txt")
+	require.NoError(t, os.WriteFile(outsideFile, []byte("outside"), 0o600))
 
-	_, err := fsutil.ReadFileSafe(deepNonExistent, filePath)
+	traversalPath := filepath.Join(base, "..", "outside.txt")
+
+	_, err := fsutil.ReadFileSafe(base, traversalPath)
 	require.ErrorIs(
 		t,
 		err,
 		fsutil.ErrPathOutsideBase,
-		"should fail with ErrPathOutsideBase for deeply non-existent base",
+		"explicit traversal outside the base should be rejected",
 	)
 }
 

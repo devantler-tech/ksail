@@ -53,24 +53,17 @@ func TestGenerate_WriteError(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	readOnlyDir := filepath.Join(tmpDir, "readonly")
-
-	err := os.MkdirAll(readOnlyDir, 0o500)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		//nolint:gosec // restoring test-directory permissions
-		_ = os.Chmod(readOnlyDir, 0o700)
-	})
+	blockingPath := filepath.Join(tmpDir, "blocking-file")
+	require.NoError(t, os.WriteFile(blockingPath, []byte("blocker"), 0o600))
 
 	generator := kindgenerator.NewGenerator()
 
 	opts := yamlgenerator.Options{
-		Output: filepath.Join(readOnlyDir, "subdir", "kind.yaml"),
+		Output: filepath.Join(blockingPath, "subdir", "kind.yaml"),
 		Force:  true,
 	}
 
-	_, err = generator.Generate(&v1alpha4.Cluster{}, opts)
+	_, err := generator.Generate(&v1alpha4.Cluster{}, opts)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "write kind config")

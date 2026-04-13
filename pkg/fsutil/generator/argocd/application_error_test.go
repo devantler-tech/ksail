@@ -11,26 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestGenerate_WriteError verifies that a write error is propagated when
-// the output directory is not writable.
-//
-//nolint:gosec,varnamelen // Test-only permission setup stays explicit.
+// TestGenerate_WriteError verifies that a write error is propagated.
 func TestGenerate_WriteError(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	readOnlyDir := filepath.Join(tmpDir, "readonly")
+	blockingPath := filepath.Join(tmpDir, "blocking-file")
+	require.NoError(t, os.WriteFile(blockingPath, []byte("blocker"), 0o600))
 
-	err := os.MkdirAll(readOnlyDir, 0o500)
-	require.NoError(t, err)
-
-	t.Cleanup(func() { _ = os.Chmod(readOnlyDir, 0o700) })
-
-	g := argocd.NewApplicationGenerator()
+	generator := argocd.NewApplicationGenerator()
 
 	opts := argocd.ApplicationGeneratorOptions{
 		Options: yamlgenerator.Options{
-			Output: filepath.Join(readOnlyDir, "subdir", "application.yaml"),
+			Output: filepath.Join(blockingPath, "subdir", "application.yaml"),
 			Force:  true,
 		},
 		ProjectName:  "test-project",
@@ -38,7 +31,7 @@ func TestGenerate_WriteError(t *testing.T) {
 		RegistryPort: 5050,
 	}
 
-	_, err = g.Generate(opts)
+	_, err := generator.Generate(opts)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "generating ArgoCD Application manifest")

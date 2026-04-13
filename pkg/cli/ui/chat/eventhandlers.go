@@ -36,7 +36,7 @@ func newSessionEventDispatcher(
 func (d *sessionEventDispatcher) dispatch(
 	event copilot.SessionEvent,
 ) {
-	//nolint:exhaustive // Only message-producing event types are handled here.
+	//nolint:exhaustive // Only event types that affect dispatcher state are handled here.
 	switch event.Type {
 	case copilot.SessionEventTypeAssistantTurnStart:
 		d.handleTurnStart()

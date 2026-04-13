@@ -11,32 +11,19 @@ import (
 )
 
 // Expose unexported functions for testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var (
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	ParseChartRef = parseChartRef
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	BuildChartPathOptions = buildChartPathOptions
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	ApplyChartPathOptions = applyChartPathOptions
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	MergeSetValues = mergeSetValues
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	MergeSetJSONValues = mergeSetJSONValues
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	MergeValuesYaml = mergeValuesYaml
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	MergeMapsInto = mergeMapsInto
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	ReleaseToInfo = releaseToInfo
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+	ParseChartRef            = parseChartRef
+	BuildChartPathOptions    = buildChartPathOptions
+	ApplyChartPathOptions    = applyChartPathOptions
+	MergeSetValues           = mergeSetValues
+	MergeSetJSONValues       = mergeSetJSONValues
+	MergeValuesYaml          = mergeValuesYaml
+	MergeMapsInto            = mergeMapsInto
+	ReleaseToInfo            = releaseToInfo
 	ExecuteAndExtractRelease = executeAndExtractRelease
-	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	ApplyCommonActionConfig = applyCommonActionConfig
+	ApplyCommonActionConfig  = applyCommonActionConfig
 )
 
 // Expose unexported error sentinels for test assertions.

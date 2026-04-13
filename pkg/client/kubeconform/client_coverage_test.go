@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateBytes_InvalidYAML(t *testing.T) {
+func TestValidateBytes_SchemaValidationError(t *testing.T) {
 	t.Parallel()
 
-	invalidYAML := `apiVersion: v1
+	invalidManifest := `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: test-config
@@ -26,7 +26,7 @@ data: "this is not valid for strict mode"
 		IgnoreMissingSchemas: true,
 	}
 
-	err := client.ValidateBytes(context.Background(), "test.yaml", []byte(invalidYAML), opts)
+	err := client.ValidateBytes(context.Background(), "test.yaml", []byte(invalidManifest), opts)
 	require.Error(t, err)
 	require.ErrorIs(t, err, kubeconform.ErrValidationFailed)
 	assert.Contains(t, err.Error(), "validation failed")

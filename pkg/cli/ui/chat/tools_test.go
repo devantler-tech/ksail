@@ -32,14 +32,14 @@ func TestFindToolByID_ViaToolEnd(t *testing.T) {
 			expectStatus: chat.ToolStatusComplete,
 		},
 		{
-			name: "no match for unknown ID and unknown name stays running",
+			name: "no match for unknown ID and unknown name falls back to first running tool",
 			setupTools: map[string]*chat.ToolExecutionForTest{
 				"tool-abc": chat.ExportNewToolExecution("bash", chat.ToolStatusRunning, false),
 			},
 			setupOrder:   []string{"tool-abc"},
 			toolID:       "tool-xyz",
-			endToolName:  "unknown",               // doesn't match "bash" by name
-			expectStatus: chat.ToolStatusComplete, // falls through to FIFO which matches first running
+			endToolName:  "unknown", // doesn't match "bash" by name
+			expectStatus: chat.ToolStatusComplete,
 		},
 	}
 
