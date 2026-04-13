@@ -121,6 +121,7 @@ func fetchGatewayAPICRDsWithRetry(
 	httpClient := &http.Client{Timeout: timeout}
 
 	retries := max(maxRetries, 1)
+
 	var lastErr error
 
 	for attempt := 1; attempt <= retries; attempt++ {

@@ -38,17 +38,19 @@ func TestFetchGatewayAPICRDsWithRetry_RetriesTransientHTTPStatus(t *testing.T) {
 
 	var attempts atomic.Int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		attempt := attempts.Add(1)
-		if attempt < 3 {
-			writer.WriteHeader(http.StatusGatewayTimeout)
+	server := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			attempt := attempts.Add(1)
+			if attempt < 3 {
+				writer.WriteHeader(http.StatusGatewayTimeout)
 
-			return
-		}
+				return
+			}
 
-		writer.Header().Set("Content-Type", "application/x-yaml")
-		_, _ = writer.Write([]byte(retryTestCRDBundle))
-	}))
+			writer.Header().Set("Content-Type", "application/x-yaml")
+			_, _ = writer.Write([]byte(retryTestCRDBundle))
+		}),
+	)
 	defer server.Close()
 
 	crds, err := ciliuminstaller.FetchGatewayAPICRDsWithRetryForTest(
@@ -70,10 +72,12 @@ func TestFetchGatewayAPICRDsWithRetry_DoesNotRetryNonRetryableStatus(t *testing.
 
 	var attempts atomic.Int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		attempts.Add(1)
-		writer.WriteHeader(http.StatusNotFound)
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			attempts.Add(1)
+			writer.WriteHeader(http.StatusNotFound)
+		}),
+	)
 	defer server.Close()
 
 	_, err := ciliuminstaller.FetchGatewayAPICRDsWithRetryForTest(
