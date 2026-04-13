@@ -614,6 +614,27 @@ func TestExportMissingContentReresolvesExplicitImagesAfterRepairPull(t *testing.
 	require.NoError(t, err)
 }
 
+func TestExportFallbackRepairsSingleImageAfterBulkRetryFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, mockClient, outputPath := newExporterTestContext(t)
+	setupFallbackRepairRetryMocks(ctx, t, mockClient)
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{
+			OutputPath: outputPath,
+			Images:     []string{"traefik/whoami:v1.10"},
+		},
+	)
+
+	require.NoError(t, err)
+}
+
 func TestExportFallbackReportsFailedImages(t *testing.T) {
 	t.Parallel()
 
@@ -1110,6 +1131,60 @@ func setupFallbackExportMocks(
 	setupIndividualImageExportMocks(ctx, t, mockClient, nodeName)
 	setupExecMockForExporter(ctx, t, mockClient, nodeName)
 	setupReexportSuccessfulImageMock(ctx, t, mockClient, nodeName)
+}
+
+func setupFallbackRepairRetryMocks(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+) {
+	t.Helper()
+
+	setupKindNodeListMock(ctx, mockClient)
+	setupExecMockWithStdoutForExporter(
+		ctx, t, mockClient, kindExporterNodeName,
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
+	)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, kindExporterNodeName)
+
+	exportCmd := buildKindCtrExportCommand("docker.io/traefik/whoami:v1.10@sha256:abc123")
+	missingContentErr := "ctr: failed to get reader: content digest sha256:missing: not found"
+
+	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, missingContentErr)
+	setupKindExecFailWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
+		"ctr: pull failed",
+	)
+	setupExecMockWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		kindExporterNodeName,
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
+	)
+	setupExecMockWithStdoutForExporter(
+		ctx, t, mockClient, kindExporterNodeName,
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
+	)
+	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, missingContentErr)
+	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, missingContentErr)
+	setupExecMockWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		kindExporterNodeName,
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
+	)
+	setupExecMockWithCmdForExporter(ctx, t, mockClient, kindExporterNodeName, exportCmd)
+	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
+	setupExecMockWithCmdForExporter(ctx, t, mockClient, kindExporterNodeName, exportCmd)
+	expectCopiedExportTar(ctx, t, mockClient)
+	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 }
 
 func matchesSingleImageExportCommand(opts container.ExecOptions, imageRef string) bool {

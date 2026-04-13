@@ -610,6 +610,26 @@ func (e *Exporter) tryExportImages(
 	return err
 }
 
+func (e *Exporter) tryExportSingleImageWithRepair(
+	ctx context.Context,
+	nodeName string,
+	tmpPath string,
+	platform string,
+	image string,
+) error {
+	err := e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
+	if err == nil || !isMissingContentError(err) {
+		return err
+	}
+
+	refreshErr := e.refreshSingleImageContent(ctx, nodeName, platform, image)
+	if refreshErr != nil {
+		return err
+	}
+
+	return e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
+}
+
 // exportImagesOneByOne tests each image individually and returns the list of
 // images that can be successfully exported, along with the list of failed images.
 func (e *Exporter) exportImagesOneByOne(
@@ -623,7 +643,7 @@ func (e *Exporter) exportImagesOneByOne(
 	failed := make([]string, 0, len(images))
 
 	for _, image := range images {
-		err := e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
+		err := e.tryExportSingleImageWithRepair(ctx, nodeName, tmpPath, platform, image)
 		if err == nil {
 			successful = append(successful, image)
 		} else {
