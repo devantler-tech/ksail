@@ -430,7 +430,7 @@ func (e *Exporter) tryExportImagesWithRepair(
 		return images, exportErr
 	}
 
-	refreshErr := e.refreshImageContent(ctx, nodeName, platform, repairImages)
+	successfulRepairRefs, refreshErr := e.refreshImageContent(ctx, nodeName, platform, repairImages)
 	if refreshErr != nil {
 		return images, exportErr
 	}
@@ -439,6 +439,8 @@ func (e *Exporter) tryExportImagesWithRepair(
 	if len(resolveImages) > 0 {
 		refreshedImages = e.resolveSpecifiedImages(ctx, nodeName, resolveImages)
 	}
+
+	refreshedImages = preferSuccessfulRepairRefs(refreshedImages, successfulRepairRefs)
 
 	return refreshedImages, e.tryExportImages(
 		ctx,
@@ -499,21 +501,27 @@ func (e *Exporter) refreshImageContent(
 	nodeName string,
 	platform string,
 	imageRefs []string,
-) error {
+) (map[string]string, error) {
+	successfulRefs := make(map[string]string, len(imageRefs))
+
 	var errs []error
 
 	for _, imageRef := range imageRefs {
-		err := e.refreshSingleImageContent(ctx, nodeName, platform, imageRef)
+		successfulRef, err := e.refreshSingleImageContent(ctx, nodeName, platform, imageRef)
 		if err != nil {
 			errs = append(errs, err)
+
+			continue
 		}
+
+		successfulRefs[imageRef] = successfulRef
 	}
 
 	if len(errs) > 0 {
-		return errors.Join(errs...)
+		return successfulRefs, errors.Join(errs...)
 	}
 
-	return nil
+	return successfulRefs, nil
 }
 
 func (e *Exporter) refreshSingleImageContent(
@@ -521,7 +529,7 @@ func (e *Exporter) refreshSingleImageContent(
 	nodeName string,
 	platform string,
 	imageRef string,
-) error {
+) (string, error) {
 	var errs []error
 
 	for _, candidate := range repairPullCandidates(imageRef) {
@@ -531,13 +539,13 @@ func (e *Exporter) refreshSingleImageContent(
 			buildCtrPullCommand(platform, candidate),
 		)
 		if err == nil {
-			return nil
+			return candidate, nil
 		}
 
 		errs = append(errs, fmt.Errorf("%s: %w", candidate, err))
 	}
 
-	return errors.Join(errs...)
+	return "", errors.Join(errs...)
 }
 
 func buildCtrPullCommand(platform string, imageRef string) []string {
@@ -622,18 +630,46 @@ func (e *Exporter) tryExportSingleImageWithRepair(
 	tmpPath string,
 	platform string,
 	image string,
-) error {
+) (string, error) {
 	err := e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
 	if err == nil || !isMissingContentError(err) {
-		return err
+		return image, err
 	}
 
-	refreshErr := e.refreshSingleImageContent(ctx, nodeName, platform, image)
+	successfulRef, refreshErr := e.refreshSingleImageContent(ctx, nodeName, platform, image)
 	if refreshErr != nil {
-		return err
+		return image, err
 	}
 
-	return e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
+	return successfulRef, e.tryExportImages(
+		ctx,
+		nodeName,
+		tmpPath,
+		platform,
+		[]string{successfulRef},
+	)
+}
+
+func preferSuccessfulRepairRefs(
+	images []string,
+	successfulRepairRefs map[string]string,
+) []string {
+	if len(successfulRepairRefs) == 0 {
+		return images
+	}
+
+	preferred := make([]string, 0, len(images))
+	for _, image := range images {
+		if successfulRef, exists := successfulRepairRefs[image]; exists {
+			preferred = append(preferred, successfulRef)
+
+			continue
+		}
+
+		preferred = append(preferred, image)
+	}
+
+	return preferred
 }
 
 // exportImagesOneByOne tests each image individually and returns the list of
@@ -649,9 +685,15 @@ func (e *Exporter) exportImagesOneByOne(
 	failed := make([]string, 0, len(images))
 
 	for _, image := range images {
-		err := e.tryExportSingleImageWithRepair(ctx, nodeName, tmpPath, platform, image)
+		successfulRef, err := e.tryExportSingleImageWithRepair(
+			ctx,
+			nodeName,
+			tmpPath,
+			platform,
+			image,
+		)
 		if err == nil {
-			successful = append(successful, image)
+			successful = append(successful, successfulRef)
 		} else {
 			failed = append(failed, image)
 		}

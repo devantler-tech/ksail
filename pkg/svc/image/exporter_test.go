@@ -538,7 +538,13 @@ func TestExportMissingContentRetriesPullForExplicitImages(t *testing.T) {
 		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
 		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
 	)
-	setupExecMockWithCmdForExporter(ctx, t, mockClient, kindExporterNodeName, exportCmd)
+	setupExecMockWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		kindExporterNodeName,
+		buildKindCtrExportCommand("docker.io/traefik/whoami:v1.10"),
+	)
 	expectCopiedExportTar(ctx, t, mockClient)
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 
@@ -1153,6 +1159,20 @@ func setupFallbackRepairRetryMocks(
 	missingContentErr := "ctr: failed to get reader: content digest sha256:missing: not found"
 
 	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, missingContentErr)
+	setupExecMockWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		kindExporterNodeName,
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
+	)
+	setupExecMockWithStdoutForExporter(
+		ctx, t, mockClient, kindExporterNodeName,
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
+	)
+	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, missingContentErr)
+	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, missingContentErr)
 	setupKindExecFailWithCmdForExporter(
 		ctx,
 		t,
@@ -1167,23 +1187,11 @@ func setupFallbackRepairRetryMocks(
 		kindExporterNodeName,
 		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
 	)
-	setupExecMockWithStdoutForExporter(
-		ctx, t, mockClient, kindExporterNodeName,
-		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
-		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
-	)
-	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, missingContentErr)
-	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, missingContentErr)
-	setupExecMockWithCmdForExporter(
-		ctx,
-		t,
-		mockClient,
-		kindExporterNodeName,
-		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
-	)
-	setupExecMockWithCmdForExporter(ctx, t, mockClient, kindExporterNodeName, exportCmd)
+
+	tagExportCmd := buildKindCtrExportCommand("docker.io/traefik/whoami:v1.10")
+	setupExecMockWithCmdForExporter(ctx, t, mockClient, kindExporterNodeName, tagExportCmd)
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
-	setupExecMockWithCmdForExporter(ctx, t, mockClient, kindExporterNodeName, exportCmd)
+	setupExecMockWithCmdForExporter(ctx, t, mockClient, kindExporterNodeName, tagExportCmd)
 	expectCopiedExportTar(ctx, t, mockClient)
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 }
