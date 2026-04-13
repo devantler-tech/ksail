@@ -53,7 +53,7 @@ func prepareClusterDirForWriteFailure(t *testing.T, clusterDir string) {
 	require.NoError(t, err)
 
 	for _, entry := range entries {
-		require.NoError(t, os.Remove(filepath.Join(clusterDir, entry.Name())))
+		require.NoError(t, os.RemoveAll(filepath.Join(clusterDir, entry.Name())))
 	}
 
 	require.NoError(t, setClusterDirReadOnly(clusterDir))

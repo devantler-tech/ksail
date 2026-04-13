@@ -1,6 +1,7 @@
 package configmanager_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +12,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func writeTestKubeconfig(t *testing.T, dir string) string {
+	t.Helper()
+
+	kubeconfigPath := filepath.Join(dir, "kubeconfig")
+
+	err := os.WriteFile(kubeconfigPath, []byte("apiVersion: v1\nkind: Config\n"), 0o600)
+	require.NoError(t, err)
+
+	return kubeconfigPath
+}
 
 // ---------------------------------------------------------------------------
 // Field selectors not previously tested
@@ -62,7 +74,8 @@ func TestConfigManager_VClusterDistribution(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	configContent := `apiVersion: ksail.io/v1alpha1
+	kubeconfigPath := writeTestKubeconfig(t, tmpDir)
+	configContent := fmt.Sprintf(`apiVersion: ksail.io/v1alpha1
 kind: Cluster
 metadata:
   name: test-vcluster
@@ -72,8 +85,8 @@ spec:
     provider: Docker
     connection:
       context: vcluster-docker_test-vcluster
-      kubeconfig: "~/.kube/config"
-`
+      kubeconfig: %q
+`, kubeconfigPath)
 	configPath := filepath.Join(tmpDir, "ksail.yaml")
 	err := os.WriteFile(configPath, []byte(configContent), 0o600)
 	require.NoError(t, err)
@@ -93,7 +106,8 @@ func TestConfigManager_TalosDistribution(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	configContent := `apiVersion: ksail.io/v1alpha1
+	kubeconfigPath := writeTestKubeconfig(t, tmpDir)
+	configContent := fmt.Sprintf(`apiVersion: ksail.io/v1alpha1
 kind: Cluster
 metadata:
   name: test-talos
@@ -103,8 +117,8 @@ spec:
     provider: Docker
     connection:
       context: admin@test-talos
-      kubeconfig: "~/.kube/config"
-`
+      kubeconfig: %q
+`, kubeconfigPath)
 	configPath := filepath.Join(tmpDir, "ksail.yaml")
 	err := os.WriteFile(configPath, []byte(configContent), 0o600)
 	require.NoError(t, err)
@@ -124,7 +138,8 @@ func TestConfigManager_TalosWithMetricsServer(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	configContent := `apiVersion: ksail.io/v1alpha1
+	kubeconfigPath := writeTestKubeconfig(t, tmpDir)
+	configContent := fmt.Sprintf(`apiVersion: ksail.io/v1alpha1
 kind: Cluster
 metadata:
   name: test-talos-metrics
@@ -135,8 +150,8 @@ spec:
     metricsServer: Enabled
     connection:
       context: admin@test-talos-metrics
-      kubeconfig: "~/.kube/config"
-`
+      kubeconfig: %q
+`, kubeconfigPath)
 	configPath := filepath.Join(tmpDir, "ksail.yaml")
 	err := os.WriteFile(configPath, []byte(configContent), 0o600)
 	require.NoError(t, err)

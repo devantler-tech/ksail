@@ -8,13 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:paralleltest // Shares process-wide Docker env state with TestGetConcreteDockerClient_InvalidEnv.
-func TestGetConcreteDockerClient(t *testing.T) {
-	concreteClient, err := docker.GetConcreteDockerClient()
-	if err != nil {
-		t.Skipf("Docker unavailable: %v", err)
-	}
+func TestGetConcreteDockerClient_DefaultEnv(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "")
+	t.Setenv("DOCKER_TLS_VERIFY", "")
+	t.Setenv("DOCKER_CERT_PATH", "")
+	t.Setenv("DOCKER_CONTEXT", "")
 
+	concreteClient, err := docker.GetConcreteDockerClient()
+
+	require.NoError(t, err)
 	require.NotNil(t, concreteClient)
 }
 

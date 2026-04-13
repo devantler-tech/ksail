@@ -53,7 +53,9 @@ func TestMergeSetValues(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests { //nolint:varnamelen
+	for index := range tests {
+		tc := tests[index] //nolint:varnamelen
+
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -105,7 +107,9 @@ func TestMergeSetJSONValues(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range tests {
+	for index := range tests {
+		testCase := tests[index]
+
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -126,7 +130,7 @@ func TestMergeSetJSONValues(t *testing.T) {
 	}
 }
 
-//nolint:varnamelen // Short names keep table-driven tests readable.
+//nolint:funlen,varnamelen // Table-driven coverage is long and short names keep the cases readable.
 func TestMergeValuesYaml(t *testing.T) {
 	t.Parallel()
 
@@ -171,7 +175,9 @@ func TestMergeValuesYaml(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
+	for index := range tests {
+		tc := tests[index]
+
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -255,7 +261,9 @@ func TestMergeMapsInto(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range tests {
+	for index := range tests {
+		testCase := tests[index]
+
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
