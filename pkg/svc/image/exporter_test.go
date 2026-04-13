@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -511,6 +512,107 @@ func TestExportExecFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "ctr export failed")
 }
 
+func TestExportMissingContentRetriesPullForExplicitImages(t *testing.T) {
+	t.Parallel()
+
+	ctx, mockClient, outputPath := newExplicitWhoamiExportTest(t)
+	exportCmd := buildKindWhoamiExportCommand("docker.io/traefik/whoami:v1.10")
+
+	setupExecFailWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		exportCmd,
+		"ctr: failed to get reader: content digest sha256:missing: not found",
+	)
+	setupExecMockWithStdoutForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
+	)
+	setupEnsureImageContentFailMocks(
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{"docker.io/traefik/whoami:v1.10@sha256:abc123"},
+	)
+	setupEnsureImageContentMocks(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{"docker.io/traefik/whoami:v1.10"},
+	)
+	setupExecMockWithStdoutForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
+	)
+	setupExecMockWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		buildKindWhoamiExportCommand("docker.io/traefik/whoami:v1.10@sha256:abc123"),
+	)
+	expectExplicitWhoamiExportCopyAndCleanup(ctx, t, mockClient)
+
+	require.NoError(t, runExplicitWhoamiExport(ctx, mockClient, outputPath))
+}
+
+func TestExportMissingContentReresolvesExplicitImagesAfterRepairPull(t *testing.T) {
+	t.Parallel()
+
+	ctx, mockClient, outputPath := newExplicitWhoamiExportTest(t)
+	exportCmd := buildKindWhoamiExportCommand("docker.io/traefik/whoami:v1.10")
+
+	setupExecFailWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		exportCmd,
+		"ctr: failed to get reader: content digest sha256:missing: not found",
+	)
+	setupExecMockWithStdoutForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
+	)
+	setupEnsureImageContentMocks(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{
+			"docker.io/traefik/whoami:v1.10@sha256:abc123",
+			"docker.io/traefik/whoami:v1.10",
+		},
+	)
+	setupExecMockWithStdoutForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10\n",
+	)
+	setupExecMockWithCmdForExporter(ctx, t, mockClient, "my-cluster-control-plane", exportCmd)
+	expectExplicitWhoamiExportCopyAndCleanup(ctx, t, mockClient)
+
+	require.NoError(t, runExplicitWhoamiExport(ctx, mockClient, outputPath))
+}
+
 func TestExportFallbackReportsFailedImages(t *testing.T) {
 	t.Parallel()
 
@@ -780,6 +882,132 @@ func setupEnsureImageContentMocks(
 	}
 }
 
+func newExplicitWhoamiExportTest(
+	t *testing.T,
+) (context.Context, *docker.MockAPIClient, string) {
+	t.Helper()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	outputPath := filepath.Join(t.TempDir(), "images.tar")
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
+			},
+		}, nil)
+
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	return ctx, mockClient, outputPath
+}
+
+func buildKindWhoamiExportCommand(imageRef string) []string {
+	return []string{
+		ctrCommand, "--namespace=k8s.io", "images", "export",
+		"--platform", "linux/amd64",
+		"/root/ksail-images-export.tar", imageRef,
+	}
+}
+
+func expectExplicitWhoamiExportCopyAndCleanup(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+) {
+	t.Helper()
+
+	tarContent := createExportTar(t, []byte("fake image data"))
+	mockClient.EXPECT().
+		CopyFromContainer(ctx, "my-cluster-control-plane", "/root/ksail-images-export.tar").
+		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
+
+	setupExecMockWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		[]string{"rm", "-f", "/root/ksail-images-export.tar"},
+	)
+}
+
+func runExplicitWhoamiExport(
+	ctx context.Context,
+	mockClient *docker.MockAPIClient,
+	outputPath string,
+) error {
+	exporter := image.NewExporter(mockClient)
+
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{
+			OutputPath: outputPath,
+			Images:     []string{"traefik/whoami:v1.10"},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("export explicit whoami image: %w", err)
+	}
+
+	return nil
+}
+
+func buildCtrPullCommand(platform string, imageRef string) []string {
+	return []string{
+		ctrCommand,
+		"--namespace=k8s.io",
+		"images",
+		"pull",
+		"--platform",
+		platform,
+		imageRef,
+	}
+}
+
+func setupEnsureImageContentFailMocks(
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	containerName string,
+	images []string,
+) {
+	t.Helper()
+
+	for _, img := range images {
+		expectedCmd := buildCtrPullCommand("linux/amd64", img)
+		execID := "exec-pull-fail-" + containerName + "-" + img
+
+		mockClient.EXPECT().
+			ContainerExecCreate(mock.Anything, containerName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+				if len(opts.Cmd) != len(expectedCmd) {
+					return false
+				}
+
+				for index := range opts.Cmd {
+					if opts.Cmd[index] != expectedCmd[index] {
+						return false
+					}
+				}
+
+				return true
+			})).
+			Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+
+		mockClient.EXPECT().
+			ContainerExecAttach(mock.Anything, execID, container.ExecStartOptions{}).
+			Return(mockDockerStreamResponse("", "ctr: pull failed"), nil).Once()
+
+		mockClient.EXPECT().
+			ContainerExecInspect(mock.Anything, execID).
+			Return(container.ExecInspect{ExitCode: 1}, nil).Once()
+	}
+}
+
 // setupExecMockForExporter is a helper to set up ContainerExec* mocks for simple cases.
 func setupExecMockForExporter(
 	ctx context.Context,
@@ -839,6 +1067,44 @@ func setupExecMockWithCmdForExporter(
 	mockClient.EXPECT().
 		ContainerExecInspect(ctx, execID).
 		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
+}
+
+// setupExecFailWithCmdForExporter sets up exec mocks with a specific failing command.
+func setupExecFailWithCmdForExporter(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	containerName string,
+	expectedCmd []string,
+	stderr string,
+) {
+	t.Helper()
+
+	execID := "exec-" + containerName + "-cmd-fail"
+
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, containerName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+			if len(opts.Cmd) != len(expectedCmd) {
+				return false
+			}
+
+			for index := range opts.Cmd {
+				if opts.Cmd[index] != expectedCmd[index] {
+					return false
+				}
+			}
+
+			return true
+		})).
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", stderr), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID).
+		Return(container.ExecInspect{ExitCode: 1}, nil).Once()
 }
 
 // setupExecMockWithStdoutForExporter sets up exec mocks with stdout output.
