@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const windowsGOOS = "windows"
+
 func TestEvalCanonicalPath(t *testing.T) {
 	t.Parallel()
 
@@ -33,7 +35,7 @@ func nonExistentRootPath(t *testing.T, parts ...string) string {
 func skipPermissionSensitivePathTest(t *testing.T) {
 	t.Helper()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("permission semantics differ on Windows")
 	}
 
@@ -48,7 +50,7 @@ func skipPermissionSensitivePathTest(t *testing.T) {
 func skipWindowsSymlinkPrivilegeError(t *testing.T, err error) {
 	t.Helper()
 
-	if err != nil && runtime.GOOS == "windows" && os.IsPermission(err) {
+	if err != nil && runtime.GOOS == windowsGOOS && os.IsPermission(err) {
 		t.Skip("skipping symlink test on Windows: creating symlinks requires additional privileges")
 	}
 }
@@ -139,6 +141,7 @@ func TestEvalCanonicalPath_PermissionDenied(t *testing.T) {
 	err := os.Mkdir(restrictedDir, 0o000)
 	require.NoError(t, err)
 	t.Cleanup(func() {
+		//nolint:gosec // TempDir cleanup requires execute permission on the directory.
 		_ = os.Chmod(restrictedDir, 0o700)
 	})
 
