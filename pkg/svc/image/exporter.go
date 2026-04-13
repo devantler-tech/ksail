@@ -454,19 +454,9 @@ func (e *Exporter) refreshImageContent(
 	var errs []error
 
 	for _, imageRef := range imageRefs {
-		cmd := []string{
-			"ctr",
-			"--namespace=k8s.io",
-			"images",
-			"pull",
-			"--platform",
-			platform,
-			imageRef,
-		}
-
-		_, err := e.executor.ExecInContainer(ctx, nodeName, cmd)
+		err := e.refreshSingleImageContent(ctx, nodeName, platform, imageRef)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", imageRef, err))
+			errs = append(errs, err)
 		}
 	}
 
@@ -475,6 +465,63 @@ func (e *Exporter) refreshImageContent(
 	}
 
 	return nil
+}
+
+func (e *Exporter) refreshSingleImageContent(
+	ctx context.Context,
+	nodeName string,
+	platform string,
+	imageRef string,
+) error {
+	var errs []error
+
+	for _, candidate := range repairPullCandidates(imageRef) {
+		_, err := e.executor.ExecInContainer(
+			ctx,
+			nodeName,
+			buildCtrPullCommand(platform, candidate),
+		)
+		if err == nil {
+			return nil
+		}
+
+		errs = append(errs, fmt.Errorf("%s: %w", candidate, err))
+	}
+
+	return errors.Join(errs...)
+}
+
+func buildCtrPullCommand(platform string, imageRef string) []string {
+	return []string{
+		"ctr",
+		"--namespace=k8s.io",
+		"images",
+		"pull",
+		"--platform",
+		platform,
+		imageRef,
+	}
+}
+
+func repairPullCandidates(imageRef string) []string {
+	candidates := []string{imageRef}
+	if imageDigest(imageRef) == "" {
+		return candidates
+	}
+
+	baseRef := stripDigestFromImageRef(imageRef)
+	if baseRef == imageRepository(imageRef) {
+		return candidates
+	}
+
+	candidates = append(candidates, baseRef)
+
+	normalizedBaseRef := NormalizeImageRef(baseRef)
+	if normalizedBaseRef != baseRef {
+		candidates = append(candidates, normalizedBaseRef)
+	}
+
+	return candidates
 }
 
 func isMissingContentError(err error) bool {

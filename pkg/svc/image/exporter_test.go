@@ -278,7 +278,7 @@ func TestExportWithSpecificImagesFallsBackWhenLocalImageListFails(t *testing.T) 
 		ctx, t, mockClient, kindExporterNodeName,
 		buildKindCtrExportCommand("docker.io/traefik/whoami:v1.10"),
 	)
-	expectCopiedExportTar(ctx, t, mockClient, kindExporterNodeName, kindExporterTarPath)
+	expectCopiedExportTar(ctx, t, mockClient)
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 
 	exporter := image.NewExporter(mockClient)
@@ -524,10 +524,63 @@ func TestExportMissingContentRetriesPullForExplicitImages(t *testing.T) {
 	)
 	setupExecMockWithCmdForExporter(
 		ctx, t, mockClient, kindExporterNodeName,
-		buildCtrPullCommand("docker.io/traefik/whoami:v1.10@sha256:abc123"),
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
 	)
 	setupExecMockWithCmdForExporter(ctx, t, mockClient, kindExporterNodeName, exportCmd)
-	expectCopiedExportTar(ctx, t, mockClient, kindExporterNodeName, kindExporterTarPath)
+	expectCopiedExportTar(ctx, t, mockClient)
+	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{
+			OutputPath: outputPath,
+			Images:     []string{"traefik/whoami:v1.10"},
+		},
+	)
+
+	require.NoError(t, err)
+}
+
+func TestExportMissingContentRetriesTaggedPullWhenDigestPullFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, mockClient, outputPath := newExporterTestContext(t)
+	setupKindNodeListMock(ctx, mockClient)
+	setupExecMockWithStdoutForExporter(
+		ctx, t, mockClient, kindExporterNodeName,
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
+	)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, kindExporterNodeName)
+
+	exportCmd := buildKindCtrExportCommand("docker.io/traefik/whoami:v1.10@sha256:abc123")
+	setupKindExecFailWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		exportCmd,
+		"ctr: failed to get reader: content digest sha256:missing: not found",
+	)
+	setupKindExecFailWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
+		"ctr: digest pull failed",
+	)
+	setupExecMockWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		kindExporterNodeName,
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
+	)
+	setupExecMockWithCmdForExporter(ctx, t, mockClient, kindExporterNodeName, exportCmd)
+	expectCopiedExportTar(ctx, t, mockClient)
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 
 	exporter := image.NewExporter(mockClient)
@@ -751,30 +804,24 @@ func buildKindCtrExportCommand(images ...string) []string {
 	return append(cmd, images...)
 }
 
-func buildCtrPullCommand(imageRef string) []string {
+func buildCtrPullCommand(platform string, imageRef string) []string {
 	return []string{
 		ctrCommand,
 		"--namespace=k8s.io",
 		"images",
 		"pull",
 		"--platform",
-		"linux/amd64",
+		platform,
 		imageRef,
 	}
 }
 
-func expectCopiedExportTar(
-	ctx context.Context,
-	t *testing.T,
-	mockClient *docker.MockAPIClient,
-	nodeName string,
-	tarPath string,
-) {
+func expectCopiedExportTar(ctx context.Context, t *testing.T, mockClient *docker.MockAPIClient) {
 	t.Helper()
 
 	tarContent := createExportTar(t, []byte("fake image data"))
 	mockClient.EXPECT().
-		CopyFromContainer(ctx, nodeName, tarPath).
+		CopyFromContainer(ctx, kindExporterNodeName, kindExporterTarPath).
 		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
 }
 
@@ -793,7 +840,7 @@ func runResolvedSpecificImageExportTest(t *testing.T, testCase specificImageExpo
 		ctx, t, mockClient, kindExporterNodeName,
 		buildKindCtrExportCommand(testCase.expectedExportImage...),
 	)
-	expectCopiedExportTar(ctx, t, mockClient, kindExporterNodeName, kindExporterTarPath)
+	expectCopiedExportTar(ctx, t, mockClient)
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 
 	exporter := image.NewExporter(mockClient)
