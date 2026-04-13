@@ -168,7 +168,9 @@ func TestEvalCanonicalPath_DotDotInPath(t *testing.T) {
 
 	require.NoError(t, err)
 
-	resolvedTempDir, _ := filepath.EvalSymlinks(tempDir)
+	resolvedTempDir, err := filepath.EvalSymlinks(tempDir)
+	require.NoError(t, err)
+
 	expected := filepath.Join(resolvedTempDir, "file.txt")
 	assert.Equal(t, expected, result)
 }

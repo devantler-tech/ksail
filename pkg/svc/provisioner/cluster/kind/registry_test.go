@@ -19,6 +19,7 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/errdefs"
+	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -33,7 +34,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(snapshottest.Run(m))
+	os.Exit(snapshottest.Run(m, snaps.CleanOpts{}))
 }
 
 // setupTestEnvironment creates a standard test environment with mock client, context, and buffer.

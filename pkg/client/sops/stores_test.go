@@ -58,7 +58,9 @@ func TestGetStores(t *testing.T) {
 	}
 
 	//nolint:varnamelen // Short names keep table-driven tests readable.
-	for _, tc := range tests {
+	for i := range tests {
+		tc := tests[i]
+
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
