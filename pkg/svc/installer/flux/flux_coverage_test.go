@@ -128,6 +128,7 @@ func TestEnsureDefaultResources_NilClusterConfig(t *testing.T) {
 
 func TestEnsureDefaultResources_NilContext(t *testing.T) {
 	t.Parallel()
+	lockFluxTestSeams(t)
 
 	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
 		return &rest.Config{Host: "https://127.0.0.1:6443"}, nil
@@ -148,6 +149,7 @@ func TestEnsureDefaultResources_NilContext(t *testing.T) {
 
 func TestEnsureDefaultResources_ArtifactNotPushed(t *testing.T) {
 	t.Parallel()
+	lockFluxTestSeams(t)
 
 	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
 		return &rest.Config{Host: "https://127.0.0.1:6443"}, nil
@@ -166,6 +168,7 @@ func TestEnsureDefaultResources_ArtifactNotPushed(t *testing.T) {
 
 func TestEnsureDefaultResources_LoadRESTConfigError(t *testing.T) {
 	t.Parallel()
+	lockFluxTestSeams(t)
 
 	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
 		return nil, errors.New("config error")
@@ -196,6 +199,7 @@ func TestSetupInstance_NilClusterConfig(t *testing.T) {
 
 func TestSetupInstance_NilContext(t *testing.T) {
 	t.Parallel()
+	lockFluxTestSeams(t)
 
 	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
 		return &rest.Config{Host: "https://127.0.0.1:6443"}, nil
@@ -214,6 +218,7 @@ func TestSetupInstance_NilContext(t *testing.T) {
 
 func TestSetupInstance_LoadRESTConfigError(t *testing.T) {
 	t.Parallel()
+	lockFluxTestSeams(t)
 
 	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
 		return nil, errors.New("config error")
@@ -234,6 +239,7 @@ func TestSetupInstance_LoadRESTConfigError(t *testing.T) {
 
 func TestWaitForFluxReady_LoadRESTConfigError(t *testing.T) {
 	t.Parallel()
+	lockFluxTestSeams(t)
 
 	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
 		return nil, errors.New("no config")
@@ -247,6 +253,7 @@ func TestWaitForFluxReady_LoadRESTConfigError(t *testing.T) {
 
 func TestWaitForFluxReady_NilContext(t *testing.T) {
 	t.Parallel()
+	lockFluxTestSeams(t)
 
 	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
 		return nil, errors.New("no config")
