@@ -36,6 +36,47 @@ type specificImageExportCase struct {
 	expectedExportImage []string
 }
 
+func exportRequestedImages(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	outputPath string,
+	requestedImages []string,
+) {
+	t.Helper()
+
+	exporter := image.NewExporter(mockClient)
+
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{
+			OutputPath: outputPath,
+			Images:     requestedImages,
+		},
+	)
+
+	require.NoError(t, err)
+}
+
+func setupWhoamiExplicitExportTest(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+) {
+	t.Helper()
+
+	setupKindNodeListMock(ctx, mockClient)
+	setupExecMockWithStdoutForExporter(
+		ctx, t, mockClient, kindExporterNodeName,
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
+	)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, kindExporterNodeName)
+}
+
 func TestNewExporter(t *testing.T) {
 	t.Parallel()
 
@@ -281,19 +322,13 @@ func TestExportWithSpecificImagesFallsBackWhenLocalImageListFails(t *testing.T) 
 	expectCopiedExportTar(ctx, t, mockClient)
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 
-	exporter := image.NewExporter(mockClient)
-	err := exporter.Export(
+	exportRequestedImages(
 		ctx,
-		"my-cluster",
-		v1alpha1.DistributionVanilla,
-		v1alpha1.ProviderDocker,
-		image.ExportOptions{
-			OutputPath: outputPath,
-			Images:     []string{"traefik/whoami:v1.10"},
-		},
+		t,
+		mockClient,
+		outputPath,
+		[]string{"traefik/whoami:v1.10"},
 	)
-
-	require.NoError(t, err)
 }
 
 func TestExportK3sDistribution(t *testing.T) {
@@ -548,32 +583,20 @@ func TestExportMissingContentRetriesPullForExplicitImages(t *testing.T) {
 	expectCopiedExportTar(ctx, t, mockClient)
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 
-	exporter := image.NewExporter(mockClient)
-	err := exporter.Export(
+	exportRequestedImages(
 		ctx,
-		"my-cluster",
-		v1alpha1.DistributionVanilla,
-		v1alpha1.ProviderDocker,
-		image.ExportOptions{
-			OutputPath: outputPath,
-			Images:     []string{"traefik/whoami:v1.10"},
-		},
+		t,
+		mockClient,
+		outputPath,
+		[]string{"traefik/whoami:v1.10"},
 	)
-
-	require.NoError(t, err)
 }
 
-func TestExportMissingContentReresolvesExplicitImagesAfterRepairPull(t *testing.T) {
+func TestExportMissingContentUsesFallbackRepairCandidateAfterDigestPullSucceeds(t *testing.T) {
 	t.Parallel()
 
 	ctx, mockClient, outputPath := newExporterTestContext(t)
-	setupKindNodeListMock(ctx, mockClient)
-	setupExecMockWithStdoutForExporter(
-		ctx, t, mockClient, kindExporterNodeName,
-		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
-		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
-	)
-	setupPlatformDetectMockForExporter(ctx, t, mockClient, kindExporterNodeName)
+	setupWhoamiExplicitExportTest(ctx, t, mockClient)
 
 	exportCmd := buildKindCtrExportCommand("docker.io/traefik/whoami:v1.10@sha256:abc123")
 	setupKindExecFailWithCmdForExporter(
@@ -589,6 +612,65 @@ func TestExportMissingContentReresolvesExplicitImagesAfterRepairPull(t *testing.
 		mockClient,
 		kindExporterNodeName,
 		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
+	)
+	setupExecMockWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		kindExporterNodeName,
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
+	)
+	setupExecMockWithStdoutForExporter(
+		ctx, t, mockClient, kindExporterNodeName,
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n",
+	)
+	setupExecMockWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		kindExporterNodeName,
+		buildKindCtrExportCommand("docker.io/traefik/whoami:v1.10"),
+	)
+	expectCopiedExportTar(ctx, t, mockClient)
+	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
+
+	exportRequestedImages(
+		ctx,
+		t,
+		mockClient,
+		outputPath,
+		[]string{"traefik/whoami:v1.10"},
+	)
+}
+
+func TestExportMissingContentReresolvesExplicitImagesAfterRepairPull(t *testing.T) {
+	t.Parallel()
+
+	ctx, mockClient, outputPath := newExporterTestContext(t)
+	setupWhoamiExplicitExportTest(ctx, t, mockClient)
+
+	exportCmd := buildKindCtrExportCommand("docker.io/traefik/whoami:v1.10@sha256:abc123")
+	setupKindExecFailWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		exportCmd,
+		"ctr: failed to get reader: content digest sha256:missing: not found",
+	)
+	setupExecMockWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		kindExporterNodeName,
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
+	)
+	setupExecMockWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		kindExporterNodeName,
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
 	)
 	setupExecMockWithStdoutForExporter(
 		ctx, t, mockClient, kindExporterNodeName,
@@ -606,19 +688,13 @@ func TestExportMissingContentReresolvesExplicitImagesAfterRepairPull(t *testing.
 	expectCopiedExportTar(ctx, t, mockClient)
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 
-	exporter := image.NewExporter(mockClient)
-	err := exporter.Export(
+	exportRequestedImages(
 		ctx,
-		"my-cluster",
-		v1alpha1.DistributionVanilla,
-		v1alpha1.ProviderDocker,
-		image.ExportOptions{
-			OutputPath: outputPath,
-			Images:     []string{"traefik/whoami:v1.10"},
-		},
+		t,
+		mockClient,
+		outputPath,
+		[]string{"traefik/whoami:v1.10"},
 	)
-
-	require.NoError(t, err)
 }
 
 func TestExportFallbackRepairsSingleImageAfterBulkRetryFails(t *testing.T) {
@@ -1165,6 +1241,13 @@ func setupFallbackRepairRetryMocks(
 		mockClient,
 		kindExporterNodeName,
 		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10@sha256:abc123"),
+	)
+	setupKindExecFailWithCmdForExporter(
+		ctx,
+		t,
+		mockClient,
+		buildCtrPullCommand("linux/amd64", "docker.io/traefik/whoami:v1.10"),
+		"ctr: pull failed",
 	)
 	setupExecMockWithStdoutForExporter(
 		ctx, t, mockClient, kindExporterNodeName,

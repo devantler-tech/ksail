@@ -530,6 +530,8 @@ func (e *Exporter) refreshSingleImageContent(
 	platform string,
 	imageRef string,
 ) (string, error) {
+	successfulRef := ""
+
 	var errs []error
 
 	for _, candidate := range repairPullCandidates(imageRef) {
@@ -539,10 +541,18 @@ func (e *Exporter) refreshSingleImageContent(
 			buildCtrPullCommand(platform, candidate),
 		)
 		if err == nil {
-			return candidate, nil
+			if successfulRef == "" || preferBaseRef(successfulRef, candidate) {
+				successfulRef = candidate
+			}
+
+			continue
 		}
 
 		errs = append(errs, fmt.Errorf("%s: %w", candidate, err))
+	}
+
+	if successfulRef != "" {
+		return successfulRef, nil
 	}
 
 	return "", errors.Join(errs...)
