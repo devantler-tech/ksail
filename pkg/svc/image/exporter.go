@@ -89,8 +89,26 @@ func (e *Exporter) Export(
 		return err
 	}
 
+	var (
+		repairImages  []string
+		resolveImages []string
+	)
+
+	if len(opts.Images) > 0 {
+		resolveImages = normalizeImageRefs(opts.Images)
+		repairImages = mergeRepairImages(images, resolveImages)
+	}
+
 	// Export images using ctr inside the node container
-	return e.exportImagesFromNode(ctx, nodeName, opts.OutputPath, images, tmpPath)
+	return e.exportImagesFromNode(
+		ctx,
+		nodeName,
+		opts.OutputPath,
+		images,
+		tmpPath,
+		repairImages,
+		resolveImages,
+	)
 }
 
 // findExportNode finds a suitable node for export operations.
@@ -140,7 +158,7 @@ func (e *Exporter) resolveImages(
 	opts ExportOptions,
 ) ([]string, error) {
 	if len(opts.Images) > 0 {
-		return opts.Images, nil
+		return e.resolveSpecifiedImages(ctx, nodeName, opts.Images), nil
 	}
 
 	images, err := e.listImagesInNode(ctx, nodeName)
@@ -153,6 +171,104 @@ func (e *Exporter) resolveImages(
 	}
 
 	return images, nil
+}
+
+// resolveSpecifiedImages normalizes user-provided image refs and, when possible,
+// resolves them to the exact refs already present in the node's image store.
+// This keeps shorthand refs working while preferring the precise local tag@digest
+// references returned by `ctr images list -q`.
+func (e *Exporter) resolveSpecifiedImages(
+	ctx context.Context,
+	nodeName string,
+	requestedImages []string,
+) []string {
+	normalizedRequested := normalizeImageRefs(requestedImages)
+
+	localImages, err := e.listImagesInNode(ctx, nodeName)
+	if err != nil {
+		return normalizedRequested
+	}
+
+	lookup := newLocalImageLookup(localImages)
+
+	resolved := make([]string, 0, len(normalizedRequested))
+	for _, imageRef := range normalizedRequested {
+		resolved = append(resolved, lookup.resolve(imageRef))
+	}
+
+	return resolved
+}
+
+type localImageLookup struct {
+	byExactRef      map[string]string
+	byBaseRef       map[string]string
+	byRepoDigestRef map[string]string
+}
+
+func newLocalImageLookup(localImages []string) localImageLookup {
+	lookup := localImageLookup{
+		byExactRef:      make(map[string]string, len(localImages)),
+		byBaseRef:       make(map[string]string, len(localImages)),
+		byRepoDigestRef: make(map[string]string, len(localImages)),
+	}
+
+	for _, imageRef := range localImages {
+		lookup.add(imageRef)
+	}
+
+	return lookup
+}
+
+func (l localImageLookup) add(imageRef string) {
+	l.byExactRef[imageRef] = imageRef
+
+	baseRef := stripDigestFromImageRef(imageRef)
+	if existing, exists := l.byBaseRef[baseRef]; !exists ||
+		preferBaseRef(existing, imageRef) {
+		l.byBaseRef[baseRef] = imageRef
+	}
+
+	normalizedBaseRef := NormalizeImageRef(baseRef)
+	if existing, exists := l.byBaseRef[normalizedBaseRef]; !exists ||
+		preferBaseRef(existing, imageRef) {
+		l.byBaseRef[normalizedBaseRef] = imageRef
+	}
+
+	digest := imageDigest(imageRef)
+	if digest == "" {
+		return
+	}
+
+	repoDigestRef := imageRepository(imageRef) + "@" + digest
+	if _, exists := l.byRepoDigestRef[repoDigestRef]; !exists {
+		l.byRepoDigestRef[repoDigestRef] = imageRef
+	}
+}
+
+func preferBaseRef(existingRef string, candidateRef string) bool {
+	return imageDigest(existingRef) != "" && imageDigest(candidateRef) == ""
+}
+
+func (l localImageLookup) resolve(imageRef string) string {
+	if exactRef, exists := l.byExactRef[imageRef]; exists {
+		return exactRef
+	}
+
+	if localRef, exists := l.byBaseRef[imageRef]; exists {
+		return localRef
+	}
+
+	digest := imageDigest(imageRef)
+	if digest == "" {
+		return imageRef
+	}
+
+	repoDigestRef := imageRepository(imageRef) + "@" + digest
+	if localRef, exists := l.byRepoDigestRef[repoDigestRef]; exists {
+		return localRef
+	}
+
+	return imageRef
 }
 
 // listImagesInNode lists all images in the containerd of a node.
@@ -183,6 +299,69 @@ func (e *Exporter) listImagesInNode(
 	return images, nil
 }
 
+func stripDigestFromImageRef(imageRef string) string {
+	baseRef, _, found := strings.Cut(imageRef, "@")
+	if found {
+		return baseRef
+	}
+
+	return imageRef
+}
+
+func imageDigest(imageRef string) string {
+	_, digest, found := strings.Cut(imageRef, "@")
+	if found {
+		return digest
+	}
+
+	return ""
+}
+
+func imageRepository(imageRef string) string {
+	baseRef := stripDigestFromImageRef(imageRef)
+	lastSlash := strings.LastIndex(baseRef, "/")
+
+	lastColon := strings.LastIndex(baseRef, ":")
+	if lastColon > lastSlash {
+		return baseRef[:lastColon]
+	}
+
+	return baseRef
+}
+
+func normalizeImageRefs(imageRefs []string) []string {
+	normalized := make([]string, 0, len(imageRefs))
+
+	for _, imageRef := range imageRefs {
+		normalized = append(normalized, NormalizeImageRef(imageRef))
+	}
+
+	return normalized
+}
+
+func mergeRepairImages(primary []string, secondary []string) []string {
+	covered := make(map[string]struct{}, len(primary)+len(secondary))
+	merged := make([]string, 0, len(primary)+len(secondary))
+
+	add := func(imageRefs []string) {
+		for _, imageRef := range imageRefs {
+			if _, exists := covered[imageRef]; exists {
+				continue
+			}
+
+			merged = append(merged, imageRef)
+			for _, candidate := range repairPullCandidates(imageRef) {
+				covered[candidate] = struct{}{}
+			}
+		}
+	}
+
+	add(primary)
+	add(secondary)
+
+	return merged
+}
+
 // exportImagesFromNode exports images from a node's containerd to the host filesystem.
 func (e *Exporter) exportImagesFromNode(
 	ctx context.Context,
@@ -190,6 +369,8 @@ func (e *Exporter) exportImagesFromNode(
 	outputPath string,
 	images []string,
 	tmpBasePath string,
+	repairImages []string,
+	resolveImages []string,
 ) error {
 	// Create a temporary file path inside the container
 	tmpPath := tmpBasePath + "/ksail-images-export.tar"
@@ -200,40 +381,26 @@ func (e *Exporter) exportImagesFromNode(
 		return fmt.Errorf("failed to detect node platform: %w", err)
 	}
 
-	// Try exporting all images at once first (most efficient if it works)
-	err = e.tryExportImages(ctx, nodeName, tmpPath, platform, images)
-	if err != nil {
-		// Fall back to exporting images one-by-one, skipping failures
-		// This handles cases where some images have incomplete manifests
-		// (e.g., multi-arch images where not all platform layers were pulled)
-		successfulImages, failedImages := e.exportImagesOneByOne(
+	exportImages, exportErr := e.tryExportImagesWithRepair(
+		ctx,
+		nodeName,
+		tmpPath,
+		platform,
+		images,
+		repairImages,
+		resolveImages,
+	)
+	if exportErr != nil {
+		err = e.fallbackExportImages(
 			ctx,
 			nodeName,
 			tmpPath,
 			platform,
-			images,
+			exportImages,
+			exportErr,
 		)
-		if len(successfulImages) == 0 {
-			return fmt.Errorf(
-				"ctr export failed for all images during individual export attempts (initial bulk export error: %w)",
-				err,
-			)
-		}
-
-		// Report failed images to stderr
-		if len(failedImages) > 0 {
-			fmt.Fprintf(
-				os.Stderr,
-				"warning: failed to export %d image(s): %s\n",
-				len(failedImages),
-				strings.Join(failedImages, ", "),
-			)
-		}
-
-		// Re-export only the successful images together
-		err = e.tryExportImages(ctx, nodeName, tmpPath, platform, successfulImages)
 		if err != nil {
-			return fmt.Errorf("ctr export failed: %w", err)
+			return err
 		}
 	}
 
@@ -247,6 +414,213 @@ func (e *Exporter) exportImagesFromNode(
 	_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
 
 	return nil
+}
+
+func (e *Exporter) tryExportImagesWithRepair(
+	ctx context.Context,
+	nodeName string,
+	tmpPath string,
+	platform string,
+	images []string,
+	repairImages []string,
+	resolveImages []string,
+) ([]string, error) {
+	exportErr := e.tryExportImages(ctx, nodeName, tmpPath, platform, images)
+	if exportErr == nil || len(repairImages) == 0 || !isMissingContentError(exportErr) {
+		return images, exportErr
+	}
+
+	successfulRepairRefs, refreshErr := e.refreshImageContent(ctx, nodeName, platform, repairImages)
+	if refreshErr != nil {
+		return images, exportErr
+	}
+
+	refreshedImages := images
+	if len(resolveImages) > 0 {
+		refreshedImages = e.resolveSpecifiedImages(ctx, nodeName, resolveImages)
+	}
+
+	refreshedImages = preferSuccessfulRepairRefs(refreshedImages, successfulRepairRefs)
+
+	return refreshedImages, e.tryExportImages(
+		ctx,
+		nodeName,
+		tmpPath,
+		platform,
+		refreshedImages,
+	)
+}
+
+func (e *Exporter) fallbackExportImages(
+	ctx context.Context,
+	nodeName string,
+	tmpPath string,
+	platform string,
+	images []string,
+	bulkErr error,
+) error {
+	successfulImages, failedImages := e.exportImagesOneByOne(
+		ctx,
+		nodeName,
+		tmpPath,
+		platform,
+		images,
+	)
+	if len(successfulImages) == 0 {
+		return fmt.Errorf(
+			"ctr export failed for all images during individual export attempts (initial bulk export error: %w)",
+			bulkErr,
+		)
+	}
+
+	logFailedImageExports(failedImages)
+
+	err := e.tryExportImages(ctx, nodeName, tmpPath, platform, successfulImages)
+	if err != nil {
+		return fmt.Errorf("ctr export failed: %w", err)
+	}
+
+	return nil
+}
+
+func logFailedImageExports(failedImages []string) {
+	if len(failedImages) == 0 {
+		return
+	}
+
+	fmt.Fprintf(
+		os.Stderr,
+		"warning: failed to export %d image(s): %s\n",
+		len(failedImages),
+		strings.Join(failedImages, ", "),
+	)
+}
+
+func (e *Exporter) refreshImageContent(
+	ctx context.Context,
+	nodeName string,
+	platform string,
+	imageRefs []string,
+) (map[string]string, error) {
+	successfulRefs := make(map[string]string, len(imageRefs))
+
+	var errs []error
+
+	for _, imageRef := range imageRefs {
+		successfulRef, err := e.refreshSingleImageContent(ctx, nodeName, platform, imageRef)
+		if err != nil {
+			errs = append(errs, err)
+
+			continue
+		}
+
+		successfulRefs[imageRef] = successfulRef
+	}
+
+	if len(errs) > 0 {
+		return successfulRefs, errors.Join(errs...)
+	}
+
+	return successfulRefs, nil
+}
+
+func (e *Exporter) refreshSingleImageContent(
+	ctx context.Context,
+	nodeName string,
+	platform string,
+	imageRef string,
+) (string, error) {
+	successfulRef := ""
+
+	var errs []error
+
+	for _, candidate := range repairPullCandidates(imageRef) {
+		_, err := e.executor.ExecInContainer(
+			ctx,
+			nodeName,
+			buildCtrPullCommand(platform, candidate),
+		)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", candidate, err))
+
+			continue
+		}
+
+		// Kind nodes commonly run containerd with discard_unpacked_layers=true, so a
+		// pull can succeed while export still fails until the missing blobs are fetched
+		// back into the content store.
+		_, _ = e.executor.ExecInContainer(
+			ctx,
+			nodeName,
+			buildCtrContentFetchCommand(platform, candidate),
+		)
+
+		if successfulRef == "" || preferBaseRef(successfulRef, candidate) {
+			successfulRef = candidate
+		}
+	}
+
+	if successfulRef != "" {
+		return successfulRef, nil
+	}
+
+	return "", errors.Join(errs...)
+}
+
+func buildCtrPullCommand(platform string, imageRef string) []string {
+	return []string{
+		"ctr",
+		"--namespace=k8s.io",
+		"images",
+		"pull",
+		"--platform",
+		platform,
+		imageRef,
+	}
+}
+
+func buildCtrContentFetchCommand(platform string, imageRef string) []string {
+	return []string{
+		"ctr",
+		"--namespace=k8s.io",
+		"content",
+		"fetch",
+		"--platform",
+		platform,
+		imageRef,
+	}
+}
+
+func repairPullCandidates(imageRef string) []string {
+	candidates := []string{imageRef}
+	if imageDigest(imageRef) == "" {
+		return candidates
+	}
+
+	baseRef := stripDigestFromImageRef(imageRef)
+	if baseRef == imageRepository(imageRef) {
+		return candidates
+	}
+
+	candidates = append(candidates, baseRef)
+
+	normalizedBaseRef := NormalizeImageRef(baseRef)
+	if normalizedBaseRef != baseRef {
+		candidates = append(candidates, normalizedBaseRef)
+	}
+
+	return candidates
+}
+
+func isMissingContentError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errText := err.Error()
+
+	return strings.Contains(errText, "failed to get reader: content digest") &&
+		strings.Contains(errText, "not found")
 }
 
 // tryExportImages attempts to export a set of images using ctr.
@@ -281,6 +655,54 @@ func (e *Exporter) tryExportImages(
 	return err
 }
 
+func (e *Exporter) tryExportSingleImageWithRepair(
+	ctx context.Context,
+	nodeName string,
+	tmpPath string,
+	platform string,
+	image string,
+) (string, error) {
+	err := e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
+	if err == nil || !isMissingContentError(err) {
+		return image, err
+	}
+
+	successfulRef, refreshErr := e.refreshSingleImageContent(ctx, nodeName, platform, image)
+	if refreshErr != nil {
+		return image, err
+	}
+
+	return successfulRef, e.tryExportImages(
+		ctx,
+		nodeName,
+		tmpPath,
+		platform,
+		[]string{successfulRef},
+	)
+}
+
+func preferSuccessfulRepairRefs(
+	images []string,
+	successfulRepairRefs map[string]string,
+) []string {
+	if len(successfulRepairRefs) == 0 {
+		return images
+	}
+
+	preferred := make([]string, 0, len(images))
+	for _, image := range images {
+		if successfulRef, exists := successfulRepairRefs[image]; exists {
+			preferred = append(preferred, successfulRef)
+
+			continue
+		}
+
+		preferred = append(preferred, image)
+	}
+
+	return preferred
+}
+
 // exportImagesOneByOne tests each image individually and returns the list of
 // images that can be successfully exported, along with the list of failed images.
 func (e *Exporter) exportImagesOneByOne(
@@ -294,9 +716,15 @@ func (e *Exporter) exportImagesOneByOne(
 	failed := make([]string, 0, len(images))
 
 	for _, image := range images {
-		err := e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
+		successfulRef, err := e.tryExportSingleImageWithRepair(
+			ctx,
+			nodeName,
+			tmpPath,
+			platform,
+			image,
+		)
 		if err == nil {
-			successful = append(successful, image)
+			successful = append(successful, successfulRef)
 		} else {
 			failed = append(failed, image)
 		}

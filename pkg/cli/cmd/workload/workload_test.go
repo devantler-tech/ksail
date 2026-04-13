@@ -8,9 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	snapshottest "github.com/devantler-tech/ksail/v6/internal/testutil/snapshottest"
 	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v6/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd"
@@ -25,6 +27,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+//nolint:gochecknoglobals // Serializes t.Chdir-based config discovery tests in this package.
+var workloadConfigDiscoveryMu sync.Mutex
 
 func TestNewImagesCmdHasCorrectDefaults(t *testing.T) {
 	t.Parallel()
@@ -2605,16 +2610,7 @@ func normalizeHomePaths(content string) string {
 }
 
 func TestMain(m *testing.M) {
-	exitCode := m.Run()
-
-	_, err := snaps.Clean(m, snaps.CleanOpts{Sort: true})
-	if err != nil {
-		_, _ = os.Stderr.WriteString("failed to clean snapshots: " + err.Error() + "\n")
-
-		os.Exit(1)
-	}
-
-	os.Exit(exitCode)
+	os.Exit(snapshottest.Run(m, snaps.CleanOpts{Sort: true}))
 }
 
 func writeValidKsailConfig(t *testing.T, dir string) {
@@ -2639,6 +2635,36 @@ func writeValidKsailConfig(t *testing.T, dir string) {
 
 	kindConfigPath := filepath.Join(dir, "kind.yaml")
 	require.NoError(t, os.WriteFile(kindConfigPath, []byte(kindConfigContent), 0o600))
+}
+
+func writeFluxReconcileKsailConfig(t *testing.T, dir string) {
+	t.Helper()
+
+	writeValidKsailConfig(t, dir)
+
+	ksailConfigContent := fmt.Sprintf(
+		"apiVersion: ksail.io/v1alpha1\n"+
+			"kind: Cluster\n"+
+			"spec:\n"+
+			"  cluster:\n"+
+			"    distribution: Vanilla\n"+
+			"    distributionConfig: kind.yaml\n"+
+			"    gitOpsEngine: Flux\n"+
+			"    connection:\n"+
+			"      kubeconfig: %s\n"+
+			"  workload:\n"+
+			"    sourceDirectory: k8s\n",
+		filepath.Join(dir, "missing-kubeconfig"),
+	)
+
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(dir, "ksail.yaml"),
+			[]byte(ksailConfigContent),
+			0o600,
+		),
+	)
 }
 
 func TestWorkloadHelpSnapshots(t *testing.T) {
@@ -2707,33 +2733,41 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 	// Note: "apply" and "install" are excluded as they are full implementations with kubectl/helm wrappers
 	testCases := []struct {
 		name          string
+		args          []string
 		expectedError string
+		writeConfig   func(t *testing.T, dir string)
 	}{
 		{
-			name: "reconcile",
-			// Reconcile auto-detects GitOps engine; fails if no engine in cluster
-			expectedError: "no GitOps engine detected in cluster",
+			name:          "reconcile",
+			args:          []string{"workload", "reconcile", "--timeout=1ms"},
+			expectedError: "create flux reconciler",
+			writeConfig:   writeFluxReconcileKsailConfig,
 		},
 		{
-			name: "push",
-			// Push auto-detects registry; fails if no registry can be detected
-			expectedError: "unable to detect registry",
+			name:          "push",
+			args:          []string{"workload", "push", "oci://example.com:5000/test:dev"},
+			expectedError: "no manifest files found in source directory",
+			writeConfig:   writeValidKsailConfig,
 		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			// Intentionally not parallel: this test exercises config discovery via t.Chdir.
 			var out bytes.Buffer
 
 			tempDir := t.TempDir()
-			writeValidKsailConfig(t, tempDir)
+			testCase.writeConfig(t, tempDir)
+
+			workloadConfigDiscoveryMu.Lock()
+			t.Cleanup(workloadConfigDiscoveryMu.Unlock)
 
 			t.Chdir(tempDir)
 
 			root := cmd.NewRootCmd("test", "test", "test")
 			root.SetOut(&out)
 			root.SetErr(&out)
-			root.SetArgs([]string{"workload", testCase.name})
+			root.SetArgs(testCase.args)
 
 			err := root.Execute()
 			require.ErrorContains(
@@ -2873,4 +2907,40 @@ func TestTopologicalSortKustomizations(t *testing.T) {
 			assert.Equal(t, testCase.expected, names)
 		})
 	}
+}
+
+func TestOutputPlain(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	images := []string{"nginx:latest", "redis:7", "postgres:16"}
+	err := workload.ExportOutputPlain(cmd, images)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "nginx:latest")
+	assert.Contains(t, output, "redis:7")
+	assert.Contains(t, output, "postgres:16")
+}
+
+func TestOutputJSON(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	images := []string{"nginx:latest", "redis:7"}
+	err := workload.ExportOutputJSON(cmd, images)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "nginx:latest")
+	assert.Contains(t, output, "redis:7")
+	assert.Contains(t, output, "[")
 }

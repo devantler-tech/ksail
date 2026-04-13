@@ -31,3 +31,14 @@ func FetchGatewayAPICRDs(
 ) ([]apiextensionsv1.CustomResourceDefinition, error) {
 	return fetchGatewayAPICRDs(ctx, url, timeout)
 }
+
+// FetchGatewayAPICRDsWithRetryForTest exports the configurable retry helper for testing.
+func FetchGatewayAPICRDsWithRetryForTest(
+	ctx context.Context,
+	url string,
+	timeout time.Duration,
+	maxRetries int,
+	baseWait, maxWait time.Duration,
+) ([]apiextensionsv1.CustomResourceDefinition, error) {
+	return fetchGatewayAPICRDsWithRetry(ctx, url, timeout, maxRetries, baseWait, maxWait)
+}

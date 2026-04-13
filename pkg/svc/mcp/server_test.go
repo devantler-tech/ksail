@@ -157,6 +157,7 @@ func connectClientServer(
 	return clientSession
 }
 
+//nolint:goconst // Repeated literals keep the test cases explicit.
 func TestNewServer_ListTools(t *testing.T) {
 	t.Parallel()
 

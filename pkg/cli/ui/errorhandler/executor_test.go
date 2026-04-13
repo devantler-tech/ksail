@@ -5,22 +5,14 @@ import (
 	"os"
 	"testing"
 
+	snapshottest "github.com/devantler-tech/ksail/v6/internal/testutil/snapshottest"
 	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/errorhandler"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )
 
 func TestMain(m *testing.M) {
-	exitCode := m.Run()
-
-	_, err := snaps.Clean(m, snaps.CleanOpts{Sort: true})
-	if err != nil {
-		_, _ = os.Stderr.WriteString("failed to clean snapshots: " + err.Error() + "\n")
-
-		os.Exit(1)
-	}
-
-	os.Exit(exitCode)
+	os.Exit(snapshottest.Run(m, snaps.CleanOpts{Sort: true}))
 }
 
 var (
