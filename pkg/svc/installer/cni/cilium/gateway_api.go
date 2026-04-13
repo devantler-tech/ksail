@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/devantler-tech/ksail/v6/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/image/parser"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -22,6 +23,14 @@ import (
 
 //go:embed Dockerfile.gateway-api
 var gatewayAPIDockerfile string
+
+const (
+	// Retry Gateway API bundle downloads on transient GitHub/network failures in CI.
+	gatewayAPICRDFetchMaxRetries = 5
+	gatewayAPICRDRetryBaseWait   = 3 * time.Second
+	gatewayAPICRDRetryMaxWait    = 30 * time.Second
+	maxGatewayAPICRDResponseSize = 10 << 20
+)
 
 // gatewayAPICRDsVersion returns the pinned Gateway API version extracted from the embedded Dockerfile.
 func gatewayAPICRDsVersion() string {
@@ -92,12 +101,65 @@ func fetchGatewayAPICRDs(
 	url string,
 	timeout time.Duration,
 ) ([]apiextensionsv1.CustomResourceDefinition, error) {
+	return fetchGatewayAPICRDsWithRetry(
+		ctx,
+		url,
+		timeout,
+		gatewayAPICRDFetchMaxRetries,
+		gatewayAPICRDRetryBaseWait,
+		gatewayAPICRDRetryMaxWait,
+	)
+}
+
+func fetchGatewayAPICRDsWithRetry(
+	ctx context.Context,
+	url string,
+	timeout time.Duration,
+	maxRetries int,
+	baseWait, maxWait time.Duration,
+) ([]apiextensionsv1.CustomResourceDefinition, error) {
+	httpClient := &http.Client{Timeout: timeout}
+
+	retries := max(maxRetries, 1)
+	var lastErr error
+
+	for attempt := 1; attempt <= retries; attempt++ {
+		crds, err := fetchGatewayAPICRDsOnce(ctx, url, httpClient)
+		if err == nil {
+			return crds, nil
+		}
+
+		lastErr = err
+		if !netretry.IsRetryable(lastErr) || attempt == retries {
+			break
+		}
+
+		delay := netretry.ExponentialDelay(attempt, baseWait, maxWait)
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+
+			return nil, fmt.Errorf("download CRDs cancelled: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+
+	return nil, lastErr
+}
+
+func fetchGatewayAPICRDsOnce(
+	ctx context.Context,
+	url string,
+	httpClient *http.Client,
+) ([]apiextensionsv1.CustomResourceDefinition, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-
-	httpClient := &http.Client{Timeout: timeout}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -113,11 +175,7 @@ func fetchGatewayAPICRDs(
 		)
 	}
 
-	// Limit response body to 10 MiB to prevent excessive memory usage
-	// from unexpected responses.
-	const maxResponseBytes = 10 << 20
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxGatewayAPICRDResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
