@@ -57,7 +57,7 @@ func prepareClusterDirForWriteFailure(t *testing.T, clusterDir string) {
 	}
 
 	require.NoError(t, setClusterDirReadOnly(clusterDir))
-	t.Cleanup(func() { restoreClusterDirMode(clusterDir, info.Mode().Perm()) })
+	t.Cleanup(func() { restoreClusterDirMode(clusterDir, info.Mode()) })
 }
 
 func assertGenerateWriteError(

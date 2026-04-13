@@ -292,7 +292,7 @@ func TestConnectivityCheckPodSpec(t *testing.T) {
 			require.Equal(t, "default", pod.Namespace)
 			require.Equal(t, corev1.RestartPolicyNever, pod.Spec.RestartPolicy)
 			require.Len(t, pod.Spec.Containers, 1)
-			require.Equal(t, "busybox:stable", pod.Spec.Containers[0].Image)
+			require.Equal(t, "busybox:1.36.1", pod.Spec.Containers[0].Image)
 			require.Equal(t, corev1.PullIfNotPresent, pod.Spec.Containers[0].ImagePullPolicy)
 			require.Contains(t, pod.Spec.Containers[0].Command[2], "nc -w 5 "+testClusterIP+" 443")
 			require.Len(t, pod.Spec.Tolerations, 1)

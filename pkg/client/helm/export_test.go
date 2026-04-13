@@ -26,7 +26,7 @@ var (
 	ApplyCommonActionConfig  = applyCommonActionConfig
 )
 
-// Expose unexported error sentinels for test assertions.
+// Expose unexported error sentinels and repository helpers for test assertions.
 var (
 	ErrUnexpectedReleaseType   = errUnexpectedReleaseType
 	ErrReleaseNameRequired     = errReleaseNameRequired
