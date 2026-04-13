@@ -2,6 +2,7 @@ package kubeconfighook_test
 
 import (
 	"encoding/base64"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -275,7 +276,7 @@ func TestMaybeRefreshOmniKubeconfig_NoConfig(t *testing.T) {
 	t.Chdir(tmpDir)
 
 	cmd := &cobra.Command{}
-	cmd.SetOut(os.Stdout)
+	cmd.SetOut(io.Discard)
 
 	// Should not panic or produce errors
 	kubeconfighook.MaybeRefreshOmniKubeconfig(cmd)

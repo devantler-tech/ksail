@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,6 +48,12 @@ func TestReadFileSafe_SameAsBase(t *testing.T) {
 	_, err := fsutil.ReadFileSafe(base, base)
 	// Reading a directory as a file fails, but should not report path-outside-base
 	require.Error(t, err, "reading a directory as a file should fail")
+	assert.NotErrorIs(
+		t,
+		err,
+		fsutil.ErrPathOutsideBase,
+		"reading the base directory itself should not be reported as path-outside-base",
+	)
 }
 
 func TestReadFileSafe_NestedSymlinkInsideBase(t *testing.T) {

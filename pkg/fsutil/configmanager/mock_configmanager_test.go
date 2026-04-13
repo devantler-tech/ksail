@@ -102,7 +102,8 @@ func TestMockConfigManager_RunAndReturn(t *testing.T) {
 			val := "verbose-result"
 
 			return &val, nil
-		})
+		}).
+		Twice()
 
 	// Test with silent=true
 	silentResult, err := mockCM.Load(configmanager.LoadOptions{Silent: true})
@@ -110,6 +111,12 @@ func TestMockConfigManager_RunAndReturn(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, silentResult)
 	assert.Equal(t, "silent-result", *silentResult)
+
+	verboseResult, err := mockCM.Load(configmanager.LoadOptions{})
+
+	require.NoError(t, err)
+	require.NotNil(t, verboseResult)
+	assert.Equal(t, "verbose-result", *verboseResult)
 }
 
 // TestMockConfigManager_Run verifies the Run callback is invoked.
