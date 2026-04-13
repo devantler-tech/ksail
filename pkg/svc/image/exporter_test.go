@@ -587,7 +587,8 @@ func TestExportMissingContentReresolvesExplicitImagesAfterRepairPull(t *testing.
 	setupExecMockWithStdoutForExporter(
 		ctx, t, mockClient, kindExporterNodeName,
 		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
-		"docker.io/traefik/whoami:v1.10\n",
+		"docker.io/traefik/whoami:v1.10@sha256:abc123\n"+
+			"docker.io/traefik/whoami:v1.10\n",
 	)
 	setupExecMockWithCmdForExporter(
 		ctx,

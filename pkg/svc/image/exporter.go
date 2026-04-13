@@ -223,12 +223,14 @@ func (l localImageLookup) add(imageRef string) {
 	l.byExactRef[imageRef] = imageRef
 
 	baseRef := stripDigestFromImageRef(imageRef)
-	if _, exists := l.byBaseRef[baseRef]; !exists {
+	if existing, exists := l.byBaseRef[baseRef]; !exists ||
+		preferBaseRef(existing, imageRef) {
 		l.byBaseRef[baseRef] = imageRef
 	}
 
 	normalizedBaseRef := NormalizeImageRef(baseRef)
-	if _, exists := l.byBaseRef[normalizedBaseRef]; !exists {
+	if existing, exists := l.byBaseRef[normalizedBaseRef]; !exists ||
+		preferBaseRef(existing, imageRef) {
 		l.byBaseRef[normalizedBaseRef] = imageRef
 	}
 
@@ -241,6 +243,10 @@ func (l localImageLookup) add(imageRef string) {
 	if _, exists := l.byRepoDigestRef[repoDigestRef]; !exists {
 		l.byRepoDigestRef[repoDigestRef] = imageRef
 	}
+}
+
+func preferBaseRef(existingRef string, candidateRef string) bool {
+	return imageDigest(existingRef) != "" && imageDigest(candidateRef) == ""
 }
 
 func (l localImageLookup) resolve(imageRef string) string {
