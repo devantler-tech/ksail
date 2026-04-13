@@ -29,6 +29,10 @@ func isWindowsSymlinkPrivilegeError(err error) bool {
 		err = linkErr.Err
 	}
 
+	if err == nil {
+		return false
+	}
+
 	var errno syscall.Errno
 	if errors.As(err, &errno) && errno == syscall.Errno(windowsPrivilegeNotHeldCode) {
 		return true

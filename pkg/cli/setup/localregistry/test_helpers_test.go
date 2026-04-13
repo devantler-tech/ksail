@@ -3,23 +3,15 @@ package localregistry_test
 import (
 	"bytes"
 	"context"
-	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v6/pkg/timer"
 	"github.com/spf13/cobra"
 )
 
-// stubTimer implements timer.Timer for tests.
-type stubTimer struct{}
-
-func (s *stubTimer) Start()                                    {}
-func (s *stubTimer) NewStage()                                 {}
-func (s *stubTimer) Stop()                                     {}
-func (s *stubTimer) GetTiming() (time.Duration, time.Duration) { return 0, 0 }
-
-// stubLifecycleDeps creates lifecycle Deps with a no-op timer.
+// stubLifecycleDeps creates lifecycle Deps with a timer suitable for tests.
 func stubLifecycleDeps() lifecycle.Deps {
-	return lifecycle.Deps{Timer: &stubTimer{}}
+	return lifecycle.Deps{Timer: timer.New()}
 }
 
 // newTestCmd creates a new Cobra command with a buffer as output
