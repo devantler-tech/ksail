@@ -2,7 +2,6 @@ package fsutil_test
 
 import (
 	"os"
-	"os/user"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -44,10 +43,7 @@ func skipPermissionSensitivePathTest(t *testing.T) {
 		t.Skip("permission semantics differ on Windows")
 	}
 
-	currentUser, err := user.Current()
-	require.NoError(t, err)
-
-	if currentUser.Uid == "0" {
+	if os.Geteuid() == 0 {
 		t.Skip("running as root — permission checks are bypassed")
 	}
 }

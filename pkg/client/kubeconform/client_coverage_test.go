@@ -23,7 +23,7 @@ data: "this is not valid for strict mode"
 	client := kubeconform.NewClient()
 	opts := &kubeconform.ValidationOptions{
 		Strict:               true,
-		IgnoreMissingSchemas: true,
+		IgnoreMissingSchemas: false,
 	}
 
 	err := client.ValidateBytes(context.Background(), "test.yaml", []byte(invalidManifest), opts)
