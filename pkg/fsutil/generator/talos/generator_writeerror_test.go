@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v6/internal/testutil/rootcheck"
 	talosgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/talos"
 	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
 	"github.com/stretchr/testify/assert"
@@ -23,7 +24,7 @@ func skipPermissionWriteFailureTest(t *testing.T) {
 		t.Skip("permission semantics differ on Windows")
 	}
 
-	if os.Geteuid() == 0 {
+	if rootcheck.IsRootUser() {
 		t.Skip("running as root — permission checks are bypassed")
 	}
 }
@@ -38,13 +39,15 @@ func setClusterDirReadOnly(path string) error {
 	return nil
 }
 
-func setClusterDirWritable(path string) {
-	//nolint:gosec // Test restores directory permissions during cleanup.
-	_ = os.Chmod(path, 0o755)
+func restoreClusterDirMode(path string, mode os.FileMode) {
+	_ = os.Chmod(path, mode)
 }
 
 func prepareClusterDirForWriteFailure(t *testing.T, clusterDir string) {
 	t.Helper()
+
+	info, err := os.Stat(clusterDir)
+	require.NoError(t, err)
 
 	entries, err := os.ReadDir(clusterDir)
 	require.NoError(t, err)
@@ -54,7 +57,7 @@ func prepareClusterDirForWriteFailure(t *testing.T, clusterDir string) {
 	}
 
 	require.NoError(t, setClusterDirReadOnly(clusterDir))
-	t.Cleanup(func() { setClusterDirWritable(clusterDir) })
+	t.Cleanup(func() { restoreClusterDirMode(clusterDir, info.Mode().Perm()) })
 }
 
 func assertGenerateWriteError(

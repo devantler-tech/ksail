@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v6/internal/testutil/rootcheck"
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,7 +44,7 @@ func skipPermissionSensitivePathTest(t *testing.T) {
 		t.Skip("permission semantics differ on Windows")
 	}
 
-	if os.Geteuid() == 0 {
+	if rootcheck.IsRootUser() {
 		t.Skip("running as root — permission checks are bypassed")
 	}
 }
