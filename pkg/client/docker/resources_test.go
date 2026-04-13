@@ -26,6 +26,7 @@ func TestGetConcreteDockerClient_InvalidEnv(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "://")
 	t.Setenv("DOCKER_TLS_VERIFY", "")
 	t.Setenv("DOCKER_CERT_PATH", "")
+	t.Setenv("DOCKER_CONTEXT", "")
 
 	concreteClient, err := docker.GetConcreteDockerClient()
 
