@@ -40,7 +40,7 @@ func nonExistentRootPath(t *testing.T, parts ...string) string {
 func skipPermissionSensitivePathTest(t *testing.T) {
 	t.Helper()
 
-	if runtime.GOOS == windowsGOOS {
+	if runtime.GOOS == "windows" {
 		t.Skip("permission semantics differ on Windows")
 	}
 
