@@ -806,8 +806,6 @@ func (m *mockFluxClient) Apply(
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
 func TestWaitForFluxInstanceReady_Success(t *testing.T) {
-	lockFluxTestSeams(t)
-
 	// Removed t.Parallel() to avoid test pollution with global mock
 	mockClient := &mockFluxClient{
 		getFunc: func(
@@ -846,8 +844,6 @@ func TestWaitForFluxInstanceReady_Success(t *testing.T) {
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
 func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
-	lockFluxTestSeams(t)
-
 	// Removed t.Parallel() to avoid test pollution with global mock
 	mockClient := &mockFluxClient{
 		getFunc: func(
@@ -893,8 +889,6 @@ func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
 func TestWaitForFluxInstanceReady_NotFound(t *testing.T) {
-	lockFluxTestSeams(t)
-
 	// Removed t.Parallel() to avoid test pollution with global mock
 	callCount := 0
 	mockClient := &mockFluxClient{
@@ -940,8 +934,6 @@ func TestWaitForFluxInstanceReady_NotFound(t *testing.T) {
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
 func TestWaitForFluxInstanceReady_ClientCreationError(t *testing.T) {
-	lockFluxTestSeams(t)
-
 	// Removed t.Parallel() to avoid test pollution with global mock
 	callCount := 0
 	// Mock the client factory to fail initially then succeed
@@ -985,8 +977,6 @@ func TestWaitForFluxInstanceReady_ClientCreationError(t *testing.T) {
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
 func TestWaitForFluxReady_DiagnosticsIncludedOnTimeout(t *testing.T) {
-	lockFluxTestSeams(t)
-
 	const wantDiagFragment = "source-controller: CrashLoopBackOff"
 
 	// Mock flux resources client: always return Ready=False so the call times out.
@@ -1043,8 +1033,6 @@ func TestWaitForFluxReady_DiagnosticsIncludedOnTimeout(t *testing.T) {
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
 func TestEnsureDefaultResources_DiagnosticsIncludedOnTimeout(t *testing.T) {
-	lockFluxTestSeams(t)
-
 	const wantDiagFragment = "source-controller: CrashLoopBackOff"
 
 	// Skip core Flux setup (API server / CRD interactions) so the test exercises
