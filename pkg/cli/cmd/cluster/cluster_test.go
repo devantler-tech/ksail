@@ -1476,6 +1476,15 @@ func setupMockRegistryBackend(t *testing.T) {
 			return fn(mockClient)
 		},
 	))
+
+	// Override the cluster stability check to be a no-op.
+	// Tests use a fake kubeconfig without a real cluster, so the real
+	// stability check would time out waiting for API server connectivity.
+	t.Cleanup(setup.SetClusterStabilityCheckForTests(
+		func(_ context.Context, _ *v1alpha1.Cluster) error {
+			return nil
+		},
+	))
 }
 
 func writeFile(t *testing.T, dir, name, content string) {
