@@ -50,9 +50,24 @@ The chat assistant supports multiple authentication methods via environment vari
 
 **Note:** `GITHUB_TOKEN` and `GH_TOKEN` are intentionally filtered as they are general-purpose personal access tokens that may lack Copilot-specific scopes, which can cause authentication errors.
 
+## Slash Commands
+
+Type `/` in the input box to open the command picker — a floating autocomplete popup with arrow-key navigation, **Enter** to fire (or fill if the command takes an argument), and **Tab** to fill without firing.
+
+| Command | Arguments | Description |
+|---------|-----------|-------------|
+| `/mode` | `interactive` \| `plan` \| `autopilot` | Switch chat mode |
+| `/model` | `<model-id>` (optional) | Switch LLM model — opens the model picker if no ID is given |
+| `/new` | — | Start a new chat session |
+| `/sessions` | — | Open session history picker |
+| `/help` | — | Show keyboard shortcuts and commands |
+| `/clear` | — | Clear the chat viewport |
+
+Commands that accept arguments show an **option picker** after selection (e.g., `/mode` lists `interactive`, `plan`, `autopilot` with descriptions).
+
 ## Chat Modes
 
-Press **Tab** to cycle between three modes:
+Press **Tab** to cycle between three modes, or use `/mode <name>` to switch directly:
 
 ### Interactive Mode (`</>`)
 
@@ -80,6 +95,12 @@ Use `--model auto` to let Copilot choose the best available model. The TUI shows
 
 The TUI displays your premium request usage (e.g., `300/300 reqs · 0% · resets Jan 2`) or `∞ reqs` for unlimited entitlements.
 
+### MCP Tool Elicitation
+
+When an MCP tool needs additional input during execution, an inline **Input Requested** modal appears with one or more form fields. Fill in the fields and press **Enter** to accept, or **Esc** to decline. Use **Tab / Shift+Tab** to navigate between fields in multi-field forms.
+
+In non-TUI mode (plain terminal), elicitation prompts are presented as stdin prompts.
+
 ### Prompt Queue
 
 Queue multiple prompts to run sequentially without waiting for each response. While a response is actively streaming, press **Ctrl+Q** to add the current input to the queue — queued prompts are processed in FIFO order after the current turn finishes, with any steering prompts for that turn applied first. Press **Ctrl+X** to remove the most recently added pending prompt.
@@ -98,11 +119,18 @@ Chat sessions support unlimited conversation length through automatic background
 
 ### Modes & Settings
 - **Tab** — Cycle chat mode (Interactive → Plan → Autopilot → Interactive)
+- **/** — Open command picker (autocomplete for slash commands)
 - **Ctrl+T** — Expand/collapse tool execution details
 - **Ctrl+O** — Change AI model (lazy-loaded picker)
 - **Ctrl+E** — Change reasoning effort level
 - **Ctrl+H** — View session history
 - **Ctrl+N** — Start new chat session
+
+### Elicitation Modal
+When an MCP tool requests additional input:
+- **Enter** — Accept (submit form values)
+- **Esc** — Decline
+- **Tab / Shift+Tab** — Navigate between fields (multi-field forms)
 
 ### Permission Prompts
 When an operation requires approval, an inline permission modal appears:
