@@ -73,18 +73,28 @@ func (m *Model) handleElicitationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "shift+tab":
 		return m.navigateElicitationField(-1)
 	case "backspace":
-		pending := m.pendingElicitation
-		if len(pending.inputValue) > 0 {
-			pending.inputValue = pending.inputValue[:len(pending.inputValue)-1]
-		}
+		m.handleElicitationBackspace()
 
 		return m, nil
 	default:
-		if len(msg.String()) == 1 {
-			m.pendingElicitation.inputValue += msg.String()
-		}
+		m.handleElicitationRune(msg)
 
 		return m, nil
+	}
+}
+
+// handleElicitationBackspace removes the last character from the elicitation input.
+func (m *Model) handleElicitationBackspace() {
+	pending := m.pendingElicitation
+	if len(pending.inputValue) > 0 {
+		pending.inputValue = pending.inputValue[:len(pending.inputValue)-1]
+	}
+}
+
+// handleElicitationRune appends typed runes to the elicitation input.
+func (m *Model) handleElicitationRune(msg tea.KeyMsg) {
+	if len(msg.Runes) > 0 {
+		m.pendingElicitation.inputValue += string(msg.Runes)
 	}
 }
 
@@ -199,7 +209,9 @@ func (m *Model) renderElicitationModal() string {
 }
 
 // renderElicitationHeader writes the title, message, and URL sections. Returns the line count.
-func (m *Model) renderElicitationHeader(content *strings.Builder, req *elicitationRequestMsg, mStyles modalContentStyles) int {
+func (m *Model) renderElicitationHeader(
+	content *strings.Builder, req *elicitationRequestMsg, mStyles modalContentStyles,
+) int {
 	lines := 0
 
 	title := "📋 Input Requested"
@@ -227,21 +239,23 @@ func (m *Model) renderElicitationHeader(content *strings.Builder, req *elicitati
 }
 
 // renderElicitationFields writes the form field section. Returns the line count.
-func (m *Model) renderElicitationFields(content *strings.Builder, pending *pendingElicitation, mStyles modalContentStyles) int {
+func (m *Model) renderElicitationFields(
+	content *strings.Builder, pending *pendingElicitation, mStyles modalContentStyles,
+) int {
 	if len(pending.fields) == 0 {
 		return 0
 	}
 
 	lines := 0
 
-	for i, field := range pending.fields {
+	for fieldIdx, field := range pending.fields {
 		prefix := "  "
-		if i == pending.fieldIndex {
+		if fieldIdx == pending.fieldIndex {
 			prefix = "▸ "
 		}
 
 		val := pending.fieldValues[field]
-		if i == pending.fieldIndex {
+		if fieldIdx == pending.fieldIndex {
 			val = pending.inputValue
 		}
 

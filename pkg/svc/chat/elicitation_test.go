@@ -12,6 +12,8 @@ import (
 )
 
 func TestCreateElicitationHandler_AcceptSimple(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("y\n")
 	writer := &bytes.Buffer{}
 	handler := chat.CreateElicitationHandler(reader, writer)
@@ -27,6 +29,8 @@ func TestCreateElicitationHandler_AcceptSimple(t *testing.T) {
 }
 
 func TestCreateElicitationHandler_DeclineSimple(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("n\n")
 	writer := &bytes.Buffer{}
 	handler := chat.CreateElicitationHandler(reader, writer)
@@ -40,6 +44,8 @@ func TestCreateElicitationHandler_DeclineSimple(t *testing.T) {
 }
 
 func TestCreateElicitationHandler_DefaultDecline(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("\n")
 	writer := &bytes.Buffer{}
 	handler := chat.CreateElicitationHandler(reader, writer)
@@ -53,6 +59,8 @@ func TestCreateElicitationHandler_DefaultDecline(t *testing.T) {
 }
 
 func TestCreateElicitationHandler_EOF(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("") // EOF immediately
 	writer := &bytes.Buffer{}
 	handler := chat.CreateElicitationHandler(reader, writer)
@@ -66,6 +74,8 @@ func TestCreateElicitationHandler_EOF(t *testing.T) {
 }
 
 func TestCreateElicitationHandler_FormFields(t *testing.T) {
+	t.Parallel()
+
 	input := "hello\nworld\n"
 	reader := strings.NewReader(input)
 	writer := &bytes.Buffer{}
@@ -90,6 +100,8 @@ func TestCreateElicitationHandler_FormFields(t *testing.T) {
 }
 
 func TestCreateElicitationHandler_FormFieldDecline(t *testing.T) {
+	t.Parallel()
+
 	input := "hello\n!cancel\n"
 	reader := strings.NewReader(input)
 	writer := &bytes.Buffer{}
@@ -111,6 +123,8 @@ func TestCreateElicitationHandler_FormFieldDecline(t *testing.T) {
 }
 
 func TestCreateElicitationHandler_FormFieldEOF(t *testing.T) {
+	t.Parallel()
+
 	input := "hello\n" // only one field, then EOF
 	reader := strings.NewReader(input)
 	writer := &bytes.Buffer{}
@@ -132,6 +146,8 @@ func TestCreateElicitationHandler_FormFieldEOF(t *testing.T) {
 }
 
 func TestCreateElicitationHandler_URLMode(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("y\n")
 	writer := &bytes.Buffer{}
 	handler := chat.CreateElicitationHandler(reader, writer)
@@ -148,6 +164,8 @@ func TestCreateElicitationHandler_URLMode(t *testing.T) {
 }
 
 func TestCreateElicitationHandler_EmptySchema(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("y\n")
 	writer := &bytes.Buffer{}
 	handler := chat.CreateElicitationHandler(reader, writer)

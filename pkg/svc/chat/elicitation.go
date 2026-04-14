@@ -2,6 +2,7 @@ package chat
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -50,8 +51,11 @@ func promptElicitationAccept(reader *bufio.Reader, writer io.Writer) (copilot.El
 
 	line, readErr := reader.ReadString('\n')
 	if readErr != nil {
-		// stdin EOF/pipe-close → cancel the elicitation gracefully
-		return copilot.ElicitationResult{Action: "cancel"}, nil //nolint:nilerr // intentional: EOF cancels
+		if errors.Is(readErr, io.EOF) {
+			return copilot.ElicitationResult{Action: "cancel"}, nil
+		}
+
+		return copilot.ElicitationResult{}, fmt.Errorf("reading elicitation response: %w", readErr)
 	}
 
 	input := strings.TrimSpace(strings.ToLower(line))
@@ -65,7 +69,9 @@ func promptElicitationAccept(reader *bufio.Reader, writer io.Writer) (copilot.El
 
 // promptElicitationFields prompts for each field in the schema.
 // The user can type "!cancel" on any field to decline the elicitation.
-func promptElicitationFields(reader *bufio.Reader, writer io.Writer, schema map[string]any) (copilot.ElicitationResult, error) {
+func promptElicitationFields(
+	reader *bufio.Reader, writer io.Writer, schema map[string]any,
+) (copilot.ElicitationResult, error) {
 	props, ok := schema["properties"].(map[string]any)
 	if !ok || len(props) == 0 {
 		return promptElicitationAccept(reader, writer)
@@ -88,8 +94,11 @@ func promptElicitationFields(reader *bufio.Reader, writer io.Writer, schema map[
 
 		line, readErr := reader.ReadString('\n')
 		if readErr != nil {
-			// stdin EOF/pipe-close → cancel the elicitation gracefully
-			return copilot.ElicitationResult{Action: "cancel"}, nil //nolint:nilerr // intentional: EOF cancels
+			if errors.Is(readErr, io.EOF) {
+				return copilot.ElicitationResult{Action: "cancel"}, nil
+			}
+
+			return copilot.ElicitationResult{}, fmt.Errorf("reading field %s: %w", field, readErr)
 		}
 
 		value := strings.TrimSpace(line)

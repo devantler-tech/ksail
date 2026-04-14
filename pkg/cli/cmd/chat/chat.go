@@ -761,8 +761,12 @@ func runNonTUIChat(
 	// Register slash commands for non-TUI mode
 	sessionConfig.Commands = chatui.BuildNonTUISlashCommands(writer)
 
+	// Create shared stdin reader for both the interactive loop and elicitation handler.
+	// Using a single bufio.Reader prevents data loss from buffered reads.
+	stdinReader := bufio.NewReader(os.Stdin)
+
 	// Register elicitation handler for MCP tool form requests
-	sessionConfig.OnElicitationRequest = chatsvc.CreateElicitationHandler(os.Stdin, writer)
+	sessionConfig.OnElicitationRequest = chatsvc.CreateElicitationHandler(stdinReader, writer)
 
 	// Create session
 	session, err := client.CreateSession(ctx, sessionConfig)
@@ -789,7 +793,7 @@ func runNonTUIChat(
 	})
 	_, _ = fmt.Fprintln(writer, "")
 
-	return runChatInteractiveLoop(ctx, session, flags.streaming, flags.timeout, writer)
+	return runChatInteractiveLoop(ctx, session, flags.streaming, flags.timeout, stdinReader, writer)
 }
 
 // inputResult holds the result of reading from stdin.
@@ -877,9 +881,9 @@ func runChatInteractiveLoop(
 	session *copilot.Session,
 	streaming bool,
 	timeout time.Duration,
+	reader *bufio.Reader,
 	writer io.Writer,
 ) error {
-	reader := bufio.NewReader(os.Stdin)
 	inputChan := make(chan inputResult, 1)
 
 	for {

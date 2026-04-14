@@ -82,7 +82,7 @@ func (m *Model) updateOptionPicker(text string) {
 
 	argText := ""
 	if len(parts) > 1 {
-		argText = strings.ToLower(parts[1])
+		argText = strings.ToLower(strings.TrimLeft(parts[1], " \t"))
 	}
 
 	// Look up option provider for this command
@@ -240,30 +240,45 @@ func (m *Model) handleOptionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, taCmd
 }
 
+// selectedCommandValue returns the text for the selected command, or empty if out of bounds.
+func (m *Model) selectedCommandValue() string {
+	if m.commandPickerIndex >= len(m.filteredCommands) {
+		return ""
+	}
+
+	return "/" + m.filteredCommands[m.commandPickerIndex].Name
+}
+
+// selectedOptionValue returns the text for the selected option, or empty if out of bounds.
+func (m *Model) selectedOptionValue() string {
+	if m.optionPickerIndex >= len(m.filteredOptions) {
+		return ""
+	}
+
+	return "/" + m.activeCommandName + " " + m.filteredOptions[m.optionPickerIndex].Name
+}
+
 // selectAndFireCommand fills the selected command into the textarea and submits it.
 func (m *Model) selectAndFireCommand() (tea.Model, tea.Cmd) {
-	if m.commandPickerIndex >= len(m.filteredCommands) {
+	value := m.selectedCommandValue()
+	if value == "" {
 		return m, nil
 	}
 
-	cmd := m.filteredCommands[m.commandPickerIndex]
-	m.textarea.SetValue("/" + cmd.Name)
-
+	m.textarea.SetValue(value)
 	m.dismissAllPickers()
 
-	// Trigger submit — reuse the existing handleEnter flow
 	return m.handleEnter()
 }
 
 // selectCommandWithoutFiring fills the selected command + a trailing space, without submitting.
 func (m *Model) selectCommandWithoutFiring() (tea.Model, tea.Cmd) {
-	if m.commandPickerIndex >= len(m.filteredCommands) {
+	value := m.selectedCommandValue()
+	if value == "" {
 		return m, nil
 	}
 
-	cmd := m.filteredCommands[m.commandPickerIndex]
-	m.textarea.SetValue("/" + cmd.Name + " ")
-
+	m.textarea.SetValue(value + " ")
 	m.showCommandPicker = false
 	m.commandPickerIndex = 0
 	m.filteredCommands = nil
@@ -276,13 +291,12 @@ func (m *Model) selectCommandWithoutFiring() (tea.Model, tea.Cmd) {
 
 // selectAndFireOption fills the selected option and fires the command.
 func (m *Model) selectAndFireOption() (tea.Model, tea.Cmd) {
-	if m.optionPickerIndex >= len(m.filteredOptions) {
+	value := m.selectedOptionValue()
+	if value == "" {
 		return m, nil
 	}
 
-	opt := m.filteredOptions[m.optionPickerIndex]
-	m.textarea.SetValue("/" + m.activeCommandName + " " + opt.Name)
-
+	m.textarea.SetValue(value)
 	m.dismissAllPickers()
 
 	return m.handleEnter()
@@ -290,13 +304,12 @@ func (m *Model) selectAndFireOption() (tea.Model, tea.Cmd) {
 
 // selectOptionWithoutFiring fills the selected option without submitting.
 func (m *Model) selectOptionWithoutFiring() (tea.Model, tea.Cmd) {
-	if m.optionPickerIndex >= len(m.filteredOptions) {
+	value := m.selectedOptionValue()
+	if value == "" {
 		return m, nil
 	}
 
-	opt := m.filteredOptions[m.optionPickerIndex]
-	m.textarea.SetValue("/" + m.activeCommandName + " " + opt.Name + " ")
-
+	m.textarea.SetValue(value + " ")
 	m.dismissAllPickers()
 
 	return m, nil

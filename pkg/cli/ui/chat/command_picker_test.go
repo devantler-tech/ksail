@@ -28,15 +28,15 @@ func TestUpdateCommandPicker_ShowsOnSlash(t *testing.T) {
 func TestUpdateCommandPicker_FiltersOnPartialInput(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	chat.ExportSetTextareaValue(m, "/mo")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/mo")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.True(t, chat.ExportShowCommandPicker(m))
+	assert.True(t, chat.ExportShowCommandPicker(model))
 
-	filtered := chat.ExportFilteredCommands(m)
+	filtered := chat.ExportFilteredCommands(model)
 	assert.Equal(t, 2, len(filtered)) // /mode, /model
 
 	names := make([]string, len(filtered))
@@ -102,22 +102,22 @@ func TestUpdateCommandPicker_HidesOnNonSlashInput(t *testing.T) {
 func TestUpdateCommandPicker_ClampsIndex(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
 	// First show all commands
-	chat.ExportSetTextareaValue(m, "/")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/")
+	chat.ExportUpdateCommandPicker(model)
 
 	// Navigate to last item
-	chat.ExportSetCommandPickerIndex(m, 5)
+	chat.ExportSetCommandPickerIndex(model, 5)
 
 	// Now filter to fewer items
-	chat.ExportSetTextareaValue(m, "/cl")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/cl")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.True(t, chat.ExportShowCommandPicker(m))
-	assert.Equal(t, 0, chat.ExportCommandPickerIndex(m)) // clamped to 0
+	assert.True(t, chat.ExportShowCommandPicker(model))
+	assert.Equal(t, 0, chat.ExportCommandPickerIndex(model)) // clamped to 0
 }
 
 func TestUpdateCommandPicker_CaseInsensitive(t *testing.T) {
@@ -188,8 +188,8 @@ func TestTryDispatchSlashCommand_ValidCommand(t *testing.T) {
 
 	var calledArgs string
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	config := chat.ExportGetSessionConfig(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	config := chat.ExportGetSessionConfig(model)
 	config.Commands = []copilot.CommandDefinition{
 		{Name: "mode", Handler: func(ctx copilot.CommandContext) error {
 			calledArgs = ctx.Args
@@ -197,11 +197,11 @@ func TestTryDispatchSlashCommand_ValidCommand(t *testing.T) {
 		}},
 	}
 
-	handled, _, _ := chat.ExportTryDispatchSlashCommand(m, "/mode plan")
+	handled, _, _ := chat.ExportTryDispatchSlashCommand(model, "/mode plan")
 
 	assert.True(t, handled)
 	assert.Equal(t, "plan", calledArgs)
-	assert.NoError(t, chat.ExportGetErr(m))
+	assert.NoError(t, chat.ExportGetErr(model))
 }
 
 func TestTryDispatchSlashCommand_CommandWithoutArgs(t *testing.T) {
