@@ -177,9 +177,9 @@ Talos is ideal for security-focused production workloads, GitOps workflows, and 
 
 ## Use Cases
 
-Talos excels at immutable infrastructure, security-focused production deployments, and multi-environment consistency—the same distribution works from local Docker development through Hetzner Cloud production without "works on my machine" issues. See [Use Cases](/use-cases/) for practical workflow examples.
+See [Use Cases](/use-cases/) for practical workflow examples with Talos.
 
-**Common Talos API operations:**
+### Common Talos API Operations
 
 ```bash
 talosctl -n <node-ip> get machineconfig   # View configuration
@@ -288,9 +288,7 @@ This generates `talos/cluster/image-verification.yaml` with a default skip-all r
 
 ```yaml
 # Talos ImageVerificationConfig (Talos 1.13+)
-# This document enables machine-wide container image signature verification.
 # Rules are evaluated in order; the first matching rule applies.
-# See: https://www.talos.dev/v1.13/talos-guides/configuration/image-verification/
 apiVersion: v1alpha1
 kind: ImageVerificationConfig
 rules:
@@ -315,7 +313,7 @@ rules:
   #   deny: true
 ```
 
-Edit the file to enforce your signature policy, then run `ksail cluster create`. Rules are evaluated in order; the first matching rule applies.
+Edit the file to enforce your signature policy, then run `ksail cluster create`.
 
 > [!NOTE]
 > For `Talos`, `--image-verification Enabled` scaffolds a native `ImageVerificationConfig` document and requires Talos 1.13+. For earlier Talos versions, omit the flag or use `--image-verification Disabled`. The `Vanilla` (Kind) distribution also supports `--image-verification Enabled` via containerd config patches — see [Vanilla Image Verification](/distributions/vanilla/#image-verification).
