@@ -3,6 +3,8 @@ package image
 import (
 	"archive/tar"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -408,6 +410,13 @@ func (e *Exporter) exportImagesFromNode(
 	err = e.copyFromContainer(ctx, nodeName, tmpPath, outputPath)
 	if err != nil {
 		return fmt.Errorf("failed to copy export file from container: %w", err)
+	}
+
+	// Validate blob integrity in the exported OCI tar archive.
+	// Catches truncated or corrupted blobs that ctr export may silently produce
+	// when the containerd content store has incomplete data.
+	if err := ValidateExportedTar(outputPath); err != nil {
+		return err
 	}
 
 	// Clean up temporary file in container
@@ -841,6 +850,85 @@ func (e *Exporter) writeFileFromTar(dstPath string, tarReader *tar.Reader) error
 	_, err = io.Copy(dstFile, tarReader)
 	if err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return nil
+}
+
+// blobSHA256Prefix is the path prefix for SHA256 blobs in OCI image layout tar archives.
+const blobSHA256Prefix = "blobs/sha256/"
+
+// sha256HexLength is the expected length of a SHA256 hex-encoded digest.
+const sha256HexLength = 64
+
+// ValidateExportedTar validates the integrity of SHA256 blobs in an OCI image tar archive.
+// For each blob file at blobs/sha256/<hex>, it computes the SHA256 hash of the content
+// and verifies it matches the expected digest from the filename.
+//
+// Returns nil if:
+//   - The file cannot be parsed as a tar archive (not an OCI layout)
+//   - The tar contains no SHA256 blobs
+//   - All blobs have correct digests
+//
+// Returns ErrBlobIntegrityFailed if any blob's content doesn't match its expected digest,
+// which indicates a truncated or corrupted export (e.g. from incomplete image pull).
+func ValidateExportedTar(tarPath string) error {
+	f, err := os.Open(tarPath) //nolint:gosec // Path is from internal code
+	if err != nil {
+		return fmt.Errorf("failed to open exported tar for validation: %w", err)
+	}
+
+	defer func() { _ = f.Close() }()
+
+	tr := tar.NewReader(f)
+
+	for {
+		header, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			// Cannot parse as tar — not an OCI layout, skip validation
+			return nil
+		}
+
+		if header.Typeflag != tar.TypeReg {
+			continue
+		}
+
+		if !strings.HasPrefix(header.Name, blobSHA256Prefix) {
+			continue
+		}
+
+		expectedDigest := strings.TrimPrefix(header.Name, blobSHA256Prefix)
+		if strings.Contains(expectedDigest, "/") || len(expectedDigest) != sha256HexLength {
+			continue
+		}
+
+		hasher := sha256.New()
+
+		n, copyErr := io.Copy(hasher, tr)
+		if copyErr != nil {
+			return fmt.Errorf(
+				"%w: failed to read blob %s: %v",
+				ErrBlobIntegrityFailed,
+				header.Name,
+				copyErr,
+			)
+		}
+
+		actualDigest := hex.EncodeToString(hasher.Sum(nil))
+		if actualDigest != expectedDigest {
+			return fmt.Errorf(
+				"%w: blob %s — computed SHA256 %s (read %d of %d bytes)",
+				ErrBlobIntegrityFailed,
+				header.Name,
+				actualDigest,
+				n,
+				header.Size,
+			)
+		}
 	}
 
 	return nil
