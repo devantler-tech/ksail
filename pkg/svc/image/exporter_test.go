@@ -1603,7 +1603,7 @@ func TestValidateExportedTarNoBlobs(t *testing.T) {
 func TestValidateExportedTarFileNotFound(t *testing.T) {
 	t.Parallel()
 
-	err := image.ValidateExportedTar("/nonexistent/path/to/file.tar")
+	err := image.ValidateExportedTar(filepath.Join(t.TempDir(), "subdir", "nonexistent.tar"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to open exported tar for validation")
 }
