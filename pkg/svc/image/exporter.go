@@ -545,7 +545,7 @@ func (e *Exporter) refreshSingleImageContent(
 		_, _ = e.executor.ExecInContainer(
 			ctx,
 			nodeName,
-			[]string{"ctr", "--namespace=k8s.io", "images", "rm", candidate},
+			buildCtrImagesRmCommand(candidate),
 		)
 
 		_, err := e.executor.ExecInContainer(
@@ -578,6 +578,16 @@ func (e *Exporter) refreshSingleImageContent(
 	}
 
 	return "", errors.Join(errs...)
+}
+
+func buildCtrImagesRmCommand(imageRef string) []string {
+	return []string{
+		"ctr",
+		"--namespace=k8s.io",
+		"images",
+		"rm",
+		imageRef,
+	}
 }
 
 func buildCtrPullCommand(platform string, imageRef string) []string {
