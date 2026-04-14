@@ -535,6 +535,19 @@ func (e *Exporter) refreshSingleImageContent(
 	var errs []error
 
 	for _, candidate := range repairPullCandidates(imageRef) {
+		// Remove the image reference before pulling. When containerd is configured
+		// with discard_unpacked_layers=true (Kind's default), a re-pull of an image
+		// whose snapshot already exists is a no-op — containerd skips re-downloading
+		// the content blobs because the snapshot is still live. Removing the image ref
+		// first forces a genuinely fresh pull that downloads all content blobs.
+		// Running containers are unaffected: their snapshot leases keep the overlayfs
+		// mounts alive regardless of whether the image ref exists.
+		_, _ = e.executor.ExecInContainer(
+			ctx,
+			nodeName,
+			buildCtrImagesRmCommand(candidate),
+		)
+
 		_, err := e.executor.ExecInContainer(
 			ctx,
 			nodeName,
@@ -546,9 +559,9 @@ func (e *Exporter) refreshSingleImageContent(
 			continue
 		}
 
-		// Kind nodes commonly run containerd with discard_unpacked_layers=true, so a
-		// pull can succeed while export still fails until the missing blobs are fetched
-		// back into the content store.
+		// Content fetch re-downloads blobs into the content store without unpacking,
+		// keeping them present for the subsequent ctr export call even when
+		// discard_unpacked_layers=true would otherwise discard them after unpacking.
 		_, _ = e.executor.ExecInContainer(
 			ctx,
 			nodeName,
@@ -565,6 +578,16 @@ func (e *Exporter) refreshSingleImageContent(
 	}
 
 	return "", errors.Join(errs...)
+}
+
+func buildCtrImagesRmCommand(imageRef string) []string {
+	return []string{
+		"ctr",
+		"--namespace=k8s.io",
+		"images",
+		"rm",
+		imageRef,
+	}
 }
 
 func buildCtrPullCommand(platform string, imageRef string) []string {
