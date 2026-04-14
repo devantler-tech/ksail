@@ -671,7 +671,12 @@ func TestExportRepairPullSucceedsWhenRmFails(t *testing.T) {
 		"ctr: failed to get reader: content digest sha256:missing: not found",
 	)
 	// rm returns an error ("not found") but repair pull still succeeds
-	expectRepairPullSuccessWithRmFailure(ctx, t, mockClient, "docker.io/traefik/whoami:v1.10@sha256:abc123")
+	expectRepairPullSuccessWithRmFailure(
+		ctx,
+		t,
+		mockClient,
+		"docker.io/traefik/whoami:v1.10@sha256:abc123",
+	)
 	expectRepairPullSuccessWithRmFailure(ctx, t, mockClient, "docker.io/traefik/whoami:v1.10")
 	setupExecMockWithStdoutForExporter(
 		ctx, t, mockClient, kindExporterNodeName,
