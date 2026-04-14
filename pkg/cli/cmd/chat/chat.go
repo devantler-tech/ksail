@@ -762,7 +762,7 @@ func runNonTUIChat(
 	sessionConfig.Commands = chatui.BuildNonTUISlashCommands(writer)
 
 	// Register elicitation handler for MCP tool form requests
-	sessionConfig.OnElicitationRequest = chatsvc.CreateElicitationHandler(writer)
+	sessionConfig.OnElicitationRequest = chatsvc.CreateElicitationHandler(os.Stdin, writer)
 
 	// Create session
 	session, err := client.CreateSession(ctx, sessionConfig)

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strings"
 
@@ -12,8 +11,11 @@ import (
 )
 
 // CreateElicitationHandler creates a non-TUI elicitation handler that prompts via
-// stdin/stdout. It shows the elicitation message and asks the user to accept or decline.
-func CreateElicitationHandler(writer io.Writer) copilot.ElicitationHandler {
+// the provided reader/writer. It shows the elicitation message and asks the user
+// to accept or decline.
+func CreateElicitationHandler(reader io.Reader, writer io.Writer) copilot.ElicitationHandler {
+	bufReader := bufio.NewReader(reader)
+
 	return func(ctx copilot.ElicitationContext) (copilot.ElicitationResult, error) {
 		_, _ = fmt.Fprintln(writer, "")
 		_, _ = fmt.Fprintln(writer, "┌─ Input Requested")
@@ -34,19 +36,17 @@ func CreateElicitationHandler(writer io.Writer) copilot.ElicitationHandler {
 
 		// For form-mode with schema fields, collect field values
 		if ctx.Mode == "form" && ctx.RequestedSchema != nil {
-			return promptElicitationFields(writer, ctx.RequestedSchema)
+			return promptElicitationFields(bufReader, writer, ctx.RequestedSchema)
 		}
 
 		// Simple accept/decline for URL mode or schema-less requests
-		return promptElicitationAccept(writer)
+		return promptElicitationAccept(bufReader, writer)
 	}
 }
 
 // promptElicitationAccept asks the user to accept or decline.
-func promptElicitationAccept(writer io.Writer) (copilot.ElicitationResult, error) {
+func promptElicitationAccept(reader *bufio.Reader, writer io.Writer) (copilot.ElicitationResult, error) {
 	_, _ = fmt.Fprint(writer, "Accept? [y/N]: ")
-
-	reader := bufio.NewReader(os.Stdin)
 
 	line, readErr := reader.ReadString('\n')
 	if readErr != nil {
@@ -64,10 +64,11 @@ func promptElicitationAccept(writer io.Writer) (copilot.ElicitationResult, error
 }
 
 // promptElicitationFields prompts for each field in the schema.
-func promptElicitationFields(writer io.Writer, schema map[string]any) (copilot.ElicitationResult, error) {
+// The user can type "!cancel" on any field to decline the elicitation.
+func promptElicitationFields(reader *bufio.Reader, writer io.Writer, schema map[string]any) (copilot.ElicitationResult, error) {
 	props, ok := schema["properties"].(map[string]any)
 	if !ok || len(props) == 0 {
-		return promptElicitationAccept(writer)
+		return promptElicitationAccept(reader, writer)
 	}
 
 	// Sort field names for deterministic prompt order
@@ -78,7 +79,8 @@ func promptElicitationFields(writer io.Writer, schema map[string]any) (copilot.E
 
 	sort.Strings(fieldNames)
 
-	reader := bufio.NewReader(os.Stdin)
+	_, _ = fmt.Fprintln(writer, "(type !cancel on any field to decline)")
+
 	content := make(map[string]any, len(props))
 
 	for _, field := range fieldNames {
@@ -90,7 +92,12 @@ func promptElicitationFields(writer io.Writer, schema map[string]any) (copilot.E
 			return copilot.ElicitationResult{Action: "cancel"}, nil //nolint:nilerr // intentional: EOF cancels
 		}
 
-		content[field] = strings.TrimSpace(line)
+		value := strings.TrimSpace(line)
+		if value == "!cancel" {
+			return copilot.ElicitationResult{Action: "decline"}, nil
+		}
+
+		content[field] = value
 	}
 
 	return copilot.ElicitationResult{

@@ -308,9 +308,25 @@ type pickerItem struct {
 	description string
 }
 
+// isModalActive returns true if any modal overlay is currently visible.
+func (m *Model) isModalActive() bool {
+	return m.pendingPermission != nil ||
+		m.pendingElicitation != nil ||
+		m.showModelPicker ||
+		m.showSessionPicker ||
+		m.showReasoningPicker ||
+		m.showHelpOverlay
+}
+
 // renderPickerPopup renders the floating autocomplete popup for either
 // commands or options, depending on which picker is active.
+// Returns empty string when any modal is active (modals take priority).
 func (m *Model) renderPickerPopup() string {
+	// Suppress picker when a modal is active — modals take visual priority
+	if m.isModalActive() {
+		return ""
+	}
+
 	if m.showOptionPicker && len(m.filteredOptions) > 0 {
 		items := make([]pickerItem, len(m.filteredOptions))
 		for i, opt := range m.filteredOptions {
