@@ -140,6 +140,18 @@ func (m *Model) dismissAllPickers() {
 	m.activeCommandName = ""
 }
 
+// commandHasOptions returns true if the currently highlighted command has registered options.
+func (m *Model) commandHasOptions() bool {
+	if m.commandPickerIndex >= len(m.filteredCommands) {
+		return false
+	}
+
+	cmdName := strings.ToLower(m.filteredCommands[m.commandPickerIndex].Name)
+	_, ok := m.commandOptions[cmdName]
+
+	return ok
+}
+
 // getRegisteredCommands returns the slash commands from the session config.
 func (m *Model) getRegisteredCommands() []copilot.CommandDefinition {
 	if m.sessionConfig == nil {
@@ -165,7 +177,12 @@ func (m *Model) handleCommandPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 	case keyEnter:
-		// Fill the command and submit
+		// If the command has options, select without firing (like Tab)
+		// so the user can pick an option. Otherwise fire immediately.
+		if m.commandHasOptions() {
+			return m.selectCommandWithoutFiring()
+		}
+
 		return m.selectAndFireCommand()
 	case "tab":
 		// Fill the command text but don't submit
