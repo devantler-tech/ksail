@@ -1086,8 +1086,8 @@ jobs:
     name: 🧹 Cleanup Hetzner Resources
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [system-test-hetzner]
-    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (needs.system-test-hetzner.result == 'failure' || needs.system-test-hetzner.result == 'cancelled') }}
+    needs: [system-test-docker, system-test-hetzner]
+    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test-docker.result == 'success' }}
     environment: ci
     permissions:
       contents: read
@@ -1120,8 +1120,8 @@ jobs:
     name: 🧹 Cleanup Omni Resources
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [system-test-omni]
-    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (needs.system-test-omni.result == 'failure' || needs.system-test-omni.result == 'cancelled') }}
+    needs: [system-test-docker, system-test-omni]
+    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test-docker.result == 'success' }}
     environment: ci
     permissions:
       contents: read
