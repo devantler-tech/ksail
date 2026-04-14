@@ -41,7 +41,7 @@ func TestWaitForNodeReady_NodeNotReady(t *testing.T) {
 		},
 	})
 
-	err := readiness.WaitForNodeReady(context.Background(), clientset, 3*time.Second)
+	err := readiness.WaitForNodeReady(context.Background(), clientset, 100*time.Millisecond)
 	assert.Error(t, err)
 }
 
@@ -50,7 +50,7 @@ func TestWaitForNodeReady_NoNodes(t *testing.T) {
 
 	clientset := fake.NewClientset()
 
-	err := readiness.WaitForNodeReady(context.Background(), clientset, 3*time.Second)
+	err := readiness.WaitForNodeReady(context.Background(), clientset, 100*time.Millisecond)
 	assert.Error(t, err)
 }
 
@@ -114,7 +114,7 @@ func TestWaitForAllNodesReady_OneNotReady(t *testing.T) {
 		},
 	)
 
-	err := readiness.WaitForAllNodesReady(context.Background(), clientset, 3*time.Second)
+	err := readiness.WaitForAllNodesReady(context.Background(), clientset, 100*time.Millisecond)
 	assert.Error(t, err)
 }
 
@@ -123,7 +123,7 @@ func TestWaitForAllNodesReady_NoNodes(t *testing.T) {
 
 	clientset := fake.NewClientset()
 
-	err := readiness.WaitForAllNodesReady(context.Background(), clientset, 3*time.Second)
+	err := readiness.WaitForAllNodesReady(context.Background(), clientset, 100*time.Millisecond)
 	assert.Error(t, err)
 }
 
