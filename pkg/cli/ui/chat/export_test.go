@@ -870,3 +870,86 @@ func (t *toolExecution) Command() string { return t.command }
 
 // ID returns the tool's ID for testing.
 func (t *toolExecution) ID() string { return t.id }
+
+// --- Slash command test exports ---
+
+// ExportClearViewportMsg is an exported alias for clearViewportMsg.
+type ExportClearViewportMsg = clearViewportMsg
+
+// ExportShowHelpMsg is an exported alias for showHelpMsg.
+type ExportShowHelpMsg = showHelpMsg
+
+// ExportModeChangeRequestMsg is an exported alias for modeChangeRequestMsg.
+type ExportModeChangeRequestMsg = modeChangeRequestMsg
+
+// ExportOpenModelPickerMsg is an exported alias for openModelPickerMsg.
+type ExportOpenModelPickerMsg = openModelPickerMsg
+
+// ExportModelSetRequestMsg is an exported alias for modelSetRequestMsg.
+type ExportModelSetRequestMsg = modelSetRequestMsg
+
+// ExportCommandDefinition wraps copilot.CommandDefinition for tests.
+type ExportCommandDefinition struct {
+	Def copilot.CommandDefinition
+}
+
+// ExportCommandContext is an exported alias for copilot.CommandContext.
+type ExportCommandContext = copilot.CommandContext
+
+// ExportCommandContextWithArgs creates a copilot.CommandContext with the given args.
+func ExportCommandContextWithArgs(args string) copilot.CommandContext {
+	return copilot.CommandContext{Args: args}
+}
+
+// --- Elicitation test exports ---
+
+// ExportElicitationRequestMsg is an exported alias for elicitationRequestMsg.
+type ExportElicitationRequestMsg = elicitationRequestMsg
+
+// ExportElicitationResponsePayload is an exported alias for elicitationResponsePayload.
+type ExportElicitationResponsePayload = elicitationResponsePayload
+
+// ExportExtractFieldNames exposes extractFieldNames for testing.
+var ExportExtractFieldNames = extractFieldNames
+
+// --- Command picker test exports ---
+
+// ExportUpdateCommandPicker exposes updateCommandPicker for testing.
+var ExportUpdateCommandPicker = func(m *Model) {
+	m.updateCommandPicker()
+}
+
+// ExportSetTextareaValue sets the textarea value for testing.
+var ExportSetTextareaValue = func(m *Model, value string) {
+	m.textarea.SetValue(value)
+}
+
+// ExportShowCommandPicker returns whether the command picker is visible.
+var ExportShowCommandPicker = func(m *Model) bool {
+	return m.showCommandPicker
+}
+
+// ExportFilteredCommands returns the filtered commands for testing.
+var ExportFilteredCommands = func(m *Model) []copilot.CommandDefinition {
+	return m.filteredCommands
+}
+
+// ExportCommandPickerIndex returns the current picker index for testing.
+var ExportCommandPickerIndex = func(m *Model) int {
+	return m.commandPickerIndex
+}
+
+// ExportSetCommandPickerIndex sets the picker index for testing.
+var ExportSetCommandPickerIndex = func(m *Model, idx int) {
+	m.commandPickerIndex = idx
+}
+
+// ExportGetSessionConfig returns the session config for testing.
+var ExportGetSessionConfig = func(m *Model) *copilot.SessionConfig {
+	return m.sessionConfig
+}
+
+// ExportCommandPickerExtraHeight exposes commandPickerExtraHeight for testing.
+var ExportCommandPickerExtraHeight = func(m *Model) int {
+	return m.commandPickerExtraHeight()
+}

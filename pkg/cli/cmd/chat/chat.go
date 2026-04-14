@@ -758,6 +758,12 @@ func runNonTUIChat(
 	// Register OnEvent handler for session-level events not in the per-turn handler
 	sessionConfig.OnEvent = buildNonTUIOnEventHandler(writer)
 
+	// Register slash commands for non-TUI mode
+	sessionConfig.Commands = chatui.BuildNonTUISlashCommands(writer)
+
+	// Register elicitation handler for MCP tool form requests
+	sessionConfig.OnElicitationRequest = chatsvc.CreateElicitationHandler(writer)
+
 	// Create session
 	session, err := client.CreateSession(ctx, sessionConfig)
 	if err != nil {
@@ -1444,6 +1450,12 @@ func runTUIChat(
 
 		return err
 	}
+
+	// Register slash commands for the TUI
+	sessionConfig.Commands = chatui.BuildTUISlashCommands(eventChan)
+
+	// Register elicitation handler for MCP tool form requests
+	sessionConfig.OnElicitationRequest = chatui.CreateTUIElicitationHandler(eventChan)
 
 	session, err := client.CreateSession(ctx, sessionConfig)
 	if err != nil {

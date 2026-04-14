@@ -295,6 +295,14 @@ type Model struct {
 	pendingPermission *permissionRequestMsg // current permission request awaiting user response
 	permissionHistory []permissionResponse  // history of permission decisions
 
+	// Elicitation request handling
+	pendingElicitation *pendingElicitation // current elicitation request awaiting user response
+
+	// Slash command autocomplete
+	showCommandPicker  bool                       // true when the command picker popup is visible
+	commandPickerIndex int                        // currently highlighted command in picker
+	filteredCommands   []copilot.CommandDefinition // commands matching current "/" prefix
+
 	// Session management
 	currentSessionID     string            // ID of the current session (empty if new)
 	availableSessions    []SessionMetadata // cached list of available sessions
@@ -466,13 +474,37 @@ func (m *Model) Update(
 
 	case streamChunkMsg, assistantMessageMsg, toolStartMsg, toolEndMsg,
 		toolOutputChunkMsg, ToolOutputChunkMsg, permissionRequestMsg,
-		PermissionRequestMsg, streamEndMsg, turnStartMsg, turnEndMsg,
+		PermissionRequestMsg, elicitationRequestMsg,
+		streamEndMsg, turnStartMsg, turnEndMsg,
 		reasoningMsg, abortMsg, snapshotRewindMsg, streamErrMsg,
 		usageMsg, compactionStartMsg, compactionCompleteMsg,
 		intentMsg, modelChangeMsg, shutdownMsg,
 		systemNotificationMsg, sessionWarningMsg,
 		ToolProgressMsg, TaskCompleteMsg:
 		return m.handleStreamEvent(msg)
+
+	case modeChangeRequestMsg:
+		return m.handleSlashModeChange(msg)
+
+	case openModelPickerMsg:
+		return m.handleOpenModelPicker()
+
+	case modelSetRequestMsg:
+		return m.handleSlashModelSet(msg)
+
+	case openSessionPickerMsg:
+		return m.handleOpenSessionPicker()
+
+	case newChatRequestMsg:
+		return m.handleNewChat()
+
+	case showHelpMsg:
+		m.showHelpOverlay = true
+
+		return m, nil
+
+	case clearViewportMsg:
+		return m.handleClearViewport()
 
 	case copyFeedbackClearMsg:
 		m.showCopyFeedback = false
@@ -527,13 +559,18 @@ func (m *Model) View() string {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
 	}
 
-	sections := make([]string, 0, viewSectionCount)
+	sections := make([]string, 0, viewSectionCount+1)
 
-	// Header, chat viewport, input/modal, and footer
+	// Header, chat viewport, (optional command picker popup), input/modal, and footer
 	sections = append(sections, m.renderHeader())
 	sections = append(sections,
 		m.styles.viewport.Width(max(m.width-modalPadding, 1)).Render(m.viewport.View()),
 	)
+
+	if popup := m.renderCommandPickerPopup(); popup != "" {
+		sections = append(sections, popup)
+	}
+
 	sections = append(sections, m.renderInputOrModal())
 	sections = append(sections, m.renderFooter())
 
@@ -579,6 +616,9 @@ func (m *Model) handleStreamEvent(
 			arguments:  msg.Arguments,
 			response:   msg.Response,
 		})
+
+	case elicitationRequestMsg:
+		return m.handleElicitationRequest(msg)
 
 	case streamEndMsg:
 		return m.handleStreamEnd()
@@ -634,6 +674,54 @@ func (m *Model) handleStreamEvent(
 	default:
 		return m, nil
 	}
+}
+
+// handleSlashModeChange handles the /mode slash command.
+func (m *Model) handleSlashModeChange(msg modeChangeRequestMsg) (tea.Model, tea.Cmd) {
+	if m.chatMode == msg.Mode {
+		return m, nil
+	}
+
+	err := m.applyMode(msg.Mode)
+	if err != nil {
+		m.err = err
+
+		return m, nil
+	}
+
+	m.chatMode = msg.Mode
+	m.updateViewportContent()
+
+	return m, nil
+}
+
+// handleSlashModelSet handles the /model <name> slash command.
+func (m *Model) handleSlashModelSet(msg modelSetRequestMsg) (tea.Model, tea.Cmd) {
+	if m.isStreaming {
+		return m, nil
+	}
+
+	err := m.session.SetModel(m.ctx, msg.Model, nil)
+	if err != nil {
+		m.err = err
+
+		return m, nil
+	}
+
+	m.currentModel = msg.Model
+	m.updateViewportContent()
+
+	return m, nil
+}
+
+// handleClearViewport handles the /clear slash command.
+func (m *Model) handleClearViewport() (tea.Model, tea.Cmd) {
+	m.messages = make([]message, 0)
+	m.tools = make(map[string]*toolExecution)
+	m.toolOrder = make([]string, 0)
+	m.updateViewportContent()
+
+	return m, nil
 }
 
 // handleMouseMsg handles mouse input events.

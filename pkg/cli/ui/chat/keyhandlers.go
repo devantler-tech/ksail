@@ -31,6 +31,14 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handlePermissionKey(msg)
 	}
 
+	if m.pendingElicitation != nil {
+		return m.handleElicitationKey(msg)
+	}
+
+	if m.showCommandPicker {
+		return m.handleCommandPickerKey(msg)
+	}
+
 	if m.showModelPicker {
 		return m.handleModelPickerKey(msg)
 	}
@@ -146,6 +154,9 @@ func (m *Model) handleViewportAndTextareaKey(msg tea.KeyMsg) (tea.Model, tea.Cmd
 	if m.justCompleted {
 		m.justCompleted = false
 	}
+
+	// Check if we should show/hide the command picker after each keystroke
+	m.updateCommandPicker()
 
 	return m, taCmd
 }
