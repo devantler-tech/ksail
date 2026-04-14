@@ -34,6 +34,35 @@ func WaitForNodeReady(
 	})
 }
 
+// WaitForAllNodesReady polls until every node in the cluster has condition Ready=True.
+// Unlike WaitForNodeReady which succeeds when at least one node is Ready, this function
+// ensures all nodes are schedulable. This prevents FailedScheduling errors from
+// transient NotReady taints on control-plane nodes during early cluster initialization.
+func WaitForAllNodesReady(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	deadline time.Duration,
+) error {
+	return PollForReadiness(ctx, deadline, func(ctx context.Context) (bool, error) {
+		nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return false, nil //nolint:nilerr // returning nil to continue polling
+		}
+
+		if len(nodes.Items) == 0 {
+			return false, nil
+		}
+
+		for i := range nodes.Items {
+			if !isNodeReady(&nodes.Items[i]) {
+				return false, nil
+			}
+		}
+
+		return true, nil
+	})
+}
+
 // isNodeReady returns true if the node has condition Ready=True.
 func isNodeReady(node *corev1.Node) bool {
 	for _, cond := range node.Status.Conditions {
