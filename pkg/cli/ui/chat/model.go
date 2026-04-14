@@ -46,6 +46,13 @@ const (
 // ChatMode represents the chat interaction mode.
 type ChatMode int //nolint:revive // ChatMode is clearer than Mode given existing ModeRef type in this package.
 
+// Mode name constants.
+const (
+	modeNameInteractive = "interactive"
+	modeNamePlan        = "plan"
+	modeNameAutopilot   = "autopilot"
+)
+
 const (
 	// InteractiveMode allows full tool execution with permission prompts for write operations.
 	InteractiveMode ChatMode = iota
@@ -59,13 +66,13 @@ const (
 func (m ChatMode) String() string {
 	switch m {
 	case InteractiveMode:
-		return "interactive"
+		return modeNameInteractive
 	case PlanMode:
-		return "plan"
+		return modeNamePlan
 	case AutopilotMode:
-		return "autopilot"
+		return modeNameAutopilot
 	default:
-		return "interactive"
+		return modeNameInteractive
 	}
 }
 

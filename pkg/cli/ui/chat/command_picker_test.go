@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/chat"
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // --- updateCommandPicker tests ---
@@ -14,14 +15,14 @@ import (
 func TestUpdateCommandPicker_ShowsOnSlash(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	chat.ExportSetTextareaValue(m, "/")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.True(t, chat.ExportShowCommandPicker(m))
-	assert.Equal(t, 6, len(chat.ExportFilteredCommands(m))) // all commands match
+	assert.True(t, chat.ExportShowCommandPicker(model))
+	assert.Equal(t, 6, len(chat.ExportFilteredCommands(model))) // all commands match
 }
 
 func TestUpdateCommandPicker_FiltersOnPartialInput(t *testing.T) {
@@ -50,28 +51,28 @@ func TestUpdateCommandPicker_FiltersOnPartialInput(t *testing.T) {
 func TestUpdateCommandPicker_HidesWhenNoMatch(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	chat.ExportSetTextareaValue(m, "/xyz")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/xyz")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.False(t, chat.ExportShowCommandPicker(m))
+	assert.False(t, chat.ExportShowCommandPicker(model))
 }
 
 func TestUpdateCommandPicker_HidesOnSpaceAfterCommand(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
 	// /mode has options, so command picker hides but option picker shows
-	chat.ExportSetTextareaValue(m, "/mode plan")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/mode plan")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.False(t, chat.ExportShowCommandPicker(m))
+	assert.False(t, chat.ExportShowCommandPicker(model))
 	// Option picker should be active for commands with options
-	assert.True(t, chat.ExportShowOptionPicker(m))
+	assert.True(t, chat.ExportShowOptionPicker(model))
 }
 
 func TestUpdateCommandPicker_HidesOnEmptyInput(t *testing.T) {
@@ -208,8 +209,8 @@ func TestTryDispatchSlashCommand_CommandWithoutArgs(t *testing.T) {
 
 	called := false
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	config := chat.ExportGetSessionConfig(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	config := chat.ExportGetSessionConfig(model)
 	config.Commands = []copilot.CommandDefinition{
 		{Name: "clear", Handler: func(_ copilot.CommandContext) error {
 			called = true
@@ -217,7 +218,7 @@ func TestTryDispatchSlashCommand_CommandWithoutArgs(t *testing.T) {
 		}},
 	}
 
-	handled, _, _ := chat.ExportTryDispatchSlashCommand(m, "/clear")
+	handled, _, _ := chat.ExportTryDispatchSlashCommand(model, "/clear")
 
 	assert.True(t, handled)
 	assert.True(t, called)
@@ -226,14 +227,14 @@ func TestTryDispatchSlashCommand_CommandWithoutArgs(t *testing.T) {
 func TestTryDispatchSlashCommand_UnknownCommand(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	handled, _, _ := chat.ExportTryDispatchSlashCommand(m, "/unknown")
+	handled, _, _ := chat.ExportTryDispatchSlashCommand(model, "/unknown")
 
 	assert.True(t, handled)
-	assert.Error(t, chat.ExportGetErr(m))
-	assert.Contains(t, chat.ExportGetErr(m).Error(), "unknown command: /unknown")
+	require.Error(t, chat.ExportGetErr(model))
+	assert.Contains(t, chat.ExportGetErr(model).Error(), "unknown command: /unknown")
 }
 
 func TestTryDispatchSlashCommand_NotSlashCommand(t *testing.T) {

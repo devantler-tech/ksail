@@ -79,7 +79,7 @@ func TestCreateTUIElicitationHandler_SendsRequestAndReturnsResult(t *testing.T) 
 				},
 			},
 		})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 
 		resultChan <- result
 	}()
@@ -118,13 +118,14 @@ func TestCreateTUIElicitationHandler_DeclineResult(t *testing.T) {
 			Message: "Confirm action",
 			Mode:    "form",
 		})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 
 		resultChan <- result
 	}()
 
 	msg := <-eventChan
-	req := msg.(chat.ExportElicitationRequestMsg)
+	req, ok := msg.(chat.ExportElicitationRequestMsg)
+	require.True(t, ok, "expected elicitationRequestMsg, got %T", msg)
 
 	req.Response <- chat.ExportElicitationResponsePayload{
 		Result: copilot.ElicitationResult{Action: "decline"},

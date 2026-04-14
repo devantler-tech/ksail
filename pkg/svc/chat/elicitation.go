@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	copilot "github.com/github/copilot-sdk/go"
@@ -49,7 +50,8 @@ func promptElicitationAccept(writer io.Writer) (copilot.ElicitationResult, error
 
 	line, readErr := reader.ReadString('\n')
 	if readErr != nil {
-		return copilot.ElicitationResult{Action: "cancel"}, nil
+		// stdin EOF/pipe-close → cancel the elicitation gracefully
+		return copilot.ElicitationResult{Action: "cancel"}, nil //nolint:nilerr // intentional: EOF cancels
 	}
 
 	input := strings.TrimSpace(strings.ToLower(line))
@@ -68,15 +70,24 @@ func promptElicitationFields(writer io.Writer, schema map[string]any) (copilot.E
 		return promptElicitationAccept(writer)
 	}
 
+	// Sort field names for deterministic prompt order
+	fieldNames := make([]string, 0, len(props))
+	for field := range props {
+		fieldNames = append(fieldNames, field)
+	}
+
+	sort.Strings(fieldNames)
+
 	reader := bufio.NewReader(os.Stdin)
 	content := make(map[string]any, len(props))
 
-	for field := range props {
+	for _, field := range fieldNames {
 		_, _ = fmt.Fprintf(writer, "%s: ", field)
 
 		line, readErr := reader.ReadString('\n')
 		if readErr != nil {
-			return copilot.ElicitationResult{Action: "cancel"}, nil
+			// stdin EOF/pipe-close → cancel the elicitation gracefully
+			return copilot.ElicitationResult{Action: "cancel"}, nil //nolint:nilerr // intentional: EOF cancels
 		}
 
 		content[field] = strings.TrimSpace(line)

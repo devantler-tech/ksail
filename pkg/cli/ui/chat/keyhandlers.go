@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -9,6 +10,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	copilot "github.com/github/copilot-sdk/go"
 )
+
+// errUnknownCommand is returned when a slash command is not recognized.
+var errUnknownCommand = errors.New("unknown command")
 
 const (
 	// feedbackResetMillis is the delay before clearing transient UI feedback
@@ -77,7 +81,7 @@ func (m *Model) handleHelpOverlayKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case keyCtrlC:
-		return m.handleQuit(true)
+		return m.handleQuit()
 	case keyEscape:
 		return m.handleEscape()
 	case keyEnter:
@@ -110,7 +114,7 @@ func (m *Model) handleChatShortcutKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleOpenSessionPicker()
 	case "ctrl+n":
 		return m.handleNewChat()
-	case "tab":
+	case keyTab:
 		return m.handleToggleMode()
 	case "ctrl+t":
 		return m.handleToggleAllTools()
@@ -168,12 +172,9 @@ func (m *Model) handleViewportAndTextareaKey(msg tea.KeyMsg) (tea.Model, tea.Cmd
 }
 
 // handleQuit handles application quit.
-func (m *Model) handleQuit(saveSession bool) (tea.Model, tea.Cmd) {
+func (m *Model) handleQuit() (tea.Model, tea.Cmd) {
 	m.cleanup()
-
-	if saveSession {
-		_ = m.saveCurrentSession()
-	}
+	_ = m.saveCurrentSession()
 
 	m.quitting = true
 
@@ -208,7 +209,7 @@ func (m *Model) handleEscape() (tea.Model, tea.Cmd) {
 func (m *Model) handleExitConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "Y":
-		return m.handleQuit(true)
+		return m.handleQuit()
 	case "n", "N", keyEscape:
 		m.confirmExit = false
 
@@ -490,7 +491,7 @@ func (m *Model) tryDispatchSlashCommand(content string) (bool, tea.Model, tea.Cm
 	}
 
 	// Parse command name and args: "/mode plan" → name="mode", args="plan"
-	parts := strings.SplitN(trimmed[1:], " ", 2)
+	parts := strings.SplitN(trimmed[1:], " ", 2) //nolint:mnd // split into command + args
 	cmdName := strings.ToLower(parts[0])
 
 	args := ""
@@ -541,7 +542,7 @@ func (m *Model) tryDispatchSlashCommand(content string) (bool, tea.Model, tea.Cm
 
 	// Unrecognized command — show transient error
 	m.textarea.Reset()
-	m.err = fmt.Errorf("unknown command: /%s", cmdName)
+	m.err = fmt.Errorf("%w: /%s", errUnknownCommand, cmdName)
 
 	return true, m, nil
 }

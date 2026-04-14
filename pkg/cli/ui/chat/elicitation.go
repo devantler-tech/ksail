@@ -2,6 +2,7 @@ package chat
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -56,71 +57,71 @@ func (m *Model) handleElicitationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	pe := m.pendingElicitation
-
 	switch msg.String() {
-	case "enter":
+	case keyEnter:
 		return m.acceptElicitation()
-	case "esc":
+	case keyEscape:
 		return m.declineElicitation()
-	case "ctrl+c":
+	case keyCtrlC:
 		m.cancelElicitation()
 		m.cleanup()
 		m.quitting = true
 
 		return m, tea.Quit
-	case "tab":
-		if len(pe.fields) > 1 {
-			// Save current field value before switching
-			pe.fieldValues[pe.fields[pe.fieldIndex]] = pe.inputValue
-			pe.fieldIndex = (pe.fieldIndex + 1) % len(pe.fields)
-			pe.inputValue = pe.fieldValues[pe.fields[pe.fieldIndex]]
-		}
-
-		return m, nil
+	case keyTab:
+		return m.navigateElicitationField(1)
 	case "shift+tab":
-		if len(pe.fields) > 1 {
-			pe.fieldValues[pe.fields[pe.fieldIndex]] = pe.inputValue
-			pe.fieldIndex = (pe.fieldIndex + len(pe.fields) - 1) % len(pe.fields)
-			pe.inputValue = pe.fieldValues[pe.fields[pe.fieldIndex]]
-		}
-
-		return m, nil
+		return m.navigateElicitationField(-1)
 	case "backspace":
-		if len(pe.inputValue) > 0 {
-			pe.inputValue = pe.inputValue[:len(pe.inputValue)-1]
+		pending := m.pendingElicitation
+		if len(pending.inputValue) > 0 {
+			pending.inputValue = pending.inputValue[:len(pending.inputValue)-1]
 		}
 
 		return m, nil
 	default:
 		if len(msg.String()) == 1 {
-			pe.inputValue += msg.String()
+			m.pendingElicitation.inputValue += msg.String()
 		}
 
 		return m, nil
 	}
 }
 
-// acceptElicitation submits the elicitation with the current input values.
-func (m *Model) acceptElicitation() (tea.Model, tea.Cmd) {
-	pe := m.pendingElicitation
-	content := make(map[string]any, len(pe.fields))
-
-	// Save the current field value
-	if len(pe.fields) > 0 {
-		pe.fieldValues[pe.fields[pe.fieldIndex]] = pe.inputValue
+// navigateElicitationField moves the field cursor by the given delta, saving the current value.
+func (m *Model) navigateElicitationField(delta int) (tea.Model, tea.Cmd) {
+	pending := m.pendingElicitation
+	if len(pending.fields) <= 1 {
+		return m, nil
 	}
 
-	for _, f := range pe.fields {
-		content[f] = pe.fieldValues[f]
+	pending.fieldValues[pending.fields[pending.fieldIndex]] = pending.inputValue
+	pending.fieldIndex = (pending.fieldIndex + len(pending.fields) + delta) % len(pending.fields)
+	pending.inputValue = pending.fieldValues[pending.fields[pending.fieldIndex]]
+
+	return m, nil
+}
+
+// acceptElicitation submits the elicitation with the current input values.
+func (m *Model) acceptElicitation() (tea.Model, tea.Cmd) {
+	pending := m.pendingElicitation
+	content := make(map[string]any, len(pending.fields))
+
+	// Save the current field value
+	if len(pending.fields) > 0 {
+		pending.fieldValues[pending.fields[pending.fieldIndex]] = pending.inputValue
+	}
+
+	for _, field := range pending.fields {
+		content[field] = pending.fieldValues[field]
 	}
 
 	// If no fields were extracted (simple confirm), return empty content
-	if len(pe.fields) == 0 {
+	if len(pending.fields) == 0 {
 		content = nil
 	}
 
-	pe.request.Response <- elicitationResponsePayload{
+	pending.request.Response <- elicitationResponsePayload{
 		Result: copilot.ElicitationResult{
 			Action:  "accept",
 			Content: content,
@@ -166,65 +167,19 @@ func (m *Model) renderElicitationModal() string {
 		return ""
 	}
 
-	pe := m.pendingElicitation
-	req := pe.request
+	pending := m.pendingElicitation
+	req := pending.request
 	modalWidth := max(m.width-modalPadding, 1)
 	mStyles := newModalContentStyles(modalWidth)
 
 	var content strings.Builder
 
-	contentLines := 0
-
-	// Title
-	title := "📋 Input Requested"
-	if req.Source != "" {
-		title += " (" + req.Source + ")"
-	}
-
-	content.WriteString(mStyles.clipStyle.Render(mStyles.warningStyle.Render(title)) + "\n\n")
-
-	contentLines += 2
-
-	// Message
-	if req.Message != "" {
-		content.WriteString(mStyles.clipStyle.Render(req.Message) + "\n\n")
-
-		contentLines += 2
-	}
-
-	// URL mode: just show the URL
-	if req.Mode == "url" && req.URL != "" {
-		content.WriteString(mStyles.clipStyle.Render("Open: "+req.URL) + "\n\n")
-
-		contentLines += 2
-	}
-
-	// Form fields
-	if len(pe.fields) > 0 {
-		for i, f := range pe.fields {
-			prefix := "  "
-			if i == pe.fieldIndex {
-				prefix = "▸ "
-			}
-
-			val := pe.fieldValues[f]
-			if i == pe.fieldIndex {
-				val = pe.inputValue
-			}
-
-			content.WriteString(mStyles.clipStyle.Render(fmt.Sprintf("%s%s: %s", prefix, f, val)) + "\n")
-
-			contentLines++
-		}
-
-		content.WriteString("\n")
-
-		contentLines++
-	}
+	contentLines := m.renderElicitationHeader(&content, req, mStyles)
+	contentLines += m.renderElicitationFields(&content, pending, mStyles)
 
 	// Instructions
 	instructions := "[Enter] Accept • [Esc] Decline"
-	if len(pe.fields) > 1 {
+	if len(pending.fields) > 1 {
 		instructions = "[Tab/Shift+Tab] Navigate • " + instructions
 	}
 
@@ -241,6 +196,65 @@ func (m *Model) renderElicitationModal() string {
 		Height(contentLines)
 
 	return modalStyle.Render(strings.TrimRight(content.String(), "\n"))
+}
+
+// renderElicitationHeader writes the title, message, and URL sections. Returns the line count.
+func (m *Model) renderElicitationHeader(content *strings.Builder, req *elicitationRequestMsg, mStyles modalContentStyles) int {
+	lines := 0
+
+	title := "📋 Input Requested"
+	if req.Source != "" {
+		title += " (" + req.Source + ")"
+	}
+
+	content.WriteString(mStyles.clipStyle.Render(mStyles.warningStyle.Render(title)) + "\n\n")
+
+	lines += 2 //nolint:mnd // title + blank line
+
+	if req.Message != "" {
+		content.WriteString(mStyles.clipStyle.Render(req.Message) + "\n\n")
+
+		lines += 2 //nolint:mnd // message + blank line
+	}
+
+	if req.Mode == "url" && req.URL != "" {
+		content.WriteString(mStyles.clipStyle.Render("Open: "+req.URL) + "\n\n")
+
+		lines += 2 //nolint:mnd // URL + blank line
+	}
+
+	return lines
+}
+
+// renderElicitationFields writes the form field section. Returns the line count.
+func (m *Model) renderElicitationFields(content *strings.Builder, pending *pendingElicitation, mStyles modalContentStyles) int {
+	if len(pending.fields) == 0 {
+		return 0
+	}
+
+	lines := 0
+
+	for i, field := range pending.fields {
+		prefix := "  "
+		if i == pending.fieldIndex {
+			prefix = "▸ "
+		}
+
+		val := pending.fieldValues[field]
+		if i == pending.fieldIndex {
+			val = pending.inputValue
+		}
+
+		content.WriteString(mStyles.clipStyle.Render(fmt.Sprintf("%s%s: %s", prefix, field, val)) + "\n")
+
+		lines++
+	}
+
+	content.WriteString("\n")
+
+	lines++
+
+	return lines
 }
 
 // CreateTUIElicitationHandler creates an elicitation handler that integrates with the TUI.
@@ -265,7 +279,7 @@ func CreateTUIElicitationHandler(eventChan chan<- tea.Msg) copilot.ElicitationHa
 }
 
 // extractFieldNames extracts field names from a JSON Schema "properties" map.
-// Returns the field names in sorted order, or a single "value" field for simple schemas.
+// Returns the field names in sorted order, or nil for empty/missing schemas.
 func extractFieldNames(schema map[string]any) []string {
 	if schema == nil {
 		return nil
@@ -280,6 +294,8 @@ func extractFieldNames(schema map[string]any) []string {
 	for k := range props {
 		fields = append(fields, k)
 	}
+
+	sort.Strings(fields)
 
 	return fields
 }

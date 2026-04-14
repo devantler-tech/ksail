@@ -1,13 +1,15 @@
 package chat
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	copilot "github.com/github/copilot-sdk/go"
 )
+
+// pickerBorderLines is the number of border lines added by the popup style (top + bottom).
+const pickerBorderLines = 2
 
 // updateCommandPicker checks the textarea content and shows/hides the
 // slash-command autocomplete popup or the option picker. Called after every textarea update.
@@ -75,7 +77,7 @@ func (m *Model) updateCommandPicker() {
 func (m *Model) updateOptionPicker(text string) {
 	// Parse: "/mode plan" → cmdName="mode", argText="plan"
 	withoutSlash := text[1:]
-	parts := strings.SplitN(withoutSlash, " ", 2)
+	parts := strings.SplitN(withoutSlash, " ", 2) //nolint:mnd // split into command + args
 	cmdName := strings.ToLower(parts[0])
 
 	argText := ""
@@ -184,7 +186,7 @@ func (m *Model) handleCommandPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 		return m.selectAndFireCommand()
-	case "tab":
+	case keyTab:
 		// Fill the command text but don't submit
 		return m.selectCommandWithoutFiring()
 	case keyEscape:
@@ -192,7 +194,7 @@ func (m *Model) handleCommandPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 	case keyCtrlC:
-		return m.handleQuit(true)
+		return m.handleQuit()
 	}
 
 	// For any other key (typing more characters), update textarea then re-filter
@@ -220,14 +222,14 @@ func (m *Model) handleOptionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keyEnter:
 		return m.selectAndFireOption()
-	case "tab":
+	case keyTab:
 		return m.selectOptionWithoutFiring()
 	case keyEscape:
 		m.dismissAllPickers()
 
 		return m, nil
 	case keyCtrlC:
-		return m.handleQuit(true)
+		return m.handleQuit()
 	}
 
 	// For any other key, update textarea then re-filter
@@ -300,23 +302,39 @@ func (m *Model) selectOptionWithoutFiring() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// pickerItem represents a single item in a picker popup.
+type pickerItem struct {
+	label       string
+	description string
+}
+
 // renderPickerPopup renders the floating autocomplete popup for either
 // commands or options, depending on which picker is active.
 func (m *Model) renderPickerPopup() string {
 	if m.showOptionPicker && len(m.filteredOptions) > 0 {
-		return m.renderOptionPickerPopup()
+		items := make([]pickerItem, len(m.filteredOptions))
+		for i, opt := range m.filteredOptions {
+			items[i] = pickerItem{label: opt.Name, description: opt.Description}
+		}
+
+		return m.renderPickerItems(items, m.optionPickerIndex)
 	}
 
 	if m.showCommandPicker && len(m.filteredCommands) > 0 {
-		return m.renderCommandPickerPopup()
+		items := make([]pickerItem, len(m.filteredCommands))
+		for i, cmd := range m.filteredCommands {
+			items[i] = pickerItem{label: "/" + cmd.Name, description: cmd.Description}
+		}
+
+		return m.renderPickerItems(items, m.commandPickerIndex)
 	}
 
 	return ""
 }
 
-// renderCommandPickerPopup renders the floating command autocomplete popup.
-func (m *Model) renderCommandPickerPopup() string {
-	if !m.showCommandPicker || len(m.filteredCommands) == 0 {
+// renderPickerItems renders a generic picker popup with highlighted selection.
+func (m *Model) renderPickerItems(items []pickerItem, selectedIndex int) string {
+	if len(items) == 0 {
 		return ""
 	}
 
@@ -333,72 +351,18 @@ func (m *Model) renderCommandPickerPopup() string {
 
 	var content strings.Builder
 
-	for i, cmd := range m.filteredCommands {
-		line := fmt.Sprintf("/%s", cmd.Name)
-		desc := cmd.Description
-
-		if i == m.commandPickerIndex {
-			// Highlight the selected item
-			styledLine := highlightStyle.Render(line)
-			if desc != "" {
-				styledLine += " " + desc
+	for i, item := range items {
+		if i == selectedIndex {
+			styledLine := highlightStyle.Render(item.label)
+			if item.description != "" {
+				styledLine += " " + item.description
 			}
 
 			content.WriteString(clipStyle.Render(styledLine) + "\n")
 		} else {
-			styledLine := line
-			if desc != "" {
-				styledLine += " " + dimStyle.Render(desc)
-			}
-
-			content.WriteString(clipStyle.Render(styledLine) + "\n")
-		}
-	}
-
-	popupStyle := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(m.theme.PrimaryColor).
-		PaddingLeft(1).
-		PaddingRight(1).
-		Width(modalWidth)
-
-	return popupStyle.Render(strings.TrimRight(content.String(), "\n"))
-}
-
-// renderOptionPickerPopup renders the floating option autocomplete popup.
-func (m *Model) renderOptionPickerPopup() string {
-	if !m.showOptionPicker || len(m.filteredOptions) == 0 {
-		return ""
-	}
-
-	modalWidth := max(m.width-modalPadding, 1)
-	contentWidth := max(modalWidth-contentPadding, 1)
-	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
-
-	highlightStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.ANSIColor(ansiBlack)).
-		Background(lipgloss.ANSIColor(ansiCyan))
-
-	dimStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
-
-	var content strings.Builder
-
-	for i, opt := range m.filteredOptions {
-		line := opt.Name
-		desc := opt.Description
-
-		if i == m.optionPickerIndex {
-			styledLine := highlightStyle.Render(line)
-			if desc != "" {
-				styledLine += " " + desc
-			}
-
-			content.WriteString(clipStyle.Render(styledLine) + "\n")
-		} else {
-			styledLine := line
-			if desc != "" {
-				styledLine += " " + dimStyle.Render(desc)
+			styledLine := item.label
+			if item.description != "" {
+				styledLine += " " + dimStyle.Render(item.description)
 			}
 
 			content.WriteString(clipStyle.Render(styledLine) + "\n")
@@ -418,18 +382,19 @@ func (m *Model) renderOptionPickerPopup() string {
 // pickerExtraHeight returns the extra height consumed by command or option picker popups.
 func (m *Model) pickerExtraHeight() int {
 	if m.showOptionPicker && len(m.filteredOptions) > 0 {
-		return len(m.filteredOptions) + 2
+		return len(m.filteredOptions) + pickerBorderLines
 	}
 
 	if m.showCommandPicker && len(m.filteredCommands) > 0 {
-		return len(m.filteredCommands) + 2
+		return len(m.filteredCommands) + pickerBorderLines
 	}
 
 	return 0
 }
 
 // commandPickerExtraHeight returns the extra height consumed by the command picker popup.
-// Deprecated: Use pickerExtraHeight() instead, which handles both pickers.
+//
+// Deprecated: Use pickerExtraHeight instead, which handles both pickers.
 func (m *Model) commandPickerExtraHeight() int {
 	return m.pickerExtraHeight()
 }

@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testModeCmd = "mode"
+
 // --- ParseChatMode tests ---
 
 func TestParseChatMode_ValidModes(t *testing.T) {
@@ -136,7 +138,7 @@ func TestBuildTUISlashCommands_ModeSendsMessage(t *testing.T) {
 
 	var modeCmd *chat.ExportCommandDefinition
 	for i := range commands {
-		if commands[i].Name == "mode" {
+		if commands[i].Name == testModeCmd {
 			modeCmd = &chat.ExportCommandDefinition{Def: commands[i]}
 
 			break
@@ -162,7 +164,7 @@ func TestBuildTUISlashCommands_ModeEmptyArgsReturnsError(t *testing.T) {
 
 	var modeCmd *chat.ExportCommandDefinition
 	for i := range commands {
-		if commands[i].Name == "mode" {
+		if commands[i].Name == testModeCmd {
 			modeCmd = &chat.ExportCommandDefinition{Def: commands[i]}
 
 			break
@@ -172,7 +174,7 @@ func TestBuildTUISlashCommands_ModeEmptyArgsReturnsError(t *testing.T) {
 	require.NotNil(t, modeCmd, "/mode command not found")
 
 	err := modeCmd.Def.Handler(chat.ExportCommandContext{})
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "usage")
 }
 
@@ -184,7 +186,7 @@ func TestBuildTUISlashCommands_ModeInvalidReturnsError(t *testing.T) {
 
 	var modeCmd *chat.ExportCommandDefinition
 	for i := range commands {
-		if commands[i].Name == "mode" {
+		if commands[i].Name == testModeCmd {
 			modeCmd = &chat.ExportCommandDefinition{Def: commands[i]}
 
 			break
@@ -194,7 +196,7 @@ func TestBuildTUISlashCommands_ModeInvalidReturnsError(t *testing.T) {
 	require.NotNil(t, modeCmd, "/mode command not found")
 
 	err := modeCmd.Def.Handler(chat.ExportCommandContextWithArgs("badmode"))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid mode")
 }
 

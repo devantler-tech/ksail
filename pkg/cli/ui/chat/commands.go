@@ -1,12 +1,19 @@
 package chat
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	copilot "github.com/github/copilot-sdk/go"
+)
+
+// Sentinel errors for slash command validation.
+var (
+	errModeUsage   = errors.New("usage: /mode <interactive|plan|autopilot>")
+	errUnknownMode = errors.New("invalid mode")
 )
 
 // Slash command message types sent from command handlers to the TUI event channel.
@@ -50,11 +57,11 @@ type CommandOptionProvider func(m *Model) []CommandOption
 // Returns the mode and true if valid, or InteractiveMode and false if invalid.
 func ParseChatMode(name string) (ChatMode, bool) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "interactive":
+	case modeNameInteractive:
 		return InteractiveMode, true
-	case "plan":
+	case modeNamePlan:
 		return PlanMode, true
-	case "autopilot":
+	case modeNameAutopilot:
 		return AutopilotMode, true
 	default:
 		return InteractiveMode, false
@@ -158,12 +165,12 @@ func BuildNonTUISlashCommands(writer io.Writer) []copilot.CommandDefinition {
 func handleModeCommand(args string, eventChan chan<- tea.Msg) error {
 	args = strings.TrimSpace(args)
 	if args == "" {
-		return fmt.Errorf("usage: /mode <interactive|plan|autopilot>")
+		return errModeUsage
 	}
 
 	mode, ok := ParseChatMode(args)
 	if !ok {
-		return fmt.Errorf("invalid mode %q: use interactive, plan, or autopilot", args)
+		return fmt.Errorf("%w %q: use interactive, plan, or autopilot", errUnknownMode, args)
 	}
 
 	eventChan <- modeChangeRequestMsg{Mode: mode}
@@ -195,19 +202,19 @@ func BuildTUICommandOptions() map[string]CommandOptionProvider {
 				{Name: "autopilot", Description: "Act autonomously"},
 			}
 		},
-		"model": func(m *Model) []CommandOption {
-			if len(m.availableModels) == 0 {
-				allModels, err := m.client.ListModels(m.ctx)
+		"model": func(model *Model) []CommandOption {
+			if len(model.availableModels) == 0 {
+				allModels, err := model.client.ListModels(model.ctx)
 				if err == nil {
-					m.availableModels = FilterEnabledModels(allModels)
+					model.availableModels = FilterEnabledModels(allModels)
 				}
 			}
 
-			options := make([]CommandOption, 0, len(m.availableModels))
-			for _, model := range m.availableModels {
+			options := make([]CommandOption, 0, len(model.availableModels))
+			for _, mdl := range model.availableModels {
 				options = append(options, CommandOption{
-					Name:        model.ID,
-					Description: model.Name,
+					Name:        mdl.ID,
+					Description: mdl.Name,
 				})
 			}
 
