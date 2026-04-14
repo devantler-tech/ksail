@@ -295,12 +295,6 @@ spec:
           port: 80
 ```
 
-Key changes:
-- Replace `Ingress` → `Gateway` + `HTTPRoute`
-- Move hostname from `spec.rules[].host` → `spec.hostnames[]`
-- Move path from `spec.rules[].http.paths` → `spec.rules[].matches[].path`
-- Drop controller-specific annotations — use native `HTTPRoute` filters instead
-
 ## Using Gateway API in GitOps
 
 When using KSail with Flux or ArgoCD, place Gateway and HTTPRoute manifests in your source directory alongside other workload manifests:
