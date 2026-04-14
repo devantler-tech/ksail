@@ -78,25 +78,25 @@ func TestUpdateCommandPicker_HidesOnSpaceAfterCommand(t *testing.T) {
 func TestUpdateCommandPicker_HidesOnEmptyInput(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	chat.ExportSetTextareaValue(m, "")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.False(t, chat.ExportShowCommandPicker(m))
+	assert.False(t, chat.ExportShowCommandPicker(model))
 }
 
 func TestUpdateCommandPicker_HidesOnNonSlashInput(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	chat.ExportSetTextareaValue(m, "hello")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "hello")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.False(t, chat.ExportShowCommandPicker(m))
+	assert.False(t, chat.ExportShowCommandPicker(model))
 }
 
 func TestUpdateCommandPicker_ClampsIndex(t *testing.T) {
@@ -123,14 +123,14 @@ func TestUpdateCommandPicker_ClampsIndex(t *testing.T) {
 func TestUpdateCommandPicker_CaseInsensitive(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	chat.ExportSetTextareaValue(m, "/MO")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/MO")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.True(t, chat.ExportShowCommandPicker(m))
-	assert.Equal(t, 2, len(chat.ExportFilteredCommands(m)))
+	assert.True(t, chat.ExportShowCommandPicker(model))
+	assert.Equal(t, 2, len(chat.ExportFilteredCommands(model)))
 }
 
 // --- commandPickerExtraHeight tests ---
@@ -138,22 +138,22 @@ func TestUpdateCommandPicker_CaseInsensitive(t *testing.T) {
 func TestCommandPickerExtraHeight_WhenHidden(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
+	model := chat.NewModel(newCommandPickerTestParams())
 
-	assert.Equal(t, 0, chat.ExportCommandPickerExtraHeight(m))
+	assert.Equal(t, 0, chat.ExportCommandPickerExtraHeight(model))
 }
 
 func TestCommandPickerExtraHeight_WhenShown(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	chat.ExportSetTextareaValue(m, "/")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/")
+	chat.ExportUpdateCommandPicker(model)
 
 	// 6 commands + 2 for border
-	assert.Equal(t, 8, chat.ExportCommandPickerExtraHeight(m))
+	assert.Equal(t, 8, chat.ExportCommandPickerExtraHeight(model))
 }
 
 // --- helpers ---
@@ -240,10 +240,10 @@ func TestTryDispatchSlashCommand_UnknownCommand(t *testing.T) {
 func TestTryDispatchSlashCommand_NotSlashCommand(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	handled, _, _ := chat.ExportTryDispatchSlashCommand(m, "hello world")
+	handled, _, _ := chat.ExportTryDispatchSlashCommand(model, "hello world")
 
 	assert.False(t, handled)
 }
@@ -253,8 +253,8 @@ func TestTryDispatchSlashCommand_CaseInsensitive(t *testing.T) {
 
 	called := false
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	config := chat.ExportGetSessionConfig(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	config := chat.ExportGetSessionConfig(model)
 	config.Commands = []copilot.CommandDefinition{
 		{Name: "mode", Handler: func(_ copilot.CommandContext) error {
 			called = true
@@ -262,7 +262,7 @@ func TestTryDispatchSlashCommand_CaseInsensitive(t *testing.T) {
 		}},
 	}
 
-	handled, _, _ := chat.ExportTryDispatchSlashCommand(m, "/MODE plan")
+	handled, _, _ := chat.ExportTryDispatchSlashCommand(model, "/MODE plan")
 
 	assert.True(t, handled)
 	assert.True(t, called)
@@ -273,30 +273,30 @@ func TestTryDispatchSlashCommand_CaseInsensitive(t *testing.T) {
 func TestOptionPicker_ShowsOnCommandWithSpace(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	chat.ExportSetTextareaValue(m, "/mode ")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/mode ")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.False(t, chat.ExportShowCommandPicker(m))
-	assert.True(t, chat.ExportShowOptionPicker(m))
-	assert.Equal(t, "mode", chat.ExportActiveCommandName(m))
-	assert.Equal(t, 3, len(chat.ExportFilteredOptions(m))) // interactive, plan, autopilot
+	assert.False(t, chat.ExportShowCommandPicker(model))
+	assert.True(t, chat.ExportShowOptionPicker(model))
+	assert.Equal(t, "mode", chat.ExportActiveCommandName(model))
+	assert.Equal(t, 3, len(chat.ExportFilteredOptions(model))) // interactive, plan, autopilot
 }
 
 func TestOptionPicker_FiltersOnPartialArg(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	chat.ExportSetTextareaValue(m, "/mode pl")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/mode pl")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.True(t, chat.ExportShowOptionPicker(m))
+	assert.True(t, chat.ExportShowOptionPicker(model))
 
-	filtered := chat.ExportFilteredOptions(m)
+	filtered := chat.ExportFilteredOptions(model)
 	assert.Equal(t, 1, len(filtered))
 	assert.Equal(t, "plan", filtered[0].Name)
 }
@@ -304,48 +304,48 @@ func TestOptionPicker_FiltersOnPartialArg(t *testing.T) {
 func TestOptionPicker_HidesForCommandWithoutOptions(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	chat.ExportSetTextareaValue(m, "/clear ")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/clear ")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.False(t, chat.ExportShowCommandPicker(m))
-	assert.False(t, chat.ExportShowOptionPicker(m))
+	assert.False(t, chat.ExportShowCommandPicker(model))
+	assert.False(t, chat.ExportShowOptionPicker(model))
 }
 
 func TestOptionPicker_ClampsIndex(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
 	// Show all options
-	chat.ExportSetTextareaValue(m, "/mode ")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/mode ")
+	chat.ExportUpdateCommandPicker(model)
 
 	// Set index beyond what filter will produce
-	chat.ExportSetOptionPickerIndex(m, 2)
+	chat.ExportSetOptionPickerIndex(model, 2)
 
 	// Now filter to single option
-	chat.ExportSetTextareaValue(m, "/mode pl")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/mode pl")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.True(t, chat.ExportShowOptionPicker(m))
-	assert.Equal(t, 0, chat.ExportOptionPickerIndex(m))
+	assert.True(t, chat.ExportShowOptionPicker(model))
+	assert.Equal(t, 0, chat.ExportOptionPickerIndex(model))
 }
 
 func TestOptionPicker_CaseInsensitive(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	chat.ExportSetTextareaValue(m, "/mode PL")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/mode PL")
+	chat.ExportUpdateCommandPicker(model)
 
-	assert.True(t, chat.ExportShowOptionPicker(m))
-	assert.Equal(t, 1, len(chat.ExportFilteredOptions(m)))
+	assert.True(t, chat.ExportShowOptionPicker(model))
+	assert.Equal(t, 1, len(chat.ExportFilteredOptions(model)))
 }
 
 // --- pickerExtraHeight tests ---
@@ -353,12 +353,12 @@ func TestOptionPicker_CaseInsensitive(t *testing.T) {
 func TestPickerExtraHeight_OptionPicker(t *testing.T) {
 	t.Parallel()
 
-	m := chat.NewModel(newCommandPickerTestParams())
-	setTestCommands(m)
+	model := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(model)
 
-	chat.ExportSetTextareaValue(m, "/mode ")
-	chat.ExportUpdateCommandPicker(m)
+	chat.ExportSetTextareaValue(model, "/mode ")
+	chat.ExportUpdateCommandPicker(model)
 
 	// 3 options + 2 for border
-	assert.Equal(t, 5, chat.ExportPickerExtraHeight(m))
+	assert.Equal(t, 5, chat.ExportPickerExtraHeight(model))
 }

@@ -45,20 +45,38 @@ func CreateElicitationHandler(reader io.Reader, writer io.Writer) copilot.Elicit
 	}
 }
 
+// errElicitationEOF is returned by readLine when the reader reaches EOF.
+var errElicitationEOF = errors.New("elicitation EOF")
+
+// readLine reads a line from the reader, returning the trimmed line content.
+// Returns errElicitationEOF if the reader reaches EOF.
+func readLine(reader *bufio.Reader, context string) (string, error) {
+	line, readErr := reader.ReadString('\n')
+	if readErr != nil {
+		if errors.Is(readErr, io.EOF) {
+			return "", errElicitationEOF
+		}
+
+		return "", fmt.Errorf("reading %s: %w", context, readErr)
+	}
+
+	return strings.TrimSpace(line), nil
+}
+
 // promptElicitationAccept asks the user to accept or decline.
 func promptElicitationAccept(reader *bufio.Reader, writer io.Writer) (copilot.ElicitationResult, error) {
 	_, _ = fmt.Fprint(writer, "Accept? [y/N]: ")
 
-	line, readErr := reader.ReadString('\n')
-	if readErr != nil {
-		if errors.Is(readErr, io.EOF) {
+	input, err := readLine(reader, "elicitation response")
+	if err != nil {
+		if errors.Is(err, errElicitationEOF) {
 			return copilot.ElicitationResult{Action: "cancel"}, nil
 		}
 
-		return copilot.ElicitationResult{}, fmt.Errorf("reading elicitation response: %w", readErr)
+		return copilot.ElicitationResult{}, err
 	}
 
-	input := strings.TrimSpace(strings.ToLower(line))
+	input = strings.ToLower(input)
 
 	if input == "y" || input == "yes" {
 		return copilot.ElicitationResult{Action: "accept"}, nil
@@ -92,16 +110,15 @@ func promptElicitationFields(
 	for _, field := range fieldNames {
 		_, _ = fmt.Fprintf(writer, "%s: ", field)
 
-		line, readErr := reader.ReadString('\n')
-		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
+		value, err := readLine(reader, "field "+field)
+		if err != nil {
+			if errors.Is(err, errElicitationEOF) {
 				return copilot.ElicitationResult{Action: "cancel"}, nil
 			}
 
-			return copilot.ElicitationResult{}, fmt.Errorf("reading field %s: %w", field, readErr)
+			return copilot.ElicitationResult{}, err
 		}
 
-		value := strings.TrimSpace(line)
 		if value == "!cancel" {
 			return copilot.ElicitationResult{Action: "decline"}, nil
 		}
