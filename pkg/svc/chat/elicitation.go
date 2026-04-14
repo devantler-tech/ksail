@@ -15,7 +15,10 @@ import (
 // the provided reader/writer. It shows the elicitation message and asks the user
 // to accept or decline.
 func CreateElicitationHandler(reader io.Reader, writer io.Writer) copilot.ElicitationHandler {
-	bufReader := bufio.NewReader(reader)
+	bufReader, ok := reader.(*bufio.Reader)
+	if !ok {
+		bufReader = bufio.NewReader(reader)
+	}
 
 	return func(ctx copilot.ElicitationContext) (copilot.ElicitationResult, error) {
 		_, _ = fmt.Fprintln(writer, "")
