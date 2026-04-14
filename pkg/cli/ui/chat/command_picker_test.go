@@ -22,7 +22,7 @@ func TestUpdateCommandPicker_ShowsOnSlash(t *testing.T) {
 	chat.ExportUpdateCommandPicker(model)
 
 	assert.True(t, chat.ExportShowCommandPicker(model))
-	assert.Equal(t, 6, len(chat.ExportFilteredCommands(model))) // all commands match
+	assert.Len(t, chat.ExportFilteredCommands(model), 6) // all commands match
 }
 
 func TestUpdateCommandPicker_FiltersOnPartialInput(t *testing.T) {
@@ -37,7 +37,7 @@ func TestUpdateCommandPicker_FiltersOnPartialInput(t *testing.T) {
 	assert.True(t, chat.ExportShowCommandPicker(model))
 
 	filtered := chat.ExportFilteredCommands(model)
-	assert.Equal(t, 2, len(filtered)) // /mode, /model
+	assert.Len(t, filtered, 2) // /mode, /model
 
 	names := make([]string, len(filtered))
 	for i, c := range filtered {
@@ -130,7 +130,7 @@ func TestUpdateCommandPicker_CaseInsensitive(t *testing.T) {
 	chat.ExportUpdateCommandPicker(model)
 
 	assert.True(t, chat.ExportShowCommandPicker(model))
-	assert.Equal(t, 2, len(chat.ExportFilteredCommands(model)))
+	assert.Len(t, chat.ExportFilteredCommands(model), 2)
 }
 
 // --- commandPickerExtraHeight tests ---
@@ -172,12 +172,36 @@ func newCommandPickerTestParams() chat.Params {
 func setTestCommands(m *chat.Model) {
 	config := chat.ExportGetSessionConfig(m)
 	config.Commands = []copilot.CommandDefinition{
-		{Name: "mode", Description: "Switch chat mode", Handler: func(_ copilot.CommandContext) error { return nil }},
-		{Name: "model", Description: "Switch LLM model", Handler: func(_ copilot.CommandContext) error { return nil }},
-		{Name: "new", Description: "Start a new chat session", Handler: func(_ copilot.CommandContext) error { return nil }},
-		{Name: "sessions", Description: "Open session picker", Handler: func(_ copilot.CommandContext) error { return nil }},
-		{Name: "help", Description: "Show help", Handler: func(_ copilot.CommandContext) error { return nil }},
-		{Name: "clear", Description: "Clear viewport", Handler: func(_ copilot.CommandContext) error { return nil }},
+		{
+			Name:        "mode",
+			Description: "Switch chat mode",
+			Handler:     func(_ copilot.CommandContext) error { return nil },
+		},
+		{
+			Name:        "model",
+			Description: "Switch LLM model",
+			Handler:     func(_ copilot.CommandContext) error { return nil },
+		},
+		{
+			Name:        "new",
+			Description: "Start a new chat session",
+			Handler:     func(_ copilot.CommandContext) error { return nil },
+		},
+		{
+			Name:        "sessions",
+			Description: "Open session picker",
+			Handler:     func(_ copilot.CommandContext) error { return nil },
+		},
+		{
+			Name:        "help",
+			Description: "Show help",
+			Handler:     func(_ copilot.CommandContext) error { return nil },
+		},
+		{
+			Name:        "clear",
+			Description: "Clear viewport",
+			Handler:     func(_ copilot.CommandContext) error { return nil },
+		},
 	}
 }
 
@@ -193,6 +217,7 @@ func TestTryDispatchSlashCommand_ValidCommand(t *testing.T) {
 	config.Commands = []copilot.CommandDefinition{
 		{Name: "mode", Handler: func(ctx copilot.CommandContext) error {
 			calledArgs = ctx.Args
+
 			return nil
 		}},
 	}
@@ -214,6 +239,7 @@ func TestTryDispatchSlashCommand_CommandWithoutArgs(t *testing.T) {
 	config.Commands = []copilot.CommandDefinition{
 		{Name: "clear", Handler: func(_ copilot.CommandContext) error {
 			called = true
+
 			return nil
 		}},
 	}
@@ -258,6 +284,7 @@ func TestTryDispatchSlashCommand_CaseInsensitive(t *testing.T) {
 	config.Commands = []copilot.CommandDefinition{
 		{Name: "mode", Handler: func(_ copilot.CommandContext) error {
 			called = true
+
 			return nil
 		}},
 	}
@@ -282,7 +309,7 @@ func TestOptionPicker_ShowsOnCommandWithSpace(t *testing.T) {
 	assert.False(t, chat.ExportShowCommandPicker(model))
 	assert.True(t, chat.ExportShowOptionPicker(model))
 	assert.Equal(t, "mode", chat.ExportActiveCommandName(model))
-	assert.Equal(t, 3, len(chat.ExportFilteredOptions(model))) // interactive, plan, autopilot
+	assert.Len(t, chat.ExportFilteredOptions(model), 3) // interactive, plan, autopilot
 }
 
 func TestOptionPicker_FiltersOnPartialArg(t *testing.T) {
@@ -297,7 +324,7 @@ func TestOptionPicker_FiltersOnPartialArg(t *testing.T) {
 	assert.True(t, chat.ExportShowOptionPicker(model))
 
 	filtered := chat.ExportFilteredOptions(model)
-	assert.Equal(t, 1, len(filtered))
+	assert.Len(t, filtered, 1)
 	assert.Equal(t, "plan", filtered[0].Name)
 }
 
@@ -345,7 +372,7 @@ func TestOptionPicker_CaseInsensitive(t *testing.T) {
 	chat.ExportUpdateCommandPicker(model)
 
 	assert.True(t, chat.ExportShowOptionPicker(model))
-	assert.Equal(t, 1, len(chat.ExportFilteredOptions(model)))
+	assert.Len(t, chat.ExportFilteredOptions(model), 1)
 }
 
 // --- pickerExtraHeight tests ---

@@ -67,7 +67,10 @@ func readLine(reader *bufio.Reader, context string) (string, error) {
 }
 
 // promptElicitationAccept asks the user to accept or decline.
-func promptElicitationAccept(reader *bufio.Reader, writer io.Writer) (copilot.ElicitationResult, error) {
+func promptElicitationAccept(
+	reader *bufio.Reader,
+	writer io.Writer,
+) (copilot.ElicitationResult, error) {
 	_, _ = fmt.Fprint(writer, "Accept? [y/N]: ")
 
 	input, err := readLine(reader, "elicitation response")

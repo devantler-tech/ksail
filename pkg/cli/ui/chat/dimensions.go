@@ -73,11 +73,11 @@ func (m *Model) elicitationModalExtraHeight() int {
 	// title (2) + message (2 if present) + URL (2 if present) + fields + field spacing + instructions (1) + border (2)
 	contentLines := 2 + 1 + pickerBorderLines //nolint:mnd // title+blank + instructions + border
 	if m.pendingElicitation.request.Message != "" {
-		contentLines += 2 //nolint:mnd // message + blank line
+		contentLines += 2
 	}
 
 	if m.pendingElicitation.request.Mode == "url" && m.pendingElicitation.request.URL != "" {
-		contentLines += 2 //nolint:mnd // URL + blank line
+		contentLines += 2
 	}
 
 	if len(m.pendingElicitation.fields) > 0 {

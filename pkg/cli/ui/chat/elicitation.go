@@ -221,18 +221,18 @@ func (m *Model) renderElicitationHeader(
 
 	content.WriteString(mStyles.clipStyle.Render(mStyles.warningStyle.Render(title)) + "\n\n")
 
-	lines += 2 //nolint:mnd // title + blank line
+	lines += 2
 
 	if req.Message != "" {
 		content.WriteString(mStyles.clipStyle.Render(req.Message) + "\n\n")
 
-		lines += 2 //nolint:mnd // message + blank line
+		lines += 2
 	}
 
 	if req.Mode == "url" && req.URL != "" {
 		content.WriteString(mStyles.clipStyle.Render("Open: "+req.URL) + "\n\n")
 
-		lines += 2 //nolint:mnd // URL + blank line
+		lines += 2
 	}
 
 	return lines
@@ -259,7 +259,9 @@ func (m *Model) renderElicitationFields(
 			val = pending.inputValue
 		}
 
-		content.WriteString(mStyles.clipStyle.Render(fmt.Sprintf("%s%s: %s", prefix, field, val)) + "\n")
+		content.WriteString(
+			mStyles.clipStyle.Render(fmt.Sprintf("%s%s: %s", prefix, field, val)) + "\n",
+		)
 
 		lines++
 	}

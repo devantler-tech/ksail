@@ -522,7 +522,8 @@ func (m *Model) tryDispatchSlashCommand(content string) (bool, tea.Model, tea.Cm
 				ctx.SessionID = m.session.SessionID
 			}
 
-			if err := cmd.Handler(ctx); err != nil {
+			err := cmd.Handler(ctx)
+			if err != nil {
 				m.err = err
 			}
 

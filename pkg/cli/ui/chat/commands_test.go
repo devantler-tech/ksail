@@ -87,6 +87,7 @@ func TestBuildTUISlashCommands_ClearSendsMessage(t *testing.T) {
 
 	// Find /clear command
 	var clearCmd *chat.ExportCommandDefinition
+
 	for i := range commands {
 		if commands[i].Name == "clear" {
 			clearCmd = &chat.ExportCommandDefinition{Def: commands[i]}
@@ -112,6 +113,7 @@ func TestBuildTUISlashCommands_HelpSendsMessage(t *testing.T) {
 	commands := chat.BuildTUISlashCommands(eventChan)
 
 	var helpCmd *chat.ExportCommandDefinition
+
 	for i := range commands {
 		if commands[i].Name == "help" {
 			helpCmd = &chat.ExportCommandDefinition{Def: commands[i]}
@@ -137,6 +139,7 @@ func TestBuildTUISlashCommands_ModeSendsMessage(t *testing.T) {
 	commands := chat.BuildTUISlashCommands(eventChan)
 
 	var modeCmd *chat.ExportCommandDefinition
+
 	for i := range commands {
 		if commands[i].Name == testModeCmd {
 			modeCmd = &chat.ExportCommandDefinition{Def: commands[i]}
@@ -163,6 +166,7 @@ func TestBuildTUISlashCommands_ModeEmptyArgsReturnsError(t *testing.T) {
 	commands := chat.BuildTUISlashCommands(eventChan)
 
 	var modeCmd *chat.ExportCommandDefinition
+
 	for i := range commands {
 		if commands[i].Name == testModeCmd {
 			modeCmd = &chat.ExportCommandDefinition{Def: commands[i]}
@@ -185,6 +189,7 @@ func TestBuildTUISlashCommands_ModeInvalidReturnsError(t *testing.T) {
 	commands := chat.BuildTUISlashCommands(eventChan)
 
 	var modeCmd *chat.ExportCommandDefinition
+
 	for i := range commands {
 		if commands[i].Name == testModeCmd {
 			modeCmd = &chat.ExportCommandDefinition{Def: commands[i]}
@@ -207,6 +212,7 @@ func TestBuildTUISlashCommands_ModelNoArgsSendsPicker(t *testing.T) {
 	commands := chat.BuildTUISlashCommands(eventChan)
 
 	var modelCmd *chat.ExportCommandDefinition
+
 	for i := range commands {
 		if commands[i].Name == "model" {
 			modelCmd = &chat.ExportCommandDefinition{Def: commands[i]}
@@ -232,6 +238,7 @@ func TestBuildTUISlashCommands_ModelWithArgsSendsSetRequest(t *testing.T) {
 	commands := chat.BuildTUISlashCommands(eventChan)
 
 	var modelCmd *chat.ExportCommandDefinition
+
 	for i := range commands {
 		if commands[i].Name == "model" {
 			modelCmd = &chat.ExportCommandDefinition{Def: commands[i]}
@@ -257,6 +264,7 @@ func TestBuildNonTUISlashCommands_ReturnsExpectedCommands(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	commands := chat.BuildNonTUISlashCommands(&buf)
 
 	assert.NotEmpty(t, commands)
@@ -272,9 +280,11 @@ func TestBuildNonTUISlashCommands_HelpPrintsOutput(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	commands := chat.BuildNonTUISlashCommands(&buf)
 
 	var helpCmd *chat.ExportCommandDefinition
+
 	for i := range commands {
 		if commands[i].Name == "help" {
 			helpCmd = &chat.ExportCommandDefinition{Def: commands[i]}

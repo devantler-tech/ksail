@@ -199,6 +199,7 @@ func (m *Model) handleCommandPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// For any other key (typing more characters), update textarea then re-filter
 	var taCmd tea.Cmd
+
 	m.textarea, taCmd = m.textarea.Update(msg)
 	m.updateCommandPicker()
 
@@ -234,6 +235,7 @@ func (m *Model) handleOptionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// For any other key, update textarea then re-filter
 	var taCmd tea.Cmd
+
 	m.textarea, taCmd = m.textarea.Update(msg)
 	m.updateCommandPicker()
 
@@ -434,10 +436,7 @@ func overlayBottom(base, popup string) string {
 	baseLines := strings.Split(base, "\n")
 	popupLines := strings.Split(popup, "\n")
 
-	startIdx := len(baseLines) - len(popupLines)
-	if startIdx < 0 {
-		startIdx = 0
-	}
+	startIdx := max(len(baseLines)-len(popupLines), 0)
 
 	for i, pLine := range popupLines {
 		idx := startIdx + i

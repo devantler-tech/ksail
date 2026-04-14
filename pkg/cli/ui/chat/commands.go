@@ -91,6 +91,7 @@ func BuildTUISlashCommands(eventChan chan<- tea.Msg) []copilot.CommandDefinition
 			Description: "Start a new chat session",
 			Handler: func(_ copilot.CommandContext) error {
 				eventChan <- newChatRequestMsg{}
+
 				return nil
 			},
 		},
@@ -99,6 +100,7 @@ func BuildTUISlashCommands(eventChan chan<- tea.Msg) []copilot.CommandDefinition
 			Description: "Open session history picker",
 			Handler: func(_ copilot.CommandContext) error {
 				eventChan <- openSessionPickerMsg{}
+
 				return nil
 			},
 		},
@@ -107,6 +109,7 @@ func BuildTUISlashCommands(eventChan chan<- tea.Msg) []copilot.CommandDefinition
 			Description: "Show keyboard shortcuts and commands",
 			Handler: func(_ copilot.CommandContext) error {
 				eventChan <- showHelpMsg{}
+
 				return nil
 			},
 		},
@@ -115,6 +118,7 @@ func BuildTUISlashCommands(eventChan chan<- tea.Msg) []copilot.CommandDefinition
 			Description: "Clear the chat viewport",
 			Handler: func(_ copilot.CommandContext) error {
 				eventChan <- clearViewportMsg{}
+
 				return nil
 			},
 		},
@@ -131,7 +135,10 @@ func BuildNonTUISlashCommands(writer io.Writer) []copilot.CommandDefinition {
 			Handler: func(_ copilot.CommandContext) error {
 				_, _ = fmt.Fprintln(writer, "\nAvailable commands:")
 				_, _ = fmt.Fprintln(writer, "  /help              Show this help")
-				_, _ = fmt.Fprintln(writer, "  /mode <mode>       Switch mode (interactive, plan, autopilot)")
+				_, _ = fmt.Fprintln(
+					writer,
+					"  /mode <mode>       Switch mode (interactive, plan, autopilot)",
+				)
 				_, _ = fmt.Fprintln(writer, "  exit, quit, q      Exit the chat")
 				_, _ = fmt.Fprintln(writer, "")
 
@@ -145,16 +152,23 @@ func BuildNonTUISlashCommands(writer io.Writer) []copilot.CommandDefinition {
 				args := strings.TrimSpace(ctx.Args)
 				if args == "" {
 					_, _ = fmt.Fprintln(writer, "Usage: /mode <interactive|plan|autopilot>")
+
 					return nil
 				}
 
 				_, ok := ParseChatMode(args)
 				if !ok {
-					_, _ = fmt.Fprintf(writer, "Invalid mode %q: use interactive, plan, or autopilot\n", args)
+					_, _ = fmt.Fprintf(
+						writer,
+						"Invalid mode %q: use interactive, plan, or autopilot\n",
+						args,
+					)
+
 					return nil
 				}
 
 				_, _ = fmt.Fprintf(writer, "Switched to %s mode\n", args)
+
 				return nil
 			},
 		},
@@ -183,6 +197,7 @@ func handleModelCommand(args string, eventChan chan<- tea.Msg) error {
 	args = strings.TrimSpace(args)
 	if args == "" {
 		eventChan <- openModelPickerMsg{}
+
 		return nil
 	}
 

@@ -306,9 +306,9 @@ type Model struct {
 	pendingElicitation *pendingElicitation // current elicitation request awaiting user response
 
 	// Slash command autocomplete
-	showCommandPicker  bool                       // true when the command picker popup is visible
-	commandPickerIndex int                        // currently highlighted command in picker
-	filteredCommands   []copilot.CommandDefinition // commands matching current "/" prefix
+	showCommandPicker  bool                             // true when the command picker popup is visible
+	commandPickerIndex int                              // currently highlighted command in picker
+	filteredCommands   []copilot.CommandDefinition      // commands matching current "/" prefix
 	commandOptions     map[string]CommandOptionProvider // per-command option providers
 
 	// Slash command option picker
@@ -579,7 +579,8 @@ func (m *Model) View() string {
 	// Header, chat viewport (with floating popup overlay), input/modal, and footer
 	sections = append(sections, m.renderHeader())
 
-	viewportContent := m.styles.viewport.Width(max(m.width-modalPadding, 1)).Render(m.viewport.View())
+	viewportContent := m.styles.viewport.Width(max(m.width-modalPadding, 1)).
+		Render(m.viewport.View())
 
 	if popup := m.renderPickerPopup(); popup != "" {
 		viewportContent = overlayBottom(viewportContent, popup)
