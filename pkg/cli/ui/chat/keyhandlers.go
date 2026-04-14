@@ -1,12 +1,18 @@
 package chat
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
+	copilot "github.com/github/copilot-sdk/go"
 )
+
+// errUnknownCommand is returned when a slash command is not recognized.
+var errUnknownCommand = errors.New("unknown command")
 
 const (
 	// feedbackResetMillis is the delay before clearing transient UI feedback
@@ -29,6 +35,18 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle overlays first (highest priority)
 	if m.pendingPermission != nil {
 		return m.handlePermissionKey(msg)
+	}
+
+	if m.pendingElicitation != nil {
+		return m.handleElicitationKey(msg)
+	}
+
+	if m.showCommandPicker {
+		return m.handleCommandPickerKey(msg)
+	}
+
+	if m.showOptionPicker {
+		return m.handleOptionPickerKey(msg)
 	}
 
 	if m.showModelPicker {
@@ -63,7 +81,7 @@ func (m *Model) handleHelpOverlayKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case keyCtrlC:
-		return m.handleQuit(true)
+		return m.handleQuit()
 	case keyEscape:
 		return m.handleEscape()
 	case keyEnter:
@@ -96,7 +114,7 @@ func (m *Model) handleChatShortcutKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleOpenSessionPicker()
 	case "ctrl+n":
 		return m.handleNewChat()
-	case "tab":
+	case keyTab:
 		return m.handleToggleMode()
 	case "ctrl+t":
 		return m.handleToggleAllTools()
@@ -147,16 +165,16 @@ func (m *Model) handleViewportAndTextareaKey(msg tea.KeyMsg) (tea.Model, tea.Cmd
 		m.justCompleted = false
 	}
 
+	// Check if we should show/hide the command picker after each keystroke
+	m.updateCommandPicker()
+
 	return m, taCmd
 }
 
 // handleQuit handles application quit.
-func (m *Model) handleQuit(saveSession bool) (tea.Model, tea.Cmd) {
+func (m *Model) handleQuit() (tea.Model, tea.Cmd) {
 	m.cleanup()
-
-	if saveSession {
-		_ = m.saveCurrentSession()
-	}
+	_ = m.saveCurrentSession()
 
 	m.quitting = true
 
@@ -191,7 +209,7 @@ func (m *Model) handleEscape() (tea.Model, tea.Cmd) {
 func (m *Model) handleExitConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "Y":
-		return m.handleQuit(true)
+		return m.handleQuit()
 	case "n", "N", keyEscape:
 		m.confirmExit = false
 
@@ -450,11 +468,84 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	}
 
 	content := m.textarea.Value()
+
+	// Intercept slash commands and handle them locally
+	if handled, model, cmd := m.tryDispatchSlashCommand(content); handled {
+		return model, cmd
+	}
+
 	m.textarea.Reset()
 	m.isStreaming = true
 	m.justCompleted = false
 
 	return m, tea.Batch(m.spinner.Tick, m.sendMessageCmd(content))
+}
+
+// tryDispatchSlashCommand checks if the content is a slash command and dispatches
+// it locally without sending it to the SDK session.
+// Returns (true, model, cmd) if the command was handled, (false, nil, nil) otherwise.
+func (m *Model) tryDispatchSlashCommand(content string) (bool, tea.Model, tea.Cmd) {
+	trimmed := strings.TrimSpace(content)
+	if !strings.HasPrefix(trimmed, "/") {
+		return false, nil, nil
+	}
+
+	// Parse command name and args: "/mode plan" → name="mode", args="plan"
+	parts := strings.SplitN(trimmed[1:], " ", 2) //nolint:mnd // split into command + args
+	cmdName := strings.ToLower(parts[0])
+
+	args := ""
+	if len(parts) > 1 {
+		args = parts[1]
+	}
+
+	// Look up the handler in registered commands
+	commands := m.getRegisteredCommands()
+	for _, cmd := range commands {
+		if strings.ToLower(cmd.Name) == cmdName {
+			m.textarea.Reset()
+			m.showCommandPicker = false
+			m.showOptionPicker = false
+			m.commandPickerIndex = 0
+			m.optionPickerIndex = 0
+			m.filteredCommands = nil
+			m.filteredOptions = nil
+
+			// Construct CommandContext and call the handler
+			ctx := copilot.CommandContext{
+				Command:     trimmed,
+				CommandName: cmd.Name,
+				Args:        args,
+			}
+
+			if m.session != nil {
+				ctx.SessionID = m.session.SessionID
+			}
+
+			err := cmd.Handler(ctx)
+			if err != nil {
+				m.err = err
+			}
+
+			// The handler sends a message to eventChan (designed for async SDK
+			// callbacks). Since we're calling it synchronously, drain the channel
+			// and process the message directly through Update.
+			select {
+			case msg := <-m.eventChan:
+				resultModel, resultCmd := m.Update(msg)
+
+				return true, resultModel, resultCmd
+			default:
+				return true, m, nil
+			}
+		}
+	}
+
+	// Unrecognized command — show transient error
+	m.textarea.Reset()
+	m.err = fmt.Errorf("%w: /%s", errUnknownCommand, cmdName)
+
+	return true, m, nil
 }
 
 // handleCopyOutput copies the latest assistant message to clipboard.

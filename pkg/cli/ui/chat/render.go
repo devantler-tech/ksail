@@ -110,6 +110,10 @@ func (m *Model) renderInputOrModal() string {
 		return m.renderPermissionModal()
 	}
 
+	if m.pendingElicitation != nil {
+		return m.renderElicitationModal()
+	}
+
 	if m.showModelPicker {
 		return m.renderModelPickerModal()
 	}

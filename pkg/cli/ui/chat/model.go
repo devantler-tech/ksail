@@ -46,6 +46,13 @@ const (
 // ChatMode represents the chat interaction mode.
 type ChatMode int //nolint:revive // ChatMode is clearer than Mode given existing ModeRef type in this package.
 
+// Mode name constants.
+const (
+	modeNameInteractive = "interactive"
+	modeNamePlan        = "plan"
+	modeNameAutopilot   = "autopilot"
+)
+
 const (
 	// InteractiveMode allows full tool execution with permission prompts for write operations.
 	InteractiveMode ChatMode = iota
@@ -59,13 +66,13 @@ const (
 func (m ChatMode) String() string {
 	switch m {
 	case InteractiveMode:
-		return "interactive"
+		return modeNameInteractive
 	case PlanMode:
-		return "plan"
+		return modeNamePlan
 	case AutopilotMode:
-		return "autopilot"
+		return modeNameAutopilot
 	default:
-		return "interactive"
+		return modeNameInteractive
 	}
 }
 
@@ -295,6 +302,21 @@ type Model struct {
 	pendingPermission *permissionRequestMsg // current permission request awaiting user response
 	permissionHistory []permissionResponse  // history of permission decisions
 
+	// Elicitation request handling
+	pendingElicitation *pendingElicitation // current elicitation request awaiting user response
+
+	// Slash command autocomplete
+	showCommandPicker  bool                             // true when the command picker popup is visible
+	commandPickerIndex int                              // currently highlighted command in picker
+	filteredCommands   []copilot.CommandDefinition      // commands matching current "/" prefix
+	commandOptions     map[string]CommandOptionProvider // per-command option providers
+
+	// Slash command option picker
+	showOptionPicker  bool            // true when the option picker popup is visible
+	optionPickerIndex int             // currently highlighted option in picker
+	filteredOptions   []CommandOption // options matching current argument prefix
+	activeCommandName string          // command name being completed (e.g., "mode")
+
 	// Session management
 	currentSessionID     string            // ID of the current session (empty if new)
 	availableSessions    []SessionMetadata // cached list of available sessions
@@ -376,6 +398,7 @@ func NewModel(params Params) *Model {
 		session:          params.Session,
 		client:           params.Client,
 		sessionConfig:    params.SessionConfig,
+		commandOptions:   BuildTUICommandOptions(),
 		currentSessionID: params.Session.SessionID, // Track the SDK's session ID
 		timeout:          params.Timeout,
 		ctx:              context.Background(),
@@ -466,13 +489,37 @@ func (m *Model) Update(
 
 	case streamChunkMsg, assistantMessageMsg, toolStartMsg, toolEndMsg,
 		toolOutputChunkMsg, ToolOutputChunkMsg, permissionRequestMsg,
-		PermissionRequestMsg, streamEndMsg, turnStartMsg, turnEndMsg,
+		PermissionRequestMsg, elicitationRequestMsg,
+		streamEndMsg, turnStartMsg, turnEndMsg,
 		reasoningMsg, abortMsg, snapshotRewindMsg, streamErrMsg,
 		usageMsg, compactionStartMsg, compactionCompleteMsg,
 		intentMsg, modelChangeMsg, shutdownMsg,
 		systemNotificationMsg, sessionWarningMsg,
 		ToolProgressMsg, TaskCompleteMsg:
 		return m.handleStreamEvent(msg)
+
+	case modeChangeRequestMsg:
+		return m.handleSlashModeChange(msg)
+
+	case openModelPickerMsg:
+		return m.handleOpenModelPicker()
+
+	case modelSetRequestMsg:
+		return m.handleSlashModelSet(msg)
+
+	case openSessionPickerMsg:
+		return m.handleOpenSessionPicker()
+
+	case newChatRequestMsg:
+		return m.handleNewChat()
+
+	case showHelpMsg:
+		m.showHelpOverlay = true
+
+		return m, nil
+
+	case clearViewportMsg:
+		return m.handleClearViewport()
 
 	case copyFeedbackClearMsg:
 		m.showCopyFeedback = false
@@ -529,11 +576,18 @@ func (m *Model) View() string {
 
 	sections := make([]string, 0, viewSectionCount)
 
-	// Header, chat viewport, input/modal, and footer
+	// Header, chat viewport (with floating popup overlay), input/modal, and footer
 	sections = append(sections, m.renderHeader())
-	sections = append(sections,
-		m.styles.viewport.Width(max(m.width-modalPadding, 1)).Render(m.viewport.View()),
-	)
+
+	viewportContent := m.styles.viewport.Width(max(m.width-modalPadding, 1)).
+		Render(m.viewport.View())
+
+	if popup := m.renderPickerPopup(); popup != "" {
+		viewportContent = overlayBottom(viewportContent, popup)
+	}
+
+	sections = append(sections, viewportContent)
+
 	sections = append(sections, m.renderInputOrModal())
 	sections = append(sections, m.renderFooter())
 
@@ -579,6 +633,9 @@ func (m *Model) handleStreamEvent(
 			arguments:  msg.Arguments,
 			response:   msg.Response,
 		})
+
+	case elicitationRequestMsg:
+		return m.handleElicitationRequest(msg)
 
 	case streamEndMsg:
 		return m.handleStreamEnd()
@@ -634,6 +691,54 @@ func (m *Model) handleStreamEvent(
 	default:
 		return m, nil
 	}
+}
+
+// handleSlashModeChange handles the /mode slash command.
+func (m *Model) handleSlashModeChange(msg modeChangeRequestMsg) (tea.Model, tea.Cmd) {
+	if m.chatMode == msg.Mode {
+		return m, nil
+	}
+
+	err := m.applyMode(msg.Mode)
+	if err != nil {
+		m.err = err
+
+		return m, nil
+	}
+
+	m.chatMode = msg.Mode
+	m.updateViewportContent()
+
+	return m, nil
+}
+
+// handleSlashModelSet handles the /model <name> slash command.
+func (m *Model) handleSlashModelSet(msg modelSetRequestMsg) (tea.Model, tea.Cmd) {
+	if m.isStreaming {
+		return m, nil
+	}
+
+	err := m.session.SetModel(m.ctx, msg.Model, nil)
+	if err != nil {
+		m.err = err
+
+		return m, nil
+	}
+
+	m.currentModel = msg.Model
+	m.updateViewportContent()
+
+	return m, nil
+}
+
+// handleClearViewport handles the /clear slash command.
+func (m *Model) handleClearViewport() (tea.Model, tea.Cmd) {
+	m.messages = make([]message, 0)
+	m.tools = make(map[string]*toolExecution)
+	m.toolOrder = make([]string, 0)
+	m.updateViewportContent()
+
+	return m, nil
 }
 
 // handleMouseMsg handles mouse input events.
