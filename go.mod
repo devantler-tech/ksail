@@ -21,7 +21,7 @@ require (
 	github.com/getsops/sops/v3 v3.12.2
 	github.com/gkampitakis/go-snaps v0.5.21
 	github.com/go-viper/mapstructure/v2 v2.5.0
-	github.com/google/go-containerregistry v0.21.3
+	github.com/google/go-containerregistry v0.21.4
 	github.com/jinzhu/copier v0.4.0
 	github.com/k3d-io/k3d/v5 v5.9.0-rc.0
 	github.com/mitchellh/go-wordwrap v1.0.1
@@ -61,7 +61,7 @@ require (
 	github.com/cli/go-gh/v2 v2.13.0
 	github.com/cosi-project/runtime v1.14.1
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/github/copilot-sdk/go v0.2.0
+	github.com/github/copilot-sdk/go v0.2.1
 	github.com/google/go-github/v72 v72.0.0
 	github.com/hetznercloud/hcloud-go/v2 v2.37.0
 	github.com/invopop/jsonschema v0.13.0
@@ -277,7 +277,7 @@ require (
 	github.com/diskfs/go-diskfs v1.7.1-0.20251223133332-fc569a00ea19 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
-	github.com/docker/cli v29.3.0+incompatible // indirect
+	github.com/docker/cli v29.3.1+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.5 // indirect
 	github.com/docker/go v1.5.1-1 // indirect
