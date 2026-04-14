@@ -1087,7 +1087,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [system-test-hetzner]
-    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test-hetzner.result != 'skipped' }}
+    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (needs.system-test-hetzner.result == 'failure' || needs.system-test-hetzner.result == 'cancelled') }}
     environment: ci
     permissions:
       contents: read
@@ -1121,7 +1121,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [system-test-omni]
-    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && needs.system-test-omni.result != 'skipped' }}
+    if: ${{ always() && (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (needs.system-test-omni.result == 'failure' || needs.system-test-omni.result == 'cancelled') }}
     environment: ci
     permissions:
       contents: read
