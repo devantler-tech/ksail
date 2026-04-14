@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
@@ -87,6 +88,47 @@ func inClusterConnectivityDeadline(dist v1alpha1.Distribution) time.Duration {
 	}
 
 	return inClusterConnectivityTimeout
+}
+
+var (
+	//nolint:gochecknoglobals // dependency injection for tests
+	clusterStabilityCheckMu sync.RWMutex
+	//nolint:gochecknoglobals // dependency injection for tests
+	clusterStabilityCheckOverride func(context.Context, *v1alpha1.Cluster) error
+)
+
+// getClusterStabilityCheckFn returns the cluster stability check function,
+// using the test override if one is set.
+func getClusterStabilityCheckFn() func(context.Context, *v1alpha1.Cluster) error {
+	clusterStabilityCheckMu.RLock()
+	defer clusterStabilityCheckMu.RUnlock()
+
+	if clusterStabilityCheckOverride != nil {
+		return clusterStabilityCheckOverride
+	}
+
+	return waitForClusterStability
+}
+
+// SetClusterStabilityCheckForTests overrides the cluster stability check for testing.
+// Returns a cleanup function that restores the previous check.
+func SetClusterStabilityCheckForTests(
+	fn func(context.Context, *v1alpha1.Cluster) error,
+) func() {
+	clusterStabilityCheckMu.Lock()
+
+	previous := clusterStabilityCheckOverride
+	clusterStabilityCheckOverride = fn
+
+	clusterStabilityCheckMu.Unlock()
+
+	return func() {
+		clusterStabilityCheckMu.Lock()
+
+		clusterStabilityCheckOverride = previous
+
+		clusterStabilityCheckMu.Unlock()
+	}
 }
 
 // ShouldPushOCIArtifact determines if OCI artifact push should happen for GitOps engines.
@@ -302,7 +344,7 @@ func runInfraPhase(
 	infraTasks []notify.ProgressTask,
 ) error {
 	if needsInClusterConnectivityCheck(clusterCfg) {
-		err := waitForClusterStability(ctx, clusterCfg)
+		err := getClusterStabilityCheckFn()(ctx, clusterCfg)
 		if err != nil {
 			return fmt.Errorf(
 				"cluster not stable before infrastructure installation: %w", err,
@@ -327,13 +369,14 @@ func runInfraPhase(
 }
 
 // runGitOpsPhase installs Phase 2 GitOps engines (ArgoCD, Flux) after
-// infrastructure components are ready. A stability check always runs before
-// GitOps operators start, both to recover from webhook/CRD registrations after
-// infrastructure installation and to guard against distributions (e.g. K3s/K3d)
-// that report cluster creation success before the API server is fully ready.
-// Without this guard, Helm's cluster reachability check can fail with
-// "the server is currently unable to handle the request" when no infrastructure
-// components are installed and the cluster was just created.
+// infrastructure components are ready, if any. A stability check always runs
+// before GitOps operators start, both to recover from webhook/CRD
+// registrations after infrastructure installation and to guard against
+// distributions (e.g. K3s/K3d) that report cluster creation success before the
+// API server is fully ready. Without this guard, Helm's cluster reachability
+// check can fail with "the server is currently unable to handle the request"
+// when no infrastructure components are installed and the cluster was just
+// created.
 func runGitOpsPhase(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -343,14 +386,15 @@ func runGitOpsPhase(
 	infraTasks []notify.ProgressTask,
 	gitopsTasks []notify.ProgressTask,
 ) error {
-	stabilityErrFmt := "cluster not stable before GitOps installation: %w"
-	if len(infraTasks) > 0 {
-		stabilityErrFmt = "cluster not stable after infrastructure installation: %w"
-	}
-
-	err := waitForClusterStability(ctx, clusterCfg)
+	err := getClusterStabilityCheckFn()(ctx, clusterCfg)
 	if err != nil {
-		return fmt.Errorf(stabilityErrFmt, err)
+		if len(infraTasks) > 0 {
+			return fmt.Errorf(
+				"cluster not stable after infrastructure installation: %w", err,
+			)
+		}
+
+		return fmt.Errorf("cluster not stable before GitOps installation: %w", err)
 	}
 
 	gitopsGroup := notify.NewProgressGroup(
