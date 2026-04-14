@@ -525,7 +525,17 @@ func (m *Model) tryDispatchSlashCommand(content string) (bool, tea.Model, tea.Cm
 				m.err = err
 			}
 
-			return true, m, nil
+			// The handler sends a message to eventChan (designed for async SDK
+			// callbacks). Since we're calling it synchronously, drain the channel
+			// and process the message directly through Update.
+			select {
+			case msg := <-m.eventChan:
+				resultModel, resultCmd := m.Update(msg)
+
+				return true, resultModel, resultCmd
+			default:
+				return true, m, nil
+			}
 		}
 	}
 
