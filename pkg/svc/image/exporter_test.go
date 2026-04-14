@@ -85,6 +85,11 @@ func expectRepairPullSuccess(
 ) {
 	t.Helper()
 
+	// rm is called before pull to force fresh download (discard_unpacked_layers fix)
+	setupExecMockWithCmdForExporter(
+		ctx, t, mockClient, kindExporterNodeName,
+		buildCtrRmCommand(imageRef),
+	)
 	setupExecMockWithCmdForExporter(
 		ctx, t, mockClient, kindExporterNodeName,
 		buildCtrPullCommand("linux/amd64", imageRef),
@@ -104,6 +109,11 @@ func expectRepairPullFailure(
 ) {
 	t.Helper()
 
+	// rm is called before pull to force fresh download (discard_unpacked_layers fix)
+	setupExecMockWithCmdForExporter(
+		ctx, t, mockClient, kindExporterNodeName,
+		buildCtrRmCommand(imageRef),
+	)
 	setupKindExecFailWithCmdForExporter(
 		ctx, t, mockClient,
 		buildCtrPullCommand("linux/amd64", imageRef),
@@ -925,6 +935,16 @@ func buildKindCtrExportCommand(images ...string) []string {
 	)
 
 	return append(cmd, images...)
+}
+
+func buildCtrRmCommand(imageRef string) []string {
+	return []string{
+		ctrCommand,
+		"--namespace=k8s.io",
+		"images",
+		"rm",
+		imageRef,
+	}
 }
 
 func buildCtrPullCommand(platform string, imageRef string) []string {
