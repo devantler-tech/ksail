@@ -567,17 +567,18 @@ func (m *Model) View() string {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
 	}
 
-	sections := make([]string, 0, viewSectionCount+1)
+	sections := make([]string, 0, viewSectionCount)
 
-	// Header, chat viewport, (optional command picker popup), input/modal, and footer
+	// Header, chat viewport (with floating popup overlay), input/modal, and footer
 	sections = append(sections, m.renderHeader())
-	sections = append(sections,
-		m.styles.viewport.Width(max(m.width-modalPadding, 1)).Render(m.viewport.View()),
-	)
+
+	viewportContent := m.styles.viewport.Width(max(m.width-modalPadding, 1)).Render(m.viewport.View())
 
 	if popup := m.renderPickerPopup(); popup != "" {
-		sections = append(sections, popup)
+		viewportContent = overlayBottom(viewportContent, popup)
 	}
+
+	sections = append(sections, viewportContent)
 
 	sections = append(sections, m.renderInputOrModal())
 	sections = append(sections, m.renderFooter())

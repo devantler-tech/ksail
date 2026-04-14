@@ -433,3 +433,24 @@ func (m *Model) pickerExtraHeight() int {
 func (m *Model) commandPickerExtraHeight() int {
 	return m.pickerExtraHeight()
 }
+
+// overlayBottom composites the popup string over the bottom lines of the base string.
+// The popup replaces the last N lines of base, where N is the popup's line count.
+func overlayBottom(base, popup string) string {
+	baseLines := strings.Split(base, "\n")
+	popupLines := strings.Split(popup, "\n")
+
+	startIdx := len(baseLines) - len(popupLines)
+	if startIdx < 0 {
+		startIdx = 0
+	}
+
+	for i, pLine := range popupLines {
+		idx := startIdx + i
+		if idx < len(baseLines) {
+			baseLines[idx] = pLine
+		}
+	}
+
+	return strings.Join(baseLines, "\n")
+}
