@@ -14,7 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testTimeout = 10 * time.Second
+const (
+	testTimeout = 10 * time.Second
+	windowsOS   = "windows"
+)
 
 func TestDefaultConfig(t *testing.T) {
 	t.Parallel()
@@ -157,11 +160,10 @@ func connectClientServer(
 	return clientSession
 }
 
-//nolint:goconst // Repeated literals keep the test cases explicit.
 func TestNewServer_ListTools(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsOS {
 		t.Skip("echo is a shell builtin on Windows, not an executable")
 	}
 
@@ -193,7 +195,7 @@ func TestNewServer_ListTools(t *testing.T) {
 func TestNewServer_CallTool(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsOS {
 		t.Skip("echo is a shell builtin on Windows, not an executable")
 	}
 

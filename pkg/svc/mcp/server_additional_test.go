@@ -169,7 +169,7 @@ func TestNewServer_ListTools_Empty(t *testing.T) {
 func TestNewServer_CallTool_WithArgs(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsOS {
 		t.Skip("echo is a shell builtin on Windows, not an executable")
 	}
 
