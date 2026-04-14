@@ -65,10 +65,13 @@ func TestUpdateCommandPicker_HidesOnSpaceAfterCommand(t *testing.T) {
 	m := chat.NewModel(newCommandPickerTestParams())
 	setTestCommands(m)
 
+	// /mode has options, so command picker hides but option picker shows
 	chat.ExportSetTextareaValue(m, "/mode plan")
 	chat.ExportUpdateCommandPicker(m)
 
 	assert.False(t, chat.ExportShowCommandPicker(m))
+	// Option picker should be active for commands with options
+	assert.True(t, chat.ExportShowOptionPicker(m))
 }
 
 func TestUpdateCommandPicker_HidesOnEmptyInput(t *testing.T) {
@@ -168,11 +171,193 @@ func newCommandPickerTestParams() chat.Params {
 func setTestCommands(m *chat.Model) {
 	config := chat.ExportGetSessionConfig(m)
 	config.Commands = []copilot.CommandDefinition{
-		{Name: "mode", Description: "Switch chat mode"},
-		{Name: "model", Description: "Switch LLM model"},
-		{Name: "new", Description: "Start a new chat session"},
-		{Name: "sessions", Description: "Open session picker"},
-		{Name: "help", Description: "Show help"},
-		{Name: "clear", Description: "Clear viewport"},
+		{Name: "mode", Description: "Switch chat mode", Handler: func(_ copilot.CommandContext) error { return nil }},
+		{Name: "model", Description: "Switch LLM model", Handler: func(_ copilot.CommandContext) error { return nil }},
+		{Name: "new", Description: "Start a new chat session", Handler: func(_ copilot.CommandContext) error { return nil }},
+		{Name: "sessions", Description: "Open session picker", Handler: func(_ copilot.CommandContext) error { return nil }},
+		{Name: "help", Description: "Show help", Handler: func(_ copilot.CommandContext) error { return nil }},
+		{Name: "clear", Description: "Clear viewport", Handler: func(_ copilot.CommandContext) error { return nil }},
 	}
+}
+
+// --- tryDispatchSlashCommand tests ---
+
+func TestTryDispatchSlashCommand_ValidCommand(t *testing.T) {
+	t.Parallel()
+
+	var calledArgs string
+
+	m := chat.NewModel(newCommandPickerTestParams())
+	config := chat.ExportGetSessionConfig(m)
+	config.Commands = []copilot.CommandDefinition{
+		{Name: "mode", Handler: func(ctx copilot.CommandContext) error {
+			calledArgs = ctx.Args
+			return nil
+		}},
+	}
+
+	handled, _, _ := chat.ExportTryDispatchSlashCommand(m, "/mode plan")
+
+	assert.True(t, handled)
+	assert.Equal(t, "plan", calledArgs)
+	assert.NoError(t, chat.ExportGetErr(m))
+}
+
+func TestTryDispatchSlashCommand_CommandWithoutArgs(t *testing.T) {
+	t.Parallel()
+
+	called := false
+
+	m := chat.NewModel(newCommandPickerTestParams())
+	config := chat.ExportGetSessionConfig(m)
+	config.Commands = []copilot.CommandDefinition{
+		{Name: "clear", Handler: func(_ copilot.CommandContext) error {
+			called = true
+			return nil
+		}},
+	}
+
+	handled, _, _ := chat.ExportTryDispatchSlashCommand(m, "/clear")
+
+	assert.True(t, handled)
+	assert.True(t, called)
+}
+
+func TestTryDispatchSlashCommand_UnknownCommand(t *testing.T) {
+	t.Parallel()
+
+	m := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(m)
+
+	handled, _, _ := chat.ExportTryDispatchSlashCommand(m, "/unknown")
+
+	assert.True(t, handled)
+	assert.Error(t, chat.ExportGetErr(m))
+	assert.Contains(t, chat.ExportGetErr(m).Error(), "unknown command: /unknown")
+}
+
+func TestTryDispatchSlashCommand_NotSlashCommand(t *testing.T) {
+	t.Parallel()
+
+	m := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(m)
+
+	handled, _, _ := chat.ExportTryDispatchSlashCommand(m, "hello world")
+
+	assert.False(t, handled)
+}
+
+func TestTryDispatchSlashCommand_CaseInsensitive(t *testing.T) {
+	t.Parallel()
+
+	called := false
+
+	m := chat.NewModel(newCommandPickerTestParams())
+	config := chat.ExportGetSessionConfig(m)
+	config.Commands = []copilot.CommandDefinition{
+		{Name: "mode", Handler: func(_ copilot.CommandContext) error {
+			called = true
+			return nil
+		}},
+	}
+
+	handled, _, _ := chat.ExportTryDispatchSlashCommand(m, "/MODE plan")
+
+	assert.True(t, handled)
+	assert.True(t, called)
+}
+
+// --- Option picker tests ---
+
+func TestOptionPicker_ShowsOnCommandWithSpace(t *testing.T) {
+	t.Parallel()
+
+	m := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(m)
+
+	chat.ExportSetTextareaValue(m, "/mode ")
+	chat.ExportUpdateCommandPicker(m)
+
+	assert.False(t, chat.ExportShowCommandPicker(m))
+	assert.True(t, chat.ExportShowOptionPicker(m))
+	assert.Equal(t, "mode", chat.ExportActiveCommandName(m))
+	assert.Equal(t, 3, len(chat.ExportFilteredOptions(m))) // interactive, plan, autopilot
+}
+
+func TestOptionPicker_FiltersOnPartialArg(t *testing.T) {
+	t.Parallel()
+
+	m := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(m)
+
+	chat.ExportSetTextareaValue(m, "/mode pl")
+	chat.ExportUpdateCommandPicker(m)
+
+	assert.True(t, chat.ExportShowOptionPicker(m))
+
+	filtered := chat.ExportFilteredOptions(m)
+	assert.Equal(t, 1, len(filtered))
+	assert.Equal(t, "plan", filtered[0].Name)
+}
+
+func TestOptionPicker_HidesForCommandWithoutOptions(t *testing.T) {
+	t.Parallel()
+
+	m := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(m)
+
+	chat.ExportSetTextareaValue(m, "/clear ")
+	chat.ExportUpdateCommandPicker(m)
+
+	assert.False(t, chat.ExportShowCommandPicker(m))
+	assert.False(t, chat.ExportShowOptionPicker(m))
+}
+
+func TestOptionPicker_ClampsIndex(t *testing.T) {
+	t.Parallel()
+
+	m := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(m)
+
+	// Show all options
+	chat.ExportSetTextareaValue(m, "/mode ")
+	chat.ExportUpdateCommandPicker(m)
+
+	// Set index beyond what filter will produce
+	chat.ExportSetOptionPickerIndex(m, 2)
+
+	// Now filter to single option
+	chat.ExportSetTextareaValue(m, "/mode pl")
+	chat.ExportUpdateCommandPicker(m)
+
+	assert.True(t, chat.ExportShowOptionPicker(m))
+	assert.Equal(t, 0, chat.ExportOptionPickerIndex(m))
+}
+
+func TestOptionPicker_CaseInsensitive(t *testing.T) {
+	t.Parallel()
+
+	m := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(m)
+
+	chat.ExportSetTextareaValue(m, "/mode PL")
+	chat.ExportUpdateCommandPicker(m)
+
+	assert.True(t, chat.ExportShowOptionPicker(m))
+	assert.Equal(t, 1, len(chat.ExportFilteredOptions(m)))
+}
+
+// --- pickerExtraHeight tests ---
+
+func TestPickerExtraHeight_OptionPicker(t *testing.T) {
+	t.Parallel()
+
+	m := chat.NewModel(newCommandPickerTestParams())
+	setTestCommands(m)
+
+	chat.ExportSetTextareaValue(m, "/mode ")
+	chat.ExportUpdateCommandPicker(m)
+
+	// 3 options + 2 for border
+	assert.Equal(t, 5, chat.ExportPickerExtraHeight(m))
 }

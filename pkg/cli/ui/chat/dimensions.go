@@ -39,8 +39,8 @@ func (m *Model) activeModalHeight() int {
 		return m.permissionModalExtraHeight()
 	case m.showModelPicker || m.showSessionPicker || m.showReasoningPicker:
 		return m.pickerModalExtraHeight()
-	case m.showCommandPicker:
-		return m.commandPickerExtraHeight()
+	case m.showCommandPicker || m.showOptionPicker:
+		return m.pickerExtraHeight()
 	default:
 		return 0
 	}

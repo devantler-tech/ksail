@@ -36,6 +36,16 @@ type showHelpMsg struct{}
 // clearViewportMsg requests the viewport to be cleared.
 type clearViewportMsg struct{}
 
+// CommandOption represents a selectable option for a slash command argument.
+type CommandOption struct {
+	Name        string
+	Description string
+}
+
+// CommandOptionProvider returns the available options for a command.
+// It receives the Model to support dynamic options (e.g., model list).
+type CommandOptionProvider func(m *Model) []CommandOption
+
 // ParseChatMode parses a string into a ChatMode.
 // Returns the mode and true if valid, or InteractiveMode and false if invalid.
 func ParseChatMode(name string) (ChatMode, bool) {
@@ -172,4 +182,36 @@ func handleModelCommand(args string, eventChan chan<- tea.Msg) error {
 	eventChan <- modelSetRequestMsg{Model: args}
 
 	return nil
+}
+
+// BuildTUICommandOptions returns a map of command name → option provider
+// for commands that support argument autocompletion.
+func BuildTUICommandOptions() map[string]CommandOptionProvider {
+	return map[string]CommandOptionProvider{
+		"mode": func(_ *Model) []CommandOption {
+			return []CommandOption{
+				{Name: "interactive", Description: "Confirm each action"},
+				{Name: "plan", Description: "Create plans before acting"},
+				{Name: "autopilot", Description: "Act autonomously"},
+			}
+		},
+		"model": func(m *Model) []CommandOption {
+			if len(m.availableModels) == 0 {
+				allModels, err := m.client.ListModels(m.ctx)
+				if err == nil {
+					m.availableModels = FilterEnabledModels(allModels)
+				}
+			}
+
+			options := make([]CommandOption, 0, len(m.availableModels))
+			for _, model := range m.availableModels {
+				options = append(options, CommandOption{
+					Name:        model.ID,
+					Description: model.Name,
+				})
+			}
+
+			return options
+		},
+	}
 }

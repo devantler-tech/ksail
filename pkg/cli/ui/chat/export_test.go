@@ -953,3 +953,50 @@ var ExportGetSessionConfig = func(m *Model) *copilot.SessionConfig {
 var ExportCommandPickerExtraHeight = func(m *Model) int {
 	return m.commandPickerExtraHeight()
 }
+
+// --- Option picker test exports ---
+
+// ExportCommandOption is an exported alias for CommandOption.
+type ExportCommandOption = CommandOption
+
+// ExportShowOptionPicker returns whether the option picker is visible.
+var ExportShowOptionPicker = func(m *Model) bool {
+	return m.showOptionPicker
+}
+
+// ExportFilteredOptions returns the filtered options for testing.
+var ExportFilteredOptions = func(m *Model) []CommandOption {
+	return m.filteredOptions
+}
+
+// ExportOptionPickerIndex returns the current option picker index.
+var ExportOptionPickerIndex = func(m *Model) int {
+	return m.optionPickerIndex
+}
+
+// ExportSetOptionPickerIndex sets the option picker index for testing.
+var ExportSetOptionPickerIndex = func(m *Model, idx int) {
+	m.optionPickerIndex = idx
+}
+
+// ExportActiveCommandName returns the active command name for the option picker.
+var ExportActiveCommandName = func(m *Model) string {
+	return m.activeCommandName
+}
+
+// ExportPickerExtraHeight exposes pickerExtraHeight for testing.
+var ExportPickerExtraHeight = func(m *Model) int {
+	return m.pickerExtraHeight()
+}
+
+// ExportSetCommandOptions sets the command options map for testing.
+var ExportSetCommandOptions = func(m *Model, opts map[string]CommandOptionProvider) {
+	m.commandOptions = opts
+}
+
+// --- Slash command dispatch test exports ---
+
+// ExportTryDispatchSlashCommand exposes tryDispatchSlashCommand for testing.
+var ExportTryDispatchSlashCommand = func(m *Model, content string) (bool, tea.Model, tea.Cmd) {
+	return m.tryDispatchSlashCommand(content)
+}

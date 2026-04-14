@@ -302,6 +302,13 @@ type Model struct {
 	showCommandPicker  bool                       // true when the command picker popup is visible
 	commandPickerIndex int                        // currently highlighted command in picker
 	filteredCommands   []copilot.CommandDefinition // commands matching current "/" prefix
+	commandOptions     map[string]CommandOptionProvider // per-command option providers
+
+	// Slash command option picker
+	showOptionPicker  bool            // true when the option picker popup is visible
+	optionPickerIndex int             // currently highlighted option in picker
+	filteredOptions   []CommandOption // options matching current argument prefix
+	activeCommandName string          // command name being completed (e.g., "mode")
 
 	// Session management
 	currentSessionID     string            // ID of the current session (empty if new)
@@ -384,6 +391,7 @@ func NewModel(params Params) *Model {
 		session:          params.Session,
 		client:           params.Client,
 		sessionConfig:    params.SessionConfig,
+		commandOptions:   BuildTUICommandOptions(),
 		currentSessionID: params.Session.SessionID, // Track the SDK's session ID
 		timeout:          params.Timeout,
 		ctx:              context.Background(),
@@ -567,7 +575,7 @@ func (m *Model) View() string {
 		m.styles.viewport.Width(max(m.width-modalPadding, 1)).Render(m.viewport.View()),
 	)
 
-	if popup := m.renderCommandPickerPopup(); popup != "" {
+	if popup := m.renderPickerPopup(); popup != "" {
 		sections = append(sections, popup)
 	}
 

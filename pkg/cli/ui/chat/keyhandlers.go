@@ -1,11 +1,13 @@
 package chat
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
+	copilot "github.com/github/copilot-sdk/go"
 )
 
 const (
@@ -37,6 +39,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if m.showCommandPicker {
 		return m.handleCommandPickerKey(msg)
+	}
+
+	if m.showOptionPicker {
+		return m.handleOptionPickerKey(msg)
 	}
 
 	if m.showModelPicker {
@@ -461,11 +467,73 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	}
 
 	content := m.textarea.Value()
+
+	// Intercept slash commands and handle them locally
+	if handled, model, cmd := m.tryDispatchSlashCommand(content); handled {
+		return model, cmd
+	}
+
 	m.textarea.Reset()
 	m.isStreaming = true
 	m.justCompleted = false
 
 	return m, tea.Batch(m.spinner.Tick, m.sendMessageCmd(content))
+}
+
+// tryDispatchSlashCommand checks if the content is a slash command and dispatches
+// it locally without sending it to the SDK session.
+// Returns (true, model, cmd) if the command was handled, (false, nil, nil) otherwise.
+func (m *Model) tryDispatchSlashCommand(content string) (bool, tea.Model, tea.Cmd) {
+	trimmed := strings.TrimSpace(content)
+	if !strings.HasPrefix(trimmed, "/") {
+		return false, nil, nil
+	}
+
+	// Parse command name and args: "/mode plan" → name="mode", args="plan"
+	parts := strings.SplitN(trimmed[1:], " ", 2)
+	cmdName := strings.ToLower(parts[0])
+
+	args := ""
+	if len(parts) > 1 {
+		args = parts[1]
+	}
+
+	// Look up the handler in registered commands
+	commands := m.getRegisteredCommands()
+	for _, cmd := range commands {
+		if strings.ToLower(cmd.Name) == cmdName {
+			m.textarea.Reset()
+			m.showCommandPicker = false
+			m.showOptionPicker = false
+			m.commandPickerIndex = 0
+			m.optionPickerIndex = 0
+			m.filteredCommands = nil
+			m.filteredOptions = nil
+
+			// Construct CommandContext and call the handler
+			ctx := copilot.CommandContext{
+				Command:     trimmed,
+				CommandName: cmd.Name,
+				Args:        args,
+			}
+
+			if m.session != nil {
+				ctx.SessionID = m.session.SessionID
+			}
+
+			if err := cmd.Handler(ctx); err != nil {
+				m.err = err
+			}
+
+			return true, m, nil
+		}
+	}
+
+	// Unrecognized command — show transient error
+	m.textarea.Reset()
+	m.err = fmt.Errorf("unknown command: /%s", cmdName)
+
+	return true, m, nil
 }
 
 // handleCopyOutput copies the latest assistant message to clipboard.

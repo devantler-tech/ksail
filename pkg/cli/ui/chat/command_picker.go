@@ -10,18 +10,32 @@ import (
 )
 
 // updateCommandPicker checks the textarea content and shows/hides the
-// slash-command autocomplete popup. Called after every textarea update.
+// slash-command autocomplete popup or the option picker. Called after every textarea update.
 func (m *Model) updateCommandPicker() {
 	text := m.textarea.Value()
 
-	// Only show when input starts with "/" and has no spaces yet (still typing command name)
-	if !strings.HasPrefix(text, "/") || strings.Contains(text, " ") {
-		m.showCommandPicker = false
-		m.commandPickerIndex = 0
-		m.filteredCommands = nil
+	// Must start with "/"
+	if !strings.HasPrefix(text, "/") {
+		m.dismissAllPickers()
 
 		return
 	}
+
+	// Check if we have a space — if so, we may be in option-picking mode
+	if strings.Contains(text, " ") {
+		m.showCommandPicker = false
+		m.commandPickerIndex = 0
+		m.filteredCommands = nil
+		m.updateOptionPicker(text)
+
+		return
+	}
+
+	// No space — we're in command-picking mode
+	m.showOptionPicker = false
+	m.optionPickerIndex = 0
+	m.filteredOptions = nil
+	m.activeCommandName = ""
 
 	partial := strings.ToLower(text[1:]) // strip leading "/"
 
@@ -57,6 +71,75 @@ func (m *Model) updateCommandPicker() {
 	}
 }
 
+// updateOptionPicker handles the option picker when the user has typed a command name + space.
+func (m *Model) updateOptionPicker(text string) {
+	// Parse: "/mode plan" → cmdName="mode", argText="plan"
+	withoutSlash := text[1:]
+	parts := strings.SplitN(withoutSlash, " ", 2)
+	cmdName := strings.ToLower(parts[0])
+
+	argText := ""
+	if len(parts) > 1 {
+		argText = strings.ToLower(parts[1])
+	}
+
+	// Look up option provider for this command
+	provider, ok := m.commandOptions[cmdName]
+	if !ok {
+		m.showOptionPicker = false
+		m.optionPickerIndex = 0
+		m.filteredOptions = nil
+		m.activeCommandName = ""
+
+		return
+	}
+
+	allOptions := provider(m)
+	if len(allOptions) == 0 {
+		m.showOptionPicker = false
+
+		return
+	}
+
+	// Filter options by prefix match on the argument text
+	var filtered []CommandOption
+
+	for _, opt := range allOptions {
+		if strings.HasPrefix(strings.ToLower(opt.Name), argText) {
+			filtered = append(filtered, opt)
+		}
+	}
+
+	if len(filtered) == 0 {
+		m.showOptionPicker = false
+		m.optionPickerIndex = 0
+		m.filteredOptions = nil
+		m.activeCommandName = ""
+
+		return
+	}
+
+	m.activeCommandName = cmdName
+	m.filteredOptions = filtered
+	m.showOptionPicker = true
+
+	// Clamp index
+	if m.optionPickerIndex >= len(filtered) {
+		m.optionPickerIndex = len(filtered) - 1
+	}
+}
+
+// dismissAllPickers hides both command and option pickers and resets their state.
+func (m *Model) dismissAllPickers() {
+	m.showCommandPicker = false
+	m.commandPickerIndex = 0
+	m.filteredCommands = nil
+	m.showOptionPicker = false
+	m.optionPickerIndex = 0
+	m.filteredOptions = nil
+	m.activeCommandName = ""
+}
+
 // getRegisteredCommands returns the slash commands from the session config.
 func (m *Model) getRegisteredCommands() []copilot.CommandDefinition {
 	if m.sessionConfig == nil {
@@ -88,9 +171,7 @@ func (m *Model) handleCommandPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Fill the command text but don't submit
 		return m.selectCommandWithoutFiring()
 	case keyEscape:
-		m.showCommandPicker = false
-		m.commandPickerIndex = 0
-		m.filteredCommands = nil
+		m.dismissAllPickers()
 
 		return m, nil
 	case keyCtrlC:
@@ -98,6 +179,41 @@ func (m *Model) handleCommandPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// For any other key (typing more characters), update textarea then re-filter
+	var taCmd tea.Cmd
+	m.textarea, taCmd = m.textarea.Update(msg)
+	m.updateCommandPicker()
+
+	return m, taCmd
+}
+
+// handleOptionPickerKey handles keyboard input when the option picker popup is active.
+func (m *Model) handleOptionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.optionPickerIndex > 0 {
+			m.optionPickerIndex--
+		}
+
+		return m, nil
+	case keyDown, "j":
+		if m.optionPickerIndex < len(m.filteredOptions)-1 {
+			m.optionPickerIndex++
+		}
+
+		return m, nil
+	case keyEnter:
+		return m.selectAndFireOption()
+	case "tab":
+		return m.selectOptionWithoutFiring()
+	case keyEscape:
+		m.dismissAllPickers()
+
+		return m, nil
+	case keyCtrlC:
+		return m.handleQuit(true)
+	}
+
+	// For any other key, update textarea then re-filter
 	var taCmd tea.Cmd
 	m.textarea, taCmd = m.textarea.Update(msg)
 	m.updateCommandPicker()
@@ -114,9 +230,7 @@ func (m *Model) selectAndFireCommand() (tea.Model, tea.Cmd) {
 	cmd := m.filteredCommands[m.commandPickerIndex]
 	m.textarea.SetValue("/" + cmd.Name)
 
-	m.showCommandPicker = false
-	m.commandPickerIndex = 0
-	m.filteredCommands = nil
+	m.dismissAllPickers()
 
 	// Trigger submit — reuse the existing handleEnter flow
 	return m.handleEnter()
@@ -135,7 +249,52 @@ func (m *Model) selectCommandWithoutFiring() (tea.Model, tea.Cmd) {
 	m.commandPickerIndex = 0
 	m.filteredCommands = nil
 
+	// Trigger option picker for the newly filled command
+	m.updateCommandPicker()
+
 	return m, nil
+}
+
+// selectAndFireOption fills the selected option and fires the command.
+func (m *Model) selectAndFireOption() (tea.Model, tea.Cmd) {
+	if m.optionPickerIndex >= len(m.filteredOptions) {
+		return m, nil
+	}
+
+	opt := m.filteredOptions[m.optionPickerIndex]
+	m.textarea.SetValue("/" + m.activeCommandName + " " + opt.Name)
+
+	m.dismissAllPickers()
+
+	return m.handleEnter()
+}
+
+// selectOptionWithoutFiring fills the selected option without submitting.
+func (m *Model) selectOptionWithoutFiring() (tea.Model, tea.Cmd) {
+	if m.optionPickerIndex >= len(m.filteredOptions) {
+		return m, nil
+	}
+
+	opt := m.filteredOptions[m.optionPickerIndex]
+	m.textarea.SetValue("/" + m.activeCommandName + " " + opt.Name + " ")
+
+	m.dismissAllPickers()
+
+	return m, nil
+}
+
+// renderPickerPopup renders the floating autocomplete popup for either
+// commands or options, depending on which picker is active.
+func (m *Model) renderPickerPopup() string {
+	if m.showOptionPicker && len(m.filteredOptions) > 0 {
+		return m.renderOptionPickerPopup()
+	}
+
+	if m.showCommandPicker && len(m.filteredCommands) > 0 {
+		return m.renderCommandPickerPopup()
+	}
+
+	return ""
 }
 
 // renderCommandPickerPopup renders the floating command autocomplete popup.
@@ -189,12 +348,71 @@ func (m *Model) renderCommandPickerPopup() string {
 	return popupStyle.Render(strings.TrimRight(content.String(), "\n"))
 }
 
-// commandPickerExtraHeight returns the extra height consumed by the command picker popup.
-func (m *Model) commandPickerExtraHeight() int {
-	if !m.showCommandPicker || len(m.filteredCommands) == 0 {
-		return 0
+// renderOptionPickerPopup renders the floating option autocomplete popup.
+func (m *Model) renderOptionPickerPopup() string {
+	if !m.showOptionPicker || len(m.filteredOptions) == 0 {
+		return ""
 	}
 
-	// Each command is 1 line + 2 for border (top + bottom)
-	return len(m.filteredCommands) + 2
+	modalWidth := max(m.width-modalPadding, 1)
+	contentWidth := max(modalWidth-contentPadding, 1)
+	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
+
+	highlightStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.ANSIColor(ansiBlack)).
+		Background(lipgloss.ANSIColor(ansiCyan))
+
+	dimStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240"))
+
+	var content strings.Builder
+
+	for i, opt := range m.filteredOptions {
+		line := opt.Name
+		desc := opt.Description
+
+		if i == m.optionPickerIndex {
+			styledLine := highlightStyle.Render(line)
+			if desc != "" {
+				styledLine += " " + desc
+			}
+
+			content.WriteString(clipStyle.Render(styledLine) + "\n")
+		} else {
+			styledLine := line
+			if desc != "" {
+				styledLine += " " + dimStyle.Render(desc)
+			}
+
+			content.WriteString(clipStyle.Render(styledLine) + "\n")
+		}
+	}
+
+	popupStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.PrimaryColor).
+		PaddingLeft(1).
+		PaddingRight(1).
+		Width(modalWidth)
+
+	return popupStyle.Render(strings.TrimRight(content.String(), "\n"))
+}
+
+// pickerExtraHeight returns the extra height consumed by command or option picker popups.
+func (m *Model) pickerExtraHeight() int {
+	if m.showOptionPicker && len(m.filteredOptions) > 0 {
+		return len(m.filteredOptions) + 2
+	}
+
+	if m.showCommandPicker && len(m.filteredCommands) > 0 {
+		return len(m.filteredCommands) + 2
+	}
+
+	return 0
+}
+
+// commandPickerExtraHeight returns the extra height consumed by the command picker popup.
+// Deprecated: Use pickerExtraHeight() instead, which handles both pickers.
+func (m *Model) commandPickerExtraHeight() int {
+	return m.pickerExtraHeight()
 }
