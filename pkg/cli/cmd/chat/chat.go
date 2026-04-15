@@ -213,7 +213,8 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 	// (embedded CLI → PATH fallback) for forward compatibility.
 	cliPath, pathErr := resolveCopilotCLIPath()
 	if pathErr == nil {
-		if verifyErr := verifyCopilotCLI(ctx, cliPath); verifyErr != nil {
+		verifyErr := verifyCopilotCLI(ctx, cliPath)
+		if verifyErr != nil {
 			return nil, verifyErr
 		}
 
@@ -260,8 +261,8 @@ func verifyCopilotCLI(ctx context.Context, cliPath string) error {
 	defer cancel()
 
 	cmd := exec.CommandContext(verifyCtx, cliPath, "--version")
-	output, err := cmd.CombinedOutput()
 
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf(
 			"copilot CLI at %q failed pre-flight check: %w (output: %s)\n\n"+
