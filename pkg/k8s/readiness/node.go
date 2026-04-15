@@ -17,20 +17,57 @@ func WaitForNodeReady(
 	clientset kubernetes.Interface,
 	deadline time.Duration,
 ) error {
-	return PollForReadiness(ctx, deadline, func(ctx context.Context) (bool, error) {
-		nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-		if err != nil {
-			// Continue polling on transient errors
-			return false, nil //nolint:nilerr // returning nil to continue polling
-		}
-
-		for i := range nodes.Items {
-			if isNodeReady(&nodes.Items[i]) {
-				return true, nil
+	return waitForNodes(ctx, clientset, deadline, func(nodes []corev1.Node) bool {
+		for i := range nodes {
+			if isNodeReady(&nodes[i]) {
+				return true
 			}
 		}
 
-		return false, nil
+		return false
+	})
+}
+
+// WaitForAllNodesReady polls until every node in the cluster has condition Ready=True.
+// Unlike WaitForNodeReady, which succeeds when at least one node is Ready, this function
+// waits for all listed nodes to report Ready=True before proceeding. This helps avoid
+// moving on while nodes still have transient NotReady state during early cluster
+// initialization, but it does not verify schedulability, taints, cordon state
+// (spec.unschedulable), or other scheduling constraints.
+func WaitForAllNodesReady(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	deadline time.Duration,
+) error {
+	return waitForNodes(ctx, clientset, deadline, func(nodes []corev1.Node) bool {
+		if len(nodes) == 0 {
+			return false
+		}
+
+		for i := range nodes {
+			if !isNodeReady(&nodes[i]) {
+				return false
+			}
+		}
+
+		return true
+	})
+}
+
+// waitForNodes polls nodes and passes them to the check function until it returns true.
+func waitForNodes(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	deadline time.Duration,
+	check func([]corev1.Node) bool,
+) error {
+	return PollForReadiness(ctx, deadline, func(ctx context.Context) (bool, error) {
+		nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return false, nil //nolint:nilerr // returning nil to continue polling
+		}
+
+		return check(nodes.Items), nil
 	})
 }
 
