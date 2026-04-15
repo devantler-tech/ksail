@@ -1236,6 +1236,7 @@ func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factor
 			K3d:      ctx.K3dConfig,
 			Talos:    ctx.TalosConfig,
 			VCluster: ctx.VClusterConfig,
+			KWOK:     ctx.KWOKConfig,
 		},
 	}
 }
@@ -6309,6 +6310,7 @@ func createAndVerifyProvisioner(
 			K3d:      ctx.K3dConfig,
 			Talos:    ctx.TalosConfig,
 			VCluster: ctx.VClusterConfig,
+			KWOK:     ctx.KWOKConfig,
 		},
 	}
 

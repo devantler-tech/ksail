@@ -81,6 +81,19 @@ func TestDetectDistributionFromContext(t *testing.T) {
 			wantError:     true,
 			errorContains: "empty cluster name",
 		},
+		{
+			name:             "kwok_cluster",
+			contextName:      "kwok-my-cluster",
+			wantDistribution: v1alpha1.DistributionKWOK,
+			wantClusterName:  "my-cluster",
+			wantError:        false,
+		},
+		{
+			name:          "empty_kwok_name",
+			contextName:   "kwok-",
+			wantError:     true,
+			errorContains: "empty cluster name",
+		},
 	}
 
 	for _, testCase := range tests {
@@ -437,6 +450,12 @@ func TestDetectProviderFromEndpoint(t *testing.T) {
 			wantProvider: v1alpha1.ProviderDocker,
 		},
 		{
+			name:         "kwok_always_docker",
+			distribution: v1alpha1.DistributionKWOK,
+			serverURL:    "https://1.2.3.4:6443",
+			wantProvider: v1alpha1.ProviderDocker,
+		},
+		{
 			name:         "talos_localhost_is_docker",
 			distribution: v1alpha1.DistributionTalos,
 			serverURL:    "https://127.0.0.1:6443",
@@ -481,6 +500,40 @@ func TestDetectProviderFromEndpoint(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestDetectInfo_LocalKWOK tests detection from a kubeconfig with a KWOK cluster.
+func TestDetectInfo_LocalKWOK(t *testing.T) {
+	kubeconfigContent := `apiVersion: v1
+kind: Config
+current-context: kwok-test-cluster
+clusters:
+- cluster:
+    server: https://127.0.0.1:6443
+  name: kwok-test-cluster
+contexts:
+- context:
+    cluster: kwok-test-cluster
+    user: kwok-test-cluster
+  name: kwok-test-cluster
+users:
+- name: kwok-test-cluster
+  user:
+    client-certificate-data: ""
+`
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
+	require.NoError(t, err)
+
+	info, err := cluster.DetectInfo(kubeconfigPath, "")
+
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.DistributionKWOK, info.Distribution)
+	assert.Equal(t, v1alpha1.ProviderDocker, info.Provider)
+	assert.Equal(t, "test-cluster", info.ClusterName)
+	assert.Equal(t, "kwok-test-cluster", info.Context)
+	assert.Equal(t, "https://127.0.0.1:6443", info.ServerURL)
 }
 
 // TestDetectInfo_VCluster tests detection from a kubeconfig with a VCluster cluster.

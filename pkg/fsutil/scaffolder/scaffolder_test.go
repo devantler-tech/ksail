@@ -69,6 +69,11 @@ func TestScaffoldAppliesDistributionDefaults(t *testing.T) {
 			distribution: v1alpha1.DistributionVCluster,
 			expected:     scaffolder.VClusterConfigFile,
 		},
+		{
+			name:         "KWOK",
+			distribution: v1alpha1.DistributionKWOK,
+			expected:     scaffolder.KWOKConfigFile,
+		},
 		{name: "Unknown", distribution: "unknown", expected: scaffolder.KindConfigFile},
 	}
 
@@ -859,6 +864,13 @@ func getScaffoldTestCases() []scaffoldTestCase {
 			expectError: false,
 		},
 		{
+			name:        "KWOK distribution",
+			setupFunc:   createKWOKCluster,
+			outputPath:  "/tmp/test-kwok/",
+			force:       true,
+			expectError: false,
+		},
+		{
 			name:        "Unknown distribution",
 			setupFunc:   createUnknownCluster,
 			outputPath:  "/tmp/test-unknown/",
@@ -966,6 +978,16 @@ func createMinimalClusterForSnapshot(
 		}
 
 		return minimalCluster
+	case v1alpha1.DistributionKWOK:
+		// For KWOK, include distribution and distributionConfig
+		minimalCluster.Spec = v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       v1alpha1.DistributionKWOK,
+				DistributionConfig: "kwok.yaml",
+			},
+		}
+
+		return minimalCluster
 	default:
 		return minimalCluster
 	}
@@ -1011,6 +1033,14 @@ func createVClusterCluster(name string) v1alpha1.Cluster {
 	c := createTestCluster(name)
 	c.Spec.Cluster.Distribution = v1alpha1.DistributionVCluster
 	c.Spec.Cluster.DistributionConfig = scaffolder.VClusterConfigFile
+
+	return c
+}
+
+func createKWOKCluster(name string) v1alpha1.Cluster {
+	c := createTestCluster(name)
+	c.Spec.Cluster.Distribution = v1alpha1.DistributionKWOK
+	c.Spec.Cluster.DistributionConfig = scaffolder.KWOKConfigFile
 
 	return c
 }
@@ -1544,6 +1574,57 @@ func TestScaffoldVCluster_SetsCorrectDistribution(t *testing.T) {
 
 	// Verify the distribution is set correctly
 	assert.Contains(t, string(ksailContent), "distribution: VCluster")
+}
+
+func TestScaffoldKWOK_CreatesConfigFile(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	cluster := createKWOKCluster("kwok-test")
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	// Verify the kwok.yaml config file was created
+	expectedPaths := []string{
+		filepath.Join(tempDir, scaffolder.KWOKConfigFile),
+		filepath.Join(tempDir, "ksail.yaml"),
+		filepath.Join(tempDir, "k8s", "kustomization.yaml"),
+	}
+
+	for _, path := range expectedPaths {
+		_, err := os.Stat(path)
+		require.NoError(t, err, "expected path to exist: %s", path)
+	}
+
+	// Verify kwok.yaml contains expected CRD kinds
+	kwokContent, err := os.ReadFile(filepath.Join(tempDir, scaffolder.KWOKConfigFile)) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	assert.Contains(t, string(kwokContent), "kind: ClusterLogs")
+	assert.Contains(t, string(kwokContent), "kind: ClusterExec")
+	assert.Contains(t, string(kwokContent), "kind: ClusterAttach")
+	assert.Contains(t, string(kwokContent), "kind: ClusterPortForward")
+}
+
+func TestScaffoldKWOK_SetsCorrectDistribution(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buffer := &bytes.Buffer{}
+	cluster := createKWOKCluster("kwok-context-test")
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, buffer, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	// Read the generated ksail.yaml to verify distribution is set
+	ksailPath := filepath.Join(tempDir, "ksail.yaml")
+	ksailContent, err := os.ReadFile(ksailPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+
+	// Verify the distribution is set correctly
+	assert.Contains(t, string(ksailContent), "distribution: KWOK")
 }
 
 // GitOps scaffolding tests.

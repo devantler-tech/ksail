@@ -76,6 +76,27 @@ func newTalosContainers(clusterName string) []container.Summary {
 	}
 }
 
+// newKWOKContainers creates test containers with KWOK naming convention.
+func newKWOKContainers(clusterName string) []container.Summary {
+	return []container.Summary{
+		{
+			ID:    "etcd1",
+			Names: []string{"/kwok-" + clusterName + "-etcd"},
+			State: "running",
+		},
+		{
+			ID:    "api1",
+			Names: []string{"/kwok-" + clusterName + "-kube-apiserver"},
+			State: "running",
+		},
+		{
+			ID:    "ctrl1",
+			Names: []string{"/kwok-" + clusterName + "-kwok-controller"},
+			State: "running",
+		},
+	}
+}
+
 func TestNewProvider(t *testing.T) {
 	t.Parallel()
 
@@ -86,6 +107,7 @@ func TestNewProvider(t *testing.T) {
 		{"Kind", docker.LabelSchemeKind},
 		{"K3d", docker.LabelSchemeK3d},
 		{"Talos", docker.LabelSchemeTalos},
+		{"KWOK", docker.LabelSchemeKWOK},
 	}
 
 	for _, tc := range tests {
@@ -512,6 +534,7 @@ func TestLabelSchemeConstants(t *testing.T) {
 		docker.LabelSchemeKind,
 		docker.LabelSchemeK3d,
 		docker.LabelSchemeTalos,
+		docker.LabelSchemeKWOK,
 	}
 
 	seen := make(map[docker.LabelScheme]bool)
@@ -552,4 +575,54 @@ func TestProvider_ListNodes_UnknownLabelScheme(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, provider.ErrUnknownLabelScheme)
 	assert.Nil(t, nodes)
+}
+
+func TestProvider_ListNodes_KWOK(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := dockerclient.NewMockAPIClient(t)
+	containers := newKWOKContainers(testClusterName)
+
+	client.EXPECT().
+		ContainerList(ctx, container.ListOptions{All: true}).
+		Return(containers, nil)
+
+	prov := docker.NewProvider(client, docker.LabelSchemeKWOK)
+
+	nodes, err := prov.ListNodes(ctx, testClusterName)
+
+	require.NoError(t, err)
+	require.Len(t, nodes, 3)
+	assert.Equal(t, "kwok-"+testClusterName+"-etcd", nodes[0].Name)
+	assert.Equal(t, "etcd", nodes[0].Role)
+	assert.Equal(t, "kwok-"+testClusterName+"-kube-apiserver", nodes[1].Name)
+	assert.Equal(t, "control-plane", nodes[1].Role)
+	assert.Equal(t, "kwok-"+testClusterName+"-kwok-controller", nodes[2].Name)
+	assert.Equal(t, "controller", nodes[2].Role)
+}
+
+func TestProvider_ListAllClusters_KWOK(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := dockerclient.NewMockAPIClient(t)
+
+	allContainers := []container.Summary{
+		{ID: "1", Names: []string{"/kwok-cluster1-etcd"}},
+		{ID: "2", Names: []string{"/kwok-cluster1-kube-apiserver"}},
+		{ID: "3", Names: []string{"/kwok-cluster2-kwok-controller"}},
+		{ID: "4", Names: []string{"/other-container"}},
+	}
+
+	client.EXPECT().
+		ContainerList(ctx, container.ListOptions{All: true}).
+		Return(allContainers, nil)
+
+	prov := docker.NewProvider(client, docker.LabelSchemeKWOK)
+
+	clusters, err := prov.ListAllClusters(ctx)
+
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"cluster1", "cluster2"}, clusters)
 }
