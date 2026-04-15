@@ -695,13 +695,7 @@ func configureArgoCD(
 ) error {
 	// Ensure OCI artifact exists before creating the ArgoCD Application,
 	// otherwise ArgoCD enters a ComparisonError loop that can saturate etcd.
-	var err error
-	if factories.EnsureOCIArtifact != nil {
-		_, err = factories.EnsureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
-	} else {
-		_, err = ensureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
-	}
-
+	_, err := factories.callEnsureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
 	if err != nil {
 		return fmt.Errorf("failed to ensure OCI artifact for ArgoCD: %w", err)
 	}
@@ -751,14 +745,13 @@ func configureFlux(
 	}
 
 	// Step 2: Check if OCI artifact exists and push if needed
-	// Use the factory function if provided (for testing), otherwise use default
-	var artifactPushed bool
-	if factories.EnsureOCIArtifact != nil {
-		artifactPushed, err = factories.EnsureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
-	} else {
-		artifactPushed, err = ensureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
-	}
-
+	artifactPushed, err := factories.callEnsureOCIArtifact(
+		ctx,
+		cmd,
+		clusterCfg,
+		clusterName,
+		writer,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to ensure OCI artifact: %w", err)
 	}
@@ -780,6 +773,23 @@ func configureFlux(
 	}
 
 	return nil
+}
+
+// callEnsureOCIArtifact calls EnsureOCIArtifact if set on the factory, or falls
+// back to the default ensureOCIArtifact implementation. This eliminates the
+// repeated nil-guard pattern in configureArgoCD and configureFlux.
+func (f *InstallerFactories) callEnsureOCIArtifact(
+	ctx context.Context,
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+	writer io.Writer,
+) (bool, error) {
+	if f.EnsureOCIArtifact != nil {
+		return f.EnsureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
+	}
+
+	return ensureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
 }
 
 // ensureOCIArtifact checks if an OCI artifact exists and pushes one if needed.
