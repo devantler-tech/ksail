@@ -20,10 +20,10 @@ Use this skill when the request is about:
 
 Do not use this skill for:
 
-- A specific failing PR check, missing workflow log, or CI failure triage. Use `gh-fix-ci`.
-- General GitHub pull request, branch, or repository operations. Use `github`.
-- CodeQL-specific configuration or code scanning guidance. Use `codeql`.
-- Dependabot configuration, grouping, or dependency update strategy. Use `dependabot`.
+- A specific failing PR check, missing workflow log, or CI failure triage. Use the repository's CI troubleshooting or GitHub CLI skill/tooling instead of this documentation-focused skill.
+- General GitHub pull request, branch, issue, or repository operations. Use the repository's general GitHub operations skill/tooling instead.
+- CodeQL-specific configuration or code scanning guidance. Use the repository's dedicated code scanning or security analysis skill/tooling instead.
+- Dependabot configuration, grouping, or dependency update strategy. Use the repository's dependency management or Dependabot-focused skill/tooling instead.
 
 ## Workflow
 
@@ -90,8 +90,8 @@ Keep citations close to the claim they support.
 - Linking the GitHub Actions docs landing page when a narrower page exists
 - Mixing up reusable workflows and composite actions
 - Suggesting long-lived cloud credentials when OIDC is the better documented path
-- Treating repo-specific CI debugging as a documentation question when it should be handed to `gh-fix-ci`
-- Letting adjacent domains absorb the request when `codeql` or `dependabot` is the sharper fit
+- Treating repo-specific CI debugging as a documentation question when it should be handed to the CI troubleshooting skill/tooling
+- Letting adjacent domains absorb the request when a dedicated code scanning or dependency management skill is the sharper fit
 
 ## Bundled Reference
 
