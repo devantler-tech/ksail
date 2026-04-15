@@ -162,10 +162,11 @@ func runCNIInstallation(
 		return fmt.Errorf("%s installation failed: %w", cniName, err)
 	}
 
-	// Wait for at least one node to become Ready before declaring success.
+	// Wait for all nodes to become Ready before declaring success.
 	// This is critical for CNIs like Calico that use SkipWait (Helm returns
 	// before pods are ready), ensuring the network layer is functional
-	// before post-CNI components begin installing.
+	// before post-CNI components begin installing. Waiting for all nodes
+	// (not just one) means the skip in waitForClusterStability is safe.
 	err = waitForCNIReadiness(cmd.Context(), setup, clusterCfg, cniNamespaces)
 	if err != nil {
 		return fmt.Errorf("node readiness check after %s install failed: %w", cniName, err)
