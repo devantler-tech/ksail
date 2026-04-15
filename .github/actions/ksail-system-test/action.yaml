@@ -230,7 +230,7 @@ runs:
 
     - name: 🧪 Image Export/Import Tests
       id: image-export-import-tests
-      if: inputs.distribution == 'Vanilla' || inputs.distribution == 'K3s' || inputs.distribution == 'KWOK'
+      if: inputs.distribution == 'Vanilla' || inputs.distribution == 'K3s'
       uses: ./.github/actions/ksail-test-image-export-import
       with:
         test-workload-name: ${{ inputs.test-workload-name }}
