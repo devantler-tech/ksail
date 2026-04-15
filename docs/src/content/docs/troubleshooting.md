@@ -74,7 +74,7 @@ kubectl get crd <crd-name> -o jsonpath='{.status.conditions[?(@.type=="Establish
 KSail performs cluster stability checks at two points during installation to prevent race conditions:
 
 - **Before infrastructure components** (Cilium CNI only): Ensures the Cilium eBPF dataplane has finished programming pod-to-service routing before deploying components like metrics-server that depend on ClusterIP connectivity.
-- **Before GitOps engines**: Ensures API server connectivity has recovered after infrastructure components (MetalLB, Kyverno, cert-manager) register webhooks and CRDs.
+- **Before GitOps engines**: Always runs before Flux or ArgoCD are installed to ensure the API server is fully ready. This is especially important for K3s/K3d clusters, which report creation success before the API server is ready to serve requests. On setups with infrastructure components (MetalLB, Kyverno, cert-manager), it also ensures API connectivity has recovered after those components register webhooks and CRDs.
 
 Each check performs up to three steps: (1) 5 consecutive successful API server health checks, (2) all kube-system DaemonSets ready, and (3) a short-lived busybox pod confirms TCP connectivity to the API server ClusterIP (Cilium CNI only). The in-cluster connectivity check allows up to **3 minutes for VCluster** (vs 2 minutes for other distributions), since VCluster + Cilium eBPF needs extra time to stabilize atop the host cluster's network layer.
 
