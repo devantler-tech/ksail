@@ -2869,30 +2869,58 @@ func displayProviderStatus(
 	}
 }
 
-// tryKubeClusterInfo attempts kubectl cluster-info and writes output to cmd's writer.
-// Returns nil on success, an error if the Kubernetes API is unreachable.
+// Retry configuration for kubectl cluster-info.
+// The API server may not be ready immediately after cluster creation
+// (e.g., K3d reports "created successfully" before K3s API is reachable).
+const (
+	clusterInfoMaxAttempts = 3
+	clusterInfoRetryDelay  = 2 * time.Second
+)
+
+// tryKubeClusterInfo attempts kubectl cluster-info with retries and writes
+// output to cmd's writer. Output is buffered during retries so that failed
+// attempts do not leak partial output. Returns nil on success, an error if
+// the Kubernetes API is unreachable after all attempts.
 func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath string) error {
-	kubectlClient := kubectl.NewClient(genericiooptions.IOStreams{
-		In:     os.Stdin,
-		Out:    cmd.OutOrStdout(),
-		ErrOut: io.Discard,
-	})
+	var lastErr error
 
-	kubeCmd := kubectlClient.CreateClusterInfoCommand(kubeconfigPath)
+	for attempt := 1; attempt <= clusterInfoMaxAttempts; attempt++ {
+		var buf bytes.Buffer
 
-	// Suppress kubectl's own error output
-	kubeCmd.SetErr(io.Discard)
-	kubeCmd.SilenceErrors = true
-	kubeCmd.SilenceUsage = true
-	// Prevent Cobra from parsing the parent ksail command's os.Args.
-	kubeCmd.SetArgs([]string{})
+		kubectlClient := kubectl.NewClient(genericiooptions.IOStreams{
+			In:     os.Stdin,
+			Out:    &buf,
+			ErrOut: io.Discard,
+		})
 
-	_, err := kubeCmd.ExecuteC()
-	if err != nil {
-		return fmt.Errorf("kubectl cluster-info failed: %w", err)
+		kubeCmd := kubectlClient.CreateClusterInfoCommand(kubeconfigPath)
+
+		// Suppress kubectl's own error output
+		kubeCmd.SetErr(io.Discard)
+		kubeCmd.SilenceErrors = true
+		kubeCmd.SilenceUsage = true
+		// Prevent Cobra from parsing the parent ksail command's os.Args.
+		kubeCmd.SetArgs([]string{})
+
+		_, lastErr = kubeCmd.ExecuteC()
+		if lastErr == nil {
+			// Success — flush buffered output to the real writer.
+			_, _ = io.Copy(cmd.OutOrStdout(), &buf)
+
+			return nil
+		}
+
+		if attempt < clusterInfoMaxAttempts {
+			select {
+			case <-time.After(clusterInfoRetryDelay):
+			case <-cmd.Context().Done():
+				return fmt.Errorf("kubectl cluster-info cancelled: %w", cmd.Context().Err())
+			}
+		}
 	}
 
-	return nil
+	return fmt.Errorf("kubectl cluster-info failed after %d attempts: %w",
+		clusterInfoMaxAttempts, lastErr)
 }
 
 // displayKSailDetails appends KSail-specific cluster metadata after kubectl output.
