@@ -715,7 +715,13 @@ func configureFlux(
 	}
 
 	// Step 2: Check if OCI artifact exists and push if needed
-	artifactPushed, err := factories.callEnsureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
+	artifactPushed, err := factories.callEnsureOCIArtifact(
+		ctx,
+		cmd,
+		clusterCfg,
+		clusterName,
+		writer,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to ensure OCI artifact: %w", err)
 	}
