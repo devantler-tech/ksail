@@ -232,11 +232,14 @@ func dockerEtcdChecks() []check.ClusterCheck {
 	}
 }
 
-// dockerPreBootSequenceChecks returns a trimmed set of pre-boot sequence checks
-// optimized for Docker environments. It skips purely diagnostic checks
-// (AllNodesMemorySizes, AllNodesDiskSizes, NoDiagnostics) that add polling
-// overhead without catching real issues in Docker containers, where resources
-// are always consistent.
+// dockerPreBootSequenceChecks returns a trimmed subset of the upstream
+// check.PreBootSequenceChecks() (github.com/siderolabs/talos v1.13.0-beta.1,
+// pkg/cluster/check/check.go) optimized for Docker environments. It omits
+// purely diagnostic checks (AllNodesMemorySizes, AllNodesDiskSizes, NoDiagnostics)
+// that add polling overhead without catching real issues in Docker containers.
+//
+// When upgrading the Talos dependency, verify this list against the upstream
+// check.PreBootSequenceChecks() to pick up any new essential readiness gates.
 func dockerPreBootSequenceChecks() []check.ClusterCheck {
 	allNodeTypes := check.WithNodeTypes(
 		machine.TypeInit,
