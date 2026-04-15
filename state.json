@@ -1,11 +1,11 @@
 {
-  "last_run": "2026-04-15T01:02:00Z",
-  "last_run_id": "24430830245",
-  "issue_backlog_cursor": 4029,
+  "last_run": "2026-04-15T12:38:00Z",
+  "last_run_id": "24454837717",
+  "issue_backlog_cursor": 4040,
   "monthly_activity_issue": 3605,
   "domain_alternation": {
-    "last_domain": "refactor",
-    "next_domain": "perf"
+    "last_domain": "test",
+    "next_domain": "refactor"
   },
   "commented_issues": {
     "3572": "2026-04-04T12:24:00Z",
@@ -35,7 +35,10 @@
     "3999": "2026-04-14T01:02:00Z",
     "3987": "2026-04-14T12:38:00Z",
     "4029": "2026-04-15T01:02:00Z",
-    "4022": "2026-04-15T01:02:00Z"
+    "4022": "2026-04-15T01:02:00Z",
+    "4038": "2026-04-15T12:38:00Z",
+    "4039": "2026-04-15T12:38:00Z",
+    "4040": "2026-04-15T12:38:00Z"
   },
   "labelled_issues": {
     "3412": ["next"],
@@ -103,6 +106,12 @@
       "branch": "repo-assist/refactor-ensure-oci-artifact-helper",
       "title": "refactor(setup): extract callEnsureOCIArtifact helper",
       "created": "2026-04-15T01:02:00Z"
+    },
+    "fix-assert-contains-4038": {
+      "branch": "repo-assist/fix-assert-contains-sigpipe-4038",
+      "title": "ci: fix assert_contains SIGPIPE race; test: add metricsserver ValuesYaml tests",
+      "fixes": 4038,
+      "created": "2026-04-15T12:38:00Z"
     }
   },
   "nudged_prs": {},
@@ -115,6 +124,11 @@
     "4029": {
       "branch": "repo-assist/fix-metricsserver-auth-tolerate-4029",
       "created": "2026-04-15T01:02:00Z",
+      "status": "open"
+    },
+    "4038": {
+      "branch": "repo-assist/fix-assert-contains-sigpipe-4038",
+      "created": "2026-04-15T12:38:00Z",
       "status": "open"
     }
   }
