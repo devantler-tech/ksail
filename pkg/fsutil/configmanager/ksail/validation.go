@@ -165,6 +165,8 @@ func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 		return "talos"
 	case v1alpha1.DistributionVCluster:
 		return "vcluster.yaml"
+	case v1alpha1.DistributionKWOK:
+		return "kwok.yaml"
 	default:
 		return ""
 	}
@@ -176,6 +178,7 @@ func distributionConfigIsOppositeDefault(current string, distribution v1alpha1.D
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionTalos,
 		v1alpha1.DistributionVCluster,
+		v1alpha1.DistributionKWOK,
 	}
 
 	for _, d := range allDefaults {

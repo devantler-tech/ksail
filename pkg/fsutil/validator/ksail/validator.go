@@ -147,14 +147,14 @@ func (v *Validator) validateDistribution(
 			fixSuggestion = "Set spec.cluster.distribution to a supported distribution type"
 		} else {
 			message = "invalid distribution value"
-			fixSuggestion = "Use a supported distribution: Vanilla, K3s, Talos, or VCluster"
+			fixSuggestion = "Use a supported distribution: Vanilla, K3s, Talos, VCluster, or KWOK"
 		}
 
 		result.AddError(validator.ValidationError{
 			Field:         "spec.cluster.distribution",
 			Message:       message,
 			CurrentValue:  distribution,
-			ExpectedValue: "one of: Vanilla, K3s, Talos, VCluster",
+			ExpectedValue: "one of: Vanilla, K3s, Talos, VCluster, KWOK",
 			FixSuggestion: fixSuggestion,
 		})
 	}
