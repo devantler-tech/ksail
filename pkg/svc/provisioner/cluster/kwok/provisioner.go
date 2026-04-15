@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"github.com/spf13/pflag"
 
@@ -22,6 +23,12 @@ import (
 	// Register the Docker compose runtime so kwokctl can find it.
 	_ "sigs.k8s.io/kwok/pkg/kwokctl/runtime/compose"
 )
+
+// kwokGlobalMu serialises access to process-global state that kwokctl
+// reads/writes (os.Args, config.DefaultCluster). Without this, concurrent
+// provisioner calls (e.g. parallel tests or multi-cluster operations)
+// could race on these globals.
+var kwokGlobalMu sync.Mutex
 
 // Provisioner manages KWOK clusters using kwokctl's Cobra commands.
 // It uses the docker (compose) runtime which runs etcd + kube-apiserver +
@@ -65,6 +72,8 @@ const kwokControllerImage = "registry.k8s.io/kwok/kwok:" + kwokControllerImageVe
 // config.InitFlags / log.InitFlags, both of which read os.Args directly.
 // We temporarily override os.Args so that the kwokctl flag parsers receive
 // only the flags relevant to KWOK (e.g. --config <path>).
+//
+// The caller must hold kwokGlobalMu.
 func (p *Provisioner) initContext(ctx context.Context) (context.Context, error) {
 	origArgs := os.Args
 	defer func() { os.Args = origArgs }()
@@ -89,6 +98,15 @@ func (p *Provisioner) initContext(ctx context.Context) (context.Context, error) 
 	return ctx, nil
 }
 
+// setDefaultCluster sets config.DefaultCluster and returns a function that
+// restores the previous value. The caller must hold kwokGlobalMu.
+func setDefaultCluster(name string) func() {
+	prev := config.DefaultCluster
+	config.DefaultCluster = name
+
+	return func() { config.DefaultCluster = prev }
+}
+
 // SetProvider sets the infrastructure provider for node operations.
 func (p *Provisioner) SetProvider(prov provider.Provider) {
 	p.infraProvider = prov
@@ -98,12 +116,16 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
+	kwokGlobalMu.Lock()
+	defer kwokGlobalMu.Unlock()
+
 	kwokCtx, err := p.initContext(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create KWOK cluster: %w", err)
 	}
 
-	config.DefaultCluster = target
+	defer setDefaultCluster(target)()
+
 	cmd := createcluster.NewCommand(kwokCtx)
 
 	args := []string{
@@ -126,6 +148,9 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
+	kwokGlobalMu.Lock()
+	defer kwokGlobalMu.Unlock()
+
 	kwokCtx, err := p.initContext(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to delete KWOK cluster: %w", err)
@@ -140,7 +165,8 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("%w: %s", clustererr.ErrClusterNotFound, target)
 	}
 
-	config.DefaultCluster = target
+	defer setDefaultCluster(target)()
+
 	cmd := deletecluster.NewCommand(kwokCtx)
 
 	_, err = p.runner.Run(kwokCtx, cmd, []string{})
@@ -155,12 +181,16 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 func (p *Provisioner) Start(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
+	kwokGlobalMu.Lock()
+	defer kwokGlobalMu.Unlock()
+
 	kwokCtx, err := p.initContext(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start KWOK cluster: %w", err)
 	}
 
-	config.DefaultCluster = target
+	defer setDefaultCluster(target)()
+
 	cmd := startcluster.NewCommand(kwokCtx)
 
 	_, err = p.runner.Run(kwokCtx, cmd, []string{})
@@ -175,12 +205,16 @@ func (p *Provisioner) Start(ctx context.Context, name string) error {
 func (p *Provisioner) Stop(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
+	kwokGlobalMu.Lock()
+	defer kwokGlobalMu.Unlock()
+
 	kwokCtx, err := p.initContext(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to stop KWOK cluster: %w", err)
 	}
 
-	config.DefaultCluster = target
+	defer setDefaultCluster(target)()
+
 	cmd := stopcluster.NewCommand(kwokCtx)
 
 	_, err = p.runner.Run(kwokCtx, cmd, []string{})
@@ -193,6 +227,9 @@ func (p *Provisioner) Stop(ctx context.Context, name string) error {
 
 // List returns all KWOK cluster names.
 func (p *Provisioner) List(ctx context.Context) ([]string, error) {
+	kwokGlobalMu.Lock()
+	defer kwokGlobalMu.Unlock()
+
 	kwokCtx, err := p.initContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list KWOK clusters: %w", err)
@@ -203,6 +240,9 @@ func (p *Provisioner) List(ctx context.Context) ([]string, error) {
 
 // Exists checks if a KWOK cluster exists.
 func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
+	kwokGlobalMu.Lock()
+	defer kwokGlobalMu.Unlock()
+
 	kwokCtx, err := p.initContext(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to check cluster existence: %w", err)

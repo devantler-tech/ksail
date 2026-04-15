@@ -411,22 +411,33 @@ func (p *Provider) listVClusterContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
+	cpPrefix := vclusterCPPrefix + clusterName
+	nodePrefix := vclusterNodePrefix + clusterName + "."
+	lbPrefix := vclusterLBPrefix + clusterName + "."
+
+	return p.filterContainers(ctx, func(name string) bool {
+		return name == cpPrefix || strings.HasPrefix(name, nodePrefix) ||
+			strings.HasPrefix(name, lbPrefix)
+	})
+}
+
+// filterContainers returns containers whose Docker name (with leading "/" stripped)
+// matches the given predicate. This deduplicates the list-and-filter pattern
+// shared across distribution-specific listing methods.
+func (p *Provider) filterContainers(
+	ctx context.Context,
+	match func(name string) bool,
+) ([]container.Summary, error) {
 	containers, err := p.client.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	cpPrefix := vclusterCPPrefix + clusterName
-	nodePrefix := vclusterNodePrefix + clusterName + "."
-	lbPrefix := vclusterLBPrefix + clusterName + "."
-
 	var result []container.Summary
 
 	for _, ctr := range containers {
-		for _, name := range ctr.Names {
-			name = strings.TrimPrefix(name, "/")
-			if name == cpPrefix || strings.HasPrefix(name, nodePrefix) ||
-				strings.HasPrefix(name, lbPrefix) {
+		for _, rawName := range ctr.Names {
+			if match(strings.TrimPrefix(rawName, "/")) {
 				result = append(result, ctr)
 
 				break
@@ -515,27 +526,11 @@ func (p *Provider) listKWOKContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
-	containers, err := p.client.ContainerList(ctx, container.ListOptions{All: true})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list containers: %w", err)
-	}
-
 	prefix := kwokContainerPrefix + clusterName + "-"
 
-	var result []container.Summary
-
-	for _, ctr := range containers {
-		for _, rawName := range ctr.Names {
-			name := strings.TrimPrefix(rawName, "/")
-			if strings.HasPrefix(name, prefix) {
-				result = append(result, ctr)
-
-				break
-			}
-		}
-	}
-
-	return result, nil
+	return p.filterContainers(ctx, func(name string) bool {
+		return strings.HasPrefix(name, prefix)
+	})
 }
 
 // extractKWOKClusterName extracts the cluster name from a KWOK container name.
@@ -544,8 +539,8 @@ func extractKWOKClusterName(ctr container.Summary) string {
 		name := strings.TrimPrefix(rawName, "/")
 		if rest, ok := strings.CutPrefix(name, kwokContainerPrefix); ok {
 			for _, suffix := range kwokComponentSuffixes {
-				if idx := strings.LastIndex(rest, suffix); idx > 0 {
-					return rest[:idx]
+				if trimmed, found := strings.CutSuffix(rest, suffix); found && trimmed != "" {
+					return trimmed
 				}
 			}
 		}
