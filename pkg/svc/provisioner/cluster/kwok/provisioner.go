@@ -312,22 +312,26 @@ func (p *Provisioner) resolveConfigPath() (string, func(), error) {
 		return "", nil, fmt.Errorf("failed to create temp config: %w", err)
 	}
 
-	if _, err := tmpFile.WriteString(defaultSimulationConfig); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+	tmpName := tmpFile.Name()
 
-		return "", nil, fmt.Errorf("failed to write temp config: %w", err)
+	_, writeErr := tmpFile.WriteString(defaultSimulationConfig)
+	if writeErr != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpName)
+
+		return "", nil, fmt.Errorf("failed to write temp config: %w", writeErr)
 	}
 
-	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpFile.Name())
+	closeErr := tmpFile.Close()
+	if closeErr != nil {
+		_ = os.Remove(tmpName)
 
-		return "", nil, fmt.Errorf("failed to close temp config: %w", err)
+		return "", nil, fmt.Errorf("failed to close temp config: %w", closeErr)
 	}
 
-	cleanup := func() { os.Remove(tmpFile.Name()) }
+	cleanup := func() { _ = os.Remove(tmpName) }
 
-	return tmpFile.Name(), cleanup, nil
+	return tmpName, cleanup, nil
 }
 
 // defaultSimulationConfig contains the KWOK simulation CRDs that are NOT

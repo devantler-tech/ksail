@@ -503,19 +503,19 @@ func extractVClusterRole(ctr container.Summary) string {
 // kwok-<cluster>-kwok-controller, etc.
 const kwokContainerPrefix = "kwok-"
 
-// kwokComponentSuffixes returns the known component suffixes used by kwokctl.
-func kwokComponentSuffixes() []string {
-	return []string{
-		"-etcd",
-		"-kube-apiserver",
-		"-kube-controller-manager",
-		"-kube-scheduler",
-		"-kwok-controller",
-		"-prometheus",
-		"-jaeger",
-		"-dashboard",
-		"-metrics-server",
-	}
+// kwokComponentSuffixes lists the known component suffixes used by kwokctl.
+//
+//nolint:gochecknoglobals // read-only lookup table; avoids per-call allocation.
+var kwokComponentSuffixes = [...]string{
+	"-etcd",
+	"-kube-apiserver",
+	"-kube-controller-manager",
+	"-kube-scheduler",
+	"-kwok-controller",
+	"-prometheus",
+	"-jaeger",
+	"-dashboard",
+	"-metrics-server",
 }
 
 // listKWOKContainers lists containers by KWOK name prefix.
@@ -541,7 +541,7 @@ func extractKWOKClusterName(ctr container.Summary) string {
 	for _, rawName := range ctr.Names {
 		name := strings.TrimPrefix(rawName, "/")
 		if rest, ok := strings.CutPrefix(name, kwokContainerPrefix); ok {
-			for _, suffix := range kwokComponentSuffixes() {
+			for _, suffix := range kwokComponentSuffixes {
 				if trimmed, found := strings.CutSuffix(rest, suffix); found && trimmed != "" {
 					return trimmed
 				}
