@@ -23,8 +23,12 @@ jobs:
 
       - name: Install gh-aw extension
         run: gh extension install github/gh-aw --pin v0.68.2
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Verify gh-aw installation
         run: gh aw version
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
