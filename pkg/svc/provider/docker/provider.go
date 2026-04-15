@@ -549,16 +549,21 @@ func extractKWOKClusterName(ctr container.Summary) string {
 func extractKWOKRole(ctr container.Summary) string {
 	for _, rawName := range ctr.Names {
 		name := strings.TrimPrefix(rawName, "/")
-		if strings.HasSuffix(name, "-kube-apiserver") {
+
+		switch {
+		case strings.HasSuffix(name, "-kube-apiserver"),
+			strings.HasSuffix(name, "-kube-controller-manager"),
+			strings.HasSuffix(name, "-kube-scheduler"):
 			return "control-plane"
-		}
-
-		if strings.HasSuffix(name, "-etcd") {
+		case strings.HasSuffix(name, "-etcd"):
 			return "etcd"
-		}
-
-		if strings.HasSuffix(name, "-kwok-controller") {
+		case strings.HasSuffix(name, "-kwok-controller"):
 			return "controller"
+		case strings.HasSuffix(name, "-prometheus"),
+			strings.HasSuffix(name, "-jaeger"),
+			strings.HasSuffix(name, "-dashboard"),
+			strings.HasSuffix(name, "-metrics-server"):
+			return "addon"
 		}
 	}
 
