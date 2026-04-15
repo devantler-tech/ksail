@@ -206,7 +206,10 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 	return []check.ClusterCheck{
 		func(cluster check.ClusterInfo) conditions.Condition {
 			return conditions.PollingCondition("etcd to be healthy", func(ctx context.Context) error {
-				return check.ServiceHealthAssertion(ctx, cluster, "etcd", check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane))
+				return check.ServiceHealthAssertion(
+					ctx, cluster, "etcd",
+					check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane),
+				)
 			}, preBootPollInterval)
 		},
 		func(cluster check.ClusterInfo) conditions.Condition {
@@ -229,7 +232,10 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 		// NoDiagnostics — skipped: informational-only, not a readiness gate
 		func(cluster check.ClusterInfo) conditions.Condition {
 			return conditions.PollingCondition("kubelet to be healthy", func(ctx context.Context) error {
-				return check.ServiceHealthAssertion(ctx, cluster, "kubelet", check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane))
+				return check.ServiceHealthAssertion(
+					ctx, cluster, "kubelet",
+					check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane),
+				)
 			}, preBootPollInterval)
 		},
 		func(cluster check.ClusterInfo) conditions.Condition {
