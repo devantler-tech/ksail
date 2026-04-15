@@ -47,9 +47,14 @@ style: |
     background: #0d1117;
     border-color: #30363d;
   }
-  mermaid {
-    font-size: 0.7em;
+  img.diagram {
+    display: block;
+    margin: 0 auto;
+    max-height: 70%;
+    max-width: 100%;
+    object-fit: contain;
   }
+html: true
 ---
 
 <!-- _class: lead -->
@@ -87,13 +92,13 @@ A **Go CLI** and SDK for spinning up local Kubernetes clusters with GitOps built
 
 # How It All Connects
 
-![Pipeline](assets/pipeline.png)
+<img src="assets/pipeline.png" class="diagram" />
 
 ---
 
 # AI Guardrails
 
-![Guardrails](assets/guardrails.png)
+<img src="assets/guardrails.png" class="diagram" />
 
 *Every layer must pass before an agent PR can merge.*
 
