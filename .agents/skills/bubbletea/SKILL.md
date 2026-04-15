@@ -134,11 +134,13 @@ maxTextWidth := panelWidth - 4  // -2 borders, -2 padding
 title = truncateString(title, maxTextWidth)
 subtitle = truncateString(subtitle, maxTextWidth)
 
+// For full Unicode/emoji support, use runewidth.Truncate from
+// github.com/mattn/go-runewidth instead of byte-based slicing.
 func truncateString(s string, maxLen int) string {
-    if len(s) <= maxLen {
+    if runewidth.StringWidth(s) <= maxLen {
         return s
     }
-    return s[:maxLen-1] + "…"
+    return runewidth.Truncate(s, maxLen, "…")
 }
 ```
 

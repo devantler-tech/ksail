@@ -61,16 +61,18 @@ for i := range contentLines {
 }
 ```
 
-**Helper function:**
+**Helper function** (use `runewidth.Truncate` from `github.com/mattn/go-runewidth` for full Unicode/emoji support):
 ```go
+import "github.com/mattn/go-runewidth"
+
 func truncateString(s string, maxLen int) string {
-    if len(s) <= maxLen {
-        return s
-    }
     if maxLen < 1 {
         return ""
     }
-    return s[:maxLen-1] + "…"
+    if runewidth.StringWidth(s) <= maxLen {
+        return s
+    }
+    return runewidth.Truncate(s, maxLen, "…")
 }
 ```
 

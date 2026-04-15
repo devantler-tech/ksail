@@ -267,6 +267,9 @@ func visualWidth(s string) int {
 
 func stripANSI(s string) string {
 	stripped := ""
+	// NOTE: For production use, prefer a proven ANSI stripping library
+	// such as github.com/muesli/ansi or github.com/muesli/reflow/ansi,
+	// which correctly handle all CSI final bytes (0x40-0x7E).
 	inAnsi := false
 
 	for _, ch := range s {
@@ -275,7 +278,7 @@ func stripANSI(s string) string {
 			continue
 		}
 		if inAnsi {
-			if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
+			if ch >= 0x40 && ch <= 0x7E {
 				inAnsi = false
 			}
 			continue
