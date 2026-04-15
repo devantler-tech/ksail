@@ -6,8 +6,7 @@ description: |
 inputs:
   label-selector:
     description: Label selector for resources to delete
-    required: false
-    default: "ksail.owned=true"
+    required: true
 
 runs:
   using: composite
