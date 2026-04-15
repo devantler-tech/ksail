@@ -87,71 +87,28 @@ A **Go CLI** and SDK for spinning up local Kubernetes clusters with GitOps built
 
 # How It All Connects
 
-```
-  ┌──────────────────────────────────────────────────────┐
-  │               Weekly Strategy                        │
-  │   Market research → Now / Next / Later Roadmap       │
-  └──────────────────────┬───────────────────────────────┘
-                         ▼
-  ┌──────────────────────────────────────────────────────┐
-  │                 Repo Assist                          │
-  │   Roadmap → Issues → Draft PRs (code & tests)       │
-  └──────────────────────┬───────────────────────────────┘
-                         ▼
-  ┌──────────────────────────────────────────────────────┐
-  │          CI Pipeline (guardrails)                    │
-  │   Lint → Build → Unit Tests → E2E → Benchmarks      │
-  └──────────────────────┬───────────────────────────────┘
-                         ▼
-  ┌──────────────────────────────────────────────────────┐
-  │  👨‍💻 Me: Promote Draft → In Review                   │
-  └──────────────────────┬───────────────────────────────┘
-                         ▼
-  ┌──────────────────────────────────────────────────────┐
-  │          Agent Merge (via Skills)                    │
-  │   Rebase, fix CI, address review, merge             │
-  └──────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["🗺️ Weekly Strategy\nMarket research → Now / Next / Later Roadmap"] --> B
+    B["📋 Repo Assist\nRoadmap → Issues → Draft PRs"] --> C
+    C["⚙️ CI Pipeline\nLint → Build → Unit Tests → E2E → Benchmarks"] --> D
+    D["👨‍💻 Me: Promote Draft → In Review"] --> E
+    E["🤖 Agent Merge via Skills\nRebase, fix CI, address review, merge"]
 ```
 
 ---
 
 # AI Guardrails
 
-```
-                    ┌─────────────────────┐
-                    │   Agent opens PR    │
-                    └────────┬────────────┘
-                             ▼
-              ┌──────────────────────────────┐
-              │   GHAS Security & CodeQL     │
-              │   (vulnerability scanning)   │
-              └──────────────┬───────────────┘
-                             ▼
-              ┌──────────────────────────────┐
-              │      StepSecurity            │
-              │   (egress policy auditing)   │
-              └──────────────┬───────────────┘
-                             ▼
-              ┌──────────────────────────────┐
-              │   Linting                    │
-              │   MegaLinter + golangci-lint │
-              └──────────────┬───────────────┘
-                             ▼
-              ┌──────────────────────────────┐
-              │   Unit Test Suite            │
-              │   go test ./... + Codecov    │
-              └──────────────┬───────────────┘
-                             ▼
-              ┌──────────────────────────────┐
-              │   E2E / System Test Suite    │
-              │   Kind × K3d × Talos ×       │
-              │   VCluster (merge queue)     │
-              └──────────────┬───────────────┘
-                             ▼
-              ┌──────────────────────────────┐
-              │   Agent Merge (Skills)       │
-              │   Rebase, fix, merge         │
-              └──────────────────────────────┘
+```mermaid
+flowchart TD
+    A["🚨 Agent opens PR"] --> B
+    B["🛡️ GHAS Security & CodeQL\n(vulnerability scanning)"] --> C
+    C["🔒 StepSecurity\n(egress policy auditing)"] --> D
+    D["🧹 Linting\nMegaLinter + golangci-lint"] --> E
+    E["🧪 Unit Test Suite\ngo test ./... + Codecov"] --> F
+    F["🚀 E2E / System Test Suite\nKind × K3d × Talos × VCluster"] --> G
+    G["✅ Agent Merge via Skills\nRebase, fix, merge"]
 ```
 
 *Every layer must pass before an agent PR can merge.*
