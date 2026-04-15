@@ -25,14 +25,13 @@ Some emojis with variation selectors (U+FE0F) render inconsistently across termi
 
 ### 0. XTerm Terminals Require unicode11
 
-**For xterm-based terminals:** Must configure go-runewidth properly:
+**For xterm-based terminals:** `go-runewidth` may require explicit unicode-width configuration for xterm/unicode11 behavior, but **importing the package alone does not do that**.
 
-```go
-import "github.com/mattn/go-runewidth"
+> Do not copy a snippet that only imports `github.com/mattn/go-runewidth` and assume xterm emoji widths are fixed. Follow the upstream `go-runewidth` documentation/issues for the exact configuration and any terminal detection needed for your environment.
 
-// Required initialization for xterm terminals
-// Without this, xterm won't handle emoji widths correctly
-```
+References:
+- https://github.com/mattn/go-runewidth
+- https://github.com/mattn/go-runewidth/issues
 
 ### 1. go-runewidth Bug #76 (Open since Feb 2024)
 

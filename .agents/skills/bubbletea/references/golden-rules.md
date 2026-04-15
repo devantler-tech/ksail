@@ -109,8 +109,8 @@ for i := 0; i < availableContentLines && i < len(content); i++ {
     lines = append(lines, line)
 }
 
-// Helper function (ASCII-only; for full Unicode/emoji support, use
-// runewidth.Truncate from github.com/mattn/go-runewidth)
+// Helper function using github.com/mattn/go-runewidth for
+// Unicode-aware width calculation and truncation
 func truncateString(s string, maxLen int) string {
     if runewidth.StringWidth(s) <= maxLen {
         return s
