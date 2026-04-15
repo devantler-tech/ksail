@@ -85,7 +85,7 @@ func (p *Provisioner) initContext(ctx context.Context) (context.Context, error) 
 	os.Args = args
 
 	flagset := pflag.NewFlagSet("kwokctl", pflag.ContinueOnError)
-	flagset.ParseErrorsWhitelist.UnknownFlags = true
+	flagset.ParseErrorsAllowlist.UnknownFlags = true
 	flagset.Usage = func() {}
 
 	ctx, _ = kwoklog.InitFlags(ctx, flagset)
@@ -117,7 +117,7 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 func (p *Provisioner) withCluster(
 	ctx context.Context,
 	target string,
-	fn func(kwokCtx context.Context) error,
+	action func(kwokCtx context.Context) error,
 ) error {
 	kwokGlobalMu.Lock()
 	defer kwokGlobalMu.Unlock()
@@ -129,7 +129,7 @@ func (p *Provisioner) withCluster(
 
 	defer setDefaultCluster(target)()
 
-	return fn(kwokCtx)
+	return action(kwokCtx)
 }
 
 // Create creates a KWOK cluster using kwokctl's create command.
