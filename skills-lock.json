@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "ebefe26b231d32379c14e41a46c2de7b4b0184543bedab7febdabe4fb21fba4e"
     },
+    "bubbletea": {
+      "source": "ggprompts/tfe",
+      "sourceType": "github",
+      "computedHash": "a06df850cbd8282da9c362bd5585150119c87032bb07417a141b71b6f0b966ba"
+    },
     "copilot-instructions-blueprint-generator": {
       "source": "github/awesome-copilot",
       "sourceType": "github",
@@ -36,6 +41,11 @@
       "sourceType": "github",
       "computedHash": "2607fc60629b82b257136dd2a7a373f0a4466c0b49df7746d845d59313c99b21"
     },
+    "github-actions-docs": {
+      "source": "xixu-me/skills",
+      "sourceType": "github",
+      "computedHash": "e9ac24e79715ef3060bd4ae376052f8d863b830604e69cb513b39764bf47ee53"
+    },
     "github-issues": {
       "source": "github/awesome-copilot",
       "sourceType": "github",
@@ -50,6 +60,11 @@
       "source": "github/awesome-copilot",
       "sourceType": "github",
       "computedHash": "87789a786b96f99ba0680e89345a975106e10e7db1071c7cdc2e76d507c449d6"
+    },
+    "test-driven-development": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "computedHash": "126f1ebf6ccd414f42544f6e83d8cc5adb089e1108eaffb7c400701e37eecd9f"
     },
     "web-design-guidelines": {
       "source": "vercel-labs/agent-skills",
