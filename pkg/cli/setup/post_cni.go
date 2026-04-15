@@ -51,6 +51,12 @@ const (
 	// the API server ClusterIP) is functional before GitOps operators start.
 	daemonSetStabilityTimeout = 3 * time.Minute
 
+	// nodeReadinessTimeout is the maximum time to wait for all cluster nodes
+	// to reach condition Ready=True. After Kind/K3d cluster creation, control-
+	// plane nodes may briefly carry a NotReady taint, causing FailedScheduling
+	// for workload pods if they are deployed before the taint clears.
+	nodeReadinessTimeout = 1 * time.Minute
+
 	// inClusterConnectivityTimeout is the maximum time to wait for a test pod
 	// to successfully reach the API server ClusterIP from within the cluster.
 	// This catches eBPF dataplane race conditions where Cilium DaemonSet pods
@@ -515,6 +521,16 @@ func waitForClusterStability(
 	)
 	if err != nil {
 		return fmt.Errorf("wait for API server stability: %w", err)
+	}
+
+	// Wait for all nodes to reach Ready state. After Kind/K3d cluster creation
+	// or infrastructure installations, control-plane nodes may briefly carry a
+	// NotReady taint that prevents workload scheduling. Without this check,
+	// pods deployed immediately after stability checks pass can hit
+	// FailedScheduling errors.
+	err = readiness.WaitForAllNodesReady(ctx, clientset, nodeReadinessTimeout)
+	if err != nil {
+		return fmt.Errorf("wait for all nodes to be ready: %w", err)
 	}
 
 	// Wait for all kube-system DaemonSets (including the CNI, e.g. Cilium)
