@@ -851,10 +851,10 @@ jobs:
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: ❌ Fail on turnstyle timeout
+      - name: ❌ Fail on turnstyle failure
         if: steps.turnstyle.outcome != 'success'
         run: |
-          echo "::error::Turnstyle timed out waiting for cloud test queue — no resources were created"
+          echo "::error::Turnstyle failed or timed out waiting for cloud test queue — no resources were created"
           exit 1
 
   system-test-hetzner-noinit:
@@ -955,10 +955,10 @@ jobs:
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: ❌ Fail on turnstyle timeout
+      - name: ❌ Fail on turnstyle failure
         if: steps.turnstyle.outcome != 'success'
         run: |
-          echo "::error::Turnstyle timed out waiting for cloud test queue — no resources were created"
+          echo "::error::Turnstyle failed or timed out waiting for cloud test queue — no resources were created"
           exit 1
 
   # Omni cloud tests are serialized across workflow runs via turnstyle to
@@ -1065,10 +1065,10 @@ jobs:
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: ❌ Fail on turnstyle timeout
+      - name: ❌ Fail on turnstyle failure
         if: steps.turnstyle.outcome != 'success'
         run: |
-          echo "::error::Turnstyle timed out waiting for cloud test queue — no resources were created"
+          echo "::error::Turnstyle failed or timed out waiting for cloud test queue — no resources were created"
           exit 1
 
   system-test-omni-noinit:
@@ -1166,10 +1166,10 @@ jobs:
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: ❌ Fail on turnstyle timeout
+      - name: ❌ Fail on turnstyle failure
         if: steps.turnstyle.outcome != 'success'
         run: |
-          echo "::error::Turnstyle timed out waiting for cloud test queue — no resources were created"
+          echo "::error::Turnstyle failed or timed out waiting for cloud test queue — no resources were created"
           exit 1
 
   benchmark:
