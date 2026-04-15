@@ -1,11 +1,11 @@
 {
-  "last_run": "2026-04-14T12:38:00Z",
-  "last_run_id": "24399246838",
-  "issue_backlog_cursor": 4006,
+  "last_run": "2026-04-15T01:02:00Z",
+  "last_run_id": "24430830245",
+  "issue_backlog_cursor": 4029,
   "monthly_activity_issue": 3605,
   "domain_alternation": {
-    "last_domain": "perf",
-    "next_domain": "test"
+    "last_domain": "refactor",
+    "next_domain": "perf"
   },
   "commented_issues": {
     "3572": "2026-04-04T12:24:00Z",
@@ -33,7 +33,9 @@
     "3922": "2026-04-11T12:25:00Z",
     "3917": "2026-04-13T01:03:00Z",
     "3999": "2026-04-14T01:02:00Z",
-    "3987": "2026-04-14T12:38:00Z"
+    "3987": "2026-04-14T12:38:00Z",
+    "4029": "2026-04-15T01:02:00Z",
+    "4022": "2026-04-15T01:02:00Z"
   },
   "labelled_issues": {
     "3412": ["next"],
@@ -77,20 +79,30 @@
       "branch": "repo-assist/fix-gitops-stability-k3s-no-infra-a63447659b360fe1",
       "title": "fix(setup): always wait for API server stability before GitOps installation",
       "fixes": 3973,
-      "created": "2026-04-13T13:04:00Z",
-      "rebased": "2026-04-14T01:02:00Z"
+      "created": "2026-04-13T13:04:00Z"
     },
     "bundle-deps": {
       "branch": "repo-assist/bundle-deps-go-containerregistry-copilot-sdk",
-      "title": "chore(deps): bundle Go dependency updates (go-containerregistry + copilot-sdk)",
+      "title": "chore(deps): bundle Go dependency updates",
       "closes": [3997, 3998],
       "created": "2026-04-14T01:02:00Z"
     },
     "fix-image-export-3987": {
       "branch": "repo-assist/fix-image-export-discard-unpacked-layers-3987",
-      "title": "fix(image): remove image ref before repair pull to handle discard_unpacked_layers",
+      "title": "fix(image): remove image ref before repair pull",
       "fixes": 3987,
       "created": "2026-04-14T12:38:00Z"
+    },
+    "fix-metricsserver-4029": {
+      "branch": "repo-assist/fix-metricsserver-auth-tolerate-4029",
+      "title": "fix(metricsserver): set --authentication-tolerate-lookup-failure=true",
+      "refs": 4029,
+      "created": "2026-04-15T01:02:00Z"
+    },
+    "refactor-ensure-oci": {
+      "branch": "repo-assist/refactor-ensure-oci-artifact-helper",
+      "title": "refactor(setup): extract callEnsureOCIArtifact helper",
+      "created": "2026-04-15T01:02:00Z"
     }
   },
   "nudged_prs": {},
@@ -98,6 +110,11 @@
     "3987": {
       "branch": "repo-assist/fix-image-export-discard-unpacked-layers-3987",
       "created": "2026-04-14T12:38:00Z",
+      "status": "open"
+    },
+    "4029": {
+      "branch": "repo-assist/fix-metricsserver-auth-tolerate-4029",
+      "created": "2026-04-15T01:02:00Z",
       "status": "open"
     }
   }
