@@ -160,7 +160,7 @@ A **Go CLI** and SDK for spinning up local Kubernetes clusters with GitOps built
 
 # My Role: Minimal but Intentional
 
-🖥️ A **Mac Mini runs 24/7 at home**, powering CI runners for KSail.
+🖥️ A **Mac Mini runs 24/7 at home**, firing scheduled prompts that trigger agents to work on KSail autonomously.
 
 ### What I actually do:
 
