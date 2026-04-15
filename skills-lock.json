@@ -31,6 +31,11 @@
       "sourceType": "github",
       "computedHash": "cbe644b0c6760ae2a1eaafa39133920d889331327065d92a131675a665273e56"
     },
+    "gh-stack": {
+      "source": "github/gh-stack",
+      "sourceType": "github",
+      "computedHash": "8b9495442dbade69f5adf375b50f93542bbc35314255bcdd94637df6a77bca1e"
+    },
     "git-commit": {
       "source": "github/awesome-copilot",
       "sourceType": "github",
