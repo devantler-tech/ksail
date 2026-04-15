@@ -220,7 +220,7 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 	}
 
 	if pathErr == nil {
-		verifyErr := verifyCopilotCLI(ctx, cliPath)
+		verifyErr := verifyCopilotCLI(ctx, cliPath, opts.Env)
 		if verifyErr != nil {
 			return nil, verifyErr
 		}
@@ -260,14 +260,16 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 
 // verifyCopilotCLI runs a quick version check on the resolved copilot binary
 // to catch common issues (missing binary, corrupt install, wrong binary)
-// before the SDK attempts a full startup.
-func verifyCopilotCLI(ctx context.Context, cliPath string) error {
+// before the SDK attempts a full startup. The provided env is used so the
+// pre-flight check matches the filtered environment the SDK will use.
+func verifyCopilotCLI(ctx context.Context, cliPath string, env []string) error {
 	const verifyTimeout = 5 * time.Second
 
 	verifyCtx, cancel := context.WithTimeout(ctx, verifyTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(verifyCtx, cliPath, "--version")
+	cmd.Env = env
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
