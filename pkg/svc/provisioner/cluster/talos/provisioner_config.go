@@ -205,22 +205,34 @@ func (p *Provisioner) isDockerProvider() bool {
 func dockerPreBootSequenceChecks() []check.ClusterCheck {
 	return []check.ClusterCheck{
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("etcd to be healthy", func(ctx context.Context) error {
-				return check.ServiceHealthAssertion(
-					ctx, cluster, "etcd",
-					check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane),
-				)
-			}, preBootPollInterval)
+			return conditions.PollingCondition(
+				"etcd to be healthy",
+				func(ctx context.Context) error {
+					return check.ServiceHealthAssertion(
+						ctx, cluster, "etcd",
+						check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane),
+					)
+				},
+				preBootPollInterval,
+			)
 		},
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("etcd members to be consistent across nodes", func(ctx context.Context) error {
-				return check.EtcdConsistentAssertion(ctx, cluster)
-			}, preBootPollInterval)
+			return conditions.PollingCondition(
+				"etcd members to be consistent across nodes",
+				func(ctx context.Context) error {
+					return check.EtcdConsistentAssertion(ctx, cluster)
+				},
+				preBootPollInterval,
+			)
 		},
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("etcd members to be control plane nodes", func(ctx context.Context) error {
-				return check.EtcdControlPlaneNodesAssertion(ctx, cluster)
-			}, preBootPollInterval)
+			return conditions.PollingCondition(
+				"etcd members to be control plane nodes",
+				func(ctx context.Context) error {
+					return check.EtcdControlPlaneNodesAssertion(ctx, cluster)
+				},
+				preBootPollInterval,
+			)
 		},
 		func(cluster check.ClusterInfo) conditions.Condition {
 			return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
@@ -231,17 +243,25 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 		// AllNodesDiskSizes — skipped: diagnostic-only, Docker containers have consistent resources
 		// NoDiagnostics — skipped: informational-only, not a readiness gate
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("kubelet to be healthy", func(ctx context.Context) error {
-				return check.ServiceHealthAssertion(
-					ctx, cluster, "kubelet",
-					check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane),
-				)
-			}, preBootPollInterval)
+			return conditions.PollingCondition(
+				"kubelet to be healthy",
+				func(ctx context.Context) error {
+					return check.ServiceHealthAssertion(
+						ctx, cluster, "kubelet",
+						check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane),
+					)
+				},
+				preBootPollInterval,
+			)
 		},
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("all nodes to finish boot sequence", func(ctx context.Context) error {
-				return check.AllNodesBootedAssertion(ctx, cluster)
-			}, preBootPollInterval)
+			return conditions.PollingCondition(
+				"all nodes to finish boot sequence",
+				func(ctx context.Context) error {
+					return check.AllNodesBootedAssertion(ctx, cluster)
+				},
+				preBootPollInterval,
+			)
 		},
 	}
 }
