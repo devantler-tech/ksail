@@ -1474,7 +1474,7 @@ func createOCITar(t *testing.T, entries map[string][]byte) []byte {
 
 	var buf bytes.Buffer
 
-	tw := tar.NewWriter(&buf)
+	tarWriter := tar.NewWriter(&buf)
 
 	for name, content := range entries {
 		header := &tar.Header{
@@ -1484,14 +1484,14 @@ func createOCITar(t *testing.T, entries map[string][]byte) []byte {
 			Typeflag: tar.TypeReg,
 		}
 
-		err := tw.WriteHeader(header)
+		err := tarWriter.WriteHeader(header)
 		require.NoError(t, err)
 
-		_, err = tw.Write(content)
+		_, err = tarWriter.Write(content)
 		require.NoError(t, err)
 	}
 
-	err := tw.Close()
+	err := tarWriter.Close()
 	require.NoError(t, err)
 
 	return buf.Bytes()
@@ -1551,7 +1551,7 @@ func TestValidateExportedTarTruncatedBlob(t *testing.T) {
 
 	err = image.ValidateExportedTar(tarPath)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, image.ErrBlobIntegrityFailed)
+	require.ErrorIs(t, err, image.ErrBlobIntegrityFailed)
 	assert.Contains(t, err.Error(), correctDigest)
 }
 
@@ -1571,9 +1571,9 @@ func TestValidateExportedTarEmptyTar(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	tw := tar.NewWriter(&buf)
+	tarWriter := tar.NewWriter(&buf)
 
-	err := tw.Close()
+	err := tarWriter.Close()
 	require.NoError(t, err)
 
 	tarPath := filepath.Join(t.TempDir(), "empty.tar")
@@ -1606,4 +1606,68 @@ func TestValidateExportedTarFileNotFound(t *testing.T) {
 	err := image.ValidateExportedTar(filepath.Join(t.TempDir(), "subdir", "nonexistent.tar"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to open exported tar for validation")
+}
+
+func TestValidateExportedTarShortRead(t *testing.T) {
+	t.Parallel()
+
+	fullContent := []byte("this is the complete blob data, all of it")
+	correctDigest := sha256Hex(fullContent)
+
+	// Build a tar where the header declares len(fullContent) bytes but only
+	// half are written, simulating ctr export truncation in the content store.
+	var buf bytes.Buffer
+
+	tarWriter := tar.NewWriter(&buf)
+
+	header := &tar.Header{
+		Name:     blobPath(correctDigest),
+		Mode:     0o644,
+		Size:     int64(len(fullContent)),
+		Typeflag: tar.TypeReg,
+	}
+
+	err := tarWriter.WriteHeader(header)
+	require.NoError(t, err)
+
+	_, err = tarWriter.Write(fullContent[:len(fullContent)/2])
+	require.NoError(t, err)
+
+	// Intentionally do not close the writer — the archive is incomplete.
+	tarPath := filepath.Join(t.TempDir(), "short-read.tar")
+	err = os.WriteFile(tarPath, buf.Bytes(), 0o600)
+	require.NoError(t, err)
+
+	err = image.ValidateExportedTar(tarPath)
+	require.Error(t, err)
+	require.ErrorIs(t, err, image.ErrBlobIntegrityFailed)
+}
+
+func TestValidateExportedTarMidStreamCorruption(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("blob content to validate")
+	digest := sha256Hex(content)
+
+	tarData := createOCITar(t, map[string][]byte{
+		"oci-layout":     []byte(`{"imageLayoutVersion":"1.0.0"}`),
+		blobPath(digest): content,
+	})
+
+	// Each tar entry occupies 512 bytes (header) + ceil(len/512)*512 bytes (data).
+	// Small content fits in one 512-byte data block, so each entry is 1024 bytes.
+	// Truncating at 1024+100 cuts the second entry's header in half, producing a
+	// mid-stream parse error after at least one entry has been successfully read.
+	truncateAt := 1024 + 100
+	if truncateAt > len(tarData) {
+		truncateAt = len(tarData) / 2
+	}
+
+	tarPath := filepath.Join(t.TempDir(), "mid-stream.tar")
+	err := os.WriteFile(tarPath, tarData[:truncateAt], 0o600)
+	require.NoError(t, err)
+
+	err = image.ValidateExportedTar(tarPath)
+	require.Error(t, err)
+	require.ErrorIs(t, err, image.ErrBlobIntegrityFailed)
 }
