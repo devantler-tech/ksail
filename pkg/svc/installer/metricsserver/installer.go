@@ -28,6 +28,10 @@ func NewInstaller(
 //
 // VCluster virtualizes the kubelet API with self-signed certificates, so
 // --kubelet-insecure-tls is required for metrics-server to scrape metrics.
+//
+// --authentication-tolerate-lookup-failure is always set to prevent metrics-server
+// from panicking when the API server is transiently unreachable at startup (e.g. Cilium
+// eBPF service map not yet fully programmed for the pod's network namespace).
 func NewInstallerWithDistribution(
 	client helm.Interface,
 	timeout time.Duration,
@@ -65,8 +69,11 @@ func NewInstallerWithDistribution(
 func buildValuesYaml(distribution v1alpha1.Distribution) string {
 	// Use InternalIP for node communication in local development clusters.
 	// Secure TLS is enabled by default - kubelet-csr-approver handles certificate approval.
+	// Tolerate transient auth lookup failures so metrics-server retries rather than
+	// panicking when the API server ClusterIP is briefly unreachable at pod startup.
 	base := `args:
-  - --kubelet-preferred-address-types=InternalIP`
+  - --kubelet-preferred-address-types=InternalIP
+  - --authentication-tolerate-lookup-failure=true`
 
 	// VCluster virtualizes the kubelet API behind its own proxy, which uses
 	// self-signed TLS certificates that metrics-server cannot verify.
