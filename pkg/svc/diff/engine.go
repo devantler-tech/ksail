@@ -143,7 +143,9 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 			getVal: func(spec *v1alpha1.ClusterSpec) string {
 				// K3s, VCluster, and KWOK have no CDI runtime wiring — suppress diffs.
 				switch e.distribution {
-				case v1alpha1.DistributionK3s, v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK:
+				case v1alpha1.DistributionK3s,
+					v1alpha1.DistributionVCluster,
+					v1alpha1.DistributionKWOK:
 					return string(v1alpha1.CDIDisabled)
 				case v1alpha1.DistributionVanilla, v1alpha1.DistributionTalos:
 					return string(spec.CDI.EffectiveValue(e.distribution, e.provider))

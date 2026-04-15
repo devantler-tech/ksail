@@ -337,7 +337,10 @@ func runHostDebug(cmd *cobra.Command, nodeName string, args []string) error {
 			debugImage,
 			args,
 		)
-	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s, v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK:
+	case v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
+		v1alpha1.DistributionVCluster,
+		v1alpha1.DistributionKWOK:
 		if info.Provider != v1alpha1.ProviderDocker {
 			return fmt.Errorf(
 				"%w: %s with %s provider",

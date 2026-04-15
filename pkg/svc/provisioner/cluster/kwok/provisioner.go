@@ -5,23 +5,22 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sync"
-
-	"github.com/spf13/pflag"
 
 	runner "github.com/devantler-tech/ksail/v6/pkg/runner"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/spf13/pflag"
 	"sigs.k8s.io/kwok/pkg/config"
 	createcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/create/cluster"
 	deletecluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/delete/cluster"
 	startcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/start/cluster"
 	stopcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/stop/cluster"
 	kwokruntime "sigs.k8s.io/kwok/pkg/kwokctl/runtime"
-	kwoklog "sigs.k8s.io/kwok/pkg/log"
-
 	// Register the Docker compose runtime so kwokctl can find it.
 	_ "sigs.k8s.io/kwok/pkg/kwokctl/runtime/compose"
+	kwoklog "sigs.k8s.io/kwok/pkg/log"
 )
 
 // kwokControllerImageVersion is the released KWOK image version to use.
@@ -174,6 +173,7 @@ func (p *Provisioner) List(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to list KWOK clusters: %w", err)
 	}
+
 	defer globalMu.Unlock()
 
 	return p.listWithContext(kwokCtx)
@@ -185,6 +185,7 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("failed to check cluster existence: %w", err)
 	}
+
 	defer globalMu.Unlock()
 
 	return p.existsWithContext(kwokCtx, p.resolveName(name))
@@ -203,6 +204,7 @@ func (p *Provisioner) initContext(
 	configPath string,
 ) (context.Context, error) {
 	origArgs := os.Args
+
 	defer func() { os.Args = origArgs }()
 
 	cfgPath := configPath
@@ -214,6 +216,7 @@ func (p *Provisioner) initContext(
 	if cfgPath != "" {
 		args = append(args, "--config", cfgPath)
 	}
+
 	os.Args = args
 
 	flagset := pflag.NewFlagSet("kwokctl", pflag.ContinueOnError)
@@ -282,10 +285,8 @@ func (p *Provisioner) existsWithContext(kwokCtx context.Context, target string) 
 		return false, err
 	}
 
-	for _, c := range clusters {
-		if c == target {
-			return true, nil
-		}
+	if slices.Contains(clusters, target) {
+		return true, nil
 	}
 
 	return false, nil

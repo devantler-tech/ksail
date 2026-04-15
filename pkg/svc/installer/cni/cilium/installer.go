@@ -176,7 +176,10 @@ func (c *Installer) getCiliumValues() map[string]string {
 	case v1alpha1.DistributionTalos:
 		// Talos-specific settings from https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
 		maps.Copy(values, talosCiliumValues())
-	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s, v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK:
+	case v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
+		v1alpha1.DistributionVCluster,
+		v1alpha1.DistributionKWOK:
 		// Vanilla, K3s, VCluster, and KWOK use default values
 	}
 
