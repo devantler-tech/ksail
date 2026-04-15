@@ -232,3 +232,13 @@ func RenameKubeconfigContextForTest(kubeconfigData []byte, desiredContext string
 
 	return result, nil
 }
+
+// IsDockerProviderForTest exposes isDockerProvider for unit testing.
+func (p *Provisioner) IsDockerProviderForTest() bool {
+	return p.isDockerProvider()
+}
+
+// ClusterReadinessChecksCountForTest returns the number of checks from clusterReadinessChecks for unit testing.
+func (p *Provisioner) ClusterReadinessChecksCountForTest() int {
+	return len(p.clusterReadinessChecks())
+}

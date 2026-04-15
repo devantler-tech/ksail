@@ -431,26 +431,43 @@ func TestAPIServerStabilitySuccesses(t *testing.T) {
 	tests := []struct {
 		name         string
 		distribution v1alpha1.Distribution
+		provider     v1alpha1.Provider
 		expected     int
 	}{
 		{
 			name:         "Vanilla uses fast (reduced) successes",
 			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderDocker,
 			expected:     setup.APIServerStabilitySuccessesFast,
 		},
 		{
 			name:         "K3s uses fast (reduced) successes",
 			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
 			expected:     setup.APIServerStabilitySuccessesFast,
 		},
 		{
-			name:         "Talos uses default (full) successes",
+			name:         "Talos Docker uses fast (reduced) successes",
 			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     setup.APIServerStabilitySuccessesFast,
+		},
+		{
+			name:         "Talos empty provider uses fast (reduced) successes",
+			distribution: v1alpha1.DistributionTalos,
+			provider:     "",
+			expected:     setup.APIServerStabilitySuccessesFast,
+		},
+		{
+			name:         "Talos Hetzner uses default (full) successes",
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderHetzner,
 			expected:     setup.APIServerStabilitySuccessesDefault,
 		},
 		{
 			name:         "VCluster uses default (full) successes",
 			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderDocker,
 			expected:     setup.APIServerStabilitySuccessesDefault,
 		},
 	}
@@ -460,7 +477,9 @@ func TestAPIServerStabilitySuccesses(t *testing.T) {
 			t.Parallel()
 
 			assert.Equal(
-				t, testCase.expected, setup.APIServerStabilitySuccesses(testCase.distribution),
+				t,
+				testCase.expected,
+				setup.APIServerStabilitySuccesses(testCase.distribution, testCase.provider),
 			)
 		})
 	}

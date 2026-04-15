@@ -1481,7 +1481,7 @@ func setupMockRegistryBackend(t *testing.T) {
 	// Tests use a fake kubeconfig without a real cluster, so the real
 	// stability check would time out waiting for API server connectivity.
 	t.Cleanup(setup.SetClusterStabilityCheckForTests(
-		func(_ context.Context, _ *v1alpha1.Cluster) error {
+		func(_ context.Context, _ *v1alpha1.Cluster, _ bool) error {
 			return nil
 		},
 	))

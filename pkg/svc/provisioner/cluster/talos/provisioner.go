@@ -58,6 +58,9 @@ const (
 	talosAPIWaitTimeout = 5 * time.Minute
 	// bootstrapTimeout is the timeout for bootstrap operations.
 	bootstrapTimeout = 2 * time.Minute
+	// preBootPollInterval is the polling interval for pre-boot sequence checks.
+	// Matches the Talos SDK's default of 5 seconds per check.
+	preBootPollInterval = 5 * time.Second
 	// retryInterval is the default interval between retry attempts.
 	retryInterval = 5 * time.Second
 	// longRetryInterval is the interval for longer operations.
