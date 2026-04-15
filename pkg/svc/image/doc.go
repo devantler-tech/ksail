@@ -31,4 +31,7 @@ var (
 	ErrUnsupportedDistribution = errors.New(
 		"talos does not support image export/import (immutable OS without shell access)",
 	)
+	// ErrBlobIntegrityFailed is returned when an OCI blob's SHA256 digest does not match
+	// its expected value (filename). This indicates a truncated or corrupted export.
+	ErrBlobIntegrityFailed = errors.New("blob integrity check failed")
 )
