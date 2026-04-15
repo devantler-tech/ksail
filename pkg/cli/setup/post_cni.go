@@ -70,14 +70,22 @@ const (
 )
 
 // apiServerStabilitySuccesses returns the number of consecutive successful
-// API server health checks required based on the distribution. Vanilla and K3s
-// distributions stabilize faster after webhook registrations, so fewer
-// consecutive successes are required.
-func apiServerStabilitySuccesses(dist v1alpha1.Distribution) int {
+// API server health checks required based on the distribution and provider.
+// Vanilla and K3s distributions stabilize faster after webhook registrations,
+// so fewer consecutive successes are required. Talos on the Docker provider
+// also uses the fast threshold because Docker containers do not experience
+// the network flapping seen in cloud environments.
+func apiServerStabilitySuccesses(dist v1alpha1.Distribution, prov v1alpha1.Provider) int {
 	switch dist {
 	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s:
 		return apiServerStabilitySuccessesFast
-	case v1alpha1.DistributionTalos, v1alpha1.DistributionVCluster:
+	case v1alpha1.DistributionTalos:
+		if prov == v1alpha1.ProviderDocker || prov == "" {
+			return apiServerStabilitySuccessesFast
+		}
+
+		return apiServerStabilitySuccessesDefault
+	case v1alpha1.DistributionVCluster:
 		return apiServerStabilitySuccessesDefault
 	default:
 		return apiServerStabilitySuccessesDefault
@@ -100,12 +108,12 @@ var (
 	//nolint:gochecknoglobals // dependency injection for tests
 	clusterStabilityCheckMu sync.RWMutex
 	//nolint:gochecknoglobals // dependency injection for tests
-	clusterStabilityCheckOverride func(context.Context, *v1alpha1.Cluster) error
+	clusterStabilityCheckOverride func(context.Context, *v1alpha1.Cluster, bool) error
 )
 
 // getClusterStabilityCheckFn returns the cluster stability check function,
 // using the test override if one is set.
-func getClusterStabilityCheckFn() func(context.Context, *v1alpha1.Cluster) error {
+func getClusterStabilityCheckFn() func(context.Context, *v1alpha1.Cluster, bool) error {
 	clusterStabilityCheckMu.RLock()
 	defer clusterStabilityCheckMu.RUnlock()
 
@@ -119,7 +127,7 @@ func getClusterStabilityCheckFn() func(context.Context, *v1alpha1.Cluster) error
 // SetClusterStabilityCheckForTests overrides the cluster stability check for testing.
 // Returns a cleanup function that restores the previous check.
 func SetClusterStabilityCheckForTests(
-	fn func(context.Context, *v1alpha1.Cluster) error,
+	fn func(context.Context, *v1alpha1.Cluster, bool) error,
 ) func() {
 	clusterStabilityCheckMu.Lock()
 
@@ -263,11 +271,15 @@ func needsCSIInstall(clusterCfg *v1alpha1.Cluster) bool {
 // InstallPostCNIComponents installs all post-CNI components in parallel.
 // This includes metrics-server, CSI, cert-manager, and GitOps engines (Flux/ArgoCD).
 // For Flux, the OCI artifact push and readiness wait happens after installation.
+// cniInstalled indicates whether CNI was just installed — when true, the node
+// readiness check in the stability pre-flight is skipped since waitForCNIReadiness
+// already verified it.
 func InstallPostCNIComponents(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 	tmr timer.Timer,
+	cniInstalled bool,
 ) error {
 	reqs := GetComponentRequirements(clusterCfg)
 
@@ -292,7 +304,7 @@ func InstallPostCNIComponents(
 		}
 	}
 
-	err := installComponentsInPhases(ctx, cmd, clusterCfg, factories, tmr, reqs)
+	err := installComponentsInPhases(ctx, cmd, clusterCfg, factories, tmr, reqs, cniInstalled)
 	if err != nil {
 		return err
 	}
@@ -314,13 +326,14 @@ func installComponentsInPhases(
 	factories *InstallerFactories,
 	tmr timer.Timer,
 	reqs ComponentRequirements,
+	cniInstalled bool,
 ) error {
 	writer := cmd.OutOrStdout()
 	labels := notify.InstallingLabels()
 
 	infraTasks := buildInfrastructureTasks(clusterCfg, factories, reqs)
 	if len(infraTasks) > 0 {
-		err := runInfraPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks)
+		err := runInfraPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks, cniInstalled)
 		if err != nil {
 			return err
 		}
@@ -328,6 +341,8 @@ func installComponentsInPhases(
 
 	gitopsTasks := buildGitOpsTasks(clusterCfg, factories, reqs)
 	if len(gitopsTasks) > 0 {
+		// After infra phase, CNI node readiness is no longer fresh — always
+		// run the full stability check before GitOps installation.
 		err := runGitOpsPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks, gitopsTasks)
 		if err != nil {
 			return err
@@ -341,6 +356,8 @@ func installComponentsInPhases(
 // load-balancer, kubelet-csr-approver, CSI, cert-manager, policy-engine).
 // For Cilium CNI, a pre-flight stability check ensures the eBPF dataplane
 // has programmed pod-to-service routing before components are deployed.
+// cniInstalled indicates whether CNI was just installed — when true, the node
+// readiness check in the stability pre-flight is skipped.
 func runInfraPhase(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -348,9 +365,10 @@ func runInfraPhase(
 	labels notify.ProgressLabels,
 	tmr timer.Timer,
 	infraTasks []notify.ProgressTask,
+	cniInstalled bool,
 ) error {
 	if needsInClusterConnectivityCheck(clusterCfg) {
-		err := getClusterStabilityCheckFn()(ctx, clusterCfg)
+		err := getClusterStabilityCheckFn()(ctx, clusterCfg, cniInstalled)
 		if err != nil {
 			return fmt.Errorf(
 				"cluster not stable before infrastructure installation: %w", err,
@@ -392,7 +410,7 @@ func runGitOpsPhase(
 	infraTasks []notify.ProgressTask,
 	gitopsTasks []notify.ProgressTask,
 ) error {
-	err := getClusterStabilityCheckFn()(ctx, clusterCfg)
+	err := getClusterStabilityCheckFn()(ctx, clusterCfg, false)
 	if err != nil {
 		if len(infraTasks) > 0 {
 			return fmt.Errorf(
@@ -498,9 +516,13 @@ func buildGitOpsTasks(
 // dataplane programming) and as a gate between Phase 1 and Phase 2 (to prevent
 // GitOps operators from entering CrashLoopBackOff due to transient API server
 // connectivity issues after infrastructure components register webhooks).
+//
+// When cniInstalled is true, the WaitForAllNodesReady check is skipped because
+// waitForCNIReadiness already verified node readiness moments ago.
 func waitForClusterStability(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
+	cniInstalled bool,
 ) error {
 	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
 	if err != nil {
@@ -514,7 +536,10 @@ func waitForClusterStability(
 		return fmt.Errorf("create clientset for API server check: %w", err)
 	}
 
-	successes := apiServerStabilitySuccesses(clusterCfg.Spec.Cluster.Distribution)
+	successes := apiServerStabilitySuccesses(
+		clusterCfg.Spec.Cluster.Distribution,
+		clusterCfg.Spec.Cluster.Provider,
+	)
 
 	err = readiness.WaitForAPIServerStable(
 		ctx, clientset, apiServerStabilityTimeout, successes,
@@ -528,9 +553,14 @@ func waitForClusterStability(
 	// NotReady taint that prevents workload scheduling. Without this check,
 	// pods deployed immediately after stability checks pass can hit
 	// FailedScheduling errors.
-	err = readiness.WaitForAllNodesReady(ctx, clientset, nodeReadinessTimeout)
-	if err != nil {
-		return fmt.Errorf("wait for all nodes to be ready: %w", err)
+	//
+	// Skipped when CNI was just installed: waitForCNIReadiness already verified
+	// node readiness, so re-checking immediately would be redundant.
+	if !cniInstalled {
+		err = readiness.WaitForAllNodesReady(ctx, clientset, nodeReadinessTimeout)
+		if err != nil {
+			return fmt.Errorf("wait for all nodes to be ready: %w", err)
+		}
 	}
 
 	// Wait for all kube-system DaemonSets (including the CNI, e.g. Cilium)

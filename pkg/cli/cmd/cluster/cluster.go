@@ -1436,7 +1436,7 @@ func handlePostCreationSetup(
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
 ) error {
-	_, err := setup.InstallCNI(cmd, clusterCfg, tmr)
+	cniInstalled, err := setup.InstallCNI(cmd, clusterCfg, tmr)
 	if err != nil {
 		return fmt.Errorf("failed to install CNI: %w", err)
 	}
@@ -1450,6 +1450,7 @@ func handlePostCreationSetup(
 		clusterCfg,
 		factories,
 		outputTimer,
+		cniInstalled,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to install post-CNI components: %w", err)
