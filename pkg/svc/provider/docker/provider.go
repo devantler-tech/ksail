@@ -264,20 +264,9 @@ func (p *Provider) listKindContainers(
 	// Kind uses container names with format: <cluster>-control-plane, <cluster>-worker,
 	// etc. Mirror helper containers can share the same prefix, so keep only names that
 	// map back to the requested cluster via the Kind node naming rules.
-	containers, err := p.client.ContainerList(ctx, container.ListOptions{All: true})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list containers: %w", err)
-	}
-
-	var result []container.Summary
-
-	for _, ctr := range containers {
-		if p.extractClusterName(ctr) == clusterName {
-			result = append(result, ctr)
-		}
-	}
-
-	return result, nil
+	return p.filterContainers(ctx, func(ctr container.Summary) bool {
+		return p.extractClusterName(ctr) == clusterName
+	})
 }
 
 // listContainersByLabels lists containers matching the given label filters.
@@ -415,18 +404,23 @@ func (p *Provider) listVClusterContainers(
 	nodePrefix := vclusterNodePrefix + clusterName + "."
 	lbPrefix := vclusterLBPrefix + clusterName + "."
 
-	return p.filterContainers(ctx, func(name string) bool {
-		return name == cpPrefix || strings.HasPrefix(name, nodePrefix) ||
-			strings.HasPrefix(name, lbPrefix)
+	return p.filterContainers(ctx, func(ctr container.Summary) bool {
+		for _, rawName := range ctr.Names {
+			name := strings.TrimPrefix(rawName, "/")
+			if name == cpPrefix || strings.HasPrefix(name, nodePrefix) ||
+				strings.HasPrefix(name, lbPrefix) {
+				return true
+			}
+		}
+
+		return false
 	})
 }
 
-// filterContainers returns containers whose Docker name (with leading "/" stripped)
-// matches the given predicate. This deduplicates the list-and-filter pattern
-// shared across distribution-specific listing methods.
+// filterContainers returns containers matching the given predicate.
 func (p *Provider) filterContainers(
 	ctx context.Context,
-	match func(name string) bool,
+	match func(container.Summary) bool,
 ) ([]container.Summary, error) {
 	containers, err := p.client.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
@@ -436,12 +430,8 @@ func (p *Provider) filterContainers(
 	var result []container.Summary
 
 	for _, ctr := range containers {
-		for _, rawName := range ctr.Names {
-			if match(strings.TrimPrefix(rawName, "/")) {
-				result = append(result, ctr)
-
-				break
-			}
+		if match(ctr) {
+			result = append(result, ctr)
 		}
 	}
 
@@ -528,8 +518,14 @@ func (p *Provider) listKWOKContainers(
 ) ([]container.Summary, error) {
 	prefix := kwokContainerPrefix + clusterName + "-"
 
-	return p.filterContainers(ctx, func(name string) bool {
-		return strings.HasPrefix(name, prefix)
+	return p.filterContainers(ctx, func(ctr container.Summary) bool {
+		for _, rawName := range ctr.Names {
+			if strings.HasPrefix(strings.TrimPrefix(rawName, "/"), prefix) {
+				return true
+			}
+		}
+
+		return false
 	})
 }
 
