@@ -87,7 +87,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		defer cleanup()
 	}
 
-	return p.withCluster(ctx, target, func(kwokCtx context.Context) error {
+	return p.withCluster(ctx, target, configPath, func(kwokCtx context.Context) error {
 		cmd := createcluster.NewCommand(kwokCtx)
 
 		args := []string{
@@ -114,7 +114,7 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	globalMu.Lock()
 	defer globalMu.Unlock()
 
-	kwokCtx, err := p.initContext(ctx)
+	kwokCtx, err := p.initContext(ctx, "")
 	if err != nil {
 		return fmt.Errorf("failed to delete KWOK cluster: %w", err)
 	}
@@ -142,7 +142,7 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 
 // Start starts a stopped KWOK cluster.
 func (p *Provisioner) Start(ctx context.Context, name string) error {
-	return p.withCluster(ctx, p.resolveName(name), func(kwokCtx context.Context) error {
+	return p.withCluster(ctx, p.resolveName(name), "", func(kwokCtx context.Context) error {
 		cmd := startcluster.NewCommand(kwokCtx)
 
 		_, err := p.runner.Run(kwokCtx, cmd, []string{})
@@ -156,7 +156,7 @@ func (p *Provisioner) Start(ctx context.Context, name string) error {
 
 // Stop stops a running KWOK cluster.
 func (p *Provisioner) Stop(ctx context.Context, name string) error {
-	return p.withCluster(ctx, p.resolveName(name), func(kwokCtx context.Context) error {
+	return p.withCluster(ctx, p.resolveName(name), "", func(kwokCtx context.Context) error {
 		cmd := stopcluster.NewCommand(kwokCtx)
 
 		_, err := p.runner.Run(kwokCtx, cmd, []string{})
@@ -196,14 +196,23 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 // We temporarily override os.Args so that the kwokctl flag parsers receive
 // only the flags relevant to KWOK (e.g. --config <path>).
 //
-// The caller must hold globalMu.
-func (p *Provisioner) initContext(ctx context.Context) (context.Context, error) {
+// configPath overrides p.configPath when non-empty (used by Create to pass
+// the resolved temp-file path). The caller must hold globalMu.
+func (p *Provisioner) initContext(
+	ctx context.Context,
+	configPath string,
+) (context.Context, error) {
 	origArgs := os.Args
 	defer func() { os.Args = origArgs }()
 
+	cfgPath := configPath
+	if cfgPath == "" {
+		cfgPath = p.configPath
+	}
+
 	args := []string{"kwokctl"}
-	if p.configPath != "" {
-		args = append(args, "--config", p.configPath)
+	if cfgPath != "" {
+		args = append(args, "--config", cfgPath)
 	}
 	os.Args = args
 
@@ -223,16 +232,17 @@ func (p *Provisioner) initContext(ctx context.Context) (context.Context, error) 
 
 // withCluster acquires globalMu, initializes the kwokctl context,
 // sets config.DefaultCluster for the duration of action, and restores it
-// on return.
+// on return. configPath overrides p.configPath for context init.
 func (p *Provisioner) withCluster(
 	ctx context.Context,
 	target string,
+	configPath string,
 	action func(kwokCtx context.Context) error,
 ) error {
 	globalMu.Lock()
 	defer globalMu.Unlock()
 
-	kwokCtx, err := p.initContext(ctx)
+	kwokCtx, err := p.initContext(ctx, configPath)
 	if err != nil {
 		return err
 	}
@@ -247,7 +257,7 @@ func (p *Provisioner) withCluster(
 func (p *Provisioner) lockAndInit(ctx context.Context) (context.Context, error) {
 	globalMu.Lock()
 
-	kwokCtx, err := p.initContext(ctx)
+	kwokCtx, err := p.initContext(ctx, "")
 	if err != nil {
 		globalMu.Unlock()
 

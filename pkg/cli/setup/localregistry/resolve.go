@@ -76,8 +76,9 @@ func resolveClusterName(
 
 		return "vcluster-default"
 	case v1alpha1.DistributionKWOK:
-		if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
-			return strings.TrimPrefix(name, "kwok-")
+		ctx := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
+		if name, ok := strings.CutPrefix(ctx, "kwok-"); ok && name != "" {
+			return name
 		}
 
 		return "kwok-default"
@@ -94,36 +95,25 @@ func resolveNetworkName(
 	case v1alpha1.DistributionVanilla:
 		return "kind"
 	case v1alpha1.DistributionK3s:
-		trimmed := strings.TrimSpace(clusterName)
-		if trimmed == "" {
-			trimmed = "k3d"
-		}
-
-		return "k3d-" + trimmed
+		return "k3d-" + trimOrDefault(clusterName, "k3d")
 	case v1alpha1.DistributionTalos:
-		trimmed := strings.TrimSpace(clusterName)
-		if trimmed == "" {
-			trimmed = "talos-default"
-		}
-
-		return trimmed
+		return trimOrDefault(clusterName, "talos-default")
 	case v1alpha1.DistributionVCluster:
-		trimmed := strings.TrimSpace(clusterName)
-		if trimmed == "" {
-			trimmed = "vcluster-default"
-		}
-
-		return "vcluster." + trimmed
+		return "vcluster." + trimOrDefault(clusterName, "vcluster-default")
 	case v1alpha1.DistributionKWOK:
-		trimmed := strings.TrimSpace(clusterName)
-		if trimmed == "" {
-			trimmed = "kwok-default"
-		}
-
-		return "kwok-" + trimmed
+		return "kwok-" + trimOrDefault(clusterName, "kwok-default")
 	default:
 		return ""
 	}
+}
+
+func trimOrDefault(name, fallback string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return fallback
+	}
+
+	return trimmed
 }
 
 func newCreateOptions(

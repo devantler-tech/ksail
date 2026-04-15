@@ -116,7 +116,7 @@ Installed after a cluster stability check confirms the API server is fully ready
 
 Before Phase 2, KSail always performs a **Cluster Stability Check** with three sequential steps:
 
-1. **API server stability** — requires consecutive successful health checks within a 2-minute timeout. The threshold is distribution-aware: 3 checks for Vanilla and K3s (which stabilize faster after webhook registration), and 5 for Talos, VCluster, and KWOK.
+1. **API server stability** — requires consecutive successful health checks within a 2-minute timeout. The threshold is distribution-aware: 3 checks for Vanilla, K3s, and KWOK (which stabilize faster after webhook registration), and 5 for Talos and VCluster.
 2. **DaemonSet readiness** — verifies all kube-system DaemonSets are ready within a 3-minute timeout. Runs after API server stability, as it does not retry transient transport errors.
 3. **In-cluster API connectivity** *(Cilium only)* — creates a short-lived busybox pod that tests TCP connectivity to the API server ClusterIP (port 443) from within the cluster, with a 2-minute timeout. Only performed for Cilium CNI, where eBPF dataplane programming may lag behind DaemonSet readiness. Skipped for the default (distribution-provided) CNI and Calico.
 
