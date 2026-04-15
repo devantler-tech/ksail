@@ -2911,7 +2911,11 @@ func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath string) error {
 		}
 
 		if attempt < clusterInfoMaxAttempts {
-			time.Sleep(clusterInfoRetryDelay)
+			select {
+			case <-time.After(clusterInfoRetryDelay):
+			case <-cmd.Context().Done():
+				return fmt.Errorf("kubectl cluster-info cancelled: %w", cmd.Context().Err())
+			}
 		}
 	}
 
