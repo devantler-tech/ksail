@@ -200,6 +200,7 @@ func (p *Provisioner) isDockerProvider() bool {
 // dockerEtcdChecks returns the etcd-related pre-boot checks for Docker environments.
 func dockerEtcdChecks() []check.ClusterCheck {
 	cpTypes := check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane)
+
 	return []check.ClusterCheck{
 		func(cluster check.ClusterInfo) conditions.Condition {
 			return conditions.PollingCondition(
@@ -237,7 +238,12 @@ func dockerEtcdChecks() []check.ClusterCheck {
 // overhead without catching real issues in Docker containers, where resources
 // are always consistent.
 func dockerPreBootSequenceChecks() []check.ClusterCheck {
-	allNodeTypes := check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane, machine.TypeWorker)
+	allNodeTypes := check.WithNodeTypes(
+		machine.TypeInit,
+		machine.TypeControlPlane,
+		machine.TypeWorker,
+	)
+
 	return append(
 		dockerEtcdChecks(),
 		func(cluster check.ClusterInfo) conditions.Condition {
@@ -249,14 +255,22 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 		// AllNodesDiskSizes — skipped: diagnostic-only, Docker containers have consistent resources
 		// NoDiagnostics — skipped: informational-only, not a readiness gate
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("kubelet to be healthy", func(ctx context.Context) error {
-				return check.ServiceHealthAssertion(ctx, cluster, "kubelet", allNodeTypes)
-			}, preBootPollInterval)
+			return conditions.PollingCondition(
+				"kubelet to be healthy",
+				func(ctx context.Context) error {
+					return check.ServiceHealthAssertion(ctx, cluster, "kubelet", allNodeTypes)
+				},
+				preBootPollInterval,
+			)
 		},
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("all nodes to finish boot sequence", func(ctx context.Context) error {
-				return check.AllNodesBootedAssertion(ctx, cluster)
-			}, preBootPollInterval)
+			return conditions.PollingCondition(
+				"all nodes to finish boot sequence",
+				func(ctx context.Context) error {
+					return check.AllNodesBootedAssertion(ctx, cluster)
+				},
+				preBootPollInterval,
+			)
 		},
 	)
 }
